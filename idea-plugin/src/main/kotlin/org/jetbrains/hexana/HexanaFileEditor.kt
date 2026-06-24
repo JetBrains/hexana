@@ -53,6 +53,7 @@ import org.jetbrains.hexana.ui.WASM_FUNCTION_NAV_TARGET_KEY
 import org.jetbrains.hexana.ui.WasmFunctionNavTarget
 import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.hexana.ui.panel.DiffLoadable
+import org.jetbrains.hexana.ui.panel.Panel
 import org.jetbrains.hexana.ui.panel.SizeReady
 import org.jetbrains.hexana.ui.panel.WasmComponentDiffEditorView
 import org.jetbrains.hexana.ui.panel.WasmDiffEditorView
@@ -191,16 +192,12 @@ class HexanaFileEditor(
 
         // Determine extra panels based on file extension / buffer magic.
         // On parse failure the result carries an error message for the error panel.
-        val extraPanelResult = resolveExtraPanels(ext, commonBuffer)
-        if (extraPanelResult is ExtraPanelResult.ParseError) {
-            val view = createComposePanel {
+        val extraPanels = when (val extraPanelResult = resolveExtraPanels(ext, commonBuffer)) {
+            is ExtraPanelResult.Panels -> extraPanelResult.panels
+            is ExtraPanelResult.ParseError -> listOf(Panel("Parse Error") {
                 org.jetbrains.jewel.ui.component.Text(extraPanelResult.message)
-            }
-            panel.add(view)
-            return
+            })
         }
-
-        val extraPanels = (extraPanelResult as? ExtraPanelResult.Panels)?.panels ?: emptyList()
 
         val sourcePath = if (inMemoryBuffer == null) myFile.toNioPathOrNull()?.toString() else null
 
