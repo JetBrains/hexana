@@ -46,43 +46,49 @@ fun BinaryEditorApp() {
         buffer.position(0)
 
         if (isZipFile(buffer)) {
-            ZipEditorContent(
+            val provider = GenericBinaryProvider(buffer)
+            val extraTabs = remember(buffer) {
+                zipExtraTabs(buffer)
+            }
+            BinaryEditorContent(
                 fileName = fileName,
-                buffer = buffer,
+                provider = provider,
+                extraTabs = extraTabs,
             )
         } else if (isClassFile(buffer)) {
-            val classFile = try {
-                JavaClassFileParser.parse(buffer.duplicate().position(0))
-            } catch (_: Exception) {
-                null
+            val classFile = remember(buffer) {
+                try {
+                    JavaClassFileParser.parse(buffer.duplicate().position(0))
+                } catch (_: Exception) {
+                    null
+                }
             }
-            if (classFile != null) {
-                ClassFileEditorContent(
-                    fileName = fileName,
-                    classFile = classFile,
-                    buffer = buffer,
-                )
-            } else {
-                // Fallback to generic hex view if parsing fails
-                val provider = nativeOrGenericBinaryProvider(buffer, filePath)
-                BinaryEditorContent(fileName = fileName, provider = provider)
+            val provider = nativeOrGenericBinaryProvider(buffer, filePath)
+            val extraTabs = remember(classFile) {
+                if (classFile != null) classFileExtraTabs(classFile) else emptyList()
             }
+            BinaryEditorContent(
+                fileName = fileName,
+                provider = provider,
+                extraTabs = extraTabs,
+            )
         } else if (isDexFile(buffer)) {
-            val dexFile = try {
-                DexFileParser.parse(buffer.duplicate().position(0))
-            } catch (_: Exception) {
-                null
+            val dexFile = remember(buffer) {
+                try {
+                    DexFileParser.parse(buffer.duplicate().position(0))
+                } catch (_: Exception) {
+                    null
+                }
             }
-            if (dexFile != null) {
-                DexFileEditorContent(
-                    fileName = fileName,
-                    dexFile = dexFile,
-                    buffer = buffer,
-                )
-            } else {
-                val provider = nativeOrGenericBinaryProvider(buffer, filePath)
-                BinaryEditorContent(fileName = fileName, provider = provider)
+            val provider = nativeOrGenericBinaryProvider(buffer, filePath)
+            val extraTabs = remember(dexFile, buffer) {
+                if (dexFile != null) dexFileExtraTabs(dexFile, buffer) else emptyList()
             }
+            BinaryEditorContent(
+                fileName = fileName,
+                provider = provider,
+                extraTabs = extraTabs,
+            )
         } else {
             val provider = when (WasmBinaryProviderSelector.select(buffer)) {
                 BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
@@ -105,6 +111,7 @@ private const val DEFAULT_PANEL_HEIGHT = 250.0
 fun BinaryEditorContent(
     fileName: String,
     provider: BinaryProvider,
+    extraTabs: List<PanelTab> = emptyList(),
 ) {
     val selection = remember { HexSelectionState() }
     val buffer = remember(provider) { provider.bytes }
@@ -174,6 +181,7 @@ fun BinaryEditorContent(
             heightPx = panelHeight,
             activeTab = activeTab,
             onActiveTabChange = { activeTab = it },
+            extraTabs = extraTabs,
         )
     }
 }

@@ -4,132 +4,18 @@ import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
 import kotlinx.coroutines.delay
-import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.javabytecode.*
-import org.jetbrains.hexana.providers.GenericBinaryProvider
-
-private const val MIN_CLASS_PANEL_HEIGHT = 80.0
-private const val DEFAULT_CLASS_PANEL_HEIGHT = 250.0
 
 /**
- * Editor content for a parsed JVM `.class` file. Shows a hex viewer on top
- * and three structured tabs underneath: Header, Methods, Constant pool —
- * mirroring the IntelliJ plugin's `ClassFileEditorView`.
+ * Builds the extra [PanelTab] entries for a parsed JVM `.class` file:
+ * Header, Methods, Constant pool — mirroring the IntelliJ plugin's
+ * `ClassFileEditorView`.
  */
-@Composable
-internal fun ClassFileEditorContent(
-    fileName: String,
-    classFile: JavaClassFile,
-    buffer: CommonByteBuffer,
-) {
-    val selection = remember { HexSelectionState() }
-    var panelHeight by remember { mutableStateOf(DEFAULT_CLASS_PANEL_HEIGHT) }
-    var activeTab by remember { mutableStateOf("Header") }
-
-    Div({
-        classes("hexana-editor")
-        style {
-            display(DisplayStyle.Flex)
-            property("flex-direction", "column")
-            width(100.percent)
-            height(100.percent)
-            property("overflow", "hidden")
-        }
-    }) {
-        EditorToolbar(
-            fileName = fileName,
-            size = buffer.size,
-            provider = GenericBinaryProvider(buffer),
-            onSizeClick = null,
-        )
-        HexViewerPanel(bytes = buffer, selection = selection)
-        SelectionStatusBar(selection = selection, totalBytes = buffer.size)
-        ResizeDivider { deltaY ->
-            panelHeight = (panelHeight - deltaY).coerceAtLeast(MIN_CLASS_PANEL_HEIGHT)
-        }
-        ClassFilePanel(
-            classFile = classFile,
-            heightPx = panelHeight,
-            activeTab = activeTab,
-            onActiveTabChange = { activeTab = it },
-        )
-    }
-}
-
-@Composable
-private fun ClassFilePanel(
-    classFile: JavaClassFile,
-    heightPx: Double,
-    activeTab: String,
-    onActiveTabChange: (String) -> Unit,
-) {
-    val tabs = listOf("Header", "Methods", "Constant pool")
-
-    Div({
-        classes("hexana-panel")
-        style {
-            property("border-top", "1px solid var(--hexana-border, #333)")
-            property("flex", "0 0 auto")
-            height(heightPx.px)
-            property("min-height", "80px")
-            display(DisplayStyle.Flex)
-            property("flex-direction", "column")
-            property("overflow", "hidden")
-        }
-    }) {
-        // Tab bar
-        Div({
-            classes("hexana-tab-bar")
-            style {
-                display(DisplayStyle.Flex)
-                property("align-items", "center")
-                property("gap", "0")
-                property("flex-shrink", "0")
-                property("border-bottom", "1px solid var(--hexana-border, #333)")
-                property("background", "var(--hexana-tab-bg, rgba(255,255,255,0.03))")
-            }
-        }) {
-            for (tab in tabs) {
-                val isActive = tab == activeTab
-                Div({
-                    classes("hexana-tab")
-                    if (isActive) classes("hexana-tab-active")
-                    style {
-                        property("padding", "6px 16px")
-                        property("cursor", "pointer")
-                        property("font-size", "12px")
-                        property("user-select", "none")
-                        property("border-bottom", if (isActive) "2px solid var(--vscode-focusBorder, #007FD4)" else "2px solid transparent")
-                        property("color", if (isActive) "var(--hexana-fg)" else "var(--vscode-tab-inactiveForeground, rgba(255,255,255,0.5))")
-                        property("background", if (isActive) "var(--hexana-tab-active-bg, transparent)" else "transparent")
-                    }
-                    onClick { onActiveTabChange(tab) }
-                }) {
-                    Text(tab)
-                }
-            }
-        }
-
-        // Tab content
-        Div({
-            classes("hexana-tab-content")
-            style {
-                property("overflow", "hidden")
-                property("padding", "8px 12px")
-                property("flex", "1")
-                property("min-height", "0")
-                display(DisplayStyle.Flex)
-                property("flex-direction", "column")
-            }
-        }) {
-            when (activeTab) {
-                "Header" -> ClassHeaderTab(classFile)
-                "Methods" -> ClassMethodsTab(classFile)
-                "Constant pool" -> ClassConstantPoolTab(classFile)
-            }
-        }
-    }
-}
+internal fun classFileExtraTabs(classFile: JavaClassFile): List<PanelTab> = listOf(
+    PanelTab("Header") { _ -> ClassHeaderTab(classFile) },
+    PanelTab("Methods") { _ -> ClassMethodsTab(classFile) },
+    PanelTab("Constant pool") { _ -> ClassConstantPoolTab(classFile) },
+)
 
 // ---------------------------------------------------------------------------
 // Header tab

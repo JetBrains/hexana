@@ -25,7 +25,7 @@ private enum class FixedTab(val label: String) {
  * A unified tab entry that can be either a provider-generated table tab or a
  * fixed (hardcoded) tab.
  */
-private class PanelTab(
+class PanelTab(
     val label: String,
     val padding: Boolean = true,
     val content: @Composable (HexSelectionState) -> Unit,
@@ -39,13 +39,14 @@ fun HexanaPanel(
     heightPx: Double = 250.0,
     activeTab: String = FixedTab.Summary.label,
     onActiveTabChange: (String) -> Unit = {},
+    extraTabs: List<PanelTab> = emptyList(),
 ) {
     val pendingRun = rememberPendingRunState()
 
     // -----------------------------------------------------------------------
     // Build the tab list: provider-generated table tabs + fixed tabs
     // -----------------------------------------------------------------------
-    val tabs = remember(provider, fileName) {
+    val tabs = remember(provider, fileName, extraTabs) {
         buildList {
             // Summary is always first
             if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
@@ -85,12 +86,22 @@ fun HexanaPanel(
                     WatTabContent(provider)
                 })
             }
+
+            // Extra tabs injected by the caller (e.g. format-specific tabs
+            // for class files, DEX files, ZIP archives).
+            addAll(extraTabs)
         }
     }
 
     // If the active tab was removed (e.g. switching from component to core), reset
-    if (tabs.none { it.label == activeTab }) {
-        onActiveTabChange(FixedTab.Summary.label)
+    // to the first available tab.  Use SideEffect so the state update happens after
+    // composition — calling onActiveTabChange directly during composition can be
+    // swallowed and leave the panel empty until an external event forces recomposition.
+    val needsReset = tabs.none { it.label == activeTab } && tabs.isNotEmpty()
+    if (needsReset) {
+        SideEffect {
+            onActiveTabChange(tabs.first().label)
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -185,38 +196,40 @@ fun HexanaPanel(
             property("overflow", "hidden")
         }
     }) {
-        // Tab bar
-        Div({
-            classes("hexana-tab-bar")
-            style {
-                display(DisplayStyle.Flex)
-                property("align-items", "center")
-                property("gap", "0")
-                property("flex-shrink", "0")
-                property("border-bottom", "1px solid var(--hexana-border, #333)")
-                property("background", "var(--hexana-tab-bg, rgba(255,255,255,0.03))")
-            }
-        }) {
-            for (tab in tabs) {
-                val isActive = tab.label == activeTab
-                Div({
-                    classes("hexana-tab")
-                    if (isActive) classes("hexana-tab-active")
-                    style {
-                        property("padding", "6px 16px")
-                        property("cursor", "pointer")
-                        property("font-size", "12px")
-                        property("user-select", "none")
-                        property("border-bottom", if (isActive) "2px solid var(--vscode-focusBorder, #007FD4)" else "2px solid transparent")
-                        property("color", if (isActive) "var(--hexana-fg)" else "var(--vscode-tab-inactiveForeground, rgba(255,255,255,0.5))")
-                        property("background", if (isActive) "var(--hexana-tab-active-bg, transparent)" else "transparent")
+        // Tab bar — hidden when there is only a single tab
+        if (tabs.size > 1) {
+            Div({
+                classes("hexana-tab-bar")
+                style {
+                    display(DisplayStyle.Flex)
+                    property("align-items", "center")
+                    property("gap", "0")
+                    property("flex-shrink", "0")
+                    property("border-bottom", "1px solid var(--hexana-border, #333)")
+                    property("background", "var(--hexana-tab-bg, rgba(255,255,255,0.03))")
+                }
+            }) {
+                for (tab in tabs) {
+                    val isActive = tab.label == activeTab
+                    Div({
+                        classes("hexana-tab")
+                        if (isActive) classes("hexana-tab-active")
+                        style {
+                            property("padding", "6px 16px")
+                            property("cursor", "pointer")
+                            property("font-size", "12px")
+                            property("user-select", "none")
+                            property("border-bottom", if (isActive) "2px solid var(--vscode-focusBorder, #007FD4)" else "2px solid transparent")
+                            property("color", if (isActive) "var(--hexana-fg)" else "var(--vscode-tab-inactiveForeground, rgba(255,255,255,0.5))")
+                            property("background", if (isActive) "var(--hexana-tab-active-bg, transparent)" else "transparent")
+                        }
+                        onClick {
+                            onActiveTabChange(tab.label)
+                            postTabSelectedToHost(tab.label)
+                        }
+                    }) {
+                        Text(tab.label)
                     }
-                    onClick {
-                        onActiveTabChange(tab.label)
-                        postTabSelectedToHost(tab.label)
-                    }
-                }) {
-                    Text(tab.label)
                 }
             }
         }

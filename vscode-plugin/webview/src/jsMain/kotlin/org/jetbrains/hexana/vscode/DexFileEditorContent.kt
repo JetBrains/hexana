@@ -6,176 +6,35 @@ import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.dex.*
 import kotlinx.coroutines.delay
 import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.providers.GenericBinaryProvider
-
-private const val MIN_DEX_PANEL_HEIGHT = 80.0
-private const val DEFAULT_DEX_PANEL_HEIGHT = 250.0
 
 /**
- * Editor content for a parsed Android `.dex` file. Shows a hex viewer on top
- * and three structured tabs underneath: Header, Classes, Strings —
- * mirroring the IntelliJ plugin's `DexFileEditorView`.
+ * Builds the extra [PanelTab] entries for a parsed Android `.dex` file:
+ * Header, Classes, Strings — mirroring the IntelliJ plugin's
+ * `DexFileEditorView`.
+ */
+internal fun dexFileExtraTabs(dexFile: DexFile, buffer: CommonByteBuffer): List<PanelTab> = listOf(
+    PanelTab("Header") { _ -> DexHeaderTab(dexFile) },
+    PanelTab("Classes") { _ -> DexClassesTabWithNavigation(dexFile, buffer) },
+    PanelTab("Strings") { _ -> DexStringsTab(dexFile) },
+)
+
+/**
+ * Wrapper that manages class-detail navigation state inside the Classes tab.
  */
 @Composable
-internal fun DexFileEditorContent(
-    fileName: String,
-    dexFile: DexFile,
-    buffer: CommonByteBuffer,
-) {
-    val selection = remember { HexSelectionState() }
-    var panelHeight by remember { mutableStateOf(DEFAULT_DEX_PANEL_HEIGHT) }
-    var activeTab by remember { mutableStateOf("Header") }
+private fun DexClassesTabWithNavigation(dexFile: DexFile, buffer: CommonByteBuffer) {
     var selectedClassDefIdx by remember { mutableStateOf<Int?>(null) }
-
-    // When navigating into a class detail, force the Classes tab
-    val effectiveTab = if (selectedClassDefIdx != null && activeTab != "Classes") {
-        activeTab = "Classes"
-        "Classes"
-    } else {
-        activeTab
-    }
-
-    Div({
-        classes("hexana-editor")
-        style {
-            display(DisplayStyle.Flex)
-            property("flex-direction", "column")
-            width(100.percent)
-            height(100.percent)
-            property("overflow", "hidden")
-        }
-    }) {
-        EditorToolbar(
-            fileName = fileName,
-            size = buffer.size,
-            provider = GenericBinaryProvider(buffer),
-            onSizeClick = null,
-        )
-        HexViewerPanel(bytes = buffer, selection = selection)
-        SelectionStatusBar(selection = selection, totalBytes = buffer.size)
-        ResizeDivider { deltaY ->
-            panelHeight = (panelHeight - deltaY).coerceAtLeast(MIN_DEX_PANEL_HEIGHT)
-        }
-        DexFilePanel(
-            dexFile = dexFile,
+    val classIdx = selectedClassDefIdx
+    if (classIdx != null) {
+        DexClassDetailView(
+            dex = dexFile,
+            classDefIndex = classIdx,
             buffer = buffer,
-            heightPx = panelHeight,
-            activeTab = effectiveTab,
-            onActiveTabChange = {
-                activeTab = it
-                if (it != "Classes") selectedClassDefIdx = null
-            },
-            selectedClassDefIdx = selectedClassDefIdx,
-            onClassSelected = { selectedClassDefIdx = it },
+            onBack = { selectedClassDefIdx = null },
+            onNavigateToClass = { selectedClassDefIdx = it },
         )
-    }
-}
-
-@Composable
-private fun DexFilePanel(
-    dexFile: DexFile,
-    buffer: CommonByteBuffer,
-    heightPx: Double,
-    activeTab: String,
-    onActiveTabChange: (String) -> Unit,
-    selectedClassDefIdx: Int?,
-    onClassSelected: (Int?) -> Unit,
-) {
-    val tabLabels = if (selectedClassDefIdx != null) {
-        val classDef = dexFile.classDefs[selectedClassDefIdx]
-        val className = dexFile.typeName(classDef.classIdx) ?: "<#${classDef.classIdx}>"
-        listOf("Header", "\u2190 $className", "Strings")
     } else {
-        listOf("Header", "Classes", "Strings")
-    }
-
-    Div({
-        classes("hexana-panel")
-        style {
-            property("border-top", "1px solid var(--hexana-border, #333)")
-            property("flex", "0 0 auto")
-            height(heightPx.px)
-            property("min-height", "80px")
-            display(DisplayStyle.Flex)
-            property("flex-direction", "column")
-            property("overflow", "hidden")
-        }
-    }) {
-        // Tab bar
-        Div({
-            classes("hexana-tab-bar")
-            style {
-                display(DisplayStyle.Flex)
-                property("align-items", "center")
-                property("gap", "0")
-                property("flex-shrink", "0")
-                property("border-bottom", "1px solid var(--hexana-border, #333)")
-                property("background", "var(--hexana-tab-bg, rgba(255,255,255,0.03))")
-            }
-        }) {
-            for ((index, label) in tabLabels.withIndex()) {
-                val tabKey = when (index) {
-                    0 -> "Header"
-                    1 -> "Classes"
-                    else -> "Strings"
-                }
-                val isActive = tabKey == activeTab
-                Div({
-                    classes("hexana-tab")
-                    if (isActive) classes("hexana-tab-active")
-                    style {
-                        property("padding", "6px 16px")
-                        property("cursor", "pointer")
-                        property("font-size", "12px")
-                        property("user-select", "none")
-                        property("border-bottom", if (isActive) "2px solid var(--vscode-focusBorder, #007FD4)" else "2px solid transparent")
-                        property("color", if (isActive) "var(--hexana-fg)" else "var(--vscode-tab-inactiveForeground, rgba(255,255,255,0.5))")
-                        property("background", if (isActive) "var(--hexana-tab-active-bg, transparent)" else "transparent")
-                    }
-                    onClick {
-                        if (tabKey == "Classes" && activeTab == "Classes" && selectedClassDefIdx != null) {
-                            onClassSelected(null)
-                        } else {
-                            onActiveTabChange(tabKey)
-                        }
-                    }
-                }) {
-                    Text(label)
-                }
-            }
-        }
-
-        // Tab content
-        Div({
-            classes("hexana-tab-content")
-            style {
-                property("overflow", "hidden")
-                property("padding", "8px 12px")
-                property("flex", "1")
-                property("min-height", "0")
-                display(DisplayStyle.Flex)
-                property("flex-direction", "column")
-            }
-        }) {
-            when (activeTab) {
-                "Header" -> DexHeaderTab(dexFile)
-                "Classes" -> {
-                    val classIdx = selectedClassDefIdx
-                    if (classIdx != null) {
-                        DexClassDetailView(
-                            dex = dexFile,
-                            classDefIndex = classIdx,
-                            buffer = buffer,
-                            onBack = { onClassSelected(null) },
-                            onNavigateToClass = { onClassSelected(it) },
-                        )
-                    } else {
-                        DexClassesTab(dexFile) { onClassSelected(it) }
-                    }
-                }
-                "Strings" -> DexStringsTab(dexFile)
-            }
-        }
+        DexClassesTab(dexFile) { selectedClassDefIdx = it }
     }
 }
 
