@@ -44,6 +44,9 @@ import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.run.runWasmFile
 import org.jetbrains.hexana.shared.formatSize
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
+import org.jetbrains.hexana.shared.isClassFile
+import org.jetbrains.hexana.shared.isDexFile
+import org.jetbrains.hexana.shared.isZipFile
 import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
 import org.jetbrains.hexana.ui.panel.WasmRunDialog
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
@@ -131,6 +134,7 @@ internal fun FileDescriptionBar(
                     binaryProvider = binaryProvider,
                     state = state,
                     parentFileName = parentFileName,
+                    fileName = fileName,
                     onNavigateToParent = onNavigateToParent,
                 )
             }
@@ -139,6 +143,7 @@ internal fun FileDescriptionBar(
                 binaryProvider = binaryProvider,
                 state = state,
                 parentFileName = parentFileName,
+                fileName = fileName,
                 onNavigateToParent = onNavigateToParent,
             )
         }
@@ -213,13 +218,21 @@ private fun NormalModeContent(
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
     parentFileName: String?,
+    fileName: String?,
     onNavigateToParent: (() -> Unit)?,
 ) {
     val moduleType = when (binaryProvider) {
         is WasmBinaryProvider -> "Core Wasm"
         is WasmComponentBinaryProvider -> "Component Model"
         is NativeBinaryProvider -> binaryProvider.nativeFormat.displayName
-        is GenericBinaryProvider -> binaryProvider.nativeFormat?.displayName ?: "Binary"
+        is GenericBinaryProvider -> {
+            when {
+                isClassFile(binaryProvider.bytes) -> "Class File"
+                isZipFile(binaryProvider.bytes) -> if (fileName.orEmpty().endsWith(".jar", true)) "Jar File" else "Zip File"
+                isDexFile(binaryProvider.bytes) -> "Android DEX File"
+                else -> binaryProvider.nativeFormat?.displayName ?: "Binary"
+            }
+        }
     }
 
     val badgeBackground = if (JewelTheme.isDark) Color(0xFF4D4D4D) else Color(0xFFE0E0E0)
