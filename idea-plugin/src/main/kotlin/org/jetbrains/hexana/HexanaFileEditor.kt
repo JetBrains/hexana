@@ -183,8 +183,7 @@ class HexanaFileEditor(
         // .class files use a dedicated 3-tab view (header / methods / constant
         // pool) instead of the binary editor — the file's structure is well
         // known and the structured view is more useful than a raw hex dump.
-        if (myFile.extension.equals("class", ignoreCase = true)
-            || isClassFile(commonBuffer)) {
+        if (myFile.extension.equals("class", ignoreCase = true)) {
             initClassFilePanel(commonBuffer)
             return
         }
