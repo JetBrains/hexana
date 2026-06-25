@@ -35,6 +35,7 @@ import org.jetbrains.hexana.mcp.query.checkMemoryContract
 import org.jetbrains.hexana.mcp.query.diffRequiredProposals
 import org.jetbrains.hexana.mcp.query.planAbiBindingRegeneration
 import org.jetbrains.hexana.mcp.query.readArtifactQuery
+import org.jetbrains.hexana.mcp.query.readBinarySummary
 import org.jetbrains.hexana.mcp.query.readCodeSectionOffsets
 import org.jetbrains.hexana.mcp.query.readComponentSurface
 import org.jetbrains.hexana.mcp.query.readCustomSections
@@ -76,6 +77,87 @@ import org.jetbrains.hexana.mcp.query.resolveWasmFrames
  */
 public class HexanaToolset : McpToolsProvider {
   override fun getTools(): List<McpTool> = listOf(
+  object : McpTool {
+    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
+      name = "summarize_binary",
+      description = """
+      |Summarize a Wasm or native binary with compact identity and entity counts.
+      |Use this first for an unknown binary before choosing a format-specific follow-up tool.
+      |Returns format, path label, size, known architecture/endian details, and bounded counts only; never raw bytes or unbounded lists.
+      |For WebAssembly core modules, `summarize_module` remains the Wasm-specific summary with its existing payload shape.
+      |Warnings indicate unsupported or partial deeper parsing while preserving the compact summary when possible.
+      """.trimMargin(),
+      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.summarizeBinary",
+      inputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("path", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+          put("description", JsonPrimitive("Readable local binary path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        })
+        put("bytesBase64", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+          put("description", JsonPrimitive("Base64 binary bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+          put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES + 2) / 3) * 4))
+        })
+        put("bytes", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("array"))
+            add(JsonPrimitive("null"))
+          })
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("minimum", JsonPrimitive(0))
+            put("maximum", JsonPrimitive(255))
+          })
+          put("description", JsonPrimitive("Raw binary bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+          put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES))
+        })
+        put("projectPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
+        })
+      },
+      requiredProperties = setOf(),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+      outputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("module", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+        put("counts", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+        put("warnings", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
+      },
+      requiredProperties = setOf("module", "counts", "warnings"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+    )
+    override suspend fun call(args: JsonObject): McpToolCallResult {
+      val path = args.optionalStringArgument("path")
+      val bytesBase64 = args.optionalStringArgument("bytesBase64")
+      val bytes = args.optionalIntListArgument("bytes")
+      val input = requireBinaryProviderInput(path = path, bytesBase64 = bytesBase64, bytes = bytes)
+      val provider = input.provider
+      val pathLabel = input.pathLabel
+      val result = provider.readBinarySummary(pathLabel = pathLabel)
+      val text = encodeHexanaJson(result)
+      val structuredContent = encodeHexanaJsonElement(result).jsonObject
+      return McpToolCallResult.text(text, structuredContent)
+    }
+  },
   object : McpTool {
     override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
       name = "summarize_module",

@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
 private val HEXANA_TOOL_ORDER = listOf(
+    "summarize_binary",
     "summarize_module",
     "list_enabled_features",
     "get_entrypoint_policy",
@@ -47,6 +48,7 @@ private val HEXANA_TOOL_ORDER = listOf(
 )
 
 val HexanaTools: List<ToolSpec> = orderedTools(
+    BinaryTools,
     ModuleTools,
     EntrypointPolicyTools,
     RuntimeTools,

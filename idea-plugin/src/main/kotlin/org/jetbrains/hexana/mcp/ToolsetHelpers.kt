@@ -76,22 +76,22 @@ internal fun requireBinaryProviderInput(
             }
             val nonWhitespaceLen = bytesBase64.count { !it.isWhitespace() }
             val upperBoundDecoded = (nonWhitespaceLen.toLong() * 3L + 3L) / 4L
-            if (upperBoundDecoded > HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES.toLong()) {
-                mcpFail("`bytesBase64` exceeds maximum decoded size of ${HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES} bytes")
+            if (upperBoundDecoded > HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES.toLong()) {
+                mcpFail("`bytesBase64` exceeds maximum decoded size of ${HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES} bytes")
             }
             val decoded = try {
                 Base64.getMimeDecoder().decode(bytesBase64)
             } catch (_: IllegalArgumentException) {
                 mcpFail("`bytesBase64` must be valid base64")
             }
-            if (decoded.size > HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES) {
-                mcpFail("`bytesBase64` exceeds maximum decoded size of ${HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES} bytes")
+            if (decoded.size > HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES) {
+                mcpFail("`bytesBase64` exceeds maximum decoded size of ${HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES} bytes")
             }
             BinaryProviderInput(decoded.toCommonByteBuffer().toBinaryProvider(pathLabel = null), null)
         }
         bytes != null -> {
-            if (bytes.size > HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES) {
-                mcpFail("`bytes` exceeds maximum size of ${HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES} bytes")
+            if (bytes.size > HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES) {
+                mcpFail("`bytes` exceeds maximum size of ${HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES} bytes")
             }
             val rawBytes = ByteArray(bytes.size) { index ->
                 val value = bytes[index]

@@ -47,6 +47,24 @@ class HexanaToolHandlersTest {
     private val handlers = HexanaToolHandlers()
 
     @Test
+    fun summarizeBinaryAcceptsRawByteArrayInput() {
+        val result = handlers.summarizeBinary(
+            buildJsonObject {
+                put("bytes", buildJsonArray {
+                    add(JsonPrimitive(1))
+                    add(JsonPrimitive(2))
+                    add(JsonPrimitive(3))
+                })
+            }
+        )
+
+        assertTrue(result.isError != true)
+        val structured = result.structuredContent ?: error("Expected structured content")
+        assertEquals("generic", structured["module"]!!.jsonObject["format"]!!.jsonPrimitive.content)
+        assertEquals(3, structured["module"]!!.jsonObject["byteLength"]!!.jsonPrimitive.int)
+    }
+
+    @Test
     fun queryArtifactsFindsBoundedExportRecords() {
         val wasm = createWasmFile(
             "query-artifacts-find.wasm",

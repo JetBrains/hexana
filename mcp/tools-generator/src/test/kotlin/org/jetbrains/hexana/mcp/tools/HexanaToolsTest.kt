@@ -40,6 +40,7 @@ class HexanaToolsTest {
     fun `registry exposes granular tools and the generic artifact query tool`() {
         assertEquals(
             listOf(
+                "summarize_binary",
                 "summarize_module",
                 "list_enabled_features",
                 "get_entrypoint_policy",

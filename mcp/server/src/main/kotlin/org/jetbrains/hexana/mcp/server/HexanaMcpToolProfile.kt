@@ -57,5 +57,6 @@ private val PRODUCTION_TOOL_NAMES = setOf(
     "resolve_wasm_frames",
     "search_exports",
     "search_functions_by_name",
+    "summarize_binary",
     "summarize_module",
 )

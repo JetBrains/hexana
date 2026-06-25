@@ -43,6 +43,7 @@ internal val EXPECTED_ADVANCED_HEXANA_TOOL_NAMES = listOf(
     "resolve_wasm_frames",
     "search_exports",
     "search_functions_by_name",
+    "summarize_binary",
     "summarize_module",
 )
 
@@ -74,5 +75,6 @@ internal val EXPECTED_PRODUCTION_HEXANA_TOOL_NAMES = listOf(
     "resolve_wasm_frames",
     "search_exports",
     "search_functions_by_name",
+    "summarize_binary",
     "summarize_module",
 )

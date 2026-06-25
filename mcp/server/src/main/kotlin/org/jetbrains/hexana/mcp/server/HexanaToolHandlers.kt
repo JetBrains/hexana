@@ -61,6 +61,12 @@ class HexanaToolHandlers(
         }
     }
 
+    fun summarizeBinary(arguments: JsonObject?): CallToolResult {
+        return execute("summarize_binary") {
+            analysisService.summarizeBinary(binaryInput(arguments))
+        }
+    }
+
     fun getEntrypointPolicy(arguments: JsonObject?): CallToolResult {
         return execute("get_entrypoint_policy") {
             analysisService.getEntrypointPolicy(wasmInput(arguments))
@@ -494,6 +500,27 @@ class HexanaToolHandlers(
             path != null -> WasmInput.FilePath(path)
             bytesBase64Decoded != null -> WasmInput.RawBytes(bytesBase64Decoded)
             bytes != null -> WasmInput.RawBytes(bytes)
+            else -> error("Unreachable input state")
+        }
+    }
+
+    private fun binaryInput(arguments: JsonObject?): BinaryInput {
+        val path = arguments.optionalNonBlankString("path")
+        val bytesBase64 = arguments.optionalNonBlankString("bytesBase64")
+        val bytes = arguments.optionalByteArray("bytes")
+
+        val providedInputs = listOf(path, bytesBase64, bytes).count { it != null }
+        if (providedInputs == 0) {
+            throw ToolInputException("Exactly one of `path`, `bytesBase64`, or `bytes` is required")
+        }
+        if (providedInputs > 1) {
+            throw ToolInputException("Provide exactly one of `path`, `bytesBase64`, or `bytes`")
+        }
+
+        return when {
+            path != null -> BinaryInput.FilePath(path)
+            bytesBase64 != null -> BinaryInput.InlineBytes(bytesBase64)
+            bytes != null -> BinaryInput.RawBytes(bytes)
             else -> error("Unreachable input state")
         }
     }

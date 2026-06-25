@@ -163,6 +163,42 @@ class BinaryInputLoaderTest {
     }
 
     @Test
+    fun defaultServiceSummarizesWasmBinary() {
+        val service = DefaultHexanaAnalysisService()
+
+        val summary = service.summarizeBinary(BinaryInput.RawBytes(minimalWasm))
+
+        assertEquals("wasm", summary.module.format)
+        assertEquals(minimalWasm.size, summary.module.byteLength)
+        assertEquals(0, summary.counts.functions)
+        assertEquals(0, summary.counts.imports)
+        assertEquals(0, summary.counts.exports)
+        assertEquals(0, summary.warnings.size)
+    }
+
+    @Test
+    fun defaultServiceSummarizesNativeIdentityWithPartialWarnings() {
+        val service = DefaultHexanaAnalysisService()
+
+        val summary = service.summarizeBinary(BinaryInput.RawBytes(minimalElf))
+
+        assertEquals("elf", summary.module.format)
+        assertEquals("64", summary.module.wordSize)
+        assertTrue(summary.warnings.any { it.code == "partial_parse" })
+    }
+
+    @Test
+    fun defaultServiceSummarizesUnknownBytesAsGeneric() {
+        val service = DefaultHexanaAnalysisService()
+
+        val summary = service.summarizeBinary(BinaryInput.RawBytes(byteArrayOf(1, 2, 3)))
+
+        assertEquals("generic", summary.module.format)
+        assertEquals(3, summary.module.byteLength)
+        assertEquals(0, summary.warnings.size)
+    }
+
+    @Test
     fun binaryDtosAreSerializable() {
         val identity = BinaryModuleIdentityResult(
             path = "dist/app.bin",

@@ -92,6 +92,42 @@ class HexanaMcpSummaryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(1, structuredContent.int("exports"))
     }
 
+    fun testSummarizeBinaryReturnsCompactWasmIdentityAndCounts() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/summary/generic-summary.wasm",
+            """
+            (module
+              (import "env" "print" (func))
+              (memory 1)
+              (func (export "main")))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject("summarize_binary", jsonPath(fixture.projectRelativePath))
+
+        assertEquals("wasm", result.obj("module").text("format"))
+        assertEquals(fixture.projectRelativePath, result.obj("module").text("path"))
+        val counts = result.obj("counts")
+        assertEquals(1, counts.int("functions"))
+        assertEquals(1, counts.int("imports"))
+        assertEquals(1, counts.int("exports"))
+        assertEquals(1, counts.int("memories"))
+        assertEquals(0, result.array("warnings").size)
+    }
+
+    fun testSummarizeBinaryHandlesUnknownBytesAsGeneric() {
+        val fixture = createBinaryFixture(
+            "fixtures/direct/summary/unknown.bin",
+            byteArrayOf(1, 2, 3, 4)
+        )
+
+        val result = callToolJsonObject("summarize_binary", jsonPath(fixture.projectRelativePath))
+
+        assertEquals("generic", result.obj("module").text("format"))
+        assertEquals(4, result.obj("module").int("byteLength"))
+        assertEquals(0, result.array("warnings").size)
+    }
+
     fun testListEnabledFeaturesReturnsFlagsAndSources() {
         val fixture = createWasmFixture(
             "fixtures/direct/summary/enabled_features.wasm",

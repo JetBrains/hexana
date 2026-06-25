@@ -812,9 +812,9 @@ private fun schemaIntValue(value: SchemaIntValue): CodeBlock {
         SchemaIntValue.MaxInlineWasmBytes -> CodeBlock.of("%T.MAX_INLINE_WASM_BYTES", HEXANA_ANALYSIS_LIMITS)
         SchemaIntValue.MaxInlineWasmBase64Length ->
             CodeBlock.of("((%T.MAX_INLINE_WASM_BYTES + 2) / 3) * 4", HEXANA_ANALYSIS_LIMITS)
-        SchemaIntValue.MaxInlineBinaryBytes -> CodeBlock.of("%T.MAX_INLINE_WASM_BYTES", HEXANA_ANALYSIS_LIMITS)
+        SchemaIntValue.MaxInlineBinaryBytes -> CodeBlock.of("%T.MAX_INLINE_BINARY_BYTES", HEXANA_ANALYSIS_LIMITS)
         SchemaIntValue.MaxInlineBinaryBase64Length ->
-            CodeBlock.of("((%T.MAX_INLINE_WASM_BYTES + 2) / 3) * 4", HEXANA_ANALYSIS_LIMITS)
+            CodeBlock.of("((%T.MAX_INLINE_BINARY_BYTES + 2) / 3) * 4", HEXANA_ANALYSIS_LIMITS)
     }
 }
 
