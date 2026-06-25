@@ -108,8 +108,6 @@ internal data class HexanaFeedbackCollectedData(
     val frequency: String?,
     @SerialName(HexanaFeedbackFieldIds.InterviewChoice)
     val interviewChoice: String?,
-    @SerialName(HexanaFeedbackFieldIds.Contact)
-    val contact: String?,
     @SerialName(HexanaFeedbackFieldIds.TimeZone)
     val timeZone: String?,
     @SerialName(HexanaFeedbackFieldIds.InterviewTopics)
@@ -280,7 +278,6 @@ private val CollectedDataQuestionSpecs: Map<String, FeedbackQuestionSpec> by laz
         HexanaFeedbackFields.WorkTypes,
         HexanaFeedbackFields.Frequency,
         HexanaFeedbackFields.InterviewChoice,
-        HexanaFeedbackFields.Contact,
         HexanaFeedbackFields.TimeZone,
         HexanaFeedbackFields.InterviewTopics,
         HexanaFeedbackFields.TechnicalContextEnabled,

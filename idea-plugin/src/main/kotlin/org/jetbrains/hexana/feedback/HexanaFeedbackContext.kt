@@ -111,7 +111,6 @@ internal fun createFeedbackCollectedDataPayload(
     ),
     frequency = state.frequency?.id,
     interviewChoice = state.interviewChoice?.id,
-    contact = state.contact.takeIfSelectedAndNotBlank(state.interviewChoice == InterviewChoice.Yes),
     timeZone = state.timeZone.takeIfSelectedAndNotBlank(state.interviewChoice == InterviewChoice.Yes),
     interviewTopics = if (state.interviewChoice == InterviewChoice.Yes) {
         checkboxGroupPayload(

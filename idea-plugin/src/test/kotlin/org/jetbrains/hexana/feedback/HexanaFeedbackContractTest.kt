@@ -61,6 +61,7 @@ class HexanaFeedbackContractTest : UsefulTestCase() {
             .single { it.jsonObject.getValue("id") == JsonPrimitive(HexanaFeedbackFieldIds.Blockers) }
             .jsonObject
 
+        assertFalse(collectedDataFields.any { it.jsonObject.getValue("id") == JsonPrimitive("contact") })
         assertEquals(JsonPrimitive("checkbox_group"), blockers.getValue("response").jsonObject.getValue("type"))
         assertEquals(
             JsonPrimitive("could_not_find_information"),
