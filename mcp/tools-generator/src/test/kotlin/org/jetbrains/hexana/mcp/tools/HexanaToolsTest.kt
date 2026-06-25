@@ -96,6 +96,19 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `binary tools stay grouped at the start of the catalog`() {
+        assertEquals(
+            listOf(
+                "summarize_binary",
+                "list_binary_functions",
+                "search_binary_functions",
+                "query_binary",
+            ),
+            HexanaTools.take(4).map { it.name },
+        )
+    }
+
+    @Test
     fun `tool names use snake_case`() {
         val snakeCase = Regex("^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
         HexanaTools.forEach { spec ->
@@ -331,6 +344,24 @@ class HexanaToolsTest {
         assertEquals(SchemaIntValue.Literal(20), fields.getValue("entityTypes").maxItems)
         assertEquals(SchemaIntValue.Literal(20), fields.getValue("query").maxItems)
         assertEquals(SchemaIntValue.Literal(20), fields.getValue("relations").maxItems)
+    }
+
+    @Test
+    fun `query_binary input carries defaults and bounds`() {
+        val fields = HexanaTools.single { it.name == "query_binary" }.input.fields.associateBy { it.name }
+
+        assertEquals("overview", fields.getValue("operation").default)
+        assertEquals(0, fields.getValue("offset").default)
+        assertEquals(25, fields.getValue("limit").default)
+        assertEquals("summary", fields.getValue("detail").default)
+        assertEquals(24_000, fields.getValue("maxBytes").default)
+        assertEquals(0, fields.getValue("offset").minimum)
+        assertEquals(1, fields.getValue("limit").minimum)
+        assertEquals(100, fields.getValue("limit").maximum)
+        assertEquals(2_000, fields.getValue("maxBytes").minimum)
+        assertEquals(60_000, fields.getValue("maxBytes").maximum)
+        assertEquals(SchemaIntValue.Literal(20), fields.getValue("entityTypes").maxItems)
+        assertEquals(SchemaIntValue.Literal(20), fields.getValue("query").maxItems)
     }
 
     @Test

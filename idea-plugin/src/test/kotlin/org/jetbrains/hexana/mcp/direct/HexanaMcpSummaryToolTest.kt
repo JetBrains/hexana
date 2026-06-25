@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp.direct
 
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -143,6 +144,94 @@ class HexanaMcpSummaryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals("generic", structuredContent.obj("module").text("format"))
         assertEquals("overview", structuredContent.text("operation"))
         assertEquals(1, structuredContent.array("records").size)
+    }
+
+    fun testQueryBinaryReportsPaginationOmissionsThroughDirectTool() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/summary/query-pagination.wasm",
+            """
+            (module
+              (func (export "first"))
+              (func (export "second"))
+              (func (export "third")))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "query_binary",
+            JsonObject(
+                jsonPath(fixture.projectRelativePath) + mapOf(
+                    "operation" to JsonPrimitive("exports"),
+                    "offset" to JsonPrimitive(1),
+                    "limit" to JsonPrimitive(1),
+                )
+            )
+        )
+
+        assertEquals(3, result.int("total"))
+        assertEquals(1, result.int("returned"))
+        assertEquals(2, result.int("nextOffset"))
+        assertEquals("second", result.array("records").obj(0).text("name"))
+        assertEquals(1, result.array("omitted").obj(0).int("count"))
+        assertEquals(1, result.array("omitted").obj(1).int("count"))
+    }
+
+    fun testListBinaryFunctionsReturnsFocusedPagedWasmFunctions() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/summary/list-binary-functions.wasm",
+            """
+            (module
+              (import "env" "log" (func))
+              (func ${'$'}first (export "first"))
+              (func ${'$'}second (export "second")))
+            """.trimIndent()
+        )
+
+        val rawResult = callTool(
+            "list_binary_functions",
+            JsonObject(
+                jsonPath(fixture.projectRelativePath) + mapOf(
+                    "offset" to JsonPrimitive(1),
+                    "limit" to JsonPrimitive(1),
+                )
+            )
+        )
+
+        assertFalse(rawResult.isError)
+        val textJson = json.parseToJsonElement(rawResult.textPayloads.single()) as JsonObject
+        val structuredContent = rawResult.requireStructuredObject()
+        assertEquals(textJson, structuredContent)
+        assertEquals(3, structuredContent.int("total"))
+        assertEquals(1, structuredContent.int("returned"))
+        assertEquals(2, structuredContent.int("nextOffset"))
+        assertEquals("code", structuredContent.array("functions").obj(0).text("source"))
+        assertEquals(1, structuredContent.array("omitted").obj(0).int("count"))
+    }
+
+    fun testSearchBinaryFunctionsFiltersFocusedFunctionFields() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/summary/search-binary-functions.wasm",
+            """
+            (module
+              (import "env" "log" (func))
+              (func ${'$'}first (export "first"))
+              (func ${'$'}second (export "second")))
+            """.trimIndent()
+        )
+
+        val result = callToolJsonObject(
+            "search_binary_functions",
+            JsonObject(
+                jsonPath(fixture.projectRelativePath) + mapOf(
+                    "query" to kotlinx.serialization.json.JsonArray(listOf(JsonPrimitive("second"), JsonPrimitive("code"))),
+                    "limit" to JsonPrimitive(10),
+                )
+            )
+        )
+
+        assertEquals(listOf("second", "code"), result.array("query").map { it.textValue() })
+        assertEquals(1, result.int("returned"))
+        assertEquals("second", result.array("functions").obj(0).text("name"))
     }
 
     fun testListEnabledFeaturesReturnsFlagsAndSources() {

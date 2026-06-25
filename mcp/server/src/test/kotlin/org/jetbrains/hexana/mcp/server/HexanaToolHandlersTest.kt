@@ -125,6 +125,67 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun listBinaryFunctionsReturnsStructuredPagedPayload() {
+        val wasm = createWasmFile(
+            "list-binary-functions.wasm",
+            """
+            (module
+              (import "env" "log" (func))
+              (func ${'$'}first (export "first"))
+              (func ${'$'}second (export "second")))
+            """.trimIndent()
+        )
+
+        val result = handlers.listBinaryFunctions(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("offset", JsonPrimitive(1))
+                put("limit", JsonPrimitive(1))
+            }
+        )
+
+        assertTrue(result.isError != true)
+        val textPayload = result.content.single() as TextContent
+        val structured = result.structuredContent ?: error("Expected structured content")
+        assertEquals(structured, Json.parseToJsonElement(textPayload.text).jsonObject)
+        assertEquals(3, structured["total"]!!.jsonPrimitive.int)
+        assertEquals(1, structured["returned"]!!.jsonPrimitive.int)
+        assertEquals(2, structured["nextOffset"]!!.jsonPrimitive.int)
+        assertEquals("code", structured["functions"]!!.jsonArray.single().jsonObject["source"]!!.jsonPrimitive.content)
+        assertEquals(1, structured["omitted"]!!.jsonArray.first().jsonObject["count"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun searchBinaryFunctionsFiltersByAllTerms() {
+        val wasm = createWasmFile(
+            "search-binary-functions.wasm",
+            """
+            (module
+              (import "env" "log" (func))
+              (func ${'$'}first (export "first"))
+              (func ${'$'}second (export "second")))
+            """.trimIndent()
+        )
+
+        val result = handlers.searchBinaryFunctions(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("query", buildJsonArray {
+                    add(JsonPrimitive("second"))
+                    add(JsonPrimitive("code"))
+                })
+                put("limit", JsonPrimitive(10))
+            }
+        )
+
+        assertTrue(result.isError != true)
+        val structured = result.structuredContent ?: error("Expected structured content")
+        assertEquals(listOf("second", "code"), structured["query"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(1, structured["returned"]!!.jsonPrimitive.int)
+        assertEquals("second", structured["functions"]!!.jsonArray.single().jsonObject["name"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun queryArtifactsFindsBoundedExportRecords() {
         val wasm = createWasmFile(
             "query-artifacts-find.wasm",

@@ -234,6 +234,24 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
+    fun binaryQuerySchemaCarriesInputBoundsAndNullableSources() {
+        val schema = toolInputSchema("query_binary")
+
+        assertEquals(listOf("string", "null"), schemaTypes(schema.getValue("path").jsonObject))
+        assertEquals(listOf("string", "null"), schemaTypes(schema.getValue("bytesBase64").jsonObject))
+        assertEquals(listOf("array", "null"), schemaTypes(schema.getValue("bytes").jsonObject))
+        assertEquals("overview", schema.getValue("operation").jsonObject.getValue("default").jsonPrimitive.content)
+        assertEquals(0, schema.getValue("offset").jsonObject.getValue("default").jsonPrimitive.int)
+        assertEquals(25, schema.getValue("limit").jsonObject.getValue("default").jsonPrimitive.int)
+        assertEquals("summary", schema.getValue("detail").jsonObject.getValue("default").jsonPrimitive.content)
+        assertEquals(24_000, schema.getValue("maxBytes").jsonObject.getValue("default").jsonPrimitive.int)
+        assertEquals(1, schema.getValue("limit").jsonObject.getValue("minimum").jsonPrimitive.int)
+        assertEquals(100, schema.getValue("limit").jsonObject.getValue("maximum").jsonPrimitive.int)
+        assertEquals(2_000, schema.getValue("maxBytes").jsonObject.getValue("minimum").jsonPrimitive.int)
+        assertEquals(60_000, schema.getValue("maxBytes").jsonObject.getValue("maximum").jsonPrimitive.int)
+    }
+
+    @Test
     fun responseBoundsArePresentInGeneratedSchema() {
         val limit = queryArtifactsInputSchema().getValue("limit").jsonObject
         val maxBytes = queryArtifactsInputSchema().getValue("maxBytes").jsonObject
@@ -355,14 +373,18 @@ class HexanaMcpServerSchemaTest {
     }
 
     private fun queryArtifactsInputSchema(): JsonObject {
+        return toolInputSchema("query_artifacts")
+    }
+
+    private fun toolInputSchema(toolName: String): JsonObject {
         return createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.ADVANCED)
             .tools
-            .getValue("query_artifacts")
+            .getValue(toolName)
             .tool
             .inputSchema
             .properties
             ?.jsonObject
-            ?: error("Missing query_artifacts input schema properties")
+            ?: error("Missing $toolName input schema properties")
     }
 
     private fun schemaTypes(schema: JsonObject): List<String> {
