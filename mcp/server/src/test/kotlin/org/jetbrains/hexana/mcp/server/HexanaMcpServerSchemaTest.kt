@@ -110,6 +110,7 @@ class HexanaMcpServerSchemaTest {
                 "list_value_types",
                 "plan_abi_binding_regeneration",
                 "query_artifacts",
+                "query_binary",
                 "resolve_component_dependencies",
                 "resolve_function_signature",
                 "resolve_function_symbols",

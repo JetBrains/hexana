@@ -11,6 +11,7 @@ import org.jetbrains.hexana.mcp.model.artifacts.QueryArtifactsResult
 import org.jetbrains.hexana.mcp.model.artifacts.PlanAbiBindingRegenerationResult
 import org.jetbrains.hexana.mcp.model.binaries.BinaryModuleIdentityResult
 import org.jetbrains.hexana.mcp.model.binaries.BinarySummaryResult
+import org.jetbrains.hexana.mcp.model.binaries.QueryBinaryResult
 import org.jetbrains.hexana.mcp.model.components.CheckComponentCompatibilityResult
 import org.jetbrains.hexana.mcp.model.components.ListComponentSurfaceResult
 import org.jetbrains.hexana.mcp.model.components.ResolveComponentDependenciesResult
@@ -63,6 +64,18 @@ interface HexanaAnalysisService {
 
     fun summarizeBinary(input: BinaryInput): BinarySummaryResult {
         throw UnsupportedOperationException("summarizeBinary is not implemented")
+    }
+
+    fun queryBinary(
+        input: BinaryInput,
+        operation: String,
+        query: List<String>,
+        offset: Int,
+        limit: Int,
+        detail: String,
+        maxBytes: Int,
+    ): QueryBinaryResult {
+        throw UnsupportedOperationException("queryBinary is not implemented")
     }
 
     fun queryArtifacts(
@@ -235,6 +248,31 @@ class DefaultHexanaAnalysisService(
             maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
         ).load(input)
         return binary.provider.readBinarySummary(binary.identity.path)
+    }
+
+    override fun queryBinary(
+        input: BinaryInput,
+        operation: String,
+        query: List<String>,
+        offset: Int,
+        limit: Int,
+        detail: String,
+        maxBytes: Int,
+    ): QueryBinaryResult {
+        requireStringList(query, "Query")
+        val binary = BinaryInputLoader(
+            maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
+            maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
+        ).load(input)
+        return binary.provider.readBinaryQuery(
+            operation = operation,
+            query = query,
+            offset = offset,
+            limit = limit,
+            detail = detail,
+            maxBytes = maxBytes,
+            pathLabel = binary.identity.path,
+        )
     }
 
     override fun queryArtifacts(

@@ -199,6 +199,48 @@ class BinaryInputLoaderTest {
     }
 
     @Test
+    fun defaultServiceQueriesBinaryOverview() {
+        val service = DefaultHexanaAnalysisService()
+
+        val result = service.queryBinary(
+            input = BinaryInput.RawBytes(minimalWasm),
+            operation = "overview",
+            query = emptyList(),
+            offset = 0,
+            limit = 10,
+            detail = "summary",
+            maxBytes = 2_000,
+        )
+
+        assertEquals("wasm", result.module.format)
+        assertEquals("overview", result.operation)
+        assertEquals(1, result.total)
+        assertEquals(1, result.returned)
+        assertEquals("overview", result.records.single().kind)
+        assertTrue(result.records.single().attributes.any { it.name == "functions" && it.value == "0" })
+    }
+
+    @Test
+    fun defaultServiceRejectsInvalidBinaryQueryDetail() {
+        val service = DefaultHexanaAnalysisService()
+
+        val error = assertFailsWith<HexanaAnalysisException> {
+            service.queryBinary(
+                input = BinaryInput.RawBytes(minimalWasm),
+                operation = "overview",
+                query = emptyList(),
+                offset = 0,
+                limit = 10,
+                detail = "verbose",
+                maxBytes = 2_000,
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, error.code)
+        assertEquals("`detail` must be `summary` or `evidence`", error.message)
+    }
+
+    @Test
     fun binaryDtosAreSerializable() {
         val identity = BinaryModuleIdentityResult(
             path = "dist/app.bin",

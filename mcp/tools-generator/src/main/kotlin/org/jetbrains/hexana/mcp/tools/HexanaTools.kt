@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.tools
 
 private val HEXANA_TOOL_ORDER = listOf(
     "summarize_binary",
+    "query_binary",
     "summarize_module",
     "list_enabled_features",
     "get_entrypoint_policy",

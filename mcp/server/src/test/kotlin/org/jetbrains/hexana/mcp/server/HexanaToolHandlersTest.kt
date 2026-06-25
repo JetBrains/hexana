@@ -65,6 +65,33 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun queryBinaryAcceptsRawByteArrayInput() {
+        val result = handlers.queryBinary(
+            buildJsonObject {
+                put("bytes", buildJsonArray {
+                    add(JsonPrimitive(0))
+                    add(JsonPrimitive(0x61))
+                    add(JsonPrimitive(0x73))
+                    add(JsonPrimitive(0x6d))
+                    add(JsonPrimitive(1))
+                    add(JsonPrimitive(0))
+                    add(JsonPrimitive(0))
+                    add(JsonPrimitive(0))
+                })
+                put("operation", JsonPrimitive("overview"))
+            }
+        )
+
+        assertTrue(result.isError != true)
+        val textPayload = result.content.single() as TextContent
+        val structured = result.structuredContent ?: error("Expected structured content")
+        assertEquals(structured, Json.parseToJsonElement(textPayload.text).jsonObject)
+        assertEquals("wasm", structured["module"]!!.jsonObject["format"]!!.jsonPrimitive.content)
+        assertEquals("overview", structured["operation"]!!.jsonPrimitive.content)
+        assertEquals(1, structured["records"]!!.jsonArray.size)
+    }
+
+    @Test
     fun queryArtifactsFindsBoundedExportRecords() {
         val wasm = createWasmFile(
             "query-artifacts-find.wasm",

@@ -18,6 +18,16 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
  * Generated input defaults shared by standalone server handlers.
  */
 internal object HexanaToolInputDefaults {
+  public const val QUERY_BINARY_OPERATION: String = "overview"
+
+  public const val QUERY_BINARY_OFFSET: Int = 0
+
+  public const val QUERY_BINARY_LIMIT: Int = 25
+
+  public const val QUERY_BINARY_DETAIL: String = "summary"
+
+  public const val QUERY_BINARY_MAX_BYTES: Int = 24_000
+
   public const val AUDIT_GLOBAL_STATE_POLICY_DETAIL: String = "compact"
 
   public const val AUDIT_LOCAL_STACK_BUDGET_COUNT_PARAMS: Boolean = false
@@ -50,6 +60,7 @@ internal object HexanaToolInputDefaults {
  */
 public fun Server.registerHexanaTools(handlers: HexanaToolHandlers, profile: HexanaMcpToolProfile = HexanaMcpToolProfile.ADVANCED) {
   if (profile.includesTool("summarize_binary")) registerSummarizeBinaryTool(handlers)
+  if (profile.includesTool("query_binary")) registerQueryBinaryTool(handlers)
   if (profile.includesTool("summarize_module")) registerSummarizeModuleTool(handlers)
   if (profile.includesTool("list_enabled_features")) registerListEnabledFeaturesTool(handlers)
   if (profile.includesTool("get_entrypoint_policy")) registerGetEntrypointPolicyTool(handlers)
@@ -162,6 +173,146 @@ private fun Server.registerSummarizeBinaryTool(handlers: HexanaToolHandlers) {
     ),
   ))  {
     request: CallToolRequest -> handlers.summarizeBinary(request.arguments)
+  }
+}
+
+private fun Server.registerQueryBinaryTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "query_binary",
+    description = """
+  |Query Wasm or native binary records with bounded output.
+  |Use this when `summarize_binary` shows the format has relevant records and you need a compact, paged lookup across generic binary entities.
+  |Prefer a focused `operation` over `all`; use `query`, `offset`, and `limit` to avoid broad scans, and request `detail=evidence` only for the few records that need parser offsets or record context.
+  |This is a broad query tool like `query_artifacts`: it never returns raw byte dumps or disassembly, and unsupported entity groups return warnings rather than failing unrelated formats.
+  |For WebAssembly core modules, keep using the existing Wasm-specific tools when the request maps to a focused Wasm surface.
+  """.trimMargin(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Readable local binary path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64 binary bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw binary bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES))
+      })
+      put("operation", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Query operation. Default `overview` returns compact format/count identity. Supported operations include `all`, `functions`, `imports`, `exports`, `sections`, `symbols`, `strings`, `segments`, `relocations`, `load_commands`, and `archive_members`; unsupported formats return a warning instead of raw bytes."))
+        put("default", JsonPrimitive("overview"))
+        put("maxLength", JsonPrimitive(32))
+      })
+      put("query", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Optional case-insensitive terms used to filter names, summaries, attributes, locations, or evidence."))
+        put("maxItems", JsonPrimitive(20))
+      })
+      put("offset", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Zero-based record offset after filtering."))
+        put("default", JsonPrimitive(0))
+        put("minimum", JsonPrimitive(0))
+      })
+      put("limit", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Maximum records to consider before byte budgeting. The implementation clamps values above 100."))
+        put("default", JsonPrimitive(25))
+        put("minimum", JsonPrimitive(1))
+        put("maximum", JsonPrimitive(100))
+      })
+      put("detail", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+        put("description", JsonPrimitive("Detail level: `summary` for compact records or `evidence` for extra offsets and parser record context."))
+        put("default", JsonPrimitive("summary"))
+        put("maxLength", JsonPrimitive(32))
+      })
+      put("maxBytes", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Approximate maximum JSON response bytes. Start small; the implementation clamps values above 60000."))
+        put("default", JsonPrimitive(24_000))
+        put("minimum", JsonPrimitive(2_000))
+        put("maximum", JsonPrimitive(60_000))
+      })
+    },
+    required = listOf()
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("module", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+      put("operation", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+      })
+      put("total", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+      })
+      put("offset", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+      })
+      put("returned", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+      })
+      put("nextOffset", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("integer"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("records", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("omitted", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("warnings", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+    },
+    required = listOf("module", "operation", "total", "offset", "returned", "records", "omitted", "warnings")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.queryBinary(request.arguments)
   }
 }
 

@@ -128,6 +128,23 @@ class HexanaMcpSummaryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(0, result.array("warnings").size)
     }
 
+    fun testQueryBinaryReturnsStructuredContentForAnyReadableFile() {
+        val fixture = createBinaryFixture(
+            "fixtures/direct/summary/query-any-file.dat",
+            byteArrayOf(1, 2, 3, 4)
+        )
+
+        val rawResult = callTool("query_binary", jsonPath(fixture.projectRelativePath))
+
+        assertFalse(rawResult.isError)
+        val textJson = json.parseToJsonElement(rawResult.textPayloads.single()) as JsonObject
+        val structuredContent = rawResult.requireStructuredObject()
+        assertEquals(textJson, structuredContent)
+        assertEquals("generic", structuredContent.obj("module").text("format"))
+        assertEquals("overview", structuredContent.text("operation"))
+        assertEquals(1, structuredContent.array("records").size)
+    }
+
     fun testListEnabledFeaturesReturnsFlagsAndSources() {
         val fixture = createWasmFixture(
             "fixtures/direct/summary/enabled_features.wasm",

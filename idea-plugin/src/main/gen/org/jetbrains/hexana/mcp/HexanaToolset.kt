@@ -35,6 +35,7 @@ import org.jetbrains.hexana.mcp.query.checkMemoryContract
 import org.jetbrains.hexana.mcp.query.diffRequiredProposals
 import org.jetbrains.hexana.mcp.query.planAbiBindingRegeneration
 import org.jetbrains.hexana.mcp.query.readArtifactQuery
+import org.jetbrains.hexana.mcp.query.readBinaryQuery
 import org.jetbrains.hexana.mcp.query.readBinarySummary
 import org.jetbrains.hexana.mcp.query.readCodeSectionOffsets
 import org.jetbrains.hexana.mcp.query.readComponentSurface
@@ -153,6 +154,163 @@ public class HexanaToolset : McpToolsProvider {
       val provider = input.provider
       val pathLabel = input.pathLabel
       val result = provider.readBinarySummary(pathLabel = pathLabel)
+      val text = encodeHexanaJson(result)
+      val structuredContent = encodeHexanaJsonElement(result).jsonObject
+      return McpToolCallResult.text(text, structuredContent)
+    }
+  },
+  object : McpTool {
+    override val descriptor: McpToolDescriptor = hexanaToolDescriptor(
+      name = "query_binary",
+      description = """
+      |Query Wasm or native binary records with bounded output.
+      |Use this when `summarize_binary` shows the format has relevant records and you need a compact, paged lookup across generic binary entities.
+      |Prefer a focused `operation` over `all`; use `query`, `offset`, and `limit` to avoid broad scans, and request `detail=evidence` only for the few records that need parser offsets or record context.
+      |This is a broad query tool like `query_artifacts`: it never returns raw byte dumps or disassembly, and unsupported entity groups return warnings rather than failing unrelated formats.
+      |For WebAssembly core modules, keep using the existing Wasm-specific tools when the request maps to a focused Wasm surface.
+      """.trimMargin(),
+      fullyQualifiedName = "org.jetbrains.hexana.mcp.HexanaToolset.queryBinary",
+      inputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("path", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+          put("description", JsonPrimitive("Readable local binary path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        })
+        put("bytesBase64", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+          put("description", JsonPrimitive("Base64 binary bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+          put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES + 2) / 3) * 4))
+        })
+        put("bytes", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("array"))
+            add(JsonPrimitive("null"))
+          })
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("integer"))
+            put("minimum", JsonPrimitive(0))
+            put("maximum", JsonPrimitive(255))
+          })
+          put("description", JsonPrimitive("Raw binary bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+          put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES))
+        })
+        put("operation", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Query operation. Default `overview` returns compact format/count identity. Supported operations include `all`, `functions`, `imports`, `exports`, `sections`, `symbols`, `strings`, `segments`, `relocations`, `load_commands`, and `archive_members`; unsupported formats return a warning instead of raw bytes."))
+          put("default", JsonPrimitive("overview"))
+          put("maxLength", JsonPrimitive(32))
+        })
+        put("query", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("array"))
+            add(JsonPrimitive("null"))
+          })
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+          put("description", JsonPrimitive("Optional case-insensitive terms used to filter names, summaries, attributes, locations, or evidence."))
+          put("maxItems", JsonPrimitive(20))
+        })
+        put("offset", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("description", JsonPrimitive("Zero-based record offset after filtering."))
+          put("default", JsonPrimitive(0))
+          put("minimum", JsonPrimitive(0))
+        })
+        put("limit", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("description", JsonPrimitive("Maximum records to consider before byte budgeting. The implementation clamps values above 100."))
+          put("default", JsonPrimitive(25))
+          put("minimum", JsonPrimitive(1))
+          put("maximum", JsonPrimitive(100))
+        })
+        put("detail", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("Detail level: `summary` for compact records or `evidence` for extra offsets and parser record context."))
+          put("default", JsonPrimitive("summary"))
+          put("maxLength", JsonPrimitive(32))
+        })
+        put("maxBytes", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("description", JsonPrimitive("Approximate maximum JSON response bytes. Start small; the implementation clamps values above 60000."))
+          put("default", JsonPrimitive(24_000))
+          put("minimum", JsonPrimitive(2_000))
+          put("maximum", JsonPrimitive(60_000))
+        })
+        put("projectPath", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+          put("description", JsonPrimitive("The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. In the case you know only the current working directory you can use it as the project path. If you're not aware about the project path you can ask user about it."))
+        })
+      },
+      requiredProperties = setOf(),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+      outputSchema = McpToolSchema.ofPropertiesSchema(
+      properties = buildJsonObject {
+        put("module", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+        put("operation", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("total", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+        })
+        put("offset", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+        })
+        put("returned", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+        })
+        put("nextOffset", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("integer"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("records", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
+        put("omitted", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
+        put("warnings", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
+      },
+      requiredProperties = setOf("module", "operation", "total", "offset", "returned", "records", "omitted", "warnings"),
+      definitions = emptyMap<String, JsonElement>(),
+      ),
+    )
+    override suspend fun call(args: JsonObject): McpToolCallResult {
+      val path = args.optionalStringArgument("path")
+      val bytesBase64 = args.optionalStringArgument("bytesBase64")
+      val bytes = args.optionalIntListArgument("bytes")
+      val operation = args.optionalStringArgument("operation") ?: "overview"
+      val query = args.optionalStringListArgument("query")
+      val offset = args.optionalIntArgument("offset") ?: 0
+      val limit = args.optionalIntArgument("limit") ?: 25
+      val detail = args.optionalStringArgument("detail") ?: "summary"
+      val maxBytes = args.optionalIntArgument("maxBytes") ?: 24_000
+      val input = requireBinaryProviderInput(path = path, bytesBase64 = bytesBase64, bytes = bytes)
+      val provider = input.provider
+      val pathLabel = input.pathLabel
+      val result = provider.readBinaryQuery(operation = operation, query = query.orEmpty(), offset = offset, limit = limit, detail = detail, maxBytes = maxBytes, pathLabel = pathLabel)
       val text = encodeHexanaJson(result)
       val structuredContent = encodeHexanaJsonElement(result).jsonObject
       return McpToolCallResult.text(text, structuredContent)

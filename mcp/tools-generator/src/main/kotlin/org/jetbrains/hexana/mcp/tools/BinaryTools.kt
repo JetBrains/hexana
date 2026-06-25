@@ -43,6 +43,69 @@ val BinarySummaryResultClass = class_("BinarySummaryResult", kotlinPackage = BIN
     list("warnings", of = BinaryWarningResultClass).describe("Warnings for partial or unsupported deeper parsing.")
 }
 
+private val QueryBinaryInput = BinaryInputClass.with("QueryBinaryInput") {
+    string("operation", default = "overview")
+        .describe("Query operation. Default `overview` returns compact format/count identity. Supported operations include `all`, `functions`, `imports`, `exports`, `sections`, `symbols`, `strings`, `segments`, `relocations`, `load_commands`, and `archive_members`; unsupported formats return a warning instead of raw bytes.")
+        .maxLength(32)
+    nullable("query", of = list(of = string()))
+        .describe("Optional case-insensitive terms used to filter names, summaries, attributes, locations, or evidence.")
+        .maxItems(20)
+    int("offset", default = 0)
+        .describe("Zero-based record offset after filtering.")
+        .minimum(0)
+    int("limit", default = 25)
+        .describe("Maximum records to consider before byte budgeting. The implementation clamps values above 100.")
+        .minimum(1)
+        .maximum(100)
+    string("detail", default = "summary")
+        .describe("Detail level: `summary` for compact records or `evidence` for extra offsets and parser record context.")
+        .maxLength(32)
+    int("maxBytes", default = 24_000)
+        .describe("Approximate maximum JSON response bytes. Start small; the implementation clamps values above 60000.")
+        .minimum(2_000)
+        .maximum(60_000)
+}
+
+private val BinaryRecordLocationResultClass = class_("BinaryRecordLocationResult", kotlinPackage = BINARIES_MODEL_PACKAGE) {
+    nullable("index", of = int()).describe("Primary record index when one exists.")
+    nullable("fileOffset", of = long()).describe("File offset when known.")
+    nullable("virtualAddress", of = long()).describe("Virtual address or RVA when known.")
+    nullable("size", of = long()).describe("Record, range, or entity size when known.")
+    nullable("section", of = string()).describe("Owning section or segment label when known.")
+}
+
+private val BinaryRecordAttributeResultClass = class_("BinaryRecordAttributeResult", kotlinPackage = BINARIES_MODEL_PACKAGE) {
+    string("name").describe("Attribute name.")
+    string("value").describe("Attribute value rendered as a compact string.")
+}
+
+private val BinaryRecordResultClass = class_("BinaryRecordResult", kotlinPackage = BINARIES_MODEL_PACKAGE) {
+    string("kind").describe("Record kind such as `function`, `import`, `export`, `section`, `symbol`, `string`, `segment`, `relocation`, `load_command`, or `archive_member`.")
+    nullable("name", of = string()).describe("Record name when the binary format exposes one.")
+    string("summary").describe("Compact human-readable summary.")
+    nullable("location", of = BinaryRecordLocationResultClass).describe("Stable location fields when offsets, addresses, sizes, or sections are known.")
+    list("attributes", of = BinaryRecordAttributeResultClass).describe("Bounded key-value attributes for this record.")
+    list("evidence", of = string()).describe("Extra parser context returned only for `detail=evidence` where available.")
+}
+
+private val BinaryOmittedResultClass = class_("BinaryOmittedResult", kotlinPackage = BINARIES_MODEL_PACKAGE) {
+    string("kind").describe("Omitted entity kind.")
+    int("count").describe("Number of omitted records.")
+    string("reason").describe("Why records were omitted.")
+}
+
+private val QueryBinaryResultClass = class_("QueryBinaryResult", kotlinPackage = BINARIES_MODEL_PACKAGE) {
+    embed("module", of = BinaryModuleIdentityResultClass).describe("Format, path label, size, and architecture identity.")
+    string("operation").describe("Executed operation.")
+    int("total").describe("Total matching records after filtering and before offset/limit/maxBytes bounds.")
+    int("offset").describe("Executed zero-based record offset.")
+    int("returned").describe("Number of records returned.")
+    nullable("nextOffset", of = int()).describe("Next offset to request more records, or null when there are no more records.")
+    list("records", of = BinaryRecordResultClass).describe("Bounded query records.")
+    list("omitted", of = BinaryOmittedResultClass).describe("Omission summaries for records outside offset/limit/maxBytes bounds.")
+    list("warnings", of = BinaryWarningResultClass).describe("Non-fatal query warnings.")
+}
+
 internal val BinaryTools: List<ToolSpec> = tools {
     tool("summarize_binary") {
         summary = "Summarize a Wasm or native binary with compact identity and entity counts."
@@ -56,5 +119,19 @@ internal val BinaryTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.BinaryOnly
         output = BinarySummaryResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readBinarySummary"
+    }
+
+    tool("query_binary") {
+        summary = "Query Wasm or native binary records with bounded output."
+        guidance = """
+            Use this when `summarize_binary` shows the format has relevant records and you need a compact, paged lookup across generic binary entities.
+            Prefer a focused `operation` over `all`; use `query`, `offset`, and `limit` to avoid broad scans, and request `detail=evidence` only for the few records that need parser offsets or record context.
+            This is a broad query tool like `query_artifacts`: it never returns raw byte dumps or disassembly, and unsupported entity groups return warnings rather than failing unrelated formats.
+            For WebAssembly core modules, keep using the existing Wasm-specific tools when the request maps to a focused Wasm surface.
+        """
+        input = QueryBinaryInput
+        inputPattern = ToolInputPattern.BoundedBinaryQuery
+        output = QueryBinaryResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readBinaryQuery"
     }
 }

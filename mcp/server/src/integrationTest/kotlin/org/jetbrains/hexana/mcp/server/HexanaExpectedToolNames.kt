@@ -36,6 +36,7 @@ internal val EXPECTED_ADVANCED_HEXANA_TOOL_NAMES = listOf(
     "list_value_types",
     "plan_abi_binding_regeneration",
     "query_artifacts",
+    "query_binary",
     "resolve_component_dependencies",
     "resolve_function_signature",
     "resolve_function_symbols",

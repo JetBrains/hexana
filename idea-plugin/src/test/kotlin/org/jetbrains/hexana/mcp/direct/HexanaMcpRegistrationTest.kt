@@ -4,6 +4,7 @@ class HexanaMcpRegistrationTest : HexanaMcpToolsetDirectTestBase() {
     fun testRegistersExpectedToolNames() {
         val names = toolNames()
         assertTrue("query_artifacts" in names)
+        assertTrue("query_binary" in names)
         assertTrue("get_entrypoint_policy" in names)
         assertTrue("summarize_binary" in names)
         assertTrue("summarize_module" in names)
