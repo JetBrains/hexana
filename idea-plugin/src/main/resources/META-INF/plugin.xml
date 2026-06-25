@@ -78,7 +78,7 @@
                      defaultValue="false"
                      description="Emit per-chunk [disasm-perf] timing to idea.log (decodeMs, renderMs, annotatedLen). Fires only when a function body is unfolded — the default-folded UX means no perf log until the user opens a function."/>
         <registryKey key="hexana.feedback.in.ide.enabled"
-                     defaultValue="false"
+                     defaultValue="true"
                      description="Show the in-IDE Hexana feedback action in the Hexana editor feedback popup. Disabled by default while the feedback submission flow is gated."/>
 
         <postStartupActivity implementation="org.jetbrains.hexana.whatsnew.HexanaWhatsNewStartupActivity"
