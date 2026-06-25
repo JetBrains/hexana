@@ -205,6 +205,7 @@ class BinaryInputLoaderTest {
         val result = service.queryBinary(
             input = BinaryInput.RawBytes(minimalWasm),
             operation = "overview",
+            entityTypes = emptyList(),
             query = emptyList(),
             offset = 0,
             limit = 10,
@@ -228,6 +229,7 @@ class BinaryInputLoaderTest {
             service.queryBinary(
                 input = BinaryInput.RawBytes(minimalWasm),
                 operation = "overview",
+                entityTypes = emptyList(),
                 query = emptyList(),
                 offset = 0,
                 limit = 10,

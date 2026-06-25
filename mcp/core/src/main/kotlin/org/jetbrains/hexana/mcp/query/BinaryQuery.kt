@@ -17,6 +17,7 @@ import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.NativeFunctionRecord
+import org.jetbrains.hexana.providers.NativeImageInfo
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
@@ -28,6 +29,7 @@ import org.jetbrains.hexana.providers.macho.MachOLoadCommand
 import org.jetbrains.hexana.providers.macho.MachOSection
 import org.jetbrains.hexana.providers.macho.MachOSymbol
 import org.jetbrains.hexana.providers.pe.PeCoffSymbol
+import org.jetbrains.hexana.providers.pe.PeDebugEntry
 import org.jetbrains.hexana.providers.pe.PeImportLibrary
 import org.jetbrains.hexana.providers.pe.PeSection
 import org.jetbrains.hexana.wasm.components.WasmComponentExport
@@ -57,6 +59,7 @@ private const val MAX_MAX_BYTES = 60_000
 
 fun org.jetbrains.hexana.providers.BinaryProvider.readBinaryQuery(
     operation: String = DEFAULT_OPERATION,
+    entityTypes: List<String> = emptyList(),
     query: List<String> = emptyList(),
     offset: Int = 0,
     limit: Int = DEFAULT_LIMIT,
@@ -87,10 +90,32 @@ fun org.jetbrains.hexana.providers.BinaryProvider.readBinaryQuery(
         warnings += BinaryWarningResult("clamped_max_bytes", "`maxBytes` was clamped to $boundedMaxBytes.")
     }
 
-    val operationRecords = recordsForOperation(normalizedOperation, normalizedDetail, warnings)
+    val effectiveOperation = if (isSupportedOperation(normalizedOperation)) {
+        normalizedOperation
+    } else {
+        warnings += BinaryWarningResult(
+            "unsupported_operation",
+            "Unsupported `operation=$normalizedOperation`; returned `overview` instead."
+        )
+        "overview"
+    }
+    val operationRecords = recordsForOperation(effectiveOperation, normalizedDetail, warnings)
+    val entityFilter = normalizeEntityTypes(entityTypes, warnings)
+    val entityFilterSpecified = entityTypes.any { it.isNotBlank() }
+    val entityRecords = if (effectiveOperation == "overview") {
+        operationRecords
+    } else {
+        operationRecords.filterByEntityTypes(entityFilter, entityFilterSpecified)
+    }
+    if (operationRecords.isNotEmpty() && entityFilterSpecified && entityRecords.isEmpty()) {
+        warnings += BinaryWarningResult(
+            "no_matching_entity_types",
+            "No records matched `entityTypes=${entityTypes.joinToString(",") { it.trim() }}`."
+        )
+    }
     val terms = query.map { it.trim() }.filter { it.isNotEmpty() }
-    val filteredRecords = operationRecords.filterByTerms(terms)
-    val pageRecords = filteredRecords.drop(offset).take(boundedLimit)
+    val filteredRecords = entityRecords.filterByTerms(terms)
+    val pageRecords = filteredRecords.drop(offset).take(boundedLimit).withDetailLevel(normalizedDetail)
     val budgetedRecords = budgetRecords(pageRecords, boundedMaxBytes)
     if (budgetedRecords.size < pageRecords.size) {
         warnings += BinaryWarningResult(
@@ -117,7 +142,7 @@ fun org.jetbrains.hexana.providers.BinaryProvider.readBinaryQuery(
     val nextOffset = (offset + budgetedRecords.size).takeIf { it < filteredRecords.size }
     return QueryBinaryResult(
         module = toModuleIdentity(pathLabel),
-        operation = normalizedOperation,
+        operation = effectiveOperation,
         total = filteredRecords.size,
         offset = offset,
         returned = budgetedRecords.size,
@@ -134,6 +159,7 @@ private fun normalizeOperation(operation: String): String =
     when (val normalized = operation.lowercase().trim().replace('-', '_')) {
         "", "overview", "summary" -> "overview"
         "all" -> "all"
+        "find", "search" -> "find"
         "function" -> "functions"
         "import" -> "imports"
         "export" -> "exports"
@@ -141,10 +167,32 @@ private fun normalizeOperation(operation: String): String =
         "symbol" -> "symbols"
         "string" -> "strings"
         "segment" -> "segments"
+        "relocation" -> "relocations"
+        "debug_info", "debugs" -> "debug"
+        "nativeimage", "native_images", "nativeimage_info", "native_image_info" -> "native_image"
         "load_command", "loadcommands" -> "load_commands"
         "archive_member", "member", "members" -> "archive_members"
         else -> normalized
     }
+
+private fun isSupportedOperation(operation: String): Boolean =
+    operation in setOf(
+        "overview",
+        "all",
+        "find",
+        "functions",
+        "imports",
+        "exports",
+        "sections",
+        "symbols",
+        "strings",
+        "segments",
+        "relocations",
+        "load_commands",
+        "archive_members",
+        "debug",
+        "native_image",
+    )
 
 private fun org.jetbrains.hexana.providers.BinaryProvider.recordsForOperation(
     operation: String,
@@ -154,6 +202,7 @@ private fun org.jetbrains.hexana.providers.BinaryProvider.recordsForOperation(
     val available = when (operation) {
         "overview" -> overviewRecords(warnings)
         "all" -> allQueryableRecords(detail, warnings)
+        "find" -> allQueryableRecords(detail, warnings)
         "functions" -> functionRecords(detail, warnings)
         "imports" -> importRecords(detail, warnings)
         "exports" -> exportRecords(detail, warnings)
@@ -164,10 +213,9 @@ private fun org.jetbrains.hexana.providers.BinaryProvider.recordsForOperation(
         "relocations" -> relocationRecords(warnings)
         "load_commands" -> loadCommandRecords(detail, warnings)
         "archive_members" -> archiveMemberRecords(detail, warnings)
-        else -> throw HexanaAnalysisException(
-            HexanaAnalysisErrorCode.INVALID_INPUT,
-            "Unsupported `operation`: $operation"
-        )
+        "debug" -> debugRecords(detail, warnings)
+        "native_image" -> nativeImageRecords(detail, warnings)
+        else -> emptyList()
     }
     if (available.isEmpty() && operation != "overview") {
         warnings += BinaryWarningResult("no_records", "No `$operation` records are available for this binary format.")
@@ -229,7 +277,9 @@ private fun org.jetbrains.hexana.providers.BinaryProvider.allQueryableRecords(
         segmentRecords(detail, warnings) +
         relocationRecords(warnings) +
         loadCommandRecords(detail, warnings) +
-        archiveMemberRecords(detail, warnings)
+        archiveMemberRecords(detail, warnings) +
+        debugRecords(detail, warnings) +
+        nativeImageRecords(detail, warnings)
 
 private fun org.jetbrains.hexana.providers.BinaryProvider.functionRecords(
     detail: String,
@@ -706,6 +756,223 @@ private fun org.jetbrains.hexana.providers.BinaryProvider.archiveMemberRecords(
         }
         else -> emptyList()
     }
+
+private fun org.jetbrains.hexana.providers.BinaryProvider.debugRecords(
+    detail: String,
+    warnings: MutableList<BinaryWarningResult>,
+): List<BinaryRecordResult> =
+    when (this) {
+        is WasmBinaryProvider -> wasmModule?.sections.orEmpty()
+            .filter { it.name.isDebugLikeSectionName() }
+            .mapIndexed { index, section -> section.toDebugRecord(index, detail) }
+        is WasmComponentBinaryProvider -> wasmModule?.sections.orEmpty()
+            .filter { it.name.isDebugLikeSectionName() }
+            .mapIndexed { index, section -> section.toDebugRecord(index, detail) }
+        is ElfBinaryProvider -> sections?.filter { it.name.isDebugLikeSectionName() }?.map { it.toDebugRecord(detail) }
+            ?: warnMissing(warnings, "Could not parse ELF sections for debug metadata.")
+        is MachOBinaryProvider -> buildList {
+            uuid?.let { uuid ->
+                add(
+                    BinaryRecordResult(
+                        kind = "debug",
+                        name = "uuid",
+                        summary = "Mach-O UUID ${uuid.value}",
+                        location = BinaryRecordLocationResult(fileOffset = uuid.uuidRange.offset.toLong(), size = uuid.uuidRange.size.toLong()),
+                        attributes = listOf(attr("uuid", uuid.value), attr("source", "LC_UUID")),
+                        evidence = if (detail == "evidence") {
+                            listOf("commandOffset=${uuid.commandRange.offset}", "uuidOffset=${uuid.uuidRange.offset}")
+                        } else {
+                            emptyList()
+                        },
+                    )
+                )
+            }
+            val debugSections = sections?.filter { it.name.isDebugLikeSectionName() } ?: run {
+                warnings += BinaryWarningResult("partial_parse", "Could not parse Mach-O sections for debug metadata.")
+                emptyList()
+            }
+            addAll(debugSections.map { it.toDebugRecord(detail) })
+        }
+        is PeBinaryProvider -> peDebugRecords(detail, warnings)
+        else -> emptyList()
+    }
+
+private fun WasmSection.toDebugRecord(index: Int, detail: String): BinaryRecordResult =
+    BinaryRecordResult(
+        kind = "debug",
+        name = name,
+        summary = "Wasm debug/custom section[$index] `$name`",
+        location = BinaryRecordLocationResult(index = index, fileOffset = sectionOffset.toLong(), size = sectionSize.toLong()),
+        attributes = listOf(attr("section", name), attr("contentSize", contentSize)),
+        evidence = if (detail == "evidence") listOf("sectionRange=$sectionRange", "contentRange=$contentRange") else emptyList(),
+    )
+
+private fun ElfSectionHeader.toDebugRecord(detail: String): BinaryRecordResult =
+    BinaryRecordResult(
+        kind = "debug",
+        name = name,
+        summary = "ELF debug section[$index] `${name.ifBlank { "<unnamed>" }}`",
+        location = BinaryRecordLocationResult(index = index, fileOffset = fileOffset.toLongOrNull(), virtualAddress = address.toLongOrNull(), size = size.toLongOrNull(), section = name),
+        attributes = listOf(attr("type", hex(type)), attr("flags", hex(flags))),
+        evidence = if (detail == "evidence") listOf("headerOffset=${headerRange.offset}", "headerSize=${headerRange.size}") else emptyList(),
+    )
+
+private fun MachOSection.toDebugRecord(detail: String): BinaryRecordResult =
+    BinaryRecordResult(
+        kind = "debug",
+        name = qualifiedName(),
+        summary = "Mach-O debug section[${index}] `${qualifiedName()}`",
+        location = BinaryRecordLocationResult(index = index, fileOffset = fileOffset.toLongOrNull(), virtualAddress = address.toLongOrNull(), size = size.toLongOrNull(), section = qualifiedName()),
+        attributes = listOf(attr("segment", segmentName), attr("flags", hex(flags))),
+        evidence = if (detail == "evidence") listOf("headerOffset=${headerRange.offset}", "headerSize=${headerRange.size}") else emptyList(),
+    )
+
+private fun PeBinaryProvider.peDebugRecords(
+    detail: String,
+    warnings: MutableList<BinaryWarningResult>,
+): List<BinaryRecordResult> {
+    val records = debugEntries ?: run {
+        warnings += BinaryWarningResult("partial_parse", "Could not parse PE debug directory.")
+        return emptyList()
+    }
+    return records.map { it.toRecord(detail) }
+}
+
+private fun PeDebugEntry.toRecord(detail: String): BinaryRecordResult =
+    BinaryRecordResult(
+        kind = "debug",
+        name = codeView?.pdbPath ?: codeView?.signature,
+        summary = buildString {
+            append("PE debug entry[$index] type=${hex(type)}")
+            codeView?.pdbPath?.let { append(" pdb=`").append(it).append('`') }
+        },
+        location = BinaryRecordLocationResult(index = index, fileOffset = recordRange.offset.toLong(), virtualAddress = addressOfRawData.toLong(), size = recordRange.size.toLong()),
+        attributes = buildList {
+            addAttr("type", hex(type))
+            addAttr("timeDateStamp", hex(timeDateStamp))
+            addAttr("sizeOfData", sizeOfData)
+            codeView?.let {
+                addAttr("codeViewSignature", it.signature)
+                it.guid?.let { guid -> addAttr("guid", guid) }
+                it.age?.let { age -> addAttr("age", age) }
+                it.pdbPath?.let { path -> addAttr("pdbPath", path) }
+            }
+        },
+        evidence = if (detail == "evidence") {
+            listOfNotNull(
+                "recordOffset=${recordRange.offset}",
+                dataRange?.let { "dataOffset=${it.offset} dataSize=${it.size}" },
+            )
+        } else {
+            emptyList()
+        },
+    )
+
+private fun org.jetbrains.hexana.providers.BinaryProvider.nativeImageRecords(
+    detail: String,
+    warnings: MutableList<BinaryWarningResult>,
+): List<BinaryRecordResult> {
+    if (this !is NativeBinaryProvider) return emptyList()
+    val info = nativeImageInfo ?: return emptyList()
+    if (!info.isNativeImage) return emptyList()
+    return listOf(info.toRecord(detail))
+}
+
+private fun NativeImageInfo.toRecord(detail: String): BinaryRecordResult =
+    BinaryRecordResult(
+        kind = "native_image",
+        name = version,
+        summary = buildString {
+            append("GraalVM Native Image")
+            version?.let { append(" `").append(it).append('`') }
+            platform?.let { append(" for ").append(it) }
+        },
+        location = sbom?.let { BinaryRecordLocationResult(fileOffset = it.fileOffset, size = it.length) },
+        attributes = buildList {
+            addAttr("confidence", confidence.name.lowercase())
+            addAttr("edition", edition.name.lowercase())
+            version?.let { addAttr("version", it) }
+            platform?.let { addAttr("platform", it) }
+            addAttr("svmSectionCount", svmSections.size)
+            sbom?.let {
+                addAttr("sbomOffset", it.fileOffset)
+                addAttr("sbomLength", it.length)
+                addAttr("sbomGzip", it.isGzip)
+            }
+        },
+        evidence = if (detail == "evidence") {
+            buildList {
+                if (svmSections.isNotEmpty()) add("svmSections=${svmSections.joinToString(",")}")
+                sbom?.let { add("sbomOffset=${it.fileOffset} sbomLength=${it.length}") }
+            }
+        } else {
+            emptyList()
+        },
+    )
+
+private fun String.isDebugLikeSectionName(): Boolean {
+    val normalized = trim().lowercase()
+    return normalized == "name" ||
+        normalized.startsWith(".debug") ||
+        normalized.startsWith(".zdebug") ||
+        normalized.startsWith("__debug") ||
+        normalized.startsWith(".note.gnu.build-id")
+}
+
+private fun normalizeEntityTypes(
+    rawEntityTypes: List<String>,
+    warnings: MutableList<BinaryWarningResult>,
+): Set<String> {
+    val unknown = mutableListOf<String>()
+    val normalized = rawEntityTypes.mapNotNull { raw ->
+        when (val value = raw.trim().lowercase().replace('-', '_')) {
+            "" -> null
+            "function", "functions" -> "function"
+            "import", "imports" -> "import"
+            "export", "exports" -> "export"
+            "section", "sections" -> "section"
+            "symbol", "symbols" -> "symbol"
+            "string", "strings" -> "string"
+            "segment", "segments", "architecture", "architectures", "slice", "slices" -> "segment"
+            "relocation", "relocations" -> "relocation"
+            "load_command", "load_commands", "loadcommands" -> "load_command"
+            "archive_member", "archive_members", "member", "members" -> "archive_member"
+            "debug", "debug_info", "debugs" -> "debug"
+            "native_image", "native_images", "nativeimage", "native_image_info", "nativeimage_info" -> "native_image"
+            "overview", "summary" -> "overview"
+            else -> {
+                unknown += value
+                null
+            }
+        }
+    }.toSet()
+    if (unknown.isNotEmpty()) {
+        warnings += BinaryWarningResult(
+            "unsupported_entity_types",
+            "Ignored unsupported `entityTypes`: ${unknown.joinToString(",")}."
+        )
+    }
+    return normalized
+}
+
+private fun List<BinaryRecordResult>.filterByEntityTypes(
+    entityTypes: Set<String>,
+    entityFilterSpecified: Boolean,
+): List<BinaryRecordResult> {
+    if (!entityFilterSpecified) return this
+    return filter { it.kind in entityTypes }
+}
+
+private fun List<BinaryRecordResult>.withDetailLevel(detail: String): List<BinaryRecordResult> {
+    if (detail == "evidence") return this
+    return map {
+        if (it.location == null && it.evidence.isEmpty()) {
+            it
+        } else {
+            it.copy(location = null, evidence = emptyList())
+        }
+    }
+}
 
 private fun List<BinaryRecordResult>.filterByTerms(terms: List<String>): List<BinaryRecordResult> {
     if (terms.isEmpty()) return this

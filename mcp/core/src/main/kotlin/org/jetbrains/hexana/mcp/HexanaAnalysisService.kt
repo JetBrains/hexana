@@ -69,6 +69,7 @@ interface HexanaAnalysisService {
     fun queryBinary(
         input: BinaryInput,
         operation: String,
+        entityTypes: List<String> = emptyList(),
         query: List<String>,
         offset: Int,
         limit: Int,
@@ -253,12 +254,14 @@ class DefaultHexanaAnalysisService(
     override fun queryBinary(
         input: BinaryInput,
         operation: String,
+        entityTypes: List<String>,
         query: List<String>,
         offset: Int,
         limit: Int,
         detail: String,
         maxBytes: Int,
     ): QueryBinaryResult {
+        requireStringList(entityTypes, "Entity types")
         requireStringList(query, "Query")
         val binary = BinaryInputLoader(
             maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
@@ -266,6 +269,7 @@ class DefaultHexanaAnalysisService(
         ).load(input)
         return binary.provider.readBinaryQuery(
             operation = operation,
+            entityTypes = entityTypes,
             query = query,
             offset = offset,
             limit = limit,

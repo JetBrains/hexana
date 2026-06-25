@@ -273,6 +273,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             val detail = inputField(spec.input, "detail").defaultOrError<String>()
             val maxBytes = inputField(spec.input, "maxBytes").defaultOrError<Int>()
             code.addStatement("val operation = args.optionalStringArgument(%S) ?: %S", "operation", operation)
+            code.addStatement("val entityTypes = args.optionalStringListArgument(%S)", "entityTypes")
             code.addStatement("val query = args.optionalStringListArgument(%S)", "query")
             code.addStatement("val offset = args.optionalIntArgument(%S) ?: %L", "offset", offset)
             code.addStatement("val limit = args.optionalIntArgument(%S) ?: %L", "limit", limit)
@@ -426,7 +427,7 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
                 "(path = file.path, dependencyPaths = dependencyPaths.orEmpty(), projectRoot = projectRoot, previousPath = previousPath, dependencyLockPath = dependencyLockPath)"
             ToolInputPattern.BinaryOnly -> "(pathLabel = pathLabel)"
             ToolInputPattern.BoundedBinaryQuery ->
-                "(operation = operation, query = query.orEmpty(), offset = offset, limit = limit, detail = detail, maxBytes = maxBytes, pathLabel = pathLabel)"
+                "(operation = operation, entityTypes = entityTypes.orEmpty(), query = query.orEmpty(), offset = offset, limit = limit, detail = detail, maxBytes = maxBytes, pathLabel = pathLabel)"
         }
         code.addStatement("val result = provider.%M$callArgs", handlerMember)
     }
@@ -570,6 +571,7 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
         ToolInputPattern.BinaryOnly -> emptyList()
         ToolInputPattern.BoundedBinaryQuery -> listOf(
             inputField(spec.input, "operation"),
+            inputField(spec.input, "entityTypes"),
             inputField(spec.input, "query"),
             inputField(spec.input, "offset"),
             inputField(spec.input, "limit"),

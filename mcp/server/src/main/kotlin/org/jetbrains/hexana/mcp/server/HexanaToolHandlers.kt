@@ -75,6 +75,7 @@ class HexanaToolHandlers(
                     "operation",
                     HexanaToolInputDefaults.QUERY_BINARY_OPERATION
                 ),
+                entityTypes = arguments.optionalStringList("entityTypes").orEmpty(),
                 query = arguments.optionalStringList("query").orEmpty(),
                 offset = arguments.intOrDefault("offset", HexanaToolInputDefaults.QUERY_BINARY_OFFSET),
                 limit = arguments.intOrDefault("limit", HexanaToolInputDefaults.QUERY_BINARY_LIMIT),

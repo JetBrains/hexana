@@ -92,6 +92,39 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun queryBinaryAcceptsEntityTypeFilters() {
+        val wasm = createWasmFile(
+            "query-binary-entity-types.wasm",
+            """
+            (module
+              (import "env" "log" (func))
+              (func (export "main")
+                call 0))
+            """.trimIndent()
+        )
+
+        val result = handlers.queryBinary(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("operation", JsonPrimitive("find"))
+                put("entityTypes", buildJsonArray {
+                    add(JsonPrimitive("export"))
+                })
+                put("query", buildJsonArray {
+                    add(JsonPrimitive("main"))
+                })
+            }
+        )
+
+        assertTrue(result.isError != true)
+        val structured = result.structuredContent ?: error("Expected structured content")
+        assertEquals("find", structured["operation"]!!.jsonPrimitive.content)
+        val record = structured["records"]!!.jsonArray.single().jsonObject
+        assertEquals("export", record["kind"]!!.jsonPrimitive.content)
+        assertEquals("main", record["name"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun queryArtifactsFindsBoundedExportRecords() {
         val wasm = createWasmFile(
             "query-artifacts-find.wasm",

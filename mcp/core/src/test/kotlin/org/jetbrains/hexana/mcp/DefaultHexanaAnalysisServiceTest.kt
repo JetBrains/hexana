@@ -67,7 +67,7 @@ class DefaultHexanaAnalysisServiceTest {
         val wasm = createWasmFile(
             "summary-raw-bytes.wasm",
             """
-            (module
+              (module
               (memory 1)
               (func (export "main")))
             """.trimIndent()
@@ -79,6 +79,114 @@ class DefaultHexanaAnalysisServiceTest {
         assertEquals(1, result.exports)
         assertEquals(1, result.memories)
         assertTrue(result.moduleSize > 0)
+    }
+
+    @Test
+    fun queryBinaryFindHonorsEntityTypesAndKeepsSummaryCompact() {
+        val wasm = createWasmFile(
+            "query-binary-find.wasm",
+            """
+            (module
+              (import "env" "log" (func))
+              (func (export "main")
+                call 0))
+            """.trimIndent()
+        )
+
+        val result = service.queryBinary(
+            input = BinaryInput.FilePath(wasm.toString()),
+            operation = "find",
+            entityTypes = listOf("export"),
+            query = listOf("main"),
+            offset = 0,
+            limit = 10,
+            detail = "summary",
+            maxBytes = 2_000,
+        )
+
+        assertEquals("find", result.operation)
+        assertEquals(1, result.total)
+        assertEquals(1, result.returned)
+        val record = result.records.single()
+        assertEquals("export", record.kind)
+        assertEquals("main", record.name)
+        assertEquals(null, record.location)
+        assertTrue(record.evidence.isEmpty())
+    }
+
+    @Test
+    fun queryBinaryEvidenceAddsLocationsOnlyForReturnedRecords() {
+        val wasm = createWasmFile(
+            "query-binary-evidence.wasm",
+            """
+            (module
+              (func (export "first"))
+              (func (export "second")))
+            """.trimIndent()
+        )
+
+        val result = service.queryBinary(
+            input = BinaryInput.FilePath(wasm.toString()),
+            operation = "exports",
+            entityTypes = emptyList(),
+            query = emptyList(),
+            offset = 1,
+            limit = 1,
+            detail = "evidence",
+            maxBytes = 2_000,
+        )
+
+        assertEquals(2, result.total)
+        assertEquals(1, result.returned)
+        assertEquals("second", result.records.single().name)
+        assertTrue(result.records.single().location != null)
+        assertTrue(result.records.single().evidence.isNotEmpty())
+        assertEquals(1, result.omitted.single { it.reason.contains("before requested") }.count)
+        assertEquals(null, result.nextOffset)
+    }
+
+    @Test
+    fun queryBinaryUnsupportedOperationReturnsBoundedOverviewWarning() {
+        val result = service.queryBinary(
+            input = BinaryInput.RawBytes(byteArrayOf(1, 2, 3)),
+            operation = "hexdump",
+            entityTypes = listOf("export"),
+            query = emptyList(),
+            offset = 0,
+            limit = 10,
+            detail = "summary",
+            maxBytes = 2_000,
+        )
+
+        assertEquals("overview", result.operation)
+        assertEquals(1, result.returned)
+        assertTrue(result.warnings.any { it.code == "unsupported_operation" })
+    }
+
+    @Test
+    fun queryBinaryUnknownEntityTypesDoNotReturnUnfilteredRecords() {
+        val wasm = createWasmFile(
+            "query-binary-unknown-entity.wasm",
+            """
+            (module
+              (func (export "main")))
+            """.trimIndent()
+        )
+
+        val result = service.queryBinary(
+            input = BinaryInput.FilePath(wasm.toString()),
+            operation = "find",
+            entityTypes = listOf("not_a_kind"),
+            query = emptyList(),
+            offset = 0,
+            limit = 10,
+            detail = "summary",
+            maxBytes = 2_000,
+        )
+
+        assertEquals(0, result.returned)
+        assertTrue(result.warnings.any { it.code == "unsupported_entity_types" })
+        assertTrue(result.warnings.any { it.code == "no_matching_entity_types" })
     }
 
     @Test

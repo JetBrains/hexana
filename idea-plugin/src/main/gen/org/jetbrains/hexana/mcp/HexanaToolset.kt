@@ -165,7 +165,7 @@ public class HexanaToolset : McpToolsProvider {
       description = """
       |Query Wasm or native binary records with bounded output.
       |Use this when `summarize_binary` shows the format has relevant records and you need a compact, paged lookup across generic binary entities.
-      |Prefer a focused `operation` over `all`; use `query`, `offset`, and `limit` to avoid broad scans, and request `detail=evidence` only for the few records that need parser offsets or record context.
+      |Prefer a focused `operation` over `all`; use `entityTypes`, `query`, `offset`, and `limit` to avoid broad scans, and request `detail=evidence` only for the few records that need parser offsets or record context.
       |This is a broad query tool like `query_artifacts`: it never returns raw byte dumps or disassembly, and unsupported entity groups return warnings rather than failing unrelated formats.
       |For WebAssembly core modules, keep using the existing Wasm-specific tools when the request maps to a focused Wasm surface.
       """.trimMargin(),
@@ -202,9 +202,20 @@ public class HexanaToolset : McpToolsProvider {
         })
         put("operation", buildJsonObject {
           put("type", JsonPrimitive("string"))
-          put("description", JsonPrimitive("Query operation. Default `overview` returns compact format/count identity. Supported operations include `all`, `functions`, `imports`, `exports`, `sections`, `symbols`, `strings`, `segments`, `relocations`, `load_commands`, and `archive_members`; unsupported formats return a warning instead of raw bytes."))
+          put("description", JsonPrimitive("Query operation. Default `overview` returns compact format/count identity. Supported operations include `find`, `all`, `functions`, `symbols`, `imports`, `exports`, `sections`, `segments`, `relocations`, `strings`, `archive_members`, `debug`, and `native_image`; unsupported formats return a warning instead of raw bytes."))
           put("default", JsonPrimitive("overview"))
           put("maxLength", JsonPrimitive(32))
+        })
+        put("entityTypes", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("array"))
+            add(JsonPrimitive("null"))
+          })
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+          put("description", JsonPrimitive("Optional record-kind filters such as `function`, `symbol`, `import`, `export`, `section`, `segment`, `relocation`, `string`, `archive_member`, `debug`, or `native_image`. Mostly useful with `operation=find` or `operation=all`."))
+          put("maxItems", JsonPrimitive(20))
         })
         put("query", buildJsonObject {
           put("type", buildJsonArray {
@@ -302,6 +313,7 @@ public class HexanaToolset : McpToolsProvider {
       val bytesBase64 = args.optionalStringArgument("bytesBase64")
       val bytes = args.optionalIntListArgument("bytes")
       val operation = args.optionalStringArgument("operation") ?: "overview"
+      val entityTypes = args.optionalStringListArgument("entityTypes")
       val query = args.optionalStringListArgument("query")
       val offset = args.optionalIntArgument("offset") ?: 0
       val limit = args.optionalIntArgument("limit") ?: 25
@@ -310,7 +322,7 @@ public class HexanaToolset : McpToolsProvider {
       val input = requireBinaryProviderInput(path = path, bytesBase64 = bytesBase64, bytes = bytes)
       val provider = input.provider
       val pathLabel = input.pathLabel
-      val result = provider.readBinaryQuery(operation = operation, query = query.orEmpty(), offset = offset, limit = limit, detail = detail, maxBytes = maxBytes, pathLabel = pathLabel)
+      val result = provider.readBinaryQuery(operation = operation, entityTypes = entityTypes.orEmpty(), query = query.orEmpty(), offset = offset, limit = limit, detail = detail, maxBytes = maxBytes, pathLabel = pathLabel)
       val text = encodeHexanaJson(result)
       val structuredContent = encodeHexanaJsonElement(result).jsonObject
       return McpToolCallResult.text(text, structuredContent)

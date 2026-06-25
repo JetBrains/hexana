@@ -896,6 +896,11 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireDefault(operation, "String") { it is String }
             requireDescribed(operation)
 
+            val entityTypes = requireField("entityTypes")
+            requireListOf(entityTypes, FieldType.StringT)
+            requireNullable(entityTypes)
+            requireDescribed(entityTypes)
+
             val query = requireField("query")
             requireListOf(query, FieldType.StringT)
             requireNullable(query)

@@ -25,6 +25,9 @@ class ToolDescriptionGenerationTest {
     private val queryBinaryInput = BinaryInputClass.with("QueryBinaryInput") {
         string("operation", default = "overview")
             .describe("Binary query operation.")
+        nullable("entityTypes", of = list(of = string()))
+            .describe("Binary record kinds used by the selected operation.")
+            .maxItems(20)
         nullable("query", of = list(of = string()))
             .describe("Search terms used by the selected operation.")
         int("offset", default = 0)
