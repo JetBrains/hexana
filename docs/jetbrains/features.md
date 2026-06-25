@@ -1,12 +1,12 @@
 ---
 title: Hexana Feature Reference
 description: Complete capability reference for the Hexana IntelliJ plugin, grouped by surface.
-version: "0.11.1"
+version: "0.12"
 ---
 
 # Hexana Feature Reference
 
-This page enumerates every user-visible capability Hexana ships. Capabilities are grouped by *surface* (file type or interaction point), not by chronological release. For per-release changes, see [`changelog-0.11.md`](changelog-0.11.md), [`changelog-0.10.md`](changelog-0.10.md), and the prior [`changelog-0.9.md`](changelog-0.9.md).
+This page enumerates every user-visible capability Hexana ships. Capabilities are grouped by *surface* (file type or interaction point), not by chronological release. For per-release changes, see [`changelog-0.12.md`](changelog-0.12.md), [`changelog-0.11.md`](changelog-0.11.md), [`changelog-0.10.md`](changelog-0.10.md), and the prior [`changelog-0.9.md`](changelog-0.9.md).
 
 ![Hexana opens a `.wasm` file with the structure tabs visible](../images/idea/01-wasm-overview.png)
 
@@ -26,11 +26,17 @@ When Hexana opens a `.wasm` file, it presents a structured editor with the follo
 - Resolved type signature per imported function.
 - Click an entry to jump to its hex offset in the **Hex** tab.
 - Search-as-you-type filter across import names.
+- **(0.12)** Each row shows a tooltip with the module-qualified name (`module.field`).
+- **(0.12)** **Copy Name** context-menu action copies the qualified name.
+- **(0.12)** For function imports, **Find Usages** lists every function that calls the import (resolved from the call graph), capped at 15 entries; each entry navigates to the caller's body in the WAT (virtualized) tab. Beyond 15, or before the call graph finishes computing, the entry opens the Caller Paths panel. The call graph is computed off the EDT.
 
 ### Exports tab
 - Exports listed with the resolved target index and kind.
 - Goto Symbol contributes export names project-wide.
 - Click an entry to jump to its hex offset.
+- **(0.12)** Each row shows a tooltip with the full export name (for names truncated by the column width).
+- **(0.12)** **Copy Name** context-menu action.
+- **(0.12)** **Navigate to Function in WAT** context-menu action (shown only for function exports) switches to the WAT (virtualized) tab and scrolls to that function's body.
 
 ### Functions tab
 - One row per defined function with index, type signature, local count, and code-section offset.
@@ -44,6 +50,7 @@ When Hexana opens a `.wasm` file, it presents a structured editor with the follo
 - Sortable table of the largest functions, data segments, and sections by byte size.
 - Click a row to navigate to the corresponding hex range.
 - Useful first stop when "the binary got bigger" — the top of the list is where the bytes went.
+- **(0.12)** For Component Model binaries, the tree now attributes every nested sub-component and embedded core module with its correct byte count, expanding on demand to internal sections and then to functions, recursively. Previously, a composed component reported most of its bytes as a single opaque block.
 
 ### Hex tab
 - Byte-level view with section annotations.
@@ -64,6 +71,7 @@ When Hexana opens a `.wasm` file, it presents a structured editor with the follo
 - Syntax highlighting and brace matching; IDE zoom respected.
 - Reference-types and bulk-memory instructions rendered.
 - Legacy Exception Handling (`try`, `catch`, `throw`, `rethrow`, `delegate`, `catch_all`) supported alongside the finalised `try_table` proposal.
+- **(0.12)** Component Model binaries: the WAT tab discovers every embedded core module recursively through nested sub-components and renders the selected one with the same three-column offset / bytes / mnemonic layout. A selector switches between modules when a component contains more than one. In-memory component views (such as a submodule opened from a diff) also gain a WAT tab this way.
 
 #### Inline row editing
 
@@ -117,7 +125,16 @@ Modules compiled by the Kotlin/Wasm backend are recognised and made navigable ba
 - **Minified modules** — detected (e.g. Binaryen `--minify-imports-and-exports`); a symbol-map sidecar (`<file>.symbols` from `--emit-symbol-map`, in either function-index or `original => minified` form) restores the original names so functions match by name.
 - **On-demand WAT comparison** — selecting a function opens a side-by-side WAT diff rendered with symbolic names and red/green line-level highlighting, so an unchanged caller of a renumbered function reads identically.
 
-For the full release notes, see [`changelog-0.11.md`](changelog-0.11.md#0111-module-diff-and-kotlinwasm).
+For the full release notes on the core-module diff, see [`changelog-0.11.md`](changelog-0.11.md#0111-module-diff-and-kotlinwasm).
+
+### Component Model diff (0.12)
+
+**Compare WASM With…** now accepts Component Model binaries. Comparing two components opens a submodule view listing each component's embedded submodules (core modules and nested components, found recursively) and classifying each as identical, modified, added, or removed. Clicking a changed pair opens a dedicated tab:
+
+- A **core-module pair** reuses the existing Size Impact / Entities / WAT diff.
+- A **nested-component pair** recurses into the same submodule view.
+
+Submodules are paired by content hash, with positional fallback when hashes do not match.
 
 ## WIT language support
 
@@ -200,6 +217,22 @@ Hexana opens Java archives, class files, and Hotspot JIT dumps as structured doc
 ![JAR file: hex on top, searchable class list below](../images/idea/07-jar-class-list.png)
 
 `.jar`, `.zip`, `.war`, `.apk` archives open with a hex view on top and a searchable, sortable class list below. Click a class to open its decoded bytes in a nested tab. An **Open in… → Hexana** action surfaces from the Project tool window for archive entries, including entries under External Libraries.
+
+### Static-library archives — `.a` and `.lib` (0.12)
+
+<!-- TODO: screenshot for static-library Members view -->
+
+`.a` (Unix `ar`) and `.lib` (Windows COFF import library) archives open as a **Members** list. Each row shows the member name, detected format (ELF / Mach-O / PE / COFF / short-import), and size. The archive's bookkeeping entries (symbol tables, long-names table) are hidden.
+
+Clicking a member extracts the object file to the IDE's temp folder and opens it in the matching disassembly view. Both the Capstone and llvm-objdump backends are available for extracted members. The member tab is titled `archive-name/member-name`; duplicate names get an index suffix.
+
+Archives are detected by `!<arch>\n` content magic, not extension. Plain MSVC import `.lib` files without this header are left to their normal handler.
+
+**Per-function disassembly**: relocatable object files (ELF `.o`, Windows COFF `.obj`/`.o`, Mach-O) carry section-relative symbols. Hexana resolves each symbol's file offset through its owning section so the virtualized Capstone view lists named functions individually. Stripped members fall back to whole-section disassembly.
+
+### Android DEX — `.dex` (0.12)
+
+`.dex` files open with a basic classes-and-members view.
 
 ### JIT dumps
 

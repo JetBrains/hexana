@@ -4,7 +4,7 @@
 
 ## Products
 
-- **JetBrains IDE plugin** — version 0.10. Compatible with IntelliJ IDEA 2024.1+, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm.
+- **JetBrains IDE plugin** — version 0.12. Compatible with IntelliJ IDEA 2025.2+, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm.
 - **VS Code extension** — version 0.2.0. Compatible with VS Code 1.102+, Cursor, VSCodium, Code OSS.
 
 ## Identity
@@ -37,6 +37,8 @@
 - [JS and TS Integration](jetbrains/js-integration.md): WebAssembly.instantiate imports completion and .instance.exports type inference.
 - [Settings](jetbrains/settings.md): IDE settings pages and Registry-key toggles.
 - [Troubleshooting](jetbrains/troubleshooting.md): common failure modes and resolutions.
+- [Changelog 0.12](jetbrains/changelog-0.12.md): release notes for 0.12 (2026-06-24).
+- [Changelog 0.11](jetbrains/changelog-0.11.md): release notes for the 0.11 line (0.11, 0.11.1).
 - [Changelog 0.10](jetbrains/changelog-0.10.md): release notes for 0.10.
 - [Changelog 0.9](jetbrains/changelog-0.9.md): release notes for the 0.9 line.
 
@@ -68,7 +70,7 @@ Yes. Both products are free. Source code is open at github.com/JetBrains/hexana.
 
 ### Which IDEs are supported?
 
-IntelliJ IDEA 2024.1+, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm, and any IntelliJ-based IDE on platform 2024.1+ that bundles the MCP server plugin. Plus Visual Studio Code 1.102+ (since VS Code extension 0.1.0) and VS Code-based editors (Cursor, VSCodium, Code OSS, Windsurf) at the same baseline. Earlier VS Code 1.85+ ran the 0.0.x line.
+IntelliJ IDEA 2025.2+, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm, and any IntelliJ-based IDE on platform 2025.2+ that bundles the MCP server plugin. Plus Visual Studio Code 1.102+ (since VS Code extension 0.1.0) and VS Code-based editors (Cursor, VSCodium, Code OSS, Windsurf) at the same baseline. Earlier VS Code 1.85+ ran the 0.0.x line.
 
 ### Does Hexana support the Component Model?
 

@@ -24,6 +24,7 @@ audience: [users]
 | [`js-integration.md`](js-integration.md) | JS / TS users | `WebAssembly.instantiate` imports completion and `.instance.exports` type inference. |
 | [`settings.md`](settings.md) | Users | `Settings → Tools → Hexana`, `Settings → Build, Execution → WASM Runtime`, and Registry-key toggles. |
 | [`troubleshooting.md`](troubleshooting.md) | Users | Common failure modes and resolutions. |
+| [`changelog-0.12.md`](changelog-0.12.md) | All | Release notes for 0.12 (2026-06-24). |
 | [`changelog-0.11.md`](changelog-0.11.md) | All | Release notes for the 0.11 line (0.11, 0.11.1). |
 | [`changelog-0.10.md`](changelog-0.10.md) | All | Release notes for the 0.10 line. |
 | [`changelog-0.9.md`](changelog-0.9.md) | All | Release notes for the 0.9 line. |
@@ -31,14 +32,14 @@ audience: [users]
 
 ## Version and compatibility
 
-- **Plugin version**: 0.11.1.
-- **`since-build`**: defined by `gradle.properties` → `defaultSinceBuild`. Hexana targets IntelliJ Platform 2024.1+.
+- **Plugin version**: 0.12.
+- **`since-build`**: defined by `gradle/intellij-platform.versions.toml` → `defaultSinceBuild = "252"`. Hexana targets IntelliJ Platform 2025.2+.
 - **Optional integrations**: the JavaScript plugin (enables JS interop for `instance.exports`) and the Java module (enables GraalWasm / Chicory completion). Both are loaded when the host IDE bundles them.
 - **Required dependency**: `com.intellij.mcpServer` — Hexana registers its toolset against the platform MCP server.
 
 ## Supported IDEs
 
-IntelliJ IDEA, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm, and any other IDE on IntelliJ Platform 2024.1+ that bundles or installs `com.intellij.mcpServer`. RustRover and CLion users get the natural fit for binary tooling; WebStorm and PhpStorm users get JS interop.
+IntelliJ IDEA, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm, and any other IDE on IntelliJ Platform 2025.2+ that bundles or installs `com.intellij.mcpServer`. RustRover and CLion users get the natural fit for binary tooling; WebStorm and PhpStorm users get JS interop.
 
 A companion **VS Code extension** is published separately on `marketplace.visualstudio.com` and `open-vsx.org`. See the [VS Code section](../vscode/index.md) of this site for that product's documentation.
 

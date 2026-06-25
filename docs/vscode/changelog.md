@@ -1,12 +1,26 @@
 ---
 title: Hexana for VS Code — Release Notes
 description: Release notes for the Hexana VS Code extension.
-version: "0.4.0"
+version: "0.5.0"
 ---
 
 # Release Notes — Hexana for VS Code
 
 This page tracks releases of the VS Code extension.
+
+## 0.5.0
+
+Released **2026-06-24**.
+
+### Added
+
+- **Virtualized WAT view.** The WAT tab now uses virtual scrolling for faster section navigation in large modules. Previously the full text was rendered at once; 0.5.0 renders only the visible portion.
+- **Java `.class` and Android DEX file viewing.** The custom editor now opens `.class` and `.dex` files directly by file-type detection, in addition to recognising them as entries inside JAR/ZIP archives (0.3.0). Files open in the hex viewer.
+- **ZIP64 archive support.** Large archives using the ZIP64 format now open in the Hexana editor.
+
+### Changed
+
+- **NodeJS debugging stability.** Improved reliability of the CDP-backed debug path for Node.js, introduced in 0.4.0.
 
 ## 0.4.0
 

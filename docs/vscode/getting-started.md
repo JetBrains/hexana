@@ -1,7 +1,7 @@
 ---
 title: Getting Started with Hexana for VS Code
 description: How to install the Hexana VS Code extension, open a WebAssembly file, and find the main views.
-version: "0.4.0"
+version: "0.5.0"
 ---
 
 # Getting Started with Hexana for VS Code

@@ -15,8 +15,8 @@ hide:
 
     Full IntelliJ Platform plugin — multi-tab `.wasm` editor with an editable virtualised WAT view, WAT and WIT language support, MCP server with Hexana tools, Java-side completion for GraalWasm and Chicory, JavaScript / TypeScript type inference for `WebAssembly.instantiate`, run and debug on Wasmtime / WAMR / GraalVM. Experimental ELF / Mach-O / PE binary support, JVM artifact viewers (`.class`, `.jar`, `.war`, `.apk`, `.jit`), and a switchable disassembler backend (bytecode AOT or Cranelift native).
 
-    **Current release**: 0.10
-    Supported IDEs: IntelliJ IDEA 2024.1+, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm.
+    **Current release**: 0.12
+    Supported IDEs: IntelliJ IDEA 2025.2+, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm.
 
     [Read the docs →](jetbrains/index.md)
 

@@ -83,6 +83,7 @@ nav:
       - JavaScript & TypeScript: jetbrains/js-integration.md
       - Settings: jetbrains/settings.md
       - Troubleshooting: jetbrains/troubleshooting.md
+      - Changelog 0.12: jetbrains/changelog-0.12.md
       - Changelog 0.11: jetbrains/changelog-0.11.md
       - Changelog 0.10: jetbrains/changelog-0.10.md
       - Changelog 0.9: jetbrains/changelog-0.9.md
