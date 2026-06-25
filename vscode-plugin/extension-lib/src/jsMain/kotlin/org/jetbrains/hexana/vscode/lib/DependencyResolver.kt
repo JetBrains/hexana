@@ -3,8 +3,8 @@
 package org.jetbrains.hexana.vscode.lib
 
 import org.jetbrains.hexana.shared.WasmDependencyResolver
-import org.jetbrains.hexana.shared.WasmFileEntry
-import org.jetbrains.hexana.shared.WasmFileSystem
+import org.jetbrains.hexana.shared.FileEntry
+import org.jetbrains.hexana.shared.FileSystem
 
 /**
  * A single resolved dependency: maps an import name to a file path.
@@ -64,21 +64,21 @@ external interface FileEntry {
 }
 
 /**
- * Adapts a JS [FileSystemAccess] to the shared [WasmFileSystem] interface.
+ * Adapts a JS [FileSystemAccess] to the shared [FileSystem] interface.
  */
-private fun FileSystemAccess.toWasmFileSystem(): WasmFileSystem = object : WasmFileSystem {
-    override fun listEntries(dir: String): List<WasmFileEntry> =
-        listDirectory(dir).map { WasmFileEntry(it.name, it.isDirectory, it.isFile) }
+private fun FileSystemAccess.toFileSystem(): FileSystem = object : FileSystem {
+    override fun listEntries(dir: String): List<FileEntry> =
+        listDirectory(dir).map { FileEntry(it.name, it.isDirectory, it.isFile) }
 
-    override fun readFile(path: String): ByteArray? = this@toWasmFileSystem.readFile(path)
+    override fun readFile(path: String): ByteArray? = this@toFileSystem.readFile(path)
 
-    override fun fileExists(path: String): Boolean = this@toWasmFileSystem.fileExists(path)
+    override fun fileExists(path: String): Boolean = this@toFileSystem.fileExists(path)
 
-    override fun parentDir(path: String): String = this@toWasmFileSystem.parentDir(path)
+    override fun parentDir(path: String): String = this@toFileSystem.parentDir(path)
 
-    override fun joinPath(base: String, child: String): String = this@toWasmFileSystem.joinPath(base, child)
+    override fun joinPath(base: String, child: String): String = this@toFileSystem.joinPath(base, child)
 
-    override fun pathRoot(path: String): String = this@toWasmFileSystem.pathRoot(path)
+    override fun pathRoot(path: String): String = this@toFileSystem.pathRoot(path)
 }
 
 /**
@@ -87,7 +87,7 @@ private fun FileSystemAccess.toWasmFileSystem(): WasmFileSystem = object : WasmF
  */
 @JsExport
 fun findWorkspaceRoot(wasmFilePath: String, fs: FileSystemAccess): String? =
-    WasmDependencyResolver.findWorkspaceRoot(wasmFilePath, fs.toWasmFileSystem())
+    WasmDependencyResolver.findWorkspaceRoot(wasmFilePath, fs.toFileSystem())
 
 /**
  * Resolves component dependencies (including transitive) for the
@@ -107,7 +107,7 @@ fun resolveAllDependencies(
     fs: FileSystemAccess,
 ): DependencyResolution {
     val allResolved = WasmDependencyResolver.resolveAllDependencies(
-        importNames.toList(), scanRoots.toList(), wasmFilePath, fs.toWasmFileSystem(),
+        importNames.toList(), scanRoots.toList(), wasmFilePath, fs.toFileSystem(),
     )
     val result = allResolved.map { (importName, filePath) -> ResolvedDep(importName, filePath) }
     return DependencyResolution(result.toTypedArray())

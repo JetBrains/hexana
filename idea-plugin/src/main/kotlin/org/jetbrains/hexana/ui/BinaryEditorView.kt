@@ -30,6 +30,10 @@ import org.jetbrains.hexana.providers.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
+import org.jetbrains.hexana.nativebin.JVM_FILE_SYSTEM
+import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.shared.NativeDebugTabData
+import org.jetbrains.hexana.shared.NativeTableTabsProvider
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.ui.panel.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -528,23 +532,23 @@ private fun BinaryProvider.resolvePanels(
     extraPanels: List<Panel> = emptyList(),
 ): Array<Panel> {
     val enricher = getTabEnricher()
-    val tabPanels = TableTabsProviderRegistry.providers.flatMap {
+    val providers = TableTabsProviderRegistry.providers
+    // Precompute filesystem-dependent debug data for native providers
+    // outside the rendering path so tableTabs() never touches the FS.
+    for (p in providers) {
+        if (p is NativeTableTabsProvider && this is NativeBinaryProvider) {
+            p.setDebugData(NativeDebugTabData.scan(this, JVM_FILE_SYSTEM, state.project.basePath))
+        }
+    }
+    val tabPanels = providers.flatMap {
         enricher(it.tableTabs(this), state, pathsNav).map { it.toPanel(state) }
     }
     val providerPanels = when (this) {
         is GenericBinaryProvider -> emptyList()
-        is ElfBinaryProvider -> listOf(
-            Panel("Debug Context") { NativeDebugContextPanel(this, state) },
-            Panel("Debug Info") { NativeDebugInfoPanel(this, state) },
-        ) + commonNativePanels(state)
-        is MachOBinaryProvider -> listOf(
-            Panel("Debug Context") { NativeDebugContextPanel(this, state) },
-            Panel("Debug Info") { NativeDebugInfoPanel(this, state) }
-        ) + commonNativePanels(state)
+        is ElfBinaryProvider -> commonNativePanels(state)
+        is MachOBinaryProvider -> commonNativePanels(state)
         is FatMachOBinaryProvider ->  commonNativePanels(state)
-        is PeBinaryProvider -> listOfNotNull(
-            Panel("Debug Context") { NativeDebugContextPanel(this, state) }
-        ) + commonNativePanels(state)
+        is PeBinaryProvider -> commonNativePanels(state)
         is CoffBinaryProvider -> commonNativePanels(state)
         // Must precede the generic `is NativeBinaryProvider` branch below: ArchiveBinaryProvider
         // IS-A NativeBinaryProvider, and Kotlin `when` is first-match — otherwise the archive

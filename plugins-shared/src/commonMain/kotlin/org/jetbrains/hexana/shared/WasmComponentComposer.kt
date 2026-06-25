@@ -37,7 +37,7 @@ interface ToolResolver {
  * Platform-agnostic abstraction for reading files during composition.
  *
  * This is deliberately minimal — callers that already have a
- * [WasmFileSystem] can adapt it with [WasmFileSystem.toComposerFileAccess].
+ * [FileSystem] can adapt it with [FileSystem.toComposerFileAccess].
  */
 interface ComposerFileAccess {
     /** Reads a file as a byte array, or `null` if unreadable. */
@@ -45,9 +45,9 @@ interface ComposerFileAccess {
 }
 
 /**
- * Adapts a [WasmFileSystem] to the [ComposerFileAccess] interface.
+ * Adapts a [FileSystem] to the [ComposerFileAccess] interface.
  */
-fun WasmFileSystem.toComposerFileAccess(): ComposerFileAccess = object : ComposerFileAccess {
+fun FileSystem.toComposerFileAccess(): ComposerFileAccess = object : ComposerFileAccess {
     override fun readFile(path: String): ByteArray? = this@toComposerFileAccess.readFile(path)
 }
 

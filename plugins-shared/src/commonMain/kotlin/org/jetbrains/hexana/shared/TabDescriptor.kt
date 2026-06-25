@@ -117,6 +117,9 @@ class RowMenuEntry(
  * @param dynamicContextMenuProvider optional provider of additional, per-row context
  *   menu entries whose count may vary by row (e.g. one entry per usage site). The UI
  *   layer renders these after [contextMenuItems]; `null` means none.
+ * @param prologueText optional text displayed above the table; `null` means no prologue
+ * @param emptyMessage optional message shown when [rowCount] is zero; `null` falls back
+ *   to the default empty-table behavior of the UI layer
  */
 class TableTabDescriptor(
     val name: String,
@@ -129,6 +132,8 @@ class TableTabDescriptor(
     val contextMenuItems: List<RowContextMenuItemDescriptor> = emptyList(),
     val rowClickAction: ((index: Int) -> Unit)? = null,
     val dynamicContextMenuProvider: ((index: Int) -> List<RowMenuEntry>)? = null,
+    val prologueText: String? = null,
+    val emptyMessage: String? = null,
 ) {
     companion object {
         /** Sentinel value for [defaultSortColumn] that targets the implicit ID column. */
@@ -149,7 +154,7 @@ interface TableTabsProvider {
 }
 
 object TableTabsProviderRegistry {
-    val providers: List<TableTabsProvider> by lazy {
+    val providers by lazy {
         listOf(
             WasmComponentTableTabsProvider(),
             WasmTableTabsProvider(),

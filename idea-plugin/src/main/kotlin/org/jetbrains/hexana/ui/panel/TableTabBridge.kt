@@ -4,7 +4,10 @@ import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -41,8 +44,28 @@ internal fun TableTabDescriptor.toPanel(state: HexViewStateHolder): Panel {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TableTabContent(descriptor: TableTabDescriptor, state: HexViewStateHolder) {
+    if (descriptor.prologueText != null || (descriptor.rowCount == 0 && descriptor.emptyMessage != null)) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            descriptor.prologueText?.let {
+                Text(it, modifier = Modifier.padding(bottom = 8.dp))
+            }
+            if (descriptor.rowCount == 0) {
+                descriptor.emptyMessage?.let { Text(it) }
+                return
+            }
+            TableTabTable(descriptor, state)
+        }
+        return
+    }
+
     if (descriptor.rowCount == 0) return
 
+    TableTabTable(descriptor, state)
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TableTabTable(descriptor: TableTabDescriptor, state: HexViewStateHolder) {
     val textMeasurer = rememberTextMeasurer()
 
     val modifiers = descriptor.columns.map { col ->

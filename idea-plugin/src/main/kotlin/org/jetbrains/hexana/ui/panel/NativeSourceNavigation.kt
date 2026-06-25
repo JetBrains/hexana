@@ -12,9 +12,10 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexanaBundle
 import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.nativebin.JVM_FILE_SYSTEM
 import org.jetbrains.hexana.providers.HexanaSourceLocation
+import org.jetbrains.hexana.shared.resolveNativeSourcePath as sharedResolveNativeSourcePath
 import java.nio.file.Path
-import kotlin.io.path.exists
 
 internal fun openNativeSourceLocation(
     sourceLocation: HexanaSourceLocation,
@@ -54,26 +55,6 @@ internal fun resolveNativeSourcePath(
     state: HexViewStateHolder,
     binaryPath: String?,
 ): Path? {
-    return resolveNativeSourcePath(sourceFilePath, state.project.basePath, binaryPath)
-}
-
-internal fun resolveNativeSourcePath(
-    sourceFilePath: String,
-    projectBasePath: String?,
-    binaryPath: String?,
-): Path? {
-    val raw = runCatching { Path.of(sourceFilePath) }.getOrNull() ?: return null
-    val binaryDirectory = binaryPath?.let { runCatching { Path.of(it).parent }.getOrNull() }
-    val projectDirectory = projectBasePath?.let { runCatching { Path.of(it) }.getOrNull() }
-
-    return buildList {
-        add(raw)
-        if (!raw.isAbsolute) {
-            binaryDirectory?.let { directory ->
-                add(directory.resolve(raw).normalize())
-                directory.parent?.let { add(it.resolve(raw).normalize()) }
-            }
-            projectDirectory?.let { add(it.resolve(raw).normalize()) }
-        }
-    }.distinct().firstOrNull { it.exists() } ?: raw.takeIf { it.isAbsolute }
+    val resolved = sharedResolveNativeSourcePath(sourceFilePath, binaryPath, state.project.basePath, JVM_FILE_SYSTEM)
+    return resolved?.let { runCatching { Path.of(it) }.getOrNull() }
 }

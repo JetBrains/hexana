@@ -10,9 +10,8 @@ import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.nativebin.JVM_FILE_SYSTEM
 import org.jetbrains.hexana.shared.WasmDependencyResolver as SharedResolver
-import org.jetbrains.hexana.shared.WasmFileEntry
-import org.jetbrains.hexana.shared.WasmFileSystem
 import org.jetbrains.hexana.shared.splitNameAndVersion
 import org.jetbrains.hexana.wit.processIndexEntries
 import java.io.File
@@ -33,31 +32,6 @@ import java.io.File
  * resolved so that composition tools receive the full dependency graph.
  */
 internal object WasmDependencyResolver {
-
-    /** `java.io.File`-based adapter for the shared [WasmFileSystem] interface. */
-    private val JVM_FILE_SYSTEM = object : WasmFileSystem {
-        override fun listEntries(dir: String): List<WasmFileEntry> {
-            val files = File(dir).listFiles() ?: return emptyList()
-            return files.map { WasmFileEntry(it.name, it.isDirectory, it.isFile) }
-        }
-
-        override fun readFile(path: String): ByteArray? {
-            val file = File(path)
-            return if (file.exists()) file.readBytes() else null
-        }
-
-        override fun fileExists(path: String): Boolean = File(path).exists()
-
-        override fun parentDir(path: String): String = File(path).parent ?: ""
-
-        override fun joinPath(base: String, child: String): String = File(base, child).path
-
-        override fun pathRoot(path: String): String {
-            var f = File(path).absoluteFile
-            while (f.parentFile != null) f = f.parentFile
-            return f.path
-        }
-    }
 
     /**
      * Resolves dependencies for a wasm file, auto-detecting whether it is

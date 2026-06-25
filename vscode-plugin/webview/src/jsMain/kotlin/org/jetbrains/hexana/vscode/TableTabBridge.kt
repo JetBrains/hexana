@@ -80,9 +80,15 @@ fun TableTabContent(
     descriptor: TableTabDescriptor,
     selection: HexSelectionState,
 ) {
+    descriptor.prologueText?.let { prologue ->
+        Div({ style { property("margin-bottom", "8px") } }) {
+            Text(prologue)
+        }
+    }
+
     if (descriptor.rowCount == 0) {
         Div({ classes("empty-hint") }) {
-            Text("No data found.")
+            Text(descriptor.emptyMessage ?: "No data found.")
         }
         return
     }

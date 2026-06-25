@@ -8,17 +8,144 @@ import org.jetbrains.hexana.providers.FatMachOBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.PeBinaryProvider
+import org.jetbrains.hexana.providers.NativeDebugInfoSummary
 import org.jetbrains.hexana.providers.macho.MachOParser
 
+/**
+ * Pre-resolved data for the debug tabs that requires filesystem access.
+ * Callers should build this outside the rendering path via [scan] and
+ * inject it into [NativeTableTabsProvider.setDebugData] so that
+ * [TableTabsProvider.tableTabs] never touches the filesystem.
+ */
+class NativeDebugTabData(
+    val debugContext: NativeDebugContext,
+    val debugInfoRows: List<Pair<String, String>>?,
+) {
+    companion object {
+        /**
+         * Scans the [provider] for debug companions and source-location
+         * summary rows using the given [fs] and [projectBasePath].
+         * Call this outside the rendering path.
+         */
+        fun scan(
+            provider: NativeBinaryProvider,
+            fs: FileSystem? = null,
+            projectBasePath: String? = null,
+        ): NativeDebugTabData {
+            val context = NativeDebugCompanionScanner.scan(provider, fs)
+            val debugInfoRows = run {
+                val slp = provider.nativeSourceLocationProvider ?: return@run null
+                val summary = slp.summary
+                if (summary.lineRowCount == 0) return@run null
+                buildDebugInfoRows(summary, provider.sourcePath, projectBasePath, fs)
+            }
+            return NativeDebugTabData(context, debugInfoRows)
+        }
+    }
+}
+
 class NativeTableTabsProvider : TableTabsProvider {
+
+    private var precomputedDebugData: NativeDebugTabData? = null
+
+    /**
+     * Injects pre-resolved debug data so that [tableTabs] can build
+     * tab descriptors without any filesystem access. IDE-specific
+     * callers should compute this outside the rendering path and
+     * inject it here before calling [tableTabs].
+     */
+    fun setDebugData(data: NativeDebugTabData) {
+        precomputedDebugData = data
+    }
+
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> = when (provider) {
-        is ElfBinaryProvider -> elfTabs(provider)
-        is MachOBinaryProvider -> machOTabs(provider)
+        is ElfBinaryProvider -> elfTabs(provider) + debugTabs(provider)
+        is MachOBinaryProvider -> machOTabs(provider) + debugTabs(provider)
         is FatMachOBinaryProvider -> fatMachOTabs(provider)
-        is PeBinaryProvider -> peTabs(provider)
+        is PeBinaryProvider -> peTabs(provider) + listOf(debugContextTab(provider))
         is CoffBinaryProvider -> coffTabs(provider)
         is NativeBinaryProvider -> stringsTab(provider)?.let(::listOf).orEmpty()
         else -> emptyList()
+    }
+
+    private fun resolveDebugData(provider: NativeBinaryProvider): NativeDebugTabData {
+        precomputedDebugData?.let { return it }
+        // Fallback: compute without filesystem access. Callers that need
+        // FS-aware companion scanning should inject data via setDebugData.
+        val context = NativeDebugCompanionScanner.scan(provider, fs = null)
+        val debugInfoRows = run {
+            val sourceLocationProvider = provider.nativeSourceLocationProvider ?: return@run null
+            val summary = sourceLocationProvider.summary
+            if (summary.lineRowCount == 0) return@run null
+            buildDebugInfoRows(summary, provider.sourcePath, projectBasePath = null, fs = null)
+        }
+        return NativeDebugTabData(context, debugInfoRows)
+    }
+
+    private fun debugTabs(provider: NativeBinaryProvider): List<TableTabDescriptor> {
+        val data = resolveDebugData(provider)
+        return listOf(
+            debugContextTab(data),
+            debugInfoTab(provider, data),
+        )
+    }
+
+    private fun debugContextTab(provider: NativeBinaryProvider): TableTabDescriptor {
+        val data = resolveDebugData(provider)
+        return debugContextTab(data)
+    }
+
+    private fun debugContextTab(data: NativeDebugTabData): TableTabDescriptor {
+        val rows = data.debugContext.companions
+        return TableTabDescriptor(
+            name = "Debug Context",
+            columns = listOf(
+                col("Kind", ColumnWidth.Fill(0.22f)) { CellValue(rows[it].kind.label) },
+                col("Status", ColumnWidth.Fill(0.16f)) { CellValue(rows[it].status.label) },
+                col("Name", ColumnWidth.Fill(0.30f)) { CellValue(rows[it].name) },
+                col("Location", ColumnWidth.Fill(0.45f)) { CellValue(rows[it].location ?: "") },
+                col("Notes", ColumnWidth.Fill()) { CellValue(rows[it].description) },
+            ),
+            rowCount = rows.size,
+            rowSelectionProvider = { index ->
+                rows.getOrNull(index)?.range?.let { range -> RowSelectionData(range.offset, range.size) }
+            },
+            prologueText = buildDebugContextPrologueText(data.debugContext),
+            emptyMessage = "No debug companion information is available.",
+        )
+    }
+
+    private fun debugInfoTab(provider: NativeBinaryProvider, data: NativeDebugTabData): TableTabDescriptor {
+        val sourceLocationProvider = provider.nativeSourceLocationProvider
+            ?: return TableTabDescriptor(
+                name = "Debug Info",
+                columns = emptyList(),
+                rowCount = 0,
+                emptyMessage = "Debug info: unavailable. No supported native line-table data was found.",
+            )
+        val summary = sourceLocationProvider.summary
+        if (summary.lineRowCount == 0) {
+            return TableTabDescriptor(
+                name = "Debug Info",
+                columns = emptyList(),
+                rowCount = 0,
+                emptyMessage = "Debug info: present, but Hexana did not resolve any source line rows.",
+            )
+        }
+        val rows = data.debugInfoRows ?: return TableTabDescriptor(
+            name = "Debug Info",
+            columns = emptyList(),
+            rowCount = 0,
+            emptyMessage = "Debug info: present, but Hexana did not resolve any source line rows.",
+        )
+        return TableTabDescriptor(
+            name = "Debug Info",
+            columns = listOf(
+                col("Field", ColumnWidth.Fill(0.24f)) { CellValue(rows[it].first) },
+                col("Value", ColumnWidth.Fill()) { CellValue(rows[it].second) },
+            ),
+            rowCount = rows.size,
+        )
     }
 }
 
@@ -494,6 +621,76 @@ private fun elfExportsTab(provider: ElfBinaryProvider): TableTabDescriptor? {
         rowCount = exports.size,
         rowSelectionProvider = { exports.getOrNull(it)?.let { export -> selection(export.recordRange) } },
     )
+}
+
+private fun buildDebugInfoRows(
+    summary: NativeDebugInfoSummary,
+    binaryPath: String?,
+    projectBasePath: String?,
+    fs: FileSystem?,
+): List<Pair<String, String>> = buildList {
+    add("Line rows" to summary.lineRowCount.toString())
+    add("Source files" to summary.fileCount.toString())
+    add("First VA" to (summary.firstAddress?.let { hex(it) } ?: ""))
+    add("Last VA" to (summary.lastAddress?.let { hex(it) } ?: ""))
+    summary.sampleFiles.forEachIndexed { index, file ->
+        val display = resolveNativeSourceDisplay(file, binaryPath, projectBasePath, fs)
+        add("File ${index + 1}" to display)
+    }
+}
+
+/**
+ * Resolves a source file path referenced in debug info against the binary's
+ * directory and the project base path, returning a display string like
+ * "found: /resolved/path" or "missing: original".
+ */
+private fun resolveNativeSourceDisplay(
+    sourceFilePath: String,
+    binaryPath: String?,
+    projectBasePath: String?,
+    fs: FileSystem?,
+): String {
+    if (fs == null) return "missing: $sourceFilePath"
+    val resolved = resolveNativeSourcePath(sourceFilePath, binaryPath, projectBasePath, fs)
+    return if (resolved != null && fs.fileExists(resolved)) "found: $resolved" else "missing: $sourceFilePath"
+}
+
+/**
+ * Tries to locate a source file on the filesystem by checking the raw path,
+ * paths relative to the binary directory (and its parent), and relative to
+ * the project base path.
+ */
+fun resolveNativeSourcePath(
+    sourceFilePath: String,
+    binaryPath: String?,
+    projectBasePath: String?,
+    fs: FileSystem,
+): String? {
+    // Check the raw path first (works for absolute paths)
+    if (fs.fileExists(sourceFilePath)) return sourceFilePath
+
+    val isAbsolute = sourceFilePath.startsWith("/") || (sourceFilePath.length >= 3 && sourceFilePath[1] == ':')
+    if (isAbsolute) return sourceFilePath // absolute but doesn't exist — return as-is for display
+
+    // Try relative to binary directory and its parent
+    if (binaryPath != null) {
+        val binaryDir = fs.parentDir(binaryPath)
+        val resolved = fs.joinPath(binaryDir, sourceFilePath)
+        if (fs.fileExists(resolved)) return resolved
+        val parentDir = fs.parentDir(binaryDir)
+        if (parentDir.isNotEmpty()) {
+            val resolvedParent = fs.joinPath(parentDir, sourceFilePath)
+            if (fs.fileExists(resolvedParent)) return resolvedParent
+        }
+    }
+
+    // Try relative to project base path
+    if (projectBasePath != null) {
+        val resolved = fs.joinPath(projectBasePath, sourceFilePath)
+        if (fs.fileExists(resolved)) return resolved
+    }
+
+    return null
 }
 
 private fun stringsTab(provider: NativeBinaryProvider): TableTabDescriptor? {

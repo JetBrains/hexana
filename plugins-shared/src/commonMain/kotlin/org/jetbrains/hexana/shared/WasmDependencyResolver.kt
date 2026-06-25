@@ -2,15 +2,15 @@ package org.jetbrains.hexana.shared
 
 /**
  * Platform-independent filesystem abstraction used by [WasmDependencyResolver]
- * to scan directories and read Wasm files.
+ * to scan directories and read files.
  *
  * Each platform provides an adapter:
  * - JVM (IntelliJ): wraps `java.io.File`
  * - JS (VS Code extension): wraps Node.js `fs`/`path`
  */
-interface WasmFileSystem {
+interface FileSystem {
     /** Lists entries in [dir]. Returns an empty list when the directory is unreadable. */
-    fun listEntries(dir: String): List<WasmFileEntry>
+    fun listEntries(dir: String): List<FileEntry>
 
     /** Reads a file as a byte array, or `null` if unreadable. */
     fun readFile(path: String): ByteArray?
@@ -28,8 +28,8 @@ interface WasmFileSystem {
     fun pathRoot(path: String): String
 }
 
-/** A directory entry returned by [WasmFileSystem.listEntries]. */
-data class WasmFileEntry(
+/** A directory entry returned by [FileSystem.listEntries]. */
+data class FileEntry(
     val name: String,
     val isDirectory: Boolean,
     val isFile: Boolean,
@@ -50,7 +50,7 @@ object WasmDependencyResolver {
      * Walks up from [wasmFilePath] looking for a directory that contains
      * a workspace marker file (`Cargo.toml`, `package.json`, `.git`).
      */
-    fun findWorkspaceRoot(wasmFilePath: String, fs: WasmFileSystem): String? {
+    fun findWorkspaceRoot(wasmFilePath: String, fs: FileSystem): String? {
         var dir = fs.parentDir(wasmFilePath)
         val root = fs.pathRoot(dir)
         while (dir.isNotEmpty() && dir != root) {
@@ -72,7 +72,7 @@ object WasmDependencyResolver {
     fun buildScanRoots(
         projectBasePath: String?,
         wasmFilePath: String?,
-        fs: WasmFileSystem,
+        fs: FileSystem,
     ): List<String> {
         val roots = LinkedHashSet<String>()
 
@@ -104,7 +104,7 @@ object WasmDependencyResolver {
         importNames: List<String>,
         scanRoots: List<String>,
         excludePath: String?,
-        fs: WasmFileSystem,
+        fs: FileSystem,
     ): Map<String, String> {
         val needed = importNames.associateBy { splitNameAndVersion(it).first }
         val resolved = mutableMapOf<String, String>()
@@ -127,7 +127,7 @@ object WasmDependencyResolver {
         directDeps: Map<String, String>,
         scanRoots: List<String>,
         excludePath: String?,
-        fs: WasmFileSystem,
+        fs: FileSystem,
     ): Map<String, String> {
         val allResolved = LinkedHashMap(directDeps)
         val visitedPaths = mutableSetOf<String>()
@@ -169,7 +169,7 @@ object WasmDependencyResolver {
         importNames: List<String>,
         scanRoots: List<String>,
         excludePath: String?,
-        fs: WasmFileSystem,
+        fs: FileSystem,
     ): Map<String, String> {
         val directDeps = resolveViaFilesystem(importNames, scanRoots, excludePath, fs)
         return resolveTransitiveDependencies(directDeps, scanRoots, excludePath, fs)
@@ -180,7 +180,7 @@ object WasmDependencyResolver {
         needed: Map<String, String>,
         resolved: MutableMap<String, String>,
         visited: MutableSet<String>,
-        fs: WasmFileSystem,
+        fs: FileSystem,
     ) {
         if (!visited.add(dir)) return
 
@@ -202,7 +202,7 @@ object WasmDependencyResolver {
         filePath: String,
         needed: Map<String, String>,
         resolved: MutableMap<String, String>,
-        fs: WasmFileSystem,
+        fs: FileSystem,
     ) {
         val bytes = fs.readFile(filePath) ?: return
         if (detectBinaryType(bytes) != org.jetbrains.hexana.providers.BinaryProviderType.WasmComponent) return
