@@ -9,6 +9,7 @@ import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
 import org.jetbrains.hexana.mcp.model.entrypoints.EntrypointPolicyResult
 import org.jetbrains.hexana.mcp.model.artifacts.QueryArtifactsResult
 import org.jetbrains.hexana.mcp.model.artifacts.PlanAbiBindingRegenerationResult
+import org.jetbrains.hexana.mcp.model.binaries.BinaryModuleIdentityResult
 import org.jetbrains.hexana.mcp.model.components.CheckComponentCompatibilityResult
 import org.jetbrains.hexana.mcp.model.components.ListComponentSurfaceResult
 import org.jetbrains.hexana.mcp.model.components.ResolveComponentDependenciesResult
@@ -55,6 +56,10 @@ import java.util.*
 import kotlin.io.path.extension
 
 interface HexanaAnalysisService {
+    fun loadBinary(input: BinaryInput): BinaryModuleIdentityResult {
+        throw UnsupportedOperationException("loadBinary is not implemented")
+    }
+
     fun queryArtifacts(
         input: WasmInput,
         baselineInput: WasmInput?,
@@ -211,6 +216,13 @@ class DefaultHexanaAnalysisService(
     private val maxInlineInputBytes: Int = HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES,
     private val maxFileInputBytes: Int = HexanaAnalysisLimits.MAX_FILE_WASM_BYTES
 ) : HexanaAnalysisService {
+
+    override fun loadBinary(input: BinaryInput): BinaryModuleIdentityResult {
+        return BinaryInputLoader(
+            maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
+            maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
+        ).load(input).identity
+    }
 
     override fun queryArtifacts(
         input: WasmInput,
