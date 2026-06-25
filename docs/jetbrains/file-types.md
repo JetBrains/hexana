@@ -1,7 +1,7 @@
 ---
 title: File Types Registered by Hexana
-description: File types Hexana registers in the IntelliJ Platform — .wasm, .wat, .wit, native binaries (ELF/Mach-O/PE), JVM artifacts (.class, .jar, .war, .apk), and JIT dumps.
-version: "0.11"
+description: File types Hexana registers in the IntelliJ Platform — .wasm, .wat, .wit, native binaries (ELF/Mach-O/PE), JVM artifacts (.class, .jar, .war, .apk), static-library archives (.a/.lib), Android DEX (.dex), and JIT dumps.
+version: "0.12"
 ---
 
 # File Types
@@ -16,7 +16,9 @@ Hexana registers and detects the following file types in the IntelliJ Platform.
 | Native binary | ELF / Mach-O / PE magic bytes (any extension); `.elf`, `.so`, `.dylib`, `.bundle`, `.exe`, `.dll`, `.sys` | Hexana hex + structure + disassembly | `org.jetbrains.hexana.NativeBinaryFileType` |
 | `binary` | `.bin` and other generic-extension fallbacks | Hex view | `org.jetbrains.hexana.BinaryFileType` |
 | JVM class | `.class` | Three-tab class view (header, methods, constant pool) | Handled inside `HexanaFileEditorProvider` |
-| JVM archive | `.jar`, `.zip`, `.war`, `.apk` | Hex view + searchable class list | Handled inside `HexanaFileEditorProvider` |
+| JVM archive | `.jar`, `.zip`, `.war`, `.apk` (including ZIP64) | Hex view + searchable class list | Handled inside `HexanaFileEditorProvider` |
+| Static-library archive (0.12) | `!<arch>\n` magic; `.a`, `.lib` | Members list + per-member disassembly | Handled inside `HexanaFileEditorProvider` |
+| Android DEX (0.12) | `.dex` | Basic classes-and-members view | Handled inside `HexanaFileEditorProvider` |
 | JIT dump | `.jit` | Three-pane symbol / native / bytecode view | Handled inside `HexanaFileEditorProvider` |
 
 Hexana also registers a `fileTypeOverrider` (`HexFileTypeOverrider`) that claims `.wasm`, `.wat`, and `.wit` even when another plugin tries to register the same extension.
@@ -89,6 +91,22 @@ This is the same view used for individual entries when browsing a `.jar` or `.ap
 
 Archives open with a hex view on top and a searchable, sortable class list below. Click any entry to open it in a nested tab using the `.class` view above. The list supports filtering by name and sorting by size, name, or position in the archive.
 
+ZIP64 archives (entries and central-directory records using the ZIP64 extension fields) are supported as of 0.12.
+
+## Static-library archives — `.a`, `.lib` (0.12)
+
+<!-- TODO: screenshot for static-library Members view -->
+
+Unix `ar` archives (`.a`) and Windows COFF import libraries (`.lib`) open as a **Members** list. Detection is by `!<arch>\n` content magic, not extension, so a renamed archive is still recognised and a plain MSVC import `.lib` without that header is left to its normal handler.
+
+Each row in the Members list shows the member name, its detected object format (ELF / Mach-O / PE / COFF / short-import), and its size. The archive's own bookkeeping entries (symbol tables, long-names table) are hidden. Clicking a member extracts the object file to the IDE's temp folder and opens it in the matching disassembly view; because the extracted file is a real on-disk file, both the Capstone and llvm-objdump backends are available. The member tab is titled `archive-name/member-name`; duplicate names receive an index suffix.
+
+For relocatable object files (ELF `.o`, Windows COFF `.obj`/`.o`, Mach-O), the virtualized Capstone view lists each named function individually, with file offsets resolved through the owning section. Stripped members fall back to whole-section disassembly.
+
+## Android DEX — `.dex` (0.12)
+
+`.dex` files open with a basic classes-and-members view listing the classes and their methods.
+
 ## JIT dumps — `.jit`
 
 Hexana ships a bundled JVMTI agent (`libjitview`). When attached to a Java run configuration, it hooks `CompiledMethodLoad` and writes a `.jit` dump on shutdown. Opening the dump gives:
@@ -105,6 +123,6 @@ A catch-all binary file type for content that doesn't match ELF, Mach-O, PE, or 
 
 ## Default editor selection
 
-`HexanaFileEditorProvider` returns a Hexana editor for `.wasm`, native binaries (detected by magic bytes), `.class`, `.jar` / `.war` / `.apk` / `.zip`, and `.jit`. For `.wat` and `.wit`, the platform's default editor (with Hexana's language support applied) is used. For the generic binary type, Hexana's hex view is the default editor.
+`HexanaFileEditorProvider` returns a Hexana editor for `.wasm`, native binaries (detected by magic bytes), `.class`, `.jar` / `.war` / `.apk` / `.zip` (including ZIP64), static-library archives (detected by `!<arch>\n` magic), `.dex`, and `.jit`. For `.wat` and `.wit`, the platform's default editor (with Hexana's language support applied) is used. For the generic binary type, Hexana's hex view is the default editor.
 
 If you have another plugin that conflicts on `.wasm` / `.wat` / `.wit`, `HexFileTypeOverrider` ensures Hexana wins. To disable the override, uninstall or disable the Hexana plugin.

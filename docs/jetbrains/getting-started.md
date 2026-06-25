@@ -10,7 +10,7 @@ This page covers installation, first launch, and the three main views you will s
 
 ## How do I install Hexana?
 
-1. Open your IntelliJ-based IDE (IntelliJ IDEA 2024.1+, RustRover, WebStorm, CLion, PyCharm, Rider, or PhpStorm).
+1. Open your IntelliJ-based IDE (IntelliJ IDEA 2025.2+, RustRover, WebStorm, CLion, PyCharm, Rider, or PhpStorm).
 2. Open **Settings → Plugins → Marketplace**.
 3. Search for `Hexana` and click **Install**.
 4. Restart the IDE when prompted.

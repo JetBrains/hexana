@@ -1,7 +1,7 @@
 ---
 title: Hexana for VS Code — Feature Reference
 description: Complete capability reference for the Hexana VS Code extension.
-version: "0.4.0"
+version: "0.5.0"
 ---
 
 # Hexana for VS Code — Feature Reference
@@ -16,7 +16,7 @@ Since **0.4.0** the hex viewer supports **in-place byte editing**: select a byte
 
 ### Automatic binary kind detection
 
-Four kinds are detected and badged in the editor toolbar:
+Five kinds are detected and badged in the editor toolbar:
 
 | Badge | Detection |
 |---|---|
@@ -24,6 +24,7 @@ Four kinds are detected and badged in the editor toolbar:
 | `component` | Component Model binary (magic `\0asm`, version 0x0a, layer 1). |
 | `wasm` | Falls back to generic when neither kind matches but the file is otherwise WebAssembly. |
 | `native` | ELF, Mach-O, or PE binary detected from magic bytes. |
+| `class` / `dex` | Java `.class` file or Android DEX file, opened directly in the hex viewer (0.5.0). |
 
 Tab availability adapts per kind — Component Model files surface a **Modules** tab; core modules surface **Functions**, **Data**, **Custom**, **Monos**, **Garbage**; native binaries surface a structure tab covering sections, segments, and symbols.
 
@@ -57,8 +58,13 @@ Common extensions are recognised (`.elf`, `.so`, `.dylib`, `.bundle`, `.exe`, `.
 
 - Click an entry that is itself a recognised binary — `.wasm`, `.class`, a native binary, or a nested archive — to open it in a new Hexana editor tab.
 - Decompression happens in the extension host; entries are read on demand, so large archives open without unpacking everything up front.
+- **ZIP64 archives (0.5.0)** — large archives using the ZIP64 format open without issue.
 
 The decoded three-tab `.class` view (header / methods / constant pool) remains JetBrains-only — in VS Code a `.class` entry opens in the hex viewer. See [What this version does not do](#what-this-version-does-not-do-yet).
+
+## Java class files and Android DEX files (0.5.0+)
+
+Java `.class` files and Android DEX (`.dex`) files open directly in the Hexana custom editor by file-type detection, without needing to be inside a JAR or ZIP archive. Both formats open in the hex viewer. The full decoded class view (header / methods / constant pool) — available in the JetBrains plugin — is not present in the VS Code extension. See [What this version does not do](#what-this-version-does-not-do-yet).
 
 ## Analysis tabs
 
@@ -77,6 +83,8 @@ Up to 11 tabs inside the same editor, surfaced by binary kind. All tables are **
 | Garbage | ✓ | — | — |
 | Modules | — | ✓ | — |
 | WAT | ✓ | ✓ | — |
+
+The WAT tab uses **virtual scrolling** since 0.5.0 — only the visible portion of the text is rendered, which keeps navigation fast in large modules. See [`analysis-tabs.md#wat`](analysis-tabs.md#wat) for details.
 
 ## Run support
 
