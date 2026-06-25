@@ -3477,6 +3477,8 @@ private fun JsonObject.optionalStringListArgument(name: String): List<String>? =
 private fun JsonObject.requireIntListArgument(name: String): List<Int> = this[name]?.jsonArray?.map { it.jsonPrimitive.int }
     ?: mcpFail("Missing required argument `$name`")
 
+private fun JsonObject.optionalIntListArgument(name: String): List<Int>? = this[name]?.jsonArray?.map { it.jsonPrimitive.int }
+
 private fun JsonObject.requireWasmFrameListArgument(name: String): List<WasmFrameInput> {
   val array = this[name]?.jsonArray ?: mcpFail("Missing required argument `$name`")
   return array.mapIndexed { index, element ->

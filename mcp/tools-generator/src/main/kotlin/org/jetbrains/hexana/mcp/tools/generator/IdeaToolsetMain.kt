@@ -91,6 +91,7 @@ private fun buildToolsetFile(tools: List<ToolSpec>): FileSpec {
         .addFunction(requireStringListArgumentFunction())
         .addFunction(optionalStringListArgumentFunction())
         .addFunction(requireIntListArgumentFunction())
+        .addFunction(optionalIntListArgumentFunction())
         .addFunction(requireWasmFrameListArgumentFunction())
         .addFunction(optionalWasmFrameListArgumentFunction())
         .addFunction(requireSourceLocationListArgumentFunction())
@@ -144,7 +145,13 @@ private fun buildToolObject(spec: ToolSpec): CodeBlock {
 
 private fun buildToolBody(spec: ToolSpec): CodeBlock {
     val code = CodeBlock.builder()
-    code.addStatement("val path = args.requireStringArgument(%S)", "path")
+    if (spec.inputPattern.isBinaryPattern()) {
+        code.addStatement("val path = args.optionalStringArgument(%S)", "path")
+        code.addStatement("val bytesBase64 = args.optionalStringArgument(%S)", "bytesBase64")
+        code.addStatement("val bytes = args.optionalIntListArgument(%S)", "bytes")
+    } else {
+        code.addStatement("val path = args.requireStringArgument(%S)", "path")
+    }
     when (val pattern = spec.inputPattern) {
         ToolInputPattern.WasmOnly -> Unit
         ToolInputPattern.WasmPathLabel -> Unit
@@ -258,12 +265,35 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             code.addStatement("val previousPath = args.optionalStringArgument(%S)", "previousPath")
             code.addStatement("val dependencyLockPath = args.optionalStringArgument(%S)", "dependencyLockPath")
         }
+        ToolInputPattern.BinaryOnly -> Unit
+        ToolInputPattern.BoundedBinaryQuery -> {
+            val operation = inputField(spec.input, "operation").defaultOrError<String>()
+            val offset = inputField(spec.input, "offset").defaultOrError<Int>()
+            val limit = inputField(spec.input, "limit").defaultOrError<Int>()
+            val detail = inputField(spec.input, "detail").defaultOrError<String>()
+            val maxBytes = inputField(spec.input, "maxBytes").defaultOrError<Int>()
+            code.addStatement("val operation = args.optionalStringArgument(%S) ?: %S", "operation", operation)
+            code.addStatement("val query = args.optionalStringListArgument(%S)", "query")
+            code.addStatement("val offset = args.optionalIntArgument(%S) ?: %L", "offset", offset)
+            code.addStatement("val limit = args.optionalIntArgument(%S) ?: %L", "limit", limit)
+            code.addStatement("val detail = args.optionalStringArgument(%S) ?: %S", "detail", detail)
+            code.addStatement("val maxBytes = args.optionalIntArgument(%S) ?: %L", "maxBytes", maxBytes)
+        }
     }
-    code.addStatement("val file = %M(path)", REQUIRE_WASM_FILE)
-    if (spec.inputPattern.isComponentPattern()) {
-        code.addStatement("val provider = file.%M()", REQUIRE_COMPONENT_WASM_BINARY_PROVIDER)
+    if (spec.inputPattern.isBinaryPattern()) {
+        code.addStatement(
+            "val input = %M(path = path, bytesBase64 = bytesBase64, bytes = bytes)",
+            REQUIRE_BINARY_PROVIDER_INPUT,
+        )
+        code.addStatement("val provider = input.provider")
+        code.addStatement("val pathLabel = input.pathLabel")
     } else {
-        code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
+        code.addStatement("val file = %M(path)", REQUIRE_WASM_FILE)
+        if (spec.inputPattern.isComponentPattern()) {
+            code.addStatement("val provider = file.%M()", REQUIRE_COMPONENT_WASM_BINARY_PROVIDER)
+        } else {
+            code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
+        }
     }
     if (spec.inputPattern.usesOptionalSourceMap()) {
         code.addStatement("val sourceMapText = sourceMapPath?.let { %M(it) }", REQUIRE_TEXT_FILE)
@@ -394,6 +424,9 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
                 "(path = file.path, projectRoot = projectRoot, scanRoots = scanRoots.orEmpty())"
             ToolInputPattern.ComponentCompatibility ->
                 "(path = file.path, dependencyPaths = dependencyPaths.orEmpty(), projectRoot = projectRoot, previousPath = previousPath, dependencyLockPath = dependencyLockPath)"
+            ToolInputPattern.BinaryOnly -> "(pathLabel = pathLabel)"
+            ToolInputPattern.BoundedBinaryQuery ->
+                "(operation = operation, query = query.orEmpty(), offset = offset, limit = limit, detail = detail, maxBytes = maxBytes, pathLabel = pathLabel)"
         }
         code.addStatement("val result = provider.%M$callArgs", handlerMember)
     }
@@ -405,13 +438,15 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
 
 private fun buildIdeaInputSchema(spec: ToolSpec): CodeBlock {
     val patternFields = inputFieldsForPattern(spec)
+    val baseFields = inputBaseFieldsForPattern(spec)
     val builder = CodeBlock.builder()
     builder.add("%T.ofPropertiesSchema(\n", MCP_TOOL_SCHEMA)
     builder.add("properties = %M {\n", BUILD_JSON_OBJECT)
-    builder.add("  put(%S, %M {\n", "path", BUILD_JSON_OBJECT)
-    builder.add("    put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "string")
-    builder.add("    put(%S, %T(%S))\n", "description", JSON_PRIMITIVE, PATH_DESCRIPTION)
-    builder.add("  })\n")
+    baseFields.forEach { field ->
+        builder.add("  put(%S, ", field.schemaKey)
+        builder.add(fieldSchemaObject(field, schemaIndent = "    ", closingIndent = "  "))
+        builder.add(")\n")
+    }
     patternFields.forEach { field ->
         builder.add("  put(%S, ", field.schemaKey)
         builder.add(fieldSchemaObject(field, schemaIndent = "    ", closingIndent = "  "))
@@ -422,14 +457,34 @@ private fun buildIdeaInputSchema(spec: ToolSpec): CodeBlock {
     builder.add("    put(%S, %T(%S))\n", "description", JSON_PRIMITIVE, PROJECT_PATH_DESCRIPTION)
     builder.add("  })\n")
     builder.add("},\n")
-    builder.add("requiredProperties = setOf(%S", "path")
-    patternFields
-        .filter { !it.nullable && it.default == null }
-        .forEach { field -> builder.add(", %S", field.schemaKey) }
+    builder.add("requiredProperties = setOf(")
+    val requiredFields = (baseFields + patternFields).filter { !it.nullable && it.default == null }
+    requiredFields.forEachIndexed { index, field ->
+        if (index > 0) builder.add(", ")
+        builder.add("%S", field.schemaKey)
+    }
     builder.add("),\n")
     builder.add("definitions = emptyMap<String, %T>(),\n", JSON_ELEMENT)
     builder.add(")")
     return builder.build()
+}
+
+private fun inputBaseFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
+    return if (spec.inputPattern.isBinaryPattern()) {
+        listOf(
+            inputField(spec.input, "path"),
+            inputField(spec.input, "bytesBase64"),
+            inputField(spec.input, "bytes"),
+        )
+    } else {
+        listOf(
+            FieldSpec(
+                name = "path",
+                type = FieldType.StringT,
+                describe = PATH_DESCRIPTION,
+            ),
+        )
+    }
 }
 
 private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
@@ -512,8 +567,21 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
             inputField(spec.input, "previousPath"),
             inputField(spec.input, "dependencyLockPath"),
         )
+        ToolInputPattern.BinaryOnly -> emptyList()
+        ToolInputPattern.BoundedBinaryQuery -> listOf(
+            inputField(spec.input, "operation"),
+            inputField(spec.input, "query"),
+            inputField(spec.input, "offset"),
+            inputField(spec.input, "limit"),
+            inputField(spec.input, "detail"),
+            inputField(spec.input, "maxBytes"),
+        )
     }
 }
+
+private fun ToolInputPattern.isBinaryPattern(): Boolean =
+    this == ToolInputPattern.BinaryOnly ||
+        this == ToolInputPattern.BoundedBinaryQuery
 
 private fun ToolInputPattern.isComponentPattern(): Boolean =
     this == ToolInputPattern.ComponentSurface ||
@@ -744,6 +812,9 @@ private fun schemaIntValue(value: SchemaIntValue): CodeBlock {
         SchemaIntValue.MaxInlineWasmBytes -> CodeBlock.of("%T.MAX_INLINE_WASM_BYTES", HEXANA_ANALYSIS_LIMITS)
         SchemaIntValue.MaxInlineWasmBase64Length ->
             CodeBlock.of("((%T.MAX_INLINE_WASM_BYTES + 2) / 3) * 4", HEXANA_ANALYSIS_LIMITS)
+        SchemaIntValue.MaxInlineBinaryBytes -> CodeBlock.of("%T.MAX_INLINE_WASM_BYTES", HEXANA_ANALYSIS_LIMITS)
+        SchemaIntValue.MaxInlineBinaryBase64Length ->
+            CodeBlock.of("((%T.MAX_INLINE_WASM_BYTES + 2) / 3) * 4", HEXANA_ANALYSIS_LIMITS)
     }
 }
 
@@ -859,6 +930,16 @@ private fun requireIntListArgumentFunction(): FunSpec {
             """.trimIndent(),
             MCP_FAIL,
         )
+        .build()
+}
+
+private fun optionalIntListArgumentFunction(): FunSpec {
+    return FunSpec.builder("optionalIntListArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .returns(LIST.parameterizedBy(Int::class.asTypeName()).copy(nullable = true))
+        .addCode("return this[name]?.jsonArray?.map { it.jsonPrimitive.int }\n")
         .build()
 }
 
@@ -1134,6 +1215,7 @@ private fun ToolSpec.handlerMemberName(): MemberName =
 
 private val REQUIRE_WASM_FILE = MemberName(IDEA_PACKAGE, "requireWasmFile")
 private val REQUIRE_TEXT_FILE = MemberName(IDEA_PACKAGE, "requireTextFile")
+private val REQUIRE_BINARY_PROVIDER_INPUT = MemberName(IDEA_PACKAGE, "requireBinaryProviderInput")
 private val REQUIRE_CLOSED_RANGE = MemberName(IDEA_PACKAGE, "requireClosedRange")
 private val REQUIRE_HALF_OPEN_RANGE = MemberName(IDEA_PACKAGE, "requireHalfOpenSegmentRange")
 private val REQUIRE_CORE_WASM_BINARY_PROVIDER = MemberName(IDEA_PACKAGE, "requireCoreWasmBinaryProvider")

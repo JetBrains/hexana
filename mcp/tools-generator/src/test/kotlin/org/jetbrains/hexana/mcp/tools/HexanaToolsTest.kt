@@ -10,6 +10,31 @@ import kotlin.test.assertTrue
 class HexanaToolsTest {
 
     private val queryArtifacts = HexanaTools.single { it.name == "query_artifacts" }
+    private val binarySummaryResult = class_(
+        "BinarySummaryResult",
+        kotlinPackage = "org.jetbrains.hexana.mcp.model.binaries",
+    ) {
+        string("format").describe("Detected binary format.")
+    }
+    private val queryBinaryInput = BinaryInputClass.with("QueryBinaryInput") {
+        string("operation", default = "overview")
+            .describe("Binary query operation.")
+        nullable("query", of = list(of = string()))
+            .describe("Search terms used by the selected operation.")
+        int("offset", default = 0)
+            .describe("Zero-based result offset.")
+            .minimum(0)
+        int("limit", default = 25)
+            .describe("Maximum number of records to return.")
+            .minimum(1)
+            .maximum(100)
+        string("detail", default = "summary")
+            .describe("Detail level for returned records.")
+        int("maxBytes", default = 24_000)
+            .describe("Maximum serialized record payload bytes.")
+            .minimum(2_000)
+            .maximum(60_000)
+    }
 
     @Test
     fun `registry exposes granular tools and the generic artifact query tool`() {
@@ -218,6 +243,11 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `binaryInputClass carries a oneOf constraint`() {
+        assertEquals(listOf("path", "bytesBase64", "bytes"), BinaryInputClass.oneOf)
+    }
+
+    @Test
     fun `standalone schema constraints are declared in the DSL`() {
         val bytesBase64 = WasmInputClass.fields.single { it.name == "bytesBase64" }
         assertEquals(SchemaIntValue.MaxInlineWasmBase64Length, bytesBase64.maxLength)
@@ -226,6 +256,57 @@ class HexanaToolsTest {
         assertEquals(SchemaIntValue.MaxInlineWasmBytes, bytes.maxItems)
         assertEquals(0, bytes.itemMinimum)
         assertEquals(255, bytes.itemMaximum)
+    }
+
+    @Test
+    fun `binary input schema constraints are declared in the DSL`() {
+        val bytesBase64 = BinaryInputClass.fields.single { it.name == "bytesBase64" }
+        assertEquals(SchemaIntValue.MaxInlineBinaryBase64Length, bytesBase64.maxLength)
+
+        val bytes = BinaryInputClass.fields.single { it.name == "bytes" }
+        assertEquals(SchemaIntValue.MaxInlineBinaryBytes, bytes.maxItems)
+        assertEquals(0, bytes.itemMinimum)
+        assertEquals(255, bytes.itemMaximum)
+    }
+
+    @Test
+    fun `binary invocation patterns can be declared from binary input classes`() {
+        val specs = tools {
+            tool("summarize_binary") {
+                summary = "Summarize a binary."
+                input = BinaryInputClass
+                inputPattern = ToolInputPattern.BinaryOnly
+                output = binarySummaryResult
+                handlerFqn = "org.jetbrains.hexana.mcp.query.summarizeBinary"
+            }
+            tool("query_binary") {
+                summary = "Query a binary."
+                input = queryBinaryInput
+                inputPattern = ToolInputPattern.BoundedBinaryQuery
+                output = binarySummaryResult
+                handlerFqn = "org.jetbrains.hexana.mcp.query.queryBinary"
+            }
+        }
+
+        assertEquals(
+            listOf(ToolInputPattern.BinaryOnly, ToolInputPattern.BoundedBinaryQuery),
+            specs.map { it.inputPattern },
+        )
+    }
+
+    @Test
+    fun `binary invocation patterns reject wasm input classes`() {
+        assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("summarize_binary") {
+                    summary = "Summarize a binary."
+                    input = WasmInputClass
+                    inputPattern = ToolInputPattern.BinaryOnly
+                    output = binarySummaryResult
+                    handlerFqn = "org.jetbrains.hexana.mcp.query.summarizeBinary"
+                }
+            }
+        }
     }
 
     @Test

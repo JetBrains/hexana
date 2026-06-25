@@ -1,12 +1,61 @@
 package org.jetbrains.hexana.mcp.tools.generator
 
+import org.jetbrains.hexana.mcp.tools.BinaryInputClass
+import org.jetbrains.hexana.mcp.tools.ClassSpec
+import org.jetbrains.hexana.mcp.tools.ToolInputPattern
+import org.jetbrains.hexana.mcp.tools.ToolSpec
+import org.jetbrains.hexana.mcp.tools.class_
+import org.jetbrains.hexana.mcp.tools.list
+import org.jetbrains.hexana.mcp.tools.string
 import org.junit.Test
 import java.lang.reflect.InvocationTargetException
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ToolDescriptionGenerationTest {
+
+    private val binarySummaryResult = class_(
+        "BinarySummaryResult",
+        kotlinPackage = "org.jetbrains.hexana.mcp.model.binaries",
+    ) {
+        string("format").describe("Detected binary format.")
+    }
+    private val queryBinaryInput = BinaryInputClass.with("QueryBinaryInput") {
+        string("operation", default = "overview")
+            .describe("Binary query operation.")
+        nullable("query", of = list(of = string()))
+            .describe("Search terms used by the selected operation.")
+        int("offset", default = 0)
+            .describe("Zero-based result offset.")
+            .minimum(0)
+        int("limit", default = 25)
+            .describe("Maximum number of records to return.")
+            .minimum(1)
+            .maximum(100)
+        string("detail", default = "summary")
+            .describe("Detail level for returned records.")
+        int("maxBytes", default = 24_000)
+            .describe("Maximum serialized record payload bytes.")
+            .minimum(2_000)
+            .maximum(60_000)
+    }
+    private val summarizeBinarySpec = ToolSpec(
+        name = "summarize_binary",
+        summary = "Summarize a binary.",
+        guidance = null,
+        input = BinaryInputClass,
+        inputPattern = ToolInputPattern.BinaryOnly,
+        output = binarySummaryResult,
+        handlerFqn = "org.jetbrains.hexana.mcp.query.summarizeBinary",
+    )
+    private val queryBinarySpec = summarizeBinarySpec.copy(
+        name = "query_binary",
+        input = queryBinaryInput,
+        inputPattern = ToolInputPattern.BoundedBinaryQuery,
+        handlerFqn = "org.jetbrains.hexana.mcp.query.queryBinary",
+    )
 
     @Test
     fun `standalone dispatcher tool descriptions include DSL guidance`() {
@@ -26,6 +75,58 @@ class ToolDescriptionGenerationTest {
         )
 
         assertAggregateToolGuidance(source)
+    }
+
+    @Test
+    fun `IDEA binary schemas expose path base64 and raw byte inputs`() {
+        val schema = invokePrivateGeneratorFunction(
+            className = "org.jetbrains.hexana.mcp.tools.generator.IdeaToolsetMainKt",
+            methodName = "buildIdeaInputSchema",
+            parameterTypes = arrayOf(ToolSpec::class.java),
+            args = arrayOf(queryBinarySpec),
+        )
+
+        val source = schema.toString()
+        assertTrue(source.contains("\"path\""))
+        assertTrue(source.contains("\"bytesBase64\""))
+        assertTrue(source.contains("\"bytes\""))
+        assertTrue(source.contains("\"operation\""))
+        assertTrue(source.contains("\"maxBytes\""))
+        assertFalse(source.contains("requiredProperties = setOf(\"path\")"))
+    }
+
+    @Test
+    fun `IDEA binary bodies resolve generic binary providers instead of wasm files`() {
+        val body = invokePrivateGeneratorFunction(
+            className = "org.jetbrains.hexana.mcp.tools.generator.IdeaToolsetMainKt",
+            methodName = "buildToolBody",
+            parameterTypes = arrayOf(ToolSpec::class.java),
+            args = arrayOf(summarizeBinarySpec),
+        )
+
+        val source = body.toString()
+        assertTrue(source.contains("requireBinaryProviderInput"))
+        assertTrue(source.contains("val provider = input.provider"))
+        assertTrue(source.contains("pathLabel = pathLabel"))
+        assertFalse(source.contains("requireWasmFile"))
+        assertFalse(source.contains("requireCoreWasmBinaryProvider"))
+    }
+
+    @Test
+    fun `standalone binary schemas expose path base64 and raw byte inputs`() {
+        val schema = invokePrivateGeneratorFunction(
+            className = "org.jetbrains.hexana.mcp.tools.generator.StandaloneToolsetMainKt",
+            methodName = "buildToolSchema",
+            parameterTypes = arrayOf(ClassSpec::class.java, Boolean::class.javaPrimitiveType!!, Boolean::class.javaPrimitiveType!!),
+            args = arrayOf(queryBinarySpec.input, true, true),
+        )
+
+        val source = schema.toString()
+        assertTrue(source.contains("\"path\""))
+        assertTrue(source.contains("\"bytesBase64\""))
+        assertTrue(source.contains("\"bytes\""))
+        assertTrue(source.contains("\"operation\""))
+        assertTrue(source.contains("\"maxBytes\""))
     }
 
     private fun renderGeneratedSource(mainClassName: String, generatedFile: Path): String {
@@ -106,5 +207,16 @@ class ToolDescriptionGenerationTest {
 
     private fun assertBoundaryPhrase(source: String, phrase: String, message: String) {
         assertTrue(source.contains(phrase), message)
+    }
+
+    private fun invokePrivateGeneratorFunction(
+        className: String,
+        methodName: String,
+        parameterTypes: Array<Class<*>>,
+        args: Array<Any>,
+    ): Any {
+        val method = Class.forName(className).getDeclaredMethod(methodName, *parameterTypes)
+        method.isAccessible = true
+        return method.invoke(null, *args)
     }
 }

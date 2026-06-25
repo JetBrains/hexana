@@ -108,6 +108,8 @@ sealed class SchemaIntValue {
     data class Literal(val value: Int) : SchemaIntValue()
     object MaxInlineWasmBytes : SchemaIntValue()
     object MaxInlineWasmBase64Length : SchemaIntValue()
+    object MaxInlineBinaryBytes : SchemaIntValue()
+    object MaxInlineBinaryBase64Length : SchemaIntValue()
 }
 
 // ---------- Class spec ----------
@@ -352,6 +354,8 @@ sealed class ToolInputPattern {
     object ComponentSurface : ToolInputPattern()
     object ComponentDependencies : ToolInputPattern()
     object ComponentCompatibility : ToolInputPattern()
+    object BinaryOnly : ToolInputPattern()
+    object BoundedBinaryQuery : ToolInputPattern()
 }
 
 @HexanaToolsDsl
@@ -471,19 +475,48 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
         }
     }
 
-    fun requireWasmInput() {
+    fun requireExactBinaryBytesInput(
+        inputKind: String,
+        expectedBytesMaxItems: SchemaIntValue,
+        expectedBase64MaxLength: SchemaIntValue,
+    ) {
         val path = requireField("path")
         requireType(path, FieldType.StringT)
         requireNullable(path)
+        requireDescribed(path)
         val bytesBase64 = requireField("bytesBase64")
         requireType(bytesBase64, FieldType.StringT)
         requireNullable(bytesBase64)
+        requireDescribed(bytesBase64)
+        require(bytesBase64.maxLength == expectedBase64MaxLength) {
+            "Tool '$toolName' input field `bytesBase64` must declare $inputKind inline base64 bounds."
+        }
         val bytes = requireField("bytes")
         requireListOf(bytes, FieldType.Int32)
         requireNullable(bytes)
-        require(input.oneOf == listOf("path", "bytesBase64", "bytes")) {
-            "Tool '$toolName' input class `${input.name}` must keep Wasm input oneOf(path, bytesBase64, bytes)."
+        requireDescribed(bytes)
+        require(bytes.maxItems == expectedBytesMaxItems) {
+            "Tool '$toolName' input field `bytes` must declare $inputKind inline byte bounds."
         }
+        require(input.oneOf == listOf("path", "bytesBase64", "bytes")) {
+            "Tool '$toolName' input class `${input.name}` must keep $inputKind input oneOf(path, bytesBase64, bytes)."
+        }
+    }
+
+    fun requireWasmInput() {
+        requireExactBinaryBytesInput(
+            inputKind = "Wasm",
+            expectedBytesMaxItems = SchemaIntValue.MaxInlineWasmBytes,
+            expectedBase64MaxLength = SchemaIntValue.MaxInlineWasmBase64Length,
+        )
+    }
+
+    fun requireBinaryInput() {
+        requireExactBinaryBytesInput(
+            inputKind = "binary",
+            expectedBytesMaxItems = SchemaIntValue.MaxInlineBinaryBytes,
+            expectedBase64MaxLength = SchemaIntValue.MaxInlineBinaryBase64Length,
+        )
     }
 
     fun requireClosedRange(field: FieldSpec) {
@@ -512,23 +545,29 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
         requireDescribed(to)
     }
 
-    requireWasmInput()
     when (pattern) {
-        ToolInputPattern.WasmOnly -> Unit
-        ToolInputPattern.WasmPathLabel -> Unit
+        ToolInputPattern.WasmOnly -> {
+            requireWasmInput()
+        }
+        ToolInputPattern.WasmPathLabel -> {
+            requireWasmInput()
+        }
         ToolInputPattern.WasmWithBaseline -> {
+            requireWasmInput()
             val baselinePath = requireField("baselinePath")
             requireType(baselinePath, FieldType.StringT)
             requireNonNullable(baselinePath)
             requireDescribed(baselinePath)
         }
         ToolInputPattern.WasmWithBinding -> {
+            requireWasmInput()
             val bindingPath = requireField("bindingPath")
             requireType(bindingPath, FieldType.StringT)
             requireNonNullable(bindingPath)
             requireDescribed(bindingPath)
         }
         ToolInputPattern.FunctionPage -> {
+            requireWasmInput()
             val offset = requireField("offset")
             requireType(offset, FieldType.Int32)
             requireNonNullable(offset)
@@ -541,12 +580,14 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireDescribed(limit)
         }
         ToolInputPattern.Funcidx -> {
+            requireWasmInput()
             val funcidx = requireField("funcidx")
             requireType(funcidx, FieldType.Int32)
             requireNonNullable(funcidx)
             requireDescribed(funcidx)
         }
         ToolInputPattern.FunctionNameSearch -> {
+            requireWasmInput()
             val query = requireField("query")
             requireType(query, FieldType.StringT)
             requireNonNullable(query)
@@ -558,6 +599,7 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireDescribed(limit)
         }
         ToolInputPattern.ExportNameSearch -> {
+            requireWasmInput()
             val query = requireField("query")
             requireListOf(query, FieldType.StringT)
             requireNonNullable(query)
@@ -569,12 +611,14 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireDescribed(limit)
         }
         ToolInputPattern.Indices -> {
+            requireWasmInput()
             val indices = requireField("indices")
             requireListOf(indices, FieldType.Int32)
             requireNonNullable(indices)
             requireDescribed(indices)
         }
         ToolInputPattern.SourceMappedIndices -> {
+            requireWasmInput()
             val indices = requireField("indices")
             requireListOf(indices, FieldType.Int32)
             requireNonNullable(indices)
@@ -585,6 +629,7 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireDescribed(sourceMapPath)
         }
         ToolInputPattern.WasmFrames -> {
+            requireWasmInput()
             val frames = requireField("frames")
             requireDescribed(frames)
             requireNullable(frames)
@@ -615,6 +660,7 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireDescribed(sourceMapPath)
         }
         ToolInputPattern.SourceLocations -> {
+            requireWasmInput()
             val locations = requireField("locations")
             requireDescribed(locations)
             val locationClass = requireListOfClass(locations)
@@ -631,8 +677,12 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireNullable(sourceMapPath)
             requireDescribed(sourceMapPath)
         }
-        is ToolInputPattern.ClosedRange -> requireClosedRange(requireField(pattern.parameterName))
+        is ToolInputPattern.ClosedRange -> {
+            requireWasmInput()
+            requireClosedRange(requireField(pattern.parameterName))
+        }
         ToolInputPattern.DataSegments -> {
+            requireWasmInput()
             requireHalfOpenRange(requireField("segmentRange"))
             val includeExports = requireField("includeExports")
             requireType(includeExports, FieldType.BooleanT)
@@ -650,12 +700,14 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireDescribed(minByteLength)
         }
         ToolInputPattern.DataPayloadPolicyAudit -> {
+            requireWasmInput()
             val policyPath = requireField("policyPath")
             requireType(policyPath, FieldType.StringT)
             requireNonNullable(policyPath)
             requireDescribed(policyPath)
         }
         ToolInputPattern.LocalStackBudgetAudit -> {
+            requireWasmInput()
             val policyPath = requireField("policyPath")
             requireType(policyPath, FieldType.StringT)
             requireNullable(policyPath)
@@ -683,6 +735,7 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireDescribed(countParams)
         }
         ToolInputPattern.ArtifactQuery -> {
+            requireWasmInput()
             val baselinePath = requireField("baselinePath")
             requireType(baselinePath, FieldType.StringT)
             requireNullable(baselinePath)
@@ -743,6 +796,7 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireDescribed(maxBytes)
         }
         ToolInputPattern.PolicyWithBaselineAndLog -> {
+            requireWasmInput()
             val baselinePath = requireField("baselinePath")
             requireType(baselinePath, FieldType.StringT)
             requireNonNullable(baselinePath)
@@ -759,6 +813,7 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireDescribed(logPath)
         }
         ToolInputPattern.GlobalStatePolicyAudit -> {
+            requireWasmInput()
             val baselinePath = requireField("baselinePath")
             requireType(baselinePath, FieldType.StringT)
             requireNonNullable(baselinePath)
@@ -781,6 +836,7 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireDescribed(detail)
         }
         ToolInputPattern.RuntimeCompatibility -> {
+            requireWasmInput()
             val runtime = requireField("runtime")
             requireType(runtime, FieldType.StringT)
             requireNonNullable(runtime)
@@ -791,8 +847,11 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireNullable(version)
             requireDescribed(version)
         }
-        ToolInputPattern.ComponentSurface -> Unit
+        ToolInputPattern.ComponentSurface -> {
+            requireWasmInput()
+        }
         ToolInputPattern.ComponentDependencies -> {
+            requireWasmInput()
             val projectRoot = requireField("projectRoot")
             requireType(projectRoot, FieldType.StringT)
             requireNullable(projectRoot)
@@ -804,6 +863,7 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireDescribed(scanRoots)
         }
         ToolInputPattern.ComponentCompatibility -> {
+            requireWasmInput()
             val dependencyPaths = requireField("dependencyPaths")
             requireListOf(dependencyPaths, FieldType.StringT)
             requireNullable(dependencyPaths)
@@ -823,6 +883,47 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireType(dependencyLockPath, FieldType.StringT)
             requireNullable(dependencyLockPath)
             requireDescribed(dependencyLockPath)
+        }
+        ToolInputPattern.BinaryOnly -> {
+            requireBinaryInput()
+        }
+        ToolInputPattern.BoundedBinaryQuery -> {
+            requireBinaryInput()
+
+            val operation = requireField("operation")
+            requireType(operation, FieldType.StringT)
+            requireNonNullable(operation)
+            requireDefault(operation, "String") { it is String }
+            requireDescribed(operation)
+
+            val query = requireField("query")
+            requireListOf(query, FieldType.StringT)
+            requireNullable(query)
+            requireDescribed(query)
+
+            val offset = requireField("offset")
+            requireType(offset, FieldType.Int32)
+            requireNonNullable(offset)
+            requireDefault(offset, "Int") { it is Int }
+            requireDescribed(offset)
+
+            val limit = requireField("limit")
+            requireType(limit, FieldType.Int32)
+            requireNonNullable(limit)
+            requireDefault(limit, "Int") { it is Int }
+            requireDescribed(limit)
+
+            val detail = requireField("detail")
+            requireType(detail, FieldType.StringT)
+            requireNonNullable(detail)
+            requireDefault(detail, "String") { it is String }
+            requireDescribed(detail)
+
+            val maxBytes = requireField("maxBytes")
+            requireType(maxBytes, FieldType.Int32)
+            requireNonNullable(maxBytes)
+            requireDefault(maxBytes, "Int") { it is Int }
+            requireDescribed(maxBytes)
         }
     }
 }
