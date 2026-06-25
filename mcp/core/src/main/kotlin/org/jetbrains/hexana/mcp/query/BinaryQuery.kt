@@ -22,6 +22,7 @@ import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.classifyArchiveMember
+import org.jetbrains.hexana.providers.nativeOrGenericBinaryProvider
 import org.jetbrains.hexana.providers.elf.ElfSectionHeader
 import org.jetbrains.hexana.providers.elf.ElfSymbol
 import org.jetbrains.hexana.providers.macho.MachOFatArch
@@ -589,8 +590,41 @@ private fun org.jetbrains.hexana.providers.BinaryProvider.symbolRecords(
         is MachOBinaryProvider -> symbols?.map { it.toRecord(detail) } ?: warnMissing(warnings, "Could not parse Mach-O symbols.")
         is PeBinaryProvider -> coffSymbols?.map { it.toRecord(detail) } ?: emptyList()
         is CoffBinaryProvider -> coffSymbols?.map { it.toRecord(detail) } ?: warnMissing(warnings, "Could not parse COFF symbols.")
+        is ArchiveBinaryProvider -> archiveNestedSymbolRecords(detail, warnings)
         else -> emptyList()
     }
+
+private fun ArchiveBinaryProvider.archiveNestedSymbolRecords(
+    detail: String,
+    warnings: MutableList<BinaryWarningResult>,
+): List<BinaryRecordResult> {
+    val archive = archiveFile ?: run {
+        warnings += BinaryWarningResult("partial_parse", "Could not parse archive members.")
+        return emptyList()
+    }
+    return archive.members.filterNot { it.isBookkeeping }.flatMap { member ->
+        val classification = classifyArchiveMember(bytes, member.contentRange)
+        if (!classification.openable) return@flatMap emptyList()
+
+        val memberBytes = bytes.slice(member.contentRange.offset, member.contentRange.size)
+        val memberProvider = nativeOrGenericBinaryProvider(memberBytes, "${sourcePath ?: "<archive>"}::${member.name}")
+        memberProvider.symbolRecords(detail, warnings).map { record ->
+            record.copy(
+                summary = "archive member `${member.name}` ${record.summary}",
+                attributes = buildList {
+                    add(attr("archiveMember", member.name))
+                    add(attr("archiveMemberKind", classification.kind.name.lowercase()))
+                    addAll(record.attributes)
+                },
+                evidence = if (detail == "evidence") {
+                    listOf("archiveMember=${member.name}", "memberContentOffset=${member.contentRange.offset}") + record.evidence
+                } else {
+                    record.evidence
+                },
+            )
+        }
+    }
+}
 
 private fun ElfSymbol.toRecord(detail: String): BinaryRecordResult =
     BinaryRecordResult(

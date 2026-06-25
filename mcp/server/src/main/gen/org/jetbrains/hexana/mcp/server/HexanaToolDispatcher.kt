@@ -429,6 +429,7 @@ private fun Server.registerQueryBinaryTool(handlers: HexanaToolHandlers) {
   |Query Wasm or native binary records with bounded output.
   |Use this when `summarize_binary` shows the format has relevant records and you need a compact, paged lookup across generic binary entities.
   |Prefer a focused `operation` over `all`; use `entityTypes`, `query`, `offset`, and `limit` to avoid broad scans, and request `detail=evidence` only for the few records that need parser offsets or record context.
+  |For archives, `operation=archive_members` enumerates members and `operation=symbols` searches symbols inside openable member objects while annotating the containing archive member.
   |This is a broad query tool like `query_artifacts`: it never returns raw byte dumps or disassembly, and unsupported entity groups return warnings rather than failing unrelated formats.
   |For WebAssembly core modules, keep using the existing Wasm-specific tools when the request maps to a focused Wasm surface.
   """.trimMargin(),

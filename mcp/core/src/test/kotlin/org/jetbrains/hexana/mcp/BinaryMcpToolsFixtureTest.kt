@@ -6,6 +6,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.charset.StandardCharsets
 import kotlin.io.path.readBytes
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -140,6 +141,28 @@ class BinaryMcpToolsFixtureTest {
         assertEquals(5, archiveMembers.total)
         assertTrue(archiveMembers.records.all { it.kind == "archive_member" })
         assertTrue(archiveMembers.records.all { it.name == "sample.exe" })
+
+        val mixedArchive = createArchiveFile(
+            "members.a",
+            listOf(
+                "sample_elf.o" to nativeFixture("elf/sample.o"),
+                "sample_coff.obj" to nativeFixture("pe/sample.coff"),
+            ),
+        )
+        val archiveSymbols = service.queryBinary(
+            input = BinaryInput.FilePath(mixedArchive.toString()),
+            operation = "symbols",
+            query = listOf("hexana"),
+            offset = 0,
+            limit = 100,
+            detail = "evidence",
+            maxBytes = 20_000,
+        )
+
+        assertTrue(archiveSymbols.records.isNotEmpty())
+        assertTrue(archiveSymbols.records.all { it.kind == "symbol" })
+        assertTrue(archiveSymbols.records.all { record -> record.attributes.any { it.name == "archiveMember" } })
+        assertTrue(archiveSymbols.records.all { record -> record.evidence.any { it.startsWith("archiveMember=") } })
     }
 
     @Test
@@ -197,6 +220,31 @@ class BinaryMcpToolsFixtureTest {
 
     private fun createBinaryFile(name: String, bytes: ByteArray): Path =
         temporaryFolder.newFile(name).toPath().also { Files.write(it, bytes) }
+
+    private fun createArchiveFile(name: String, members: List<Pair<String, Path>>): Path {
+        val path = temporaryFolder.newFile(name).toPath()
+        path.toFile().outputStream().use { output ->
+            output.write("!<arch>\n".toByteArray(StandardCharsets.US_ASCII))
+            for ((memberName, memberPath) in members) {
+                val data = memberPath.readBytes()
+                val rawName = "$memberName/"
+                require(rawName.length <= 16) { "archive member name is too long: $memberName" }
+                val header = buildString {
+                    append(rawName.padEnd(16))
+                    append("0".padEnd(12))
+                    append("0".padEnd(6))
+                    append("0".padEnd(6))
+                    append("100644".padEnd(8))
+                    append(data.size.toString().padEnd(10))
+                    append("`\n")
+                }
+                output.write(header.toByteArray(StandardCharsets.US_ASCII))
+                output.write(data)
+                if (data.size % 2 != 0) output.write('\n'.code)
+            }
+        }
+        return path
+    }
 
     private fun componentWithCoreModule(coreModule: ByteArray): ByteArray =
         componentHeader() + componentSection(1, coreModule)
