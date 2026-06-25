@@ -280,6 +280,19 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             code.addStatement("val detail = args.optionalStringArgument(%S) ?: %S", "detail", detail)
             code.addStatement("val maxBytes = args.optionalIntArgument(%S) ?: %L", "maxBytes", maxBytes)
         }
+        ToolInputPattern.BinaryFunctionPage -> {
+            val offset = inputField(spec.input, "offset").defaultOrError<Int>()
+            val limit = inputField(spec.input, "limit").defaultOrError<Int>()
+            code.addStatement("val offset = args.optionalIntArgument(%S) ?: %L", "offset", offset)
+            code.addStatement("val limit = args.optionalIntArgument(%S) ?: %L", "limit", limit)
+        }
+        ToolInputPattern.BinaryFunctionSearch -> {
+            val offset = inputField(spec.input, "offset").defaultOrError<Int>()
+            val limit = inputField(spec.input, "limit").defaultOrError<Int>()
+            code.addStatement("val query = args.requireStringListArgument(%S)", "query")
+            code.addStatement("val offset = args.optionalIntArgument(%S) ?: %L", "offset", offset)
+            code.addStatement("val limit = args.optionalIntArgument(%S) ?: %L", "limit", limit)
+        }
     }
     if (spec.inputPattern.isBinaryPattern()) {
         code.addStatement(
@@ -428,6 +441,8 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             ToolInputPattern.BinaryOnly -> "(pathLabel = pathLabel)"
             ToolInputPattern.BoundedBinaryQuery ->
                 "(operation = operation, entityTypes = entityTypes.orEmpty(), query = query.orEmpty(), offset = offset, limit = limit, detail = detail, maxBytes = maxBytes, pathLabel = pathLabel)"
+            ToolInputPattern.BinaryFunctionPage -> "(offset = offset, limit = limit, pathLabel = pathLabel)"
+            ToolInputPattern.BinaryFunctionSearch -> "(query = query, offset = offset, limit = limit, pathLabel = pathLabel)"
         }
         code.addStatement("val result = provider.%M$callArgs", handlerMember)
     }
@@ -578,12 +593,23 @@ private fun inputFieldsForPattern(spec: ToolSpec): List<FieldSpec> {
             inputField(spec.input, "detail"),
             inputField(spec.input, "maxBytes"),
         )
+        ToolInputPattern.BinaryFunctionPage -> listOf(
+            inputField(spec.input, "offset"),
+            inputField(spec.input, "limit"),
+        )
+        ToolInputPattern.BinaryFunctionSearch -> listOf(
+            inputField(spec.input, "query"),
+            inputField(spec.input, "offset"),
+            inputField(spec.input, "limit"),
+        )
     }
 }
 
 private fun ToolInputPattern.isBinaryPattern(): Boolean =
     this == ToolInputPattern.BinaryOnly ||
-        this == ToolInputPattern.BoundedBinaryQuery
+        this == ToolInputPattern.BoundedBinaryQuery ||
+        this == ToolInputPattern.BinaryFunctionPage ||
+        this == ToolInputPattern.BinaryFunctionSearch
 
 private fun ToolInputPattern.isComponentPattern(): Boolean =
     this == ToolInputPattern.ComponentSurface ||

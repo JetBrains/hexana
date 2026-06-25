@@ -69,6 +69,22 @@ private val QueryBinaryInput = BinaryInputClass.with("QueryBinaryInput") {
         .maximum(60_000)
 }
 
+private val BinaryFunctionPageInput = BinaryInputClass.with("BinaryFunctionPageInput") {
+    int("offset", default = 0)
+        .describe("Zero-based function offset after filtering.")
+        .minimum(0)
+    int("limit", default = 25)
+        .describe("Maximum functions to return. The implementation clamps values above 100.")
+        .minimum(1)
+        .maximum(100)
+}
+
+private val SearchBinaryFunctionsInput = BinaryFunctionPageInput.with("SearchBinaryFunctionsInput") {
+    list("query", of = string())
+        .describe("Case-insensitive terms; all terms must match one function record.")
+        .maxItems(20)
+}
+
 private val BinaryRecordLocationResultClass = class_("BinaryRecordLocationResult", kotlinPackage = BINARIES_MODEL_PACKAGE) {
     nullable("index", of = int()).describe("Primary record index when one exists.")
     nullable("fileOffset", of = long()).describe("File offset when known.")
@@ -109,6 +125,38 @@ private val QueryBinaryResultClass = class_("QueryBinaryResult", kotlinPackage =
     list("warnings", of = BinaryWarningResultClass).describe("Non-fatal query warnings.")
 }
 
+private val BinaryFunctionResultClass = class_("BinaryFunctionResult", kotlinPackage = BINARIES_MODEL_PACKAGE) {
+    nullable("funcidx", of = int()).describe("Unified Wasm function index.")
+    nullable("symbolIndex", of = int()).describe("Native symbol index.")
+    string("source").describe("Wasm source or native symbol source.")
+    nullable("name", of = string()).describe("Best display name.")
+    nullable("demangledName", of = string()).describe("Native demangled name.")
+    nullable("mangledName", of = string()).describe("Native mangled name.")
+    boolean("imported").describe("Imported or undefined function flag.")
+    nullable("thunkLike", of = boolean()).describe("Native thunk/stub-like flag.")
+    nullable("importModule", of = string()).describe("Wasm import module.")
+    nullable("importName", of = string()).describe("Wasm import name.")
+    nullable("typeidx", of = int()).describe("Wasm function type index.")
+    nullable("section", of = string()).describe("Native section label.")
+    nullable("virtualAddress", of = long()).describe("Native virtual address.")
+    nullable("fileOffset", of = long()).describe("File offset.")
+    nullable("size", of = long()).describe("Function or range size.")
+    nullable("rangeConfidence", of = string()).describe("Native range confidence.")
+}
+
+private val BinaryFunctionsResultClass = class_("BinaryFunctionsResult", kotlinPackage = BINARIES_MODEL_PACKAGE) {
+    embed("module", of = BinaryModuleIdentityResultClass).describe("Binary identity.")
+    list("query", of = string()).describe("Applied search terms.")
+    int("total").describe("Total matching functions.")
+    int("offset").describe("Executed offset.")
+    int("limit").describe("Executed limit.")
+    int("returned").describe("Returned count.")
+    nullable("nextOffset", of = int()).describe("Next page offset, if any.")
+    list("functions", of = BinaryFunctionResultClass).describe("Paged function records.")
+    list("omitted", of = BinaryOmittedResultClass).describe("Omitted function counts.")
+    list("warnings", of = BinaryWarningResultClass).describe("Non-fatal warnings.")
+}
+
 internal val BinaryTools: List<ToolSpec> = tools {
     tool("summarize_binary") {
         summary = "Summarize a Wasm or native binary with compact identity and entity counts."
@@ -136,5 +184,29 @@ internal val BinaryTools: List<ToolSpec> = tools {
         inputPattern = ToolInputPattern.BoundedBinaryQuery
         output = QueryBinaryResultClass
         handlerFqn = "org.jetbrains.hexana.mcp.query.readBinaryQuery"
+    }
+
+    tool("list_binary_functions") {
+        summary = "List Wasm funcidx or native symbol-backed functions with focused fields."
+        guidance = """
+            Use this for stack, source, or function inventories after `summarize_binary` shows functions.
+            Wasm results use unified `funcidx`; native results include symbol/source, names, import/thunk flags, section, address, offset, size, and range confidence.
+        """
+        input = BinaryFunctionPageInput
+        inputPattern = ToolInputPattern.BinaryFunctionPage
+        output = BinaryFunctionsResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readBinaryFunctions"
+    }
+
+    tool("search_binary_functions") {
+        summary = "Search Wasm funcidx or native symbol-backed functions by focused function fields."
+        guidance = """
+            Use this when you have a name, import, source, section, address, offset, or range-confidence term.
+            Search is case-insensitive; all `query` terms must match one function record.
+        """
+        input = SearchBinaryFunctionsInput
+        inputPattern = ToolInputPattern.BinaryFunctionSearch
+        output = BinaryFunctionsResultClass
+        handlerFqn = "org.jetbrains.hexana.mcp.query.searchBinaryFunctions"
     }
 }

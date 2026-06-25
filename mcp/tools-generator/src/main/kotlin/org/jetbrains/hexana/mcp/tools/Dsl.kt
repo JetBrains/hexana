@@ -356,6 +356,8 @@ sealed class ToolInputPattern {
     object ComponentCompatibility : ToolInputPattern()
     object BinaryOnly : ToolInputPattern()
     object BoundedBinaryQuery : ToolInputPattern()
+    object BinaryFunctionPage : ToolInputPattern()
+    object BinaryFunctionSearch : ToolInputPattern()
 }
 
 @HexanaToolsDsl
@@ -543,6 +545,22 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
         requireType(to, FieldType.Int32)
         requireNullable(to)
         requireDescribed(to)
+    }
+
+    fun requireBinaryFunctionPageInput() {
+        requireBinaryInput()
+
+        val offset = requireField("offset")
+        requireType(offset, FieldType.Int32)
+        requireNonNullable(offset)
+        requireDefault(offset, "Int") { it is Int }
+        requireDescribed(offset)
+
+        val limit = requireField("limit")
+        requireType(limit, FieldType.Int32)
+        requireNonNullable(limit)
+        requireDefault(limit, "Int") { it is Int }
+        requireDescribed(limit)
     }
 
     when (pattern) {
@@ -929,6 +947,17 @@ private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: To
             requireNonNullable(maxBytes)
             requireDefault(maxBytes, "Int") { it is Int }
             requireDescribed(maxBytes)
+        }
+        ToolInputPattern.BinaryFunctionPage -> {
+            requireBinaryFunctionPageInput()
+        }
+        ToolInputPattern.BinaryFunctionSearch -> {
+            requireBinaryFunctionPageInput()
+
+            val query = requireField("query")
+            requireListOf(query, FieldType.StringT)
+            requireNonNullable(query)
+            requireDescribed(query)
         }
     }
 }

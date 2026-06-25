@@ -44,6 +44,8 @@ class HexanaToolsTest {
         assertEquals(
             listOf(
                 "summarize_binary",
+                "list_binary_functions",
+                "search_binary_functions",
                 "query_binary",
                 "summarize_module",
                 "list_enabled_features",

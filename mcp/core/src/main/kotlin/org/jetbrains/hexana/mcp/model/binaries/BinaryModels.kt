@@ -55,6 +55,40 @@ data class QueryBinaryResult(
 )
 
 @Serializable
+data class BinaryFunctionsResult(
+    val module: BinaryModuleIdentityResult,
+    val query: List<String> = emptyList(),
+    val total: Int,
+    val offset: Int,
+    val limit: Int,
+    val returned: Int,
+    val nextOffset: Int?,
+    val functions: List<BinaryFunctionResult>,
+    val omitted: List<BinaryOmittedResult> = emptyList(),
+    val warnings: List<BinaryWarningResult> = emptyList(),
+)
+
+@Serializable
+data class BinaryFunctionResult(
+    val funcidx: Int? = null,
+    val symbolIndex: Int? = null,
+    val source: String,
+    val name: String? = null,
+    val demangledName: String? = null,
+    val mangledName: String? = null,
+    val imported: Boolean,
+    val thunkLike: Boolean? = null,
+    val importModule: String? = null,
+    val importName: String? = null,
+    val typeidx: Int? = null,
+    val section: String? = null,
+    val virtualAddress: Long? = null,
+    val fileOffset: Long? = null,
+    val size: Long? = null,
+    val rangeConfidence: String? = null,
+)
+
+@Serializable
 data class BinaryRecordResult(
     val kind: String,
     val name: String? = null,

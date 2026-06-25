@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp
 
+import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
 import org.jetbrains.hexana.mcp.model.binaries.BinaryModuleIdentityResult
 import org.jetbrains.hexana.mcp.model.binaries.BinaryOmittedResult
 import org.jetbrains.hexana.mcp.model.binaries.BinaryRecordResult
@@ -240,6 +241,83 @@ class BinaryInputLoaderTest {
 
         assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, error.code)
         assertEquals("`detail` must be `summary` or `evidence`", error.message)
+    }
+
+    @Test
+    fun defaultServiceListsWasmBinaryFunctionsWithUnifiedFuncidx() {
+        val service = DefaultHexanaAnalysisService()
+        val wasm = wat2wasm(
+            """
+            (module
+              (import "env" "host_call" (func ${'$'}host (param i32)))
+              (func ${'$'}worker (result i32)
+                i32.const 42)
+              (export "worker" (func ${'$'}worker)))
+            """.trimIndent()
+        )
+
+        val result = service.listBinaryFunctions(
+            input = BinaryInput.RawBytes(wasm),
+            offset = 0,
+            limit = 1,
+        )
+
+        assertEquals("wasm", result.module.format)
+        assertEquals(2, result.total)
+        assertEquals(1, result.returned)
+        assertEquals(1, result.nextOffset)
+        assertEquals(listOf(BinaryOmittedResult("functions", 1, "outside `limit` bounds")), result.omitted)
+        val imported = result.functions.single()
+        assertEquals(0, imported.funcidx)
+        assertEquals("import", imported.source)
+        assertEquals("env.host_call", imported.name)
+        assertEquals(true, imported.imported)
+        assertEquals("env", imported.importModule)
+        assertEquals("host_call", imported.importName)
+    }
+
+    @Test
+    fun defaultServiceSearchesWasmBinaryFunctions() {
+        val service = DefaultHexanaAnalysisService()
+        val wasm = wat2wasm(
+            """
+            (module
+              (import "env" "host_call" (func ${'$'}host (param i32)))
+              (func ${'$'}worker (result i32)
+                i32.const 42)
+              (export "worker" (func ${'$'}worker)))
+            """.trimIndent()
+        )
+
+        val result = service.searchBinaryFunctions(
+            input = BinaryInput.RawBytes(wasm),
+            query = listOf("code"),
+            offset = 0,
+            limit = 10,
+        )
+
+        assertEquals(listOf("code"), result.query)
+        assertEquals(1, result.total)
+        val local = result.functions.single()
+        assertEquals(1, local.funcidx)
+        assertEquals("code", local.source)
+        assertEquals(false, local.imported)
+    }
+
+    @Test
+    fun defaultServiceRejectsInvalidBinaryFunctionOffset() {
+        val service = DefaultHexanaAnalysisService()
+
+        val error = assertFailsWith<HexanaAnalysisException> {
+            service.listBinaryFunctions(
+                input = BinaryInput.RawBytes(minimalWasm),
+                offset = -1,
+                limit = 10,
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, error.code)
+        assertEquals("`offset` must be non-negative", error.message)
     }
 
     @Test

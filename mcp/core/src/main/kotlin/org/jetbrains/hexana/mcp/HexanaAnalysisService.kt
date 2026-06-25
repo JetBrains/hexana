@@ -10,6 +10,7 @@ import org.jetbrains.hexana.mcp.model.entrypoints.EntrypointPolicyResult
 import org.jetbrains.hexana.mcp.model.artifacts.QueryArtifactsResult
 import org.jetbrains.hexana.mcp.model.artifacts.PlanAbiBindingRegenerationResult
 import org.jetbrains.hexana.mcp.model.binaries.BinaryModuleIdentityResult
+import org.jetbrains.hexana.mcp.model.binaries.BinaryFunctionsResult
 import org.jetbrains.hexana.mcp.model.binaries.BinarySummaryResult
 import org.jetbrains.hexana.mcp.model.binaries.QueryBinaryResult
 import org.jetbrains.hexana.mcp.model.components.CheckComponentCompatibilityResult
@@ -77,6 +78,23 @@ interface HexanaAnalysisService {
         maxBytes: Int,
     ): QueryBinaryResult {
         throw UnsupportedOperationException("queryBinary is not implemented")
+    }
+
+    fun listBinaryFunctions(
+        input: BinaryInput,
+        offset: Int,
+        limit: Int,
+    ): BinaryFunctionsResult {
+        throw UnsupportedOperationException("listBinaryFunctions is not implemented")
+    }
+
+    fun searchBinaryFunctions(
+        input: BinaryInput,
+        query: List<String>,
+        offset: Int,
+        limit: Int,
+    ): BinaryFunctionsResult {
+        throw UnsupportedOperationException("searchBinaryFunctions is not implemented")
     }
 
     fun queryArtifacts(
@@ -275,6 +293,41 @@ class DefaultHexanaAnalysisService(
             limit = limit,
             detail = detail,
             maxBytes = maxBytes,
+            pathLabel = binary.identity.path,
+        )
+    }
+
+    override fun listBinaryFunctions(
+        input: BinaryInput,
+        offset: Int,
+        limit: Int,
+    ): BinaryFunctionsResult {
+        val binary = BinaryInputLoader(
+            maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
+            maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
+        ).load(input)
+        return binary.provider.readBinaryFunctions(
+            offset = offset,
+            limit = limit,
+            pathLabel = binary.identity.path,
+        )
+    }
+
+    override fun searchBinaryFunctions(
+        input: BinaryInput,
+        query: List<String>,
+        offset: Int,
+        limit: Int,
+    ): BinaryFunctionsResult {
+        requireStringList(query, "Query")
+        val binary = BinaryInputLoader(
+            maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
+            maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
+        ).load(input)
+        return binary.provider.searchBinaryFunctions(
+            query = query,
+            offset = offset,
+            limit = limit,
             pathLabel = binary.identity.path,
         )
     }

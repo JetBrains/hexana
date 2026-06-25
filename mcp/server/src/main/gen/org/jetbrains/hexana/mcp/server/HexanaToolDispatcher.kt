@@ -18,6 +18,14 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
  * Generated input defaults shared by standalone server handlers.
  */
 internal object HexanaToolInputDefaults {
+  public const val LIST_BINARY_FUNCTIONS_OFFSET: Int = 0
+
+  public const val LIST_BINARY_FUNCTIONS_LIMIT: Int = 25
+
+  public const val SEARCH_BINARY_FUNCTIONS_OFFSET: Int = 0
+
+  public const val SEARCH_BINARY_FUNCTIONS_LIMIT: Int = 25
+
   public const val QUERY_BINARY_OPERATION: String = "overview"
 
   public const val QUERY_BINARY_OFFSET: Int = 0
@@ -60,6 +68,8 @@ internal object HexanaToolInputDefaults {
  */
 public fun Server.registerHexanaTools(handlers: HexanaToolHandlers, profile: HexanaMcpToolProfile = HexanaMcpToolProfile.ADVANCED) {
   if (profile.includesTool("summarize_binary")) registerSummarizeBinaryTool(handlers)
+  if (profile.includesTool("list_binary_functions")) registerListBinaryFunctionsTool(handlers)
+  if (profile.includesTool("search_binary_functions")) registerSearchBinaryFunctionsTool(handlers)
   if (profile.includesTool("query_binary")) registerQueryBinaryTool(handlers)
   if (profile.includesTool("summarize_module")) registerSummarizeModuleTool(handlers)
   if (profile.includesTool("list_enabled_features")) registerListEnabledFeaturesTool(handlers)
@@ -173,6 +183,242 @@ private fun Server.registerSummarizeBinaryTool(handlers: HexanaToolHandlers) {
     ),
   ))  {
     request: CallToolRequest -> handlers.summarizeBinary(request.arguments)
+  }
+}
+
+private fun Server.registerListBinaryFunctionsTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "list_binary_functions",
+    description = """
+  |List Wasm funcidx or native symbol-backed functions with focused fields.
+  |Use this for stack, source, or function inventories after `summarize_binary` shows functions.
+  |Wasm results use unified `funcidx`; native results include symbol/source, names, import/thunk flags, section, address, offset, size, and range confidence.
+  """.trimMargin(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Readable local binary path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64 binary bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw binary bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES))
+      })
+      put("offset", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Zero-based function offset after filtering."))
+        put("default", JsonPrimitive(0))
+        put("minimum", JsonPrimitive(0))
+      })
+      put("limit", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Maximum functions to return. The implementation clamps values above 100."))
+        put("default", JsonPrimitive(25))
+        put("minimum", JsonPrimitive(1))
+        put("maximum", JsonPrimitive(100))
+      })
+    },
+    required = listOf()
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("module", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+      put("query", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+      })
+      put("total", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+      })
+      put("offset", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+      })
+      put("limit", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+      })
+      put("returned", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+      })
+      put("nextOffset", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("integer"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("functions", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("omitted", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("warnings", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+    },
+    required = listOf("module", "query", "total", "offset", "limit", "returned", "functions", "omitted", "warnings")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.listBinaryFunctions(request.arguments)
+  }
+}
+
+private fun Server.registerSearchBinaryFunctionsTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "search_binary_functions",
+    description = """
+  |Search Wasm funcidx or native symbol-backed functions by focused function fields.
+  |Use this when you have a name, import, source, section, address, offset, or range-confidence term.
+  |Search is case-insensitive; all `query` terms must match one function record.
+  """.trimMargin(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Readable local binary path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64 binary bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw binary bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES))
+      })
+      put("offset", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Zero-based function offset after filtering."))
+        put("default", JsonPrimitive(0))
+        put("minimum", JsonPrimitive(0))
+      })
+      put("limit", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+        put("description", JsonPrimitive("Maximum functions to return. The implementation clamps values above 100."))
+        put("default", JsonPrimitive(25))
+        put("minimum", JsonPrimitive(1))
+        put("maximum", JsonPrimitive(100))
+      })
+      put("query", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+        put("description", JsonPrimitive("Case-insensitive terms; all terms must match one function record."))
+        put("maxItems", JsonPrimitive(20))
+      })
+    },
+    required = listOf("query")
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("module", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+      put("query", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+      })
+      put("total", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+      })
+      put("offset", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+      })
+      put("limit", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+      })
+      put("returned", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+      })
+      put("nextOffset", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("integer"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("functions", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("omitted", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("warnings", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+    },
+    required = listOf("module", "query", "total", "offset", "limit", "returned", "functions", "omitted", "warnings")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.searchBinaryFunctions(request.arguments)
   }
 }
 

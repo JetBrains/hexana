@@ -85,6 +85,27 @@ class HexanaToolHandlers(
         }
     }
 
+    fun listBinaryFunctions(arguments: JsonObject?): CallToolResult {
+        return execute("list_binary_functions") {
+            analysisService.listBinaryFunctions(
+                input = binaryInput(arguments),
+                offset = arguments.intOrDefault("offset", HexanaToolInputDefaults.LIST_BINARY_FUNCTIONS_OFFSET),
+                limit = arguments.intOrDefault("limit", HexanaToolInputDefaults.LIST_BINARY_FUNCTIONS_LIMIT)
+            )
+        }
+    }
+
+    fun searchBinaryFunctions(arguments: JsonObject?): CallToolResult {
+        return execute("search_binary_functions") {
+            analysisService.searchBinaryFunctions(
+                input = binaryInput(arguments),
+                query = arguments.requireStringList("query"),
+                offset = arguments.intOrDefault("offset", HexanaToolInputDefaults.SEARCH_BINARY_FUNCTIONS_OFFSET),
+                limit = arguments.intOrDefault("limit", HexanaToolInputDefaults.SEARCH_BINARY_FUNCTIONS_LIMIT)
+            )
+        }
+    }
+
     fun getEntrypointPolicy(arguments: JsonObject?): CallToolResult {
         return execute("get_entrypoint_policy") {
             analysisService.getEntrypointPolicy(wasmInput(arguments))
