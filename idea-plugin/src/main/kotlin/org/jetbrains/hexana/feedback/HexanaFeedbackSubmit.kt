@@ -15,7 +15,6 @@ import javax.net.ssl.HttpsURLConnection
 
 private const val RequestIdKey = "Request-Id"
 
-private val EmailRegex = Regex("^[a-zA-Z0-9\\\\._%+!$&*=^|~#{}-]+@([a-zA-Z0-9\\\\-]+\\.)+([a-zA-Z]{2,22})$")
 private val SpaceRegex = Regex("\\s")
 private val Log = Logger.getInstance("org.jetbrains.hexana.feedback.HexanaFeedbackSubmit")
 
@@ -84,7 +83,7 @@ private fun buildFeedbackRequest(
     HexanaFeedbackRequestData(
         formId = HexanaFeedbackFormIdWithDetailedAnswer,
         autoSolve = false,
-        email = state.contact.takeIf { it.matches(EmailRegex) } ?: "",
+        email = state.contact,
         subject = HexanaFeedbackTitle,
         comment = createFeedbackMarkdown(state, technicalContextPreview),
         intellijProduct = getProductTag(),
