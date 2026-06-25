@@ -84,6 +84,7 @@ internal fun createFeedbackCollectedDataPayload(
         options = TaskChoice.entries,
         selected = state.selectedTasks,
         other = TaskChoice.Other,
+        optionId = TaskChoice::id,
     ),
     outcome = state.outcome?.id,
     blockers = checkboxGroupPayload(
@@ -91,6 +92,7 @@ internal fun createFeedbackCollectedDataPayload(
         selected = state.blockers,
         other = Blocker.Other,
         otherText = state.blockerOtherText,
+        optionId = Blocker::id,
     ),
     improvementText = state.improvementText.takeIf(String::isNotBlank),
     alternativeTools = checkboxGroupPayload(
@@ -98,12 +100,14 @@ internal fun createFeedbackCollectedDataPayload(
         selected = state.alternativeTools,
         other = AlternativeTool.Other,
         otherText = state.alternativeToolOtherText,
+        optionId = AlternativeTool::id,
     ),
     workTypes = checkboxGroupPayload(
         options = WorkType.entries,
         selected = state.workTypes,
         other = WorkType.Other,
         otherText = state.workTypeOtherText,
+        optionId = WorkType::id,
     ),
     frequency = state.frequency?.id,
     interviewChoice = state.interviewChoice?.id,
@@ -114,9 +118,10 @@ internal fun createFeedbackCollectedDataPayload(
             options = InterviewTopic.entries,
             selected = state.interviewTopics,
             other = InterviewTopic.Other,
+            optionId = InterviewTopic::id,
         )
     } else {
-        emptyCheckboxGroupPayload(InterviewTopic.entries, InterviewTopic.Other)
+        emptyCheckboxGroupPayload(InterviewTopic.entries, InterviewTopic.Other, InterviewTopic::id)
     },
     technicalContextEnabled = state.technicalContextEnabled,
     technicalContext = contextPreview.toPayload().takeIf { state.technicalContextEnabled },
@@ -158,18 +163,19 @@ private fun <T> checkboxGroupPayload(
     options: List<T>,
     selected: Set<T>,
     other: T,
+    optionId: (T) -> String,
     otherText: String? = null,
 ): JsonObject = buildJsonObject {
-    options.filterNot { it == other }.forEachIndexed { index, option ->
-        put("checkbox_$index", option in selected)
+    options.filterNot { it == other }.forEach { option ->
+        put(optionId(option), option in selected)
     }
     if (other in selected) {
         put("other", otherText.orEmpty())
     }
 }
 
-private fun <T> emptyCheckboxGroupPayload(options: List<T>, other: T): JsonObject =
-    checkboxGroupPayload(options = options, selected = emptySet(), other = other)
+private fun <T> emptyCheckboxGroupPayload(options: List<T>, other: T, optionId: (T) -> String): JsonObject =
+    checkboxGroupPayload(options = options, selected = emptySet(), other = other, optionId = optionId)
 
 private fun Set<Enum<*>>.toLabelsOrPlaceholder(): String =
     if (isEmpty()) {

@@ -33,19 +33,19 @@ class HexanaFeedbackContractTest : UsefulTestCase() {
             ),
         )
 
-        assertEquals(true, payload.tasks.getValue("checkbox_0").jsonPrimitive.boolean)
-        assertEquals(false, payload.tasks.getValue("checkbox_1").jsonPrimitive.boolean)
+        assertEquals(true, payload.tasks.getValue("imports_exports").jsonPrimitive.boolean)
+        assertEquals(false, payload.tasks.getValue("module_structure").jsonPrimitive.boolean)
         assertEquals(JsonPrimitive(""), payload.tasks.getValue("other"))
 
-        assertEquals(false, payload.blockers.getValue("checkbox_0").jsonPrimitive.boolean)
-        assertEquals(true, payload.blockers.getValue("checkbox_1").jsonPrimitive.boolean)
+        assertEquals(false, payload.blockers.getValue("could_not_find_information").jsonPrimitive.boolean)
+        assertEquals(true, payload.blockers.getValue("navigation_unclear").jsonPrimitive.boolean)
         assertEquals(JsonPrimitive("Missing jump target"), payload.blockers.getValue("other"))
 
-        assertEquals(true, payload.alternativeTools.getValue("checkbox_0").jsonPrimitive.boolean)
+        assertEquals(true, payload.alternativeTools.getValue("cli_tools").jsonPrimitive.boolean)
         assertFalse(payload.alternativeTools.containsKey("other"))
 
         assertEquals(JsonPrimitive("Tooling engineer"), payload.workTypes.getValue("other"))
-        assertEquals(true, payload.interviewTopics.getValue("checkbox_5").jsonPrimitive.boolean)
+        assertEquals(true, payload.interviewTopics.getValue("performance").jsonPrimitive.boolean)
         assertEquals(JsonPrimitive(""), payload.interviewTopics.getValue("other"))
     }
 
@@ -63,7 +63,7 @@ class HexanaFeedbackContractTest : UsefulTestCase() {
 
         assertEquals(JsonPrimitive("checkbox_group"), blockers.getValue("response").jsonObject.getValue("type"))
         assertEquals(
-            JsonPrimitive("checkbox_0"),
+            JsonPrimitive("could_not_find_information"),
             blockers.getValue("options").jsonArray.first().jsonObject.getValue("responseKey"),
         )
         assertEquals(

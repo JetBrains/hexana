@@ -347,8 +347,8 @@ private fun SerialDescriptor.elementContractJson(index: Int): JsonObject {
             put("question", spec.question)
             if (spec.options.isNotEmpty()) {
                 put("options", buildJsonArray {
-                    spec.options.forEachIndexed { optionIndex, option ->
-                        add(option.toJsonObject(responseKey = spec.response?.optionKey(optionIndex)))
+                    spec.options.forEach { option ->
+                        add(option.toJsonObject(responseKey = spec.response?.optionKey(option.id)))
                     }
                 })
             }
@@ -396,9 +396,9 @@ private fun checkboxGroupResponse(
     ),
 )
 
-private fun FeedbackResponseSpec.optionKey(index: Int): String? =
+private fun FeedbackResponseSpec.optionKey(optionId: String): String? =
     when (type) {
-        "checkbox_group" -> "checkbox_$index"
+        "checkbox_group" -> optionId
         else -> null
     }
 
