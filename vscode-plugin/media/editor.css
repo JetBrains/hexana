@@ -77,8 +77,49 @@ html, body {
 }
 
 /* Tab bar */
+.hexana-tab-list {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+.hexana-tab-list::-webkit-scrollbar {
+    display: none;
+}
+
 .hexana-tab:hover {
     background: rgba(255, 255, 255, 0.06);
+}
+
+.hexana-tab-scroll-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    align-self: stretch;
+    flex: 0 0 auto;
+    cursor: pointer;
+    user-select: none;
+    font-size: 16px;
+    color: var(--hexana-fg);
+    border-bottom: 2px solid transparent;
+}
+
+.hexana-tab-scroll-button:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.hexana-tab-scroll-button-disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.hexana-tab-scroll-button-disabled:hover {
+    background: transparent;
 }
 
 /* Panel table base */

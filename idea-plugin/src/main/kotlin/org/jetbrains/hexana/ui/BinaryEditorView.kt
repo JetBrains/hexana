@@ -7,10 +7,15 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
@@ -355,8 +360,20 @@ private fun TabsPanel(
     }
 
     var expanded by remember { mutableStateOf(false) }
+    var tabBarWidthPx by remember { mutableIntStateOf(0) }
+    var tabContentWidthPx by remember(panels) { mutableIntStateOf(0) }
+    var tabOffsetPx by remember(panels) { mutableIntStateOf(0) }
+    val tabOverflowPx = (tabContentWidthPx - tabBarWidthPx).coerceAtLeast(0)
+    val hasHiddenTabs = tabOverflowPx > TAB_OVERFLOW_THRESHOLD_PX
+    val maxTabOffsetPx = if (hasHiddenTabs) tabOverflowPx else 0
+    val canShowPreviousHiddenTab = hasHiddenTabs && tabOffsetPx > 0
+    val canShowNextHiddenTab = hasHiddenTabs && tabOffsetPx < maxTabOffsetPx
 
-    val tabs by remember(state.tabIndex) {
+    LaunchedEffect(maxTabOffsetPx) {
+        tabOffsetPx = tabOffsetPx.coerceIn(0, maxTabOffsetPx)
+    }
+
+    val tabs by remember(state.tabIndex, panels) {
         derivedStateOf {
             panels.mapIndexed { index, panel ->
                 TabData.Default(
@@ -395,10 +412,52 @@ private fun TabsPanel(
                     )
                 }
             }
-            TabStrip(
-                tabs = tabs,
-                style = JewelTheme.defaultTabStyle,
-            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .onGloballyPositioned { tabBarWidthPx = it.size.width }
+                    .clipToBounds(),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (hasHiddenTabs) {
+                        IconButton(
+                            enabled = canShowPreviousHiddenTab,
+                            onClick = {
+                                tabOffsetPx = (tabOffsetPx - tabBarWidthPx).coerceAtLeast(0)
+                            },
+                        ) {
+                            Text("‹")
+                        }
+                    }
+
+                    NaturalWidthTabStrip(
+                        tabs = tabs,
+                        offsetPx = tabOffsetPx.coerceIn(0, maxTabOffsetPx),
+                        onContentWidthChanged = { widthPx ->
+                            if (widthPx < TAB_STRIP_IMPLAUSIBLE_MEASURE_WIDTH) {
+                                tabContentWidthPx = widthPx
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .clipToBounds(),
+                    )
+
+                    if (hasHiddenTabs) {
+                        IconButton(
+                            enabled = canShowNextHiddenTab,
+                            onClick = {
+                                tabOffsetPx = (tabOffsetPx + tabBarWidthPx).coerceAtMost(maxTabOffsetPx)
+                            },
+                        ) {
+                            Text("›")
+                        }
+                    }
+                }
+            }
         }
 
         Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal)
@@ -415,6 +474,52 @@ private fun TabsPanel(
         }
     }
 }
+
+@Composable
+private fun NaturalWidthTabStrip(
+    tabs: List<TabData>,
+    offsetPx: Int,
+    onContentWidthChanged: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Layout(
+        content = {
+            Box(modifier = Modifier.onSizeChanged { onContentWidthChanged(it.width) }) {
+                TabStrip(
+                    tabs = tabs,
+                    style = JewelTheme.defaultTabStyle,
+                )
+            }
+        },
+        modifier = modifier,
+    ) { measurables, constraints ->
+        val placeable = measurables.single().measure(
+            Constraints(
+                minWidth = 0,
+                maxWidth = TAB_STRIP_MEASURE_MAX_WIDTH,
+                minHeight = 0,
+                maxHeight = constraints.maxHeight.coerceAtMost(TAB_STRIP_MEASURE_MAX_HEIGHT),
+            )
+        )
+        val width = if (constraints.hasBoundedWidth) {
+            constraints.maxWidth
+        } else {
+            placeable.width
+        }
+        val height = placeable.height.coerceIn(constraints.minHeight, constraints.maxHeight)
+        val maxOffset = (placeable.width - width).coerceAtLeast(0)
+        val offset = offsetPx.coerceIn(0, maxOffset)
+
+        layout(width, height) {
+            placeable.placeRelative(-offset, (height - placeable.height) / 2)
+        }
+    }
+}
+
+private const val TAB_STRIP_MEASURE_MAX_WIDTH = 65_535
+private const val TAB_STRIP_IMPLAUSIBLE_MEASURE_WIDTH = TAB_STRIP_MEASURE_MAX_WIDTH - 1_024
+private const val TAB_STRIP_MEASURE_MAX_HEIGHT = 4_096
+private const val TAB_OVERFLOW_THRESHOLD_PX = 24
 
 
 /**
