@@ -9,16 +9,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.shared.CellValue
 import org.jetbrains.hexana.shared.ColumnWidth
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.ui.components.Table
@@ -68,15 +68,21 @@ private fun TableTabContent(descriptor: TableTabDescriptor, state: HexViewStateH
 private fun TableTabTable(descriptor: TableTabDescriptor, state: HexViewStateHolder) {
     val textMeasurer = rememberTextMeasurer()
 
-    val modifiers = descriptor.columns.map { col ->
-        col.widthBehavior.toModifier(textMeasurer)
+    val columnLayouts = descriptor.columns.map { col ->
+        col.widthBehavior.toColumnLayout(
+            textMeasurer = textMeasurer,
+            title = col.name,
+            rowCount = descriptor.rowCount,
+            cellProvider = col.cellProvider,
+        )
     }
 
-    val columns = remember(descriptor, modifiers) {
+    val columns = remember(descriptor, columnLayouts) {
         descriptor.columns.mapIndexed { i, col ->
             TableColumn(
                 title = col.name,
-                modifier = modifiers[i],
+                modifier = columnLayouts[i].modifier,
+                width = columnLayouts[i].width,
             ) { index ->
                 val cell = col.cellProvider(index)
                 TableCellValue(cell.value, cell.representation, cell.tooltip)
@@ -136,10 +142,52 @@ private fun TableTabTable(descriptor: TableTabDescriptor, state: HexViewStateHol
 }
 
 @Composable
-private fun ColumnWidth.toModifier(
+private fun ColumnWidth.toColumnLayout(
     textMeasurer: TextMeasurer,
-): Modifier = when (this) {
-    is ColumnWidth.Fill -> Modifier.fillMaxWidth(fraction)
-    is ColumnWidth.Measured -> Modifier.width(textMeasurer.measureWidthMonospace(sample))
-    is ColumnWidth.MeasuredMin -> Modifier.widthIn(min = textMeasurer.measureWidthMonospace(sample))
+    title: String,
+    rowCount: Int,
+    cellProvider: (Int) -> CellValue<*>,
+): ColumnLayout = when (this) {
+    is ColumnWidth.Fill -> ColumnLayout(modifier = Modifier.fillMaxWidth(fraction))
+    is ColumnWidth.Measured -> ColumnLayout(
+        width = textMeasurer.measureWidthMonospace(widestSample(title, sample)),
+    )
+    is ColumnWidth.MeasuredMin -> ColumnLayout(
+        width = textMeasurer.measureWidthMonospace(
+            widestSample(title, sample, rowCount, cellProvider),
+        ),
+    )
 }
+
+private data class ColumnLayout(
+    val modifier: Modifier = Modifier,
+    val width: Dp? = null,
+)
+
+private fun widestSample(
+    title: String,
+    sample: String,
+    rowCount: Int = 0,
+    cellProvider: ((Int) -> CellValue<*>)? = null,
+): String {
+    var widest = "$title ▾"
+
+    fun consider(value: String) {
+        val boundedValue = value.take(MAX_MEASURED_COLUMN_CHARS)
+        if (boundedValue.length > widest.length) {
+            widest = boundedValue
+        }
+    }
+
+    consider(sample)
+
+    if (cellProvider != null) {
+        repeat(rowCount) { index ->
+            consider(cellProvider(index).representation)
+        }
+    }
+
+    return widest
+}
+
+private const val MAX_MEASURED_COLUMN_CHARS = 80
