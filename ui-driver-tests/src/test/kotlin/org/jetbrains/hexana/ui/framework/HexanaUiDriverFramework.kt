@@ -77,6 +77,9 @@ internal class HexanaIde internal constructor(
     val context: IDETestContext,
     val driver: Driver,
 ) {
+    private val probe: HexanaEditorUiTestProbeRef
+        get() = driver.utility(HexanaEditorUiTestProbeRef::class)
+
     fun closeProjectToolWindow() {
         driver.closeToolWindow("Project")
     }
@@ -88,6 +91,24 @@ internal class HexanaIde internal constructor(
 
     fun openWasm(fileName: String = HexanaUiDriverTestSupport.wasmFileName): HexanaEditor =
         openFile(fileName)
+
+    fun openAbsoluteFile(path: Path): HexanaEditor {
+        val absolutePath = path.toAbsolutePath().normalize()
+        probe.openAbsoluteFile(absolutePath.toString())
+        return HexanaEditor(
+            driver,
+            absolutePath.fileName?.toString() ?: absolutePath.toString(),
+            ABSOLUTE_FILE_IDENTIFIER_PREFIX + absolutePath.toSystemIndependentPath(),
+        )
+    }
+
+    fun openComponentDiff(leftPath: String, rightPath: String): HexanaEditor {
+        val payload = probe.openComponentDiff(leftPath, rightPath)
+        val fileName = payload.firstOrNull { it.startsWith("fileName=") }
+            ?.removePrefix("fileName=")
+            ?: "$leftPath ↔ $rightPath"
+        return HexanaEditor(driver, fileName, fileName)
+    }
 
     fun hexanaEditor(
         fileName: String = HexanaUiDriverTestSupport.wasmFileName,
@@ -119,6 +140,16 @@ internal class HexanaEditor internal constructor(
 
     fun watState(): HexanaEditorWatState =
         HexanaProbePayload.watState(probe.watState(fileIdentifier))
+
+    fun componentDiffState(): HexanaComponentDiffState =
+        HexanaProbePayload.componentDiffState(probe.componentDiffState(fileIdentifier))
+
+    fun archiveState(): HexanaArchiveState =
+        HexanaProbePayload.archiveState(probe.archiveState(fileIdentifier))
+
+    fun selectTab(tabName: String) {
+        probe.selectTab(fileIdentifier, tabName)
+    }
 
     fun expect(action: HexanaEditorExpectations.() -> Unit) {
         HexanaEditorExpectations(this, probe).action()
@@ -265,6 +296,37 @@ internal data class HexanaEditorWatState(
         get() = conversionState in setOf("show-editor", "show-lite-editor", "show-multifile-editor")
 }
 
+internal data class HexanaComponentDiffState(
+    val fileName: String,
+    val leftName: String,
+    val rightName: String,
+    val totalPairings: Int,
+    val differingCount: Int,
+    val pairings: List<HexanaComponentDiffPairing>,
+)
+
+internal data class HexanaComponentDiffPairing(
+    val index: Int,
+    val kind: String,
+    val status: String,
+    val label: String,
+)
+
+internal data class HexanaArchiveState(
+    val fileName: String,
+    val memberCount: Int,
+    val openableCount: Int,
+    val members: List<HexanaArchiveMemberState>,
+)
+
+internal data class HexanaArchiveMemberState(
+    val index: Int,
+    val name: String,
+    val format: String,
+    val size: Long,
+    val openable: Boolean,
+)
+
 @Remote(
     "org.jetbrains.hexana.uitestframework.HexanaEditorUiTestProbe",
     plugin = HEXANA_PLUGIN_ID,
@@ -272,6 +334,11 @@ internal data class HexanaEditorWatState(
 internal interface HexanaEditorUiTestProbeRef {
     fun frameworkVersion(): String
     fun ping(): String
+    fun openAbsoluteFile(path: String): List<String>
+    fun openComponentDiff(leftPath: String, rightPath: String): List<String>
+    fun selectTab(fileName: String, tabName: String): List<String>
+    fun componentDiffState(fileName: String): List<String>
+    fun archiveState(fileName: String): List<String>
     fun editorSnapshot(fileName: String): List<String>
     fun searchState(fileName: String): List<String>
     fun watState(fileName: String): List<String>

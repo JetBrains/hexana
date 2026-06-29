@@ -40,7 +40,25 @@ dependencies {
 }
 
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags("screenshot")
+    }
+    providers.gradleProperty("testIdeType").orNull?.let {
+        systemProperty("hexana.testIdeType", it)
+    }
+    providers.gradleProperty("testIdeVersion").orNull?.let {
+        systemProperty("hexana.testIdeVersion", it)
+    }
+}
+
+tasks.register<Test>("captureWhatsNewScreenshots") {
+    group = "verification"
+    description = "Runs opt-in UI Driver screenshot capture flows for Hexana What's New."
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform {
+        includeTags("screenshot")
+    }
     providers.gradleProperty("testIdeType").orNull?.let {
         systemProperty("hexana.testIdeType", it)
     }

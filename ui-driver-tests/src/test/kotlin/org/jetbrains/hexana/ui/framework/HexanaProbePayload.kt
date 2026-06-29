@@ -4,6 +4,8 @@ private const val WIRE_VERSION = "1"
 private const val SNAPSHOT_SCHEMA = "hexana-editor-snapshot"
 private const val SEARCH_STATE_SCHEMA = "hexana-editor-search-state"
 private const val WAT_STATE_SCHEMA = "hexana-editor-wat-state"
+private const val COMPONENT_DIFF_STATE_SCHEMA = "hexana-component-diff-state"
+private const val ARCHIVE_STATE_SCHEMA = "hexana-archive-state"
 
 internal object HexanaProbePayload {
     fun snapshot(payload: List<String>): HexanaEditorSnapshot =
@@ -37,6 +39,51 @@ internal object HexanaProbePayload {
                 containsFunctionText = fields.boolean("containsFunctionText"),
                 textSummary = fields.value("textSummary"),
                 error = fields.value("error").takeIf { it.isNotEmpty() },
+            )
+        }
+
+    fun componentDiffState(payload: List<String>): HexanaComponentDiffState =
+        parse(payload, COMPONENT_DIFF_STATE_SCHEMA) { fields ->
+            HexanaComponentDiffState(
+                fileName = fields.value("fileName"),
+                leftName = fields.value("leftName"),
+                rightName = fields.value("rightName"),
+                totalPairings = fields.int("totalPairings"),
+                differingCount = fields.int("differingCount"),
+                pairings = fields.values("pairing").map { pairing ->
+                    val parts = pairing.split("|")
+                    if (parts.size != 4) {
+                        payloadError(payload, "malformed pairing '$pairing'")
+                    }
+                    HexanaComponentDiffPairing(
+                        index = parts[0].toInt(),
+                        kind = parts[1],
+                        status = parts[2],
+                        label = parts[3],
+                    )
+                },
+            )
+        }
+
+    fun archiveState(payload: List<String>): HexanaArchiveState =
+        parse(payload, ARCHIVE_STATE_SCHEMA) { fields ->
+            HexanaArchiveState(
+                fileName = fields.value("fileName"),
+                memberCount = fields.int("memberCount"),
+                openableCount = fields.int("openableCount"),
+                members = fields.values("member").map { member ->
+                    val parts = member.split("|")
+                    if (parts.size != 5) {
+                        payloadError(payload, "malformed member '$member'")
+                    }
+                    HexanaArchiveMemberState(
+                        index = parts[0].toInt(),
+                        name = parts[1],
+                        format = parts[2],
+                        size = parts[3].toLong(),
+                        openable = parts[4].removePrefix("openable=").toBooleanStrict(),
+                    )
+                },
             )
         }
 

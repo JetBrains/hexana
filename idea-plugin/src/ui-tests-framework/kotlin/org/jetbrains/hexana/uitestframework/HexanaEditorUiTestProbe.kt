@@ -5,16 +5,25 @@ import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
+import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.hexana.HexanaComponentDiffVirtualFile
 import org.jetbrains.hexana.HexanaFileEditor
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
+import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
+import org.jetbrains.hexana.providers.classifyArchiveMember
+import org.jetbrains.hexana.providers.format.WasmComponentDiffOrchestrator
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.ui.panel.WatConversionState
+import java.nio.file.Path
 
 private const val WIRE_VERSION = "1"
 private const val SNAPSHOT_SCHEMA = "hexana-editor-snapshot"
@@ -29,6 +38,116 @@ object HexanaEditorUiTestProbe {
 
     @JvmStatic
     fun ping(): String = "pong"
+
+    @JvmStatic
+    fun openAbsoluteFile(path: String): List<String> {
+        val normalizedPath = Path.of(path).toAbsolutePath().normalize()
+        val file = VfsUtil.findFile(normalizedPath, true)
+            ?: throw IllegalStateException("Could not find file for screenshot capture: $normalizedPath")
+        return runOnEdt {
+            val project = singleOpenProject()
+            FileEditorManager.getInstance(project).openFile(file, true)
+            payload(
+                "hexana-open-absolute-file",
+                listOf(
+                    "path=${normalizedPath.toString().toSystemIndependentPath()}",
+                    "fileName=${file.name}",
+                ),
+            )
+        }
+    }
+
+    @JvmStatic
+    fun openComponentDiff(leftPath: String, rightPath: String): List<String> {
+        val left = resolveProjectFile(leftPath)
+        val right = resolveProjectFile(rightPath)
+        val leftBytes = left.contentsToByteArray().toCommonByteBuffer()
+        val rightBytes = right.contentsToByteArray().toCommonByteBuffer()
+        val leftProvider = WasmComponentBinaryProvider(leftBytes.duplicate())
+        val rightProvider = WasmComponentBinaryProvider(rightBytes.duplicate())
+        require(leftProvider.canProvideWasmModule()) { "Left file is not a Component Model binary: $leftPath" }
+        require(rightProvider.canProvideWasmModule()) { "Right file is not a Component Model binary: $rightPath" }
+
+        val diffFile = HexanaComponentDiffVirtualFile(
+            name = "${left.name} ↔ ${right.name}",
+            leftBuffer = leftBytes,
+            rightBuffer = rightBytes,
+            leftName = left.name,
+            rightName = right.name,
+        )
+        return runOnEdt {
+            FileEditorManager.getInstance(singleOpenProject()).openFile(diffFile, true)
+            payload(
+                "hexana-open-component-diff",
+                listOf(
+                    "fileName=${diffFile.name}",
+                    "leftName=${left.name}",
+                    "rightName=${right.name}",
+                ),
+            )
+        }
+    }
+
+    @JvmStatic
+    fun selectTab(fileIdentifier: String, tabName: String): List<String> = runOnEdt {
+        val editor = requireHexanaEditor(fileIdentifier)
+        val panels = editor.panelNames()
+        val index = panels.indexOf(tabName)
+        if (index < 0) {
+            throw IllegalStateException(
+                "Expected tab '$tabName' for '$fileIdentifier', but available tabs are: $panels",
+            )
+        }
+        editor.stateHolder.setSelectedTab(index)
+        editor.snapshot()
+    }
+
+    @JvmStatic
+    fun componentDiffState(fileName: String): List<String> = runOnEdt {
+        val editor = requireHexanaEditor(fileName)
+        val file = editor.myFile as? HexanaComponentDiffVirtualFile
+            ?: throw IllegalStateException("Expected component diff virtual file for '$fileName', got ${editor.myFile::class.java.name}")
+        val result = WasmComponentDiffOrchestrator.diff(
+            WasmComponentBinaryProvider(file.leftBuffer.duplicate()),
+            WasmComponentBinaryProvider(file.rightBuffer.duplicate()),
+        ) ?: throw IllegalStateException("Could not compute component diff for '$fileName'")
+        payload(
+            "hexana-component-diff-state",
+            buildList {
+                add("fileName=${file.name}")
+                add("leftName=${file.leftName}")
+                add("rightName=${file.rightName}")
+                add("totalPairings=${result.pairings.size}")
+                add("differingCount=${result.differingCount}")
+                result.pairings.forEachIndexed { index, pairing ->
+                    val label = pairing.left?.label ?: pairing.right?.label.orEmpty()
+                    add("pairing=$index|${pairing.kind}|${pairing.status}|$label")
+                }
+            },
+        )
+    }
+
+    @JvmStatic
+    fun archiveState(fileIdentifier: String): List<String> = runOnEdt {
+        val editor = requireHexanaEditor(fileIdentifier)
+        val provider = editor.binaryProvider as? ArchiveBinaryProvider
+            ?: throw IllegalStateException("Expected archive provider for '$fileIdentifier', got ${editor.binaryProvider.kindId()}")
+        val members = provider.members.filterNot { it.isBookkeeping }
+        val classifications = members.map { member ->
+            member to classifyArchiveMember(provider.bytes, member.contentRange)
+        }
+        payload(
+            "hexana-archive-state",
+            buildList {
+                add("fileName=${editor.myFile.name}")
+                add("memberCount=${members.size}")
+                add("openableCount=${classifications.count { it.second.openable }}")
+                classifications.forEachIndexed { index, (member, cls) ->
+                    add("member=$index|${member.name}|${cls.displayName}|${member.size}|openable=${cls.openable}")
+                }
+            },
+        )
+    }
 
     @JvmStatic
     fun editorSnapshot(): List<String> = runOnEdt {
@@ -139,6 +258,20 @@ object HexanaEditorUiTestProbe {
                     editor.asHexanaEditor()?.let { HexanaEditorCandidate(project, it) }
                 }
             }
+
+    private fun singleOpenProject(): Project =
+        ProjectManager.getInstance().openProjects.singleOrNull()
+            ?: throw IllegalStateException(
+                "Expected exactly one open project, got ${ProjectManager.getInstance().openProjects.size}",
+            )
+
+    private fun resolveProjectFile(path: String): VirtualFile {
+        val normalized = path.removePrefix("./")
+        val basePath = singleOpenProject().basePath
+            ?: throw IllegalStateException("Open project has no base path")
+        val file = VfsUtil.findFile(Path.of(basePath).resolve(normalized).normalize(), true)
+        return file ?: throw IllegalStateException("Could not find project file: $path")
+    }
 
     private fun FileEditor?.asHexanaEditor(): HexanaFileEditor? =
         this as? HexanaFileEditor
@@ -320,7 +453,7 @@ object HexanaEditorUiTestProbe {
             }
             is WasmComponentBinaryVirtualFileProvider -> {
                 if (provider.canProvideWasmModule()) {
-                    listOf("Top", "Wat")
+                    listOf("Top", "Wat", "WAT (virtualized)")
                 } else {
                     listOf("Something is wrong :(", "Wat")
                 }
@@ -334,8 +467,10 @@ object HexanaEditorUiTestProbe {
                 }
             }
             is WasmComponentBinaryProvider -> {
-                if (provider.canProvideWasmModule()) listOf("Top") else emptyList()
+                if (provider.canProvideWasmModule()) listOf("Top", "WAT (virtualized)") else emptyList()
             }
+            is ArchiveBinaryProvider -> listOf("Members")
+            is NativeBinaryProvider -> listOf("Top", "Disassembly", "Disassembly (virtualized)")
             else -> emptyList()
         }
         return (tablePanelNames + extraPanelNames).distinct()
