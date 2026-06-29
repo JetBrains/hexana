@@ -7,7 +7,7 @@
 
 ### 10.1 Settings page accessible
 **Steps:** Open Settings -> Tools -> Hexana.
-**Expected:** Settings page appears with fields: Wasm-tools path, Use built-in wasm tools, Show offsets, Send anonymous usage analytics.
+**Expected:** Settings page appears with fields: Wasm-tools path, LLVM objdump path, Use built-in wasm tools, Show offsets, Send anonymous usage analytics, SBOM vulnerability options, feedback prompt, and What's New update prompt.
 
 ### 10.2 Wasm-tools path — custom
 **Steps:** Set a custom path to the `wasm-tools` binary via the file browser. Open a `.wasm` file, click Wat tab.
@@ -44,3 +44,11 @@
 ### 10.10 Settings persistence
 **Steps:** Change settings. Close and reopen the IDE.
 **Expected:** All settings are preserved across IDE restarts (stored in `hexana.xml`).
+
+### 10.11 What's New update prompt — enabled
+**Steps:** Check "Show What's New after Hexana updates". Start the IDE with a Hexana version whose major/minor version differs from the stored `lastShownWhatsNewVersion` in `hexana.xml`.
+**Expected:** A "Hexana What's New <version>" editor tab opens once and the stored version is updated. The tab renders the bundled rich HTML What's New page with formatting and images; if the IDE browser component is unavailable, a fallback panel offers to open release notes in the external browser.
+
+### 10.12 What's New update prompt — disabled
+**Steps:** Uncheck "Show What's New after Hexana updates". Start the IDE after changing the Hexana major/minor version.
+**Expected:** No What's New tab opens automatically.

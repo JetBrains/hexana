@@ -81,6 +81,9 @@
                      defaultValue="false"
                      description="Show the in-IDE Hexana feedback action in the Hexana editor feedback popup. Disabled by default while the feedback submission flow is gated."/>
 
+        <postStartupActivity implementation="org.jetbrains.hexana.whatsnew.HexanaWhatsNewStartupActivity"
+                             order="last"/>
+
         <!-- Status bar widget surfacing in-flight Hexana disassembly work.
              Hidden when idle; shows "Disassembling: N" while decode +
              render is happening. -->
@@ -157,6 +160,7 @@
 
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.feedback.HexanaFeedbackFileEditorProvider"/>
+        <fileEditorProvider implementation="org.jetbrains.hexana.whatsnew.HexanaWhatsNewFileEditorProvider"/>
         <editorTabTitleProvider implementation="org.jetbrains.hexana.ArchiveMemberTabTitleProvider"/>
         <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasmToolsNotification"/>
         <fileTypeOverrider implementation="org.jetbrains.hexana.actions.HexFileTypeOverrider"/>
@@ -301,6 +305,11 @@
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
             <add-to-group group-id="RevealGroup" anchor="last"/>
         </group>
+
+        <action id="hexana.showWhatsNew"
+                class="org.jetbrains.hexana.whatsnew.HexanaWhatsNewAction">
+            <add-to-group group-id="HelpMenu" anchor="last"/>
+        </action>
     </actions>
 
 </idea-plugin>

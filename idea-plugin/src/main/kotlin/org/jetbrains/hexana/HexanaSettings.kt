@@ -94,6 +94,18 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
             feedbackPromptDisabled = !value
         }
 
+    var showWhatsNewOnNewVersion: Boolean
+        get() = state.showWhatsNewOnNewVersion
+        set(value) {
+            state.showWhatsNewOnNewVersion = value
+        }
+
+    var lastShownWhatsNewVersion: String?
+        get() = state.lastShownWhatsNewVersion
+        set(value) {
+            state.lastShownWhatsNewVersion = value?.takeIf { it.isNotBlank() }
+        }
+
     val wasmToolsPath: String
         get() = wasmToolsPathInUi ?: "wasm-tools"
 
@@ -115,6 +127,8 @@ class HexanaSettingsState : BaseState() {
     var lookupVulnerabilities: Boolean by property(false)
     var vulnerabilitiesOnline: Boolean by property(false)
     var feedbackPromptDisabled: Boolean by property(false)
+    var showWhatsNewOnNewVersion: Boolean by property(true)
+    var lastShownWhatsNewVersion: String? by string()
 }
 
 class HexanaConfigurableProvider : ConfigurableProvider() {
@@ -198,6 +212,14 @@ class HexanaConfigurable : DslConfigurableBase(), SearchableConfigurable {
                     .align(AlignX.FILL)
                     .comment(HexanaBundle.message("hexana.settings.showFeedbackPromptComment"))
                     .bindSelected(settings::feedbackPromptEnabled)
+            }
+            separator()
+            row {
+                checkBox(HexanaBundle.message("hexana.settings.showWhatsNewOnNewVersion"))
+                    .align(AlignY.TOP)
+                    .align(AlignX.FILL)
+                    .comment(HexanaBundle.message("hexana.settings.showWhatsNewOnNewVersionComment"))
+                    .bindSelected(settings::showWhatsNewOnNewVersion)
             }
         }
     }
