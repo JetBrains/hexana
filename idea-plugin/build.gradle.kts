@@ -370,6 +370,98 @@ tasks.register("verifyHexanaToolsetUpToDate") {
     }
 }
 
+tasks.register("verifyReleaseWhatsNew") {
+    description = "Fails release builds when the bundled What's New page for pluginVersion is missing or incomplete."
+    group = "verification"
+
+    val pluginVersion = baseVersion
+    val releaseVersion = Regex("""^\s*(\d+)\.(\d+)""")
+        .find(pluginVersion)
+        ?.let { "${it.groupValues[1]}.${it.groupValues[2]}" }
+        ?: throw GradleException("pluginVersion must start with <major>.<minor>, got '$pluginVersion'.")
+    val whatsNewDirectory = layout.projectDirectory.dir("src/main/resources/whatsnew/$releaseVersion")
+    val indexFile = whatsNewDirectory.file("index.html")
+    val styleFile = whatsNewDirectory.file("style.css")
+    val manifestFile = whatsNewDirectory.file("manifest.txt")
+    val sourceFile = whatsNewDirectory.file("source.json")
+
+    inputs.property("releaseVersion", releaseVersion)
+    inputs.files(project.fileTree(whatsNewDirectory.asFile))
+        .withPropertyName("whatsNewFiles")
+
+    doLast {
+        fun fail(message: String): Nothing = throw GradleException(
+            "Invalid What's New resources for pluginVersion=$pluginVersion (resource version $releaseVersion): $message"
+        )
+
+        val root = whatsNewDirectory.asFile
+        if (!root.isDirectory) {
+            fail("missing directory ${root.relativeTo(projectDir)}")
+        }
+
+        val requiredFiles = listOf(indexFile, styleFile, manifestFile, sourceFile).map { it.asFile }
+        val missingRequiredFiles = requiredFiles.filterNot { it.isFile }
+        if (missingRequiredFiles.isNotEmpty()) {
+            fail("missing required files: ${missingRequiredFiles.joinToString { it.relativeTo(projectDir).path }}")
+        }
+
+        val manifestEntries = manifestFile.asFile.readLines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+        val manifestEntrySet = manifestEntries.toSet()
+        if (manifestEntries.size != manifestEntrySet.size) {
+            fail("manifest.txt contains duplicate entries.")
+        }
+        val requiredManifestEntries = setOf("index.html", "style.css", "source.json")
+        val missingManifestEntries = requiredManifestEntries - manifestEntrySet
+        if (missingManifestEntries.isNotEmpty()) {
+            fail("manifest.txt is missing required entries: ${missingManifestEntries.joinToString()}")
+        }
+
+        val missingManifestFiles = manifestEntrySet
+            .map { it to root.resolve(it) }
+            .filterNot { (_, file) -> file.isFile }
+            .map { (entry, _) -> entry }
+        if (missingManifestFiles.isNotEmpty()) {
+            fail("manifest.txt references missing files: ${missingManifestFiles.joinToString()}")
+        }
+
+        fun localReferences(text: String): Set<String> {
+            val htmlReferences = Regex("""\b(?:href|src)="([^"]+)"""")
+                .findAll(text)
+                .map { it.groupValues[1] }
+            val cssReferences = Regex("""url\((['"]?)([^)'"]+)\1\)""")
+                .findAll(text)
+                .map { it.groupValues[2] }
+            return (htmlReferences + cssReferences)
+                .filterNot { reference ->
+                    reference.startsWith("http://") ||
+                        reference.startsWith("https://") ||
+                        reference.startsWith("mailto:") ||
+                        reference.startsWith("#") ||
+                        reference.startsWith("data:")
+                }
+                .toSet()
+        }
+
+        val referencedAssets = localReferences(indexFile.asFile.readText()) + localReferences(styleFile.asFile.readText())
+        val missingReferencedAssets = referencedAssets - manifestEntrySet
+        if (missingReferencedAssets.isNotEmpty()) {
+            fail("local HTML/CSS references are missing from manifest.txt: ${missingReferencedAssets.joinToString()}")
+        }
+
+        val sourceJson = JsonSlurper().parse(sourceFile.asFile) as Map<*, *>
+        val sourceVersion = sourceJson["version"] as? String
+        if (sourceVersion != releaseVersion) {
+            fail("source.json version is '$sourceVersion', expected '$releaseVersion'.")
+        }
+        val clusters = sourceJson["clusters"] as? List<*>
+        if (clusters.isNullOrEmpty()) {
+            fail("source.json must contain at least one generated feature cluster.")
+        }
+    }
+}
+
 kotlin {
     jvmToolchain(21)
 }
