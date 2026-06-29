@@ -1,0 +1,109 @@
+{
+  "schema": 1,
+  "default_release": "0.12",
+  "asset_root": ".",
+  "capture_policy": {
+    "preferred_source": "ui-driver",
+    "fallback_source": "none",
+    "normal_tests": "exclude screenshots; use the screenshot tag or captureWhatsNewScreenshots task",
+    "rule": "Every big visible feature should have a UI-driver capture recipe before page generation. For 0.12, do not use checked-in documentation images as fallback assets."
+  },
+  "clusters": {
+    "wasm-component-model": {
+      "release": "0.12",
+      "eyebrow": "WASM",
+      "title": "Compare and inspect Component Model binaries",
+      "summary": "Component Model binaries now get recursive comparison, virtualized WAT for embedded core modules, and complete nested size attribution.",
+      "recipe": "component-model-recursive-wat-and-size",
+      "keywords": [
+        "Component Model",
+        "component diff",
+        "submodule view",
+        "WAT (virtualized)",
+        "embedded core module",
+        "sub-component",
+        "recursively",
+        "nested component",
+        "nested sub-component",
+        "first nested component section",
+        "lazy children-generator"
+      ],
+      "doc_candidates": [
+        "doc/components/Binary.md"
+      ],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.12/wasm-component-model.png"
+      ]
+    },
+    "static-archives": {
+      "release": "0.12",
+      "eyebrow": "Archives",
+      "title": "Inspect static libraries and object members",
+      "summary": "Unix ar archives and COFF import libraries open as member lists, with object files extracted into the native disassembly views.",
+      "recipe": "native-archive-member-disassembly",
+      "keywords": [
+        "Static-library archives",
+        ".a",
+        ".lib",
+        "archive",
+        "object-file members",
+        "Relocatable objects",
+        "Capstone",
+        "llvm-objdump"
+      ],
+      "doc_candidates": [
+        "doc/components/Binary.md"
+      ],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.12/static-archives.png"
+      ]
+    },
+    "table-affordances": {
+      "release": "0.12",
+      "presentation": "text",
+      "eyebrow": "Tables",
+      "title": "Copy, inspect, and navigate imports and exports faster",
+      "summary": "Imports and Exports rows now expose full names, copy actions, WAT navigation, and usage discovery for function imports.",
+      "recipe": "imports-exports-row-actions",
+      "keywords": [
+        "Exports tab",
+        "Imports tab",
+        "Copy Name",
+        "Navigate to Function in WAT",
+        "Find Usages",
+        "Caller Paths",
+        "tooltip"
+      ],
+      "doc_candidates": [
+        "doc/images/idea/01-wasm-overview.png"
+      ],
+      "image_candidates": []
+    },
+    "format-workflow-polish": {
+      "release": "0.12",
+      "presentation": "text",
+      "eyebrow": "Workflow",
+      "title": "More binary formats and cleaner IDE entry points",
+      "summary": "Hexana adds DEX and ZIP64 coverage, groups IDE actions under a Hexana submenu, and improves Node.js debugging stability.",
+      "recipe": "format-coverage-and-action-grouping",
+      "keywords": [
+        "Android DEX",
+        "ZIP64",
+        "Hexana submenu",
+        "project-view actions",
+        "Open In",
+        "Open Archive",
+        "Hex view",
+        "Search Everywhere",
+        "keymap",
+        "NodeJS",
+        "stability"
+      ],
+      "doc_candidates": [
+        "doc/images/idea/06-class-file-view.png",
+        "doc/images/idea/07-jar-class-list.png"
+      ],
+      "image_candidates": []
+    }
+  }
+}
