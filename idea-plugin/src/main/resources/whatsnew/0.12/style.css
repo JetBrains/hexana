@@ -145,7 +145,7 @@ h2 {
   color: var(--muted);
 }
 
-.feature ul {
+.note-list {
   margin: 16px 0 0;
   padding-left: 20px;
 }
@@ -171,7 +171,7 @@ h2 {
   list-style: none;
 }
 
-.improvements li {
+.improvements > li {
   display: grid;
   gap: 6px;
   min-width: 0;
@@ -179,13 +179,47 @@ h2 {
   border-top: 1px solid var(--border);
 }
 
-.improvements span,
-.improvements small {
+.improvements > li > span {
   color: var(--muted);
 }
 
-.improvements small {
+.more-toggle {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.show-more-link,
+.show-less-link {
+  display: inline-flex;
+  margin-top: 8px;
+  color: var(--accent);
+  cursor: pointer;
   font-size: 13px;
+  font-weight: 650;
+}
+
+.show-more-link:hover,
+.show-less-link:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.more-continuation,
+.show-less-link {
+  display: none;
+}
+
+.more-toggle:checked ~ .note-list .more-continuation {
+  display: inline;
+}
+
+.more-toggle:checked ~ .show-more-link {
+  display: none;
+}
+
+.more-toggle:checked ~ .show-less-link {
+  display: inline-flex;
 }
 
 code {

@@ -196,6 +196,5 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         "<h2>Compare and inspect Component Model binaries</h2>",
         "<h2>Inspect static libraries and object members</h2>",
         "<h2>Also in 0.12</h2>",
-        "<h2>Release notes</h2>",
     )
 }

@@ -23,11 +23,15 @@
       <p class="eyebrow">WASM</p>
       <h2>Compare and inspect Component Model binaries</h2>
       <p>Component Model binaries now get recursive comparison, virtualized WAT for embedded core modules, and complete nested size attribution.</p>
-      <ul>
-        <li><strong>Compare WASM With…</strong> now accepts Component Model binaries, not only core modules.</li>
-        <li>Component Model binaries gain a <strong>WAT (virtualized)</strong> tab.</li>
-        <li>The <strong>Top</strong> size-profiler tab now breaks a Component Model binary down completely: every nested sub-component and embedded core module is attributed with its correct size and expands to its internal sections and functions, recursively and on demand.</li>
-      </ul>
+        <input class="more-toggle" type="checkbox" id="wasm-component-model-more">
+        <ul class="note-list">
+          <li><strong>Compare WASM With…</strong> now accepts Component Model binaries, not only core modules. <span class="more-continuation">Comparing two components opens a submodule view that lists each component&#x27;s embedded submodules (core modules and nested components, found recursively), flags which differ.</span></li>
+          <li>Component Model binaries gain a <strong>WAT (virtualized)</strong> tab. <span class="more-continuation">A component&#x27;s code lives in its embedded core modules, so the tab discovers every embedded core module — recursively, through nested sub-components.</span></li>
+          <li>The <strong>Top</strong> size-profiler tab now breaks a Component Model binary down completely: every nested sub-component and embedded core module is attributed with its correct size and expands to its internal sections and functions, recursively and on demand. <span class="more-continuation">Previously a composed component — whose code sits inside nested sub-components — reported most of its bytes as a single opaque block.</span></li>
+          <li>Size-profiler (<strong>Top</strong>) tree nodes expand again. <span class="more-continuation">Nodes whose children are generated lazily — now any nested component / embedded core module, and a core module&#x27;s sections expanding into their functions.</span></li>
+        </ul>
+        <label class="show-more-link" for="wasm-component-model-more">Show more</label>
+        <label class="show-less-link" for="wasm-component-model-more">Show less</label>
     </div>
       <img src="screenshots/wasm-component-model.png" alt="Compare and inspect Component Model binaries screenshot">
   </section>
@@ -36,10 +40,13 @@
       <p class="eyebrow">Archives</p>
       <h2>Inspect static libraries and object members</h2>
       <p>Unix ar archives and COFF import libraries open as member lists, with object files extracted into the native disassembly views.</p>
-      <ul>
-        <li>Static-library archives open for inspection: <code>.a</code> (Unix <code>ar</code>, with ELF or Mach-O members) and <code>.lib</code> (Windows COFF import libraries).</li>
-        <li>Object-file members of a static-library archive disassemble per function in the virtualized (Capstone) view.</li>
-      </ul>
+        <input class="more-toggle" type="checkbox" id="static-archives-more">
+        <ul class="note-list">
+          <li>Static-library archives open for inspection: <code>.a</code> (Unix <code>ar</code>, with ELF or Mach-O members) and <code>.lib</code> (Windows COFF import libraries). <span class="more-continuation">The archive opens to a <strong>Members</strong> list showing each object file&#x27;s name, its detected format (ELF / Mach-O / PE / COFF / short-import), and size.</span></li>
+          <li>Object-file members of a static-library archive disassemble per function in the virtualized (Capstone) view. <span class="more-continuation">Relocatable objects — ELF (<code>.o</code>), Windows COFF (<code>.obj</code>/<code>.o</code>), and Mach-O — lay out their function symbols section-relative rather than at virtual addresses.</span></li>
+        </ul>
+        <label class="show-more-link" for="static-archives-more">Show more</label>
+        <label class="show-less-link" for="static-archives-more">Show less</label>
     </div>
       <img src="screenshots/static-archives.png" alt="Inspect static libraries and object members screenshot">
   </section>
@@ -50,20 +57,14 @@
       <li>
         <strong>Copy, inspect, and navigate imports and exports faster</strong>
         <span>Imports and Exports rows now expose full names, copy actions, WAT navigation, and usage discovery for function imports.</span>
-        <small>The core-module <strong>Exports</strong> tab gains per-row affordances. The core-module <strong>Imports</strong> tab gains matching per-row affordances.</small>
       </li>
       <li>
         <strong>More binary formats and cleaner IDE entry points</strong>
         <span>Hexana adds DEX and ZIP64 coverage, groups IDE actions under a Hexana submenu, and improves Node.js debugging stability.</span>
-        <small>Basic support for Android DEX files (with classes and members). ZIP64 files support.</small>
       </li>
     </ul>
   </section>
 
-  <section class="notes release-notes">
-    <h2>Release notes</h2>
-    <p>Generated from <code>idea-plugin/CHANGELOG.md</code>. The full changelog remains the source of truth for fixes and compatibility notes.</p>
-  </section>
 </main>
 </body>
 </html>

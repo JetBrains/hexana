@@ -71,6 +71,13 @@ class FeatureCluster:
     asset: SelectedAsset | None
 
 
+@dataclass(frozen=True)
+class NoteExcerpt:
+    preview: str
+    full: str
+    has_more: bool
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="Print the planned output without writing files.")
@@ -272,14 +279,44 @@ def build_clusters(release: ReleaseNotes, assets: dict, assets_path: Path, max_c
     return tuple(clusters[:max_clusters])
 
 
-def complete_note(entry: ChangelogEntry, limit: int = 210) -> str:
+def normalized_note_text(entry: ChangelogEntry) -> str:
     text = re.sub(r"\s+", " ", entry.text).strip()
+    return text if text.endswith((".", "!", "?")) else f"{text}."
+
+
+def note_excerpt(entry: ChangelogEntry, limit: int = 210) -> NoteExcerpt:
+    text = normalized_note_text(entry)
     if len(text) <= limit:
-        return text if text.endswith((".", "!", "?")) else f"{text}."
+        return NoteExcerpt(preview=text, full=text, has_more=False)
     first_sentence = re.split(r"(?<=[.!?])\s+", text, maxsplit=1)[0].strip()
-    if first_sentence:
-        return first_sentence if first_sentence.endswith((".", "!", "?")) else f"{first_sentence}."
-    return text
+    preview = first_sentence or text[: limit - 1].rsplit(" ", 1)[0].strip()
+    if preview and not preview.endswith((".", "!", "?")):
+        preview = f"{preview}."
+    return NoteExcerpt(preview=preview, full=text, has_more=preview != text)
+
+
+def note_continuation(excerpt: NoteExcerpt, limit: int = 180) -> str:
+    tail = excerpt.full.removeprefix(excerpt.preview).strip()
+    if not tail:
+        return ""
+    sentence = re.split(r"(?<=[.!?])\s+", tail, maxsplit=1)[0].strip()
+    detail = sentence or tail
+    if len(detail) > limit:
+        detail = compact_clause(detail, limit)
+    if detail and not detail.endswith((".", "!", "?")):
+        detail = f"{detail}."
+    return detail
+
+
+def compact_clause(text: str, limit: int) -> str:
+    candidates = []
+    for separator in ("; ", ", because ", ", so ", ", and ", " — "):
+        index = text.rfind(separator, 0, limit)
+        if index >= 40:
+            candidates.append(text[:index].strip())
+    if candidates:
+        return max(candidates, key=len)
+    return text[: limit - 1].rsplit(" ", 1)[0].strip()
 
 
 def render_inline_markdown(text: str) -> str:
@@ -299,6 +336,29 @@ def render_inline_markdown(text: str) -> str:
 
     rendered.append(html.escape(text[position:]).replace("**", "").replace("`", ""))
     return "".join(rendered)
+
+
+def render_expandable_notes(cluster: FeatureCluster, preview_limit: int, list_indent: str = "      ") -> str:
+    excerpts = [note_excerpt(entry, preview_limit) for entry in cluster.entries]
+    has_more = any(excerpt.has_more for excerpt in excerpts)
+    items = []
+    for excerpt in excerpts:
+        tail = note_continuation(excerpt)
+        continuation = f' <span class="more-continuation">{render_inline_markdown(tail)}</span>' if tail else ""
+        items.append(f"{list_indent}    <li>{render_inline_markdown(excerpt.preview)}{continuation}</li>")
+    list_html = "\n".join(items)
+    if not has_more:
+        return f"""{list_indent}  <ul class="note-list">
+{list_html}
+{list_indent}  </ul>"""
+
+    control_id = f"{cluster.cluster_id}-more"
+    return f"""{list_indent}  <input class="more-toggle" type="checkbox" id="{html.escape(control_id)}">
+{list_indent}  <ul class="note-list">
+{list_html}
+{list_indent}  </ul>
+{list_indent}  <label class="show-more-link" for="{html.escape(control_id)}">Show more</label>
+{list_indent}  <label class="show-less-link" for="{html.escape(control_id)}">Show less</label>"""
 
 
 def release_summary(release: ReleaseNotes, clusters: Sequence[FeatureCluster]) -> str:
@@ -327,7 +387,7 @@ def render_html(release: ReleaseNotes, clusters: Sequence[FeatureCluster]) -> st
                 f'\n      <img src="{html.escape(cluster.asset.target)}" '
                 f'alt="{html.escape(cluster.title)} screenshot">'
             )
-        details = "\n".join(f"        <li>{render_inline_markdown(complete_note(entry))}</li>" for entry in cluster.entries[:3])
+        details = render_expandable_notes(cluster, preview_limit=210)
         reversed_class = " reversed" if index % 2 else ""
         sections.append(
             f"""  <section class="feature{reversed_class}">
@@ -335,9 +395,7 @@ def render_html(release: ReleaseNotes, clusters: Sequence[FeatureCluster]) -> st
       <p class="eyebrow">{html.escape(cluster.eyebrow)}</p>
       <h2>{html.escape(cluster.title)}</h2>
       <p>{html.escape(cluster.summary)}</p>
-      <ul>
 {details}
-      </ul>
     </div>{asset_html}
   </section>"""
         )
@@ -346,12 +404,10 @@ def render_html(release: ReleaseNotes, clusters: Sequence[FeatureCluster]) -> st
     if improvement_clusters:
         improvement_items = []
         for cluster in improvement_clusters:
-            details = " ".join(complete_note(entry, limit=140) for entry in cluster.entries[:2])
             improvement_items.append(
                 f"""      <li>
         <strong>{html.escape(cluster.title)}</strong>
         <span>{html.escape(cluster.summary)}</span>
-        <small>{render_inline_markdown(details)}</small>
       </li>"""
             )
         improvements_html = f"""
@@ -385,10 +441,6 @@ def render_html(release: ReleaseNotes, clusters: Sequence[FeatureCluster]) -> st
 
 {chr(10).join(sections)}
 {improvements_html}
-  <section class="notes release-notes">
-    <h2>Release notes</h2>
-    <p>Generated from <code>idea-plugin/CHANGELOG.md</code>. The full changelog remains the source of truth for fixes and compatibility notes.</p>
-  </section>
 </main>
 </body>
 </html>
@@ -544,7 +596,7 @@ h2 {{
   color: var(--muted);
 }}
 
-.feature ul {{
+.note-list {{
   margin: 16px 0 0;
   padding-left: 20px;
 }}
@@ -570,7 +622,7 @@ h2 {{
   list-style: none;
 }}
 
-.improvements li {{
+.improvements > li {{
   display: grid;
   gap: 6px;
   min-width: 0;
@@ -578,13 +630,47 @@ h2 {{
   border-top: 1px solid var(--border);
 }}
 
-.improvements span,
-.improvements small {{
+.improvements > li > span {{
   color: var(--muted);
 }}
 
-.improvements small {{
+.more-toggle {{
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}}
+
+.show-more-link,
+.show-less-link {{
+  display: inline-flex;
+  margin-top: 8px;
+  color: var(--accent);
+  cursor: pointer;
   font-size: 13px;
+  font-weight: 650;
+}}
+
+.show-more-link:hover,
+.show-less-link:hover {{
+  color: var(--accent-strong);
+  text-decoration: underline;
+}}
+
+.more-continuation,
+.show-less-link {{
+  display: none;
+}}
+
+.more-toggle:checked ~ .note-list .more-continuation {{
+  display: inline;
+}}
+
+.more-toggle:checked ~ .show-more-link {{
+  display: none;
+}}
+
+.more-toggle:checked ~ .show-less-link {{
+  display: inline-flex;
 }}
 
 code {{

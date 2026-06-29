@@ -170,18 +170,80 @@ class GenerateWhatsNewTest(unittest.TestCase):
             rendered,
         )
 
-    def test_complete_note_uses_complete_sentence_excerpt(self):
+    def test_note_excerpt_uses_complete_sentence_preview(self):
         entry = gen.ChangelogEntry(
             "Added",
             "First complete sentence. " + "Second sentence with many words " * 20,
         )
 
-        self.assertEqual("First complete sentence.", gen.complete_note(entry, limit=80))
+        excerpt = gen.note_excerpt(entry, limit=80)
 
-    def test_complete_note_finishes_short_fragment(self):
+        self.assertEqual("First complete sentence.", excerpt.preview)
+        self.assertTrue(excerpt.has_more)
+        self.assertIn("Second sentence", excerpt.full)
+
+    def test_note_excerpt_finishes_short_fragment_without_show_more(self):
         entry = gen.ChangelogEntry("Added", "ZIP64 files support")
 
-        self.assertEqual("ZIP64 files support.", gen.complete_note(entry, limit=80))
+        excerpt = gen.note_excerpt(entry, limit=80)
+
+        self.assertEqual("ZIP64 files support.", excerpt.preview)
+        self.assertFalse(excerpt.has_more)
+
+    def test_note_continuation_is_bounded(self):
+        entry = gen.ChangelogEntry(
+            "Added",
+            "First complete sentence. " +
+            "Second sentence with focused detail. " +
+            "Third sentence should not be included in the expandable copy.",
+        )
+        excerpt = gen.note_excerpt(entry, limit=40)
+
+        continuation = gen.note_continuation(excerpt, limit=80)
+
+        self.assertEqual("Second sentence with focused detail.", continuation)
+        self.assertNotIn("Third sentence", continuation)
+
+    def test_note_continuation_prefers_clause_boundary(self):
+        excerpt = gen.NoteExcerpt(
+            preview="Preview.",
+            full=(
+                "Preview. The archive opens to a Members list showing each object file's name, "
+                "its detected format, and size; the archive's own bookkeeping entries are hidden."
+            ),
+            has_more=True,
+        )
+
+        continuation = gen.note_continuation(excerpt, limit=95)
+
+        self.assertEqual("The archive opens to a Members list showing each object file's name, its detected format.", continuation)
+
+    def test_render_expandable_notes_adds_single_show_more_control_for_cluster(self):
+        cluster = gen.FeatureCluster(
+            cluster_id="test-cluster",
+            eyebrow="Test",
+            title="Test cluster",
+            summary="Summary",
+            recipe="test-recipe",
+            entries=(
+                gen.ChangelogEntry(
+                    "Added",
+                    "First complete sentence. Second sentence with **details**. Third sentence should stay out.",
+                ),
+                gen.ChangelogEntry("Added", "Short note"),
+            ),
+            asset=None,
+        )
+
+        rendered = gen.render_expandable_notes(cluster, preview_limit=80)
+
+        self.assertIn("""<input class="more-toggle" type="checkbox" id="test-cluster-more">""", rendered)
+        self.assertEqual(1, rendered.count("Show more"))
+        self.assertEqual(1, rendered.count("Show less"))
+        self.assertEqual(1, rendered.count("""<ul class="note-list">"""))
+        self.assertIn("""<span class="more-continuation">""", rendered)
+        self.assertIn("<strong>details</strong>", rendered)
+        self.assertNotIn("Third sentence", rendered)
 
     def test_write_complete_static_resource_folder(self):
         with tempfile.TemporaryDirectory() as tmp:
