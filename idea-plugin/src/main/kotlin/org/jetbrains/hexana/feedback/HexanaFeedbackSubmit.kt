@@ -25,7 +25,7 @@ internal fun submitHexanaFeedback(
     onError: () -> Unit,
 ) {
     ApplicationManager.getApplication().executeOnPooledThread {
-        val feedbackUrl = RegionUrlMapper.tryMapUrlBlocking(HexanaFeedbackTestUrl)
+        val feedbackUrl = RegionUrlMapper.tryMapUrlBlocking(HexanaFeedbackUrl)
         val requestData = buildFeedbackRequest(state, technicalContextPreview).toString()
 
         try {

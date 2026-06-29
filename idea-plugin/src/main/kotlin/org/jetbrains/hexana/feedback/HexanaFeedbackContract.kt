@@ -16,6 +16,7 @@ import java.nio.file.Path
 import kotlin.enums.enumEntries
 
 internal const val HexanaFeedbackTestUrl = "https://feedback.example.invalid/feedback"
+internal const val HexanaFeedbackUrl = "https://forms-service.jetbrains.com/feedback"
 internal const val HexanaFeedbackFormIdWithDetailedAnswer = "v2/feedback/ide_with_detailed_answer"
 internal const val HexanaFeedbackConsentId = "rsch.statistics.feedback.common"
 internal const val HexanaFeedbackType = "hexana_feedback"
@@ -286,7 +287,7 @@ private val CollectedDataQuestionSpecs: Map<String, FeedbackQuestionSpec> by laz
 }
 
 internal fun createHexanaFeedbackFormContractJson(): JsonObject = buildJsonObject {
-    put("submitEndpoint", HexanaFeedbackTestUrl)
+    put("submitEndpoint", HexanaFeedbackUrl)
     put("requestBody", HexanaFeedbackRequestData.serializer().descriptor.toContractJson())
     put("constants", buildJsonObject {
         put(HexanaFeedbackRequestFieldIds.FormId, HexanaFeedbackFormIdWithDetailedAnswer)
