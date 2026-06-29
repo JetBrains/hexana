@@ -33,7 +33,7 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.nativebin.JVM_FILE_SYSTEM
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.shared.NativeDebugTabData
-import org.jetbrains.hexana.shared.NativeTableTabsProvider
+import org.jetbrains.hexana.shared.TableTabsContext
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.ui.panel.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -535,13 +535,12 @@ private fun BinaryProvider.resolvePanels(
     val providers = TableTabsProviderRegistry.providers
     // Precompute filesystem-dependent debug data for native providers
     // outside the rendering path so tableTabs() never touches the FS.
-    for (p in providers) {
-        if (p is NativeTableTabsProvider && this is NativeBinaryProvider) {
-            p.setDebugData(NativeDebugTabData.scan(this, JVM_FILE_SYSTEM, state.project.basePath))
-        }
-    }
+    val tableTabsContext = TableTabsContext(
+        nativeDebugData = (this as? NativeBinaryProvider)
+            ?.let { NativeDebugTabData.scan(it, JVM_FILE_SYSTEM, state.project.basePath) },
+    )
     val tabPanels = providers.flatMap {
-        enricher(it.tableTabs(this), state, pathsNav).map { it.toPanel(state) }
+        enricher(it.tableTabs(this, tableTabsContext), state, pathsNav).map { it.toPanel(state) }
     }
     val providerPanels = when (this) {
         is GenericBinaryProvider -> emptyList()

@@ -256,7 +256,7 @@ private fun parseElfBuildId(bytes: CommonByteBuffer, section: ElfSectionHeader?)
         val nameStart = offset
         val nameEnd = nameStart + nameSize
         if (nameEnd > end) return null
-        val name = bytes.readAscii(nameStart, nameSize).trimEnd(' ')
+        val name = bytes.readAscii(nameStart, nameSize).trimEnd('\u0000', ' ')
         offset = align4(nameEnd)
 
         val descriptorStart = offset

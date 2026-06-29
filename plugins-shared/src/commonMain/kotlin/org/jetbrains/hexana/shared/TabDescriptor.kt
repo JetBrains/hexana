@@ -151,7 +151,14 @@ class TableTabDescriptor(
  */
 interface TableTabsProvider {
     fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor>
+
+    fun tableTabs(provider: BinaryProvider, context: TableTabsContext): List<TableTabDescriptor> =
+        tableTabs(provider)
 }
+
+class TableTabsContext(
+    val nativeDebugData: NativeDebugTabData? = null,
+)
 
 object TableTabsProviderRegistry {
     val providers by lazy {

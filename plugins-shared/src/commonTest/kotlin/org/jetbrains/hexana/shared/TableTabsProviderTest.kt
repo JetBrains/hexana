@@ -1,6 +1,10 @@
 package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.parsing.common.NativeBinaryEndian
+import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
+import org.jetbrains.hexana.parsing.common.NativeBinaryWordSize
+import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
@@ -342,6 +346,36 @@ class TableTabsProviderTest {
     }
 
     // -----------------------------------------------------------------------
+    // NativeTableTabsProvider tests
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun nativeDebugContextDataIsScopedToTableTabsCall() {
+        val tabsProvider = NativeTableTabsProvider()
+        val providerA = emptyElfProvider(sourcePath = "/tmp/a")
+        val providerB = emptyElfProvider(sourcePath = "/tmp/b")
+
+        val injectedA = NativeDebugTabData(
+            debugContext = debugContextWithCompanion(binaryPath = "/tmp/a", name = "build-id-a"),
+            debugInfoRows = null,
+        )
+        val injectedB = NativeDebugTabData(
+            debugContext = debugContextWithCompanion(binaryPath = "/tmp/b", name = "build-id-b"),
+            debugInfoRows = null,
+        )
+
+        val tabA = tabsProvider.tableTabs(providerA, TableTabsContext(injectedA)).debugContextTab()
+        assertEquals("build-id-a", tabA.columns.first { it.name == "Name" }.cellProvider(0).representation)
+
+        val fallbackTab = tabsProvider.tableTabs(providerB).debugContextTab()
+        assertEquals(1, fallbackTab.rowCount)
+        assertEquals("DWARF sections", fallbackTab.columns.first { it.name == "Name" }.cellProvider(0).representation)
+
+        val tabB = tabsProvider.tableTabs(providerB, TableTabsContext(injectedB)).debugContextTab()
+        assertEquals("build-id-b", tabB.columns.first { it.name == "Name" }.cellProvider(0).representation)
+    }
+
+    // -----------------------------------------------------------------------
     // TabDescriptor structure tests
     // -----------------------------------------------------------------------
 
@@ -533,5 +567,43 @@ class TableTabsProviderTest {
         assertNotNull(tab.rowClickAction)
         tab.rowClickAction!!(0)
         assertEquals(0, clicked)
+    }
+
+    private fun emptyElfProvider(sourcePath: String): ElfBinaryProvider =
+        ElfBinaryProvider(
+            sharedBytes = ByteArray(16).toCommonByteBuffer(),
+            nativeFormat = NativeBinaryFormat.Elf(
+                wordSize = NativeBinaryWordSize.Bits64,
+                endian = NativeBinaryEndian.Little,
+                fileType = null,
+                machine = null,
+            ),
+            sourcePath = sourcePath,
+        )
+
+    private fun debugContextWithCompanion(binaryPath: String, name: String): NativeDebugContext =
+        NativeDebugContext(
+            binaryPath = binaryPath,
+            embeddedDebugInfoPresent = false,
+            elfBuildId = name,
+            gnuDebugLink = null,
+            machOUuid = null,
+            pePdbPath = null,
+            peCodeViewId = null,
+            companions = listOf(
+                NativeDebugCompanion(
+                    kind = NativeDebugCompanionKind.ElfBuildId,
+                    status = NativeDebugCompanionStatus.Found,
+                    name = name,
+                    location = ".build-id/${name.take(2)}/${name.drop(2)}.debug",
+                    description = "Injected test companion.",
+                )
+            ),
+        )
+
+    private fun List<TableTabDescriptor>.debugContextTab(): TableTabDescriptor {
+        val tab = find { it.name == "Debug Context" }
+        assertNotNull(tab, "Expected Debug Context tab")
+        return tab
     }
 }

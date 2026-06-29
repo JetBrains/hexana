@@ -13,9 +13,9 @@ import org.jetbrains.hexana.providers.macho.MachOParser
 
 /**
  * Pre-resolved data for the debug tabs that requires filesystem access.
- * Callers should build this outside the rendering path via [scan] and
- * inject it into [NativeTableTabsProvider.setDebugData] so that
- * [TableTabsProvider.tableTabs] never touches the filesystem.
+ * Callers should build this outside the rendering path via [scan] and pass
+ * it through [TableTabsContext] so that tab descriptor construction never
+ * touches the filesystem.
  */
 class NativeDebugTabData(
     val debugContext: NativeDebugContext,
@@ -46,32 +46,23 @@ class NativeDebugTabData(
 
 class NativeTableTabsProvider : TableTabsProvider {
 
-    private var precomputedDebugData: NativeDebugTabData? = null
+    override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> =
+        tableTabs(provider, TableTabsContext())
 
-    /**
-     * Injects pre-resolved debug data so that [tableTabs] can build
-     * tab descriptors without any filesystem access. IDE-specific
-     * callers should compute this outside the rendering path and
-     * inject it here before calling [tableTabs].
-     */
-    fun setDebugData(data: NativeDebugTabData) {
-        precomputedDebugData = data
-    }
-
-    override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> = when (provider) {
-        is ElfBinaryProvider -> elfTabs(provider) + debugTabs(provider)
-        is MachOBinaryProvider -> machOTabs(provider) + debugTabs(provider)
+    override fun tableTabs(provider: BinaryProvider, context: TableTabsContext): List<TableTabDescriptor> = when (provider) {
+        is ElfBinaryProvider -> elfTabs(provider) + debugTabs(provider, context.nativeDebugData)
+        is MachOBinaryProvider -> machOTabs(provider) + debugTabs(provider, context.nativeDebugData)
         is FatMachOBinaryProvider -> fatMachOTabs(provider)
-        is PeBinaryProvider -> peTabs(provider) + listOf(debugContextTab(provider))
+        is PeBinaryProvider -> peTabs(provider) + listOf(debugContextTab(provider, context.nativeDebugData))
         is CoffBinaryProvider -> coffTabs(provider)
         is NativeBinaryProvider -> stringsTab(provider)?.let(::listOf).orEmpty()
         else -> emptyList()
     }
 
-    private fun resolveDebugData(provider: NativeBinaryProvider): NativeDebugTabData {
-        precomputedDebugData?.let { return it }
+    private fun resolveDebugData(provider: NativeBinaryProvider, debugData: NativeDebugTabData?): NativeDebugTabData {
+        if (debugData != null) return debugData
         // Fallback: compute without filesystem access. Callers that need
-        // FS-aware companion scanning should inject data via setDebugData.
+        // FS-aware companion scanning should pass data through TableTabsContext.
         val context = NativeDebugCompanionScanner.scan(provider, fs = null)
         val debugInfoRows = run {
             val sourceLocationProvider = provider.nativeSourceLocationProvider ?: return@run null
@@ -82,16 +73,16 @@ class NativeTableTabsProvider : TableTabsProvider {
         return NativeDebugTabData(context, debugInfoRows)
     }
 
-    private fun debugTabs(provider: NativeBinaryProvider): List<TableTabDescriptor> {
-        val data = resolveDebugData(provider)
+    private fun debugTabs(provider: NativeBinaryProvider, debugData: NativeDebugTabData?): List<TableTabDescriptor> {
+        val data = resolveDebugData(provider, debugData)
         return listOf(
             debugContextTab(data),
             debugInfoTab(provider, data),
         )
     }
 
-    private fun debugContextTab(provider: NativeBinaryProvider): TableTabDescriptor {
-        val data = resolveDebugData(provider)
+    private fun debugContextTab(provider: NativeBinaryProvider, debugData: NativeDebugTabData?): TableTabDescriptor {
+        val data = resolveDebugData(provider, debugData)
         return debugContextTab(data)
     }
 
