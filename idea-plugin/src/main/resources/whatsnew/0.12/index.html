@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What's New in Hexana 0.12</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+  <section class="hero">
+    <p class="eyebrow">Hexana update</p>
+    <h1>What's New in Hexana 0.12</h1>
+    <p class="lead">Hexana 0.12 focuses on WASM and Archives while refining binary inspection inside JetBrains IDEs.</p>
+    <div class="actions">
+      <a class="button primary" href="https://plugins.jetbrains.com/plugin/29090-hexana--webassembly--binary-inspector">Open release notes</a>
+      <a class="button" href="https://github.com/JetBrains/hexana">Open GitHub</a>
+    </div>
+  </section>
+
+  <section class="feature">
+    <div>
+      <p class="eyebrow">WASM</p>
+      <h2>Compare and inspect Component Model binaries</h2>
+      <p>Component Model binaries now get recursive comparison, virtualized WAT for embedded core modules, and complete nested size attribution.</p>
+      <ul>
+        <li><strong>Compare WASM With…</strong> now accepts Component Model binaries, not only core modules.</li>
+        <li>Component Model binaries gain a <strong>WAT (virtualized)</strong> tab.</li>
+        <li>The <strong>Top</strong> size-profiler tab now breaks a Component Model binary down completely: every nested sub-component and embedded core module is attributed with its correct size and expands to its internal sections and functions, recursively and on demand.</li>
+      </ul>
+    </div>
+      <img src="screenshots/wasm-component-model.png" alt="Compare and inspect Component Model binaries screenshot">
+  </section>
+  <section class="feature reversed">
+    <div>
+      <p class="eyebrow">Archives</p>
+      <h2>Inspect static libraries and object members</h2>
+      <p>Unix ar archives and COFF import libraries open as member lists, with object files extracted into the native disassembly views.</p>
+      <ul>
+        <li>Static-library archives open for inspection: <code>.a</code> (Unix <code>ar</code>, with ELF or Mach-O members) and <code>.lib</code> (Windows COFF import libraries).</li>
+        <li>Object-file members of a static-library archive disassemble per function in the virtualized (Capstone) view.</li>
+      </ul>
+    </div>
+      <img src="screenshots/static-archives.png" alt="Inspect static libraries and object members screenshot">
+  </section>
+
+  <section class="notes">
+    <h2>Also in 0.12</h2>
+    <ul class="improvements">
+      <li>
+        <strong>Copy, inspect, and navigate imports and exports faster</strong>
+        <span>Imports and Exports rows now expose full names, copy actions, WAT navigation, and usage discovery for function imports.</span>
+        <small>The core-module <strong>Exports</strong> tab gains per-row affordances. The core-module <strong>Imports</strong> tab gains matching per-row affordances.</small>
+      </li>
+      <li>
+        <strong>More binary formats and cleaner IDE entry points</strong>
+        <span>Hexana adds DEX and ZIP64 coverage, groups IDE actions under a Hexana submenu, and improves Node.js debugging stability.</span>
+        <small>Basic support for Android DEX files (with classes and members). ZIP64 files support.</small>
+      </li>
+    </ul>
+  </section>
+
+  <section class="notes release-notes">
+    <h2>Release notes</h2>
+    <p>Generated from <code>idea-plugin/CHANGELOG.md</code>. The full changelog remains the source of truth for fixes and compatibility notes.</p>
+  </section>
+</main>
+</body>
+</html>

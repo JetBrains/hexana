@@ -1,0 +1,107 @@
+{
+  "clusters": [
+    {
+      "asset": "screenshots/wasm-component-model.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Compare WASM With\u2026** now accepts Component Model binaries, not only core modules. Comparing two components opens a submodule view that lists each component's embedded submodules (core modules and nested components, found recursively), flags which differ (identical / modified / added / removed), and on click opens a dedicated tab comparing that pair: a core-module pair reuses the existing Size Impact / Entities / WAT diff, and a nested-component pair recurses into another component diff. Submodules are paired by content hash with a positional fallback"
+        },
+        {
+          "section": "Added",
+          "text": "Component Model binaries gain a **WAT (virtualized)** tab. A component's code lives in its embedded core modules, so the tab discovers every embedded core module \u2014 recursively, through nested sub-components \u2014 and renders the selected one with the same structured, lazily-parsed virtualized WAT view that core modules use (three-column offset / bytes / mnemonic, per-function navigation, folding); a selector switches between modules when there is more than one. This also gives in-memory component views (for example a submodule opened from a diff) a WAT view they previously lacked"
+        },
+        {
+          "section": "Added",
+          "text": "The **Top** size-profiler tab now breaks a Component Model binary down completely: every nested sub-component and embedded core module is attributed with its correct size and expands to its internal sections and functions, recursively and on demand. Previously a composed component \u2014 whose code sits inside nested sub-components \u2014 reported most of its bytes as a single opaque block, because the profiler read only the first nested component section"
+        },
+        {
+          "section": "Fixed",
+          "text": "Size-profiler (**Top**) tree nodes expand again. Nodes whose children are generated lazily \u2014 now any nested component / embedded core module, and a core module's sections expanding into their functions \u2014 silently showed nothing when expanded: the lazy children-generator was gated by the tree-build coroutine's cancellation flag, which is already cancelled by the time a node is expanded, so it returned no children. The generator no longer inherits that flag"
+        }
+      ],
+      "eyebrow": "WASM",
+      "id": "wasm-component-model",
+      "recipe": "component-model-recursive-wat-and-size",
+      "summary": "Component Model binaries now get recursive comparison, virtualized WAT for embedded core modules, and complete nested size attribution.",
+      "title": "Compare and inspect Component Model binaries"
+    },
+    {
+      "asset": "screenshots/static-archives.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Static-library archives open for inspection: `.a` (Unix `ar`, with ELF or Mach-O members) and `.lib` (Windows COFF import libraries). The archive opens to a **Members** list showing each object file's name, its detected format (ELF / Mach-O / PE / COFF / short-import), and size; the archive's own bookkeeping entries (symbol tables, the long-names table) are hidden. Archives are recognised by their `!<arch>\\n` content magic rather than by file extension, so a non-archive `.lib` (a plain MSVC import library) is left to its normal handler. Clicking a member extracts that object file to the IDE temp folder and opens it in the matching disassembly view \u2014 and because the extracted member is a real file on disk, both the Capstone and the llvm-objdump disassembly panels are available. The member's editor tab is titled `archive-name/member-name`, with the member index appended when two members share the same name"
+        },
+        {
+          "section": "Added",
+          "text": "Object-file members of a static-library archive disassemble per function in the virtualized (Capstone) view. Relocatable objects \u2014 ELF (`.o`), Windows COFF (`.obj`/`.o`), and Mach-O \u2014 lay out their function symbols section-relative rather than at virtual addresses, so their file offsets are now resolved through the owning section; the disassembly lists each named function instead of only the whole `.text` section. Symbol-stripped members still fall back to disassembling the code sections"
+        }
+      ],
+      "eyebrow": "Archives",
+      "id": "static-archives",
+      "recipe": "native-archive-member-disassembly",
+      "summary": "Unix ar archives and COFF import libraries open as member lists, with object files extracted into the native disassembly views.",
+      "title": "Inspect static libraries and object members"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "The core-module **Exports** tab gains per-row affordances. Each entry shows its full name as a tooltip, so a name truncated to fit the column is still readable on hover. A **Copy Name** context-menu action copies the export's full name to the clipboard. A **Navigate to Function in WAT** context-menu action \u2014 shown only on function exports, which are the only kind with a body to jump to \u2014 switches to the **WAT (virtualized)** tab and scrolls to that function's body"
+        },
+        {
+          "section": "Added",
+          "text": "The core-module **Imports** tab gains matching per-row affordances. Each entry shows its module-qualified name (`module.field`) as a tooltip, and a **Copy Name** context-menu action copies that qualified name to the clipboard. For function imports, the context menu also offers **Find Usages**: a flat list of the functions that call the import (resolved from the call graph), each entry navigating to that caller's body in the **WAT (virtualized)** tab. The list is capped at 15 entries; beyond that \u2014 or before the call graph has finished computing in the background \u2014 a single entry opens the Caller Paths panel, which lists every usage. The call graph is built off the EDT so opening the menu stays responsive on large modules"
+        }
+      ],
+      "eyebrow": "Tables",
+      "id": "table-affordances",
+      "recipe": "imports-exports-row-actions",
+      "summary": "Imports and Exports rows now expose full names, copy actions, WAT navigation, and usage discovery for function imports.",
+      "title": "Copy, inspect, and navigate imports and exports faster"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Basic support for Android DEX files (with classes and members)"
+        },
+        {
+          "section": "Added",
+          "text": "ZIP64 files support"
+        },
+        {
+          "section": "Changed",
+          "text": "Hexana's project-view actions (Hex view, Open Archive, **Compare WASM With\u2026**, and the in-editor Hex/offset/structure actions) are now grouped under a single **Hexana** submenu instead of being scattered across the right-click menu. In IntelliJ IDEA the submenu sits at the top level of the project-view popup; in RustRover and CLion \u2014 whose project-view popup is overridden to a fixed action list that silently drops third-party top-level contributions \u2014 it appears under **Open In \u25b8 Hexana**, the one group those IDEs still surface. Each entry continues to gate its own visibility, so only the actions that apply to the selected file appear"
+        },
+        {
+          "section": "Changed",
+          "text": "**Compare WASM With\u2026** can now be invoked from Search Everywhere and the keymap, not only from a selected `.wasm`: when run without a `.wasm` selection it prompts for the first module, then the second, instead of doing nothing"
+        },
+        {
+          "section": "Changed",
+          "text": "Stability improvements for debugging with NodeJS"
+        }
+      ],
+      "eyebrow": "Workflow",
+      "id": "format-workflow-polish",
+      "recipe": "format-coverage-and-action-grouping",
+      "summary": "Hexana adds DEX and ZIP64 coverage, groups IDE actions under a Hexana submenu, and improves Node.js debugging stability.",
+      "title": "More binary formats and cleaner IDE entry points"
+    }
+  ],
+  "date": "2026-06-24",
+  "schema": 1,
+  "sources": {
+    "assets": "docs/whatsnew/assets.yml",
+    "assets_sha256": "3399611a4faffc49d58b5f176407f2847cf031dac595bf5778a73beb2c789181",
+    "changelog": "idea-plugin/CHANGELOG.md",
+    "changelog_sha256": "189250d714cf3d89d618c957b7435cde2f3f4eeb11782c91ba629ca36f58fb83",
+    "design": "docs/whatsnew/DESIGN.md",
+    "design_sha256": "9d78242126b778ea9b2e726407499489193e7c5a71661d09e2dda0f9c8238af4"
+  },
+  "version": "0.12"
+}
