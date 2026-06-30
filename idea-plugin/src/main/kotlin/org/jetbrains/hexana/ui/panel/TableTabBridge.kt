@@ -46,10 +46,13 @@ import org.jetbrains.jewel.ui.theme.defaultTabStyle
  * Converts a [TableTabDescriptor] into a [Panel] by bridging the UI-free
  * abstraction to the Compose-based [Table] component.
  */
-internal fun TableTabDescriptor.toPanel(state: HexViewStateHolder): Panel {
+internal fun TableTabDescriptor.toPanel(
+    state: HexViewStateHolder,
+    searchBarLeading: (@Composable () -> Unit)? = null,
+): Panel {
     val descriptor = this
     return Panel(descriptor.name) {
-        TableTabContent(descriptor, state)
+        TableTabContent(descriptor, state, searchBarLeading)
     }
 }
 
@@ -109,7 +112,11 @@ private fun GroupedTableTabContent(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TableTabContent(descriptor: TableTabDescriptor, state: HexViewStateHolder) {
+private fun TableTabContent(
+    descriptor: TableTabDescriptor,
+    state: HexViewStateHolder,
+    searchBarLeading: (@Composable () -> Unit)? = null,
+) {
     if (descriptor.prologueText != null || (descriptor.rowCount == 0 && descriptor.emptyMessage != null)) {
         Column(modifier = Modifier.fillMaxSize()) {
             descriptor.prologueText?.let {
@@ -119,19 +126,23 @@ private fun TableTabContent(descriptor: TableTabDescriptor, state: HexViewStateH
                 descriptor.emptyMessage?.let { Text(it) }
                 return
             }
-            TableTabTable(descriptor, state)
+            TableTabTable(descriptor, state, searchBarLeading)
         }
         return
     }
 
-    if (descriptor.rowCount == 0) return
+    if (descriptor.rowCount == 0 && !descriptor.alwaysShowSearch) return
 
-    TableTabTable(descriptor, state)
+    TableTabTable(descriptor, state, searchBarLeading)
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TableTabTable(descriptor: TableTabDescriptor, state: HexViewStateHolder) {
+private fun TableTabTable(
+    descriptor: TableTabDescriptor,
+    state: HexViewStateHolder,
+    searchBarLeading: (@Composable () -> Unit)? = null,
+) {
     if (descriptor.childrenProvider != null) {
         TreeTableTabTable(descriptor, state)
         return
@@ -210,6 +221,9 @@ private fun TableTabTable(descriptor: TableTabDescriptor, state: HexViewStateHol
                 state.scrollHexViewTo(selection.offset, selection.size)
             }
         },
+        alwaysShowSearch = descriptor.alwaysShowSearch,
+        searchPlaceholder = descriptor.searchPlaceholder,
+        searchBarLeading = searchBarLeading,
     )
 }
 
@@ -377,7 +391,7 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
 }
 
 @Composable
-private fun ColumnWidth.toColumnLayout(
+internal fun ColumnWidth.toColumnLayout(
     textMeasurer: TextMeasurer,
     title: String,
     rowCount: Int,
@@ -394,13 +408,13 @@ private fun ColumnWidth.toColumnLayout(
     )
 }
 
-private data class ColumnLayout(
+internal data class ColumnLayout(
     val modifier: Modifier = Modifier,
     val width: Dp? = null,
     val weight: Float? = null,
 )
 
-private fun widestSample(
+internal fun widestSample(
     title: String,
     sample: String,
     rowCount: Int = 0,
@@ -426,4 +440,4 @@ private fun widestSample(
     return widest
 }
 
-private const val MAX_MEASURED_COLUMN_CHARS = 80
+internal const val MAX_MEASURED_COLUMN_CHARS = 80

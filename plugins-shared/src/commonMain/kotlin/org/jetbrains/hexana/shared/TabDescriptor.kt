@@ -140,6 +140,9 @@ class TableTabDescriptor(
     val prologueText: String? = null,
     val emptyMessage: String? = null,
     val childrenProvider: ((index: Int) -> TableTabChildRows?)? = null,
+    val alwaysShowSearch: Boolean = false,
+    val searchPlaceholder: String? = null,
+    val showIdColumn: Boolean = true,
 ) {
     companion object {
         /** Sentinel value for [defaultSortColumn] that targets the implicit ID column. */

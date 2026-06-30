@@ -1,12 +1,12 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.*
-import kotlinx.coroutines.delay
 import org.jetbrains.compose.web.attributes.selected
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.shared.formatSizeLong
+import org.jetbrains.hexana.shared.ZipEntryRow
+import org.jetbrains.hexana.shared.zipEntriesDescriptor
 import org.jetbrains.hexana.zip.ZipEntry
 import org.jetbrains.hexana.zip.ZipParser
 
@@ -54,40 +54,31 @@ private fun ZipEntriesContent(
         entries.filter { !it.isDirectory }
     }
 
-    if (displayEntries.isEmpty()) {
-        Div({
-            classes("empty-hint")
-            style { padding(12.px) }
-        }) {
-            Text(if (classEntries.isNotEmpty()) "(no class entries)" else "(no entries)")
-        }
-        return
-    }
+    val descriptor = zipEntriesDescriptor(
+        entries = displayEntries.map { ZipEntryRow(it.name, it.compressedSize, it.uncompressedSize) },
+        onRowClick = { index ->
+            val entry = displayEntries[index]
+            postOpenZipEntryToHost(
+                name = entry.name,
+                dataOffset = entry.dataOffset,
+                compressedSize = entry.compressedSize,
+                uncompressedSize = entry.uncompressedSize,
+                compressionMethod = entry.compressionMethod,
+            )
+        },
+        searchPlaceholder = if (classEntries.isNotEmpty()) {
+            if (showAll) "Search entries\u2026" else "Search classes\u2026"
+        } else {
+            "Search entries\u2026"
+        },
+        emptyMessage = if (classEntries.isNotEmpty()) "(no class entries)" else "(no entries)",
+    )
 
-    val headers = listOf("Name", "Compressed", "Uncompressed")
-    val aligns = listOf("left", "right", "right")
+    val selection = remember { HexSelectionState() }
 
-    // Render rows incrementally in batches to avoid blocking the browser
-    // main thread when the archive has tens of thousands of entries.
-    val initialBatch = 100
-    val batchSize = 300
-    var renderedCount by remember(displayEntries) { mutableStateOf(minOf(initialBatch, displayEntries.size)) }
-
-    LaunchedEffect(displayEntries, renderedCount) {
-        if (renderedCount < displayEntries.size) {
-            delay(1)
-            renderedCount = minOf(renderedCount + batchSize, displayEntries.size)
-        }
-    }
-
-    val isLoading = renderedCount < displayEntries.size
-
-    SearchableTable(
-        headers = headers,
-        columnAligns = aligns,
-        defaultSortColumn = 0,
-        defaultSortDirection = SortDirection.ASC,
-        alwaysShowSearch = true,
+    TableTabContent(
+        descriptor = descriptor,
+        selection = selection,
         searchBarLeading = if (classEntries.isNotEmpty() && hasNonClassEntries) {
             {
                 Select({
@@ -103,39 +94,5 @@ private fun ZipEntriesContent(
         } else {
             null
         },
-        footer = if (isLoading) {
-            {
-                Div({
-                    classes("loading-hint")
-                    style {
-                        property("text-align", "center")
-                        property("padding", "8px 0")
-                        property("opacity", "0.7")
-                        property("font-size", "12px")
-                    }
-                }) {
-                    Text("Loading entries $renderedCount / ${displayEntries.size}\u2026")
-                }
-            }
-        } else null,
-    ) {
-        for (i in 0 until renderedCount) {
-            val entry = displayEntries[i]
-            PanelTableRow(
-                onClick = {
-                    postOpenZipEntryToHost(
-                        name = entry.name,
-                        dataOffset = entry.dataOffset,
-                        compressedSize = entry.compressedSize,
-                        uncompressedSize = entry.uncompressedSize,
-                        compressionMethod = entry.compressionMethod,
-                    )
-                },
-            ) {
-                Td({ classes("cell") }) { Text(entry.name) }
-                Td({ classes("cell-right") }) { Text(formatSizeLong(entry.compressedSize)) }
-                Td({ classes("cell-right") }) { Text(formatSizeLong(entry.uncompressedSize)) }
-            }
-        }
-    }
+    )
 }

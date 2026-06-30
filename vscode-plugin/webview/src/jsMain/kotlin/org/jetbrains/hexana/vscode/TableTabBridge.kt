@@ -132,6 +132,7 @@ fun GroupedTableTabContent(
 fun TableTabContent(
     descriptor: TableTabDescriptor,
     selection: HexSelectionState,
+    searchBarLeading: (@Composable () -> Unit)? = null,
 ) {
     descriptor.prologueText?.let { prologue ->
         Div({ style {
@@ -154,15 +155,21 @@ fun TableTabContent(
         return
     }
 
+    val showId = descriptor.showIdColumn
+
     val headers = buildList {
-        add("")
-        add("ID")
+        if (showId) {
+            add("")
+            add("ID")
+        }
         descriptor.columns.forEach { add(it.name) }
     }
 
     val aligns = buildList {
-        add("center")
-        add("right")
+        if (showId) {
+            add("center")
+            add("right")
+        }
         descriptor.columns.forEach { col ->
             when (col.widthBehavior) {
                 is ColumnWidth.Fill -> add("left")
@@ -180,11 +187,12 @@ fun TableTabContent(
     // to the ID column so the sorting arrow is always visible — matching the old
     // per-tab behaviour where SearchableTable auto-detected the "ID" header.
     val idHeaderIndex = headers.indexOf("ID").takeIf { it >= 0 }
+    val headerOffset = if (showId) 2 else 0
     val resolvedSortColumn = descriptor.defaultSortColumn?.let { col ->
         if (col == TableTabDescriptor.ID_COLUMN) {
             idHeaderIndex
         } else {
-            col + 2 // action placeholder + ID
+            col + headerOffset
         }
     } ?: idHeaderIndex ?: -1
     val resolvedSortDirection = if (resolvedSortColumn >= 0) {
@@ -212,6 +220,8 @@ fun TableTabContent(
         columnAligns = aligns,
         defaultSortColumn = resolvedSortColumn,
         defaultSortDirection = resolvedSortDirection,
+        alwaysShowSearch = descriptor.alwaysShowSearch,
+        searchBarLeading = searchBarLeading,
         footer = if (isLoading) {
             {
                 Div({
@@ -248,22 +258,24 @@ fun TableTabContent(
                     }
                 },
             ) {
-                // Action column (run button or empty placeholder for consistent layout)
-                Td({ classes("cell-id"); style { property("width", "12px") } }) {
-                    if (descriptor.rowAction != null) {
-                        val tooltip = descriptor.rowAction!!.tooltipProvider(index)
-                        if (tooltip != null) {
-                            RunArrowButton(
-                                tooltip = tooltip,
-                                onClick = { descriptor.rowAction!!.action(index) },
-                            )
+                if (showId) {
+                    // Action column (run button or empty placeholder for consistent layout)
+                    Td({ classes("cell-id"); style { property("width", "12px") } }) {
+                        if (descriptor.rowAction != null) {
+                            val tooltip = descriptor.rowAction!!.tooltipProvider(index)
+                            if (tooltip != null) {
+                                RunArrowButton(
+                                    tooltip = tooltip,
+                                    onClick = { descriptor.rowAction!!.action(index) },
+                                )
+                            }
                         }
                     }
-                }
 
-                // ID column
-                Td({ classes("cell-id") }) {
-                    Text(index.toString())
+                    // ID column
+                    Td({ classes("cell-id") }) {
+                        Text(index.toString())
+                    }
                 }
 
                 // Data columns

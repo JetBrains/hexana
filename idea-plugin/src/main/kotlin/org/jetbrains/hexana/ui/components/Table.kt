@@ -59,6 +59,9 @@ fun Table(
     onRowSelect: ((id: Int) -> Unit)? = null,
     rowColor: (id: Int) -> Color? = { null },
     onRow: (id: Int) -> Unit = {},
+    alwaysShowSearch: Boolean = false,
+    searchPlaceholder: String? = null,
+    searchBarLeading: (@Composable () -> Unit)? = null,
 ) {
     val tableData = remember(columns, dataCount) {
         (0 until dataCount).map { index ->
@@ -73,7 +76,7 @@ fun Table(
     var hoveredOriginalIndex: Int? by remember { mutableStateOf(null) }
 
     var searchQuery by remember { mutableStateOf(TextFieldValue("")) }
-    var isSearchVisible by remember { mutableStateOf(false) }
+    var isSearchVisible by remember { mutableStateOf(alwaysShowSearch) }
     val searchFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(isSearchVisible) {
@@ -121,6 +124,7 @@ fun Table(
                     val valueB = b.second[sortIndex].value
                     when {
                         valueA is Int && valueB is Int -> valueA.compareTo(valueB)
+                        valueA is Long && valueB is Long -> valueA.compareTo(valueB)
                         valueA is String && valueB is String -> valueA.compareTo(valueB)
                         else -> 0
                     }
@@ -131,6 +135,7 @@ fun Table(
                     val valueB = b.second[sortIndex].value
                     when {
                         valueA is Int && valueB is Int -> valueB.compareTo(valueA)
+                        valueA is Long && valueB is Long -> valueB.compareTo(valueA)
                         valueA is String && valueB is String -> valueB.compareTo(valueA)
                         else -> 0
                     }
@@ -174,8 +179,12 @@ fun Table(
                 }
 
                 if (event.key == Key.Escape) {
-                    if (isSearchVisible) {
+                    if (isSearchVisible && !alwaysShowSearch) {
                         isSearchVisible = false
+                        searchQuery = TextFieldValue("")
+                        focusRequester.requestFocus()
+                        return@onPreviewKeyEvent true
+                    } else if (alwaysShowSearch && searchQuery.text.isNotEmpty()) {
                         searchQuery = TextFieldValue("")
                         focusRequester.requestFocus()
                         return@onPreviewKeyEvent true
@@ -248,13 +257,15 @@ fun Table(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                searchBarLeading?.invoke()
                 TextField(
                     value = searchQuery,
                     onValueChange = {
                         searchQuery = it
-                        if (it.text.isEmpty()) {
+                        if (it.text.isEmpty() && !alwaysShowSearch) {
                             isSearchVisible = false
                             focusRequester.requestFocus()
                         }
@@ -262,7 +273,7 @@ fun Table(
                     modifier = Modifier
                         .weight(1f)
                         .focusRequester(searchFocusRequester),
-                    placeholder = { Text("Search...") },
+                    placeholder = { Text(searchPlaceholder ?: "Search...") },
                     leadingIcon = {
                         Icon(
                             AllIconsKeys.Actions.Search,
@@ -275,7 +286,9 @@ fun Table(
                         {
                             IconButton(onClick = {
                                 searchQuery = TextFieldValue("")
-                                isSearchVisible = false
+                                if (!alwaysShowSearch) {
+                                    isSearchVisible = false
+                                }
                                 focusRequester.requestFocus()
                             }) {
                                 Icon(
