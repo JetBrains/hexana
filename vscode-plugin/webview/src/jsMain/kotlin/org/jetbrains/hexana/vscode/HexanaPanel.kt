@@ -18,7 +18,6 @@ import org.w3c.dom.events.Event
  */
 private enum class FixedTab(val label: String) {
     Summary("Sections"),
-    Garbage("Garbage"),
     Wat("WAT"),
 }
 
@@ -56,19 +55,18 @@ fun HexanaPanel(
                 })
             }
 
+            // Interleave ordinary and grouped tabs per provider so each
+            // provider's tabs appear together in registration order.
             val enricher = provider.getTabsEnricher()
-            val commonTabs = TableTabsProviderRegistry.providers.flatMap { p ->
-                enricher(p.tableTabs(provider), fileName, pendingRun)
-            }.map { d-> TableTab(name = d.name) { selection ->
-                TableTabContent(d, selection)
-            } }
-            addAll(commonTabs.map { tt -> PanelTab(tt.name) { sel -> tt.content(sel) } })
-
-            // Garbage (core Wasm only)
-            if (provider is WasmBinaryProvider) {
-                add(PanelTab(FixedTab.Garbage.label) { sel ->
-                    GarbageTabContent(provider, sel)
-                })
+            for (p in TableTabsProviderRegistry.providers) {
+                val ordinary = enricher(p.tableTabs(provider), fileName, pendingRun)
+                    .map { d -> TableTab(name = d.name) { selection -> TableTabContent(d, selection) } }
+                addAll(ordinary.map { tt -> PanelTab(tt.name) { sel -> tt.content(sel) } })
+                for (grouped in p.groupedTabs(provider)) {
+                    add(PanelTab(grouped.name) { sel ->
+                        GroupedTableTabContent(grouped, sel)
+                    })
+                }
             }
 
             // WAT tab (always present for Wasm and component)

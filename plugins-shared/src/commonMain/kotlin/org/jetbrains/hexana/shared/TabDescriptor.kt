@@ -170,6 +170,20 @@ class TableTabChildRows(
 )
 
 /**
+ * A tab that contains inner sub-tabs, each of which is a [TableTabDescriptor].
+ *
+ * The UI layer renders this as a single outer tab with an inner tab strip
+ * that switches between the contained table tabs.
+ *
+ * @param name the outer tab title shown in the main tab strip
+ * @param innerTabs the list of inner table tab descriptors
+ */
+class GroupedTableTabDescriptor(
+    val name: String,
+    val innerTabs: List<TableTabDescriptor>,
+)
+
+/**
  * Produces [TableTabDescriptor]s for a given [BinaryProvider].
  *
  * Each binary format (core Wasm, component-model Wasm, future formats)
@@ -182,6 +196,11 @@ interface TableTabsProvider {
 
     fun tableTabs(provider: BinaryProvider, context: TableTabsContext): List<TableTabDescriptor> =
         tableTabs(provider)
+
+    fun groupedTabs(provider: BinaryProvider): List<GroupedTableTabDescriptor> = emptyList()
+
+    fun groupedTabs(provider: BinaryProvider, context: TableTabsContext): List<GroupedTableTabDescriptor> =
+        groupedTabs(provider)
 }
 
 class TableTabsContext(

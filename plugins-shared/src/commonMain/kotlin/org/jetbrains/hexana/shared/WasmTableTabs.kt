@@ -3,6 +3,8 @@ package org.jetbrains.hexana.shared
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.analysis.MonosResult
+import org.jetbrains.hexana.wasm.analysis.garbage.GarbageReason
+import org.jetbrains.hexana.wasm.analysis.garbage.GarbageResult
 
 /**
  * [TableTabsProvider] for core Wasm binaries.
@@ -202,13 +204,21 @@ private fun customTab(provider: WasmBinaryProvider): TableTabDescriptor? {
 }
 
 /**
- * [TableTabsProvider] for Wasm profiler tabs (monomorphization analysis).
+ * [TableTabsProvider] for Wasm profiler tabs (monomorphization analysis)
+ * and garbage analysis.
  */
 class WasmProfilerTabsProvider : TableTabsProvider {
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> {
         if (provider !is WasmBinaryProvider) return emptyList()
         if (!provider.canProvideWasmModule()) return emptyList()
         return listOf(monosTab(provider))
+    }
+
+    override fun groupedTabs(provider: BinaryProvider): List<GroupedTableTabDescriptor> {
+        if (provider !is WasmBinaryProvider) return emptyList()
+        if (!provider.canProvideWasmModule()) return emptyList()
+        val garbage = provider.garbageAnalysis ?: return emptyList()
+        return listOf(garbageGroupedTab(provider, garbage))
     }
 }
 
@@ -273,3 +283,171 @@ const val UNIVERSAL_NAME_MEASURE = "sdgdsgsd_DSgsdgdsg_DS_gsdgsdGS_GSD_GSD_GDSG_
 
 /** Reference measure string for qualified name columns. */
 const val UNIVERSAL_QUALIFIED_NAME_MEASURE = "component:subtractor11111/environent@2.9.0"
+
+// ---------------------------------------------------------------------------
+// Garbage analysis tabs (grouped under a single "Garbage" outer tab)
+// ---------------------------------------------------------------------------
+
+private fun garbageGroupedTab(
+    provider: WasmBinaryProvider,
+    garbage: GarbageResult,
+): GroupedTableTabDescriptor {
+    val innerTabs = buildList {
+        garbageFunctionsTab(provider, garbage)?.let { add(it) }
+        garbageTypesTab(provider, garbage)?.let { add(it) }
+        garbageDataTab(garbage)?.let { add(it) }
+    }
+    return GroupedTableTabDescriptor(
+        name = "Garbage",
+        innerTabs = innerTabs,
+    )
+}
+
+private fun garbageFunctionsTab(
+    provider: WasmBinaryProvider,
+    garbage: GarbageResult,
+): TableTabDescriptor? {
+    val entries = garbage.entries
+    val importFuncCount = provider.importFuncCount
+    val codeOffsets = provider.codeOffsets
+
+    val pct = if (garbage.codeSectionTotalBytes > 0) {
+        val raw = garbage.totalWastedBytes * 100.0 / garbage.codeSectionTotalBytes
+        val rounded = kotlin.math.round(raw * 10) / 10.0
+        "${rounded}%"
+    } else "\u2014"
+
+    val prologueText = "${entries.size} unreachable, ${formatSizeLong(garbage.totalWastedBytes)} wasted ($pct of code)"
+
+    return TableTabDescriptor(
+        name = "Functions (${entries.size})",
+        columns = listOf(
+            ColumnDescriptor(
+                name = "Index",
+                widthBehavior = ColumnWidth.Measured("x Index"),
+            ) { index ->
+                CellValue(entries[index].funcIndex)
+            },
+            ColumnDescriptor(
+                name = "Name",
+                widthBehavior = ColumnWidth.Measured(UNIVERSAL_NAME_MEASURE),
+            ) { index ->
+                val name = entries[index].name
+                CellValue(name, tooltip = name.takeIf { it.length > UNIVERSAL_NAME_MEASURE.length })
+            },
+            ColumnDescriptor(
+                name = "Size",
+                widthBehavior = ColumnWidth.Measured("00000.0 KB"),
+            ) { index ->
+                val e = entries[index]
+                if (e.size > 0) CellValue(e.size, formatSize(e.size))
+                else CellValue(0, "\u2014")
+            },
+            ColumnDescriptor(
+                name = "Module",
+                widthBehavior = ColumnWidth.Measured("component:env"),
+            ) { index ->
+                CellValue(entries[index].module ?: "", representation = entries[index].module ?: "")
+            },
+            ColumnDescriptor(
+                name = "Reason",
+                widthBehavior = ColumnWidth.Fill(),
+            ) { index ->
+                val reason = when (entries[index].reason) {
+                    GarbageReason.NO_CALLERS -> "No callers"
+                    GarbageReason.CALLERS_UNREACHABLE -> "Callers unreachable"
+                }
+                CellValue(reason)
+            },
+        ),
+        rowCount = entries.size,
+        rowSelectionProvider = { index ->
+            val entry = entries[index]
+            if (entry.size > 0) {
+                val codeIdx = entry.funcIndex - importFuncCount
+                codeOffsets.getOrNull(codeIdx)?.let { offset ->
+                    RowSelectionData(offset.offset, offset.size)
+                }
+            } else null
+        },
+        prologueText = prologueText,
+        emptyMessage = "No unreachable functions detected",
+    )
+}
+
+private fun garbageTypesTab(
+    provider: WasmBinaryProvider,
+    garbage: GarbageResult,
+): TableTabDescriptor? {
+    val entries = garbage.typeEntries
+
+    val types = run {
+        val typesSection = provider.wasmModule?.typesSection ?: return@run emptyList()
+        with(typesSection) { provider.bytes.parseTypes() }
+    }
+    val typeNames = provider.nameSection?.typesSection?.namemap
+
+    val prologueText = "${entries.size} unreachable types, ${formatSizeLong(garbage.typeWastedBytes)} wasted"
+
+    return TableTabDescriptor(
+        name = "Types (${entries.size})",
+        columns = listOf(
+            ColumnDescriptor(
+                name = "Index",
+                widthBehavior = ColumnWidth.MeasuredMin("x Index"),
+            ) { index ->
+                CellValue(entries[index].typeIndex)
+            },
+            ColumnDescriptor(
+                name = "Size",
+                widthBehavior = ColumnWidth.MeasuredMin("x 00000 B"),
+            ) { index ->
+                CellValue(entries[index].size, "${entries[index].size} B")
+            },
+            ColumnDescriptor(
+                name = "Signature",
+                widthBehavior = ColumnWidth.Fill(),
+            ) { index ->
+                val typeIdx = entries[index].typeIndex
+                val desc = types.getOrNull(typeIdx)?.getDescription(typeIdx, typeNames) ?: "type[$typeIdx]"
+                CellValue(desc, tooltip = desc)
+            },
+        ),
+        rowCount = entries.size,
+        prologueText = prologueText,
+        emptyMessage = "No unreachable types detected",
+    )
+}
+
+private fun garbageDataTab(garbage: GarbageResult): TableTabDescriptor? {
+    val entries = garbage.dataSegmentEntries
+
+    val prologueText = "${entries.size} data segments, ${formatSizeLong(garbage.dataSegmentWastedBytes)} potential garbage"
+
+    return TableTabDescriptor(
+        name = "Data (${entries.size})",
+        columns = listOf(
+            ColumnDescriptor(
+                name = "Index",
+                widthBehavior = ColumnWidth.MeasuredMin("x Index"),
+            ) { index ->
+                CellValue(entries[index].index)
+            },
+            ColumnDescriptor(
+                name = "Data Size",
+                widthBehavior = ColumnWidth.MeasuredMin("x Data Size"),
+            ) { index ->
+                CellValue(entries[index].dataSize, formatSize(entries[index].dataSize))
+            },
+            ColumnDescriptor(
+                name = "Record Size",
+                widthBehavior = ColumnWidth.MeasuredMin("x Record Size"),
+            ) { index ->
+                CellValue(entries[index].recordSize, formatSize(entries[index].recordSize))
+            },
+        ),
+        rowCount = entries.size,
+        prologueText = prologueText,
+        emptyMessage = "No data segments",
+    )
+}

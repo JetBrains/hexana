@@ -24,6 +24,7 @@ import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.shared.CellValue
 import org.jetbrains.hexana.shared.ColumnDescriptor
 import org.jetbrains.hexana.shared.ColumnWidth
+import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.RowSelectionData
 import org.jetbrains.hexana.shared.TableTabChildRows
 import org.jetbrains.hexana.shared.TableTabDescriptor
@@ -31,10 +32,14 @@ import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.hexana.ui.components.measureWidthMonospace
+import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Icon
+import org.jetbrains.jewel.ui.component.TabData
+import org.jetbrains.jewel.ui.component.TabStrip
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.Tooltip
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
+import org.jetbrains.jewel.ui.theme.defaultTabStyle
 
 /**
  * Converts a [TableTabDescriptor] into a [Panel] by bridging the UI-free
@@ -44,6 +49,44 @@ internal fun TableTabDescriptor.toPanel(state: HexViewStateHolder): Panel {
     val descriptor = this
     return Panel(descriptor.name) {
         TableTabContent(descriptor, state)
+    }
+}
+
+/**
+ * Converts a [GroupedTableTabDescriptor] into a [Panel] that renders an
+ * inner tab strip switching between the contained table tabs.
+ */
+internal fun GroupedTableTabDescriptor.toPanel(state: HexViewStateHolder): Panel {
+    val grouped = this
+    return Panel(grouped.name) {
+        GroupedTableTabContent(grouped, state)
+    }
+}
+
+@Composable
+private fun GroupedTableTabContent(
+    grouped: GroupedTableTabDescriptor,
+    state: HexViewStateHolder,
+) {
+    val innerTabs = grouped.innerTabs
+    if (innerTabs.isEmpty()) return
+
+    var selectedIndex by remember(grouped) { mutableStateOf(0) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        TabStrip(
+            tabs = innerTabs.mapIndexed { index, tab ->
+                TabData.Default(
+                    selected = index == selectedIndex,
+                    content = { Text(tab.name) },
+                    onClick = { selectedIndex = index },
+                    closable = false,
+                )
+            },
+            style = JewelTheme.defaultTabStyle,
+        )
+        val currentTab = innerTabs.getOrNull(selectedIndex) ?: return
+        TableTabContent(currentTab, state)
     }
 }
 

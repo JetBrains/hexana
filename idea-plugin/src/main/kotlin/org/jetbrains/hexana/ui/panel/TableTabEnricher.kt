@@ -621,6 +621,53 @@ private fun enrichComponentModulesTab(
 }
 
 // ---------------------------------------------------------------------------
+// Garbage grouped tab enrichment
+// ---------------------------------------------------------------------------
+
+/**
+ * Enriches a garbage [GroupedTableTabDescriptor] by adding context menu items
+ * to the inner Functions tab for "Show in Dominators" and "Show Callers".
+ */
+internal fun enrichGarbageGroupedTab(
+    grouped: GroupedTableTabDescriptor,
+    garbageEntries: List<org.jetbrains.hexana.wasm.analysis.garbage.GarbageEntry>,
+    onShowInDominators: (funcIndex: Int) -> Unit,
+    onShowCallers: (funcIndex: Int) -> Unit,
+): GroupedTableTabDescriptor {
+    val enrichedInnerTabs = grouped.innerTabs.map { tab ->
+        if (tab.name.startsWith("Functions")) {
+            TableTabDescriptor(
+                name = tab.name,
+                columns = tab.columns,
+                rowCount = tab.rowCount,
+                defaultSortColumn = tab.defaultSortColumn,
+                defaultSortAscending = tab.defaultSortAscending,
+                rowSelectionProvider = tab.rowSelectionProvider,
+                prologueText = tab.prologueText,
+                emptyMessage = tab.emptyMessage,
+                contextMenuItems = listOf(
+                    RowContextMenuItemDescriptor(
+                        labelProvider = { "Show in Dominators" },
+                        action = { index -> onShowInDominators(garbageEntries[index].funcIndex) },
+                    ),
+                    RowContextMenuItemDescriptor(
+                        labelProvider = { "Show Callers" },
+                        isVisible = { index ->
+                            garbageEntries[index].reason != org.jetbrains.hexana.wasm.analysis.garbage.GarbageReason.NO_CALLERS
+                        },
+                        action = { index -> onShowCallers(garbageEntries[index].funcIndex) },
+                    ),
+                ),
+            )
+        } else tab
+    }
+    return GroupedTableTabDescriptor(
+        name = grouped.name,
+        innerTabs = enrichedInnerTabs,
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Fat (universal) Mach-O enrichment
 // ---------------------------------------------------------------------------
 

@@ -9,7 +9,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.web.css.Color
+import org.jetbrains.compose.web.css.DisplayStyle
 import org.jetbrains.compose.web.css.color
+import org.jetbrains.compose.web.css.display
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Td
@@ -17,6 +19,7 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.ColumnDescriptor
 import org.jetbrains.hexana.shared.ColumnWidth
+import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.RowSelectionData
 import org.jetbrains.hexana.shared.TableTabChildRows
 import org.jetbrains.hexana.shared.TableTabDescriptor
@@ -73,6 +76,52 @@ internal fun TableTabsProvider.toTableTabs(
     TableTab(name = descriptor.name) { selection ->
         TableTabContent(descriptor, selection)
     }
+}
+
+/**
+ * Renders a [GroupedTableTabDescriptor] as an inner tab strip switching
+ * between the contained table tabs.
+ */
+@Composable
+fun GroupedTableTabContent(
+    grouped: GroupedTableTabDescriptor,
+    selection: HexSelectionState,
+) {
+    val innerTabs = grouped.innerTabs
+    if (innerTabs.isEmpty()) return
+
+    var selectedIndex by remember(grouped) { mutableStateOf(0) }
+
+    // Inner tab strip
+    Div({
+        style {
+            display(DisplayStyle.Flex)
+            property("gap", "0")
+            property("border-bottom", "1px solid var(--hexana-border, #333)")
+            property("margin-bottom", "8px")
+        }
+    }) {
+        for ((index, tab) in innerTabs.withIndex()) {
+            val isActive = index == selectedIndex
+            Div({
+                style {
+                    property("padding", "4px 12px")
+                    property("cursor", "pointer")
+                    property("font-size", "12px")
+                    property("user-select", "none")
+                    property("white-space", "nowrap")
+                    property("border-bottom", if (isActive) "2px solid var(--vscode-focusBorder, #007FD4)" else "2px solid transparent")
+                    property("color", if (isActive) "var(--hexana-fg)" else "var(--vscode-tab-inactiveForeground, rgba(255,255,255,0.5))")
+                }
+                onClick { selectedIndex = index }
+            }) {
+                Text(tab.name)
+            }
+        }
+    }
+
+    val currentTab = innerTabs.getOrNull(selectedIndex) ?: return
+    TableTabContent(currentTab, selection)
 }
 
 /**

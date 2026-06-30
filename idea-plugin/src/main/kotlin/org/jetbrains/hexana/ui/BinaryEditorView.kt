@@ -37,7 +37,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.nativebin.JVM_FILE_SYSTEM
 import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.NativeDebugTabData
+import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsContext
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.ui.panel.*
@@ -643,8 +645,17 @@ private fun BinaryProvider.resolvePanels(
         nativeDebugData = (this as? NativeBinaryProvider)
             ?.let { NativeDebugTabData.scan(it, JVM_FILE_SYSTEM, state.project.basePath) },
     )
-    val tabPanels = providers.flatMap {
-        enricher(it.tableTabs(this, tableTabsContext), state, pathsNav).map { it.toPanel(state) }
+    // Collect ordinary and grouped tab descriptors per provider, preserving
+    // provider order: for each provider ordinary tabs come first, then grouped.
+    data class ProviderTabs(
+        val ordinary: List<TableTabDescriptor>,
+        val grouped: List<GroupedTableTabDescriptor>,
+    )
+    val perProvider = providers.map { p ->
+        ProviderTabs(
+            ordinary = p.tableTabs(this, tableTabsContext),
+            grouped = p.groupedTabs(this, tableTabsContext),
+        )
     }
     val providerPanels = when (this) {
         is GenericBinaryProvider -> emptyList()
@@ -663,7 +674,6 @@ private fun BinaryProvider.resolvePanels(
         is WasmBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
                 listOf(
-                    Panel("Garbage") { WasmPanelGarbage(this, state) },
                     Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                     Panel("Wat") { WasmPanelWat(this, state) },
                     Panel("WAT (virtualized)") {
@@ -700,7 +710,6 @@ private fun BinaryProvider.resolvePanels(
         is WasmBinaryProvider -> {
             if (canProvideWasmModule()) {
                 listOf(
-                    Panel("Garbage") { WasmPanelGarbage(this, state) },
                     Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                     Panel("WAT (virtualized)") {
                         val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
@@ -726,26 +735,43 @@ private fun BinaryProvider.resolvePanels(
         }
         else -> emptyList()
     }
-    val panels = (tabPanels + providerPanels + extraPanels).toMutableList()
-    // Wire Garbage → Dominators cross-panel navigation
-    val domIndex = panels.indexOfFirst { it.description == "Dominators" }
-    val garbageIndex = panels.indexOfFirst { it.description == "Garbage" }
-    if (garbageIndex >= 0 && domIndex >= 0 && this is WasmBinaryProvider) {
-        val provider = this
-        panels[garbageIndex] = Panel("Garbage") {
-            WasmPanelGarbage(
-                provider, state,
-                onShowInDominators = { fIdx ->
-                    pathsNav.targetFuncIndex = fIdx
-                    state.setSelectedTab(domIndex)
-                },
-                onShowCallers = { fIdx ->
-                    pathsNav.targetFuncIndex = fIdx
-                    state.setSelectedTab(domIndex)
-                },
-            )
+    // Build tab panels in provider order: ordinary tabs then grouped tabs per provider.
+    // Grouped tabs may need enrichment (e.g. Garbage → Dominators cross-navigation),
+    // which depends on providerPanels already being present, so we assemble the
+    // full panel list first with providerPanels, then interleave provider tabs.
+    val allGroupedDescriptors = perProvider.flatMap { it.grouped }
+    val hasDominators = providerPanels.any { it.description == "Dominators" }
+    val enrichedGrouped: Map<GroupedTableTabDescriptor, Panel> =
+        if (hasDominators && this is WasmBinaryProvider) {
+            val garbageEntries = this.garbageAnalysis?.entries ?: emptyList()
+            allGroupedDescriptors.associateWith { grouped ->
+                if (grouped.name == "Garbage" && garbageEntries.isNotEmpty()) {
+                    enrichGarbageGroupedTab(
+                        grouped, garbageEntries,
+                        onShowInDominators = { fIdx ->
+                            pathsNav.targetFuncIndex = fIdx
+                            state.requestSelectTabByDescription("Dominators")
+                        },
+                        onShowCallers = { fIdx ->
+                            pathsNav.targetFuncIndex = fIdx
+                            state.requestSelectTabByDescription("Dominators")
+                        },
+                    ).toPanel(state)
+                } else {
+                    grouped.toPanel(state)
+                }
+            }
+        } else {
+            allGroupedDescriptors.associateWith { it.toPanel(state) }
         }
+
+    val panels = mutableListOf<Panel>()
+    for (pt in perProvider) {
+        panels += enricher(pt.ordinary, state, pathsNav).map { it.toPanel(state) }
+        panels += pt.grouped.mapNotNull { enrichedGrouped[it] }
     }
+    panels += providerPanels
+    panels += extraPanels
     return panels.toTypedArray()
 }
 
