@@ -63,9 +63,25 @@ fun HexanaPanel(
                     .map { d -> TableTab(name = d.name) { selection -> TableTabContent(d, selection) } }
                 addAll(ordinary.map { tt -> PanelTab(tt.name) { sel -> tt.content(sel) } })
                 for (grouped in p.groupedTabs(provider)) {
-                    add(PanelTab(grouped.name) { sel ->
-                        GroupedTableTabContent(grouped, sel)
-                    })
+                    val inner = grouped.innerTabs
+                    when {
+                        // Skip entirely when no inner tabs and no emptyMessage
+                        inner.isEmpty() && grouped.emptyMessage == null -> {}
+                        // Show emptyMessage when no inner tabs
+                        inner.isEmpty() -> add(PanelTab(grouped.name) { _ ->
+                            org.jetbrains.compose.web.dom.Text(grouped.emptyMessage ?: "")
+                        })
+                        // Single inner tab: promote to top-level with combined name
+                        inner.size == 1 -> {
+                            val single = inner.single()
+                            val combinedName = "${grouped.name}: ${single.name}"
+                            add(PanelTab(combinedName) { sel -> TableTabContent(single, sel) })
+                        }
+                        // Multiple inner tabs: render with sub-tab strip
+                        else -> add(PanelTab(grouped.name) { sel ->
+                            GroupedTableTabContent(grouped, sel)
+                        })
+                    }
                 }
             }
 

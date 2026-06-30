@@ -217,8 +217,7 @@ class WasmProfilerTabsProvider : TableTabsProvider {
     override fun groupedTabs(provider: BinaryProvider): List<GroupedTableTabDescriptor> {
         if (provider !is WasmBinaryProvider) return emptyList()
         if (!provider.canProvideWasmModule()) return emptyList()
-        val garbage = provider.garbageAnalysis ?: return emptyList()
-        return listOf(garbageGroupedTab(provider, garbage))
+        return listOfNotNull(garbageGroupedTab(provider))
     }
 }
 
@@ -290,15 +289,21 @@ const val UNIVERSAL_QUALIFIED_NAME_MEASURE = "component:subtractor11111/environe
 // Garbage analysis tabs (grouped under a single "Garbage" outer tab)
 // ---------------------------------------------------------------------------
 
+/**
+ * Returns a grouped garbage tab with non-empty subtabs, or `null` when
+ * no subtab has data. The rendering layer handles the single-subtab case
+ * by promoting it to a plain tab automatically.
+ */
 private fun garbageGroupedTab(
     provider: WasmBinaryProvider,
-    garbage: GarbageResult,
-): GroupedTableTabDescriptor {
+): GroupedTableTabDescriptor? {
+    val garbage = provider.garbageAnalysis ?: return null
     val innerTabs = buildList {
         garbageFunctionsTab(provider, garbage)?.let { add(it) }
         garbageTypesTab(provider, garbage)?.let { add(it) }
         garbageDataTab(garbage)?.let { add(it) }
-    }
+    }.filter { it.rowCount > 0 }
+    if (innerTabs.isEmpty()) return null
     return GroupedTableTabDescriptor(
         name = "Garbage",
         innerTabs = innerTabs,

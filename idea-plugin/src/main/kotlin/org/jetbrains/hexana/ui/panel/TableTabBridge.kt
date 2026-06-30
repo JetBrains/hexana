@@ -57,8 +57,24 @@ internal fun TableTabDescriptor.toPanel(state: HexViewStateHolder): Panel {
  * Converts a [GroupedTableTabDescriptor] into a [Panel] that renders an
  * inner tab strip switching between the contained table tabs.
  */
-internal fun GroupedTableTabDescriptor.toPanel(state: HexViewStateHolder): Panel {
+internal fun GroupedTableTabDescriptor.toPanel(state: HexViewStateHolder): Panel? {
     val grouped = this
+    // Skip the entire group when there are no inner tabs and no emptyMessage.
+    if (grouped.innerTabs.isEmpty() && grouped.emptyMessage == null) return null
+    // When there are no inner tabs but an emptyMessage is set, show it.
+    if (grouped.innerTabs.isEmpty()) {
+        return Panel(grouped.name) {
+            Text(grouped.emptyMessage ?: "")
+        }
+    }
+    // When there is exactly one inner tab, render its content directly
+    // without a sub-tab header, using a combined "Group: Sub" name.
+    if (grouped.innerTabs.size == 1) {
+        val single = grouped.innerTabs.single()
+        return Panel("${grouped.name}: ${single.name}") {
+            TableTabContent(single, state)
+        }
+    }
     return Panel(grouped.name) {
         GroupedTableTabContent(grouped, state)
     }

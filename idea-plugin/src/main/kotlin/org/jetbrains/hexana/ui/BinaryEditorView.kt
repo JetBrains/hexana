@@ -741,7 +741,7 @@ private fun BinaryProvider.resolvePanels(
     // full panel list first with providerPanels, then interleave provider tabs.
     val allGroupedDescriptors = perProvider.flatMap { it.grouped }
     val hasDominators = providerPanels.any { it.description == "Dominators" }
-    val enrichedGrouped: Map<GroupedTableTabDescriptor, Panel> =
+    val enrichedGrouped: Map<GroupedTableTabDescriptor, Panel?> =
         if (hasDominators && this is WasmBinaryProvider) {
             val garbageEntries = this.garbageAnalysis?.entries ?: emptyList()
             allGroupedDescriptors.associateWith { grouped ->

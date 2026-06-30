@@ -175,12 +175,19 @@ class TableTabChildRows(
  * The UI layer renders this as a single outer tab with an inner tab strip
  * that switches between the contained table tabs.
  *
+ * When [innerTabs] is empty and [emptyMessage] is `null`, the UI layer skips
+ * rendering this group tab entirely.
+ *
  * @param name the outer tab title shown in the main tab strip
  * @param innerTabs the list of inner table tab descriptors
+ * @param emptyMessage optional message shown when [innerTabs] is empty; when
+ *   non-null the group tab is still rendered with this message instead of being
+ *   hidden
  */
 class GroupedTableTabDescriptor(
     val name: String,
     val innerTabs: List<TableTabDescriptor>,
+    val emptyMessage: String? = null,
 )
 
 /**
