@@ -3,6 +3,7 @@ package org.jetbrains.hexana.vscode
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -14,7 +15,10 @@ import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Td
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.shared.ColumnDescriptor
 import org.jetbrains.hexana.shared.ColumnWidth
+import org.jetbrains.hexana.shared.RowSelectionData
+import org.jetbrains.hexana.shared.TableTabChildRows
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsProvider
 
@@ -90,6 +94,11 @@ fun TableTabContent(
         Div({ classes("empty-hint") }) {
             Text(descriptor.emptyMessage ?: "No data found.")
         }
+        return
+    }
+
+    if (descriptor.childrenProvider != null) {
+        TreeTableTabContent(descriptor, selection)
         return
     }
 
@@ -234,6 +243,179 @@ fun TableTabContent(
                         }) {
                             Text(cell.representation)
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------
+// Tree table rendering for descriptors with childrenProvider
+// -----------------------------------------------------------------------
+
+/**
+ * A flattened row in a tree table, used by the VSCode renderer.
+ */
+private class VscFlatRow(
+    val depth: Int,
+    val index: Int,
+    val columns: List<ColumnDescriptor>,
+    val hasChildren: Boolean,
+    val isExpanded: Boolean,
+    val rowSelectionProvider: (Int) -> RowSelectionData?,
+    val treePath: List<Int>,
+)
+
+private fun flattenTreeVsc(
+    descriptor: TableTabDescriptor,
+    expandedPaths: Set<List<Int>>,
+): List<VscFlatRow> {
+    val result = mutableListOf<VscFlatRow>()
+
+    fun addLevel(
+        rowCount: Int,
+        columns: List<ColumnDescriptor>,
+        childrenProvider: ((Int) -> TableTabChildRows?)?,
+        rowSelectionProvider: (Int) -> RowSelectionData?,
+        depth: Int,
+        parentPath: List<Int>,
+    ) {
+        for (i in 0 until rowCount) {
+            val path = parentPath + i
+            val children = childrenProvider?.invoke(i)
+            val hasChildren = children != null && children.rowCount > 0
+            val isExpanded = hasChildren && path in expandedPaths
+            result += VscFlatRow(depth, i, columns, hasChildren, isExpanded, rowSelectionProvider, path)
+            if (isExpanded && children != null) {
+                addLevel(
+                    children.rowCount, children.columns, children.childrenProvider,
+                    children.rowSelectionProvider, depth + 1, path,
+                )
+            }
+        }
+    }
+
+    addLevel(
+        descriptor.rowCount, descriptor.columns, descriptor.childrenProvider,
+        descriptor.rowSelectionProvider, 0, emptyList(),
+    )
+    return result
+}
+
+private const val CHEVRON_RIGHT = "\u25B6"
+private const val CHEVRON_DOWN = "\u25BC"
+
+@Composable
+private fun TreeTableTabContent(
+    descriptor: TableTabDescriptor,
+    selection: HexSelectionState,
+) {
+    val expandedPaths = remember(descriptor) { mutableStateListOf<List<Int>>() }
+    val flatRows = remember(descriptor, expandedPaths.toList()) {
+        flattenTreeVsc(descriptor, expandedPaths.toSet())
+    }
+
+    val headers = buildList {
+        add("")
+        add("ID")
+        descriptor.columns.forEach { add(it.name) }
+    }
+
+    val aligns = buildList {
+        add("center")
+        add("right")
+        descriptor.columns.forEach { col ->
+            when (col.widthBehavior) {
+                is ColumnWidth.Fill -> add("left")
+                is ColumnWidth.Measured -> add("left")
+                is ColumnWidth.MeasuredMin -> add("left")
+            }
+        }
+    }
+
+    SearchableTable(
+        headers = headers,
+        columnAligns = aligns,
+        defaultSortColumn = -1,
+        defaultSortDirection = SortDirection.NONE,
+    ) {
+        for ((flatIndex, row) in flatRows.withIndex()) {
+            val selData = row.rowSelectionProvider(row.index)
+            val isHighlighted = selData != null && selection.hasSelection &&
+                selection.selectionStart == selData.offset &&
+                selection.selectionEnd == selData.offset + selData.size - 1
+
+            PanelTableRow(
+                isHighlighted = isHighlighted,
+                onClick = {
+                    if (row.hasChildren) {
+                        if (row.isExpanded) {
+                            expandedPaths.remove(row.treePath)
+                        } else {
+                            expandedPaths.add(row.treePath)
+                        }
+                    } else if (selData != null) {
+                        selection.anchorIndex = selData.offset
+                        selection.activeIndex = selData.offset + selData.size - 1
+                        selection.cursorIndex = selData.offset
+                        scrollHexViewerTo(selData.offset)
+                    }
+                },
+            ) {
+                // Action column placeholder
+                Td({ classes("cell-id"); style { property("width", "12px") } }) {}
+
+                // ID column
+                Td({ classes("cell-id") }) {
+                    Text(flatIndex.toString())
+                }
+
+                // Data columns
+                for ((colIndex, col) in descriptor.columns.withIndex()) {
+                    val cell = row.columns[colIndex].cellProvider(row.index)
+                    val cssClass = when (col.widthBehavior) {
+                        is ColumnWidth.Fill -> "cell-muted"
+                        is ColumnWidth.Measured -> "cell"
+                        is ColumnWidth.MeasuredMin -> "cell"
+                    }
+
+                    Td({
+                        classes(cssClass)
+                        if (cell.tooltip != null) attr("title", cell.tooltip!!)
+                    }) {
+                        if (colIndex == 0) {
+                            // Indentation and expand/collapse chevron
+                            val indentPx = row.depth * 16
+                            if (indentPx > 0) {
+                                Span({ style { property("display", "inline-block"); property("width", "${indentPx}px") } }) {}
+                            }
+                            if (row.hasChildren) {
+                                Span({
+                                    style {
+                                        property("cursor", "pointer")
+                                        property("display", "inline-block")
+                                        property("width", "16px")
+                                        property("text-align", "center")
+                                        property("font-size", "10px")
+                                        property("user-select", "none")
+                                    }
+                                    onClick { event ->
+                                        event.stopPropagation()
+                                        if (row.isExpanded) {
+                                            expandedPaths.remove(row.treePath)
+                                        } else {
+                                            expandedPaths.add(row.treePath)
+                                        }
+                                    }
+                                }) {
+                                    Text(if (row.isExpanded) CHEVRON_DOWN else CHEVRON_RIGHT)
+                                }
+                            } else {
+                                Span({ style { property("display", "inline-block"); property("width", "16px") } }) {}
+                            }
+                        }
+                        Text(cell.representation)
                     }
                 }
             }

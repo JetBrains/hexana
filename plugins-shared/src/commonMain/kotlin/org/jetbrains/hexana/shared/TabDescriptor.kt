@@ -120,6 +120,11 @@ class RowMenuEntry(
  * @param prologueText optional text displayed above the table; `null` means no prologue
  * @param emptyMessage optional message shown when [rowCount] is zero; `null` falls back
  *   to the default empty-table behavior of the UI layer
+ * @param childrenProvider optional provider of nested child rows for a given row index.
+ *   When non-null, the UI layer renders the table as a tree: rows that return a non-null
+ *   [TableTabChildRows] are expandable, and their children share the same column layout.
+ *   Each [TableTabChildRows] can itself carry a [TableTabChildRows.childrenProvider] for
+ *   recursive nesting. Returns `null` for leaf rows (no expand chevron).
  */
 class TableTabDescriptor(
     val name: String,
@@ -134,12 +139,35 @@ class TableTabDescriptor(
     val dynamicContextMenuProvider: ((index: Int) -> List<RowMenuEntry>)? = null,
     val prologueText: String? = null,
     val emptyMessage: String? = null,
+    val childrenProvider: ((index: Int) -> TableTabChildRows?)? = null,
 ) {
     companion object {
         /** Sentinel value for [defaultSortColumn] that targets the implicit ID column. */
         const val ID_COLUMN: Int = -1
     }
 }
+
+/**
+ * A set of nested child rows for a tree-table row.
+ *
+ * Shares the same column layout as the parent [TableTabDescriptor]: each
+ * column's [ColumnDescriptor.cellProvider] is called with child row indices
+ * `0 ..< rowCount`.
+ *
+ * @param columns column descriptors for child rows; must match the parent's
+ *   column count so the UI can align cells. Typically the same column list
+ *   with different cell providers.
+ * @param rowCount number of child rows
+ * @param rowSelectionProvider binary selection for a child row click
+ * @param childrenProvider optional recursive nesting; returns further
+ *   children for a child row, or `null` for leaf rows
+ */
+class TableTabChildRows(
+    val columns: List<ColumnDescriptor>,
+    val rowCount: Int,
+    val rowSelectionProvider: (index: Int) -> RowSelectionData? = { null },
+    val childrenProvider: ((index: Int) -> TableTabChildRows?)? = null,
+)
 
 /**
  * Produces [TableTabDescriptor]s for a given [BinaryProvider].

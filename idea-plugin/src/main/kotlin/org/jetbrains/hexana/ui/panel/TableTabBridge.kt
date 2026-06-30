@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextMeasurer
@@ -19,7 +20,10 @@ import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.shared.CellValue
+import org.jetbrains.hexana.shared.ColumnDescriptor
 import org.jetbrains.hexana.shared.ColumnWidth
+import org.jetbrains.hexana.shared.RowSelectionData
+import org.jetbrains.hexana.shared.TableTabChildRows
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
@@ -66,6 +70,11 @@ private fun TableTabContent(descriptor: TableTabDescriptor, state: HexViewStateH
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TableTabTable(descriptor: TableTabDescriptor, state: HexViewStateHolder) {
+    if (descriptor.childrenProvider != null) {
+        TreeTableTabTable(descriptor, state)
+        return
+    }
+
     val textMeasurer = rememberTextMeasurer()
 
     val columnLayouts = descriptor.columns.map { col ->
@@ -135,6 +144,134 @@ private fun TableTabTable(descriptor: TableTabDescriptor, state: HexViewStateHol
                 clickAction(rowIndex)
             } else {
                 val selection = descriptor.rowSelectionProvider(rowIndex) ?: return@Table
+                state.scrollHexViewTo(selection.offset, selection.size)
+            }
+        },
+    )
+}
+
+/**
+ * A flattened row in a tree table. Each visible row (including nested children)
+ * is represented as one [FlatRow] with its nesting [depth], the [columns] to
+ * read cell values from, and tree-expansion metadata.
+ */
+private class FlatRow(
+    val depth: Int,
+    val index: Int,
+    val columns: List<ColumnDescriptor>,
+    val hasChildren: Boolean,
+    val isExpanded: Boolean,
+    val rowSelectionProvider: (Int) -> RowSelectionData?,
+    /** Stable path from root used as the key in the expanded-set. */
+    val treePath: List<Int>,
+)
+
+/**
+ * Builds the list of currently visible [FlatRow]s by walking the tree
+ * depth-first, expanding only nodes whose path is in [expandedPaths].
+ */
+private fun flattenTree(
+    descriptor: TableTabDescriptor,
+    expandedPaths: Set<List<Int>>,
+): List<FlatRow> {
+    val result = mutableListOf<FlatRow>()
+
+    fun addLevel(
+        rowCount: Int,
+        columns: List<ColumnDescriptor>,
+        childrenProvider: ((Int) -> TableTabChildRows?)?,
+        rowSelectionProvider: (Int) -> RowSelectionData?,
+        depth: Int,
+        parentPath: List<Int>,
+    ) {
+        for (i in 0 until rowCount) {
+            val path = parentPath + i
+            val children = childrenProvider?.invoke(i)
+            val hasChildren = children != null && children.rowCount > 0
+            val isExpanded = hasChildren && path in expandedPaths
+            result += FlatRow(depth, i, columns, hasChildren, isExpanded, rowSelectionProvider, path)
+            if (isExpanded && children != null) {
+                addLevel(
+                    children.rowCount, children.columns, children.childrenProvider,
+                    children.rowSelectionProvider, depth + 1, path,
+                )
+            }
+        }
+    }
+
+    addLevel(
+        descriptor.rowCount, descriptor.columns, descriptor.childrenProvider,
+        descriptor.rowSelectionProvider, 0, emptyList(),
+    )
+    return result
+}
+
+private const val INDENT_CHARS = 4
+private const val CHEVRON_RIGHT = "\u25B6 "
+private const val CHEVRON_DOWN = "\u25BC "
+private const val CHEVRON_PLACEHOLDER = "  "
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStateHolder) {
+    val expandedPaths = remember(descriptor) { mutableStateListOf<List<Int>>() }
+    val flatRows = remember(descriptor, expandedPaths.toList()) {
+        flattenTree(descriptor, expandedPaths.toSet())
+    }
+
+    val textMeasurer = rememberTextMeasurer()
+
+    val columnLayouts = descriptor.columns.map { col ->
+        col.widthBehavior.toColumnLayout(
+            textMeasurer = textMeasurer,
+            title = col.name,
+            rowCount = descriptor.rowCount,
+            cellProvider = col.cellProvider,
+        )
+    }
+
+    val columns = remember(descriptor, flatRows, columnLayouts) {
+        descriptor.columns.mapIndexed { colIndex, col ->
+            val layout = columnLayouts[colIndex]
+            TableColumn(
+                title = col.name,
+                modifier = layout.modifier,
+                width = layout.width,
+            ) { flatIndex ->
+                val row = flatRows[flatIndex]
+                val cell = row.columns[colIndex].cellProvider(row.index)
+                if (colIndex == 0) {
+                    val indent = " ".repeat(row.depth * INDENT_CHARS)
+                    val chevron = when {
+                        row.hasChildren && row.isExpanded -> CHEVRON_DOWN
+                        row.hasChildren -> CHEVRON_RIGHT
+                        else -> CHEVRON_PLACEHOLDER
+                    }
+                    TableCellValue(cell.value, indent + chevron + cell.representation, cell.tooltip)
+                } else {
+                    TableCellValue(cell.value, cell.representation, cell.tooltip)
+                }
+            }
+        }
+    }
+
+    val actionColumnWidth = textMeasurer.measureWidthMonospace("__")
+
+    Table(
+        columns = columns,
+        dataCount = flatRows.size,
+        defaultSortColumn = descriptor.defaultSortColumn ?: -1,
+        defaultSortAscending = descriptor.defaultSortAscending,
+        onRow = { flatIndex ->
+            val row = flatRows[flatIndex]
+            if (row.hasChildren) {
+                if (row.isExpanded) {
+                    expandedPaths.remove(row.treePath)
+                } else {
+                    expandedPaths.add(row.treePath)
+                }
+            } else {
+                val selection = row.rowSelectionProvider(row.index) ?: return@Table
                 state.scrollHexViewTo(selection.offset, selection.size)
             }
         },
