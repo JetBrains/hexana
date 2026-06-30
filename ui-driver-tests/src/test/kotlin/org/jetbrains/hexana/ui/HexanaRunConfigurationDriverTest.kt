@@ -48,6 +48,7 @@ class HexanaRunConfigurationDriverTest {
 
     @Test
     fun runCoreModuleWithWasmtime() {
+        val wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime()
         val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-run-core-module")
 
         context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
@@ -66,6 +67,7 @@ class HexanaRunConfigurationDriverTest {
                     driver = this,
                     wasmFileName = CORE_MODULE_FILE,
                     engine = "WASMTIME",
+                    wasmtimePath = wasmtimePath,
                 )
                 waitForProcessTermination(this)
 
@@ -81,6 +83,7 @@ class HexanaRunConfigurationDriverTest {
 
     @Test
     fun runExportedFunctionWithWasmtime() {
+        val wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime()
         val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-run-exported-function")
 
         context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
@@ -102,6 +105,7 @@ class HexanaRunConfigurationDriverTest {
                     wasmtimeOptions = "--invoke add",
                     exportName = "add",
                     programArgs = "2 3",
+                    wasmtimePath = wasmtimePath,
                 )
                 waitForProcessTermination(this)
 
@@ -118,6 +122,7 @@ class HexanaRunConfigurationDriverTest {
 
     @Test
     fun runComponentModuleWithWasmtime() {
+        val wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime()
         val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-run-component-module")
 
         context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
@@ -136,6 +141,7 @@ class HexanaRunConfigurationDriverTest {
                     driver = this,
                     wasmFileName = COMPONENT_MODULE_FILE,
                     engine = "WASMTIME",
+                    wasmtimePath = wasmtimePath,
                 )
                 waitForProcessTermination(this)
 
@@ -151,6 +157,7 @@ class HexanaRunConfigurationDriverTest {
 
     @Test
     fun debugCoreModuleWithWasmtime() {
+        val wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime()
         val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-core-module")
 
         context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
@@ -169,6 +176,7 @@ class HexanaRunConfigurationDriverTest {
                     driver = this,
                     wasmFileName = CORE_MODULE_FILE,
                     engine = "WASMTIME",
+                    wasmtimePath = wasmtimePath,
                 )
                 waitForProcessTermination(this, 5.minutes)
 
@@ -184,6 +192,7 @@ class HexanaRunConfigurationDriverTest {
 
     @Test
     fun debugCoreModuleWithNodeJs() {
+        val nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs()
         val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-core-module-nodejs")
 
         context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
@@ -204,6 +213,7 @@ class HexanaRunConfigurationDriverTest {
                     engine = "NODE_JS",
                     exportName = "add",
                     programArgs = "2 3",
+                    nodePath = nodePath,
                 )
                 waitForProcessTermination(this, 5.minutes)
 
@@ -401,11 +411,11 @@ class HexanaRunConfigurationDriverTest {
         driver: Driver,
         wasmFileName: String,
         engine: String,
+        wasmtimePath: String,
         wasmtimeOptions: String = "",
         exportName: String = "",
         programArgs: String = "",
     ) {
-        val wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime()
         val project = driver.singleProject()
         val helper = driver.utility(RunConfigHelperRef::class)
         helper.createAndRunWasmtime(
@@ -423,11 +433,11 @@ class HexanaRunConfigurationDriverTest {
         driver: Driver,
         wasmFileName: String,
         engine: String,
+        nodePath: String,
         nodeOptions: String = "",
         exportName: String = "",
         programArgs: String = "",
     ) {
-        val nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs()
         val project = driver.singleProject()
         val helper = driver.utility(NodeJsRunConfigHelperRef::class)
         helper.createAndRunNodeJs(
@@ -445,11 +455,11 @@ class HexanaRunConfigurationDriverTest {
         driver: Driver,
         wasmFileName: String,
         engine: String,
+        nodePath: String,
         nodeOptions: String = "",
         exportName: String = "",
         programArgs: String = "",
     ) {
-        val nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs()
         val project = driver.singleProject()
         val helper = driver.utility(NodeJsRunConfigHelperRef::class)
         helper.createAndDebugNodeJs(
@@ -467,11 +477,11 @@ class HexanaRunConfigurationDriverTest {
         driver: Driver,
         wasmFileName: String,
         engine: String,
+        wasmtimePath: String,
         wasmtimeOptions: String = "",
         exportName: String = "",
         programArgs: String = "",
     ) {
-        val wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime()
         val project = driver.singleProject()
         val helper = driver.utility(RunConfigHelperRef::class)
         helper.createAndDebugWasmtime(
