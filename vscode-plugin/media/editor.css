@@ -136,7 +136,6 @@ html, body {
 /* Panel table row focus (keyboard navigation) */
 .hexana-panel-row:focus {
     outline: none;
-    background: rgba(255, 255, 255, 0.05);
 }
 
 /* Run arrow button */

@@ -51,6 +51,7 @@ internal fun SearchableTable(
     alwaysShowSearch: Boolean = false,
     searchBarLeading: (@Composable () -> Unit)? = null,
     footer: (@Composable () -> Unit)? = null,
+    onSortToggle: ((columnIndex: Int) -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     var searchVisible by remember { mutableStateOf(alwaysShowSearch) }
@@ -119,6 +120,7 @@ internal fun SearchableTable(
                 headers = headers,
                 columnAligns = columnAligns,
                 sortState = sortState,
+                onSortToggle = onSortToggle,
                 content = content,
             )
         }
@@ -315,6 +317,7 @@ internal fun PanelTable(
     headers: List<String>,
     columnAligns: List<String> = emptyList(),
     sortState: TableSortState? = null,
+    onSortToggle: ((columnIndex: Int) -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     Table({
@@ -347,7 +350,13 @@ internal fun PanelTable(
                             }
                         }
                         if (sortState != null && header.isNotEmpty()) {
-                            onClick { sortState.toggle(index) }
+                            onClick {
+                                if (onSortToggle != null) {
+                                    onSortToggle(index)
+                                } else {
+                                    sortState.toggle(index)
+                                }
+                            }
                         }
                     }) { Text(header + indicator) }
                 }
@@ -360,6 +369,16 @@ internal fun PanelTable(
 }
 
 /**
+ * Mutable holder for row callbacks so that a stable keydown listener
+ * always invokes the latest lambdas without re-registering.
+ */
+private class RowCallbacks {
+    var onClick: (() -> Unit)? = null
+    var onSelect: (() -> Unit)? = null
+    var onActivate: (() -> Unit)? = null
+}
+
+/**
  * Reusable table row that supports click-to-highlight behaviour.
  * Rows are focusable and support ArrowUp / ArrowDown keyboard navigation
  * between sibling rows, preventing the hex viewer from stealing focus.
@@ -368,8 +387,18 @@ internal fun PanelTable(
 internal fun PanelTableRow(
     isHighlighted: Boolean = false,
     onClick: () -> Unit = {},
+    onSelect: (() -> Unit)? = null,
+    onActivate: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
+    // Keep a stable callbacks holder across recompositions; update its
+    // fields on every recomposition so the keydown listener (registered
+    // once in ref{}) always sees the current lambdas.
+    val callbacks = remember { RowCallbacks() }
+    callbacks.onClick = onClick
+    callbacks.onSelect = onSelect
+    callbacks.onActivate = onActivate
+
     Tr({
         classes("hexana-panel-row")
         tabIndex(0)
@@ -380,34 +409,55 @@ internal fun PanelTableRow(
             }
         }
         onClick { onClick() }
-        // Attach keydown and click handlers directly on the DOM element so
-        // that preventDefault() fires before the browser performs native
-        // overflow-scroll on the parent container.
+        // Store the stable callbacks holder on the DOM element so that
+        // arrow-key navigation to a sibling row can read the *target*
+        // row's current callbacks.
         ref { element ->
+            element.asDynamic().__callbacks = callbacks
             val keyListener = EventListener { event ->
                 val ke = event as? KeyboardEvent ?: return@EventListener
                 val row = ke.currentTarget as? HTMLElement ?: return@EventListener
+                val cb = row.asDynamic().__callbacks as? RowCallbacks ?: return@EventListener
                 when (ke.key) {
                     "ArrowDown" -> {
                         ke.preventDefault()
                         ke.stopPropagation()
-                        nextVisibleRow(row)?.let {
-                            it.focus()
-                            it.click()
+                        nextVisibleRow(row)?.let { target ->
+                            target.focus()
+                            val targetCb = target.asDynamic().__callbacks as? RowCallbacks
+                            if (targetCb?.onSelect != null) {
+                                targetCb.onSelect!!()
+                            } else {
+                                target.click()
+                            }
                         }
                     }
                     "ArrowUp" -> {
                         ke.preventDefault()
                         ke.stopPropagation()
-                        previousVisibleRow(row)?.let {
-                            it.focus()
-                            it.click()
+                        previousVisibleRow(row)?.let { target ->
+                            target.focus()
+                            val targetCb = target.asDynamic().__callbacks as? RowCallbacks
+                            if (targetCb?.onSelect != null) {
+                                targetCb.onSelect!!()
+                            } else {
+                                target.click()
+                            }
+                        }
+                    }
+                    "ArrowLeft", "ArrowRight" -> {
+                        ke.preventDefault()
+                        ke.stopPropagation()
+                        if (cb.onActivate != null) {
+                            cb.onActivate!!()
+                        } else {
+                            cb.onClick?.invoke()
                         }
                     }
                     "Enter", " " -> {
                         ke.preventDefault()
                         ke.stopPropagation()
-                        onClick()
+                        cb.onClick?.invoke()
                     }
                 }
             }

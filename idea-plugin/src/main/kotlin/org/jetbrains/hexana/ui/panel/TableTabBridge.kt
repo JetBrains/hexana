@@ -295,8 +295,8 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
         },
         onRowSelect = { flatIndex ->
             val row = flatRows[flatIndex]
-            if (!row.hasChildren) {
-                val selection = row.rowSelectionProvider(row.index) ?: return@Table
+            val selection = row.rowSelectionProvider(row.index)
+            if (selection != null) {
                 state.scrollHexViewTo(selection.offset, selection.size)
             }
         },

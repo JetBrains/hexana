@@ -204,6 +204,7 @@ fun Table(
                 if (newIndex != null && newIndex != currentIndex && viewData.isNotEmpty()) {
                     val (newId, _) = viewData[newIndex]
                     selectedOriginalIndex = newId
+                    hoveredOriginalIndex = null
                     if (onRowSelect != null) {
                         onRowSelect(newId)
                     } else {

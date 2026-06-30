@@ -270,8 +270,27 @@ private class VscFlatRow(
 private fun flattenTreeVsc(
     descriptor: TableTabDescriptor,
     expandedPaths: Set<List<Int>>,
+    sortColumnIndex: Int = -1,
+    sortAscending: Boolean = true,
 ): List<VscFlatRow> {
     val result = mutableListOf<VscFlatRow>()
+
+    fun sortedIndices(rowCount: Int, columns: List<ColumnDescriptor>): List<Int> {
+        val indices = (0 until rowCount).toMutableList()
+        if (sortColumnIndex < 0 || sortColumnIndex >= columns.size) return indices
+        val col = columns[sortColumnIndex]
+        indices.sortWith { a, b ->
+            val va = col.cellProvider(a).value
+            val vb = col.cellProvider(b).value
+            val cmp = when {
+                va is Int && vb is Int -> va.compareTo(vb)
+                va is String && vb is String -> va.compareTo(vb)
+                else -> 0
+            }
+            if (sortAscending) cmp else -cmp
+        }
+        return indices
+    }
 
     fun addLevel(
         rowCount: Int,
@@ -281,7 +300,8 @@ private fun flattenTreeVsc(
         depth: Int,
         parentPath: List<Int>,
     ) {
-        for (i in 0 until rowCount) {
+        val order = if (depth == 0) sortedIndices(rowCount, columns) else (0 until rowCount).toList()
+        for (i in order) {
             val path = parentPath + i
             val children = childrenProvider?.invoke(i)
             val hasChildren = children != null && children.rowCount > 0
@@ -312,9 +332,14 @@ private fun TreeTableTabContent(
     selection: HexSelectionState,
 ) {
     val expandedPaths = remember(descriptor) { mutableStateListOf<List<Int>>() }
-    val flatRows = remember(descriptor, expandedPaths.toList()) {
-        flattenTreeVsc(descriptor, expandedPaths.toSet())
+    var sortColumnIndex by remember { mutableStateOf(descriptor.defaultSortColumn ?: -1) }
+    var sortAscending by remember { mutableStateOf(descriptor.defaultSortAscending) }
+    val flatRows = remember(descriptor, expandedPaths.toList(), sortColumnIndex, sortAscending) {
+        flattenTreeVsc(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending)
     }
+    // Track which flattened row is currently focused (keyboard-navigated or clicked).
+    // This ensures nested rows without hex selection data still get highlighted.
+    var focusedFlatIndex by remember(descriptor) { mutableStateOf(-1) }
 
     val headers = buildList {
         add("")
@@ -332,21 +357,47 @@ private fun TreeTableTabContent(
         }
     }
 
+    // Sort state managed externally; the sort indicator column index is offset by +1
+    // because headers[0] is the empty action column.
+    val sortState = remember { TableSortState() }
+    // Sync sort state for header indicators
+    sortState.columnIndex = if (sortColumnIndex >= 0) sortColumnIndex + 1 else -1
+    sortState.direction = if (sortColumnIndex >= 0) {
+        if (sortAscending) SortDirection.ASC else SortDirection.DESC
+    } else SortDirection.NONE
+
     SearchableTable(
         headers = headers,
         columnAligns = aligns,
         defaultSortColumn = -1,
         defaultSortDirection = SortDirection.NONE,
+        onSortToggle = { headerIndex ->
+            // headerIndex 0 is the empty action column, data columns start at 1
+            val dataColIndex = headerIndex - 1
+            if (dataColIndex >= 0) {
+                if (sortColumnIndex == dataColIndex) {
+                    sortAscending = !sortAscending
+                } else {
+                    sortColumnIndex = dataColIndex
+                    sortAscending = true
+                }
+            }
+        },
     ) {
         for ((flatIndex, row) in flatRows.withIndex()) {
             val selData = row.rowSelectionProvider(row.index)
-            val isHighlighted = selData != null && selection.hasSelection &&
-                selection.selectionStart == selData.offset &&
-                selection.selectionEnd == selData.offset + selData.size - 1
+            val isHighlighted = if (focusedFlatIndex >= 0) {
+                flatIndex == focusedFlatIndex
+            } else {
+                selData != null && selection.hasSelection &&
+                    selection.selectionStart == selData.offset &&
+                    selection.selectionEnd == selData.offset + selData.size - 1
+            }
 
             PanelTableRow(
                 isHighlighted = isHighlighted,
                 onClick = {
+                    focusedFlatIndex = flatIndex
                     if (row.hasChildren) {
                         if (row.isExpanded) {
                             expandedPaths.remove(row.treePath)
@@ -358,6 +409,26 @@ private fun TreeTableTabContent(
                         selection.activeIndex = selData.offset + selData.size - 1
                         selection.cursorIndex = selData.offset
                         scrollHexViewerTo(selData.offset)
+                    }
+                },
+                onSelect = {
+                    // Arrow up/down: scroll hex view without toggling expand/collapse
+                    focusedFlatIndex = flatIndex
+                    if (selData != null) {
+                        selection.anchorIndex = selData.offset
+                        selection.activeIndex = selData.offset + selData.size - 1
+                        selection.cursorIndex = selData.offset
+                        scrollHexViewerTo(selData.offset)
+                    }
+                },
+                onActivate = {
+                    // Left/right arrows: toggle expand/collapse
+                    if (row.hasChildren) {
+                        if (row.isExpanded) {
+                            expandedPaths.remove(row.treePath)
+                        } else {
+                            expandedPaths.add(row.treePath)
+                        }
                     }
                 },
             ) {
