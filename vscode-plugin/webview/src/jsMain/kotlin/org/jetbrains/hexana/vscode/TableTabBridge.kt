@@ -134,7 +134,10 @@ fun TableTabContent(
     selection: HexSelectionState,
 ) {
     descriptor.prologueText?.let { prologue ->
-        Div({ style { property("margin-bottom", "8px") } }) {
+        Div({ style {
+            property("margin-bottom", "8px")
+            property("font-size", "12px")
+        } }) {
             Text(prologue)
         }
     }

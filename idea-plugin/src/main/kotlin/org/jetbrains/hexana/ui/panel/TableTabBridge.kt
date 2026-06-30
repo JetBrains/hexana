@@ -19,6 +19,7 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.shared.CellValue
@@ -96,7 +97,7 @@ private fun TableTabContent(descriptor: TableTabDescriptor, state: HexViewStateH
     if (descriptor.prologueText != null || (descriptor.rowCount == 0 && descriptor.emptyMessage != null)) {
         Column(modifier = Modifier.fillMaxSize()) {
             descriptor.prologueText?.let {
-                Text(it, modifier = Modifier.padding(bottom = 8.dp))
+                Text(it, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp), fontSize = 13.sp)
             }
             if (descriptor.rowCount == 0) {
                 descriptor.emptyMessage?.let { Text(it) }
