@@ -211,7 +211,7 @@ class WasmProfilerTabsProvider : TableTabsProvider {
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> {
         if (provider !is WasmBinaryProvider) return emptyList()
         if (!provider.canProvideWasmModule()) return emptyList()
-        return listOf(monosTab(provider))
+        return listOfNotNull(monosTab(provider))
     }
 
     override fun groupedTabs(provider: BinaryProvider): List<GroupedTableTabDescriptor> {
@@ -222,9 +222,11 @@ class WasmProfilerTabsProvider : TableTabsProvider {
     }
 }
 
-private fun monosTab(provider: WasmBinaryProvider): TableTabDescriptor {
+private fun monosTab(provider: WasmBinaryProvider): TableTabDescriptor? {
     val monos: MonosResult? = provider.monosAnalysis
     val groups = monos?.groups ?: emptyList()
+
+    if (groups.isEmpty()) return null
 
     val importFuncCount = provider.importFuncCount
     val codeOffsets = provider.codeOffsets

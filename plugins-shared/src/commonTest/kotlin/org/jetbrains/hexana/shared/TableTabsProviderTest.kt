@@ -206,17 +206,6 @@ class TableTabsProviderTest {
     }
 
     @Test
-    fun profilerProviderReturnsMonosForEmptyModule() {
-        val provider = WasmBinaryProvider(buildEmptyWasm().toCommonByteBuffer())
-        val tabs = WasmProfilerTabsProvider().tableTabs(provider)
-        assertEquals(1, tabs.size, "Empty module should produce the Monos tab")
-        val monosTab = tabs[0]
-        assertEquals("Monos", monosTab.name)
-        assertEquals(0, monosTab.rowCount)
-        assertEquals("No monomorphizations detected", monosTab.emptyMessage)
-    }
-
-    @Test
     fun wasmProviderReturnsExportsTab() {
         val provider = WasmBinaryProvider(buildWasmWithExport().toCommonByteBuffer())
         val tabs = WasmTableTabsProvider().tableTabs(provider)
