@@ -15,16 +15,22 @@ private const val runConfigurationTerminationPollIntervalSeconds = 1
 
 internal data class HexanaRunConfigurationConsoleResult(
     val consoleOutput: String,
+    val terminationState: String,
+    val waitTimeout: Duration,
 )
 
 internal fun Driver.awaitRunConfigurationConsoleResult(
     timeout: Duration = defaultRunConfigurationTerminationTimeout,
 ): HexanaRunConfigurationConsoleResult {
-    waitForRunConfigurationProcessTermination(timeout)
-    return HexanaRunConfigurationConsoleResult(readRunConfigurationConsoleOutput())
+    val terminationState = waitForRunConfigurationProcessTermination(timeout)
+    return HexanaRunConfigurationConsoleResult(
+        consoleOutput = readRunConfigurationConsoleOutput(),
+        terminationState = terminationState,
+        waitTimeout = timeout,
+    )
 }
 
-private fun Driver.waitForRunConfigurationProcessTermination(timeout: Duration) {
+private fun Driver.waitForRunConfigurationProcessTermination(timeout: Duration): String {
     val project = singleProject()
     val runContentManager = getRunContentManager(project)
     var lastState = "no selected process content"
@@ -52,6 +58,8 @@ private fun Driver.waitForRunConfigurationProcessTermination(timeout: Duration) 
             t,
         )
     }
+
+    return lastState
 }
 
 private fun Driver.readRunConfigurationConsoleOutput(): String {
