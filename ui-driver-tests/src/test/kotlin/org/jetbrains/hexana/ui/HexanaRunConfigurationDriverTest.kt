@@ -9,19 +9,13 @@ import com.intellij.driver.sdk.ui.components.common.ideFrame
 import com.intellij.ide.starter.driver.engine.runIdeWithDriver
 import com.intellij.tools.ide.util.common.logOutput
 import org.jetbrains.hexana.ui.framework.DebugTestHelperRef
+import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationRuntimePreflight
 import org.jetbrains.hexana.ui.framework.NodeJsDebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.NodeJsRunConfigHelperRef
 import org.jetbrains.hexana.ui.framework.RunConfigHelperRef
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import java.io.File
-import java.net.URI
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.StandardCopyOption
-import java.util.zip.ZipInputStream
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -50,179 +44,6 @@ class HexanaRunConfigurationDriverTest {
         private const val DEBUG_DWARF_WASM_FILE = "debug-add.wasm"
         private const val DEBUG_RUST_SOURCE_FILE = "debug_add.rs"
         private const val BREAKPOINT_LINE = 10 // `let sum = a + b;`
-
-        private lateinit var wasmtimePathForTests: String
-        private lateinit var nodePathForTests: String
-
-        @JvmStatic
-        @BeforeAll
-        fun ensureRuntimes() {
-            ensureWasmtime()
-            ensureNodeJs()
-        }
-
-        private fun ensureWasmtime() {
-            val wasmtimePath = resolveWasmtimePath()
-            if (wasmtimePath != null) {
-                logOutput("Wasmtime already available at: $wasmtimePath")
-                wasmtimePathForTests = wasmtimePath
-                return
-            }
-            logOutput("Wasmtime not found, downloading...")
-            downloadWasmtime()
-            val verifiedPath = resolveWasmtimePath()
-                ?: error("Wasmtime installation failed: not found after download")
-            logOutput("Wasmtime installed at: $verifiedPath")
-            wasmtimePathForTests = verifiedPath
-        }
-
-        private fun ensureNodeJs() {
-            val nodePath = resolveNodePath()
-            if (nodePath != null) {
-                logOutput("Node.js already available at: $nodePath")
-                nodePathForTests = nodePath
-                return
-            }
-            error("Node.js not found. Please install Node.js to run Node.js debug tests.")
-        }
-
-        private fun resolveNodePath(): String? {
-            val candidates = listOf(
-                "/usr/local/bin/node",
-                "/usr/bin/node",
-            )
-            for (candidate in candidates) {
-                if (File(candidate).exists()) return candidate
-            }
-            return try {
-                val lookupCommand = if (isWindows()) "where" else "which"
-                val process = ProcessBuilder(lookupCommand, "node")
-                    .redirectErrorStream(true)
-                    .start()
-                val output = process.inputStream.bufferedReader().readText().trim()
-                process.waitFor()
-                val firstPath = output.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
-                if (process.exitValue() == 0 && firstPath != null && File(firstPath).exists()) firstPath else null
-            } catch (_: Exception) {
-                null
-            }
-        }
-
-        private fun resolveWasmtimePath(): String? {
-            val defaultPath = defaultWasmtimePath()
-            if (File(defaultPath).exists()) return defaultPath
-            return try {
-                val lookupCommand = if (isWindows()) "where" else "which"
-                val process = ProcessBuilder(lookupCommand, "wasmtime")
-                    .redirectErrorStream(true)
-                    .start()
-                val output = process.inputStream.bufferedReader().readText().trim()
-                process.waitFor()
-                val firstPath = output.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
-                if (process.exitValue() == 0 && firstPath != null && File(firstPath).exists()) firstPath else null
-            } catch (_: Exception) {
-                null
-            }
-        }
-
-        private fun defaultWasmtimePath(): String {
-            val home = System.getProperty("user.home")
-            val executableName = if (isWindows()) "wasmtime.exe" else "wasmtime"
-            return "$home/.wasmtime/bin/$executableName"
-        }
-
-        private fun isWindows(): Boolean {
-            return System.getProperty("os.name").contains("windows", ignoreCase = true)
-        }
-
-        private fun downloadWasmtime() {
-            val arch = System.getProperty("os.arch").let {
-                when {
-                    it.contains("aarch64") || it.contains("arm64") -> "aarch64"
-                    it.contains("x86_64") || it.contains("amd64") -> "x86_64"
-                    else -> it
-                }
-            }
-            val os = System.getProperty("os.name").lowercase().let {
-                when {
-                    it.contains("mac") || it.contains("darwin") -> "macos"
-                    it.contains("linux") -> "linux"
-                    it.contains("windows") -> "windows"
-                    else -> error("Unsupported OS: $it")
-                }
-            }
-
-            val version = "v44.0.0"
-            val ext = if (os == "windows") "zip" else "tar.xz"
-            val fileName = "wasmtime-$version-$arch-$os.$ext"
-            val url = "https://github.com/bytecodealliance/wasmtime/releases/download/$version/$fileName"
-
-            logOutput("Downloading wasmtime from: $url")
-            val tempDir = Files.createTempDirectory("wasmtime-download")
-            val archiveFile = tempDir.resolve(fileName)
-
-            URI(url).toURL().openStream().use { input ->
-                Files.copy(input, archiveFile)
-            }
-
-            val home = System.getProperty("user.home")
-            val wasmtimeHome = Path.of(home, ".wasmtime")
-            val binDir = wasmtimeHome.resolve("bin")
-            Files.createDirectories(binDir)
-
-            if (ext == "tar.xz") {
-                val process = ProcessBuilder("tar", "xf", archiveFile.toString(), "-C", tempDir.toString())
-                    .redirectErrorStream(true)
-                    .start()
-                process.waitFor()
-                require(process.exitValue() == 0) {
-                    "Failed to extract wasmtime archive: ${process.inputStream.bufferedReader().readText()}"
-                }
-
-                val extractedDir = Files.list(tempDir)
-                    .filter { Files.isDirectory(it) && it.fileName.toString().startsWith("wasmtime-") }
-                    .findFirst()
-                    .orElseThrow { error("Extracted wasmtime directory not found") }
-
-                val wasmtimeBin = extractedDir.resolve("wasmtime")
-                val targetBin = binDir.resolve("wasmtime")
-                Files.copy(wasmtimeBin, targetBin, StandardCopyOption.REPLACE_EXISTING)
-                targetBin.toFile().setExecutable(true)
-            } else {
-                unzip(archiveFile, tempDir)
-
-                val extractedDir = Files.list(tempDir)
-                    .filter { Files.isDirectory(it) && it.fileName.toString().startsWith("wasmtime-") }
-                    .findFirst()
-                    .orElseThrow { error("Extracted wasmtime directory not found") }
-
-                val wasmtimeBin = extractedDir.resolve("wasmtime.exe")
-                val targetBin = binDir.resolve("wasmtime.exe")
-                Files.copy(wasmtimeBin, targetBin, StandardCopyOption.REPLACE_EXISTING)
-            }
-
-            tempDir.toFile().deleteRecursively()
-        }
-
-        private fun unzip(archiveFile: Path, destinationDir: Path) {
-            val normalizedDestination = destinationDir.toAbsolutePath().normalize()
-            ZipInputStream(Files.newInputStream(archiveFile)).use { zipInput ->
-                generateSequence { zipInput.nextEntry }.forEach { entry ->
-                    val outputPath = normalizedDestination.resolve(entry.name).normalize()
-                    require(outputPath.startsWith(normalizedDestination)) {
-                        "Refusing to extract ZIP entry outside destination: ${entry.name}"
-                    }
-
-                    if (entry.isDirectory) {
-                        Files.createDirectories(outputPath)
-                    } else {
-                        Files.createDirectories(outputPath.parent)
-                        Files.copy(zipInput, outputPath, StandardCopyOption.REPLACE_EXISTING)
-                    }
-                    zipInput.closeEntry()
-                }
-            }
-        }
     }
 
     @Test
@@ -398,6 +219,7 @@ class HexanaRunConfigurationDriverTest {
 
     @Test
     fun debugDwarfWasmBreakpointAndInspectVariablesWithNodeJs() {
+        val nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs()
         val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-dwarf-breakpoint-nodejs")
 
         context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
@@ -427,7 +249,7 @@ class HexanaRunConfigurationDriverTest {
                     nodeOptions = "",
                     exportName = "add",
                     programArgs = "3 7",
-                    nodePath = nodePathForTests,
+                    nodePath = nodePath,
                 )
 
                 logOutput("Node.js DWARF breakpoint debug result:\n$result")
@@ -487,6 +309,7 @@ class HexanaRunConfigurationDriverTest {
 
     @Test
     fun debugDwarfWasmBreakpointAndInspectVariables() {
+        val wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime()
         val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-dwarf-breakpoint")
 
         context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
@@ -516,7 +339,7 @@ class HexanaRunConfigurationDriverTest {
                     wasmtimeOptions = "--invoke add",
                     exportName = "add",
                     programArgs = "3 7",
-                    wasmtimePath = wasmtimePathForTests,
+                    wasmtimePath = wasmtimePath,
                 )
 
                 logOutput("DWARF breakpoint debug result:\n$result")
@@ -582,6 +405,7 @@ class HexanaRunConfigurationDriverTest {
         exportName: String = "",
         programArgs: String = "",
     ) {
+        val wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime()
         val project = driver.singleProject()
         val helper = driver.utility(RunConfigHelperRef::class)
         helper.createAndRunWasmtime(
@@ -591,7 +415,7 @@ class HexanaRunConfigurationDriverTest {
             wasmtimeOptions,
             exportName,
             programArgs,
-            wasmtimePathForTests,
+            wasmtimePath,
         )
     }
 
@@ -603,6 +427,7 @@ class HexanaRunConfigurationDriverTest {
         exportName: String = "",
         programArgs: String = "",
     ) {
+        val nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs()
         val project = driver.singleProject()
         val helper = driver.utility(NodeJsRunConfigHelperRef::class)
         helper.createAndRunNodeJs(
@@ -612,7 +437,7 @@ class HexanaRunConfigurationDriverTest {
             nodeOptions,
             exportName,
             programArgs,
-            nodePathForTests,
+            nodePath,
         )
     }
 
@@ -624,6 +449,7 @@ class HexanaRunConfigurationDriverTest {
         exportName: String = "",
         programArgs: String = "",
     ) {
+        val nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs()
         val project = driver.singleProject()
         val helper = driver.utility(NodeJsRunConfigHelperRef::class)
         helper.createAndDebugNodeJs(
@@ -633,7 +459,7 @@ class HexanaRunConfigurationDriverTest {
             nodeOptions,
             exportName,
             programArgs,
-            nodePathForTests,
+            nodePath,
         )
     }
 
@@ -645,6 +471,7 @@ class HexanaRunConfigurationDriverTest {
         exportName: String = "",
         programArgs: String = "",
     ) {
+        val wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime()
         val project = driver.singleProject()
         val helper = driver.utility(RunConfigHelperRef::class)
         helper.createAndDebugWasmtime(
@@ -654,7 +481,7 @@ class HexanaRunConfigurationDriverTest {
             wasmtimeOptions,
             exportName,
             programArgs,
-            wasmtimePathForTests,
+            wasmtimePath,
         )
     }
 
