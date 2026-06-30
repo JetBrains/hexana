@@ -663,7 +663,6 @@ private fun BinaryProvider.resolvePanels(
         is WasmBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
                 listOf(
-                    Panel("Monos") { WasmPanelMonos(this, state) },
                     Panel("Garbage") { WasmPanelGarbage(this, state) },
                     Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                     Panel("Wat") { WasmPanelWat(this, state) },
@@ -701,7 +700,6 @@ private fun BinaryProvider.resolvePanels(
         is WasmBinaryProvider -> {
             if (canProvideWasmModule()) {
                 listOf(
-                    Panel("Monos") { WasmPanelMonos(this, state) },
                     Panel("Garbage") { WasmPanelGarbage(this, state) },
                     Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                     Panel("WAT (virtualized)") {

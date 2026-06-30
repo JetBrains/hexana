@@ -2,6 +2,7 @@ package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.wasm.analysis.MonosResult
 
 /**
  * [TableTabsProvider] for core Wasm binaries.
@@ -197,6 +198,73 @@ private fun customTab(provider: WasmBinaryProvider): TableTabDescriptor? {
             val section = customSections.getOrNull(index)
             section?.let { RowSelectionData(it.sectionOffset, it.contentSize) }
         },
+    )
+}
+
+/**
+ * [TableTabsProvider] for Wasm profiler tabs (monomorphization analysis).
+ */
+class WasmProfilerTabsProvider : TableTabsProvider {
+    override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> {
+        if (provider !is WasmBinaryProvider) return emptyList()
+        if (!provider.canProvideWasmModule()) return emptyList()
+        return listOf(monosTab(provider))
+    }
+}
+
+private fun monosTab(provider: WasmBinaryProvider): TableTabDescriptor {
+    val monos: MonosResult? = provider.monosAnalysis
+    val groups = monos?.groups ?: emptyList()
+
+    val importFuncCount = provider.importFuncCount
+    val codeOffsets = provider.codeOffsets
+
+    return TableTabDescriptor(
+        name = "Monos",
+        columns = listOf(
+            ColumnDescriptor(
+                name = "Base Name",
+                widthBehavior = ColumnWidth.Measured(UNIVERSAL_NAME_MEASURE),
+            ) { index ->
+                val g = groups[index]
+                CellValue(
+                    g.baseName,
+                    tooltip = g.baseName.takeIf { it.length > UNIVERSAL_NAME_MEASURE.length },
+                )
+            },
+            ColumnDescriptor(
+                name = "Count",
+                widthBehavior = ColumnWidth.Measured("Count"),
+            ) { index ->
+                CellValue(groups[index].count)
+            },
+            ColumnDescriptor(
+                name = "Total Size",
+                widthBehavior = ColumnWidth.Measured("00000.0 KB"),
+            ) { index ->
+                val g = groups[index]
+                CellValue(g.totalSize, formatSize(g.totalSize))
+            },
+            ColumnDescriptor(
+                name = "Avg Size",
+                widthBehavior = ColumnWidth.Fill(),
+            ) { index ->
+                val g = groups[index]
+                CellValue(g.avgSize, formatSize(g.avgSize))
+            },
+        ),
+        rowCount = groups.size,
+        rowSelectionProvider = { rowIndex ->
+            val group = groups[rowIndex]
+            val firstFuncIdx = group.funcIndices.firstOrNull()
+            if (firstFuncIdx != null) {
+                val codeIdx = firstFuncIdx - importFuncCount
+                codeOffsets.getOrNull(codeIdx)?.let { entry ->
+                    RowSelectionData(entry.offset, entry.size)
+                }
+            } else null
+        },
+        emptyMessage = "No monomorphizations detected",
     )
 }
 

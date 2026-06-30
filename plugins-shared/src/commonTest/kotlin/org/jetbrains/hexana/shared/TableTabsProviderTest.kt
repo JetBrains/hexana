@@ -194,6 +194,28 @@ class TableTabsProviderTest {
         assertTrue(tabs.isEmpty(), "Empty module should produce no table tabs")
     }
 
+    // -----------------------------------------------------------------------
+    // WasmProfilerTabsProvider tests
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun profilerProviderReturnsEmptyForGenericBinary() {
+        val provider = GenericBinaryProvider(byteArrayOf(0, 1, 2, 3).toCommonByteBuffer())
+        val tabs = WasmProfilerTabsProvider().tableTabs(provider)
+        assertTrue(tabs.isEmpty())
+    }
+
+    @Test
+    fun profilerProviderReturnsMonosForEmptyModule() {
+        val provider = WasmBinaryProvider(buildEmptyWasm().toCommonByteBuffer())
+        val tabs = WasmProfilerTabsProvider().tableTabs(provider)
+        assertEquals(1, tabs.size, "Empty module should produce the Monos tab")
+        val monosTab = tabs[0]
+        assertEquals("Monos", monosTab.name)
+        assertEquals(0, monosTab.rowCount)
+        assertEquals("No monomorphizations detected", monosTab.emptyMessage)
+    }
+
     @Test
     fun wasmProviderReturnsExportsTab() {
         val provider = WasmBinaryProvider(buildWasmWithExport().toCommonByteBuffer())
