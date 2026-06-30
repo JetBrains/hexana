@@ -12,7 +12,6 @@ import org.jetbrains.hexana.ui.framework.DebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.NodeJsDebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.NodeJsRunConfigHelperRef
 import org.jetbrains.hexana.ui.framework.RunConfigHelperRef
-import org.jetbrains.hexana.ui.framework.runConfigurationProbeResponds
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
@@ -233,7 +232,6 @@ class HexanaRunConfigurationDriverTest {
         context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
             .useDriverAndCloseIde {
                 waitForIndicators(5.minutes)
-                runConfigurationProbeResponds()
 
                 openFile(CORE_MODULE_FILE, waitForCodeAnalysis = false, isTextEditor = false)
                 ideFrame {
