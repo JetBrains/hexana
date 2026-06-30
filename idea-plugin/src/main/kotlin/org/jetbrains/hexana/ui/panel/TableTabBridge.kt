@@ -6,12 +6,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -92,6 +94,7 @@ private fun TableTabTable(descriptor: TableTabDescriptor, state: HexViewStateHol
                 title = col.name,
                 modifier = columnLayouts[i].modifier,
                 width = columnLayouts[i].width,
+                weight = columnLayouts[i].weight,
             ) { index ->
                 val cell = col.cellProvider(index)
                 TableCellValue(cell.value, cell.representation, cell.tooltip)
@@ -173,8 +176,27 @@ private class FlatRow(
 private fun flattenTree(
     descriptor: TableTabDescriptor,
     expandedPaths: Set<List<Int>>,
+    sortColumnIndex: Int = -1,
+    sortAscending: Boolean = true,
 ): List<FlatRow> {
     val result = mutableListOf<FlatRow>()
+
+    fun sortedIndices(rowCount: Int, columns: List<ColumnDescriptor>): List<Int> {
+        val indices = (0 until rowCount).toMutableList()
+        if (sortColumnIndex < 0 || sortColumnIndex >= columns.size) return indices
+        val col = columns[sortColumnIndex]
+        indices.sortWith { a, b ->
+            val va = col.cellProvider(a).value
+            val vb = col.cellProvider(b).value
+            val cmp = when {
+                va is Int && vb is Int -> va.compareTo(vb)
+                va is String && vb is String -> va.compareTo(vb)
+                else -> 0
+            }
+            if (sortAscending) cmp else -cmp
+        }
+        return indices
+    }
 
     fun addLevel(
         rowCount: Int,
@@ -184,7 +206,8 @@ private fun flattenTree(
         depth: Int,
         parentPath: List<Int>,
     ) {
-        for (i in 0 until rowCount) {
+        val order = if (depth == 0) sortedIndices(rowCount, columns) else (0 until rowCount).toList()
+        for (i in order) {
             val path = parentPath + i
             val children = childrenProvider?.invoke(i)
             val hasChildren = children != null && children.rowCount > 0
@@ -215,8 +238,10 @@ private const val CHEVRON_PLACEHOLDER = "  "
 @Composable
 private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStateHolder) {
     val expandedPaths = remember(descriptor) { mutableStateListOf<List<Int>>() }
-    val flatRows = remember(descriptor, expandedPaths.toList()) {
-        flattenTree(descriptor, expandedPaths.toSet())
+    var sortColumnIndex by remember { mutableStateOf(descriptor.defaultSortColumn ?: -1) }
+    var sortAscending by remember { mutableStateOf(descriptor.defaultSortAscending) }
+    val flatRows = remember(descriptor, expandedPaths.toList(), sortColumnIndex, sortAscending) {
+        flattenTree(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending)
     }
 
     val textMeasurer = rememberTextMeasurer()
@@ -237,6 +262,7 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
                 title = col.name,
                 modifier = layout.modifier,
                 width = layout.width,
+                weight = layout.weight,
             ) { flatIndex ->
                 val row = flatRows[flatIndex]
                 val cell = row.columns[colIndex].cellProvider(row.index)
@@ -260,8 +286,20 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
     Table(
         columns = columns,
         dataCount = flatRows.size,
-        defaultSortColumn = descriptor.defaultSortColumn ?: -1,
-        defaultSortAscending = descriptor.defaultSortAscending,
+        defaultSortColumn = sortColumnIndex,
+        defaultSortAscending = sortAscending,
+        showIdColumn = false,
+        onSortChanged = { colIdx, asc ->
+            sortColumnIndex = colIdx
+            sortAscending = asc
+        },
+        onRowSelect = { flatIndex ->
+            val row = flatRows[flatIndex]
+            if (!row.hasChildren) {
+                val selection = row.rowSelectionProvider(row.index) ?: return@Table
+                state.scrollHexViewTo(selection.offset, selection.size)
+            }
+        },
         onRow = { flatIndex ->
             val row = flatRows[flatIndex]
             if (row.hasChildren) {
@@ -285,7 +323,7 @@ private fun ColumnWidth.toColumnLayout(
     rowCount: Int,
     cellProvider: (Int) -> CellValue<*>,
 ): ColumnLayout = when (this) {
-    is ColumnWidth.Fill -> ColumnLayout(modifier = Modifier.fillMaxWidth(fraction))
+    is ColumnWidth.Fill -> ColumnLayout(weight = fraction)
     is ColumnWidth.Measured -> ColumnLayout(
         width = textMeasurer.measureWidthMonospace(widestSample(title, sample)),
     )
@@ -299,6 +337,7 @@ private fun ColumnWidth.toColumnLayout(
 private data class ColumnLayout(
     val modifier: Modifier = Modifier,
     val width: Dp? = null,
+    val weight: Float? = null,
 )
 
 private fun widestSample(

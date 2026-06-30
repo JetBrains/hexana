@@ -603,7 +603,6 @@ internal fun rebuildProviderFromBytes(original: BinaryProvider, newBytes: ByteAr
 
 private fun NativeBinaryProvider.commonNativePanels(state: HexViewStateHolder): List<Panel> {
     return listOfNotNull(
-        Panel("Top") { PanelSize(this, state) }.takeIf { this.sizeAnalysis != null },
         Panel("SBOM") { CycloneDxSbomPanel(this, state) }.takeIf { this.nativeImageInfo?.sbom != null },
         Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
         Panel("Disassembly (virtualized)") { NativeDisassemblyPanelVirtualized(this, state) }
@@ -660,13 +659,10 @@ private fun BinaryProvider.resolvePanels(
         is ArchiveBinaryProvider -> listOf(
             Panel("Members") { ArchiveMembersPanel(this, state, archiveName = archiveName) },
         )
-        is NativeBinaryProvider -> listOfNotNull(
-            Panel("Top") { PanelSize(this, state) }.takeIf { this.sizeAnalysis != null },
-        )
+        is NativeBinaryProvider -> emptyList()
         is WasmBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
                 listOf(
-                    Panel("Top") { PanelSize(this, state) },
                     Panel("Monos") { WasmPanelMonos(this, state) },
                     Panel("Garbage") { WasmPanelGarbage(this, state) },
                     Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
@@ -695,7 +691,6 @@ private fun BinaryProvider.resolvePanels(
         is WasmComponentBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
                 listOf(
-                    Panel("Top") { PanelSize(this, state) },
                     Panel("Wat") { WasmPanelWat(this, state) },
                     Panel("WAT (virtualized)") { WasmComponentPanelWatVirtualized(this, state) },
                 )
@@ -706,7 +701,6 @@ private fun BinaryProvider.resolvePanels(
         is WasmBinaryProvider -> {
             if (canProvideWasmModule()) {
                 listOf(
-                    Panel("Top") { PanelSize(this, state) },
                     Panel("Monos") { WasmPanelMonos(this, state) },
                     Panel("Garbage") { WasmPanelGarbage(this, state) },
                     Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
@@ -728,7 +722,6 @@ private fun BinaryProvider.resolvePanels(
         is WasmComponentBinaryProvider -> {
             if (canProvideWasmModule()) {
                 listOf(
-                    Panel("Top") { PanelSize(this, state) },
                     Panel("WAT (virtualized)") { WasmComponentPanelWatVirtualized(this, state) },
                 )
             } else emptyList()

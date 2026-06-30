@@ -194,6 +194,7 @@ object TableTabsProviderRegistry {
             WasmComponentTableTabsProvider(),
             WasmTableTabsProvider(),
             NativeTableTabsProvider(),
+            SizeTableTabsProvider(),
         )
     }
 }

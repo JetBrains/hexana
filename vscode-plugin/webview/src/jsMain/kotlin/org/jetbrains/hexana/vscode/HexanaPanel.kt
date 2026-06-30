@@ -18,7 +18,6 @@ import org.w3c.dom.events.Event
  */
 private enum class FixedTab(val label: String) {
     Summary("Sections"),
-    Size("Top"),
     Monos("Monos"),
     Garbage("Garbage"),
     Wat("WAT"),
@@ -65,13 +64,6 @@ fun HexanaPanel(
                 TableTabContent(d, selection)
             } }
             addAll(commonTabs.map { tt -> PanelTab(tt.name) { sel -> tt.content(sel) } })
-
-            // Size tab (shown whenever the provider supports size analysis)
-            if (provider.sizeAnalysis != null) {
-                add(PanelTab(FixedTab.Size.label) { sel ->
-                    SizeTabContent(provider, sel)
-                })
-            }
 
             // Monos and Garbage (core Wasm only)
             if (provider is WasmBinaryProvider) {

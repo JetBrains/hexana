@@ -40,6 +40,7 @@ class TableColumn(
     val title: String,
     val modifier: Modifier = Modifier,
     val width: Dp? = null,
+    val weight: Float? = null,
     val dataProvider: (index: Int) -> TableCellValue<*>
 )
 
@@ -53,6 +54,9 @@ fun Table(
     actionColumnWidth: Dp = 0.dp,
     defaultSortColumn: Int = -1,
     defaultSortAscending: Boolean = true,
+    showIdColumn: Boolean = true,
+    onSortChanged: ((columnIndex: Int, ascending: Boolean) -> Unit)? = null,
+    onRowSelect: ((id: Int) -> Unit)? = null,
     rowColor: (id: Int) -> Color? = { null },
     onRow: (id: Int) -> Unit = {},
 ) {
@@ -62,8 +66,8 @@ fun Table(
         }
     }
 
-    var sortAsc: Boolean by remember { mutableStateOf(defaultSortAscending) }
-    var sortIndex: Int by remember { mutableStateOf(defaultSortColumn) }
+    var sortAsc: Boolean by remember(defaultSortAscending) { mutableStateOf(defaultSortAscending) }
+    var sortIndex: Int by remember(defaultSortColumn) { mutableStateOf(defaultSortColumn) }
 
     var selectedOriginalIndex: Int? by remember { mutableStateOf(null) }
     var hoveredOriginalIndex: Int? by remember { mutableStateOf(null) }
@@ -100,7 +104,11 @@ fun Table(
             }
         }
 
-        if (sortIndex == -1) {
+        // When onSortChanged is provided, the caller handles sorting externally
+        // (e.g. tree tables sort in flattenTree to preserve parent-child structure).
+        if (onSortChanged != null) {
+            filtered
+        } else if (sortIndex == -1) {
             if (sortAsc) {
                 filtered.sortedBy { (id, _) -> id }
             } else {
@@ -132,10 +140,10 @@ fun Table(
     }
 
     val textMeasurer = rememberTextMeasurer()
-    val idColumnWidth = maxOf(
+    val idColumnWidth = if (showIdColumn) maxOf(
         textMeasurer.measureWidthMonospace(dataCount, 4),
         textMeasurer.measureWidthMonospace("ID ▾"),
-    )
+    ) else 0.dp
 
 
     Column(modifier = Modifier
@@ -196,9 +204,19 @@ fun Table(
                 if (newIndex != null && newIndex != currentIndex && viewData.isNotEmpty()) {
                     val (newId, _) = viewData[newIndex]
                     selectedOriginalIndex = newId
-                    onRow(newId)
+                    if (onRowSelect != null) {
+                        onRowSelect(newId)
+                    } else {
+                        onRow(newId)
+                    }
                     scope.launch {
                         lazyListState.animateScrollToItem(newIndex)
+                    }
+                }
+
+                if (event.key == Key.DirectionLeft || event.key == Key.DirectionRight) {
+                    selectedOriginalIndex?.let { id ->
+                        onRow(id)
                     }
                 }
 
@@ -293,36 +311,37 @@ fun Table(
                     else -> "▾"
                 }
 
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 4.dp)
-                        .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
-                        .width(idColumnWidth)
-                        .clickable {
-                            if (sortIndex == -1) {
-                                sortAsc = !sortAsc
+                if (showIdColumn) {
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
+                            .width(idColumnWidth)
+                            .clickable {
+                                val newAsc = if (sortIndex == -1) !sortAsc else sortAsc
+                                sortAsc = newAsc
+                                sortIndex = -1
+                                onSortChanged?.invoke(-1, newAsc)
                             }
+                    ) {
+                        Row {
+                            Text(
+                                "ID",
+                                style = TextStyle(
+                                    color = HexanaTheme.textColor,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            )
 
-                            sortIndex = -1
+                            Text(
+                                sortSelectorText,
+                                modifier = Modifier.padding(start = 4.dp),
+                                style = TextStyle(
+                                    color = selectionColor,
+                                    fontFamily = FontFamily.Monospace,
+                                )
+                            )
                         }
-                ) {
-                    Row {
-                        Text(
-                            "ID",
-                            style = TextStyle(
-                                color = HexanaTheme.textColor,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        )
-
-                        Text(
-                            sortSelectorText,
-                            modifier = Modifier.padding(start = 4.dp),
-                            style = TextStyle(
-                                color = selectionColor,
-                                fontFamily = FontFamily.Monospace,
-                            )
-                        )
                     }
                 }
 
@@ -332,12 +351,13 @@ fun Table(
                         .padding(horizontal = 4.dp)
                         .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
                         .clickable {
-                            if (sortIndex == columnIndex) {
-                                sortAsc = !sortAsc
-                            }
+                            val newAsc = if (sortIndex == columnIndex) !sortAsc else sortAsc
+                            sortAsc = newAsc
                             sortIndex = columnIndex
+                            onSortChanged?.invoke(columnIndex, newAsc)
                         }
                         .then(column.widthModifier())
+                        .then(weightModifier(column))
                         .then(column.modifier)) {
                         val selectionColor = when {
                             columnIndex == sortIndex -> HexanaTheme.textColor
@@ -432,13 +452,15 @@ fun Table(
                             modifier = Modifier.weight(1f),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            ContextMenuArea(items = { onRowContextMenu(id) }) {
-                                Box(modifier = Modifier.padding(horizontal = 4.dp).width(idColumnWidth)) {
-                                    Text(
-                                        id.toString(),
-                                        style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
-                                        lineHeight = TextUnit(1f, TextUnitType.Em)
-                                    )
+                            if (showIdColumn) {
+                                ContextMenuArea(items = { onRowContextMenu(id) }) {
+                                    Box(modifier = Modifier.padding(horizontal = 4.dp).width(idColumnWidth)) {
+                                        Text(
+                                            id.toString(),
+                                            style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
+                                            lineHeight = TextUnit(1f, TextUnitType.Em)
+                                        )
+                                    }
                                 }
                             }
 
@@ -447,27 +469,29 @@ fun Table(
                                 val text = tableCellValue.representation
                                 val tooltip = tableCellValue.tooltip
 
-                                ContextMenuArea(items = { onRowContextMenu(id) }) {
-                                    Box(modifier = Modifier.padding(horizontal = 4.dp).then(column.widthModifier()).then(column.modifier)) {
-                                        val textComponent = @Composable {
-                                            Text(
-                                                text,
-                                                style = TextStyle(
-                                                    color = HexanaTheme.textColor,
-                                                    fontFamily = FontFamily.Monospace
-                                                ),
-                                                lineHeight = TextUnit(1f, TextUnitType.Em),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
+                                Box(modifier = Modifier.then(weightModifier(column))) {
+                                    ContextMenuArea(items = { onRowContextMenu(id) }) {
+                                        Box(modifier = Modifier.padding(horizontal = 4.dp).then(column.widthModifier()).then(column.modifier)) {
+                                            val textComponent = @Composable {
+                                                Text(
+                                                    text,
+                                                    style = TextStyle(
+                                                        color = HexanaTheme.textColor,
+                                                        fontFamily = FontFamily.Monospace
+                                                    ),
+                                                    lineHeight = TextUnit(1f, TextUnitType.Em),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
 
-                                        if (tooltip != null) {
-                                            Tooltip(tooltip = { Text(tooltip) }) {
+                                            if (tooltip != null) {
+                                                Tooltip(tooltip = { Text(tooltip) }) {
+                                                    textComponent()
+                                                }
+                                            } else {
                                                 textComponent()
                                             }
-                                        } else {
-                                            textComponent()
                                         }
                                     }
                                 }
@@ -486,6 +510,11 @@ fun Table(
 private fun TableColumn.widthModifier(): Modifier {
     val width = width ?: return Modifier
     return Modifier.width(width)
+}
+
+private fun RowScope.weightModifier(column: TableColumn): Modifier {
+    val weight = column.weight ?: return Modifier
+    return Modifier.weight(weight)
 }
 
 

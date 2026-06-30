@@ -3,7 +3,7 @@ package org.jetbrains.hexana.shared
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import kotlin.math.roundToInt
 
-private fun formatOneDecimal(value: Double): String {
+internal fun formatOneDecimal(value: Double): String {
     val rounded = (value * 10).roundToInt()
     return "${rounded / 10}.${rounded % 10}"
 }

@@ -318,13 +318,11 @@ private fun TreeTableTabContent(
 
     val headers = buildList {
         add("")
-        add("ID")
         descriptor.columns.forEach { add(it.name) }
     }
 
     val aligns = buildList {
         add("center")
-        add("right")
         descriptor.columns.forEach { col ->
             when (col.widthBehavior) {
                 is ColumnWidth.Fill -> add("left")
@@ -365,11 +363,6 @@ private fun TreeTableTabContent(
             ) {
                 // Action column placeholder
                 Td({ classes("cell-id"); style { property("width", "12px") } }) {}
-
-                // ID column
-                Td({ classes("cell-id") }) {
-                    Text(flatIndex.toString())
-                }
 
                 // Data columns
                 for ((colIndex, col) in descriptor.columns.withIndex()) {
