@@ -1,7 +1,6 @@
 package org.jetbrains.hexana.ui
 
 import com.intellij.driver.client.Driver
-import com.intellij.driver.client.Remote
 import com.intellij.driver.sdk.*
 import com.intellij.driver.sdk.ui.UiText.Companion.asString
 import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
@@ -9,6 +8,11 @@ import com.intellij.driver.sdk.ui.components.common.editorTabs
 import com.intellij.driver.sdk.ui.components.common.ideFrame
 import com.intellij.ide.starter.driver.engine.runIdeWithDriver
 import com.intellij.tools.ide.util.common.logOutput
+import org.jetbrains.hexana.ui.framework.DebugTestHelperRef
+import org.jetbrains.hexana.ui.framework.NodeJsDebugTestHelperRef
+import org.jetbrains.hexana.ui.framework.NodeJsRunConfigHelperRef
+import org.jetbrains.hexana.ui.framework.RunConfigHelperRef
+import org.jetbrains.hexana.ui.framework.runConfigurationProbeResponds
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Tag
@@ -41,7 +45,6 @@ import kotlin.time.Duration.Companion.seconds
 class HexanaRunConfigurationDriverTest {
 
     companion object {
-        private const val HEXANA_PLUGIN_ID = "org.jetbrains.hexana"
         private const val CORE_MODULE_FILE = "hello_wasi.wasm"
         private const val ADD_MODULE_FILE = "add.wasm"
         private const val COMPONENT_MODULE_FILE = "hello_component.wasm"
@@ -230,6 +233,7 @@ class HexanaRunConfigurationDriverTest {
         context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
             .useDriverAndCloseIde {
                 waitForIndicators(5.minutes)
+                runConfigurationProbeResponds()
 
                 openFile(CORE_MODULE_FILE, waitForCodeAnalysis = false, isTextEditor = false)
                 ideFrame {
@@ -679,93 +683,4 @@ class HexanaRunConfigurationDriverTest {
         return output
     }
 
-    // ---- Remote stubs ----
-
-    @Remote(
-        "org.jetbrains.hexana.run.WasmRunConfigTestHelper",
-        plugin = HEXANA_PLUGIN_ID,
-    )
-    interface RunConfigHelperRef {
-        fun createAndRunWasmtime(
-            project: com.intellij.driver.sdk.Project,
-            wasmFileName: String,
-            engine: String,
-            wasmtimeOptions: String,
-            exportName: String,
-            programArgs: String,
-            wasmtimePath: String,
-        )
-
-        fun createAndDebugWasmtime(
-            project: com.intellij.driver.sdk.Project,
-            wasmFileName: String,
-            engine: String,
-            wasmtimeOptions: String,
-            exportName: String,
-            programArgs: String,
-            wasmtimePath: String,
-        )
-    }
-
-    @Remote(
-        "org.jetbrains.hexana.run.WasmRunConfigTestHelper",
-        plugin = HEXANA_PLUGIN_ID,
-    )
-    interface NodeJsRunConfigHelperRef {
-        fun createAndRunNodeJs(
-            project: com.intellij.driver.sdk.Project,
-            wasmFileName: String,
-            engine: String,
-            nodeOptions: String,
-            exportName: String,
-            programArgs: String,
-            nodePath: String,
-        )
-
-        fun createAndDebugNodeJs(
-            project: com.intellij.driver.sdk.Project,
-            wasmFileName: String,
-            engine: String,
-            nodeOptions: String,
-            exportName: String,
-            programArgs: String,
-            nodePath: String,
-        )
-    }
-
-    @Remote(
-        "org.jetbrains.hexana.run.WasmRunConfigTestHelper",
-        plugin = HEXANA_PLUGIN_ID,
-    )
-    interface NodeJsDebugTestHelperRef {
-        fun debugNodeJsWithBreakpointAndInspectVariables(
-            project: com.intellij.driver.sdk.Project,
-            wasmFileName: String,
-            sourceFileName: String,
-            breakpointLine: Int,
-            engine: String,
-            nodeOptions: String,
-            exportName: String,
-            programArgs: String,
-            nodePath: String,
-        ): String
-    }
-
-    @Remote(
-        "org.jetbrains.hexana.run.WasmRunConfigTestHelper",
-        plugin = HEXANA_PLUGIN_ID,
-    )
-    interface DebugTestHelperRef {
-        fun debugWithBreakpointAndInspectVariables(
-            project: com.intellij.driver.sdk.Project,
-            wasmFileName: String,
-            sourceFileName: String,
-            breakpointLine: Int,
-            engine: String,
-            wasmtimeOptions: String,
-            exportName: String,
-            programArgs: String,
-            wasmtimePath: String,
-        ): String
-    }
 }
