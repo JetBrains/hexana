@@ -2,7 +2,6 @@ package org.jetbrains.hexana.ui
 
 import com.intellij.driver.client.Driver
 import com.intellij.driver.sdk.*
-import com.intellij.driver.sdk.ui.UiText.Companion.asString
 import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
 import com.intellij.driver.sdk.ui.components.common.editorTabs
 import com.intellij.driver.sdk.ui.components.common.ideFrame
@@ -10,15 +9,14 @@ import com.intellij.ide.starter.driver.engine.runIdeWithDriver
 import com.intellij.tools.ide.util.common.logOutput
 import org.jetbrains.hexana.ui.framework.DebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationRuntimePreflight
+import org.jetbrains.hexana.ui.framework.awaitRunConfigurationConsoleResult
 import org.jetbrains.hexana.ui.framework.NodeJsDebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.NodeJsRunConfigHelperRef
 import org.jetbrains.hexana.ui.framework.RunConfigHelperRef
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * UI driver tests for Wasm run configurations using the Wasmtime and Node.js engines.
@@ -69,9 +67,7 @@ class HexanaRunConfigurationDriverTest {
                     engine = "WASMTIME",
                     wasmtimePath = wasmtimePath,
                 )
-                waitForProcessTermination(this)
-
-                val output = readConsoleOutput()
+                val output = awaitRunConfigurationConsoleResult().consoleOutput
                 logOutput("Core module run output: $output")
 
                 assertTrue(
@@ -107,10 +103,7 @@ class HexanaRunConfigurationDriverTest {
                     programArgs = "2 3",
                     wasmtimePath = wasmtimePath,
                 )
-                waitForProcessTermination(this)
-
-                // wasmtime --invoke outputs the numeric result followed by a newline
-                val output = readConsoleOutput()
+                val output = awaitRunConfigurationConsoleResult().consoleOutput
                 logOutput("Exported function run output: $output")
 
                 assertTrue(
@@ -143,9 +136,7 @@ class HexanaRunConfigurationDriverTest {
                     engine = "WASMTIME",
                     wasmtimePath = wasmtimePath,
                 )
-                waitForProcessTermination(this)
-
-                val output = readConsoleOutput()
+                val output = awaitRunConfigurationConsoleResult().consoleOutput
                 logOutput("Component module run output: $output")
 
                 assertTrue(
@@ -178,9 +169,7 @@ class HexanaRunConfigurationDriverTest {
                     engine = "WASMTIME",
                     wasmtimePath = wasmtimePath,
                 )
-                waitForProcessTermination(this, 5.minutes)
-
-                val output = readConsoleOutput()
+                val output = awaitRunConfigurationConsoleResult(5.minutes).consoleOutput
                 logOutput("Core module debug output: $output")
 
                 assertTrue(
@@ -215,9 +204,7 @@ class HexanaRunConfigurationDriverTest {
                     programArgs = "2 3",
                     nodePath = nodePath,
                 )
-                waitForProcessTermination(this, 5.minutes)
-
-                val output = readConsoleOutput()
+                val output = awaitRunConfigurationConsoleResult(5.minutes).consoleOutput
                 logOutput("Node.js core module debug output: $output")
 
                 assertTrue(
@@ -494,28 +481,4 @@ class HexanaRunConfigurationDriverTest {
             wasmtimePath,
         )
     }
-
-    private fun waitForProcessTermination(driver: Driver, timeout: Duration = 2.minutes) {
-        val project = driver.singleProject()
-        val rcm = driver.getRunContentManager(project)
-        waitFor(
-            message = "Waiting for process to terminate",
-            timeout = timeout,
-            interval = 1.seconds,
-        ) {
-            val content = rcm.getSelectedContent()
-            content?.getProcessHandler()?.isProcessTerminated() == true
-        }
-    }
-
-    private fun Driver.readConsoleOutput(): String {
-        var output = ""
-        ideFrame {
-            output = x { byClass("ConsoleViewImpl") }
-                .x { byAccessibleName("Editor") }
-                .getAllTexts().asString()
-        }
-        return output
-    }
-
 }
