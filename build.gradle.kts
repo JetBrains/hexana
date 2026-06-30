@@ -56,10 +56,7 @@ plugins.withType<WasmNodeJsRootPlugin> {
 }
 
 // Aggregator task driven by ci-configuration's `Tests` build configuration.
-// The TeamCity DSL probes for this task and, when present, uses it in place of the
-// hardcoded per-module list in `.teamcity/legacy/ReleaseZeroNineFallback.kt`.
-// Keep this list synchronised with that file until the fallback is removed; the list
-// must travel with the code branch so release branches stay self-contained.
+// The list travels with the code branch so release branches stay self-contained.
 tasks.register("teamcityCiTests") {
     group = "verification"
     description = "Aggregate every subproject's test surface for the TeamCity Tests build."

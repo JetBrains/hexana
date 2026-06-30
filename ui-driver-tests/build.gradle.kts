@@ -68,10 +68,8 @@ tasks.register<Test>("captureWhatsNewScreenshots") {
 }
 
 // Aggregator task driven by ci-configuration's `UI Driver Tests` build.
-// The DSL probes for this task and, when present, runs it instead of the hardcoded
-// `--tests` triplet kept in `.teamcity/legacy/ReleaseZeroNineFallback.kt`. Keep the
-// surface broad on purpose: any new UI driver test class added to this module is
-// picked up automatically without a DSL change.
+// Keep the surface broad on purpose: any new UI driver test class added to this module
+// is picked up automatically without a DSL change.
 tasks.register("teamcityUiDriverTests") {
     group = "verification"
     description = "Aggregate every UI driver test for the TeamCity UI Driver Tests build."
