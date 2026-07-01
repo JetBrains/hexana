@@ -556,8 +556,14 @@ fun nativeOrGenericBinaryProvider(
     is NativeBinaryFormat.Pe -> PeBinaryProvider(sharedBytes, fmt, sourcePath)
     is NativeBinaryFormat.Coff -> CoffBinaryProvider(sharedBytes, fmt, sourcePath)
     NativeBinaryFormat.Archive -> ArchiveBinaryProvider(sharedBytes, sourcePath)
-    null -> if (ZipBinaryProvider.isZip(sharedBytes)) ZipBinaryProvider(sharedBytes)
-           else GenericBinaryProvider(sharedBytes)
+    null -> {
+        when {
+            ZipBinaryProvider.isZip(sharedBytes) -> ZipBinaryProvider(sharedBytes)
+            ClassFileBinaryProvider.isClassFile(sharedBytes) -> ClassFileBinaryProvider(sharedBytes.duplicate().position(0))
+            DexBinaryProvider.isDexFile(sharedBytes) -> DexBinaryProvider(sharedBytes.duplicate().position(0))
+            else -> GenericBinaryProvider(sharedBytes)
+        }
+    }
 }
 
 open class WasmComponentBinaryProvider(private val sharedBytes: CommonByteBuffer): BinaryProvider {

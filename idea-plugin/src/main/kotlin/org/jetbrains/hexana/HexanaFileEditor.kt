@@ -30,8 +30,6 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.Nls
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
-import org.jetbrains.hexana.dex.DexFileParser
-import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.providers.format.ComponentDiffResult
 import org.jetbrains.hexana.providers.format.SubmoduleKind
@@ -41,8 +39,6 @@ import org.jetbrains.hexana.providers.format.WasmComponentDiffOrchestrator
 import org.jetbrains.hexana.providers.format.WasmEntityDiffOrchestrator
 import org.jetbrains.hexana.providers.format.WasmEntityDiffResult
 import org.jetbrains.hexana.providers.format.WasmSizeDiffOrchestrator
-import org.jetbrains.hexana.shared.isClassFile
-import org.jetbrains.hexana.shared.isDexFile
 import org.jetbrains.hexana.sourcemap.parseSourceMap
 import org.jetbrains.hexana.ui.BinaryEditorView
 import org.jetbrains.hexana.ui.CLASS_FILE_NAV_TARGET_KEY
@@ -189,6 +185,10 @@ class HexanaFileEditor(
             return
         }
 
+        val sourcePath = if (inMemoryBuffer == null) myFile.toNioPathOrNull()?.toString() else null
+
+        binaryProvider = resolveProvider(ext, inMemoryBuffer, commonBuffer, sourcePath)
+
         // Determine extra panels based on file extension / buffer magic.
         // On parse failure the result carries an error message for the error panel.
         val extraPanels = when (val extraPanelResult = resolveExtraPanels(ext, commonBuffer)) {
@@ -197,10 +197,6 @@ class HexanaFileEditor(
                 org.jetbrains.jewel.ui.component.Text(extraPanelResult.message)
             })
         }
-
-        val sourcePath = if (inMemoryBuffer == null) myFile.toNioPathOrNull()?.toString() else null
-
-        binaryProvider = resolveProvider(ext, inMemoryBuffer, commonBuffer, sourcePath)
 
         val parentFile = myFile.getUserData(HexanaBinaryVirtualFile.PARENT_FILE_KEY)
 
@@ -234,11 +230,13 @@ class HexanaFileEditor(
         commonBuffer: CommonByteBuffer,
         sourcePath: String?
     ): BinaryProvider {
-        // Recognised structured formats (class/dex) always use a generic provider.
-        // ZIP/JAR archives are detected by nativeOrGenericBinaryProvider → ZipBinaryProvider.
-        if (ext == "class" || isClassFile(commonBuffer)
-            || ext == "dex" || isDexFile(commonBuffer)) {
-            return GenericBinaryProvider(commonBuffer.duplicate().position(0))
+        // Recognised structured formats (class/dex) use dedicated providers with
+        // lazy parsed data so panels can reuse the parse result without re-parsing.
+        if (ext == "class" || ClassFileBinaryProvider.isClassFile(commonBuffer)) {
+            return ClassFileBinaryProvider(commonBuffer.duplicate().position(0))
+        }
+        if (ext == "dex" || DexBinaryProvider.isDexFile(commonBuffer)) {
+            return DexBinaryProvider(commonBuffer.duplicate().position(0))
         }
 
         // Known ZIP extensions: skip Wasm detection and go straight to
@@ -335,12 +333,12 @@ class HexanaFileEditor(
      * or [ExtraPanelResult.Panels] with the extra panels (empty list for unrecognised formats).
      */
     private fun resolveExtraPanels(ext: String?, commonBuffer: CommonByteBuffer): ExtraPanelResult {
-        if (ext == "class" || isClassFile(commonBuffer)) {
-            val parsed = try {
-                JavaClassFileParser.parse(commonBuffer.duplicate().position(0))
-            } catch (t: Throwable) {
-                HexanaLog.LOG.warn("Failed to parse .class file ${myFile.name}", t)
-                null
+        val provider = binaryProvider
+
+        if (provider is ClassFileBinaryProvider) {
+            val parsed = provider.parsedClassFile
+            if (parsed == null) {
+                HexanaLog.LOG.warn("Failed to parse .class file ${myFile.name}")
             }
             return if (parsed != null) {
                 ExtraPanelResult.Panels(org.jetbrains.hexana.ui.classFilePanels(parsed, classFileNavTargetFlow))
@@ -351,15 +349,13 @@ class HexanaFileEditor(
             }
         }
 
-        if (ext == "dex" || isDexFile(commonBuffer)) {
-            val parsed = try {
-                DexFileParser.parse(commonBuffer.duplicate().position(0))
-            } catch (t: Throwable) {
-                HexanaLog.LOG.warn("Failed to parse .dex file ${myFile.name}", t)
-                null
+        if (provider is DexBinaryProvider) {
+            val parsed = provider.parsedDexFile
+            if (parsed == null) {
+                HexanaLog.LOG.warn("Failed to parse .dex file ${myFile.name}")
             }
             return if (parsed != null) {
-                ExtraPanelResult.Panels(org.jetbrains.hexana.ui.dexFilePanels(parsed, GenericBinaryProvider(commonBuffer.duplicate().position(0))))
+                ExtraPanelResult.Panels(org.jetbrains.hexana.ui.dexFilePanels(parsed, provider))
             } else {
                 ExtraPanelResult.ParseError(
                     "Failed to parse ${myFile.name} as an Android DEX file \u2014 see idea.log for details."

@@ -9,8 +9,6 @@ import org.jetbrains.hexana.dex.DexFileParser
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.providers.*
-import org.jetbrains.hexana.shared.isClassFile
-import org.jetbrains.hexana.shared.isDexFile
 
 fun main() {
     renderComposable(rootElementId = "root") {
@@ -45,14 +43,10 @@ fun BinaryEditorApp() {
         buffer.position(0)
 
         val provider = remember(buffer, filePath) {
-            when {
-                isClassFile(buffer) -> GenericBinaryProvider(buffer)
-                isDexFile(buffer) -> GenericBinaryProvider(buffer)
-                else -> when (WasmBinaryProviderSelector.select(buffer)) {
-                    BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
-                    BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
-                    else -> nativeOrGenericBinaryProvider(buffer, filePath)
-                }
+            when (WasmBinaryProviderSelector.select(buffer)) {
+                BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
+                BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
+                else -> nativeOrGenericBinaryProvider(buffer, filePath)
             }
         }
 
@@ -69,7 +63,7 @@ fun BinaryEditorApp() {
 }
 
 private fun computeExtraTabs(buffer: org.jetbrains.hexana.io.CommonByteBuffer): List<PanelTab> {
-    if (isClassFile(buffer)) {
+    if (ClassFileBinaryProvider.isClassFile(buffer)) {
         val classFile = try {
             JavaClassFileParser.parse(buffer.duplicate().position(0))
         } catch (_: Exception) {
@@ -77,7 +71,7 @@ private fun computeExtraTabs(buffer: org.jetbrains.hexana.io.CommonByteBuffer): 
         }
         return if (classFile != null) classFileExtraTabs(classFile) else emptyList()
     }
-    if (isDexFile(buffer)) {
+    if (DexBinaryProvider.isDexFile(buffer)) {
         val dexFile = try {
             DexFileParser.parse(buffer.duplicate().position(0))
         } catch (_: Exception) {

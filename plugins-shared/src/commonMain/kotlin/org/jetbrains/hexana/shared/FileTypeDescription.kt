@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.ClassFileBinaryProvider
+import org.jetbrains.hexana.providers.DexBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
@@ -15,12 +17,7 @@ fun fileTypeDescription(
     is WasmComponentBinaryProvider -> "Component Model"
     is NativeBinaryProvider -> binaryProvider.nativeFormat.displayName
     is ZipBinaryProvider -> if (fileName.orEmpty().endsWith(".jar", true)) "Jar File" else "Zip File"
-    is GenericBinaryProvider -> {
-        when {
-            isClassFile(binaryProvider.bytes) -> "Class File"
-            isDexFile(binaryProvider.bytes) -> "Android DEX File"
-            else -> binaryProvider.nativeFormat?.displayName ?: "Binary"
-        }
-    }
-    else -> "Binary"
+    is ClassFileBinaryProvider -> "Class File"
+    is DexBinaryProvider -> "Android DEX File"
+    is GenericBinaryProvider -> binaryProvider.nativeFormat?.displayName ?: "Binary"
 }
