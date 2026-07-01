@@ -35,6 +35,8 @@ data class RuntimeOption(
     val id: String,
     val label: String,
     val supportsDebug: Boolean = true,
+    /** Whether the runtime can invoke a specific exported function by name. */
+    val supportsExportInvocation: Boolean = true,
 )
 
 /**
@@ -44,7 +46,7 @@ val coreRuntimeOptions = listOf(
     RuntimeOption("wasmtime", "Wasmtime", supportsDebug = true),
     RuntimeOption("wamr", "WAMR", supportsDebug = true),
     RuntimeOption("graalwasm", "GraalWasm", supportsDebug = false),
-    RuntimeOption("wazero", "Wazero", supportsDebug = false),
+    RuntimeOption("wazero", "Wazero", supportsDebug = false, supportsExportInvocation = false),
     RuntimeOption("browser", "Default Browser", supportsDebug = true),
     RuntimeOption("nodejs", "Node.js", supportsDebug = true),
 )
@@ -89,7 +91,9 @@ fun FunctionArgsDialog(
     onCancel: () -> Unit,
 ) {
     val allRuntimeOptions = if (isComponent) componentRuntimeOptions else coreRuntimeOptions
-    val runtimeOptions = if (forcedAction == "debug") allRuntimeOptions.filter { it.supportsDebug } else allRuntimeOptions
+    val runtimeOptions = allRuntimeOptions
+        .filter { it.supportsExportInvocation }
+        .let { opts -> if (forcedAction == "debug") opts.filter { it.supportsDebug } else opts }
     if (runtimeOptions.isEmpty()) {
         onCancel()
         return

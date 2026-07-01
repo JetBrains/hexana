@@ -302,7 +302,7 @@ private fun runWasmExportedFunction(
         val programArgs = dialog.argValues.joinToString(" ")
         runWasmConfiguration(project, file, exportName, programArgs, "--invoke $exportName", result.engine, result.mode)
     } else {
-        val dialog = WasmRunDialog.createSimple(project, "Run '$exportName'")
+        val dialog = WasmRunDialog.createSimple(project, "Run '$exportName'", isExportInvocation = true)
         if (!dialog.showAndGet()) return
         val result = dialog.result ?: return
         runWasmConfiguration(project, file, exportName, "", "--invoke $exportName", result.engine, result.mode)

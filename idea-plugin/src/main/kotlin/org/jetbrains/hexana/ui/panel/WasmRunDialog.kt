@@ -34,10 +34,14 @@ internal open class WasmRunDialog(
     dialogTitle: String,
     private val isComponentModel: Boolean = false,
     private val popupMode: PopupMode = PopupMode.RUN_AND_DEBUG,
+    private val isExportInvocation: Boolean = false,
 ) : DialogWrapper(project, false) {
 
     private val engines: List<WasmEngine> =
-        WasmEngine.entries.filter { !isComponentModel || it.supportsComponentsModel }
+        WasmEngine.entries.filter {
+            (!isComponentModel || it.supportsComponentsModel) &&
+            (!isExportInvocation || it.supportsExportInvocation)
+        }
 
     private val singleEngine: WasmEngine? = engines.singleOrNull()
 
@@ -158,8 +162,9 @@ internal open class WasmRunDialog(
             dialogTitle: String,
             isComponentModel: Boolean = false,
             popupMode: PopupMode = PopupMode.RUN_AND_DEBUG,
+            isExportInvocation: Boolean = false,
         ): WasmRunDialog {
-            return WasmRunDialog(project, dialogTitle, isComponentModel, popupMode).also { it.init() }
+            return WasmRunDialog(project, dialogTitle, isComponentModel, popupMode, isExportInvocation).also { it.init() }
         }
     }
 }

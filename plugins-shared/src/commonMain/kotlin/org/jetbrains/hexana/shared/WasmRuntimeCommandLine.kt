@@ -679,18 +679,33 @@ fun buildChicoryRunArgs(input: WasmRunInput, aot: Boolean): WasmCommandLine {
  * Wazero is a Go-based WebAssembly runtime with zero dependencies.
  * It does not support the Component Model or debugging.
  *
- * The CLI syntax is: `wazero run [options] <file.wasm> [args]`
+ * The CLI syntax is: `wazero run [options] <dep.wasm>... <file.wasm> [args]`
+ *
+ * Wazero resolves imported modules by accepting dependency `.wasm` files
+ * as positional arguments **before** the main module. Stub modules are
+ * therefore inserted as arguments, not placed in the working directory.
  *
  * @param input shared run input
  */
-fun buildWazeroRunArgs(input: WasmRunInput): WasmCommandLine {
+fun buildWazeroRunArgs(
+    input: WasmRunInput,
+    stubFileWriter: StubFileWriter? = null,
+): WasmCommandLine {
     val args = mutableListOf<String>()
     args.add("run")
+
+    val wasmBytes = input.wasmBytes
+    val stubPaths = if (stubFileWriter != null) {
+        generateWazeroStubFiles(wasmBytes, stubFileWriter)
+    } else emptyList()
 
     val options = input.runtimeOptions.trim()
     if (options.isNotEmpty()) {
         args.addAll(splitOptions(options))
     }
+
+    // Dependency stubs must appear before the main module.
+    args.addAll(stubPaths)
 
     args.add(input.wasmFilePath)
 
@@ -701,6 +716,27 @@ fun buildWazeroRunArgs(input: WasmRunInput): WasmCommandLine {
 
     val workDir = input.workingDirectory.ifBlank { null }
     return WasmCommandLine(arguments = args, workingDirectory = workDir)
+}
+
+/**
+ * Generates wazero stub files in a temporary directory and returns the
+ * list of absolute paths to the generated stub `.wasm` files.
+ *
+ * Wazero resolves imported modules by accepting dependency `.wasm` files
+ * as positional arguments before the main module on the command line.
+ * Returns an empty list when no stubs are needed.
+ */
+fun generateWazeroStubFiles(
+    wasmBytes: ByteArray?,
+    stubFileWriter: StubFileWriter,
+): List<String> {
+    if (wasmBytes == null || !WasmImportStubGenerator.hasImports(wasmBytes)) return emptyList()
+    val stubs = WasmImportStubGenerator.generateStubs(wasmBytes)
+    if (stubs.isEmpty()) return emptyList()
+    val tempDir = stubFileWriter.createTempDir("hexana-wazero-stubs")
+    return stubs.map { stub ->
+        stubFileWriter.writeFile(tempDir, "${stub.moduleName}.wasm", stub.wasmBytes)
+    }
 }
 
 // ---------------------------------------------------------------------------

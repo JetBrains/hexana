@@ -21,7 +21,7 @@ internal class FunctionArgsDialog(
     private val args: List<FunctionArgDescriptor>,
     isComponentModel: Boolean = false,
     popupMode: PopupMode = PopupMode.RUN_AND_DEBUG,
-) : WasmRunDialog(project, "Arguments for '$exportName'", isComponentModel, popupMode) {
+) : WasmRunDialog(project, "Arguments for '$exportName'", isComponentModel, popupMode, isExportInvocation = true) {
 
     val argValues = MutableList(args.size) { i -> args[i].defaultValue }
 

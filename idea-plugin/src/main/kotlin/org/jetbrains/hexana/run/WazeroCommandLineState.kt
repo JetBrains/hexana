@@ -25,15 +25,19 @@ class WazeroCommandLineState(
             WasmRuntimeSettings.getInstance().effectiveWazeroPath()
         }
 
+        val wasmFile = File(configuration.wasmFilePath)
+        val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
+
         val input = WasmRunInput(
             wasmFilePath = configuration.wasmFilePath,
+            wasmBytes = wasmBytes,
             programArguments = configuration.programArguments,
             workingDirectory = configuration.workingDirectory,
             runtimeOptions = configuration.wazeroOptions,
             exportName = configuration.exportName,
         )
 
-        val cmdLine = buildWazeroRunArgs(input)
+        val cmdLine = buildWazeroRunArgs(input, JvmStubFileWriter)
         return runCommandLine(wazeroExe, cmdLine)
     }
 

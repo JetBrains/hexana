@@ -123,7 +123,7 @@ object WasmRuntimeResolver {
             "wasmtime" -> buildWasmtimeRunArgs(input)
             "wamr" -> buildWamrRunArgs(input, stubFileWriter = stubFileWriter)
             "graalwasm" -> buildGraalWasmRunArgs(input)
-            "wazero" -> buildWazeroRunArgs(input)
+            "wazero" -> buildWazeroRunArgs(input, stubFileWriter = stubFileWriter)
             "nodejs" -> buildNodeJsRunArgs(input)
             "chicory-interpreter" -> buildChicoryRunArgs(input, aot = false)
             "chicory-aot" -> buildChicoryRunArgs(input, aot = true)
