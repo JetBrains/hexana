@@ -22,10 +22,13 @@ object HexanaRunConfigurationUiTestProbe {
     fun ping(): String = "pong"
 
     @JvmStatic
-    fun launchCoreModuleWithWasmtime(
+    fun launchWasmtimeRunConfiguration(
         project: Project,
         wasmFileName: String,
         wasmtimePath: String,
+        wasmtimeOptions: String,
+        exportName: String,
+        programArgs: String,
     ): List<String> {
         val basePath = project.basePath ?: error("project basePath is null")
         val wasmFilePath = "$basePath/$wasmFileName"
@@ -36,9 +39,9 @@ object HexanaRunConfigurationUiTestProbe {
         runWasmConfiguration(
             project = project,
             file = wasmVirtualFile,
-            exportName = "",
-            programArgs = "",
-            wasmTimeArgs = "",
+            exportName = exportName,
+            programArgs = programArgs,
+            wasmTimeArgs = wasmtimeOptions,
             engine = WasmEngine.WASMTIME,
             mode = WasmRunMode.RUN,
         )
@@ -54,12 +57,16 @@ object HexanaRunConfigurationUiTestProbe {
         return payload(
             buildList {
                 add("wasmFilePath=${configuration.wasmFilePath}")
+                add("workingDirectory=${configuration.workingDirectory}")
                 add("engine=${configuration.engine.name}")
                 add("mode=${WasmRunMode.RUN.name}")
                 add("configurationName=${settings.name}")
                 add("selectedConfigurationName=${currentSelectedConfigurationName(project)}")
                 add("selectedConfigurationType=${configuration::class.java.name}")
-                add("wasmtimePath=${WasmRuntimeSettings.getInstance().wasmtimePathInUi.orEmpty()}")
+                add("effectiveWasmtimePath=${WasmRuntimeSettings.getInstance().effectiveWasmtimePath()}")
+                add("wasmtimeOptions=${configuration.wasmtimeOptions}")
+                add("exportName=${configuration.exportName}")
+                add("programArguments=${configuration.programArguments}")
                 add("dependenciesCount=${configuration.dependencies.size}")
                 configuration.dependencies.forEach { dependency ->
                     add("dependency=$dependency")

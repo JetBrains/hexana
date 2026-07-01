@@ -13,16 +13,22 @@ internal fun Driver.runConfigurationProbeResponds() {
     assertEquals("1", probe.frameworkVersion())
 }
 
-internal fun Driver.launchCoreModuleWithWasmtime(
+internal fun Driver.launchWasmtimeRunConfiguration(
     wasmFileName: String,
     wasmtimePath: String,
+    wasmtimeOptions: String = "",
+    exportName: String = "",
+    programArgs: String = "",
 ): HexanaRunConfigurationLaunchSnapshot {
     val probe = utility(HexanaRunConfigurationUiTestProbeRef::class)
     return HexanaRunConfigurationLaunchPayload.parse(
-        probe.launchCoreModuleWithWasmtime(
+        probe.launchWasmtimeRunConfiguration(
             singleProject(),
             wasmFileName,
             wasmtimePath,
+            wasmtimeOptions,
+            exportName,
+            programArgs,
         ),
     )
 }
@@ -34,10 +40,13 @@ internal fun Driver.launchCoreModuleWithWasmtime(
 internal interface HexanaRunConfigurationUiTestProbeRef {
     fun frameworkVersion(): String
     fun ping(): String
-    fun launchCoreModuleWithWasmtime(
+    fun launchWasmtimeRunConfiguration(
         project: com.intellij.driver.sdk.Project,
         wasmFileName: String,
         wasmtimePath: String,
+        wasmtimeOptions: String,
+        exportName: String,
+        programArgs: String,
     ): List<String>
 }
 
@@ -46,16 +55,6 @@ internal interface HexanaRunConfigurationUiTestProbeRef {
     plugin = HEXANA_PLUGIN_ID,
 )
 internal interface RunConfigHelperRef {
-    fun createAndRunWasmtime(
-        project: com.intellij.driver.sdk.Project,
-        wasmFileName: String,
-        engine: String,
-        wasmtimeOptions: String,
-        exportName: String,
-        programArgs: String,
-        wasmtimePath: String,
-    )
-
     fun createAndDebugWasmtime(
         project: com.intellij.driver.sdk.Project,
         wasmFileName: String,

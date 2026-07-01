@@ -9,11 +9,12 @@ import com.intellij.ide.starter.driver.engine.runIdeWithDriver
 import com.intellij.tools.ide.util.common.logOutput
 import org.jetbrains.hexana.ui.framework.DebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationRuntimePreflight
-import org.jetbrains.hexana.ui.framework.launchCoreModuleWithWasmtime
 import org.jetbrains.hexana.ui.framework.awaitRunConfigurationConsoleResult
+import org.jetbrains.hexana.ui.framework.launchWasmtimeRunConfiguration
 import org.jetbrains.hexana.ui.framework.NodeJsDebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.NodeJsRunConfigHelperRef
 import org.jetbrains.hexana.ui.framework.RunConfigHelperRef
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -62,35 +63,32 @@ class HexanaRunConfigurationDriverTest {
                 }
                 Thread.sleep(3_000)
 
-                val launch = launchCoreModuleWithWasmtime(
+                val launch = launchWasmtimeRunConfiguration(
                     wasmFileName = CORE_MODULE_FILE,
                     wasmtimePath = wasmtimePath,
                 )
-                assertTrue(
-                    launch.wasmFilePath.replace('\\', '/') ==
-                        context.resolvedProjectHome.resolve(CORE_MODULE_FILE).toString().replace('\\', '/'),
-                    "Expected production launch to target $CORE_MODULE_FILE, got ${launch.wasmFilePath}",
+                assertEquals(
+                    context.resolvedProjectHome.resolve(CORE_MODULE_FILE).toString().replace('\\', '/'),
+                    launch.wasmFilePath.replace('\\', '/'),
+                    "Expected production launch to target $CORE_MODULE_FILE",
                 )
-                assertTrue(
-                    launch.engine == "WASMTIME" && launch.mode == "RUN",
-                    "Expected production launch metadata to report WASMTIME/RUN, got engine=${launch.engine}, mode=${launch.mode}",
+                assertEquals(
+                    context.resolvedProjectHome.toString().replace('\\', '/'),
+                    launch.workingDirectory.replace('\\', '/'),
+                    "Expected production launch to record the project root as working directory",
                 )
-                assertTrue(
-                    launch.configurationName == launch.selectedConfigurationName,
-                    "Expected selected configuration to match the production-created configuration, got launch=${launch.configurationName}, selected=${launch.selectedConfigurationName}",
-                )
+                assertEquals("WASMTIME", launch.engine, "Expected production launch to use WASMTIME")
+                assertEquals("RUN", launch.mode, "Expected production launch to use RUN mode")
+                assertEquals(launch.configurationName, launch.selectedConfigurationName, "Expected selected configuration to match the production-created configuration")
                 assertTrue(
                     launch.selectedConfigurationType.contains("WasmRunConfiguration"),
                     "Expected a WasmRunConfiguration selected by the production launch, got ${launch.selectedConfigurationType}",
                 )
-                assertTrue(
-                    launch.wasmtimePath == wasmtimePath,
-                    "Expected production launch probe to record the injected Wasmtime path, got ${launch.wasmtimePath}",
-                )
-                assertTrue(
-                    launch.dependencies.isNotEmpty(),
-                    "Expected production dependency resolution to populate dependencies",
-                )
+                assertEquals(wasmtimePath, launch.effectiveWasmtimePath, "Expected production launch probe to record the injected Wasmtime path")
+                assertEquals("", launch.wasmtimeOptions, "Expected the core module run to omit Wasmtime options")
+                assertEquals("", launch.exportName, "Expected the core module run to omit an export name")
+                assertEquals("", launch.programArguments, "Expected the core module run to omit program arguments")
+                assertTrue(launch.dependencies.isNotEmpty(), "Expected production dependency resolution to populate dependencies")
                 val output = awaitRunConfigurationConsoleResult().consoleOutput
                 logOutput("Core module run output: $output")
 
@@ -118,15 +116,35 @@ class HexanaRunConfigurationDriverTest {
                 }
                 Thread.sleep(3_000)
 
-                launchWasmtimeConfig(
-                    driver = this,
+                val launch = launchWasmtimeRunConfiguration(
                     wasmFileName = ADD_MODULE_FILE,
-                    engine = "WASMTIME",
+                    wasmtimePath = wasmtimePath,
                     wasmtimeOptions = "--invoke add",
                     exportName = "add",
                     programArgs = "2 3",
-                    wasmtimePath = wasmtimePath,
                 )
+                assertEquals(
+                    context.resolvedProjectHome.resolve(ADD_MODULE_FILE).toString().replace('\\', '/'),
+                    launch.wasmFilePath.replace('\\', '/'),
+                    "Expected exported-function run to target $ADD_MODULE_FILE",
+                )
+                assertEquals(
+                    context.resolvedProjectHome.toString().replace('\\', '/'),
+                    launch.workingDirectory.replace('\\', '/'),
+                    "Expected exported-function run to record the project root as working directory",
+                )
+                assertEquals("WASMTIME", launch.engine, "Expected exported-function run to use WASMTIME")
+                assertEquals("RUN", launch.mode, "Expected exported-function run to use RUN mode")
+                assertEquals(launch.configurationName, launch.selectedConfigurationName, "Expected exported-function run to select its production-created configuration")
+                assertTrue(
+                    launch.selectedConfigurationType.contains("WasmRunConfiguration"),
+                    "Expected a WasmRunConfiguration selected by the exported-function launch, got ${launch.selectedConfigurationType}",
+                )
+                assertEquals(wasmtimePath, launch.effectiveWasmtimePath, "Expected exported-function run to record the injected Wasmtime path")
+                assertEquals("--invoke add", launch.wasmtimeOptions, "Expected exported-function run to preserve Wasmtime options")
+                assertEquals("add", launch.exportName, "Expected exported-function run to preserve the export name")
+                assertEquals("2 3", launch.programArguments, "Expected exported-function run to preserve program arguments")
+                assertTrue(launch.dependencies.isNotEmpty(), "Expected exported-function run dependency resolution to populate dependencies")
                 val output = awaitRunConfigurationConsoleResult().consoleOutput
                 logOutput("Exported function run output: $output")
 
@@ -154,12 +172,32 @@ class HexanaRunConfigurationDriverTest {
                 }
                 Thread.sleep(3_000)
 
-                launchWasmtimeConfig(
-                    driver = this,
+                val launch = launchWasmtimeRunConfiguration(
                     wasmFileName = COMPONENT_MODULE_FILE,
-                    engine = "WASMTIME",
                     wasmtimePath = wasmtimePath,
                 )
+                assertEquals(
+                    context.resolvedProjectHome.resolve(COMPONENT_MODULE_FILE).toString().replace('\\', '/'),
+                    launch.wasmFilePath.replace('\\', '/'),
+                    "Expected component-module run to target $COMPONENT_MODULE_FILE",
+                )
+                assertEquals(
+                    context.resolvedProjectHome.toString().replace('\\', '/'),
+                    launch.workingDirectory.replace('\\', '/'),
+                    "Expected component-module run to record the project root as working directory",
+                )
+                assertEquals("WASMTIME", launch.engine, "Expected component-module run to use WASMTIME")
+                assertEquals("RUN", launch.mode, "Expected component-module run to use RUN mode")
+                assertEquals(launch.configurationName, launch.selectedConfigurationName, "Expected component-module run to select its production-created configuration")
+                assertTrue(
+                    launch.selectedConfigurationType.contains("WasmRunConfiguration"),
+                    "Expected a WasmRunConfiguration selected by the component-module launch, got ${launch.selectedConfigurationType}",
+                )
+                assertEquals(wasmtimePath, launch.effectiveWasmtimePath, "Expected component-module run to record the injected Wasmtime path")
+                assertEquals("", launch.wasmtimeOptions, "Expected the component-module run to omit Wasmtime options")
+                assertEquals("", launch.exportName, "Expected the component-module run to omit an export name")
+                assertEquals("", launch.programArguments, "Expected the component-module run to omit program arguments")
+                assertTrue(launch.dependencies.isNotEmpty(), "Expected component-module run dependency resolution to populate dependencies")
                 val output = awaitRunConfigurationConsoleResult().consoleOutput
                 logOutput("Component module run output: $output")
 
@@ -416,28 +454,6 @@ class HexanaRunConfigurationDriverTest {
                     "Expected debug session to be resumed after inspection"
                 )
             }
-    }
-
-    private fun launchWasmtimeConfig(
-        driver: Driver,
-        wasmFileName: String,
-        engine: String,
-        wasmtimePath: String,
-        wasmtimeOptions: String = "",
-        exportName: String = "",
-        programArgs: String = "",
-    ) {
-        val project = driver.singleProject()
-        val helper = driver.utility(RunConfigHelperRef::class)
-        helper.createAndRunWasmtime(
-            project,
-            wasmFileName,
-            engine,
-            wasmtimeOptions,
-            exportName,
-            programArgs,
-            wasmtimePath,
-        )
     }
 
     private fun launchNodeJsConfig(

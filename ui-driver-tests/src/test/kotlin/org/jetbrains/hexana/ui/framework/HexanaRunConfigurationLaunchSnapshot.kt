@@ -5,12 +5,16 @@ private const val LAUNCH_SCHEMA = "hexana-run-configuration-launch"
 
 internal data class HexanaRunConfigurationLaunchSnapshot(
     val wasmFilePath: String,
+    val workingDirectory: String,
     val engine: String,
     val mode: String,
     val configurationName: String,
     val selectedConfigurationName: String,
     val selectedConfigurationType: String,
-    val wasmtimePath: String,
+    val effectiveWasmtimePath: String,
+    val wasmtimeOptions: String,
+    val exportName: String,
+    val programArguments: String,
     val dependencies: List<String>,
 ) {
     val dependencyCount: Int get() = dependencies.size
@@ -31,12 +35,16 @@ internal object HexanaRunConfigurationLaunchPayload {
 
         return HexanaRunConfigurationLaunchSnapshot(
             wasmFilePath = fields.value("wasmFilePath"),
+            workingDirectory = fields.value("workingDirectory"),
             engine = fields.value("engine"),
             mode = fields.value("mode"),
             configurationName = fields.value("configurationName"),
             selectedConfigurationName = fields.value("selectedConfigurationName"),
             selectedConfigurationType = fields.value("selectedConfigurationType"),
-            wasmtimePath = fields.value("wasmtimePath"),
+            effectiveWasmtimePath = fields.value("effectiveWasmtimePath"),
+            wasmtimeOptions = fields.value("wasmtimeOptions"),
+            exportName = fields.value("exportName"),
+            programArguments = fields.value("programArguments"),
             dependencies = fields.values("dependency"),
         )
     }
