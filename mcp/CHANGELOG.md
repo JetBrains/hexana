@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-07-01
+
+### Added
+- Binary inspection tools can summarize Wasm and native binaries, query binary records, and list or search functions.
+- Native MCP release artifacts cover macOS arm64 and Linux x64, with Claude Code and Codex plugin wrappers preferring the bundled native executable on those platforms.
+
+### Changed
+- Standalone MCP release metadata now targets version 0.3.0 for the current server line.
+- Windows users continue to use the JVM fallback package while native Windows binaries remain disabled for this release.
+
 ## 0.2.0 - 2026-06-23
 
 ### Added
@@ -11,4 +21,3 @@
 
 ### Changed
 - Codex and Claude release automation is native-first by default: release publishing expects the native matrix ZIPs to be available before public publication.
-
