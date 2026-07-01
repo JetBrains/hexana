@@ -53,6 +53,39 @@ class BinaryFormatDetectionTest {
     fun detectsPng() = assertEquals(HexanaEvent.DetectedFormat.PNG, detect(0x89, 0x50, 0x4E, 0x47))
 
     @Test
+    fun detectsZstd() = assertEquals(HexanaEvent.DetectedFormat.ZSTD, detect(0x28, 0xB5, 0x2F, 0xFD))
+
+    @Test
+    fun detectsSevenZip() =
+        assertEquals(HexanaEvent.DetectedFormat.SEVENZIP, detect(0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C))
+
+    @Test
+    fun detectsXz() = assertEquals(HexanaEvent.DetectedFormat.XZ, detect(0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00))
+
+    @Test
+    fun detectsBzip2() = assertEquals(HexanaEvent.DetectedFormat.BZIP2, detect(0x42, 0x5A, 0x68, 0x39))
+
+    @Test
+    fun detectsRar() = assertEquals(HexanaEvent.DetectedFormat.RAR, detect(0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00))
+
+    @Test
+    fun detectsLz4() = assertEquals(HexanaEvent.DetectedFormat.LZ4, detect(0x04, 0x22, 0x4D, 0x18))
+
+    @Test
+    fun detectsCab() = assertEquals(HexanaEvent.DetectedFormat.CAB, detect(0x4D, 0x53, 0x43, 0x46))
+
+    @Test
+    fun detectsTarByUstarAtOffset257() {
+        // tar has no offset-0 magic; "ustar" lives at byte 257. Build a full
+        // 512-byte record with an arbitrary filename head and the marker in place.
+        val bytes = ByteArray(512)
+        "hello.txt".encodeToByteArray().copyInto(bytes)
+        byteArrayOf(0x75, 0x73, 0x74, 0x61, 0x72).copyInto(bytes, destinationOffset = 257)
+        val provider = GenericBinaryProvider(bytes.toCommonByteBuffer())
+        assertEquals(HexanaEvent.DetectedFormat.TAR, genericDetailOf(file = null, provider = provider).detected)
+    }
+
+    @Test
     fun unknownMagicIsNull() = assertNull(detect(0xDE, 0xAD, 0xBE, 0xEF))
 
     @Test

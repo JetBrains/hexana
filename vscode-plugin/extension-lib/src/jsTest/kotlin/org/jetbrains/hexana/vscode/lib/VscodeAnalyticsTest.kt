@@ -83,6 +83,49 @@ class VscodeAnalyticsTest {
     }
 
     @Test
+    fun archiveContainerMagicResolvesDetectedFormat() = runTest {
+        if (!isNodeTestRuntime()) return@runTest
+
+        val server = FakePostHogNodeServer.start()
+        try {
+            withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {
+                initAnalytics(
+                    storagePath = temporaryStoragePath(),
+                    telemetryEnabled = true,
+                    appName = "Visual Studio Code",
+                    appVersion = "1.102.0",
+                )
+
+                // One file per newly-supported container magic. Each name has an
+                // unrecognized extension so it falls through to generic and is
+                // classified by its magic bytes alone. tar is the offset-257 case.
+                captureBinaryOpened("a.blob", bytes(0x28, 0xB5, 0x2F, 0xFD)) // zstd
+                captureBinaryOpened("b.blob", bytes(0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C)) // 7z
+                captureBinaryOpened("c.blob", bytes(0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00)) // xz
+                captureBinaryOpened("d.blob", bytes(0x42, 0x5A, 0x68, 0x39)) // bzip2 "BZh9"
+                captureBinaryOpened("e.blob", bytes(0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00)) // rar
+                captureBinaryOpened("f.blob", bytes(0x04, 0x22, 0x4D, 0x18)) // lz4
+                captureBinaryOpened("g.blob", bytes(0x4D, 0x53, 0x43, 0x46)) // cab "MSCF"
+                captureBinaryOpened("h.blob", tarRecord()) // tar "ustar" at offset 257
+
+                flushUntilEvents(server, expectedCount = 8)
+
+                val detected = server.events()
+                    .filter { it.name == "binary_opened" }
+                    .map { "${it.properties["detected_format"]}" }
+                    .toSet()
+                assertEquals(
+                    setOf("zstd", "sevenzip", "xz", "bzip2", "rar", "lz4", "cab", "tar"),
+                    detected,
+                )
+            }
+        } finally {
+            shutdownAnalytics()
+            server.close()
+        }
+    }
+
+    @Test
     fun telemetryDisabledSendsNoRequestsThroughExportedApi() = runTest {
         if (!isNodeTestRuntime()) return@runTest
 
@@ -190,6 +233,17 @@ class VscodeAnalyticsTest {
 
 private fun deleteDynamicProperty(target: dynamic, key: String) {
     js("Reflect").deleteProperty(target, key)
+}
+
+/** Builds a byte array from int literals, allowing values above 0x7F. */
+private fun bytes(vararg values: Int): ByteArray = ByteArray(values.size) { values[it].toByte() }
+
+/** A 512-byte tar record: arbitrary filename head plus "ustar" at offset 257. */
+private fun tarRecord(): ByteArray {
+    val record = ByteArray(512)
+    "hello.txt".encodeToByteArray().copyInto(record)
+    bytes(0x75, 0x73, 0x74, 0x61, 0x72).copyInto(record, destinationOffset = 257)
+    return record
 }
 
 private fun isNodeTestRuntime(): Boolean =

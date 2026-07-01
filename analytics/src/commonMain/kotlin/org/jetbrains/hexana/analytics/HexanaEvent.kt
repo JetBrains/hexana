@@ -287,15 +287,28 @@ sealed class HexanaEvent {
         GZIP("gzip"),
         PDF("pdf"),
         PNG("png"),
+        // Archive / compression container family. Added to gauge demand for
+        // browsing these in Hexana (it already has an archive-members view for
+        // zip/jar). All have a reliable fixed head magic except TAR, whose
+        // `ustar` magic sits at offset 257.
+        TAR("tar"),
+        ZSTD("zstd"),
+        SEVENZIP("sevenzip"),
+        XZ("xz"),
+        BZIP2("bzip2"),
+        RAR("rar"),
+        LZ4("lz4"),
+        CAB("cab"),
         ;
 
         companion object {
             /**
              * Classifies a file by its leading magic bytes. [header] may be
              * the whole file or just its head — only a short prefix is
-             * examined. Returns null when no known magic matched. Shared by
-             * the IDE-plugin and VS Code surfaces so the magic table has a
-             * single source of truth.
+             * examined (through tar's `ustar` magic at offset 257, so callers
+             * must pass at least 262 bytes for tar to be detectable). Returns
+             * null when no known magic matched. Shared by the IDE-plugin and
+             * VS Code surfaces so the magic table has a single source of truth.
              */
             fun fromMagic(header: ByteArray): DetectedFormat? = when {
                 header.startsWith(0x47, 0x47, 0x55, 0x46) -> GGUF // "GGUF"
@@ -311,13 +324,23 @@ sealed class HexanaEvent {
                 header.startsWith(0x1F, 0x8B) -> GZIP
                 header.startsWith(0x25, 0x50, 0x44, 0x46) -> PDF // "%PDF"
                 header.startsWith(0x89, 0x50, 0x4E, 0x47) -> PNG // "\x89PNG"
+                header.startsWith(0x28, 0xB5, 0x2F, 0xFD) -> ZSTD // Zstandard frame
+                header.startsWith(0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C) -> SEVENZIP // "7z\xBC\xAF'\x1C"
+                header.startsWith(0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00) -> XZ // "\xFD7zXZ\x00"
+                header.startsWith(0x42, 0x5A, 0x68) -> BZIP2 // "BZh"
+                header.startsWith(0x52, 0x61, 0x72, 0x21, 0x1A, 0x07) -> RAR // "Rar!\x1A\x07" (v4 and v5)
+                header.startsWith(0x04, 0x22, 0x4D, 0x18) -> LZ4 // LZ4 frame
+                header.startsWith(0x4D, 0x53, 0x43, 0x46) -> CAB // "MSCF"
+                header.matchesAt(257, 0x75, 0x73, 0x74, 0x61, 0x72) -> TAR // "ustar" at offset 257 (POSIX/GNU)
                 else -> null
             }
 
-            private fun ByteArray.startsWith(vararg expected: Int): Boolean {
-                if (size < expected.size) return false
+            private fun ByteArray.startsWith(vararg expected: Int): Boolean = matchesAt(0, *expected)
+
+            private fun ByteArray.matchesAt(offset: Int, vararg expected: Int): Boolean {
+                if (offset < 0 || size < offset + expected.size) return false
                 for (i in expected.indices) {
-                    if (this[i] != expected[i].toByte()) return false
+                    if (this[offset + i] != expected[i].toByte()) return false
                 }
                 return true
             }

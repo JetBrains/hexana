@@ -55,8 +55,9 @@ internal fun binaryFormatOf(
  * a content magic-byte sniff ([HexanaEvent.DetectedFormat], null when no
  * magic matched). Call only when [binaryFormatOf] returned GENERIC.
  *
- * The magic sniff reads at most the first 16 bytes from the provider's
- * already-loaded buffer — no fresh disk I/O — and never retains them.
+ * The magic sniff reads at most the first [HEADER_SNIFF_BYTES] bytes from the
+ * provider's already-loaded buffer — no fresh disk I/O — and never retains
+ * them. The window is wide enough to reach tar's `ustar` magic at offset 257.
  */
 internal data class GenericDetail(
     val ext: HexanaEvent.GenericExt,
@@ -72,12 +73,19 @@ internal fun genericDetailOf(
 )
 
 /**
- * Reads up to 16 header bytes from [buffer] (an independent-cursor duplicate
- * per [BinaryProvider.bytes]) and classifies them. Defensive: any failure
- * yields null — analytics must never break the editor open path.
+ * Header window read for the magic-byte sniff. 512 bytes (one tar record)
+ * covers every offset-0 magic and reaches tar's `ustar` marker at offset 257.
+ */
+private const val HEADER_SNIFF_BYTES = 512
+
+/**
+ * Reads up to [HEADER_SNIFF_BYTES] header bytes from [buffer] (an
+ * independent-cursor duplicate per [BinaryProvider.bytes]) and classifies
+ * them. Defensive: any failure yields null — analytics must never break the
+ * editor open path.
  */
 private fun detectMagic(buffer: CommonByteBuffer): HexanaEvent.DetectedFormat? = try {
-    val n = minOf(16, buffer.size)
+    val n = minOf(HEADER_SNIFF_BYTES, buffer.size)
     if (n < 4) {
         null
     } else {
