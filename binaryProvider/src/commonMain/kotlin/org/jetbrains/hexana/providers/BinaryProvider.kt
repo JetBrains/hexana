@@ -89,6 +89,8 @@ sealed interface BinaryProvider {
      * does not (yet) support size profiling.
      */
     val sizeAnalysis: BinarySizeNode? get() = null
+
+    val strings: List<NativeStringRecord> get() = emptyList()
 }
 
 object WasmBinaryProviderSelector {
@@ -168,7 +170,7 @@ sealed class NativeBinaryProvider(
     override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
     abstract val nativeFormat: NativeBinaryFormat
 
-    val strings: List<NativeStringRecord> by lazy {
+    override val strings: List<NativeStringRecord> by lazy {
         NativeStringScanner.scanAscii(bytes)
     }
 

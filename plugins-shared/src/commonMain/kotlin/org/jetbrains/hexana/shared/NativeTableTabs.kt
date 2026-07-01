@@ -55,7 +55,6 @@ class NativeTableTabsProvider : TableTabsProvider {
         is FatMachOBinaryProvider -> fatMachOTabs(provider)
         is PeBinaryProvider -> peTabs(provider) + listOf(debugContextTab(provider, context.nativeDebugData))
         is CoffBinaryProvider -> coffTabs(provider)
-        is NativeBinaryProvider -> stringsTab(provider)?.let(::listOf).orEmpty()
         else -> emptyList()
     }
 
@@ -142,7 +141,6 @@ class NativeTableTabsProvider : TableTabsProvider {
 
 private fun coffTabs(provider: CoffBinaryProvider): List<TableTabDescriptor> = buildList {
     coffSymbolsTab(provider)?.let { add(it) }
-    stringsTab(provider)?.let { add(it) }
 }
 
 private fun coffSymbolsTab(provider: CoffBinaryProvider): TableTabDescriptor? {
@@ -170,7 +168,6 @@ private fun peTabs(provider: PeBinaryProvider): List<TableTabDescriptor> = build
     peRelocationsTab(provider)?.let { add(it) }
     peDebugTab(provider)?.let { add(it) }
     peSymbolsTab(provider)?.let { add(it) }
-    stringsTab(provider)?.let { add(it) }
 }
 
 private fun peHeadersTab(provider: PeBinaryProvider): TableTabDescriptor? {
@@ -285,7 +282,6 @@ private fun peSymbolsTab(provider: PeBinaryProvider): TableTabDescriptor? {
 
 private fun fatMachOTabs(provider: FatMachOBinaryProvider): List<TableTabDescriptor> = buildList {
     machOUniversalTab(provider)?.let { add(it) }
-    stringsTab(provider)?.let { add(it) }
 }
 
 private fun machOUniversalTab(provider: FatMachOBinaryProvider): TableTabDescriptor? {
@@ -325,7 +321,6 @@ private fun machOTabs(provider: MachOBinaryProvider): List<TableTabDescriptor> =
     machODynamicSymbolsTab(provider)?.let { add(it) }
     machODylibsTab(provider)?.let { add(it) }
     machORelocationsTab(provider)?.let { add(it) }
-    stringsTab(provider)?.let { add(it) }
 }
 
 private fun machOHeadersTab(provider: MachOBinaryProvider): TableTabDescriptor? {
@@ -472,7 +467,6 @@ private fun elfTabs(provider: ElfBinaryProvider): List<TableTabDescriptor> = bui
     elfRelocationsTab(provider)?.let { add(it) }
     elfImportsTab(provider)?.let { add(it) }
     elfExportsTab(provider)?.let { add(it) }
-    stringsTab(provider)?.let { add(it) }
 }
 
 private fun elfHeadersTab(provider: ElfBinaryProvider): TableTabDescriptor? {
@@ -682,18 +676,4 @@ fun resolveNativeSourcePath(
     }
 
     return null
-}
-
-private fun stringsTab(provider: NativeBinaryProvider): TableTabDescriptor? {
-    val strings = provider.strings.takeIf { it.isNotEmpty() } ?: return null
-    return TableTabDescriptor(
-        name = "Strings",
-        columns = listOf(
-            col("Offset") { CellValue(hex(strings[it].offset)) },
-            col("Size") { CellValue(strings[it].size) },
-            col("Value", ColumnWidth.Fill()) { CellValue(strings[it].value) },
-        ),
-        rowCount = strings.size,
-        rowSelectionProvider = { strings.getOrNull(it)?.let { string -> RowSelectionData(string.offset, string.size) } },
-    )
 }
