@@ -51,6 +51,21 @@ class HexanaClaudePluginWrapperIntegrationTest {
     }
 
     @Test
+    fun assembledPluginWrappersShipWindowsLaunchers() {
+        val claudeInstallDir = Path.of(
+            System.getProperty(StdioLauncher.ClaudePluginWrapper.installDirSystemProperty)
+                ?: error("Missing `${StdioLauncher.ClaudePluginWrapper.installDirSystemProperty}` system property")
+        )
+        val codexInstallDir = Path.of(
+            System.getProperty(StdioLauncher.CodexPluginWrapper.installDirSystemProperty)
+                ?: error("Missing `${StdioLauncher.CodexPluginWrapper.installDirSystemProperty}` system property")
+        )
+
+        assertTrue(Files.isRegularFile(claudeInstallDir.resolve("bin/hexana-mcp.cmd")))
+        assertTrue(Files.isRegularFile(codexInstallDir.resolve("bin/hexana-mcp.cmd")))
+    }
+
+    @Test
     fun assembledClaudePluginExposesProductionToolsByDefaultOverStdio() = runBlocking {
         assertWrapperExposesToolsOverStdio(
             clientLabel = "Claude",
