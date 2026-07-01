@@ -97,7 +97,7 @@ object NativeImageDetector {
     private const val SVM_VERSION_INFO = "svm_version_info"
 
     fun fromElf(
-        strings: List<NativeStringRecord>,
+        strings: List<BinaryStringRecord>,
         sections: List<ElfSectionHeader>,
         symbols: List<ElfSymbol>,
         programHeaders: List<ElfProgramHeader>,
@@ -126,7 +126,7 @@ object NativeImageDetector {
     }
 
     fun fromMachO(
-        strings: List<NativeStringRecord>,
+        strings: List<BinaryStringRecord>,
         sections: List<MachOSection>,
         symbols: List<MachOSymbol>,
         bytes: CommonByteBuffer,
@@ -152,7 +152,7 @@ object NativeImageDetector {
     }
 
     fun fromPe(
-        strings: List<NativeStringRecord>,
+        strings: List<BinaryStringRecord>,
         sections: List<PeSection>,
         exports: PeExportDirectory?,
         bytes: CommonByteBuffer,
@@ -205,7 +205,7 @@ object NativeImageDetector {
         val platform: String?,
     )
 
-    private fun parseVmIdentity(strings: List<NativeStringRecord>): VmIdentity? {
+    private fun parseVmIdentity(strings: List<BinaryStringRecord>): VmIdentity? {
         // The value is "GraalVM 23+37.1 Java 23", "GraalVM CE 21.0.1 Java 21",
         // or — for the commercial distribution — "Oracle GraalVM 24.0.2+11.1".
         val versionValue = strings.firstNotNullOfOrNull { record ->

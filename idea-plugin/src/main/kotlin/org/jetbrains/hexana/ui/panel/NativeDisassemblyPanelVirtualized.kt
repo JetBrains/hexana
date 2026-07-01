@@ -72,7 +72,7 @@ import org.jetbrains.hexana.providers.CoffBinaryProvider
 import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
-import org.jetbrains.hexana.providers.NativeStringRecord
+import org.jetbrains.hexana.providers.BinaryStringRecord
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.jewel.foundation.theme.JewelTheme

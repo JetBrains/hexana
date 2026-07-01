@@ -22,7 +22,7 @@ import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.parsing.common.NativeByteRange
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ElfBinaryProvider
-import org.jetbrains.hexana.providers.NativeStringRecord
+import org.jetbrains.hexana.providers.BinaryStringRecord
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.elf.ElfDynamicEntry
 import org.jetbrains.hexana.providers.elf.ElfProgramHeader
@@ -517,7 +517,7 @@ private fun Iterable<ElfDynamicEntry>.dynamicEntriesCoveringRange(): IntRange =
     map { it.recordRange.toIntRange() }.coveringRange()
 
 
-private fun Iterable<NativeStringRecord>.stringsCoveringRange(): IntRange =
+private fun Iterable<BinaryStringRecord>.stringsCoveringRange(): IntRange =
     map { IntRange(it.offset, it.offset + it.size - 1) }.coveringRange()
 
 

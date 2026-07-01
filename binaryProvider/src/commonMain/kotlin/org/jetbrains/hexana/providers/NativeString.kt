@@ -2,10 +2,12 @@ package org.jetbrains.hexana.providers
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 
-data class NativeStringRecord(
-    val offset: Int,
-    val size: Int,
+data class BinaryStringRecord(
     val value: String,
+    val offset: Int = -1,
+    val size: Int = -1,
+    val index: Int = -1,
+    val tag: String? = null,
 )
 
 object NativeStringScanner {
@@ -14,13 +16,13 @@ object NativeStringScanner {
         minLength: Int = 4,
         maxBytes: Int = 8 * 1024 * 1024,
         maxStrings: Int = 5_000,
-    ): List<NativeStringRecord> {
+    ): List<BinaryStringRecord> {
         require(minLength > 0) { "minLength must be positive" }
         require(maxBytes >= 0) { "maxBytes must be non-negative" }
         require(maxStrings >= 0) { "maxStrings must be non-negative" }
 
         val limit = minOf(bytes.size, maxBytes)
-        val strings = mutableListOf<NativeStringRecord>()
+        val strings = mutableListOf<BinaryStringRecord>()
         var index = 0
 
         while (index < limit && strings.size < maxStrings) {
@@ -35,7 +37,7 @@ object NativeStringScanner {
             }
 
             if (builder.length >= minLength) {
-                strings.add(NativeStringRecord(start, builder.length, builder.toString()))
+                strings.add(BinaryStringRecord(value = builder.toString(), offset = start, size = builder.length))
             }
 
             index = if (index == start) index + 1 else index + 1

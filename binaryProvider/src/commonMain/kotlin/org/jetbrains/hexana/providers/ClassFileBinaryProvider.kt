@@ -26,18 +26,13 @@ class ClassFileBinaryProvider(
         }
     }
 
-    /**
-     * Pre-rendered constant pool entries as `(index, renderedText)` pairs,
-     * suitable for display in a table tab without depending on
-     * [JavaConstantPoolEntry] types at the UI layer.
-     */
-    val constantPoolEntries: List<ConstantPoolDisplayEntry> by lazy {
+    override val strings: List<BinaryStringRecord> by lazy {
         val cf = parsedClassFile ?: return@lazy emptyList()
         cf.constantPool.asSequence().map { (index, entry) ->
-            ConstantPoolDisplayEntry(
+            BinaryStringRecord(
+                value = renderConstantPoolEntry(entry, cf.constantPool),
                 index = index,
                 tag = constantPoolEntryTag(entry),
-                description = renderConstantPoolEntry(entry, cf.constantPool),
             )
         }.toList()
     }
@@ -74,11 +69,6 @@ class ClassFileBinaryProvider(
     }
 }
 
-class ConstantPoolDisplayEntry(
-    val index: Int,
-    val tag: String,
-    val description: String,
-)
 
 private fun constantPoolEntryTag(entry: JavaConstantPoolEntry): String = when (entry) {
     is JavaConstantPoolEntry.Utf8 -> "Utf8"

@@ -657,7 +657,7 @@ private fun PeCoffSymbol.toRecord(detail: String): BinaryRecordResult =
     )
 
 private fun org.jetbrains.hexana.providers.BinaryProvider.stringRecords(): List<BinaryRecordResult> =
-    (this as? NativeBinaryProvider)?.strings.orEmpty().mapIndexed { index, record ->
+    strings.mapIndexed { index, record ->
         BinaryRecordResult(
             kind = "string",
             name = record.value.take(80),

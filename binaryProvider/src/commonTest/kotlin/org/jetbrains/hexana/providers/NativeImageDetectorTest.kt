@@ -136,7 +136,7 @@ class NativeImageDetectorTest {
 
     // --- fixture helpers -----------------------------------------------------
 
-    private fun str(value: String) = NativeStringRecord(offset = 0, size = value.length, value = value)
+    private fun str(value: String) = BinaryStringRecord(value = value, offset = 0, size = value.length)
 
     private fun sym(name: String, value: ULong) = ElfSymbol(
         index = 0,
