@@ -72,7 +72,6 @@ internal fun classFilePanels(
 ): List<org.jetbrains.hexana.ui.panel.Panel> = listOf(
     org.jetbrains.hexana.ui.panel.Panel("Header") { ClassHeaderTab(classFile) },
     org.jetbrains.hexana.ui.panel.Panel("Methods") { ClassMethodsTab(classFile, navTargetFlow) },
-    org.jetbrains.hexana.ui.panel.Panel("Constant pool") { ClassConstantPoolTab(classFile) },
 )
 
 @Composable
@@ -235,46 +234,6 @@ private fun MethodBodyRow(row: MethodRow) {
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(row.text, style = RowTextStyle)
-    }
-}
-
-@Composable
-private fun ClassConstantPoolTab(cf: JavaClassFile) {
-    val rows = remember(cf) { cf.constantPool.asSequence().toList() }
-    var searchQuery by remember(cf) { mutableStateOf(TextFieldValue("")) }
-    val filteredRows = remember(cf, searchQuery.text) {
-        if (searchQuery.text.isBlank()) rows
-        else {
-            val q = searchQuery.text.trim().lowercase()
-            rows.filter { (index, entry) ->
-                val text = "#${index.toString().padStart(4, ' ')}  ${renderEntry(entry, cf.constantPool)}"
-                text.lowercase().contains(q)
-            }
-        }
-    }
-    val listState = rememberLazyListState()
-    Column(modifier = Modifier.fillMaxSize()) {
-        SearchField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            placeholder = "Search constant pool",
-        )
-        Box(modifier = Modifier.fillMaxSize().weight(1f)) {
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                if (filteredRows.isEmpty() && searchQuery.text.isNotEmpty()) {
-                    item { Text("No entries match the search.", style = RowTextStyle) }
-                } else {
-                    items(filteredRows.size) { idx ->
-                        val (index, entry) = filteredRows[idx]
-                        Text(
-                            "#${index.toString().padStart(4, ' ')}  ${renderEntry(entry, cf.constantPool)}",
-                            style = RowTextStyle,
-                        )
-                    }
-                }
-            }
-            VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
-        }
     }
 }
 
@@ -472,27 +431,6 @@ private fun resolveCpReference(index: Int, cp: JavaConstantPool): String? {
         is JavaConstantPoolEntry.Utf8 -> "\"${entry.value}\""
         else -> null
     }
-}
-
-private fun renderEntry(entry: JavaConstantPoolEntry, cp: JavaConstantPool): String = when (entry) {
-    is JavaConstantPoolEntry.Utf8 -> "Utf8                \"${entry.value}\""
-    is JavaConstantPoolEntry.Integer -> "Integer             ${entry.value}"
-    is JavaConstantPoolEntry.Float -> "Float               ${entry.value}"
-    is JavaConstantPoolEntry.Long -> "Long                ${entry.value}"
-    is JavaConstantPoolEntry.Double -> "Double              ${entry.value}"
-    is JavaConstantPoolEntry.ClassRef -> "Class               #${entry.nameIndex}  // ${runCatching { cp.utf8(entry.nameIndex) }.getOrDefault("?")}"
-    is JavaConstantPoolEntry.StringRef -> "String              #${entry.stringIndex}  // \"${runCatching { cp.utf8(entry.stringIndex) }.getOrDefault("?")}\""
-    is JavaConstantPoolEntry.Fieldref -> "Fieldref            #${entry.classIndex}.#${entry.nameAndTypeIndex}"
-    is JavaConstantPoolEntry.Methodref -> "Methodref           #${entry.classIndex}.#${entry.nameAndTypeIndex}"
-    is JavaConstantPoolEntry.InterfaceMethodref -> "InterfaceMethodref  #${entry.classIndex}.#${entry.nameAndTypeIndex}"
-    is JavaConstantPoolEntry.NameAndType -> "NameAndType         #${entry.nameIndex}:#${entry.descriptorIndex}"
-    is JavaConstantPoolEntry.MethodHandle -> "MethodHandle        kind=${entry.referenceKind} ref=#${entry.referenceIndex}"
-    is JavaConstantPoolEntry.MethodType -> "MethodType          #${entry.descriptorIndex}"
-    is JavaConstantPoolEntry.Dynamic -> "Dynamic             bsm=${entry.bootstrapMethodAttrIndex} nat=#${entry.nameAndTypeIndex}"
-    is JavaConstantPoolEntry.InvokeDynamic -> "InvokeDynamic       bsm=${entry.bootstrapMethodAttrIndex} nat=#${entry.nameAndTypeIndex}"
-    is JavaConstantPoolEntry.ModuleRef -> "Module              #${entry.nameIndex}"
-    is JavaConstantPoolEntry.PackageRef -> "Package             #${entry.nameIndex}"
-    JavaConstantPoolEntry.Unusable -> "(unusable)"
 }
 
 private fun renderClassAccessFlags(raw: Int): String = buildString {

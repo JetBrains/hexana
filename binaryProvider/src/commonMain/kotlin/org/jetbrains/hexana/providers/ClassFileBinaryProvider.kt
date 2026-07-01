@@ -3,6 +3,8 @@ package org.jetbrains.hexana.providers
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.javabytecode.JavaClassFile
 import org.jetbrains.hexana.javabytecode.JavaClassFileParser
+import org.jetbrains.hexana.javabytecode.JavaConstantPool
+import org.jetbrains.hexana.javabytecode.JavaConstantPoolEntry
 
 /**
  * Binary provider for JVM `.class` files. Extends [GenericBinaryProvider] so the
@@ -22,6 +24,22 @@ class ClassFileBinaryProvider(
         } catch (_: Throwable) {
             null
         }
+    }
+
+    /**
+     * Pre-rendered constant pool entries as `(index, renderedText)` pairs,
+     * suitable for display in a table tab without depending on
+     * [JavaConstantPoolEntry] types at the UI layer.
+     */
+    val constantPoolEntries: List<ConstantPoolDisplayEntry> by lazy {
+        val cf = parsedClassFile ?: return@lazy emptyList()
+        cf.constantPool.asSequence().map { (index, entry) ->
+            ConstantPoolDisplayEntry(
+                index = index,
+                tag = constantPoolEntryTag(entry),
+                description = renderConstantPoolEntry(entry, cf.constantPool),
+            )
+        }.toList()
     }
 
     companion object {
@@ -54,4 +72,52 @@ class ClassFileBinaryProvider(
             return word4 > 30
         }
     }
+}
+
+class ConstantPoolDisplayEntry(
+    val index: Int,
+    val tag: String,
+    val description: String,
+)
+
+private fun constantPoolEntryTag(entry: JavaConstantPoolEntry): String = when (entry) {
+    is JavaConstantPoolEntry.Utf8 -> "Utf8"
+    is JavaConstantPoolEntry.Integer -> "Integer"
+    is JavaConstantPoolEntry.Float -> "Float"
+    is JavaConstantPoolEntry.Long -> "Long"
+    is JavaConstantPoolEntry.Double -> "Double"
+    is JavaConstantPoolEntry.ClassRef -> "Class"
+    is JavaConstantPoolEntry.StringRef -> "String"
+    is JavaConstantPoolEntry.Fieldref -> "Fieldref"
+    is JavaConstantPoolEntry.Methodref -> "Methodref"
+    is JavaConstantPoolEntry.InterfaceMethodref -> "InterfaceMethodref"
+    is JavaConstantPoolEntry.NameAndType -> "NameAndType"
+    is JavaConstantPoolEntry.MethodHandle -> "MethodHandle"
+    is JavaConstantPoolEntry.MethodType -> "MethodType"
+    is JavaConstantPoolEntry.Dynamic -> "Dynamic"
+    is JavaConstantPoolEntry.InvokeDynamic -> "InvokeDynamic"
+    is JavaConstantPoolEntry.ModuleRef -> "Module"
+    is JavaConstantPoolEntry.PackageRef -> "Package"
+    JavaConstantPoolEntry.Unusable -> "(unusable)"
+}
+
+private fun renderConstantPoolEntry(entry: JavaConstantPoolEntry, cp: JavaConstantPool): String = when (entry) {
+    is JavaConstantPoolEntry.Utf8 -> "\"${entry.value}\""
+    is JavaConstantPoolEntry.Integer -> "${entry.value}"
+    is JavaConstantPoolEntry.Float -> "${entry.value}"
+    is JavaConstantPoolEntry.Long -> "${entry.value}"
+    is JavaConstantPoolEntry.Double -> "${entry.value}"
+    is JavaConstantPoolEntry.ClassRef -> "#${entry.nameIndex}  // ${runCatching { cp.utf8(entry.nameIndex) }.getOrDefault("?")}"
+    is JavaConstantPoolEntry.StringRef -> "#${entry.stringIndex}  // \"${runCatching { cp.utf8(entry.stringIndex) }.getOrDefault("?")}\""
+    is JavaConstantPoolEntry.Fieldref -> "#${entry.classIndex}.#${entry.nameAndTypeIndex}"
+    is JavaConstantPoolEntry.Methodref -> "#${entry.classIndex}.#${entry.nameAndTypeIndex}"
+    is JavaConstantPoolEntry.InterfaceMethodref -> "#${entry.classIndex}.#${entry.nameAndTypeIndex}"
+    is JavaConstantPoolEntry.NameAndType -> "#${entry.nameIndex}:#${entry.descriptorIndex}"
+    is JavaConstantPoolEntry.MethodHandle -> "kind=${entry.referenceKind} ref=#${entry.referenceIndex}"
+    is JavaConstantPoolEntry.MethodType -> "#${entry.descriptorIndex}"
+    is JavaConstantPoolEntry.Dynamic -> "bsm=${entry.bootstrapMethodAttrIndex} nat=#${entry.nameAndTypeIndex}"
+    is JavaConstantPoolEntry.InvokeDynamic -> "bsm=${entry.bootstrapMethodAttrIndex} nat=#${entry.nameAndTypeIndex}"
+    is JavaConstantPoolEntry.ModuleRef -> "#${entry.nameIndex}"
+    is JavaConstantPoolEntry.PackageRef -> "#${entry.nameIndex}"
+    JavaConstantPoolEntry.Unusable -> "(unusable)"
 }

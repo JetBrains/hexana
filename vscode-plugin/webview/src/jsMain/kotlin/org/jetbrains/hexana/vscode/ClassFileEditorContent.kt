@@ -8,13 +8,12 @@ import org.jetbrains.hexana.javabytecode.*
 
 /**
  * Builds the extra [PanelTab] entries for a parsed JVM `.class` file:
- * Header, Methods, Constant pool — mirroring the IntelliJ plugin's
- * `ClassFileEditorView`.
+ * Header, Methods — mirroring the IntelliJ plugin's `ClassFileEditorView`.
+ * The Constant Pool tab is provided by [ClassFileTableTabsProvider].
  */
 internal fun classFileExtraTabs(classFile: JavaClassFile): List<PanelTab> = listOf(
     PanelTab("Header") { _ -> ClassHeaderTab(classFile) },
     PanelTab("Methods") { _ -> ClassMethodsTab(classFile) },
-    PanelTab("Constant pool") { _ -> ClassConstantPoolTab(classFile) },
 )
 
 // ---------------------------------------------------------------------------
@@ -198,89 +197,6 @@ private fun ClassMethodsTab(cf: JavaClassFile) {
 }
 
 // ---------------------------------------------------------------------------
-// Constant pool tab
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun ClassConstantPoolTab(cf: JavaClassFile) {
-    val rows = remember(cf) { cf.constantPool.asSequence().toList() }
-    var searchQuery by remember(cf) { mutableStateOf("") }
-    var debouncedQuery by remember(cf) { mutableStateOf("") }
-
-    LaunchedEffect(searchQuery) {
-        delay(300)
-        debouncedQuery = searchQuery
-    }
-
-    val filteredRows = remember(cf, debouncedQuery) {
-        if (debouncedQuery.isBlank()) rows
-        else {
-            val q = debouncedQuery.trim().lowercase()
-            rows.filter { (index, entry) ->
-                val text = "#${index.toString().padStart(4, ' ')}  ${renderEntry(entry, cf.constantPool)}"
-                text.lowercase().contains(q)
-            }
-        }
-    }
-
-    Div({
-        style {
-            display(DisplayStyle.Flex)
-            property("flex-direction", "column")
-            property("gap", "4px")
-            property("flex", "1")
-            property("min-height", "0")
-        }
-    }) {
-        Input(org.jetbrains.compose.web.attributes.InputType.Text) {
-            classes("hexana-search-input")
-            value(searchQuery)
-            attr("placeholder", "Search constant pool\u2026")
-            onInput { searchQuery = it.value }
-            style {
-                property("margin-bottom", "4px")
-                property("padding", "4px 8px")
-                property("font-size", "12px")
-                property("background", "var(--vscode-input-background, #3c3c3c)")
-                property("color", "var(--hexana-fg)")
-                property("border", "1px solid var(--hexana-border, #333)")
-                property("border-radius", "3px")
-                property("outline", "none")
-                property("flex", "none")
-                width(100.percent)
-            }
-        }
-
-        if (filteredRows.isEmpty() && searchQuery.isNotEmpty()) {
-            Div({
-                style {
-                    property("font-family", "monospace")
-                    property("font-size", "12px")
-                }
-            }) {
-                Text("No entries match the search.")
-            }
-        } else {
-            VirtualizedList(
-                itemCount = filteredRows.size,
-                itemHeightPx = 20,
-            ) { idx ->
-                val (index, entry) = filteredRows[idx]
-                Div({
-                    style {
-                        property("font-family", "monospace")
-                        property("font-size", "12px")
-                        property("white-space", "pre")
-                    }
-                }) {
-                    Text("#${index.toString().padStart(4, ' ')}  ${renderEntry(entry, cf.constantPool)}")
-                }
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Methods-tab section builder
 // ---------------------------------------------------------------------------
 
@@ -421,27 +337,6 @@ private fun resolveCpReference(index: Int, cp: JavaConstantPool): String? {
         is JavaConstantPoolEntry.Utf8 -> "\"${entry.value}\""
         else -> null
     }
-}
-
-private fun renderEntry(entry: JavaConstantPoolEntry, cp: JavaConstantPool): String = when (entry) {
-    is JavaConstantPoolEntry.Utf8 -> "Utf8                \"${entry.value}\""
-    is JavaConstantPoolEntry.Integer -> "Integer             ${entry.value}"
-    is JavaConstantPoolEntry.Float -> "Float               ${entry.value}"
-    is JavaConstantPoolEntry.Long -> "Long                ${entry.value}"
-    is JavaConstantPoolEntry.Double -> "Double              ${entry.value}"
-    is JavaConstantPoolEntry.ClassRef -> "Class               #${entry.nameIndex}  // ${runCatching { cp.utf8(entry.nameIndex) }.getOrDefault("?")}"
-    is JavaConstantPoolEntry.StringRef -> "String              #${entry.stringIndex}  // \"${runCatching { cp.utf8(entry.stringIndex) }.getOrDefault("?")}\""
-    is JavaConstantPoolEntry.Fieldref -> "Fieldref            #${entry.classIndex}.#${entry.nameAndTypeIndex}"
-    is JavaConstantPoolEntry.Methodref -> "Methodref           #${entry.classIndex}.#${entry.nameAndTypeIndex}"
-    is JavaConstantPoolEntry.InterfaceMethodref -> "InterfaceMethodref  #${entry.classIndex}.#${entry.nameAndTypeIndex}"
-    is JavaConstantPoolEntry.NameAndType -> "NameAndType         #${entry.nameIndex}:#${entry.descriptorIndex}"
-    is JavaConstantPoolEntry.MethodHandle -> "MethodHandle        kind=${entry.referenceKind} ref=#${entry.referenceIndex}"
-    is JavaConstantPoolEntry.MethodType -> "MethodType          #${entry.descriptorIndex}"
-    is JavaConstantPoolEntry.Dynamic -> "Dynamic             bsm=${entry.bootstrapMethodAttrIndex} nat=#${entry.nameAndTypeIndex}"
-    is JavaConstantPoolEntry.InvokeDynamic -> "InvokeDynamic       bsm=${entry.bootstrapMethodAttrIndex} nat=#${entry.nameAndTypeIndex}"
-    is JavaConstantPoolEntry.ModuleRef -> "Module              #${entry.nameIndex}"
-    is JavaConstantPoolEntry.PackageRef -> "Package             #${entry.nameIndex}"
-    JavaConstantPoolEntry.Unusable -> "(unusable)"
 }
 
 private fun renderClassAccessFlags(raw: Int): String = buildString {

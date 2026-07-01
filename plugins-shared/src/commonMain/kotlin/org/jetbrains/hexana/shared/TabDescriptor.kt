@@ -224,6 +224,7 @@ object TableTabsProviderRegistry {
             WasmTableTabsProvider(),
             NativeTableTabsProvider(),
             ZipTableTabsProvider(),
+            ClassFileTableTabsProvider(),
             StringsTabProvider(),
             SizeTableTabsProvider(),
             WasmProfilerTabsProvider(),
