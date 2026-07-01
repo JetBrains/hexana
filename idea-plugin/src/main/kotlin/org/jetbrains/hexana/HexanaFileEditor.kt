@@ -220,21 +220,6 @@ class HexanaFileEditor(
         commonBuffer: CommonByteBuffer,
         sourcePath: String?
     ): BinaryProvider {
-        // Recognised structured formats (class/dex) use dedicated providers with
-        // lazy parsed data so panels can reuse the parse result without re-parsing.
-        if (ext == "class" || ClassFileBinaryProvider.isClassFile(commonBuffer)) {
-            return ClassFileBinaryProvider(commonBuffer.duplicate().position(0))
-        }
-        if (ext == "dex" || DexBinaryProvider.isDexFile(commonBuffer)) {
-            return DexBinaryProvider(commonBuffer.duplicate().position(0))
-        }
-
-        // Known ZIP extensions: skip Wasm detection and go straight to
-        // nativeOrGenericBinaryProvider which will produce a ZipBinaryProvider.
-        if (ext == "jar" || ext == "zip" || ext == "war" || ext == "apk") {
-            return nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
-        }
-
         if (ext != "wasm") {
             return nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
         }

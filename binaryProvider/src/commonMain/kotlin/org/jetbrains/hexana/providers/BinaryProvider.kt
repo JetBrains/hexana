@@ -549,19 +549,21 @@ fun classifyArchiveMember(
 fun nativeOrGenericBinaryProvider(
     sharedBytes: CommonByteBuffer,
     sourcePath: String? = null,
-): BinaryProvider = when (val fmt = NativeBinaryFormatDetector.detect(sharedBytes)) {
-    is NativeBinaryFormat.Elf -> ElfBinaryProvider(sharedBytes, fmt, sourcePath)
-    is NativeBinaryFormat.MachO -> MachOBinaryProvider(sharedBytes, fmt, sourcePath)
-    is NativeBinaryFormat.FatMachO -> FatMachOBinaryProvider(sharedBytes, fmt, sourcePath)
-    is NativeBinaryFormat.Pe -> PeBinaryProvider(sharedBytes, fmt, sourcePath)
-    is NativeBinaryFormat.Coff -> CoffBinaryProvider(sharedBytes, fmt, sourcePath)
-    NativeBinaryFormat.Archive -> ArchiveBinaryProvider(sharedBytes, sourcePath)
-    null -> {
-        when {
-            ZipBinaryProvider.isZip(sharedBytes) -> ZipBinaryProvider(sharedBytes)
-            ClassFileBinaryProvider.isClassFile(sharedBytes) -> ClassFileBinaryProvider(sharedBytes.duplicate().position(0))
-            DexBinaryProvider.isDexFile(sharedBytes) -> DexBinaryProvider(sharedBytes.duplicate().position(0))
-            else -> GenericBinaryProvider(sharedBytes)
+): BinaryProvider {
+    return when {
+        ZipBinaryProvider.isZip(sharedBytes) -> ZipBinaryProvider(sharedBytes)
+        ClassFileBinaryProvider.isClassFile(sharedBytes) -> ClassFileBinaryProvider(sharedBytes.duplicate().position(0))
+        DexBinaryProvider.isDexFile(sharedBytes) -> DexBinaryProvider(sharedBytes.duplicate().position(0))
+        else -> {
+            when (val fmt = NativeBinaryFormatDetector.detect(sharedBytes)) {
+                is NativeBinaryFormat.Elf -> ElfBinaryProvider(sharedBytes, fmt, sourcePath)
+                is NativeBinaryFormat.MachO -> MachOBinaryProvider(sharedBytes, fmt, sourcePath)
+                is NativeBinaryFormat.FatMachO -> FatMachOBinaryProvider(sharedBytes, fmt, sourcePath)
+                is NativeBinaryFormat.Pe -> PeBinaryProvider(sharedBytes, fmt, sourcePath)
+                is NativeBinaryFormat.Coff -> CoffBinaryProvider(sharedBytes, fmt, sourcePath)
+                NativeBinaryFormat.Archive -> ArchiveBinaryProvider(sharedBytes, sourcePath)
+                null -> GenericBinaryProvider(sharedBytes)
+            }
         }
     }
 }
