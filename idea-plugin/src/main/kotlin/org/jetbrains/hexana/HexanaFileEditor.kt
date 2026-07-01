@@ -48,7 +48,6 @@ import org.jetbrains.hexana.ui.WASM_FUNCTION_NAV_TARGET_KEY
 import org.jetbrains.hexana.ui.WasmFunctionNavTarget
 import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.hexana.ui.panel.DiffLoadable
-import org.jetbrains.hexana.ui.panel.Panel
 import org.jetbrains.hexana.ui.panel.SizeReady
 import org.jetbrains.hexana.ui.panel.WasmComponentDiffEditorView
 import org.jetbrains.hexana.ui.panel.WasmDiffEditorView
@@ -189,15 +188,6 @@ class HexanaFileEditor(
 
         binaryProvider = resolveProvider(ext, inMemoryBuffer, commonBuffer, sourcePath)
 
-        // Determine extra panels based on file extension / buffer magic.
-        // On parse failure the result carries an error message for the error panel.
-        val extraPanels = when (val extraPanelResult = resolveExtraPanels(ext, commonBuffer)) {
-            is ExtraPanelResult.Panels -> extraPanelResult.panels
-            is ExtraPanelResult.ParseError -> listOf(Panel("Parse Error") {
-                org.jetbrains.jewel.ui.component.Text(extraPanelResult.message)
-            })
-        }
-
         val parentFile = myFile.getUserData(HexanaBinaryVirtualFile.PARENT_FILE_KEY)
 
         val hexView = createComposePanel {
@@ -214,7 +204,7 @@ class HexanaFileEditor(
                         { FileEditorManager.getInstance(myProject).openFile(pf, true) }
                     },
                     wasmFunctionNavTargetFlow = wasmFunctionNavTargetFlow,
-                    extraPanels = extraPanels,
+                    classFileNavTargetFlow = classFileNavTargetFlow,
                     onOpenZipEntry = { entry -> openZipEntry(entry, commonBuffer) },
                 )
             }
@@ -316,55 +306,6 @@ class HexanaFileEditor(
         }
     }
 
-    /**
-     * Result of resolving format-specific extra panels from the file extension and buffer.
-     */
-    private sealed interface ExtraPanelResult {
-        /** Successfully parsed — carry the extra panels (may be empty for unknown formats). */
-        data class Panels(val panels: List<org.jetbrains.hexana.ui.panel.Panel>) : ExtraPanelResult
-        /** Parsing failed — carry an error message for the error panel. */
-        data class ParseError(val message: String) : ExtraPanelResult
-    }
-
-    /**
-     * Determines extra panels for known structured formats (.class, .dex).
-     * ZIP/JAR archives are handled by [ZipTableTabsProvider] via the provider pipeline.
-     * Returns [ExtraPanelResult.ParseError] when the format is recognised but parsing fails,
-     * or [ExtraPanelResult.Panels] with the extra panels (empty list for unrecognised formats).
-     */
-    private fun resolveExtraPanels(ext: String?, commonBuffer: CommonByteBuffer): ExtraPanelResult {
-        val provider = binaryProvider
-
-        if (provider is ClassFileBinaryProvider) {
-            val parsed = provider.parsedClassFile
-            if (parsed == null) {
-                HexanaLog.LOG.warn("Failed to parse .class file ${myFile.name}")
-            }
-            return if (parsed != null) {
-                ExtraPanelResult.Panels(org.jetbrains.hexana.ui.classFilePanels(parsed, classFileNavTargetFlow))
-            } else {
-                ExtraPanelResult.ParseError(
-                    "Failed to parse ${myFile.name} as a JVM class file \u2014 see idea.log for details."
-                )
-            }
-        }
-
-        if (provider is DexBinaryProvider) {
-            val parsed = provider.parsedDexFile
-            if (parsed == null) {
-                HexanaLog.LOG.warn("Failed to parse .dex file ${myFile.name}")
-            }
-            return if (parsed != null) {
-                ExtraPanelResult.Panels(org.jetbrains.hexana.ui.dexFilePanels(parsed, provider))
-            } else {
-                ExtraPanelResult.ParseError(
-                    "Failed to parse ${myFile.name} as an Android DEX file \u2014 see idea.log for details."
-                )
-            }
-        }
-
-        return ExtraPanelResult.Panels(emptyList())
-    }
 
     private fun initWasmDiffPanel(file: HexanaWasmDiffVirtualFile) {
         // Compute both diffs once, off the EDT, into editor-scoped flows. These outlive

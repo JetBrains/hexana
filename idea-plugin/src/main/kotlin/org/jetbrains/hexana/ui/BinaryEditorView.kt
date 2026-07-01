@@ -35,7 +35,11 @@ import org.jetbrains.hexana.providers.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
+import org.jetbrains.hexana.HexanaLog
 import org.jetbrains.hexana.nativebin.JVM_FILE_SYSTEM
+import org.jetbrains.hexana.providers.ClassFileBinaryProvider
+import org.jetbrains.hexana.providers.DexBinaryProvider
+import org.jetbrains.hexana.ui.ClassFileNavTarget
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.NativeDebugTabData
@@ -59,7 +63,7 @@ internal fun BinaryEditorView(
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
-    extraPanels: List<Panel> = emptyList(),
+    classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?> = remember { MutableStateFlow(null) },
     onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
 ) {
     // Phase F: every opened file gets one editable BinaryDocument shared by
@@ -232,7 +236,7 @@ internal fun BinaryEditorView(
         // reads the current value on each composition and recomposes when
         // it changes. Non-edit panel lambdas use `this` (the original
         // provider) and stay frozen across edits.
-        val panels = remember(binaryProvider, hexEditedSinceOpen, extraPanels) {
+        val panels = remember(binaryProvider, hexEditedSinceOpen) {
             val p: Array<Panel> = if (hexEditedSinceOpen) {
                 // Demoted to generic — only the Hex view + status bar remain.
                 emptyArray()
@@ -246,7 +250,8 @@ internal fun BinaryEditorView(
                     liveProviderProvider = { liveProvider },
                     wasmFunctionNavTargetFlow = wasmNavFlow,
                     archiveName = fileName,
-                    extraPanels = extraPanels,
+                    classFileNavTargetFlow = classFileNavTargetFlow,
+                    fileName = fileName,
                     onOpenZipEntry = onOpenZipEntry,
                 )
             }
@@ -639,7 +644,8 @@ private fun BinaryProvider.resolvePanels(
     liveProviderProvider: (() -> BinaryProvider)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?>? = null,
     archiveName: String? = null,
-    extraPanels: List<Panel> = emptyList(),
+    classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?>? = null,
+    fileName: String? = null,
     onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
 ): Array<Panel> {
     val enricher = getTabEnricher()
@@ -663,19 +669,40 @@ private fun BinaryProvider.resolvePanels(
         )
     }
     val providerPanels = when (this) {
+        is ClassFileBinaryProvider -> {
+            val parsed = this.parsedClassFile
+            if (parsed != null) {
+                classFilePanels(parsed, classFileNavTargetFlow ?: MutableStateFlow(null))
+            } else {
+                HexanaLog.LOG.warn("Failed to parse .class file ${fileName ?: "unknown"}")
+                listOf(Panel("Parse Error") {
+                    Text(
+                        "Failed to parse ${fileName ?: "the file"} as a JVM class file \u2014 see idea.log for details."
+                    )
+                })
+            }
+        }
+        is DexBinaryProvider -> {
+            val parsed = this.parsedDexFile
+            if (parsed != null) {
+                dexFilePanels(parsed, this)
+            } else {
+                HexanaLog.LOG.warn("Failed to parse .dex file ${fileName ?: "unknown"}")
+                listOf(Panel("Parse Error") {
+                    Text(
+                        "Failed to parse ${fileName ?: "the file"} as an Android DEX file \u2014 see idea.log for details."
+                    )
+                })
+            }
+        }
         is GenericBinaryProvider -> emptyList()
-        is ElfBinaryProvider -> commonNativePanels(state)
-        is MachOBinaryProvider -> commonNativePanels(state)
-        is FatMachOBinaryProvider ->  commonNativePanels(state)
-        is PeBinaryProvider -> commonNativePanels(state)
-        is CoffBinaryProvider -> commonNativePanels(state)
         // Must precede the generic `is NativeBinaryProvider` branch below: ArchiveBinaryProvider
         // IS-A NativeBinaryProvider, and Kotlin `when` is first-match — otherwise the archive
         // would fall through to the near-empty generic native branch (blank editor).
         is ArchiveBinaryProvider -> listOf(
             Panel("Members") { ArchiveMembersPanel(this, state, archiveName = archiveName) },
         )
-        is NativeBinaryProvider -> emptyList()
+        is NativeBinaryProvider -> commonNativePanels(state)
         is WasmBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
                 listOf(
@@ -783,7 +810,6 @@ private fun BinaryProvider.resolvePanels(
         panels += pt.grouped.mapNotNull { enrichedGrouped[it] }
     }
     panels += providerPanels
-    panels += extraPanels
     return panels.toTypedArray()
 }
 
