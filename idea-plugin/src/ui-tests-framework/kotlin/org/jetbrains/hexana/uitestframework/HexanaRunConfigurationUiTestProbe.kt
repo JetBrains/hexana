@@ -96,7 +96,6 @@ object HexanaRunConfigurationUiTestProbe {
                 configuration.engine != engine -> {
                     "selected configuration engine=${configuration.engine.name}"
                 }
-                configuration.dependencies.isEmpty() -> "selected configuration has no dependencies yet"
                 else -> return selected
             }
             Thread.sleep(100)

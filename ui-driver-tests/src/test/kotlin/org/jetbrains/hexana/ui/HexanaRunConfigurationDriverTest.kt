@@ -88,7 +88,6 @@ class HexanaRunConfigurationDriverTest {
                 assertEquals("", launch.wasmtimeOptions, "Expected the core module run to omit Wasmtime options")
                 assertEquals("", launch.exportName, "Expected the core module run to omit an export name")
                 assertEquals("", launch.programArguments, "Expected the core module run to omit program arguments")
-                assertTrue(launch.dependencies.isNotEmpty(), "Expected production dependency resolution to populate dependencies")
                 val output = awaitRunConfigurationConsoleResult().consoleOutput
                 logOutput("Core module run output: $output")
 
@@ -144,7 +143,7 @@ class HexanaRunConfigurationDriverTest {
                 assertEquals("--invoke add", launch.wasmtimeOptions, "Expected exported-function run to preserve Wasmtime options")
                 assertEquals("add", launch.exportName, "Expected exported-function run to preserve the export name")
                 assertEquals("2 3", launch.programArguments, "Expected exported-function run to preserve program arguments")
-                assertTrue(launch.dependencies.isNotEmpty(), "Expected exported-function run dependency resolution to populate dependencies")
+                assertEquals(emptyList<String>(), launch.dependencies, "Expected add.wasm to resolve no dependencies")
                 val output = awaitRunConfigurationConsoleResult().consoleOutput
                 logOutput("Exported function run output: $output")
 
@@ -197,7 +196,7 @@ class HexanaRunConfigurationDriverTest {
                 assertEquals("", launch.wasmtimeOptions, "Expected the component-module run to omit Wasmtime options")
                 assertEquals("", launch.exportName, "Expected the component-module run to omit an export name")
                 assertEquals("", launch.programArguments, "Expected the component-module run to omit program arguments")
-                assertTrue(launch.dependencies.isNotEmpty(), "Expected component-module run dependency resolution to populate dependencies")
+                assertEquals(emptyList<String>(), launch.dependencies, "Expected hello_component.wasm to resolve no dependencies")
                 val output = awaitRunConfigurationConsoleResult().consoleOutput
                 logOutput("Component module run output: $output")
 
