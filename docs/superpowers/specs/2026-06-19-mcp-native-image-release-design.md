@@ -36,11 +36,12 @@ durable repo-local record for the native MCP packaging decisions.
 - Native HTTP validation is available as a separate smoke task. It is not part of
   `:mcp:assembleNativeMcpReleaseArtifacts` until the platform matrix has rebuilt
   and passed it consistently.
-- JVM MCP analytics remain enabled by default for `stdio` and `http`.
-- GraalVM Native Image MCP analytics are disabled by default because PostHog
-  networking and shutdown-hook behavior adds startup/runtime surface that can
-  destabilize native smoke reliability. Native users can opt in explicitly with
-  `--telemetry-enabled true` or `HEXANA_MCP_TELEMETRY_ENABLED=true`.
+- MCP analytics remain enabled by default for JVM and GraalVM Native Image
+  `stdio` and `http`; users can opt out explicitly with
+  `--telemetry-enabled false` or `HEXANA_MCP_TELEMETRY_ENABLED=false`.
+- PostHog networking and shutdown-hook behavior adds startup/runtime surface
+  that can destabilize native smoke reliability, so native release smokes must
+  keep covering the default analytics-enabled command line.
 - Public Claude/Codex packages continue to include the R8-obfuscated JVM
   runtime layout as a fallback. Native artifacts are the release path and are
   collected from platform CI matrix outputs by the release script.

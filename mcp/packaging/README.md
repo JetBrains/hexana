@@ -131,10 +131,10 @@ test before writing current-host artifacts. Native HTTP support is validated by 
 `:mcp:server:nativeMcpHttpSmoke` task; it is not part of `:mcp:assembleNativeMcpReleaseArtifacts` until the HTTP path is
 proven on the supported platform matrix.
 
-JVM standalone MCP analytics are enabled by default for `stdio` and `http`. GraalVM Native Image MCP analytics are
-disabled by default because PostHog networking and shutdown-hook behavior adds runtime surface to native startup and
-smoke reliability. Native users can opt in explicitly with `--telemetry-enabled true` or
-`HEXANA_MCP_TELEMETRY_ENABLED=true`; explicit opt-out works everywhere.
+Standalone MCP analytics are enabled by default for JVM and GraalVM Native Image `stdio` and `http`; explicit opt-out
+works everywhere with `--telemetry-enabled false` or `HEXANA_MCP_TELEMETRY_ENABLED=false`. PostHog networking and
+shutdown-hook behavior adds runtime surface to native startup and smoke reliability, so the native release matrix must
+keep default-command-line smoke coverage.
 
 ## Codex/Claude release automation
 

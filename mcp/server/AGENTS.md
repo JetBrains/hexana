@@ -40,13 +40,11 @@ Read these files before making structural changes:
 
 ## Analytics Policy
 
-- JVM standalone MCP analytics stay enabled by default for `stdio` and `http`; users can opt out with
+- Standalone MCP analytics stay enabled by default for JVM and GraalVM Native Image `stdio` and `http`; users can opt out with
   `--telemetry-enabled false` or `HEXANA_MCP_TELEMETRY_ENABLED=false`.
-- GraalVM Native Image MCP analytics are disabled by default because PostHog networking and shutdown-hook behavior add
-  runtime surface that can block native startup/smoke reliability. Native users can still opt in explicitly with
-  `--telemetry-enabled true` or `HEXANA_MCP_TELEMETRY_ENABLED=true`.
-- Keep native stdio smoke coverage on the default command line so it verifies analytics do not initialize implicitly in
-  native binaries.
+- PostHog networking and shutdown-hook behavior add runtime surface that can block native startup/smoke reliability, so
+  keep native stdio smoke coverage on the default command line to verify the analytics-enabled native default remains
+  stable.
 
 ## Testing
 

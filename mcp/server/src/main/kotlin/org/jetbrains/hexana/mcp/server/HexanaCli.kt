@@ -191,12 +191,12 @@ private fun parseLogLevel(value: String): HexanaLogLevel {
 
 private fun CliktCommand.analyticsEnabledOption() = option(
     "--telemetry-enabled",
-    help = "Whether anonymous usage analytics are allowed. Defaults to false in GraalVM Native Image and true on JVM.",
+    help = "Whether anonymous usage analytics are allowed. Defaults to true.",
     envvar = "HEXANA_MCP_TELEMETRY_ENABLED"
 ).convert("true|false") { parseBooleanOption("--telemetry-enabled", it) }.default(defaultMcpAnalyticsEnabled())
 
 internal fun defaultMcpAnalyticsEnabled(): Boolean {
-    return !isRunningInGraalVmNativeImage()
+    return true
 }
 
 internal fun isRunningInGraalVmNativeImage(

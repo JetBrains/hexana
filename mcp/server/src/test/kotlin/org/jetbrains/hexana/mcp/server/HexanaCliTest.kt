@@ -22,12 +22,12 @@ class HexanaCliTest {
     }
 
     @Test
-    fun parseDisablesTelemetryByDefaultInNativeImageRuntime() {
+    fun parseEnablesTelemetryByDefaultInNativeImageRuntime() {
         withNativeImageRuntimeProperty {
             val command = cli().parse(arrayOf("stdio"))
 
             assertIs<HexanaCommand.Stdio>(command)
-            assertFalse(command.analyticsEnabled)
+            assertTrue(command.analyticsEnabled)
         }
     }
 
