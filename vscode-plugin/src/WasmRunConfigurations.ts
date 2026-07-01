@@ -137,10 +137,10 @@ const nodeToolResolver: ExtensionLib.JsToolResolver = {
  * Returns the currently selected Wasm runtime from settings.
  * Returns `"ask"` when the user wants to see a picker every time.
  */
-export function getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" | "browser" | "nodejs" | "ask" {
+export function getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" | "wazero" | "browser" | "nodejs" | "ask" {
     const config = vscode.workspace.getConfiguration("hexana");
     const runtime = config.get<string>("wasmRuntime", "ask").trim();
-    if (runtime === "wamr" || runtime === "graalwasm" || runtime === "browser" || runtime === "nodejs" || runtime === "ask") {
+    if (runtime === "wamr" || runtime === "graalwasm" || runtime === "wazero" || runtime === "browser" || runtime === "nodejs" || runtime === "ask") {
         return runtime;
     }
     return "wasmtime";
@@ -151,7 +151,7 @@ export function getSelectedRuntime(): "wasmtime" | "wamr" | "graalwasm" | "brows
  * whether the user selected a run or debug action.
  */
 export interface RuntimePickerResult {
-    runtime: "wasmtime" | "wamr" | "graalwasm" | "browser" | "nodejs";
+    runtime: "wasmtime" | "wamr" | "graalwasm" | "wazero" | "browser" | "nodejs";
     action: "run" | "debug";
 }
 
@@ -171,7 +171,7 @@ export async function showRuntimePicker(
     isComponent: boolean = false,
 ): Promise<RuntimePickerResult | undefined> {
     interface RuntimeItem extends vscode.QuickPickItem {
-        runtime?: "wasmtime" | "wamr" | "graalwasm" | "browser" | "nodejs";
+        runtime?: "wasmtime" | "wamr" | "graalwasm" | "wazero" | "browser" | "nodejs";
         action?: "run" | "debug";
         isConfigure?: boolean;
     }
@@ -192,6 +192,11 @@ export async function showRuntimePicker(
         items.push({
             label: "$(play) Run with GraalWasm",
             runtime: "graalwasm",
+            action: "run",
+        });
+        items.push({
+            label: "$(play) Run with Wazero",
+            runtime: "wazero",
             action: "run",
         });
     }
@@ -276,11 +281,12 @@ export function getRuntimeCommand(runtime: string, isWindows: boolean): string |
     const config = vscode.workspace.getConfiguration("hexana");
     const wasmtimePath = config.get<string>("wasmtimePath", "");
     const wamrPath = config.get<string>("wamrPath", "");
+    const wazeroPath = config.get<string>("wazeroPath", "");
     const graalVmHome = resolveGraalVmHome();
     const nodePath = config.get<string>("nodePath", "");
 
     const result = extensionLib.resolveRuntimeExecutable(
-        runtime, isWindows, wasmtimePath, wamrPath, graalVmHome, nodePath,
+        runtime, isWindows, wasmtimePath, wamrPath, wazeroPath, graalVmHome, nodePath,
     );
 
     if (result === null) {
@@ -752,14 +758,14 @@ export async function runExport(
 
     const isComponent = message.isComponent && message.componentImports && message.componentImports.length > 0;
 
-    let runtime: "wasmtime" | "wamr" | "graalwasm" | "browser" | "nodejs";
+    let runtime: "wasmtime" | "wamr" | "graalwasm" | "wazero" | "browser" | "nodejs";
     let action: "run" | "debug";
 
     // When the webview dialog already collected a runtime and action,
     // use them directly and skip the native VS Code picker.
     if (message.runtime && message.action) {
         const rawRuntime = message.runtime as string;
-        runtime = (rawRuntime === "wasmtime" || rawRuntime === "wamr" || rawRuntime === "graalwasm" || rawRuntime === "browser" || rawRuntime === "nodejs") ? rawRuntime : "wasmtime";
+        runtime = (rawRuntime === "wasmtime" || rawRuntime === "wamr" || rawRuntime === "graalwasm" || rawRuntime === "wazero" || rawRuntime === "browser" || rawRuntime === "nodejs") ? rawRuntime : "wasmtime";
         action = message.action === "debug" ? "debug" : "run";
     } else {
         const configured = getSelectedRuntime();

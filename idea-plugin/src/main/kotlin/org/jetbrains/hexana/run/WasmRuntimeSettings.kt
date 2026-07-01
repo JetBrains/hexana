@@ -49,6 +49,11 @@ class WasmRuntimeSettings : SimplePersistentStateComponent<WasmRuntimeSettingsSt
         get() = state.chicoryPath
         set(value) { state.chicoryPath = value?.takeIf { it.isNotBlank() } }
 
+    /** User-configured Wazero path for UI binding. */
+    var wazeroPathInUi: String?
+        get() = state.wazeroPath
+        set(value) { state.wazeroPath = value?.takeIf { it.isNotBlank() } }
+
     /** User-configured LLDB path for UI binding. */
     var lldbPathInUi: String?
         get() = state.lldbPath
@@ -126,6 +131,15 @@ class WasmRuntimeSettings : SimplePersistentStateComponent<WasmRuntimeSettingsSt
     }
 
     /**
+     * Returns the effective Wazero executable path.
+     */
+    fun effectiveWazeroPath(): String {
+        val configured = state.wazeroPath
+        if (!configured.isNullOrBlank()) return configured
+        return WazeroCommandLineState.resolveDefaultWazeroPath()
+    }
+
+    /**
      * Returns the effective LLDB executable path.
      */
     fun effectiveLldbPath(): String {
@@ -150,6 +164,7 @@ class WasmRuntimeSettingsState : BaseState() {
     var graalVmPath: String? by string()
     var nodePath: String? by string()
     var chicoryPath: String? by string()
+    var wazeroPath: String? by string()
     var lldbPath: String? by string()
     var chromePath: String? by string()
     var defaultEngine: String? by string()

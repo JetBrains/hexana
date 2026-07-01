@@ -25,9 +25,10 @@ fun resolveRuntimeExecutable(
     isWindows: Boolean,
     wasmtimePath: String = "",
     wamrPath: String = "",
+    wazeroPath: String = "",
     graalVmHome: String = "",
     nodePath: String = "",
-): String? = WasmRuntimeResolver.resolveRuntimeExecutable(runtime, isWindows, wasmtimePath, wamrPath, graalVmHome, nodePath)
+): String? = WasmRuntimeResolver.resolveRuntimeExecutable(runtime, isWindows, wasmtimePath, wamrPath, wazeroPath, graalVmHome, nodePath)
 
 /**
  * Builds a unified runtime command line by dispatching to the

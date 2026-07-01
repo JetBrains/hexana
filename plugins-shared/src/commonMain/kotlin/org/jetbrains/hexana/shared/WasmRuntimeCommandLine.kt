@@ -670,6 +670,40 @@ fun buildChicoryRunArgs(input: WasmRunInput, aot: Boolean): WasmCommandLine {
 }
 
 // ---------------------------------------------------------------------------
+// Wazero
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the argument list for a [wazero](https://wazero.io/) `run` invocation.
+ *
+ * Wazero is a Go-based WebAssembly runtime with zero dependencies.
+ * It does not support the Component Model or debugging.
+ *
+ * The CLI syntax is: `wazero run [options] <file.wasm> [args]`
+ *
+ * @param input shared run input
+ */
+fun buildWazeroRunArgs(input: WasmRunInput): WasmCommandLine {
+    val args = mutableListOf<String>()
+    args.add("run")
+
+    val options = input.runtimeOptions.trim()
+    if (options.isNotEmpty()) {
+        args.addAll(splitOptions(options))
+    }
+
+    args.add(input.wasmFilePath)
+
+    val programArgs = input.programArguments.trim()
+    if (programArgs.isNotEmpty()) {
+        args.addAll(programArgs.split("\\s+".toRegex()))
+    }
+
+    val workDir = input.workingDirectory.ifBlank { null }
+    return WasmCommandLine(arguments = args, workingDirectory = workDir)
+}
+
+// ---------------------------------------------------------------------------
 // Node.js
 // ---------------------------------------------------------------------------
 

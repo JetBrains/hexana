@@ -8,6 +8,7 @@ enum class WasmEngine(val displayName: String, val supportsComponentsModel: Bool
     NODE_JS("Node.js", false, true),
     CHICORY_INTERPRETER("Chicory (Interpreter)", false, false),
     CHICORY_AOT("Chicory (AOT)", false, false),
+    WAZERO("Wazero", false, false),
     ;
 
     companion object {

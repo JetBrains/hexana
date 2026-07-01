@@ -83,6 +83,15 @@ class WasmRuntimeConfigurable : DslConfigurableBase(), SearchableConfigurable {
                         .comment(HexanaBundle.message("wasm.runtime.settings.chicory.path.comment"))
                         .bindText(settings::chicoryPathInUi.toNonNullableProperty(""))
                 }
+                row(HexanaBundle.message("wasm.runtime.settings.wazero.path")) {
+                    textFieldWithBrowseButton(FileChooserDescriptorFactory.singleFile())
+                        .align(AlignX.FILL)
+                        .comment(HexanaBundle.message("wasm.runtime.settings.wazero.path.comment"))
+                        .applyToComponent {
+                            emptyText.text = WazeroCommandLineState.resolveDefaultWazeroPath()
+                        }
+                        .bindText(settings::wazeroPathInUi.toNonNullableProperty(""))
+                }
             }
             group(HexanaBundle.message("wasm.runtime.settings.group.debugger")) {
                 row(HexanaBundle.message("wasm.runtime.settings.lldb.path")) {

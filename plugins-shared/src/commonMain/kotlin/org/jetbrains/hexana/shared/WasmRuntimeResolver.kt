@@ -4,7 +4,7 @@ package org.jetbrains.hexana.shared
  * Platform-agnostic runtime executable resolution.
  *
  * Maps a runtime identifier (`"wasmtime"`, `"wamr"`, `"graalwasm"`,
- * `"chicory-interpreter"`, `"chicory-aot"`) to its default executable
+ * `"wazero"`, `"chicory-interpreter"`, `"chicory-aot"`) to its default executable
  * name, respecting optional custom paths provided by the caller.
  * Platform-specific details (reading settings, environment variables,
  * checking file existence) remain in the host layer.
@@ -21,7 +21,7 @@ object WasmRuntimeResolver {
      * first use and executed via `java`.
      *
      * @param runtime      runtime identifier: `"wasmtime"`, `"wamr"`, `"graalwasm"`,
-     *                      `"chicory-interpreter"`, or `"chicory-aot"`
+     *                      `"wazero"`, `"chicory-interpreter"`, or `"chicory-aot"`
      * @param isWindows    `true` on Windows (appends `.exe` to bare names)
      * @param wasmtimePath custom Wasmtime executable path (empty = use default)
      * @param wamrPath     custom WAMR (iwasm) executable path (empty = use default)
@@ -35,6 +35,7 @@ object WasmRuntimeResolver {
         isWindows: Boolean,
         wasmtimePath: String = "",
         wamrPath: String = "",
+        wazeroPath: String = "",
         graalVmHome: String = "",
         nodePath: String = "",
         chicoryPath: String = "",
@@ -49,6 +50,11 @@ object WasmRuntimeResolver {
                 val custom = wamrPath.trim()
                 if (custom.isNotEmpty()) custom
                 else if (isWindows) "iwasm.exe" else "iwasm"
+            }
+            "wazero" -> {
+                val custom = wazeroPath.trim()
+                if (custom.isNotEmpty()) custom
+                else if (isWindows) "wazero.exe" else "wazero"
             }
             "graalwasm" -> {
                 val home = graalVmHome.trim()
@@ -76,7 +82,7 @@ object WasmRuntimeResolver {
      * correct shared builder.
      *
      * @param runtime          runtime identifier: `"wasmtime"`, `"wamr"`, `"graalwasm"`,
-     *                          `"chicory-interpreter"`, or `"chicory-aot"`
+     *                          `"wazero"`, `"chicory-interpreter"`, or `"chicory-aot"`
      * @param wasmFilePath     path to the `.wasm` file
      * @param wasmBytes        raw bytes of the file, or `null`
      * @param exportName       function to invoke (used by WAMR/GraalWasm)
@@ -117,6 +123,7 @@ object WasmRuntimeResolver {
             "wasmtime" -> buildWasmtimeRunArgs(input)
             "wamr" -> buildWamrRunArgs(input, stubFileWriter = stubFileWriter)
             "graalwasm" -> buildGraalWasmRunArgs(input)
+            "wazero" -> buildWazeroRunArgs(input)
             "nodejs" -> buildNodeJsRunArgs(input)
             "chicory-interpreter" -> buildChicoryRunArgs(input, aot = false)
             "chicory-aot" -> buildChicoryRunArgs(input, aot = true)

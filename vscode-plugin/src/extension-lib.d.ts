@@ -241,6 +241,7 @@ export function resolveRuntimeExecutable(
     isWindows: boolean,
     wasmtimePath?: string,
     wamrPath?: string,
+    wazeroPath?: string,
     graalVmHome?: string,
     nodePath?: string,
 ): string | null;

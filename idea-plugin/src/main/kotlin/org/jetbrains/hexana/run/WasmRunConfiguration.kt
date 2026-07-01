@@ -74,6 +74,14 @@ class WasmRunConfiguration(
         get() = options.getChicoryOptions()
         set(value) { options.setChicoryOptions(value) }
 
+    var wazeroPath: String
+        get() = options.getWazeroPath()
+        set(value) { options.setWazeroPath(value) }
+
+    var wazeroOptions: String
+        get() = options.getWazeroOptions()
+        set(value) { options.setWazeroOptions(value) }
+
     var lldbPath: String
         get() = options.getLldbPath()
         set(value) { options.setLldbPath(value) }
@@ -99,7 +107,7 @@ class WasmRunConfiguration(
         if (!file.exists()) {
             throw RuntimeConfigurationError("Wasm file not found: $path")
         }
-        if (engine == WasmEngine.GRAALWASM || engine == WasmEngine.WAMR || engine == WasmEngine.BROWSER || engine == WasmEngine.NODE_JS || engine == WasmEngine.CHICORY_INTERPRETER || engine == WasmEngine.CHICORY_AOT) {
+        if (engine == WasmEngine.GRAALWASM || engine == WasmEngine.WAMR || engine == WasmEngine.BROWSER || engine == WasmEngine.NODE_JS || engine == WasmEngine.CHICORY_INTERPRETER || engine == WasmEngine.CHICORY_AOT || engine == WasmEngine.WAZERO) {
             val binaryType = WasmBinaryProviderSelector.select(file.readBytes().toCommonByteBuffer())
             if (binaryType is BinaryProviderType.WasmComponent) {
                 throw RuntimeConfigurationError(
@@ -122,6 +130,7 @@ class WasmRunConfiguration(
             WasmEngine.NODE_JS -> NodeJsCommandLineState(this, environment)
             WasmEngine.CHICORY_INTERPRETER -> ChicoryCommandLineState(this, environment, aot = false)
             WasmEngine.CHICORY_AOT -> ChicoryCommandLineState(this, environment, aot = true)
+            WasmEngine.WAZERO -> WazeroCommandLineState(this, environment)
         }
     }
 }

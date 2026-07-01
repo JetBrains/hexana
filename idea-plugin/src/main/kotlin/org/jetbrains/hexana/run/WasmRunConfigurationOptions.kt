@@ -16,6 +16,8 @@ class WasmRunConfigurationOptions : RunConfigurationOptions() {
     private val nodeOptions = string("").provideDelegate(this, "nodeOptions")
     private val chicoryPath = string("").provideDelegate(this, "chicoryPath")
     private val chicoryOptions = string("").provideDelegate(this, "chicoryOptions")
+    private val wazeroPath = string("").provideDelegate(this, "wazeroPath")
+    private val wazeroOptions = string("").provideDelegate(this, "wazeroOptions")
     private val lldbPath = string("").provideDelegate(this, "lldbPath")
     private val chromePath = string("").provideDelegate(this, "chromePath")
     private val exportName = string("").provideDelegate(this, "exportName")
@@ -59,6 +61,12 @@ class WasmRunConfigurationOptions : RunConfigurationOptions() {
 
     fun getChicoryOptions(): String = chicoryOptions.getValue(this) ?: ""
     fun setChicoryOptions(value: String) { chicoryOptions.setValue(this, value) }
+
+    fun getWazeroPath(): String = wazeroPath.getValue(this) ?: ""
+    fun setWazeroPath(value: String) { wazeroPath.setValue(this, value) }
+
+    fun getWazeroOptions(): String = wazeroOptions.getValue(this) ?: ""
+    fun setWazeroOptions(value: String) { wazeroOptions.setValue(this, value) }
 
     fun getLldbPath(): String = lldbPath.getValue(this) ?: ""
     fun setLldbPath(value: String) { lldbPath.setValue(this, value) }

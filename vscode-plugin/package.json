@@ -202,11 +202,12 @@
         "hexana.wasmRuntime": {
           "type": "string",
           "default": "ask",
-          "enum": ["wasmtime", "wamr", "graalwasm", "browser", "nodejs", "ask"],
+          "enum": ["wasmtime", "wamr", "graalwasm", "wazero", "browser", "nodejs", "ask"],
           "enumDescriptions": [
             "Wasmtime — full-featured runtime with Component Model support",
             "WAMR (iwasm) — lightweight runtime for core modules",
             "GraalWasm — GraalVM WebAssembly launcher for core modules",
+            "Wazero — zero-dependency Go-based runtime for core modules",
             "Default Browser — run the module in the system browser via a local HTTP server",
             "Node.js — run the module using Node.js built-in WebAssembly API",
             "Show all runtimes every time — display a picker before each run"
@@ -227,6 +228,11 @@
           "type": "string",
           "default": "",
           "description": "Custom path to the Node.js executable. When empty, the extension looks for node on the system PATH."
+        },
+        "hexana.wazeroPath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the wazero executable. When empty, the extension looks for wazero on the system PATH."
         },
         "hexana.graalVmHome": {
           "type": "string",
