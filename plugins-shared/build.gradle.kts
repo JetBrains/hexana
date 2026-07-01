@@ -21,6 +21,7 @@ kotlin {
                 implementation(project(":wasmParser"))
                 implementation(project(":binaryProvider"))
                 implementation(project(":encdec"))
+                implementation(project(":parsing:zip"))
                 implementation(project(":debugInfo:dwarf"))
             }
         }

@@ -220,6 +220,7 @@ class HexanaFileEditor(
                     },
                     wasmFunctionNavTargetFlow = wasmFunctionNavTargetFlow,
                     extraPanels = extraPanels,
+                    onOpenZipEntry = { entry -> openZipEntry(entry, commonBuffer) },
                 )
             }
         }
@@ -323,7 +324,8 @@ class HexanaFileEditor(
     }
 
     /**
-     * Determines extra panels for known structured formats (.class, .jar/.zip, .dex).
+     * Determines extra panels for known structured formats (.class, .dex).
+     * ZIP/JAR archives are handled by [ZipTableTabsProvider] via the provider pipeline.
      * Returns [ExtraPanelResult.ParseError] when the format is recognised but parsing fails,
      * or [ExtraPanelResult.Panels] with the extra panels (empty list for unrecognised formats).
      */
@@ -340,25 +342,6 @@ class HexanaFileEditor(
             } else {
                 ExtraPanelResult.ParseError(
                     "Failed to parse ${myFile.name} as a JVM class file \u2014 see idea.log for details."
-                )
-            }
-        }
-
-        if (ext == "jar" || ext == "zip" || ext == "war" || ext == "apk"
-            || isZipFile(commonBuffer)) {
-            val entries = try {
-                org.jetbrains.hexana.zip.ZipParser.parse(commonBuffer.duplicate().position(0))
-            } catch (t: Throwable) {
-                HexanaLog.LOG.warn("Failed to parse ${myFile.name} as a ZIP / JAR archive", t)
-                null
-            }
-            return if (entries != null) {
-                ExtraPanelResult.Panels(
-                    org.jetbrains.hexana.ui.jarFilePanels(entries) { entry -> openZipEntry(entry, commonBuffer) }
-                )
-            } else {
-                ExtraPanelResult.ParseError(
-                    "Failed to parse ${myFile.name} as a ZIP / JAR archive \u2014 see idea.log for details."
                 )
             }
         }

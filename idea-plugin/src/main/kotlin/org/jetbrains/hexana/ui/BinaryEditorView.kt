@@ -43,6 +43,8 @@ import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsContext
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.ui.panel.*
+import org.jetbrains.hexana.zip.ZipEntry
+import org.jetbrains.hexana.zip.ZipParser
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -58,6 +60,7 @@ internal fun BinaryEditorView(
     onNavigateToParent: (() -> Unit)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
     extraPanels: List<Panel> = emptyList(),
+    onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
 ) {
     // Phase F: every opened file gets one editable BinaryDocument shared by
     // the editor's lifecycle. Edits land in this doc, but ONLY the WAT
@@ -244,6 +247,7 @@ internal fun BinaryEditorView(
                     wasmFunctionNavTargetFlow = wasmNavFlow,
                     archiveName = fileName,
                     extraPanels = extraPanels,
+                    onOpenZipEntry = onOpenZipEntry,
                 )
             }
             mutableStateListOf(*p)
@@ -636,6 +640,7 @@ private fun BinaryProvider.resolvePanels(
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?>? = null,
     archiveName: String? = null,
     extraPanels: List<Panel> = emptyList(),
+    onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
 ): Array<Panel> {
     val enricher = getTabEnricher()
     val providers = TableTabsProviderRegistry.providers
@@ -767,12 +772,55 @@ private fun BinaryProvider.resolvePanels(
 
     val panels = mutableListOf<Panel>()
     for (pt in perProvider) {
-        panels += enricher(pt.ordinary, state, pathsNav).map { it.toPanel(state) }
+        val enriched = enricher(pt.ordinary, state, pathsNav)
+        panels += enriched.map { tab ->
+            if (tab.name == "Entries" && onOpenZipEntry != null) {
+                enrichZipEntriesTab(tab, onOpenZipEntry).toPanel(state)
+            } else {
+                tab.toPanel(state)
+            }
+        }
         panels += pt.grouped.mapNotNull { enrichedGrouped[it] }
     }
     panels += providerPanels
     panels += extraPanels
     return panels.toTypedArray()
+}
+
+/**
+ * Enriches the ZIP "Entries" tab descriptor with a row-click action that
+ * opens the clicked entry via [onOpenEntry]. The descriptor's row indices
+ * correspond to the non-directory entries parsed by [ZipTableTabsProvider],
+ * so we re-parse the buffer to obtain the full [ZipEntry] list for the
+ * click callback.
+ */
+private fun BinaryProvider.enrichZipEntriesTab(
+    tab: TableTabDescriptor,
+    onOpenEntry: (ZipEntry) -> Unit,
+): TableTabDescriptor {
+    val entries = try {
+        ZipParser.parse(bytes.duplicate().position(0)).filter { !it.isDirectory }
+    } catch (_: Throwable) {
+        return tab
+    }
+    return TableTabDescriptor(
+        name = tab.name,
+        columns = tab.columns,
+        rowCount = tab.rowCount,
+        defaultSortColumn = tab.defaultSortColumn,
+        defaultSortAscending = tab.defaultSortAscending,
+        rowSelectionProvider = tab.rowSelectionProvider,
+        rowAction = tab.rowAction,
+        contextMenuItems = tab.contextMenuItems,
+        rowClickAction = { index -> onOpenEntry(entries[index]) },
+        dynamicContextMenuProvider = tab.dynamicContextMenuProvider,
+        prologueText = tab.prologueText,
+        emptyMessage = tab.emptyMessage,
+        childrenProvider = tab.childrenProvider,
+        alwaysShowSearch = tab.alwaysShowSearch,
+        searchPlaceholder = tab.searchPlaceholder,
+        showIdColumn = tab.showIdColumn,
+    )
 }
 
 private fun BinaryVirtualFileProvider.errorPanel(state: HexViewStateHolder): List<Panel> = listOf(

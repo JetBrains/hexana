@@ -71,9 +71,6 @@ fun BinaryEditorApp() {
 }
 
 private fun computeExtraTabs(buffer: org.jetbrains.hexana.io.CommonByteBuffer): List<PanelTab> {
-    if (isZipFile(buffer)) {
-        return zipExtraTabs(buffer)
-    }
     if (isClassFile(buffer)) {
         val classFile = try {
             JavaClassFileParser.parse(buffer.duplicate().position(0))

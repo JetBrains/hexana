@@ -8,7 +8,11 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
+import org.jetbrains.hexana.shared.ZipTableTabsProvider
+import org.jetbrains.hexana.shared.isZipFile
+import org.jetbrains.hexana.zip.ZipParser
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.events.Event
 
@@ -58,9 +62,19 @@ fun HexanaPanel(
             // Interleave ordinary and grouped tabs per provider so each
             // provider's tabs appear together in registration order.
             val enricher = provider.getTabsEnricher()
+            // Pre-parse ZIP entries once for enrichment if this is a ZIP file.
+            val zipEntries = if (isZipFile(provider.bytes)) {
+                try { ZipParser.parse(provider.bytes.duplicate().position(0)).filter { !it.isDirectory } }
+                catch (_: Throwable) { null }
+            } else null
             for (p in TableTabsProviderRegistry.providers) {
-                val ordinary = enricher(p.tableTabs(provider), fileName, pendingRun)
-                    .map { d -> TableTab(name = d.name) { selection -> TableTabContent(d, selection) } }
+                val enriched = enricher(p.tableTabs(provider), fileName, pendingRun)
+                val ordinary = enriched.map { d ->
+                    val desc = if (p is ZipTableTabsProvider && d.name == "Entries" && zipEntries != null) {
+                        enrichZipEntriesTab(d, zipEntries)
+                    } else d
+                    TableTab(name = desc.name) { selection -> TableTabContent(desc, selection) }
+                }
                 addAll(ordinary.map { tt -> PanelTab(tt.name) { sel -> tt.content(sel) } })
                 for (grouped in p.groupedTabs(provider)) {
                     val inner = grouped.innerTabs
@@ -385,3 +399,39 @@ private fun TabScrollButton(
         Text(label)
     }
 }
+
+/**
+ * Enriches the ZIP "Entries" tab descriptor with a row-click action that
+ * posts the entry metadata to the extension host for decompression and
+ * opening.
+ */
+private fun enrichZipEntriesTab(
+    tab: TableTabDescriptor,
+    entries: List<org.jetbrains.hexana.zip.ZipEntry>,
+): TableTabDescriptor = TableTabDescriptor(
+    name = tab.name,
+    columns = tab.columns,
+    rowCount = tab.rowCount,
+    defaultSortColumn = tab.defaultSortColumn,
+    defaultSortAscending = tab.defaultSortAscending,
+    rowSelectionProvider = tab.rowSelectionProvider,
+    rowAction = tab.rowAction,
+    contextMenuItems = tab.contextMenuItems,
+    rowClickAction = { index ->
+        val entry = entries[index]
+        postOpenZipEntryToHost(
+            name = entry.name,
+            dataOffset = entry.dataOffset,
+            compressedSize = entry.compressedSize,
+            uncompressedSize = entry.uncompressedSize,
+            compressionMethod = entry.compressionMethod,
+        )
+    },
+    dynamicContextMenuProvider = tab.dynamicContextMenuProvider,
+    prologueText = tab.prologueText,
+    emptyMessage = tab.emptyMessage,
+    childrenProvider = tab.childrenProvider,
+    alwaysShowSearch = tab.alwaysShowSearch,
+    searchPlaceholder = tab.searchPlaceholder,
+    showIdColumn = tab.showIdColumn,
+)

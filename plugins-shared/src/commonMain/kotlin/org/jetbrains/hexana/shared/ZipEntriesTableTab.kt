@@ -1,5 +1,8 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.zip.ZipParser
+
 /**
  * Lightweight data holder for a single ZIP/JAR entry, carrying only the
  * fields needed by the shared table descriptor. Platform code maps its
@@ -59,3 +62,33 @@ fun zipEntriesDescriptor(
     emptyMessage = emptyMessage,
     showIdColumn = false,
 )
+
+/**
+ * [TableTabsProvider] for ZIP / JAR archives.
+ *
+ * Detects ZIP files via [isZipFile] magic check, parses the central
+ * directory with [ZipParser], and produces a single "Entries" table tab
+ * listing all non-directory entries. Platform-specific behaviour (entry
+ * opening on click) is added by the platform enricher.
+ */
+class ZipTableTabsProvider : TableTabsProvider {
+
+    override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> {
+        val buffer = provider.bytes
+        if (!isZipFile(buffer)) return emptyList()
+
+        val entries = try {
+            ZipParser.parse(buffer.duplicate().position(0))
+        } catch (_: Throwable) {
+            return emptyList()
+        }
+
+        val displayEntries = entries.filter { !it.isDirectory }
+
+        return listOf(
+            zipEntriesDescriptor(
+                entries = displayEntries.map { ZipEntryRow(it.name, it.compressedSize, it.uncompressedSize) },
+            )
+        )
+    }
+}

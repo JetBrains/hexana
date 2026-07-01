@@ -224,6 +224,7 @@ private fun TableTabTable(
         alwaysShowSearch = descriptor.alwaysShowSearch,
         searchPlaceholder = descriptor.searchPlaceholder,
         searchBarLeading = searchBarLeading,
+        showIdColumn = descriptor.showIdColumn,
     )
 }
 
