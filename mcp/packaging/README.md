@@ -82,11 +82,11 @@ plugins/hexana/
 
 Each assembled wrapper includes its own bundled standalone JVM runtime under `server/` and exposes `bin/hexana-mcp`.
 Native-enabled wrappers also include `native/<platform>/hexana-mcp` for the current host platform, or
-`native/<platform>/hexana-mcp.exe` on Windows. The supported native release matrix uses these platform tags:
+`native/<platform>/hexana-mcp.exe` on Windows when a Windows native package is built outside the active release matrix.
+The supported 0.3.0 native release matrix uses these platform tags:
 
 - `macos-arm64`
 - `linux-x64`
-- `windows-x64`
 
 The launcher first
 uses `HEXANA_SERVER_BIN` when explicitly set, then prefers the bundled native executable matching the current platform,
@@ -191,9 +191,10 @@ versioned artifacts to `mcp/build/distributions-native/`:
 - `hexana-codex-plugin-<platform>-<version>.zip`: Codex wrapper with the native executable and JVM fallback.
 
 The release job must download all native matrix artifacts into one directory before running
-`release-codex-claude-plugins.sh`. By default the script requires `macos-arm64 linux-x64 windows-x64`;
+`release-codex-claude-plugins.sh`. By default the script requires `macos-arm64 linux-x64`;
 override `NATIVE_RELEASE_PLATFORMS` only when intentionally changing the supported matrix. Unsupported platforms keep
-using the bundled JVM runtime through the wrapper fallback.
+using the bundled JVM runtime through the wrapper fallback. For 0.3.0, Windows users are supported through that JVM
+fallback rather than a required Windows native artifact.
 
 Release script example:
 
@@ -264,7 +265,7 @@ Optional environment variables:
   only for explicit JVM fallback diagnostics; public `release.lock.json` native policy still rejects publishing when
   native artifacts are advertised.
 - `NATIVE_RELEASE_ARTIFACT_DIR`: defaults to `mcp/build/distributions-native`.
-- `NATIVE_RELEASE_PLATFORMS`: defaults to `macos-arm64 linux-x64 windows-x64`.
+- `NATIVE_RELEASE_PLATFORMS`: defaults to `macos-arm64 linux-x64`.
 - `VALIDATE_CLAUDE_CMD`: optional command run from the cloned public repo root.
 - `VALIDATE_CODEX_CMD`: optional command run from the cloned public repo root.
 - `SKIP_RELEASE_BUILD_AND_SMOKE`: defaults to `false`. TeamCity sets this to `true` only after it has already run the

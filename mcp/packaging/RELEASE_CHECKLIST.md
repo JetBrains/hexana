@@ -11,7 +11,9 @@ Run each native matrix leg on a host with a GraalVM distribution that includes
 |--------------|------------------|
 | `macos-arm64` | macOS on arm64 |
 | `linux-x64` | Linux on x86_64 |
-| `windows-x64` | Windows on x86_64 |
+
+Windows users are supported by the bundled JVM fallback for the 0.3.0 release;
+Windows native ZIPs are not required release artifacts in this matrix.
 
 Each leg must run:
 
@@ -87,7 +89,7 @@ release:
   is only for explicit JVM fallback diagnostics and must not be used for
   release publishing.
 - Keep `NATIVE_RELEASE_PLATFORMS` at the default
-  `macos-arm64 linux-x64 windows-x64` unless the supported matrix is intentionally
+  `macos-arm64 linux-x64` unless the supported matrix is intentionally
   changing.
 - The release script fails before publishing when public `release.lock.json`
   advertises GitHub Release-only native artifacts but the matching ZIPs were not

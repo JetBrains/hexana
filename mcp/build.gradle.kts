@@ -62,7 +62,7 @@ val nativeServerExecutableName = if (System.getProperty("os.name").startsWith("W
     "hexana-mcp"
 }
 val nativeHostPlatformName = currentNativePlatformName()
-val nativeReleasePlatforms = listOf("macos-arm64", "linux-x64", "windows-x64")
+val nativeReleasePlatforms = listOf("macos-arm64", "linux-x64")
 val nativeServerExecutable = project(":mcp:server").layout.buildDirectory.file("native/nativeCompile/$nativeServerExecutableName")
 val nativeDistributionDir = layout.buildDirectory.dir("distributions-native")
 val publicMarketplaceDir = layout.projectDirectory.dir("out/teamcity/public-marketplace")

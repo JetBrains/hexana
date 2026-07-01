@@ -17,10 +17,9 @@ durable repo-local record for the native MCP packaging decisions.
   `org.jetbrains.hexana.mcp.server.MainKt` as the entrypoint.
 - The executable name is `hexana-mcp` on Unix platforms and `hexana-mcp.exe` on
   Windows.
-- The supported native release matrix is:
+- The supported 0.3.0 native release matrix is:
   - `macos-arm64`
   - `linux-x64`
-  - `windows-x64`
 - Native-enabled Claude and Codex packages include both:
   - `native/<platform>/hexana-mcp`, or `hexana-mcp.exe` on Windows
   - `server/`, the JVM standalone runtime fallback
@@ -45,6 +44,8 @@ durable repo-local record for the native MCP packaging decisions.
 - Public Claude/Codex packages continue to include the R8-obfuscated JVM
   runtime layout as a fallback. Native artifacts are the release path and are
   collected from platform CI matrix outputs by the release script.
+- Windows users are supported through the JVM fallback for 0.3.0 rather than a
+  required Windows native artifact.
 - `mcp/CHANGELOG.md` is the MCP-specific changelog source. Release automation
   extracts the section matching `mcp/server/gradle.properties:mcpServerVersion`
   and uses it as the GitHub Release notes body after the public text guard has

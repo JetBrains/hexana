@@ -263,7 +263,7 @@ main() {
 
   MCP_VERSION="${MCP_VERSION:-${PLUGIN_VERSION:-$(read_mcp_version)}}"
   [ -n "$MCP_VERSION" ] || die "Could not determine MCP_VERSION"
-  MCP_RELEASE_PLATFORMS="${MCP_RELEASE_PLATFORMS:-${NATIVE_RELEASE_PLATFORMS:-macos-arm64 linux-x64 windows-x64}}"
+  MCP_RELEASE_PLATFORMS="${MCP_RELEASE_PLATFORMS:-${NATIVE_RELEASE_PLATFORMS:-macos-arm64 linux-x64}}"
   MCP_RELEASE_ARTIFACT_DIR="${MCP_RELEASE_ARTIFACT_DIR:-${NATIVE_RELEASE_ARTIFACT_DIR:-mcp/build/distributions-native}}"
   MCP_DOWNLOADS_BUNDLE_DIR="${MCP_DOWNLOADS_BUNDLE_DIR:-mcp/out/teamcity/downloads-release}"
   DOWNLOADS_PUBLIC_PREFIX="${DOWNLOADS_PUBLIC_PREFIX:-https://download.jetbrains.com/resources/hexana/mcp/$MCP_VERSION}"
