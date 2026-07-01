@@ -39,18 +39,22 @@ fun runWasmConfiguration(
     wasmTimeArgs: String,
     engine: WasmEngine = WasmEngine.DEFAULT,
     mode: WasmRunMode = WasmRunMode.RUN,
+    nodeOptions: String = "",
 ) {
     val runManager = RunManager.getInstance(project)
     val configurationType = ConfigurationTypeUtil.findConfigurationType(WasmRunConfigurationType::class.java)
     val factory = configurationType.configurationFactories.first { it is WasmConfigurationFactory }
 
     val configName = "${file.nameWithoutExtension}::${exportName}"
+    val expectedWasmtimeOptions = if (engine == WasmEngine.WASMTIME) wasmTimeArgs else ""
+    val expectedNodeOptions = if (engine == WasmEngine.NODE_JS) nodeOptions else ""
 
     val existing = runManager.allSettings.firstOrNull { settings ->
         settings.type == configurationType &&
                 (settings.configuration as? WasmRunConfiguration)?.let { config ->
                     config.wasmFilePath == file.path &&
-                            config.wasmtimeOptions == wasmTimeArgs &&
+                            config.wasmtimeOptions == expectedWasmtimeOptions &&
+                            config.nodeOptions == expectedNodeOptions &&
                             config.engine == engine
                 } == true
     }
@@ -59,7 +63,8 @@ fun runWasmConfiguration(
         (newSettings.configuration as WasmRunConfiguration).apply {
             wasmFilePath = file.path
             workingDirectory = file.parent?.path ?: ""
-            wasmtimeOptions = wasmTimeArgs
+            wasmtimeOptions = expectedWasmtimeOptions
+            this.nodeOptions = expectedNodeOptions
             this.engine = engine
         }
         runManager.addConfiguration(newSettings)
@@ -69,6 +74,8 @@ fun runWasmConfiguration(
         programArguments = programArgs
         this.exportName = exportName
         this.engine = engine
+        wasmtimeOptions = expectedWasmtimeOptions
+        this.nodeOptions = expectedNodeOptions
     }
 
     doRun(file, project, settings, runManager, mode)

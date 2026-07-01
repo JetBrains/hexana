@@ -10,6 +10,7 @@ import com.intellij.tools.ide.util.common.logOutput
 import org.jetbrains.hexana.ui.framework.DebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationRuntimePreflight
 import org.jetbrains.hexana.ui.framework.awaitRunConfigurationConsoleResult
+import org.jetbrains.hexana.ui.framework.launchNodeJsRunConfiguration
 import org.jetbrains.hexana.ui.framework.launchWasmtimeRunConfiguration
 import org.jetbrains.hexana.ui.framework.NodeJsDebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.NodeJsRunConfigHelperRef
@@ -25,7 +26,7 @@ import kotlin.time.Duration.Companion.minutes
  *
  * Covers:
  * - Running a core module (with `_start`) from the hex view Run button
- * - Running an exported function from a core module
+ * - Running an exported function from a core module with Wasmtime and Node.js
  * - Running a component model module (with `wasi:cli/run`) from the hex view Run button
  * - Debugging a core module (with `_start`) via the Debug executor (Wasmtime)
  * - Debugging a core module via the Debug executor (Node.js / CDP)
@@ -141,6 +142,64 @@ class HexanaRunConfigurationDriverTest {
                 )
                 assertEquals(wasmtimePath, launch.effectiveWasmtimePath, "Expected exported-function run to record the injected Wasmtime path")
                 assertEquals("--invoke add", launch.wasmtimeOptions, "Expected exported-function run to preserve Wasmtime options")
+                assertEquals("", launch.nodeOptions, "Expected exported-function run to leave Node.js options blank")
+                assertEquals("add", launch.exportName, "Expected exported-function run to preserve the export name")
+                assertEquals("2 3", launch.programArguments, "Expected exported-function run to preserve program arguments")
+                assertEquals(emptyList<String>(), launch.dependencies, "Expected add.wasm to resolve no dependencies")
+                val output = awaitRunConfigurationConsoleResult().consoleOutput
+                logOutput("Exported function run output: $output")
+
+                assertTrue(
+                    output.contains("5"),
+                    "Expected '5' in output for add(2,3), got: $output"
+                )
+            }
+    }
+
+    @Test
+    fun runExportedFunctionWithNodeJs() {
+        val nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs()
+        val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-run-exported-function-nodejs")
+
+        context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
+            .useDriverAndCloseIde {
+                waitForIndicators(5.minutes)
+
+                openFile(ADD_MODULE_FILE, waitForCodeAnalysis = false, isTextEditor = false)
+                ideFrame {
+                    editorTabs {
+                        tab(ADD_MODULE_FILE, fullMatch = false).waitFound()
+                    }
+                }
+                Thread.sleep(3_000)
+
+                val launch = launchNodeJsRunConfiguration(
+                    wasmFileName = ADD_MODULE_FILE,
+                    nodePath = nodePath,
+                    nodeOptions = "",
+                    exportName = "add",
+                    programArgs = "2 3",
+                )
+                assertEquals(
+                    context.resolvedProjectHome.resolve(ADD_MODULE_FILE).toString().replace('\\', '/'),
+                    launch.wasmFilePath.replace('\\', '/'),
+                    "Expected exported-function run to target $ADD_MODULE_FILE",
+                )
+                assertEquals(
+                    context.resolvedProjectHome.toString().replace('\\', '/'),
+                    launch.workingDirectory.replace('\\', '/'),
+                    "Expected exported-function run to record the project root as working directory",
+                )
+                assertEquals("NODE_JS", launch.engine, "Expected exported-function run to use NODE_JS")
+                assertEquals("RUN", launch.mode, "Expected exported-function run to use RUN mode")
+                assertEquals(launch.configurationName, launch.selectedConfigurationName, "Expected exported-function run to select its production-created configuration")
+                assertTrue(
+                    launch.selectedConfigurationType.contains("WasmRunConfiguration"),
+                    "Expected a WasmRunConfiguration selected by the exported-function launch, got ${launch.selectedConfigurationType}",
+                )
+                assertEquals(nodePath, launch.effectiveNodePath, "Expected exported-function run to record the injected Node.js path")
+                assertEquals("", launch.wasmtimeOptions, "Expected exported-function run to leave Wasmtime options blank")
+                assertEquals("", launch.nodeOptions, "Expected exported-function run to omit Node.js options")
                 assertEquals("add", launch.exportName, "Expected exported-function run to preserve the export name")
                 assertEquals("2 3", launch.programArguments, "Expected exported-function run to preserve program arguments")
                 assertEquals(emptyList<String>(), launch.dependencies, "Expected add.wasm to resolve no dependencies")
@@ -453,28 +512,6 @@ class HexanaRunConfigurationDriverTest {
                     "Expected debug session to be resumed after inspection"
                 )
             }
-    }
-
-    private fun launchNodeJsConfig(
-        driver: Driver,
-        wasmFileName: String,
-        engine: String,
-        nodePath: String,
-        nodeOptions: String = "",
-        exportName: String = "",
-        programArgs: String = "",
-    ) {
-        val project = driver.singleProject()
-        val helper = driver.utility(NodeJsRunConfigHelperRef::class)
-        helper.createAndRunNodeJs(
-            project,
-            wasmFileName,
-            engine,
-            nodeOptions,
-            exportName,
-            programArgs,
-            nodePath,
-        )
     }
 
     private fun launchNodeJsDebugConfig(

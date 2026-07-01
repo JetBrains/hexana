@@ -30,26 +30,72 @@ object HexanaRunConfigurationUiTestProbe {
         exportName: String,
         programArgs: String,
     ): List<String> {
+        return launchRunConfiguration(
+            project = project,
+            wasmFileName = wasmFileName,
+            engine = WasmEngine.WASMTIME,
+            runtimePath = wasmtimePath,
+            runtimeOptions = wasmtimeOptions,
+            exportName = exportName,
+            programArgs = programArgs,
+        )
+    }
+
+    @JvmStatic
+    fun launchNodeJsRunConfiguration(
+        project: Project,
+        wasmFileName: String,
+        nodePath: String,
+        nodeOptions: String,
+        exportName: String,
+        programArgs: String,
+    ): List<String> {
+        return launchRunConfiguration(
+            project = project,
+            wasmFileName = wasmFileName,
+            engine = WasmEngine.NODE_JS,
+            runtimePath = nodePath,
+            runtimeOptions = nodeOptions,
+            exportName = exportName,
+            programArgs = programArgs,
+        )
+    }
+
+    private fun launchRunConfiguration(
+        project: Project,
+        wasmFileName: String,
+        engine: WasmEngine,
+        runtimePath: String,
+        runtimeOptions: String,
+        exportName: String,
+        programArgs: String,
+    ): List<String> {
         val basePath = project.basePath ?: error("project basePath is null")
         val wasmFilePath = "$basePath/$wasmFileName"
         val wasmVirtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(wasmFilePath)
             ?: error("wasm file not found: $wasmFilePath")
 
-        WasmRuntimeSettings.getInstance().wasmtimePathInUi = wasmtimePath
+        val runtimeSettings = WasmRuntimeSettings.getInstance()
+        when (engine) {
+            WasmEngine.WASMTIME -> runtimeSettings.wasmtimePathInUi = runtimePath
+            WasmEngine.NODE_JS -> runtimeSettings.nodePathInUi = runtimePath
+            else -> error("Unsupported engine for run probe: ${engine.name}")
+        }
         runWasmConfiguration(
             project = project,
             file = wasmVirtualFile,
             exportName = exportName,
             programArgs = programArgs,
-            wasmTimeArgs = wasmtimeOptions,
-            engine = WasmEngine.WASMTIME,
+            wasmTimeArgs = if (engine == WasmEngine.WASMTIME) runtimeOptions else "",
+            engine = engine,
             mode = WasmRunMode.RUN,
+            nodeOptions = if (engine == WasmEngine.NODE_JS) runtimeOptions else "",
         )
 
         val settings = waitForLaunchedConfiguration(
             project = project,
             wasmFilePath = wasmVirtualFile.path,
-            engine = WasmEngine.WASMTIME,
+            engine = engine,
         )
         val configuration = settings.configuration as? WasmRunConfiguration
             ?: error("Expected WasmRunConfiguration, got ${settings.configuration::class.java.name}")
@@ -63,8 +109,10 @@ object HexanaRunConfigurationUiTestProbe {
                 add("configurationName=${settings.name}")
                 add("selectedConfigurationName=${currentSelectedConfigurationName(project)}")
                 add("selectedConfigurationType=${configuration::class.java.name}")
-                add("effectiveWasmtimePath=${WasmRuntimeSettings.getInstance().effectiveWasmtimePath()}")
+                add("effectiveWasmtimePath=${runtimeSettings.effectiveWasmtimePath()}")
+                add("effectiveNodePath=${runtimeSettings.effectiveNodePath()}")
                 add("wasmtimeOptions=${configuration.wasmtimeOptions}")
+                add("nodeOptions=${configuration.nodeOptions}")
                 add("exportName=${configuration.exportName}")
                 add("programArguments=${configuration.programArguments}")
                 add("dependenciesCount=${configuration.dependencies.size}")
