@@ -9,13 +9,12 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 
 /**
  * Builds the extra [PanelTab] entries for a parsed Android `.dex` file:
- * Header, Classes, Strings — mirroring the IntelliJ plugin's
- * `DexFileEditorView`.
+ * Header, Classes — mirroring the IntelliJ plugin's `DexFileEditorView`.
+ * The Strings tab is provided by [DexTableTabsProvider].
  */
 internal fun dexFileExtraTabs(dexFile: DexFile, buffer: CommonByteBuffer): List<PanelTab> = listOf(
     PanelTab("Header") { _ -> DexHeaderTab(dexFile) },
     PanelTab("Classes") { _ -> DexClassesTabWithNavigation(dexFile, buffer) },
-    PanelTab("Strings") { _ -> DexStringsTab(dexFile) },
 )
 
 /**
@@ -171,93 +170,6 @@ private fun DexClassesTab(dex: DexFile, onClassClick: (Int) -> Unit) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Strings tab
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun DexStringsTab(dex: DexFile) {
-    data class IndexedString(val index: Int, val displayValue: String)
-
-    val allStrings = remember(dex) {
-        dex.stringIds.mapIndexed { idx, entry ->
-            IndexedString(idx, escapeControlChars(entry.value))
-        }
-    }
-    var searchQuery by remember(dex) { mutableStateOf("") }
-    var debouncedQuery by remember(dex) { mutableStateOf("") }
-
-    LaunchedEffect(searchQuery) {
-        delay(300)
-        debouncedQuery = searchQuery
-    }
-
-    val filteredStrings = remember(dex, debouncedQuery) {
-        if (debouncedQuery.isBlank()) allStrings
-        else {
-            val q = debouncedQuery.trim().lowercase()
-            allStrings.filter { it.displayValue.lowercase().contains(q) }
-        }
-    }
-
-    Div({
-        style {
-            display(DisplayStyle.Flex)
-            property("flex-direction", "column")
-            property("gap", "4px")
-            property("flex", "1")
-            property("min-height", "0")
-        }
-    }) {
-        Input(org.jetbrains.compose.web.attributes.InputType.Text) {
-            classes("hexana-search-input")
-            value(searchQuery)
-            attr("placeholder", "Search strings\u2026")
-            onInput { searchQuery = it.value }
-            style {
-                property("margin-bottom", "4px")
-                property("padding", "4px 8px")
-                property("font-size", "12px")
-                property("background", "var(--vscode-input-background, #3c3c3c)")
-                property("color", "var(--hexana-fg)")
-                property("border", "1px solid var(--hexana-border, #333)")
-                property("border-radius", "3px")
-                property("outline", "none")
-                property("flex", "none")
-                width(100.percent)
-            }
-        }
-
-        if (filteredStrings.isEmpty()) {
-            Div({
-                style {
-                    property("font-family", "monospace")
-                    property("font-size", "12px")
-                }
-            }) {
-                Text(if (searchQuery.isNotEmpty()) "No strings match the search." else "(no strings)")
-            }
-        } else {
-            VirtualizedList(
-                itemCount = filteredStrings.size,
-                itemHeightPx = 20,
-            ) { idx ->
-                val s = filteredStrings[idx]
-                Div({
-                    style {
-                        property("font-family", "monospace")
-                        property("font-size", "12px")
-                        property("white-space", "nowrap")
-                        property("overflow", "hidden")
-                        property("text-overflow", "ellipsis")
-                    }
-                }) {
-                    Text("#${s.index.toString().padStart(5, ' ')}  ${s.displayValue}")
-                }
-            }
-        }
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Class detail view
@@ -585,14 +497,3 @@ private fun buildClassRows(dex: DexFile): List<DexClassRowData> =
         DexClassRowData(index = idx, classDefIndex = idx, text = text)
     }
 
-private fun escapeControlChars(s: String): String = buildString(s.length) {
-    for (c in s) {
-        when (c) {
-            '\n' -> append("\\n")
-            '\r' -> append("\\r")
-            '\t' -> append("\\t")
-            '\u0000' -> append("\\0")
-            else -> if (c.code < 0x20) append("\\x${c.code.toString(16).padStart(2, '0')}") else append(c)
-        }
-    }
-}

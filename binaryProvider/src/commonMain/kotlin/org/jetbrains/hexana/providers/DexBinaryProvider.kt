@@ -24,6 +24,16 @@ class DexBinaryProvider(
         }
     }
 
+    /**
+     * Pre-rendered DEX string pool entries suitable for display in a table tab.
+     */
+    val dexStrings: List<DexStringDisplayEntry> by lazy {
+        val dex = parsedDexFile ?: return@lazy emptyList()
+        dex.stringIds.mapIndexed { index, entry ->
+            DexStringDisplayEntry(index = index, value = entry.value)
+        }
+    }
+
     companion object {
         /** Detects whether [buffer] starts with the DEX magic (`dex\n`). */
         fun isDexFile(buffer: CommonByteBuffer): Boolean {
@@ -35,3 +45,8 @@ class DexBinaryProvider(
         }
     }
 }
+
+class DexStringDisplayEntry(
+    val index: Int,
+    val value: String,
+)

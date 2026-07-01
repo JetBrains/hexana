@@ -2,7 +2,6 @@ package org.jetbrains.hexana.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -16,15 +15,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.intellij.openapi.ui.DialogWrapper
 import org.jetbrains.hexana.dex.DexClassData
 import org.jetbrains.hexana.dex.DexClassDef
 import org.jetbrains.hexana.dex.DexEncodedField
@@ -44,10 +40,6 @@ import org.jetbrains.jewel.ui.component.TabStrip
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.VerticalScrollbar
 import org.jetbrains.jewel.ui.theme.defaultTabStyle
-import java.awt.BorderLayout
-import java.awt.Toolkit
-import java.awt.datatransfer.StringSelection
-import javax.swing.*
 
 internal fun dexFilePanels(
     dexFile: DexFile,
@@ -55,7 +47,6 @@ internal fun dexFilePanels(
 ): List<org.jetbrains.hexana.ui.panel.Panel> = listOf(
     org.jetbrains.hexana.ui.panel.Panel("Header") { DexHeaderTab(dexFile) },
     org.jetbrains.hexana.ui.panel.Panel("Classes") { DexClassesPanel(dexFile, binaryProvider) },
-    org.jetbrains.hexana.ui.panel.Panel("Strings") { DexStringsTab(dexFile) },
 )
 
 /**
@@ -163,102 +154,6 @@ private fun DexClassRow(row: DexClassRowData, onClick: () -> Unit) {
     }
 }
 
-@Composable
-private fun DexStringsTab(dex: DexFile) {
-    data class IndexedString(val index: Int, val rawValue: String, val displayValue: String)
-
-    val allStrings = remember(dex) {
-        dex.stringIds.mapIndexed { idx, entry ->
-            IndexedString(idx, entry.value, escapeControlChars(entry.value))
-        }
-    }
-    var searchQuery by remember(dex) { mutableStateOf(TextFieldValue("")) }
-    val filteredStrings = remember(dex, searchQuery.text) {
-        if (searchQuery.text.isBlank()) allStrings
-        else {
-            val q = searchQuery.text.trim().lowercase()
-            allStrings.filter { it.displayValue.lowercase().contains(q) }
-        }
-    }
-    val listState = rememberLazyListState()
-    Column(modifier = Modifier.fillMaxSize()) {
-        SearchField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            placeholder = "Search strings",
-        )
-        Box(modifier = Modifier.fillMaxSize().weight(1f)) {
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                if (filteredStrings.isEmpty()) {
-                    item { Text(if (searchQuery.text.isNotEmpty()) "No strings match the search." else "(no strings)", style = DexRowTextStyle) }
-                    return@LazyColumn
-                }
-                items(filteredStrings.size, key = { filteredStrings[it].index }) { idx ->
-                    val s = filteredStrings[idx]
-                    val prefix = "#${s.index.toString().padStart(5, ' ')}  "
-                    Text(
-                        prefix + s.displayValue,
-                        style = DexRowTextStyle,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
-                            .pointerInput(s.rawValue) {
-                                detectTapGestures(
-                                    onDoubleTap = {
-                                        StringValueDialog("String #${s.index}", s.rawValue).show()
-                                    },
-                                )
-                            },
-                    )
-                }
-            }
-            VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
-        }
-    }
-}
-
-private class StringValueDialog(title: String, private val value: String) : DialogWrapper(true) {
-    init {
-        this.title = title
-        setOKButtonText("Close")
-        init()
-    }
-
-    override fun createCenterPanel(): JComponent {
-        val textArea = JTextArea(value).apply {
-            isEditable = false
-            lineWrap = true
-            wrapStyleWord = true
-            rows = 12
-            columns = 60
-        }
-        return JPanel(BorderLayout()).apply {
-            add(JScrollPane(textArea), BorderLayout.CENTER)
-        }
-    }
-
-    override fun createActions(): Array<Action> {
-        val copyAction = object : DialogWrapperAction("Copy to Clipboard") {
-            override fun doAction(e: java.awt.event.ActionEvent?) {
-                val selection = StringSelection(value)
-                Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, null)
-            }
-        }
-        return arrayOf(copyAction, okAction)
-    }
-}
-
-private fun escapeControlChars(s: String): String = buildString(s.length) {
-    for (c in s) {
-        when (c) {
-            '\n' -> append("\\n")
-            '\r' -> append("\\r")
-            '\t' -> append("\\t")
-            '\u0000' -> append("\\0")
-            else -> if (c.code < 0x20) append("\\x${c.code.toString(16).padStart(2, '0')}") else append(c)
-        }
-    }
-}
 
 // -----------------------------------------------------------------------------
 // Class detail view — shown when a class name is clicked

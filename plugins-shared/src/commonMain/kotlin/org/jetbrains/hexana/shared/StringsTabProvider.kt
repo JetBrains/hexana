@@ -15,7 +15,11 @@ private fun stringsTab(provider: BinaryProvider): TableTabDescriptor? {
         columns = listOf(
             col("Offset") { CellValue(hex(strings[it].offset)) },
             col("Size") { CellValue(strings[it].size) },
-            col("Value", ColumnWidth.Fill()) { CellValue(strings[it].value) },
+            col("Value", ColumnWidth.Fill()) {
+                val raw = strings[it].value
+                val escaped = escapeControlChars(raw)
+                CellValue(escaped, tooltip = if (escaped != raw) raw else null)
+            },
         ),
         rowCount = strings.size,
         rowSelectionProvider = { strings.getOrNull(it)?.let { string -> RowSelectionData(string.offset, string.size) } },

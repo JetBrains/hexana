@@ -264,3 +264,15 @@ internal fun hex(value: UInt): String = "0x${value.toString(16).uppercase()}"
 internal fun hex(value: ULong): String = "0x${value.toString(16).uppercase()}"
 
 internal const val SHT_DYNSYM = 11u
+
+internal fun escapeControlChars(s: String): String = buildString(s.length) {
+    for (c in s) {
+        when (c) {
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            '\u0000' -> append("\\0")
+            else -> if (c.code < 0x20) append("\\x${c.code.toString(16).padStart(2, '0')}") else append(c)
+        }
+    }
+}

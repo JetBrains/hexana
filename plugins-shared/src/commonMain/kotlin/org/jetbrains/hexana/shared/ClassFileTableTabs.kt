@@ -18,7 +18,11 @@ private fun constantPoolTab(provider: ClassFileBinaryProvider): TableTabDescript
         columns = listOf(
             col("Index") { CellValue(entries[it].index) },
             col("Tag", ColumnWidth.Fill(0.22f)) { CellValue(entries[it].tag) },
-            col("Value", ColumnWidth.Fill()) { CellValue(entries[it].description) },
+            col("Value", ColumnWidth.Fill()) {
+                val raw = entries[it].description
+                val escaped = escapeControlChars(raw)
+                CellValue(escaped, tooltip = if (escaped != raw) raw else null)
+            },
         ),
         rowCount = entries.size,
     )
