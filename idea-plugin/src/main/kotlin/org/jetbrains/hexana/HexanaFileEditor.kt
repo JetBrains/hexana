@@ -43,7 +43,6 @@ import org.jetbrains.hexana.providers.format.WasmEntityDiffResult
 import org.jetbrains.hexana.providers.format.WasmSizeDiffOrchestrator
 import org.jetbrains.hexana.shared.isClassFile
 import org.jetbrains.hexana.shared.isDexFile
-import org.jetbrains.hexana.shared.isZipFile
 import org.jetbrains.hexana.sourcemap.parseSourceMap
 import org.jetbrains.hexana.ui.BinaryEditorView
 import org.jetbrains.hexana.ui.CLASS_FILE_NAV_TARGET_KEY
@@ -235,11 +234,17 @@ class HexanaFileEditor(
         commonBuffer: CommonByteBuffer,
         sourcePath: String?
     ): BinaryProvider {
-        // Recognised structured formats (class/jar/dex) always use a generic provider.
+        // Recognised structured formats (class/dex) always use a generic provider.
+        // ZIP/JAR archives are detected by nativeOrGenericBinaryProvider → ZipBinaryProvider.
         if (ext == "class" || isClassFile(commonBuffer)
-            || ext == "jar" || ext == "zip" || ext == "war" || ext == "apk" || isZipFile(commonBuffer)
             || ext == "dex" || isDexFile(commonBuffer)) {
             return GenericBinaryProvider(commonBuffer.duplicate().position(0))
+        }
+
+        // Known ZIP extensions: skip Wasm detection and go straight to
+        // nativeOrGenericBinaryProvider which will produce a ZipBinaryProvider.
+        if (ext == "jar" || ext == "zip" || ext == "war" || ext == "apk") {
+            return nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
         }
 
         if (ext != "wasm") {

@@ -8,11 +8,9 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
-import org.jetbrains.hexana.shared.ZipTableTabsProvider
-import org.jetbrains.hexana.shared.isZipFile
-import org.jetbrains.hexana.zip.ZipParser
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.events.Event
 
@@ -62,16 +60,12 @@ fun HexanaPanel(
             // Interleave ordinary and grouped tabs per provider so each
             // provider's tabs appear together in registration order.
             val enricher = provider.getTabsEnricher()
-            // Pre-parse ZIP entries once for enrichment if this is a ZIP file.
-            val zipEntries = if (isZipFile(provider.bytes)) {
-                try { ZipParser.parse(provider.bytes.duplicate().position(0)).filter { !it.isDirectory } }
-                catch (_: Throwable) { null }
-            } else null
+            val zipProvider = provider as? ZipBinaryProvider
             for (p in TableTabsProviderRegistry.providers) {
                 val enriched = enricher(p.tableTabs(provider), fileName, pendingRun)
                 val ordinary = enriched.map { d ->
-                    val desc = if (p is ZipTableTabsProvider && d.name == "Entries" && zipEntries != null) {
-                        enrichZipEntriesTab(d, zipEntries)
+                    val desc = if (d.name == "Entries" && zipProvider != null) {
+                        enrichZipEntriesTab(d, zipProvider.displayEntries)
                     } else d
                     TableTab(name = desc.name) { selection -> TableTabContent(desc, selection) }
                 }

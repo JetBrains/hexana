@@ -13,6 +13,7 @@ import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.wasm.sections.WasmGlobalType
 import org.jetbrains.hexana.wasm.sections.WasmMemType
@@ -31,6 +32,7 @@ fun org.jetbrains.hexana.providers.BinaryProvider.readBinarySummary(pathLabel: S
         is CoffBinaryProvider -> coffCounts(warnings)
         is ArchiveBinaryProvider -> archiveCounts(warnings)
         is NativeBinaryProvider -> nativeCounts()
+        is ZipBinaryProvider -> BinarySummaryCountsResult()
         is GenericBinaryProvider -> BinarySummaryCountsResult()
     }
     return BinarySummaryResult(

@@ -12,6 +12,7 @@ import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.providers.nativeOrGenericBinaryProvider
 import java.nio.file.Files
 import java.nio.file.Path
@@ -166,6 +167,12 @@ internal fun BinaryProvider.toModuleIdentity(pathLabel: String?): BinaryModuleId
             architecture = nativeFormat.architectureLabel(),
             endian = nativeFormat.endianLabel(),
             wordSize = nativeFormat.wordSizeLabel(),
+        )
+        is ZipBinaryProvider -> BinaryModuleIdentityResult(
+            path = pathLabel,
+            format = "zip",
+            displayFormat = "ZIP archive",
+            byteLength = bytes.size,
         )
         is GenericBinaryProvider -> BinaryModuleIdentityResult(
             path = pathLabel,

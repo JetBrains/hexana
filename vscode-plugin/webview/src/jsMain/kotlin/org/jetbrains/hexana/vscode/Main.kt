@@ -11,7 +11,6 @@ import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.shared.isClassFile
 import org.jetbrains.hexana.shared.isDexFile
-import org.jetbrains.hexana.shared.isZipFile
 
 fun main() {
     renderComposable(rootElementId = "root") {
@@ -47,7 +46,6 @@ fun BinaryEditorApp() {
 
         val provider = remember(buffer, filePath) {
             when {
-                isZipFile(buffer) -> GenericBinaryProvider(buffer)
                 isClassFile(buffer) -> GenericBinaryProvider(buffer)
                 isDexFile(buffer) -> GenericBinaryProvider(buffer)
                 else -> when (WasmBinaryProviderSelector.select(buffer)) {

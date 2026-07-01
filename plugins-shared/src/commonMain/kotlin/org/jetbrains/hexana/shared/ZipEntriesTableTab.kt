@@ -1,7 +1,7 @@
 package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.providers.BinaryProvider
-import org.jetbrains.hexana.zip.ZipParser
+import org.jetbrains.hexana.providers.ZipBinaryProvider
 
 /**
  * Lightweight data holder for a single ZIP/JAR entry, carrying only the
@@ -66,24 +66,17 @@ fun zipEntriesDescriptor(
 /**
  * [TableTabsProvider] for ZIP / JAR archives.
  *
- * Detects ZIP files via [isZipFile] magic check, parses the central
- * directory with [ZipParser], and produces a single "Entries" table tab
- * listing all non-directory entries. Platform-specific behaviour (entry
- * opening on click) is added by the platform enricher.
+ * Produces a single "Entries" table tab listing all non-directory entries
+ * when the provider is a [ZipBinaryProvider]. The cached entry list from
+ * the provider is reused, avoiding redundant parsing. Platform-specific
+ * behaviour (entry opening on click) is added by the platform enricher.
  */
 class ZipTableTabsProvider : TableTabsProvider {
 
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> {
-        val buffer = provider.bytes
-        if (!isZipFile(buffer)) return emptyList()
-
-        val entries = try {
-            ZipParser.parse(buffer.duplicate().position(0))
-        } catch (_: Throwable) {
-            return emptyList()
-        }
-
-        val displayEntries = entries.filter { !it.isDirectory }
+        if (provider !is ZipBinaryProvider) return emptyList()
+        val displayEntries = provider.displayEntries
+        if (displayEntries.isEmpty()) return emptyList()
 
         return listOf(
             zipEntriesDescriptor(

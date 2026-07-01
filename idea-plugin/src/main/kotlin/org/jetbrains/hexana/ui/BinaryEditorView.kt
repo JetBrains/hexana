@@ -43,8 +43,8 @@ import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsContext
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.ui.panel.*
+import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.zip.ZipEntry
-import org.jetbrains.hexana.zip.ZipParser
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -774,7 +774,7 @@ private fun BinaryProvider.resolvePanels(
     for (pt in perProvider) {
         val enriched = enricher(pt.ordinary, state, pathsNav)
         panels += enriched.map { tab ->
-            if (tab.name == "Entries" && onOpenZipEntry != null) {
+            if (tab.name == "Entries" && onOpenZipEntry != null && this is ZipBinaryProvider) {
                 enrichZipEntriesTab(tab, onOpenZipEntry).toPanel(state)
             } else {
                 tab.toPanel(state)
@@ -789,20 +789,14 @@ private fun BinaryProvider.resolvePanels(
 
 /**
  * Enriches the ZIP "Entries" tab descriptor with a row-click action that
- * opens the clicked entry via [onOpenEntry]. The descriptor's row indices
- * correspond to the non-directory entries parsed by [ZipTableTabsProvider],
- * so we re-parse the buffer to obtain the full [ZipEntry] list for the
- * click callback.
+ * opens the clicked entry via [onOpenEntry]. The entry list is obtained
+ * from the [ZipBinaryProvider]'s cached [ZipBinaryProvider.displayEntries].
  */
-private fun BinaryProvider.enrichZipEntriesTab(
+private fun ZipBinaryProvider.enrichZipEntriesTab(
     tab: TableTabDescriptor,
     onOpenEntry: (ZipEntry) -> Unit,
 ): TableTabDescriptor {
-    val entries = try {
-        ZipParser.parse(bytes.duplicate().position(0)).filter { !it.isDirectory }
-    } catch (_: Throwable) {
-        return tab
-    }
+    val entries = displayEntries
     return TableTabDescriptor(
         name = tab.name,
         columns = tab.columns,

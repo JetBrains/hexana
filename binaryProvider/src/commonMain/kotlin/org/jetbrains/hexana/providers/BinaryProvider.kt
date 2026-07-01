@@ -38,6 +38,8 @@ import org.jetbrains.hexana.providers.pe.PeImportLibrary
 import org.jetbrains.hexana.providers.pe.PeOptionalHeader
 import org.jetbrains.hexana.providers.pe.PeParser
 import org.jetbrains.hexana.providers.pe.PeSection
+import org.jetbrains.hexana.zip.ZipEntry
+import org.jetbrains.hexana.zip.ZipParser
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmParseSuccess
@@ -121,6 +123,41 @@ open class GenericBinaryProvider(private val sharedBytes: CommonByteBuffer) : Bi
 
     val nativeFormat: NativeBinaryFormat? by lazy {
         NativeBinaryFormatDetector.detect(bytes)
+    }
+}
+
+/**
+ * Provider for ZIP / JAR archives.
+ *
+ * Lazily parses the central directory once and caches the entry list so that
+ * table-tab providers and enrichers can reuse it without re-parsing.
+ */
+class ZipBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvider {
+    override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
+
+    /** All entries from the ZIP central directory, or empty on parse failure. */
+    val zipEntries: List<ZipEntry> by lazy {
+        try {
+            ZipParser.parse(sharedBytes.duplicate().position(0))
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    /** Non-directory entries suitable for display in the entries table. */
+    val displayEntries: List<ZipEntry> by lazy {
+        zipEntries.filter { !it.isDirectory }
+    }
+
+    companion object {
+        /** PK\x03\x04 local file header magic. */
+        fun isZip(buffer: CommonByteBuffer): Boolean {
+            if (buffer.size < 4) return false
+            return buffer[0] == 0x50.toByte() &&
+                buffer[1] == 0x4B.toByte() &&
+                buffer[2] == 0x03.toByte() &&
+                buffer[3] == 0x04.toByte()
+        }
     }
 }
 
@@ -519,7 +556,8 @@ fun nativeOrGenericBinaryProvider(
     is NativeBinaryFormat.Pe -> PeBinaryProvider(sharedBytes, fmt, sourcePath)
     is NativeBinaryFormat.Coff -> CoffBinaryProvider(sharedBytes, fmt, sourcePath)
     NativeBinaryFormat.Archive -> ArchiveBinaryProvider(sharedBytes, sourcePath)
-    null -> GenericBinaryProvider(sharedBytes)
+    null -> if (ZipBinaryProvider.isZip(sharedBytes)) ZipBinaryProvider(sharedBytes)
+           else GenericBinaryProvider(sharedBytes)
 }
 
 open class WasmComponentBinaryProvider(private val sharedBytes: CommonByteBuffer): BinaryProvider {
