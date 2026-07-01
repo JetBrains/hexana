@@ -9,6 +9,7 @@ import com.intellij.ide.starter.driver.engine.runIdeWithDriver
 import com.intellij.tools.ide.util.common.logOutput
 import org.jetbrains.hexana.ui.framework.DebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationRuntimePreflight
+import org.jetbrains.hexana.ui.framework.launchCoreModuleWithWasmtime
 import org.jetbrains.hexana.ui.framework.awaitRunConfigurationConsoleResult
 import org.jetbrains.hexana.ui.framework.NodeJsDebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.NodeJsRunConfigHelperRef
@@ -61,11 +62,34 @@ class HexanaRunConfigurationDriverTest {
                 }
                 Thread.sleep(3_000)
 
-                launchWasmtimeConfig(
-                    driver = this,
+                val launch = launchCoreModuleWithWasmtime(
                     wasmFileName = CORE_MODULE_FILE,
-                    engine = "WASMTIME",
                     wasmtimePath = wasmtimePath,
+                )
+                assertTrue(
+                    launch.wasmFilePath.replace('\\', '/') ==
+                        context.resolvedProjectHome.resolve(CORE_MODULE_FILE).toString().replace('\\', '/'),
+                    "Expected production launch to target $CORE_MODULE_FILE, got ${launch.wasmFilePath}",
+                )
+                assertTrue(
+                    launch.engine == "WASMTIME" && launch.mode == "RUN",
+                    "Expected production launch metadata to report WASMTIME/RUN, got engine=${launch.engine}, mode=${launch.mode}",
+                )
+                assertTrue(
+                    launch.configurationName == launch.selectedConfigurationName,
+                    "Expected selected configuration to match the production-created configuration, got launch=${launch.configurationName}, selected=${launch.selectedConfigurationName}",
+                )
+                assertTrue(
+                    launch.selectedConfigurationType.contains("WasmRunConfiguration"),
+                    "Expected a WasmRunConfiguration selected by the production launch, got ${launch.selectedConfigurationType}",
+                )
+                assertTrue(
+                    launch.wasmtimePath == wasmtimePath,
+                    "Expected production launch probe to record the injected Wasmtime path, got ${launch.wasmtimePath}",
+                )
+                assertTrue(
+                    launch.dependencies.isNotEmpty(),
+                    "Expected production dependency resolution to populate dependencies",
                 )
                 val output = awaitRunConfigurationConsoleResult().consoleOutput
                 logOutput("Core module run output: $output")

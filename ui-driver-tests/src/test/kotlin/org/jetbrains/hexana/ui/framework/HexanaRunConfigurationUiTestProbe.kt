@@ -2,6 +2,7 @@ package org.jetbrains.hexana.ui.framework
 
 import com.intellij.driver.client.Driver
 import com.intellij.driver.client.Remote
+import com.intellij.driver.sdk.singleProject
 import org.junit.jupiter.api.Assertions.assertEquals
 
 private const val HEXANA_PLUGIN_ID = "org.jetbrains.hexana"
@@ -12,6 +13,20 @@ internal fun Driver.runConfigurationProbeResponds() {
     assertEquals("1", probe.frameworkVersion())
 }
 
+internal fun Driver.launchCoreModuleWithWasmtime(
+    wasmFileName: String,
+    wasmtimePath: String,
+): HexanaRunConfigurationLaunchSnapshot {
+    val probe = utility(HexanaRunConfigurationUiTestProbeRef::class)
+    return HexanaRunConfigurationLaunchPayload.parse(
+        probe.launchCoreModuleWithWasmtime(
+            singleProject(),
+            wasmFileName,
+            wasmtimePath,
+        ),
+    )
+}
+
 @Remote(
     "org.jetbrains.hexana.uitestframework.HexanaRunConfigurationUiTestProbe",
     plugin = HEXANA_PLUGIN_ID,
@@ -19,6 +34,11 @@ internal fun Driver.runConfigurationProbeResponds() {
 internal interface HexanaRunConfigurationUiTestProbeRef {
     fun frameworkVersion(): String
     fun ping(): String
+    fun launchCoreModuleWithWasmtime(
+        project: com.intellij.driver.sdk.Project,
+        wasmFileName: String,
+        wasmtimePath: String,
+    ): List<String>
 }
 
 @Remote(

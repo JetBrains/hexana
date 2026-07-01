@@ -1,9 +1,123 @@
 package org.jetbrains.hexana.uitestframework
 
+import com.intellij.execution.RunManager
+import com.intellij.execution.RunnerAndConfigurationSettings
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.LocalFileSystem
+import org.jetbrains.hexana.run.WasmEngine
+import org.jetbrains.hexana.run.WasmRunConfiguration
+import org.jetbrains.hexana.run.WasmRunMode
+import org.jetbrains.hexana.run.WasmRuntimeSettings
+import org.jetbrains.hexana.run.runWasmConfiguration
+
+private const val WIRE_VERSION = "1"
+private const val LAUNCH_SCHEMA = "hexana-run-configuration-launch"
+
 object HexanaRunConfigurationUiTestProbe {
     @JvmStatic
     fun frameworkVersion(): String = "1"
 
     @JvmStatic
     fun ping(): String = "pong"
+
+    @JvmStatic
+    fun launchCoreModuleWithWasmtime(
+        project: Project,
+        wasmFileName: String,
+        wasmtimePath: String,
+    ): List<String> {
+        val basePath = project.basePath ?: error("project basePath is null")
+        val wasmFilePath = "$basePath/$wasmFileName"
+        val wasmVirtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(wasmFilePath)
+            ?: error("wasm file not found: $wasmFilePath")
+
+        WasmRuntimeSettings.getInstance().wasmtimePathInUi = wasmtimePath
+        runWasmConfiguration(
+            project = project,
+            file = wasmVirtualFile,
+            exportName = "",
+            programArgs = "",
+            wasmTimeArgs = "",
+            engine = WasmEngine.WASMTIME,
+            mode = WasmRunMode.RUN,
+        )
+
+        val settings = waitForLaunchedConfiguration(
+            project = project,
+            wasmFilePath = wasmVirtualFile.path,
+            engine = WasmEngine.WASMTIME,
+        )
+        val configuration = settings.configuration as? WasmRunConfiguration
+            ?: error("Expected WasmRunConfiguration, got ${settings.configuration::class.java.name}")
+
+        return payload(
+            buildList {
+                add("wasmFilePath=${configuration.wasmFilePath}")
+                add("engine=${configuration.engine.name}")
+                add("mode=${WasmRunMode.RUN.name}")
+                add("configurationName=${settings.name}")
+                add("selectedConfigurationName=${currentSelectedConfigurationName(project)}")
+                add("selectedConfigurationType=${configuration::class.java.name}")
+                add("wasmtimePath=${WasmRuntimeSettings.getInstance().wasmtimePathInUi.orEmpty()}")
+                add("dependenciesCount=${configuration.dependencies.size}")
+                configuration.dependencies.forEach { dependency ->
+                    add("dependency=$dependency")
+                }
+            },
+        )
+    }
+
+    private fun waitForLaunchedConfiguration(
+        project: Project,
+        wasmFilePath: String,
+        engine: WasmEngine,
+    ): RunnerAndConfigurationSettings {
+        val deadlineMs = System.currentTimeMillis() + 30_000
+        var lastState = "launch not observed"
+        while (System.currentTimeMillis() < deadlineMs) {
+            val selected = onEdt { RunManager.getInstance(project).selectedConfiguration }
+            val configuration = selected?.configuration as? WasmRunConfiguration
+            lastState = when {
+                selected == null -> "no selected configuration"
+                configuration == null -> {
+                    "selected configuration is ${selected.configuration::class.java.name}"
+                }
+                configuration.wasmFilePath != wasmFilePath -> {
+                    "selected configuration path=${configuration.wasmFilePath}"
+                }
+                configuration.engine != engine -> {
+                    "selected configuration engine=${configuration.engine.name}"
+                }
+                configuration.dependencies.isEmpty() -> "selected configuration has no dependencies yet"
+                else -> return selected
+            }
+            Thread.sleep(100)
+        }
+
+        error("Timed out waiting for launch of $wasmFilePath; last state: $lastState")
+    }
+
+    private fun currentSelectedConfigurationName(project: Project): String =
+        onEdt { RunManager.getInstance(project).selectedConfiguration?.name.orEmpty() }
+
+    private fun <T> onEdt(action: () -> T): T {
+        val app = ApplicationManager.getApplication()
+        if (app.isDispatchThread) {
+            return action()
+        }
+
+        var result: Result<T>? = null
+        app.invokeAndWait {
+            result = runCatching(action)
+        }
+        return result!!.getOrThrow()
+    }
+
+    private fun payload(entries: List<String>): List<String> =
+        buildList {
+            add("schema=$LAUNCH_SCHEMA")
+            add("version=$WIRE_VERSION")
+            addAll(entries)
+        }
 }
