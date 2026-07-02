@@ -36,7 +36,7 @@ internal fun Driver.launchWasmtimeRunConfiguration(
 internal fun Driver.launchNodeJsRunConfiguration(
     wasmFileName: String,
     nodePath: String,
-    nodeOptions: String = "",
+    nodeOptions: String? = null,
     exportName: String = "",
     programArgs: String = "",
 ): HexanaRunConfigurationLaunchSnapshot {
@@ -72,7 +72,7 @@ internal interface HexanaRunConfigurationUiTestProbeRef {
         project: com.intellij.driver.sdk.Project,
         wasmFileName: String,
         nodePath: String,
-        nodeOptions: String,
+        nodeOptions: String?,
         exportName: String,
         programArgs: String,
     ): List<String>

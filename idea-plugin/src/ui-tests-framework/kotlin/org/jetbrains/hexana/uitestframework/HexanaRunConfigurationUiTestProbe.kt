@@ -35,7 +35,7 @@ object HexanaRunConfigurationUiTestProbe {
             wasmFileName = wasmFileName,
             engine = WasmEngine.WASMTIME,
             runtimePath = wasmtimePath,
-            runtimeOptions = wasmtimeOptions,
+            wasmtimeOptions = wasmtimeOptions,
             exportName = exportName,
             programArgs = programArgs,
         )
@@ -46,7 +46,7 @@ object HexanaRunConfigurationUiTestProbe {
         project: Project,
         wasmFileName: String,
         nodePath: String,
-        nodeOptions: String,
+        nodeOptions: String? = null,
         exportName: String,
         programArgs: String,
     ): List<String> {
@@ -55,7 +55,7 @@ object HexanaRunConfigurationUiTestProbe {
             wasmFileName = wasmFileName,
             engine = WasmEngine.NODE_JS,
             runtimePath = nodePath,
-            runtimeOptions = nodeOptions,
+            nodeOptions = nodeOptions,
             exportName = exportName,
             programArgs = programArgs,
         )
@@ -66,7 +66,8 @@ object HexanaRunConfigurationUiTestProbe {
         wasmFileName: String,
         engine: WasmEngine,
         runtimePath: String,
-        runtimeOptions: String,
+        wasmtimeOptions: String = "",
+        nodeOptions: String? = null,
         exportName: String,
         programArgs: String,
     ): List<String> {
@@ -86,10 +87,10 @@ object HexanaRunConfigurationUiTestProbe {
             file = wasmVirtualFile,
             exportName = exportName,
             programArgs = programArgs,
-            wasmTimeArgs = if (engine == WasmEngine.WASMTIME) runtimeOptions else "",
+            wasmTimeArgs = if (engine == WasmEngine.WASMTIME) wasmtimeOptions else "",
             engine = engine,
             mode = WasmRunMode.RUN,
-            nodeOptions = if (engine == WasmEngine.NODE_JS) runtimeOptions else "",
+            nodeOptions = if (engine == WasmEngine.NODE_JS) nodeOptions else null,
         )
 
         val settings = waitForLaunchedConfiguration(

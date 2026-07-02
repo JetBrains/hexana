@@ -39,7 +39,7 @@ fun runWasmConfiguration(
     wasmTimeArgs: String,
     engine: WasmEngine = WasmEngine.DEFAULT,
     mode: WasmRunMode = WasmRunMode.RUN,
-    nodeOptions: String = "",
+    nodeOptions: String? = null,
 ) {
     val runManager = RunManager.getInstance(project)
     val configurationType = ConfigurationTypeUtil.findConfigurationType(WasmRunConfigurationType::class.java)
@@ -47,15 +47,21 @@ fun runWasmConfiguration(
 
     val configName = "${file.nameWithoutExtension}::${exportName}"
     val expectedWasmtimeOptions = if (engine == WasmEngine.WASMTIME) wasmTimeArgs else ""
-    val expectedNodeOptions = if (engine == WasmEngine.NODE_JS) nodeOptions else ""
+    val expectedNodeOptions = if (engine == WasmEngine.NODE_JS) nodeOptions ?: "" else ""
+    val nodeOptionsOverrideProvided = nodeOptions != null
 
     val existing = runManager.allSettings.firstOrNull { settings ->
         settings.type == configurationType &&
                 (settings.configuration as? WasmRunConfiguration)?.let { config ->
                     config.wasmFilePath == file.path &&
                             config.wasmtimeOptions == expectedWasmtimeOptions &&
-                            config.nodeOptions == expectedNodeOptions &&
-                            config.engine == engine
+                            config.engine == engine &&
+                            when (engine) {
+                                WasmEngine.NODE_JS -> {
+                                    !nodeOptionsOverrideProvided || config.nodeOptions == expectedNodeOptions
+                                }
+                                else -> config.nodeOptions == expectedNodeOptions
+                            }
                 } == true
     }
 
@@ -75,7 +81,14 @@ fun runWasmConfiguration(
         this.exportName = exportName
         this.engine = engine
         wasmtimeOptions = expectedWasmtimeOptions
-        this.nodeOptions = expectedNodeOptions
+        when (engine) {
+            WasmEngine.NODE_JS -> {
+                if (nodeOptionsOverrideProvided || existing == null) {
+                    this.nodeOptions = expectedNodeOptions
+                }
+            }
+            else -> this.nodeOptions = expectedNodeOptions
+        }
     }
 
     doRun(file, project, settings, runManager, mode)

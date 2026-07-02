@@ -214,6 +214,48 @@ class HexanaRunConfigurationDriverTest {
     }
 
     @Test
+    fun runExportedFunctionWithNodeJsPreservesSavedOptionsWithoutOverride() {
+        val nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs()
+        val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-run-exported-function-nodejs-preserve-options")
+
+        context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
+            .useDriverAndCloseIde {
+                waitForIndicators(5.minutes)
+
+                openFile(ADD_MODULE_FILE, waitForCodeAnalysis = false, isTextEditor = false)
+                ideFrame {
+                    editorTabs {
+                        tab(ADD_MODULE_FILE, fullMatch = false).waitFound()
+                    }
+                }
+                Thread.sleep(3_000)
+
+                val savedNodeOptions = "--no-warnings"
+                val firstLaunch = launchNodeJsRunConfiguration(
+                    wasmFileName = ADD_MODULE_FILE,
+                    nodePath = nodePath,
+                    nodeOptions = savedNodeOptions,
+                    exportName = "add",
+                    programArgs = "2 3",
+                )
+                assertEquals(savedNodeOptions, firstLaunch.nodeOptions, "Expected the initial Node.js launch to save its explicit options")
+
+                val secondLaunch = launchNodeJsRunConfiguration(
+                    wasmFileName = ADD_MODULE_FILE,
+                    nodePath = nodePath,
+                    exportName = "add",
+                    programArgs = "2 3",
+                )
+                assertEquals(savedNodeOptions, secondLaunch.nodeOptions, "Expected the relaunch without override to preserve saved Node.js options")
+                assertEquals(
+                    firstLaunch.configurationName,
+                    secondLaunch.configurationName,
+                    "Expected the relaunch without override to reuse the existing Node.js configuration",
+                )
+            }
+    }
+
+    @Test
     fun runComponentModuleWithWasmtime() {
         val wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime()
         val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-run-component-module")
