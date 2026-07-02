@@ -1,8 +1,23 @@
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "artifacts": [
-    "hexana-claude-plugin-0.2.0.zip",
-    "hexana-codex-plugin-0.2.0.zip",
-    "server-0.2.0.zip"
-  ]
+    "hexana-claude-plugin-0.3.0.zip",
+    "hexana-codex-plugin-0.3.0.zip",
+    "server-0.3.0.zip"
+  ],
+  "nativeArtifacts": {
+    "distribution": "github-release-only",
+    "platforms": [
+      "macos-arm64",
+      "linux-x64"
+    ],
+    "artifacts": [
+      "hexana-mcp-native-macos-arm64-0.3.0.zip",
+      "hexana-claude-plugin-macos-arm64-0.3.0.zip",
+      "hexana-codex-plugin-macos-arm64-0.3.0.zip",
+      "hexana-mcp-native-linux-x64-0.3.0.zip",
+      "hexana-claude-plugin-linux-x64-0.3.0.zip",
+      "hexana-codex-plugin-linux-x64-0.3.0.zip"
+    ]
+  }
 }
