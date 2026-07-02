@@ -49,6 +49,15 @@ class HexanaCli(
 
     fun helpText(): String = rootCommand.getFormattedHelp(null) ?: ""
 
+    internal fun helpText(args: Array<String>): String {
+        return try {
+            rootCommand.parse(args.asList())
+            rootCommand.getFormattedHelp(null) ?: ""
+        } catch (error: PrintHelpMessage) {
+            rootCommand.getFormattedHelp(error) ?: ""
+        }
+    }
+
     fun echoFormattedHelp(error: CliktError) {
         rootCommand.echoFormattedHelp(error)
     }
@@ -181,7 +190,8 @@ class HexanaCli(
         private val envReader: (String) -> String?,
         private val sink: (HexanaCommand) -> Unit
     ) : CliktCommand(name = "doctor") {
-        override fun help(context: Context): String = "Run compact standalone server diagnostics."
+        override fun help(context: Context): String =
+            "Run compact standalone server diagnostics. Exits 0 for OK or warning-only reports, 1 for failure reports."
 
         private val allowedRoots by allowedRootOption()
 

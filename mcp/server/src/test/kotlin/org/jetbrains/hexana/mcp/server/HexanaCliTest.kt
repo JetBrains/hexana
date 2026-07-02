@@ -177,6 +177,15 @@ class HexanaCliTest {
     }
 
     @Test
+    fun doctorHelpDocumentsExitCodes() {
+        val help = cli().helpText(arrayOf("doctor", "--help"))
+
+        assertTrue(help.contains("Run compact standalone server diagnostics."))
+        assertTrue(help.contains("Exits 0 for OK or warning-only"))
+        assertTrue(help.contains("1 for failure reports."))
+    }
+
+    @Test
     fun parseRejectsUnsupportedLogLevel() {
         val error = assertFailsWith<CliktError> {
             cli().parse(arrayOf("stdio", "--log-level", "trace"))
