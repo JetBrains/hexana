@@ -7,6 +7,7 @@
 ### Fixed
 - Public Claude Code and Codex marketplace metadata now bundles the macOS arm64 and Linux x64 native MCP executables so marketplace installs use the native launcher on supported platforms.
 - Release validation now rejects mismatched bundled-native marketplace metadata before public publication.
+- Packaged Claude Code and Codex skill guidance now references only MCP tools available in the default release profile.
 
 ## 0.3.0 - 2026-07-01
 
