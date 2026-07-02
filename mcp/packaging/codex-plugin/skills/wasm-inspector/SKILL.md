@@ -14,49 +14,43 @@ description: >
 Hexana's MCP server reads ground truth straight from the `.wasm` binary. Use it for any structural
 fact about a WebAssembly module or component, and keep answers grounded in what the tool reports.
 
-## The tool
+## Tools
 
-One tool: **`query_artifacts`**. Pass the binary (`path` to the `.wasm`) and an `operation`; output is
-byte-bounded. Useful params:
+The bundled release server exposes focused production tools. Start with the narrowest matching
+tool instead of looking for a generic catch-all tool.
 
-- `operation` — picks the query (table below). Default `overview`.
-- `query` — case-insensitive filter terms, or the payload for `crash_frames` / `data_payload_audit`.
-- `entityTypes` — filter: `export`, `import`, `memory`, `global`, `function`, `element`.
-- `startName` / `startFuncidx` — a function/import/export name or unified index for `trace` / `host_call_diff`.
-- `relations` — `direct_call`, `direct_imported_call`, `indirect_call`, `memory_write`.
-- `baselinePath` — a second `.wasm` for diff-style operations.
-- `limit` (≤100), `detail` (`summary` | `evidence`), `maxBytes` (start small).
+Common inputs:
 
-## Pick the operation by task
+- `path` — real path to the `.wasm` file.
+- `baselinePath` — second `.wasm` for compatibility/diff checks when the tool supports it.
+- `query`, `name`, `funcidx`, `limit`, `maxBytes`, and detail flags — use only when present in the tool schema.
 
-| Task | `operation` | Key params / discipline |
-|------|-------------|-------------------------|
-| "What is this module?" / counts | `overview` (default) | none — skip it entirely if the task already names a focused fact |
-| Triage a crash / stack trace | `crash_frames` | **Read the crash report first; pass ALL numeric stack funcidx values as strings in `query` in ONE call.** Don't probe one frame at a time |
-| API/ABI changed between two builds | `api_diff` | `baselinePath` = the old `.wasm`. Returns changed signatures, public type indices, ref-type import ABI risks |
-| Exported ABI surface (one module) | `public_surface` | exported functions/signatures |
-| Compact imports + exports (one module) | `abi_surface` | `limit=1` is often enough (summary JSON arrays) |
-| Host / supply-chain import audit | `import_surface` | host manifest/link checks; `functionImportsJson` on the summary |
-| Memory declarations / limit changes | `memory_contract` | add `baselinePath` for limit-change detection |
-| Mutable imported / new exported globals | `global_state_policy` | — |
-| Data-segment payload policy check | `data_payload_audit` | **Read the policy first; pass all forbidden strings exactly, in ONE call.** Empty `query` returns only a reminder |
-| Exported-function local-count budget | `local_budget` | — |
-| Exports that write memory / call host directly | `entrypoint_effects` | omit `relations` to scan both `memory_write` and `direct_imported_call` in one call |
-| Element-table slot target changes | `dispatch_table_diff` | `baselinePath` for the diff |
-| Direct imported-call regression from a function | `host_call_diff` | `startName` or `startFuncidx` |
-| Look up a specific symbol/index | any + `query` / `startFuncidx` | resolve it from results first, then drill down |
-| No focused operation matches | `find` / `diff` / `trace` | generic fallbacks only |
-| Ambiguous task, no named fact | `triage` | last resort |
+## Pick The Tool By Task
+
+| Task | Tool |
+|------|------|
+| "What is this module?" / counts / first look | `summarize_binary` or `summarize_module` |
+| Enabled Wasm features / proposals | `list_enabled_features`, `list_required_proposals`, `diff_required_proposals` |
+| Runtime/component compatibility | `check_runtime_compatibility`, `check_component_compatibility` |
+| Imports, exports, and exported ABI surface | `list_imports`, `list_exports`, `search_exports`, `list_exported_functions` |
+| Functions and signatures | `list_functions`, `search_functions_by_name`, `resolve_function_signature`, `resolve_function_symbols` |
+| Function internals and call graph | `disassemble_function`, `get_function_call_graph`, `resolve_source_locations` |
+| Crash stack triage | `resolve_wasm_frames` |
+| Memory declarations / memory policy | `list_memory`, `check_memory_contract` |
+| Globals / global-state policy | `list_globals`, `audit_global_state_policy` |
+| Tables and data segments | `list_element_segments`, `list_data_segments`, `audit_data_payload_policy` |
+| Entry-point effects / host-call policy | `get_entrypoint_policy` |
+| Local stack budget | `audit_local_stack_budget` |
+| ABI binding regeneration planning | `plan_abi_binding_regeneration` |
 
 ## Rules (efficiency + correctness)
 
-- **One focused call, then stop.** Don't follow a focused operation with generic `find`/`diff`/`trace`
-  (e.g. `api_diff` → `find`, `import_surface` → `find`, `crash_frames` → per-frame `trace`,
-  `entrypoint_effects` → per-export `trace`) unless a required output field is genuinely missing.
-- **Gather inputs before calling** for `crash_frames` and `data_payload_audit` — one call, not a probe loop.
+- **One focused call, then stop.** Do not fan out into broad follow-up calls unless a required output field is
+  genuinely missing.
+- **Gather inputs before calling** for `resolve_wasm_frames` and `audit_data_payload_policy` — one call, not a probe loop.
 - **Keep `limit` and `maxBytes` small.** Request `detail=evidence` only for the few records that need
   offsets, locals, element lists, or instruction text.
-- **Path fields take a real path** — the task's `.wasm` path or the `modules[].path` echoed in the result.
+- **Path fields take a real path** — the task's `.wasm` path or a path echoed in a previous result.
   Never write `local`, `current`, or `baseline` into a path field.
 - **Stay grounded in the tool output.** For any `.wasm` structural fact, prefer Hexana over shell tooling
   (`objdump` / `strings` / `hexdump`); the MCP server reports the verified binary structure.

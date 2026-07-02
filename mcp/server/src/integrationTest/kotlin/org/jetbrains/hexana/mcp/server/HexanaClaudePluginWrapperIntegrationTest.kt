@@ -21,6 +21,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
+private val BACKTICKED_IDENTIFIER = Regex("""`([a-z][a-z0-9_]+)`""")
+
 class HexanaClaudePluginWrapperIntegrationTest {
     private val logger = LoggerFactory.getLogger(HexanaClaudePluginWrapperIntegrationTest::class.java)
 
@@ -63,6 +65,34 @@ class HexanaClaudePluginWrapperIntegrationTest {
 
         assertTrue(Files.isRegularFile(claudeInstallDir.resolve("bin/hexana-mcp.cmd")))
         assertTrue(Files.isRegularFile(codexInstallDir.resolve("bin/hexana-mcp.cmd")))
+    }
+
+    @Test
+    fun assembledPluginSkillsReferenceOnlyProductionTools() {
+        val productionToolNames = EXPECTED_PRODUCTION_HEXANA_TOOL_NAMES.toSet()
+        val knownToolNames = EXPECTED_ADVANCED_HEXANA_TOOL_NAMES.toSet()
+
+        for (launcher in listOf(StdioLauncher.ClaudePluginWrapper, StdioLauncher.CodexPluginWrapper)) {
+            val installDir = Path.of(
+                System.getProperty(launcher.installDirSystemProperty)
+                    ?: error("Missing `${launcher.installDirSystemProperty}` system property")
+            )
+            val skill = Files.readString(installDir.resolve("skills/wasm-inspector/SKILL.md"))
+            val referencedKnownTools = BACKTICKED_IDENTIFIER.findAll(skill)
+                .map { it.groupValues[1] }
+                .filter { it in knownToolNames }
+                .toSet()
+            val advancedOnlyTools = referencedKnownTools - productionToolNames
+
+            assertTrue(
+                "summarize_binary" in referencedKnownTools,
+                "${launcher.clientName} wasm-inspector skill should reference production tool names"
+            )
+            assertTrue(
+                advancedOnlyTools.isEmpty(),
+                "${launcher.clientName} wasm-inspector skill references tools not available in the default production profile: $advancedOnlyTools"
+            )
+        }
     }
 
     @Test
