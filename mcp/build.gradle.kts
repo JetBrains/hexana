@@ -855,9 +855,15 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
     nativeReleasePlatforms.forEach { platform ->
         from({ zipTree(nativeExecutableZipFile(platform)) }) {
             include("bin/hexana-mcp")
-            into("plugins/hexana/native/$platform")
             eachFile {
-                relativePath = org.gradle.api.file.RelativePath(true, "hexana-mcp")
+                relativePath = org.gradle.api.file.RelativePath(
+                    true,
+                    "plugins",
+                    "hexana",
+                    "native",
+                    platform,
+                    "hexana-mcp"
+                )
                 permissions { unix("rwxr-xr-x") }
             }
             includeEmptyDirs = false
