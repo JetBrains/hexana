@@ -62,13 +62,14 @@ internal class HexanaInstalledServer private constructor(
             endpoint: String = "/mcp",
             logLevel: HexanaLogLevel = HexanaLogLevel.QUIET,
             toolProfile: HexanaMcpToolProfile? = null,
+            allowedRoots: List<Path> = emptyList(),
         ): HexanaInstalledServer {
             val processSpec = processSpec(launcher)
             val port = findFreePort()
             val stdoutBuffer = StringBuffer()
             val stderrBuffer = StringBuffer()
 
-            val command = buildCommand(processSpec, launcher, port, endpoint, logLevel, toolProfile)
+            val command = buildCommand(processSpec, launcher, port, endpoint, logLevel, toolProfile, allowedRoots)
             logger.info(
                 "Starting installed server from {} on http://127.0.0.1:{}{} with logLevel={} command={}",
                 processSpec.workingDirectory,
@@ -141,6 +142,7 @@ internal class HexanaInstalledServer private constructor(
             endpoint: String,
             logLevel: HexanaLogLevel,
             toolProfile: HexanaMcpToolProfile?,
+            allowedRoots: List<Path>,
         ): List<String> {
             val arguments = buildList {
                 add("http")
@@ -155,6 +157,10 @@ internal class HexanaInstalledServer private constructor(
                 if (toolProfile != null) {
                     add("--tool-profile")
                     add(toolProfile.cliValue())
+                }
+                allowedRoots.forEach { allowedRoot ->
+                    add("--allowed-root")
+                    add(allowedRoot.toString())
                 }
             }
             processSpec.executable?.let { executable ->
@@ -290,6 +296,7 @@ internal suspend inline fun <T> withInstalledServer(
     endpoint: String = "/mcp",
     logLevel: HexanaLogLevel = HexanaLogLevel.QUIET,
     toolProfile: HexanaMcpToolProfile? = null,
+    allowedRoots: List<Path> = emptyList(),
     crossinline block: suspend (HexanaInstalledServer) -> T
 ): T {
     val server = HexanaInstalledServer.start(
@@ -297,6 +304,7 @@ internal suspend inline fun <T> withInstalledServer(
         endpoint = endpoint,
         logLevel = logLevel,
         toolProfile = toolProfile,
+        allowedRoots = allowedRoots,
     )
     return try {
         block(server)

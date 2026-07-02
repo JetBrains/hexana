@@ -111,7 +111,11 @@ class HexanaClaudePluginWrapperIntegrationTest {
         callTool: Boolean = true,
     ) {
         KotlinLoggingConfiguration.logStartupMessage = false
-        withInstalledStdioClient(launcher = launcher, toolProfile = toolProfile) { server ->
+        withInstalledStdioClient(
+            launcher = launcher,
+            toolProfile = toolProfile,
+            allowedRoots = listOf(temporaryFolder.root.toPath())
+        ) { server ->
             logger.info("Connected {} plugin wrapper stdio client", clientLabel)
 
             val tools = server.client.listTools(ListToolsRequest())

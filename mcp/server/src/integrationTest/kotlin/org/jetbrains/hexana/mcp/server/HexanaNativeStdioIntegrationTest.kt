@@ -16,10 +16,14 @@ class HexanaNativeStdioIntegrationTest {
     @Test
     fun nativeExecutableSupportsListToolsAndToolCallsOverStdio() = runBlocking {
         KotlinLoggingConfiguration.logStartupMessage = false
-        withInstalledStdioClient(launcher = StdioLauncher.NativeExecutable) { server ->
+        val fixtureDirectory = temporaryFolder.root.toPath()
+        withInstalledStdioClient(
+            launcher = StdioLauncher.NativeExecutable,
+            allowedRoots = listOf(fixtureDirectory)
+        ) { server ->
             assertProductionStdioSmoke(
                 server = server,
-                fixtureDirectory = temporaryFolder.root.toPath(),
+                fixtureDirectory = fixtureDirectory,
                 logger = logger,
                 label = "native"
             )

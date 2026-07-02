@@ -33,12 +33,31 @@ class HexanaStdioIntegrationTest {
     }
 
     @Test
+    fun installedServerDoctorCommandReportsRuntimeAndLayout() = runBlocking {
+        val result = HexanaInstalledStdioClient.runCommand(StdioLauncher.Server, "doctor")
+
+        assertFalse(
+            result.timedOut,
+            "Doctor command timed out. stdout=${result.stdout}, stderr=${result.stderr}, command=${result.command}"
+        )
+        assertEquals(0, result.exitCode, "stdout=${result.stdout}, stderr=${result.stderr}")
+        assertTrue(result.stdout.contains("Hexana MCP doctor"), result.stdout)
+        assertTrue(result.stdout.contains("version:"), result.stdout)
+        assertTrue(result.stdout.contains("runtime:"), result.stdout)
+        assertTrue(result.stdout.contains("logs:"), result.stdout)
+        assertTrue(result.stdout.contains("allowed roots:"), result.stdout)
+        assertTrue(result.stdout.contains("installed layout:"), result.stdout)
+        assertTrue(result.stdout.contains("JVM distribution detected"), result.stdout)
+    }
+
+    @Test
     fun installedServerSupportsListToolsAndToolCallsOverStdio() = runBlocking {
         KotlinLoggingConfiguration.logStartupMessage = false
-        withInstalledStdioClient { server ->
+        val fixtureDirectory = temporaryFolder.root.toPath()
+        withInstalledStdioClient(allowedRoots = listOf(fixtureDirectory)) { server ->
             assertProductionStdioSmoke(
                 server = server,
-                fixtureDirectory = temporaryFolder.root.toPath(),
+                fixtureDirectory = fixtureDirectory,
                 logger = logger,
                 label = "installed"
             )

@@ -104,6 +104,7 @@ internal class HexanaInstalledStdioClient private constructor(
             logLevel: HexanaLogLevel = HexanaLogLevel.INFO,
             launcher: StdioLauncher = StdioLauncher.Server,
             toolProfile: HexanaMcpToolProfile? = null,
+            allowedRoots: List<Path> = emptyList(),
         ): HexanaInstalledStdioClient {
             val processSpec = processSpec(launcher)
             val command = buildCommand(
@@ -116,6 +117,10 @@ internal class HexanaInstalledStdioClient private constructor(
                     if (toolProfile != null) {
                         add("--tool-profile")
                         add(toolProfile.cliValue())
+                    }
+                    allowedRoots.forEach { allowedRoot ->
+                        add("--allowed-root")
+                        add(allowedRoot.toString())
                     }
                 }
             )
@@ -316,12 +321,14 @@ internal suspend inline fun <T> withInstalledStdioClient(
     logLevel: HexanaLogLevel = HexanaLogLevel.INFO,
     launcher: StdioLauncher = StdioLauncher.Server,
     toolProfile: HexanaMcpToolProfile? = null,
+    allowedRoots: List<Path> = emptyList(),
     crossinline block: suspend (HexanaInstalledStdioClient) -> T
 ): T {
     val server = HexanaInstalledStdioClient.start(
         logLevel = logLevel,
         launcher = launcher,
         toolProfile = toolProfile,
+        allowedRoots = allowedRoots,
     )
     return try {
         block(server)

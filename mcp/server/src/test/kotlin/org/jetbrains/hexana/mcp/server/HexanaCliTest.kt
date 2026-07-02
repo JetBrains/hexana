@@ -106,6 +106,22 @@ class HexanaCliTest {
     }
 
     @Test
+    fun parseCombinesAllowedRootsFromCliAndEnvForDoctor() {
+        val command = HexanaCli { name ->
+            if (name == "HEXANA_MCP_ALLOWED_ROOTS") "/env/project,/env/deps" else null
+        }.parse(
+            arrayOf(
+                "doctor",
+                "--allowed-root",
+                "/cli/project",
+            )
+        )
+
+        assertIs<HexanaCommand.Doctor>(command)
+        assertEquals(listOf("/cli/project", "/env/project", "/env/deps"), command.allowedRoots)
+    }
+
+    @Test
     fun parseNormalizesHttpEndpointAndKeepsLoopbackDefaults() {
         val command = cli().parse(
             arrayOf(
@@ -155,6 +171,7 @@ class HexanaCliTest {
         assertTrue(help.contains("Standalone Hexana MCP server"))
         assertTrue(help.contains("stdio"))
         assertTrue(help.contains("http"))
+        assertTrue(help.contains("doctor"))
         assertTrue(help.contains("version"))
         assertTrue(help.contains("help"))
     }

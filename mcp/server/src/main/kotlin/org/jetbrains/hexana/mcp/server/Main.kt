@@ -41,6 +41,18 @@ fun main(args: Array<String>) {
             when (command) {
                 is HexanaCommand.Help -> println(cli.helpText())
                 is HexanaCommand.Version -> println("hexana-mcp $version")
+                is HexanaCommand.Doctor -> {
+                    val report = HexanaDoctor.inspect(
+                        DoctorEnvironment.current(
+                            version = version,
+                            allowedRoots = command.allowedRoots
+                        )
+                    )
+                    println(HexanaDoctor.render(report))
+                    if (report.exitCode != 0) {
+                        exitProcess(report.exitCode)
+                    }
+                }
                 is HexanaCommand.Stdio -> runBlocking { runStdio(command) }
                 is HexanaCommand.Http -> runBlocking { runHttp(command) }
             }
@@ -54,6 +66,7 @@ fun main(args: Array<String>) {
         val userMessage = when (command) {
             is HexanaCommand.Stdio -> "Hexana MCP server failed while running stdio transport. See server logs for details."
             is HexanaCommand.Http -> "Hexana MCP server failed while running HTTP transport. See server logs for details."
+            is HexanaCommand.Doctor -> "Hexana MCP doctor failed. See server logs for details."
             is HexanaCommand.Version,
             is HexanaCommand.Help -> "Hexana MCP server failed. See server logs for details."
         }
@@ -106,6 +119,7 @@ internal fun HexanaCommand.analytics(): CommandAnalytics? = when (this) {
     )
 
     is HexanaCommand.Help,
+    is HexanaCommand.Doctor,
     is HexanaCommand.Version -> null
 }
 
@@ -115,6 +129,7 @@ internal fun developmentVersionWarning(command: HexanaCommand, version: String):
     }
     return when (command) {
         is HexanaCommand.Help,
+        is HexanaCommand.Doctor,
         is HexanaCommand.Version -> null
 
         is HexanaCommand.Stdio,

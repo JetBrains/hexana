@@ -34,7 +34,7 @@ class HexanaHttpIntegrationTest {
 
     @Test
     fun installedServerSupportsListToolsAndToolCallsOverHttp() = runBlocking {
-        withInstalledServer { server ->
+        withInstalledServer(allowedRoots = listOf(temporaryFolder.root.toPath())) { server ->
             logger.info("Server reported ready at {}", server.baseUrl)
             KotlinLoggingConfiguration.logStartupMessage = false
             HttpClient(CIO).use { httpClient ->

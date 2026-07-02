@@ -27,6 +27,10 @@ sealed interface HexanaCommand {
         val allowedRoots: List<String>,
     ) : HexanaCommand
 
+    data class Doctor(
+        val allowedRoots: List<String>,
+    ) : HexanaCommand
+
     data object Version : HexanaCommand
     data object Help : HexanaCommand
 }
@@ -62,6 +66,7 @@ class HexanaCli(
             subcommands(
                 StdioCommand(envReader, sink),
                 HttpCommand(envReader, sink),
+                DoctorCommand(envReader, sink),
                 VersionCommand(sink),
                 HelpCommand(sink)
             )
@@ -172,6 +177,23 @@ class HexanaCli(
         }
     }
 
+    private class DoctorCommand(
+        private val envReader: (String) -> String?,
+        private val sink: (HexanaCommand) -> Unit
+    ) : CliktCommand(name = "doctor") {
+        override fun help(context: Context): String = "Run compact standalone server diagnostics."
+
+        private val allowedRoots by allowedRootOption()
+
+        override fun run() {
+            sink(
+                HexanaCommand.Doctor(
+                    allowedRoots = allowedRoots + allowedRootsFromEnv(envReader)
+                )
+            )
+        }
+    }
+
     private class VersionCommand(
         private val sink: (HexanaCommand) -> Unit
     ) : CliktCommand(name = "version") {
@@ -246,7 +268,7 @@ private fun parseBooleanOption(optionName: String, value: String): Boolean {
     }
 }
 
-private fun allowedRootsFromEnv(envReader: (String) -> String?): List<String> {
+internal fun allowedRootsFromEnv(envReader: (String) -> String?): List<String> {
     return envReader("HEXANA_MCP_ALLOWED_ROOTS")
         ?.split(File.pathSeparatorChar, ',', '\n')
         ?.map { it.trim() }
