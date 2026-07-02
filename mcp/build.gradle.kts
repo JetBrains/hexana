@@ -894,10 +894,28 @@ tasks.register("validateClaudeDesktopMcpbManifest") {
     }
 }
 
+tasks.register("validateClaudeDesktopMcpbNativeRuntime") {
+    group = "verification"
+    description = "Validate that the staged MCPB native runtime supports the required Claude Desktop CLI surface."
+    dependsOn(assembleClaudeDesktopMcpbPackage)
+
+    val packageDir = claudeDesktopMcpbDir
+    val smokeAllowedRoot = layout.buildDirectory.dir("mcpb-smoke/native allowed root")
+    inputs.dir(packageDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val outputDir = packageDir.get().asFile
+        val allowedRoot = smokeAllowedRoot.get().asFile.also { it.mkdirs() }
+        val nativeRuntime = outputDir.resolve("native/$nativeHostPlatformName/$nativeServerExecutableName")
+        validateMcpbNativeCliSurface(nativeRuntime, allowedRoot, outputDir)
+    }
+}
+
 val packClaudeDesktopMcpb = tasks.register<Zip>("packClaudeDesktopMcpb") {
     group = "distribution"
     description = "Pack the local Claude Desktop MCPB bundle into mcp/build/distributions-native."
-    dependsOn("validateClaudeDesktopMcpbManifest")
+    dependsOn("validateClaudeDesktopMcpbManifest", "validateClaudeDesktopMcpbNativeRuntime")
 
     from(claudeDesktopMcpbDir) {
         filesMatching(listOf("bin/hexana-mcp", "bin/hexana-mcp-claude-desktop", "server/bin/*", "native/**/hexana-mcp")) {
@@ -954,10 +972,7 @@ tasks.register("claudeDesktopMcpbSmoke") {
         check(fallbackServer.canExecute()) { "Expected executable JVM fallback server at ${fallbackServer.absolutePath}" }
         check(nativeRuntime.canExecute()) { "Expected executable native runtime at ${nativeRuntime.absolutePath}" }
 
-        val version = runProcess(listOf(launcher.absolutePath, "version"), outputDir)
-        check(version.exitCode == 0 && version.output.trim() == "hexana-mcp $mcpServerVersion") {
-            "Unexpected version smoke output:\n${version.output}"
-        }
+        validateMcpbNativeCliSurface(nativeRuntime, allowedRoot, outputDir)
 
         val doctor = runProcess(
             listOf(launcher.absolutePath, "doctor"),
@@ -1462,6 +1477,35 @@ fun extractMcpbNativeExecutable(zipFile: File, destinationFile: File) {
     }
     check(destinationFile.canExecute()) {
         "Prepared MCPB native executable from ZIP is not executable: ${destinationFile.absolutePath}"
+    }
+}
+
+fun validateMcpbNativeCliSurface(nativeRuntime: File, allowedRoot: File, workingDir: File) {
+    check(nativeRuntime.canExecute()) {
+        "Expected executable native runtime at ${nativeRuntime.absolutePath}"
+    }
+
+    val version = runProcess(listOf(nativeRuntime.absolutePath, "version"), workingDir)
+    check(version.exitCode == 0 && version.output.trim() == "hexana-mcp $mcpServerVersion") {
+        """
+        MCPB native executable lacks the required MCPB CLI surface.
+        Expected direct native `version` to print `hexana-mcp $mcpServerVersion`, got exit ${version.exitCode}:
+        ${version.output}
+        Build the MCPB native override from the current branch/foundation, or omit the override so `:mcp:server:nativeCompile` is used.
+        """.trimIndent()
+    }
+
+    val doctor = runProcess(
+        listOf(nativeRuntime.absolutePath, "doctor", "--allowed-root", allowedRoot.absolutePath),
+        workingDir,
+    )
+    check(doctor.exitCode == 0 && doctor.output.contains("[OK] allowed roots: 1 configured")) {
+        """
+        MCPB native executable lacks the required MCPB CLI surface.
+        Expected direct native `doctor --allowed-root ${allowedRoot.absolutePath}` to accept allowed roots, got exit ${doctor.exitCode}:
+        ${doctor.output}
+        Build the MCPB native override from the current branch/foundation, or omit the override so `:mcp:server:nativeCompile` is used.
+        """.trimIndent()
     }
 }
 
