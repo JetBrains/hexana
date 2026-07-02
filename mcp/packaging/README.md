@@ -5,8 +5,16 @@ This directory contains client-specific wrapper templates for the standalone run
 Related documents:
 
 - [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) lists the native release gates and JVM fallback compatibility checks.
+- [CLAUDE_DESKTOP_MCPB.md](CLAUDE_DESKTOP_MCPB.md) describes the local Claude Desktop MCPB prototype and demo checklist.
 - [Hexana MCP Native Image Release Design](../../docs/superpowers/specs/2026-06-19-mcp-native-image-release-design.md)
   records the native package support policy and current limitations.
+- [Claude Desktop MCPB Strategy](../../docs/superpowers/specs/2026-07-02-claude-desktop-mcpb-strategy.md)
+  records the local MCPB package decision for the prototype track.
+
+Use `CLAUDE_DESKTOP_MCPB.md` for reviewer-facing local install steps, `doctor`
+preflight, Claude Desktop log locations, `tools/list` proof expectations, the
+`const.wasm` fixture prompt, outside-root denial proof, and the manual
+`claude_desktop_config.json` fallback.
 
 Source layouts:
 
@@ -37,6 +45,12 @@ Build and smoke-test native release artifacts for the current host platform with
 ./gradlew :mcp:assembleNativeMcpReleaseArtifacts
 ```
 
+Build and smoke-test the local Claude Desktop MCPB prototype for the current host platform with:
+
+```bash
+./gradlew :mcp:assembleClaudeDesktopMcpb
+```
+
 Native builds require a GraalVM distribution with `native-image` installed. Set `GRAALVM_HOME` or `JAVA_HOME` to that
 distribution before running native tasks if Gradle does not auto-detect it. JBR and ordinary JDKs can run JVM package
 gates, but they cannot rebuild the native executable.
@@ -61,6 +75,13 @@ The native-enabled task produces outputs under:
 mcp/build/packaging-native/claude-plugin/
 mcp/build/packaging-native/codex-plugin/
 mcp/build/distributions-native/
+```
+
+The local Claude Desktop MCPB task produces:
+
+```text
+mcp/build/packaging-native/claude-desktop-mcpb/
+mcp/build/distributions-native/hexana-core-<platform>.mcpb
 ```
 
 The pre-R8 task produces non-release smoke outputs under:
