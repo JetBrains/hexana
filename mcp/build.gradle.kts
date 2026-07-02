@@ -198,6 +198,27 @@ fun renderThirdPartyNotices(components: List<ThirdPartyComponentNotice>): String
     }
 }.trimEnd() + "\n"
 
+fun rewriteMcpServerLauncherClasspaths(installDir: File) {
+    installDir.resolve("bin/server").takeIf { it.isFile }?.let { script ->
+        script.writeText(
+            Regex("(?m)^CLASSPATH=.*$").replace(script.readText()) {
+                "CLASSPATH=\$APP_HOME/lib/*"
+            }
+        )
+    }
+    installDir.resolve("bin/server.bat").takeIf { it.isFile }?.let { script ->
+        script.writeText(
+            Regex("(?m)^set CLASSPATH=.*$").replace(script.readText()) {
+                "set CLASSPATH=%APP_HOME%\\\\lib\\\\*"
+            }
+        )
+    }
+}
+
+fun rewritePackagedMcpServerLauncherClasspaths(pluginDir: File) {
+    rewriteMcpServerLauncherClasspaths(pluginDir.resolve("server"))
+}
+
 jib {
     from {
         image = jibBaseImage.get()
@@ -276,8 +297,9 @@ fun registerPackagingSync(
         }
     }
     into(outputRootDir.map { it.dir(packagingDirName) })
-    if (rewriteMcpJson) {
-        doLast {
+    doLast {
+        rewritePackagedMcpServerLauncherClasspaths(destinationDir)
+        if (rewriteMcpJson) {
             val launcherPath = destinationDir.resolve("bin/hexana-mcp").absolutePath
             destinationDir.resolve(".mcp.json").writeText(renderMcpConfig(launcherPath))
         }
@@ -463,20 +485,7 @@ val installObfuscatedMcpServerRuntime = tasks.register("installObfuscatedMcpServ
             overwrite = true,
         )
 
-        installDir.resolve("bin/server").takeIf { it.isFile }?.let { script ->
-            script.writeText(
-                Regex("(?m)^CLASSPATH=.*$").replace(script.readText()) {
-                    "CLASSPATH=\$APP_HOME/lib/*"
-                }
-            )
-        }
-        installDir.resolve("bin/server.bat").takeIf { it.isFile }?.let { script ->
-            script.writeText(
-                Regex("(?m)^set CLASSPATH=.*$").replace(script.readText()) {
-                    "set CLASSPATH=%APP_HOME%\\\\lib\\\\*"
-                }
-            )
-        }
+        rewriteMcpServerLauncherClasspaths(installDir)
     }
 }
 
@@ -583,6 +592,9 @@ tasks.register<Sync>("installRepoLocalClaudePlugin") {
         into("server")
     }
     into(rootProject.layout.projectDirectory.dir("plugins/hexana"))
+    doLast {
+        rewritePackagedMcpServerLauncherClasspaths(destinationDir)
+    }
 }
 
 tasks.register<Sync>("installRepoLocalCodexPlugin") {
@@ -607,6 +619,7 @@ tasks.register<Sync>("installRepoLocalCodexPlugin") {
     }
     into(rootProject.layout.projectDirectory.dir("plugins/hexana"))
     doLast {
+        rewritePackagedMcpServerLauncherClasspaths(destinationDir)
         val launcherPath = destinationDir.resolve("bin/hexana-mcp").absolutePath
         destinationDir.resolve(".mcp.json").writeText(renderMcpConfig(launcherPath))
     }
