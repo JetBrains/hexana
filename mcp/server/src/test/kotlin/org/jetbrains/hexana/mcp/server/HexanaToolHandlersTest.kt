@@ -707,9 +707,9 @@ class HexanaToolHandlersTest {
     }
 
     @Test
-    fun standaloneConfiguredServiceDeniesPathInputsWithoutAllowedRoots() {
+    fun standaloneConfiguredServiceAllowsPathInputsWithoutAllowedRoots() {
         val wasm = createWasmFile(
-            "standalone-deny-by-default.wasm",
+            "standalone-allow-by-default.wasm",
             """
             (module
               (func (export "main")))
@@ -721,9 +721,8 @@ class HexanaToolHandlersTest {
 
         val result = standaloneHandlers.summarizeModule(jsonPath(wasm.toString()))
 
-        assertEquals(true, result.isError)
-        assertEquals("INVALID_INPUT", result.structuredContent?.get("code")?.jsonPrimitive?.content)
-        assertTrue((result.content.single() as TextContent).text.contains("outside allowed roots"))
+        assertFalse(result.isError == true)
+        assertEquals(1, result.structuredContent?.get("functions")?.jsonPrimitive?.int)
     }
 
     @Test

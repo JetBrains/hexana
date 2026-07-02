@@ -32,8 +32,14 @@ fun createHexanaMcpServer(
 }
 
 fun createStandaloneHexanaAnalysisService(allowedRoots: List<String>): HexanaAnalysisService {
+    // TODO: Replace this compatibility default with client-provided workspace roots once wrappers can pass them reliably.
+    val allowedFilePolicy = if (allowedRoots.none { it.isNotBlank() }) {
+        AllowedFilePolicy.allowAll
+    } else {
+        AllowedFilePolicy.requiringAllowedRoots(allowedRoots)
+    }
     return DefaultHexanaAnalysisService(
-        allowedFilePolicy = AllowedFilePolicy.requiringAllowedRoots(allowedRoots)
+        allowedFilePolicy = allowedFilePolicy
     )
 }
 

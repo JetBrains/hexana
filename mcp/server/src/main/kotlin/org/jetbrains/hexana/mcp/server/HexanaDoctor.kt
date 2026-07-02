@@ -111,9 +111,9 @@ internal object HexanaDoctor {
         val configuredRoots = allowedRoots.filter { it.isNotBlank() }
         if (configuredRoots.isEmpty()) {
             return DoctorCheck(
-                severity = DoctorSeverity.WARNING,
+                severity = DoctorSeverity.OK,
                 name = "allowed roots",
-                message = "none configured; path-backed MCP inputs require --allowed-root or HEXANA_MCP_ALLOWED_ROOTS"
+                message = "none configured; all local paths are currently allowed by default"
             )
         }
 

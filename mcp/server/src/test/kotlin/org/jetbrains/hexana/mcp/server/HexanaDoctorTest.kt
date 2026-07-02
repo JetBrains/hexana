@@ -41,7 +41,8 @@ class HexanaDoctorTest {
 
         assertEquals(DoctorStatus.WARNING, report.status)
         assertEquals(0, report.exitCode)
-        assertTrue(report.checks.any { it.severity == DoctorSeverity.WARNING && it.name == "allowed roots" })
+        assertTrue(report.checks.any { it.severity == DoctorSeverity.OK && it.name == "allowed roots" })
+        assertTrue(HexanaDoctor.render(report).contains("all local paths are currently allowed by default"))
         assertTrue(HexanaDoctor.render(report).contains("Overall: WARNING"))
     }
 
