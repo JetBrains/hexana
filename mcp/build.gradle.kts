@@ -2,6 +2,7 @@ import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.result.ResolvedArtifactResult
 import org.gradle.maven.MavenModule
 import org.gradle.maven.MavenPomArtifact
+import groovy.json.JsonSlurper
 import java.net.InetAddress
 import java.util.*
 import java.util.jar.JarFile
@@ -56,6 +57,7 @@ val standaloneInstallDir = project(":mcp:server").layout.buildDirectory.dir("ins
 val plainPackagingDir = layout.buildDirectory.dir("packaging-plain")
 val obfuscatedPackagingDir = layout.buildDirectory.dir("packaging")
 val nativePackagingDir = layout.buildDirectory.dir("packaging-native")
+val claudeDesktopMcpbDir = layout.buildDirectory.dir("packaging-native/claude-desktop-mcpb")
 val obfuscatedInstallDir = project(":mcp").layout.buildDirectory.dir("install/server-r8")
 val nativeServerExecutableName = if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
     "hexana-mcp.exe"
@@ -63,9 +65,14 @@ val nativeServerExecutableName = if (System.getProperty("os.name").startsWith("W
     "hexana-mcp"
 }
 val nativeHostPlatformName = currentNativePlatformName()
+val mcpbHostPlatformName = currentMcpbPlatformName(nativeHostPlatformName)
 val nativeReleasePlatforms = listOf("macos-arm64", "linux-x64")
 val nativeServerExecutable = project(":mcp:server").layout.buildDirectory.file("native/nativeCompile/$nativeServerExecutableName")
+val mcpbNativeExecutableOverridePath = providers.gradleProperty("hexanaMcpbNativeExecutable").map { it.trim() }
+val mcpbNativeZipOverridePath = providers.gradleProperty("hexanaMcpbNativeZip").map { it.trim() }
+val mcpbPreparedNativeExecutable = layout.buildDirectory.file("mcpb-native-runtime/$nativeHostPlatformName/$nativeServerExecutableName")
 val nativeDistributionDir = layout.buildDirectory.dir("distributions-native")
+val claudeDesktopMcpbArchiveName = "hexana-core-$nativeHostPlatformName.mcpb"
 val publicMarketplaceDir = layout.projectDirectory.dir("out/teamcity/public-marketplace")
 val pluginLicenseFile = layout.projectDirectory.file("packaging/LICENSE.txt")
 val thirdPartyNoticesDir = layout.buildDirectory.dir("generated/third-party-notices")
@@ -94,6 +101,19 @@ val r8Tool by configurations.creating {
 
 require(jibAllowPublicBind.get() || jibHost.get().isLoopbackHost()) {
     "Non-loopback `hexanaMcpHost` requires `-PhexanaMcpAllowPublicBind=true`."
+}
+require(!(mcpbNativeExecutableOverridePath.isPresent && mcpbNativeZipOverridePath.isPresent)) {
+    "Use only one MCPB native override: `hexanaMcpbNativeExecutable` or `hexanaMcpbNativeZip`."
+}
+mcpbNativeExecutableOverridePath.orNull?.let { path ->
+    require(path.isNotEmpty()) {
+        "`hexanaMcpbNativeExecutable` must not be blank."
+    }
+}
+mcpbNativeZipOverridePath.orNull?.let { path ->
+    require(path.isNotEmpty()) {
+        "`hexanaMcpbNativeZip` must not be blank."
+    }
 }
 
 data class ThirdPartyLicense(val name: String, val url: String?)
@@ -749,6 +769,297 @@ val zipNativeMcpExecutable = tasks.register<Zip>("zipNativeMcpExecutable") {
     destinationDirectory.set(nativeDistributionDir)
 }
 
+val prepareClaudeDesktopMcpbNativeExecutable = tasks.register("prepareClaudeDesktopMcpbNativeExecutable") {
+    group = "distribution"
+    description = "Prepare the native executable used by the local Claude Desktop MCPB package."
+    outputs.file(mcpbPreparedNativeExecutable)
+
+    when {
+        mcpbNativeExecutableOverridePath.isPresent -> {
+            inputs.file(providers.provider { file(mcpbNativeExecutableOverridePath.get()) })
+        }
+        mcpbNativeZipOverridePath.isPresent -> {
+            inputs.file(providers.provider { file(mcpbNativeZipOverridePath.get()) })
+        }
+        else -> {
+            dependsOn(":mcp:server:nativeCompile")
+            inputs.file(nativeServerExecutable)
+        }
+    }
+
+    doLast {
+        val destinationFile = mcpbPreparedNativeExecutable.get().asFile
+        when {
+            mcpbNativeExecutableOverridePath.isPresent -> copyMcpbNativeExecutable(
+                sourceFile = file(mcpbNativeExecutableOverridePath.get()),
+                destinationFile = destinationFile,
+                sourceDescription = "hexanaMcpbNativeExecutable",
+            )
+            mcpbNativeZipOverridePath.isPresent -> extractMcpbNativeExecutable(
+                zipFile = file(mcpbNativeZipOverridePath.get()),
+                destinationFile = destinationFile,
+            )
+            else -> copyMcpbNativeExecutable(
+                sourceFile = nativeServerExecutable.get().asFile,
+                destinationFile = destinationFile,
+                sourceDescription = ":mcp:server:nativeCompile",
+            )
+        }
+    }
+}
+
+val assembleClaudeDesktopMcpbPackage = tasks.register<Sync>("assembleClaudeDesktopMcpbPackage") {
+    group = "distribution"
+    description = "Stage the local Claude Desktop MCPB package for the current host platform."
+    dependsOn(installObfuscatedMcpServerRuntime, prepareClaudeDesktopMcpbNativeExecutable, generateThirdPartyNotices)
+
+    from(layout.projectDirectory.dir("packaging/claude-desktop-mcpb")) {
+        filesMatching("manifest.json") {
+            filter { line ->
+                line
+                    .replace(GENERATED_VERSION_TOKEN, mcpServerVersion)
+                    .replace("__GENERATED_MCPB_PLATFORM__", mcpbHostPlatformName)
+            }
+        }
+        filesMatching("bin/hexana-mcp-claude-desktop") {
+            permissions { unix("rwxr-xr-x") }
+        }
+    }
+    from(rootProject.layout.projectDirectory.file("vscode-plugin/media/icon.png")) {
+        into("assets")
+        rename { "icon.png" }
+    }
+    from(layout.projectDirectory.dir("packaging/claude-plugin/bin")) {
+        into("bin")
+        filesMatching("hexana-mcp") {
+            permissions { unix("rwxr-xr-x") }
+        }
+    }
+    from(mcpbPreparedNativeExecutable) {
+        into("native/$nativeHostPlatformName")
+        rename { nativeServerExecutableName }
+        filesMatching(nativeServerExecutableName) {
+            permissions { unix("rwxr-xr-x") }
+        }
+    }
+    from(obfuscatedInstallDir) {
+        into("server")
+        filesMatching("bin/*") {
+            if (!name.endsWith(".bat") && !name.endsWith(".cmd")) {
+                permissions { unix("rwxr-xr-x") }
+            }
+        }
+    }
+    from(pluginLicenseFile)
+    from(generateThirdPartyNotices)
+    from(pluginLicenseFile) {
+        into("server")
+    }
+    from(generateThirdPartyNotices) {
+        into("server")
+    }
+    into(claudeDesktopMcpbDir)
+
+    doFirst {
+        delete(claudeDesktopMcpbDir)
+    }
+    doLast {
+        val outputDir = claudeDesktopMcpbDir.get().asFile
+        val manifest = outputDir.resolve("manifest.json")
+        check(manifest.readText().contains(GENERATED_VERSION_TOKEN).not()) {
+            "Generated MCPB manifest still contains the version token."
+        }
+        check(manifest.readText().contains("__GENERATED_MCPB_PLATFORM__").not()) {
+            "Generated MCPB manifest still contains the platform token."
+        }
+        check(outputDir.resolve("bin/hexana-mcp-claude-desktop").canExecute()) {
+            "MCPB Claude Desktop launcher is not executable."
+        }
+        check(outputDir.resolve("native/$nativeHostPlatformName/$nativeServerExecutableName").canExecute()) {
+            "MCPB package is missing executable native runtime for $nativeHostPlatformName."
+        }
+    }
+}
+
+tasks.register("validateClaudeDesktopMcpbManifest") {
+    group = "verification"
+    description = "Validate generated Claude Desktop MCPB manifest fields used by the local prototype."
+    dependsOn(assembleClaudeDesktopMcpbPackage)
+
+    val manifestFile = claudeDesktopMcpbDir.map { it.file("manifest.json") }
+    inputs.file(manifestFile)
+
+    doLast {
+        validateClaudeDesktopMcpbManifest(manifestFile.get().asFile)
+    }
+}
+
+val packClaudeDesktopMcpb = tasks.register<Zip>("packClaudeDesktopMcpb") {
+    group = "distribution"
+    description = "Pack the local Claude Desktop MCPB bundle into mcp/build/distributions-native."
+    dependsOn("validateClaudeDesktopMcpbManifest")
+
+    from(claudeDesktopMcpbDir) {
+        filesMatching(listOf("bin/hexana-mcp", "bin/hexana-mcp-claude-desktop", "server/bin/*", "native/**/hexana-mcp")) {
+            if (!name.endsWith(".bat") && !name.endsWith(".cmd")) {
+                permissions { unix("rwxr-xr-x") }
+            }
+        }
+    }
+    archiveFileName.set(claudeDesktopMcpbArchiveName)
+    destinationDirectory.set(nativeDistributionDir)
+    isReproducibleFileOrder = true
+    isPreserveFileTimestamps = false
+}
+
+tasks.register("claudeDesktopMcpbSmoke") {
+    group = "verification"
+    description = "Smoke-test the staged local Claude Desktop MCPB layout and packed archive."
+    dependsOn(packClaudeDesktopMcpb)
+
+    val packageDir = claudeDesktopMcpbDir
+    val archiveFile = nativeDistributionDir.map { it.file(claudeDesktopMcpbArchiveName) }
+    val smokeAllowedRoot = layout.buildDirectory.dir("mcpb-smoke/allowed root")
+    val smokeSecondAllowedRoot = layout.buildDirectory.dir("mcpb-smoke/second allowed root")
+    val fakeServerExecutable = layout.buildDirectory.file("mcpb-smoke/fake server/hexana-mcp")
+
+    inputs.dir(packageDir)
+    inputs.file(archiveFile)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val outputDir = packageDir.get().asFile
+        val archive = archiveFile.get().asFile
+        val allowedRoot = smokeAllowedRoot.get().asFile.also { it.mkdirs() }
+        val secondAllowedRoot = smokeSecondAllowedRoot.get().asFile.also { it.mkdirs() }
+        val fakeServer = fakeServerExecutable.get().asFile.also { executable ->
+            executable.parentFile.mkdirs()
+            executable.writeText(
+                """
+                #!/bin/sh
+                printf 'args:\n'
+                printf '%s\n' "$@"
+                printf 'env-begin\n%s\nenv-end\n' "${'$'}HEXANA_MCP_ALLOWED_ROOTS"
+                """.trimIndent() + "\n"
+            )
+            executable.setExecutable(true, false)
+        }
+        val launcher = outputDir.resolve("bin/hexana-mcp")
+        val desktopLauncher = outputDir.resolve("bin/hexana-mcp-claude-desktop")
+        val fallbackServer = outputDir.resolve("server/bin/server")
+        val nativeRuntime = outputDir.resolve("native/$nativeHostPlatformName/$nativeServerExecutableName")
+
+        check(launcher.canExecute()) { "Expected executable launcher at ${launcher.absolutePath}" }
+        check(desktopLauncher.canExecute()) { "Expected executable MCPB launcher at ${desktopLauncher.absolutePath}" }
+        check(fallbackServer.canExecute()) { "Expected executable JVM fallback server at ${fallbackServer.absolutePath}" }
+        check(nativeRuntime.canExecute()) { "Expected executable native runtime at ${nativeRuntime.absolutePath}" }
+
+        val version = runProcess(listOf(launcher.absolutePath, "version"), outputDir)
+        check(version.exitCode == 0 && version.output.trim() == "hexana-mcp $mcpServerVersion") {
+            "Unexpected version smoke output:\n${version.output}"
+        }
+
+        val doctor = runProcess(
+            listOf(launcher.absolutePath, "doctor"),
+            outputDir,
+            environment = mapOf(
+                "HEXANA_SERVER_BIN" to fallbackServer.absolutePath,
+                "HEXANA_MCP_ALLOWED_ROOTS" to allowedRoot.absolutePath,
+            ),
+        )
+        check(doctor.exitCode == 0 && doctor.output.contains("[OK] allowed roots: 1 configured")) {
+            "Expected doctor to see the staged allowed root, got exit ${doctor.exitCode}:\n${doctor.output}"
+        }
+
+        val missingRoots = runProcess(listOf(desktopLauncher.absolutePath), outputDir)
+        check(missingRoots.exitCode != 0 && missingRoots.output.contains("requires at least one allowed directory")) {
+            "Expected MCPB launcher to reject missing allowed directories, got exit ${missingRoots.exitCode}:\n${missingRoots.output}"
+        }
+
+        val wrapperArgs = runProcess(
+            listOf(desktopLauncher.absolutePath, allowedRoot.absolutePath, secondAllowedRoot.absolutePath),
+            outputDir,
+            environment = mapOf("HEXANA_SERVER_BIN" to fakeServer.absolutePath),
+        )
+        val observedArgs = wrapperArgs.output.lineSequence().filter { it.isNotBlank() }.toList()
+        check(
+            wrapperArgs.exitCode == 0 && observedArgs == listOf(
+                "args:",
+                "stdio",
+                "env-begin",
+                allowedRoot.absolutePath,
+                secondAllowedRoot.absolutePath,
+                "env-end",
+            )
+        ) {
+            "Expected MCPB launcher to pass selected directories as allowed roots, got exit ${wrapperArgs.exitCode}:\n${wrapperArgs.output}"
+        }
+
+        ZipFile(archive).use { zip ->
+            val requiredEntries = listOf(
+                "manifest.json",
+                "bin/hexana-mcp",
+                "bin/hexana-mcp-claude-desktop",
+                "native/$nativeHostPlatformName/$nativeServerExecutableName",
+                "assets/icon.png",
+                "LICENSE.txt",
+                thirdPartyNoticesFileName,
+            )
+            val missing = requiredEntries.filter { zip.getEntry(it) == null }
+            check(missing.isEmpty()) {
+                "Packed MCPB archive is missing entries: ${missing.joinToString()}"
+            }
+        }
+    }
+}
+
+tasks.register("mcpbValidateClaudeDesktopMcpb") {
+    group = "verification"
+    description = "Run the official mcpb CLI validate command against the staged Claude Desktop MCPB manifest."
+    dependsOn(assembleClaudeDesktopMcpbPackage)
+
+    doLast {
+        runRequiredMcpbCommand(
+            listOf("validate", claudeDesktopMcpbDir.get().asFile.absolutePath),
+            "Install with `npm install -g @anthropic-ai/mcpb`, or pass `-PmcpbCli=/path/to/mcpb`."
+        )
+    }
+}
+
+tasks.register("mcpbPackClaudeDesktopMcpb") {
+    group = "distribution"
+    description = "Run the official mcpb CLI pack command for comparison with the Gradle-packed MCPB."
+    dependsOn(assembleClaudeDesktopMcpbPackage)
+
+    doLast {
+        val outputFile = nativeDistributionDir.get().file("hexana-core-$nativeHostPlatformName.mcpb").asFile
+        outputFile.parentFile.mkdirs()
+        runRequiredMcpbCommand(
+            listOf("pack", claudeDesktopMcpbDir.get().asFile.absolutePath, outputFile.absolutePath),
+            "Install with `npm install -g @anthropic-ai/mcpb`, or pass `-PmcpbCli=/path/to/mcpb`."
+        )
+    }
+}
+
+tasks.register("mcpbInfoClaudeDesktopMcpb") {
+    group = "verification"
+    description = "Run the official mcpb CLI info command against the packed Claude Desktop MCPB."
+    dependsOn(packClaudeDesktopMcpb)
+
+    doLast {
+        runRequiredMcpbCommand(
+            listOf("info", nativeDistributionDir.get().file(claudeDesktopMcpbArchiveName).asFile.absolutePath),
+            "Install with `npm install -g @anthropic-ai/mcpb`, or pass `-PmcpbCli=/path/to/mcpb`."
+        )
+    }
+}
+
+tasks.register("assembleClaudeDesktopMcpb") {
+    group = "distribution"
+    description = "Assemble, validate, pack, and smoke-test the local Claude Desktop MCPB bundle."
+    dependsOn(packClaudeDesktopMcpb, "claudeDesktopMcpbSmoke")
+}
+
 tasks.register("assembleMcpPackagingPlain") {
     group = "distribution"
     description = "Assemble pre-R8 JVM fallback standalone, Claude, and Codex MCP wrapper layouts for diagnostic smoke testing."
@@ -1067,6 +1378,93 @@ fun parseRequiredBoolean(value: String): Boolean {
     }
 }
 
+fun validateClaudeDesktopMcpbManifest(manifestFile: File) {
+    val manifest = JsonSlurper().parse(manifestFile) as? Map<*, *>
+        ?: error("MCPB manifest must be a JSON object: ${manifestFile.absolutePath}")
+    val server = manifest.mapField("server")
+    val mcpConfig = server.mapField("mcp_config")
+    val userConfig = manifest.mapField("user_config")
+    val allowedDirectories = userConfig.mapField("allowed_directories")
+    val compatibility = manifest.mapField("compatibility")
+
+    check(manifest["manifest_version"] == "0.3") {
+        "Claude Desktop MCPB manifest must use manifest_version 0.3."
+    }
+    check(manifest["name"] == "hexana-core") {
+        "Claude Desktop MCPB manifest must use the stable package name `hexana-core`."
+    }
+    check(manifest["version"] == mcpServerVersion) {
+        "Claude Desktop MCPB manifest version must match mcpServerVersion $mcpServerVersion."
+    }
+    check(server["type"] == "binary") {
+        "Claude Desktop MCPB must use server.type=binary."
+    }
+    check(server["entry_point"] == "bin/hexana-mcp-claude-desktop") {
+        "Claude Desktop MCPB must enter through the allowed-directory wrapper."
+    }
+    check(mcpConfig["command"] == "\${__dirname}/bin/hexana-mcp-claude-desktop") {
+        "Claude Desktop MCPB command must use the portable MCPB install directory variable."
+    }
+    check(mcpConfig["args"] == listOf("\${user_config.allowed_directories}")) {
+        "Claude Desktop MCPB args must expand the selected allowed directories."
+    }
+    check(allowedDirectories["type"] == "directory") {
+        "allowed_directories must use the MCPB directory picker type."
+    }
+    check(allowedDirectories["multiple"] == true) {
+        "allowed_directories must allow multiple directory selections."
+    }
+    check(allowedDirectories["required"] == true) {
+        "allowed_directories must be required."
+    }
+    check(compatibility["platforms"] == listOf(mcpbHostPlatformName)) {
+        "Claude Desktop MCPB compatibility.platforms must match the current host platform."
+    }
+}
+
+fun copyMcpbNativeExecutable(sourceFile: File, destinationFile: File, sourceDescription: String) {
+    check(sourceFile.isFile) {
+        "MCPB native executable from `$sourceDescription` does not exist: ${sourceFile.absolutePath}"
+    }
+    check(sourceFile.canExecute()) {
+        "MCPB native executable from `$sourceDescription` is not executable: ${sourceFile.absolutePath}"
+    }
+    destinationFile.parentFile.mkdirs()
+    sourceFile.copyTo(destinationFile, overwrite = true)
+    if (!destinationFile.name.endsWith(".exe")) {
+        destinationFile.setExecutable(true, false)
+    }
+    check(destinationFile.canExecute()) {
+        "Prepared MCPB native executable is not executable: ${destinationFile.absolutePath}"
+    }
+}
+
+fun extractMcpbNativeExecutable(zipFile: File, destinationFile: File) {
+    check(zipFile.isFile) {
+        "MCPB native ZIP does not exist: ${zipFile.absolutePath}"
+    }
+    val entryName = "bin/$nativeServerExecutableName"
+    destinationFile.parentFile.mkdirs()
+    ZipFile(zipFile).use { zip ->
+        val entry = zip.getEntry(entryName)
+            ?: error("MCPB native ZIP must contain `$entryName`: ${zipFile.absolutePath}")
+        check(!entry.isDirectory) {
+            "MCPB native ZIP entry `$entryName` must be a file: ${zipFile.absolutePath}"
+        }
+        zip.getInputStream(entry).use { input ->
+            destinationFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+    }
+    if (!destinationFile.name.endsWith(".exe")) {
+        destinationFile.setExecutable(true, false)
+    }
+    check(destinationFile.canExecute()) {
+        "Prepared MCPB native executable from ZIP is not executable: ${destinationFile.absolutePath}"
+    }
+}
+
 fun currentNativePlatformName(): String {
     val os = when {
         System.getProperty("os.name").startsWith("Mac", ignoreCase = true) -> "macos"
@@ -1080,6 +1478,48 @@ fun currentNativePlatformName(): String {
         else -> System.getProperty("os.arch").lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-')
     }
     return "$os-$arch"
+}
+
+fun currentMcpbPlatformName(nativePlatformName: String): String {
+    return when {
+        nativePlatformName.startsWith("macos-") -> "darwin"
+        nativePlatformName.startsWith("linux-") -> "linux"
+        nativePlatformName.startsWith("windows-") -> "win32"
+        else -> nativePlatformName.substringBefore('-')
+    }
+}
+
+fun Map<*, *>.mapField(name: String): Map<*, *> {
+    return this[name] as? Map<*, *>
+        ?: error("Expected object field `$name` in MCPB manifest.")
+}
+
+data class ProcessResult(val exitCode: Int, val output: String)
+
+fun runProcess(commandLine: List<String>, workingDir: File, environment: Map<String, String> = emptyMap()): ProcessResult {
+    val processBuilder = ProcessBuilder(commandLine)
+        .directory(workingDir)
+        .redirectErrorStream(true)
+    processBuilder.environment().putAll(environment)
+    val process = processBuilder
+        .start()
+    val output = process.inputStream.bufferedReader().use { it.readText() }
+    return ProcessResult(process.waitFor(), output)
+}
+
+fun runRequiredMcpbCommand(args: List<String>, missingCliHint: String) {
+    val cli = providers.gradleProperty("mcpbCli").orElse("mcpb").get()
+    val result = try {
+        runProcess(listOf(cli) + args, projectDir)
+    } catch (error: java.io.IOException) {
+        error("Could not run `$cli`: ${error.message}. $missingCliHint")
+    }
+    check(result.exitCode == 0) {
+        "mcpb ${args.joinToString(" ")} failed with exit ${result.exitCode}:\n${result.output}"
+    }
+    if (result.output.isNotBlank()) {
+        println(result.output.trimEnd())
+    }
 }
 
 fun String.isLoopbackHost(): Boolean {

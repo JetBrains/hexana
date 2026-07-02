@@ -1,0 +1,68 @@
+{
+  "manifest_version": "0.3",
+  "name": "hexana-core",
+  "display_name": "Hexana Core",
+  "version": "__GENERATED_BY_ASSEMBLY__",
+  "description": "Inspect WebAssembly modules with Hexana MCP tools from Claude Desktop.",
+  "long_description": "Hexana Core packages the standalone Hexana MCP server for local Claude Desktop use. It analyzes WebAssembly binaries from directories selected during installation.",
+  "author": {
+    "name": "JetBrains",
+    "url": "https://www.jetbrains.com/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JetBrains/hexana"
+  },
+  "homepage": "https://github.com/JetBrains/hexana",
+  "documentation": "https://github.com/JetBrains/hexana",
+  "icon": "assets/icon.png",
+  "license": "SEE LICENSE IN LICENSE.txt",
+  "keywords": [
+    "webassembly",
+    "wasm",
+    "mcp",
+    "claude-desktop",
+    "developer-tools"
+  ],
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": [
+      "__GENERATED_MCPB_PLATFORM__"
+    ]
+  },
+  "tools_generated": true,
+  "tools": [
+    {
+      "name": "summarize_binary",
+      "description": "Summarize a WebAssembly or native binary."
+    },
+    {
+      "name": "list_exports",
+      "description": "List exports from a WebAssembly module."
+    },
+    {
+      "name": "list_imports",
+      "description": "List imports from a WebAssembly module."
+    }
+  ],
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/hexana-mcp-claude-desktop",
+    "mcp_config": {
+      "command": "${__dirname}/bin/hexana-mcp-claude-desktop",
+      "args": [
+        "${user_config.allowed_directories}"
+      ],
+      "env": {}
+    }
+  },
+  "user_config": {
+    "allowed_directories": {
+      "type": "directory",
+      "title": "Allowed Directories",
+      "description": "Directories containing WebAssembly files that Hexana may read.",
+      "multiple": true,
+      "required": true
+    }
+  }
+}

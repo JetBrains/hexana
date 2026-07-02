@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PLUGIN_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+LAUNCHER="$PLUGIN_ROOT/bin/hexana-mcp"
+
+if [ ! -f "$LAUNCHER" ]; then
+  echo "Hexana MCP launcher not found: $LAUNCHER" >&2
+  exit 1
+fi
+
+if [ ! -x "$LAUNCHER" ]; then
+  echo "Hexana MCP launcher is not executable: $LAUNCHER" >&2
+  exit 1
+fi
+
+if [ "$#" -eq 0 ]; then
+  echo "Hexana MCPB requires at least one allowed directory selected in Claude Desktop." >&2
+  exit 1
+fi
+
+ROOT_COUNT=0
+ALLOWED_ROOTS=()
+for allowed_root in "$@"; do
+  if [ -n "$allowed_root" ]; then
+    ROOT_COUNT=$((ROOT_COUNT + 1))
+    ALLOWED_ROOTS+=("$allowed_root")
+  fi
+done
+
+if [ "$ROOT_COUNT" -eq 0 ]; then
+  echo "Hexana MCPB received only empty allowed-directory values from Claude Desktop." >&2
+  exit 1
+fi
+
+HEXANA_MCP_ALLOWED_ROOTS=$(printf '%s\n' "${ALLOWED_ROOTS[@]}")
+export HEXANA_MCP_ALLOWED_ROOTS
+exec "$LAUNCHER" stdio
