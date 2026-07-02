@@ -330,6 +330,16 @@ data class ToolSpec(
 val ToolSpec.mcpDescription: String
     get() = guidance?.trim()?.takeIf { it.isNotBlank() }?.let { "${summary.trim()}\n$it" } ?: summary.trim()
 
+data class ToolCompatibilitySpec(
+    val schemaVersion: Int,
+    val policy: String,
+) {
+    init {
+        require(schemaVersion > 0) { "MCP tool schema version must be positive." }
+        require(policy.isNotBlank()) { "MCP tool schema compatibility policy must not be blank." }
+    }
+}
+
 sealed class ToolInputPattern {
     object WasmOnly : ToolInputPattern()
     object WasmPathLabel : ToolInputPattern()

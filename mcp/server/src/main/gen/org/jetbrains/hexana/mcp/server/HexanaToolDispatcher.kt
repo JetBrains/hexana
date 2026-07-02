@@ -15,6 +15,16 @@ import kotlinx.serialization.json.buildJsonObject
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 
 /**
+ * Generated MCP tool schema compatibility marker.
+ */
+public object HexanaMcpToolCompatibility {
+  public const val SCHEMA_VERSION: Int = 1
+
+  public const val POLICY: String =
+      "Tool schemas are append-compatible within a version; breaking changes to names, required inputs, defaults, bounds, output keys, or descriptions require a schema version bump."
+}
+
+/**
  * Generated input defaults shared by standalone server handlers.
  */
 internal object HexanaToolInputDefaults {

@@ -50,6 +50,11 @@ private val HEXANA_TOOL_ORDER = listOf(
     "query_artifacts",
 )
 
+val HexanaToolSchemaCompatibility = ToolCompatibilitySpec(
+    schemaVersion = 1,
+    policy = "Tool schemas are append-compatible within a version; breaking changes to names, required inputs, defaults, bounds, output keys, or descriptions require a schema version bump.",
+)
+
 val HexanaTools: List<ToolSpec> = orderedTools(
     BinaryTools,
     ModuleTools,

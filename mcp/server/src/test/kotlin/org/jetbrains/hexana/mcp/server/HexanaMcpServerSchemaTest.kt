@@ -34,6 +34,13 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
+    fun generatedCompatibilityMarkerIsAvailable() {
+        assertEquals(1, HexanaMcpToolCompatibility.SCHEMA_VERSION)
+        assertTrue(HexanaMcpToolCompatibility.POLICY.contains("append-compatible within a version"))
+        assertTrue(HexanaMcpToolCompatibility.POLICY.contains("schema version bump"))
+    }
+
+    @Test
     fun defaultRegistryExposesProductionHexanaTools() {
         assertEquals(
             listOf(

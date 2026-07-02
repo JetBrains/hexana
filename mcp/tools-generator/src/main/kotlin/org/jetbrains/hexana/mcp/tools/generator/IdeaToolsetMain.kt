@@ -7,11 +7,13 @@ import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.MemberName
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.asTypeName
 import org.jetbrains.hexana.mcp.tools.ClassSpec
 import org.jetbrains.hexana.mcp.tools.FieldSpec
 import org.jetbrains.hexana.mcp.tools.FieldType
+import org.jetbrains.hexana.mcp.tools.HexanaToolSchemaCompatibility
 import org.jetbrains.hexana.mcp.tools.HexanaTools
 import org.jetbrains.hexana.mcp.tools.SchemaIntValue
 import org.jetbrains.hexana.mcp.tools.ToolInputPattern
@@ -82,6 +84,7 @@ private fun buildToolsetFile(tools: List<ToolSpec>): FileSpec {
             "jsonPrimitive",
             "longOrNull",
         )
+        .addType(buildCompatibilityObject())
         .addType(cls)
         .addFunction(requireStringArgumentFunction())
         .addFunction(requireIntArgumentFunction())
@@ -98,6 +101,23 @@ private fun buildToolsetFile(tools: List<ToolSpec>): FileSpec {
         .addFunction(requireIntMapArgumentFunction())
         .addFunction(hexanaToolCategoryFunction())
         .addFunction(hexanaToolDescriptorFunction())
+        .build()
+}
+
+private fun buildCompatibilityObject(): TypeSpec {
+    return TypeSpec.objectBuilder("HexanaMcpToolCompatibility")
+        .addModifiers(KModifier.PUBLIC)
+        .addKdoc("Generated MCP tool schema compatibility marker.\n")
+        .addProperty(
+            PropertySpec.builder("SCHEMA_VERSION", Int::class, KModifier.CONST)
+                .initializer("%L", HexanaToolSchemaCompatibility.schemaVersion)
+                .build()
+        )
+        .addProperty(
+            PropertySpec.builder("POLICY", String::class, KModifier.CONST)
+                .initializer("%S", HexanaToolSchemaCompatibility.policy)
+                .build()
+        )
         .build()
 }
 

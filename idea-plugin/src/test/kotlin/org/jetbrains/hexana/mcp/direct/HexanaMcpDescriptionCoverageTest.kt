@@ -5,6 +5,7 @@ import com.intellij.mcpserver.McpToolSchema
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import org.jetbrains.hexana.mcp.HexanaMcpToolCompatibility
 import org.jetbrains.hexana.mcp.HexanaToolset
 
 /**
@@ -35,6 +36,12 @@ class HexanaMcpDescriptionCoverageTest : HexanaMcpToolsetDirectTestBase() {
         }
 
         assertEmpty("Input fields without a `@McpDescription` annotation", missing)
+    }
+
+    fun testGeneratedCompatibilityMarkerIsAvailable() {
+        assertEquals(1, HexanaMcpToolCompatibility.SCHEMA_VERSION)
+        assertContains(HexanaMcpToolCompatibility.POLICY, "append-compatible within a version")
+        assertContains(HexanaMcpToolCompatibility.POLICY, "schema version bump")
     }
 
     fun testQueryArtifactsDescriptionContent() {
