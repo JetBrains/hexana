@@ -25,6 +25,7 @@ data class LoadedBinary(
 class BinaryInputLoader(
     private val maxInlineInputBytes: Int = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
     private val maxFileInputBytes: Int = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
+    private val allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
 ) {
     fun load(input: BinaryInput): LoadedBinary {
         return when (input) {
@@ -35,14 +36,7 @@ class BinaryInputLoader(
     }
 
     private fun loadFromPath(rawPath: String): LoadedBinary {
-        if (rawPath.isBlank()) {
-            throw HexanaAnalysisException(HexanaAnalysisErrorCode.INVALID_INPUT, "Path must not be blank")
-        }
-
-        val path = Path.of(rawPath)
-        if (!Files.exists(path) || !Files.isRegularFile(path)) {
-            throw HexanaAnalysisException(HexanaAnalysisErrorCode.FILE_NOT_FOUND, "File not found")
-        }
+        val path = allowedFilePolicy.resolveAllowedRegularFile(rawPath, "Binary file")
         requireFileByteCount(path)
 
         val bytes = try {
@@ -137,7 +131,8 @@ class BinaryInputLoader(
 fun BinaryInput.loadBinary(
     maxInlineInputBytes: Int = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
     maxFileInputBytes: Int = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
-): LoadedBinary = BinaryInputLoader(maxInlineInputBytes, maxFileInputBytes).load(this)
+    allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
+): LoadedBinary = BinaryInputLoader(maxInlineInputBytes, maxFileInputBytes, allowedFilePolicy).load(this)
 
 internal fun CommonByteBuffer.toBinaryProvider(pathLabel: String?): BinaryProvider {
     position(0)

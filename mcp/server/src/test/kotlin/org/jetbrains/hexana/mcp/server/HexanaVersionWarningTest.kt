@@ -23,7 +23,8 @@ class HexanaVersionWarningTest {
                     logLevel = HexanaLogLevel.INFO,
                     analyticsKey = null,
                     analyticsEnabled = true,
-                    toolProfile = HexanaMcpToolProfile.PRODUCTION
+                    toolProfile = HexanaMcpToolProfile.PRODUCTION,
+                    allowedRoots = emptyList(),
                 ),
                 "0.7"
             )
@@ -41,7 +42,8 @@ class HexanaVersionWarningTest {
                 logLevel = HexanaLogLevel.INFO,
                 analyticsKey = null,
                 analyticsEnabled = true,
-                toolProfile = HexanaMcpToolProfile.PRODUCTION
+                toolProfile = HexanaMcpToolProfile.PRODUCTION,
+                allowedRoots = emptyList(),
             ),
             "dev"
         )

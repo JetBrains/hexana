@@ -251,13 +251,15 @@ object HexanaAnalysisServices {
 
 class DefaultHexanaAnalysisService(
     private val maxInlineInputBytes: Int = HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES,
-    private val maxFileInputBytes: Int = HexanaAnalysisLimits.MAX_FILE_WASM_BYTES
+    private val maxFileInputBytes: Int = HexanaAnalysisLimits.MAX_FILE_WASM_BYTES,
+    private val allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
 ) : HexanaAnalysisService {
 
     override fun loadBinary(input: BinaryInput): BinaryModuleIdentityResult {
         return BinaryInputLoader(
             maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
             maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
+            allowedFilePolicy = allowedFilePolicy,
         ).load(input).identity
     }
 
@@ -265,6 +267,7 @@ class DefaultHexanaAnalysisService(
         val binary = BinaryInputLoader(
             maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
             maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
+            allowedFilePolicy = allowedFilePolicy,
         ).load(input)
         return binary.provider.readBinarySummary(binary.identity.path)
     }
@@ -284,6 +287,7 @@ class DefaultHexanaAnalysisService(
         val binary = BinaryInputLoader(
             maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
             maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
+            allowedFilePolicy = allowedFilePolicy,
         ).load(input)
         return binary.provider.readBinaryQuery(
             operation = operation,
@@ -305,6 +309,7 @@ class DefaultHexanaAnalysisService(
         val binary = BinaryInputLoader(
             maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
             maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
+            allowedFilePolicy = allowedFilePolicy,
         ).load(input)
         return binary.provider.readBinaryFunctions(
             offset = offset,
@@ -323,6 +328,7 @@ class DefaultHexanaAnalysisService(
         val binary = BinaryInputLoader(
             maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
             maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
+            allowedFilePolicy = allowedFilePolicy,
         ).load(input)
         return binary.provider.searchBinaryFunctions(
             query = query,
@@ -452,6 +458,7 @@ class DefaultHexanaAnalysisService(
             path = input.artifactPathLabel(),
             projectRoot = projectRoot,
             scanRoots = scanRoots,
+            allowedFilePolicy = allowedFilePolicy,
         )
     }
 
@@ -470,6 +477,7 @@ class DefaultHexanaAnalysisService(
             projectRoot = projectRoot,
             previousPath = previousPath,
             dependencyLockPath = dependencyLockPath,
+            allowedFilePolicy = allowedFilePolicy,
         )
     }
 
@@ -797,13 +805,7 @@ class DefaultHexanaAnalysisService(
     }
 
     private fun loadTextFromPath(rawPath: String, pathLabel: String? = rawPath): LoadedText {
-        if (rawPath.isBlank()) {
-            throw HexanaAnalysisException(HexanaAnalysisErrorCode.INVALID_INPUT, "Path must not be blank")
-        }
-        val path = Path.of(rawPath)
-        if (!Files.exists(path) || !Files.isRegularFile(path)) {
-            throw HexanaAnalysisException(HexanaAnalysisErrorCode.FILE_NOT_FOUND, "File not found")
-        }
+        val path = allowedFilePolicy.resolveAllowedRegularFile(rawPath, "Text file")
         val size = try {
             Files.size(path)
         } catch (error: Exception) {
@@ -844,17 +846,7 @@ class DefaultHexanaAnalysisService(
     }
 
     private fun loadFromPath(rawPath: String): LoadedWasm {
-        if (rawPath.isBlank()) {
-            throw HexanaAnalysisException(HexanaAnalysisErrorCode.INVALID_INPUT, "Path must not be blank")
-        }
-
-        val path = Path.of(rawPath)
-        if (!Files.exists(path)) {
-            throw HexanaAnalysisException(HexanaAnalysisErrorCode.FILE_NOT_FOUND, "File not found")
-        }
-        if (!Files.isRegularFile(path)) {
-            throw HexanaAnalysisException(HexanaAnalysisErrorCode.FILE_NOT_FOUND, "File not found")
-        }
+        val path = allowedFilePolicy.resolveAllowedRegularFile(rawPath, ".wasm file")
         if (path.extension.lowercase() != "wasm") {
             throw HexanaAnalysisException(HexanaAnalysisErrorCode.NOT_WASM, "Not a .wasm file")
         }
@@ -874,14 +866,7 @@ class DefaultHexanaAnalysisService(
     }
 
     private fun loadComponentFromPath(rawPath: String): LoadedComponentWasm {
-        if (rawPath.isBlank()) {
-            throw HexanaAnalysisException(HexanaAnalysisErrorCode.INVALID_INPUT, "Path must not be blank")
-        }
-
-        val path = Path.of(rawPath)
-        if (!Files.exists(path) || !Files.isRegularFile(path)) {
-            throw HexanaAnalysisException(HexanaAnalysisErrorCode.FILE_NOT_FOUND, "File not found")
-        }
+        val path = allowedFilePolicy.resolveAllowedRegularFile(rawPath, ".wasm file")
         if (path.extension.lowercase() != "wasm") {
             throw HexanaAnalysisException(HexanaAnalysisErrorCode.NOT_WASM, "Not a .wasm file")
         }

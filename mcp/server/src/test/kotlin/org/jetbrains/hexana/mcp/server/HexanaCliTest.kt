@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp.server
 
 import com.github.ajalt.clikt.core.CliktError
+import java.io.File
 import kotlin.test.*
 
 class HexanaCliTest {
@@ -19,6 +20,7 @@ class HexanaCliTest {
         assertEquals(HexanaLogLevel.INFO, command.logLevel)
         assertTrue(command.analyticsEnabled)
         assertEquals(HexanaMcpToolProfile.PRODUCTION, command.toolProfile)
+        assertEquals(emptyList(), command.allowedRoots)
     }
 
     @Test
@@ -58,6 +60,52 @@ class HexanaCliTest {
     }
 
     @Test
+    fun parseAcceptsRepeatedAllowedRootsForStdio() {
+        val command = cli().parse(
+            arrayOf(
+                "stdio",
+                "--allowed-root",
+                "/work/project",
+                "--allowed-root",
+                "/work/deps",
+            )
+        )
+
+        assertIs<HexanaCommand.Stdio>(command)
+        assertEquals(listOf("/work/project", "/work/deps"), command.allowedRoots)
+    }
+
+    @Test
+    fun parseAcceptsAllowedRootsFromEnvForStdio() {
+        val command = HexanaCli { name ->
+            if (name == "HEXANA_MCP_ALLOWED_ROOTS") {
+                listOf("/env/project", "/env/deps").joinToString(File.pathSeparator)
+            } else {
+                null
+            }
+        }.parse(arrayOf("stdio"))
+
+        assertIs<HexanaCommand.Stdio>(command)
+        assertEquals(listOf("/env/project", "/env/deps"), command.allowedRoots)
+    }
+
+    @Test
+    fun parseCombinesAllowedRootsFromCliAndEnvForHttp() {
+        val command = HexanaCli { name ->
+            if (name == "HEXANA_MCP_ALLOWED_ROOTS") "/env/project,/env/deps" else null
+        }.parse(
+            arrayOf(
+                "http",
+                "--allowed-root",
+                "/cli/project",
+            )
+        )
+
+        assertIs<HexanaCommand.Http>(command)
+        assertEquals(listOf("/cli/project", "/env/project", "/env/deps"), command.allowedRoots)
+    }
+
+    @Test
     fun parseNormalizesHttpEndpointAndKeepsLoopbackDefaults() {
         val command = cli().parse(
             arrayOf(
@@ -80,6 +128,7 @@ class HexanaCliTest {
         assertEquals(HexanaLogLevel.DEBUG, command.logLevel)
         assertFalse(command.analyticsEnabled)
         assertEquals(HexanaMcpToolProfile.ADVANCED, command.toolProfile)
+        assertEquals(emptyList(), command.allowedRoots)
     }
 
     @Test

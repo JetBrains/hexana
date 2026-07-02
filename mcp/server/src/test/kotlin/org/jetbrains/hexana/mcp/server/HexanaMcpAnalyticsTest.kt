@@ -163,6 +163,7 @@ class HexanaMcpAnalyticsTest {
             analyticsKey = testApiKey(),
             analyticsEnabled = analyticsEnabled,
             toolProfile = HexanaMcpToolProfile.PRODUCTION,
+            allowedRoots = emptyList(),
         )
     }
 
@@ -176,6 +177,7 @@ class HexanaMcpAnalyticsTest {
             analyticsKey = testApiKey(),
             analyticsEnabled = analyticsEnabled,
             toolProfile = HexanaMcpToolProfile.PRODUCTION,
+            allowedRoots = emptyList(),
         )
     }
 

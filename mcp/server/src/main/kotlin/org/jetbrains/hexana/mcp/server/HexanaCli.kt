@@ -3,6 +3,7 @@ package org.jetbrains.hexana.mcp.server
 import com.github.ajalt.clikt.core.*
 import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.int
+import java.io.File
 import java.net.InetAddress
 
 sealed interface HexanaCommand {
@@ -10,7 +11,8 @@ sealed interface HexanaCommand {
         val logLevel: HexanaLogLevel,
         val analyticsKey: String?,
         val analyticsEnabled: Boolean,
-        val toolProfile: HexanaMcpToolProfile
+        val toolProfile: HexanaMcpToolProfile,
+        val allowedRoots: List<String>,
     ) : HexanaCommand
 
     data class Http(
@@ -21,16 +23,19 @@ sealed interface HexanaCommand {
         val logLevel: HexanaLogLevel,
         val analyticsKey: String?,
         val analyticsEnabled: Boolean,
-        val toolProfile: HexanaMcpToolProfile
+        val toolProfile: HexanaMcpToolProfile,
+        val allowedRoots: List<String>,
     ) : HexanaCommand
 
     data object Version : HexanaCommand
     data object Help : HexanaCommand
 }
 
-class HexanaCli {
+class HexanaCli(
+    private val envReader: (String) -> String? = System::getenv
+) {
     private var parsedCommand: HexanaCommand? = null
-    private val rootCommand = RootCommand { parsedCommand = it }
+    private val rootCommand = RootCommand(envReader) { parsedCommand = it }
 
     fun parse(args: Array<String>): HexanaCommand {
         parsedCommand = null
@@ -45,6 +50,7 @@ class HexanaCli {
     }
 
     private class RootCommand(
+        private val envReader: (String) -> String?,
         private val sink: (HexanaCommand) -> Unit
     ) : CliktCommand(name = "hexana-mcp") {
         override fun help(context: Context): String = "Standalone Hexana MCP server for WebAssembly inspection."
@@ -54,8 +60,8 @@ class HexanaCli {
 
         init {
             subcommands(
-                StdioCommand(sink),
-                HttpCommand(sink),
+                StdioCommand(envReader, sink),
+                HttpCommand(envReader, sink),
                 VersionCommand(sink),
                 HelpCommand(sink)
             )
@@ -65,6 +71,7 @@ class HexanaCli {
     }
 
     private class StdioCommand(
+        private val envReader: (String) -> String?,
         private val sink: (HexanaCommand) -> Unit
     ) : CliktCommand(name = "stdio") {
         override fun help(context: Context): String = "Run the MCP server over stdio."
@@ -84,19 +91,23 @@ class HexanaCli {
 
         private val toolProfile by toolProfileOption()
 
+        private val allowedRoots by allowedRootOption()
+
         override fun run() {
             sink(
                 HexanaCommand.Stdio(
                     logLevel = logLevel,
                     analyticsKey = analyticsKey,
                     analyticsEnabled = analyticsEnabled,
-                    toolProfile = toolProfile
+                    toolProfile = toolProfile,
+                    allowedRoots = allowedRoots + allowedRootsFromEnv(envReader)
                 )
             )
         }
     }
 
     private class HttpCommand(
+        private val envReader: (String) -> String?,
         private val sink: (HexanaCommand) -> Unit
     ) : CliktCommand(name = "http") {
         override fun help(context: Context): String = "Run the MCP server over stateless Streamable HTTP."
@@ -138,6 +149,8 @@ class HexanaCli {
 
         private val toolProfile by toolProfileOption()
 
+        private val allowedRoots by allowedRootOption()
+
         override fun run() {
             if (!allowPublicBind && !host.isLoopbackHost()) {
                 throw UsageError("Public HTTP bind requires --allow-public-bind")
@@ -152,7 +165,8 @@ class HexanaCli {
                     logLevel = logLevel,
                     analyticsKey = analyticsKey,
                     analyticsEnabled = analyticsEnabled,
-                    toolProfile = toolProfile
+                    toolProfile = toolProfile,
+                    allowedRoots = allowedRoots + allowedRootsFromEnv(envReader)
                 )
             )
         }
@@ -211,6 +225,11 @@ private fun CliktCommand.toolProfileOption() = option(
     envvar = "HEXANA_MCP_TOOL_PROFILE"
 ).convert("production|advanced") { parseToolProfile(it) }.default(HexanaMcpToolProfile.PRODUCTION)
 
+private fun CliktCommand.allowedRootOption() = option(
+    "--allowed-root",
+    help = "Directory whose files may be read by path-backed MCP inputs. Repeat to allow multiple roots; HEXANA_MCP_ALLOWED_ROOTS may also provide ${File.pathSeparator}-separated roots."
+).multiple()
+
 private fun parseToolProfile(value: String): HexanaMcpToolProfile {
     return try {
         HexanaMcpToolProfile.parseCliValue(value)
@@ -225,6 +244,14 @@ private fun parseBooleanOption(optionName: String, value: String): Boolean {
         "false" -> false
         else -> throw UsageError("Unsupported $optionName value: $value. Expected true or false.")
     }
+}
+
+private fun allowedRootsFromEnv(envReader: (String) -> String?): List<String> {
+    return envReader("HEXANA_MCP_ALLOWED_ROOTS")
+        ?.split(File.pathSeparatorChar, ',', '\n')
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+        .orEmpty()
 }
 
 private fun String.isLoopbackHost(): Boolean {

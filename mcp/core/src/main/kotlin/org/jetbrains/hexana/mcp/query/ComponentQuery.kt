@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp.query
 
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.mcp.model.components.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -57,9 +58,14 @@ fun WasmComponentBinaryProvider.resolveComponentDependencies(
     path: String?,
     projectRoot: String?,
     scanRoots: List<String>,
+    allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
 ): ResolveComponentDependenciesResult {
-    val roots = componentScanRoots(path, projectRoot, scanRoots)
-    val index = ComponentScanIndex.scan(roots, excludedPaths = excludedComponentPaths(path, projectRoot))
+    val roots = componentScanRoots(path, projectRoot, scanRoots, allowedFilePolicy)
+    val index = ComponentScanIndex.scan(
+        roots,
+        excludedPaths = excludedComponentPaths(path, projectRoot),
+        allowedFilePolicy = allowedFilePolicy,
+    )
     val directImports = imports.map { it.importRef() }
     val directRuntimeImports = directImports
         .filter { isRuntimeImport(it.fullName) }
@@ -76,7 +82,7 @@ fun WasmComponentBinaryProvider.resolveComponentDependencies(
     while (queue.isNotEmpty()) {
         val depPath = queue.removeFirst()
         if (!visitedDependencies.add(depPath)) continue
-        val provider = readComponentProvider(Path.of(depPath)) ?: continue
+        val provider = readComponentProvider(Path.of(depPath), allowedFilePolicy) ?: continue
         val depImports = provider.imports.map { it.importRef() }
         depImports
             .filter { isRuntimeImport(it.fullName) }
@@ -168,18 +174,20 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
     projectRoot: String?,
     previousPath: String?,
     dependencyLockPath: String?,
+    allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
 ): CheckComponentCompatibilityResult {
-    val lock = readDependencyLock(dependencyLockPath, projectRoot)
+    val lock = readDependencyLock(dependencyLockPath, projectRoot, allowedFilePolicy)
     val explicitProviders = dependencyPaths.mapNotNull { depPath ->
         val resolvedPath = resolveOptionalProjectPath(depPath, projectRoot) ?: Path.of(depPath).normalize()
-        readComponentProvider(resolvedPath)?.let { provider ->
+        readComponentProvider(resolvedPath, allowedFilePolicy)?.let { provider ->
             ScannedComponent(resolvedPath, provider.exports.map { it.exportRef(resolvedPath.toString()) })
         }
     }
     val resolvedIndex = if (explicitProviders.isEmpty()) {
         ComponentScanIndex.scan(
-            componentScanRoots(path, projectRoot, emptyList()),
+            componentScanRoots(path, projectRoot, emptyList(), allowedFilePolicy),
             excludedPaths = excludedComponentPaths(path, projectRoot) + excludedComponentPaths(previousPath, projectRoot),
+            allowedFilePolicy = allowedFilePolicy,
         )
     } else {
         ComponentScanIndex(
@@ -197,7 +205,7 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
     val matches = resolved.matches
     val candidateProviders = buildProviderVerdicts(required, resolvedIndex.components)
     val failingImport = selectFailingImport(required, resolved, candidateProviders)
-    val previousImport = failingImport?.let { readPreviousImport(previousPath, projectRoot, it) }
+    val previousImport = failingImport?.let { readPreviousImport(previousPath, projectRoot, it, allowedFilePolicy) }
     val selectedReason = failingImport?.let {
         selectIncompatibilityReason(it, resolved, candidateProviders)
     }
@@ -448,7 +456,11 @@ private data class ComponentScanIndex(
     val truncated: Boolean,
 ) {
     companion object {
-        fun scan(roots: List<Path>, excludedPaths: Set<Path>): ComponentScanIndex {
+        fun scan(
+            roots: List<Path>,
+            excludedPaths: Set<Path>,
+            allowedFilePolicy: AllowedFilePolicy,
+        ): ComponentScanIndex {
             val components = mutableListOf<ScannedComponent>()
             val rejectedCandidates = mutableListOf<RejectedScannedCandidate>()
             var scanned = 0
@@ -468,7 +480,7 @@ private data class ComponentScanIndex(
                         val normalized = path.normalize()
                         if (normalized in excludedPaths) continue
                         scanned += 1
-                        val provider = readComponentProvider(path)
+                        val provider = readComponentProvider(path, allowedFilePolicy)
                         if (provider == null) {
                             rejectedCandidates += RejectedScannedCandidate(
                                 normalized,
@@ -800,20 +812,26 @@ private fun readPreviousImport(
     previousPath: String?,
     projectRoot: String?,
     failingImport: ComponentImportRef,
+    allowedFilePolicy: AllowedFilePolicy,
 ): ComponentImportRef? {
     val previous = resolveOptionalProjectPath(previousPath, projectRoot) ?: return null
-    val provider = readComponentProvider(previous) ?: return null
+    val provider = readComponentProvider(previous, allowedFilePolicy) ?: return null
     return provider.imports
         .filterNot { isRuntimeImport(it.fullName()) }
         .map { it.importRef() }
         .firstOrNull { it.matchKey == failingImport.matchKey }
 }
 
-private fun readDependencyLock(dependencyLockPath: String?, projectRoot: String?): DependencyLock {
+private fun readDependencyLock(
+    dependencyLockPath: String?,
+    projectRoot: String?,
+    allowedFilePolicy: AllowedFilePolicy,
+): DependencyLock {
     val rawPath = dependencyLockPath?.takeIf { it.isNotBlank() } ?: return DependencyLock(null, emptyList())
     val resolvedPath = resolveOptionalProjectPath(rawPath, projectRoot) ?: return DependencyLock(rawPath, emptyList())
+    val allowedPath = allowedFilePolicy.resolveAllowedRegularFile(resolvedPath.toString(), "Dependency lock")
     val providers = try {
-        val root = Json.parseToJsonElement(Files.readString(resolvedPath)).jsonObject
+        val root = Json.parseToJsonElement(Files.readString(allowedPath)).jsonObject
         val providerArray = root["providers"] as? JsonArray ?: return DependencyLock(rawPath, emptyList())
         providerArray.mapNotNull { provider ->
             val obj = provider as? JsonObject ?: return@mapNotNull null
@@ -1053,16 +1071,26 @@ private fun rejectedComponentReason(
 
 private fun componentPackagePrefix(baseName: String): String = baseName.substringBeforeLast('/', baseName)
 
-private fun componentScanRoots(path: String?, projectRoot: String?, scanRoots: List<String>): List<Path> {
+private fun componentScanRoots(
+    path: String?,
+    projectRoot: String?,
+    scanRoots: List<String>,
+    allowedFilePolicy: AllowedFilePolicy,
+): List<Path> {
     val roots = linkedMapOf<Path, Path>()
     fun addRoot(candidate: Path) {
         val normalized = candidate.normalize()
-        val key = try {
-            normalized.toRealPath()
-        } catch (_: Exception) {
-            normalized.toAbsolutePath().normalize()
+        if (allowedFilePolicy.allowsAllFiles) {
+            val key = try {
+                normalized.toRealPath()
+            } catch (_: Exception) {
+                normalized.toAbsolutePath().normalize()
+            }
+            roots.putIfAbsent(key, normalized)
+        } else {
+            val allowedRoot = allowedFilePolicy.resolveAllowedDirectory(normalized.toString(), "Component scan root")
+            roots.putIfAbsent(allowedRoot, allowedRoot)
         }
-        roots.putIfAbsent(key, normalized)
     }
 
     val projectRootPath = projectRoot
@@ -1092,9 +1120,10 @@ private fun componentScanRoots(path: String?, projectRoot: String?, scanRoots: L
 private fun componentMatchKey(baseName: String): String =
     baseName.substringAfter(':', baseName)
 
-private fun readComponentProvider(path: Path): WasmComponentBinaryProvider? {
+private fun readComponentProvider(path: Path, allowedFilePolicy: AllowedFilePolicy): WasmComponentBinaryProvider? {
+    val allowedPath = allowedFilePolicy.resolveAllowedRegularFile(path.toString(), "Component provider")
     val bytes = try {
-        Files.readAllBytes(path)
+        Files.readAllBytes(allowedPath)
     } catch (_: Exception) {
         return null
     }

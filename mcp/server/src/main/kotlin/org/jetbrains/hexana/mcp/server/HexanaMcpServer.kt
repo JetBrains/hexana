@@ -3,6 +3,8 @@ package org.jetbrains.hexana.mcp.server
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.types.*
+import org.jetbrains.hexana.mcp.AllowedFilePolicy
+import org.jetbrains.hexana.mcp.DefaultHexanaAnalysisService
 import org.jetbrains.hexana.analytics.HexanaEvent
 import org.jetbrains.hexana.mcp.HexanaAnalysisService
 import org.jetbrains.hexana.mcp.HexanaAnalysisServices
@@ -27,6 +29,12 @@ fun createHexanaMcpServer(
     ) {
         registerHexanaTools(toolHandlers, toolProfile)
     }
+}
+
+fun createStandaloneHexanaAnalysisService(allowedRoots: List<String>): HexanaAnalysisService {
+    return DefaultHexanaAnalysisService(
+        allowedFilePolicy = AllowedFilePolicy.requiringAllowedRoots(allowedRoots)
+    )
 }
 
 internal fun hexanaServerVersion(): String {
