@@ -178,8 +178,11 @@ class AllowedFilePolicyTest {
             service.summarizeModule(WasmInput.FilePath(wasm.toString()))
         }
 
-        assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, error.code)
-        assertEquals("File exceeds maximum size of 3 bytes", error.message)
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertEquals(
+            "File exceeds maximum size of 3 bytes. Use a smaller file or increase the configured MCP file-size limit.",
+            error.message
+        )
     }
 
     @Test

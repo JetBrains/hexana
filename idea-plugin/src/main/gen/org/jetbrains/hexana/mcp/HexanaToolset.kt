@@ -527,7 +527,7 @@ public class HexanaToolset : McpToolsProvider {
           put("type", JsonPrimitive("integer"))
           put("description", JsonPrimitive("Approximate maximum JSON response bytes. Start small; the implementation clamps values above 60000."))
           put("default", JsonPrimitive(24_000))
-          put("minimum", JsonPrimitive(2_000))
+          put("minimum", JsonPrimitive(1))
           put("maximum", JsonPrimitive(60_000))
         })
         put("projectPath", buildJsonObject {
@@ -3911,7 +3911,7 @@ public class HexanaToolset : McpToolsProvider {
           put("type", JsonPrimitive("integer"))
           put("description", JsonPrimitive("Approximate maximum JSON response bytes. Start small; the implementation clamps values above 60000."))
           put("default", JsonPrimitive(24_000))
-          put("minimum", JsonPrimitive(2_000))
+          put("minimum", JsonPrimitive(1))
           put("maximum", JsonPrimitive(60_000))
         })
         put("projectPath", buildJsonObject {

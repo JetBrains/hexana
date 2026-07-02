@@ -10,6 +10,7 @@ import org.junit.rules.TemporaryFolder
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -183,6 +184,31 @@ class ComponentAnalysisServiceTest {
     }
 
     @Test
+    fun resolveComponentDependenciesRejectsOversizedScanCandidatesBeforeParsing() {
+        val root = temporaryFolder.newFolder("oversized-candidates").toPath()
+        val checkout = writeComponent(
+            root.resolve("dist/components/checkout.component.wasm"),
+            imports = listOf("acme:pricing/calculate@1.0.0"),
+            exports = listOf("acme:checkout/run@1.0.0"),
+        )
+        Files.createDirectories(root.resolve("components"))
+        Files.write(root.resolve("components/oversized.component.wasm"), ByteArray(32))
+
+        val provider = WasmComponentBinaryProvider(Files.readAllBytes(checkout).toCommonByteBuffer())
+        val result = provider.resolveComponentDependencies(
+            path = checkout.toString(),
+            projectRoot = root.toString(),
+            scanRoots = emptyList(),
+            limits = HexanaResourceLimits(maxFileWasmBytes = 8),
+        )
+
+        assertTrue(result.rejectedCandidates.any {
+            it.candidatePath.endsWith("oversized.component.wasm") &&
+                it.reason == "file size 32 bytes exceeds configured maximum file size of 8 bytes"
+        })
+    }
+
+    @Test
     fun resolveComponentDependenciesExcludesRelativeMainComponentFromRejectedCandidates() {
         val root = temporaryFolder.newFolder("relative-checkout").toPath()
         val relativeCheckout = "dist/components/checkout.component.wasm"
@@ -295,6 +321,91 @@ class ComponentAnalysisServiceTest {
         assertTrue(result.matches.any { it.importName.contains("component:adder/add") })
         assertTrue(result.missingImports.any { it.baseName.contains("component:subtractor/subtract") })
         assertEquals(result.compatible, result.summary.compatible)
+    }
+
+    @Test
+    fun checkComponentCompatibilityRejectsOversizedExplicitDependency() {
+        val root = temporaryFolder.newFolder("oversized-explicit-dependency").toPath()
+        val current = writeComponentEntries(
+            root.resolve("current.component.wasm"),
+            imports = emptyList(),
+            exports = emptyList(),
+        )
+        val oversizedDependency = root.resolve("deps/oversized.component.wasm")
+        Files.createDirectories(oversizedDependency.parent)
+        val maxFileBytes = Files.size(current).toInt()
+        Files.write(oversizedDependency, ByteArray(maxFileBytes + 1))
+
+        val error = assertFailsWith<HexanaAnalysisException> {
+            DefaultHexanaAnalysisService(
+                limits = HexanaResourceLimits(maxFileWasmBytes = maxFileBytes)
+            ).checkComponentCompatibility(
+                input = WasmInput.FilePath(current.toString()),
+                dependencyPaths = listOf(oversizedDependency.toString()),
+                projectRoot = root.toString(),
+                previousPath = null,
+                dependencyLockPath = null,
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertTrue(error.message.contains("Component provider size"))
+    }
+
+    @Test
+    fun checkComponentCompatibilityRejectsOversizedPreviousComponent() {
+        val root = temporaryFolder.newFolder("oversized-previous-component").toPath()
+        val current = writeComponentEntries(
+            root.resolve("current.component.wasm"),
+            imports = listOf(componentImport("acme:reporting/sink@2.0.0")),
+            exports = emptyList(),
+        )
+        val oversizedPrevious = root.resolve("previous.component.wasm")
+        val maxFileBytes = Files.size(current).toInt()
+        Files.write(oversizedPrevious, ByteArray(maxFileBytes + 1))
+
+        val error = assertFailsWith<HexanaAnalysisException> {
+            DefaultHexanaAnalysisService(
+                limits = HexanaResourceLimits(maxFileWasmBytes = maxFileBytes)
+            ).checkComponentCompatibility(
+                input = WasmInput.FilePath(current.toString()),
+                dependencyPaths = emptyList(),
+                projectRoot = root.toString(),
+                previousPath = oversizedPrevious.toString(),
+                dependencyLockPath = null,
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertTrue(error.message.contains("Component provider size"))
+    }
+
+    @Test
+    fun checkComponentCompatibilityRejectsOversizedDependencyLock() {
+        val root = temporaryFolder.newFolder("oversized-dependency-lock").toPath()
+        val current = writeComponentEntries(
+            root.resolve("current.component.wasm"),
+            imports = emptyList(),
+            exports = emptyList(),
+        )
+        val lockPath = root.resolve("config/component-lock.json")
+        Files.createDirectories(lockPath.parent)
+        Files.writeString(lockPath, """{"providers":[]}""")
+
+        val error = assertFailsWith<HexanaAnalysisException> {
+            DefaultHexanaAnalysisService(
+                limits = HexanaResourceLimits(maxTextFileBytes = 4)
+            ).checkComponentCompatibility(
+                input = WasmInput.FilePath(current.toString()),
+                dependencyPaths = emptyList(),
+                projectRoot = root.toString(),
+                previousPath = null,
+                dependencyLockPath = "config/component-lock.json",
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertTrue(error.message.contains("Dependency lock size"))
     }
 
     @Test

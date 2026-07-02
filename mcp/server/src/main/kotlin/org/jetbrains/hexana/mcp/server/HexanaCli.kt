@@ -3,6 +3,8 @@ package org.jetbrains.hexana.mcp.server
 import com.github.ajalt.clikt.core.*
 import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.int
+import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
+import org.jetbrains.hexana.mcp.HexanaResourceLimits
 import java.io.File
 import java.net.InetAddress
 
@@ -13,6 +15,7 @@ sealed interface HexanaCommand {
         val analyticsEnabled: Boolean,
         val toolProfile: HexanaMcpToolProfile,
         val allowedRoots: List<String>,
+        val resourceLimits: HexanaResourceLimits,
     ) : HexanaCommand
 
     data class Http(
@@ -25,6 +28,7 @@ sealed interface HexanaCommand {
         val analyticsEnabled: Boolean,
         val toolProfile: HexanaMcpToolProfile,
         val allowedRoots: List<String>,
+        val resourceLimits: HexanaResourceLimits,
     ) : HexanaCommand
 
     data class Doctor(
@@ -106,6 +110,13 @@ class HexanaCli(
         private val toolProfile by toolProfileOption()
 
         private val allowedRoots by allowedRootOption()
+        private val maxFileBytes by maxFileBytesOption()
+        private val maxInlineBytes by maxInlineBytesOption()
+        private val maxTextFileBytes by maxTextFileBytesOption()
+        private val maxOutputBytes by maxOutputBytesOption()
+        private val maxCandidateCount by maxCandidateCountOption()
+        private val maxScanRoots by maxScanRootsOption()
+        private val maxScanDepth by maxScanDepthOption()
 
         override fun run() {
             sink(
@@ -114,7 +125,16 @@ class HexanaCli(
                     analyticsKey = analyticsKey,
                     analyticsEnabled = analyticsEnabled,
                     toolProfile = toolProfile,
-                    allowedRoots = allowedRoots + allowedRootsFromEnv(envReader)
+                    allowedRoots = allowedRoots + allowedRootsFromEnv(envReader),
+                    resourceLimits = buildResourceLimits(
+                        maxFileBytes = maxFileBytes,
+                        maxInlineBytes = maxInlineBytes,
+                        maxTextFileBytes = maxTextFileBytes,
+                        maxOutputBytes = maxOutputBytes,
+                        maxCandidateCount = maxCandidateCount,
+                        maxScanRoots = maxScanRoots,
+                        maxScanDepth = maxScanDepth,
+                    )
                 )
             )
         }
@@ -164,6 +184,13 @@ class HexanaCli(
         private val toolProfile by toolProfileOption()
 
         private val allowedRoots by allowedRootOption()
+        private val maxFileBytes by maxFileBytesOption()
+        private val maxInlineBytes by maxInlineBytesOption()
+        private val maxTextFileBytes by maxTextFileBytesOption()
+        private val maxOutputBytes by maxOutputBytesOption()
+        private val maxCandidateCount by maxCandidateCountOption()
+        private val maxScanRoots by maxScanRootsOption()
+        private val maxScanDepth by maxScanDepthOption()
 
         override fun run() {
             if (!allowPublicBind && !host.isLoopbackHost()) {
@@ -180,7 +207,16 @@ class HexanaCli(
                     analyticsKey = analyticsKey,
                     analyticsEnabled = analyticsEnabled,
                     toolProfile = toolProfile,
-                    allowedRoots = allowedRoots + allowedRootsFromEnv(envReader)
+                    allowedRoots = allowedRoots + allowedRootsFromEnv(envReader),
+                    resourceLimits = buildResourceLimits(
+                        maxFileBytes = maxFileBytes,
+                        maxInlineBytes = maxInlineBytes,
+                        maxTextFileBytes = maxTextFileBytes,
+                        maxOutputBytes = maxOutputBytes,
+                        maxCandidateCount = maxCandidateCount,
+                        maxScanRoots = maxScanRoots,
+                        maxScanDepth = maxScanDepth,
+                    )
                 )
             )
         }
@@ -261,6 +297,77 @@ private fun CliktCommand.allowedRootOption() = option(
     "--allowed-root",
     help = "Directory whose files may be read by path-backed MCP inputs. Repeat to allow multiple roots; HEXANA_MCP_ALLOWED_ROOTS may also provide ${File.pathSeparator}-separated roots."
 ).multiple()
+
+private fun CliktCommand.maxFileBytesOption() = positiveIntOption(
+    "--max-file-bytes",
+    "Maximum input file size accepted by MCP tools.",
+    "HEXANA_MCP_MAX_FILE_BYTES",
+)
+
+private fun CliktCommand.maxInlineBytesOption() = positiveIntOption(
+    "--max-inline-bytes",
+    "Maximum inline payload size accepted in MCP tool arguments.",
+    "HEXANA_MCP_MAX_INLINE_BYTES",
+)
+
+private fun CliktCommand.maxTextFileBytesOption() = positiveIntOption(
+    "--max-text-file-bytes",
+    "Maximum text file size accepted by text-oriented MCP tool inputs.",
+    "HEXANA_MCP_MAX_TEXT_FILE_BYTES",
+)
+
+private fun CliktCommand.maxOutputBytesOption() = positiveIntOption(
+    "--max-output-bytes",
+    "Maximum bounded query output budget accepted for one MCP tool call.",
+    "HEXANA_MCP_MAX_OUTPUT_BYTES",
+)
+
+private fun CliktCommand.maxCandidateCountOption() = positiveIntOption(
+    "--max-candidate-count",
+    "Maximum number of candidate files or records kept during discovery.",
+    "HEXANA_MCP_MAX_CANDIDATE_COUNT",
+)
+
+private fun CliktCommand.maxScanRootsOption() = positiveIntOption(
+    "--max-scan-roots",
+    "Maximum number of scan root directories accepted for discovery tools.",
+    "HEXANA_MCP_MAX_SCAN_ROOTS",
+)
+
+private fun CliktCommand.maxScanDepthOption() = positiveIntOption(
+    "--max-scan-depth",
+    "Maximum directory depth traversed while scanning roots.",
+    "HEXANA_MCP_MAX_SCAN_DEPTH",
+)
+
+private fun CliktCommand.positiveIntOption(name: String, description: String, envvar: String) =
+    option(name, help = description, envvar = envvar).int().validate {
+        require(it > 0) { "Value must be greater than 0" }
+    }
+
+private fun buildResourceLimits(
+    maxFileBytes: Int?,
+    maxInlineBytes: Int?,
+    maxTextFileBytes: Int?,
+    maxOutputBytes: Int?,
+    maxCandidateCount: Int?,
+    maxScanRoots: Int?,
+    maxScanDepth: Int?,
+): HexanaResourceLimits {
+    val fileBytes = maxFileBytes ?: HexanaAnalysisLimits.MAX_FILE_WASM_BYTES
+    val inlineBytes = maxInlineBytes ?: HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES
+    return HexanaResourceLimits(
+        maxInlineWasmBytes = inlineBytes,
+        maxFileWasmBytes = fileBytes,
+        maxInlineBinaryBytes = inlineBytes,
+        maxFileBinaryBytes = fileBytes,
+        maxTextFileBytes = maxTextFileBytes ?: HexanaAnalysisLimits.MAX_TEXT_FILE_BYTES,
+        maxOutputBytes = maxOutputBytes ?: HexanaAnalysisLimits.MAX_OUTPUT_BYTES,
+        maxCandidateCount = maxCandidateCount ?: HexanaAnalysisLimits.MAX_CANDIDATE_COUNT,
+        maxScanRoots = maxScanRoots ?: HexanaAnalysisLimits.MAX_SCAN_ROOTS,
+        maxScanDepth = maxScanDepth ?: HexanaAnalysisLimits.MAX_SCAN_DEPTH,
+    )
+}
 
 private fun parseToolProfile(value: String): HexanaMcpToolProfile {
     return try {

@@ -65,7 +65,7 @@ private val QueryBinaryInput = BinaryInputClass.with("QueryBinaryInput") {
         .maxLength(32)
     int("maxBytes", default = 24_000)
         .describe("Approximate maximum JSON response bytes. Start small; the implementation clamps values above 60000.")
-        .minimum(2_000)
+        .minimum(1)
         .maximum(60_000)
 }
 

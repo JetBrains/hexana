@@ -35,7 +35,7 @@ class HexanaToolsTest {
             .describe("Detail level for returned records.")
         int("maxBytes", default = 24_000)
             .describe("Maximum serialized record payload bytes.")
-            .minimum(2_000)
+            .minimum(1)
             .maximum(60_000)
     }
 
@@ -339,7 +339,7 @@ class HexanaToolsTest {
         assertEquals(24_000, fields.getValue("maxBytes").default)
         assertEquals(1, fields.getValue("limit").minimum)
         assertEquals(100, fields.getValue("limit").maximum)
-        assertEquals(2_000, fields.getValue("maxBytes").minimum)
+        assertEquals(1, fields.getValue("maxBytes").minimum)
         assertEquals(60_000, fields.getValue("maxBytes").maximum)
         assertEquals(SchemaIntValue.Literal(20), fields.getValue("entityTypes").maxItems)
         assertEquals(SchemaIntValue.Literal(20), fields.getValue("query").maxItems)
@@ -358,7 +358,7 @@ class HexanaToolsTest {
         assertEquals(0, fields.getValue("offset").minimum)
         assertEquals(1, fields.getValue("limit").minimum)
         assertEquals(100, fields.getValue("limit").maximum)
-        assertEquals(2_000, fields.getValue("maxBytes").minimum)
+        assertEquals(1, fields.getValue("maxBytes").minimum)
         assertEquals(60_000, fields.getValue("maxBytes").maximum)
         assertEquals(SchemaIntValue.Literal(20), fields.getValue("entityTypes").maxItems)
         assertEquals(SchemaIntValue.Literal(20), fields.getValue("query").maxItems)

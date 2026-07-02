@@ -4,18 +4,20 @@ import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.types.*
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
-import org.jetbrains.hexana.mcp.DefaultHexanaAnalysisService
 import org.jetbrains.hexana.analytics.HexanaEvent
 import org.jetbrains.hexana.mcp.HexanaAnalysisService
-import org.jetbrains.hexana.mcp.HexanaAnalysisServices
+import org.jetbrains.hexana.mcp.DefaultHexanaAnalysisService
+import org.jetbrains.hexana.mcp.HexanaResourceLimits
 
 fun createHexanaMcpServer(
-    analysisService: HexanaAnalysisService = HexanaAnalysisServices.default,
+    resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
+    analysisService: HexanaAnalysisService = DefaultHexanaAnalysisService(resourceLimits),
     transport: HexanaEvent.McpTransport = HexanaEvent.McpTransport.STDIO,
     toolProfile: HexanaMcpToolProfile = HexanaMcpToolProfile.PRODUCTION
 ): Server {
     val toolHandlers = HexanaToolHandlers(
         analysisService = analysisService,
+        resourceLimits = resourceLimits,
         transport = transport
     )
 
@@ -31,7 +33,10 @@ fun createHexanaMcpServer(
     }
 }
 
-fun createStandaloneHexanaAnalysisService(allowedRoots: List<String>): HexanaAnalysisService {
+fun createStandaloneHexanaAnalysisService(
+    allowedRoots: List<String>,
+    resourceLimits: HexanaResourceLimits,
+): HexanaAnalysisService {
     // TODO: Replace this compatibility default with client-provided workspace roots once wrappers can pass them reliably.
     val allowedFilePolicy = if (allowedRoots.none { it.isNotBlank() }) {
         AllowedFilePolicy.allowAll
@@ -39,6 +44,7 @@ fun createStandaloneHexanaAnalysisService(allowedRoots: List<String>): HexanaAna
         AllowedFilePolicy.requiringAllowedRoots(allowedRoots)
     }
     return DefaultHexanaAnalysisService(
+        limits = resourceLimits,
         allowedFilePolicy = allowedFilePolicy
     )
 }

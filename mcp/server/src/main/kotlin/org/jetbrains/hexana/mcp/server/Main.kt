@@ -162,9 +162,10 @@ internal fun initializeMcpAnalytics(analytics: CommandAnalytics) {
 private suspend fun runStdio(command: HexanaCommand.Stdio) {
     configureLogging(command.logLevel)
     val server = createHexanaMcpServer(
-        analysisService = createStandaloneHexanaAnalysisService(command.allowedRoots),
+        analysisService = createStandaloneHexanaAnalysisService(command.allowedRoots, command.resourceLimits),
         transport = HexanaEvent.McpTransport.STDIO,
-        toolProfile = command.toolProfile
+        toolProfile = command.toolProfile,
+        resourceLimits = command.resourceLimits,
     )
     val finished = CompletableDeferred<Unit>()
     val transport = HexanaStdioServerTransport(
@@ -216,9 +217,10 @@ private suspend fun runHttp(command: HexanaCommand.Http) {
             eventStore = null
         ) {
             createHexanaMcpServer(
-                analysisService = createStandaloneHexanaAnalysisService(command.allowedRoots),
+                analysisService = createStandaloneHexanaAnalysisService(command.allowedRoots, command.resourceLimits),
                 transport = HexanaEvent.McpTransport.HTTP,
-                toolProfile = command.toolProfile
+                toolProfile = command.toolProfile,
+                resourceLimits = command.resourceLimits,
             )
         }
     }.start(wait = true)

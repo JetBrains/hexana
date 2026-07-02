@@ -115,15 +115,15 @@ class BinaryInputLoader(
 
     private fun fileTooLarge(): HexanaAnalysisException {
         return HexanaAnalysisException(
-            HexanaAnalysisErrorCode.INVALID_INPUT,
-            "File exceeds maximum size of $maxFileInputBytes bytes"
+            HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+            "File exceeds maximum size of $maxFileInputBytes bytes. Use a smaller file or increase the configured MCP file-size limit."
         )
     }
 
     private fun inlineBytesTooLarge(): HexanaAnalysisException {
         return HexanaAnalysisException(
-            HexanaAnalysisErrorCode.INVALID_INPUT,
-            "Inline bytes exceed maximum size of $maxInlineInputBytes bytes"
+            HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+            "Inline bytes exceed maximum size of $maxInlineInputBytes bytes. Send a smaller inline payload or increase the configured MCP inline-size limit."
         )
     }
 }

@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.query
 
 import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
+import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.model.binaries.BinaryFunctionResult
 import org.jetbrains.hexana.mcp.model.binaries.BinaryFunctionsResult
 import org.jetbrains.hexana.mcp.model.binaries.BinaryOmittedResult
@@ -12,28 +13,28 @@ import org.jetbrains.hexana.providers.NativeFunctionRecord
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 
-private const val DEFAULT_BINARY_FUNCTION_LIMIT = 25
-private const val MAX_BINARY_FUNCTION_LIMIT = 100
-
 fun org.jetbrains.hexana.providers.BinaryProvider.readBinaryFunctions(
     offset: Int = 0,
-    limit: Int = DEFAULT_BINARY_FUNCTION_LIMIT,
+    limit: Int = HexanaAnalysisLimits.DEFAULT_QUERY_LIMIT,
+    maxLimit: Int = HexanaAnalysisLimits.MAX_CANDIDATE_COUNT,
     pathLabel: String? = null,
 ): BinaryFunctionsResult =
-    readBinaryFunctionsPage(query = emptyList(), offset = offset, limit = limit, pathLabel = pathLabel)
+    readBinaryFunctionsPage(query = emptyList(), offset = offset, limit = limit, maxLimit = maxLimit, pathLabel = pathLabel)
 
 fun org.jetbrains.hexana.providers.BinaryProvider.searchBinaryFunctions(
     query: List<String>,
     offset: Int = 0,
-    limit: Int = DEFAULT_BINARY_FUNCTION_LIMIT,
+    limit: Int = HexanaAnalysisLimits.DEFAULT_QUERY_LIMIT,
+    maxLimit: Int = HexanaAnalysisLimits.MAX_CANDIDATE_COUNT,
     pathLabel: String? = null,
 ): BinaryFunctionsResult =
-    readBinaryFunctionsPage(query = query, offset = offset, limit = limit, pathLabel = pathLabel)
+    readBinaryFunctionsPage(query = query, offset = offset, limit = limit, maxLimit = maxLimit, pathLabel = pathLabel)
 
 private fun org.jetbrains.hexana.providers.BinaryProvider.readBinaryFunctionsPage(
     query: List<String>,
     offset: Int,
     limit: Int,
+    maxLimit: Int,
     pathLabel: String?,
 ): BinaryFunctionsResult {
     if (offset < 0) {
@@ -41,7 +42,8 @@ private fun org.jetbrains.hexana.providers.BinaryProvider.readBinaryFunctionsPag
     }
 
     val warnings = mutableListOf<BinaryWarningResult>()
-    val boundedLimit = limit.coerceIn(1, MAX_BINARY_FUNCTION_LIMIT)
+    val configuredMaxLimit = minOf(HexanaAnalysisLimits.MAX_QUERY_LIMIT, maxLimit.coerceAtLeast(1))
+    val boundedLimit = limit.coerceIn(1, configuredMaxLimit)
     if (boundedLimit != limit) {
         warnings += BinaryWarningResult("clamped_limit", "`limit` was clamped to $boundedLimit.")
     }

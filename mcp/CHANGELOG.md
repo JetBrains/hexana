@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- Standalone MCP resource limits can be configured with CLI flags or environment variables, and oversized inputs now return deterministic resource-limit errors.
+
 ## 0.3.1 - 2026-07-02
 
 ### Fixed

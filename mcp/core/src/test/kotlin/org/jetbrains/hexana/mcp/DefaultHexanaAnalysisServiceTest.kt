@@ -1447,10 +1447,16 @@ class DefaultHexanaAnalysisServiceTest {
         assertEquals("Inline bytes must not be blank", blankInlineBytes.message)
         assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, malformedBase64.code)
         assertEquals("Inline bytes must be valid base64", malformedBase64.message)
-        assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, oversizedInlineBytes.code)
-        assertEquals("Inline bytes exceed maximum size of 3 bytes", oversizedInlineBytes.message)
-        assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, oversizedRawBytes.code)
-        assertEquals("Inline bytes exceed maximum size of 3 bytes", oversizedRawBytes.message)
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, oversizedInlineBytes.code)
+        assertEquals(
+            "Inline bytes exceed maximum size of 3 bytes. Send a smaller inline payload or increase the configured MCP inline-size limit.",
+            oversizedInlineBytes.message
+        )
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, oversizedRawBytes.code)
+        assertEquals(
+            "Inline bytes exceed maximum size of 3 bytes. Send a smaller inline payload or increase the configured MCP inline-size limit.",
+            oversizedRawBytes.message
+        )
         assertEquals(HexanaAnalysisErrorCode.WASM_PARSE_FAILED, nonWasmInlineBytes.code)
     }
 
@@ -1476,8 +1482,11 @@ class DefaultHexanaAnalysisServiceTest {
                 .summarizeModule(WasmInput.FilePath(oversizedFile.toString()))
         }
 
-        assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, error.code)
-        assertEquals("File exceeds maximum size of 3 bytes", error.message)
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertEquals(
+            "File exceeds maximum size of 3 bytes. Use a smaller file or increase the configured MCP file-size limit.",
+            error.message
+        )
     }
 
     @Test
@@ -1497,6 +1506,137 @@ class DefaultHexanaAnalysisServiceTest {
 
         assertEquals(HexanaAnalysisErrorCode.NOT_WASM, nonWasmError.code)
         assertEquals(HexanaAnalysisErrorCode.WASM_PARSE_FAILED, malformedError.code)
+    }
+
+    @Test
+    fun queryArtifactsClampsMaxBytesToConfiguredOutputLimit() {
+        val wasm = createWasmFile(
+            "configured_output_limit.wasm",
+            """
+            (module
+              (func (export "main")))
+            """.trimIndent()
+        )
+
+        val result = DefaultHexanaAnalysisService(
+            limits = HexanaResourceLimits(maxOutputBytes = 1_500)
+        ).queryArtifacts(
+            input = WasmInput.FilePath(wasm.toString()),
+            baselineInput = null,
+            bindingInput = null,
+            operation = "find",
+            entityTypes = listOf("export"),
+            query = listOf("main"),
+            startName = null,
+            startFuncidx = null,
+            relations = emptyList(),
+            limit = 10,
+            detail = "summary",
+            maxBytes = 60_000
+        )
+
+        assertTrue(result.warnings.any { it == "`maxBytes` was clamped to 1500." })
+    }
+
+    @Test
+    fun rejectsLimitAboveConfiguredCandidateCount() {
+        val wasm = createWasmFile(
+            "candidate_limit.wasm",
+            """
+            (module
+              (func (export "main")))
+            """.trimIndent()
+        )
+
+        val error = assertFailsWith<HexanaAnalysisException> {
+            DefaultHexanaAnalysisService(
+                limits = HexanaResourceLimits(maxCandidateCount = 1)
+            ).listFunctions(WasmInput.FilePath(wasm.toString()), offset = 0, limit = 2)
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertEquals(
+            "Limit 2 exceeds configured maximum candidate count of 1. Reduce the request scope or increase the configured MCP resource limit.",
+            error.message
+        )
+    }
+
+    @Test
+    fun rejectsQueryLimitsAboveConfiguredCandidateCount() {
+        val wasm = createWasmFile(
+            "query_candidate_limit.wasm",
+            """
+            (module
+              (func (export "main")))
+            """.trimIndent()
+        )
+        val service = DefaultHexanaAnalysisService(
+            limits = HexanaResourceLimits(maxCandidateCount = 1)
+        )
+
+        val binaryError = assertFailsWith<HexanaAnalysisException> {
+            service.queryBinary(
+                input = BinaryInput.FilePath(wasm.toString()),
+                operation = "find",
+                entityTypes = listOf("export"),
+                query = listOf("main"),
+                offset = 0,
+                limit = 2,
+                detail = "summary",
+                maxBytes = 24_000,
+            )
+        }
+        val artifactError = assertFailsWith<HexanaAnalysisException> {
+            service.queryArtifacts(
+                input = WasmInput.FilePath(wasm.toString()),
+                baselineInput = null,
+                bindingInput = null,
+                operation = "find",
+                entityTypes = listOf("export"),
+                query = listOf("main"),
+                startName = null,
+                startFuncidx = null,
+                relations = emptyList(),
+                limit = 2,
+                detail = "summary",
+                maxBytes = 24_000,
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, binaryError.code)
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, artifactError.code)
+    }
+
+    @Test
+    fun rejectsOpenEndedDataSegmentRangeAboveConfiguredCandidateCount() {
+        val wasm = createWasmFile(
+            "open_ended_data_range.wasm",
+            """
+            (module
+              (memory 1)
+              (data (i32.const 0) "first")
+              (data (i32.const 16) "second"))
+            """.trimIndent()
+        )
+
+        val error = assertFailsWith<HexanaAnalysisException> {
+            DefaultHexanaAnalysisService(
+                limits = HexanaResourceLimits(maxCandidateCount = 1)
+            ).listDataSegments(
+                input = WasmInput.FilePath(wasm.toString()),
+                segmentStartInclusive = 0,
+                segmentEndExclusive = Int.MAX_VALUE,
+                includeExports = false,
+                includeGlobals = true,
+                minByteLength = null
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertEquals(
+            "Range requests 2 entries, exceeding configured maximum candidate count of 1. Reduce the request scope or increase the configured MCP resource limit.",
+            error.message
+        )
     }
 
     @Test

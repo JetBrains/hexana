@@ -6,6 +6,7 @@ import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
 import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.HexanaAnalysisService
+import org.jetbrains.hexana.mcp.HexanaResourceLimits
 import org.jetbrains.hexana.mcp.WasmInput
 import org.jetbrains.hexana.mcp.model.data.ListDataSectionsResult
 import org.jetbrains.hexana.mcp.model.data.ListDataSegmentsResult
@@ -89,6 +90,52 @@ class HexanaToolHandlersTest {
         assertEquals("wasm", structured["module"]!!.jsonObject["format"]!!.jsonPrimitive.content)
         assertEquals("overview", structured["operation"]!!.jsonPrimitive.content)
         assertEquals(1, structured["records"]!!.jsonArray.size)
+    }
+
+    @Test
+    fun queryBinaryUsesConfiguredBinaryInlineLimit() {
+        val handlers = HexanaToolHandlers(
+            resourceLimits = HexanaResourceLimits(
+                maxInlineWasmBytes = 8,
+                maxInlineBinaryBytes = 2,
+            )
+        )
+
+        val result = handlers.queryBinary(
+            buildJsonObject {
+                put("bytes", buildJsonArray {
+                    add(JsonPrimitive(1))
+                    add(JsonPrimitive(2))
+                    add(JsonPrimitive(3))
+                })
+                put("operation", JsonPrimitive("overview"))
+            }
+        )
+
+        assertEquals(true, result.isError)
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", result.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertTrue(result.structuredContent?.get("message")?.jsonPrimitive?.content.orEmpty().contains("2 bytes"))
+    }
+
+    @Test
+    fun queryBinaryBase64UsesConfiguredBinaryInlineLimit() {
+        val handlers = HexanaToolHandlers(
+            resourceLimits = HexanaResourceLimits(
+                maxInlineWasmBytes = 8,
+                maxInlineBinaryBytes = 2,
+            )
+        )
+
+        val result = handlers.queryBinary(
+            buildJsonObject {
+                put("bytesBase64", JsonPrimitive(Base64.getEncoder().encodeToString(byteArrayOf(1, 2, 3))))
+                put("operation", JsonPrimitive("overview"))
+            }
+        )
+
+        assertEquals(true, result.isError)
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", result.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertTrue(result.structuredContent?.get("message")?.jsonPrimitive?.content.orEmpty().contains("2 bytes"))
     }
 
     @Test
@@ -217,6 +264,39 @@ class HexanaToolHandlersTest {
         assertEquals("export", record["entityType"]!!.jsonPrimitive.content)
         assertEquals("main", record["name"]!!.jsonPrimitive.content)
         assertEquals("function", record["kind"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun queryToolsRejectExplicitLimitAboveConfiguredCandidateCount() {
+        val wasm = createWasmFile(
+            "query-tools-candidate-limit.wasm",
+            """
+            (module
+              (func (export "main")))
+            """.trimIndent()
+        )
+        val handlers = HexanaToolHandlers(
+            resourceLimits = HexanaResourceLimits(maxCandidateCount = 1)
+        )
+        val arguments = buildJsonObject {
+            put("path", JsonPrimitive(wasm.toString()))
+            put("operation", JsonPrimitive("find"))
+            put("entityTypes", buildJsonArray {
+                add(JsonPrimitive("export"))
+            })
+            put("query", buildJsonArray {
+                add(JsonPrimitive("main"))
+            })
+            put("limit", JsonPrimitive(2))
+        }
+
+        val binaryResult = handlers.queryBinary(arguments)
+        val artifactsResult = handlers.queryArtifacts(arguments)
+
+        assertEquals(true, binaryResult.isError)
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", binaryResult.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertEquals(true, artifactsResult.isError)
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", artifactsResult.structuredContent?.get("code")?.jsonPrimitive?.content)
     }
 
     @Test
@@ -358,6 +438,41 @@ class HexanaToolHandlersTest {
 
         assertTrue(result.isError != true)
         assertEquals(1, result.structuredContent!!["functions"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun maxInlineInputOverrideFeedsDefaultAnalysisService() {
+        val minimalWasm = byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00)
+        val handlers = HexanaToolHandlers(
+            resourceLimits = HexanaResourceLimits(maxInlineWasmBytes = 3, maxInlineBinaryBytes = 3),
+            maxInlineInputBytes = 8,
+        )
+
+        val result = handlers.summarizeModule(
+            buildJsonObject {
+                put("bytes", buildJsonArray {
+                    minimalWasm.forEach { add(JsonPrimitive(it.toInt() and 0xFF)) }
+                })
+            }
+        )
+
+        assertFalse(result.isError == true)
+        assertEquals(8, result.structuredContent!!["moduleSize"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun listImportsAcceptsPaddedInlineBase64AtExactConfiguredLimit() {
+        val minimalWasm = byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00)
+        val handlers = HexanaToolHandlers(maxInlineInputBytes = 8)
+
+        val result = handlers.listImports(
+            buildJsonObject {
+                put("bytesBase64", JsonPrimitive(Base64.getEncoder().encodeToString(minimalWasm)))
+            }
+        )
+
+        assertFalse(result.isError == true)
+        assertEquals(0, result.structuredContent!!["imports"]!!.jsonArray.size)
     }
 
     @Test
@@ -527,6 +642,30 @@ class HexanaToolHandlersTest {
         assertTrue(functions[0].jsonObject["offset"]!!.jsonPrimitive.long > 0)
         assertTrue(functions[0].jsonObject["size"]!!.jsonPrimitive.long > 0)
         assertEquals(2, functions[1].jsonObject["funcidx"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun omittedLimitUsesConfiguredCandidateCountAsDefaultCeiling() {
+        val wasm = createWasmFile(
+            "configured-candidate-default.wasm",
+            """
+            (module
+              (func ${'$'}first)
+              (func ${'$'}second))
+            """.trimIndent()
+        )
+        val handlers = HexanaToolHandlers(
+            resourceLimits = HexanaResourceLimits(maxCandidateCount = 1),
+        )
+
+        val result = handlers.listFunctions(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+            }
+        )
+
+        assertFalse(result.isError == true)
+        assertEquals(1, result.structuredContent!!["functions"]!!.jsonArray.size)
     }
 
     @Test
@@ -716,7 +855,10 @@ class HexanaToolHandlersTest {
             """.trimIndent()
         )
         val standaloneHandlers = HexanaToolHandlers(
-            analysisService = createStandaloneHexanaAnalysisService(allowedRoots = emptyList())
+            analysisService = createStandaloneHexanaAnalysisService(
+                allowedRoots = emptyList(),
+                resourceLimits = HexanaResourceLimits(),
+            )
         )
 
         val result = standaloneHandlers.summarizeModule(jsonPath(wasm.toString()))
@@ -1006,8 +1148,11 @@ class HexanaToolHandlersTest {
         assertEquals("`bytes[0]` must be an integer", (nullElement.content.single() as TextContent).text)
 
         assertEquals(true, oversized.isError)
-        assertEquals("INVALID_INPUT", oversized.structuredContent?.get("code")?.jsonPrimitive?.content)
-        assertEquals("`bytes` exceeds maximum size of 2 bytes", (oversized.content.single() as TextContent).text)
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", oversized.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertEquals(
+            "`bytes` exceeds maximum size of 2 bytes. Send a smaller inline payload or increase the configured MCP inline-size limit.",
+            (oversized.content.single() as TextContent).text
+        )
     }
 
     @Test

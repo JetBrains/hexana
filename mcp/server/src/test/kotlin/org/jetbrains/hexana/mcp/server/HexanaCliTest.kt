@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp.server
 
 import com.github.ajalt.clikt.core.CliktError
+import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import java.io.File
 import kotlin.test.*
 
@@ -21,6 +22,35 @@ class HexanaCliTest {
         assertTrue(command.analyticsEnabled)
         assertEquals(HexanaMcpToolProfile.PRODUCTION, command.toolProfile)
         assertEquals(emptyList(), command.allowedRoots)
+        assertEquals(HexanaAnalysisLimits.MAX_FILE_WASM_BYTES, command.resourceLimits.maxFileWasmBytes)
+        assertEquals(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES, command.resourceLimits.maxInlineWasmBytes)
+    }
+
+    @Test
+    fun parseAcceptsResourceLimitOptionsForStdio() {
+        val command = cli().parse(
+            arrayOf(
+                "stdio",
+                "--max-file-bytes", "1048576",
+                "--max-inline-bytes", "4096",
+                "--max-text-file-bytes", "8192",
+                "--max-output-bytes", "2000",
+                "--max-candidate-count", "7",
+                "--max-scan-roots", "2",
+                "--max-scan-depth", "3",
+            )
+        )
+
+        assertIs<HexanaCommand.Stdio>(command)
+        assertEquals(1_048_576, command.resourceLimits.maxFileWasmBytes)
+        assertEquals(1_048_576, command.resourceLimits.maxFileBinaryBytes)
+        assertEquals(4_096, command.resourceLimits.maxInlineWasmBytes)
+        assertEquals(4_096, command.resourceLimits.maxInlineBinaryBytes)
+        assertEquals(8_192, command.resourceLimits.maxTextFileBytes)
+        assertEquals(2_000, command.resourceLimits.maxOutputBytes)
+        assertEquals(7, command.resourceLimits.maxCandidateCount)
+        assertEquals(2, command.resourceLimits.maxScanRoots)
+        assertEquals(3, command.resourceLimits.maxScanDepth)
     }
 
     @Test
@@ -145,6 +175,7 @@ class HexanaCliTest {
         assertFalse(command.analyticsEnabled)
         assertEquals(HexanaMcpToolProfile.ADVANCED, command.toolProfile)
         assertEquals(emptyList(), command.allowedRoots)
+        assertEquals(HexanaAnalysisLimits.MAX_OUTPUT_BYTES, command.resourceLimits.maxOutputBytes)
     }
 
     @Test
@@ -214,6 +245,15 @@ class HexanaCliTest {
 
         assertTrue(error.message.orEmpty().contains("production"))
         assertTrue(error.message.orEmpty().contains("advanced"))
+    }
+
+    @Test
+    fun parseRejectsInvalidResourceLimit() {
+        val error = assertFailsWith<CliktError> {
+            cli().parse(arrayOf("stdio", "--max-candidate-count", "0"))
+        }
+
+        assertTrue(error.message.orEmpty().contains("greater than 0"))
     }
 
     @Test

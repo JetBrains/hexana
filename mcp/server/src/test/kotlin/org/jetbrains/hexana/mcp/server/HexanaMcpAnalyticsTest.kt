@@ -9,6 +9,7 @@ import org.jetbrains.hexana.analytics.DistinctIdProvider
 import org.jetbrains.hexana.analytics.HexanaAnalytics
 import org.jetbrains.hexana.analytics.HexanaEvent
 import org.jetbrains.hexana.mcp.HexanaAnalysisService
+import org.jetbrains.hexana.mcp.HexanaResourceLimits
 import org.jetbrains.hexana.mcp.WasmInput
 import org.jetbrains.hexana.mcp.model.data.ListDataSectionsResult
 import org.jetbrains.hexana.mcp.model.data.ListDataSegmentsResult
@@ -164,6 +165,7 @@ class HexanaMcpAnalyticsTest {
             analyticsEnabled = analyticsEnabled,
             toolProfile = HexanaMcpToolProfile.PRODUCTION,
             allowedRoots = emptyList(),
+            resourceLimits = HexanaResourceLimits(),
         )
     }
 
@@ -178,6 +180,7 @@ class HexanaMcpAnalyticsTest {
             analyticsEnabled = analyticsEnabled,
             toolProfile = HexanaMcpToolProfile.PRODUCTION,
             allowedRoots = emptyList(),
+            resourceLimits = HexanaResourceLimits(),
         )
     }
 

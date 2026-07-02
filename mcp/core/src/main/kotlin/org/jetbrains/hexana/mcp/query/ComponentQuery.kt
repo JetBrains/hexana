@@ -2,6 +2,9 @@ package org.jetbrains.hexana.mcp.query
 
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
+import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
+import org.jetbrains.hexana.mcp.HexanaAnalysisException
+import org.jetbrains.hexana.mcp.HexanaResourceLimits
 import org.jetbrains.hexana.mcp.model.components.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -23,12 +26,10 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.extension
 
-private const val MAX_SCAN_ROOTS = 8
-private const val MAX_SCANNED_WASM_FILES = 500
-private const val MAX_SCAN_DEPTH = 16
-private const val MAX_RESULT_ITEMS = 200
-
-fun WasmComponentBinaryProvider.readComponentSurface(pathLabel: String? = null): ListComponentSurfaceResult {
+fun WasmComponentBinaryProvider.readComponentSurface(
+    pathLabel: String? = null,
+    limits: HexanaResourceLimits = HexanaResourceLimits(),
+): ListComponentSurfaceResult {
     if (!canProvideWasmModule()) {
         return ListComponentSurfaceResult(
             path = pathLabel,
@@ -43,8 +44,8 @@ fun WasmComponentBinaryProvider.readComponentSurface(pathLabel: String? = null):
     return ListComponentSurfaceResult(
         path = pathLabel,
         isComponent = true,
-        imports = imports.take(MAX_RESULT_ITEMS),
-        exports = exports.take(MAX_RESULT_ITEMS),
+        imports = imports.take(limits.maxCandidateCount),
+        exports = exports.take(limits.maxCandidateCount),
         summary = ComponentSurfaceSummaryResult(
             importCount = imports.size,
             exportCount = exports.size,
@@ -59,12 +60,15 @@ fun WasmComponentBinaryProvider.resolveComponentDependencies(
     projectRoot: String?,
     scanRoots: List<String>,
     allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
+    limits: HexanaResourceLimits = HexanaResourceLimits(),
 ): ResolveComponentDependenciesResult {
-    val roots = componentScanRoots(path, projectRoot, scanRoots, allowedFilePolicy)
+    requireScanRootCount(scanRoots.filter { it.isNotBlank() }.size, limits)
+    val roots = componentScanRoots(path, projectRoot, scanRoots, allowedFilePolicy, limits)
     val index = ComponentScanIndex.scan(
         roots,
         excludedPaths = excludedComponentPaths(path, projectRoot),
         allowedFilePolicy = allowedFilePolicy,
+        limits = limits,
     )
     val directImports = imports.map { it.importRef() }
     val directRuntimeImports = directImports
@@ -82,7 +86,7 @@ fun WasmComponentBinaryProvider.resolveComponentDependencies(
     while (queue.isNotEmpty()) {
         val depPath = queue.removeFirst()
         if (!visitedDependencies.add(depPath)) continue
-        val provider = readComponentProvider(Path.of(depPath), allowedFilePolicy) ?: continue
+        val provider = readComponentProvider(Path.of(depPath), allowedFilePolicy, limits) ?: continue
         val depImports = provider.imports.map { it.importRef() }
         depImports
             .filter { isRuntimeImport(it.fullName) }
@@ -132,21 +136,21 @@ fun WasmComponentBinaryProvider.resolveComponentDependencies(
         scanRoots = roots.map(Path::toString),
         requiredNonRuntimeImports = requiredImports
             .sortedWith(compareBy({ it.classification }, { it.importName }))
-            .take(MAX_RESULT_ITEMS),
-        ignoredRuntimeImports = ignoredRuntimeImports.take(MAX_RESULT_ITEMS),
-        resolvedDependencyPaths = resolvedDependencyPaths.take(MAX_RESULT_ITEMS),
-        directDependencies = directDeps.sortedBy { it.importName }.take(MAX_RESULT_ITEMS),
-        transitiveDependencies = transitiveDeps.sortedBy { it.importName }.take(MAX_RESULT_ITEMS),
+            .take(limits.maxCandidateCount),
+        ignoredRuntimeImports = ignoredRuntimeImports.take(limits.maxCandidateCount),
+        resolvedDependencyPaths = resolvedDependencyPaths.take(limits.maxCandidateCount),
+        directDependencies = directDeps.sortedBy { it.importName }.take(limits.maxCandidateCount),
+        transitiveDependencies = transitiveDeps.sortedBy { it.importName }.take(limits.maxCandidateCount),
         unresolvedImports = allUnresolved.map { it.importRef.toUnresolvedResult() }
             .sortedBy { it.importName }
-            .take(MAX_RESULT_ITEMS),
+            .take(limits.maxCandidateCount),
         candidateConflicts = allConflicts.map { it.toResult() }
             .sortedBy { it.importName }
-            .take(MAX_RESULT_ITEMS),
+            .take(limits.maxCandidateCount),
         rejectedCandidates = rejectedCandidates
             .map { it.toResult() }
             .sortedBy { it.candidatePath }
-            .take(MAX_RESULT_ITEMS),
+            .take(limits.maxCandidateCount),
         minimalRunBuildFix = buildMinimalRunBuildFix(
             componentPath = path,
             projectRoot = projectRoot,
@@ -175,19 +179,22 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
     previousPath: String?,
     dependencyLockPath: String?,
     allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
+    limits: HexanaResourceLimits = HexanaResourceLimits(),
 ): CheckComponentCompatibilityResult {
-    val lock = readDependencyLock(dependencyLockPath, projectRoot, allowedFilePolicy)
+    requireCandidateCount(dependencyPaths.filter { it.isNotBlank() }.size, limits, "dependency paths")
+    val lock = readDependencyLock(dependencyLockPath, projectRoot, allowedFilePolicy, limits)
     val explicitProviders = dependencyPaths.mapNotNull { depPath ->
         val resolvedPath = resolveOptionalProjectPath(depPath, projectRoot) ?: Path.of(depPath).normalize()
-        readComponentProvider(resolvedPath, allowedFilePolicy)?.let { provider ->
+        readComponentProvider(resolvedPath, allowedFilePolicy, limits, rejectOversized = true)?.let { provider ->
             ScannedComponent(resolvedPath, provider.exports.map { it.exportRef(resolvedPath.toString()) })
         }
     }
     val resolvedIndex = if (explicitProviders.isEmpty()) {
         ComponentScanIndex.scan(
-            componentScanRoots(path, projectRoot, emptyList(), allowedFilePolicy),
+            componentScanRoots(path, projectRoot, emptyList(), allowedFilePolicy, limits),
             excludedPaths = excludedComponentPaths(path, projectRoot) + excludedComponentPaths(previousPath, projectRoot),
             allowedFilePolicy = allowedFilePolicy,
+            limits = limits,
         )
     } else {
         ComponentScanIndex(
@@ -205,7 +212,9 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
     val matches = resolved.matches
     val candidateProviders = buildProviderVerdicts(required, resolvedIndex.components)
     val failingImport = selectFailingImport(required, resolved, candidateProviders)
-    val previousImport = failingImport?.let { readPreviousImport(previousPath, projectRoot, it, allowedFilePolicy) }
+    val previousImport = failingImport?.let {
+        readPreviousImport(previousPath, projectRoot, it, allowedFilePolicy, limits)
+    }
     val selectedReason = failingImport?.let {
         selectIncompatibilityReason(it, resolved, candidateProviders)
     }
@@ -311,26 +320,26 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
                 exportName = it.export.fullName,
                 exactVersionMatch = it.exactVersionMatch,
             )
-        }.take(MAX_RESULT_ITEMS),
-        missingImports = missing.take(MAX_RESULT_ITEMS),
-        issues = issues.take(MAX_RESULT_ITEMS),
+        }.take(limits.maxCandidateCount),
+        missingImports = missing.take(limits.maxCandidateCount),
+        issues = issues.take(limits.maxCandidateCount),
         failingImport = failingImport?.toResult(previousImport),
         failingImportForReport = failingImport?.toReportResult(previousImport),
         configuredProviders = lock.configuredProviders
             .map { it.toResult() }
-            .take(MAX_RESULT_ITEMS),
+            .take(limits.maxCandidateCount),
         candidateProviders = candidateProviders
             .map { it.toResult() }
             .sortedBy { it.dependencyPath }
-            .take(MAX_RESULT_ITEMS),
+            .take(limits.maxCandidateCount),
         candidateProvidersInspected = candidateProviders
             .map { it.toInspectedResult(projectRoot) }
             .sortedBy { it.dependencyPath }
-            .take(MAX_RESULT_ITEMS),
+            .take(limits.maxCandidateCount),
         selectedIncompatibilityReason = selectedReason,
         selectedIncompatibilityReasonForReport = selectedReason,
-        providerPathsInvolved = providerPathsInvolved.take(MAX_RESULT_ITEMS),
-        providerPathsInvolvedForReport = providerPathsInvolvedForReport.take(MAX_RESULT_ITEMS),
+        providerPathsInvolved = providerPathsInvolved.take(limits.maxCandidateCount),
+        providerPathsInvolvedForReport = providerPathsInvolvedForReport.take(limits.maxCandidateCount),
         minimalDependencyLockFix = lockFix,
         minimalDependencyLockFixForReport = lockFix?.toReportResult(projectRoot),
         evidence = evidence,
@@ -460,19 +469,20 @@ private data class ComponentScanIndex(
             roots: List<Path>,
             excludedPaths: Set<Path>,
             allowedFilePolicy: AllowedFilePolicy,
+            limits: HexanaResourceLimits = HexanaResourceLimits(),
         ): ComponentScanIndex {
             val components = mutableListOf<ScannedComponent>()
             val rejectedCandidates = mutableListOf<RejectedScannedCandidate>()
             var scanned = 0
             var truncated = false
-            for (root in roots.take(MAX_SCAN_ROOTS)) {
+            for (root in roots.take(limits.maxScanRoots)) {
                 if (truncated) break
                 if (!Files.isDirectory(root)) continue
-                Files.walk(root, MAX_SCAN_DEPTH).use { paths ->
+                Files.walk(root, limits.maxScanDepth).use { paths ->
                     val iterator = paths.iterator()
                     while (iterator.hasNext()) {
                         val path = iterator.next()
-                        if (scanned >= MAX_SCANNED_WASM_FILES) {
+                        if (scanned >= limits.maxCandidateCount) {
                             truncated = true
                             break
                         }
@@ -480,7 +490,15 @@ private data class ComponentScanIndex(
                         val normalized = path.normalize()
                         if (normalized in excludedPaths) continue
                         scanned += 1
-                        val provider = readComponentProvider(path, allowedFilePolicy)
+                        val fileSize = fileSizeOrNull(path)
+                        if (fileSize != null && fileSize > limits.maxFileWasmBytes) {
+                            rejectedCandidates += RejectedScannedCandidate(
+                                normalized,
+                                "file size $fileSize bytes exceeds configured maximum file size of ${limits.maxFileWasmBytes} bytes"
+                            )
+                            continue
+                        }
+                        val provider = readComponentProvider(path, allowedFilePolicy, limits)
                         if (provider == null) {
                             rejectedCandidates += RejectedScannedCandidate(
                                 normalized,
@@ -813,9 +831,10 @@ private fun readPreviousImport(
     projectRoot: String?,
     failingImport: ComponentImportRef,
     allowedFilePolicy: AllowedFilePolicy,
+    limits: HexanaResourceLimits,
 ): ComponentImportRef? {
     val previous = resolveOptionalProjectPath(previousPath, projectRoot) ?: return null
-    val provider = readComponentProvider(previous, allowedFilePolicy) ?: return null
+    val provider = readComponentProvider(previous, allowedFilePolicy, limits, rejectOversized = true) ?: return null
     return provider.imports
         .filterNot { isRuntimeImport(it.fullName()) }
         .map { it.importRef() }
@@ -826,10 +845,18 @@ private fun readDependencyLock(
     dependencyLockPath: String?,
     projectRoot: String?,
     allowedFilePolicy: AllowedFilePolicy,
+    limits: HexanaResourceLimits,
 ): DependencyLock {
     val rawPath = dependencyLockPath?.takeIf { it.isNotBlank() } ?: return DependencyLock(null, emptyList())
     val resolvedPath = resolveOptionalProjectPath(rawPath, projectRoot) ?: return DependencyLock(rawPath, emptyList())
     val allowedPath = allowedFilePolicy.resolveAllowedRegularFile(resolvedPath.toString(), "Dependency lock")
+    val fileSize = fileSizeOrNull(allowedPath)
+    if (fileSize != null && fileSize > limits.maxTextFileBytes) {
+        throw HexanaAnalysisException(
+            HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+            "Dependency lock size $fileSize bytes exceeds configured maximum text file size of ${limits.maxTextFileBytes}. Use a smaller lock file or increase the configured MCP text-file-size limit."
+        )
+    }
     val providers = try {
         val root = Json.parseToJsonElement(Files.readString(allowedPath)).jsonObject
         val providerArray = root["providers"] as? JsonArray ?: return DependencyLock(rawPath, emptyList())
@@ -1076,6 +1103,7 @@ private fun componentScanRoots(
     projectRoot: String?,
     scanRoots: List<String>,
     allowedFilePolicy: AllowedFilePolicy,
+    limits: HexanaResourceLimits,
 ): List<Path> {
     val roots = linkedMapOf<Path, Path>()
     fun addRoot(candidate: Path) {
@@ -1114,14 +1142,49 @@ private fun componentScanRoots(
         }
         resolvedPath.toAbsolutePath().parent?.normalize()?.let(::addRoot)
     }
-    return roots.values.filter { Files.isDirectory(it) }.take(MAX_SCAN_ROOTS)
+    return roots.values.filter { Files.isDirectory(it) }.take(limits.maxScanRoots)
+}
+
+private fun requireCandidateCount(count: Int, limits: HexanaResourceLimits, label: String) {
+    if (count > limits.maxCandidateCount) {
+        throw HexanaAnalysisException(
+            HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+            "$label count $count exceeds configured maximum candidate count of ${limits.maxCandidateCount}. Reduce the request scope or increase the configured MCP candidate-count limit."
+        )
+    }
+}
+
+private fun requireScanRootCount(count: Int, limits: HexanaResourceLimits) {
+    if (count > limits.maxScanRoots) {
+        throw HexanaAnalysisException(
+            HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+            "Scan root count $count exceeds configured maximum scan root count of ${limits.maxScanRoots}. Reduce the request scope or increase the configured MCP scan-root limit."
+        )
+    }
 }
 
 private fun componentMatchKey(baseName: String): String =
     baseName.substringAfter(':', baseName)
 
-private fun readComponentProvider(path: Path, allowedFilePolicy: AllowedFilePolicy): WasmComponentBinaryProvider? {
+private fun readComponentProvider(
+    path: Path,
+    allowedFilePolicy: AllowedFilePolicy,
+    limits: HexanaResourceLimits? = null,
+    rejectOversized: Boolean = false,
+): WasmComponentBinaryProvider? {
     val allowedPath = allowedFilePolicy.resolveAllowedRegularFile(path.toString(), "Component provider")
+    if (limits != null) {
+        val fileSize = fileSizeOrNull(allowedPath)
+        if (fileSize != null && fileSize > limits.maxFileWasmBytes) {
+            if (rejectOversized) {
+                throw HexanaAnalysisException(
+                    HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+                    "Component provider size $fileSize bytes exceeds configured maximum file size of ${limits.maxFileWasmBytes}. Use a smaller dependency component or increase the configured MCP file-size limit."
+                )
+            }
+            return null
+        }
+    }
     val bytes = try {
         Files.readAllBytes(allowedPath)
     } catch (_: Exception) {
@@ -1131,3 +1194,10 @@ private fun readComponentProvider(path: Path, allowedFilePolicy: AllowedFilePoli
     if (WasmBinaryProviderSelector.select(buffer) != BinaryProviderType.WasmComponent) return null
     return WasmComponentBinaryProvider(buffer).takeIf(WasmComponentBinaryProvider::canProvideWasmModule)
 }
+
+private fun fileSizeOrNull(path: Path): Long? =
+    try {
+        Files.size(path)
+    } catch (_: Exception) {
+        null
+    }

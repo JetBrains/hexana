@@ -250,25 +250,22 @@ object HexanaAnalysisServices {
 }
 
 class DefaultHexanaAnalysisService(
-    private val maxInlineInputBytes: Int = HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES,
-    private val maxFileInputBytes: Int = HexanaAnalysisLimits.MAX_FILE_WASM_BYTES,
+    limits: HexanaResourceLimits = HexanaResourceLimits(),
+    maxInlineInputBytes: Int = limits.maxInlineWasmBytes,
+    maxFileInputBytes: Int = limits.maxFileWasmBytes,
     private val allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
 ) : HexanaAnalysisService {
+    private val limits = limits.copy(
+        maxInlineWasmBytes = maxInlineInputBytes,
+        maxFileWasmBytes = maxFileInputBytes,
+    )
 
     override fun loadBinary(input: BinaryInput): BinaryModuleIdentityResult {
-        return BinaryInputLoader(
-            maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
-            maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
-            allowedFilePolicy = allowedFilePolicy,
-        ).load(input).identity
+        return binaryInputLoader().load(input).identity
     }
 
     override fun summarizeBinary(input: BinaryInput): BinarySummaryResult {
-        val binary = BinaryInputLoader(
-            maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
-            maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
-            allowedFilePolicy = allowedFilePolicy,
-        ).load(input)
+        val binary = binaryInputLoader().load(input)
         return binary.provider.readBinarySummary(binary.identity.path)
     }
 
@@ -284,11 +281,8 @@ class DefaultHexanaAnalysisService(
     ): QueryBinaryResult {
         requireStringList(entityTypes, "Entity types")
         requireStringList(query, "Query")
-        val binary = BinaryInputLoader(
-            maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
-            maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
-            allowedFilePolicy = allowedFilePolicy,
-        ).load(input)
+        requireLimit(limit)
+        val binary = binaryInputLoader().load(input)
         return binary.provider.readBinaryQuery(
             operation = operation,
             entityTypes = entityTypes,
@@ -297,6 +291,7 @@ class DefaultHexanaAnalysisService(
             limit = limit,
             detail = detail,
             maxBytes = maxBytes,
+            maxOutputBytesLimit = limits.maxOutputBytes,
             pathLabel = binary.identity.path,
         )
     }
@@ -306,14 +301,11 @@ class DefaultHexanaAnalysisService(
         offset: Int,
         limit: Int,
     ): BinaryFunctionsResult {
-        val binary = BinaryInputLoader(
-            maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
-            maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
-            allowedFilePolicy = allowedFilePolicy,
-        ).load(input)
+        val binary = binaryInputLoader().load(input)
         return binary.provider.readBinaryFunctions(
             offset = offset,
             limit = limit,
+            maxLimit = limits.maxCandidateCount,
             pathLabel = binary.identity.path,
         )
     }
@@ -325,15 +317,12 @@ class DefaultHexanaAnalysisService(
         limit: Int,
     ): BinaryFunctionsResult {
         requireStringList(query, "Query")
-        val binary = BinaryInputLoader(
-            maxInlineInputBytes = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
-            maxFileInputBytes = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
-            allowedFilePolicy = allowedFilePolicy,
-        ).load(input)
+        val binary = binaryInputLoader().load(input)
         return binary.provider.searchBinaryFunctions(
             query = query,
             offset = offset,
             limit = limit,
+            maxLimit = limits.maxCandidateCount,
             pathLabel = binary.identity.path,
         )
     }
@@ -352,6 +341,7 @@ class DefaultHexanaAnalysisService(
         detail: String,
         maxBytes: Int
     ): QueryArtifactsResult {
+        requireLimit(limit)
         val wasm = load(input)
         val baseline = baselineInput?.let(::load)
         val binding = bindingInput?.let(::loadText)
@@ -367,6 +357,7 @@ class DefaultHexanaAnalysisService(
             limit = limit,
             detail = detail,
             maxBytes = maxBytes,
+            maxOutputBytesLimit = limits.maxOutputBytes,
             pathLabel = input.artifactPathLabel(),
             baselinePathLabel = baselineInput?.artifactPathLabel(),
             bindingPathLabel = bindingInput?.artifactPathLabel()
@@ -444,7 +435,7 @@ class DefaultHexanaAnalysisService(
                 ),
             )
         }
-        return wasm.provider.readComponentSurface(input.artifactPathLabel())
+        return wasm.provider.readComponentSurface(input.artifactPathLabel(), limits)
     }
 
     override fun resolveComponentDependencies(
@@ -459,6 +450,7 @@ class DefaultHexanaAnalysisService(
             projectRoot = projectRoot,
             scanRoots = scanRoots,
             allowedFilePolicy = allowedFilePolicy,
+            limits = limits,
         )
     }
 
@@ -478,6 +470,7 @@ class DefaultHexanaAnalysisService(
             previousPath = previousPath,
             dependencyLockPath = dependencyLockPath,
             allowedFilePolicy = allowedFilePolicy,
+            limits = limits,
         )
     }
 
@@ -724,6 +717,8 @@ class DefaultHexanaAnalysisService(
         requireHalfOpenRange(segmentStartInclusive, segmentEndExclusive)
         requireOptionalNonNegative(minByteLength, "Minimum byte length")
         val wasm = load(input)
+        val dataSegmentCount = wasm.provider.bytes.listDataSectionInternal(wasm.provider.wasmModule).size
+        requireHalfOpenRange(segmentStartInclusive, segmentEndExclusive, dataSegmentCount)
         return wasm.provider.readDataSegments(
             segmentStartInclusive = segmentStartInclusive,
             segmentEndExclusive = segmentEndExclusive,
@@ -772,6 +767,13 @@ class DefaultHexanaAnalysisService(
         return wasm.provider.readElementSegments()
     }
 
+    private fun binaryInputLoader(): BinaryInputLoader =
+        BinaryInputLoader(
+            maxInlineInputBytes = limits.maxInlineBinaryBytes,
+            maxFileInputBytes = limits.maxFileBinaryBytes,
+            allowedFilePolicy = allowedFilePolicy,
+        )
+
     private fun load(input: WasmInput): LoadedWasm {
         return when (input) {
             is WasmInput.FilePath -> loadFromPath(input.path)
@@ -815,10 +817,10 @@ class DefaultHexanaAnalysisService(
                 error
             )
         }
-        if (size > 1_000_000L) {
+        if (size > limits.maxTextFileBytes.toLong()) {
             throw HexanaAnalysisException(
-                HexanaAnalysisErrorCode.INVALID_INPUT,
-                "Text file exceeds maximum size of 1000000 bytes"
+                HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+                "Text file exceeds maximum size of ${limits.maxTextFileBytes} bytes. Use a smaller text file or increase the configured MCP text-file limit."
             )
         }
         val text = try {
@@ -944,7 +946,7 @@ class DefaultHexanaAnalysisService(
     private fun requireInlineBase64Size(base64: String) {
         val paddingBytes = base64.takeLastWhile { it == '=' }.length.coerceAtMost(2)
         val estimatedDecodedSize = ((base64.length.toLong() + 3L) / 4L) * 3L - paddingBytes
-        if (estimatedDecodedSize > maxInlineInputBytes.toLong()) {
+        if (estimatedDecodedSize > limits.maxInlineWasmBytes.toLong()) {
             throw inlineBytesTooLarge()
         }
     }
@@ -959,26 +961,26 @@ class DefaultHexanaAnalysisService(
                 error
             )
         }
-        if (size > maxFileInputBytes.toLong()) {
+        if (size > limits.maxFileWasmBytes.toLong()) {
             throw fileTooLarge()
         }
     }
     private fun requireInlineByteCount(size: Int) {
-        if (size > maxInlineInputBytes) {
+        if (size > limits.maxInlineWasmBytes) {
             throw inlineBytesTooLarge()
         }
     }
 
     private fun fileTooLarge(): HexanaAnalysisException {
         return HexanaAnalysisException(
-            HexanaAnalysisErrorCode.INVALID_INPUT,
-            "File exceeds maximum size of $maxFileInputBytes bytes"
+            HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+            "File exceeds maximum size of ${limits.maxFileWasmBytes} bytes. Use a smaller file or increase the configured MCP file-size limit."
         )
     }
     private fun inlineBytesTooLarge(): HexanaAnalysisException {
         return HexanaAnalysisException(
-            HexanaAnalysisErrorCode.INVALID_INPUT,
-            "Inline bytes exceed maximum size of $maxInlineInputBytes bytes"
+            HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+            "Inline bytes exceed maximum size of ${limits.maxInlineWasmBytes} bytes. Send a smaller inline payload or increase the configured MCP inline-size limit."
         )
     }
     private fun requireOffset(offset: Int) {
@@ -995,6 +997,11 @@ class DefaultHexanaAnalysisService(
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.OUT_OF_RANGE,
                 "Limit must be greater than 0"
+            )
+        }
+        if (limit > limits.maxCandidateCount) {
+            throw resourceLimitExceeded(
+                "Limit $limit exceeds configured maximum candidate count of ${limits.maxCandidateCount}"
             )
         }
     }
@@ -1051,9 +1058,19 @@ class DefaultHexanaAnalysisService(
                 "Range `to` must be greater than or equal to `from`"
             )
         }
+        val requested = range.last.toLong() - range.first.toLong() + 1L
+        if (requested > limits.maxCandidateCount.toLong()) {
+            throw resourceLimitExceeded(
+                "Range requests $requested entries, exceeding configured maximum candidate count of ${limits.maxCandidateCount}"
+            )
+        }
     }
 
     private fun requireHalfOpenRange(from: Int, to: Int) {
+        requireHalfOpenRange(from, to, totalCount = null)
+    }
+
+    private fun requireHalfOpenRange(from: Int, to: Int, totalCount: Int?) {
         if (from < 0) {
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.OUT_OF_RANGE,
@@ -1072,6 +1089,16 @@ class DefaultHexanaAnalysisService(
                 "Range `to` must be greater than or equal to `from`"
             )
         }
+        val effectiveTo = totalCount
+            ?.let { to.coerceAtMost(it).coerceAtLeast(from) }
+            ?: to
+        if (totalCount == null && to == Int.MAX_VALUE) return
+        val requested = effectiveTo.toLong() - from.toLong()
+        if (requested > limits.maxCandidateCount.toLong()) {
+            throw resourceLimitExceeded(
+                "Range requests $requested entries, exceeding configured maximum candidate count of ${limits.maxCandidateCount}"
+            )
+        }
     }
 
     private fun requireIndices(indices: List<Int>) {
@@ -1081,9 +1108,19 @@ class DefaultHexanaAnalysisService(
                 "Indices must be greater than or equal to 0"
             )
         }
+        if (indices.size > limits.maxCandidateCount) {
+            throw resourceLimitExceeded(
+                "Index list contains ${indices.size} entries, exceeding configured maximum candidate count of ${limits.maxCandidateCount}"
+            )
+        }
     }
 
     private fun requireFrameInputs(frames: List<WasmFrameInput>) {
+        if (frames.size > limits.maxCandidateCount) {
+            throw resourceLimitExceeded(
+                "Frame list contains ${frames.size} entries, exceeding configured maximum candidate count of ${limits.maxCandidateCount}"
+            )
+        }
         if (frames.any { it.funcidx < 0 }) {
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.OUT_OF_RANGE,
@@ -1099,6 +1136,11 @@ class DefaultHexanaAnalysisService(
     }
 
     private fun requireSourceLocationInputs(locations: List<SourceLocationInput>) {
+        if (locations.size > limits.maxCandidateCount) {
+            throw resourceLimitExceeded(
+                "Location list contains ${locations.size} entries, exceeding configured maximum candidate count of ${limits.maxCandidateCount}"
+            )
+        }
         if (locations.any { it.funcidx != null && it.funcidx < 0 }) {
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.OUT_OF_RANGE,
@@ -1130,6 +1172,12 @@ class DefaultHexanaAnalysisService(
             )
         }
     }
+
+    private fun resourceLimitExceeded(message: String): HexanaAnalysisException =
+        HexanaAnalysisException(
+            HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+            "$message. Reduce the request scope or increase the configured MCP resource limit."
+        )
 
     private fun WasmInput.artifactPathLabel(): String? =
         (this as? WasmInput.FilePath)?.path

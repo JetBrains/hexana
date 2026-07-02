@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.jetbrains.hexana.mcp.DataEntry
 import org.jetbrains.hexana.mcp.GeneralFunctionEntry
+import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.ParameterSignature
 import org.jetbrains.hexana.mcp.encodeHexanaJson
 import org.jetbrains.hexana.mcp.listDataSectionInternal
@@ -27,11 +28,6 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.sections.WasmMemType
 import org.jetbrains.hexana.wasm.sections.WasmTableExternalType
 
-private const val DEFAULT_LIMIT = 25
-private const val MAX_LIMIT = 100
-private const val DEFAULT_MAX_BYTES = 24_000
-private const val MIN_MAX_BYTES = 2_000
-private const val MAX_MAX_BYTES = 60_000
 private const val SUMMARY_FACT_JSON_LIMIT = 64
 
 private val SUPPORTED_OPERATIONS = setOf(
@@ -89,17 +85,21 @@ fun WasmBinaryProvider.readArtifactQuery(
     startName: String? = null,
     startFuncidx: Int? = null,
     relations: List<String> = emptyList(),
-    limit: Int = DEFAULT_LIMIT,
+    limit: Int = HexanaAnalysisLimits.DEFAULT_QUERY_LIMIT,
     detail: String = "summary",
-    maxBytes: Int = DEFAULT_MAX_BYTES,
+    maxBytes: Int = HexanaAnalysisLimits.DEFAULT_QUERY_OUTPUT_BYTES,
+    maxOutputBytesLimit: Int = HexanaAnalysisLimits.MAX_OUTPUT_BYTES,
     pathLabel: String? = null,
     baselinePathLabel: String? = null,
     bindingPathLabel: String? = null
 ): QueryArtifactsResult {
     val normalizedOperation = operation.trim().lowercase().ifBlank { "overview" }
     val normalizedDetail = detail.trim().lowercase().ifBlank { "summary" }
-    val boundedLimit = limit.coerceIn(1, MAX_LIMIT)
-    val boundedMaxBytes = maxBytes.coerceIn(MIN_MAX_BYTES, MAX_MAX_BYTES)
+    val boundedLimit = limit.coerceIn(1, HexanaAnalysisLimits.MAX_QUERY_LIMIT)
+    val configuredMaxBytes = maxOutputBytesLimit
+        .coerceAtLeast(1)
+        .coerceAtMost(HexanaAnalysisLimits.MAX_OUTPUT_BYTES)
+    val boundedMaxBytes = maxBytes.coerceIn(1, configuredMaxBytes)
     val warnings = mutableListOf<String>()
 
     if (normalizedOperation !in SUPPORTED_OPERATIONS) {

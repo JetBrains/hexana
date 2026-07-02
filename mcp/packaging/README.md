@@ -124,6 +124,28 @@ mcp/build/packaging-native/claude-plugin/bin/hexana-mcp version
 For Codex local plugin testing, run `./gradlew :mcp:installRepoLocalCodexPlugin`, restart Codex, and install
 `Hexana` from the `Hexana Local` marketplace in the plugin directory (`/plugins` in CLI).
 
+## Runtime configuration
+
+The packaged `hexana-mcp` launcher forwards server flags and reads the same `HEXANA_MCP_*` environment variables as
+the standalone runtime. Use these options to tune per-request resource limits:
+
+| Flag | Environment variable | Limit |
+|---|---|---|
+| `--max-file-bytes` | `HEXANA_MCP_MAX_FILE_BYTES` | Maximum input file size accepted by MCP tools. |
+| `--max-inline-bytes` | `HEXANA_MCP_MAX_INLINE_BYTES` | Maximum inline payload size accepted in tool arguments. |
+| `--max-text-file-bytes` | `HEXANA_MCP_MAX_TEXT_FILE_BYTES` | Maximum text file size read for text-oriented tool inputs. |
+| `--max-output-bytes` | `HEXANA_MCP_MAX_OUTPUT_BYTES` | Maximum bounded query output budget accepted for one tool call. |
+| `--max-candidate-count` | `HEXANA_MCP_MAX_CANDIDATE_COUNT` | Maximum number of candidate files or records kept during discovery. |
+| `--max-scan-roots` | `HEXANA_MCP_MAX_SCAN_ROOTS` | Maximum number of scan root directories accepted for discovery tools. |
+| `--max-scan-depth` | `HEXANA_MCP_MAX_SCAN_DEPTH` | Maximum directory depth traversed while scanning roots. |
+
+Command-line flags take precedence over environment variables when both are set. Use byte counts as plain integers.
+For example:
+
+```bash
+HEXANA_MCP_MAX_FILE_BYTES=10485760 mcp/build/packaging/claude-plugin/bin/hexana-mcp stdio --max-output-bytes 1048576
+```
+
 ## Native support policy
 
 Native MCP releases are stdio-first. The release artifact task runs `hexana-mcp version` and the native stdio MCP smoke

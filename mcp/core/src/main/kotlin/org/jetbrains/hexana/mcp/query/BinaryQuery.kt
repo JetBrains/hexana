@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.query
 
 import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
+import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.model.binaries.BinaryOmittedResult
 import org.jetbrains.hexana.mcp.model.binaries.BinaryRecordAttributeResult
 import org.jetbrains.hexana.mcp.model.binaries.BinaryRecordLocationResult
@@ -51,21 +52,17 @@ import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 import org.jetbrains.hexana.wasm.sections.WasmUnsupportedExportRecordEntry
 
 private const val DEFAULT_OPERATION = "overview"
-private const val DEFAULT_LIMIT = 25
 private const val DEFAULT_DETAIL = "summary"
-private const val DEFAULT_MAX_BYTES = 24_000
-private const val MAX_LIMIT = 100
-private const val MIN_MAX_BYTES = 2_000
-private const val MAX_MAX_BYTES = 60_000
 
 fun org.jetbrains.hexana.providers.BinaryProvider.readBinaryQuery(
     operation: String = DEFAULT_OPERATION,
     entityTypes: List<String> = emptyList(),
     query: List<String> = emptyList(),
     offset: Int = 0,
-    limit: Int = DEFAULT_LIMIT,
+    limit: Int = HexanaAnalysisLimits.DEFAULT_QUERY_LIMIT,
     detail: String = DEFAULT_DETAIL,
-    maxBytes: Int = DEFAULT_MAX_BYTES,
+    maxBytes: Int = HexanaAnalysisLimits.DEFAULT_QUERY_OUTPUT_BYTES,
+    maxOutputBytesLimit: Int = HexanaAnalysisLimits.MAX_OUTPUT_BYTES,
     pathLabel: String? = null,
 ): QueryBinaryResult {
     if (offset < 0) {
@@ -82,8 +79,11 @@ fun org.jetbrains.hexana.providers.BinaryProvider.readBinaryQuery(
         )
     }
 
-    val boundedLimit = limit.coerceIn(1, MAX_LIMIT)
-    val boundedMaxBytes = maxBytes.coerceIn(MIN_MAX_BYTES, MAX_MAX_BYTES)
+    val boundedLimit = limit.coerceIn(1, HexanaAnalysisLimits.MAX_QUERY_LIMIT)
+    val configuredMaxBytes = maxOutputBytesLimit
+        .coerceAtLeast(1)
+        .coerceAtMost(HexanaAnalysisLimits.MAX_OUTPUT_BYTES)
+    val boundedMaxBytes = maxBytes.coerceIn(1, configuredMaxBytes)
     if (boundedLimit != limit) {
         warnings += BinaryWarningResult("clamped_limit", "`limit` was clamped to $boundedLimit.")
     }

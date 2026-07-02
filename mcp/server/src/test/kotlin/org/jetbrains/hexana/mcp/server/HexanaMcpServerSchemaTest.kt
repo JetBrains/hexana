@@ -254,7 +254,7 @@ class HexanaMcpServerSchemaTest {
         assertEquals(24_000, schema.getValue("maxBytes").jsonObject.getValue("default").jsonPrimitive.int)
         assertEquals(1, schema.getValue("limit").jsonObject.getValue("minimum").jsonPrimitive.int)
         assertEquals(100, schema.getValue("limit").jsonObject.getValue("maximum").jsonPrimitive.int)
-        assertEquals(2_000, schema.getValue("maxBytes").jsonObject.getValue("minimum").jsonPrimitive.int)
+        assertEquals(1, schema.getValue("maxBytes").jsonObject.getValue("minimum").jsonPrimitive.int)
         assertEquals(60_000, schema.getValue("maxBytes").jsonObject.getValue("maximum").jsonPrimitive.int)
     }
 
@@ -265,7 +265,7 @@ class HexanaMcpServerSchemaTest {
 
         assertEquals(1, limit.getValue("minimum").jsonPrimitive.int)
         assertEquals(100, limit.getValue("maximum").jsonPrimitive.int)
-        assertEquals(2_000, maxBytes.getValue("minimum").jsonPrimitive.int)
+        assertEquals(1, maxBytes.getValue("minimum").jsonPrimitive.int)
         assertEquals(60_000, maxBytes.getValue("maximum").jsonPrimitive.int)
     }
 

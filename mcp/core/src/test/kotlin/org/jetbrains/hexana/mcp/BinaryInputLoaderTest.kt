@@ -133,8 +133,11 @@ class BinaryInputLoaderTest {
             BinaryInput.RawBytes(byteArrayOf(1, 2, 3)).loadBinary(maxInlineInputBytes = 2)
         }
 
-        assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, error.code)
-        assertEquals("Inline bytes exceed maximum size of 2 bytes", error.message)
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertEquals(
+            "Inline bytes exceed maximum size of 2 bytes. Send a smaller inline payload or increase the configured MCP inline-size limit.",
+            error.message
+        )
     }
 
     @Test
@@ -147,8 +150,11 @@ class BinaryInputLoaderTest {
                 BinaryInput.FilePath(file.toString()).loadBinary(maxFileInputBytes = 2)
             }
 
-            assertEquals(HexanaAnalysisErrorCode.INVALID_INPUT, error.code)
-            assertEquals("File exceeds maximum size of 2 bytes", error.message)
+            assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+            assertEquals(
+                "File exceeds maximum size of 2 bytes. Use a smaller file or increase the configured MCP file-size limit.",
+                error.message
+            )
         } finally {
             Files.deleteIfExists(file)
         }

@@ -41,7 +41,7 @@ class ToolDescriptionGenerationTest {
             .describe("Detail level for returned records.")
         int("maxBytes", default = 24_000)
             .describe("Maximum serialized record payload bytes.")
-            .minimum(2_000)
+            .minimum(1)
             .maximum(60_000)
     }
     private val summarizeBinarySpec = ToolSpec(

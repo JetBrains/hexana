@@ -7,6 +7,7 @@ enum class HexanaAnalysisErrorCode {
     NOT_WASM,
     WASM_PARSE_FAILED,
     OUT_OF_RANGE,
+    RESOURCE_LIMIT_EXCEEDED,
     INTERNAL_ERROR
 }
 

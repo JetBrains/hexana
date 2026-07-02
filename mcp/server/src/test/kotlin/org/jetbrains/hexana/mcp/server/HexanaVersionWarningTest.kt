@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp.server
 
+import org.jetbrains.hexana.mcp.HexanaResourceLimits
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -25,6 +26,7 @@ class HexanaVersionWarningTest {
                     analyticsEnabled = true,
                     toolProfile = HexanaMcpToolProfile.PRODUCTION,
                     allowedRoots = emptyList(),
+                    resourceLimits = HexanaResourceLimits(),
                 ),
                 "0.7"
             )
@@ -44,6 +46,7 @@ class HexanaVersionWarningTest {
                 analyticsEnabled = true,
                 toolProfile = HexanaMcpToolProfile.PRODUCTION,
                 allowedRoots = emptyList(),
+                resourceLimits = HexanaResourceLimits(),
             ),
             "dev"
         )

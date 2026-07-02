@@ -524,7 +524,7 @@ private fun Server.registerQueryBinaryTool(handlers: HexanaToolHandlers) {
         put("type", JsonPrimitive("integer"))
         put("description", JsonPrimitive("Approximate maximum JSON response bytes. Start small; the implementation clamps values above 60000."))
         put("default", JsonPrimitive(24_000))
-        put("minimum", JsonPrimitive(2_000))
+        put("minimum", JsonPrimitive(1))
         put("maximum", JsonPrimitive(60_000))
       })
     },
@@ -4516,7 +4516,7 @@ private fun Server.registerQueryArtifactsTool(handlers: HexanaToolHandlers) {
         put("type", JsonPrimitive("integer"))
         put("description", JsonPrimitive("Approximate maximum JSON response bytes. Start small; the implementation clamps values above 60000."))
         put("default", JsonPrimitive(24_000))
-        put("minimum", JsonPrimitive(2_000))
+        put("minimum", JsonPrimitive(1))
         put("maximum", JsonPrimitive(60_000))
       })
     },
