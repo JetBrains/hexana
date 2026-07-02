@@ -4,13 +4,14 @@ import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.client.StdioClientTransport
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.io.asSink
 import kotlinx.io.asSource
 import kotlinx.io.buffered
 import org.slf4j.LoggerFactory
+import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -65,33 +66,23 @@ internal class HexanaInstalledStdioClient private constructor(
 
     suspend fun close() {
         logger.info("Closing installed stdio server (pid={}, command={})", process.pid(), command.joinToString(" "))
-        runCatching { client.close() }
-            .onFailure { logger.warn("Failed to close MCP stdio client cleanly", it) }
+        val clientClosed = withTimeoutOrNull(5_000.milliseconds) {
+            runCatching { client.close() }
+                .onFailure { logger.warn("Failed to close MCP stdio client cleanly", it) }
+            true
+        } == true
+        if (!clientClosed) {
+            logger.warn("MCP stdio client close timed out after 5s; destroying server process tree")
+        }
 
-        waitForProcessExit()
+        stopInstalledProcessTree(process, logger, "stdio server")
+        closeInstalledProcessStreams(process, logger, "stdio server")
         logger.info(
-            "Installed stdio server stopped with exitCode={}, stderrBytes={}",
-            process.exitValue(),
+            "Installed stdio server stopped with exitCode={}, alive={}, stderrBytes={}",
+            process.exitCodeOrNull(),
+            process.isAlive,
             stderr.length
         )
-    }
-
-    private suspend fun waitForProcessExit() {
-        withContext(NonCancellable + Dispatchers.IO) {
-            if (process.waitFor(5, TimeUnit.SECONDS)) {
-                return@withContext
-            }
-
-            logger.warn("Process did not exit within 5s after client shutdown, destroying pid={}", process.pid())
-            process.destroy()
-            if (process.waitFor(5, TimeUnit.SECONDS)) {
-                return@withContext
-            }
-
-            logger.warn("Process still alive after destroy(), forcing pid={}", process.pid())
-            process.destroyForcibly()
-            process.waitFor()
-        }
     }
 
     companion object {
@@ -207,17 +198,14 @@ internal class HexanaInstalledStdioClient private constructor(
                     COMMAND_TIMEOUT_SECONDS,
                     process.pid()
                 )
-                withContext(Dispatchers.IO) {
-                    process.destroyForcibly()
-                    process.waitFor()
-                }
+                stopInstalledProcessTree(process, logger, "installed command")
+                closeInstalledProcessStreams(process, logger, "installed command")
             }
-
-            val stdout = withContext(Dispatchers.IO) { process.inputStream.bufferedReader().readText() }
-            val stderr = withContext(Dispatchers.IO) { process.errorStream.bufferedReader().readText() }
+            val stdout = process.inputStream.readTextSafely(logger, "installed command stdout")
+            val stderr = process.errorStream.readTextSafely(logger, "installed command stderr")
             return InstalledCommandResult(
                 command = command,
-                exitCode = process.exitValue(),
+                exitCode = process.exitCodeOrNull() ?: -1,
                 stdout = stdout,
                 stderr = stderr,
                 timedOut = !completed,
@@ -287,20 +275,17 @@ internal class HexanaInstalledStdioClient private constructor(
         }
 
         private suspend fun stopFailedProcess(process: Process) {
-            withContext(NonCancellable + Dispatchers.IO) {
-                if (!process.isAlive) {
-                    return@withContext
-                }
-
-                process.destroy()
-                if (process.waitFor(5, TimeUnit.SECONDS)) {
-                    return@withContext
-                }
-
-                process.destroyForcibly()
-                process.waitFor()
-            }
+            stopInstalledProcessTree(process, logger, "failed stdio server")
+            closeInstalledProcessStreams(process, logger, "failed stdio server")
         }
+    }
+}
+
+private suspend fun InputStream.readTextSafely(logger: org.slf4j.Logger, label: String): String {
+    return withContext(Dispatchers.IO) {
+        runCatching { bufferedReader().readText() }
+            .onFailure { logger.warn("Failed to read {}", label, it) }
+            .getOrDefault("")
     }
 }
 

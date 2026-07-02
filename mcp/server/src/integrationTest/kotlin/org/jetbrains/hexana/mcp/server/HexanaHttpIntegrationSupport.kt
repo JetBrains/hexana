@@ -33,20 +33,17 @@ internal class HexanaInstalledServer private constructor(
 
     suspend fun close() {
         logger.info("Stopping installed server (pid={}, baseUrl={})", process.pid(), baseUrl)
-        withContext(Dispatchers.IO) {
-            process.destroy()
-            if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
-                logger.warn("Process did not stop within 5s, forcing termination (pid={})", process.pid())
-                process.destroyForcibly()
-                process.waitFor()
-            }
+        withContext(NonCancellable) {
+            stopInstalledProcessTree(process, logger, "HTTP server")
+            closeInstalledProcessStreams(process, logger, "HTTP server")
+            stdoutPump.cancelAndJoinWithin("HTTP stdout pump")
+            stderrPump.cancelAndJoinWithin("HTTP stderr pump")
+            pumpScope.coroutineContext[Job]?.cancel()
         }
-        stdoutPump.cancelAndJoin()
-        stderrPump.cancelAndJoin()
-        pumpScope.coroutineContext[Job]?.cancel()
         logger.info(
-            "Installed server stopped with exitCode={}, stdoutBytes={}, stderrBytes={}",
-            process.exitValue(),
+            "Installed server stopped with exitCode={}, alive={}, stdoutBytes={}, stderrBytes={}",
+            process.exitCodeOrNull(),
+            process.isAlive,
             stdout.length,
             stderr.length
         )
@@ -276,6 +273,18 @@ private data class HttpProcessSpec(
     val workingDirectory: Path,
     val executable: Path?,
 )
+
+private suspend fun Job.cancelAndJoinWithin(name: String) {
+    cancel()
+    val completed = withTimeoutOrNull(2_000) {
+        join()
+        true
+    } == true
+    if (!completed) {
+        LoggerFactory.getLogger(HexanaInstalledServer::class.java)
+            .warn("{} did not finish within 2s after cancellation", name)
+    }
+}
 
 private suspend fun java.io.InputStream.pumpTo(target: StringBuffer, streamName: String) {
     val logger = LoggerFactory.getLogger("org.jetbrains.hexana.mcp.server.HexanaInstalledServer.$streamName")
