@@ -323,6 +323,80 @@ self_test_release_native_artifact_policy() {
   log "Native artifact policy self-test passed"
 }
 
+self_test_public_bundle_native_policy() {
+  local temp_dir
+  local plugin_dir
+  local scan_status
+
+  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/hexana-public-native-policy.XXXXXX")"
+  register_cleanup_dir "$temp_dir"
+  plugin_dir="$temp_dir/public/plugins/hexana"
+  mkdir -p "$plugin_dir/native/macos-arm64" "$plugin_dir/server"
+  touch \
+    "$plugin_dir/LICENSE.txt" \
+    "$plugin_dir/THIRD-PARTY-NOTICES.md" \
+    "$plugin_dir/server/LICENSE.txt" \
+    "$plugin_dir/server/THIRD-PARTY-NOTICES.md"
+  printf 'native executable fixture\n' > "$plugin_dir/native/macos-arm64/hexana-mcp"
+  printf '%s\n' \
+    '# Hexana MCP' \
+    '' \
+    '- `native/<platform>/hexana-mcp`: optional bundled native executable' > "$plugin_dir/README.md"
+  printf '%s\n' \
+    '{' \
+    '  "nativeArtifacts": {' \
+    '    "distribution": "marketplace-bundle",' \
+    '    "platforms": [' \
+    '      "macos-arm64"' \
+    '    ]' \
+    '  }' \
+    '}' > "$plugin_dir/release.lock.json"
+
+  GENERATED_PUBLIC_DIR="$temp_dir/public" \
+    PLUGIN_NAME="hexana" \
+    check_public_bundle_native_policy
+
+  printf '%s\n' \
+    '{' \
+    '  "nativeArtifacts": {' \
+    '    "distribution": "marketplace-bundle",' \
+    '    "platforms": [' \
+    '      "linux-x64"' \
+    '    ]' \
+    '  }' \
+    '}' > "$plugin_dir/release.lock.json"
+
+  set +e
+  (
+    GENERATED_PUBLIC_DIR="$temp_dir/public"
+    PLUGIN_NAME="hexana"
+    check_public_bundle_native_policy
+  ) >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Public bundled native policy self-test did not reject mismatched metadata"
+
+  rm -rf "$plugin_dir/native"
+  printf '%s\n' \
+    '# Hexana MCP' \
+    '' \
+    'Native executables are not included in this public marketplace tree.' > "$plugin_dir/README.md"
+  printf '%s\n' \
+    '{' \
+    '  "nativeArtifacts": {' \
+    '    "distribution": "github-release-only",' \
+    '    "artifacts": [' \
+    '      "hexana-mcp-native-macos-arm64-0.2.0.zip"' \
+    '    ]' \
+    '  }' \
+    '}' > "$plugin_dir/release.lock.json"
+  GENERATED_PUBLIC_DIR="$temp_dir/public" \
+    PLUGIN_NAME="hexana" \
+    check_public_bundle_native_policy
+
+  log "Public bundled native policy self-test passed"
+}
+
 self_test_release_native_artifact_default() {
   local temp_dir
   local version="0.2.0"
@@ -739,12 +813,26 @@ check_public_bundle_plugin_manifest_licenses() {
   check_plugin_manifest_license "Public marketplace bundle" "plugins/$PLUGIN_NAME/.claude-plugin/plugin.json" "$manifest"
 }
 
+validate_native_platform_name() {
+  local platform="$1"
+  case "$platform" in
+    ''|*/*|.*|*..*|*[!A-Za-z0-9._-]*)
+      die "Native platform must be a simple path segment: $platform"
+      ;;
+  esac
+}
+
 check_public_bundle_native_policy() {
   local plugin_dir="$GENERATED_PUBLIC_DIR/plugins/$PLUGIN_NAME"
   local readme="$plugin_dir/README.md"
   local lock_file="$plugin_dir/release.lock.json"
   local native_dir="$plugin_dir/native"
   local native_file=""
+  local native_rel
+  local platform
+  local platform_count=0
+  local expected_platforms_file
+  local actual_platforms_file
 
   require_nonempty_file "Public marketplace bundle" "$readme"
   require_nonempty_file "Public marketplace bundle" "$lock_file"
@@ -765,6 +853,50 @@ check_public_bundle_native_policy() {
       die "Public marketplace README must document that native executables are GitHub Release artifacts when plugins/$PLUGIN_NAME/native is absent"
     jq -e '.nativeArtifacts.distribution == "github-release-only"' "$lock_file" >/dev/null ||
       die "Public marketplace release.lock.json must document the GitHub Release-only native artifact policy when plugins/$PLUGIN_NAME/native is absent"
+    return
+  fi
+
+  if ! jq -e '.nativeArtifacts.distribution == "marketplace-bundle" or .nativeArtifacts.distribution == "bundled"' "$lock_file" >/dev/null; then
+    die "Public marketplace release.lock.json must document bundled native artifact policy when plugins/$PLUGIN_NAME/native is present"
+  fi
+
+  expected_platforms_file="$(mktemp "${TMPDIR:-/tmp}/hexana-native-platforms-expected.XXXXXX")"
+  actual_platforms_file="$(mktemp "${TMPDIR:-/tmp}/hexana-native-platforms-actual.XXXXXX")"
+  register_cleanup_dir "$expected_platforms_file"
+  register_cleanup_dir "$actual_platforms_file"
+
+  jq -r '.nativeArtifacts.platforms[]?' "$lock_file" | sort > "$expected_platforms_file"
+  : > "$actual_platforms_file"
+  while IFS= read -r platform; do
+    platform_count=$((platform_count + 1))
+    validate_native_platform_name "$platform"
+    require_nonempty_file "Public marketplace bundle" "$native_dir/$platform/hexana-mcp"
+  done < "$expected_platforms_file"
+
+  [ "$platform_count" -gt 0 ] ||
+    die "Public marketplace release.lock.json must list bundled native platforms when plugins/$PLUGIN_NAME/native is present"
+
+  while IFS= read -r native_rel; do
+    case "$native_rel" in
+      */hexana-mcp)
+        platform="$(dirname "$native_rel")"
+        [ -n "$platform" ] && [ "$platform" != "." ] ||
+          die "Public marketplace native executable is missing a platform directory: plugins/$PLUGIN_NAME/native/$native_rel"
+        validate_native_platform_name "$platform"
+        printf '%s\n' "$platform" >> "$actual_platforms_file"
+        ;;
+      *)
+        die "Public marketplace native bundle contains unexpected file: plugins/$PLUGIN_NAME/native/$native_rel"
+        ;;
+    esac
+  done < <(
+    cd "$native_dir"
+    find . -type f -print | sed 's#^\./##'
+  )
+  sort -u "$actual_platforms_file" -o "$actual_platforms_file"
+
+  if ! cmp -s "$expected_platforms_file" "$actual_platforms_file"; then
+    die "Public marketplace release.lock.json native platforms do not match plugins/$PLUGIN_NAME/native contents"
   fi
 }
 
@@ -1318,6 +1450,7 @@ main() {
   if [ "$(to_bool "${RELEASE_NATIVE_ARTIFACT_POLICY_SELF_TEST:-false}" "RELEASE_NATIVE_ARTIFACT_POLICY_SELF_TEST")" = "true" ]; then
     require_tool "jq"
     self_test_release_native_artifact_policy
+    self_test_public_bundle_native_policy
     return
   fi
   if [ "$(to_bool "${RELEASE_NATIVE_ARTIFACT_DEFAULT_SELF_TEST:-false}" "RELEASE_NATIVE_ARTIFACT_DEFAULT_SELF_TEST")" = "true" ]; then

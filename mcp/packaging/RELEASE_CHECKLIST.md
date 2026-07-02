@@ -70,6 +70,13 @@ release readiness without the native matrix artifacts above.
   PUBLIC_GITHUB_TEXT_GUARD_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh
   ```
 
+- Run the native publication policy self-test when native artifact or public
+  marketplace bundle validation changes:
+
+  ```bash
+  RELEASE_NATIVE_ARTIFACT_POLICY_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh
+  ```
+
 - Run the changelog-driven release-notes self-test when changelog validation or
   release-note extraction changes:
 
@@ -107,6 +114,10 @@ release:
 
 - Confirm every native-enabled wrapper contains `native/<platform>/` for its
   platform and `server/` as the JVM fallback.
+- If the public marketplace PR tree bundles native executables, confirm every
+  `plugins/hexana/native/<platform>/hexana-mcp` file has a matching
+  `nativeArtifacts.platforms` entry in `plugins/hexana/release.lock.json`, and
+  that no undeclared native platform files are present.
 - Confirm unsupported platforms launch through the JVM fallback instead of a
   mismatched native executable.
 - Confirm release ZIP security checks pass before uploading GitHub Release
