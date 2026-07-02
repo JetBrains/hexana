@@ -248,7 +248,12 @@ Required environment variables:
 Optional environment variables:
 
 - `PUBLIC_REPO_BASE_BRANCH`: defaults to `main`.
-- `RELEASE_TAG`: release tag to mention in the PR body, for example `v1.2.3`.
+- `PUBLICATION_MODE`: defaults to `production`. Use `test-nightly` only for publication into a non-production GitHub
+  repository such as a personal nightly test repo.
+- `PRODUCTION_PUBLIC_REPO_SLUG`: defaults to `JetBrains/hexana` and is used by publication-mode guards.
+- `ALLOW_PRODUCTION_TO_NON_CANONICAL_REPO`: defaults to `false`; leave it false for normal release publishing.
+- `RELEASE_TAG`: release tag to mention in the PR body, for example `v1.2.3`. In `test-nightly` mode, when this is not
+  set, the script defaults it to `nightly-<version>-<TeamCity build id>`.
 - `AUTO_MERGE`: defaults to `false`. When `true`, the script queues `gh pr merge --auto --rebase --delete-branch`.
 - `DRY_RUN`: defaults to `false`. When `true`, the script clones, syncs, validates, scans, and prints a diff summary
   but does not commit, push, create/update a PR, or enable auto-merge.
@@ -314,6 +319,8 @@ guard can be checked without network access by running
 `PUBLIC_GITHUB_TEXT_GUARD_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh`.
 The changelog extraction and generated release-note guard can be checked without network access by running
 `MCP_CHANGELOG_RELEASE_NOTES_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh`.
+The publication-mode guard can be checked without network access by running
+`PUBLICATION_MODE_GUARD_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh`.
 The downloads checksum/manifest generator can be checked without network access by running
 `MCP_DOWNLOADS_BUNDLE_SELF_TEST=true bash ./mcp/packaging/publish-downloads-release-bundle.sh`.
 
@@ -343,6 +350,20 @@ PLUGIN_NAME=hexana \
 PLUGIN_VERSION=1.2.3 \
 GENERATED_PUBLIC_DIR=mcp/out/teamcity/public-marketplace \
 RELEASE_TAG=v1.2.3 \
+AUTO_MERGE=false \
+mcp/packaging/release-codex-claude-plugins.sh
+```
+
+Test-nightly publication example:
+
+```bash
+GH_TOKEN=... \
+PUBLIC_REPO_SLUG=example-org/hexana-nightly \
+PUBLICATION_MODE=test-nightly \
+PUBLIC_REPO_BASE_BRANCH=main \
+PLUGIN_NAME=hexana \
+PLUGIN_VERSION=1.2.3 \
+GENERATED_PUBLIC_DIR=mcp/out/teamcity/public-marketplace \
 AUTO_MERGE=false \
 mcp/packaging/release-codex-claude-plugins.sh
 ```

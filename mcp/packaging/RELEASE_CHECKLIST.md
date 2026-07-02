@@ -84,6 +84,13 @@ release readiness without the native matrix artifacts above.
   MCP_CHANGELOG_RELEASE_NOTES_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh
   ```
 
+- Run the publication-mode guard self-test when production/test-nightly routing
+  changes:
+
+  ```bash
+  PUBLICATION_MODE_GUARD_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh
+  ```
+
 ## Release Script Inputs
 
 Before invoking `mcp/packaging/release-codex-claude-plugins.sh` for a
@@ -103,6 +110,10 @@ release:
   collected into the release directory.
 - Ensure `PLUGIN_VERSION` matches `mcp/server/gradle.properties:mcpServerVersion`
   unless the release job intentionally overrides it.
+- Keep `PUBLICATION_MODE=production` for the canonical public release. Use
+  `PUBLICATION_MODE=test-nightly` only with a non-production GitHub repository;
+  that mode refuses `AUTO_MERGE=true` and defaults the tag to a nightly tag when
+  `RELEASE_TAG` is empty.
 - Ensure `mcp/CHANGELOG.md` contains the matching `## <version>` entry with
   public-safe notes. The generated GitHub Release notes are scanned by the
   public text guard before any public mutation.

@@ -7,8 +7,11 @@ CLEANUP_DIRS=()
 cleanup_on_exit() {
   local dir
   for dir in "${CLEANUP_DIRS[@]:-}"; do
-    [ -n "$dir" ] && rm -rf "$dir"
+    if [ -n "$dir" ]; then
+      rm -rf "$dir"
+    fi
   done
+  return 0
 }
 trap cleanup_on_exit EXIT
 
@@ -46,6 +49,63 @@ to_bool() {
     false|FALSE|False|0|no|NO|No|'') printf 'false' ;;
     *) die "Expected boolean value for $2, got '$1'" ;;
   esac
+}
+
+lower_ascii() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+default_release_tag() {
+  case "$PUBLICATION_MODE" in
+    production)
+      printf 'v%s\n' "$PLUGIN_VERSION"
+      ;;
+    test-nightly)
+      local build_id="${TEAMCITY_BUILD_ID:-}"
+      if [ -z "$build_id" ]; then
+        build_id="$(date -u +%Y%m%d%H%M%S)"
+      fi
+      build_id="$(sanitize_branch_part "$build_id")"
+      printf 'nightly-%s-%s\n' "$(sanitize_branch_part "$PLUGIN_VERSION")" "$build_id"
+      ;;
+    *)
+      die "Unsupported PUBLICATION_MODE: $PUBLICATION_MODE"
+      ;;
+  esac
+}
+
+validate_publication_mode() {
+  local canonical_repo
+  local requested_repo
+
+  case "$PUBLICATION_MODE" in
+    production|test-nightly) ;;
+    *) die "PUBLICATION_MODE must be 'production' or 'test-nightly', got '$PUBLICATION_MODE'" ;;
+  esac
+
+  canonical_repo="$(lower_ascii "$PRODUCTION_PUBLIC_REPO_SLUG")"
+  requested_repo="$(lower_ascii "$PUBLIC_REPO_SLUG")"
+
+  case "$PUBLICATION_MODE" in
+    production)
+      if [ "$requested_repo" != "$canonical_repo" ] && [ "$ALLOW_PRODUCTION_TO_NON_CANONICAL_REPO" != "true" ]; then
+        die "Refusing production publication to non-canonical repo '$PUBLIC_REPO_SLUG'. Expected '$PRODUCTION_PUBLIC_REPO_SLUG'. Set PUBLICATION_MODE=test-nightly for test repositories."
+      fi
+      ;;
+    test-nightly)
+      if [ "$requested_repo" = "$canonical_repo" ]; then
+        die "Refusing test-nightly publication to canonical production repo '$PRODUCTION_PUBLIC_REPO_SLUG'"
+      fi
+      if [ "$AUTO_MERGE" = "true" ]; then
+        die "Refusing AUTO_MERGE=true in test-nightly publication mode"
+      fi
+      ;;
+  esac
+
+  if [ -z "${RELEASE_TAG:-}" ]; then
+    RELEASE_TAG="$(default_release_tag)"
+    export RELEASE_TAG
+  fi
 }
 
 read_mcp_version() {
@@ -524,6 +584,82 @@ EOF
   [ "$scan_status" -ne 0 ] || die "MCP changelog self-test did not apply the public text guard to release notes"
 
   log "MCP changelog release-notes self-test passed"
+}
+
+self_test_publication_mode_guard() {
+  local scan_status
+
+  (
+    PUBLICATION_MODE="production"
+    PUBLIC_REPO_SLUG="JetBrains/hexana"
+    PRODUCTION_PUBLIC_REPO_SLUG="JetBrains/hexana"
+    ALLOW_PRODUCTION_TO_NON_CANONICAL_REPO="false"
+    AUTO_MERGE="false"
+    PLUGIN_VERSION="1.2.3"
+    RELEASE_TAG=""
+    validate_publication_mode
+    [ "$RELEASE_TAG" = "v1.2.3" ]
+  )
+
+  set +e
+  (
+    PUBLICATION_MODE="production"
+    PUBLIC_REPO_SLUG="example-org/hexana-nightly"
+    PRODUCTION_PUBLIC_REPO_SLUG="JetBrains/hexana"
+    ALLOW_PRODUCTION_TO_NON_CANONICAL_REPO="false"
+    AUTO_MERGE="false"
+    PLUGIN_VERSION="1.2.3"
+    RELEASE_TAG=""
+    validate_publication_mode
+  ) >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Publication mode self-test did not reject production publication to a test repo"
+
+  set +e
+  (
+    PUBLICATION_MODE="test-nightly"
+    PUBLIC_REPO_SLUG="JetBrains/hexana"
+    PRODUCTION_PUBLIC_REPO_SLUG="JetBrains/hexana"
+    ALLOW_PRODUCTION_TO_NON_CANONICAL_REPO="false"
+    AUTO_MERGE="false"
+    PLUGIN_VERSION="1.2.3"
+    RELEASE_TAG=""
+    validate_publication_mode
+  ) >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Publication mode self-test did not reject test-nightly publication to production repo"
+
+  set +e
+  (
+    PUBLICATION_MODE="test-nightly"
+    PUBLIC_REPO_SLUG="example-org/hexana-nightly"
+    PRODUCTION_PUBLIC_REPO_SLUG="JetBrains/hexana"
+    ALLOW_PRODUCTION_TO_NON_CANONICAL_REPO="false"
+    AUTO_MERGE="true"
+    PLUGIN_VERSION="1.2.3"
+    RELEASE_TAG=""
+    validate_publication_mode
+  ) >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Publication mode self-test did not reject AUTO_MERGE=true in test-nightly mode"
+
+  (
+    PUBLICATION_MODE="test-nightly"
+    PUBLIC_REPO_SLUG="example-org/hexana-nightly"
+    PRODUCTION_PUBLIC_REPO_SLUG="JetBrains/hexana"
+    ALLOW_PRODUCTION_TO_NON_CANONICAL_REPO="false"
+    AUTO_MERGE="false"
+    PLUGIN_VERSION="1.2.3"
+    TEAMCITY_BUILD_ID="12345"
+    RELEASE_TAG=""
+    validate_publication_mode
+    [ "$RELEASE_TAG" = "nightly-1.2.3-12345" ]
+  )
+
+  log "Publication mode guard self-test passed"
 }
 
 publish_github_release() {
@@ -1363,6 +1499,8 @@ print_summary() {
   printf '\n'
   log "Summary"
   printf '  Mode: %s\n' "$([ "$DRY_RUN" = "true" ] && printf 'dry run' || printf 'real run')"
+  printf '  Publication mode: %s\n' "$PUBLICATION_MODE"
+  printf '  Public repository: %s\n' "$PUBLIC_REPO_SLUG"
   printf '  Release tag: %s\n' "$RELEASE_TAG"
   printf '  Branch: %s\n' "$BRANCH"
   printf '  Base branch: %s\n' "$BASE_BRANCH"
@@ -1461,6 +1599,10 @@ main() {
     self_test_mcp_changelog_release_notes
     return
   fi
+  if [ "$(to_bool "${PUBLICATION_MODE_GUARD_SELF_TEST:-false}" "PUBLICATION_MODE_GUARD_SELF_TEST")" = "true" ]; then
+    self_test_publication_mode_guard
+    return
+  fi
 
   require_tool "./gradlew"
   require_tool "gh"
@@ -1481,11 +1623,15 @@ main() {
 
   export PLUGIN_NAME="${PLUGIN_NAME:-hexana}"
   export PLUGIN_VERSION="${PLUGIN_VERSION:-$mcp_version}"
-  export RELEASE_TAG="${RELEASE_TAG:-v$PLUGIN_VERSION}"
   export GENERATED_PUBLIC_DIR="${GENERATED_PUBLIC_DIR:-mcp/out/teamcity/public-marketplace}"
   export PUBLIC_REPO_BASE_BRANCH="${PUBLIC_REPO_BASE_BRANCH:-main}"
   export AUTO_MERGE="$(to_bool "${AUTO_MERGE:-false}" "AUTO_MERGE")"
   export DRY_RUN="$(to_bool "${DRY_RUN:-false}" "DRY_RUN")"
+  export PUBLICATION_MODE="${PUBLICATION_MODE:-production}"
+  export PRODUCTION_PUBLIC_REPO_SLUG="${PRODUCTION_PUBLIC_REPO_SLUG:-JetBrains/hexana}"
+  export ALLOW_PRODUCTION_TO_NON_CANONICAL_REPO="$(to_bool "${ALLOW_PRODUCTION_TO_NON_CANONICAL_REPO:-false}" "ALLOW_PRODUCTION_TO_NON_CANONICAL_REPO")"
+  export RELEASE_TAG="${RELEASE_TAG:-}"
+  validate_publication_mode
   export ALLOW_BUNDLED_JAR="$(to_bool "${ALLOW_BUNDLED_JAR:-false}" "ALLOW_BUNDLED_JAR")"
   export INCLUDE_NATIVE_ARTIFACTS="$(to_bool "${INCLUDE_NATIVE_ARTIFACTS:-true}" "INCLUDE_NATIVE_ARTIFACTS")"
   export NATIVE_RELEASE_ARTIFACT_DIR="${NATIVE_RELEASE_ARTIFACT_DIR:-mcp/build/distributions-native}"
