@@ -45,6 +45,7 @@ import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.NativeDebugTabData
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsContext
+import org.jetbrains.hexana.shared.TabPriority
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.ui.panel.*
 import org.jetbrains.hexana.providers.ZipBinaryProvider
@@ -661,11 +662,13 @@ private fun BinaryProvider.resolvePanels(
     data class ProviderTabs(
         val ordinary: List<TableTabDescriptor>,
         val grouped: List<GroupedTableTabDescriptor>,
+        val providerIndex: Int,
     )
-    val perProvider = providers.map { p ->
+    val perProvider = providers.mapIndexed { index, p ->
         ProviderTabs(
             ordinary = p.tableTabs(this, tableTabsContext),
             grouped = p.groupedTabs(this, tableTabsContext),
+            providerIndex = index,
         )
     }
     val providerPanels = when (this) {
@@ -797,18 +800,26 @@ private fun BinaryProvider.resolvePanels(
             allGroupedDescriptors.associateWith { it.toPanel(state) }
         }
 
-    val panels = mutableListOf<Panel>()
+    // Collect all tab entries with their priority and provider index for sorting.
+    data class TabEntry(val panel: Panel, val priority: TabPriority, val providerIndex: Int)
+    val tabEntries = mutableListOf<TabEntry>()
     for (pt in perProvider) {
         val enriched = enricher(pt.ordinary, state, pathsNav)
-        panels += enriched.map { tab ->
-            if (tab.name == "Entries" && onOpenZipEntry != null && this is ZipBinaryProvider) {
+        tabEntries += enriched.map { tab ->
+            val panel = if (tab.name == "Entries" && onOpenZipEntry != null && this is ZipBinaryProvider) {
                 enrichZipEntriesTab(tab, onOpenZipEntry).toPanel(state)
             } else {
                 tab.toPanel(state)
             }
+            TabEntry(panel, tab.priority, pt.providerIndex)
         }
-        panels += pt.grouped.mapNotNull { enrichedGrouped[it] }
+        tabEntries += pt.grouped.mapNotNull { grouped ->
+            enrichedGrouped[grouped]?.let { panel -> TabEntry(panel, grouped.priority, pt.providerIndex) }
+        }
     }
+    // Sort by priority first (High < Medium < Low ordinal), then by provider order.
+    tabEntries.sortWith(compareBy<TabEntry> { it.priority }.thenBy { it.providerIndex })
+    val panels = tabEntries.map { it.panel }.toMutableList()
     panels += providerPanels
     return panels.toTypedArray()
 }
@@ -840,6 +851,7 @@ private fun ZipBinaryProvider.enrichZipEntriesTab(
         alwaysShowSearch = tab.alwaysShowSearch,
         searchPlaceholder = tab.searchPlaceholder,
         showIdColumn = tab.showIdColumn,
+        priority = tab.priority,
     )
 }
 

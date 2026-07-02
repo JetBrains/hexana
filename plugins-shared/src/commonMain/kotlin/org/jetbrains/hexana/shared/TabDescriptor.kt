@@ -3,6 +3,16 @@ package org.jetbrains.hexana.shared
 import org.jetbrains.hexana.providers.BinaryProvider
 
 /**
+ * Priority level for tab ordering.
+ *
+ * Tabs are sorted by priority first (High before Medium before Low),
+ * then by provider registration order within the same priority level.
+ */
+enum class TabPriority {
+    High, Medium, Low
+}
+
+/**
  * A UI-free description of a single cell value in a table tab.
  *
  * @param value the underlying data value (used for sorting)
@@ -143,6 +153,7 @@ class TableTabDescriptor(
     val alwaysShowSearch: Boolean = false,
     val searchPlaceholder: String? = null,
     val showIdColumn: Boolean = true,
+    val priority: TabPriority = TabPriority.High,
 ) {
     companion object {
         /** Sentinel value for [defaultSortColumn] that targets the implicit ID column. */
@@ -191,6 +202,7 @@ class GroupedTableTabDescriptor(
     val name: String,
     val innerTabs: List<TableTabDescriptor>,
     val emptyMessage: String? = null,
+    val priority: TabPriority = TabPriority.High,
 )
 
 /**

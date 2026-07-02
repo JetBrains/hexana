@@ -40,5 +40,6 @@ private fun stringsTab(provider: BinaryProvider): TableTabDescriptor? {
         showIdColumn = !hasIndex,
         alwaysShowSearch = true,
         searchPlaceholder = "Search strings",
+        priority = TabPriority.Low,
     )
 }

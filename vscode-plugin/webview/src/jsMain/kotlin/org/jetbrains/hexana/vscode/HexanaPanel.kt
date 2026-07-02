@@ -10,6 +10,7 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.shared.TableTabDescriptor
+import org.jetbrains.hexana.shared.TabPriority
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.events.Event
@@ -57,41 +58,48 @@ fun HexanaPanel(
                 })
             }
 
-            // Interleave ordinary and grouped tabs per provider so each
-            // provider's tabs appear together in registration order.
+            // Collect ordinary and grouped tabs per provider, then sort by
+            // priority (High first) while preserving provider order within
+            // the same priority level.
             val enricher = provider.getTabsEnricher()
             val zipProvider = provider as? ZipBinaryProvider
-            for (p in TableTabsProviderRegistry.providers) {
+            data class TabEntry(val tab: PanelTab, val priority: TabPriority, val providerIndex: Int)
+            val tabEntries = mutableListOf<TabEntry>()
+            for ((providerIndex, p) in TableTabsProviderRegistry.providers.withIndex()) {
                 val enriched = enricher(p.tableTabs(provider), fileName, pendingRun)
-                val ordinary = enriched.map { d ->
+                for (d in enriched) {
                     val desc = if (d.name == "Entries" && zipProvider != null) {
                         enrichZipEntriesTab(d, zipProvider.displayEntries)
                     } else d
-                    TableTab(name = desc.name) { selection -> TableTabContent(desc, selection) }
+                    tabEntries += TabEntry(
+                        PanelTab(desc.name) { sel -> TableTabContent(desc, sel) },
+                        desc.priority,
+                        providerIndex,
+                    )
                 }
-                addAll(ordinary.map { tt -> PanelTab(tt.name) { sel -> tt.content(sel) } })
                 for (grouped in p.groupedTabs(provider)) {
                     val inner = grouped.innerTabs
-                    when {
-                        // Skip entirely when no inner tabs and no emptyMessage
-                        inner.isEmpty() && grouped.emptyMessage == null -> {}
-                        // Show emptyMessage when no inner tabs
-                        inner.isEmpty() -> add(PanelTab(grouped.name) { _ ->
+                    val panelTab: PanelTab? = when {
+                        inner.isEmpty() && grouped.emptyMessage == null -> null
+                        inner.isEmpty() -> PanelTab(grouped.name) { _ ->
                             org.jetbrains.compose.web.dom.Text(grouped.emptyMessage ?: "")
-                        })
-                        // Single inner tab: promote to top-level with combined name
+                        }
                         inner.size == 1 -> {
                             val single = inner.single()
                             val combinedName = "${grouped.name}: ${single.name}"
-                            add(PanelTab(combinedName) { sel -> TableTabContent(single, sel) })
+                            PanelTab(combinedName) { sel -> TableTabContent(single, sel) }
                         }
-                        // Multiple inner tabs: render with sub-tab strip
-                        else -> add(PanelTab(grouped.name) { sel ->
+                        else -> PanelTab(grouped.name) { sel ->
                             GroupedTableTabContent(grouped, sel)
-                        })
+                        }
+                    }
+                    if (panelTab != null) {
+                        tabEntries += TabEntry(panelTab, grouped.priority, providerIndex)
                     }
                 }
             }
+            tabEntries.sortWith(compareBy<TabEntry> { it.priority }.thenBy { it.providerIndex })
+            addAll(tabEntries.map { it.tab })
 
             // WAT tab (always present for Wasm and component)
             if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
@@ -428,4 +436,5 @@ private fun enrichZipEntriesTab(
     alwaysShowSearch = tab.alwaysShowSearch,
     searchPlaceholder = tab.searchPlaceholder,
     showIdColumn = tab.showIdColumn,
+    priority = tab.priority,
 )

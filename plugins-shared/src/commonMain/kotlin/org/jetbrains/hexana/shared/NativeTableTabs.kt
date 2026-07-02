@@ -102,6 +102,7 @@ class NativeTableTabsProvider : TableTabsProvider {
             },
             prologueText = buildDebugContextPrologueText(data.debugContext),
             emptyMessage = "No debug companion information is available.",
+            priority = TabPriority.Low,
         )
     }
 
@@ -112,6 +113,7 @@ class NativeTableTabsProvider : TableTabsProvider {
                 columns = emptyList(),
                 rowCount = 0,
                 emptyMessage = "Debug info: unavailable. No supported native line-table data was found.",
+                priority = TabPriority.Low,
             )
         val summary = sourceLocationProvider.summary
         if (summary.lineRowCount == 0) {
@@ -120,6 +122,7 @@ class NativeTableTabsProvider : TableTabsProvider {
                 columns = emptyList(),
                 rowCount = 0,
                 emptyMessage = "Debug info: present, but Hexana did not resolve any source line rows.",
+                priority = TabPriority.Low,
             )
         }
         val rows = data.debugInfoRows ?: return TableTabDescriptor(
@@ -127,6 +130,7 @@ class NativeTableTabsProvider : TableTabsProvider {
             columns = emptyList(),
             rowCount = 0,
             emptyMessage = "Debug info: present, but Hexana did not resolve any source line rows.",
+            priority = TabPriority.Low,
         )
         return TableTabDescriptor(
             name = "Debug Info",
@@ -135,6 +139,7 @@ class NativeTableTabsProvider : TableTabsProvider {
                 col("Value", ColumnWidth.Fill()) { CellValue(rows[it].second) },
             ),
             rowCount = rows.size,
+            priority = TabPriority.Low,
         )
     }
 }
