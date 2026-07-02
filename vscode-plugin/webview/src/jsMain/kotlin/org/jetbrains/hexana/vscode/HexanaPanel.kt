@@ -99,7 +99,8 @@ fun HexanaPanel(
                 }
             }
             tabEntries.sortWith(compareBy<TabEntry> { it.priority }.thenBy { it.providerIndex })
-            addAll(tabEntries.map { it.tab })
+            val (lowEntries, normalEntries) = tabEntries.partition { it.priority == TabPriority.Low }
+            addAll(normalEntries.map { it.tab })
 
             // WAT tab (always present for Wasm and component)
             if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
@@ -111,6 +112,9 @@ fun HexanaPanel(
             // Extra tabs injected by the caller (e.g. format-specific tabs
             // for class files, DEX files, ZIP archives).
             addAll(extraTabs)
+
+            // Low-priority tabs go after all other panels (including non-table tabs).
+            addAll(lowEntries.map { it.tab })
         }
     }
 

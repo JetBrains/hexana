@@ -819,8 +819,12 @@ private fun BinaryProvider.resolvePanels(
     }
     // Sort by priority first (High < Medium < Low ordinal), then by provider order.
     tabEntries.sortWith(compareBy<TabEntry> { it.priority }.thenBy { it.providerIndex })
-    val panels = tabEntries.map { it.panel }.toMutableList()
+    // Low-priority tabs go after all other panels (including non-table provider panels).
+    val (lowEntries, normalEntries) = tabEntries.partition { it.priority == TabPriority.Low }
+    val panels = mutableListOf<Panel>()
+    panels += normalEntries.map { it.panel }
     panels += providerPanels
+    panels += lowEntries.map { it.panel }
     return panels.toTypedArray()
 }
 
