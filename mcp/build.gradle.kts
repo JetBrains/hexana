@@ -5,6 +5,7 @@ import org.gradle.maven.MavenPomArtifact
 import java.net.InetAddress
 import java.util.*
 import java.util.jar.JarFile
+import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
 
 val serverPropertiesFile = layout.projectDirectory.file("server/gradle.properties").asFile
@@ -217,6 +218,34 @@ fun rewriteMcpServerLauncherClasspaths(installDir: File) {
 
 fun rewritePackagedMcpServerLauncherClasspaths(pluginDir: File) {
     rewriteMcpServerLauncherClasspaths(pluginDir.resolve("server"))
+}
+
+fun nativeExecutableArtifactName(platform: String): String =
+    "hexana-mcp-native-$platform-$mcpServerVersion.zip"
+
+fun nativeReleaseArtifactNames(platform: String): List<String> = listOf(
+    nativeExecutableArtifactName(platform),
+    "hexana-claude-plugin-$platform-$mcpServerVersion.zip",
+    "hexana-codex-plugin-$platform-$mcpServerVersion.zip",
+)
+
+fun nativeExecutableZipFile(platform: String): File =
+    nativeDistributionDir.get().file(nativeExecutableArtifactName(platform)).asFile
+
+fun validateNativeExecutableZip(platform: String, zipFile: File) {
+    check(zipFile.isFile) {
+        "Missing native executable ZIP for $platform: ${zipFile.absolutePath}. " +
+            "Expected ${nativeExecutableArtifactName(platform)} under ${nativeDistributionDir.get().asFile.absolutePath}."
+    }
+    ZipFile(zipFile).use { zip ->
+        val entry = zip.getEntry("bin/hexana-mcp")
+        check(entry != null && !entry.isDirectory) {
+            "Malformed native executable ZIP for $platform: ${zipFile.absolutePath} is missing bin/hexana-mcp."
+        }
+        check(entry.size > 0L || entry.compressedSize > 0L) {
+            "Malformed native executable ZIP for $platform: ${zipFile.absolutePath} contains empty bin/hexana-mcp."
+        }
+    }
 }
 
 jib {
@@ -761,28 +790,29 @@ fun validatePublicMarketplaceBundleNativePolicy(outputDir: File) {
 
     val readme = readmeFile.readText()
     val releaseLock = releaseLockFile.readText()
-    val nativeDir = pluginDir.resolve("native")
-    val nativeFilesPresent = nativeDir.exists() && nativeDir.walkTopDown().any { it.isFile }
-    val readmeClaimsBundledNative = listOf(
-        "`native/<platform>/hexana-mcp`: optional bundled native executable",
-        "Native-enabled wrappers also include",
-    ).any(readme::contains)
-    val lockClaimsBundledNative = listOf(
-        "\"distribution\": \"marketplace-bundle\"",
-        "\"distribution\": \"bundled\"",
-    ).any(releaseLock::contains)
-
-    check(nativeFilesPresent || !readmeClaimsBundledNative) {
-        "Public marketplace README claims bundled native files, but plugins/hexana/native is missing."
+    nativeReleasePlatforms.forEach { platform ->
+        val nativeFile = pluginDir.resolve("native/$platform/hexana-mcp")
+        check(nativeFile.isFile) {
+            "Public marketplace bundle is missing bundled native executable for $platform: ${nativeFile.absolutePath}"
+        }
+        check(nativeFile.length() > 0L) {
+            "Public marketplace bundled native executable for $platform is empty: ${nativeFile.absolutePath}"
+        }
+        check(nativeFile.canExecute()) {
+            "Public marketplace bundled native executable for $platform is not executable: ${nativeFile.absolutePath}"
+        }
+        check(readme.contains("`native/$platform/hexana-mcp`")) {
+            "Public marketplace README must document bundled native executable for $platform."
+        }
     }
-    check(nativeFilesPresent || !lockClaimsBundledNative) {
-        "Public marketplace release.lock.json claims bundled native files, but plugins/hexana/native is missing."
+    check(!readme.contains("Native executables are not included in this public marketplace tree.")) {
+        "Public marketplace README must not claim native executables are absent when they are bundled."
     }
-    check(nativeFilesPresent || readme.contains("Native executables are not included in this public marketplace tree.")) {
-        "Public marketplace README must document that native executables are GitHub Release artifacts when plugins/hexana/native is absent."
+    check(releaseLock.contains("\"distribution\": \"marketplace-bundle\"")) {
+        "Public marketplace release.lock.json must document that native executables are bundled in the marketplace tree."
     }
-    check(nativeFilesPresent || releaseLock.contains("\"distribution\": \"github-release-only\"")) {
-        "Public marketplace release.lock.json must document the GitHub Release-only native artifact policy when plugins/hexana/native is absent."
+    check(!releaseLock.contains("\"distribution\": \"github-release-only\"")) {
+        "Public marketplace release.lock.json must not claim GitHub Release-only native distribution when native is bundled."
     }
 }
 
@@ -822,8 +852,22 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
     from(generateThirdPartyNotices) {
         into("plugins/hexana")
     }
+    nativeReleasePlatforms.forEach { platform ->
+        from({ zipTree(nativeExecutableZipFile(platform)) }) {
+            include("bin/hexana-mcp")
+            into("plugins/hexana/native/$platform")
+            eachFile {
+                relativePath = org.gradle.api.file.RelativePath(true, "hexana-mcp")
+                permissions { unix("rwxr-xr-x") }
+            }
+            includeEmptyDirs = false
+        }
+    }
 
     doFirst {
+        nativeReleasePlatforms.forEach { platform ->
+            validateNativeExecutableZip(platform, nativeExecutableZipFile(platform))
+        }
         delete(publicMarketplaceDir)
     }
     doLast {
@@ -919,7 +963,8 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
 
             ## Requirements
 
-            - Java 21 or newer must be available on `PATH`.
+            - macOS arm64 and Linux x64 use the bundled native executable by default.
+            - Other platforms require Java 21 or newer on `PATH` for the bundled JVM fallback.
             - The plugin is installed from a configured Claude Code or Codex marketplace.
 
             ## Included Files
@@ -932,18 +977,16 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
             - `THIRD-PARTY-NOTICES.md`: generated third-party dependency notices.
             - `server/`: bundled standalone Hexana MCP runtime.
             - `skills/wasm-inspector/`: Codex skill metadata and instructions.
+            ${nativeReleasePlatforms.joinToString(separator = "\n            ") { "- `native/$it/hexana-mcp`: bundled native executable." }}
 
             ## Native Artifacts
 
-            Native executables are not included in this public marketplace tree. They are published as GitHub Release
-            artifacts produced by the platform matrix:
+            Native executables are bundled in this public marketplace tree for the supported native platforms:
 
-            ${nativeReleasePlatforms.joinToString(separator = "\n            ") { "- `hexana-mcp-native-$it-$mcpServerVersion.zip`" }}
-            ${nativeReleasePlatforms.joinToString(separator = "\n            ") { "- `hexana-claude-plugin-$it-$mcpServerVersion.zip`" }}
-            ${nativeReleasePlatforms.joinToString(separator = "\n            ") { "- `hexana-codex-plugin-$it-$mcpServerVersion.zip`" }}
+            ${nativeReleasePlatforms.joinToString(separator = "\n            ") { "- `native/$it/hexana-mcp`" }}
 
-            The marketplace launcher uses the bundled JVM runtime from `server/`. Native-enabled release ZIPs use the
-            same launcher and add `native/<platform>/hexana-mcp` beside the JVM fallback.
+            The marketplace launcher uses the bundled native executable when it matches the current platform, then falls
+            back to the bundled JVM runtime from `server/`.
 
             ## What It Provides
 
@@ -961,18 +1004,18 @@ tasks.register<Sync>("assemblePublicMarketplaceBundle") {
                 "server-$mcpServerVersion.zip"
               ],
               "nativeArtifacts": {
-                "distribution": "github-release-only",
+                "distribution": "marketplace-bundle",
                 "platforms": [
                   ${nativeReleasePlatforms.joinToString(separator = ",\n                  ") { "\"$it\"" }}
                 ],
-                "artifacts": [
-                  ${nativeReleasePlatforms.flatMap { platform ->
-                      listOf(
-                          "hexana-mcp-native-$platform-$mcpServerVersion.zip",
-                          "hexana-claude-plugin-$platform-$mcpServerVersion.zip",
-                          "hexana-codex-plugin-$platform-$mcpServerVersion.zip",
-                      )
-                  }.joinToString(separator = ",\n                  ") { "\"$it\"" }}
+                "paths": [
+                  ${nativeReleasePlatforms.joinToString(separator = ",\n                  ") { "\"plugins/hexana/native/$it/hexana-mcp\"" }}
+                ],
+                "sourceArtifacts": [
+                  ${nativeReleasePlatforms.joinToString(separator = ",\n                  ") { "\"${nativeExecutableArtifactName(it)}\"" }}
+                ],
+                "githubReleaseArtifacts": [
+                  ${nativeReleasePlatforms.flatMap(::nativeReleaseArtifactNames).joinToString(separator = ",\n                  ") { "\"$it\"" }}
                 ]
               }
             }
