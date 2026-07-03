@@ -49,15 +49,15 @@ class DwarfInfoSection(
 
     fun CommonByteBuffer.readCompilationUnitHeader(): CompilationUnitHeader<*> {
         val offset = position()
-        return when(val value = readUInt()) {
+        return when(val value = getIntLE().toUInt()) {
             0xFFFFFFFFu -> readDwarf64Header(offset)
             else -> readDwarf32Header(offset, value)
         }
     }
 
     private fun CommonByteBuffer.readDwarf64Header(offset: Int): CompilationUnitHeader<*> {
-        val size = readULong()
-        val version = readUShort()
+        val size = getLongLE().toULong()
+        val version = getShortLE().toUShort()
         return when (version.toInt()) {
             1,2,3,4 -> readDwarf64v4Header(offset, size)
             5 -> readDwarf64v5Header(offset, size)
@@ -66,23 +66,23 @@ class DwarfInfoSection(
     }
 
     private fun CommonByteBuffer.readDwarf64v4Header( offset: Int, size: ULong ): CompilationUnitHeader<*> {
-        val debugAbbrevOffset = readULong()
-        val addressSize = readUByte()
+        val debugAbbrevOffset = getLongLE().toULong()
+        val addressSize = get().toUByte()
         return CompilationUnitHeader.Dwarf64Header.V4(offset, size.toInt(), size.toInt() + 12, debugAbbrevOffset, addressSize)
     }
 
     private fun CommonByteBuffer.readDwarf64v5Header( offset: Int, size: ULong ): CompilationUnitHeader<*> {
-        val unitType = readUByte().toUnitType()
-        val addressSize = readUByte()
-        val debugAbbrevOffset = readULong()
+        val unitType = get().toUByte().toUnitType()
+        val addressSize = get().toUByte()
+        val debugAbbrevOffset = getLongLE().toULong()
         val next = size.toInt() + 12
         return when (unitType) {
             UnitType.DW_UT_compile, UnitType.DW_UT_partial -> CompilationUnitHeader.Dwarf64Header.V5.CompileUnit(offset, size.toInt(),
                 next, debugAbbrevOffset, addressSize, unitType)
             UnitType.DW_UT_skeleton, UnitType.DW_UT_split_compile -> CompilationUnitHeader.Dwarf64Header.V5.SkeletonUnit(offset, size.toInt(),
-                next, debugAbbrevOffset, addressSize, unitType, readULong())
+                next, debugAbbrevOffset, addressSize, unitType, getLongLE().toULong())
             UnitType.DW_UT_type, UnitType.DW_UT_split_type -> CompilationUnitHeader.Dwarf64Header.V5.TypeUnit(offset, size.toInt(),
-                next, debugAbbrevOffset, addressSize, unitType, readULong(), readULong())
+                next, debugAbbrevOffset, addressSize, unitType, getLongLE().toULong(), getLongLE().toULong())
             else -> CompilationUnitHeader.Dwarf64Header.V5.CompileUnit(offset, size.toInt(),
                 next, debugAbbrevOffset, addressSize, unitType)
         }
@@ -90,7 +90,7 @@ class DwarfInfoSection(
     }
 
     private fun CommonByteBuffer.readDwarf32Header( offset: Int, size: UInt ): CompilationUnitHeader<*> {
-        val version = readUShort()
+        val version = getShortLE().toUShort()
         return when (version.toInt()) {
             1,2,3,4 -> readDwarf32v4Header(offset, size)
             5 -> readDwarf32v5Header(offset, size)
@@ -99,24 +99,24 @@ class DwarfInfoSection(
     }
 
     private fun CommonByteBuffer.readDwarf32v4Header(offset: Int, size: UInt): CompilationUnitHeader<*> {
-        val debugAbbrevOffset = readUInt()
-        val addressSize = readUByte()
+        val debugAbbrevOffset = getIntLE().toUInt()
+        val addressSize = get().toUByte()
         return CompilationUnitHeader.Dwarf32Header.V4(offset, size.toInt(),
             size.toInt() + 4, debugAbbrevOffset, addressSize)
     }
 
     private fun CommonByteBuffer.readDwarf32v5Header(offset: Int, size: UInt): CompilationUnitHeader<*> {
-        val unitType = readUByte().toUnitType()
-        val addressSize = readUByte()
-        val debugAbbrevOffset = readUInt()
+        val unitType = get().toUByte().toUnitType()
+        val addressSize = get().toUByte()
+        val debugAbbrevOffset = getIntLE().toUInt()
         val next = size.toInt() + 4
         return when (unitType) {
             UnitType.DW_UT_compile, UnitType.DW_UT_partial -> CompilationUnitHeader.Dwarf32Header.V5.CompileUnit(offset, size.toInt(),
                 next, debugAbbrevOffset, addressSize, unitType)
             UnitType.DW_UT_skeleton, UnitType.DW_UT_split_compile -> CompilationUnitHeader.Dwarf32Header.V5.SkeletonUnit(offset, size.toInt(),
-                next, debugAbbrevOffset, addressSize, unitType, readULong())
+                next, debugAbbrevOffset, addressSize, unitType, getLongLE().toULong())
             UnitType.DW_UT_type, UnitType.DW_UT_split_type -> CompilationUnitHeader.Dwarf32Header.V5.TypeUnit(offset, size.toInt(),
-                next, debugAbbrevOffset, addressSize, unitType, readULong(), readUInt())
+                next, debugAbbrevOffset, addressSize, unitType, getLongLE().toULong(), getIntLE().toUInt())
             else -> CompilationUnitHeader.Dwarf32Header.V5.CompileUnit(offset, size.toInt(),
                 next, debugAbbrevOffset, addressSize, unitType)
         }
@@ -230,37 +230,3 @@ sealed class CompilationUnitHeader<T>(offset: Int, size: Int, val next: Int, ove
     }
 }
 
-fun CommonByteBuffer.readUByte(): UByte {
-    return get().toUByte()
-}
-
-fun CommonByteBuffer.readShort(): Short {
-    return ByteArray(2).let {
-            get(it, 0, 2)
-            it[1].toUByte().toInt().shl(8).or(it[0].toUByte().toInt())
-    }.toShort()
-}
-
-fun CommonByteBuffer.readUShort(): UShort = readShort().toUShort()
-
-fun CommonByteBuffer.readUInt(): UInt {
-    return ByteArray(4).let {
-        get(it, 0, 4)
-        var value = 0U
-        for (i in 0 until 4) {
-            value = value.or(it[i].toUByte().toUInt().shl(i * 8))
-        }
-        value
-    }
-}
-
-fun CommonByteBuffer.readULong(): ULong {
-    return ByteArray(8).let {
-        get(it, 0, 8)
-        var value = 0UL
-        for (i in 0 until 8) {
-            value = value.or(it[i].toUByte().toULong().shl(i * 8))
-        }
-        value
-    }
-}

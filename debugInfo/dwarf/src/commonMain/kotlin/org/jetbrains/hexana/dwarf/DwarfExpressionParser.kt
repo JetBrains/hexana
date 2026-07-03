@@ -178,9 +178,9 @@ object DwarfExpressionParser {
             else -> when (opByte) {
                 Op.DW_OP_addr.value -> {
                     val addr = when (addressSize) {
-                        4 -> buffer.readUInt().toLong()
-                        8 -> buffer.readULong().toLong()
-                        else -> buffer.readUInt().toLong()
+                        4 -> buffer.getIntLE().toLong() and 0xFFFFFFFFL
+                        8 -> buffer.getLongLE()
+                        else -> buffer.getIntLE().toLong() and 0xFFFFFFFFL
                     }
                     DwarfExprOp.Address(addr)
                 }
@@ -195,22 +195,22 @@ object DwarfExpressionParser {
                     buffer.get().toLong(), 1, true
                 )
                 Op.DW_OP_const2u.value -> DwarfExprOp.ConstFixed(
-                    buffer.readUShort().toLong(), 2, false
+                    buffer.getShortLE().toUShort().toLong(), 2, false
                 )
                 Op.DW_OP_const2s.value -> DwarfExprOp.ConstFixed(
-                    buffer.readShort().toLong(), 2, true
+                    buffer.getShortLE().toLong(), 2, true
                 )
                 Op.DW_OP_const4u.value -> DwarfExprOp.ConstFixed(
-                    buffer.readUInt().toLong(), 4, false
+                    buffer.getIntLE().toLong() and 0xFFFFFFFFL, 4, false
                 )
                 Op.DW_OP_const4s.value -> DwarfExprOp.ConstFixed(
-                    buffer.readUInt().toInt().toLong(), 4, true
+                    buffer.getIntLE().toLong(), 4, true
                 )
                 Op.DW_OP_const8u.value -> DwarfExprOp.ConstFixed(
-                    buffer.readULong().toLong(), 8, false
+                    buffer.getLongLE(), 8, false
                 )
                 Op.DW_OP_const8s.value -> DwarfExprOp.ConstFixed(
-                    buffer.readULong().toLong(), 8, true
+                    buffer.getLongLE(), 8, true
                 )
                 Op.DW_OP_constu.value -> DwarfExprOp.ConstUnsigned(buffer.getULEB128())
                 Op.DW_OP_consts.value -> DwarfExprOp.ConstSigned(buffer.getSLEB128())
@@ -246,7 +246,7 @@ object DwarfExpressionParser {
                         0x00 -> DwarfExprOp.WasmLocal(buffer.getULEB128())
                         0x01 -> DwarfExprOp.WasmGlobal(buffer.getULEB128())
                         0x02 -> DwarfExprOp.WasmOperandStack(buffer.getULEB128())
-                        0x03 -> DwarfExprOp.WasmGlobalU32(buffer.readUInt().toLong())
+                        0x03 -> DwarfExprOp.WasmGlobalU32(buffer.getIntLE().toLong() and 0xFFFFFFFFL)
                         else -> DwarfExprOp.Other(opByte)
                     }
                 }

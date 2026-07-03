@@ -26,15 +26,15 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
 
     fun CommonByteBuffer.readLineUnitHeader(): DwarfLineUnitHeader<*> {
         val offset = position()
-        return when (val unitSize = readUInt()) {
+        return when (val unitSize = getIntLE().toUInt()) {
             0xFFFFFFFFu -> readDwarf64Header(offset)
             else -> readDwarf32Header(offset, unitSize)
         }
     }
 
     fun CommonByteBuffer.readDwarf64Header(unitOffset: Int): DwarfLineUnitHeader<*> {
-        val size = readULong()
-        val version = readUShort()
+        val size = getLongLE().toULong()
+        val version = getShortLE().toUShort()
         return when (version.toInt()) {
             1, 2, 3, 4 -> readDwarfLine64V4Header(unitOffset, size)
             5 -> readDwarfLine64V5Header(unitOffset, size)
@@ -43,13 +43,13 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
     }
 
     fun CommonByteBuffer.readDwarfLine64V4Header(unitOffset: Int, size: ULong): DwarfLineUnitHeader<*> {
-        val headerLength = readULong()
-        val maximumInstructionsLength = readUByte()
-        val maximumOperationsPerInstruction = readUByte()
-        val defaultIsStatement = readUByte()
+        val headerLength = getLongLE().toULong()
+        val maximumInstructionsLength = get().toUByte()
+        val maximumOperationsPerInstruction = get().toUByte()
+        val defaultIsStatement = get().toUByte()
         val lineBase = get()
-        val lineRange = readUByte()
-        val opcodeBase = readUByte()
+        val lineRange = get().toUByte()
+        val opcodeBase = get().toUByte()
         val standardOpcodeLengths = ByteArray(opcodeBase.toInt() - 1).also {
             get(it, 0, opcodeBase.toInt() - 1)
         }
@@ -108,7 +108,7 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
     }
 
     fun CommonByteBuffer.readDwarf32Header(unitOffset: Int, unitSize: UInt): DwarfLineUnitHeader<*> {
-        val version = readUShort()
+        val version = getShortLE().toUShort()
         return when (version.toInt()) {
             1, 2, 3, 4 -> readDwarfLine32V4Header(unitOffset, unitSize)
             5 -> readDwarfLine32V5Header(unitOffset, unitSize)
@@ -117,13 +117,13 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
     }
 
     fun CommonByteBuffer.readDwarfLine32V4Header(unitOffset: Int, unitSize: UInt): DwarfLineUnitHeader<*> {
-        val prologLength = readUInt()
-        val maximumInstructionsLength = readUByte()
-        val maximumOperationsPerInstruction = readUByte()
-        val defaultIsStatement = readUByte()
+        val prologLength = getIntLE().toUInt()
+        val maximumInstructionsLength = get().toUByte()
+        val maximumOperationsPerInstruction = get().toUByte()
+        val defaultIsStatement = get().toUByte()
         val lineBase = get()
-        val lineRange = readUByte()
-        val opcodeBase = readUByte()
+        val lineRange = get().toUByte()
+        val opcodeBase = get().toUByte()
         val standardOpcodeLengths = ByteArray(opcodeBase.toInt() - 1).also {
             get(it, 0, opcodeBase.toInt() - 1)
         }
@@ -183,15 +183,15 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
     )
 
     fun CommonByteBuffer.readDwarfLine32V5Header(unitOffset: Int, unitSize: UInt): DwarfLineUnitHeader<UInt> {
-        val addressSize = readUByte()
-        val segmentSelectorSize = readUByte()
-        val prologLength = readUInt()
-        val minimumInstructionLength = readUByte()
-        val maximumOperationsPerInstruction = readUByte()
-        val defaultIsStatement = readUByte()
+        val addressSize = get().toUByte()
+        val segmentSelectorSize = get().toUByte()
+        val prologLength = getIntLE().toUInt()
+        val minimumInstructionLength = get().toUByte()
+        val maximumOperationsPerInstruction = get().toUByte()
+        val defaultIsStatement = get().toUByte()
         val lineBase = get()
-        val lineRange = readUByte()
-        val opcodeBase = readUByte()
+        val lineRange = get().toUByte()
+        val opcodeBase = get().toUByte()
         val unit = object : DwarfUnit {
             override val version: Int = 5
             override val addressSize: UByte = addressSize
@@ -200,7 +200,7 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
         val standardOpcodeLengths = ByteArray(opcodeBase.toInt() - 1).also {
             get(it, 0, opcodeBase.toInt() - 1)
         }
-        val directoryEntryFormatCount = readUByte()
+        val directoryEntryFormatCount = get().toUByte()
         val directoryEntryFormats = List(directoryEntryFormatCount.toInt()) { DwarfEntryFormat(getULEB128().toULong(), getULEB128().toULong()) }
         val directoriesCount = getULEB128()
         val directories = List(directoriesCount.toInt()) {
@@ -210,7 +210,7 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
                 Entry(formatName, form, readForm(form, unit))
             }
         }
-        val fileNameEntryFormatCount = readUByte()
+        val fileNameEntryFormatCount = get().toUByte()
         val fileNameEntryFormats = List(fileNameEntryFormatCount.toInt()) { DwarfEntryFormat(getULEB128().toULong(), getULEB128().toULong()) }
         val fileNamesCount = getULEB128()
         val fileNames = List(fileNamesCount.toInt()) {
@@ -479,7 +479,7 @@ sealed class DwarfLineUnitHeader<T>(
             position(contentOffset + programOffset)
             while (position() < contentOffset + unitSize) {
                 val standardOpcodeOffset = position()
-                val opEncoding = readUByte()
+                val opEncoding = get().toUByte()
                 val op = when (opEncoding) {
                     0x0.toUByte() -> {
                         val extendedLength = getULEB128().toInt()
@@ -487,7 +487,7 @@ sealed class DwarfLineUnitHeader<T>(
                             "Malformed DWARF extended line opcode length: $extendedLength"
                         }
                         val extendedOffset = position()
-                        val extendedOpCode = readUByte()
+                        val extendedOpCode = get().toUByte()
                         when (extendedOpCode) {
                             0x01.toUByte() -> {
                                 LneOpcode.DW_LNE_end_sequence(extendedOffset, extendedLength, ULongArray(0))
@@ -593,7 +593,7 @@ sealed class DwarfLineUnitHeader<T>(
                     }
 
                     LnsOpcode.DW_LNS_fixed_advance_pc.std -> {
-                        val param = readUShort().toULong()
+                        val param = getShortLE().toUShort().toULong()
                         val size = position() - standardOpcodeOffset
                         LnsOpcode.DW_LNS_fixed_advance_pc(
                             standardOpcodeOffset, size,
@@ -655,7 +655,7 @@ sealed class DwarfLineUnitHeader<T>(
             addressSize -> readAddressFromExtendedOpcode(addressSize)
             addressSize + segmentSelectorSize -> {
                 repeat(segmentSelectorSize) {
-                    readUByte()
+                    get()
                 }
                 readAddressFromExtendedOpcode(addressSize)
             }
@@ -667,14 +667,14 @@ sealed class DwarfLineUnitHeader<T>(
 
     private fun CommonByteBuffer.readAddressFromExtendedOpcode(byteSize: Int): ULong =
         when (byteSize) {
-            1 -> readUByte().toULong()
-            2 -> readUShort().toULong()
-            4 -> readUInt().toULong()
-            8 -> readULong()
+            1 -> get().toUByte().toULong()
+            2 -> getShortLE().toUShort().toULong()
+            4 -> getIntLE().toUInt().toULong()
+            8 -> getLongLE().toULong()
             in 3..7 -> {
                 var value = 0uL
                 repeat(byteSize) { index ->
-                    value = value or (readUByte().toULong() shl (index * 8))
+                    value = value or (get().toUByte().toULong() shl (index * 8))
                 }
                 value
             }

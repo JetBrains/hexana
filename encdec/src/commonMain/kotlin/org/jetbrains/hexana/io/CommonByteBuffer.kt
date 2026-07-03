@@ -132,6 +132,28 @@ interface CommonByteBuffer {
             require(it >= Long.MIN_VALUE) { "Value below Long range" }
         }
     }
+
+    fun getShortLE(): Short {
+        return ByteArray(2).let {
+            get(it, 0, 2)
+            it[1].toUByte().toInt().shl(8).or(it[0].toUByte().toInt())
+        }.toShort()
+    }
+
+    fun getLongLE(): Long {
+        return ByteArray(8).let {
+            get(it, 0, 8)
+            var value = 0L
+            for (i in 0 until 8) {
+                value = value or (it[i].toUByte().toLong().shl(i * 8))
+            }
+            value
+        }
+    }
+
+    fun zigzag32(): Int = getULEB128().toInt().let { (it ushr 1) xor -(it and 1) }
+
+    fun zigzag64(): Long = getULEB128().let { (it ushr 1) xor -(it and 1) }
 }
 
 inline fun <R> CommonByteBuffer.crossSectionOperation(op: () -> R): R {

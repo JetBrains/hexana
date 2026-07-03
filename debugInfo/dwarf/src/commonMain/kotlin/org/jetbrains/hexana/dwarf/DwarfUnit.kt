@@ -15,26 +15,26 @@ fun CommonByteBuffer.readForm(
     form: Form,
     header: DwarfUnit
 ): Any = when (form) {
-    Form.DW_FORM_flag, Form.DW_FORM_ref1, Form.DW_FORM_data1, Form.DW_FORM_strx1 -> readUByte()
-    Form.DW_FORM_ref2, Form.DW_FORM_data2, Form.DW_FORM_strx2 ->  readUShort()
-    Form.DW_FORM_ref4, Form.DW_FORM_data4, Form.DW_FORM_strx4 ->  readUInt()
-    Form.DW_FORM_ref8, Form.DW_FORM_data8, Form.DW_FORM_strx8 ->  readULong()
+    Form.DW_FORM_flag, Form.DW_FORM_ref1, Form.DW_FORM_data1, Form.DW_FORM_strx1 -> get().toUByte()
+    Form.DW_FORM_ref2, Form.DW_FORM_data2, Form.DW_FORM_strx2 ->  getShortLE().toUShort()
+    Form.DW_FORM_ref4, Form.DW_FORM_data4, Form.DW_FORM_strx4 ->  getIntLE().toUInt()
+    Form.DW_FORM_ref8, Form.DW_FORM_data8, Form.DW_FORM_strx8 ->  getLongLE().toULong()
     Form.DW_FORM_data16 -> ByteArray(16).also { get(it, 0, 16) }
     Form.DW_FORM_strp, Form.DW_FORM_sec_offset -> when (header.offsetSize) {
-        4.toUByte() -> readUInt()
-        8.toUByte() -> readULong()
+        4.toUByte() -> getIntLE().toUInt()
+        8.toUByte() -> getLongLE().toULong()
         else -> throw IllegalArgumentException("Unsupported DWARF offset size: ${header.offsetSize}")
     }
 
     Form.DW_FORM_ref_addr -> when (val size = if (header.version <= 2) header.addressSize else header.offsetSize) {
-        4.toUByte() -> readUInt()
-        8.toUByte() -> readULong()
+        4.toUByte() -> getIntLE().toUInt()
+        8.toUByte() -> getLongLE().toULong()
         else -> throw IllegalArgumentException("Unsupported DWARF reference address size: $size")
     }
 
     Form.DW_FORM_addr -> when (header.addressSize) {
-        4.toUByte() ->  readUInt()
-        8.toUByte() ->  readULong()
+        4.toUByte() ->  getIntLE().toUInt()
+        8.toUByte() ->  getLongLE().toULong()
         else -> throw IllegalArgumentException("Unsupported address size: ${header.addressSize}")
     }
 
@@ -54,21 +54,21 @@ fun CommonByteBuffer.readForm(
     }
 
     Form.DW_FORM_block1 -> {
-        val length = readUByte().toInt()
+        val length = get().toUByte().toInt()
         val buffer = ByteArray(length)
         get(buffer, 0, length)
         buffer
     }
 
     Form.DW_FORM_block2 -> {
-        val length = readUShort().toInt()
+        val length = getShortLE().toUShort().toInt()
         val buffer = ByteArray(length)
         get(buffer, 0, length)
         buffer
     }
 
     Form.DW_FORM_block4 -> {
-        val length = readUInt().toInt()
+        val length = getIntLE().toUInt().toInt()
         val buffer = ByteArray(length)
         get(buffer, 0, length)
         buffer
@@ -86,8 +86,8 @@ fun CommonByteBuffer.readForm(
     // read from v5 .debug_line_str
     Form.DW_FORM_line_strp -> {
         when (header.offsetSize) {
-             4.toUByte() -> readUInt().toInt()
-             8.toUByte() -> readULong().toIntExact("DW_FORM_line_strp")
+             4.toUByte() -> getIntLE().toUInt().toInt()
+             8.toUByte() -> getLongLE().toULong().toIntExact("DW_FORM_line_strp")
             else -> throw IllegalArgumentException("Unsupported DWARF offset size: ${header.offsetSize}")
         }
     }
