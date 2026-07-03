@@ -5,6 +5,7 @@ import com.intellij.execution.RunnerAndConfigurationSettings
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.xdebugger.XDebuggerManager
 import org.jetbrains.hexana.run.WasmEngine
 import org.jetbrains.hexana.run.WasmRunConfiguration
 import org.jetbrains.hexana.run.WasmRunMode
@@ -42,6 +43,27 @@ object HexanaRunConfigurationUiTestProbe {
     }
 
     @JvmStatic
+    fun launchWasmtimeDebugRunConfiguration(
+        project: Project,
+        wasmFileName: String,
+        wasmtimePath: String,
+        wasmtimeOptions: String,
+        exportName: String,
+        programArgs: String,
+    ): List<String> {
+        return launchRunConfiguration(
+            project = project,
+            wasmFileName = wasmFileName,
+            engine = WasmEngine.WASMTIME,
+            runtimePath = wasmtimePath,
+            wasmtimeOptions = wasmtimeOptions,
+            exportName = exportName,
+            programArgs = programArgs,
+            mode = WasmRunMode.DEBUG,
+        )
+    }
+
+    @JvmStatic
     fun launchNodeJsRunConfiguration(
         project: Project,
         wasmFileName: String,
@@ -70,6 +92,7 @@ object HexanaRunConfigurationUiTestProbe {
         nodeOptions: String? = null,
         exportName: String,
         programArgs: String,
+        mode: WasmRunMode = WasmRunMode.RUN,
     ): List<String> {
         val basePath = project.basePath ?: error("project basePath is null")
         val wasmFilePath = "$basePath/$wasmFileName"
@@ -89,9 +112,15 @@ object HexanaRunConfigurationUiTestProbe {
             programArgs = programArgs,
             wasmTimeArgs = if (engine == WasmEngine.WASMTIME) wasmtimeOptions else "",
             engine = engine,
-            mode = WasmRunMode.RUN,
+            mode = mode,
             nodeOptions = if (engine == WasmEngine.NODE_JS) nodeOptions else null,
         )
+        val debugSessionObserved = if (mode == WasmRunMode.DEBUG) {
+            waitForDebugSession(project, wasmVirtualFile.path, engine)
+            true
+        } else {
+            false
+        }
 
         waitForLaunchedConfiguration(
             project = project,
@@ -105,10 +134,11 @@ object HexanaRunConfigurationUiTestProbe {
                 add("wasmFilePath=${configuration.wasmFilePath}")
                 add("workingDirectory=${configuration.workingDirectory}")
                 add("engine=${configuration.engine.name}")
-                add("mode=${WasmRunMode.RUN.name}")
+                add("mode=${mode.name}")
                 add("configurationName=${settings.name}")
                 add("selectedConfigurationName=${currentSelectedConfigurationName(project)}")
                 add("selectedConfigurationType=${configuration::class.java.name}")
+                add("debugSessionObserved=$debugSessionObserved")
                 add("effectiveWasmtimePath=${runtimeSettings.effectiveWasmtimePath()}")
                 add("effectiveNodePath=${runtimeSettings.effectiveNodePath()}")
                 add("wasmtimeOptions=${configuration.wasmtimeOptions}")
@@ -142,6 +172,37 @@ object HexanaRunConfigurationUiTestProbe {
         }
 
         error("Timed out waiting for launch of ${expectedSettings.name}; last state: $lastState")
+    }
+
+    private fun waitForDebugSession(
+        project: Project,
+        wasmFilePath: String,
+        engine: WasmEngine,
+    ) {
+        val deadlineMs = System.currentTimeMillis() + 30_000
+        var lastState = "debug session not observed"
+        while (System.currentTimeMillis() < deadlineMs) {
+            val currentSession = onEdt { XDebuggerManager.getInstance(project).currentSession }
+            val selected = onEdt { RunManager.getInstance(project).selectedConfiguration }
+            val configuration = selected?.configuration as? WasmRunConfiguration
+            lastState = when {
+                currentSession != null -> return
+                selected == null -> "no selected configuration"
+                configuration == null -> {
+                    "selected configuration is ${selected.configuration::class.java.name}"
+                }
+                configuration.wasmFilePath != wasmFilePath -> {
+                    "selected configuration path=${configuration.wasmFilePath}"
+                }
+                configuration.engine != engine -> {
+                    "selected configuration engine=${configuration.engine.name}"
+                }
+                else -> "current debugger session not created yet"
+            }
+            Thread.sleep(100)
+        }
+
+        error("Timed out waiting for debug session for $wasmFilePath; last state: $lastState")
     }
 
     private fun currentSelectedConfigurationName(project: Project): String =

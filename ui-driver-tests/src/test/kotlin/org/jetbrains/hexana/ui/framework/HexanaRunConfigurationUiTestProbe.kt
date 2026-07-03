@@ -33,6 +33,26 @@ internal fun Driver.launchWasmtimeRunConfiguration(
     )
 }
 
+internal fun Driver.launchWasmtimeDebugRunConfiguration(
+    wasmFileName: String,
+    wasmtimePath: String,
+    wasmtimeOptions: String = "",
+    exportName: String = "",
+    programArgs: String = "",
+): HexanaRunConfigurationLaunchSnapshot {
+    val probe = utility(HexanaRunConfigurationUiTestProbeRef::class)
+    return HexanaRunConfigurationLaunchPayload.parse(
+        probe.launchWasmtimeDebugRunConfiguration(
+            singleProject(),
+            wasmFileName,
+            wasmtimePath,
+            wasmtimeOptions,
+            exportName,
+            programArgs,
+        ),
+    )
+}
+
 internal fun Driver.launchNodeJsRunConfiguration(
     wasmFileName: String,
     nodePath: String,
@@ -68,6 +88,14 @@ internal interface HexanaRunConfigurationUiTestProbeRef {
         exportName: String,
         programArgs: String,
     ): List<String>
+    fun launchWasmtimeDebugRunConfiguration(
+        project: com.intellij.driver.sdk.Project,
+        wasmFileName: String,
+        wasmtimePath: String,
+        wasmtimeOptions: String,
+        exportName: String,
+        programArgs: String,
+    ): List<String>
     fun launchNodeJsRunConfiguration(
         project: com.intellij.driver.sdk.Project,
         wasmFileName: String,
@@ -76,22 +104,6 @@ internal interface HexanaRunConfigurationUiTestProbeRef {
         exportName: String,
         programArgs: String,
     ): List<String>
-}
-
-@Remote(
-    "org.jetbrains.hexana.run.WasmRunConfigTestHelper",
-    plugin = HEXANA_PLUGIN_ID,
-)
-internal interface RunConfigHelperRef {
-    fun createAndDebugWasmtime(
-        project: com.intellij.driver.sdk.Project,
-        wasmFileName: String,
-        engine: String,
-        wasmtimeOptions: String,
-        exportName: String,
-        programArgs: String,
-        wasmtimePath: String,
-    )
 }
 
 @Remote(

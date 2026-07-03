@@ -10,11 +10,11 @@ import com.intellij.tools.ide.util.common.logOutput
 import org.jetbrains.hexana.ui.framework.DebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationRuntimePreflight
 import org.jetbrains.hexana.ui.framework.awaitRunConfigurationConsoleResult
+import org.jetbrains.hexana.ui.framework.launchWasmtimeDebugRunConfiguration
 import org.jetbrains.hexana.ui.framework.launchNodeJsRunConfiguration
 import org.jetbrains.hexana.ui.framework.launchWasmtimeRunConfiguration
 import org.jetbrains.hexana.ui.framework.NodeJsDebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.NodeJsRunConfigHelperRef
-import org.jetbrains.hexana.ui.framework.RunConfigHelperRef
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Tag
@@ -325,12 +325,33 @@ class HexanaRunConfigurationDriverTest {
                 }
                 Thread.sleep(3_000)
 
-                launchWasmtimeDebugConfig(
-                    driver = this,
+                val launch = launchWasmtimeDebugRunConfiguration(
                     wasmFileName = CORE_MODULE_FILE,
-                    engine = "WASMTIME",
                     wasmtimePath = wasmtimePath,
                 )
+                assertEquals(
+                    context.resolvedProjectHome.resolve(CORE_MODULE_FILE).toString().replace('\\', '/'),
+                    launch.wasmFilePath.replace('\\', '/'),
+                    "Expected debug launch to target $CORE_MODULE_FILE",
+                )
+                assertEquals(
+                    context.resolvedProjectHome.toString().replace('\\', '/'),
+                    launch.workingDirectory.replace('\\', '/'),
+                    "Expected debug launch to record the project root as working directory",
+                )
+                assertEquals("WASMTIME", launch.engine, "Expected debug launch to use WASMTIME")
+                assertEquals("DEBUG", launch.mode, "Expected debug launch to use DEBUG mode")
+                assertTrue(launch.debugSessionObserved, "Expected the debug launch to observe a debugger session")
+                assertEquals(launch.configurationName, launch.selectedConfigurationName, "Expected debug launch to select its production-created configuration")
+                assertTrue(
+                    launch.selectedConfigurationType.contains("WasmRunConfiguration"),
+                    "Expected a WasmRunConfiguration selected by the debug launch, got ${launch.selectedConfigurationType}",
+                )
+                assertEquals(wasmtimePath, launch.effectiveWasmtimePath, "Expected debug launch to record the injected Wasmtime path")
+                assertEquals("", launch.wasmtimeOptions, "Expected the debug launch to omit Wasmtime options")
+                assertEquals("", launch.exportName, "Expected the debug launch to omit an export name")
+                assertEquals("", launch.programArguments, "Expected the debug launch to omit program arguments")
+                assertEquals(emptyList<String>(), launch.dependencies, "Expected hello_wasi.wasm to resolve no dependencies")
                 val output = awaitRunConfigurationConsoleResult(5.minutes).consoleOutput
                 logOutput("Core module debug output: $output")
 
@@ -578,25 +599,4 @@ class HexanaRunConfigurationDriverTest {
         )
     }
 
-    private fun launchWasmtimeDebugConfig(
-        driver: Driver,
-        wasmFileName: String,
-        engine: String,
-        wasmtimePath: String,
-        wasmtimeOptions: String = "",
-        exportName: String = "",
-        programArgs: String = "",
-    ) {
-        val project = driver.singleProject()
-        val helper = driver.utility(RunConfigHelperRef::class)
-        helper.createAndDebugWasmtime(
-            project,
-            wasmFileName,
-            engine,
-            wasmtimeOptions,
-            exportName,
-            programArgs,
-            wasmtimePath,
-        )
-    }
 }
