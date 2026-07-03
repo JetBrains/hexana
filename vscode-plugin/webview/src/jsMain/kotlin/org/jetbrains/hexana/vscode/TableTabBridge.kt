@@ -466,7 +466,6 @@ fun TableTabContent(
                                         classes(cssClass)
                                         style {
                                             property("cursor", "pointer")
-                                            color(Color("var(--vscode-textLink-foreground, #3794FF)"))
                                         }
                                         attr("title", cell.tooltip ?: cell.representation)
                                     }) {
