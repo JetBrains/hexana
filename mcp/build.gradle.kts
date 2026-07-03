@@ -58,6 +58,8 @@ val plainPackagingDir = layout.buildDirectory.dir("packaging-plain")
 val obfuscatedPackagingDir = layout.buildDirectory.dir("packaging")
 val nativePackagingDir = layout.buildDirectory.dir("packaging-native")
 val claudeDesktopMcpbDir = layout.buildDirectory.dir("packaging-native/claude-desktop-mcpb")
+val claudeDesktopMcpbManifestTemplate = layout.projectDirectory.file("packaging/claude-desktop-mcpb/manifest.json")
+val claudeDesktopMcpbGeneratedManifest = layout.buildDirectory.file("generated/claude-desktop-mcpb/manifest.json")
 val obfuscatedInstallDir = project(":mcp").layout.buildDirectory.dir("install/server-r8")
 val nativeServerExecutableName = if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
     "hexana-mcp.exe"
@@ -769,6 +771,47 @@ val zipNativeMcpExecutable = tasks.register<Zip>("zipNativeMcpExecutable") {
     destinationDirectory.set(nativeDistributionDir)
 }
 
+val generateClaudeDesktopMcpbManifest = tasks.register<JavaExec>("generateClaudeDesktopMcpbManifest") {
+    group = "generation"
+    description = "Generate the Claude Desktop MCPB manifest from the MCP tool catalog."
+    classpath = project(":mcp:tools-generator").extensions
+        .getByType<SourceSetContainer>()
+        .named("main").get().runtimeClasspath
+    mainClass.set("org.jetbrains.hexana.mcp.tools.generator.McpbManifestMainKt")
+    argumentProviders.add(CommandLineArgumentProvider {
+        listOf(
+            claudeDesktopMcpbManifestTemplate.asFile.absolutePath,
+            claudeDesktopMcpbGeneratedManifest.get().asFile.absolutePath,
+            mcpServerVersion,
+            mcpbHostPlatformName,
+        )
+    })
+    inputs.file(claudeDesktopMcpbManifestTemplate)
+    inputs.files(project(":mcp:tools-generator").tasks.named("classes"))
+    outputs.file(claudeDesktopMcpbGeneratedManifest)
+    dependsOn(":mcp:tools-generator:classes")
+}
+
+tasks.register<JavaExec>("generateClaudeDesktopMcpbManifestTemplate") {
+    group = "generation"
+    description = "Regenerate the checked-in Claude Desktop MCPB manifest template from the MCP tool catalog."
+    classpath = project(":mcp:tools-generator").extensions
+        .getByType<SourceSetContainer>()
+        .named("main").get().runtimeClasspath
+    mainClass.set("org.jetbrains.hexana.mcp.tools.generator.McpbManifestMainKt")
+    argumentProviders.add(CommandLineArgumentProvider {
+        listOf(
+            claudeDesktopMcpbManifestTemplate.asFile.absolutePath,
+            claudeDesktopMcpbManifestTemplate.asFile.absolutePath,
+            GENERATED_VERSION_TOKEN,
+            "__GENERATED_MCPB_PLATFORM__",
+        )
+    })
+    inputs.files(project(":mcp:tools-generator").tasks.named("classes"))
+    outputs.file(claudeDesktopMcpbManifestTemplate)
+    dependsOn(":mcp:tools-generator:classes")
+}
+
 val prepareClaudeDesktopMcpbNativeExecutable = tasks.register("prepareClaudeDesktopMcpbNativeExecutable") {
     group = "distribution"
     description = "Prepare the native executable used by the local Claude Desktop MCPB package."
@@ -811,20 +854,20 @@ val prepareClaudeDesktopMcpbNativeExecutable = tasks.register("prepareClaudeDesk
 val assembleClaudeDesktopMcpbPackage = tasks.register<Sync>("assembleClaudeDesktopMcpbPackage") {
     group = "distribution"
     description = "Stage the local Claude Desktop MCPB package for the current host platform."
-    dependsOn(installObfuscatedMcpServerRuntime, prepareClaudeDesktopMcpbNativeExecutable, generateThirdPartyNotices)
+    dependsOn(
+        installObfuscatedMcpServerRuntime,
+        generateClaudeDesktopMcpbManifest,
+        prepareClaudeDesktopMcpbNativeExecutable,
+        generateThirdPartyNotices,
+    )
 
     from(layout.projectDirectory.dir("packaging/claude-desktop-mcpb")) {
-        filesMatching("manifest.json") {
-            filter { line ->
-                line
-                    .replace(GENERATED_VERSION_TOKEN, mcpServerVersion)
-                    .replace("__GENERATED_MCPB_PLATFORM__", mcpbHostPlatformName)
-            }
-        }
+        exclude("manifest.json")
         filesMatching("bin/hexana-mcp-claude-desktop") {
             permissions { unix("rwxr-xr-x") }
         }
     }
+    from(claudeDesktopMcpbGeneratedManifest)
     from(rootProject.layout.projectDirectory.file("vscode-plugin/media/icon.png")) {
         into("assets")
         rename { "icon.png" }

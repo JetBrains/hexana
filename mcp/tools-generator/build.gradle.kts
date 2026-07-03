@@ -7,6 +7,7 @@ group = "org.jetbrains.hexana"
 
 dependencies {
     implementation(libs.kotlinpoet.jvm)
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit4)
     testImplementation(libs.kotlin.test)

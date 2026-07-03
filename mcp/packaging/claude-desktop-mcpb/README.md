@@ -13,6 +13,10 @@ The assembled bundle is written to:
 mcp/build/distributions-native/hexana-core-<platform>.mcpb
 ```
 
+The staged `manifest.json` is generated during assembly from this template and
+the shared `mcp:tools-generator` catalog, so its tool metadata stays aligned
+with the runtime tools exposed by `tools/list`.
+
 The package uses Claude Desktop's required `allowed_directories` picker. The MCPB
 entrypoint converts selected directories into Hexana allowed roots before
 starting the standalone Hexana MCP server over stdio.
