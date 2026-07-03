@@ -174,5 +174,7 @@ Windows: %APPDATA%\Claude\claude_desktop_config.json
 - Public MCP Registry publishing is not implemented.
 - Signing and update channels are not implemented.
 - The artifact is platform-specific.
+- Windows MCPB assembly is disabled until the package has a Windows-specific
+  entrypoint.
 - The package is native-first while this implementation still includes the
   existing JVM fallback.

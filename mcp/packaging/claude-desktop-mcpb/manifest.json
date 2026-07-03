@@ -37,18 +37,6 @@
             "description": "Summarize a Wasm or native binary with compact identity and entity counts."
         },
         {
-            "name": "list_binary_functions",
-            "description": "List Wasm funcidx or native symbol-backed functions with focused fields."
-        },
-        {
-            "name": "search_binary_functions",
-            "description": "Search Wasm funcidx or native symbol-backed functions by focused function fields."
-        },
-        {
-            "name": "query_binary",
-            "description": "Query Wasm or native binary records with bounded output."
-        },
-        {
             "name": "summarize_module",
             "description": "Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types."
         },
@@ -77,14 +65,6 @@
             "description": "Compare current/previous component imports against provider candidates and lock/config files."
         },
         {
-            "name": "resolve_component_dependencies",
-            "description": "Resolve component run/link dependencies from a main component and candidate roots into report-ready fields."
-        },
-        {
-            "name": "list_component_surface",
-            "description": "Low-level component import/export listing; not for dependency/provider resolution."
-        },
-        {
             "name": "plan_abi_binding_regeneration",
             "description": "Plan report-ready ABI binding regeneration from current Wasm plus a stale binding file."
         },
@@ -99,10 +79,6 @@
         {
             "name": "audit_local_stack_budget",
             "description": "Audit exported function local counts against a local stack budget policy."
-        },
-        {
-            "name": "list_custom_sections",
-            "description": "List WebAssembly custom sections with offsets, sizes, and small content previews."
         },
         {
             "name": "list_imports",
@@ -123,14 +99,6 @@
         {
             "name": "list_functions",
             "description": "List imported and defined functions with offset/limit pagination."
-        },
-        {
-            "name": "list_code_section_offsets",
-            "description": "List byte offsets and sizes for defined function bodies."
-        },
-        {
-            "name": "functions_for_indices",
-            "description": "Resolve function entries for the given unified function indices."
         },
         {
             "name": "resolve_function_signature",
@@ -161,52 +129,16 @@
             "description": "Focused source lookup for WebAssembly code offsets or function indices."
         },
         {
-            "name": "get_locals_for_functions",
-            "description": "Return grouped local declarations for the requested function indices."
-        },
-        {
-            "name": "get_instructions_for_functions",
-            "description": "Return decoded instruction text for the requested function indices."
-        },
-        {
             "name": "list_memory",
             "description": "Low-level list of imported and defined memories from a `.wasm` module."
-        },
-        {
-            "name": "get_memory_for_indices",
-            "description": "Return memories for the requested indices from the unified memory index space."
         },
         {
             "name": "list_globals",
             "description": "Low-level list of imported and defined globals from a `.wasm` module."
         },
         {
-            "name": "get_globals_for_indices",
-            "description": "Return globals for the requested indices from the unified global index space."
-        },
-        {
-            "name": "list_types",
-            "description": "List type entries declared by a `.wasm` module."
-        },
-        {
-            "name": "list_value_types",
-            "description": "List value types used by a `.wasm` module with counts and feature flags."
-        },
-        {
-            "name": "list_reference_types",
-            "description": "List reference value types used by a `.wasm` module."
-        },
-        {
-            "name": "get_types_for_indices",
-            "description": "Return type entries for the requested indices from the type index space."
-        },
-        {
             "name": "list_element_segments",
             "description": "List element segments declared by a `.wasm` module."
-        },
-        {
-            "name": "list_data",
-            "description": "Return raw data-section entries for a closed data-segment range."
         },
         {
             "name": "list_data_segments",
@@ -215,10 +147,6 @@
         {
             "name": "audit_data_payload_policy",
             "description": "Audit data segments against a payload policy JSON file and return report-ready matches."
-        },
-        {
-            "name": "query_artifacts",
-            "description": "Query WebAssembly artifact entities, diffs, and function relations with bounded output."
         }
     ],
     "server": {

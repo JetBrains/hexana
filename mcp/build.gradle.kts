@@ -67,7 +67,7 @@ val nativeServerExecutableName = if (System.getProperty("os.name").startsWith("W
     "hexana-mcp"
 }
 val nativeHostPlatformName = currentNativePlatformName()
-val mcpbHostPlatformName = currentMcpbPlatformName(nativeHostPlatformName)
+val mcpbHostPlatformName = providers.provider { currentMcpbPlatformName(nativeHostPlatformName) }
 val nativeReleasePlatforms = listOf("macos-arm64", "linux-x64")
 val nativeServerExecutable = project(":mcp:server").layout.buildDirectory.file("native/nativeCompile/$nativeServerExecutableName")
 val mcpbNativeExecutableOverridePath = providers.gradleProperty("hexanaMcpbNativeExecutable").map { it.trim() }
@@ -783,7 +783,7 @@ val generateClaudeDesktopMcpbManifest = tasks.register<JavaExec>("generateClaude
             claudeDesktopMcpbManifestTemplate.asFile.absolutePath,
             claudeDesktopMcpbGeneratedManifest.get().asFile.absolutePath,
             mcpServerVersion,
-            mcpbHostPlatformName,
+            mcpbHostPlatformName.get(),
         )
     })
     inputs.file(claudeDesktopMcpbManifestTemplate)
@@ -1475,7 +1475,7 @@ fun validateClaudeDesktopMcpbManifest(manifestFile: File) {
     check(allowedDirectories["required"] == true) {
         "allowed_directories must be required."
     }
-    check(compatibility["platforms"] == listOf(mcpbHostPlatformName)) {
+    check(compatibility["platforms"] == listOf(mcpbHostPlatformName.get())) {
         "Claude Desktop MCPB compatibility.platforms must match the current host platform."
     }
 }
@@ -1571,7 +1571,9 @@ fun currentMcpbPlatformName(nativePlatformName: String): String {
     return when {
         nativePlatformName.startsWith("macos-") -> "darwin"
         nativePlatformName.startsWith("linux-") -> "linux"
-        nativePlatformName.startsWith("windows-") -> "win32"
+        nativePlatformName.startsWith("windows-") -> error(
+            "Claude Desktop MCPB packaging is not supported on Windows until a Windows entrypoint is added."
+        )
         else -> nativePlatformName.substringBefore('-')
     }
 }

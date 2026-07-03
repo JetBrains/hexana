@@ -4,11 +4,11 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.jetbrains.hexana.mcp.tools.HexanaTools
 import org.junit.Test
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class McpbManifestGenerationTest {
@@ -49,10 +49,12 @@ class McpbManifestGenerationTest {
             listOf("darwin"),
             manifest.getValue("compatibility").jsonObject.getValue("platforms").jsonArray.map { it.jsonPrimitive.content },
         )
-        assertEquals(HexanaTools.size, tools.size)
-        assertEquals(HexanaTools.map { it.name }, tools.map { it.jsonObject.getValue("name").jsonPrimitive.content })
+        val toolNames = tools.map { it.jsonObject.getValue("name").jsonPrimitive.content }
+        assertEquals(mcpbManifestToolNames.size, tools.size)
+        assertEquals(mcpbManifestToolNames, toolNames)
+        assertFalse("query_binary" in toolNames)
         assertEquals(
-            HexanaTools.map { it.summary.trim() },
+            mcpbManifestTools().map { it.summary.trim() },
             tools.map { it.jsonObject.getValue("description").jsonPrimitive.content },
         )
     }
@@ -68,10 +70,12 @@ class McpbManifestGenerationTest {
             manifest.getValue("compatibility").jsonObject.getValue("platforms").jsonArray.map { it.jsonPrimitive.content },
         )
         assertEquals(true, manifest.getValue("tools_generated").jsonPrimitive.content.toBooleanStrict())
-        assertEquals(HexanaTools.size, tools.size)
-        assertEquals(HexanaTools.map { it.name }, tools.map { it.jsonObject.getValue("name").jsonPrimitive.content })
+        val toolNames = tools.map { it.jsonObject.getValue("name").jsonPrimitive.content }
+        assertEquals(mcpbManifestToolNames.size, tools.size)
+        assertEquals(mcpbManifestToolNames, toolNames)
+        assertFalse("list_binary_functions" in toolNames)
         assertEquals(
-            HexanaTools.map { it.summary.trim() },
+            mcpbManifestTools().map { it.summary.trim() },
             tools.map { it.jsonObject.getValue("description").jsonPrimitive.content },
         )
     }

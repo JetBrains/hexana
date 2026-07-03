@@ -8,8 +8,6 @@ Related documents:
 - [CLAUDE_DESKTOP_MCPB.md](CLAUDE_DESKTOP_MCPB.md) describes the local Claude Desktop MCPB prototype and demo checklist.
 - [Hexana MCP Native Image Release Design](../../docs/superpowers/specs/2026-06-19-mcp-native-image-release-design.md)
   records the native package support policy and current limitations.
-- [Claude Desktop MCPB Strategy](../../docs/superpowers/specs/2026-07-02-claude-desktop-mcpb-strategy.md)
-  records the local MCPB package decision for the prototype track.
 
 Use `CLAUDE_DESKTOP_MCPB.md` for reviewer-facing local install steps, `doctor`
 preflight, Claude Desktop log locations, `tools/list` proof expectations, the

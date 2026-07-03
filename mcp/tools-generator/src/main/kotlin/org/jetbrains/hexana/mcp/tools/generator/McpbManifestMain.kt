@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import org.jetbrains.hexana.mcp.tools.HexanaTools
+import org.jetbrains.hexana.mcp.tools.ToolSpec
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.system.exitProcess
@@ -41,7 +42,7 @@ internal fun generateMcpbManifest(template: Path, output: Path, version: String,
 
     output.parent?.let(Files::createDirectories)
     Files.writeString(output, Json { prettyPrint = true }.encodeToString(JsonObject.serializer(), manifest) + "\n")
-    println("Wrote Claude Desktop MCPB manifest with ${HexanaTools.size} tools to $output")
+    println("Wrote Claude Desktop MCPB manifest with ${mcpbManifestTools().size} tools to $output")
 }
 
 private fun renderCompatibility(template: JsonObject, platform: String): JsonObject = buildJsonObject {
@@ -55,10 +56,49 @@ private fun renderCompatibility(template: JsonObject, platform: String): JsonObj
 }
 
 private fun renderTools(): JsonArray = JsonArray(
-    HexanaTools.map { tool ->
+    mcpbManifestTools().map { tool ->
         buildJsonObject {
             put("name", JsonPrimitive(tool.name))
             put("description", JsonPrimitive(tool.summary.trim()))
         }
     }
 )
+
+internal val mcpbManifestToolNames = listOf(
+    "summarize_binary",
+    "summarize_module",
+    "list_enabled_features",
+    "get_entrypoint_policy",
+    "list_required_proposals",
+    "diff_required_proposals",
+    "check_runtime_compatibility",
+    "check_component_compatibility",
+    "plan_abi_binding_regeneration",
+    "check_memory_contract",
+    "audit_global_state_policy",
+    "audit_local_stack_budget",
+    "list_imports",
+    "list_exports",
+    "search_exports",
+    "list_exported_functions",
+    "list_functions",
+    "resolve_function_signature",
+    "disassemble_function",
+    "get_function_call_graph",
+    "search_functions_by_name",
+    "resolve_wasm_frames",
+    "resolve_function_symbols",
+    "resolve_source_locations",
+    "list_memory",
+    "list_globals",
+    "list_element_segments",
+    "list_data_segments",
+    "audit_data_payload_policy",
+)
+
+internal fun mcpbManifestTools(): List<ToolSpec> {
+    val toolsByName = HexanaTools.associateBy { it.name }
+    return mcpbManifestToolNames.map { name ->
+        toolsByName[name] ?: error("MCPB manifest tool `$name` is missing from the shared Hexana tool catalog.")
+    }
+}
