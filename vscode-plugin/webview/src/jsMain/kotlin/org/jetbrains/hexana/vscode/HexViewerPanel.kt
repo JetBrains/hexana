@@ -287,10 +287,15 @@ fun HexViewerPanel(
             val ke = event as? KeyboardEvent ?: return@handler
             val key = ke.key
 
+            // Skip all hex viewer keyboard handling when focus is inside the
+            // tab content area — let the table/tab handle its own keys.
+            val focusTarget = ke.target as? HTMLElement
+            if (focusTarget?.closest(".hexana-tab-content") != null) return@handler
+
             // Cmd/Ctrl+F opens the hex search bar.
             if (key == "f" && (ke.metaKey || ke.ctrlKey)) {
                 // Only intercept when focus is on the hex viewer or the body.
-                val target = ke.target as? HTMLElement
+                val target = focusTarget
                 if (target?.closest(".hexana-panel-table") != null ||
                     target?.closest(".hexana-searchable-table") != null
                 ) return@handler

@@ -231,9 +231,25 @@ fun HexanaPanel(
         }
 
         val currentTab = tabs.firstOrNull { it.label == activeTab }
+        var tabContentRef by remember { mutableStateOf<HTMLElement?>(null) }
+
+        // Focus the tab content whenever the active tab changes
+        LaunchedEffect(activeTab) {
+            // Double rAF to ensure the new tab content is rendered before focusing
+            kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+                window.requestAnimationFrame {
+                    window.requestAnimationFrame {
+                        tabContentRef?.focus()
+                        cont.resumeWith(Result.success(Unit))
+                    }
+                }
+            }
+        }
+
         // Tab content
         Div({
             classes("hexana-tab-content")
+            tabIndex(-1)
             style {
                 property("overflow-y", "auto")
                 if (currentTab?.padding != false) {
@@ -241,6 +257,19 @@ fun HexanaPanel(
                 }
                 property("flex", "1")
                 property("min-height", "0")
+                property("outline", "none")
+            }
+            onClick { e ->
+                val target = e.target as? HTMLElement ?: return@onClick
+                // Focus the tab content when clicking on empty area (not on interactive children)
+                val tag = target.tagName.uppercase()
+                if (tag != "INPUT" && tag != "BUTTON" && tag != "A" && tag != "SELECT" && tag != "TEXTAREA") {
+                    tabContentRef?.focus()
+                }
+            }
+            ref { element ->
+                tabContentRef = element
+                onDispose { tabContentRef = null }
             }
         }) {
             currentTab?.content?.invoke(selection)

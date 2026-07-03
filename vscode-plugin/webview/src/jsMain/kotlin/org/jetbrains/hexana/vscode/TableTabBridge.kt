@@ -283,8 +283,17 @@ fun TableTabContent(
             property("min-height", "0")
         }
         ref { container ->
+            // Listen on window (capture phase) so we receive Cmd+F even when
+            // focus is on the parent hexana-tab-content rather than this div.
             val keyListener = EventListener { event ->
                 val ke = event as? KeyboardEvent ?: return@EventListener
+                // Only handle when focus is inside (or on) this container
+                val target = ke.target as? HTMLElement
+                if (target != null && !container.contains(target) && target != container) {
+                    // Also handle when focus is on the direct parent tab-content
+                    val tabContent = container.closest(".hexana-tab-content")
+                    if (target != tabContent) return@EventListener
+                }
                 if (ke.key == "f" && (ke.metaKey || ke.ctrlKey)) {
                     ke.preventDefault()
                     ke.stopPropagation()
@@ -299,9 +308,9 @@ fun TableTabContent(
                     searchQuery = ""
                 }
             }
-            container.addEventListener("keydown", keyListener, true)
+            kotlinx.browser.window.addEventListener("keydown", keyListener, true)
             onDispose {
-                container.removeEventListener("keydown", keyListener, true)
+                kotlinx.browser.window.removeEventListener("keydown", keyListener, true)
             }
         }
     }) {
