@@ -81,7 +81,7 @@ Overall: OK
 
 The MCPB manifest passes `${user_config.allowed_directories}` as the only
 argument. Claude Desktop expands the selected directories into argv values, and
-the package wrapper exports them through `HEXANA_MCP_ALLOWED_ROOTS` before
+the package wrapper forwards them as repeated `--allowed-root` arguments before
 starting `hexana-mcp stdio`.
 
 Common log locations:
@@ -147,7 +147,7 @@ after replacing the two absolute paths:
 {
   "mcpServers": {
     "hexana": {
-      "command": "/absolute/path/to/Hexana-mcp-mcdb/mcp/build/packaging-native/claude-desktop-mcpb/bin/hexana-mcp",
+      "command": "/absolute/path/to/Hexana/mcp/build/packaging-native/claude-desktop-mcpb/bin/hexana-mcp",
       "args": [
         "stdio",
         "--allowed-root",

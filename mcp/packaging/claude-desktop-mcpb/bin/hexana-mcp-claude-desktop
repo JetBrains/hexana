@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PLUGIN_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
@@ -21,11 +21,14 @@ if [ "$#" -eq 0 ]; then
 fi
 
 ROOT_COUNT=0
-ALLOWED_ROOTS=()
 for allowed_root in "$@"; do
   if [ -n "$allowed_root" ]; then
     ROOT_COUNT=$((ROOT_COUNT + 1))
-    ALLOWED_ROOTS+=("$allowed_root")
+    if [ "$ROOT_COUNT" -eq 1 ]; then
+      set -- stdio --allowed-root "$allowed_root"
+    else
+      set -- "$@" --allowed-root "$allowed_root"
+    fi
   fi
 done
 
@@ -34,6 +37,4 @@ if [ "$ROOT_COUNT" -eq 0 ]; then
   exit 1
 fi
 
-HEXANA_MCP_ALLOWED_ROOTS=$(printf '%s\n' "${ALLOWED_ROOTS[@]}")
-export HEXANA_MCP_ALLOWED_ROOTS
-exec "$LAUNCHER" stdio
+exec "$LAUNCHER" "$@"

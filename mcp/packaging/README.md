@@ -17,6 +17,7 @@ preflight, Claude Desktop log locations, `tools/list` proof expectations, the
 Source layouts:
 
 - `claude-plugin/`
+- `claude-desktop-mcpb/`
 - `codex-plugin/`
 
 Build JVM fallback wrapper outputs with R8-obfuscated Hexana runtime classes:

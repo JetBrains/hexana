@@ -787,6 +787,8 @@ val generateClaudeDesktopMcpbManifest = tasks.register<JavaExec>("generateClaude
         )
     })
     inputs.file(claudeDesktopMcpbManifestTemplate)
+    inputs.property("mcpServerVersion", mcpServerVersion)
+    inputs.property("mcpbHostPlatformName", mcpbHostPlatformName)
     inputs.files(project(":mcp:tools-generator").tasks.named("classes"))
     outputs.file(claudeDesktopMcpbGeneratedManifest)
     dependsOn(":mcp:tools-generator:classes")
@@ -1044,9 +1046,11 @@ tasks.register("claudeDesktopMcpbSmoke") {
             wrapperArgs.exitCode == 0 && observedArgs == listOf(
                 "args:",
                 "stdio",
-                "env-begin",
+                "--allowed-root",
                 allowedRoot.absolutePath,
+                "--allowed-root",
                 secondAllowedRoot.absolutePath,
+                "env-begin",
                 "env-end",
             )
         ) {
