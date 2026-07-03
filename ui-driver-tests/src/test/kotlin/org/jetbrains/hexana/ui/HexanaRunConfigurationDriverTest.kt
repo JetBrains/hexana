@@ -8,6 +8,7 @@ import com.intellij.ide.starter.driver.engine.runIdeWithDriver
 import com.intellij.tools.ide.util.common.logOutput
 import org.jetbrains.hexana.ui.framework.DebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationRuntimePreflight
+import org.jetbrains.hexana.ui.framework.HexanaWasmBreakpointDebugResult
 import org.jetbrains.hexana.ui.framework.awaitRunConfigurationConsoleResult
 import org.jetbrains.hexana.ui.framework.launchNodeJsDebugRunConfiguration
 import org.jetbrains.hexana.ui.framework.launchWasmtimeDebugRunConfiguration
@@ -459,57 +460,9 @@ class HexanaRunConfigurationDriverTest {
                 )
 
                 logOutput("Node.js DWARF breakpoint debug result:\n$result")
-
-                // Verify the session paused at the breakpoint
-                assertTrue(
-                    result.startsWith("PAUSED"),
-                    "Expected debug session to pause at breakpoint, got: $result"
-                )
-
-                // Parse variable lines (format: name=value)
-                val variableLines = result.lines()
-                    .filter { it.contains("=") && it != "PAUSED" && it != "RESUMED" }
-                val variableMap = variableLines.associate {
-                    val eqIndex = it.indexOf('=')
-                    it.substring(0, eqIndex) to it.substring(eqIndex + 1)
-                }
-
-                logOutput("Parsed variables: $variableMap")
-
-                // Filter out runtime-injected variables
-                val userVariables = variableMap.filterKeys { it != "__vmctx" && it != "memory" }
-
-                // We expect function parameters 'a' and 'b' to be visible
-                assertTrue(
-                    userVariables.containsKey("a"),
-                    "Expected variable 'a' to be visible. Found: ${userVariables.keys}"
-                )
-                assertTrue(
-                    userVariables.containsKey("b"),
-                    "Expected variable 'b' to be visible. Found: ${userVariables.keys}"
-                )
-
-                // Verify values if available (we passed a=3, b=7)
-                val aValue = userVariables["a"]
-                if (aValue != null && aValue.isNotBlank()) {
-                    assertTrue(
-                        aValue.contains("3"),
-                        "Expected variable 'a' to have value 3, got: $aValue"
-                    )
-                }
-                val bValue = userVariables["b"]
-                if (bValue != null && bValue.isNotBlank()) {
-                    assertTrue(
-                        bValue.contains("7"),
-                        "Expected variable 'b' to have value 7, got: $bValue"
-                    )
-                }
-
-                // Verify execution was resumed
-                assertTrue(
-                    result.contains("RESUMED"),
-                    "Expected debug session to be resumed after inspection"
-                )
+                val breakpointResult = HexanaWasmBreakpointDebugResult.parse(result)
+                logOutput("Parsed breakpoint variables: ${breakpointResult}")
+                breakpointResult.assertStrict()
             }
     }
 
@@ -549,57 +502,9 @@ class HexanaRunConfigurationDriverTest {
                 )
 
                 logOutput("DWARF breakpoint debug result:\n$result")
-
-                // Verify the session paused at the breakpoint
-                assertTrue(
-                    result.startsWith("PAUSED"),
-                    "Expected debug session to pause at breakpoint, got: $result"
-                )
-
-                // Parse variable lines (format: name=value)
-                val variableLines = result.lines()
-                    .filter { it.contains("=") && it != "PAUSED" && it != "RESUMED" }
-                val variableMap = variableLines.associate {
-                    val eqIndex = it.indexOf('=')
-                    it.substring(0, eqIndex) to it.substring(eqIndex + 1)
-                }
-
-                logOutput("Parsed variables: $variableMap")
-
-                // Filter out runtime-injected variables
-                val userVariables = variableMap.filterKeys { it != "__vmctx" && it != "memory" }
-
-                // We expect function parameters 'a' and 'b' to be visible
-                assertTrue(
-                    userVariables.containsKey("a"),
-                    "Expected variable 'a' to be visible. Found: ${userVariables.keys}"
-                )
-                assertTrue(
-                    userVariables.containsKey("b"),
-                    "Expected variable 'b' to be visible. Found: ${userVariables.keys}"
-                )
-
-                // Verify values if available (we passed a=3, b=7)
-                val aValue = userVariables["a"]
-                if (aValue != null && aValue.isNotBlank()) {
-                    assertTrue(
-                        aValue.contains("3"),
-                        "Expected variable 'a' to have value 3, got: $aValue"
-                    )
-                }
-                val bValue = userVariables["b"]
-                if (bValue != null && bValue.isNotBlank()) {
-                    assertTrue(
-                        bValue.contains("7"),
-                        "Expected variable 'b' to have value 7, got: $bValue"
-                    )
-                }
-
-                // Verify execution was resumed
-                assertTrue(
-                    result.contains("RESUMED"),
-                    "Expected debug session to be resumed after inspection"
-                )
+                val breakpointResult = HexanaWasmBreakpointDebugResult.parse(result)
+                logOutput("Parsed breakpoint variables: ${breakpointResult}")
+                breakpointResult.assertStrict()
             }
     }
 }
