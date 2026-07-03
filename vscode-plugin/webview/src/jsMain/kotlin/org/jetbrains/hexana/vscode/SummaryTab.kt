@@ -86,8 +86,12 @@ private fun SummaryLayout(
             property("align-items", "flex-start")
         }
     }) {
-        // Sections table – shrink-wraps to its content
-        Div({ style { property("flex", "0 0 auto") } }) {
+        // Sections table – shrinks to fit available space
+        Div({ style {
+            property("flex", "1 1 0%")
+            property("min-width", "0")
+            property("overflow", "auto")
+        } }) {
             H4({ style { property("margin", "0 0 8px 0") } }) { Text("Sections") }
             SummarySectionsTable(sections, selection)
         }
