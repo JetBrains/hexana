@@ -296,14 +296,14 @@ fun TableTabContent(
                                 property("cursor", "pointer")
                                 color(Color("var(--vscode-textLink-foreground, #3794FF)"))
                             }
-                            if (cell.tooltip != null) attr("title", cell.tooltip!!)
+                            attr("title", cell.tooltip ?: cell.representation)
                         }) {
                             Text(cell.representation)
                         }
                     } else {
                         Td({
                             classes(cssClass)
-                            if (cell.tooltip != null) attr("title", cell.tooltip!!)
+                            attr("title", cell.tooltip ?: cell.representation)
                         }) {
                             Text(cell.representation)
                         }
@@ -510,7 +510,7 @@ private fun TreeTableTabContent(
 
                     Td({
                         classes(cssClass)
-                        if (cell.tooltip != null) attr("title", cell.tooltip!!)
+                        attr("title", cell.tooltip ?: cell.representation)
                     }) {
                         if (colIndex == 0) {
                             // Indentation and expand/collapse chevron

@@ -126,6 +126,8 @@ html, body {
 .hexana-panel-table {
     border-collapse: collapse;
     font-size: 12px;
+    table-layout: fixed;
+    width: 100%;
 }
 
 /* Panel table row hover */
@@ -192,6 +194,10 @@ html, body {
 }
 .cell {
     padding: 2px 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 0;
 }
 .cell-right {
     text-align: right;
@@ -200,6 +206,10 @@ html, body {
 .cell-muted {
     padding: 2px 8px;
     opacity: 0.7;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 0;
 }
 .cell-right-muted {
     text-align: right;
