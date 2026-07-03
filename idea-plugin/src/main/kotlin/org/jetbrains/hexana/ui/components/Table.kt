@@ -442,6 +442,7 @@ fun Table(
                             }
                             .clickable {
                                 selectedOriginalIndex = id
+                                focusRequester.requestFocus()
                                 onRow(id)
                             },
                         verticalAlignment = Alignment.CenterVertically

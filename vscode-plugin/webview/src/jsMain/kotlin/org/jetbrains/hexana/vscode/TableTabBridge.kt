@@ -209,6 +209,7 @@ fun TableTabContent(
 
     // --- Data-level sorting & filtering for virtual scrolling ---
     var searchQuery by remember(descriptor) { mutableStateOf("") }
+    var isSearchVisible by remember(descriptor) { mutableStateOf(descriptor.alwaysShowSearch) }
     var debouncedQuery by remember(descriptor) { mutableStateOf("") }
     LaunchedEffect(searchQuery) {
         delay(300)
@@ -287,6 +288,15 @@ fun TableTabContent(
                 if (ke.key == "f" && (ke.metaKey || ke.ctrlKey)) {
                     ke.preventDefault()
                     ke.stopPropagation()
+                    isSearchVisible = true
+                    kotlinx.browser.window.requestAnimationFrame {
+                        container.querySelector(".hexana-search-input")
+                            ?.let { (it as? org.w3c.dom.HTMLInputElement)?.focus() }
+                    }
+                }
+                if (ke.key == "Escape" && isSearchVisible && !descriptor.alwaysShowSearch) {
+                    isSearchVisible = false
+                    searchQuery = ""
                 }
             }
             container.addEventListener("keydown", keyListener, true)
@@ -296,11 +306,14 @@ fun TableTabContent(
         }
     }) {
         // Search bar
-        if (descriptor.alwaysShowSearch || searchQuery.isNotEmpty()) {
+        if (isSearchVisible || searchQuery.isNotEmpty()) {
             SearchBar(
                 query = searchQuery,
                 onQueryChange = { searchQuery = it },
-                onClose = { searchQuery = "" },
+                onClose = {
+                    searchQuery = ""
+                    if (!descriptor.alwaysShowSearch) isSearchVisible = false
+                },
                 leading = searchBarLeading,
             )
         }
