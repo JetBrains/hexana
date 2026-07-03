@@ -63,9 +63,16 @@ fun Table(
     searchPlaceholder: String? = null,
     searchBarLeading: (@Composable () -> Unit)? = null,
 ) {
-    val tableData = remember(columns, dataCount) {
-        (0 until dataCount).map { index ->
-            index to columns.map { column -> column.dataProvider(index) }
+    // Cache cell values lazily per row to avoid computing all cells upfront.
+    // Only rows that are actually displayed, filtered, or sorted will be evaluated.
+    val cellCache = remember(columns, dataCount) {
+        Array<Array<TableCellValue<*>>?>(dataCount) { null }
+    }
+    val getCellValues = remember(columns, dataCount) {
+        { index: Int ->
+            cellCache[index] ?: columns.map { column -> column.dataProvider(index) }
+                .toTypedArray()
+                .also { cellCache[index] = it }
         }
     }
 
@@ -98,50 +105,37 @@ fun Table(
     }
     val scope = rememberCoroutineScope()
 
-    val viewData = remember(tableData, sortIndex, sortAsc, searchQuery) {
-        val filtered = if (searchQuery.text.isEmpty()) {
-            tableData
-        } else {
-            tableData.filter { (_, values) ->
-                values.any { it.representation.contains(searchQuery.text, ignoreCase = true) }
+    val viewData = remember(columns, dataCount, sortIndex, sortAsc, searchQuery) {
+        val indices = (0 until dataCount).toMutableList()
+
+        // Filter
+        if (searchQuery.text.isNotEmpty()) {
+            indices.retainAll { index ->
+                getCellValues(index).any { it.representation.contains(searchQuery.text, ignoreCase = true) }
             }
         }
 
-        // When onSortChanged is provided, the caller handles sorting externally
+        // Sort — when onSortChanged is provided, the caller handles sorting externally
         // (e.g. tree tables sort in flattenTree to preserve parent-child structure).
         if (onSortChanged != null) {
-            filtered
+            // no-op: external sort
         } else if (sortIndex == -1) {
-            if (sortAsc) {
-                filtered.sortedBy { (id, _) -> id }
-            } else {
-                filtered.sortedByDescending { (id, _) -> id }
-            }
+            if (!sortAsc) indices.reverse()
         } else {
-            if (sortAsc) {
-                filtered.sortedWith { a, b ->
-                    val valueA = a.second[sortIndex].value
-                    val valueB = b.second[sortIndex].value
-                    when {
-                        valueA is Int && valueB is Int -> valueA.compareTo(valueB)
-                        valueA is Long && valueB is Long -> valueA.compareTo(valueB)
-                        valueA is String && valueB is String -> valueA.compareTo(valueB)
-                        else -> 0
-                    }
-                }
-            } else {
-                filtered.sortedWith { a, b ->
-                    val valueA = a.second[sortIndex].value
-                    val valueB = b.second[sortIndex].value
-                    when {
-                        valueA is Int && valueB is Int -> valueB.compareTo(valueA)
-                        valueA is Long && valueB is Long -> valueB.compareTo(valueA)
-                        valueA is String && valueB is String -> valueB.compareTo(valueA)
-                        else -> 0
-                    }
+            val comparator = Comparator<Int> { a, b ->
+                val valueA = getCellValues(a)[sortIndex].value
+                val valueB = getCellValues(b)[sortIndex].value
+                when {
+                    valueA is Int && valueB is Int -> valueA.compareTo(valueB)
+                    valueA is Long && valueB is Long -> valueA.compareTo(valueB)
+                    valueA is String && valueB is String -> valueA.compareTo(valueB)
+                    else -> 0
                 }
             }
+            indices.sortWith(if (sortAsc) comparator else comparator.reversed())
         }
+
+        indices
     }
 
     val textMeasurer = rememberTextMeasurer()
@@ -158,11 +152,11 @@ fun Table(
             if (event.type == KeyEventType.KeyDown) {
                 if (event.key == Key.C && (event.isCtrlPressed || event.isMetaPressed)) {
                     selectedOriginalIndex?.let { id ->
-                        val rowData = tableData.find { it.first == id }
+                        val rowData = selectedOriginalIndex?.let { getCellValues(it) }
                         if (rowData != null) {
                             val rowContent = buildString {
                                 append(id)
-                                rowData.second.forEach {
+                                rowData.forEach {
                                     append("\t")
                                     append(it.representation)
                                 }
@@ -198,7 +192,7 @@ fun Table(
                     }
                 }
 
-                val currentIndex = viewData.indexOfFirst { it.first == selectedOriginalIndex }
+                val currentIndex = viewData.indexOf(selectedOriginalIndex ?: -1)
                 val newIndex = when (event.key) {
                     Key.DirectionUp -> {
                         (currentIndex - 1).coerceAtLeast(0)
@@ -211,7 +205,7 @@ fun Table(
                 }
 
                 if (newIndex != null && newIndex != currentIndex && viewData.isNotEmpty()) {
-                    val (newId, _) = viewData[newIndex]
+                    val newId = viewData[newIndex]
                     selectedOriginalIndex = newId
                     hoveredOriginalIndex = null
                     if (onRowSelect != null) {
@@ -426,7 +420,8 @@ fun Table(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
                     .onPointerEvent(PointerEventType.Exit) { hoveredOriginalIndex = null }) {
                 items(viewData.size) { rowIndex ->
-                    val (id, data) = viewData[rowIndex]
+                    val id = viewData[rowIndex]
+                    val data = getCellValues(id)
 
                     val rowBackgroundColor = if (hoveredOriginalIndex == id) {
                         Color(201, 255, 255, 100).compositeOver(HexanaTheme.hexCellHoverActiveColor)
