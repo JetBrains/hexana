@@ -486,6 +486,7 @@ fun Table(
                                 Box(modifier = Modifier.then(weightModifier(column))) {
                                     ContextMenuArea(items = { onRowContextMenu(id) }) {
                                         Box(modifier = Modifier.padding(horizontal = 4.dp).then(column.widthModifier()).then(column.modifier)) {
+                                            var isOverflowed by remember { mutableStateOf(false) }
                                             val textComponent = @Composable {
                                                 Text(
                                                     text,
@@ -495,12 +496,16 @@ fun Table(
                                                     ),
                                                     lineHeight = TextUnit(1f, TextUnitType.Em),
                                                     maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    onTextLayout = { layoutResult ->
+                                                        isOverflowed = layoutResult.hasVisualOverflow
+                                                    },
                                                 )
                                             }
 
-                                            if (tooltip != null) {
-                                                Tooltip(tooltip = { Text(tooltip) }) {
+                                            val effectiveTooltip = tooltip ?: text.takeIf { isOverflowed }
+                                            if (effectiveTooltip != null) {
+                                                Tooltip(tooltip = { Text(effectiveTooltip) }) {
                                                     textComponent()
                                                 }
                                             } else {
