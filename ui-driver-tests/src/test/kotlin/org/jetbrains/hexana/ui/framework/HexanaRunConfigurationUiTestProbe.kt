@@ -73,6 +73,26 @@ internal fun Driver.launchNodeJsRunConfiguration(
     )
 }
 
+internal fun Driver.launchNodeJsDebugRunConfiguration(
+    wasmFileName: String,
+    nodePath: String,
+    nodeOptions: String? = null,
+    exportName: String = "",
+    programArgs: String = "",
+): HexanaRunConfigurationLaunchSnapshot {
+    val probe = utility(HexanaRunConfigurationUiTestProbeRef::class)
+    return HexanaRunConfigurationLaunchPayload.parse(
+        probe.launchNodeJsDebugRunConfiguration(
+            singleProject(),
+            wasmFileName,
+            nodePath,
+            nodeOptions,
+            exportName,
+            programArgs,
+        ),
+    )
+}
+
 @Remote(
     "org.jetbrains.hexana.uitestframework.HexanaRunConfigurationUiTestProbe",
     plugin = HEXANA_PLUGIN_ID,
@@ -104,22 +124,14 @@ internal interface HexanaRunConfigurationUiTestProbeRef {
         exportName: String,
         programArgs: String,
     ): List<String>
-}
-
-@Remote(
-    "org.jetbrains.hexana.run.WasmRunConfigTestHelper",
-    plugin = HEXANA_PLUGIN_ID,
-)
-internal interface NodeJsRunConfigHelperRef {
-    fun createAndDebugNodeJs(
+    fun launchNodeJsDebugRunConfiguration(
         project: com.intellij.driver.sdk.Project,
         wasmFileName: String,
-        engine: String,
-        nodeOptions: String,
+        nodePath: String,
+        nodeOptions: String?,
         exportName: String,
         programArgs: String,
-        nodePath: String,
-    )
+    ): List<String>
 }
 
 @Remote(

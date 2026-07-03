@@ -1,6 +1,5 @@
 package org.jetbrains.hexana.ui
 
-import com.intellij.driver.client.Driver
 import com.intellij.driver.sdk.*
 import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
 import com.intellij.driver.sdk.ui.components.common.editorTabs
@@ -10,11 +9,11 @@ import com.intellij.tools.ide.util.common.logOutput
 import org.jetbrains.hexana.ui.framework.DebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationRuntimePreflight
 import org.jetbrains.hexana.ui.framework.awaitRunConfigurationConsoleResult
+import org.jetbrains.hexana.ui.framework.launchNodeJsDebugRunConfiguration
 import org.jetbrains.hexana.ui.framework.launchWasmtimeDebugRunConfiguration
 import org.jetbrains.hexana.ui.framework.launchNodeJsRunConfiguration
 import org.jetbrains.hexana.ui.framework.launchWasmtimeRunConfiguration
 import org.jetbrains.hexana.ui.framework.NodeJsDebugTestHelperRef
-import org.jetbrains.hexana.ui.framework.NodeJsRunConfigHelperRef
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Tag
@@ -379,14 +378,41 @@ class HexanaRunConfigurationDriverTest {
                 }
                 Thread.sleep(3_000)
 
-                launchNodeJsDebugConfig(
-                    driver = this,
+                val launch = launchNodeJsDebugRunConfiguration(
                     wasmFileName = ADD_MODULE_FILE,
-                    engine = "NODE_JS",
+                    nodePath = nodePath,
+                    nodeOptions = "",
                     exportName = "add",
                     programArgs = "2 3",
-                    nodePath = nodePath,
                 )
+                assertEquals(
+                    context.resolvedProjectHome.resolve(ADD_MODULE_FILE).toString().replace('\\', '/'),
+                    launch.wasmFilePath.replace('\\', '/'),
+                    "Expected Node.js debug launch to target $ADD_MODULE_FILE",
+                )
+                assertEquals(
+                    context.resolvedProjectHome.toString().replace('\\', '/'),
+                    launch.workingDirectory.replace('\\', '/'),
+                    "Expected Node.js debug launch to record the project root as working directory",
+                )
+                assertEquals("NODE_JS", launch.engine, "Expected Node.js debug launch to use NODE_JS")
+                assertEquals("DEBUG", launch.mode, "Expected Node.js debug launch to use DEBUG mode")
+                assertTrue(launch.debugSessionObserved, "Expected the Node.js debug launch to observe a debugger session")
+                assertEquals(
+                    launch.configurationName,
+                    launch.selectedConfigurationName,
+                    "Expected Node.js debug launch to select its production-created configuration",
+                )
+                assertTrue(
+                    launch.selectedConfigurationType.contains("WasmRunConfiguration"),
+                    "Expected a WasmRunConfiguration selected by the Node.js debug launch, got ${launch.selectedConfigurationType}",
+                )
+                assertEquals(nodePath, launch.effectiveNodePath, "Expected Node.js debug launch to record the injected Node.js path")
+                assertEquals("", launch.wasmtimeOptions, "Expected Node.js debug launch to leave Wasmtime options blank")
+                assertEquals("", launch.nodeOptions, "Expected Node.js debug launch to omit Node.js options")
+                assertEquals("add", launch.exportName, "Expected Node.js debug launch to preserve the export name")
+                assertEquals("2 3", launch.programArguments, "Expected Node.js debug launch to preserve program arguments")
+                assertEquals(emptyList<String>(), launch.dependencies, "Expected add.wasm to resolve no dependencies")
                 val output = awaitRunConfigurationConsoleResult(5.minutes).consoleOutput
                 logOutput("Node.js core module debug output: $output")
 
@@ -576,27 +602,4 @@ class HexanaRunConfigurationDriverTest {
                 )
             }
     }
-
-    private fun launchNodeJsDebugConfig(
-        driver: Driver,
-        wasmFileName: String,
-        engine: String,
-        nodePath: String,
-        nodeOptions: String = "",
-        exportName: String = "",
-        programArgs: String = "",
-    ) {
-        val project = driver.singleProject()
-        val helper = driver.utility(NodeJsRunConfigHelperRef::class)
-        helper.createAndDebugNodeJs(
-            project,
-            wasmFileName,
-            engine,
-            nodeOptions,
-            exportName,
-            programArgs,
-            nodePath,
-        )
-    }
-
 }

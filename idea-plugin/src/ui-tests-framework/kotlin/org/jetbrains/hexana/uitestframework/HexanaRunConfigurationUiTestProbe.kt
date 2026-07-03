@@ -83,6 +83,27 @@ object HexanaRunConfigurationUiTestProbe {
         )
     }
 
+    @JvmStatic
+    fun launchNodeJsDebugRunConfiguration(
+        project: Project,
+        wasmFileName: String,
+        nodePath: String,
+        nodeOptions: String? = null,
+        exportName: String,
+        programArgs: String,
+    ): List<String> {
+        return launchRunConfiguration(
+            project = project,
+            wasmFileName = wasmFileName,
+            engine = WasmEngine.NODE_JS,
+            runtimePath = nodePath,
+            nodeOptions = nodeOptions,
+            exportName = exportName,
+            programArgs = programArgs,
+            mode = WasmRunMode.DEBUG,
+        )
+    }
+
     private fun launchRunConfiguration(
         project: Project,
         wasmFileName: String,
