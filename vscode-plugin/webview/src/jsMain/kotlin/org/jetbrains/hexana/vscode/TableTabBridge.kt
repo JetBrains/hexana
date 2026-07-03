@@ -14,8 +14,16 @@ import org.jetbrains.compose.web.css.color
 import org.jetbrains.compose.web.css.display
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Span
+import org.jetbrains.compose.web.dom.Table
+import org.jetbrains.compose.web.dom.Tbody
 import org.jetbrains.compose.web.dom.Td
 import org.jetbrains.compose.web.dom.Text
+import org.jetbrains.compose.web.dom.Thead
+import org.jetbrains.compose.web.dom.Th
+import org.jetbrains.compose.web.dom.Tr
+import org.w3c.dom.HTMLElement
+import org.w3c.dom.events.EventListener
+import org.w3c.dom.events.KeyboardEvent
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.ColumnDescriptor
 import org.jetbrains.hexana.shared.ColumnWidth
@@ -199,114 +207,267 @@ fun TableTabContent(
         if (descriptor.defaultSortAscending) SortDirection.ASC else SortDirection.DESC
     } else SortDirection.NONE
 
-    // Render rows incrementally in batches to avoid blocking the browser
-    // main thread when the table has thousands of entries.
-    val initialBatch = 100
-    val batchSize = 300
-    var renderedCount by remember(descriptor) { mutableStateOf(minOf(initialBatch, descriptor.rowCount)) }
-
-    LaunchedEffect(descriptor, renderedCount) {
-        if (renderedCount < descriptor.rowCount) {
-            // Yield to the browser between batches so the UI stays responsive.
-            delay(1)
-            renderedCount = minOf(renderedCount + batchSize, descriptor.rowCount)
-        }
+    // --- Data-level sorting & filtering for virtual scrolling ---
+    var searchQuery by remember(descriptor) { mutableStateOf("") }
+    var debouncedQuery by remember(descriptor) { mutableStateOf("") }
+    LaunchedEffect(searchQuery) {
+        delay(300)
+        debouncedQuery = searchQuery
     }
 
-    val isLoading = renderedCount < descriptor.rowCount
+    val sortState = remember {
+        if (resolvedSortColumn >= 0) TableSortState(resolvedSortColumn, resolvedSortDirection)
+        else TableSortState()
+    }
 
-    SearchableTable(
-        headers = headers,
-        columnAligns = aligns,
-        defaultSortColumn = resolvedSortColumn,
-        defaultSortDirection = resolvedSortDirection,
-        alwaysShowSearch = descriptor.alwaysShowSearch,
-        searchBarLeading = searchBarLeading,
-        footer = if (isLoading) {
-            {
-                Div({
-                    classes("loading-hint")
-                    style {
-                        property("text-align", "center")
-                        property("padding", "8px 0")
-                        property("opacity", "0.7")
-                        property("font-size", "12px")
+    // Build sorted & filtered index list at the data level.
+    val visibleIndices = remember(descriptor, debouncedQuery, sortState.columnIndex, sortState.direction) {
+        val indices = (0 until descriptor.rowCount).toMutableList()
+
+        // Filter
+        if (debouncedQuery.isNotEmpty()) {
+            val lq = debouncedQuery.lowercase()
+            indices.retainAll { idx ->
+                descriptor.columns.any { col ->
+                    col.cellProvider(idx).representation.lowercase().contains(lq)
+                } || idx.toString().contains(lq)
+            }
+        }
+
+        // Sort
+        val colIdx = sortState.columnIndex
+        val dir = sortState.direction
+        if (colIdx >= 0 && dir != SortDirection.NONE) {
+            val descColIdx = colIdx - headerOffset
+            if (descColIdx >= 0 && descColIdx < descriptor.columns.size) {
+                val col = descriptor.columns[descColIdx]
+                indices.sortWith { a, b ->
+                    val va = col.cellProvider(a).value
+                    val vb = col.cellProvider(b).value
+                    val cmp = when {
+                        va is Comparable<*> && vb is Comparable<*> -> {
+                            @Suppress("UNCHECKED_CAST")
+                            (va as Comparable<Any>).compareTo(vb as Comparable<Any>)
+                        }
+                        else -> va.toString().compareTo(vb.toString())
                     }
-                }) {
-                    Text("Loading rows $renderedCount / ${descriptor.rowCount}\u2026")
+                    if (dir == SortDirection.DESC) -cmp else cmp
+                }
+            } else if (colIdx == idHeaderIndex) {
+                if (dir == SortDirection.DESC) indices.sortDescending() else indices.sort()
+            }
+        }
+
+        indices
+    }
+
+    // --- Virtual scroll state ---
+    val rowHeight = 24 // px, matches CSS row height
+    val bufferRows = 20
+    var scrollTop by remember { mutableStateOf(0.0) }
+    var viewportHeight by remember { mutableStateOf(600.0) }
+
+    val totalRows = visibleIndices.size
+    val totalHeight = totalRows * rowHeight
+    val firstVisible = maxOf(0, (scrollTop / rowHeight).toInt() - bufferRows)
+    val lastVisible = minOf(totalRows - 1, ((scrollTop + viewportHeight) / rowHeight).toInt() + bufferRows)
+
+    Div({
+        classes("hexana-searchable-table")
+        tabIndex(-1)
+        style {
+            property("outline", "none")
+            display(DisplayStyle.Flex)
+            property("flex-direction", "column")
+            property("min-height", "0")
+        }
+        ref { container ->
+            val keyListener = EventListener { event ->
+                val ke = event as? KeyboardEvent ?: return@EventListener
+                if (ke.key == "f" && (ke.metaKey || ke.ctrlKey)) {
+                    ke.preventDefault()
+                    ke.stopPropagation()
                 }
             }
-        } else null,
-    ) {
-        for (index in 0 until renderedCount) {
-            val selData = descriptor.rowSelectionProvider(index)
-            val isHighlighted = selData != null && selection.hasSelection &&
-                selection.selectionStart == selData.offset &&
-                selection.selectionEnd == selData.offset + selData.size - 1
+            container.addEventListener("keydown", keyListener, true)
+            onDispose {
+                container.removeEventListener("keydown", keyListener, true)
+            }
+        }
+    }) {
+        // Search bar
+        if (descriptor.alwaysShowSearch || searchQuery.isNotEmpty()) {
+            SearchBar(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                onClose = { searchQuery = "" },
+                leading = searchBarLeading,
+            )
+        }
 
-            PanelTableRow(
-                isHighlighted = isHighlighted,
-                onClick = {
-                    val clickAction = descriptor.rowClickAction
-                    if (clickAction != null) {
-                        clickAction(index)
-                    } else if (selData != null) {
-                        selection.anchorIndex = selData.offset
-                        selection.activeIndex = selData.offset + selData.size - 1
-                        selection.cursorIndex = selData.offset
-                        scrollHexViewerTo(selData.offset)
+        // Table with virtual scrolling — we listen to scroll events on the
+        // nearest scrollable ancestor (hexana-tab-content) to determine
+        // which rows are visible.
+        Div({
+            ref { tableWrapper ->
+                // Find the scrollable ancestor (hexana-tab-content)
+                fun findScrollParent(el: HTMLElement): HTMLElement? {
+                    var current: HTMLElement? = el.parentElement as? HTMLElement
+                    while (current != null) {
+                        val overflow = kotlinx.browser.window.getComputedStyle(current)
+                            .getPropertyValue("overflow-y")
+                        if (overflow == "auto" || overflow == "scroll") return current
+                        current = current.parentElement as? HTMLElement
                     }
-                },
-            ) {
-                if (showId) {
-                    // Action column (run button or empty placeholder for consistent layout)
-                    Td({ classes("cell-id"); style { property("width", "12px") } }) {
-                        if (descriptor.rowAction != null) {
-                            val tooltip = descriptor.rowAction!!.tooltipProvider(index)
-                            if (tooltip != null) {
-                                RunArrowButton(
-                                    tooltip = tooltip,
-                                    onClick = { descriptor.rowAction!!.action(index) },
-                                )
-                            }
+                    return null
+                }
+
+                val scrollParent = findScrollParent(tableWrapper)
+                if (scrollParent != null) {
+                    viewportHeight = scrollParent.clientHeight.toDouble()
+                    // Compute initial scrollTop relative to the table wrapper
+                    val wrapperTop = tableWrapper.getBoundingClientRect().top
+                    val parentTop = scrollParent.getBoundingClientRect().top
+                    scrollTop = maxOf(0.0, parentTop - wrapperTop)
+
+                    val listener = EventListener {
+                        viewportHeight = scrollParent.clientHeight.toDouble()
+                        val wt = tableWrapper.getBoundingClientRect().top
+                        val pt = scrollParent.getBoundingClientRect().top
+                        scrollTop = maxOf(0.0, pt - wt)
+                    }
+                    scrollParent.addEventListener("scroll", listener)
+                    onDispose { scrollParent.removeEventListener("scroll", listener) }
+                } else {
+                    onDispose { }
+                }
+            }
+        }) {
+            Table({
+                classes("hexana-panel-table")
+            }) {
+                // Header
+                Thead {
+                    Tr({
+                        style {
+                            property("border-bottom", "1px solid var(--hexana-border, #333)")
                         }
-                    }
-
-                    // ID column
-                    Td({ classes("cell-id") }) {
-                        Text(index.toString())
+                    }) {
+                        headers.forEachIndexed { index, header ->
+                            val align = aligns.getOrElse(index) { "left" }
+                            val isNarrow = header == "ID" || header == ""
+                            val isSorted = sortState.columnIndex == index
+                            val indicator = when {
+                                isSorted && sortState.direction == SortDirection.ASC -> " \u25B2"
+                                isSorted && sortState.direction == SortDirection.DESC -> " \u25BC"
+                                else -> ""
+                            }
+                            Th({
+                                classes("panel-th")
+                                if (isNarrow) classes("panel-th-narrow")
+                                if (header.isNotEmpty()) classes("panel-th-sortable")
+                                style {
+                                    property("text-align", align)
+                                    if (header.isNotEmpty()) {
+                                        property("cursor", "pointer")
+                                        property("user-select", "none")
+                                    }
+                                }
+                                if (header.isNotEmpty()) {
+                                    onClick { sortState.toggle(index) }
+                                }
+                            }) { Text(header + indicator) }
+                        }
                     }
                 }
 
-                // Data columns
-                val firstColumn = descriptor.columns.firstOrNull()
-                for (col in descriptor.columns) {
-                    val cell = col.cellProvider(index)
-                    val cssClass = when (col.widthBehavior) {
-                        is ColumnWidth.Fill -> "cell-muted"
-                        is ColumnWidth.Measured -> "cell"
-                        is ColumnWidth.MeasuredMin -> "cell"
+                // Virtualized body
+                Tbody {
+                    // Top spacer
+                    if (firstVisible > 0) {
+                        Tr({
+                            style { property("height", "${firstVisible * rowHeight}px") }
+                        }) {}
                     }
 
-                    if (descriptor.rowClickAction != null && col === firstColumn) {
-                        // Clickable link style for rows with a custom click action (e.g. Modules)
-                        Td({
-                            classes(cssClass)
-                            style {
-                                property("cursor", "pointer")
-                                color(Color("var(--vscode-textLink-foreground, #3794FF)"))
+                    // Visible rows
+                    for (vi in firstVisible..lastVisible) {
+                        if (vi < 0 || vi >= visibleIndices.size) continue
+                        val index = visibleIndices[vi]
+                        val selData = descriptor.rowSelectionProvider(index)
+                        val isHighlighted = selData != null && selection.hasSelection &&
+                            selection.selectionStart == selData.offset &&
+                            selection.selectionEnd == selData.offset + selData.size - 1
+
+                        PanelTableRow(
+                            isHighlighted = isHighlighted,
+                            onClick = {
+                                val clickAction = descriptor.rowClickAction
+                                if (clickAction != null) {
+                                    clickAction(index)
+                                } else if (selData != null) {
+                                    selection.anchorIndex = selData.offset
+                                    selection.activeIndex = selData.offset + selData.size - 1
+                                    selection.cursorIndex = selData.offset
+                                    scrollHexViewerTo(selData.offset)
+                                }
+                            },
+                        ) {
+                            if (showId) {
+                                Td({ classes("cell-id"); style { property("width", "12px") } }) {
+                                    if (descriptor.rowAction != null) {
+                                        val tooltip = descriptor.rowAction!!.tooltipProvider(index)
+                                        if (tooltip != null) {
+                                            RunArrowButton(
+                                                tooltip = tooltip,
+                                                onClick = { descriptor.rowAction!!.action(index) },
+                                            )
+                                        }
+                                    }
+                                }
+                                Td({ classes("cell-id") }) {
+                                    Text(index.toString())
+                                }
                             }
-                            attr("title", cell.tooltip ?: cell.representation)
-                        }) {
-                            Text(cell.representation)
+
+                            val firstColumn = descriptor.columns.firstOrNull()
+                            for (col in descriptor.columns) {
+                                val cell = col.cellProvider(index)
+                                val cssClass = when (col.widthBehavior) {
+                                    is ColumnWidth.Fill -> "cell-muted"
+                                    is ColumnWidth.Measured -> "cell"
+                                    is ColumnWidth.MeasuredMin -> "cell"
+                                }
+
+                                if (descriptor.rowClickAction != null && col === firstColumn) {
+                                    Td({
+                                        classes(cssClass)
+                                        style {
+                                            property("cursor", "pointer")
+                                            color(Color("var(--vscode-textLink-foreground, #3794FF)"))
+                                        }
+                                        attr("title", cell.tooltip ?: cell.representation)
+                                    }) {
+                                        Text(cell.representation)
+                                    }
+                                } else {
+                                    Td({
+                                        classes(cssClass)
+                                        attr("title", cell.tooltip ?: cell.representation)
+                                    }) {
+                                        Text(cell.representation)
+                                    }
+                                }
+                            }
                         }
-                    } else {
-                        Td({
-                            classes(cssClass)
-                            attr("title", cell.tooltip ?: cell.representation)
-                        }) {
-                            Text(cell.representation)
-                        }
+                    }
+
+                    // Bottom spacer
+                    val bottomRows = totalRows - lastVisible - 1
+                    if (bottomRows > 0) {
+                        Tr({
+                            style { property("height", "${bottomRows * rowHeight}px") }
+                        }) {}
                     }
                 }
             }

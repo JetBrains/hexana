@@ -158,7 +158,7 @@ internal fun SearchableTable(
  * Inline search bar displayed above the table.
  */
 @Composable
-private fun SearchBar(
+internal fun SearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
     onClose: () -> Unit,
