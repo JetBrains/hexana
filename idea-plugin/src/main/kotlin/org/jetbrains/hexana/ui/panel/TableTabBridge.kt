@@ -178,6 +178,7 @@ private fun TableTabTable(
     Table(
         columns = columns,
         dataCount = descriptor.rowCount,
+        onTableFocusChanged = { focused -> state.isTableFocused = focused },
         onRowContextMenu = { rowIndex ->
             val staticItems = descriptor.contextMenuItems
                 .filter { item -> item.isVisible(rowIndex) }

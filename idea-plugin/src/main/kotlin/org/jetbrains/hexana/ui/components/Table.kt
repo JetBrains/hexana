@@ -9,6 +9,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
@@ -62,6 +63,7 @@ fun Table(
     alwaysShowSearch: Boolean = false,
     searchPlaceholder: String? = null,
     searchBarLeading: (@Composable () -> Unit)? = null,
+    onTableFocusChanged: ((Boolean) -> Unit)? = null,
 ) {
     // Cache cell values lazily per row to avoid computing all cells upfront.
     // Only rows that are actually displayed, filtered, or sorted will be evaluated.
@@ -241,6 +243,7 @@ fun Table(
             false
         }
         .focusRequester(focusRequester)
+        .onFocusChanged { focusState -> onTableFocusChanged?.invoke(focusState.hasFocus) }
         .focusable()
         .clickable(interactionSource = null, indication = null) {
             focusRequester.requestFocus()

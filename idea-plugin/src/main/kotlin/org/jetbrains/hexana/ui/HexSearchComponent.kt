@@ -240,7 +240,7 @@ class HexFindAction(
     }
 
     override fun update(actionEvent: AnActionEvent) {
-        actionEvent.presentation.isEnabledAndVisible = state.viewMode == HexViewMode.Hex
+        actionEvent.presentation.isEnabledAndVisible = state.viewMode == HexViewMode.Hex && !state.isTableFocused
     }
 
     override fun actionPerformed(actionEvent: AnActionEvent) {

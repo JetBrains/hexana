@@ -54,6 +54,10 @@ class HexViewStateHolder(
         _viewMode.value = mode
     }
 
+    /** True when a table tab has Compose focus — used to suppress the hex search shortcut. */
+    @Volatile
+    var isTableFocused: Boolean = false
+
     var showSearchDialog = mutableStateOf(false)
     val searchText = mutableStateOf("")
     val searchResults = mutableStateOf<List<LongRange>>(emptyList())
