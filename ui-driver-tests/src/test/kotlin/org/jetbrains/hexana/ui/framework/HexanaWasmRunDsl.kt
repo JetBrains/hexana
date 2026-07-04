@@ -37,7 +37,7 @@ internal fun HexanaIde.debugWasm(
 
 internal fun HexanaIde.runNodeJsWasm(
     wasmFileName: String,
-    nodeOptions: String = "",
+    nodeOptions: String? = null,
     exportName: String = "",
     programArgs: String = "",
 ): HexanaWasmExecutionResult {
@@ -53,7 +53,7 @@ internal fun HexanaIde.runNodeJsWasm(
 
 internal fun HexanaIde.debugNodeJsWasm(
     wasmFileName: String,
-    nodeOptions: String = "",
+    nodeOptions: String? = null,
     exportName: String = "",
     programArgs: String = "",
 ): HexanaWasmExecutionResult {
@@ -112,7 +112,7 @@ internal class HexanaWasmRunDsl internal constructor(
 
     fun runNodeJsWasm(
         wasmFileName: String,
-        nodeOptions: String = "",
+        nodeOptions: String? = null,
         exportName: String = "",
         programArgs: String = "",
     ): HexanaWasmExecutionResult {
@@ -132,7 +132,7 @@ internal class HexanaWasmRunDsl internal constructor(
 
     fun debugNodeJsWasm(
         wasmFileName: String,
-        nodeOptions: String = "",
+        nodeOptions: String? = null,
         exportName: String = "",
         programArgs: String = "",
     ): HexanaWasmExecutionResult {
