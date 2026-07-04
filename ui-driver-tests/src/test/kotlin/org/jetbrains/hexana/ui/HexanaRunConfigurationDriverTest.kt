@@ -10,10 +10,9 @@ import org.jetbrains.hexana.ui.framework.DebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationLaunchSnapshot
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationRuntimePreflight
 import org.jetbrains.hexana.ui.framework.HexanaWasmBreakpointDebugResult
-import org.jetbrains.hexana.ui.framework.awaitRunConfigurationConsoleResult
+import org.jetbrains.hexana.ui.framework.debugNodeJsWasm
+import org.jetbrains.hexana.ui.framework.debugWasm
 import org.jetbrains.hexana.ui.framework.hexanaIde
-import org.jetbrains.hexana.ui.framework.launchNodeJsDebugRunConfiguration
-import org.jetbrains.hexana.ui.framework.launchWasmtimeDebugRunConfiguration
 import org.jetbrains.hexana.ui.framework.NodeJsDebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.runNodeJsWasm
 import org.jetbrains.hexana.ui.framework.runWasm
@@ -242,117 +241,69 @@ class HexanaRunConfigurationDriverTest {
     @Test
     fun debugCoreModuleWithWasmtime() {
         val wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime()
-        val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-core-module")
+        hexanaIde(testName = "hexana-debug-core-module") {
+            val result = debugWasm(CORE_MODULE_FILE)
 
-        context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
-            .useDriverAndCloseIde {
-                waitForIndicators(5.minutes)
+            assertRunSnapshot(
+                launch = result.launchSnapshot,
+                projectHome = context.resolvedProjectHome,
+                wasmFileName = CORE_MODULE_FILE,
+                expectedEngine = "WASMTIME",
+                expectedMode = "DEBUG",
+                expectedEffectiveWasmtimePath = wasmtimePath,
+                expectedEffectiveNodePath = "",
+                expectedWasmtimeOptions = "",
+                expectedNodeOptions = "",
+                expectedExportName = "",
+                expectedProgramArgs = "",
+                expectedDependencies = emptyList(),
+                expectedDebugSessionObserved = true,
+                description = "core module debug",
+            )
 
-                openFile(CORE_MODULE_FILE, waitForCodeAnalysis = false, isTextEditor = false)
-                ideFrame {
-                    editorTabs {
-                        tab(CORE_MODULE_FILE, fullMatch = false).waitFound()
-                    }
-                }
-                Thread.sleep(3_000)
+            logOutput("Core module debug output: ${result.consoleOutput}")
 
-                val launch = launchWasmtimeDebugRunConfiguration(
-                    wasmFileName = CORE_MODULE_FILE,
-                    wasmtimePath = wasmtimePath,
-                )
-                assertEquals(
-                    context.resolvedProjectHome.resolve(CORE_MODULE_FILE).toString().replace('\\', '/'),
-                    launch.wasmFilePath.replace('\\', '/'),
-                    "Expected debug launch to target $CORE_MODULE_FILE",
-                )
-                assertEquals(
-                    context.resolvedProjectHome.toString().replace('\\', '/'),
-                    launch.workingDirectory.replace('\\', '/'),
-                    "Expected debug launch to record the project root as working directory",
-                )
-                assertEquals("WASMTIME", launch.engine, "Expected debug launch to use WASMTIME")
-                assertEquals("DEBUG", launch.mode, "Expected debug launch to use DEBUG mode")
-                assertTrue(launch.debugSessionObserved, "Expected the debug launch to observe a debugger session")
-                assertEquals(launch.configurationName, launch.selectedConfigurationName, "Expected debug launch to select its production-created configuration")
-                assertTrue(
-                    launch.selectedConfigurationType.contains("WasmRunConfiguration"),
-                    "Expected a WasmRunConfiguration selected by the debug launch, got ${launch.selectedConfigurationType}",
-                )
-                assertEquals(wasmtimePath, launch.effectiveWasmtimePath, "Expected debug launch to record the injected Wasmtime path")
-                assertEquals("", launch.wasmtimeOptions, "Expected the debug launch to omit Wasmtime options")
-                assertEquals("", launch.exportName, "Expected the debug launch to omit an export name")
-                assertEquals("", launch.programArguments, "Expected the debug launch to omit program arguments")
-                assertEquals(emptyList<String>(), launch.dependencies, "Expected hello_wasi.wasm to resolve no dependencies")
-                val output = awaitRunConfigurationConsoleResult(5.minutes).consoleOutput
-                logOutput("Core module debug output: $output")
-
-                assertTrue(
-                    output.contains("Hello from Wasm!"),
-                    "Expected 'Hello from Wasm!' in debug output, got: $output"
-                )
-            }
+            assertTrue(
+                result.consoleOutput.contains("Hello from Wasm!"),
+                "Expected 'Hello from Wasm!' in debug output, got: ${result.consoleOutput}",
+            )
+        }
     }
 
     @Test
     fun debugCoreModuleWithNodeJs() {
         val nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs()
-        val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-core-module-nodejs")
+        hexanaIde(testName = "hexana-debug-core-module-nodejs") {
+            val result = debugNodeJsWasm(
+                ADD_MODULE_FILE,
+                exportName = "add",
+                programArgs = "2 3",
+            )
 
-        context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
-            .useDriverAndCloseIde {
-                waitForIndicators(5.minutes)
+            assertRunSnapshot(
+                launch = result.launchSnapshot,
+                projectHome = context.resolvedProjectHome,
+                wasmFileName = ADD_MODULE_FILE,
+                expectedEngine = "NODE_JS",
+                expectedMode = "DEBUG",
+                expectedEffectiveWasmtimePath = "",
+                expectedEffectiveNodePath = nodePath,
+                expectedWasmtimeOptions = "",
+                expectedNodeOptions = "",
+                expectedExportName = "add",
+                expectedProgramArgs = "2 3",
+                expectedDependencies = emptyList(),
+                expectedDebugSessionObserved = true,
+                description = "Node.js core module debug",
+            )
 
-                openFile(ADD_MODULE_FILE, waitForCodeAnalysis = false, isTextEditor = false)
-                ideFrame {
-                    editorTabs {
-                        tab(ADD_MODULE_FILE, fullMatch = false).waitFound()
-                    }
-                }
-                Thread.sleep(3_000)
+            logOutput("Node.js core module debug output: ${result.consoleOutput}")
 
-                val launch = launchNodeJsDebugRunConfiguration(
-                    wasmFileName = ADD_MODULE_FILE,
-                    nodePath = nodePath,
-                    nodeOptions = "",
-                    exportName = "add",
-                    programArgs = "2 3",
-                )
-                assertEquals(
-                    context.resolvedProjectHome.resolve(ADD_MODULE_FILE).toString().replace('\\', '/'),
-                    launch.wasmFilePath.replace('\\', '/'),
-                    "Expected Node.js debug launch to target $ADD_MODULE_FILE",
-                )
-                assertEquals(
-                    context.resolvedProjectHome.toString().replace('\\', '/'),
-                    launch.workingDirectory.replace('\\', '/'),
-                    "Expected Node.js debug launch to record the project root as working directory",
-                )
-                assertEquals("NODE_JS", launch.engine, "Expected Node.js debug launch to use NODE_JS")
-                assertEquals("DEBUG", launch.mode, "Expected Node.js debug launch to use DEBUG mode")
-                assertTrue(launch.debugSessionObserved, "Expected the Node.js debug launch to observe a debugger session")
-                assertEquals(
-                    launch.configurationName,
-                    launch.selectedConfigurationName,
-                    "Expected Node.js debug launch to select its production-created configuration",
-                )
-                assertTrue(
-                    launch.selectedConfigurationType.contains("WasmRunConfiguration"),
-                    "Expected a WasmRunConfiguration selected by the Node.js debug launch, got ${launch.selectedConfigurationType}",
-                )
-                assertEquals(nodePath, launch.effectiveNodePath, "Expected Node.js debug launch to record the injected Node.js path")
-                assertEquals("", launch.wasmtimeOptions, "Expected Node.js debug launch to leave Wasmtime options blank")
-                assertEquals("", launch.nodeOptions, "Expected Node.js debug launch to omit Node.js options")
-                assertEquals("add", launch.exportName, "Expected Node.js debug launch to preserve the export name")
-                assertEquals("2 3", launch.programArguments, "Expected Node.js debug launch to preserve program arguments")
-                assertEquals(emptyList<String>(), launch.dependencies, "Expected add.wasm to resolve no dependencies")
-                val output = awaitRunConfigurationConsoleResult(5.minutes).consoleOutput
-                logOutput("Node.js core module debug output: $output")
-
-                assertTrue(
-                    output.contains("5"),
-                    "Expected '5' in Node.js debug output for add(2,3), got: $output"
-                )
-            }
+            assertTrue(
+                result.consoleOutput.contains("5"),
+                "Expected '5' in Node.js debug output for add(2,3), got: ${result.consoleOutput}",
+            )
+        }
     }
 
     @Test
@@ -452,6 +403,7 @@ class HexanaRunConfigurationDriverTest {
         expectedExportName: String,
         expectedProgramArgs: String,
         expectedDependencies: List<String>,
+        expectedDebugSessionObserved: Boolean? = null,
         description: String,
     ) {
         assertEquals(
@@ -510,5 +462,12 @@ class HexanaRunConfigurationDriverTest {
             launch.dependencies,
             "Expected $description to resolve the expected dependencies",
         )
+        if (expectedDebugSessionObserved != null) {
+            assertEquals(
+                expectedDebugSessionObserved,
+                launch.debugSessionObserved,
+                "Expected $description to observe debug session=$expectedDebugSessionObserved",
+            )
+        }
     }
 }
