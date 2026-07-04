@@ -41,9 +41,9 @@ Support code:
     `HexanaIde.debugNodeJsWasm(...)`, `HexanaIde.debugWasmWithBreakpoint(...)`, and
     `HexanaIde.debugNodeJsWasmWithBreakpoint(...)`;
   - packaged MCP workflows through `HexanaIde.withGlobalMcpClient { ... }`.
-- For `UIT-20`, probe-level migration alone is not sufficient. The visible run/debug test surface must eventually call
-  the `HexanaIde` entry points above, with any low-level run/debug setup kept behind `HexanaRunConfigurationUiTestProbe`
-  or a focused helper in `src/test/kotlin/org/jetbrains/hexana/ui/framework/`.
+- Run/debug migration is complete at the visible test surface. Keep any low-level run/debug setup behind
+  `HexanaRunConfigurationUiTestProbe` or a focused helper in `src/test/kotlin/org/jetbrains/hexana/ui/framework/`,
+  but the test body itself should stay on the `HexanaIde` entry points above.
 - Use plugin-side `@Remote` probes for Hexana Compose editor state that Driver cannot observe through stable Swing
   selectors. The packaged `HexanaEditorUiTestProbe` reports provider kind, Hexana tabs, search state, cursor offset, and
   WAT conversion state.
@@ -51,10 +51,9 @@ Support code:
   may call product APIs to create run configurations, launch debug sessions, and inspect debugger state.
 - Do not call `utility(...)`, `singleProject()`, IDE services, Run Content Manager, or MCP transport plumbing directly
   from normal tests. Put that logic behind a focused helper in `src/test/kotlin/org/jetbrains/hexana/ui/framework/`.
-- After a run/debug capability has been migrated, verify `HexanaRunConfigurationDriverTest` no longer contains direct
-  Driver APIs with `rtk rg -n 'singleProject\\(|utility\\('
-  ui-driver-tests/src/test/kotlin/org/jetbrains/hexana/ui/HexanaRunConfigurationDriverTest.kt`. Any match means the
-  test is still on the old path and has not reached the visible DSL target yet.
+- Verify `HexanaRunConfigurationDriverTest` does not contain any of the legacy run/debug Driver symbols with:
+  `rtk rg -n "runIdeWithDriver|useDriverAndCloseIde|singleProject\\(|utility\\(|getRunContentManager|@Remote|ConsoleViewImpl|launchWasmtime|launchNodeJs|DebugTestHelperRef|NodeJsDebugTestHelperRef|WasmRunConfigTestHelper|Thread\\.sleep\\(3_000\\)|openFile\\(" ui-driver-tests/src/test/kotlin/org/jetbrains/hexana/ui/HexanaRunConfigurationDriverTest.kt`
+  Any match means the visible test surface still leaks the old path.
 - Keep the UI-first boundary clear: Driver owns user workflows when stable controls exist; probes observe product state
   or perform narrow unavoidable setup for flows such as run/debug and MCP that cannot be driven reliably through UI.
 - Packaged probes intentionally live under `idea-plugin/src/ui-tests-framework/kotlin` and ship in the plugin ZIP used by

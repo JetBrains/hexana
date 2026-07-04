@@ -1,6 +1,5 @@
 package org.jetbrains.hexana.ui
 
-import com.intellij.driver.sdk.*
 import com.intellij.tools.ide.util.common.logOutput
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationLaunchSnapshot
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationRuntimePreflight
@@ -17,7 +16,6 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
-import kotlin.time.Duration.Companion.minutes
 
 /**
  * UI driver tests for Wasm run configurations using the Wasmtime and Node.js engines.

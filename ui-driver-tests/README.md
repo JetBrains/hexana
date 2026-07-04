@@ -26,8 +26,10 @@ for normal IDE workflows:
 - `HexanaEditorExpectations`, reached through `editor.expect { ... }`, owns common JUnit assertions such as
   `providerKind(...)`, `tabsContain(...)`, and `tabsDoNotContain(...)`.
 - Settings tests should use `HexanaIde.hexanaSettings(...)` for standard settings-dialog navigation and assertions.
-- `HexanaRunConfigurationDriverTest` intentionally remains on its existing direct Driver/helper path in this branch.
-  Do not migrate run/debug tests into the framework until that work is explicitly scoped.
+- `HexanaRunConfigurationDriverTest` now uses `hexanaIde(...)` plus the run/debug DSL entry points in
+  `src/test/kotlin/org/jetbrains/hexana/ui/framework/HexanaWasmRunDsl.kt`.
+- Keep the low-level launch/debug plumbing inside `HexanaRunConfigurationUiTestProbe` and the framework helpers, not
+  in the visible test body.
 - Packaged MCP tests should use `HexanaIde.withGlobalMcpClient { ... }`. The helper owns IDE MCP server URL resolution,
   transport fallback, project-path headers, and connection retry, while tests keep the real MCP client calls visible.
 
