@@ -9,7 +9,7 @@ This module contains expensive end-to-end UI tests for the plugin using JetBrain
 - Install the plugin into the test IDE.
 - Open a sample project from `testData/projects/hexana_wasm_project`.
 - Verify that `hello.wasm` can be opened successfully.
-- Run Wasm configurations with Wasmtime (core modules, exported functions, component models).
+- Run/debug Wasm configurations with Wasmtime and Node.js (core modules, exported functions, component models, DWARF breakpoints).
 - Exercise Hexana's Compose editor through a hybrid Driver plus plugin-side `@Remote` probe approach.
 - Run a packaged-plugin MCP smoke against the IDE MCP server and Hexana MCP tools.
 
@@ -25,6 +25,7 @@ Support code:
 
 - `src/test/kotlin/org/jetbrains/hexana/ui/framework/HexanaUiDriverFramework.kt`
 - `idea-plugin/src/ui-tests-framework/kotlin/org/jetbrains/hexana/uitestframework/HexanaEditorUiTestProbe.kt`
+- `idea-plugin/src/ui-tests-framework/kotlin/org/jetbrains/hexana/uitestframework/HexanaRunConfigurationUiTestProbe.kt`
 - `HexanaTeamCityArtifacts.kt`
 - `HexanaTeamCityIdeDownloader.kt`
 
@@ -36,18 +37,26 @@ Support code:
   - lifecycle and context setup through `hexanaIde(...)`, `HexanaIdeConfiguration`, and `HexanaUiDriverTestSupport`;
   - editor workflows through `HexanaIde.hexanaEditor(...)`, `HexanaEditor`, and `HexanaEditorExpectations`;
   - settings workflows through `HexanaIde.hexanaSettings(...)`;
+  - run/debug workflows through `HexanaIde.runWasm(...)`, `HexanaIde.debugWasm(...)`, `HexanaIde.runNodeJsWasm(...)`,
+    `HexanaIde.debugNodeJsWasm(...)`, `HexanaIde.debugWasmWithBreakpoint(...)`, and
+    `HexanaIde.debugNodeJsWasmWithBreakpoint(...)`;
   - packaged MCP workflows through `HexanaIde.withGlobalMcpClient { ... }`.
-- Keep `HexanaRunConfigurationDriverTest` on its existing direct Driver/helper path in this branch. Do not migrate
-  run/debug tests into the new DSL until that work is explicitly scoped.
+- For `UIT-20`, probe-level migration alone is not sufficient. The visible run/debug test surface must eventually call
+  the `HexanaIde` entry points above, with any low-level run/debug setup kept behind `HexanaRunConfigurationUiTestProbe`
+  or a focused helper in `src/test/kotlin/org/jetbrains/hexana/ui/framework/`.
 - Use plugin-side `@Remote` probes for Hexana Compose editor state that Driver cannot observe through stable Swing
   selectors. The packaged `HexanaEditorUiTestProbe` reports provider kind, Hexana tabs, search state, cursor offset, and
   WAT conversion state.
-- Keep Hexana-specific remote helpers in the packaged UI-test framework boundary.
-- Do not call `driver.utility(...)`, framework `@Remote` interfaces, `singleProject()`, IDE services, Run Content Manager,
-  or MCP transport plumbing directly from normal tests. Put that logic behind a focused helper in
-  `src/test/kotlin/org/jetbrains/hexana/ui/framework/`.
+- Keep Hexana-specific remote helpers in the packaged UI-test framework boundary. `HexanaRunConfigurationUiTestProbe`
+  may call product APIs to create run configurations, launch debug sessions, and inspect debugger state.
+- Do not call `utility(...)`, `singleProject()`, IDE services, Run Content Manager, or MCP transport plumbing directly
+  from normal tests. Put that logic behind a focused helper in `src/test/kotlin/org/jetbrains/hexana/ui/framework/`.
+- After a run/debug capability has been migrated, verify `HexanaRunConfigurationDriverTest` no longer contains direct
+  Driver APIs with `rtk rg -n 'singleProject\\(|utility\\('
+  ui-driver-tests/src/test/kotlin/org/jetbrains/hexana/ui/HexanaRunConfigurationDriverTest.kt`. Any match means the
+  test is still on the old path and has not reached the visible DSL target yet.
 - Keep the UI-first boundary clear: Driver owns user workflows when stable controls exist; probes observe product state
-  or perform narrow unavoidable setup for flows such as MCP that cannot be driven reliably through UI.
+  or perform narrow unavoidable setup for flows such as run/debug and MCP that cannot be driven reliably through UI.
 - Packaged probes intentionally live under `idea-plugin/src/ui-tests-framework/kotlin` and ship in the plugin ZIP used by
   these tests. Keep them tiny, assertion-oriented, and meaningful as product state rather than test-only behavior.
 - Add Compose accessibility names only for durable user-facing controls that Driver must locate or activate. Do not add
