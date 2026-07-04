@@ -3,11 +3,8 @@ package org.jetbrains.hexana.ui.framework
 import com.intellij.driver.client.Driver
 import kotlin.time.Duration.Companion.minutes
 
-private const val DEFAULT_WASM_ENGINE = "WASMTIME"
-
 internal fun HexanaIde.runWasm(
     wasmFileName: String,
-    engine: String = DEFAULT_WASM_ENGINE,
     wasmtimeOptions: String = "",
     exportName: String = "",
     programArgs: String = "",
@@ -16,7 +13,6 @@ internal fun HexanaIde.runWasm(
     waitForHexanaRunEditorReady()
     return HexanaWasmRunDsl(driver).runWasm(
         wasmFileName = wasmFileName,
-        engine = engine,
         wasmtimeOptions = wasmtimeOptions,
         exportName = exportName,
         programArgs = programArgs,
@@ -25,7 +21,6 @@ internal fun HexanaIde.runWasm(
 
 internal fun HexanaIde.debugWasm(
     wasmFileName: String,
-    engine: String = DEFAULT_WASM_ENGINE,
     wasmtimeOptions: String = "",
     exportName: String = "",
     programArgs: String = "",
@@ -34,7 +29,6 @@ internal fun HexanaIde.debugWasm(
     waitForHexanaRunEditorReady()
     return HexanaWasmRunDsl(driver).debugWasm(
         wasmFileName = wasmFileName,
-        engine = engine,
         wasmtimeOptions = wasmtimeOptions,
         exportName = exportName,
         programArgs = programArgs,
@@ -76,10 +70,8 @@ internal fun HexanaIde.debugNodeJsWasm(
 internal class HexanaWasmRunDsl internal constructor(
     private val driver: Driver,
 ) {
-    @Suppress("UNUSED_PARAMETER")
     fun runWasm(
         wasmFileName: String,
-        engine: String = DEFAULT_WASM_ENGINE,
         wasmtimeOptions: String = "",
         exportName: String = "",
         programArgs: String = "",
@@ -98,10 +90,8 @@ internal class HexanaWasmRunDsl internal constructor(
         )
     }
 
-    @Suppress("UNUSED_PARAMETER")
     fun debugWasm(
         wasmFileName: String,
-        engine: String = DEFAULT_WASM_ENGINE,
         wasmtimeOptions: String = "",
         exportName: String = "",
         programArgs: String = "",
