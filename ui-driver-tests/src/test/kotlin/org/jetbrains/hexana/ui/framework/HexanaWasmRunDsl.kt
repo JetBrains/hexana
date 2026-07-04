@@ -67,6 +67,26 @@ internal fun HexanaIde.debugNodeJsWasm(
     )
 }
 
+internal fun HexanaIde.debugNodeJsWasmWithBreakpoint(
+    wasmFileName: String,
+    sourceFileName: String,
+    breakpointLine: Int,
+    nodeOptions: String? = null,
+    exportName: String = "",
+    programArgs: String = "",
+): HexanaWasmBreakpointDebugResult {
+    hexanaEditor(wasmFileName)
+    waitForHexanaRunEditorReady()
+    return HexanaWasmRunDsl(driver).debugNodeJsWasmWithBreakpoint(
+        wasmFileName = wasmFileName,
+        sourceFileName = sourceFileName,
+        breakpointLine = breakpointLine,
+        nodeOptions = nodeOptions,
+        exportName = exportName,
+        programArgs = programArgs,
+    )
+}
+
 internal fun HexanaIde.debugWasmWithBreakpoint(
     wasmFileName: String,
     sourceFileName: String,
@@ -168,6 +188,25 @@ internal class HexanaWasmRunDsl internal constructor(
             consoleOutput = consoleResult.consoleOutput,
             launchSnapshot = launchSnapshot,
         )
+    }
+
+    fun debugNodeJsWasmWithBreakpoint(
+        wasmFileName: String,
+        sourceFileName: String,
+        breakpointLine: Int,
+        nodeOptions: String? = null,
+        exportName: String = "",
+        programArgs: String = "",
+    ): HexanaWasmBreakpointDebugResult {
+        val rawOutput = driver.debugNodeJsWithBreakpointAndInspectVariables(
+            wasmFileName = wasmFileName,
+            sourceFileName = sourceFileName,
+            breakpointLine = breakpointLine,
+            nodeOptions = nodeOptions,
+            exportName = exportName,
+            programArgs = programArgs,
+        )
+        return HexanaWasmBreakpointDebugResult.parse(rawOutput)
     }
 
     fun debugWasmWithBreakpoint(

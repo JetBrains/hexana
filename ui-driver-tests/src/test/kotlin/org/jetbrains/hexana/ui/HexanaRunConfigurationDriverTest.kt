@@ -1,16 +1,12 @@
 package org.jetbrains.hexana.ui
 
 import com.intellij.driver.sdk.*
-import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
-import com.intellij.driver.sdk.ui.components.common.editorTabs
-import com.intellij.driver.sdk.ui.components.common.ideFrame
-import com.intellij.ide.starter.driver.engine.runIdeWithDriver
 import com.intellij.tools.ide.util.common.logOutput
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationLaunchSnapshot
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationRuntimePreflight
 import org.jetbrains.hexana.ui.framework.HexanaWasmBreakpointDebugResult
-import org.jetbrains.hexana.ui.framework.NodeJsDebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.debugNodeJsWasm
+import org.jetbrains.hexana.ui.framework.debugNodeJsWasmWithBreakpoint
 import org.jetbrains.hexana.ui.framework.debugWasmWithBreakpoint
 import org.jetbrains.hexana.ui.framework.debugWasm
 import org.jetbrains.hexana.ui.framework.hexanaIde
@@ -308,44 +304,18 @@ class HexanaRunConfigurationDriverTest {
 
     @Test
     fun debugDwarfWasmBreakpointAndInspectVariablesWithNodeJs() {
-        val nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs()
-        val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-dwarf-breakpoint-nodejs")
+        hexanaIde(testName = "hexana-debug-dwarf-breakpoint-nodejs") {
+            val result = debugNodeJsWasmWithBreakpoint(
+                wasmFileName = DEBUG_DWARF_WASM_FILE,
+                sourceFileName = DEBUG_RUST_SOURCE_FILE,
+                breakpointLine = BREAKPOINT_LINE,
+                exportName = "add",
+                programArgs = "3 7",
+            )
 
-        context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
-            .useDriverAndCloseIde {
-                waitForIndicators(5.minutes)
-
-                // Open the DWARF wasm file first so the editor is ready
-                openFile(DEBUG_DWARF_WASM_FILE, waitForCodeAnalysis = false, isTextEditor = false)
-                ideFrame {
-                    editorTabs {
-                        tab(DEBUG_DWARF_WASM_FILE, fullMatch = false).waitFound()
-                    }
-                }
-                Thread.sleep(3_000)
-
-                // Call the helper that sets a breakpoint in the Rust source,
-                // launches debug via Node.js CDP, waits for the breakpoint hit,
-                // collects variables, and resumes.
-                val project = singleProject()
-                val helper = utility(NodeJsDebugTestHelperRef::class)
-                val result = helper.debugNodeJsWithBreakpointAndInspectVariables(
-                    project,
-                    wasmFileName = DEBUG_DWARF_WASM_FILE,
-                    sourceFileName = DEBUG_RUST_SOURCE_FILE,
-                    breakpointLine = BREAKPOINT_LINE,
-                    engine = "NODE_JS",
-                    nodeOptions = "",
-                    exportName = "add",
-                    programArgs = "3 7",
-                    nodePath = nodePath,
-                )
-
-                logOutput("Node.js DWARF breakpoint debug result:\n$result")
-                val breakpointResult = HexanaWasmBreakpointDebugResult.parse(result)
-                logOutput("Parsed breakpoint variables: ${breakpointResult}")
-                breakpointResult.assertStrict()
-            }
+            logOutput("Node.js DWARF breakpoint debug result:\n${result.rawOutput}")
+            result.assertStrict()
+        }
     }
 
     @Test
