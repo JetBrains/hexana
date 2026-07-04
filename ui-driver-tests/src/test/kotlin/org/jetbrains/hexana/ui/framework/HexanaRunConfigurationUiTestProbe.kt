@@ -93,6 +93,29 @@ internal fun Driver.launchNodeJsDebugRunConfiguration(
     )
 }
 
+internal fun Driver.debugWasmtimeWithBreakpointAndInspectVariables(
+    wasmFileName: String,
+    sourceFileName: String,
+    breakpointLine: Int,
+    wasmtimePath: String,
+    wasmtimeOptions: String = "",
+    exportName: String = "",
+    programArgs: String = "",
+): String {
+    val helper = utility(DebugTestHelperRef::class)
+    return helper.debugWithBreakpointAndInspectVariables(
+        singleProject(),
+        wasmFileName,
+        sourceFileName,
+        breakpointLine,
+        "WASMTIME",
+        wasmtimeOptions,
+        exportName,
+        programArgs,
+        wasmtimePath,
+    )
+}
+
 @Remote(
     "org.jetbrains.hexana.uitestframework.HexanaRunConfigurationUiTestProbe",
     plugin = HEXANA_PLUGIN_ID,

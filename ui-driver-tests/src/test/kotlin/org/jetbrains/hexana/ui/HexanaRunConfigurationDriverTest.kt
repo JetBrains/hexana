@@ -6,14 +6,14 @@ import com.intellij.driver.sdk.ui.components.common.editorTabs
 import com.intellij.driver.sdk.ui.components.common.ideFrame
 import com.intellij.ide.starter.driver.engine.runIdeWithDriver
 import com.intellij.tools.ide.util.common.logOutput
-import org.jetbrains.hexana.ui.framework.DebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationLaunchSnapshot
 import org.jetbrains.hexana.ui.framework.HexanaRunConfigurationRuntimePreflight
 import org.jetbrains.hexana.ui.framework.HexanaWasmBreakpointDebugResult
+import org.jetbrains.hexana.ui.framework.NodeJsDebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.debugNodeJsWasm
+import org.jetbrains.hexana.ui.framework.debugWasmWithBreakpoint
 import org.jetbrains.hexana.ui.framework.debugWasm
 import org.jetbrains.hexana.ui.framework.hexanaIde
-import org.jetbrains.hexana.ui.framework.NodeJsDebugTestHelperRef
 import org.jetbrains.hexana.ui.framework.runNodeJsWasm
 import org.jetbrains.hexana.ui.framework.runWasm
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -350,44 +350,19 @@ class HexanaRunConfigurationDriverTest {
 
     @Test
     fun debugDwarfWasmBreakpointAndInspectVariables() {
-        val wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime()
-        val context = HexanaUiDriverTestSupport.newContext(testName = "hexana-debug-dwarf-breakpoint")
+        hexanaIde(testName = "hexana-debug-dwarf-breakpoint") {
+            val result = debugWasmWithBreakpoint(
+                wasmFileName = DEBUG_DWARF_WASM_FILE,
+                sourceFileName = DEBUG_RUST_SOURCE_FILE,
+                breakpointLine = BREAKPOINT_LINE,
+                wasmtimeOptions = "--invoke add",
+                exportName = "add",
+                programArgs = "3 7",
+            )
 
-        context.runIdeWithDriver(runTimeout = 15.minutes) { withScreenRecording() }
-            .useDriverAndCloseIde {
-                waitForIndicators(5.minutes)
-
-                // Open the DWARF wasm file first so the editor is ready
-                openFile(DEBUG_DWARF_WASM_FILE, waitForCodeAnalysis = false, isTextEditor = false)
-                ideFrame {
-                    editorTabs {
-                        tab(DEBUG_DWARF_WASM_FILE, fullMatch = false).waitFound()
-                    }
-                }
-                Thread.sleep(3_000)
-
-                // Call the helper that sets a breakpoint in the Rust source,
-                // launches debug, waits for the breakpoint hit, collects
-                // variables, and resumes.
-                val project = singleProject()
-                val helper = utility(DebugTestHelperRef::class)
-                val result = helper.debugWithBreakpointAndInspectVariables(
-                    project,
-                    wasmFileName = DEBUG_DWARF_WASM_FILE,
-                    sourceFileName = DEBUG_RUST_SOURCE_FILE,
-                    breakpointLine = BREAKPOINT_LINE,
-                    engine = "WASMTIME",
-                    wasmtimeOptions = "--invoke add",
-                    exportName = "add",
-                    programArgs = "3 7",
-                    wasmtimePath = wasmtimePath,
-                )
-
-                logOutput("DWARF breakpoint debug result:\n$result")
-                val breakpointResult = HexanaWasmBreakpointDebugResult.parse(result)
-                logOutput("Parsed breakpoint variables: ${breakpointResult}")
-                breakpointResult.assertStrict()
-            }
+            logOutput("DWARF breakpoint debug result:\n${result.rawOutput}")
+            result.assertStrict()
+        }
     }
 
     private fun assertRunSnapshot(
