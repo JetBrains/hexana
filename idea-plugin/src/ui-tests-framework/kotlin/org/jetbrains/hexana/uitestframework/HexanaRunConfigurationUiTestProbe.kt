@@ -110,6 +110,22 @@ object HexanaRunConfigurationUiTestProbe {
         )
     }
 
+    @JvmStatic
+    fun clearNodeJsRunConfigurations(
+        project: Project,
+        wasmFileName: String,
+        exportName: String,
+    ): Int {
+        val basePath = project.basePath ?: error("project basePath is null")
+        val wasmFilePath = "$basePath/$wasmFileName"
+        return clearRunConfigurations(
+            project = project,
+            wasmFilePath = wasmFilePath,
+            engine = WasmEngine.NODE_JS,
+            exportName = exportName,
+        )
+    }
+
     private fun launchRunConfiguration(
         project: Project,
         wasmFileName: String,
@@ -215,6 +231,25 @@ object HexanaRunConfigurationUiTestProbe {
 
     private fun currentSelectedConfigurationName(project: Project): String =
         onEdt { RunManager.getInstance(project).selectedConfiguration?.name.orEmpty() }
+
+    private fun clearRunConfigurations(
+        project: Project,
+        wasmFilePath: String,
+        engine: WasmEngine,
+        exportName: String,
+    ): Int =
+        onEdt {
+            val runManager = RunManager.getInstance(project)
+            val settingsToRemove = runManager.allSettings.filter { settings ->
+                val configuration = settings.configuration as? WasmRunConfiguration
+                configuration != null &&
+                        configuration.wasmFilePath == wasmFilePath &&
+                        configuration.engine == engine &&
+                        configuration.exportName == exportName
+            }
+            settingsToRemove.forEach(runManager::removeConfiguration)
+            settingsToRemove.size
+        }
 
     private data class LaunchResult(
         val settings: RunnerAndConfigurationSettings,

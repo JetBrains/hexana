@@ -11,6 +11,7 @@ import org.jetbrains.hexana.ui.framework.debugWasm
 import org.jetbrains.hexana.ui.framework.hexanaIde
 import org.jetbrains.hexana.ui.framework.runNodeJsWasm
 import org.jetbrains.hexana.ui.framework.runWasm
+import org.jetbrains.hexana.ui.framework.withWasmRunDsl
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Tag
@@ -56,7 +57,6 @@ class HexanaRunConfigurationDriverTest {
                 expectedEngine = "WASMTIME",
                 expectedMode = "RUN",
                 expectedEffectiveWasmtimePath = wasmtimePath,
-                expectedEffectiveNodePath = "",
                 expectedWasmtimeOptions = "",
                 expectedNodeOptions = "",
                 expectedExportName = "",
@@ -92,7 +92,6 @@ class HexanaRunConfigurationDriverTest {
                 expectedEngine = "WASMTIME",
                 expectedMode = "RUN",
                 expectedEffectiveWasmtimePath = wasmtimePath,
-                expectedEffectiveNodePath = "",
                 expectedWasmtimeOptions = "--invoke add",
                 expectedNodeOptions = "",
                 expectedExportName = "add",
@@ -116,6 +115,7 @@ class HexanaRunConfigurationDriverTest {
         hexanaIde(testName = "hexana-run-exported-function-nodejs") {
             val result = runNodeJsWasm(
                 wasmFileName = ADD_MODULE_FILE,
+                nodeOptions = "",
                 exportName = "add",
                 programArgs = "2 3",
             )
@@ -126,7 +126,6 @@ class HexanaRunConfigurationDriverTest {
                 wasmFileName = ADD_MODULE_FILE,
                 expectedEngine = "NODE_JS",
                 expectedMode = "RUN",
-                expectedEffectiveWasmtimePath = "",
                 expectedEffectiveNodePath = nodePath,
                 expectedWasmtimeOptions = "",
                 expectedNodeOptions = "",
@@ -150,54 +149,60 @@ class HexanaRunConfigurationDriverTest {
         val nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs()
         hexanaIde(testName = "hexana-run-exported-function-nodejs-preserve-options") {
             val savedNodeOptions = "--no-warnings"
-            val firstLaunch = runNodeJsWasm(
-                wasmFileName = ADD_MODULE_FILE,
-                nodeOptions = savedNodeOptions,
-                exportName = "add",
-                programArgs = "2 3",
-            )
-            assertRunSnapshot(
-                launch = firstLaunch.launchSnapshot,
-                projectHome = context.resolvedProjectHome,
-                wasmFileName = ADD_MODULE_FILE,
-                expectedEngine = "NODE_JS",
-                expectedMode = "RUN",
-                expectedEffectiveWasmtimePath = "",
-                expectedEffectiveNodePath = nodePath,
-                expectedWasmtimeOptions = "",
-                expectedNodeOptions = savedNodeOptions,
-                expectedExportName = "add",
-                expectedProgramArgs = "2 3",
-                expectedDependencies = emptyList(),
-                description = "initial Node.js exported-function run",
-            )
+            withWasmRunDsl(ADD_MODULE_FILE) {
+                clearNodeJsWasmRunConfigurations(
+                    wasmFileName = ADD_MODULE_FILE,
+                    exportName = "add",
+                )
 
-            val secondLaunch = runNodeJsWasm(
-                wasmFileName = ADD_MODULE_FILE,
-                exportName = "add",
-                programArgs = "2 3",
-            )
-            assertRunSnapshot(
-                launch = secondLaunch.launchSnapshot,
-                projectHome = context.resolvedProjectHome,
-                wasmFileName = ADD_MODULE_FILE,
-                expectedEngine = "NODE_JS",
-                expectedMode = "RUN",
-                expectedEffectiveWasmtimePath = "",
-                expectedEffectiveNodePath = nodePath,
-                expectedWasmtimeOptions = "",
-                expectedNodeOptions = savedNodeOptions,
-                expectedExportName = "add",
-                expectedProgramArgs = "2 3",
-                expectedDependencies = emptyList(),
-                description = "relaunch of Node.js exported-function run",
-            )
+                val firstLaunch = runNodeJsWasm(
+                    wasmFileName = ADD_MODULE_FILE,
+                    nodeOptions = savedNodeOptions,
+                    exportName = "add",
+                    programArgs = "2 3",
+                )
+                assertRunSnapshot(
+                    launch = firstLaunch.launchSnapshot,
+                    projectHome = context.resolvedProjectHome,
+                    wasmFileName = ADD_MODULE_FILE,
+                    expectedEngine = "NODE_JS",
+                    expectedMode = "RUN",
+                    expectedEffectiveNodePath = nodePath,
+                    expectedWasmtimeOptions = "",
+                    expectedNodeOptions = savedNodeOptions,
+                    expectedExportName = "add",
+                    expectedProgramArgs = "2 3",
+                    expectedDependencies = emptyList(),
+                    description = "initial Node.js exported-function run",
+                )
 
-            assertEquals(
-                firstLaunch.launchSnapshot.configurationName,
-                secondLaunch.launchSnapshot.configurationName,
-                "Expected the relaunch without override to reuse the existing Node.js configuration",
-            )
+                val secondLaunch = runNodeJsWasm(
+                    wasmFileName = ADD_MODULE_FILE,
+                    nodeOptions = null,
+                    exportName = "add",
+                    programArgs = "2 3",
+                )
+                assertRunSnapshot(
+                    launch = secondLaunch.launchSnapshot,
+                    projectHome = context.resolvedProjectHome,
+                    wasmFileName = ADD_MODULE_FILE,
+                    expectedEngine = "NODE_JS",
+                    expectedMode = "RUN",
+                    expectedEffectiveNodePath = nodePath,
+                    expectedWasmtimeOptions = "",
+                    expectedNodeOptions = savedNodeOptions,
+                    expectedExportName = "add",
+                    expectedProgramArgs = "2 3",
+                    expectedDependencies = emptyList(),
+                    description = "relaunch of Node.js exported-function run",
+                )
+
+                assertEquals(
+                    firstLaunch.launchSnapshot.configurationName,
+                    secondLaunch.launchSnapshot.configurationName,
+                    "Expected the relaunch without override to reuse the existing Node.js configuration",
+                )
+            }
         }
     }
 
@@ -214,7 +219,6 @@ class HexanaRunConfigurationDriverTest {
                 expectedEngine = "WASMTIME",
                 expectedMode = "RUN",
                 expectedEffectiveWasmtimePath = wasmtimePath,
-                expectedEffectiveNodePath = "",
                 expectedWasmtimeOptions = "",
                 expectedNodeOptions = "",
                 expectedExportName = "",
@@ -245,7 +249,6 @@ class HexanaRunConfigurationDriverTest {
                 expectedEngine = "WASMTIME",
                 expectedMode = "DEBUG",
                 expectedEffectiveWasmtimePath = wasmtimePath,
-                expectedEffectiveNodePath = "",
                 expectedWasmtimeOptions = "",
                 expectedNodeOptions = "",
                 expectedExportName = "",
@@ -269,7 +272,8 @@ class HexanaRunConfigurationDriverTest {
         val nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs()
         hexanaIde(testName = "hexana-debug-core-module-nodejs") {
             val result = debugNodeJsWasm(
-                ADD_MODULE_FILE,
+                wasmFileName = ADD_MODULE_FILE,
+                nodeOptions = "",
                 exportName = "add",
                 programArgs = "2 3",
             )
@@ -280,7 +284,6 @@ class HexanaRunConfigurationDriverTest {
                 wasmFileName = ADD_MODULE_FILE,
                 expectedEngine = "NODE_JS",
                 expectedMode = "DEBUG",
-                expectedEffectiveWasmtimePath = "",
                 expectedEffectiveNodePath = nodePath,
                 expectedWasmtimeOptions = "",
                 expectedNodeOptions = "",
@@ -307,6 +310,7 @@ class HexanaRunConfigurationDriverTest {
                 wasmFileName = DEBUG_DWARF_WASM_FILE,
                 sourceFileName = DEBUG_RUST_SOURCE_FILE,
                 breakpointLine = BREAKPOINT_LINE,
+                nodeOptions = "",
                 exportName = "add",
                 programArgs = "3 7",
             )
@@ -339,8 +343,8 @@ class HexanaRunConfigurationDriverTest {
         wasmFileName: String,
         expectedEngine: String,
         expectedMode: String,
-        expectedEffectiveWasmtimePath: String,
-        expectedEffectiveNodePath: String,
+        expectedEffectiveWasmtimePath: String? = null,
+        expectedEffectiveNodePath: String? = null,
         expectedWasmtimeOptions: String,
         expectedNodeOptions: String,
         expectedExportName: String,
@@ -370,16 +374,20 @@ class HexanaRunConfigurationDriverTest {
             launch.selectedConfigurationType.contains("WasmRunConfiguration"),
             "Expected a WasmRunConfiguration selected by the $description launch, got ${launch.selectedConfigurationType}",
         )
-        assertEquals(
-            expectedEffectiveWasmtimePath,
-            launch.effectiveWasmtimePath,
-            "Expected $description to record the injected Wasmtime path",
-        )
-        assertEquals(
-            expectedEffectiveNodePath,
-            launch.effectiveNodePath,
-            "Expected $description to record the injected Node.js path",
-        )
+        if (expectedEffectiveWasmtimePath != null) {
+            assertEquals(
+                expectedEffectiveWasmtimePath,
+                launch.effectiveWasmtimePath,
+                "Expected $description to record the injected Wasmtime path",
+            )
+        }
+        if (expectedEffectiveNodePath != null) {
+            assertEquals(
+                expectedEffectiveNodePath,
+                launch.effectiveNodePath,
+                "Expected $description to record the injected Node.js path",
+            )
+        }
         assertEquals(
             expectedWasmtimeOptions,
             launch.wasmtimeOptions,

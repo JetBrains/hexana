@@ -1,14 +1,15 @@
 package org.jetbrains.hexana.run
 
-import com.intellij.execution.Platform
 import com.intellij.execution.ProgramRunnerUtil
 import com.intellij.execution.RunManager
+import com.intellij.execution.RunnerAndConfigurationSettings
 import com.intellij.execution.configurations.ConfigurationTypeUtil
 import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.frame.*
@@ -80,34 +81,24 @@ object WasmRunConfigTestHelper {
         val wasmVirtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(wasmFilePath)
             ?: error("wasm file not found: $wasmFilePath")
 
-        val runManager = RunManager.getInstance(project)
-        val configurationType = ConfigurationTypeUtil.findConfigurationType(WasmRunConfigurationType::class.java)
-        val factory = configurationType.configurationFactories.first { it is WasmConfigurationFactory }
-
-        val configName = "test-debug-bp-${wasmVirtualFile.nameWithoutExtension}"
-        val settings = runManager.createConfiguration(configName, factory)
         val selectedEngine = WasmEngine.fromString(engine)
-
-        (settings.configuration as WasmRunConfiguration).apply {
-            this.wasmFilePath = wasmVirtualFile.path
-            this.workingDirectory = wasmVirtualFile.parent?.path ?: ""
-            this.engine = selectedEngine
+        val dependencies = resolveDependencies(project, wasmVirtualFile)
+        val settings = createAndSelectDebugConfiguration(
+            project = project,
+            wasmVirtualFile = wasmVirtualFile,
+            engine = selectedEngine,
+            dependencies = dependencies,
+        ) {
             this.wasmtimeOptions = wasmtimeOptions
             this.exportName = exportName
             this.programArguments = programArgs
-            if (wasmtimePath.isNotBlank()) this.wasmtimePath = wasmtimePath
+            if (wasmtimePath.isNotBlank()) {
+                this.wasmtimePath = wasmtimePath
+            }
         }
 
-        val wasmBytes = wasmVirtualFile.contentsToByteArray()
-        val resolved = WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = wasmVirtualFile)
-        (settings.configuration as WasmRunConfiguration).dependencies =
-            resolved.map { (name, path) -> "$name=$path" }
-
-        runManager.addConfiguration(settings)
-        runManager.selectedConfiguration = settings
-
         val executor = DefaultDebugExecutor.getDebugExecutorInstance()
-        ApplicationManager.getApplication().invokeLater {
+        onEdt {
             ProgramRunnerUtil.executeConfiguration(settings, executor)
         }
 
@@ -192,14 +183,14 @@ object WasmRunConfigTestHelper {
         sourceFilePath: String,
         breakpointLine: Int,
         wasmFilePath: String,
-        settings: com.intellij.execution.RunnerAndConfigurationSettings,
+        settings: RunnerAndConfigurationSettings,
         timeoutMs: Long,
     ): String {
         val runManager = RunManager.getInstance(project)
         val configuration = settings.configuration as? WasmRunConfiguration
         val session = XDebuggerManager.getInstance(project).currentSession
         val breakpoints = XDebuggerManager.getInstance(project).breakpointManager.allBreakpoints
-        val selected = runManager.selectedConfiguration
+        val selected = onEdt { runManager.selectedConfiguration }
         val matchingBreakpoints = breakpoints.count { breakpoint ->
             breakpoint.type is WasmLineBreakpointType &&
                 breakpoint.sourcePosition?.file?.path == sourceFilePath &&
@@ -278,34 +269,24 @@ object WasmRunConfigTestHelper {
         val wasmVirtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(wasmFilePath)
             ?: error("wasm file not found: $wasmFilePath")
 
-        val runManager = RunManager.getInstance(project)
-        val configurationType = ConfigurationTypeUtil.findConfigurationType(WasmRunConfigurationType::class.java)
-        val factory = configurationType.configurationFactories.first { it is WasmConfigurationFactory }
-
-        val configName = "test-debug-bp-${wasmVirtualFile.nameWithoutExtension}"
-        val settings = runManager.createConfiguration(configName, factory)
         val selectedEngine = WasmEngine.fromString(engine)
-
-        (settings.configuration as WasmRunConfiguration).apply {
-            this.wasmFilePath = wasmVirtualFile.path
-            this.workingDirectory = wasmVirtualFile.parent?.path ?: ""
-            this.engine = selectedEngine
+        val dependencies = resolveDependencies(project, wasmVirtualFile)
+        val settings = createAndSelectDebugConfiguration(
+            project = project,
+            wasmVirtualFile = wasmVirtualFile,
+            engine = selectedEngine,
+            dependencies = dependencies,
+        ) {
             this.nodeOptions = nodeOptions
             this.exportName = exportName
             this.programArguments = programArgs
-            if (nodePath.isNotBlank()) this.nodePath = nodePath
+            if (nodePath.isNotBlank()) {
+                this.nodePath = nodePath
+            }
         }
 
-        val wasmBytes = wasmVirtualFile.contentsToByteArray()
-        val resolved = WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = wasmVirtualFile)
-        (settings.configuration as WasmRunConfiguration).dependencies =
-            resolved.map { (name, path) -> "$name=$path" }
-
-        runManager.addConfiguration(settings)
-        runManager.selectedConfiguration = settings
-
         val executor = DefaultDebugExecutor.getDebugExecutorInstance()
-        ApplicationManager.getApplication().invokeLater {
+        onEdt {
             ProgramRunnerUtil.executeConfiguration(settings, executor)
         }
 
@@ -357,6 +338,54 @@ object WasmRunConfigTestHelper {
                 bpManager.allBreakpoints.forEach { bpManager.removeBreakpoint(it) }
             }
         }
+    }
+
+    private fun resolveDependencies(
+        project: Project,
+        wasmVirtualFile: VirtualFile,
+    ): List<String> =
+        ApplicationManager.getApplication().runReadAction<List<String>> {
+            val wasmBytes = wasmVirtualFile.contentsToByteArray()
+            WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = wasmVirtualFile)
+                .map { (name, path) -> "$name=$path" }
+        }
+
+    private fun createAndSelectDebugConfiguration(
+        project: Project,
+        wasmVirtualFile: VirtualFile,
+        engine: WasmEngine,
+        dependencies: List<String>,
+        configure: WasmRunConfiguration.() -> Unit,
+    ): RunnerAndConfigurationSettings =
+        onEdt {
+            val runManager = RunManager.getInstance(project)
+            val configurationType = ConfigurationTypeUtil.findConfigurationType(WasmRunConfigurationType::class.java)
+            val factory = configurationType.configurationFactories.first { it is WasmConfigurationFactory }
+            val configName = "test-debug-bp-${wasmVirtualFile.nameWithoutExtension}"
+            val settings = runManager.createConfiguration(configName, factory)
+            (settings.configuration as WasmRunConfiguration).apply {
+                this.wasmFilePath = wasmVirtualFile.path
+                this.workingDirectory = wasmVirtualFile.parent?.path ?: ""
+                this.engine = engine
+                this.dependencies = dependencies
+                configure()
+            }
+            runManager.addConfiguration(settings)
+            runManager.selectedConfiguration = settings
+            settings
+        }
+
+    private fun <T> onEdt(action: () -> T): T {
+        val app = ApplicationManager.getApplication()
+        if (app.isDispatchThread) {
+            return action()
+        }
+
+        var result: Result<T>? = null
+        app.invokeAndWait {
+            result = runCatching(action)
+        }
+        return result!!.getOrThrow()
     }
 
     /**

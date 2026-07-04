@@ -107,6 +107,15 @@ internal fun HexanaIde.debugWasmWithBreakpoint(
     )
 }
 
+internal fun <T> HexanaIde.withWasmRunDsl(
+    wasmFileName: String,
+    action: HexanaWasmRunDsl.() -> T,
+): T {
+    hexanaEditor(wasmFileName)
+    waitForHexanaRunEditorReady()
+    return HexanaWasmRunDsl(driver).action()
+}
+
 internal class HexanaWasmRunDsl internal constructor(
     private val driver: Driver,
 ) {
@@ -116,6 +125,7 @@ internal class HexanaWasmRunDsl internal constructor(
         exportName: String = "",
         programArgs: String = "",
     ): HexanaWasmExecutionResult {
+        val previousSelectedContent = driver.selectedRunConfigurationContent()
         val launchSnapshot = driver.launchWasmtimeRunConfiguration(
             wasmFileName = wasmFileName,
             wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime(),
@@ -123,7 +133,10 @@ internal class HexanaWasmRunDsl internal constructor(
             exportName = exportName,
             programArgs = programArgs,
         )
-        val consoleResult = driver.awaitRunConfigurationConsoleResult()
+        val consoleResult = driver.awaitRunConfigurationConsoleResult(
+            expectedConfigurationName = launchSnapshot.configurationName,
+            previousSelectedContent = previousSelectedContent,
+        )
         return HexanaWasmExecutionResult(
             consoleOutput = consoleResult.consoleOutput,
             launchSnapshot = launchSnapshot,
@@ -136,6 +149,7 @@ internal class HexanaWasmRunDsl internal constructor(
         exportName: String = "",
         programArgs: String = "",
     ): HexanaWasmExecutionResult {
+        val previousSelectedContent = driver.selectedRunConfigurationContent()
         val launchSnapshot = driver.launchWasmtimeDebugRunConfiguration(
             wasmFileName = wasmFileName,
             wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime(),
@@ -143,7 +157,11 @@ internal class HexanaWasmRunDsl internal constructor(
             exportName = exportName,
             programArgs = programArgs,
         )
-        val consoleResult = driver.awaitRunConfigurationConsoleResult(5.minutes)
+        val consoleResult = driver.awaitRunConfigurationConsoleResult(
+            expectedConfigurationName = launchSnapshot.configurationName,
+            previousSelectedContent = previousSelectedContent,
+            timeout = 5.minutes,
+        )
         return HexanaWasmExecutionResult(
             consoleOutput = consoleResult.consoleOutput,
             launchSnapshot = launchSnapshot,
@@ -156,6 +174,7 @@ internal class HexanaWasmRunDsl internal constructor(
         exportName: String = "",
         programArgs: String = "",
     ): HexanaWasmExecutionResult {
+        val previousSelectedContent = driver.selectedRunConfigurationContent()
         val launchSnapshot = driver.launchNodeJsRunConfiguration(
             wasmFileName = wasmFileName,
             nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs(),
@@ -163,12 +182,24 @@ internal class HexanaWasmRunDsl internal constructor(
             exportName = exportName,
             programArgs = programArgs,
         )
-        val consoleResult = driver.awaitRunConfigurationConsoleResult()
+        val consoleResult = driver.awaitRunConfigurationConsoleResult(
+            expectedConfigurationName = launchSnapshot.configurationName,
+            previousSelectedContent = previousSelectedContent,
+        )
         return HexanaWasmExecutionResult(
             consoleOutput = consoleResult.consoleOutput,
             launchSnapshot = launchSnapshot,
         )
     }
+
+    fun clearNodeJsWasmRunConfigurations(
+        wasmFileName: String,
+        exportName: String = "",
+    ): Int =
+        driver.clearNodeJsRunConfigurations(
+            wasmFileName = wasmFileName,
+            exportName = exportName,
+        )
 
     fun debugNodeJsWasm(
         wasmFileName: String,
@@ -176,6 +207,7 @@ internal class HexanaWasmRunDsl internal constructor(
         exportName: String = "",
         programArgs: String = "",
     ): HexanaWasmExecutionResult {
+        val previousSelectedContent = driver.selectedRunConfigurationContent()
         val launchSnapshot = driver.launchNodeJsDebugRunConfiguration(
             wasmFileName = wasmFileName,
             nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs(),
@@ -183,7 +215,11 @@ internal class HexanaWasmRunDsl internal constructor(
             exportName = exportName,
             programArgs = programArgs,
         )
-        val consoleResult = driver.awaitRunConfigurationConsoleResult(5.minutes)
+        val consoleResult = driver.awaitRunConfigurationConsoleResult(
+            expectedConfigurationName = launchSnapshot.configurationName,
+            previousSelectedContent = previousSelectedContent,
+            timeout = 5.minutes,
+        )
         return HexanaWasmExecutionResult(
             consoleOutput = consoleResult.consoleOutput,
             launchSnapshot = launchSnapshot,

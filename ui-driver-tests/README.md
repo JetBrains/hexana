@@ -8,7 +8,8 @@ This module contains end-to-end UI tests for the Hexana IntelliJ plugin using Je
 - Resolves the Hexana plugin — either from a local ZIP or by downloading from TeamCity (see configuration below).
 - Installs the plugin into test IDE.
 - Opens a local wasm project and verifies `hello.wasm` can be opened.
-- Runs Wasm configurations with Wasmtime: core modules (`_start`), exported functions (`--invoke`), and component models.
+- Runs and debugs Wasm configurations with Wasmtime and Node.js: core modules (`_start`), exported functions
+  (`--invoke`), component models, and DWARF breakpoint variable-inspection flows.
 - Runs a packaged-plugin MCP smoke through the framework MCP DSL and checks that Hexana tools are exposed through the
   real IDE MCP server.
 
@@ -29,7 +30,8 @@ for normal IDE workflows:
 - `HexanaRunConfigurationDriverTest` now uses `hexanaIde(...)` plus the run/debug DSL entry points in
   `src/test/kotlin/org/jetbrains/hexana/ui/framework/HexanaWasmRunDsl.kt`.
 - Keep the low-level launch/debug plumbing inside `HexanaRunConfigurationUiTestProbe` and the framework helpers, not
-  in the visible test body.
+  in the visible test body. The breakpoint-inspection helper `org.jetbrains.hexana.run.WasmRunConfigTestHelper`
+  lives in `idea-plugin/src/ui-tests-framework/kotlin` with the packaged probe boundary.
 - Packaged MCP tests should use `HexanaIde.withGlobalMcpClient { ... }`. The helper owns IDE MCP server URL resolution,
   transport fallback, project-path headers, and connection retry, while tests keep the real MCP client calls visible.
 

@@ -93,6 +93,18 @@ internal fun Driver.launchNodeJsDebugRunConfiguration(
     )
 }
 
+internal fun Driver.clearNodeJsRunConfigurations(
+    wasmFileName: String,
+    exportName: String,
+): Int {
+    val probe = utility(HexanaRunConfigurationUiTestProbeRef::class)
+    return probe.clearNodeJsRunConfigurations(
+        singleProject(),
+        wasmFileName,
+        exportName,
+    )
+}
+
 internal fun Driver.debugWasmtimeWithBreakpointAndInspectVariables(
     wasmFileName: String,
     sourceFileName: String,
@@ -177,6 +189,11 @@ internal interface HexanaRunConfigurationUiTestProbeRef {
         exportName: String,
         programArgs: String,
     ): List<String>
+    fun clearNodeJsRunConfigurations(
+        project: com.intellij.driver.sdk.Project,
+        wasmFileName: String,
+        exportName: String,
+    ): Int
 }
 
 @Remote(

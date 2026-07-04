@@ -48,7 +48,9 @@ Support code:
   selectors. The packaged `HexanaEditorUiTestProbe` reports provider kind, Hexana tabs, search state, cursor offset, and
   WAT conversion state.
 - Keep Hexana-specific remote helpers in the packaged UI-test framework boundary. `HexanaRunConfigurationUiTestProbe`
-  may call product APIs to create run configurations, launch debug sessions, and inspect debugger state.
+  may call product APIs to create run configurations, launch debug sessions, and inspect debugger state. The
+  breakpoint-inspection helper `org.jetbrains.hexana.run.WasmRunConfigTestHelper` also lives in
+  `idea-plugin/src/ui-tests-framework/kotlin` so the packaged plugin ZIP carries the remote helper boundary.
 - Do not call `utility(...)`, `singleProject()`, IDE services, Run Content Manager, or MCP transport plumbing directly
   from normal tests. Put that logic behind a focused helper in `src/test/kotlin/org/jetbrains/hexana/ui/framework/`.
 - Verify `HexanaRunConfigurationDriverTest` does not contain any of the legacy run/debug Driver symbols with:
