@@ -1,3 +1,7 @@
+# Unreleased
+
+- support for viewing compiled Protocol Buffers descriptor sets (.desc / .protoset), with Files/Messages/Fields/Enums/Services tabs
+
 # 0.5.0 - 24.06.2026
 
 - virtualized WAT (WebAssembly Text) view, providing faster navigation between sections

@@ -28,6 +28,7 @@ kotlin {
                 api(project(":parsing:zip"))
                 api(project(":parsing:javaBytecode"))
                 api(project(":parsing:dex"))
+                api(project(":parsing:protobuf"))
                 api(project(":parsing:parquet"))
                 api(project(":parsing:arrow"))
                 implementation(project(":debugInfo:dwarf"))

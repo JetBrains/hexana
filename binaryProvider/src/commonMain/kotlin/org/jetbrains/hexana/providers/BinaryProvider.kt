@@ -556,6 +556,7 @@ fun nativeOrGenericBinaryProvider(
         ZipBinaryProvider.isZip(sharedBytes) -> ZipBinaryProvider(sharedBytes)
         ClassFileBinaryProvider.isClassFile(sharedBytes) -> ClassFileBinaryProvider(sharedBytes.duplicate().position(0))
         DexBinaryProvider.isDexFile(sharedBytes) -> DexBinaryProvider(sharedBytes.duplicate().position(0))
+        ProtobufBinaryProvider.isFileDescriptorSet(sharedBytes) -> ProtobufBinaryProvider(sharedBytes.duplicate().position(0))
         else -> {
             when (val fmt = NativeBinaryFormatDetector.detect(sharedBytes)) {
                 is NativeBinaryFormat.Elf -> ElfBinaryProvider(sharedBytes, fmt, sourcePath)

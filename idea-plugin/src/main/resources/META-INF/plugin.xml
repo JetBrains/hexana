@@ -168,6 +168,11 @@
                   fieldName="INSTANCE"
                   extensions="arrow"/>
 
+        <fileType name="Protobuf Descriptor Set"
+                  implementationClass="org.jetbrains.hexana.ProtobufFileType"
+                  fieldName="INSTANCE"
+                  extensions="desc;protoset"/>
+
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.feedback.HexanaFeedbackFileEditorProvider"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.whatsnew.HexanaWhatsNewFileEditorProvider"/>
