@@ -139,10 +139,16 @@ release:
   native matrix ZIPs, not a local rebuild.
 - Confirm `publish-downloads-release-bundle.sh` generated one `.sha256` file per
   public ZIP and `hexana-mcp-release-<version>.json` from the copied files.
+- Confirm `publish-downloads-release-bundle.sh` generated
+  `mcp/out/teamcity/downloads-index/releases.json` and that it includes the
+  current version's manifest URL.
 - Confirm the downloads upload target is the versioned prefix
   `s3://downloads-bucket.example.invalid/resources/hexana/mcp/<version>/`.
+- Confirm the root downloads index upload target is
+  `s3://downloads-bucket.example.invalid/resources/hexana/mcp/releases.json`.
 
 If downloads publication fails after the bundle directory was generated, rerun
 the same TeamCity publication build. The script regenerates checksums and the
-manifest from the same downloaded ZIPs and overwrites the same versioned prefix
-in one recursive upload action.
+manifest/index metadata from the same downloaded ZIPs, overwrites the same
+versioned prefix in one recursive upload action, and uploads the root releases
+index separately.

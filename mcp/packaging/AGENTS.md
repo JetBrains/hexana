@@ -20,8 +20,9 @@ This folder contains client-specific wrapper layouts for the standalone MCP runt
   orchestrate branches, credentials, and gates, then call this script instead of duplicating release shell logic in
   Kotlin DSL.
 - `publish-downloads-release-bundle.sh` owns downloads.jetbrains.com bundle metadata: it copies already verified native
-  release ZIPs, writes one `.sha256` file per ZIP, writes the release manifest, and optionally uploads the complete
-  bundle to the versioned S3 prefix. It must not rebuild artifacts.
+  release ZIPs, writes one `.sha256` file per ZIP, writes the versioned release manifest, writes the root
+  `releases.json` index, and optionally uploads the complete bundle to the versioned S3 prefix plus the index to the
+  root MCP downloads prefix. It must not rebuild artifacts.
 - Public Claude/Codex release packages run R8 at build time and ship `server/lib/hexana-runtime-obfuscated.jar`.
   Do not ship R8 itself, `mcp/build/r8/mapping.txt`, or the pre-obfuscation Hexana-owned runtime jars.
 

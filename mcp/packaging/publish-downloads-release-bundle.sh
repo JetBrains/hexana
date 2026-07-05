@@ -90,6 +90,12 @@ url_join() {
   printf '%s/%s' "${base%/}" "$file_name"
 }
 
+s3_join() {
+  local base="$1"
+  local file_name="$2"
+  printf '%s/%s' "${base%/}" "$file_name"
+}
+
 prepare_manifest_json() {
   local manifest_tmp="$1"
   jq -n \
@@ -189,6 +195,118 @@ generate_downloads_bundle() {
   find "$bundle_dir" -maxdepth 1 -type f -print | sort
 }
 
+fetch_existing_release_index() {
+  local target_file="$1"
+  local aws_error
+
+  rm -f "$target_file"
+  if [ -n "${MCP_EXISTING_RELEASES_INDEX_FILE:-}" ]; then
+    [ -f "$MCP_EXISTING_RELEASES_INDEX_FILE" ] || die "Existing releases index file does not exist: $MCP_EXISTING_RELEASES_INDEX_FILE"
+    cp "$MCP_EXISTING_RELEASES_INDEX_FILE" "$target_file"
+  elif [ "$PUBLISH_DOWNLOADS" = "true" ]; then
+    require_tool "aws"
+    aws_error="$(mktemp "${TMPDIR:-/tmp}/hexana-mcp-releases-index-aws.XXXXXX")"
+    if ! aws s3 cp "$DOWNLOADS_RELEASES_INDEX_S3_URI" "$target_file" --only-show-errors 2>"$aws_error"; then
+      if ! grep -Eq '(404|NoSuchKey|Not Found|does not exist)' "$aws_error"; then
+        cat "$aws_error" >&2
+        rm -f "$aws_error" "$target_file"
+        die "Failed to read existing releases index from $DOWNLOADS_RELEASES_INDEX_S3_URI"
+      fi
+      log "No existing releases index found at $DOWNLOADS_RELEASES_INDEX_S3_URI; creating a new one"
+      rm -f "$target_file"
+    fi
+    rm -f "$aws_error"
+  fi
+
+  if [ -f "$target_file" ]; then
+    jq -e '.schemaVersion == 1 and (.releases | type == "array")' "$target_file" >/dev/null \
+      || die "Existing releases index is not a supported Hexana MCP releases index: $target_file"
+  fi
+}
+
+generate_releases_index() {
+  local bundle_dir="$1"
+  local index_dir="$2"
+  local manifest_file="$bundle_dir/hexana-mcp-release-$MCP_VERSION.json"
+  local existing_index="$index_dir/.existing-releases.json"
+  local index_tmp="$index_dir/releases.json.tmp"
+  local manifest_url
+
+  [ -f "$manifest_file" ] || die "Missing generated release manifest: $manifest_file"
+  mkdir -p "$index_dir"
+  fetch_existing_release_index "$existing_index"
+
+  manifest_url="$(url_join "$DOWNLOADS_PUBLIC_PREFIX" "hexana-mcp-release-$MCP_VERSION.json")"
+
+  if [ -f "$existing_index" ]; then
+    jq \
+      --slurpfile manifest "$manifest_file" \
+      --arg version "$MCP_VERSION" \
+      --arg downloadsRoot "$DOWNLOADS_ROOT_PUBLIC_PREFIX" \
+      --arg manifestUrl "$manifest_url" \
+      --arg generatedAt "$GENERATED_AT" \
+      '
+      def version_key:
+        (.version | sub("^v"; "") | split("-")[0] | split(".") | map(tonumber? // 0));
+      def current_release:
+        {
+          version: $version,
+          manifestUrl: $manifestUrl,
+          downloadsPrefix: $manifest[0].downloadsPrefix,
+          generatedAt: $manifest[0].generatedAt,
+          gitRevision: $manifest[0].gitRevision,
+          teamcity: $manifest[0].teamcity,
+          platforms: ($manifest[0].artifacts | map(.platform) | unique),
+          artifactKinds: ($manifest[0].artifacts | map(.kind) | unique)
+        };
+      ([current_release] + ((.releases // []) | map(select(.version != $version))))
+        | sort_by(version_key)
+        | reverse
+        as $releases
+      | {
+          schemaVersion: 1,
+          latest: $releases[0].version,
+          downloadsRoot: $downloadsRoot,
+          generatedAt: $generatedAt,
+          releases: $releases
+        }
+      ' "$existing_index" > "$index_tmp"
+  else
+    jq -n \
+      --slurpfile manifest "$manifest_file" \
+      --arg version "$MCP_VERSION" \
+      --arg downloadsRoot "$DOWNLOADS_ROOT_PUBLIC_PREFIX" \
+      --arg manifestUrl "$manifest_url" \
+      --arg generatedAt "$GENERATED_AT" \
+      '
+      {
+        schemaVersion: 1,
+        latest: $version,
+        downloadsRoot: $downloadsRoot,
+        generatedAt: $generatedAt,
+        releases: [
+          {
+            version: $version,
+            manifestUrl: $manifestUrl,
+            downloadsPrefix: $manifest[0].downloadsPrefix,
+            generatedAt: $manifest[0].generatedAt,
+            gitRevision: $manifest[0].gitRevision,
+            teamcity: $manifest[0].teamcity,
+            platforms: ($manifest[0].artifacts | map(.platform) | unique),
+            artifactKinds: ($manifest[0].artifacts | map(.kind) | unique)
+          }
+        ]
+      }
+      ' > "$index_tmp"
+  fi
+
+  jq empty "$index_tmp"
+  mv "$index_tmp" "$index_dir/releases.json"
+  rm -f "$existing_index"
+  log "Prepared downloads releases index in $index_dir"
+  find "$index_dir" -maxdepth 1 -type f -print | sort
+}
+
 publish_downloads_bundle() {
   local bundle_dir="$1"
   local destination="$2"
@@ -204,6 +322,22 @@ publish_downloads_bundle() {
   aws s3 cp "$bundle_dir" "$destination" --recursive --only-show-errors
 }
 
+publish_releases_index() {
+  local index_dir="$1"
+  local destination="$2"
+  local index_file="$index_dir/releases.json"
+
+  require_tool "aws"
+  [ -f "$index_file" ] || die "Releases index does not exist: $index_file"
+  case "$destination" in
+    s3://downloads-bucket.example.invalid/resources/hexana/mcp/releases.json) ;;
+    *) die "Refusing to publish releases index outside the Hexana MCP downloads root: $destination" ;;
+  esac
+
+  log "Uploading releases index to $destination"
+  aws s3 cp "$index_file" "$destination" --only-show-errors
+}
+
 verify_checksum_files() {
   local dir="$1"
   if command -v shasum >/dev/null 2>&1; then
@@ -217,6 +351,9 @@ self_test_downloads_bundle() {
   local temp_dir
   local artifact_dir
   local bundle_dir
+  local index_dir
+  local existing_index
+  local releases_index
   local manifest
   local artifact_count
   local sha_count
@@ -225,6 +362,8 @@ self_test_downloads_bundle() {
   trap "rm -rf '$temp_dir'" RETURN
   artifact_dir="$temp_dir/artifacts"
   bundle_dir="$temp_dir/bundle"
+  index_dir="$temp_dir/index"
+  existing_index="$temp_dir/existing-releases.json"
   mkdir -p "$artifact_dir"
 
   printf 'native fixture\n' > "$artifact_dir/hexana-mcp-native-linux-x64-0.2.0.zip"
@@ -233,15 +372,40 @@ self_test_downloads_bundle() {
 
   MCP_VERSION="0.2.0"
   MCP_RELEASE_PLATFORMS="linux-x64"
+  DOWNLOADS_ROOT_PUBLIC_PREFIX="https://download.jetbrains.com/resources/hexana/mcp"
   DOWNLOADS_PUBLIC_PREFIX="https://download.jetbrains.com/resources/hexana/mcp/$MCP_VERSION"
   GITHUB_RELEASE_ASSET_BASE_URL="https://github.com/JetBrains/hexana/releases/download/v$MCP_VERSION"
   TEAMCITY_BUILD_ID="12345"
   TEAMCITY_BUILD_URL="https://ci.example.invalid/buildConfiguration/InnoHub_HexFlow_McpPublishDownloads/12345"
   GIT_REVISION="abcdef1234567890"
   GENERATED_AT="2026-06-23T00:00:00Z"
+  PUBLISH_DOWNLOADS="false"
+
+  jq -n \
+    '{
+      schemaVersion: 1,
+      latest: "0.1.0",
+      downloadsRoot: "https://download.jetbrains.com/resources/hexana/mcp",
+      generatedAt: "2026-06-01T00:00:00Z",
+      releases: [
+        {
+          version: "0.1.0",
+          manifestUrl: "https://download.jetbrains.com/resources/hexana/mcp/0.1.0/hexana-mcp-release-0.1.0.json",
+          downloadsPrefix: "https://download.jetbrains.com/resources/hexana/mcp/0.1.0",
+          generatedAt: "2026-06-01T00:00:00Z",
+          gitRevision: "1111111111111111",
+          teamcity: { buildId: "11111", buildUrl: null },
+          platforms: ["linux-x64"],
+          artifactKinds: ["native-executable"]
+        }
+      ]
+    }' > "$existing_index"
+  MCP_EXISTING_RELEASES_INDEX_FILE="$existing_index"
 
   generate_downloads_bundle "$artifact_dir" "$bundle_dir"
+  generate_releases_index "$bundle_dir" "$index_dir"
   manifest="$bundle_dir/hexana-mcp-release-0.2.0.json"
+  releases_index="$index_dir/releases.json"
   artifact_count="$(jq '.artifacts | length' "$manifest")"
   [ "$artifact_count" -eq 3 ] || die "Self-test expected 3 manifest artifacts, got $artifact_count"
   jq -e '.version == "0.2.0"' "$manifest" >/dev/null
@@ -250,6 +414,10 @@ self_test_downloads_bundle() {
   sha_count="$(find "$bundle_dir" -maxdepth 1 -type f -name '*.sha256' | wc -l | tr -d '[:space:]')"
   [ "$sha_count" -eq 3 ] || die "Self-test expected 3 checksum files, got $sha_count"
   verify_checksum_files "$bundle_dir"
+  jq -e '.schemaVersion == 1 and .latest == "0.2.0" and .downloadsRoot == "https://download.jetbrains.com/resources/hexana/mcp"' "$releases_index" >/dev/null
+  jq -e '.releases | length == 2' "$releases_index" >/dev/null
+  jq -e '.releases[0] | .version == "0.2.0" and .manifestUrl == "https://download.jetbrains.com/resources/hexana/mcp/0.2.0/hexana-mcp-release-0.2.0.json"' "$releases_index" >/dev/null
+  jq -e '.releases[0].platforms == ["linux-x64"] and (.releases[0].artifactKinds | index("native-executable"))' "$releases_index" >/dev/null
 
   log "Downloads bundle self-test passed"
 }
@@ -266,8 +434,12 @@ main() {
   MCP_RELEASE_PLATFORMS="${MCP_RELEASE_PLATFORMS:-${NATIVE_RELEASE_PLATFORMS:-macos-arm64 linux-x64}}"
   MCP_RELEASE_ARTIFACT_DIR="${MCP_RELEASE_ARTIFACT_DIR:-${NATIVE_RELEASE_ARTIFACT_DIR:-mcp/build/distributions-native}}"
   MCP_DOWNLOADS_BUNDLE_DIR="${MCP_DOWNLOADS_BUNDLE_DIR:-mcp/out/teamcity/downloads-release}"
-  DOWNLOADS_PUBLIC_PREFIX="${DOWNLOADS_PUBLIC_PREFIX:-https://download.jetbrains.com/resources/hexana/mcp/$MCP_VERSION}"
-  DOWNLOADS_S3_PREFIX="${DOWNLOADS_S3_PREFIX:-s3://downloads-bucket.example.invalid/resources/hexana/mcp/$MCP_VERSION/}"
+  MCP_DOWNLOADS_INDEX_DIR="${MCP_DOWNLOADS_INDEX_DIR:-mcp/out/teamcity/downloads-index}"
+  DOWNLOADS_ROOT_PUBLIC_PREFIX="${DOWNLOADS_ROOT_PUBLIC_PREFIX:-https://download.jetbrains.com/resources/hexana/mcp}"
+  DOWNLOADS_PUBLIC_PREFIX="${DOWNLOADS_PUBLIC_PREFIX:-$DOWNLOADS_ROOT_PUBLIC_PREFIX/$MCP_VERSION}"
+  DOWNLOADS_ROOT_S3_PREFIX="${DOWNLOADS_ROOT_S3_PREFIX:-s3://downloads-bucket.example.invalid/resources/hexana/mcp/}"
+  DOWNLOADS_S3_PREFIX="${DOWNLOADS_S3_PREFIX:-$(s3_join "$DOWNLOADS_ROOT_S3_PREFIX" "$MCP_VERSION")/}"
+  DOWNLOADS_RELEASES_INDEX_S3_URI="${DOWNLOADS_RELEASES_INDEX_S3_URI:-$(s3_join "$DOWNLOADS_ROOT_S3_PREFIX" "releases.json")}"
   GITHUB_RELEASE_ASSET_BASE_URL="${GITHUB_RELEASE_ASSET_BASE_URL:-}"
   if [ -z "$GITHUB_RELEASE_ASSET_BASE_URL" ] && [ -n "${PUBLIC_REPO_SLUG:-}" ]; then
     RELEASE_TAG="${RELEASE_TAG:-v$MCP_VERSION}"
@@ -280,9 +452,11 @@ main() {
   PUBLISH_DOWNLOADS="$(to_bool "${PUBLISH_DOWNLOADS:-false}" "PUBLISH_DOWNLOADS")"
 
   generate_downloads_bundle "$MCP_RELEASE_ARTIFACT_DIR" "$MCP_DOWNLOADS_BUNDLE_DIR"
+  generate_releases_index "$MCP_DOWNLOADS_BUNDLE_DIR" "$MCP_DOWNLOADS_INDEX_DIR"
 
   if [ "$PUBLISH_DOWNLOADS" = "true" ]; then
     publish_downloads_bundle "$MCP_DOWNLOADS_BUNDLE_DIR" "$DOWNLOADS_S3_PREFIX"
+    publish_releases_index "$MCP_DOWNLOADS_INDEX_DIR" "$DOWNLOADS_RELEASES_INDEX_S3_URI"
   else
     log "PUBLISH_DOWNLOADS=false; upload skipped"
   fi

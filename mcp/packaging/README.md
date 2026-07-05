@@ -209,10 +209,17 @@ platform, kind, size, SHA-256, GitHub Release asset URL when configured, and dow
 `s3://downloads-bucket.example.invalid/resources/hexana/mcp/<version>/`, which is served as
 `https://download.jetbrains.com/resources/hexana/mcp/<version>/`.
 
-The downloads build uploads the generated directory in one recursive S3 publication action, so ZIPs, checksums, and the
-manifest are published together. Re-running the same TeamCity build is safe: the versioned prefix is overwritten with
-metadata generated from the same downloaded artifact files. Do not run the downloads publication from a directory that
-was assembled locally or from expected filenames only.
+The script also prepares `mcp/out/teamcity/downloads-index/releases.json` for
+`https://download.jetbrains.com/resources/hexana/mcp/releases.json`. This root index records the newest release plus
+known versioned manifest URLs so clients can discover the latest MCP version without querying GitHub. During real
+publication, the script reads the existing root index from S3 when available, replaces the current version entry, sorts
+known releases by version, and uploads the updated root index after the versioned bundle.
+
+The downloads build uploads the generated versioned directory in one recursive S3 publication action, so ZIPs,
+checksums, and the versioned manifest are published together. It then uploads the root `releases.json` index as a
+separate S3 object. Re-running the same TeamCity build is safe: the versioned prefix is overwritten with metadata
+generated from the same downloaded artifact files, and the root index keeps one entry per version. Do not run the
+downloads publication from a directory that was assembled locally or from expected filenames only.
 
 TeamCity stays responsible for branch policy, secure parameters, build-chain dependencies, and notifications. The
 packaging repository stays responsible for the release mechanics and public-file safety rules.
