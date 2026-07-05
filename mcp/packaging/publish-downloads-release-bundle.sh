@@ -246,8 +246,18 @@ generate_releases_index() {
       --arg manifestUrl "$manifest_url" \
       --arg generatedAt "$GENERATED_AT" \
       '
+      def semver_version:
+        .version | sub("^v"; "");
+      def semver_parts:
+        semver_version
+        | capture("^(?<core>[0-9]+\\.[0-9]+\\.[0-9]+)(?:-(?<prerelease>[0-9A-Za-z.-]+))?(?:\\+.*)?$");
+      def prerelease_identifier_key:
+        if test("^[0-9]+$") then [0, tonumber] else [1, .] end;
       def version_key:
-        (.version | sub("^v"; "") | split("-")[0] | split(".") | map(tonumber? // 0));
+        semver_parts as $version |
+          ($version.core | split(".") | map(tonumber)) +
+          [if ($version.prerelease // "") == "" then 1 else 0 end] +
+          (if ($version.prerelease // "") == "" then [] else ($version.prerelease | split(".") | map(prerelease_identifier_key)) end);
       def current_release:
         {
           version: $version,
@@ -372,8 +382,8 @@ self_test_downloads_bundle() {
 
   MCP_VERSION="0.2.0"
   MCP_RELEASE_PLATFORMS="linux-x64"
-  DOWNLOADS_ROOT_PUBLIC_PREFIX="https://download.jetbrains.com/resources/hexana/mcp"
-  DOWNLOADS_PUBLIC_PREFIX="https://download.jetbrains.com/resources/hexana/mcp/$MCP_VERSION"
+  DOWNLOADS_ROOT_PUBLIC_PREFIX="https://download.jetbrains.com/resources/hexana/mcp/"
+  DOWNLOADS_PUBLIC_PREFIX="$(url_join "$DOWNLOADS_ROOT_PUBLIC_PREFIX" "$MCP_VERSION")"
   GITHUB_RELEASE_ASSET_BASE_URL="https://github.com/JetBrains/hexana/releases/download/v$MCP_VERSION"
   TEAMCITY_BUILD_ID="12345"
   TEAMCITY_BUILD_URL="https://ci.example.invalid/buildConfiguration/InnoHub_HexFlow_McpPublishDownloads/12345"
@@ -384,10 +394,50 @@ self_test_downloads_bundle() {
   jq -n \
     '{
       schemaVersion: 1,
-      latest: "0.1.0",
+      latest: "0.2.0-rc.2",
       downloadsRoot: "https://download.jetbrains.com/resources/hexana/mcp",
       generatedAt: "2026-06-01T00:00:00Z",
       releases: [
+        {
+          version: "0.2.0-rc.10",
+          manifestUrl: "https://download.jetbrains.com/resources/hexana/mcp/0.2.0-rc.10/hexana-mcp-release-0.2.0-rc.10.json",
+          downloadsPrefix: "https://download.jetbrains.com/resources/hexana/mcp/0.2.0-rc.10",
+          generatedAt: "2026-06-17T00:00:00Z",
+          gitRevision: "4444444444444444",
+          teamcity: { buildId: "44444", buildUrl: null },
+          platforms: ["linux-x64"],
+          artifactKinds: ["native-executable"]
+        },
+        {
+          version: "0.2.0-rc.2",
+          manifestUrl: "https://download.jetbrains.com/resources/hexana/mcp/0.2.0-rc.2/hexana-mcp-release-0.2.0-rc.2.json",
+          downloadsPrefix: "https://download.jetbrains.com/resources/hexana/mcp/0.2.0-rc.2",
+          generatedAt: "2026-06-15T00:00:00Z",
+          gitRevision: "2222222222222222",
+          teamcity: { buildId: "22222", buildUrl: null },
+          platforms: ["linux-x64"],
+          artifactKinds: ["native-executable"]
+        },
+        {
+          version: "0.2.0-beta.11",
+          manifestUrl: "https://download.jetbrains.com/resources/hexana/mcp/0.2.0-beta.11/hexana-mcp-release-0.2.0-beta.11.json",
+          downloadsPrefix: "https://download.jetbrains.com/resources/hexana/mcp/0.2.0-beta.11",
+          generatedAt: "2026-06-13T00:00:00Z",
+          gitRevision: "5555555555555555",
+          teamcity: { buildId: "55555", buildUrl: null },
+          platforms: ["linux-x64"],
+          artifactKinds: ["native-executable"]
+        },
+        {
+          version: "0.2.0-beta.2",
+          manifestUrl: "https://download.jetbrains.com/resources/hexana/mcp/0.2.0-beta.2/hexana-mcp-release-0.2.0-beta.2.json",
+          downloadsPrefix: "https://download.jetbrains.com/resources/hexana/mcp/0.2.0-beta.2",
+          generatedAt: "2026-06-12T00:00:00Z",
+          gitRevision: "3333333333333333",
+          teamcity: { buildId: "33333", buildUrl: null },
+          platforms: ["linux-x64"],
+          artifactKinds: ["native-executable"]
+        },
         {
           version: "0.1.0",
           manifestUrl: "https://download.jetbrains.com/resources/hexana/mcp/0.1.0/hexana-mcp-release-0.1.0.json",
@@ -410,14 +460,21 @@ self_test_downloads_bundle() {
   [ "$artifact_count" -eq 3 ] || die "Self-test expected 3 manifest artifacts, got $artifact_count"
   jq -e '.version == "0.2.0"' "$manifest" >/dev/null
   jq -e '.teamcity.buildId == "12345"' "$manifest" >/dev/null
+  jq -e '.downloadsPrefix == "https://download.jetbrains.com/resources/hexana/mcp/0.2.0"' "$manifest" >/dev/null
+  jq -e 'all(.artifacts[].downloadsUrl; contains("/mcp//") | not)' "$manifest" >/dev/null
   jq -e '.artifacts[] | select(.name == "hexana-mcp-native-linux-x64-0.2.0.zip" and .platform == "linux-x64" and .kind == "native-executable" and (.sha256 | test("^[0-9a-f]{64}$")))' "$manifest" >/dev/null
   sha_count="$(find "$bundle_dir" -maxdepth 1 -type f -name '*.sha256' | wc -l | tr -d '[:space:]')"
   [ "$sha_count" -eq 3 ] || die "Self-test expected 3 checksum files, got $sha_count"
   verify_checksum_files "$bundle_dir"
-  jq -e '.schemaVersion == 1 and .latest == "0.2.0" and .downloadsRoot == "https://download.jetbrains.com/resources/hexana/mcp"' "$releases_index" >/dev/null
-  jq -e '.releases | length == 2' "$releases_index" >/dev/null
+  jq -e '.schemaVersion == 1 and .latest == "0.2.0" and .downloadsRoot == "https://download.jetbrains.com/resources/hexana/mcp/"' "$releases_index" >/dev/null
+  jq -e '.releases | length == 6' "$releases_index" >/dev/null
   jq -e '.releases[0] | .version == "0.2.0" and .manifestUrl == "https://download.jetbrains.com/resources/hexana/mcp/0.2.0/hexana-mcp-release-0.2.0.json"' "$releases_index" >/dev/null
+  jq -e '.releases[1] | .version == "0.2.0-rc.10"' "$releases_index" >/dev/null
+  jq -e '.releases[2] | .version == "0.2.0-rc.2"' "$releases_index" >/dev/null
+  jq -e '.releases[3] | .version == "0.2.0-beta.11"' "$releases_index" >/dev/null
+  jq -e '.releases[4] | .version == "0.2.0-beta.2"' "$releases_index" >/dev/null
   jq -e '.releases[0].platforms == ["linux-x64"] and (.releases[0].artifactKinds | index("native-executable"))' "$releases_index" >/dev/null
+  jq -e 'all(.releases[].manifestUrl; contains("/mcp//") | not) and all(.releases[].downloadsPrefix; contains("/mcp//") | not)' "$releases_index" >/dev/null
 
   log "Downloads bundle self-test passed"
 }
@@ -436,7 +493,7 @@ main() {
   MCP_DOWNLOADS_BUNDLE_DIR="${MCP_DOWNLOADS_BUNDLE_DIR:-mcp/out/teamcity/downloads-release}"
   MCP_DOWNLOADS_INDEX_DIR="${MCP_DOWNLOADS_INDEX_DIR:-mcp/out/teamcity/downloads-index}"
   DOWNLOADS_ROOT_PUBLIC_PREFIX="${DOWNLOADS_ROOT_PUBLIC_PREFIX:-https://download.jetbrains.com/resources/hexana/mcp}"
-  DOWNLOADS_PUBLIC_PREFIX="${DOWNLOADS_PUBLIC_PREFIX:-$DOWNLOADS_ROOT_PUBLIC_PREFIX/$MCP_VERSION}"
+  DOWNLOADS_PUBLIC_PREFIX="${DOWNLOADS_PUBLIC_PREFIX:-$(url_join "$DOWNLOADS_ROOT_PUBLIC_PREFIX" "$MCP_VERSION")}"
   DOWNLOADS_ROOT_S3_PREFIX="${DOWNLOADS_ROOT_S3_PREFIX:-s3://downloads-bucket.example.invalid/resources/hexana/mcp/}"
   DOWNLOADS_S3_PREFIX="${DOWNLOADS_S3_PREFIX:-$(s3_join "$DOWNLOADS_ROOT_S3_PREFIX" "$MCP_VERSION")/}"
   DOWNLOADS_RELEASES_INDEX_S3_URI="${DOWNLOADS_RELEASES_INDEX_S3_URI:-$(s3_join "$DOWNLOADS_ROOT_S3_PREFIX" "releases.json")}"
