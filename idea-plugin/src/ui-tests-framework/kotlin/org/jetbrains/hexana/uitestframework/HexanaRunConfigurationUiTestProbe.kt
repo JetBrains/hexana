@@ -82,7 +82,7 @@ object HexanaRunConfigurationUiTestProbe {
             WasmEngine.NODE_JS -> runtimeSettings.nodePathInUi = runtimePath
             else -> error("Unsupported engine for run probe: ${engine.name}")
         }
-        runWasmConfiguration(
+        val settings = runWasmConfiguration(
             project = project,
             file = wasmVirtualFile,
             exportName = exportName,
@@ -93,10 +93,9 @@ object HexanaRunConfigurationUiTestProbe {
             nodeOptions = if (engine == WasmEngine.NODE_JS) nodeOptions else null,
         )
 
-        val settings = waitForLaunchedConfiguration(
+        waitForLaunchedConfiguration(
             project = project,
-            wasmFilePath = wasmVirtualFile.path,
-            engine = engine,
+            expectedSettings = settings,
         )
         val configuration = settings.configuration as? WasmRunConfiguration
             ?: error("Expected WasmRunConfiguration, got ${settings.configuration::class.java.name}")
@@ -126,31 +125,23 @@ object HexanaRunConfigurationUiTestProbe {
 
     private fun waitForLaunchedConfiguration(
         project: Project,
-        wasmFilePath: String,
-        engine: WasmEngine,
-    ): RunnerAndConfigurationSettings {
+        expectedSettings: RunnerAndConfigurationSettings,
+    ) {
         val deadlineMs = System.currentTimeMillis() + 30_000
         var lastState = "launch not observed"
         while (System.currentTimeMillis() < deadlineMs) {
             val selected = onEdt { RunManager.getInstance(project).selectedConfiguration }
-            val configuration = selected?.configuration as? WasmRunConfiguration
             lastState = when {
                 selected == null -> "no selected configuration"
-                configuration == null -> {
-                    "selected configuration is ${selected.configuration::class.java.name}"
+                selected !== expectedSettings -> {
+                    "selected configuration is ${selected.name}, expected ${expectedSettings.name}"
                 }
-                configuration.wasmFilePath != wasmFilePath -> {
-                    "selected configuration path=${configuration.wasmFilePath}"
-                }
-                configuration.engine != engine -> {
-                    "selected configuration engine=${configuration.engine.name}"
-                }
-                else -> return selected
+                else -> return
             }
             Thread.sleep(100)
         }
 
-        error("Timed out waiting for launch of $wasmFilePath; last state: $lastState")
+        error("Timed out waiting for launch of ${expectedSettings.name}; last state: $lastState")
     }
 
     private fun currentSelectedConfigurationName(project: Project): String =

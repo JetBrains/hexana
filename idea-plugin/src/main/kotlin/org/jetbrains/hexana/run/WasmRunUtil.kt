@@ -40,7 +40,7 @@ fun runWasmConfiguration(
     engine: WasmEngine = WasmEngine.DEFAULT,
     mode: WasmRunMode = WasmRunMode.RUN,
     nodeOptions: String? = null,
-) {
+): RunnerAndConfigurationSettings {
     val runManager = RunManager.getInstance(project)
     val configurationType = ConfigurationTypeUtil.findConfigurationType(WasmRunConfigurationType::class.java)
     val factory = configurationType.configurationFactories.first { it is WasmConfigurationFactory }
@@ -50,20 +50,27 @@ fun runWasmConfiguration(
     val expectedNodeOptions = if (engine == WasmEngine.NODE_JS) nodeOptions ?: "" else ""
     val nodeOptionsOverrideProvided = nodeOptions != null
 
-    val existing = runManager.allSettings.firstOrNull { settings ->
-        settings.type == configurationType &&
-                (settings.configuration as? WasmRunConfiguration)?.let { config ->
-                    config.wasmFilePath == file.path &&
-                            config.wasmtimeOptions == expectedWasmtimeOptions &&
-                            config.engine == engine &&
-                            when (engine) {
-                                WasmEngine.NODE_JS -> {
-                                    !nodeOptionsOverrideProvided || config.nodeOptions == expectedNodeOptions
-                                }
-                                else -> config.nodeOptions == expectedNodeOptions
-                            }
-                } == true
+    fun wasmConfiguration(settings: RunnerAndConfigurationSettings): WasmRunConfiguration? =
+        settings.configuration as? WasmRunConfiguration
+
+    fun isCompatible(settings: RunnerAndConfigurationSettings): Boolean {
+        if (settings.type != configurationType) return false
+        val config = wasmConfiguration(settings) ?: return false
+        return config.wasmFilePath == file.path &&
+                config.wasmtimeOptions == expectedWasmtimeOptions &&
+                config.engine == engine &&
+                when (engine) {
+                    WasmEngine.NODE_JS -> !nodeOptionsOverrideProvided || config.nodeOptions == expectedNodeOptions
+                    else -> config.nodeOptions == expectedNodeOptions
+                }
     }
+
+    val selected = runManager.selectedConfiguration
+    val compatible = runManager.allSettings.filter(::isCompatible)
+    val existing = compatible.firstOrNull { it.name == configName }
+        ?: compatible.firstOrNull { it === selected }
+        ?: compatible.firstOrNull { wasmConfiguration(it)?.exportName == exportName }
+        ?: compatible.firstOrNull()
 
     val settings = existing ?: runManager.createConfiguration(configName, factory).also { newSettings ->
         (newSettings.configuration as WasmRunConfiguration).apply {
@@ -92,6 +99,7 @@ fun runWasmConfiguration(
     }
 
     doRun(file, project, settings, runManager, mode)
+    return settings
 }
 
 fun runWasmFile(binaryProvider: BinaryProvider, state: HexViewStateHolder, engine: WasmEngine = WasmEngine.DEFAULT, mode: WasmRunMode = WasmRunMode.RUN) {
