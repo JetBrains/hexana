@@ -21,8 +21,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
+import androidx.compose.ui.graphics.Color
+import org.jetbrains.hexana.HexHighlightRange
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.shared.CellValue
+import org.jetbrains.hexana.shared.HexRange
+import org.jetbrains.hexana.shared.HexRangeRole
 import org.jetbrains.hexana.shared.ColumnDescriptor
 import org.jetbrains.hexana.shared.ColumnWidth
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
@@ -218,8 +222,13 @@ private fun TableTabTable(
             if (clickAction != null) {
                 clickAction(rowIndex)
             } else {
-                val selection = descriptor.rowSelectionProvider(rowIndex) ?: return@Table
-                state.scrollHexViewTo(selection.offset, selection.size)
+                val highlightProvider = descriptor.rowHighlightRangesProvider
+                if (highlightProvider != null) {
+                    applyHighlightRanges(highlightProvider(rowIndex), state)
+                } else {
+                    val selection = descriptor.rowSelectionProvider(rowIndex) ?: return@Table
+                    state.scrollHexViewTo(selection.offset, selection.size)
+                }
             }
         },
         alwaysShowSearch = descriptor.alwaysShowSearch,
@@ -371,9 +380,14 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
         },
         onRowSelect = { flatIndex ->
             val row = flatRows[flatIndex]
-            val selection = row.rowSelectionProvider(row.index)
-            if (selection != null) {
-                state.scrollHexViewTo(selection.offset, selection.size)
+            val highlightProvider = descriptor.rowHighlightRangesProvider
+            if (highlightProvider != null && row.depth == 0) {
+                applyHighlightRanges(highlightProvider(row.index), state)
+            } else {
+                val selection = row.rowSelectionProvider(row.index)
+                if (selection != null) {
+                    state.scrollHexViewTo(selection.offset, selection.size)
+                }
             }
         },
         onRow = { flatIndex ->
@@ -385,8 +399,13 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
                     expandedPaths.add(row.treePath)
                 }
             } else {
-                val selection = row.rowSelectionProvider(row.index) ?: return@Table
-                state.scrollHexViewTo(selection.offset, selection.size)
+                val highlightProvider = descriptor.rowHighlightRangesProvider
+                if (highlightProvider != null && row.depth == 0) {
+                    applyHighlightRanges(highlightProvider(row.index), state)
+                } else {
+                    val selection = row.rowSelectionProvider(row.index) ?: return@Table
+                    state.scrollHexViewTo(selection.offset, selection.size)
+                }
             }
         },
     )
@@ -443,3 +462,26 @@ internal fun widestSample(
 }
 
 internal const val MAX_MEASURED_COLUMN_CHARS = 80
+
+// Multi-range highlight colors (mirrors JitFileEditorView's SymRangeColor / BciHighlightColor).
+private val HexRangePrimaryColor = Color(0x223B82F6)
+private val HexRangeSecondaryColor = Color(0x553B82F6)
+
+private fun colorFor(role: HexRangeRole): Color = when (role) {
+    HexRangeRole.PRIMARY -> HexRangePrimaryColor
+    HexRangeRole.SECONDARY -> HexRangeSecondaryColor
+}
+
+/**
+ * Maps a [List<HexRange>] from a descriptor to [List<HexHighlightRange>] and
+ * drives the hex view: highlights all spans and scrolls to the first, or
+ * clears the highlight when the list is empty.
+ */
+private fun applyHighlightRanges(ranges: List<HexRange>, state: HexViewStateHolder) {
+    if (ranges.isEmpty()) {
+        state.clearHighlightRanges()
+        return
+    }
+    state.setHighlightRanges(ranges.map { r -> HexHighlightRange(r.offset, r.size, colorFor(r.role)) })
+    state.scrollHexViewTo(ranges.first().offset)
+}

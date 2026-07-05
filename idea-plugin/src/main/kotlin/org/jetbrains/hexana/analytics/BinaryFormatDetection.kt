@@ -6,11 +6,17 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.CoffBinaryProvider
 import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.FatMachOBinaryProvider
+import org.jetbrains.hexana.providers.ArchiveBinaryProvider
+import org.jetbrains.hexana.providers.ArrowBinaryProvider
+import org.jetbrains.hexana.providers.ClassFileBinaryProvider
+import org.jetbrains.hexana.providers.DexBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
+import org.jetbrains.hexana.providers.ParquetBinaryProvider
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.providers.ZipBinaryProvider
 
 /**
  * Maps a `(BinaryProvider, VirtualFile)` pair to the analytics-side
@@ -35,9 +41,12 @@ internal fun binaryFormatOf(
         is FatMachOBinaryProvider -> return HexanaEvent.BinaryFormat.FAT_MACHO
         is PeBinaryProvider -> return HexanaEvent.BinaryFormat.PE
         is CoffBinaryProvider -> return HexanaEvent.BinaryFormat.COFF
+        is ParquetBinaryProvider -> return HexanaEvent.BinaryFormat.PARQUET
+        is ArrowBinaryProvider -> return HexanaEvent.BinaryFormat.ARROW_IPC
+        is ArchiveBinaryProvider -> return HexanaEvent.BinaryFormat.GENERIC
         is GenericBinaryProvider -> return HexanaEvent.BinaryFormat.GENERIC
-        null -> Unit
-        else -> return HexanaEvent.BinaryFormat.GENERIC
+        // Zip / class / dex providers are classified by extension below (jar/war/apk/zip/class).
+        is ZipBinaryProvider, is ClassFileBinaryProvider, is DexBinaryProvider, null -> Unit
     }
     return when (file?.extension?.lowercase()) {
         "class" -> HexanaEvent.BinaryFormat.CLASS

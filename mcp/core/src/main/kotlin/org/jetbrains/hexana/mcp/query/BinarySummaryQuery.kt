@@ -34,6 +34,7 @@ fun org.jetbrains.hexana.providers.BinaryProvider.readBinarySummary(pathLabel: S
         is NativeBinaryProvider -> nativeCounts()
         is ZipBinaryProvider -> BinarySummaryCountsResult()
         is GenericBinaryProvider -> BinarySummaryCountsResult()
+        else -> BinarySummaryCountsResult()
     }
     return BinarySummaryResult(
         module = toModuleIdentity(pathLabel),

@@ -28,6 +28,7 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.ColumnDescriptor
 import org.jetbrains.hexana.shared.ColumnWidth
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
+import org.jetbrains.hexana.shared.HexRange
 import org.jetbrains.hexana.shared.RowSelectionData
 import org.jetbrains.hexana.shared.TableTabChildRows
 import org.jetbrains.hexana.shared.TableTabDescriptor
@@ -427,11 +428,18 @@ fun TableTabContent(
                                 val clickAction = descriptor.rowClickAction
                                 if (clickAction != null) {
                                     clickAction(index)
-                                } else if (selData != null) {
-                                    selection.anchorIndex = selData.offset
-                                    selection.activeIndex = selData.offset + selData.size - 1
-                                    selection.cursorIndex = selData.offset
-                                    scrollHexViewerTo(selData.offset)
+                                } else {
+                                    val highlightProvider = descriptor.rowHighlightRangesProvider
+                                    if (highlightProvider != null) {
+                                        // Web hex view has no multi-range highlight API; degrade to the
+                                        // bounding span covering all returned ranges.
+                                        applyHighlightRangesVsc(highlightProvider(index), selection)
+                                    } else if (selData != null) {
+                                        selection.anchorIndex = selData.offset
+                                        selection.activeIndex = selData.offset + selData.size - 1
+                                        selection.cursorIndex = selData.offset
+                                        scrollHexViewerTo(selData.offset)
+                                    }
                                 }
                             },
                         ) {
@@ -572,6 +580,22 @@ private fun flattenTreeVsc(
 private const val CHEVRON_RIGHT = "\u25B6"
 private const val CHEVRON_DOWN = "\u25BC"
 
+/**
+ * Applies a multi-range highlight from [rowHighlightRangesProvider] to the VS Code hex view.
+ * The web hex viewer has no multi-range highlight API, so this degrades to the bounding span
+ * [min(offset), max(offset+size)) covering all ranges. When [ranges] is empty the selection
+ * is left unchanged.
+ */
+private fun applyHighlightRangesVsc(ranges: List<HexRange>, selection: HexSelectionState) {
+    if (ranges.isEmpty()) return
+    val minOffset = ranges.minOf { it.offset }.toInt()
+    val maxEnd = ranges.maxOf { it.offset + it.size }.toInt()
+    selection.anchorIndex = minOffset
+    selection.activeIndex = maxEnd - 1
+    selection.cursorIndex = minOffset
+    scrollHexViewerTo(minOffset)
+}
+
 @Composable
 private fun TreeTableTabContent(
     descriptor: TableTabDescriptor,
@@ -650,17 +674,27 @@ private fun TreeTableTabContent(
                         } else {
                             expandedPaths.add(row.treePath)
                         }
-                    } else if (selData != null) {
-                        selection.anchorIndex = selData.offset
-                        selection.activeIndex = selData.offset + selData.size - 1
-                        selection.cursorIndex = selData.offset
-                        scrollHexViewerTo(selData.offset)
+                    } else {
+                        val highlightProvider = descriptor.rowHighlightRangesProvider
+                        if (highlightProvider != null && row.depth == 0) {
+                            // Web hex view has no multi-range highlight API; degrade to the
+                            // bounding span covering all returned ranges.
+                            applyHighlightRangesVsc(highlightProvider(row.index), selection)
+                        } else if (selData != null) {
+                            selection.anchorIndex = selData.offset
+                            selection.activeIndex = selData.offset + selData.size - 1
+                            selection.cursorIndex = selData.offset
+                            scrollHexViewerTo(selData.offset)
+                        }
                     }
                 },
                 onSelect = {
                     // Arrow up/down: scroll hex view without toggling expand/collapse
                     focusedFlatIndex = flatIndex
-                    if (selData != null) {
+                    val highlightProvider = descriptor.rowHighlightRangesProvider
+                    if (highlightProvider != null && row.depth == 0) {
+                        applyHighlightRangesVsc(highlightProvider(row.index), selection)
+                    } else if (selData != null) {
                         selection.anchorIndex = selData.offset
                         selection.activeIndex = selData.offset + selData.size - 1
                         selection.cursorIndex = selData.offset

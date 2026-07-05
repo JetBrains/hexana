@@ -35,13 +35,17 @@ class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
         return file.fileType is WasmFileType ||
             file.fileType is BinaryFileType ||
             file.fileType is NativeBinaryFileType ||
+            file.fileType is ParquetFileType ||
+            file.fileType is ArrowFileType ||
             file.extension.equals("class", ignoreCase = true) ||
             file.extension.equals("jar", ignoreCase = true) ||
             file.extension.equals("zip", ignoreCase = true) ||
             file.extension.equals("war", ignoreCase = true) ||
             file.extension.equals("apk", ignoreCase = true) ||
             file.extension.equals("jit", ignoreCase = true) ||
-            file.extension.equals("dex", ignoreCase = true)
+            file.extension.equals("dex", ignoreCase = true) ||
+            file.extension.equals("parquet", ignoreCase = true) ||
+            file.extension.equals("arrow", ignoreCase = true)
     }
 
     override fun createEditor(

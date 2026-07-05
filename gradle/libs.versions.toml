@@ -1,4 +1,5 @@
 [versions]
+aircompressor = "2.0.3"
 changelog = "2.4.0"
 chicory = "1.4.0"
 kotlin = "2.2.21"
@@ -26,6 +27,7 @@ slf4j = "2.0.17"
 r8 = "9.1.31"
 
 [libraries]
+aircompressor = { module = "io.airlift:aircompressor", version.ref = "aircompressor" }
 chicory-runtime = { module = "com.dylibso.chicory:runtime", version.ref = "chicory" }
 chicory-compiler = { module = "com.dylibso.chicory:compiler", version.ref = "chicory" }
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }

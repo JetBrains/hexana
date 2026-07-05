@@ -30,5 +30,13 @@ kotlin {
                 implementation(libs.kotlin.test)
             }
         }
+
+        jvmTest {
+            dependencies {
+                implementation(libs.kotlin.test)
+                implementation(project(":parsing:parquet"))
+                implementation(project(":parsing:arrow"))
+            }
+        }
     }
 }

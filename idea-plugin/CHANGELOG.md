@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- Open Apache Parquet and Apache Arrow IPC files for inspection. Both are recognised by content magic (`PAR1` for Parquet, `ARROW1` for the Arrow IPC file format, the `0xFFFFFFFF` continuation marker for the Arrow IPC stream format) rather than by extension. A Parquet file opens to **Schema**, **Row Groups** (each expanding to its column chunks with path, type, codec, and value count), and **Metadata** tabs; an Arrow file opens to **Schema**, a **Record Batches** or **Messages** tab depending on format, and **Metadata**.
+- Parquet and Arrow files gain a **Data** tab that decodes the actual contents into a table (one column per schema leaf field, one row per record) and links the table to the hex view: selecting a row highlights that record's bytes in the hex editor as disjoint spans, at the best granularity each value allows (an exact per-value range for uncompressed PLAIN data, a page or chunk box for compressed or encoded data). The first row group (Parquet) or first record batch (Arrow) is decoded, capped at 10,000 rows, with a note when more rows or batches exist. Decoding covers page compression (SNAPPY, GZIP, ZSTD, and LZ4 on the JVM), the Parquet encodings (PLAIN, dictionary, RLE/bit-packed, DELTA variants, BYTE_STREAM_SPLIT) with Dremel definition levels for nullable columns, and Arrow buffer reconstruction for primitive, boolean, string/binary, and the temporal, interval, and decimal types. A file that is recognised as Parquet or Arrow but decodes to no rows (empty or malformed) still shows the Data tab with an explanatory empty state instead of hiding it.
+- Parquet INT96 values (legacy 12-byte timestamps) are decoded and shown as their signed 96-bit integer in base-10, matching the BigInteger representation other Parquet tooling exposes.
 
 ### Changed
 

@@ -180,6 +180,12 @@ internal fun BinaryProvider.toModuleIdentity(pathLabel: String?): BinaryModuleId
             displayFormat = "Generic binary",
             byteLength = bytes.size,
         )
+        else -> BinaryModuleIdentityResult(
+            path = pathLabel,
+            format = "generic",
+            displayFormat = "Generic binary",
+            byteLength = bytes.size,
+        )
     }
 }
 

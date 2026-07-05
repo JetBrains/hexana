@@ -196,6 +196,8 @@ sealed class HexanaEvent {
         ZIP("zip"),
         APK("apk"),
         CLASS("class"),
+        PARQUET("parquet"),
+        ARROW_IPC("arrow_ipc"),
         GENERIC("generic"),
         ;
 

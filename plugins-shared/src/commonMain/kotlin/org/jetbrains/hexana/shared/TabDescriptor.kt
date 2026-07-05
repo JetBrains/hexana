@@ -62,6 +62,19 @@ sealed class ColumnWidth {
  */
 class RowSelectionData(val offset: Int, val size: Int)
 
+/** Role of a [HexRange] within a multi-range row highlight. */
+enum class HexRangeRole { PRIMARY, SECONDARY }
+
+/**
+ * A single highlighted byte range within the hex view, produced by
+ * [TableTabDescriptor.rowHighlightRangesProvider].
+ *
+ * @param offset byte offset from the start of the file
+ * @param size number of bytes covered
+ * @param role visual weight of this range; the UI layer maps roles to colors
+ */
+class HexRange(val offset: Long, val size: Int, val role: HexRangeRole = HexRangeRole.PRIMARY)
+
 /**
  * A UI-free description of a per-row action button (e.g. "Run" icon).
  *
@@ -135,6 +148,11 @@ class RowMenuEntry(
  *   [TableTabChildRows] are expandable, and their children share the same column layout.
  *   Each [TableTabChildRows] can itself carry a [TableTabChildRows.childrenProvider] for
  *   recursive nesting. Returns `null` for leaf rows (no expand chevron).
+ * @param rowHighlightRangesProvider optional provider of multiple disjoint byte ranges for
+ *   a given row index. When non-null, the UI layer highlights all returned spans in the hex
+ *   view on row select (using color determined by [HexRangeRole]) and scrolls to the first
+ *   range. An empty list clears the current highlight. When null, the single-range
+ *   [rowSelectionProvider] path is used unchanged.
  */
 class TableTabDescriptor(
     val name: String,
@@ -154,6 +172,7 @@ class TableTabDescriptor(
     val searchPlaceholder: String? = null,
     val showIdColumn: Boolean = true,
     val priority: TabPriority = TabPriority.High,
+    val rowHighlightRangesProvider: ((index: Int) -> List<HexRange>)? = null,
 ) {
     companion object {
         /** Sentinel value for [defaultSortColumn] that targets the implicit ID column. */
@@ -239,6 +258,8 @@ object TableTabsProviderRegistry {
             StringsTabProvider(),
             SizeTableTabsProvider(),
             WasmProfilerTabsProvider(),
+            ParquetTableTabsProvider(),
+            ArrowTableTabsProvider(),
         )
     }
 }

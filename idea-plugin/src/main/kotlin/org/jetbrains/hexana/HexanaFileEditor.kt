@@ -220,6 +220,14 @@ class HexanaFileEditor(
         commonBuffer: CommonByteBuffer,
         sourcePath: String?
     ): BinaryProvider {
+        if (ext == "parquet" || myFile.fileType is ParquetFileType || (ext == null && isParquetMagic(commonBuffer))) {
+            return ParquetBinaryProvider(commonBuffer, sourcePath)
+        }
+
+        if (ext == "arrow" || myFile.fileType is ArrowFileType || (ext == null && isArrowFileMagic(commonBuffer))) {
+            return ArrowBinaryProvider(commonBuffer, ArrowFormat.FILE, sourcePath)
+        }
+
         if (ext != "wasm") {
             return nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
         }

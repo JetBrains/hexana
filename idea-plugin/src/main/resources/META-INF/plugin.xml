@@ -158,6 +158,16 @@
                   fieldName="INSTANCE"
                   extensions="dex"/>
 
+        <fileType name="parquet"
+                  implementationClass="org.jetbrains.hexana.ParquetFileType"
+                  fieldName="INSTANCE"
+                  extensions="parquet"/>
+
+        <fileType name="arrow"
+                  implementationClass="org.jetbrains.hexana.ArrowFileType"
+                  fieldName="INSTANCE"
+                  extensions="arrow"/>
+
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.feedback.HexanaFeedbackFileEditorProvider"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.whatsnew.HexanaWhatsNewFileEditorProvider"/>
@@ -165,6 +175,7 @@
         <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasmToolsNotification"/>
         <fileTypeOverrider implementation="org.jetbrains.hexana.actions.HexFileTypeOverrider"/>
         <fileTypeDetector implementation="org.jetbrains.hexana.NativeBinaryFileTypeDetector"/>
+        <fileTypeDetector implementation="org.jetbrains.hexana.ColumnarBinaryFileTypeDetector"/>
         <statistics.counterUsagesCollector
                 implementationClass="org.jetbrains.hexana.statistics.HexanaCounterUsagesCollector"/>
         <useScopeOptimizer implementation="org.jetbrains.hexana.wat.WatScopeOptimizer"/>
