@@ -358,7 +358,8 @@ internal fun BinaryEditorView(
                     )
                 }
             }, onAddScriptTab = {
-                val dialog = AddScriptTabDialog(state.project)
+                val existingScriptPaths = panels.filterIsInstance<ScriptPanel>().map { it.scriptPath }.toSet()
+                val dialog = AddScriptTabDialog(state.project, existingScriptPaths)
                 if (dialog.showAndGet()) {
                     val scriptPath = dialog.selectedFile?.path ?: return@TabsPanel
                     val scriptSettings = ScriptTabSettings.getInstance(state.project)

@@ -14,7 +14,10 @@ import javax.swing.JComponent
  * Explains the concept, documents the available JS APIs (`print`, `binary`),
  * and lets the user pick a `.js` file.
  */
-internal class AddScriptTabDialog(private val project: Project) : DialogWrapper(project, false) {
+internal class AddScriptTabDialog(
+    private val project: Project,
+    private val existingScriptPaths: Set<String> = emptySet(),
+) : DialogWrapper(project, false) {
 
     var selectedFile: VirtualFile? = null
         private set
@@ -63,6 +66,10 @@ internal class AddScriptTabDialog(private val project: Project) : DialogWrapper(
 
     override fun doOKAction() {
         if (selectedFile == null) return
+        if (selectedFile!!.path in existingScriptPaths) {
+            setErrorText("A tab for this script file is already open.")
+            return
+        }
         super.doOKAction()
     }
 }
