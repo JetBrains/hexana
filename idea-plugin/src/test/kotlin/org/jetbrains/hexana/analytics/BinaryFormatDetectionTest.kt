@@ -75,6 +75,99 @@ class BinaryFormatDetectionTest {
     fun detectsCab() = assertEquals(HexanaEvent.DetectedFormat.CAB, detect(0x4D, 0x53, 0x43, 0x46))
 
     @Test
+    fun detectsNpy() = assertEquals(HexanaEvent.DetectedFormat.NPY, detect(0x93, 0x4E, 0x55, 0x4D, 0x50, 0x59))
+
+    @Test
+    fun detectsLlvmBitcode() = assertEquals(HexanaEvent.DetectedFormat.BITCODE, detect(0x42, 0x43, 0xC0, 0xDE))
+
+    @Test
+    fun detectsPcapLittleEndian() = assertEquals(HexanaEvent.DetectedFormat.PCAP, detect(0xD4, 0xC3, 0xB2, 0xA1))
+
+    @Test
+    fun detectsPcapBigEndian() = assertEquals(HexanaEvent.DetectedFormat.PCAP, detect(0xA1, 0xB2, 0xC3, 0xD4))
+
+    @Test
+    fun detectsPcapng() = assertEquals(HexanaEvent.DetectedFormat.PCAPNG, detect(0x0A, 0x0D, 0x0D, 0x0A))
+
+    @Test
+    fun detectsJpeg() = assertEquals(HexanaEvent.DetectedFormat.JPEG, detect(0xFF, 0xD8, 0xFF, 0xE0))
+
+    @Test
+    fun detectsGif() = assertEquals(HexanaEvent.DetectedFormat.GIF, detect(0x47, 0x49, 0x46, 0x38, 0x39, 0x61))
+
+    @Test
+    fun detectsBmp() = assertEquals(HexanaEvent.DetectedFormat.BMP, detect(0x42, 0x4D))
+
+    @Test
+    fun detectsWebp() =
+        // "RIFF" at 0, 4-byte size, then "WEBP" at offset 8.
+        assertEquals(
+            HexanaEvent.DetectedFormat.WEBP,
+            detect(0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50),
+        )
+
+    @Test
+    fun detectsTiffLittleEndian() = assertEquals(HexanaEvent.DetectedFormat.TIFF, detect(0x49, 0x49, 0x2A, 0x00))
+
+    @Test
+    fun detectsTiffBigEndian() = assertEquals(HexanaEvent.DetectedFormat.TIFF, detect(0x4D, 0x4D, 0x00, 0x2A))
+
+    @Test
+    fun detectsMatroska() = assertEquals(HexanaEvent.DetectedFormat.MATROSKA, detect(0x1A, 0x45, 0xDF, 0xA3))
+
+    @Test
+    fun detectsAvro() = assertEquals(HexanaEvent.DetectedFormat.AVRO, detect(0x4F, 0x62, 0x6A, 0x01))
+
+    @Test
+    fun detectsRpm() = assertEquals(HexanaEvent.DetectedFormat.RPM, detect(0xED, 0xAB, 0xEE, 0xDB))
+
+    @Test
+    fun detectsOleCompound() =
+        assertEquals(
+            HexanaEvent.DetectedFormat.OLE_COMPOUND,
+            detect(0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1),
+        )
+
+    @Test
+    fun detectsWoff() = assertEquals(HexanaEvent.DetectedFormat.WOFF, detect(0x77, 0x4F, 0x46, 0x46))
+
+    @Test
+    fun detectsWoff2() = assertEquals(HexanaEvent.DetectedFormat.WOFF2, detect(0x77, 0x4F, 0x46, 0x32))
+
+    @Test
+    fun detectsOtf() = assertEquals(HexanaEvent.DetectedFormat.OTF, detect(0x4F, 0x54, 0x54, 0x4F))
+
+    @Test
+    fun detectsMp3() = assertEquals(HexanaEvent.DetectedFormat.MP3, detect(0x49, 0x44, 0x33))
+
+    @Test
+    fun detectsOgg() = assertEquals(HexanaEvent.DetectedFormat.OGG, detect(0x4F, 0x67, 0x67, 0x53))
+
+    @Test
+    fun detectsFlac() = assertEquals(HexanaEvent.DetectedFormat.FLAC, detect(0x66, 0x4C, 0x61, 0x43))
+
+    @Test
+    fun detectsWav() =
+        // "RIFF" at 0, 4-byte size, then "WAVE" at offset 8.
+        assertEquals(
+            HexanaEvent.DetectedFormat.WAV,
+            detect(0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45),
+        )
+
+    @Test
+    fun detectsIsoBmffByFtypAtOffset4() =
+        // "ftyp" box tag lives at offset 4, after the 4-byte box size.
+        assertEquals(
+            HexanaEvent.DetectedFormat.ISO_BMFF,
+            detect(0x00, 0x00, 0x00, 0x00, 0x66, 0x74, 0x79, 0x70),
+        )
+
+    @Test
+    fun detectsTfliteByFlatBufferIdAtOffset4() =
+        // "TFL3" identifier lives at offset 4, after the 4-byte root-table offset.
+        assertEquals(HexanaEvent.DetectedFormat.TFLITE, detect(0x00, 0x00, 0x00, 0x00, 0x54, 0x46, 0x4C, 0x33))
+
+    @Test
     fun detectsTarByUstarAtOffset257() {
         // tar has no offset-0 magic; "ustar" lives at byte 257. Build a full
         // 512-byte record with an arbitrary filename head and the marker in place.

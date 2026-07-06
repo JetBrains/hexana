@@ -301,6 +301,41 @@ sealed class HexanaEvent {
         RAR("rar"),
         LZ4("lz4"),
         CAB("cab"),
+        // Model / compiler-IR binaries common in Hexana's audience but not
+        // first-class providers. All carry a reliable fixed magic (tflite's
+        // FlatBuffer identifier sits at offset 4, not the file head).
+        NPY("npy"),
+        TFLITE("tflite"),
+        BITCODE("bitcode"),
+        // Network capture containers — a natural fit for a hex/binary view.
+        PCAP("pcap"),
+        PCAPNG("pcapng"),
+        // Raster image formats (companions to the existing PNG entry). All
+        // carry a reliable fixed head magic; webp additionally checks its
+        // "WEBP" tag at offset 8 to disambiguate from other RIFF containers.
+        JPEG("jpeg"),
+        GIF("gif"),
+        BMP("bmp"),
+        WEBP("webp"),
+        TIFF("tiff"),
+        // Container / media formats. ISO_BMFF is the `ftyp`-box family
+        // (mp4/mov/m4a/heic/avif); the brand is not further split here.
+        ISO_BMFF("iso_bmff"),
+        MATROSKA("matroska"),
+        // Data-engineering + OS-package formats. OLE_COMPOUND is the CFB
+        // container shared by MSI installers and legacy Office documents.
+        AVRO("avro"),
+        RPM("rpm"),
+        OLE_COMPOUND("ole_compound"),
+        // Web fonts.
+        WOFF("woff"),
+        WOFF2("woff2"),
+        OTF("otf"),
+        // Audio.
+        MP3("mp3"),
+        OGG("ogg"),
+        FLAC("flac"),
+        WAV("wav"),
         ;
 
         companion object {
@@ -334,6 +369,36 @@ sealed class HexanaEvent {
                 header.startsWith(0x04, 0x22, 0x4D, 0x18) -> LZ4 // LZ4 frame
                 header.startsWith(0x4D, 0x53, 0x43, 0x46) -> CAB // "MSCF"
                 header.matchesAt(257, 0x75, 0x73, 0x74, 0x61, 0x72) -> TAR // "ustar" at offset 257 (POSIX/GNU)
+                header.startsWith(0x93, 0x4E, 0x55, 0x4D, 0x50, 0x59) -> NPY // "\x93NUMPY"
+                header.startsWith(0x42, 0x43, 0xC0, 0xDE) -> BITCODE // LLVM bitcode "BC\xC0\xDE"
+                header.startsWith(0x0A, 0x0D, 0x0D, 0x0A) -> PCAPNG // pcapng Section Header Block type
+                header.startsWith(0xD4, 0xC3, 0xB2, 0xA1) -> PCAP // pcap us-resolution, LE
+                header.startsWith(0xA1, 0xB2, 0xC3, 0xD4) -> PCAP // pcap us-resolution, BE
+                header.startsWith(0x4D, 0x3C, 0xB2, 0xA1) -> PCAP // pcap ns-resolution, LE
+                header.startsWith(0xA1, 0xB2, 0x3C, 0x4D) -> PCAP // pcap ns-resolution, BE
+                header.startsWith(0xFF, 0xD8, 0xFF) -> JPEG // JPEG SOI + marker
+                header.startsWith(0x47, 0x49, 0x46, 0x38) -> GIF // "GIF8" (87a and 89a)
+                header.startsWith(0x42, 0x4D) -> BMP // "BM"
+                header.startsWith(0x52, 0x49, 0x46, 0x46) &&
+                    header.matchesAt(8, 0x57, 0x45, 0x42, 0x50) -> WEBP // "RIFF"…"WEBP"
+                header.startsWith(0x49, 0x49, 0x2A, 0x00) -> TIFF // "II*\x00" little-endian
+                header.startsWith(0x4D, 0x4D, 0x00, 0x2A) -> TIFF // "MM\x00*" big-endian
+                header.startsWith(0x1A, 0x45, 0xDF, 0xA3) -> MATROSKA // EBML header (mkv/webm)
+                header.startsWith(0x4F, 0x62, 0x6A, 0x01) -> AVRO // "Obj\x01"
+                header.startsWith(0xED, 0xAB, 0xEE, 0xDB) -> RPM // RPM lead magic
+                header.startsWith(0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1) -> OLE_COMPOUND // CFB (MSI, legacy Office)
+                header.startsWith(0x77, 0x4F, 0x46, 0x32) -> WOFF2 // "wOF2"
+                header.startsWith(0x77, 0x4F, 0x46, 0x46) -> WOFF // "wOFF"
+                header.startsWith(0x4F, 0x54, 0x54, 0x4F) -> OTF // "OTTO"
+                header.startsWith(0x49, 0x44, 0x33) -> MP3 // "ID3" (ID3v2 tag)
+                header.startsWith(0x4F, 0x67, 0x67, 0x53) -> OGG // "OggS"
+                header.startsWith(0x66, 0x4C, 0x61, 0x43) -> FLAC // "fLaC"
+                header.startsWith(0x52, 0x49, 0x46, 0x46) &&
+                    header.matchesAt(8, 0x57, 0x41, 0x56, 0x45) -> WAV // "RIFF"…"WAVE"
+                // Offset-4 identifiers — checked after every offset-0 magic so a
+                // stronger head match always wins.
+                header.matchesAt(4, 0x66, 0x74, 0x79, 0x70) -> ISO_BMFF // "ftyp" box (mp4/mov/heic/avif)
+                header.matchesAt(4, 0x54, 0x46, 0x4C, 0x33) -> TFLITE // "TFL3"
                 else -> null
             }
 
