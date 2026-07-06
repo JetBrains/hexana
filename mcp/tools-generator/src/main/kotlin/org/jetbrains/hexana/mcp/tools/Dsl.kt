@@ -114,12 +114,30 @@ sealed class SchemaIntValue {
 
 // ---------- Class spec ----------
 
+enum class InputConversionCapability {
+    JsonObject,
+    WasmPath,
+    WasmFromString,
+    BinaryPath,
+    StdinPlaceholder,
+}
+
+enum class OutputConversionCapability {
+    SemanticJson,
+    McpWrapper,
+    PrettyPlaceholder,
+    RawTextPlaceholder,
+    RawBytesPlaceholder,
+}
+
 data class ClassSpec(
     val name: String,
     val fields: List<FieldSpec>,
     /** Exactly one of these field names must be present at runtime. */
     val oneOf: List<String>? = null,
     val kotlinFqn: String? = null,
+    val inputCapabilities: Set<InputConversionCapability> = DEFAULT_INPUT_CAPABILITIES,
+    val outputCapabilities: Set<OutputConversionCapability> = DEFAULT_OUTPUT_CAPABILITIES,
 ) {
     /**
      * Returns a new ClassSpec that inherits this one's fields, plus whatever the block adds.
@@ -130,7 +148,14 @@ data class ClassSpec(
         kotlinPackage: String? = null,
         block: ClassBuilder.() -> Unit,
     ): ClassSpec {
-        val builder = ClassBuilder(renameTo, fields, oneOf, kotlinFqn(renameTo, kotlinPackage))
+        val builder = ClassBuilder(
+            name = renameTo,
+            seed = fields,
+            seedOneOf = oneOf,
+            kotlinFqn = kotlinFqn(renameTo, kotlinPackage),
+            seedInputCapabilities = inputCapabilities,
+            seedOutputCapabilities = outputCapabilities,
+        )
         builder.block()
         return builder.build()
     }
@@ -143,6 +168,12 @@ fun class_(name: String, kotlinPackage: String? = null, block: ClassBuilder.() -
 private fun kotlinFqn(name: String, kotlinPackage: String?): String? =
     kotlinPackage?.let { "$it.$name" }
 
+private val DEFAULT_INPUT_CAPABILITIES = setOf(InputConversionCapability.JsonObject)
+private val DEFAULT_OUTPUT_CAPABILITIES = setOf(
+    OutputConversionCapability.SemanticJson,
+    OutputConversionCapability.McpWrapper,
+)
+
 // ---------- Builders ----------
 
 @DslMarker
@@ -154,9 +185,13 @@ class ClassBuilder internal constructor(
     seed: List<FieldSpec> = emptyList(),
     seedOneOf: List<String>? = null,
     private val kotlinFqn: String? = null,
+    seedInputCapabilities: Set<InputConversionCapability> = DEFAULT_INPUT_CAPABILITIES,
+    seedOutputCapabilities: Set<OutputConversionCapability> = DEFAULT_OUTPUT_CAPABILITIES,
 ) {
     private val fields = seed.toMutableList()
     private var oneOf: List<String>? = seedOneOf
+    private var inputCapabilities = seedInputCapabilities
+    private var outputCapabilities = seedOutputCapabilities
 
     fun int(name: String, default: Int? = null): FieldHandle =
         addField(name, FieldType.Int32, default)
@@ -211,6 +246,16 @@ class ClassBuilder internal constructor(
         oneOf = choices
     }
 
+    fun inputCapabilities(vararg capabilities: InputConversionCapability) {
+        require(capabilities.isNotEmpty()) { "Class '$name' input capabilities must not be empty." }
+        inputCapabilities = capabilities.toSet()
+    }
+
+    fun outputCapabilities(vararg capabilities: OutputConversionCapability) {
+        require(capabilities.isNotEmpty()) { "Class '$name' output capabilities must not be empty." }
+        outputCapabilities = capabilities.toSet()
+    }
+
     private fun addField(
         name: String,
         type: FieldType,
@@ -243,7 +288,14 @@ class ClassBuilder internal constructor(
                 "Class '$name' kotlin FQN must end with the class name, got `$it`."
             }
         }
-        return ClassSpec(name, fields.toList(), oneOf, kotlinFqn)
+        return ClassSpec(
+            name = name,
+            fields = fields.toList(),
+            oneOf = oneOf,
+            kotlinFqn = kotlinFqn,
+            inputCapabilities = inputCapabilities,
+            outputCapabilities = outputCapabilities,
+        )
     }
 }
 
@@ -366,6 +418,7 @@ data class CliSurfaceSpec(
     val commandName: String?,
     val groups: Set<ToolGroup>,
     val outputPolicy: ToolOutputPolicy?,
+    val outputOverride: OutputConversionCapability? = null,
 ) {
     init {
         if (visible) {
@@ -379,6 +432,7 @@ data class CliSurfaceSpec(
             require(commandName == null) { "Hidden CLI surface must not declare a command name." }
             require(groups.isEmpty()) { "Hidden CLI surface must not declare groups." }
             require(outputPolicy == null) { "Hidden CLI surface must not declare an output policy." }
+            require(outputOverride == null) { "Hidden CLI surface must not declare an output override." }
         }
     }
 
@@ -388,11 +442,13 @@ data class CliSurfaceSpec(
             group: ToolGroup,
             outputPolicy: ToolOutputPolicy,
             vararg additionalGroups: ToolGroup,
+            outputOverride: OutputConversionCapability? = null,
         ): CliSurfaceSpec = CliSurfaceSpec(
             visible = true,
             commandName = commandName,
             groups = setOf(group, *additionalGroups),
             outputPolicy = outputPolicy,
+            outputOverride = outputOverride,
         )
 
         fun hidden(): CliSurfaceSpec = CliSurfaceSpec(
@@ -400,6 +456,7 @@ data class CliSurfaceSpec(
             commandName = null,
             groups = emptySet(),
             outputPolicy = null,
+            outputOverride = null,
         )
     }
 }
@@ -430,9 +487,10 @@ fun productionCliSurface(
     group: ToolGroup,
     outputPolicy: ToolOutputPolicy,
     vararg additionalGroups: ToolGroup,
+    outputOverride: OutputConversionCapability? = null,
 ): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.production(),
-    cli = CliSurfaceSpec.visible(commandName, group, outputPolicy, *additionalGroups),
+    cli = CliSurfaceSpec.visible(commandName, group, outputPolicy, *additionalGroups, outputOverride = outputOverride),
     publicMcpb = PublicMcpbSurfaceSpec.excluded(),
 )
 
@@ -441,9 +499,10 @@ fun publicMcpbProductionCliSurface(
     group: ToolGroup,
     outputPolicy: ToolOutputPolicy,
     vararg additionalGroups: ToolGroup,
+    outputOverride: OutputConversionCapability? = null,
 ): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.production(),
-    cli = CliSurfaceSpec.visible(commandName, group, outputPolicy, *additionalGroups),
+    cli = CliSurfaceSpec.visible(commandName, group, outputPolicy, *additionalGroups, outputOverride = outputOverride),
     publicMcpb = PublicMcpbSurfaceSpec.included(),
 )
 
@@ -541,6 +600,7 @@ class ToolBuilder internal constructor(private val name: String) {
             "Tool '$name' handlerFqn must be a fully-qualified function name (`pkg.subpkg.fn`), got `$resolvedHandler`."
         }
         validateInputPattern(name, resolvedInput, resolvedInputPattern)
+        validateCliOutputOverride(name, resolvedOutput, resolvedSurfaces.cli)
         return ToolSpec(
             name = name,
             summary = resolvedSummary.trim(),
@@ -551,6 +611,14 @@ class ToolBuilder internal constructor(private val name: String) {
             surfaces = resolvedSurfaces,
             handlerFqn = resolvedHandler,
         )
+    }
+}
+
+private fun validateCliOutputOverride(toolName: String, output: ClassSpec, cli: CliSurfaceSpec) {
+    val outputOverride = cli.outputOverride ?: return
+    require(outputOverride in output.outputCapabilities) {
+        "Tool '$toolName' CLI output override $outputOverride is not declared by output class " +
+            "`${output.name}`. Declared output capabilities: ${output.outputCapabilities}."
     }
 }
 

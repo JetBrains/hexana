@@ -44,6 +44,7 @@ class HexanaToolCompatibilityTest {
             appendLine("$prefix.cli.commandName=${tool.surfaces.cli.commandName.orEmpty()}")
             appendLine("$prefix.cli.groups=${tool.surfaces.cli.groups.joinToString(",")}")
             appendLine("$prefix.cli.outputPolicy=${tool.surfaces.cli.outputPolicy?.name.orEmpty()}")
+            appendLine("$prefix.cli.outputOverride=${tool.surfaces.cli.outputOverride?.name.orEmpty()}")
             appendLine("$prefix.handlerFqn=${tool.handlerFqn}")
             appendClass("$prefix.input", tool.input)
             appendClass("$prefix.output", tool.output)
@@ -54,6 +55,8 @@ class HexanaToolCompatibilityTest {
         appendLine("$prefix.name=${spec.name}")
         appendLine("$prefix.kotlinFqn=${spec.kotlinFqn.orEmpty()}")
         appendLine("$prefix.oneOf=${spec.oneOf.orEmpty().joinToString(",")}")
+        appendLine("$prefix.inputCapabilities=${spec.inputCapabilities.joinToString(",") { it.name }}")
+        appendLine("$prefix.outputCapabilities=${spec.outputCapabilities.joinToString(",") { it.name }}")
         appendLine("$prefix.required=${spec.requiredSchemaKeys().joinToString(",")}")
         spec.fields.forEachIndexed { index, field ->
             appendField("$prefix.field[$index]", field)
@@ -163,6 +166,6 @@ class HexanaToolCompatibilityTest {
     }
 
     private companion object {
-        const val EXPECTED_COMPATIBILITY_FINGERPRINT = "7213c61d0b02ddaf9139e54c2a2689f9aa2780016e7a06604738c8213012e324"
+        const val EXPECTED_COMPATIBILITY_FINGERPRINT = "5aa2c06fede5097d744489a9c5b6e0e4876f5f0fdf1c6241cf4b18244709e4a9"
     }
 }

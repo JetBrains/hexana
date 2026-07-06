@@ -6,6 +6,12 @@ private const val BINARY_INPUT_VALIDATION =
     "Provide exactly one of `path`, `bytesBase64`, or `bytes`."
 
 val WasmInputClass = class_("WasmInput") {
+    inputCapabilities(
+        InputConversionCapability.JsonObject,
+        InputConversionCapability.WasmPath,
+        InputConversionCapability.WasmFromString,
+        InputConversionCapability.StdinPlaceholder,
+    )
     nullable("path", string())
         .describe("Readable local `.wasm` path. $WASM_INPUT_VALIDATION")
     nullable("bytesBase64", string())
@@ -20,6 +26,11 @@ val WasmInputClass = class_("WasmInput") {
 }
 
 val BinaryInputClass = class_("BinaryInput") {
+    inputCapabilities(
+        InputConversionCapability.JsonObject,
+        InputConversionCapability.BinaryPath,
+        InputConversionCapability.StdinPlaceholder,
+    )
     nullable("path", string())
         .describe("Readable local binary path. $BINARY_INPUT_VALIDATION")
     nullable("bytesBase64", string())

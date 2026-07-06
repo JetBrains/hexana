@@ -170,12 +170,38 @@ class HexanaToolsTest {
                 assertTrue(kebabCase.matches(commandName), "CLI command `$commandName` is not kebab-case")
                 assertTrue(cli.groups.isNotEmpty(), "missing CLI group for ${spec.name}")
                 assertEquals(ToolOutputPolicy.ToolDefined, cli.outputPolicy, "bad output policy for ${spec.name}")
+                assertEquals(null, cli.outputOverride, "unexpected output override for ${spec.name}")
             } else {
                 assertEquals(null, cli.commandName, "hidden CLI surface has command for ${spec.name}")
                 assertTrue(cli.groups.isEmpty(), "hidden CLI surface has groups for ${spec.name}")
                 assertEquals(null, cli.outputPolicy, "hidden CLI surface has output policy for ${spec.name}")
+                assertEquals(null, cli.outputOverride, "hidden CLI surface has output override for ${spec.name}")
             }
         }
+    }
+
+    @Test
+    fun `ClassSpec with inherits conversion capability metadata`() {
+        val base = class_("Base") {
+            inputCapabilities(InputConversionCapability.JsonObject, InputConversionCapability.WasmPath)
+            outputCapabilities(OutputConversionCapability.SemanticJson, OutputConversionCapability.RawTextPlaceholder)
+            string("path").describe("Input path.")
+        }
+
+        val derived = base.with("Derived") {
+            int("limit", default = 10).describe("Maximum items.")
+        }
+
+        assertEquals(base.inputCapabilities, derived.inputCapabilities)
+        assertEquals(base.outputCapabilities, derived.outputCapabilities)
+
+        val overridden = base.with("Overridden") {
+            inputCapabilities(InputConversionCapability.StdinPlaceholder)
+            outputCapabilities(OutputConversionCapability.RawBytesPlaceholder)
+        }
+
+        assertEquals(setOf(InputConversionCapability.StdinPlaceholder), overridden.inputCapabilities)
+        assertEquals(setOf(OutputConversionCapability.RawBytesPlaceholder), overridden.outputCapabilities)
     }
 
     @Test
@@ -200,6 +226,67 @@ class HexanaToolsTest {
         val publicMcpb = publicMcpbProductionCliSurface("summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
         assertEquals(setOf(McpToolAudience.Production), publicMcpb.mcp.audiences)
         assertTrue(publicMcpb.publicMcpb.included)
+    }
+
+    @Test
+    fun `CLI visible output override is validated against output capabilities`() {
+        val semanticOnlyOutput = class_("SemanticOnlyResult", kotlinPackage = "org.jetbrains.hexana.mcp.model.test") {
+            outputCapabilities(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper)
+            string("value").describe("Result value.")
+        }
+
+        val specs = tools {
+            tool("supported_output_override") {
+                summary = "Supported output override."
+                input = BinaryInputClass
+                inputPattern = ToolInputPattern.BinaryOnly
+                output = semanticOnlyOutput
+                surfaces = productionCliSurface(
+                    "supported-output-override",
+                    ToolGroup.Binary,
+                    ToolOutputPolicy.ToolDefined,
+                    outputOverride = OutputConversionCapability.SemanticJson,
+                )
+                handlerFqn = queryArtifacts.handlerFqn
+            }
+        }
+
+        assertEquals(OutputConversionCapability.SemanticJson, specs.single().surfaces.cli.outputOverride)
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("unsupported_output_override") {
+                    summary = "Unsupported output override."
+                    input = BinaryInputClass
+                    inputPattern = ToolInputPattern.BinaryOnly
+                    output = semanticOnlyOutput
+                    surfaces = productionCliSurface(
+                        "unsupported-output-override",
+                        ToolGroup.Binary,
+                        ToolOutputPolicy.ToolDefined,
+                        outputOverride = OutputConversionCapability.RawBytesPlaceholder,
+                    )
+                    handlerFqn = queryArtifacts.handlerFqn
+                }
+            }
+        }
+
+        assertTrue(error.message.orEmpty().contains("CLI output override RawBytesPlaceholder is not declared"))
+    }
+
+    @Test
+    fun `hidden CLI surface rejects output override`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            CliSurfaceSpec(
+                visible = false,
+                commandName = null,
+                groups = emptySet(),
+                outputPolicy = null,
+                outputOverride = OutputConversionCapability.SemanticJson,
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("Hidden CLI surface must not declare an output override"))
     }
 
     @Test
@@ -422,6 +509,45 @@ class HexanaToolsTest {
     @Test
     fun `binaryInputClass carries a oneOf constraint`() {
         assertEquals(listOf("path", "bytesBase64", "bytes"), BinaryInputClass.oneOf)
+    }
+
+    @Test
+    fun `wasm and binary input classes declare conversion capabilities`() {
+        assertEquals(
+            setOf(
+                InputConversionCapability.JsonObject,
+                InputConversionCapability.WasmPath,
+                InputConversionCapability.WasmFromString,
+                InputConversionCapability.StdinPlaceholder,
+            ),
+            WasmInputClass.inputCapabilities,
+        )
+        assertEquals(
+            setOf(
+                InputConversionCapability.JsonObject,
+                InputConversionCapability.BinaryPath,
+                InputConversionCapability.StdinPlaceholder,
+            ),
+            BinaryInputClass.inputCapabilities,
+        )
+        assertEquals(WasmInputClass.inputCapabilities, indicesInput("SampleIndicesInput", "Indices.").inputCapabilities)
+        assertEquals(
+            BinaryInputClass.inputCapabilities,
+            BinaryInputClass.with("SampleBinaryInput") {
+                int("limit", default = 10).describe("Maximum items.")
+            }.inputCapabilities,
+        )
+    }
+
+    @Test
+    fun `existing catalog outputs declare minimal semantic JSON and MCP capabilities`() {
+        HexanaTools.forEach { spec ->
+            assertEquals(
+                setOf(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper),
+                spec.output.outputCapabilities,
+                "bad output capabilities for ${spec.name}",
+            )
+        }
     }
 
     @Test
