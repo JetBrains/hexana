@@ -3,9 +3,12 @@ package org.jetbrains.hexana.mcp.tools.generator
 import org.jetbrains.hexana.mcp.tools.BinaryInputClass
 import org.jetbrains.hexana.mcp.tools.ClassSpec
 import org.jetbrains.hexana.mcp.tools.ToolInputPattern
+import org.jetbrains.hexana.mcp.tools.ToolGroup
+import org.jetbrains.hexana.mcp.tools.ToolOutputPolicy
 import org.jetbrains.hexana.mcp.tools.ToolSpec
 import org.jetbrains.hexana.mcp.tools.class_
 import org.jetbrains.hexana.mcp.tools.list
+import org.jetbrains.hexana.mcp.tools.productionCliSurface
 import org.jetbrains.hexana.mcp.tools.string
 import org.junit.Test
 import java.lang.reflect.InvocationTargetException
@@ -51,12 +54,14 @@ class ToolDescriptionGenerationTest {
         input = BinaryInputClass,
         inputPattern = ToolInputPattern.BinaryOnly,
         output = binarySummaryResult,
+        surfaces = productionCliSurface("summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
         handlerFqn = "org.jetbrains.hexana.mcp.query.summarizeBinary",
     )
     private val queryBinarySpec = summarizeBinarySpec.copy(
         name = "query_binary",
         input = queryBinaryInput,
         inputPattern = ToolInputPattern.BoundedBinaryQuery,
+        surfaces = productionCliSurface("query-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
         handlerFqn = "org.jetbrains.hexana.mcp.query.queryBinary",
     )
 

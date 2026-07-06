@@ -63,6 +63,7 @@ val ListCustomSectionsResultClass = class_("ListCustomSectionsResult", kotlinPac
 internal val ModuleTools: List<ToolSpec> = tools {
     tool("summarize_module") {
         summary = "Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types."
+        surfaces = productionCliSurface("summarize-module", ToolGroup.Module, ToolOutputPolicy.ToolDefined)
         guidance = """
             Summarize a WebAssembly (.wasm) module with high-level counts for its major sections and declarations.
             Includes the nested import breakdown and total module size, making it a low-cost overview before calling heavier tools.
@@ -77,6 +78,7 @@ internal val ModuleTools: List<ToolSpec> = tools {
 
     tool("list_enabled_features") {
         summary = "List enabled or inferred WebAssembly feature flags for a `.wasm` module."
+        surfaces = productionCliSurface("list-enabled-features", ToolGroup.Module, ToolOutputPolicy.ToolDefined)
         guidance = """
             Infer WebAssembly feature usage from type declarations, section presence, instructions, and feature-related custom sections.
             Use this before choosing specialized tools when syntax or semantics depend on proposals such as reference types, bulk memory, SIMD, threads, memory64, GC, or function references.
@@ -89,6 +91,7 @@ internal val ModuleTools: List<ToolSpec> = tools {
 
     tool("list_custom_sections") {
         summary = "List WebAssembly custom sections with offsets, sizes, and small content previews."
+        surfaces = productionCliSurface("list-custom-sections", ToolGroup.Module, ToolOutputPolicy.ToolDefined)
         guidance = """
             List custom sections from a WebAssembly module, including names, full-section byte ranges, and a capped content preview.
             The preview excludes the encoded section name; `encoding` is `utf8` for printable UTF-8 content prefixes and `binary` for hex-rendered byte prefixes.

@@ -41,6 +41,7 @@ private val EntrypointPolicyResultClass = class_("EntrypointPolicyResult", kotli
 internal val EntrypointPolicyTools: List<ToolSpec> = tools {
     tool("get_entrypoint_policy") {
         summary = "Return policy-ready direct host-call facts for exported WebAssembly entrypoints."
+        surfaces = productionCliSurface("get-entrypoint-policy", ToolGroup.EntrypointPolicy, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this when repairing or validating entrypoint host-call policy JSON.
             It scans exported local functions and returns only imports called directly by each entrypoint body; exports that only reach host imports through local helper calls are listed separately in `excluded_transitive_exports`.

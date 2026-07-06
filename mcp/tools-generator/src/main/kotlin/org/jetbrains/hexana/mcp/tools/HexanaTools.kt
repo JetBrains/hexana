@@ -74,9 +74,8 @@ val HexanaTools: List<ToolSpec> = orderedTools(
 
 private fun orderedTools(vararg groups: List<ToolSpec>): List<ToolSpec> {
     val tools = groups.flatMap { it }
+    validateToolCollection(tools)
     val byName = tools.groupBy { it.name }
-    val duplicates = byName.filterValues { it.size > 1 }.keys
-    require(duplicates.isEmpty()) { "Duplicate tool names: $duplicates" }
 
     val actualNames = byName.keys
     val expectedNames = HEXANA_TOOL_ORDER.toSet()

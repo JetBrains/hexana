@@ -160,6 +160,7 @@ private val BinaryFunctionsResultClass = class_("BinaryFunctionsResult", kotlinP
 internal val BinaryTools: List<ToolSpec> = tools {
     tool("summarize_binary") {
         summary = "Summarize a Wasm or native binary with compact identity and entity counts."
+        surfaces = productionCliSurface("summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this first for an unknown binary before choosing a format-specific follow-up tool.
             Returns format, path label, size, known architecture/endian details, and bounded counts only; never raw bytes or unbounded lists.
@@ -174,6 +175,7 @@ internal val BinaryTools: List<ToolSpec> = tools {
 
     tool("query_binary") {
         summary = "Query Wasm or native binary records with bounded output."
+        surfaces = productionCliSurface("query-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this when `summarize_binary` shows the format has relevant records and you need a compact, paged lookup across generic binary entities.
             Prefer a focused `operation` over `all`; use `entityTypes`, `query`, `offset`, and `limit` to avoid broad scans, and request `detail=evidence` only for the few records that need parser offsets or record context.
@@ -189,6 +191,7 @@ internal val BinaryTools: List<ToolSpec> = tools {
 
     tool("list_binary_functions") {
         summary = "List Wasm funcidx or native symbol-backed functions with focused fields."
+        surfaces = productionCliSurface("list-binary-functions", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this for stack, source, or function inventories after `summarize_binary` shows functions.
             Wasm results use unified `funcidx`; native results include symbol/source, names, import/thunk flags, section, address, offset, size, and range confidence.
@@ -201,6 +204,7 @@ internal val BinaryTools: List<ToolSpec> = tools {
 
     tool("search_binary_functions") {
         summary = "Search Wasm funcidx or native symbol-backed functions by focused function fields."
+        surfaces = productionCliSurface("search-binary-functions", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this when you have a name, import, source, section, address, offset, or range-confidence term.
             Search is case-insensitive; all `query` terms must match one function record.

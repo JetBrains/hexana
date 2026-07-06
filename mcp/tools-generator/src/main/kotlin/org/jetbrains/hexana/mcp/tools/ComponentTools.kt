@@ -268,6 +268,7 @@ val ComponentCompatibilityInputClass = WasmInputClass.with("ComponentCompatibili
 internal val ComponentTools: List<ToolSpec> = tools {
     tool("list_component_surface") {
         summary = "Low-level component import/export listing; not for dependency/provider resolution."
+        surfaces = productionCliSurface("list-component-surface", ToolGroup.Component, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this only for compact component-model surface inspection when provider selection is not needed.
             For component run/link failures, project-root scans, or dependency resolution across candidate component files, call `resolve_component_dependencies` instead.
@@ -282,6 +283,7 @@ internal val ComponentTools: List<ToolSpec> = tools {
 
     tool("resolve_component_dependencies") {
         summary = "Resolve component run/link dependencies from a main component and candidate roots into report-ready fields."
+        surfaces = productionCliSurface("resolve-component-dependencies", ToolGroup.Component, ToolOutputPolicy.ToolDefined)
         guidance = """
             Search `scanRoots`, `projectRoot`, and the input component directory for component providers of non-runtime imports.
             Use this aggregate dependency-resolution workflow first when a component run/build/link step has a main component plus project root or candidate directories.
@@ -297,6 +299,7 @@ internal val ComponentTools: List<ToolSpec> = tools {
 
     tool("check_component_compatibility") {
         summary = "Compare current/previous component imports against provider candidates and lock/config files."
+        surfaces = productionCliSurface("check-component-compatibility", ToolGroup.Component, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this first for component compatibility drift, compose failure logs, provider candidate triage, and dependency lock/config repair.
             Compare current non-runtime imports with `dependencyPaths` or providers discovered from `projectRoot`, then use `previousPath` to explain import drift and `dependencyLockPath` to identify the configured provider to replace.

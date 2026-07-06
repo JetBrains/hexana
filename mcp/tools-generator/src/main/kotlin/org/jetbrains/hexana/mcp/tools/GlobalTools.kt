@@ -190,6 +190,7 @@ val AuditGlobalStatePolicyResultClass = class_("AuditGlobalStatePolicyResult", k
 internal val GlobalTools: List<ToolSpec> = tools {
     tool("list_globals") {
         summary = "Low-level list of imported and defined globals from a `.wasm` module."
+        surfaces = productionCliSurface("list-globals", ToolGroup.Global, ToolOutputPolicy.ToolDefined)
         guidance = """
             List imported and defined globals declared by a WebAssembly (.wasm) module.
             Returns each global with its value type, mutability, normalized initializer expression, import identity, and export names pointing at the global.
@@ -203,6 +204,7 @@ internal val GlobalTools: List<ToolSpec> = tools {
 
     tool("audit_global_state_policy") {
         summary = "Audit global-state policy with current/baseline Wasm and policy JSON; returns report-ready violations."
+        surfaces = productionCliSurface("audit-global-state-policy", ToolGroup.Global, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this as the shortest path for global-state audits that have a current module, `baselinePath`, and `policyPath`.
             Compares current globals with baseline public globals, applies policy rules, and returns exact input path echoes.
@@ -218,6 +220,7 @@ internal val GlobalTools: List<ToolSpec> = tools {
 
     tool("get_globals_for_indices") {
         summary = "Return globals for the requested indices from the unified global index space."
+        surfaces = productionCliSurface("get-globals-for-indices", ToolGroup.Global, ToolOutputPolicy.ToolDefined)
         guidance = """
             Return only the requested globals from the unified global index space.
             Use this for targeted analysis when `list_globals` would return more data than needed.

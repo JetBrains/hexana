@@ -117,6 +117,19 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `production tools declare explicit MCP and CLI surface metadata`() {
+        val kebabCase = Regex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
+        HexanaTools.forEach { spec ->
+            assertEquals(setOf(McpToolAudience.Production), spec.surfaces.mcp.audiences, "bad MCP audience for ${spec.name}")
+            assertTrue(spec.surfaces.cli.visible, "CLI surface hidden for ${spec.name}")
+            val commandName = requireNotNull(spec.surfaces.cli.commandName) { "missing CLI command for ${spec.name}" }
+            assertTrue(kebabCase.matches(commandName), "CLI command `$commandName` is not kebab-case")
+            assertTrue(spec.surfaces.cli.groups.isNotEmpty(), "missing CLI group for ${spec.name}")
+            assertEquals(ToolOutputPolicy.ToolDefined, spec.surfaces.cli.outputPolicy, "bad output policy for ${spec.name}")
+        }
+    }
+
+    @Test
     fun `tool builder rejects names outside strict snake_case`() {
         assertFailsWith<IllegalArgumentException> {
             tools {
@@ -140,6 +153,77 @@ class HexanaToolsTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun `tool builder requires explicit surface metadata`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("missing_surfaces") {
+                    summary = "s"
+                    input = BinaryInputClass
+                    inputPattern = ToolInputPattern.BinaryOnly
+                    output = binarySummaryResult
+                    handlerFqn = queryArtifacts.handlerFqn
+                }
+            }
+        }
+
+        assertTrue(error.message.orEmpty().contains("missing `surfaces = `"))
+    }
+
+    @Test
+    fun `MCP surface requires at least one audience declaration`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            McpSurfaceSpec(emptySet())
+        }
+
+        assertTrue(error.message.orEmpty().contains("at least one audience"))
+    }
+
+    @Test
+    fun `CLI visible surface requires kebab-case command metadata`() {
+        assertFailsWith<IllegalArgumentException> {
+            productionCliSurface("query_artifacts", ToolGroup.ArtifactQuery, ToolOutputPolicy.ToolDefined)
+        }
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            CliSurfaceSpec(
+                visible = true,
+                commandName = null,
+                groups = setOf(ToolGroup.ArtifactQuery),
+                outputPolicy = ToolOutputPolicy.ToolDefined,
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("must declare a command name"))
+    }
+
+    @Test
+    fun `tool collection rejects duplicate CLI command names`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("first_tool") {
+                    summary = "s"
+                    input = BinaryInputClass
+                    inputPattern = ToolInputPattern.BinaryOnly
+                    output = binarySummaryResult
+                    surfaces = productionCliSurface("same-command", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
+                    handlerFqn = queryArtifacts.handlerFqn
+                }
+                tool("second_tool") {
+                    summary = "s"
+                    input = BinaryInputClass
+                    inputPattern = ToolInputPattern.BinaryOnly
+                    output = binarySummaryResult
+                    surfaces = productionCliSurface("same-command", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
+                    handlerFqn = queryArtifacts.handlerFqn
+                }
+            }
+        }
+
+        assertTrue(error.message.orEmpty().contains("Duplicate CLI command names"))
+        assertTrue(error.message.orEmpty().contains("same-command"))
     }
 
     @Test
@@ -297,6 +381,7 @@ class HexanaToolsTest {
                 input = BinaryInputClass
                 inputPattern = ToolInputPattern.BinaryOnly
                 output = binarySummaryResult
+                surfaces = productionCliSurface("summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
                 handlerFqn = "org.jetbrains.hexana.mcp.query.summarizeBinary"
             }
             tool("query_binary") {
@@ -304,6 +389,7 @@ class HexanaToolsTest {
                 input = queryBinaryInput
                 inputPattern = ToolInputPattern.BoundedBinaryQuery
                 output = binarySummaryResult
+                surfaces = productionCliSurface("query-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
                 handlerFqn = "org.jetbrains.hexana.mcp.query.queryBinary"
             }
         }
@@ -323,6 +409,7 @@ class HexanaToolsTest {
                     input = WasmInputClass
                     inputPattern = ToolInputPattern.BinaryOnly
                     output = binarySummaryResult
+                    surfaces = productionCliSurface("summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
                     handlerFqn = "org.jetbrains.hexana.mcp.query.summarizeBinary"
                 }
             }

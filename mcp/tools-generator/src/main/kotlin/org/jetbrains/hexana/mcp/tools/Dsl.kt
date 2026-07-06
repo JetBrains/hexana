@@ -318,6 +318,7 @@ data class ToolSpec(
     val input: ClassSpec,
     val inputPattern: ToolInputPattern,
     val output: ClassSpec,
+    val surfaces: ToolSurfaceSpec,
     /**
      * Fully-qualified name of the top-level handler function that backs this tool.
      * Expressed as a string so the DSL has zero compile-time dependency on the
@@ -325,6 +326,101 @@ data class ToolSpec(
      * when they emit the dispatcher code that references it.
      */
     val handlerFqn: String,
+)
+
+data class ToolSurfaceSpec(
+    val mcp: McpSurfaceSpec,
+    val cli: CliSurfaceSpec,
+)
+
+data class McpSurfaceSpec(
+    val audiences: Set<McpToolAudience>,
+) {
+    init {
+        require(audiences.isNotEmpty()) { "MCP surface must declare at least one audience/profile." }
+    }
+
+    companion object {
+        fun production(): McpSurfaceSpec = McpSurfaceSpec(setOf(McpToolAudience.Production))
+    }
+}
+
+enum class McpToolAudience {
+    Production,
+}
+
+data class CliSurfaceSpec(
+    val visible: Boolean,
+    val commandName: String?,
+    val groups: Set<ToolGroup>,
+    val outputPolicy: ToolOutputPolicy?,
+) {
+    init {
+        if (visible) {
+            require(!commandName.isNullOrBlank()) { "Visible CLI surface must declare a command name." }
+            require(CLI_COMMAND_NAME_REGEX.matches(commandName)) {
+                "CLI command '$commandName' must be strict kebab-case."
+            }
+            require(groups.isNotEmpty()) { "Visible CLI surface '$commandName' must declare at least one group." }
+            require(outputPolicy != null) { "Visible CLI surface '$commandName' must declare an output policy." }
+        } else {
+            require(commandName == null) { "Hidden CLI surface must not declare a command name." }
+            require(groups.isEmpty()) { "Hidden CLI surface must not declare groups." }
+            require(outputPolicy == null) { "Hidden CLI surface must not declare an output policy." }
+        }
+    }
+
+    companion object {
+        fun visible(
+            commandName: String,
+            group: ToolGroup,
+            outputPolicy: ToolOutputPolicy,
+            vararg additionalGroups: ToolGroup,
+        ): CliSurfaceSpec = CliSurfaceSpec(
+            visible = true,
+            commandName = commandName,
+            groups = setOf(group, *additionalGroups),
+            outputPolicy = outputPolicy,
+        )
+
+        fun hidden(): CliSurfaceSpec = CliSurfaceSpec(
+            visible = false,
+            commandName = null,
+            groups = emptySet(),
+            outputPolicy = null,
+        )
+    }
+}
+
+enum class ToolGroup {
+    ArtifactQuery,
+    Binary,
+    Component,
+    Data,
+    Element,
+    EntrypointPolicy,
+    Export,
+    Function,
+    Global,
+    Import,
+    Memory,
+    Module,
+    Runtime,
+    Type,
+}
+
+enum class ToolOutputPolicy {
+    ToolDefined,
+}
+
+fun productionCliSurface(
+    commandName: String,
+    group: ToolGroup,
+    outputPolicy: ToolOutputPolicy,
+    vararg additionalGroups: ToolGroup,
+): ToolSurfaceSpec = ToolSurfaceSpec(
+    mcp = McpSurfaceSpec.production(),
+    cli = CliSurfaceSpec.visible(commandName, group, outputPolicy, *additionalGroups),
 )
 
 val ToolSpec.mcpDescription: String
@@ -380,8 +476,7 @@ class ToolsBuilder internal constructor() {
     }
 
     internal fun build(): List<ToolSpec> {
-        val duplicates = specs.groupBy { it.name }.filterValues { it.size > 1 }.keys
-        require(duplicates.isEmpty()) { "Duplicate tool names: $duplicates" }
+        validateToolCollection(specs)
         return specs.toList()
     }
 }
@@ -389,6 +484,7 @@ class ToolsBuilder internal constructor() {
 private val FQN_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$")
 private val FIELD_NAME_REGEX = Regex("^[a-z][A-Za-z0-9]*$")
 private val TOOL_NAME_REGEX = Regex("^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
+private val CLI_COMMAND_NAME_REGEX = Regex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 
 @HexanaToolsDsl
 class ToolBuilder internal constructor(private val name: String) {
@@ -397,6 +493,7 @@ class ToolBuilder internal constructor(private val name: String) {
     var input: ClassSpec? = null
     var inputPattern: ToolInputPattern? = null
     var output: ClassSpec? = null
+    var surfaces: ToolSurfaceSpec? = null
     var handlerFqn: String? = null
 
     internal fun build(): ToolSpec {
@@ -408,6 +505,7 @@ class ToolBuilder internal constructor(private val name: String) {
         val resolvedInput = requireNotNull(input) { "Tool '$name' is missing `input = `." }
         val resolvedInputPattern = requireNotNull(inputPattern) { "Tool '$name' is missing `inputPattern = `." }
         val resolvedOutput = requireNotNull(output) { "Tool '$name' is missing `output = `." }
+        val resolvedSurfaces = requireNotNull(surfaces) { "Tool '$name' is missing `surfaces = `." }
         val resolvedHandler = requireNotNull(handlerFqn) { "Tool '$name' is missing `handlerFqn = `." }
         require(FQN_REGEX.matches(resolvedHandler)) {
             "Tool '$name' handlerFqn must be a fully-qualified function name (`pkg.subpkg.fn`), got `$resolvedHandler`."
@@ -420,8 +518,23 @@ class ToolBuilder internal constructor(private val name: String) {
             input = resolvedInput,
             inputPattern = resolvedInputPattern,
             output = resolvedOutput,
+            surfaces = resolvedSurfaces,
             handlerFqn = resolvedHandler,
         )
+    }
+}
+
+internal fun validateToolCollection(specs: List<ToolSpec>) {
+    val duplicateToolNames = specs.groupBy { it.name }.filterValues { it.size > 1 }.keys
+    require(duplicateToolNames.isEmpty()) { "Duplicate tool names: $duplicateToolNames" }
+
+    val duplicateCliCommandNames = specs
+        .mapNotNull { spec -> spec.surfaces.cli.commandName?.let { it to spec.name } }
+        .groupBy({ it.first }, { it.second })
+        .filterValues { it.size > 1 }
+    require(duplicateCliCommandNames.isEmpty()) {
+        "Duplicate CLI command names: " +
+            duplicateCliCommandNames.entries.joinToString { (command, tools) -> "$command used by $tools" }
     }
 }
 

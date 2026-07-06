@@ -169,6 +169,7 @@ val AuditDataPayloadPolicyResultClass = class_("AuditDataPayloadPolicyResult", k
 internal val DataTools: List<ToolSpec> = tools {
     tool("list_data") {
         summary = "Return raw data-section entries for a closed data-segment range."
+        surfaces = productionCliSurface("list-data", ToolGroup.Data, ToolOutputPolicy.ToolDefined)
         guidance = """
             Range `entriesRange` is closed: both `from` and `to` are inclusive zero-based segment indices.
             This is the high-volume raw-bytes view; the `data` field is base64-encoded, and `list_data_segments` is usually cheaper when previews and metadata are sufficient.
@@ -183,6 +184,7 @@ internal val DataTools: List<ToolSpec> = tools {
 
     tool("list_data_segments") {
         summary = "Return data-segment metadata with range slicing and optional export/global context."
+        surfaces = productionCliSurface("list-data-segments", ToolGroup.Data, ToolOutputPolicy.ToolDefined)
         guidance = """
             Range `segmentRange` is half-open: `from` is inclusive, `to` is exclusive (omit `to` to read to the end).
             Prefer this over `list_data` when previews, sizes, and offset context are enough.
@@ -195,6 +197,7 @@ internal val DataTools: List<ToolSpec> = tools {
 
     tool("audit_data_payload_policy") {
         summary = "Audit data segments against a payload policy JSON file and return report-ready matches."
+        surfaces = productionCliSurface("audit-data-payload-policy", ToolGroup.Data, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this as the shortest path for embedded payload audits that have a Wasm module and `policyPath`.
             It reads forbidden strings from the policy, confirms matches against raw data-segment bytes, and returns `recommendedReport` as a report-ready object.
