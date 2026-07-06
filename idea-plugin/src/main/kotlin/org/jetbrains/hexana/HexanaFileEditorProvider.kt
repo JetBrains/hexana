@@ -38,6 +38,7 @@ class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
             file.fileType is ParquetFileType ||
             file.fileType is ArrowFileType ||
             file.fileType is ProtobufFileType ||
+            file.fileType is ProtobufMessageFileType ||
             file.extension.equals("class", ignoreCase = true) ||
             file.extension.equals("jar", ignoreCase = true) ||
             file.extension.equals("zip", ignoreCase = true) ||

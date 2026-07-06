@@ -25,6 +25,20 @@ class ProtoBuilder {
         bytes.forEach { buf.add(it) }
     }
 
+    /** Writes a fixed-32 field: tag (wiretype 5) followed by exactly 4 raw LE bytes. */
+    fun i32Field(fn: Int, fourBytesLE: ByteArray) {
+        require(fourBytesLE.size == 4) { "i32 payload must be 4 bytes" }
+        writeTag(fn, 5)
+        fourBytesLE.forEach { buf.add(it) }
+    }
+
+    /** Writes a fixed-64 field: tag (wiretype 1) followed by exactly 8 raw LE bytes. */
+    fun i64Field(fn: Int, eightBytesLE: ByteArray) {
+        require(eightBytesLE.size == 8) { "i64 payload must be 8 bytes" }
+        writeTag(fn, 1)
+        eightBytesLE.forEach { buf.add(it) }
+    }
+
     private fun writeTag(fn: Int, wt: Int) = writeVarint(((fn shl 3) or wt).toLong())
 
     fun writeVarint(v: Long) {

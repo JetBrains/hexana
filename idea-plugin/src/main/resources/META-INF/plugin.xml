@@ -173,6 +173,11 @@
                   fieldName="INSTANCE"
                   extensions="desc;protoset"/>
 
+        <fileType name="Protobuf Message"
+                  implementationClass="org.jetbrains.hexana.ProtobufMessageFileType"
+                  fieldName="INSTANCE"
+                  extensions="pb"/>
+
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.feedback.HexanaFeedbackFileEditorProvider"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.whatsnew.HexanaWhatsNewFileEditorProvider"/>
@@ -312,6 +317,10 @@
                     class="org.jetbrains.hexana.actions.CompareWasmAction"
                     text="Compare WASM With…"
                     description="Compare two .wasm modules by size impact"/>
+            <action id="hexana.openAsProtobufMessage"
+                    class="org.jetbrains.hexana.actions.OpenAsProtobufMessageAction"
+                    text="Open As Protobuf Message"
+                    description="Decode this file as a raw Protobuf wire-encoded message"/>
             <separator/>
             <action id="hexana.showElementInHexView" class="org.jetbrains.hexana.actions.ShowElementInHexViewAction"/>
             <action id="hexana.goToOffset" class="org.jetbrains.hexana.actions.GoToOffsetAction"

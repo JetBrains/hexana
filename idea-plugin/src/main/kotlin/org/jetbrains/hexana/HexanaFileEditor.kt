@@ -220,6 +220,10 @@ class HexanaFileEditor(
         commonBuffer: CommonByteBuffer,
         sourcePath: String?
     ): BinaryProvider {
+        if (myFile.fileType is ProtobufMessageFileType) {
+            return ProtobufMessageBinaryProvider(commonBuffer)
+        }
+
         if (ext == "parquet" || myFile.fileType is ParquetFileType || (ext == null && isParquetMagic(commonBuffer))) {
             return ParquetBinaryProvider(commonBuffer, sourcePath)
         }

@@ -44,6 +44,7 @@ internal fun binaryFormatOf(
         is ParquetBinaryProvider -> return HexanaEvent.BinaryFormat.PARQUET
         is ArrowBinaryProvider -> return HexanaEvent.BinaryFormat.ARROW_IPC
         is ArchiveBinaryProvider -> return HexanaEvent.BinaryFormat.GENERIC
+        // ProtobufMessageBinaryProvider (explicit Open-As) intentionally reports as GENERIC — not an auto-detected format.
         is GenericBinaryProvider -> return HexanaEvent.BinaryFormat.GENERIC
         // Zip / class / dex providers are classified by extension below (jar/war/apk/zip/class).
         is ZipBinaryProvider, is ClassFileBinaryProvider, is DexBinaryProvider, null -> Unit
