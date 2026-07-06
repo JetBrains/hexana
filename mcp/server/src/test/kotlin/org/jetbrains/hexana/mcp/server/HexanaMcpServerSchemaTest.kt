@@ -76,6 +76,7 @@ class HexanaMcpServerSchemaTest {
             ),
             createHexanaMcpServer().tools.keys.sorted(),
         )
+        assertEquals(29, createHexanaMcpServer().tools.size)
     }
 
     @Test
@@ -132,6 +133,29 @@ class HexanaMcpServerSchemaTest {
             ),
             createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.ADVANCED).tools.keys.sorted(),
         )
+    }
+
+    @Test
+    fun generatedProfileMetadataDrivesDefaultProductionAndAdvancedRegistries() {
+        val productionNames = HexanaGeneratedMcpToolProfiles.PRODUCTION_TOOL_NAMES
+        assertEquals(29, productionNames.size)
+        assertEquals(
+            productionNames,
+            createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.PRODUCTION).tools.keys.toSet(),
+        )
+        assertEquals(
+            productionNames,
+            createHexanaMcpServer().tools.keys.toSet(),
+        )
+
+        val advancedNames = HexanaGeneratedMcpToolProfiles.ADVANCED_TOOL_NAMES
+        assertEquals(
+            advancedNames,
+            createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.ADVANCED).tools.keys.toSet(),
+        )
+        assertTrue(advancedNames.all { HexanaMcpToolProfile.ADVANCED.includesTool(it) })
+        assertTrue(productionNames.all { HexanaMcpToolProfile.PRODUCTION.includesTool(it) })
+        assertFalse(HexanaMcpToolProfile.PRODUCTION.includesTool("query_artifacts"))
     }
 
     @Test
