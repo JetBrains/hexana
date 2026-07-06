@@ -57,7 +57,7 @@ cd vscode-plugin
 npm run test:unit
 ```
 
-The MCP update test runs only when
+The UI MCP update test uses the legacy mock GitHub-release path and runs only when
 `../../mcp/server/build/distributions/server-<version>.zip`
 exists. Build it first with:
 

@@ -31,14 +31,33 @@ interface TestReleaseAsset {
     digest?: string | null;
 }
 
-interface LiveGitHubRelease {
-    tag_name: string;
-    assets: LiveGitHubReleaseAsset[];
+interface TestDownloadsRelease {
+    version: string;
+    platform: string;
+    archivePath: string;
+    digest?: string;
 }
 
-interface LiveGitHubReleaseAsset {
-    name: string;
-    digest?: string;
+interface LiveDownloadsReleasesIndex {
+    schemaVersion: number;
+    latest: string;
+    releases: LiveDownloadsReleaseIndexEntry[];
+}
+
+interface LiveDownloadsReleaseIndexEntry {
+    version: string;
+    manifestUrl: string;
+}
+
+interface LiveDownloadsReleaseManifest {
+    version: string;
+    artifacts: LiveDownloadsReleaseArtifact[];
+}
+
+interface LiveDownloadsReleaseArtifact {
+    platform: string;
+    kind: string;
+    sha256?: string;
 }
 
 describe('Hexana MCP server downloader', function () {
@@ -115,6 +134,116 @@ describe('Hexana MCP server downloader', function () {
             expect(server.requestPaths[0]).to.equal('/repos/example/hexana/releases?per_page=100&page=1');
             expect(server.requestPaths).to.contain('/download/server-0.10.0.zip');
             expect(await downloader.getDownloadedHexanaMcpServerVersion(context)).to.equal('0.10.0');
+        } finally {
+            await server.close();
+        }
+    });
+
+    it('downloads the current-platform native MCP executable from the downloads release index', async function () {
+        const platform = currentTestDownloadsPlatform();
+        if (!platform) {
+            this.skip();
+        }
+
+        const archivePath = createNativeServerArchive(tempRoot, '0.4.0');
+        const server = await startDownloadsReleaseServer([
+            {version: '0.4.0', platform, archivePath},
+        ]);
+        process.env.HEXANA_MCP_DOWNLOADS_RELEASES_INDEX_URL = server.apiUrl;
+        delete process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL;
+
+        try {
+            const downloader = requireExtensionModule('mcpServerDownloader');
+            const context = extensionContext(tempRoot);
+
+            const result = await downloader.prepareHexanaMcpServer(context);
+
+            expect(result?.fsPath).to.equal(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server'));
+            expect(server.requestPaths).to.contain('/resources/hexana/mcp/releases.json');
+            expect(server.requestPaths).to.contain('/resources/hexana/mcp/0.4.0/hexana-mcp-release-0.4.0.json');
+            expect(server.requestPaths).to.contain(`/resources/hexana/mcp/0.4.0/hexana-mcp-native-${platform}-0.4.0.zip`);
+            expect(await downloader.getDownloadedHexanaMcpServerVersion(context)).to.equal('0.4.0');
+            expect(downloader.getHexanaMcpServerLauncherPath(context))
+                .to.equal(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server', 'bin', nativeLauncherFileName()));
+        } finally {
+            await server.close();
+        }
+    });
+
+    it('fails instead of using GitHub fallback when downloads metadata is unavailable', async function () {
+        const server = await startUnavailableDownloadsReleaseServer();
+        process.env.HEXANA_MCP_DOWNLOADS_RELEASES_INDEX_URL = server.apiUrl;
+        delete process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL;
+
+        const httpsModule = require('https') as typeof https;
+        const originalHttpsGet = httpsModule.get;
+        let githubFallbackRequested = false;
+
+        try {
+            httpsModule.get = ((..._args: unknown[]) => {
+                githubFallbackRequested = true;
+                throw new Error('Unexpected automatic GitHub fallback');
+            }) as typeof https.get;
+
+            const downloader = requireExtensionModule('mcpServerDownloader');
+            const result = await downloader.prepareHexanaMcpServer(extensionContext(tempRoot), {
+                showErrorNotification: false,
+            });
+
+            expect(result).to.equal(undefined);
+            expect(githubFallbackRequested).to.equal(false);
+            expect(server.requestCounts.metadata).to.equal(1);
+            expect(server.requestCounts.archive).to.equal(0);
+            expect(fs.existsSync(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server'))).to.equal(false);
+            expect(vscode.messages).to.deep.equal([]);
+        } finally {
+            httpsModule.get = originalHttpsGet;
+            await server.close();
+        }
+    });
+
+    it('uses the JVM fallback release when the downloads manifest has no current-platform native artifact', async function () {
+        const platform = currentTestDownloadsPlatform();
+        if (!platform) {
+            this.skip();
+        }
+
+        const otherPlatform = platform === 'linux-x64' ? 'macos-arm64' : 'linux-x64';
+        const archivePath = createNativeServerArchive(tempRoot, '0.4.0');
+        const server = await startDownloadsReleaseServer([
+            {version: '0.4.0', platform: otherPlatform, archivePath},
+        ]);
+        process.env.HEXANA_MCP_DOWNLOADS_RELEASES_INDEX_URL = server.apiUrl;
+        delete process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL;
+
+        try {
+            const downloader = requireExtensionModule('mcpServerDownloader');
+            downloader.registerHexanaMcpServerCommands(extensionContext(tempRoot));
+
+            await vscode.commands.get('hexana.mcp.showServerStatus')?.();
+
+            expect(vscode.messages).to.contain('Hexana MCP server is not downloaded. Latest known version: v0.1.0.');
+            expect(server.requestPaths).to.contain('/resources/hexana/mcp/releases.json');
+            expect(server.requestPaths).to.contain('/resources/hexana/mcp/0.4.0/hexana-mcp-release-0.4.0.json');
+            expect(server.requestCounts.archive).to.equal(0);
+        } finally {
+            await server.close();
+        }
+    });
+
+    it('opens the production MCP downloads page from the failure notification', async function () {
+        const server = await startUnavailableDownloadsReleaseServer();
+        process.env.HEXANA_MCP_DOWNLOADS_RELEASES_INDEX_URL = server.apiUrl;
+        delete process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL;
+        vscode.messageActions.push('Open Download Page');
+
+        try {
+            const downloader = requireExtensionModule('mcpServerDownloader');
+
+            await downloader.prepareHexanaMcpServer(extensionContext(tempRoot));
+
+            expect(vscode.messages).to.deep.equal(['Hexana MCP server could not be downloaded automatically.']);
+            expect(vscode.openedExternal).to.deep.equal(['https://download.jetbrains.com/resources/hexana/mcp']);
         } finally {
             await server.close();
         }
@@ -520,16 +649,21 @@ describe('Hexana MCP server downloader', function () {
         }
     });
 
-    it('downloads the newest real GitHub MCP server release without mocks', async function () {
+    it('downloads the newest real downloads.jetbrains.com MCP server release without mocks', async function () {
         if (process.env.HEXANA_RUN_LIVE_MCP_RELEASE_TESTS !== 'true') {
             this.skip();
         }
 
         this.timeout(180_000);
         delete process.env.HEXANA_MCP_GITHUB_RELEASE_API_URL;
+        delete process.env.HEXANA_MCP_DOWNLOADS_RELEASES_INDEX_URL;
         delete process.env.HEXANA_MCP_RELEASES_PAGE_URL;
 
-        const expectedVersion = await fetchLiveLatestMcpServerReleaseVersion();
+        const expectedVersion = await fetchLiveLatestNativeDownloadsMcpServerReleaseVersion();
+        if (!expectedVersion) {
+            this.skip();
+        }
+
         const downloader = requireExtensionModule('mcpServerDownloader');
         const context = extensionContext(tempRoot, 'live-test');
 
@@ -821,6 +955,24 @@ function createServerArchive(tempRoot: string, version: string): string {
     return archivePath;
 }
 
+function createNativeServerArchive(tempRoot: string, version: string): string {
+    const sourceRoot = path.join(tempRoot, `native-server-${version}-source`);
+    const serverBin = path.join(sourceRoot, 'bin');
+    fs.mkdirSync(serverBin, { recursive: true });
+    const launcherPath = path.join(serverBin, nativeLauncherFileName());
+    const script = process.platform === 'win32'
+        ? `@echo off\r\necho hexana-mcp ${version}\r\n`
+        : `#!/usr/bin/env sh\necho hexana-mcp ${version}\n`;
+    fs.writeFileSync(launcherPath, script);
+    if (process.platform !== 'win32') {
+        fs.chmodSync(launcherPath, 0o755);
+    }
+
+    const archivePath = path.join(tempRoot, `hexana-mcp-native-${currentTestDownloadsPlatform() ?? 'unknown'}-${version}.zip`);
+    createZipArchive(sourceRoot, archivePath, '');
+    return archivePath;
+}
+
 function createInstalledServer(storageDir: string, version: string): void {
     const serverBin = path.join(storageDir, 'server', 'bin');
     fs.mkdirSync(serverBin, { recursive: true });
@@ -837,14 +989,14 @@ function createInstalledServer(storageDir: string, version: string): void {
     fs.writeFileSync(path.join(storageDir, 'server.version'), `${version}\n`, 'utf8');
 }
 
-function createZipArchive(sourceDir: string, archivePath: string): void {
+function createZipArchive(sourceDir: string, archivePath: string, zipPath = 'server'): void {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const AdmZip = require('adm-zip') as new () => {
         addLocalFolder(localPath: string, zipPath?: string): void;
         writeZip(targetPath: string): void;
     };
     const zip = new AdmZip();
-    zip.addLocalFolder(sourceDir, 'server');
+    zip.addLocalFolder(sourceDir, zipPath);
     zip.writeZip(archivePath);
 }
 
@@ -892,6 +1044,111 @@ async function startPagedReleasesServer(pages: TestRelease[][]): Promise<TestRel
     await listen(server);
     return {
         apiUrl: baseUrl(server) + '/repos/example/hexana/releases',
+        close: () => close(server),
+        requestCounts,
+        requestPaths,
+    };
+}
+
+async function startDownloadsReleaseServer(releases: TestDownloadsRelease[]): Promise<TestReleaseServer> {
+    const requestCounts = { metadata: 0, archive: 0 };
+    const requestPaths: string[] = [];
+    const latest = releases
+        .map((release) => {
+            const version = semver.valid(release.version);
+            return version ? {normalizedVersion: version, release} : undefined;
+        })
+        .filter((candidate): candidate is { normalizedVersion: string; release: TestDownloadsRelease } => candidate !== undefined)
+        .sort((left, right) => semver.rcompare(left.normalizedVersion, right.normalizedVersion))[0]?.release
+        ?? releases[0];
+
+    const server = http.createServer((request, response) => {
+        requestPaths.push(request.url ?? '');
+        if (request.url === '/resources/hexana/mcp/releases.json') {
+            requestCounts.metadata++;
+            response.setHeader('Content-Type', 'application/json');
+            response.end(JSON.stringify({
+                schemaVersion: 1,
+                latest: latest.version,
+                downloadsRoot: `${baseUrl(server)}/resources/hexana/mcp`,
+                releases: releases.map((release) => ({
+                    version: release.version,
+                    manifestUrl: `${baseUrl(server)}/resources/hexana/mcp/${release.version}/hexana-mcp-release-${release.version}.json`,
+                    downloadsPrefix: `${baseUrl(server)}/resources/hexana/mcp/${release.version}`,
+                    platforms: [release.platform],
+                    artifactKinds: ['native-executable'],
+                })),
+            }));
+            return;
+        }
+
+        const manifestRelease = releases.find(
+            (release) => request.url === `/resources/hexana/mcp/${release.version}/hexana-mcp-release-${release.version}.json`,
+        );
+        if (manifestRelease) {
+            requestCounts.metadata++;
+            response.setHeader('Content-Type', 'application/json');
+            const artifactName = `hexana-mcp-native-${manifestRelease.platform}-${manifestRelease.version}.zip`;
+            response.end(JSON.stringify({
+                version: manifestRelease.version,
+                downloadsPrefix: `${baseUrl(server)}/resources/hexana/mcp/${manifestRelease.version}`,
+                artifacts: [
+                    {
+                        name: artifactName,
+                        platform: manifestRelease.platform,
+                        kind: 'native-executable',
+                        size: fs.statSync(manifestRelease.archivePath).size,
+                        sha256: manifestRelease.digest ?? sha256(manifestRelease.archivePath),
+                        downloadsUrl: `${baseUrl(server)}/resources/hexana/mcp/${manifestRelease.version}/${artifactName}`,
+                    },
+                ],
+            }));
+            return;
+        }
+
+        const artifactRelease = releases.find((release) => {
+            const artifactName = `hexana-mcp-native-${release.platform}-${release.version}.zip`;
+            return request.url === `/resources/hexana/mcp/${release.version}/${artifactName}`;
+        });
+        if (artifactRelease) {
+            requestCounts.archive++;
+            response.setHeader('Content-Type', 'application/zip');
+            fs.createReadStream(artifactRelease.archivePath).pipe(response);
+            return;
+        }
+
+        response.statusCode = 404;
+        response.end('not found');
+    });
+
+    await listen(server);
+    return {
+        apiUrl: baseUrl(server) + '/resources/hexana/mcp/releases.json',
+        close: () => close(server),
+        requestCounts,
+        requestPaths,
+    };
+}
+
+async function startUnavailableDownloadsReleaseServer(): Promise<TestReleaseServer> {
+    const requestCounts = { metadata: 0, archive: 0 };
+    const requestPaths: string[] = [];
+    const server = http.createServer((request, response) => {
+        requestPaths.push(request.url ?? '');
+        if (request.url === '/resources/hexana/mcp/releases.json') {
+            requestCounts.metadata++;
+            response.statusCode = 503;
+            response.end('unavailable');
+            return;
+        }
+
+        requestCounts.archive++;
+        response.statusCode = 500;
+        response.end('unexpected archive request');
+    });
+    await listen(server);
+    return {
+        apiUrl: baseUrl(server) + '/resources/hexana/mcp/releases.json',
         close: () => close(server),
         requestCounts,
         requestPaths,
@@ -1020,34 +1277,52 @@ function sha256(filePath: string): string {
     return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
-async function fetchLiveLatestMcpServerReleaseVersion(): Promise<string> {
-    const releases: LiveGitHubRelease[] = [];
-    let page = 1;
-    while (true) {
-        const nextPage = await getLiveJson<LiveGitHubRelease[]>(`https://api.github.com/repos/JetBrains/hexana/releases?per_page=100&page=${page}`);
-        releases.push(...nextPage);
-        if (nextPage.length < 100) {
-            break;
-        }
-        page++;
+async function fetchLiveLatestNativeDownloadsMcpServerReleaseVersion(): Promise<string | undefined> {
+    const platform = currentTestDownloadsPlatform();
+    if (!platform) {
+        return undefined;
     }
 
-    const candidates = releases
+    const index = await getLiveJson<LiveDownloadsReleasesIndex>(
+        'https://download.jetbrains.com/resources/hexana/mcp/releases.json',
+    );
+    if (index.schemaVersion !== 1) {
+        throw new Error(`Real downloads.jetbrains.com releases index has unsupported schema version: ${index.schemaVersion}`);
+    }
+
+    const latestEntry = selectLiveDownloadsReleaseEntry(index);
+    if (!latestEntry) {
+        throw new Error('Real downloads.jetbrains.com releases index does not contain a latest release entry');
+    }
+
+    const manifest = await getLiveJson<LiveDownloadsReleaseManifest>(latestEntry.manifestUrl);
+    if (manifest.version !== latestEntry.version) {
+        throw new Error(
+            `Real downloads.jetbrains.com release manifest version mismatch: index=${latestEntry.version}, manifest=${manifest.version}`,
+        );
+    }
+
+    const nativeArtifact = manifest.artifacts.find((candidate) =>
+        candidate.platform === platform && candidate.kind === 'native-executable' && isSha256(candidate.sha256),
+    );
+    return nativeArtifact ? manifest.version : undefined;
+}
+
+function selectLiveDownloadsReleaseEntry(index: LiveDownloadsReleasesIndex): LiveDownloadsReleaseIndexEntry | undefined {
+    const latest = index.releases.find((release) => release.version === index.latest);
+    if (latest) {
+        return latest;
+    }
+
+    return index.releases
         .map((release) => {
-            const version = semver.valid(release.tag_name);
-            const hasServerAsset = release.assets.some((asset) =>
-                /^server-.+\.zip$/.test(asset.name) && parseGitHubSha256Digest(asset.digest) !== undefined,
-            );
-            return version && hasServerAsset ? {normalizedVersion: version, version: release.tag_name} : undefined;
+            const version = semver.valid(release.version);
+            return version ? {normalizedVersion: version, release} : undefined;
         })
-        .filter((candidate): candidate is { normalizedVersion: string; version: string } => candidate !== undefined)
-        .sort((left, right) => semver.rcompare(left.normalizedVersion, right.normalizedVersion));
-
-    const latest = candidates[0]?.version;
-    if (!latest) {
-        throw new Error('Real GitHub releases do not contain a semver-tagged server-*.zip asset with a SHA-256 digest');
-    }
-    return latest;
+        .filter((candidate): candidate is { normalizedVersion: string; release: LiveDownloadsReleaseIndexEntry } =>
+            candidate !== undefined,
+        )
+        .sort((left, right) => semver.rcompare(left.normalizedVersion, right.normalizedVersion))[0]?.release;
 }
 
 function getLiveJson<T>(url: string): Promise<T> {
@@ -1075,7 +1350,7 @@ function getLiveJson<T>(url: string): Promise<T> {
                 response.on('end', () => {
                     const body = Buffer.concat(chunks).toString('utf8');
                     if (statusCode < 200 || statusCode >= 300) {
-                        reject(new Error(`Live GitHub release metadata request failed with HTTP ${statusCode}: ${body}`));
+                        reject(new Error(`Live MCP release metadata request failed with HTTP ${statusCode}: ${body}`));
                         return;
                     }
 
@@ -1089,21 +1364,33 @@ function getLiveJson<T>(url: string): Promise<T> {
         );
 
         request.setTimeout(30_000, () => {
-            request.destroy(new Error('Live GitHub release metadata request timed out'));
+            request.destroy(new Error('Live MCP release metadata request timed out'));
         });
         request.on('error', reject);
         request.end();
     });
 }
 
-function parseGitHubSha256Digest(digest: string | undefined): string | undefined {
-    const prefix = 'sha256:';
-    if (!digest?.startsWith(prefix)) {
-        return undefined;
-    }
+function currentTestDownloadsPlatform(): string | undefined {
+    const osName = process.platform === 'darwin'
+        ? 'macos'
+        : process.platform === 'linux'
+            ? 'linux'
+            : process.platform === 'win32'
+                ? 'windows'
+                : undefined;
+    const archName = process.arch === 'x64' || process.arch === 'arm64'
+        ? process.arch
+        : undefined;
+    return osName && archName ? `${osName}-${archName}` : undefined;
+}
 
-    const value = digest.slice(prefix.length);
-    return /^[a-fA-F0-9]{64}$/.test(value) ? value.toLowerCase() : undefined;
+function isSha256(value: string | undefined): boolean {
+    return value !== undefined && /^[a-fA-F0-9]{64}$/.test(value);
+}
+
+function nativeLauncherFileName(): string {
+    return process.platform === 'win32' ? 'hexana-mcp.exe' : 'hexana-mcp';
 }
 
 function clearExtensionModuleCache(): void {

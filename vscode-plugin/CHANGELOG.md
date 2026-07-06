@@ -1,6 +1,7 @@
 # Unreleased
 
 - support for viewing compiled Protocol Buffers descriptor sets (.desc / .protoset), with Files/Messages/Fields/Enums/Services tabs
+- MCP server setup now uses JetBrains downloads index native artifacts by default on supported platforms and no longer silently switches to GitHub when downloads metadata is unavailable
 
 # 0.5.0 - 24.06.2026
 

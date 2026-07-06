@@ -218,10 +218,17 @@ On Windows, use `publish.bat` and set environment variables with `set` before ru
 - Re-run the Gradle webpack tasks after changing Kotlin sources in either `extension-lib/` or `webview/`.
 - Press F5 in VS Code (with this folder open) to launch an Extension Development Host.
 
-### Mock MCP Release
+### MCP Release Downloads
 
-The downloader queries GitHub Releases and installs the newest semver-tagged release that contains a `server-*.zip`
-asset with a SHA-256 digest. The VS Code extension version does not have to match the MCP server version.
+The production downloader reads `https://download.jetbrains.com/resources/hexana/mcp/releases.json`, follows the
+latest release manifest, and installs the current platform's `native-executable` artifact when one is published. The
+VS Code extension version does not have to match the MCP server version.
+
+Set `HEXANA_MCP_DOWNLOADS_RELEASES_INDEX_URL` to point the downloader at a mock or staging downloads index. Set
+`HEXANA_MCP_GITHUB_RELEASE_API_URL` only for the legacy GitHub Releases-compatible path; that override looks for the
+newest semver-tagged release containing a `server-*.zip` asset with a SHA-256 digest.
+
+### Mock MCP Release
 
 Build the standalone MCP server distribution:
 
@@ -245,9 +252,9 @@ HEXANA_MCP_RELEASES_PAGE_URL=http://127.0.0.1:18765/releases \
 code .
 ```
 
-Run `Hexana MCP: Update Server` from the Command Palette to download and extract the served server ZIP.
+Run `Hexana MCP: Update Server` from the Command Palette to download and extract the served legacy server ZIP.
 
-To include the live GitHub release/download smoke test in the unit run:
+To include the live downloads.jetbrains.com release/download smoke test in the unit run:
 
 ```bash
 cd vscode-plugin

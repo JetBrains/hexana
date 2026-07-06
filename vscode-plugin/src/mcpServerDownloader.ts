@@ -8,8 +8,10 @@ import * as semver from "semver";
 import * as vscode from "vscode";
 
 const githubReleaseApiBaseUrl = "https://api.github.com/repos/JetBrains/hexana/releases";
-const githubReleasesPageUrl = "https://github.com/JetBrains/hexana/releases";
+const downloadsReleasesIndexUrl = "https://download.jetbrains.com/resources/hexana/mcp/releases.json";
+const downloadsReleasesPageUrl = "https://download.jetbrains.com/resources/hexana/mcp";
 const githubReleaseApiBaseUrlOverrideEnv = "HEXANA_MCP_GITHUB_RELEASE_API_URL";
+const downloadsReleasesIndexUrlOverrideEnv = "HEXANA_MCP_DOWNLOADS_RELEASES_INDEX_URL";
 const githubReleasesPageUrlOverrideEnv = "HEXANA_MCP_RELEASES_PAGE_URL";
 const storageDirOverrideEnv = "HEXANA_MCP_STORAGE_DIR";
 const fallbackMcpServerVersion = "v0.1.0";
@@ -33,7 +35,7 @@ interface HexanaMcpRelease {
     version: string;
     downloadUrl: string;
     sha256: string;
-    source: "github" | "fallback";
+    source: "downloads-native" | "github" | "fallback";
 }
 
 interface HexanaMcpServerStatus {
@@ -124,7 +126,10 @@ export async function getDownloadedHexanaMcpServerVersion(context: vscode.Extens
         const storageDir = mcpStorageDir(context);
         const serverDir = path.join(storageDir, installedServerDirName);
         const markerPath = path.join(storageDir, versionMarkerFileName);
-        const launcherPath = getHexanaMcpServerLauncherPath(context);
+        const launcherPath = getInstalledLauncherPath(serverDir);
+        if (!launcherPath) {
+            return undefined;
+        }
         const [serverStat, launcherStat, marker] = await Promise.all([
             fs.promises.stat(serverDir),
             fs.promises.stat(launcherPath),
@@ -147,11 +152,8 @@ export function getHexanaMcpServerDir(context: vscode.ExtensionContext): string 
 }
 
 export function getHexanaMcpServerLauncherPath(context: vscode.ExtensionContext): string {
-    return path.join(
-        getHexanaMcpServerDir(context),
-        "bin",
-        process.platform === "win32" ? "server.bat" : "server",
-    );
+    return getInstalledLauncherPath(getHexanaMcpServerDir(context))
+        ?? path.join(getHexanaMcpServerDir(context), "bin", jvmLauncherFileName());
 }
 
 async function getHexanaMcpServerStatus(context: vscode.ExtensionContext): Promise<HexanaMcpServerStatus> {
@@ -354,11 +356,10 @@ async function canReuseInstalledServer(
 
 async function getPreparedServerVersion(serverDir: string, markerPath: string): Promise<string | undefined> {
     try {
-        const launcherPath = path.join(
-            serverDir,
-            "bin",
-            process.platform === "win32" ? "server.bat" : "server",
-        );
+        const launcherPath = getInstalledLauncherPath(serverDir);
+        if (!launcherPath) {
+            return undefined;
+        }
         const [serverStat, launcherStat, marker] = await Promise.all([
             fs.promises.stat(serverDir),
             fs.promises.stat(launcherPath),
@@ -377,20 +378,124 @@ async function getPreparedServerVersion(serverDir: string, markerPath: string): 
 }
 
 async function getLatestReleaseOrFallback(): Promise<HexanaMcpRelease> {
+    const useGitHubOverride = process.env[githubReleaseApiBaseUrlOverrideEnv] !== undefined;
     try {
-        return await fetchLatestSemverRelease();
+        if (useGitHubOverride) {
+            return await fetchLatestSemverGitHubRelease();
+        }
+        return await fetchLatestNativeDownloadsRelease();
     } catch (error) {
-        console.warn("[Hexana] Could not fetch latest MCP release metadata, using fallback", error);
-        return {
-            version: fallbackMcpServerVersion,
-            downloadUrl: fallbackMcpServerDownloadUrl,
-            sha256: fallbackSha256,
-            source: "fallback",
-        };
+        console.warn(
+            useGitHubOverride
+                ? "[Hexana] Could not fetch latest GitHub MCP release metadata"
+                : "[Hexana] Could not fetch latest native MCP release metadata",
+            error,
+        );
+        if (!useGitHubOverride) {
+            if (isNativeDownloadsFallbackError(error)) {
+                console.warn("[Hexana] Using fallback MCP server release");
+                return fallbackRelease();
+            }
+            throw error;
+        }
+        console.warn("[Hexana] Using fallback MCP server release");
+        return fallbackRelease();
     }
 }
 
-async function fetchLatestSemverRelease(): Promise<HexanaMcpRelease> {
+async function fetchLatestNativeDownloadsRelease(): Promise<HexanaMcpRelease> {
+    const platform = currentDownloadsPlatform();
+    if (!platform) {
+        throw new NativeDownloadsFallbackError(`Native MCP download is not published for ${process.platform}-${process.arch}`);
+    }
+
+    const index = await getJson<DownloadsReleasesIndex>(getDownloadsReleasesIndexUrl());
+    if (index.schemaVersion !== 1) {
+        throw new Error(`Unsupported Hexana MCP releases index schema version: ${index.schemaVersion}`);
+    }
+
+    const latestEntry = selectDownloadsReleaseEntry(index);
+    if (!latestEntry) {
+        throw new Error("Hexana MCP releases index does not contain a latest release entry");
+    }
+
+    const manifest = await getJson<DownloadsReleaseManifest>(latestEntry.manifestUrl);
+    if (manifest.version !== latestEntry.version) {
+        throw new Error(`Hexana MCP release manifest version mismatch: index=${latestEntry.version}, manifest=${manifest.version}`);
+    }
+
+    const artifact = manifest.artifacts.find((candidate) =>
+        candidate.platform === platform && candidate.kind === "native-executable" && isSha256(candidate.sha256),
+    );
+    if (!artifact) {
+        throw new NativeDownloadsFallbackError(`Hexana MCP release ${manifest.version} does not contain a native executable for ${platform}`);
+    }
+
+    const downloadUrl = artifact.downloadsUrl
+        ?? urlJoin(manifest.downloadsPrefix, artifact.name)
+        ?? urlJoin(index.downloadsRoot, `${manifest.version}/${artifact.name}`);
+    if (!downloadUrl) {
+        throw new Error(`Hexana MCP release ${manifest.version} native artifact has no download URL`);
+    }
+
+    return {
+        version: manifest.version,
+        downloadUrl,
+        sha256: artifact.sha256.toLowerCase(),
+        source: "downloads-native",
+    };
+}
+
+function selectDownloadsReleaseEntry(index: DownloadsReleasesIndex): DownloadsReleaseIndexEntry | undefined {
+    const latest = index.releases.find((release) => release.version === index.latest);
+    if (latest) {
+        return latest;
+    }
+
+    return index.releases
+        .map((release) => {
+            const version = semver.valid(release.version);
+            return version ? { normalizedVersion: version, release } : undefined;
+        })
+        .filter((candidate): candidate is { normalizedVersion: string; release: DownloadsReleaseIndexEntry } => candidate !== undefined)
+        .sort((left, right) => semver.rcompare(left.normalizedVersion, right.normalizedVersion))[0]?.release;
+}
+
+function currentDownloadsPlatform(): string | undefined {
+    const osName = process.platform === "darwin"
+        ? "macos"
+        : process.platform === "linux"
+            ? "linux"
+            : process.platform === "win32"
+                ? "windows"
+                : undefined;
+    const archName = process.arch === "x64" || process.arch === "arm64"
+        ? process.arch
+        : undefined;
+    return osName && archName ? `${osName}-${archName}` : undefined;
+}
+
+function getDownloadsReleasesIndexUrl(): string {
+    return process.env[downloadsReleasesIndexUrlOverrideEnv] ?? downloadsReleasesIndexUrl;
+}
+
+function fallbackRelease(): HexanaMcpRelease {
+    return {
+        version: fallbackMcpServerVersion,
+        downloadUrl: fallbackMcpServerDownloadUrl,
+        sha256: fallbackSha256,
+        source: "fallback",
+    };
+}
+
+class NativeDownloadsFallbackError extends Error {
+}
+
+function isNativeDownloadsFallbackError(error: unknown): boolean {
+    return error instanceof NativeDownloadsFallbackError;
+}
+
+async function fetchLatestSemverGitHubRelease(): Promise<HexanaMcpRelease> {
     const candidates: Array<{ version: string; release: HexanaMcpRelease }> = [];
     let page = 1;
     while (true) {
@@ -443,11 +548,37 @@ function getGitHubReleasesApiUrl(page: number): string {
 }
 
 function getGitHubReleasesPageUrl(): string {
-    return process.env[githubReleasesPageUrlOverrideEnv] ?? githubReleasesPageUrl;
+    return process.env[githubReleasesPageUrlOverrideEnv] ?? downloadsReleasesPageUrl;
 }
 
 function mcpStorageDir(context: vscode.ExtensionContext): string {
     return process.env[storageDirOverrideEnv] ?? path.join(context.globalStorageUri.fsPath, storageDirName);
+}
+
+interface DownloadsReleasesIndex {
+    schemaVersion: number;
+    latest: string;
+    downloadsRoot: string;
+    releases: DownloadsReleaseIndexEntry[];
+}
+
+interface DownloadsReleaseIndexEntry {
+    version: string;
+    manifestUrl: string;
+}
+
+interface DownloadsReleaseManifest {
+    version: string;
+    downloadsPrefix?: string;
+    artifacts: DownloadsReleaseArtifact[];
+}
+
+interface DownloadsReleaseArtifact {
+    name: string;
+    platform: string;
+    kind: string;
+    sha256: string;
+    downloadsUrl?: string | null;
 }
 
 interface GitHubRelease {
@@ -516,6 +647,17 @@ function parseGitHubSha256Digest(digest: string | undefined): string | undefined
 
     const value = digest.slice(prefix.length);
     return /^[a-fA-F0-9]{64}$/.test(value) ? value.toLowerCase() : undefined;
+}
+
+function isSha256(value: string | undefined): boolean {
+    return value !== undefined && /^[a-fA-F0-9]{64}$/.test(value);
+}
+
+function urlJoin(base: string | undefined, pathSegment: string): string | undefined {
+    if (!base) {
+        return undefined;
+    }
+    return `${base.replace(/\/+$/, "")}/${pathSegment.replace(/^\/+/, "")}`;
 }
 
 async function withDownloadLock<T>(storageDir: string, action: () => Promise<T>): Promise<T> {
@@ -617,21 +759,54 @@ async function findExtractedServerDir(extractDir: string): Promise<string> {
         }
     }
 
-    throw new Error("Downloaded MCP server archive does not contain bin/server.");
+    throw new Error("Downloaded MCP server archive does not contain bin/hexana-mcp or bin/server.");
 }
 
 async function hasServerLauncher(serverDir: string): Promise<boolean> {
-    const launcherPath = path.join(serverDir, "bin", "server");
-    const stats = await fs.promises.stat(launcherPath).catch(() => undefined);
-    return stats?.isFile() ?? false;
+    const launchers = launcherCandidatePaths(serverDir);
+    const launcherStats = await Promise.all(
+        launchers.map((launcherPath) => fs.promises.stat(launcherPath).catch(() => undefined)),
+    );
+    return launcherStats.some((stats) => stats?.isFile() ?? false);
 }
 
 async function ensureLauncherExecutable(serverDir: string): Promise<void> {
     if (process.platform === "win32") {
         return;
     }
-    const launcherPath = path.join(serverDir, "bin", "server");
-    await fs.promises.chmod(launcherPath, 0o755);
+    await Promise.all(
+        launcherCandidatePaths(serverDir).map(async (launcherPath) => {
+            const stats = await fs.promises.stat(launcherPath).catch(() => undefined);
+            if (stats?.isFile()) {
+                await fs.promises.chmod(launcherPath, 0o755);
+            }
+        }),
+    );
+}
+
+function getInstalledLauncherPath(serverDir: string): string | undefined {
+    return launcherCandidatePaths(serverDir).find((launcherPath) => {
+        try {
+            return fs.statSync(launcherPath).isFile();
+        } catch {
+            return false;
+        }
+    });
+}
+
+function launcherCandidatePaths(serverDir: string): string[] {
+    return [
+        path.join(serverDir, "bin", nativeLauncherFileName()),
+        path.join(serverDir, "bin", jvmLauncherFileName()),
+    ];
+}
+
+function nativeLauncherFileName(): string {
+    return process.platform === "win32" ? "hexana-mcp.exe" : "hexana-mcp";
+}
+
+function jvmLauncherFileName(): string {
+    return process.platform === "win32" ? "server.bat" : "server";
 }
 
 function downloadFile(url: string, targetPath: string, redirectsLeft = 5): Promise<void> {
