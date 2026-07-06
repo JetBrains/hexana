@@ -60,6 +60,11 @@ internal class AddScriptTabDialog(
                             "&nbsp;&nbsp;&nbsp;&nbsp;<b>binary.sizeAnalysis</b> — hierarchical size breakdown (if available)"
                     )
                 }
+                row {
+                    link("Open complete API .d.ts definitions") {
+                        BinaryProviderApiSummary.showDtsInEditor(project)
+                    }
+                }
             }
         }
     }

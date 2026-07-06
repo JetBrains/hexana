@@ -1,0 +1,299 @@
+package org.jetbrains.hexana.ui.panel
+
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.project.Project
+import com.intellij.testFramework.LightVirtualFile
+import org.jetbrains.hexana.providers.BinaryProvider
+import kotlin.reflect.KClass
+import kotlin.reflect.KType
+import kotlin.reflect.KVisibility
+import kotlin.reflect.full.declaredMemberProperties
+import kotlin.reflect.full.isSubclassOf
+import kotlin.reflect.full.memberFunctions
+import kotlin.reflect.full.memberProperties
+
+/**
+ * Generates a Markdown summary of the BinaryProvider API hierarchy using reflection
+ * and opens it in a new IDE editor tab.
+ */
+internal object BinaryProviderApiSummary {
+
+    /** Primitive / well-known types that don't need a dedicated type description. */
+    private val PRIMITIVE_NAMES = setOf(
+        "Boolean", "Byte", "Short", "Int", "Long", "Float", "Double",
+        "Char", "String", "Unit", "Any", "Number", "UByte", "UShort",
+        "UInt", "ULong", "ByteArray", "IntArray", "LongArray",
+    )
+
+    fun showDtsInEditor(project: Project) {
+        val dts = generateDts()
+        val vf = LightVirtualFile("hexana-scripting.d.ts", dts).apply { isWritable = false }
+        FileEditorManager.getInstance(project).openFile(vf, true)
+    }
+
+    private fun generateDts(): String {
+        val sb = StringBuilder()
+        sb.appendLine("// Hexana Script Tab API type definitions")
+        sb.appendLine()
+        sb.appendLine("/**")
+        sb.appendLine(" * Appends a line to the script tab output.")
+        sb.appendLine(" */")
+        sb.appendLine("declare function print(text: string): void;")
+        sb.appendLine()
+
+        // Collect all types needed
+        val referencedTypes = mutableSetOf<KClass<*>>()
+
+        val providerInterface = BinaryProvider::class
+        val allClasses = discoverSubclasses(providerInterface)
+
+        // Emit BinaryProvider interface
+        sb.appendLine("/**")
+        sb.appendLine(" * The current file's binary provider. Access via the global `binary` variable.")
+        sb.appendLine(" */")
+        emitDtsInterface(sb, providerInterface, referencedTypes)
+        sb.appendLine()
+
+        // Emit subclass interfaces
+        for (klass in allClasses) {
+            emitDtsInterface(sb, klass, referencedTypes)
+            sb.appendLine()
+        }
+
+        // Expand and emit all referenced complex types
+        val expandedTypes = mutableSetOf<KClass<*>>()
+        val queue = ArrayDeque(referencedTypes)
+        while (queue.isNotEmpty()) {
+            val klass = queue.removeFirst()
+            if (!expandedTypes.add(klass)) continue
+            try {
+                for (prop in klass.memberProperties) {
+                    val nested = mutableSetOf<KClass<*>>()
+                    collectComplexTypes(prop.returnType, nested)
+                    for (t in nested) {
+                        if (t !in expandedTypes) queue.addLast(t)
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+        for (klass in expandedTypes.sortedBy { it.simpleName ?: "" }) {
+            val name = klass.simpleName ?: continue
+            // Skip if already emitted as a provider
+            if (klass == providerInterface || klass in allClasses) continue
+            appendTypeScriptType(sb, klass, name, indent = "  ", visited = mutableSetOf())
+            sb.appendLine()
+        }
+
+        sb.appendLine("/**")
+        sb.appendLine(" * The current file's binary data.")
+        sb.appendLine(" */")
+        sb.appendLine("declare const binary: BinaryProvider;")
+
+        return sb.toString()
+    }
+
+    private fun emitDtsInterface(sb: StringBuilder, klass: KClass<*>, referencedTypes: MutableSet<KClass<*>>) {
+        val name = klass.simpleName ?: return
+        val supertypes = klass.supertypes
+            .mapNotNull { (it.classifier as? KClass<*>)?.simpleName }
+            .filter { it != "Any" }
+        val extendsClause = if (supertypes.isNotEmpty()) " extends ${supertypes.joinToString(", ")}" else ""
+
+        val props = if (klass.java.isInterface) {
+            klass.memberProperties.toList()
+        } else {
+            klass.declaredMemberProperties.toList()
+        }
+
+        sb.appendLine("interface $name$extendsClause {")
+        val visited = mutableSetOf<KClass<*>>()
+        for (prop in props.sortedBy { it.name }) {
+            collectComplexTypes(prop.returnType, referencedTypes)
+            val nullable = prop.returnType.isMarkedNullable
+            val optional = if (nullable) "?" else ""
+            val typeStr = formatTsFieldType(prop.returnType, "  ", visited, suppressNullable = nullable)
+            sb.appendLine("  ${prop.name}$optional: $typeStr;")
+        }
+        sb.appendLine("}")
+    }
+
+
+    /** Collect all non-primitive KClass types referenced in a KType (recursively through type arguments). */
+    private fun collectComplexTypes(type: KType, into: MutableSet<KClass<*>>) {
+        val classifier = type.classifier
+        if (classifier is KClass<*> && isComplexType(classifier)) {
+            into.add(classifier)
+        }
+        for (arg in type.arguments) {
+            arg.type?.let { collectComplexTypes(it, into) }
+        }
+    }
+
+    private fun isComplexType(klass: KClass<*>): Boolean {
+        val name = klass.simpleName ?: return false
+        if (name in PRIMITIVE_NAMES) return false
+        // Skip collection/map wrapper types
+        if (name in setOf("List", "Set", "Map", "MutableList", "MutableSet", "MutableMap", "Collection")) return false
+        // Skip enum types — they are simple value types
+        if (klass.java.isEnum) return false
+        return true
+    }
+
+
+    private fun appendTypeScriptType(sb: StringBuilder, klass: KClass<*>, typeName: String, indent: String, visited: MutableSet<KClass<*>>) {
+        sb.appendLine("interface $typeName {")
+        val props = try {
+            klass.memberProperties.sortedBy { it.name }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+        for (prop in props) {
+            val nullable = prop.returnType.isMarkedNullable
+            val optional = if (nullable) "?" else ""
+            val typeStr = formatTsFieldType(prop.returnType, indent, visited, suppressNullable = nullable)
+            sb.appendLine("$indent${prop.name}$optional: $typeStr;")
+        }
+        val methods = try {
+            klass.memberFunctions
+                .filter { it.visibility == KVisibility.PUBLIC }
+                .filter { it.name !in setOf("equals", "hashCode", "toString") }
+                .sortedBy { it.name }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+        for (fn in methods) {
+            val params = fn.parameters
+                .drop(1)
+                .joinToString(", ") { p ->
+                    val pName = (p.name ?: "arg").let { if (it == "default") "default_" else it }
+                    val pType = p.type?.let { formatTsFieldType(it, indent, visited) } ?: "any"
+                    "$pName: $pType"
+                }
+            val retType = formatTsFieldType(fn.returnType, indent, visited)
+            sb.appendLine("$indent${fn.name}($params): $retType;")
+        }
+        if (props.isEmpty() && methods.isEmpty()) {
+            sb.appendLine("$indent// (unable to inspect)")
+        }
+        sb.appendLine("}")
+    }
+
+    private fun formatTsFieldType(type: KType, indent: String, visited: MutableSet<KClass<*>>, suppressNullable: Boolean = false): String {
+        val classifier = type.classifier
+        val nullable = type.isMarkedNullable && !suppressNullable
+        fun wrap(s: String) = if (nullable) "$s | null" else s
+
+        if (classifier !is KClass<*>) {
+            val raw = type.toString().removeSuffix("?")
+            return wrap(raw)
+        }
+
+        val name = classifier.simpleName ?: return wrap(type.toString())
+
+        return when (name) {
+            "Boolean" -> wrap("boolean")
+            "Byte", "Short", "Int", "Long", "Float", "Double",
+            "UByte", "UShort", "UInt", "ULong", "Number" -> wrap("number")
+            "Char", "String" -> wrap("string")
+            "ByteArray", "IntArray", "LongArray" -> wrap("number[]")
+            "Unit" -> "void"
+            "Any" -> wrap("any")
+            "List", "MutableList", "Set", "MutableSet", "Collection" -> {
+                val elemType = type.arguments.firstOrNull()?.type
+                if (elemType != null) {
+                    val inner = formatTsFieldType(elemType, indent, visited)
+                    wrap("$inner[]")
+                } else {
+                    wrap("any[]")
+                }
+            }
+            "Map", "MutableMap" -> {
+                val keyType = type.arguments.getOrNull(0)?.type
+                val valType = type.arguments.getOrNull(1)?.type
+                val k = keyType?.let { formatTsFieldType(it, indent, visited) } ?: "any"
+                val v = valType?.let { formatTsFieldType(it, indent, visited) } ?: "any"
+                wrap("Record<$k, $v>")
+            }
+            else -> {
+                if (classifier.java.isEnum) {
+                    val constants = try {
+                        classifier.java.enumConstants?.joinToString(" | ") { "\"$it\"" } ?: name
+                    } catch (_: Throwable) { name }
+                    return wrap(constants)
+                }
+                // Recursive type — if already visited, just reference by name
+                if (classifier in visited) return wrap(name)
+                visited.add(classifier)
+                val innerProps = try { classifier.memberProperties.sortedBy { it.name } } catch (_: Throwable) { null }
+                if (innerProps.isNullOrEmpty()) {
+                    visited.remove(classifier)
+                    return wrap(name)
+                }
+                val innerIndent = "$indent  "
+                val sb2 = StringBuilder()
+                sb2.appendLine("{")
+                for (p in innerProps) {
+                    val pNullable = p.returnType.isMarkedNullable
+                    val pOptional = if (pNullable) "?" else ""
+                    val ft = formatTsFieldType(p.returnType, innerIndent, visited, suppressNullable = pNullable)
+                    sb2.appendLine("$innerIndent${p.name}$pOptional: $ft;")
+                }
+                sb2.append("$indent}")
+                visited.remove(classifier)
+                wrap(sb2.toString())
+            }
+        }
+    }
+
+    private fun discoverSubclasses(root: KClass<*>): List<KClass<*>> {
+        // Use classpath scanning via known subclasses for sealed types,
+        // and hardcode the known hierarchy since BinaryProvider is a sealed interface
+        // with known implementations in the same module.
+        val result = mutableListOf<KClass<*>>()
+        collectSubclasses(root, result, mutableSetOf())
+        return result
+    }
+
+    private fun collectSubclasses(klass: KClass<*>, result: MutableList<KClass<*>>, visited: MutableSet<KClass<*>>) {
+        if (!visited.add(klass)) return
+
+        val subclasses = klass.sealedSubclasses
+        if (subclasses.isNotEmpty()) {
+            for (sub in subclasses) {
+                result.add(sub)
+                collectSubclasses(sub, result, visited)
+            }
+        }
+
+        // For non-sealed classes, we need to manually list known implementations
+        if (klass == BinaryProvider::class) {
+            val knownImpls = listOf(
+                "org.jetbrains.hexana.providers.GenericBinaryProvider",
+                "org.jetbrains.hexana.providers.ZipBinaryProvider",
+                "org.jetbrains.hexana.providers.NativeBinaryProvider",
+                "org.jetbrains.hexana.providers.ElfBinaryProvider",
+                "org.jetbrains.hexana.providers.MachOBinaryProvider",
+                "org.jetbrains.hexana.providers.FatMachOBinaryProvider",
+                "org.jetbrains.hexana.providers.PeBinaryProvider",
+                "org.jetbrains.hexana.providers.CoffBinaryProvider",
+                "org.jetbrains.hexana.providers.ArchiveBinaryProvider",
+                "org.jetbrains.hexana.providers.WasmBinaryProvider",
+                "org.jetbrains.hexana.providers.WasmComponentBinaryProvider",
+                "org.jetbrains.hexana.providers.ParquetBinaryProvider",
+                "org.jetbrains.hexana.providers.ClassFileBinaryProvider",
+                "org.jetbrains.hexana.providers.DexBinaryProvider",
+            )
+            for (name in knownImpls) {
+                try {
+                    val cls = Class.forName(name).kotlin
+                    if (cls !in visited && cls.isSubclassOf(BinaryProvider::class)) {
+                        result.add(cls)
+                        collectSubclasses(cls, result, visited)
+                    }
+                } catch (_: Throwable) {
+                    // class not on classpath, skip
+                }
+            }
+        }
+    }
+}
