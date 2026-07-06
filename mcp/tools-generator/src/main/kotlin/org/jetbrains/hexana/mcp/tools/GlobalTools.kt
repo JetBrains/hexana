@@ -220,7 +220,7 @@ internal val GlobalTools: List<ToolSpec> = tools {
 
     tool("get_globals_for_indices") {
         summary = "Return globals for the requested indices from the unified global index space."
-        surfaces = productionCliSurface("get-globals-for-indices", ToolGroup.Global, ToolOutputPolicy.ToolDefined)
+        surfaces = advancedHiddenCliSurface()
         guidance = """
             Return only the requested globals from the unified global index space.
             Use this for targeted analysis when `list_globals` would return more data than needed.

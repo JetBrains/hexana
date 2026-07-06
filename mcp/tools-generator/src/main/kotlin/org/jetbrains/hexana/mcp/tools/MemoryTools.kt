@@ -112,7 +112,7 @@ internal val MemoryTools: List<ToolSpec> = tools {
 
     tool("get_memory_for_indices") {
         summary = "Return memories for the requested indices from the unified memory index space."
-        surfaces = productionCliSurface("get-memory-for-indices", ToolGroup.Memory, ToolOutputPolicy.ToolDefined)
+        surfaces = advancedHiddenCliSurface()
         guidance = """
             Return only the requested memories from the unified memory index space.
             Useful for multi-memory or wasm64 modules when only a subset matters.

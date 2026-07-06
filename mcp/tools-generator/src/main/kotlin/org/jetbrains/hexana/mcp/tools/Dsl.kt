@@ -342,10 +342,12 @@ data class McpSurfaceSpec(
 
     companion object {
         fun production(): McpSurfaceSpec = McpSurfaceSpec(setOf(McpToolAudience.Production))
+        fun advanced(): McpSurfaceSpec = McpSurfaceSpec(setOf(McpToolAudience.Advanced))
     }
 }
 
 enum class McpToolAudience {
+    Advanced,
     Production,
 }
 
@@ -421,6 +423,11 @@ fun productionCliSurface(
 ): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.production(),
     cli = CliSurfaceSpec.visible(commandName, group, outputPolicy, *additionalGroups),
+)
+
+fun advancedHiddenCliSurface(): ToolSurfaceSpec = ToolSurfaceSpec(
+    mcp = McpSurfaceSpec.advanced(),
+    cli = CliSurfaceSpec.hidden(),
 )
 
 val ToolSpec.mcpDescription: String

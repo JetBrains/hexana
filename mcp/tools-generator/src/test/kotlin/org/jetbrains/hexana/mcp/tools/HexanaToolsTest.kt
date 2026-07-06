@@ -7,6 +7,38 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
+private val CURRENT_PRODUCTION_MCP_TOOL_NAMES = setOf(
+    "audit_data_payload_policy",
+    "audit_global_state_policy",
+    "audit_local_stack_budget",
+    "check_memory_contract",
+    "check_component_compatibility",
+    "check_runtime_compatibility",
+    "diff_required_proposals",
+    "disassemble_function",
+    "get_entrypoint_policy",
+    "get_function_call_graph",
+    "list_data_segments",
+    "list_element_segments",
+    "list_enabled_features",
+    "list_exported_functions",
+    "list_exports",
+    "list_functions",
+    "list_globals",
+    "list_imports",
+    "list_memory",
+    "list_required_proposals",
+    "plan_abi_binding_regeneration",
+    "resolve_function_symbols",
+    "resolve_function_signature",
+    "resolve_source_locations",
+    "resolve_wasm_frames",
+    "search_exports",
+    "search_functions_by_name",
+    "summarize_binary",
+    "summarize_module",
+)
+
 class HexanaToolsTest {
 
     private val queryArtifacts = HexanaTools.single { it.name == "query_artifacts" }
@@ -117,16 +149,46 @@ class HexanaToolsTest {
     }
 
     @Test
-    fun `production tools declare explicit MCP and CLI surface metadata`() {
+    fun `MCP production metadata matches current production profile`() {
+        assertEquals(
+            CURRENT_PRODUCTION_MCP_TOOL_NAMES,
+            HexanaTools
+                .filter { McpToolAudience.Production in it.surfaces.mcp.audiences }
+                .map { it.name }
+                .toSet(),
+        )
+    }
+
+    @Test
+    fun `tools declare explicit MCP and CLI surface metadata`() {
         val kebabCase = Regex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
         HexanaTools.forEach { spec ->
-            assertEquals(setOf(McpToolAudience.Production), spec.surfaces.mcp.audiences, "bad MCP audience for ${spec.name}")
-            assertTrue(spec.surfaces.cli.visible, "CLI surface hidden for ${spec.name}")
-            val commandName = requireNotNull(spec.surfaces.cli.commandName) { "missing CLI command for ${spec.name}" }
-            assertTrue(kebabCase.matches(commandName), "CLI command `$commandName` is not kebab-case")
-            assertTrue(spec.surfaces.cli.groups.isNotEmpty(), "missing CLI group for ${spec.name}")
-            assertEquals(ToolOutputPolicy.ToolDefined, spec.surfaces.cli.outputPolicy, "bad output policy for ${spec.name}")
+            assertTrue(spec.surfaces.mcp.audiences.isNotEmpty(), "missing MCP audience for ${spec.name}")
+            val cli = spec.surfaces.cli
+            if (cli.visible) {
+                val commandName = requireNotNull(cli.commandName) { "missing CLI command for ${spec.name}" }
+                assertTrue(kebabCase.matches(commandName), "CLI command `$commandName` is not kebab-case")
+                assertTrue(cli.groups.isNotEmpty(), "missing CLI group for ${spec.name}")
+                assertEquals(ToolOutputPolicy.ToolDefined, cli.outputPolicy, "bad output policy for ${spec.name}")
+            } else {
+                assertEquals(null, cli.commandName, "hidden CLI surface has command for ${spec.name}")
+                assertTrue(cli.groups.isEmpty(), "hidden CLI surface has groups for ${spec.name}")
+                assertEquals(null, cli.outputPolicy, "hidden CLI surface has output policy for ${spec.name}")
+            }
         }
+    }
+
+    @Test
+    fun `production and advanced MCP audiences do not imply CLI visibility`() {
+        val production = HexanaTools.single { it.name == "summarize_binary" }
+        assertEquals(setOf(McpToolAudience.Production), production.surfaces.mcp.audiences)
+        assertTrue(production.surfaces.cli.visible)
+        assertEquals("summarize-binary", production.surfaces.cli.commandName)
+
+        val advanced = HexanaTools.single { it.name == "query_artifacts" }
+        assertEquals(setOf(McpToolAudience.Advanced), advanced.surfaces.mcp.audiences)
+        assertFalse(advanced.surfaces.cli.visible)
+        assertEquals(null, advanced.surfaces.cli.commandName)
     }
 
     @Test

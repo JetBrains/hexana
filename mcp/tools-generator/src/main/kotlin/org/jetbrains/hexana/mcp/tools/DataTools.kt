@@ -169,7 +169,7 @@ val AuditDataPayloadPolicyResultClass = class_("AuditDataPayloadPolicyResult", k
 internal val DataTools: List<ToolSpec> = tools {
     tool("list_data") {
         summary = "Return raw data-section entries for a closed data-segment range."
-        surfaces = productionCliSurface("list-data", ToolGroup.Data, ToolOutputPolicy.ToolDefined)
+        surfaces = advancedHiddenCliSurface()
         guidance = """
             Range `entriesRange` is closed: both `from` and `to` are inclusive zero-based segment indices.
             This is the high-volume raw-bytes view; the `data` field is base64-encoded, and `list_data_segments` is usually cheaper when previews and metadata are sufficient.

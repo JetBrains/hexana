@@ -268,7 +268,7 @@ val ComponentCompatibilityInputClass = WasmInputClass.with("ComponentCompatibili
 internal val ComponentTools: List<ToolSpec> = tools {
     tool("list_component_surface") {
         summary = "Low-level component import/export listing; not for dependency/provider resolution."
-        surfaces = productionCliSurface("list-component-surface", ToolGroup.Component, ToolOutputPolicy.ToolDefined)
+        surfaces = advancedHiddenCliSurface()
         guidance = """
             Use this only for compact component-model surface inspection when provider selection is not needed.
             For component run/link failures, project-root scans, or dependency resolution across candidate component files, call `resolve_component_dependencies` instead.
@@ -283,7 +283,7 @@ internal val ComponentTools: List<ToolSpec> = tools {
 
     tool("resolve_component_dependencies") {
         summary = "Resolve component run/link dependencies from a main component and candidate roots into report-ready fields."
-        surfaces = productionCliSurface("resolve-component-dependencies", ToolGroup.Component, ToolOutputPolicy.ToolDefined)
+        surfaces = advancedHiddenCliSurface()
         guidance = """
             Search `scanRoots`, `projectRoot`, and the input component directory for component providers of non-runtime imports.
             Use this aggregate dependency-resolution workflow first when a component run/build/link step has a main component plus project root or candidate directories.

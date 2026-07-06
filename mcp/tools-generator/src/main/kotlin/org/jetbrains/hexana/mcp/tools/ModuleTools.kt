@@ -91,7 +91,7 @@ internal val ModuleTools: List<ToolSpec> = tools {
 
     tool("list_custom_sections") {
         summary = "List WebAssembly custom sections with offsets, sizes, and small content previews."
-        surfaces = productionCliSurface("list-custom-sections", ToolGroup.Module, ToolOutputPolicy.ToolDefined)
+        surfaces = advancedHiddenCliSurface()
         guidance = """
             List custom sections from a WebAssembly module, including names, full-section byte ranges, and a capped content preview.
             The preview excludes the encoded section name; `encoding` is `utf8` for printable UTF-8 content prefixes and `binary` for hex-rendered byte prefixes.

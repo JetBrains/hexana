@@ -579,7 +579,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
 
     tool("list_code_section_offsets") {
         summary = "List byte offsets and sizes for defined function bodies."
-        surfaces = productionCliSurface("list-code-section-offsets", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
+        surfaces = advancedHiddenCliSurface()
         guidance = """
             List code-section byte ranges for all defined WebAssembly function bodies.
             The returned `funcidx` values are in the unified function index space, so imported functions are skipped and defined functions keep their import-offset-adjusted indices.
@@ -593,7 +593,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
 
     tool("functions_for_indices") {
         summary = "Resolve function entries for the given unified function indices."
-        surfaces = productionCliSurface("functions-for-indices", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
+        surfaces = advancedHiddenCliSurface()
         guidance = """
             Resolve imported and defined function entries for the requested unified function indices.
             Use this as a targeted follow-up when you already know the exact `funcidx` values you need.
@@ -719,7 +719,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
 
     tool("get_locals_for_functions") {
         summary = "Return grouped local declarations for the requested function indices."
-        surfaces = productionCliSurface("get-locals-for-functions", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
+        surfaces = advancedHiddenCliSurface()
         guidance = """
             Return grouped local declarations for the requested unified function indices.
             Imported functions return empty local lists because they have no body.
@@ -732,7 +732,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
 
     tool("get_instructions_for_functions") {
         summary = "Return decoded instruction text for the requested function indices."
-        surfaces = productionCliSurface("get-instructions-for-functions", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
+        surfaces = advancedHiddenCliSurface()
         guidance = """
             Return decoded instruction text for the requested unified function indices.
             Imported functions return empty instruction lists because they have no body.

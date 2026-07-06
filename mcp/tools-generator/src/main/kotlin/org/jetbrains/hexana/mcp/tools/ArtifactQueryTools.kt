@@ -175,7 +175,7 @@ val ArtifactQueryTools = tools {
 
     tool("query_artifacts") {
         summary = "Query WebAssembly artifact entities, diffs, and function relations with bounded output."
-        surfaces = productionCliSurface("query-artifacts", ToolGroup.ArtifactQuery, ToolOutputPolicy.ToolDefined)
+        surfaces = advancedHiddenCliSurface()
         guidance = """
             Use this as the default Hexana MCP entry point for WebAssembly artifact facts.
             `overview` returns module counts; skip it when the request already names a focused production fact.
