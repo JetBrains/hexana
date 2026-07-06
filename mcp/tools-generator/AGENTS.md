@@ -23,6 +23,9 @@ DSL and emit checked-in Kotlin files into the two consumers:
 ## Ownership Boundary
 
 - Tool descriptions, input/output shapes, and handler references live only in this module.
+- Tool surface metadata also lives only in this module. Each tool must explicitly declare its MCP audience/profile intent
+  and CLI visibility, command name, group/domain, and output policy instead of deriving those facts from production
+  profile membership.
 - Top-level tool output classes also declare their `mcp/core` model package here with `kotlinPackage = ...`; the
   idea-plugin generator must not carry a separate result-class package map.
 - Standalone server input and output JSON schemas are generated from `ClassSpec`/`FieldSpec`; add defaults and bounds
@@ -71,7 +74,10 @@ reviewed with the DSL change.
    input schema from `input`; update `StandaloneToolsetMain.kt` only when the DSL needs a new schema feature or field
    type. The existing patterns cover path-only, offset/limit, indices, closed range, and half-open segment range with
    filters.
-4. Run both generators and both sets of tests: `./gradlew :mcp:tools-generator:test :idea-plugin:test :mcp:server:test
+4. Set `surfaces` beside the tool contract. Choose the explicit MCP audience/profile, and choose the CLI surface
+   independently: visible tools need a kebab-case command name, group/domain, and output policy; advanced-only or
+   otherwise hidden CLI tools should use the hidden CLI helper.
+5. Run both generators and both sets of tests: `./gradlew :mcp:tools-generator:test :idea-plugin:test :mcp:server:test
    :mcp:server:integrationTest`.
 
 ## Testing
