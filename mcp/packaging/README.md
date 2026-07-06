@@ -103,7 +103,7 @@ plugins/hexana/
 Each assembled wrapper includes its own bundled standalone JVM runtime under `server/` and exposes `bin/hexana-mcp`.
 Native-enabled wrappers also include `native/<platform>/hexana-mcp` for the current host platform, or
 `native/<platform>/hexana-mcp.exe` on Windows when a Windows native package is built outside the active release matrix.
-The supported 0.3.1 native release matrix uses these platform tags:
+The supported native release matrix uses these platform tags:
 
 - `macos-arm64`
 - `linux-x64`
@@ -242,7 +242,7 @@ versioned artifacts to `mcp/build/distributions-native/`:
 The release job must download all native matrix artifacts into one directory before running
 `release-codex-claude-plugins.sh`. By default the script requires `macos-arm64 linux-x64`;
 override `NATIVE_RELEASE_PLATFORMS` only when intentionally changing the supported matrix. Unsupported platforms keep
-using the bundled JVM runtime through the wrapper fallback. For 0.3.1, Windows users are supported through that JVM
+using the bundled JVM runtime through the wrapper fallback. Windows users are supported through that JVM
 fallback rather than a required Windows native artifact.
 
 Release script example:
