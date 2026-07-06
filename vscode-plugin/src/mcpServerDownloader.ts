@@ -50,6 +50,11 @@ interface DownloadLockInfo {
     createdAt: number;
 }
 
+interface DownloadProgress {
+    downloadedBytes: number;
+    totalBytes?: number;
+}
+
 export function registerHexanaMcpServerCommands(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.commands.registerCommand("hexana.mcp.updateServer", async () => {
@@ -250,17 +255,48 @@ async function ensureHexanaMcpServer(
                 );
 
                 try {
-                    progress.report({ increment: 5, message: "Downloading..." });
-                    await downloadFile(latestRelease.downloadUrl, tempArchivePath);
+                    const downloadIncrementBudget = 65;
+                    let reportedDownloadIncrement = 0;
+                    let lastDownloadProgress: DownloadProgress | undefined;
+                    let lastDownloadMessageAtBytes = 0;
 
-                    progress.report({ increment: 65, message: "Verifying integrity..." });
+                    progress.report({ increment: 5, message: "Downloading..." });
+                    await downloadFile(latestRelease.downloadUrl, tempArchivePath, (downloadProgress) => {
+                        lastDownloadProgress = downloadProgress;
+                        const message = formatDownloadProgress(downloadProgress);
+                        const totalBytes = downloadProgress.totalBytes;
+
+                        if (totalBytes !== undefined) {
+                            const nextIncrement = Math.min(
+                                downloadIncrementBudget,
+                                (downloadProgress.downloadedBytes / totalBytes) * downloadIncrementBudget,
+                            );
+                            const increment = Math.max(0, nextIncrement - reportedDownloadIncrement);
+                            if (increment >= 1 || downloadProgress.downloadedBytes >= totalBytes) {
+                                progress.report({ increment, message });
+                                reportedDownloadIncrement = nextIncrement;
+                            }
+                        } else if (downloadProgress.downloadedBytes - lastDownloadMessageAtBytes >= 1024 * 1024) {
+                            progress.report({ message });
+                            lastDownloadMessageAtBytes = downloadProgress.downloadedBytes;
+                        }
+                    });
+
+                    if (reportedDownloadIncrement < downloadIncrementBudget) {
+                        progress.report({
+                            increment: downloadIncrementBudget - reportedDownloadIncrement,
+                            message: formatDownloadComplete(lastDownloadProgress),
+                        });
+                    }
+
+                    progress.report({ increment: 10, message: "Verifying integrity..." });
                     await verifySha256(tempArchivePath, latestRelease.sha256);
 
-                    progress.report({ increment: 15, message: "Extracting..." });
+                    progress.report({ increment: 10, message: "Extracting..." });
                     await extractZipArchive(tempArchivePath, tempExtractDir);
                     const extractedServerDir = await findExtractedServerDir(tempExtractDir);
 
-                    progress.report({ increment: 15 });
+                    progress.report({ increment: 10 });
                     await installServerAtomically(storageDir, serverDir, markerPath, extractedServerDir, latestRelease.version);
                 } finally {
                     await Promise.all([
@@ -809,7 +845,29 @@ function jvmLauncherFileName(): string {
     return process.platform === "win32" ? "server.bat" : "server";
 }
 
-function downloadFile(url: string, targetPath: string, redirectsLeft = 5): Promise<void> {
+function formatDownloadProgress(progress: DownloadProgress): string {
+    const downloaded = formatMegabytes(progress.downloadedBytes);
+    return progress.totalBytes !== undefined
+        ? `Downloading ${downloaded} / ${formatMegabytes(progress.totalBytes)}...`
+        : `Downloading ${downloaded}...`;
+}
+
+function formatDownloadComplete(progress: DownloadProgress | undefined): string {
+    return progress
+        ? `Downloaded ${formatMegabytes(progress.downloadedBytes)}.`
+        : "Download complete.";
+}
+
+function formatMegabytes(bytes: number): string {
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function downloadFile(
+    url: string,
+    targetPath: string,
+    onProgress?: (progress: DownloadProgress) => void,
+    redirectsLeft = 5,
+): Promise<void> {
     return new Promise((resolve, reject) => {
         const request = getHttpClient(url).get(
             url,
@@ -825,7 +883,7 @@ function downloadFile(url: string, targetPath: string, redirectsLeft = 5): Promi
                 if (statusCode >= 300 && statusCode < 400 && location && redirectsLeft > 0) {
                     response.resume();
                     const nextUrl = new URL(location, url).toString();
-                    downloadFile(nextUrl, targetPath, redirectsLeft - 1).then(resolve, reject);
+                    downloadFile(nextUrl, targetPath, onProgress, redirectsLeft - 1).then(resolve, reject);
                     return;
                 }
 
@@ -836,6 +894,15 @@ function downloadFile(url: string, targetPath: string, redirectsLeft = 5): Promi
                 }
 
                 const file = fs.createWriteStream(targetPath, { flags: "w" });
+                const totalBytes = parseContentLength(response.headers["content-length"]);
+                let downloadedBytes = 0;
+                response.on("data", (chunk: Buffer) => {
+                    downloadedBytes += chunk.length;
+                    onProgress?.({
+                        downloadedBytes,
+                        totalBytes,
+                    });
+                });
                 response.pipe(file);
                 file.on("finish", () => {
                     file.close((error) => {
@@ -856,6 +923,16 @@ function downloadFile(url: string, targetPath: string, redirectsLeft = 5): Promi
         request.on("error", reject);
         request.end();
     });
+}
+
+function parseContentLength(value: string | string[] | undefined): number | undefined {
+    const rawValue = Array.isArray(value) ? value[0] : value;
+    if (rawValue === undefined) {
+        return undefined;
+    }
+
+    const parsed = Number(rawValue);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function getHttpClient(url: string): typeof http | typeof https {

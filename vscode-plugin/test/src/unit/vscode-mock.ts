@@ -2,6 +2,11 @@ import Module = require('module');
 
 type CommandHandler = (...args: unknown[]) => unknown;
 
+export interface ProgressReport {
+    increment?: number;
+    message?: string;
+}
+
 export interface MockConfiguration {
     values: Record<string, unknown>;
     get<T>(key: string, defaultValue: T): T;
@@ -25,6 +30,7 @@ export interface VscodeMock {
     messageActions: Array<string | undefined>;
     openedExternal: string[];
     providers: Map<string, unknown>;
+    progressReports: ProgressReport[];
     settings: Record<string, unknown>;
     module: unknown;
     restore(): void;
@@ -36,6 +42,7 @@ export function installVscodeMock(): VscodeMock {
     const messageActions: Array<string | undefined> = [];
     const openedExternal: string[] = [];
     const providers = new Map<string, unknown>();
+    const progressReports: ProgressReport[] = [];
     const settings: Record<string, unknown> = {};
 
     class EventEmitter<T> {
@@ -108,8 +115,12 @@ export function installVscodeMock(): VscodeMock {
                 messages.push(message);
                 return messageActions.shift();
             },
-            withProgress: async (_options: unknown, task: (progress: { report(): void }) => Promise<unknown>) => {
-                return task({ report: () => undefined });
+            withProgress: async (_options: unknown, task: (progress: { report(value: ProgressReport): void }) => Promise<unknown>) => {
+                return task({
+                    report: (value: ProgressReport) => {
+                        progressReports.push(value);
+                    },
+                });
             },
         },
         workspace: {
@@ -149,6 +160,7 @@ export function installVscodeMock(): VscodeMock {
         messageActions,
         openedExternal,
         providers,
+        progressReports,
         settings,
         module: vscodeModule,
         restore: () => {

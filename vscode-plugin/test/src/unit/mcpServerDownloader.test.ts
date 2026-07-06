@@ -165,6 +165,9 @@ describe('Hexana MCP server downloader', function () {
             expect(await downloader.getDownloadedHexanaMcpServerVersion(context)).to.equal('0.4.0');
             expect(downloader.getHexanaMcpServerLauncherPath(context))
                 .to.equal(path.join(process.env.HEXANA_MCP_STORAGE_DIR!, 'server', 'bin', nativeLauncherFileName()));
+            expect(vscode.progressReports.some((report) =>
+                report.message !== undefined && /^Downloading \d+\.\d MB \/ \d+\.\d MB\.\.\.$/.test(report.message),
+            )).to.equal(true);
         } finally {
             await server.close();
         }
@@ -1033,6 +1036,7 @@ async function startPagedReleasesServer(pages: TestRelease[][]): Promise<TestRel
         if (matchingAsset?.archivePath) {
             requestCounts.archive++;
             response.setHeader('Content-Type', 'application/zip');
+            response.setHeader('Content-Length', fs.statSync(matchingAsset.archivePath).size);
             fs.createReadStream(matchingAsset.archivePath).pipe(response);
             return;
         }
@@ -1113,6 +1117,7 @@ async function startDownloadsReleaseServer(releases: TestDownloadsRelease[]): Pr
         if (artifactRelease) {
             requestCounts.archive++;
             response.setHeader('Content-Type', 'application/zip');
+            response.setHeader('Content-Length', fs.statSync(artifactRelease.archivePath).size);
             fs.createReadStream(artifactRelease.archivePath).pipe(response);
             return;
         }
