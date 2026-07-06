@@ -88,7 +88,7 @@ val ListExportedFunctionsResultClass = class_("ListExportedFunctionsResult", kot
 internal val ExportTools: List<ToolSpec> = tools {
     tool("list_exports") {
         summary = "List exports declared by a `.wasm` module."
-        surfaces = productionCliSurface("list-exports", ToolGroup.Export, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("list-exports", ToolGroup.Export, ToolOutputPolicy.ToolDefined)
         guidance = """
             Includes exported functions, tables, memories, and globals; `kind` uses the standard tags 0=function, 1=table, 2=memory, 3=global.
             This is the light name-and-kind view of exports.
@@ -107,7 +107,7 @@ internal val ExportTools: List<ToolSpec> = tools {
 
     tool("search_exports") {
         summary = "Search exports by name and resolve common export metadata."
-        surfaces = productionCliSurface("search-exports", ToolGroup.Export, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("search-exports", ToolGroup.Export, ToolOutputPolicy.ToolDefined)
         guidance = """
             Search exported functions, tables, memories, globals, and tags by case-insensitive export-name substrings.
             Function matches include resolved signatures, and memory matches include decoded page limits.
@@ -121,7 +121,7 @@ internal val ExportTools: List<ToolSpec> = tools {
 
     tool("list_exported_functions") {
         summary = "List exported functions within a closed range of the export section."
-        surfaces = productionCliSurface("list-exported-functions", ToolGroup.Export, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("list-exported-functions", ToolGroup.Export, ToolOutputPolicy.ToolDefined)
         guidance = """
             List exported functions from a WebAssembly (.wasm) module using a closed export-range slice.
             Pass `entriesRange = { from, to }` with inclusive export-list positions; do not use `offset/limit` or `start/end`.

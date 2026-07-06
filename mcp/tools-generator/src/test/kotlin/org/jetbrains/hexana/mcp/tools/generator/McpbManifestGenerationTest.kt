@@ -4,12 +4,48 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.jetbrains.hexana.mcp.tools.McpToolAudience
+import org.jetbrains.hexana.mcp.tools.ToolGroup
+import org.jetbrains.hexana.mcp.tools.ToolOutputPolicy
+import org.jetbrains.hexana.mcp.tools.productionCliSurface
 import org.junit.Test
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+
+private val CURRENT_PUBLIC_MCPB_TOOL_NAMES = listOf(
+    "summarize_binary",
+    "summarize_module",
+    "list_enabled_features",
+    "get_entrypoint_policy",
+    "list_required_proposals",
+    "diff_required_proposals",
+    "check_runtime_compatibility",
+    "check_component_compatibility",
+    "plan_abi_binding_regeneration",
+    "check_memory_contract",
+    "audit_global_state_policy",
+    "audit_local_stack_budget",
+    "list_imports",
+    "list_exports",
+    "search_exports",
+    "list_exported_functions",
+    "list_functions",
+    "resolve_function_signature",
+    "disassemble_function",
+    "get_function_call_graph",
+    "search_functions_by_name",
+    "resolve_wasm_frames",
+    "resolve_function_symbols",
+    "resolve_source_locations",
+    "list_memory",
+    "list_globals",
+    "list_element_segments",
+    "list_data_segments",
+    "audit_data_payload_policy",
+)
 
 class McpbManifestGenerationTest {
 
@@ -50,13 +86,27 @@ class McpbManifestGenerationTest {
             manifest.getValue("compatibility").jsonObject.getValue("platforms").jsonArray.map { it.jsonPrimitive.content },
         )
         val toolNames = tools.map { it.jsonObject.getValue("name").jsonPrimitive.content }
-        assertEquals(mcpbManifestToolNames.size, tools.size)
-        assertEquals(mcpbManifestToolNames, toolNames)
+        val metadataToolNames = mcpbManifestTools().map { it.name }
+        assertEquals(CURRENT_PUBLIC_MCPB_TOOL_NAMES, metadataToolNames)
+        assertEquals(metadataToolNames.size, tools.size)
+        assertEquals(metadataToolNames, toolNames)
         assertFalse("query_binary" in toolNames)
         assertEquals(
             mcpbManifestTools().map { it.summary.trim() },
             tools.map { it.jsonObject.getValue("description").jsonPrimitive.content },
         )
+    }
+
+    @Test
+    fun `MCPB manifest inclusion is not inferred from production MCP audience`() {
+        val productionOnlyTool = mcpbManifestTools().first().copy(
+            name = "production_only",
+            surfaces = productionCliSurface("production-only", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
+        )
+
+        assertTrue(McpToolAudience.Production in productionOnlyTool.surfaces.mcp.audiences)
+        assertFalse(productionOnlyTool.surfaces.publicMcpb.included)
+        assertEquals(emptyList(), mcpbManifestTools(listOf(productionOnlyTool)))
     }
 
     @Test
@@ -71,8 +121,10 @@ class McpbManifestGenerationTest {
         )
         assertEquals(true, manifest.getValue("tools_generated").jsonPrimitive.content.toBooleanStrict())
         val toolNames = tools.map { it.jsonObject.getValue("name").jsonPrimitive.content }
-        assertEquals(mcpbManifestToolNames.size, tools.size)
-        assertEquals(mcpbManifestToolNames, toolNames)
+        val metadataToolNames = mcpbManifestTools().map { it.name }
+        assertEquals(CURRENT_PUBLIC_MCPB_TOOL_NAMES, metadataToolNames)
+        assertEquals(metadataToolNames.size, tools.size)
+        assertEquals(metadataToolNames, toolNames)
         assertFalse("list_binary_functions" in toolNames)
         assertEquals(
             mcpbManifestTools().map { it.summary.trim() },

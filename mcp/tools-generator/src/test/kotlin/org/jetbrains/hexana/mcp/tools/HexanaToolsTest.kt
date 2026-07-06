@@ -192,6 +192,17 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `public MCPB exposure is declared separately from production MCP audience`() {
+        val productionOnly = productionCliSurface("summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
+        assertEquals(setOf(McpToolAudience.Production), productionOnly.mcp.audiences)
+        assertFalse(productionOnly.publicMcpb.included)
+
+        val publicMcpb = publicMcpbProductionCliSurface("summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
+        assertEquals(setOf(McpToolAudience.Production), publicMcpb.mcp.audiences)
+        assertTrue(publicMcpb.publicMcpb.included)
+    }
+
+    @Test
     fun `tool builder rejects names outside strict snake_case`() {
         assertFailsWith<IllegalArgumentException> {
             tools {

@@ -160,7 +160,7 @@ private val PlanAbiBindingRegenerationResultClass = class_(
 val ArtifactQueryTools = tools {
     tool("plan_abi_binding_regeneration") {
         summary = "Plan report-ready ABI binding regeneration from current Wasm plus a stale binding file."
-        surfaces = productionCliSurface("plan-abi-binding-regeneration", ToolGroup.ArtifactQuery, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("plan-abi-binding-regeneration", ToolGroup.ArtifactQuery, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this as the shortest path for regenerating host bindings when a current module and stale `bindingPath` are available.
             Compare the current WebAssembly function import/export ABI against a stale binding file and return a report-ready regeneration plan with exact input path echoes.

@@ -98,7 +98,7 @@ val CheckMemoryContractResultClass = class_("CheckMemoryContractResult", kotlinP
 internal val MemoryTools: List<ToolSpec> = tools {
     tool("list_memory") {
         summary = "Low-level list of imported and defined memories from a `.wasm` module."
-        surfaces = productionCliSurface("list-memory", ToolGroup.Memory, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("list-memory", ToolGroup.Memory, ToolOutputPolicy.ToolDefined)
         guidance = """
             List imported and defined memories declared by a WebAssembly (.wasm) module.
             Returns memory indices together with decoded WebAssembly limits.
@@ -125,7 +125,7 @@ internal val MemoryTools: List<ToolSpec> = tools {
 
     tool("check_memory_contract") {
         summary = "Check a memory contract with current/baseline Wasm and policy JSON; returns report-ready violations."
-        surfaces = productionCliSurface("check-memory-contract", ToolGroup.Memory, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("check-memory-contract", ToolGroup.Memory, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this as the shortest path for memory contract audits that have a current module, `baselinePath`, and `policyPath`.
             Compares current declarations with baseline declarations, applies policy limits, and returns exact input path echoes.

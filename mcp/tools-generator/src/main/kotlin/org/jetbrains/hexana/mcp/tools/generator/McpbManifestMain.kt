@@ -64,41 +64,5 @@ private fun renderTools(): JsonArray = JsonArray(
     }
 )
 
-internal val mcpbManifestToolNames = listOf(
-    "summarize_binary",
-    "summarize_module",
-    "list_enabled_features",
-    "get_entrypoint_policy",
-    "list_required_proposals",
-    "diff_required_proposals",
-    "check_runtime_compatibility",
-    "check_component_compatibility",
-    "plan_abi_binding_regeneration",
-    "check_memory_contract",
-    "audit_global_state_policy",
-    "audit_local_stack_budget",
-    "list_imports",
-    "list_exports",
-    "search_exports",
-    "list_exported_functions",
-    "list_functions",
-    "resolve_function_signature",
-    "disassemble_function",
-    "get_function_call_graph",
-    "search_functions_by_name",
-    "resolve_wasm_frames",
-    "resolve_function_symbols",
-    "resolve_source_locations",
-    "list_memory",
-    "list_globals",
-    "list_element_segments",
-    "list_data_segments",
-    "audit_data_payload_policy",
-)
-
-internal fun mcpbManifestTools(): List<ToolSpec> {
-    val toolsByName = HexanaTools.associateBy { it.name }
-    return mcpbManifestToolNames.map { name ->
-        toolsByName[name] ?: error("MCPB manifest tool `$name` is missing from the shared Hexana tool catalog.")
-    }
-}
+internal fun mcpbManifestTools(tools: List<ToolSpec> = HexanaTools): List<ToolSpec> =
+    tools.filter { it.surfaces.publicMcpb.included }

@@ -26,7 +26,7 @@ val ListImportsResultClass = class_("ListImportsResult", kotlinPackage = MODEL_P
 internal val ImportTools: List<ToolSpec> = tools {
     tool("list_imports") {
         summary = "List imported functions declared by a `.wasm` module."
-        surfaces = productionCliSurface("list-imports", ToolGroup.Import, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("list-imports", ToolGroup.Import, ToolOutputPolicy.ToolDefined)
         guidance = """
             List imported functions declared by a WebAssembly (.wasm) module.
             This is the primary MCP tool for import inventories, link-mismatch analysis, and mapping direct host calls to imported functions.

@@ -19,7 +19,7 @@ val ListElementSegmentsResultClass = class_("ListElementSegmentsResult", kotlinP
 internal val ElementTools: List<ToolSpec> = tools {
     tool("list_element_segments") {
         summary = "List element segments declared by a `.wasm` module."
-        surfaces = productionCliSurface("list-element-segments", ToolGroup.Element, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("list-element-segments", ToolGroup.Element, ToolOutputPolicy.ToolDefined)
         guidance = """
             List element segments declared by a WebAssembly (.wasm) module.
             Covers active, passive, and declarative segments, including function-index and expression-based initializers.

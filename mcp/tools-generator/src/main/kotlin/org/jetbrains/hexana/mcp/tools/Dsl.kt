@@ -331,6 +331,7 @@ data class ToolSpec(
 data class ToolSurfaceSpec(
     val mcp: McpSurfaceSpec,
     val cli: CliSurfaceSpec,
+    val publicMcpb: PublicMcpbSurfaceSpec,
 )
 
 data class McpSurfaceSpec(
@@ -349,6 +350,15 @@ data class McpSurfaceSpec(
 enum class McpToolAudience {
     Advanced,
     Production,
+}
+
+data class PublicMcpbSurfaceSpec(
+    val included: Boolean,
+) {
+    companion object {
+        fun included(): PublicMcpbSurfaceSpec = PublicMcpbSurfaceSpec(included = true)
+        fun excluded(): PublicMcpbSurfaceSpec = PublicMcpbSurfaceSpec(included = false)
+    }
 }
 
 data class CliSurfaceSpec(
@@ -423,11 +433,24 @@ fun productionCliSurface(
 ): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.production(),
     cli = CliSurfaceSpec.visible(commandName, group, outputPolicy, *additionalGroups),
+    publicMcpb = PublicMcpbSurfaceSpec.excluded(),
+)
+
+fun publicMcpbProductionCliSurface(
+    commandName: String,
+    group: ToolGroup,
+    outputPolicy: ToolOutputPolicy,
+    vararg additionalGroups: ToolGroup,
+): ToolSurfaceSpec = ToolSurfaceSpec(
+    mcp = McpSurfaceSpec.production(),
+    cli = CliSurfaceSpec.visible(commandName, group, outputPolicy, *additionalGroups),
+    publicMcpb = PublicMcpbSurfaceSpec.included(),
 )
 
 fun advancedHiddenCliSurface(): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.advanced(),
     cli = CliSurfaceSpec.hidden(),
+    publicMcpb = PublicMcpbSurfaceSpec.excluded(),
 )
 
 val ToolSpec.mcpDescription: String

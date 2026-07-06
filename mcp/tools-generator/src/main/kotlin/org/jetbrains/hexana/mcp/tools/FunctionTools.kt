@@ -563,7 +563,7 @@ val AuditLocalStackBudgetResultClass = class_("AuditLocalStackBudgetResult", kot
 internal val FunctionTools: List<ToolSpec> = tools {
     tool("list_functions") {
         summary = "List imported and defined functions with offset/limit pagination."
-        surfaces = productionCliSurface("list-functions", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("list-functions", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             List imported and defined functions from a WebAssembly (.wasm) module using offset/limit pagination.
             The offset is in the unified function index space, so imports appear before defined bodies.
@@ -606,7 +606,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
 
     tool("resolve_function_signature") {
         summary = "Resolve the type index and signature for one function index."
-        surfaces = productionCliSurface("resolve-function-signature", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("resolve-function-signature", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Resolve the type index and signature for one unified WebAssembly function index.
             Use this as a targeted lookup when logs, stack traces, exports, or other tools already identify the `funcidx`.
@@ -619,7 +619,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
 
     tool("disassemble_function") {
         summary = "Disassemble one function by unified function index."
-        surfaces = productionCliSurface("disassemble-function", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("disassemble-function", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Disassemble one WebAssembly function by `funcidx`, returning signature, import/export metadata, locals, decoded instruction records, WAT-style text, and raw code bytes when the function has a body.
             Imported functions return metadata with empty body fields because imports have no code entry.
@@ -633,7 +633,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
 
     tool("get_function_call_graph") {
         summary = "Return resolved direct calls and memory write sites for function indices."
-        surfaces = productionCliSurface("get-function-call-graph", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("get-function-call-graph", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Return a compact per-function call graph for requested unified WebAssembly `funcidx` values.
             The result resolves direct `call` and `return_call` targets to import/export/signature metadata, separates imported callees, reports `call_indirect` sites, preserves grouped local counts, and lists direct memory-writing instructions.
@@ -648,7 +648,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
 
     tool("audit_local_stack_budget") {
         summary = "Audit exported function local counts against a local stack budget policy."
-        surfaces = productionCliSurface("audit-local-stack-budget", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("audit-local-stack-budget", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this as the shortest path for local-variable or stack-budget audits that have a Wasm module and optional `policyPath`.
             It maps exported functions to funcidx values, reads grouped declared locals without full disassembly, applies `max_locals` and `count_params`, and returns violations, clean exports, log evidence, and `recommendedReport`.
@@ -662,7 +662,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
 
     tool("search_functions_by_name") {
         summary = "Search function names across imports, exports, and debug names."
-        surfaces = productionCliSurface("search-functions-by-name", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("search-functions-by-name", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Search import names, export names, and WebAssembly name-section function names with a case-insensitive substring query.
             Use this before targeted lookups when you know a symbolic name from logs, host bindings, exports, or source-level debugging.
@@ -675,7 +675,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
 
     tool("resolve_wasm_frames") {
         summary = "Aggregate WebAssembly crash-report and stack-frame triage from function indices, labels, and offsets."
-        surfaces = productionCliSurface("resolve-wasm-frames", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("resolve-wasm-frames", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Resolve crash-report or stack-frame `funcidx` values, raw labels, and optional code offsets into symbols, signatures, exported names, code ranges, source locations, top application frame, skipped-frame reasons, and report-ready summaries.
             Prefer `crashReportPath` with a matching `sourceMapPath` when a crash report JSON is available; for previous/current build regression triage, call this once for each build's module, crash report, and source map, then compare the returned `topApplicationFrame` symbols and exports.
@@ -689,7 +689,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
 
     tool("resolve_function_symbols") {
         summary = "Focused lookup for function indices, symbols, signatures, and metadata."
-        surfaces = productionCliSurface("resolve-function-symbols", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("resolve-function-symbols", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Batch-resolve unified WebAssembly function indices to compact symbol records.
             Symbol resolution prefers name-section entries, then DWARF names, DWARF linkage names, export names, and finally an explicit `funcidx_fallback`.
@@ -704,7 +704,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
 
     tool("resolve_source_locations") {
         summary = "Focused source lookup for WebAssembly code offsets or function indices."
-        surfaces = productionCliSurface("resolve-source-locations", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("resolve-source-locations", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Map absolute WebAssembly code offsets or unified `funcidx` values to source-map or DWARF source locations.
             When only `funcidx` is supplied, the function body start offset is used; when only `codeOffset` is supplied, the containing local function is inferred when possible.

@@ -299,7 +299,7 @@ internal val ComponentTools: List<ToolSpec> = tools {
 
     tool("check_component_compatibility") {
         summary = "Compare current/previous component imports against provider candidates and lock/config files."
-        surfaces = productionCliSurface("check-component-compatibility", ToolGroup.Component, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface("check-component-compatibility", ToolGroup.Component, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this first for component compatibility drift, compose failure logs, provider candidate triage, and dependency lock/config repair.
             Compare current non-runtime imports with `dependencyPaths` or providers discovered from `projectRoot`, then use `previousPath` to explain import drift and `dependencyLockPath` to identify the configured provider to replace.
