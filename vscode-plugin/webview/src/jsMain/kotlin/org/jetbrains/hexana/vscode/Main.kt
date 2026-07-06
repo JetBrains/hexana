@@ -16,11 +16,23 @@ fun main() {
     }
 }
 
+/**
+ * Holds the state for a single script tab: its file path and the latest
+ * content read from the extension host.
+ */
+class ScriptTabState(
+    val path: String,
+    content: String = "",
+) {
+    var content by mutableStateOf(content)
+}
+
 @Composable
 fun BinaryEditorApp() {
     var wasmBytes by remember { mutableStateOf<ByteArray?>(null) }
     var fileName by remember { mutableStateOf("") }
     var filePath by remember { mutableStateOf("") }
+    val scriptTabs = remember { mutableStateListOf<ScriptTabState>() }
 
     VscodeMessageListener { message ->
         when (message.type) {
@@ -29,6 +41,28 @@ fun BinaryEditorApp() {
                 filePath = message.filePath
                 wasmBytes = message.data
                 configuredRuntimeId = message.wasmRuntime
+            }
+            "script-file-picked" -> {
+                if (message.scriptPath.isNotBlank() &&
+                    scriptTabs.none { it.path == message.scriptPath }
+                ) {
+                    scriptTabs.add(ScriptTabState(message.scriptPath, message.scriptContent))
+                    postScriptTabAddedToHost(message.scriptPath)
+                }
+            }
+            "script-file-content" -> {
+                val tab = scriptTabs.find { it.path == message.scriptPath }
+                if (tab != null) {
+                    tab.content = message.scriptContent
+                }
+            }
+            "restore-script-tabs" -> {
+                for (path in message.scriptPaths) {
+                    if (scriptTabs.none { it.path == path }) {
+                        scriptTabs.add(ScriptTabState(path))
+                        postReadScriptFileToHost(path)
+                    }
+                }
             }
         }
     }
@@ -58,6 +92,7 @@ fun BinaryEditorApp() {
             fileName = fileName,
             provider = provider,
             extraTabs = extraTabs,
+            scriptTabs = scriptTabs,
         )
     }
 }
@@ -90,6 +125,7 @@ fun BinaryEditorContent(
     fileName: String,
     provider: BinaryProvider,
     extraTabs: List<PanelTab> = emptyList(),
+    scriptTabs: List<ScriptTabState> = emptyList(),
 ) {
     val selection = remember { HexSelectionState() }
     val buffer = remember(provider) { provider.bytes }
@@ -160,6 +196,7 @@ fun BinaryEditorContent(
             activeTab = activeTab,
             onActiveTabChange = { activeTab = it },
             extraTabs = extraTabs,
+            scriptTabs = scriptTabs,
         )
     }
 }

@@ -185,6 +185,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     data: payload,
                     wasmRuntime: getSelectedRuntime(),
                 });
+                this.restoreScriptTabs(document, webviewPanel);
             } else if (message.type === "open-module") {
                 this.openNestedModule(document, message);
             } else if (message.type === "navigate-to-parent") {
@@ -210,6 +211,14 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 this.overwriteFile(document, message);
             } else if (message.type === "save-copy") {
                 this.saveCopy(document, message);
+            } else if (message.type === "pick-script-file") {
+                this.pickScriptFile(document, webviewPanel);
+            } else if (message.type === "read-script-file") {
+                this.readScriptFile(message.scriptPath as string, webviewPanel);
+            } else if (message.type === "script-tab-added") {
+                this.addScriptTabToState(document, message.scriptPath as string);
+            } else if (message.type === "script-tab-removed") {
+                this.removeScriptTabFromState(document, message.scriptPath as string);
             }
         });
     }
@@ -419,6 +428,96 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             vscode.window.showErrorMessage(
                 `Failed to open nested module "${moduleName}": ${err}`,
             );
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // Script tab support
+    // -------------------------------------------------------------------
+
+    /**
+     * Shows a file picker for `.js` files and sends the selected file's
+     * path and content back to the webview.
+     */
+    private async pickScriptFile(
+        document: WasmDocument,
+        webviewPanel: vscode.WebviewPanel,
+    ): Promise<void> {
+        const uris = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            filters: { "JavaScript": ["js"] },
+            title: "Select Script File",
+        });
+        if (!uris || uris.length === 0) return;
+        const uri = uris[0];
+        try {
+            const bytes = await vscode.workspace.fs.readFile(uri);
+            const content = new TextDecoder("utf-8").decode(bytes);
+            webviewPanel.webview.postMessage({
+                type: "script-file-picked",
+                scriptPath: uri.fsPath,
+                scriptContent: content,
+            });
+        } catch (err) {
+            vscode.window.showErrorMessage(`Failed to read script file: ${err}`);
+        }
+    }
+
+    /**
+     * Re-reads a script file from disk and sends the content to the webview.
+     */
+    private async readScriptFile(
+        scriptPath: string,
+        webviewPanel: vscode.WebviewPanel,
+    ): Promise<void> {
+        try {
+            const uri = vscode.Uri.file(scriptPath);
+            const bytes = await vscode.workspace.fs.readFile(uri);
+            const content = new TextDecoder("utf-8").decode(bytes);
+            webviewPanel.webview.postMessage({
+                type: "script-file-content",
+                scriptPath,
+                scriptContent: content,
+            });
+        } catch (err) {
+            vscode.window.showErrorMessage(`Failed to read script file: ${err}`);
+        }
+    }
+
+    /**
+     * Persists a newly added script tab path in workspace state.
+     */
+    private addScriptTabToState(document: WasmDocument, scriptPath: string): void {
+        const key = `hexana.scriptTabs.${document.uri.toString()}`;
+        const existing: string[] = this.context.workspaceState.get(key, []);
+        if (!existing.includes(scriptPath)) {
+            this.context.workspaceState.update(key, [...existing, scriptPath]);
+        }
+    }
+
+    /**
+     * Removes a script tab path from workspace state.
+     */
+    private removeScriptTabFromState(document: WasmDocument, scriptPath: string): void {
+        const key = `hexana.scriptTabs.${document.uri.toString()}`;
+        const existing: string[] = this.context.workspaceState.get(key, []);
+        this.context.workspaceState.update(key, existing.filter(p => p !== scriptPath));
+    }
+
+    /**
+     * Sends persisted script tab paths to the webview so it can restore them.
+     */
+    private restoreScriptTabs(
+        document: WasmDocument,
+        webviewPanel: vscode.WebviewPanel,
+    ): void {
+        const key = `hexana.scriptTabs.${document.uri.toString()}`;
+        const paths: string[] = this.context.workspaceState.get(key, []);
+        if (paths.length > 0) {
+            webviewPanel.webview.postMessage({
+                type: "restore-script-tabs",
+                scriptPaths: paths,
+            });
         }
     }
 }

@@ -18,6 +18,9 @@ data class VscodeMessage(
     val filePath: String = "",
     val data: ByteArray? = null,
     val wasmRuntime: String? = null,
+    val scriptPath: String = "",
+    val scriptContent: String = "",
+    val scriptPaths: List<String> = emptyList(),
 )
 
 /**
@@ -235,6 +238,50 @@ fun postOpenModuleToHost(moduleIndex: Int, fileName: String, data: ByteArray) {
 }
 
 /**
+ * Asks the extension host to show a file picker for `.js` script files.
+ * The host will respond with a `script-file-picked` message containing
+ * the file path and content.
+ */
+fun postPickScriptFileToHost() {
+    val msg = js("{}")
+    msg.type = "pick-script-file"
+    vscodeApi.postMessage(msg)
+}
+
+/**
+ * Asks the extension host to re-read a script file's content.
+ * The host will respond with a `script-file-content` message.
+ */
+fun postReadScriptFileToHost(scriptPath: String) {
+    val msg = js("{}")
+    msg.type = "read-script-file"
+    msg.scriptPath = scriptPath
+    vscodeApi.postMessage(msg)
+}
+
+/**
+ * Notifies the extension host that a script tab was added, so it can
+ * persist the script path.
+ */
+fun postScriptTabAddedToHost(scriptPath: String) {
+    val msg = js("{}")
+    msg.type = "script-tab-added"
+    msg.scriptPath = scriptPath
+    vscodeApi.postMessage(msg)
+}
+
+/**
+ * Notifies the extension host that a script tab was removed, so it can
+ * update the persisted script paths.
+ */
+fun postScriptTabRemovedToHost(scriptPath: String) {
+    val msg = js("{}")
+    msg.type = "script-tab-removed"
+    msg.scriptPath = scriptPath
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Composable side-effect that listens for messages from the VS Code extension
  * host and converts them to [VscodeMessage] instances.
  *
@@ -262,6 +309,24 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                             filePath = (data.filePath as? String) ?: "",
                             data = byteArray,
                             wasmRuntime = (data.wasmRuntime as? String),
+                        )
+                    }
+                    "script-file-picked", "script-file-content" -> {
+                        VscodeMessage(
+                            type = type,
+                            scriptPath = (data.scriptPath as? String) ?: "",
+                            scriptContent = (data.scriptContent as? String) ?: "",
+                        )
+                    }
+                    "restore-script-tabs" -> {
+                        val jsPaths = data.scriptPaths
+                        val paths = if (jsPaths != null) {
+                            val len = jsPaths.length as Int
+                            (0 until len).map { i -> jsPaths[i] as String }
+                        } else emptyList()
+                        VscodeMessage(
+                            type = type,
+                            scriptPaths = paths,
                         )
                     }
                     else -> VscodeMessage(type = type)

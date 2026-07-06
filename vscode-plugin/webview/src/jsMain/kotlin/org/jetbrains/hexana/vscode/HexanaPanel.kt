@@ -4,6 +4,7 @@ import androidx.compose.runtime.*
 import kotlinx.browser.window
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
+import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
@@ -43,13 +44,14 @@ fun HexanaPanel(
     activeTab: String = FixedTab.Summary.label,
     onActiveTabChange: (String) -> Unit = {},
     extraTabs: List<PanelTab> = emptyList(),
+    scriptTabs: List<ScriptTabState> = emptyList(),
 ) {
     val pendingRun = rememberPendingRunState()
 
     // -----------------------------------------------------------------------
     // Build the tab list: provider-generated table tabs + fixed tabs
     // -----------------------------------------------------------------------
-    val tabs = remember(provider, fileName, extraTabs) {
+    val tabs = remember(provider, fileName, extraTabs, scriptTabs.size) {
         buildList {
             // Summary is always first
             if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
@@ -115,7 +117,25 @@ fun HexanaPanel(
 
             // Low-priority tabs go after all other panels (including non-table tabs).
             addAll(lowEntries.map { it.tab })
+
+            // Script tabs added by the user
+            for (st in scriptTabs) {
+                val label = st.path.substringAfterLast('/').substringAfterLast('\\')
+                add(PanelTab(label, padding = false) { _ ->
+                    ScriptTabContent(
+                        scriptPath = st.path,
+                        scriptContent = st.content,
+                        provider = provider,
+                        onRequestRefresh = { postReadScriptFileToHost(st.path) },
+                    )
+                })
+            }
         }
+    }
+
+    // Labels of script tabs for close button rendering
+    val scriptTabLabels = remember(scriptTabs.size) {
+        scriptTabs.map { it.path.substringAfterLast('/').substringAfterLast('\\') }.toSet()
     }
 
     // If the active tab was removed (e.g. switching from component to core), reset
@@ -222,11 +242,21 @@ fun HexanaPanel(
         }
     }) {
         // Tab bar — hidden when there is only a single tab
-        if (tabs.size > 1) {
+        if (tabs.size > 1 || scriptTabs.isNotEmpty()) {
             ScrollableTabBar(
                 tabs = tabs,
                 activeTab = activeTab,
                 onActiveTabChange = onActiveTabChange,
+                closableTabs = scriptTabLabels,
+                onCloseTab = { label ->
+                    val st = scriptTabs.find {
+                        it.path.substringAfterLast('/').substringAfterLast('\\') == label
+                    }
+                    if (st != null) {
+                        postScriptTabRemovedToHost(st.path)
+                    }
+                },
+                onAddTab = { postPickScriptFileToHost() },
             )
         }
 
@@ -282,6 +312,9 @@ private fun ScrollableTabBar(
     tabs: List<PanelTab>,
     activeTab: String,
     onActiveTabChange: (String) -> Unit,
+    closableTabs: Set<String> = emptySet(),
+    onCloseTab: (String) -> Unit = {},
+    onAddTab: () -> Unit = {},
 ) {
     var tabListRef by remember { mutableStateOf<HTMLElement?>(null) }
     var canScrollStart by remember { mutableStateOf(false) }
@@ -381,6 +414,7 @@ private fun ScrollableTabBar(
         }) {
             for (tab in tabs) {
                 val isActive = tab.label == activeTab
+                val isClosable = tab.label in closableTabs
                 Div({
                     classes("hexana-tab")
                     if (isActive) classes("hexana-tab-active")
@@ -393,6 +427,11 @@ private fun ScrollableTabBar(
                         property("border-bottom", if (isActive) "2px solid var(--vscode-focusBorder, #007FD4)" else "2px solid transparent")
                         property("color", if (isActive) "var(--hexana-fg)" else "var(--vscode-tab-inactiveForeground, rgba(255,255,255,0.5))")
                         property("background", if (isActive) "var(--hexana-tab-active-bg, transparent)" else "transparent")
+                        if (isClosable) {
+                            display(DisplayStyle.Flex)
+                            property("align-items", "center")
+                            property("gap", "4px")
+                        }
                     }
                     onClick {
                         onActiveTabChange(tab.label)
@@ -400,6 +439,24 @@ private fun ScrollableTabBar(
                     }
                 }) {
                     Text(tab.label)
+                    if (isClosable) {
+                        Span({
+                            classes("hexana-tab-close")
+                            attr("title", "Close tab")
+                            style {
+                                property("font-size", "10px")
+                                property("opacity", "0.6")
+                                property("cursor", "pointer")
+                                property("padding", "0 2px")
+                            }
+                            onClick { event ->
+                                event.stopPropagation()
+                                onCloseTab(tab.label)
+                            }
+                        }) {
+                            Text("\u2715")
+                        }
+                    }
                 }
             }
         }
@@ -411,6 +468,23 @@ private fun ScrollableTabBar(
                 enabled = canScrollEnd,
                 onClick = { scrollByPage(1) },
             )
+        }
+
+        // "+" button to add a script tab
+        Div({
+            classes("hexana-tab-add")
+            attr("title", "Add custom script tab")
+            style {
+                property("padding", "4px 8px")
+                property("cursor", "pointer")
+                property("font-size", "14px")
+                property("user-select", "none")
+                property("color", "var(--vscode-tab-inactiveForeground, rgba(255,255,255,0.5))")
+                property("flex-shrink", "0")
+            }
+            onClick { onAddTab() }
+        }) {
+            Text("+")
         }
     }
 }
