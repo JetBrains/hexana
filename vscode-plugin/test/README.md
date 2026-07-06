@@ -11,9 +11,8 @@ powered by [vscode-extension-tester](https://github.com/redhat-developer/vscode-
 - Clicking a hex byte updates the selection status bar with offset info.
 - Switching to the Exports tab displays export rows for the `.wasm` module.
 - Clicking an export row highlights the corresponding bytes in the hex view.
-- Updating the Hexana MCP server from a mocked GitHub Release downloads,
-  extracts, and launches the standalone MCP server distribution when the MCP
-  ZIP has been built.
+- Updating the Hexana MCP server from the production downloads index installs
+  and launches the native MCP server distribution for the current platform.
 - A failed MCP archive download leaves no partial server directory, no version
   marker, and no stale download lock.
 - Unit coverage for the MCP downloader/provider verifies release metadata
@@ -35,6 +34,11 @@ powered by [vscode-extension-tester](https://github.com/redhat-developer/vscode-
    cd vscode-plugin && npm install && npm run compile
    npx @vscode/vsce package --allow-missing-repository
    ```
+3. The production MCP UI acceptance path needs live network access to the
+   downloads metadata endpoint and a published `native-executable` artifact for
+   the current OS/architecture. Set
+   `HEXANA_MCP_DOWNLOADS_RELEASES_INDEX_URL` to use staging or non-production
+   downloads metadata during QA runs.
 
 ## Running the Tests
 
@@ -57,9 +61,9 @@ cd vscode-plugin
 npm run test:unit
 ```
 
-The UI MCP update test uses the legacy mock GitHub-release path and runs only when
+The MCP download-failure UI test uses the legacy mock GitHub-release path and runs only when
 `../../mcp/server/build/distributions/server-<version>.zip`
-exists. Build it first with:
+exists. Build it first if you want that failure-path test to run:
 
 ```bash
 ./gradlew :mcp:server:distZip

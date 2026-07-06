@@ -33,7 +33,6 @@ const mcpFailureStorageDir = path.resolve(
         path.join(os.tmpdir(), `hexana-vscode-mcp-failure-test-${process.pid}`),
 );
 const mcpFailureRequestLog = path.join(mcpFailureStorageDir, 'mock-requests.log');
-const mcpRequestLog = path.join(mcpStorageDir, 'mock-requests.log');
 
 main().catch(error => {
     console.error(error);
@@ -48,11 +47,8 @@ async function main(): Promise<void> {
         await runExtest(['get-chromedriver', '--code_version', codeVersion]);
         await runExtest(['install-vsix', '--extensions_dir', extensionsDir, '-f', vsixPath]);
 
-        const mockServer = startMcpMockServerIfAvailable({
-            port: mcpMockPort,
-            storageDir: mcpStorageDir,
-            requestLog: mcpRequestLog,
-        });
+        fs.rmSync(mcpStorageDir, { recursive: true, force: true });
+        fs.mkdirSync(mcpStorageDir, { recursive: true });
         try {
             fakePostHog.reset();
             await runExtest([
@@ -71,12 +67,7 @@ async function main(): Promise<void> {
                 wasmFixture,
             ], {
                 ...fakePostHog.env,
-                ...mcpTestEnv({
-                    enabled: mockServer !== undefined,
-                    port: mcpMockPort,
-                    storageDir: mcpStorageDir,
-                    requestLog: mcpRequestLog,
-                }),
+                ...mcpProductionTestEnv(mcpStorageDir),
                 HEXANA_VSCODE_TEST_RUN: 'VSCode UI Tests',
                 VSIX_PATH: vsixPath,
                 WASM_FIXTURE: wasmFixture,
@@ -84,7 +75,6 @@ async function main(): Promise<void> {
                 VSCODE_EXTENSIONS_DIR: extensionsDir,
             });
         } finally {
-            mockServer?.kill();
             fs.rmSync(mcpStorageDir, { recursive: true, force: true });
         }
 
@@ -298,6 +288,13 @@ interface McpTestEnvOptions {
     storageDir: string;
     failure?: boolean;
     requestLog?: string;
+}
+
+function mcpProductionTestEnv(storageDir: string): NodeJS.ProcessEnv {
+    return {
+        HEXANA_VSCODE_MCP_TEST: '1',
+        HEXANA_MCP_STORAGE_DIR: storageDir,
+    };
 }
 
 function mcpTestEnv(options: boolean | McpTestEnvOptions): NodeJS.ProcessEnv {

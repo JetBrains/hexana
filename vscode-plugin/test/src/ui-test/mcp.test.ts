@@ -1,5 +1,7 @@
 import * as childProcess from 'child_process';
 import * as fs from 'fs';
+import * as http from 'http';
+import * as https from 'https';
 import * as path from 'path';
 import * as readline from 'readline';
 import { expect } from 'chai';
@@ -24,25 +26,51 @@ interface PendingRequest {
     timer: NodeJS.Timeout;
 }
 
+interface DownloadsReleasesIndex {
+    schemaVersion: number;
+    latest: string;
+    releases: Array<{
+        version: string;
+        manifestUrl: string;
+    }>;
+}
+
+interface DownloadsReleaseManifest {
+    version: string;
+    artifacts: Array<{
+        platform: string;
+        kind: string;
+        downloadsUrl?: string | null;
+    }>;
+}
+
+interface ExpectedNativeRelease {
+    version: string;
+    platform: string;
+}
+
 describe('Hexana MCP Server Update - Acceptance Tests', function () {
     this.timeout(180_000);
 
     const enabled = process.env.HEXANA_VSCODE_MCP_TEST === '1';
     const storageDir = process.env.HEXANA_MCP_STORAGE_DIR;
-    const expectedVersion = process.env.HEXANA_MCP_TEST_VERSION;
-    const requestLogPath = process.env.HEXANA_MCP_MOCK_REQUEST_LOG;
     const wasmFixture = path.resolve(process.env.WASM_FIXTURE || path.join(process.cwd(), 'fixtures', 'test-exports.wasm'));
+    let expectedRelease: ExpectedNativeRelease;
 
-    before(function () {
+    before(async function () {
         if (!enabled) {
             this.skip();
         }
         expect(storageDir, 'HEXANA_MCP_STORAGE_DIR must be set').to.be.a('string').and.not.empty;
-        expect(expectedVersion, 'HEXANA_MCP_TEST_VERSION must be set').to.be.a('string').and.not.empty;
-        expect(requestLogPath, 'HEXANA_MCP_MOCK_REQUEST_LOG must be set').to.be.a('string').and.not.empty;
+        const release = await fetchExpectedNativeRelease();
+        if (!release) {
+            this.skip();
+            return;
+        }
+        expectedRelease = release;
     });
 
-    it('downloads, extracts, and launches the MCP server from the mocked GitHub release', async function () {
+    it('downloads, extracts, and launches the MCP server from production downloads', async function () {
         const workbench = new Workbench();
         await workbench.executeCommand('Hexana MCP: Update Server');
 
@@ -50,27 +78,17 @@ describe('Hexana MCP Server Update - Acceptance Tests', function () {
         const launcherPath = path.join(
             serverDir,
             'bin',
-            process.platform === 'win32' ? 'server.bat' : 'server',
+            process.platform === 'win32' ? 'hexana-mcp.exe' : 'hexana-mcp',
         );
         const versionMarkerPath = path.join(storageDir!, 'server.version');
         const lockPath = path.join(storageDir!, '.download.lock');
 
-        await waitForFile(launcherPath, 90_000);
+        await waitForFile(launcherPath, 120_000);
         await waitForFile(versionMarkerPath, 10_000);
         await waitForNoFile(lockPath, 30_000);
 
-        const requestLog = fs.readFileSync(requestLogPath!, 'utf8');
-        expect(
-            requestLog,
-            'mock metadata endpoint was not hit — extension may have fallen back to real GitHub',
-        ).to.match(/\/repos\/example\/hexana-mcp\/releases\/tags\//);
-        expect(
-            requestLog,
-            'mock archive endpoint was not hit — extension may have fallen back to real GitHub',
-        ).to.match(/DOWNLOAD_STATUS 200 \/download\//);
-
         const marker = fs.readFileSync(versionMarkerPath, 'utf8').trim();
-        expect(marker).to.equal(expectedVersion);
+        expect(marker).to.equal(expectedRelease.version);
 
         if (process.platform !== 'win32') {
             fs.accessSync(launcherPath, fs.constants.X_OK);
@@ -87,7 +105,7 @@ describe('Hexana MCP Server Update - Acceptance Tests', function () {
         });
 
         expect(result.status, result.stderr || result.stdout).to.equal(0);
-        expect(result.stdout).to.match(new RegExp(`hexana-mcp\\s+${expectedVersion}`));
+        expect(result.stdout).to.match(new RegExp(`hexana-mcp\\s+${expectedRelease.version}`));
 
         const client = new StdioMcpClient(
             launcherPath,
@@ -122,6 +140,102 @@ describe('Hexana MCP Server Update - Acceptance Tests', function () {
         }
     });
 });
+
+async function fetchExpectedNativeRelease(): Promise<ExpectedNativeRelease | undefined> {
+    const platform = currentDownloadsPlatform();
+    if (!platform) {
+        return undefined;
+    }
+
+    const index = await getJson<DownloadsReleasesIndex>(
+        process.env.HEXANA_MCP_DOWNLOADS_RELEASES_INDEX_URL ||
+        'https://download.jetbrains.com/resources/hexana/mcp/releases.json',
+    );
+    expect(index.schemaVersion).to.equal(1);
+
+    const release = index.releases.find(candidate => candidate.version === index.latest);
+    expect(release, `Downloads index does not contain latest release ${index.latest}`).to.not.equal(undefined);
+
+    const manifest = await getJson<DownloadsReleaseManifest>(release!.manifestUrl);
+    expect(manifest.version).to.equal(release!.version);
+
+    const nativeArtifact = manifest.artifacts.find(candidate =>
+        candidate.platform === platform &&
+        candidate.kind === 'native-executable' &&
+        typeof candidate.downloadsUrl === 'string',
+    );
+    return nativeArtifact ? { version: manifest.version, platform } : undefined;
+}
+
+function currentDownloadsPlatform(): string | undefined {
+    const osName = process.platform === 'darwin'
+        ? 'macos'
+        : process.platform === 'linux'
+            ? 'linux'
+            : process.platform === 'win32'
+                ? 'windows'
+                : undefined;
+    const archName = process.arch === 'x64' || process.arch === 'arm64'
+        ? process.arch
+        : undefined;
+    return osName && archName ? `${osName}-${archName}` : undefined;
+}
+
+function getJson<T>(url: string): Promise<T> {
+    return new Promise((resolve, reject) => {
+        const request = getHttpClient(url).get(
+            url,
+            {
+                headers: {
+                    'User-Agent': 'Hexana-VSCode-UI-Test',
+                },
+            },
+            response => {
+                const statusCode = response.statusCode ?? 0;
+                const location = response.headers.location;
+                if (statusCode >= 300 && statusCode < 400 && location) {
+                    response.resume();
+                    getJson<T>(new URL(location, url).toString()).then(resolve, reject);
+                    return;
+                }
+
+                const chunks: Buffer[] = [];
+                response.on('error', reject);
+                response.on('data', (chunk: Buffer) => chunks.push(chunk));
+                response.on('end', () => {
+                    const body = Buffer.concat(chunks).toString('utf8');
+                    if (statusCode < 200 || statusCode >= 300) {
+                        reject(new Error(`Release metadata request failed with HTTP ${statusCode}: ${body}`));
+                        return;
+                    }
+
+                    try {
+                        resolve(JSON.parse(body) as T);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            },
+        );
+
+        request.setTimeout(30_000, () => {
+            request.destroy(new Error('Release metadata request timed out'));
+        });
+        request.on('error', reject);
+        request.end();
+    });
+}
+
+function getHttpClient(url: string): typeof http | typeof https {
+    const protocol = new URL(url).protocol;
+    if (protocol === 'http:') {
+        return http;
+    }
+    if (protocol === 'https:') {
+        return https;
+    }
+    throw new Error(`Unsupported URL protocol: ${protocol}`);
+}
 
 class StdioMcpClient {
     private nextId = 1;
