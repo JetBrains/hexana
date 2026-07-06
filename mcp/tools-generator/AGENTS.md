@@ -9,6 +9,9 @@ DSL and emit checked-in Kotlin files into the two consumers:
 - `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt` — `Server.registerHexanaTools(handlers)`
   extension for the standalone MCP runtime.
 
+A separate Claude Desktop MCPB manifest generator consumes catalog metadata and refreshes the checked-in packaging
+template.
+
 ## Start Here
 
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/Dsl.kt` — `class_`/`tools` builders, `FieldType` hierarchy,
@@ -19,6 +22,7 @@ DSL and emit checked-in Kotlin files into the two consumers:
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt` — catalog composition and canonical tool ordering.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/StandaloneToolsetMain.kt` — server dispatcher generator.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/IdeaToolsetMain.kt` — idea-plugin toolset generator.
+- `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/McpbManifestMain.kt` — Claude Desktop MCPB manifest generator.
 
 ## Ownership Boundary
 
@@ -26,6 +30,7 @@ DSL and emit checked-in Kotlin files into the two consumers:
 - Tool surface metadata also lives only in this module. Each tool must explicitly declare its MCP audience/profile intent,
   public MCPB manifest exposure, and CLI visibility, command name, group/domain, and output policy instead of deriving
   those facts from production profile membership.
+- Public MCPB manifest exposure is generated from catalog metadata; do not maintain a separate manifest tool list.
 - Top-level tool output classes also declare their `mcp/core` model package here with `kotlinPackage = ...`; the
   idea-plugin generator must not carry a separate result-class package map.
 - Standalone server input and output JSON schemas are generated from `ClassSpec`/`FieldSpec`; add defaults and bounds
@@ -43,12 +48,14 @@ DSL and emit checked-in Kotlin files into the two consumers:
 
 ## Regenerating
 
-After editing the DSL, run both generators and commit their output alongside the DSL change:
+After editing the DSL, run the affected generators and commit their output alongside the DSL change:
 
 - `./gradlew :idea-plugin:generateHexanaToolset`
 - `./gradlew :mcp:server:generateHexanaToolDispatcher`
+- `./gradlew :mcp:generateClaudeDesktopMcpbManifestTemplate` when MCPB/public manifest surface metadata or summaries
+  change; commit the refreshed `mcp/packaging/claude-desktop-mcpb/manifest.json` template if it changes.
 
-Neither generator is wired into `compileKotlin` automatically — the outputs are committed to `src/main/gen/` and
+These generation tasks are not wired into `compileKotlin` automatically — the checked-in outputs are committed and
 reviewed with the DSL change.
 
 ## Guidance prose conventions
