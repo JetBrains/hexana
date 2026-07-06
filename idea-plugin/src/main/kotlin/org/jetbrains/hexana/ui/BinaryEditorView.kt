@@ -39,7 +39,6 @@ import org.jetbrains.hexana.HexanaLog
 import org.jetbrains.hexana.nativebin.JVM_FILE_SYSTEM
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.DexBinaryProvider
-import org.jetbrains.hexana.ui.ClassFileNavTarget
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.NativeDebugTabData
@@ -256,7 +255,16 @@ internal fun BinaryEditorView(
                     onOpenZipEntry = onOpenZipEntry,
                 )
             }
-            mutableStateListOf(*p)
+            val scriptSettings = ScriptTabSettings.getInstance(state.project)
+            val scriptPanels = scriptSettings.getScriptPaths(fileName).map { scriptPath ->
+                createScriptPanel(scriptPath, binaryProvider)
+            }
+            mutableStateListOf(*(p + scriptPanels))
+        }
+
+        // Track which panels are script tabs so we know which are closable.
+        val scriptTabIndices = remember(panels.size) {
+            panels.indices.filter { panels[it] is ScriptPanel }.toSet()
         }
 
         // If the panel list shrank because of a file-aware → plain provider
@@ -332,7 +340,7 @@ internal fun BinaryEditorView(
                 HexViewStatusBar(state = state, totalBytes = liveProvider.bytes.limit())
             }
         }, southPanel = {
-            TabsPanel(panels, state.currentState.value,  onExpand = { expanded ->
+            TabsPanel(panels, state.currentState.value, scriptTabIndices = scriptTabIndices, onExpand = { expanded ->
                 if (expanded) {
                     state.setTopFraction(0f)
                 } else {
@@ -349,6 +357,24 @@ internal fun BinaryEditorView(
                         )
                     )
                 }
+            }, onAddScriptTab = {
+                val dialog = AddScriptTabDialog(state.project)
+                if (dialog.showAndGet()) {
+                    val scriptPath = dialog.selectedFile?.path ?: return@TabsPanel
+                    val scriptSettings = ScriptTabSettings.getInstance(state.project)
+                    scriptSettings.addScriptPath(fileName, scriptPath)
+                    val panel = createScriptPanel(scriptPath, binaryProvider)
+                    panels.add(panel)
+                    state.setSelectedTab(panels.size - 1)
+                }
+            }, onCloseScriptTab = { index ->
+                val panel = panels.getOrNull(index) as? ScriptPanel ?: return@TabsPanel
+                val scriptSettings = ScriptTabSettings.getInstance(state.project)
+                scriptSettings.removeScriptPath(fileName, panel.scriptPath)
+                panels.removeAt(index)
+                if (state.currentState.value.tabIndex >= panels.size && panels.isNotEmpty()) {
+                    state.setSelectedTab(panels.size - 1)
+                }
             })
         })
     }
@@ -358,8 +384,11 @@ internal fun BinaryEditorView(
 private fun TabsPanel(
     panels: List<Panel>,
     state: HexViewState,
+    scriptTabIndices: Set<Int> = emptySet(),
     onExpand: (Boolean) -> Unit,
     onTabSelect: (Int) -> Unit,
+    onAddScriptTab: () -> Unit = {},
+    onCloseScriptTab: (Int) -> Unit = {},
 ) {
     if (panels.isEmpty()) return
 
@@ -385,13 +414,18 @@ private fun TabsPanel(
         tabOffsetPx = tabOffsetPx.coerceIn(0, maxTabOffsetPx)
     }
 
-    val tabs by remember(state.tabIndex, panels) {
+    val tabs by remember(state.tabIndex, panels, scriptTabIndices) {
         derivedStateOf {
             panels.mapIndexed { index, panel ->
                 TabData.Default(
                     selected = index == state.tabIndex,
                     content = { Text(text = panel.description) },
-                    closable = false,
+                    closable = index in scriptTabIndices,
+                    onClose = if (index in scriptTabIndices) {
+                        { onCloseScriptTab(index) }
+                    } else {
+                        {}
+                    },
                     onClick = {
                         onTabSelect(index)
                     }
@@ -470,6 +504,13 @@ private fun TabsPanel(
                     }
                 }
             }
+            IconButton(onClick = onAddScriptTab) {
+                Icon(
+                    AllIconsKeys.General.Add,
+                    contentDescription = "Add script tab",
+                    iconClass = AllIcons::class.java,
+                )
+            }
         }
 
         Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal)
@@ -497,10 +538,16 @@ private fun NaturalWidthTabStrip(
     Layout(
         content = {
             Box(modifier = Modifier.onSizeChanged { onContentWidthChanged(it.width) }) {
-                TabStrip(
-                    tabs = tabs,
-                    style = JewelTheme.defaultTabStyle,
-                )
+                Row {
+                    TabStrip(
+                        tabs = tabs,
+                        style = JewelTheme.defaultTabStyle,
+                    )
+                    // Invisible spacer so the last real tab title is never clipped
+                    // behind the scroll arrows or the "+" button. Using a plain
+                    // Spacer instead of a fake TabData avoids unwanted hover state.
+                    Spacer(modifier = Modifier.width(35.dp))
+                }
             }
         },
         modifier = modifier,

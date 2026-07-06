@@ -115,6 +115,7 @@ dependencies {
     implementation(libs.kotlin.reflect)
     compileOnly(libs.kotlinx.serialization.json)
     implementation(libs.bundles.graalvm)
+    implementation(libs.bundles.graalvm.js)
     implementation(libs.jackson.module.kotlin)
     implementation(libs.ktor.client.cio.jvm)
     implementation(libs.ktor.client.websockets.jvm)

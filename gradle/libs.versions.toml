@@ -53,6 +53,7 @@ posthog-server = { module = "com.posthog:posthog-server", version.ref = "posthog
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 graalvm-polyglot = { module = "org.graalvm.polyglot:polyglot", version.ref = "graalvm" }
 graalvm-wasm = { module = "org.graalvm.polyglot:wasm", version.ref = "graalvm" }
+graalvm-js = { module = "org.graalvm.polyglot:js", version.ref = "graalvm" }
 kotlinx-browser = { module = "org.jetbrains.kotlinx:kotlinx-browser", version.ref = "kotlinx-browser" }
 ktor-server-cio-jvm = { module = "io.ktor:ktor-server-cio-jvm", version.ref = "ktor" }
 ktor-client-cio-jvm = { module = "io.ktor:ktor-client-cio-jvm", version.ref = "ktor" }
@@ -66,6 +67,10 @@ r8 = { module = "com.android.tools:r8", version.ref = "r8" }
 graalvm = [
     "graalvm-polyglot",
     "graalvm-wasm",
+]
+graalvm-js = [
+    "graalvm-polyglot",
+    "graalvm-js",
 ]
 intellij-driver = [
     "intellij-starter-squashed",
