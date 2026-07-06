@@ -224,9 +224,7 @@ The production downloader reads `https://download.jetbrains.com/resources/hexana
 latest release manifest, and installs the current platform's `native-executable` artifact when one is published. The
 VS Code extension version does not have to match the MCP server version.
 
-Set `HEXANA_MCP_DOWNLOADS_RELEASES_INDEX_URL` to point the downloader at a mock or staging downloads index. Set
-`HEXANA_MCP_GITHUB_RELEASE_API_URL` only for the legacy GitHub Releases-compatible path; that override looks for the
-newest semver-tagged release containing a `server-*.zip` asset with a SHA-256 digest.
+Set `HEXANA_MCP_DOWNLOADS_RELEASES_INDEX_URL` to point the downloader at a mock or staging downloads index.
 
 ### Mock MCP Release
 
@@ -236,7 +234,8 @@ Build the standalone MCP server distribution:
 ./gradlew :mcp:server:distZip
 ```
 
-Then run the mock GitHub Releases API. With no archive argument, it serves
+Then run the mock downloads-index API. With no archive argument, it first looks for
+`mcp/build/distributions-native/hexana-mcp-native-<platform>-<version>.zip`, then falls back to
 `mcp/server/build/distributions/server-<version>.zip`:
 
 ```bash
@@ -247,12 +246,13 @@ npm run mock:mcp-release
 Then launch VS Code with the mock endpoint in the extension host environment:
 
 ```bash
-HEXANA_MCP_GITHUB_RELEASE_API_URL=http://127.0.0.1:18765/repos/example/hexana-mcp/releases \
-HEXANA_MCP_RELEASES_PAGE_URL=http://127.0.0.1:18765/releases \
+HEXANA_MCP_DOWNLOADS_RELEASES_INDEX_URL=http://127.0.0.1:18765/resources/hexana/mcp/releases.json \
+HEXANA_MCP_RELEASES_PAGE_URL=http://127.0.0.1:18765/resources/hexana/mcp \
 code .
 ```
 
-Run `Hexana MCP: Update Server` from the Command Palette to download and extract the served legacy server ZIP.
+Run `Hexana MCP: Update Server` from the Command Palette to download and extract the served ZIP through the
+downloads-index metadata flow.
 
 To include the live downloads.jetbrains.com release/download smoke test in the unit run:
 

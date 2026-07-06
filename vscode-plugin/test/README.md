@@ -61,7 +61,7 @@ cd vscode-plugin
 npm run test:unit
 ```
 
-The MCP download-failure UI test uses the legacy mock GitHub-release path and runs only when
+The MCP download-failure UI test uses the mock downloads-index path and runs only when
 `../../mcp/server/build/distributions/server-<version>.zip`
 exists. Build it first if you want that failure-path test to run:
 

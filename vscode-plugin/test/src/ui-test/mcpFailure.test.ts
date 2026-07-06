@@ -42,7 +42,7 @@ describe('Hexana MCP Server Download Failure - Acceptance Tests', function () {
         const lockPath = path.join(storageDir!, '.download.lock');
 
         await executeCommandWithRetry('Hexana MCP: Update Server');
-        await waitForFileContaining(requestLogPath!, 'DOWNLOAD_STATUS 500 /download/');
+        await waitForFileContaining(requestLogPath!, 'DOWNLOAD_STATUS 500 ');
         await waitForNoFile(lockPath, 30_000);
         await delay(1_000);
 

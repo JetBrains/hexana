@@ -281,7 +281,7 @@
   "scripts": {
     "compile": "tsc -p ./tsconfig.json",
     "watch": "tsc -watch -p ./tsconfig.json",
-    "mock:mcp-release": "node scripts/mock-github-release-server.js",
+    "mock:mcp-release": "node scripts/mock-mcp-downloads-server.js",
     "test:unit": "npm run compile && npm --prefix test install && npm --prefix test run unit",
     "package": "npx @vscode/vsce package",
     "publish:vscode": "vsce publish --packagePath",
