@@ -70,6 +70,7 @@ tasks.register("teamcityCiTests") {
         ":encdec:allTests",
         ":hexanaDocument:allTests",
         ":jvm-jit:allTests",
+        ":mcp:tool-runtime:build",
         ":mcp:tools-generator:test",
         ":parsing:common:allTests",
         ":parsing:dex:allTests",
