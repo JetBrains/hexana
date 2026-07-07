@@ -29,6 +29,7 @@ import org.jetbrains.hexana.shared.ColumnDescriptor
 import org.jetbrains.hexana.shared.ColumnWidth
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.HexRange
+import org.jetbrains.hexana.shared.PredefinedFilter
 import org.jetbrains.hexana.shared.RowSelectionData
 import org.jetbrains.hexana.shared.TableTabChildRows
 import org.jetbrains.hexana.shared.TableTabDescriptor
@@ -164,6 +165,31 @@ fun TableTabContent(
         return
     }
 
+    // --- Predefined filter state ---
+    val filters = descriptor.predefinedFilters
+    var selectedFilterIndex: Int? by remember(descriptor) {
+        mutableStateOf(if (filters.isNotEmpty()) 0 else null)
+    }
+    val activeFilter: PredefinedFilter? = selectedFilterIndex?.let { filters.getOrNull(it) }
+
+    val filterLeading: (@Composable () -> Unit)? = if (filters.isNotEmpty()) {
+        {
+            FilterDropdownVsc(
+                filters = filters,
+                selectedIndex = selectedFilterIndex,
+                onSelected = { selectedFilterIndex = it },
+            )
+        }
+    } else null
+
+    val combinedLeading: (@Composable () -> Unit)? = when {
+        filterLeading != null && searchBarLeading != null -> {
+            { filterLeading(); searchBarLeading() }
+        }
+        filterLeading != null -> filterLeading
+        else -> searchBarLeading
+    }
+
     val showId = descriptor.showIdColumn
 
     val headers = buildList {
@@ -223,10 +249,15 @@ fun TableTabContent(
     }
 
     // Build sorted & filtered index list at the data level.
-    val visibleIndices = remember(descriptor, debouncedQuery, sortState.columnIndex, sortState.direction) {
+    val visibleIndices = remember(descriptor, debouncedQuery, sortState.columnIndex, sortState.direction, activeFilter) {
         val indices = (0 until descriptor.rowCount).toMutableList()
 
-        // Filter
+        // Predefined filter
+        if (activeFilter != null) {
+            indices.retainAll { idx -> activeFilter.predicate(idx) }
+        }
+
+        // Search filter
         if (debouncedQuery.isNotEmpty()) {
             val lq = debouncedQuery.lowercase()
             indices.retainAll { idx ->
@@ -324,7 +355,7 @@ fun TableTabContent(
                     searchQuery = ""
                     if (!descriptor.alwaysShowSearch) isSearchVisible = false
                 },
-                leading = searchBarLeading,
+                leading = combinedLeading,
             )
         }
 
@@ -527,6 +558,7 @@ private fun flattenTreeVsc(
     sortColumnIndex: Int = -1,
     sortAscending: Boolean = true,
     searchQuery: String = "",
+    activeFilter: PredefinedFilter? = null,
 ): List<VscFlatRow> {
     val result = mutableListOf<VscFlatRow>()
     val lq = searchQuery.lowercase()
@@ -578,6 +610,7 @@ private fun flattenTreeVsc(
     ) {
         val order = if (depth == 0) sortedIndices(rowCount, columns) else (0 until rowCount).toList()
         for (i in order) {
+            if (depth == 0 && activeFilter != null && !activeFilter.predicate(i)) continue
             if (isSearching && !subtreeMatches(i, columns, childrenProvider)) continue
             val path = parentPath + i
             val children = childrenProvider?.invoke(i)
@@ -605,6 +638,51 @@ private const val CHEVRON_RIGHT = "\u25B6"
 private const val CHEVRON_DOWN = "\u25BC"
 
 /**
+ * Renders an HTML `<select>` dropdown for predefined row filters.
+ */
+@Composable
+private fun FilterDropdownVsc(
+    filters: List<PredefinedFilter>,
+    selectedIndex: Int?,
+    onSelected: (Int?) -> Unit,
+) {
+    val currentValue = selectedIndex?.toString() ?: "all"
+
+    org.jetbrains.compose.web.dom.Select({
+        classes("hexana-filter-dropdown")
+        style {
+            property("font-size", "12px")
+            property("margin-right", "6px")
+            property("background", "var(--vscode-dropdown-background, #3c3c3c)")
+            property("color", "var(--vscode-dropdown-foreground, #ccc)")
+            property("border", "1px solid var(--vscode-dropdown-border, #555)")
+            property("border-radius", "2px")
+            property("padding", "2px 4px")
+        }
+        onChange { event ->
+            val value = (event.target as? org.w3c.dom.HTMLSelectElement)?.value
+            onSelected(if (value == "all") null else value?.toIntOrNull())
+        }
+        attr("value", currentValue)
+    }) {
+        filters.forEachIndexed { index, filter ->
+            org.jetbrains.compose.web.dom.Option(
+                value = index.toString(),
+                attrs = {
+                    if (index.toString() == currentValue) attr("selected", "selected")
+                },
+            ) { Text(filter.label) }
+        }
+        org.jetbrains.compose.web.dom.Option(
+            value = "all",
+            attrs = {
+                if (currentValue == "all") attr("selected", "selected")
+            },
+        ) { Text("Show all") }
+    }
+}
+
+/**
  * Applies a multi-range highlight from [rowHighlightRangesProvider] to the VS Code hex view.
  * The web hex viewer has no multi-range highlight API, so this degrades to the bounding span
  * [min(offset), max(offset+size)) covering all ranges. When [ranges] is empty the selection
@@ -629,6 +707,13 @@ private fun TreeTableTabContent(
     var sortColumnIndex by remember { mutableStateOf(descriptor.defaultSortColumn ?: -1) }
     var sortAscending by remember { mutableStateOf(descriptor.defaultSortAscending) }
 
+    // --- Predefined filter state ---
+    val filters = descriptor.predefinedFilters
+    var selectedFilterIndex: Int? by remember(descriptor) {
+        mutableStateOf(if (filters.isNotEmpty()) 0 else null)
+    }
+    val activeFilter: PredefinedFilter? = selectedFilterIndex?.let { filters.getOrNull(it) }
+
     // --- Search state ---
     var searchQuery by remember(descriptor) { mutableStateOf("") }
     var isSearchVisible by remember(descriptor) { mutableStateOf(descriptor.alwaysShowSearch) }
@@ -638,8 +723,8 @@ private fun TreeTableTabContent(
         debouncedQuery = searchQuery
     }
 
-    val flatRows = remember(descriptor, expandedPaths.toList(), sortColumnIndex, sortAscending, debouncedQuery) {
-        flattenTreeVsc(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending, debouncedQuery)
+    val flatRows = remember(descriptor, expandedPaths.toList(), sortColumnIndex, sortAscending, debouncedQuery, activeFilter) {
+        flattenTreeVsc(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending, debouncedQuery, activeFilter)
     }
 
     // Track which flattened row is currently focused (keyboard-navigated or clicked).
@@ -678,13 +763,31 @@ private fun TreeTableTabContent(
     val firstVisible = maxOf(0, (scrollTop / rowHeight).toInt() - bufferRows)
     val lastVisible = minOf(totalRows - 1, ((scrollTop + viewportHeight) / rowHeight).toInt() + bufferRows)
 
-    val searchBarLeading: (@Composable () -> Unit)? = if (debouncedQuery.isNotEmpty()) {
+    val resultsLeading: (@Composable () -> Unit)? = if (debouncedQuery.isNotEmpty()) {
         {
             Span({ style { property("font-size", "11px"); color(Color("#888")) } }) {
                 Text("${flatRows.size} results")
             }
         }
     } else null
+
+    val filterLeading: (@Composable () -> Unit)? = if (filters.isNotEmpty()) {
+        {
+            FilterDropdownVsc(
+                filters = filters,
+                selectedIndex = selectedFilterIndex,
+                onSelected = { selectedFilterIndex = it },
+            )
+        }
+    } else null
+
+    val searchBarLeading: (@Composable () -> Unit)? = when {
+        filterLeading != null && resultsLeading != null -> {
+            { filterLeading(); resultsLeading() }
+        }
+        filterLeading != null -> filterLeading
+        else -> resultsLeading
+    }
 
     Div({
         classes("hexana-searchable-table")

@@ -30,6 +30,7 @@ fun zipEntriesDescriptor(
     onRowClick: ((index: Int) -> Unit)? = null,
     searchPlaceholder: String = "Search entries\u2026",
     emptyMessage: String = "(no entries)",
+    predefinedFilters: List<PredefinedFilter> = emptyList(),
 ): TableTabDescriptor = TableTabDescriptor(
     name = "Entries",
     columns = listOf(
@@ -61,6 +62,7 @@ fun zipEntriesDescriptor(
     searchPlaceholder = searchPlaceholder,
     emptyMessage = emptyMessage,
     showIdColumn = false,
+    predefinedFilters = predefinedFilters,
 )
 
 /**
@@ -78,9 +80,16 @@ class ZipTableTabsProvider : TableTabsProvider {
         val displayEntries = provider.displayEntries
         if (displayEntries.isEmpty()) return emptyList()
 
+        val rows = displayEntries.map { ZipEntryRow(it.name, it.compressedSize, it.uncompressedSize) }
+        val hasClassFiles = rows.any { it.name.endsWith(".class") }
+        val filters = if (hasClassFiles) {
+            listOf(PredefinedFilter("Classes") { index -> rows[index].name.endsWith(".class") })
+        } else emptyList()
+
         return listOf(
             zipEntriesDescriptor(
-                entries = displayEntries.map { ZipEntryRow(it.name, it.compressedSize, it.uncompressedSize) },
+                entries = rows,
+                predefinedFilters = filters,
             )
         )
     }

@@ -4,22 +4,34 @@ import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
 import com.intellij.icons.AllIcons
 import androidx.compose.ui.graphics.Color
 import org.jetbrains.hexana.HexHighlightRange
@@ -30,6 +42,7 @@ import org.jetbrains.hexana.shared.HexRangeRole
 import org.jetbrains.hexana.shared.ColumnDescriptor
 import org.jetbrains.hexana.shared.ColumnWidth
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
+import org.jetbrains.hexana.shared.PredefinedFilter
 import org.jetbrains.hexana.shared.RowSelectionData
 import org.jetbrains.hexana.shared.TableTabChildRows
 import org.jetbrains.hexana.shared.TableTabDescriptor
@@ -121,6 +134,32 @@ private fun TableTabContent(
     state: HexViewStateHolder,
     searchBarLeading: (@Composable () -> Unit)? = null,
 ) {
+    // --- Predefined filter state ---
+    val filters = descriptor.predefinedFilters
+    // null means "Show all", 0..n-1 selects a predefined filter
+    var selectedFilterIndex: Int? by remember(descriptor) {
+        mutableStateOf(if (filters.isNotEmpty()) 0 else null)
+    }
+    val activeFilter: PredefinedFilter? = selectedFilterIndex?.let { filters.getOrNull(it) }
+
+    val filterDropdown: (@Composable () -> Unit)? = if (filters.isNotEmpty()) {
+        {
+            FilterDropdown(
+                filters = filters,
+                selectedIndex = selectedFilterIndex,
+                onSelected = { selectedFilterIndex = it },
+            )
+        }
+    } else null
+
+    val combinedLeading: (@Composable () -> Unit)? = when {
+        filterDropdown != null && searchBarLeading != null -> {
+            { filterDropdown(); searchBarLeading() }
+        }
+        filterDropdown != null -> filterDropdown
+        else -> searchBarLeading
+    }
+
     if (descriptor.prologueText != null || (descriptor.rowCount == 0 && descriptor.emptyMessage != null)) {
         Column(modifier = Modifier.fillMaxSize()) {
             descriptor.prologueText?.let {
@@ -130,14 +169,95 @@ private fun TableTabContent(
                 descriptor.emptyMessage?.let { Text(it) }
                 return
             }
-            TableTabTable(descriptor, state, searchBarLeading)
+            TableTabTable(descriptor, state, combinedLeading, activeFilter)
         }
         return
     }
 
     if (descriptor.rowCount == 0 && !descriptor.alwaysShowSearch) return
 
-    TableTabTable(descriptor, state, searchBarLeading)
+    TableTabTable(descriptor, state, combinedLeading, activeFilter)
+}
+
+/**
+ * Renders a dropdown for selecting a predefined row filter.
+ */
+@Composable
+private fun FilterDropdown(
+    filters: List<PredefinedFilter>,
+    selectedIndex: Int?,
+    onSelected: (Int?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val label = if (selectedIndex != null) filters.getOrNull(selectedIndex)?.label ?: "Show all" else "Show all"
+
+    val borderColor = JewelTheme.globalColors.borders.normal
+    val shape = RoundedCornerShape(4.dp)
+
+    val textMeasurer = rememberTextMeasurer()
+    val textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+    val longestLabel = remember(filters) {
+        val allLabels = filters.map { it.label } + "Show all"
+        allLabels.maxByOrNull { it.length } ?: "Show all"
+    }
+    val dropdownWidth = remember(longestLabel, textMeasurer) {
+        val measured = textMeasurer.measure("$longestLabel ▾", textStyle)
+        measured.size.width
+    }
+
+    Box {
+        Box(
+            modifier = Modifier
+                .height(30.dp)
+                .width(with(androidx.compose.ui.platform.LocalDensity.current) { dropdownWidth.toDp() } + 16.dp + 2.dp)
+                .border(1.dp, borderColor, shape)
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 8.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                "$label ▾",
+                style = textStyle,
+            )
+        }
+        if (expanded) {
+            Popup(
+                alignment = Alignment.TopStart,
+                onDismissRequest = { expanded = false },
+            ) {
+                val allItems = filters + null // null represents "Show all"
+                Column(
+                    modifier = Modifier
+                        .width(IntrinsicSize.Max)
+                        .background(JewelTheme.globalColors.panelBackground, shape)
+                        .border(1.dp, borderColor, shape)
+                        .padding(4.dp),
+                ) {
+                    allItems.forEachIndexed { idx, filter ->
+                        if (idx > 0) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 4.dp)
+                                    .height(1.dp)
+                                    .background(borderColor)
+                            )
+                        }
+                        Text(
+                            filter?.label ?: "Show all",
+                            modifier = Modifier
+                                .clickable {
+                                    onSelected(if (filter != null) filters.indexOf(filter) else null)
+                                    expanded = false
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp),
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -146,10 +266,25 @@ private fun TableTabTable(
     descriptor: TableTabDescriptor,
     state: HexViewStateHolder,
     searchBarLeading: (@Composable () -> Unit)? = null,
+    activeFilter: PredefinedFilter? = null,
 ) {
     if (descriptor.childrenProvider != null) {
-        TreeTableTabTable(descriptor, state)
+        TreeTableTabTable(descriptor, state, activeFilter)
         return
+    }
+
+    // Pre-filter row indices when a predefined filter is active.
+    val filteredIndices = remember(descriptor, activeFilter) {
+        if (activeFilter != null) {
+            (0 until descriptor.rowCount).filter { activeFilter.predicate(it) }
+        } else null
+    }
+    val effectiveRowCount = filteredIndices?.size ?: descriptor.rowCount
+    // Maps a filtered index back to the original row index.
+    val toOriginal: (Int) -> Int = if (filteredIndices != null) {
+        { filteredIndices[it] }
+    } else {
+        { it }
     }
 
     val textMeasurer = rememberTextMeasurer()
@@ -163,7 +298,7 @@ private fun TableTabTable(
         )
     }
 
-    val columns = remember(descriptor, columnLayouts) {
+    val columns = remember(descriptor, columnLayouts, filteredIndices) {
         descriptor.columns.mapIndexed { i, col ->
             TableColumn(
                 title = col.name,
@@ -171,7 +306,7 @@ private fun TableTabTable(
                 width = columnLayouts[i].width,
                 weight = columnLayouts[i].weight,
             ) { index ->
-                val cell = col.cellProvider(index)
+                val cell = col.cellProvider(toOriginal(index))
                 TableCellValue(cell.value, cell.representation, cell.tooltip)
             }
         }
@@ -181,23 +316,25 @@ private fun TableTabTable(
 
     Table(
         columns = columns,
-        dataCount = descriptor.rowCount,
+        dataCount = effectiveRowCount,
         onTableFocusChanged = { focused -> state.isTableFocused = focused },
         onRowContextMenu = { rowIndex ->
+            val origIndex = toOriginal(rowIndex)
             val staticItems = descriptor.contextMenuItems
-                .filter { item -> item.isVisible(rowIndex) }
+                .filter { item -> item.isVisible(origIndex) }
                 .map { item ->
-                    ContextMenuItem(item.labelProvider(rowIndex)) {
-                        item.action(rowIndex)
+                    ContextMenuItem(item.labelProvider(origIndex)) {
+                        item.action(origIndex)
                     }
                 }
-            val dynamicItems = descriptor.dynamicContextMenuProvider?.invoke(rowIndex)
+            val dynamicItems = descriptor.dynamicContextMenuProvider?.invoke(origIndex)
                 ?.map { entry -> ContextMenuItem(entry.label, entry.action) }
                 ?: emptyList()
             staticItems + dynamicItems
         },
         actionColumn = descriptor.rowAction?.let { rowAction -> { index ->
-            val tooltip = rowAction.tooltipProvider(index)
+            val origIndex = toOriginal(index)
+            val tooltip = rowAction.tooltipProvider(origIndex)
             if (tooltip != null) {
                 Tooltip(tooltip = { Text(tooltip) }) {
                     Icon(
@@ -208,7 +345,7 @@ private fun TableTabTable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
                         ) {
-                            rowAction.action(index)
+                            rowAction.action(origIndex)
                         },
                     )
                 }
@@ -218,15 +355,16 @@ private fun TableTabTable(
         defaultSortColumn = descriptor.defaultSortColumn ?: -1,
         defaultSortAscending = descriptor.defaultSortAscending,
         onRow = { rowIndex ->
+            val origIndex = toOriginal(rowIndex)
             val clickAction = descriptor.rowClickAction
             if (clickAction != null) {
-                clickAction(rowIndex)
+                clickAction(origIndex)
             } else {
                 val highlightProvider = descriptor.rowHighlightRangesProvider
                 if (highlightProvider != null) {
-                    applyHighlightRanges(highlightProvider(rowIndex), state)
+                    applyHighlightRanges(highlightProvider(origIndex), state)
                 } else {
-                    val selection = descriptor.rowSelectionProvider(rowIndex) ?: return@Table
+                    val selection = descriptor.rowSelectionProvider(origIndex) ?: return@Table
                     state.scrollHexViewTo(selection.offset, selection.size)
                 }
             }
@@ -264,6 +402,7 @@ private fun flattenTree(
     sortColumnIndex: Int = -1,
     sortAscending: Boolean = true,
     searchQuery: String = "",
+    activeFilter: PredefinedFilter? = null,
 ): List<FlatRow> {
     val result = mutableListOf<FlatRow>()
     val lq = searchQuery.lowercase()
@@ -315,6 +454,7 @@ private fun flattenTree(
     ) {
         val order = if (depth == 0) sortedIndices(rowCount, columns) else (0 until rowCount).toList()
         for (i in order) {
+            if (depth == 0 && activeFilter != null && !activeFilter.predicate(i)) continue
             if (isSearching && !subtreeMatches(i, columns, childrenProvider)) continue
             val path = parentPath + i
             val children = childrenProvider?.invoke(i)
@@ -345,13 +485,13 @@ private const val CHEVRON_PLACEHOLDER = "  "
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStateHolder) {
+private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStateHolder, activeFilter: PredefinedFilter? = null) {
     val expandedPaths = remember(descriptor) { mutableStateListOf<List<Int>>() }
     var sortColumnIndex by remember { mutableStateOf(descriptor.defaultSortColumn ?: -1) }
     var sortAscending by remember { mutableStateOf(descriptor.defaultSortAscending) }
     var searchQuery by remember(descriptor) { mutableStateOf("") }
-    val flatRows = remember(descriptor, expandedPaths.toList(), sortColumnIndex, sortAscending, searchQuery) {
-        flattenTree(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending, searchQuery)
+    val flatRows = remember(descriptor, expandedPaths.toList(), sortColumnIndex, sortAscending, searchQuery, activeFilter) {
+        flattenTree(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending, searchQuery, activeFilter)
     }
 
     val textMeasurer = rememberTextMeasurer()

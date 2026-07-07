@@ -587,6 +587,7 @@ private fun enrichArchiveMembersTab(
         searchPlaceholder = tab.searchPlaceholder,
         showIdColumn = tab.showIdColumn,
         priority = tab.priority,
+        predefinedFilters = tab.predefinedFilters,
     )
 }
 
@@ -625,4 +626,5 @@ private fun enrichZipEntriesTab(
     searchPlaceholder = tab.searchPlaceholder,
     showIdColumn = tab.showIdColumn,
     priority = tab.priority,
+    predefinedFilters = tab.predefinedFilters,
 )

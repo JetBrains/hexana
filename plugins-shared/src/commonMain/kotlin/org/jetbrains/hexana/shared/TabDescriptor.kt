@@ -122,6 +122,21 @@ class RowMenuEntry(
 )
 
 /**
+ * A named row filter that can be selected from a dropdown above the table.
+ *
+ * When [predefinedFilters] is non-empty on a [TableTabDescriptor], the UI
+ * layer renders a dropdown before the search bar. The first entry is
+ * pre-selected. A built-in "Show all" option is always appended by the UI.
+ *
+ * @param label display text in the dropdown
+ * @param predicate returns `true` for rows that should be visible
+ */
+class PredefinedFilter(
+    val label: String,
+    val predicate: (index: Int) -> Boolean,
+)
+
+/**
  * A UI-free description of a table-based tab.
  *
  * @param name the tab title shown in the tab strip
@@ -173,6 +188,7 @@ class TableTabDescriptor(
     val showIdColumn: Boolean = true,
     val priority: TabPriority = TabPriority.High,
     val rowHighlightRangesProvider: ((index: Int) -> List<HexRange>)? = null,
+    val predefinedFilters: List<PredefinedFilter> = emptyList(),
 ) {
     companion object {
         /** Sentinel value for [defaultSortColumn] that targets the implicit ID column. */
