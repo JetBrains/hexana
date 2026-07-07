@@ -1,26 +1,11 @@
-package org.jetbrains.hexana.ui
+package org.jetbrains.hexana.ui.panel
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,48 +15,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.intellij.openapi.util.Key
 import kotlinx.coroutines.flow.MutableStateFlow
-import org.jetbrains.hexana.javabytecode.JavaBytecodeInstruction
-import org.jetbrains.hexana.javabytecode.JavaBytecodeOperands
-import org.jetbrains.hexana.javabytecode.JavaClassAccess
-import org.jetbrains.hexana.javabytecode.JavaClassFile
-import org.jetbrains.hexana.javabytecode.JavaCodeAttribute
-import org.jetbrains.hexana.javabytecode.JavaCodeAttributeParser
-import org.jetbrains.hexana.javabytecode.JavaConstantPool
-import org.jetbrains.hexana.javabytecode.JavaConstantPoolEntry
-import org.jetbrains.hexana.javabytecode.JavaFieldAccess
-import org.jetbrains.hexana.javabytecode.JavaMethodAccess
+import org.jetbrains.hexana.javabytecode.*
+import org.jetbrains.hexana.ui.ClassFileNavTarget
+import org.jetbrains.hexana.ui.HexanaTheme
+import org.jetbrains.hexana.ui.SearchField
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.VerticalScrollbar
 
-/**
- * Navigation target handed to [ClassFileEditorView] when another view (today: the
- * JIT inline-frame click in `JitFileEditorView`) wants the bytecode editor to
- * scroll to a specific method and optionally a specific BCI inside it.
- *
- * Producers stash an instance in [CLASS_FILE_NAV_TARGET_KEY] on the
- * [com.intellij.openapi.vfs.VirtualFile] before opening, or push it into the
- * editor's `MutableStateFlow` if the editor is already open.
- */
-data class ClassFileNavTarget(
-    /** Method name as written in the class file's constant pool, e.g. `decode`, `<init>`. */
-    val methodName: String,
-    /** JVM method descriptor, e.g. `(Lfoo/Bar;I)V`. Matched byte-for-byte against `Code` rows. */
-    val methodDescriptor: String,
-    /** Optional bytecode index to scroll to within the matched method. */
-    val bci: Int? = null,
-)
-
-val CLASS_FILE_NAV_TARGET_KEY: Key<ClassFileNavTarget> = Key.create("hexana.classFile.navTarget")
-
 internal fun classFilePanels(
     classFile: JavaClassFile,
     navTargetFlow: MutableStateFlow<ClassFileNavTarget?>,
-): List<org.jetbrains.hexana.ui.panel.Panel> = listOf(
-    org.jetbrains.hexana.ui.panel.Panel("Header") { ClassHeaderTab(classFile) },
-    org.jetbrains.hexana.ui.panel.Panel("Methods") { ClassMethodsTab(classFile, navTargetFlow) },
+): List<Panel> = listOf(
+    Panel("Header") { ClassHeaderTab(classFile) },
+    Panel("Methods") { ClassMethodsTab(classFile, navTargetFlow) },
 )
 
 @Composable
