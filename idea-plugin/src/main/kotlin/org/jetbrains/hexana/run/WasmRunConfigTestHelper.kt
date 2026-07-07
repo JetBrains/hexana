@@ -128,7 +128,14 @@ object WasmRunConfigTestHelper {
         }
 
         if (!paused) {
-            return "TIMEOUT"
+            return debugTimeoutReport(
+                project = project,
+                sourceFilePath = sourceFilePath,
+                breakpointLine = breakpointLine,
+                wasmFilePath = wasmVirtualFile.path,
+                settings = settings,
+                timeoutMs = if (SystemInfo.isWindows) 200_000 else 60_000,
+            )
         }
 
         result.appendLine("PAUSED")
@@ -178,6 +185,50 @@ object WasmRunConfigTestHelper {
 
         result.appendLine("RESUMED")
         return result.toString().trim()
+    }
+
+    private fun debugTimeoutReport(
+        project: Project,
+        sourceFilePath: String,
+        breakpointLine: Int,
+        wasmFilePath: String,
+        settings: com.intellij.execution.RunnerAndConfigurationSettings,
+        timeoutMs: Long,
+    ): String {
+        val runManager = RunManager.getInstance(project)
+        val configuration = settings.configuration as? WasmRunConfiguration
+        val session = XDebuggerManager.getInstance(project).currentSession
+        val breakpoints = XDebuggerManager.getInstance(project).breakpointManager.allBreakpoints
+        val selected = runManager.selectedConfiguration
+        val matchingBreakpoints = breakpoints.count { breakpoint ->
+            breakpoint.type is WasmLineBreakpointType &&
+                breakpoint.sourcePosition?.file?.path == sourceFilePath &&
+                breakpoint.sourcePosition?.line == breakpointLine - 1
+        }
+
+        return buildString {
+            appendLine("TIMEOUT")
+            appendLine("timeoutMs=$timeoutMs")
+            appendLine("os=${SystemInfo.OS_NAME}")
+            appendLine("projectBasePath=${project.basePath.orEmpty()}")
+            appendLine("wasmFilePath=$wasmFilePath")
+            appendLine("sourceFilePath=$sourceFilePath")
+            appendLine("breakpointLine=$breakpointLine")
+            appendLine("breakpointsCount=${breakpoints.size}")
+            appendLine("matchingBreakpointsCount=$matchingBreakpoints")
+            appendLine("selectedConfigurationName=${selected?.name.orEmpty()}")
+            appendLine("selectedConfigurationIsExpected=${selected === settings}")
+            appendLine("expectedConfigurationName=${settings.name}")
+            appendLine("currentSessionClass=${session?.javaClass?.name.orEmpty()}")
+            appendLine("currentSessionSuspended=${session?.isSuspended ?: false}")
+            appendLine("configurationEngine=${configuration?.engine?.name.orEmpty()}")
+            appendLine("configurationWasmtimeOptions=${configuration?.wasmtimeOptions.orEmpty()}")
+            appendLine("configurationExportName=${configuration?.exportName.orEmpty()}")
+            appendLine("configurationProgramArguments=${configuration?.programArguments.orEmpty()}")
+            appendLine("configurationWasmtimePath=${configuration?.wasmtimePath.orEmpty()}")
+            appendLine("effectiveWasmtimePath=${WasmRuntimeSettings.getInstance().effectiveWasmtimePath()}")
+            appendLine("dependenciesCount=${configuration?.dependencies?.size ?: 0}")
+        }.trim()
     }
 
     @JvmStatic
