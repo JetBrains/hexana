@@ -374,6 +374,9 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
         defaultSortColumn = sortColumnIndex,
         defaultSortAscending = sortAscending,
         showIdColumn = false,
+        alwaysShowSearch = descriptor.alwaysShowSearch,
+        searchPlaceholder = descriptor.searchPlaceholder,
+        onTableFocusChanged = { focused -> state.isTableFocused = focused },
         onSortChanged = { colIdx, asc ->
             sortColumnIndex = colIdx
             sortAscending = asc
