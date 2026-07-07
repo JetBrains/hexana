@@ -34,7 +34,6 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
           content="default-src 'none';
                    style-src ${webview.cspSource} 'unsafe-inline';
                    script-src 'nonce-${nonce}' 'wasm-unsafe-eval' 'unsafe-eval';
-                   worker-src blob:;
                    font-src ${webview.cspSource};
                    connect-src ${webview.cspSource};
                    img-src ${webview.cspSource} data:;">

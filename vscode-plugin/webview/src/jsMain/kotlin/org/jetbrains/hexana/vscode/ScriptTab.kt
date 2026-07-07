@@ -288,91 +288,28 @@ private fun wrapUnknownObject(value: Any?): dynamic {
 }
 
 /**
- * Asynchronously materializes a lazily-wrapped JS object into a plain,
- * structured-cloneable object that can be transferred to a Web Worker.
- *
- * Unlike a synchronous deep-clone, this function yields to the browser
- * event loop every [YIELD_INTERVAL] items when processing arrays, so the
- * UI stays responsive during materialization of large datasets.
+ * Number of `print()` calls between automatic yields to the browser
+ * event loop. Keeping this small enough lets the polling coroutine in
+ * [ScriptTabContent] drain accumulated lines into the Compose state,
+ * so the first rows appear almost immediately while the rest of the
+ * script is still running.
  */
-private fun materializeForTransferAsync(wrapped: dynamic): Promise<dynamic> {
-    @Suppress("UNUSED_VARIABLE")
-    val input = wrapped
-    return js("""
-        (function() {
-            var YIELD_INTERVAL = 500;
-            function yieldToBrowser() {
-                return new Promise(function(r) { setTimeout(r, 0); });
-            }
-            function deepClone(v) {
-                if (v == null || typeof v !== 'object') return Promise.resolve(v);
-                if (Array.isArray(v)) {
-                    return cloneArray(v);
-                }
-                return cloneObject(v);
-            }
-            function cloneArray(arr) {
-                var result = new Array(arr.length);
-                var i = 0;
-                function next() {
-                    var end = Math.min(i + YIELD_INTERVAL, arr.length);
-                    var chain = Promise.resolve();
-                    while (i < end) {
-                        (function(idx) {
-                            chain = chain.then(function() {
-                                return deepClone(arr[idx]).then(function(val) { result[idx] = val; });
-                            });
-                        })(i);
-                        i++;
-                    }
-                    if (i < arr.length) {
-                        return chain.then(yieldToBrowser).then(next);
-                    }
-                    return chain.then(function() { return result; });
-                }
-                return next();
-            }
-            function cloneObject(v) {
-                var result = {};
-                // Collect all property keys (own enumerable + getter-defined)
-                var allKeys = {};
-                var keys = Object.keys(v);
-                for (var i = 0; i < keys.length; i++) allKeys[keys[i]] = true;
-                var descs = Object.getOwnPropertyDescriptors(v);
-                var dkeys = Object.keys(descs);
-                for (var i = 0; i < dkeys.length; i++) {
-                    if (descs[dkeys[i]].get) allKeys[dkeys[i]] = true;
-                }
-                var propNames = Object.keys(allKeys);
-                var chain = Promise.resolve();
-                for (var i = 0; i < propNames.length; i++) {
-                    (function(k) {
-                        chain = chain.then(function() {
-                            try {
-                                var val = v[k];
-                                return deepClone(val).then(function(cloned) { result[k] = cloned; });
-                            } catch(e) {
-                                result[k] = null;
-                                return Promise.resolve();
-                            }
-                        });
-                    })(propNames[i]);
-                }
-                return chain.then(function() { return result; });
-            }
-            return deepClone(input);
-        })()
-    """).unsafeCast<Promise<dynamic>>()
-}
+private const val YIELD_EVERY = 100
 
 /**
  * Executes a JavaScript script string with `binary` (BinaryProvider) and
- * `print` (line collector) bindings in a Web Worker so the UI thread is
- * never blocked.
+ * `print` (line collector) bindings on the main thread.
  *
- * The wrapped binary is materialized asynchronously (yielding to the event
- * loop for large arrays) and then transferred to the worker.
- * The worker posts `print` lines back via `postMessage`.
+ * The lazily-wrapped binary object is passed directly — no upfront
+ * materialization — so only the properties the script accesses are
+ * resolved, and the first output lines appear almost immediately.
+ *
+ * The user script is wrapped in a JS generator function where every
+ * `print(...)` call is replaced with `yield print(...)`. An async
+ * driver loop steps through the generator, yielding to the browser
+ * event loop every [YIELD_EVERY] steps via `setTimeout(0)`. This
+ * lets the polling coroutine drain accumulated lines into the UI
+ * while the script is still running.
  *
  * Returns a [Promise] that resolves to `null` on success or an error message.
  */
@@ -383,64 +320,59 @@ private fun executeScriptAsync(
 ): Promise<String?> {
     return Promise { resolve, _ ->
         val wrappedBinary = wrapForJs(provider)
-
-        materializeForTransferAsync(wrappedBinary).then<dynamic> { plainBinary: dynamic ->
-            // Build a worker from a Blob URL
-            @Suppress("UNUSED_VARIABLE")
-            val workerCode = """
-                self.onmessage = function(e) {
-                    var binary = e.data.binary;
-                    var scriptBody = e.data.script;
-                    var lines = [];
-                    function print(text) {
-                        lines.push(String(text));
-                        if (lines.length >= 100) {
-                            self.postMessage({ type: 'lines', lines: lines });
-                            lines = [];
-                        }
-                    }
-                    try {
-                        var fn = new Function('binary', 'print', scriptBody);
-                        fn(binary, print);
-                        if (lines.length > 0) self.postMessage({ type: 'lines', lines: lines });
-                        self.postMessage({ type: 'done', error: null });
-                    } catch(err) {
-                        if (lines.length > 0) self.postMessage({ type: 'lines', lines: lines });
-                        self.postMessage({ type: 'done', error: err.message || 'Script execution failed' });
-                    }
-                };
-            """
-            val worker = js("new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })))")
-
-            worker.onmessage = { event: dynamic ->
-                val data = event.data
-                val type = data.type as String
-                if (type == "lines") {
-                    val arr = data.lines
-                    val len = arr.length as Int
-                    for (i in 0 until len) {
-                        onLine(arr[i] as String)
-                    }
-                } else if (type == "done") {
-                    val err = data.error
-                    resolve(err?.toString())
-                    worker.terminate()
-                }
-                Unit
-            }
-
-            worker.onerror = { event: dynamic ->
-                resolve(event.message?.toString() ?: "Worker error")
-                worker.terminate()
-                Unit
-            }
-
-            @Suppress("UNUSED_VARIABLE")
-            val scriptBody = scriptContent
-            @Suppress("UNUSED_VARIABLE")
-            val binaryData = plainBinary
-            js("worker.postMessage({ binary: binaryData, script: scriptBody })")
+        val printFn: (dynamic) -> Unit = { text ->
+            onLine(text.toString())
         }
+
+        // Transform print(...) calls into yield print(...) so the
+        // generator pauses after each print, giving the async driver
+        // a chance to yield to the event loop periodically.
+        val generatorBody = scriptContent.replace(Regex("""(?<!\w)print\s*\("""), "yield print(")
+
+        @Suppress("UNUSED_VARIABLE")
+        val yieldEvery = YIELD_EVERY
+
+        @Suppress("UNUSED_VARIABLE")
+        val genBody = generatorBody
+
+        @Suppress("UNUSED_VARIABLE")
+        val binary = wrappedBinary
+
+        @Suppress("UNUSED_VARIABLE")
+        val print = printFn
+
+        // Create a GeneratorFunction, run it, and drive it from an
+        // async loop that yields to the event loop every YIELD_EVERY steps.
+        js("""
+            (function() {
+                var GeneratorFunction = Object.getPrototypeOf(function*(){}).constructor;
+                var gen;
+                try {
+                    gen = new GeneratorFunction('binary', 'print', genBody);
+                } catch(e) {
+                    resolve(e.message || 'Script compilation failed');
+                    return;
+                }
+                var iter = gen(binary, print);
+                var count = 0;
+                function step() {
+                    try {
+                        while (true) {
+                            var r = iter.next();
+                            if (r.done) { resolve(null); return; }
+                            count++;
+                            if (count % yieldEvery === 0) {
+                                setTimeout(step, 0);
+                                return;
+                            }
+                        }
+                    } catch(e) {
+                        resolve(e.message || 'Script execution failed');
+                    }
+                }
+                setTimeout(step, 0);
+            })()
+        """)
     }
 }
 
