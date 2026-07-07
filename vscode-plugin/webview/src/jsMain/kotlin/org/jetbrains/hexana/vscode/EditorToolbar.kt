@@ -289,6 +289,15 @@ fun EditorToolbar(
                 ProposalBadges(proposals)
             }
         }
+
+        // Spacer to push Share Feedback to the right
+        Div({
+            style {
+                property("flex", "1")
+            }
+        }) {}
+
+        ShareFeedbackButton()
     }
 }
 
@@ -446,5 +455,112 @@ private fun EditToolbarButton(
         }
     }) {
         Text(label)
+    }
+}
+
+private const val GITHUB_ISSUES_URL = "https://github.com/JetBrains/hexana/issues"
+private const val VSCODE_MARKETPLACE_REVIEW_URL =
+    "https://marketplace.visualstudio.com/items?itemName=JetBrains.hexana-wasm&ssr=false#review-details"
+private const val OPENVSX_REVIEW_URL =
+    "https://open-vsx.org/extension/JetBrains/hexana-wasm/reviews"
+
+/**
+ * "Share Feedback" button with a dropdown offering links to report a bug,
+ * rate on VS Code Marketplace, or rate on Open VSX.
+ */
+@Composable
+private fun ShareFeedbackButton() {
+    var dropdownVisible by remember { mutableStateOf(false) }
+
+    Div({
+        style {
+            property("position", "relative")
+            property("display", "inline-flex")
+            property("flex-shrink", "0")
+        }
+    }) {
+        Span({
+            classes("hexana-share-feedback-btn")
+            onClick { event ->
+                event.stopPropagation()
+                dropdownVisible = !dropdownVisible
+            }
+        }) {
+            Text("Share Feedback")
+        }
+
+        if (dropdownVisible) {
+            // Invisible overlay to close dropdown when clicking outside
+            Div({
+                style {
+                    property("position", "fixed")
+                    property("top", "0")
+                    property("left", "0")
+                    property("right", "0")
+                    property("bottom", "0")
+                    property("z-index", "999")
+                }
+                onClick { dropdownVisible = false }
+            }) {}
+
+            Div({
+                classes("hexana-share-feedback-dropdown")
+            }) {
+                ShareFeedbackDropdownItem(
+                    title = "Report a bug",
+                    subtitle = "Open a GitHub issue with reproduction details",
+                ) {
+                    postOpenUrlToHost(GITHUB_ISSUES_URL)
+                    dropdownVisible = false
+                }
+                ShareFeedbackDropdownItem(
+                    title = "Rate on VS Code Marketplace",
+                    subtitle = "Leave a review on the VS Code Marketplace",
+                ) {
+                    postOpenUrlToHost(VSCODE_MARKETPLACE_REVIEW_URL)
+                    dropdownVisible = false
+                }
+                ShareFeedbackDropdownItem(
+                    title = "Rate on Open VSX",
+                    subtitle = "Leave a review on the Open VSX Registry",
+                ) {
+                    postOpenUrlToHost(OPENVSX_REVIEW_URL)
+                    dropdownVisible = false
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShareFeedbackDropdownItem(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Div({
+        classes("hexana-share-feedback-item")
+        onClick { event ->
+            event.stopPropagation()
+            onClick()
+        }
+    }) {
+        Div({
+            style {
+                property("font-size", "12px")
+                property("font-weight", "500")
+            }
+        }) {
+            Text(title)
+        }
+        Div({
+            style {
+                property("font-size", "11px")
+                property("opacity", "0.7")
+                property("margin-top", "2px")
+            }
+        }) {
+            Text(subtitle)
+        }
     }
 }

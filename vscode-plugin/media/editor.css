@@ -676,3 +676,66 @@ html, body {
 .hexana-tab-content::-webkit-scrollbar-thumb:active {
     background: var(--vscode-scrollbarSlider-activeBackground, rgba(191, 191, 191, 0.4));
 }
+
+/* Share Feedback button */
+.hexana-share-feedback-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    border: 1px solid var(--vscode-button-secondaryBorder, rgba(255, 255, 255, 0.15));
+    background: var(--vscode-button-secondaryBackground, rgba(255, 255, 255, 0.08));
+    color: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground, #ccc));
+    transition: background 0.15s, border-color 0.15s;
+}
+.hexana-share-feedback-btn:hover {
+    background: var(--vscode-button-secondaryHoverBackground, rgba(255, 255, 255, 0.16));
+    border-color: var(--vscode-focusBorder, rgba(255, 255, 255, 0.3));
+}
+.vscode-light .hexana-share-feedback-btn {
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--vscode-editor-foreground, #333);
+}
+.vscode-light .hexana-share-feedback-btn:hover {
+    background: rgba(0, 0, 0, 0.12);
+    border-color: var(--vscode-focusBorder, rgba(0, 0, 0, 0.3));
+}
+
+/* Share Feedback dropdown */
+.hexana-share-feedback-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 1000;
+    margin-top: 4px;
+    min-width: 260px;
+    padding: 4px;
+    border-radius: 6px;
+    background: var(--vscode-menu-background, var(--vscode-editorHoverWidget-background, #2d2d30));
+    border: 1px solid var(--vscode-menu-border, var(--vscode-editorHoverWidget-border, #454545));
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+.vscode-light .hexana-share-feedback-dropdown {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* Share Feedback dropdown item */
+.hexana-share-feedback-item {
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--vscode-menu-foreground, var(--vscode-editor-foreground, #ccc));
+}
+.hexana-share-feedback-item:hover {
+    background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.08)));
+    color: var(--vscode-menu-selectionForeground, var(--vscode-editor-foreground, #fff));
+}
+.vscode-light .hexana-share-feedback-item:hover {
+    background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground, rgba(0, 0, 0, 0.06)));
+}

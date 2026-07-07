@@ -218,6 +218,16 @@ fun postSaveCopyToHost(outputName: String, bytes: ByteArray) {
 }
 
 /**
+ * Asks the extension host to open an external URL in the user's default browser.
+ */
+fun postOpenUrlToHost(url: String) {
+    val msg = js("{}")
+    msg.type = "open-url"
+    msg.url = url
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to open a nested module in a new editor tab.
  *
  * [moduleIndex] is the zero-based index of the module inside the component,

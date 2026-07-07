@@ -211,6 +211,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 this.overwriteFile(document, message);
             } else if (message.type === "save-copy") {
                 this.saveCopy(document, message);
+            } else if (message.type === "open-url") {
+                const url = message.url as string;
+                if (url) {
+                    vscode.env.openExternal(vscode.Uri.parse(url));
+                }
             } else if (message.type === "open-dts") {
                 this.openDtsReference();
             } else if (message.type === "pick-script-file") {
