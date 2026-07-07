@@ -83,7 +83,8 @@ class HexanaMcpServerSchemaTest {
             ),
             summarizeModule.inputModes,
         )
-        assertEquals(setOf(HexanaCliOutputFormat.JSON), summarizeModule.outputFormats)
+        assertEquals(setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.PRETTY), summarizeModule.outputFormats)
+        assertEquals(HexanaCliOutputFormat.PRETTY, summarizeModule.defaultOutputFormat)
         assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, summarizeModule.defaultOutputPolicy)
 
         assertFalse(tools.any { it.commandName == "query-artifacts" })

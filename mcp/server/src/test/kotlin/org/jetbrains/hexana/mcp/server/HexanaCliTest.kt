@@ -152,14 +152,30 @@ class HexanaCliTest {
     }
 
     @Test
-    fun parseAcceptsSummarizeModuleJsonCommand() {
-        val command = cli().parse(arrayOf("summarize-module", "app.wasm", "--format", "json"))
+    fun parseUsesGeneratedDefaultFormatForSummarizeModule() {
+        val command = cli().parse(arrayOf("summarize-module", "app.wasm"))
 
         assertIs<HexanaCommand.SummarizeModule>(command)
         assertEquals("app.wasm", command.path)
-        assertEquals(HexanaCliOutputFormat.JSON, command.format)
+        assertEquals(HexanaCliOutputFormat.PRETTY, command.format)
         assertEquals(emptyList(), command.allowedRoots)
         assertEquals(HexanaAnalysisLimits.MAX_FILE_WASM_BYTES, command.resourceLimits.maxFileWasmBytes)
+    }
+
+    @Test
+    fun parseAcceptsExplicitSummarizeModuleJsonFormat() {
+        val command = cli().parse(arrayOf("summarize-module", "app.wasm", "--format", "json"))
+
+        assertIs<HexanaCommand.SummarizeModule>(command)
+        assertEquals(HexanaCliOutputFormat.JSON, command.format)
+    }
+
+    @Test
+    fun parseAcceptsExplicitSummarizeModulePrettyFormat() {
+        val command = cli().parse(arrayOf("summarize-module", "app.wasm", "--format", "pretty"))
+
+        assertIs<HexanaCommand.SummarizeModule>(command)
+        assertEquals(HexanaCliOutputFormat.PRETTY, command.format)
     }
 
     @Test
@@ -180,13 +196,14 @@ class HexanaCliTest {
     }
 
     @Test
-    fun parseRejectsUnsupportedSummarizeModuleFormat() {
+    fun parseRejectsSummarizeModuleFormatNotSupportedByGeneratedMetadata() {
         val error = assertFailsWith<CliktError> {
-            cli().parse(arrayOf("summarize-module", "app.wasm", "--format", "pretty"))
+            cli().parse(arrayOf("summarize-module", "app.wasm", "--format", "raw"))
         }
 
         assertTrue(error.message.orEmpty().contains("Unsupported summarize-module format"))
-        assertTrue(error.message.orEmpty().contains("Expected json"))
+        assertTrue(error.message.orEmpty().contains("json"))
+        assertTrue(error.message.orEmpty().contains("pretty"))
     }
 
     @Test

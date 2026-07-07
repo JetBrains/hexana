@@ -186,6 +186,7 @@ private fun buildCliToolSpecClass(): TypeSpec {
         .addParameter(ParameterSpec.builder("groups", setOfToolGroup).build())
         .addParameter(ParameterSpec.builder("inputModes", setOfInputMode).build())
         .addParameter(ParameterSpec.builder("outputFormats", setOfOutputFormat).build())
+        .addParameter(ParameterSpec.builder("defaultOutputFormat", CLI_OUTPUT_FORMAT).build())
         .addParameter(ParameterSpec.builder("defaultOutputPolicy", CLI_OUTPUT_POLICY).build())
         .build()
 
@@ -204,6 +205,7 @@ private fun buildCliToolSpecClass(): TypeSpec {
         .addProperty(property("groups", setOfToolGroup))
         .addProperty(property("inputModes", setOfInputMode))
         .addProperty(property("outputFormats", setOfOutputFormat))
+        .addProperty(property("defaultOutputFormat", CLI_OUTPUT_FORMAT))
         .addProperty(property("defaultOutputPolicy", CLI_OUTPUT_POLICY))
         .build()
 }
@@ -242,6 +244,13 @@ private fun cliToolSpecInitializer(spec: ToolSpec): CodeBlock {
     require(outputFormats.isNotEmpty()) {
         "Visible CLI tool '${spec.name}' command '$commandName' has no supported CLI output format."
     }
+    val defaultOutput = requireNotNull(cli.defaultOutput) {
+        "Visible CLI tool '${spec.name}' command '$commandName' has no default CLI output format."
+    }
+    require(defaultOutput in outputFormats) {
+        "Visible CLI tool '${spec.name}' command '$commandName' default output $defaultOutput " +
+            "is not in supported CLI output formats $outputFormats."
+    }
 
     return CodeBlock.builder()
         .add("%T(\n", CLI_TOOL_SPEC)
@@ -251,6 +260,7 @@ private fun cliToolSpecInitializer(spec: ToolSpec): CodeBlock {
         .add("  groups = %L,\n", enumSetInitializer(CLI_TOOL_GROUP, cli.groups.map { it.generatedCliGroupName() }))
         .add("  inputModes = %L,\n", enumSetInitializer(CLI_INPUT_MODE, spec.input.inputCapabilities.map { it.generatedCliInputModeName() }))
         .add("  outputFormats = %L,\n", enumSetInitializer(CLI_OUTPUT_FORMAT, outputFormats.map { it.generatedCliOutputFormatName() }))
+        .add("  defaultOutputFormat = %T.%L,\n", CLI_OUTPUT_FORMAT, defaultOutput.generatedCliOutputFormatName())
         .add("  defaultOutputPolicy = %T.%L,\n", CLI_OUTPUT_POLICY, outputPolicy.generatedCliOutputPolicyName())
         .add(")")
         .build()

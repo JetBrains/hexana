@@ -45,6 +45,7 @@ class HexanaToolCompatibilityTest {
             appendLine("$prefix.cli.groups=${tool.surfaces.cli.groups.joinToString(",")}")
             appendLine("$prefix.cli.outputPolicy=${tool.surfaces.cli.outputPolicy?.name.orEmpty()}")
             appendLine("$prefix.cli.outputOverride=${tool.surfaces.cli.outputOverride?.name.orEmpty()}")
+            appendLine("$prefix.cli.defaultOutput=${tool.surfaces.cli.defaultOutput?.name.orEmpty()}")
             appendLine("$prefix.handlerFqn=${tool.handlerFqn}")
             appendClass("$prefix.input", tool.input)
             appendClass("$prefix.output", tool.output)
@@ -166,6 +167,6 @@ class HexanaToolCompatibilityTest {
     }
 
     private companion object {
-        const val EXPECTED_COMPATIBILITY_FINGERPRINT = "5aa2c06fede5097d744489a9c5b6e0e4876f5f0fdf1c6241cf4b18244709e4a9"
+        const val EXPECTED_COMPATIBILITY_FINGERPRINT = "82345e1e2441c7d7491db3c04a5ffe83e0bd56b16bf59c4fc7afb51dde686965"
     }
 }

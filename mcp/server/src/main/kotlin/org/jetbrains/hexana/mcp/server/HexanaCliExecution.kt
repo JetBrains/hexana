@@ -6,16 +6,17 @@ import org.jetbrains.hexana.mcp.HexanaJson
 import org.jetbrains.hexana.mcp.WasmInput
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 
-internal fun renderSummarizeModuleJson(
+internal fun renderSummarizeModuleOutput(
     command: HexanaCommand.SummarizeModule,
     analysisService: HexanaAnalysisService = createStandaloneHexanaAnalysisService(
         command.allowedRoots,
         command.resourceLimits
     ),
 ): String {
-    require(command.format == HexanaCliOutputFormat.JSON) {
-        "summarize-module currently supports only json output"
-    }
     val result = analysisService.summarizeModule(WasmInput.FilePath(command.path))
-    return HexanaJson.compact.encodeToString(SummarizeModuleResult.serializer(), result)
+    return when (command.format) {
+        HexanaCliOutputFormat.JSON -> HexanaJson.compact.encodeToString(SummarizeModuleResult.serializer(), result)
+        HexanaCliOutputFormat.PRETTY -> renderSummarizeModulePretty(result)
+        HexanaCliOutputFormat.RAW -> error("summarize-module does not support raw output")
+    }
 }

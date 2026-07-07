@@ -419,6 +419,7 @@ data class CliSurfaceSpec(
     val groups: Set<ToolGroup>,
     val outputPolicy: ToolOutputPolicy?,
     val outputOverride: OutputConversionCapability? = null,
+    val defaultOutput: OutputConversionCapability? = null,
 ) {
     init {
         if (visible) {
@@ -428,11 +429,13 @@ data class CliSurfaceSpec(
             }
             require(groups.isNotEmpty()) { "Visible CLI surface '$commandName' must declare at least one group." }
             require(outputPolicy != null) { "Visible CLI surface '$commandName' must declare an output policy." }
+            require(defaultOutput != null) { "Visible CLI surface '$commandName' must declare a default output." }
         } else {
             require(commandName == null) { "Hidden CLI surface must not declare a command name." }
             require(groups.isEmpty()) { "Hidden CLI surface must not declare groups." }
             require(outputPolicy == null) { "Hidden CLI surface must not declare an output policy." }
             require(outputOverride == null) { "Hidden CLI surface must not declare an output override." }
+            require(defaultOutput == null) { "Hidden CLI surface must not declare a default output." }
         }
     }
 
@@ -443,12 +446,14 @@ data class CliSurfaceSpec(
             outputPolicy: ToolOutputPolicy,
             vararg additionalGroups: ToolGroup,
             outputOverride: OutputConversionCapability? = null,
+            defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
         ): CliSurfaceSpec = CliSurfaceSpec(
             visible = true,
             commandName = commandName,
             groups = setOf(group, *additionalGroups),
             outputPolicy = outputPolicy,
             outputOverride = outputOverride,
+            defaultOutput = defaultOutput,
         )
 
         fun hidden(): CliSurfaceSpec = CliSurfaceSpec(
@@ -457,6 +462,7 @@ data class CliSurfaceSpec(
             groups = emptySet(),
             outputPolicy = null,
             outputOverride = null,
+            defaultOutput = null,
         )
     }
 }
@@ -488,9 +494,17 @@ fun productionCliSurface(
     outputPolicy: ToolOutputPolicy,
     vararg additionalGroups: ToolGroup,
     outputOverride: OutputConversionCapability? = null,
+    defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
 ): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.production(),
-    cli = CliSurfaceSpec.visible(commandName, group, outputPolicy, *additionalGroups, outputOverride = outputOverride),
+    cli = CliSurfaceSpec.visible(
+        commandName,
+        group,
+        outputPolicy,
+        *additionalGroups,
+        outputOverride = outputOverride,
+        defaultOutput = defaultOutput,
+    ),
     publicMcpb = PublicMcpbSurfaceSpec.excluded(),
 )
 
@@ -500,9 +514,17 @@ fun publicMcpbProductionCliSurface(
     outputPolicy: ToolOutputPolicy,
     vararg additionalGroups: ToolGroup,
     outputOverride: OutputConversionCapability? = null,
+    defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
 ): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.production(),
-    cli = CliSurfaceSpec.visible(commandName, group, outputPolicy, *additionalGroups, outputOverride = outputOverride),
+    cli = CliSurfaceSpec.visible(
+        commandName,
+        group,
+        outputPolicy,
+        *additionalGroups,
+        outputOverride = outputOverride,
+        defaultOutput = defaultOutput,
+    ),
     publicMcpb = PublicMcpbSurfaceSpec.included(),
 )
 
@@ -600,7 +622,7 @@ class ToolBuilder internal constructor(private val name: String) {
             "Tool '$name' handlerFqn must be a fully-qualified function name (`pkg.subpkg.fn`), got `$resolvedHandler`."
         }
         validateInputPattern(name, resolvedInput, resolvedInputPattern)
-        validateCliOutputOverride(name, resolvedOutput, resolvedSurfaces.cli)
+        validateCliOutputSelection(name, resolvedOutput, resolvedSurfaces.cli)
         return ToolSpec(
             name = name,
             summary = resolvedSummary.trim(),
@@ -614,11 +636,13 @@ class ToolBuilder internal constructor(private val name: String) {
     }
 }
 
-private fun validateCliOutputOverride(toolName: String, output: ClassSpec, cli: CliSurfaceSpec) {
-    val outputOverride = cli.outputOverride ?: return
-    require(outputOverride in output.outputCapabilities) {
-        "Tool '$toolName' CLI output override $outputOverride is not declared by output class " +
-            "`${output.name}`. Declared output capabilities: ${output.outputCapabilities}."
+private fun validateCliOutputSelection(toolName: String, output: ClassSpec, cli: CliSurfaceSpec) {
+    val selectedOutputs = listOfNotNull(cli.outputOverride, cli.defaultOutput)
+    selectedOutputs.forEach { selectedOutput ->
+        require(selectedOutput in output.outputCapabilities) {
+            "Tool '$toolName' CLI output $selectedOutput is not declared by output class " +
+                "`${output.name}`. Declared output capabilities: ${output.outputCapabilities}."
+        }
     }
 }
 

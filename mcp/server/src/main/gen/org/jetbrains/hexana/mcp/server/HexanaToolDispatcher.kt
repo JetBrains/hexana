@@ -170,6 +170,7 @@ public data class HexanaCliToolSpec(
   public val groups: Set<HexanaCliToolGroup>,
   public val inputModes: Set<HexanaCliInputMode>,
   public val outputFormats: Set<HexanaCliOutputFormat>,
+  public val defaultOutputFormat: HexanaCliOutputFormat,
   public val defaultOutputPolicy: HexanaCliOutputPolicy,
 )
 
@@ -185,6 +186,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.BINARY),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -193,7 +195,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types.",
           groups = setOf(HexanaCliToolGroup.MODULE),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
-          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.PRETTY),
+          defaultOutputFormat = HexanaCliOutputFormat.PRETTY,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -203,6 +206,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.MODULE),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -212,6 +216,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.ENTRYPOINT_POLICY),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -221,6 +226,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.RUNTIME),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -230,6 +236,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.RUNTIME),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -239,6 +246,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.RUNTIME),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -248,6 +256,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.COMPONENT),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -257,6 +266,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.ARTIFACT_QUERY),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -266,6 +276,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.MEMORY),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -275,6 +286,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.GLOBAL),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -284,6 +296,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -293,6 +306,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.IMPORT),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -302,6 +316,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.EXPORT),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -311,6 +326,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.EXPORT),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -320,6 +336,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.EXPORT),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -329,6 +346,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -338,6 +356,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -347,6 +366,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -356,6 +376,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -365,6 +386,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -374,6 +396,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -383,6 +406,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -392,6 +416,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -401,6 +426,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.MEMORY),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -410,6 +436,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.GLOBAL),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -419,6 +446,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.ELEMENT),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -428,6 +456,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.DATA),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
         HexanaCliToolSpec(
@@ -437,6 +466,7 @@ public object HexanaGeneratedCliToolRegistry {
           groups = setOf(HexanaCliToolGroup.DATA),
           inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
         ),
       )

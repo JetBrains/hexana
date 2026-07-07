@@ -171,13 +171,30 @@ class HexanaToolsTest {
                 assertTrue(cli.groups.isNotEmpty(), "missing CLI group for ${spec.name}")
                 assertEquals(ToolOutputPolicy.ToolDefined, cli.outputPolicy, "bad output policy for ${spec.name}")
                 assertEquals(null, cli.outputOverride, "unexpected output override for ${spec.name}")
+                assertNotNull(cli.defaultOutput, "missing default output for ${spec.name}")
             } else {
                 assertEquals(null, cli.commandName, "hidden CLI surface has command for ${spec.name}")
                 assertTrue(cli.groups.isEmpty(), "hidden CLI surface has groups for ${spec.name}")
                 assertEquals(null, cli.outputPolicy, "hidden CLI surface has output policy for ${spec.name}")
                 assertEquals(null, cli.outputOverride, "hidden CLI surface has output override for ${spec.name}")
+                assertEquals(null, cli.defaultOutput, "hidden CLI surface has default output for ${spec.name}")
             }
         }
+    }
+
+    @Test
+    fun `summarize_module declares pretty CLI output default`() {
+        val summarize = HexanaTools.single { it.name == "summarize_module" }
+
+        assertEquals(
+            setOf(
+                OutputConversionCapability.SemanticJson,
+                OutputConversionCapability.McpWrapper,
+                OutputConversionCapability.PrettyPlaceholder,
+            ),
+            summarize.output.outputCapabilities,
+        )
+        assertEquals(OutputConversionCapability.PrettyPlaceholder, summarize.surfaces.cli.defaultOutput)
     }
 
     @Test
@@ -271,7 +288,7 @@ class HexanaToolsTest {
             }
         }
 
-        assertTrue(error.message.orEmpty().contains("CLI output override RawBytesPlaceholder is not declared"))
+        assertTrue(error.message.orEmpty().contains("CLI output RawBytesPlaceholder is not declared"))
     }
 
     @Test
@@ -287,6 +304,34 @@ class HexanaToolsTest {
         }
 
         assertTrue(error.message.orEmpty().contains("Hidden CLI surface must not declare an output override"))
+    }
+
+    @Test
+    fun `visible CLI surface default output is validated against output capabilities`() {
+        val semanticOnlyOutput = class_("SemanticOnlyResult", kotlinPackage = "org.jetbrains.hexana.mcp.model.test") {
+            outputCapabilities(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper)
+            string("value").describe("Result value.")
+        }
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("unsupported_default_output") {
+                    summary = "Unsupported default output."
+                    input = BinaryInputClass
+                    inputPattern = ToolInputPattern.BinaryOnly
+                    output = semanticOnlyOutput
+                    surfaces = productionCliSurface(
+                        "unsupported-default-output",
+                        ToolGroup.Binary,
+                        ToolOutputPolicy.ToolDefined,
+                        defaultOutput = OutputConversionCapability.PrettyPlaceholder,
+                    )
+                    handlerFqn = queryArtifacts.handlerFqn
+                }
+            }
+        }
+
+        assertTrue(error.message.orEmpty().contains("CLI output PrettyPlaceholder is not declared"))
     }
 
     @Test
@@ -542,8 +587,17 @@ class HexanaToolsTest {
     @Test
     fun `existing catalog outputs declare minimal semantic JSON and MCP capabilities`() {
         HexanaTools.forEach { spec ->
+            val expectedCapabilities = if (spec.name == "summarize_module") {
+                setOf(
+                    OutputConversionCapability.SemanticJson,
+                    OutputConversionCapability.McpWrapper,
+                    OutputConversionCapability.PrettyPlaceholder,
+                )
+            } else {
+                setOf(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper)
+            }
             assertEquals(
-                setOf(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper),
+                expectedCapabilities,
                 spec.output.outputCapabilities,
                 "bad output capabilities for ${spec.name}",
             )

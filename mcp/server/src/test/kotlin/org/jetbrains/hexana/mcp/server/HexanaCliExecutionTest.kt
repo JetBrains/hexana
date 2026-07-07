@@ -30,8 +30,11 @@ class HexanaCliExecutionTest {
             """.trimIndent()
         )
 
-        val output = renderSummarizeModuleJson(
-            summarizeModuleCommand(path = wasm.toString())
+        val output = renderSummarizeModuleOutput(
+            summarizeModuleCommand(
+                path = wasm.toString(),
+                format = HexanaCliOutputFormat.JSON,
+            )
         )
 
         val json = Json.parseToJsonElement(output).jsonObject
@@ -45,15 +48,56 @@ class HexanaCliExecutionTest {
     }
 
     @Test
+    fun renderSummarizeModulePrettyReturnsDeterministicPlainText() {
+        val wasm = createWasmFile(
+            "pretty-summary.wasm",
+            """
+            (module
+              (import "env" "host" (func))
+              (memory 1)
+              (global i32 (i32.const 0))
+              (func (export "main")))
+            """.trimIndent()
+        )
+
+        val output = renderSummarizeModuleOutput(
+            summarizeModuleCommand(
+                path = wasm.toString(),
+                format = HexanaCliOutputFormat.PRETTY,
+            )
+        )
+
+        assertEquals(
+            """
+            WebAssembly module summary
+            Functions: 1
+            Exports: 1
+            Memories: 1
+            Globals: 1
+            Tables: 0
+            Types: 1
+            Imports:
+              Functions: 1
+              Memories: 0
+              Tables: 0
+              Globals: 0
+            Module size: 61 bytes
+            """.trimIndent(),
+            output,
+        )
+    }
+
+    @Test
     fun renderSummarizeModuleJsonRejectsFileOutsideAllowedRoot() {
         val wasm = createWasmFile("outside.wasm", "(module)")
         val allowedRoot = temporaryFolder.newFolder("allowed").toPath()
 
         val error = assertFailsWith<HexanaAnalysisException> {
-            renderSummarizeModuleJson(
+            renderSummarizeModuleOutput(
                 summarizeModuleCommand(
                     path = wasm.toString(),
-                    allowedRoots = listOf(allowedRoot.toString())
+                    format = HexanaCliOutputFormat.JSON,
+                    allowedRoots = listOf(allowedRoot.toString()),
                 )
             )
         }
@@ -63,10 +107,11 @@ class HexanaCliExecutionTest {
 
     private fun summarizeModuleCommand(
         path: String,
+        format: HexanaCliOutputFormat,
         allowedRoots: List<String> = emptyList(),
     ) = HexanaCommand.SummarizeModule(
         path = path,
-        format = HexanaCliOutputFormat.JSON,
+        format = format,
         allowedRoots = allowedRoots,
         resourceLimits = HexanaResourceLimits(),
     )

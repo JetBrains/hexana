@@ -244,8 +244,10 @@ class HexanaCli(
 
         private val format by option(
             "--format",
-            help = "Output format. Only json is supported for this command."
-        ).convert("json") { parseSummarizeModuleFormat(it) }.default(HexanaCliOutputFormat.JSON)
+            help = "Output format. Supported: ${summarizeModuleCliToolSpec().supportedFormatNames()}. Defaults to ${summarizeModuleCliToolSpec().defaultOutputFormat.cliName()}."
+        ).convert(summarizeModuleCliToolSpec().supportedFormatNames()) {
+            parseCliOutputFormat(summarizeModuleCliToolSpec(), it)
+        }.default(summarizeModuleCliToolSpec().defaultOutputFormat)
 
         private val allowedRoots by allowedRootOption()
         private val maxFileBytes by maxFileBytesOption()
@@ -320,19 +322,29 @@ private fun summarizeModuleCliToolSpec(): HexanaCliToolSpec {
     require(HexanaCliInputMode.WASM_PATH in spec.inputModes) {
         "Generated summarize-module CLI metadata must support wasm path input"
     }
-    require(spec.outputFormats == setOf(HexanaCliOutputFormat.JSON)) {
-        "Generated summarize-module CLI metadata must expose only json output for this slice"
+    require(HexanaCliOutputFormat.JSON in spec.outputFormats) {
+        "Generated summarize-module CLI metadata must support json output"
+    }
+    require(spec.defaultOutputFormat in spec.outputFormats) {
+        "Generated summarize-module CLI metadata default output must be one of ${spec.outputFormats}"
     }
     return spec
 }
 
-private fun parseSummarizeModuleFormat(value: String): HexanaCliOutputFormat {
-    val normalized = value.lowercase()
-    if (normalized == "json") {
-        return HexanaCliOutputFormat.JSON
+internal fun parseCliOutputFormat(spec: HexanaCliToolSpec, value: String): HexanaCliOutputFormat {
+    val format = HexanaCliOutputFormat.entries.firstOrNull { it.cliName() == value.trim().lowercase() }
+    if (format != null && format in spec.outputFormats) {
+        return format
     }
-    throw UsageError("Unsupported summarize-module format: $value. Expected json.")
+    throw UsageError(
+        "Unsupported ${spec.commandName} format: $value. Supported formats: ${spec.supportedFormatNames()}."
+    )
 }
+
+private fun HexanaCliToolSpec.supportedFormatNames(): String =
+    outputFormats.joinToString { it.cliName() }
+
+private fun HexanaCliOutputFormat.cliName(): String = name.lowercase()
 
 private fun parseLogLevel(value: String): HexanaLogLevel {
     return try {

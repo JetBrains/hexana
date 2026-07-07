@@ -12,6 +12,11 @@ val SummarizeModuleImportsClass = class_("SummarizeModuleImports") {
 }
 
 val SummarizeModuleResultClass = class_("SummarizeModuleResult", kotlinPackage = SUMMARY_MODEL_PACKAGE) {
+    outputCapabilities(
+        OutputConversionCapability.SemanticJson,
+        OutputConversionCapability.McpWrapper,
+        OutputConversionCapability.PrettyPlaceholder,
+    )
     int("functions").describe("Total function count (imports + defined).")
     int("exports").describe("Number of exports declared by the module.")
     int("memories").describe("Number of memories declared by the module.")
@@ -63,7 +68,12 @@ val ListCustomSectionsResultClass = class_("ListCustomSectionsResult", kotlinPac
 internal val ModuleTools: List<ToolSpec> = tools {
     tool("summarize_module") {
         summary = "Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types."
-        surfaces = publicMcpbProductionCliSurface("summarize-module", ToolGroup.Module, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface(
+            "summarize-module",
+            ToolGroup.Module,
+            ToolOutputPolicy.ToolDefined,
+            defaultOutput = OutputConversionCapability.PrettyPlaceholder,
+        )
         guidance = """
             Summarize a WebAssembly (.wasm) module with high-level counts for its major sections and declarations.
             Includes the nested import breakdown and total module size, making it a low-cost overview before calling heavier tools.

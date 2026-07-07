@@ -53,7 +53,7 @@ fun main(args: Array<String>) {
                         exitProcess(report.exitCode)
                     }
                 }
-                is HexanaCommand.SummarizeModule -> println(renderSummarizeModuleJson(command))
+                is HexanaCommand.SummarizeModule -> println(renderSummarizeModuleOutput(command))
                 is HexanaCommand.Stdio -> runBlocking { runStdio(command) }
                 is HexanaCommand.Http -> runBlocking { runHttp(command) }
             }
