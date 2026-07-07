@@ -161,6 +161,27 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `production MCP tools declare visible CLI metadata except documented divergence`() {
+        val productionToolNames = HexanaTools
+            .filter { McpToolAudience.Production in it.surfaces.mcp.audiences }
+            .map { it.name }
+            .toSet()
+        val cliVisibleToolNames = HexanaTools
+            .filter { it.surfaces.cli.visible }
+            .map { it.name }
+            .toSet()
+
+        assertEquals(
+            emptySet(),
+            productionToolNames - cliVisibleToolNames,
+            "Production MCP tools missing visible CLI metadata",
+        )
+        assertTrue("wasm_to_wat" in cliVisibleToolNames, "wasm_to_wat should stay CLI-visible")
+        assertFalse("wasm_to_wat" in productionToolNames, "wasm_to_wat should stay outside production MCP")
+        assertFalse("query_artifacts" in cliVisibleToolNames, "query_artifacts should stay hidden from CLI")
+    }
+
+    @Test
     fun `tools declare explicit MCP and CLI surface metadata`() {
         val kebabCase = Regex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
         HexanaTools.forEach { spec ->

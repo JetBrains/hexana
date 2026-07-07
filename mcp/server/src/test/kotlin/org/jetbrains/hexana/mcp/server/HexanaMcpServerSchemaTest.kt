@@ -121,6 +121,23 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
+    fun generatedCliRegistryPreservesProductionParityAndCliOnlyDivergence() {
+        val productionNames = HexanaGeneratedMcpToolProfiles.PRODUCTION_TOOL_NAMES
+        val cliNames = HexanaGeneratedCliToolRegistry.TOOLS.map { it.toolName }.toSet()
+
+        assertEquals(
+            emptySet(),
+            productionNames - cliNames,
+            "Production MCP tools missing from generated CLI registry",
+        )
+        assertEquals(
+            setOf("wasm_to_wat"),
+            cliNames - productionNames,
+            "Generated CLI registry should only contain documented CLI-only tools outside production MCP",
+        )
+    }
+
+    @Test
     fun productionRegistryPresentsFocusedAuditToolsBeforeGenericViews() {
         val names = createHexanaMcpServer().tools.keys.toList()
 
