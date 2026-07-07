@@ -174,12 +174,14 @@ class HexanaToolsTest {
                 assertTrue(kebabCase.matches(commandName), "CLI command `$commandName` is not kebab-case")
                 assertTrue(cli.groups.isNotEmpty(), "missing CLI group for ${spec.name}")
                 assertEquals(ToolOutputPolicy.ToolDefined, cli.outputPolicy, "bad output policy for ${spec.name}")
+                assertNotNull(cli.executionStatus, "missing CLI execution status for ${spec.name}")
                 assertEquals(null, cli.outputOverride, "unexpected output override for ${spec.name}")
                 assertNotNull(cli.defaultOutput, "missing default output for ${spec.name}")
             } else {
                 assertEquals(null, cli.commandName, "hidden CLI surface has command for ${spec.name}")
                 assertTrue(cli.groups.isEmpty(), "hidden CLI surface has groups for ${spec.name}")
                 assertEquals(null, cli.outputPolicy, "hidden CLI surface has output policy for ${spec.name}")
+                assertEquals(null, cli.executionStatus, "hidden CLI surface has execution status for ${spec.name}")
                 assertEquals(null, cli.outputOverride, "hidden CLI surface has output override for ${spec.name}")
                 assertEquals(null, cli.defaultOutput, "hidden CLI surface has default output for ${spec.name}")
             }
@@ -199,6 +201,15 @@ class HexanaToolsTest {
             summarize.output.outputCapabilities,
         )
         assertEquals(OutputConversionCapability.PrettyPlaceholder, summarize.surfaces.cli.defaultOutput)
+    }
+
+    @Test
+    fun `implemented CLI commands are marked executable`() {
+        val summarizeModule = HexanaTools.single { it.name == "summarize_module" }
+        val wasmToWat = HexanaTools.single { it.name == "wasm_to_wat" }
+
+        assertEquals(CliExecutionStatus.Executable, summarizeModule.surfaces.cli.executionStatus)
+        assertEquals(CliExecutionStatus.Executable, wasmToWat.surfaces.cli.executionStatus)
     }
 
     @Test
@@ -231,11 +242,37 @@ class HexanaToolsTest {
         assertEquals(setOf(McpToolAudience.Production), production.surfaces.mcp.audiences)
         assertTrue(production.surfaces.cli.visible)
         assertEquals("summarize-binary", production.surfaces.cli.commandName)
+        assertEquals(CliExecutionStatus.Todo, production.surfaces.cli.executionStatus)
 
         val advanced = HexanaTools.single { it.name == "query_artifacts" }
         assertEquals(setOf(McpToolAudience.Advanced), advanced.surfaces.mcp.audiences)
         assertFalse(advanced.surfaces.cli.visible)
         assertEquals(null, advanced.surfaces.cli.commandName)
+        assertEquals(null, advanced.surfaces.cli.executionStatus)
+    }
+
+    @Test
+    fun `MCP visibility CLI visibility and CLI execution status are independent metadata`() {
+        val cliOnlyTodo = tools {
+            tool("future_cli_only") {
+                summary = "Future CLI-only metadata."
+                input = BinaryInputClass
+                inputPattern = ToolInputPattern.BinaryOnly
+                output = binarySummaryResult
+                surfaces = noMcpCliSurface("future-cli-only", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
+                handlerFqn = queryArtifacts.handlerFqn
+            }
+        }.single()
+
+        assertFalse(cliOnlyTodo.surfaces.mcp.visible)
+        assertEquals(emptySet(), cliOnlyTodo.surfaces.mcp.audiences)
+        assertTrue(cliOnlyTodo.surfaces.cli.visible)
+        assertEquals(CliExecutionStatus.Todo, cliOnlyTodo.surfaces.cli.executionStatus)
+
+        val advancedHidden = HexanaTools.single { it.name == "query_artifacts" }
+        assertEquals(setOf(McpToolAudience.Advanced), advancedHidden.surfaces.mcp.audiences)
+        assertFalse(advancedHidden.surfaces.cli.visible)
+        assertEquals(null, advancedHidden.surfaces.cli.executionStatus)
     }
 
     @Test
@@ -308,6 +345,31 @@ class HexanaToolsTest {
         }
 
         assertTrue(error.message.orEmpty().contains("Hidden CLI surface must not declare an output override"))
+    }
+
+    @Test
+    fun `CLI execution status follows CLI visibility`() {
+        val visibleError = assertFailsWith<IllegalArgumentException> {
+            CliSurfaceSpec(
+                visible = true,
+                commandName = "future-command",
+                groups = setOf(ToolGroup.Binary),
+                outputPolicy = ToolOutputPolicy.ToolDefined,
+                defaultOutput = OutputConversionCapability.SemanticJson,
+            )
+        }
+        assertTrue(visibleError.message.orEmpty().contains("must declare an execution status"))
+
+        val hiddenError = assertFailsWith<IllegalArgumentException> {
+            CliSurfaceSpec(
+                visible = false,
+                commandName = null,
+                groups = emptySet(),
+                outputPolicy = null,
+                executionStatus = CliExecutionStatus.Todo,
+            )
+        }
+        assertTrue(hiddenError.message.orEmpty().contains("Hidden CLI surface must not declare an execution status"))
     }
 
     @Test

@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.tools.generator
 
 import org.jetbrains.hexana.mcp.tools.BinaryInputClass
 import org.jetbrains.hexana.mcp.tools.ClassSpec
+import org.jetbrains.hexana.mcp.tools.CliExecutionStatus
 import org.jetbrains.hexana.mcp.tools.OutputConversionCapability
 import org.jetbrains.hexana.mcp.tools.ToolInputPattern
 import org.jetbrains.hexana.mcp.tools.ToolGroup
@@ -190,6 +191,31 @@ class ToolDescriptionGenerationTest {
         assertFalse(source.contains("registerWasmToWatTool"))
         assertFalse(source.contains("profile.includesTool(\"wasm_to_wat\")"))
         assertFalse(source.contains("name = \"wasm_to_wat\""))
+    }
+
+    @Test
+    fun `standalone CLI registry emits execution status independently from MCP visibility`() {
+        val executable = summarizeBinarySpec.copy(
+            surfaces = productionCliSurface(
+                "summarize-binary",
+                ToolGroup.Binary,
+                ToolOutputPolicy.ToolDefined,
+                executionStatus = CliExecutionStatus.Executable,
+            ),
+        )
+        val cliOnlyTodo = summarizeBinarySpec.copy(
+            name = "future_cli_only",
+            surfaces = noMcpCliSurface("future-cli-only", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
+        )
+
+        val source = buildDispatcherFile(listOf(executable, cliOnlyTodo)).toString()
+
+        assertTrue(source.contains("public enum class HexanaCliExecutionStatus"))
+        assertTrue(source.contains("executionStatus = HexanaCliExecutionStatus.EXECUTABLE"))
+        assertTrue(source.contains("commandName = \"future-cli-only\""))
+        assertTrue(source.contains("toolName = \"future_cli_only\""))
+        assertTrue(source.contains("executionStatus = HexanaCliExecutionStatus.TODO"))
+        assertFalse(source.contains("profile.includesTool(\"future_cli_only\")"))
     }
 
     private fun renderGeneratedSource(mainClassName: String, generatedFile: Path): String {

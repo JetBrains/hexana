@@ -19,6 +19,7 @@ val ConverterTools = tools {
             "wasm-to-wat",
             ToolGroup.Converters,
             ToolOutputPolicy.ToolDefined,
+            executionStatus = CliExecutionStatus.Executable,
             defaultOutput = OutputConversionCapability.RawTextPlaceholder,
         )
         handlerFqn = "org.jetbrains.hexana.mcp.server.wasmToWat"

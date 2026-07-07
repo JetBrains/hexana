@@ -86,6 +86,7 @@ class HexanaMcpServerSchemaTest {
         assertEquals(setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.PRETTY), summarizeModule.outputFormats)
         assertEquals(HexanaCliOutputFormat.PRETTY, summarizeModule.defaultOutputFormat)
         assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, summarizeModule.defaultOutputPolicy)
+        assertEquals(HexanaCliExecutionStatus.EXECUTABLE, summarizeModule.executionStatus)
 
         val wasmToWat = tools.single { it.commandName == "wasm-to-wat" }
         assertEquals("wasm_to_wat", wasmToWat.toolName)
@@ -102,6 +103,11 @@ class HexanaMcpServerSchemaTest {
         assertEquals(setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.RAW), wasmToWat.outputFormats)
         assertEquals(HexanaCliOutputFormat.RAW, wasmToWat.defaultOutputFormat)
         assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, wasmToWat.defaultOutputPolicy)
+        assertEquals(HexanaCliExecutionStatus.EXECUTABLE, wasmToWat.executionStatus)
+
+        val futureModuleTool = tools.single { it.commandName == "list-enabled-features" }
+        assertTrue(futureModuleTool.groups.contains(HexanaCliToolGroup.MODULE))
+        assertEquals(HexanaCliExecutionStatus.TODO, futureModuleTool.executionStatus)
 
         val productionNames = HexanaGeneratedMcpToolProfiles.PRODUCTION_TOOL_NAMES
         val advancedNames = HexanaGeneratedMcpToolProfiles.ADVANCED_TOOL_NAMES

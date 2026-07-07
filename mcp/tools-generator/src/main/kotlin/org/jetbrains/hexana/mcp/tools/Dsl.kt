@@ -417,6 +417,7 @@ data class CliSurfaceSpec(
     val commandName: String?,
     val groups: Set<ToolGroup>,
     val outputPolicy: ToolOutputPolicy?,
+    val executionStatus: CliExecutionStatus? = null,
     val outputOverride: OutputConversionCapability? = null,
     val defaultOutput: OutputConversionCapability? = null,
 ) {
@@ -428,11 +429,13 @@ data class CliSurfaceSpec(
             }
             require(groups.isNotEmpty()) { "Visible CLI surface '$commandName' must declare at least one group." }
             require(outputPolicy != null) { "Visible CLI surface '$commandName' must declare an output policy." }
+            require(executionStatus != null) { "Visible CLI surface '$commandName' must declare an execution status." }
             require(defaultOutput != null) { "Visible CLI surface '$commandName' must declare a default output." }
         } else {
             require(commandName == null) { "Hidden CLI surface must not declare a command name." }
             require(groups.isEmpty()) { "Hidden CLI surface must not declare groups." }
             require(outputPolicy == null) { "Hidden CLI surface must not declare an output policy." }
+            require(executionStatus == null) { "Hidden CLI surface must not declare an execution status." }
             require(outputOverride == null) { "Hidden CLI surface must not declare an output override." }
             require(defaultOutput == null) { "Hidden CLI surface must not declare a default output." }
         }
@@ -444,6 +447,7 @@ data class CliSurfaceSpec(
             group: ToolGroup,
             outputPolicy: ToolOutputPolicy,
             vararg additionalGroups: ToolGroup,
+            executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
             outputOverride: OutputConversionCapability? = null,
             defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
         ): CliSurfaceSpec = CliSurfaceSpec(
@@ -451,6 +455,7 @@ data class CliSurfaceSpec(
             commandName = commandName,
             groups = setOf(group, *additionalGroups),
             outputPolicy = outputPolicy,
+            executionStatus = executionStatus,
             outputOverride = outputOverride,
             defaultOutput = defaultOutput,
         )
@@ -460,10 +465,16 @@ data class CliSurfaceSpec(
             commandName = null,
             groups = emptySet(),
             outputPolicy = null,
+            executionStatus = null,
             outputOverride = null,
             defaultOutput = null,
         )
     }
+}
+
+enum class CliExecutionStatus {
+    Executable,
+    Todo,
 }
 
 enum class ToolGroup {
@@ -493,6 +504,7 @@ fun productionCliSurface(
     group: ToolGroup,
     outputPolicy: ToolOutputPolicy,
     vararg additionalGroups: ToolGroup,
+    executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
     outputOverride: OutputConversionCapability? = null,
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
 ): ToolSurfaceSpec = ToolSurfaceSpec(
@@ -502,6 +514,7 @@ fun productionCliSurface(
         group,
         outputPolicy,
         *additionalGroups,
+        executionStatus = executionStatus,
         outputOverride = outputOverride,
         defaultOutput = defaultOutput,
     ),
@@ -513,6 +526,7 @@ fun publicMcpbProductionCliSurface(
     group: ToolGroup,
     outputPolicy: ToolOutputPolicy,
     vararg additionalGroups: ToolGroup,
+    executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
     outputOverride: OutputConversionCapability? = null,
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
 ): ToolSurfaceSpec = ToolSurfaceSpec(
@@ -522,6 +536,7 @@ fun publicMcpbProductionCliSurface(
         group,
         outputPolicy,
         *additionalGroups,
+        executionStatus = executionStatus,
         outputOverride = outputOverride,
         defaultOutput = defaultOutput,
     ),
@@ -539,6 +554,7 @@ fun noMcpCliSurface(
     group: ToolGroup,
     outputPolicy: ToolOutputPolicy,
     vararg additionalGroups: ToolGroup,
+    executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
     outputOverride: OutputConversionCapability? = null,
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
 ): ToolSurfaceSpec = ToolSurfaceSpec(
@@ -548,6 +564,7 @@ fun noMcpCliSurface(
         group,
         outputPolicy,
         *additionalGroups,
+        executionStatus = executionStatus,
         outputOverride = outputOverride,
         defaultOutput = defaultOutput,
     ),

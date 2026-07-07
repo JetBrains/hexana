@@ -12,6 +12,7 @@ import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.asTypeName
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import org.jetbrains.hexana.mcp.tools.ClassSpec
+import org.jetbrains.hexana.mcp.tools.CliExecutionStatus
 import org.jetbrains.hexana.mcp.tools.FieldSpec
 import org.jetbrains.hexana.mcp.tools.FieldType
 import org.jetbrains.hexana.mcp.tools.HexanaToolSchemaCompatibility
@@ -40,6 +41,7 @@ private val CLI_INPUT_MODE = ClassName(SERVER_PACKAGE, "HexanaCliInputMode")
 private val CLI_OUTPUT_FORMAT = ClassName(SERVER_PACKAGE, "HexanaCliOutputFormat")
 private val CLI_TOOL_GROUP = ClassName(SERVER_PACKAGE, "HexanaCliToolGroup")
 private val CLI_OUTPUT_POLICY = ClassName(SERVER_PACKAGE, "HexanaCliOutputPolicy")
+private val CLI_EXECUTION_STATUS = ClassName(SERVER_PACKAGE, "HexanaCliExecutionStatus")
 private val KOTLIN_LIST = ClassName("kotlin.collections", "List")
 private val KOTLIN_SET = ClassName("kotlin.collections", "Set")
 private val HEXANA_ANALYSIS_LIMITS = ClassName("org.jetbrains.hexana.mcp", "HexanaAnalysisLimits")
@@ -94,6 +96,7 @@ internal fun buildDispatcherFile(tools: List<ToolSpec>): FileSpec {
         .addType(buildCliOutputFormatEnum())
         .addType(buildCliToolGroupEnum())
         .addType(buildCliOutputPolicyEnum())
+        .addType(buildCliExecutionStatusEnum())
         .addType(buildCliToolSpecClass())
         .addType(buildCliToolRegistryObject(tools))
     buildInputDefaultsObject(tools)?.let { fileBuilder.addType(it) }
@@ -176,6 +179,14 @@ private fun buildCliOutputPolicyEnum(): TypeSpec =
         .addEnumConstant("TOOL_DEFINED")
         .build()
 
+private fun buildCliExecutionStatusEnum(): TypeSpec =
+    TypeSpec.enumBuilder(CLI_EXECUTION_STATUS)
+        .addModifiers(KModifier.PUBLIC)
+        .addKdoc("Generated CLI execution status declared by catalog surface metadata.\n")
+        .addEnumConstant("EXECUTABLE")
+        .addEnumConstant("TODO")
+        .build()
+
 private fun buildCliToolSpecClass(): TypeSpec {
     val setOfInputMode = KOTLIN_SET.parameterizedBy(CLI_INPUT_MODE)
     val setOfOutputFormat = KOTLIN_SET.parameterizedBy(CLI_OUTPUT_FORMAT)
@@ -189,6 +200,7 @@ private fun buildCliToolSpecClass(): TypeSpec {
         .addParameter(ParameterSpec.builder("outputFormats", setOfOutputFormat).build())
         .addParameter(ParameterSpec.builder("defaultOutputFormat", CLI_OUTPUT_FORMAT).build())
         .addParameter(ParameterSpec.builder("defaultOutputPolicy", CLI_OUTPUT_POLICY).build())
+        .addParameter(ParameterSpec.builder("executionStatus", CLI_EXECUTION_STATUS).build())
         .build()
 
     fun property(name: String, type: com.squareup.kotlinpoet.TypeName): PropertySpec =
@@ -208,6 +220,7 @@ private fun buildCliToolSpecClass(): TypeSpec {
         .addProperty(property("outputFormats", setOfOutputFormat))
         .addProperty(property("defaultOutputFormat", CLI_OUTPUT_FORMAT))
         .addProperty(property("defaultOutputPolicy", CLI_OUTPUT_POLICY))
+        .addProperty(property("executionStatus", CLI_EXECUTION_STATUS))
         .build()
 }
 
@@ -241,6 +254,9 @@ private fun cliToolSpecInitializer(spec: ToolSpec): CodeBlock {
     val cli = spec.surfaces.cli
     val commandName = requireNotNull(cli.commandName) { "Visible CLI tool '${spec.name}' is missing commandName." }
     val outputPolicy = requireNotNull(cli.outputPolicy) { "Visible CLI tool '${spec.name}' is missing outputPolicy." }
+    val executionStatus = requireNotNull(cli.executionStatus) {
+        "Visible CLI tool '${spec.name}' is missing executionStatus."
+    }
     val outputFormats = spec.cliOutputFormats()
     require(outputFormats.isNotEmpty()) {
         "Visible CLI tool '${spec.name}' command '$commandName' has no supported CLI output format."
@@ -263,6 +279,7 @@ private fun cliToolSpecInitializer(spec: ToolSpec): CodeBlock {
         .add("  outputFormats = %L,\n", enumSetInitializer(CLI_OUTPUT_FORMAT, outputFormats.map { it.generatedCliOutputFormatName() }))
         .add("  defaultOutputFormat = %T.%L,\n", CLI_OUTPUT_FORMAT, defaultOutput.generatedCliOutputFormatName())
         .add("  defaultOutputPolicy = %T.%L,\n", CLI_OUTPUT_POLICY, outputPolicy.generatedCliOutputPolicyName())
+        .add("  executionStatus = %T.%L,\n", CLI_EXECUTION_STATUS, executionStatus.generatedCliExecutionStatusName())
         .add(")")
         .build()
 }
@@ -672,4 +689,10 @@ private fun ToolGroup.generatedCliGroupName(): String =
 private fun ToolOutputPolicy.generatedCliOutputPolicyName(): String =
     when (this) {
         ToolOutputPolicy.ToolDefined -> "TOOL_DEFINED"
+    }
+
+private fun CliExecutionStatus.generatedCliExecutionStatusName(): String =
+    when (this) {
+        CliExecutionStatus.Executable -> "EXECUTABLE"
+        CliExecutionStatus.Todo -> "TODO"
     }

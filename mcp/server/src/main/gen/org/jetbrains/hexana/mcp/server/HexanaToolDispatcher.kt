@@ -162,6 +162,14 @@ public enum class HexanaCliOutputPolicy {
 }
 
 /**
+ * Generated CLI execution status declared by catalog surface metadata.
+ */
+public enum class HexanaCliExecutionStatus {
+  EXECUTABLE,
+  TODO,
+}
+
+/**
  * Generated CLI-visible tool metadata derived from the catalog.
  */
 public data class HexanaCliToolSpec(
@@ -173,6 +181,7 @@ public data class HexanaCliToolSpec(
   public val outputFormats: Set<HexanaCliOutputFormat>,
   public val defaultOutputFormat: HexanaCliOutputFormat,
   public val defaultOutputPolicy: HexanaCliOutputPolicy,
+  public val executionStatus: HexanaCliExecutionStatus,
 )
 
 /**
@@ -189,6 +198,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "wasm-to-wat",
@@ -199,6 +209,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.RAW),
           defaultOutputFormat = HexanaCliOutputFormat.RAW,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.EXECUTABLE,
         ),
         HexanaCliToolSpec(
           commandName = "summarize-module",
@@ -209,6 +220,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.PRETTY),
           defaultOutputFormat = HexanaCliOutputFormat.PRETTY,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.EXECUTABLE,
         ),
         HexanaCliToolSpec(
           commandName = "list-enabled-features",
@@ -219,6 +231,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "get-entrypoint-policy",
@@ -229,6 +242,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "list-required-proposals",
@@ -239,6 +253,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "diff-required-proposals",
@@ -249,6 +264,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "check-runtime-compatibility",
@@ -259,6 +275,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "check-component-compatibility",
@@ -269,6 +286,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "plan-abi-binding-regeneration",
@@ -279,6 +297,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "check-memory-contract",
@@ -289,6 +308,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "audit-global-state-policy",
@@ -299,6 +319,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "audit-local-stack-budget",
@@ -309,6 +330,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "list-imports",
@@ -319,6 +341,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "list-exports",
@@ -329,6 +352,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "search-exports",
@@ -339,6 +363,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "list-exported-functions",
@@ -349,6 +374,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "list-functions",
@@ -359,6 +385,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "resolve-function-signature",
@@ -369,6 +396,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "disassemble-function",
@@ -379,6 +407,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "get-function-call-graph",
@@ -389,6 +418,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "search-functions-by-name",
@@ -399,6 +429,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "resolve-wasm-frames",
@@ -409,6 +440,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "resolve-function-symbols",
@@ -419,6 +451,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "resolve-source-locations",
@@ -429,6 +462,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "list-memory",
@@ -439,6 +473,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "list-globals",
@@ -449,6 +484,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "list-element-segments",
@@ -459,6 +495,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "list-data-segments",
@@ -469,6 +506,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
         HexanaCliToolSpec(
           commandName = "audit-data-payload-policy",
@@ -479,6 +517,7 @@ public object HexanaGeneratedCliToolRegistry {
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.TODO,
         ),
       )
 }

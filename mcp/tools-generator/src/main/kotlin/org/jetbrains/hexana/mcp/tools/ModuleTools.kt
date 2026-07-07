@@ -72,6 +72,7 @@ internal val ModuleTools: List<ToolSpec> = tools {
             "summarize-module",
             ToolGroup.Module,
             ToolOutputPolicy.ToolDefined,
+            executionStatus = CliExecutionStatus.Executable,
             defaultOutput = OutputConversionCapability.PrettyPlaceholder,
         )
         guidance = """
