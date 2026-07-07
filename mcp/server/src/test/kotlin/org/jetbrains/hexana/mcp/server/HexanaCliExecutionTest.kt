@@ -228,6 +228,36 @@ class HexanaCliExecutionTest {
         assertTrue(error.message.orEmpty().contains("outside allowed roots"))
     }
 
+    @Test
+    fun renderToolsListingReturnsDeterministicGeneratedCliMetadata() {
+        val output = renderCliToolsListing(HexanaCommand.Tools(group = null))
+
+        assertTrue(output.startsWith("Hexana MCP CLI tools\n"))
+        assertTrue(output.contains("Groups are generated CLI metadata, not MCP tool profiles.\n"))
+        assertTrue(output.contains("summarize-module\n"))
+        assertTrue(output.contains("  groups: module\n"))
+        assertTrue(output.contains("  formats: json, pretty\n"))
+        assertTrue(output.contains("  default: pretty\n"))
+        assertTrue(output.contains("  summary: Summarize a WebAssembly module"))
+        assertTrue(output.contains("wasm-to-wat\n"))
+        assertTrue(output.contains("  groups: converters\n"))
+        assertTrue(output.contains("  formats: json, raw\n"))
+        assertTrue(output.contains("  default: raw\n"))
+        assertTrue(output.indexOf("summarize-binary\n") < output.indexOf("summarize-module\n"))
+        assertTrue(output.indexOf("summarize-module\n") < output.indexOf("wasm-to-wat\n"))
+    }
+
+    @Test
+    fun renderToolsListingFiltersByGeneratedGroupMetadataNotMcpProfile() {
+        val output = renderCliToolsListing(HexanaCommand.Tools(group = HexanaCliToolGroup.CONVERTERS))
+
+        assertTrue(output.contains("Groups are generated CLI metadata, not MCP tool profiles.\n"))
+        assertTrue(output.contains("wasm-to-wat\n"))
+        assertTrue(output.contains("  groups: converters\n"))
+        assertFalse(output.contains("summarize-module\n"))
+        assertFalse(output.contains("  groups: module\n"))
+    }
+
     private fun summarizeModuleCommand(
         path: String,
         format: HexanaCliOutputFormat,

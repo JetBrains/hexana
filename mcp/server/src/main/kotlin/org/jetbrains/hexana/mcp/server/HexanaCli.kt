@@ -51,6 +51,10 @@ sealed interface HexanaCommand {
         val resourceLimits: HexanaResourceLimits,
     ) : HexanaCommand
 
+    data class Tools(
+        val group: HexanaCliToolGroup?,
+    ) : HexanaCommand
+
     data object Version : HexanaCommand
     data object Help : HexanaCommand
 }
@@ -97,6 +101,7 @@ class HexanaCli(
                 HttpCommand(envReader, sink),
                 SummarizeModuleCommand(envReader, sink),
                 WasmToWatCommand(envReader, sink),
+                ToolsCommand(sink),
                 DoctorCommand(envReader, sink),
                 VersionCommand(sink),
                 HelpCommand(sink)
@@ -358,6 +363,22 @@ class HexanaCli(
         }
     }
 
+    private class ToolsCommand(
+        private val sink: (HexanaCommand) -> Unit
+    ) : CliktCommand(name = "tools") {
+        override fun help(context: Context): String =
+            "List generated CLI-visible tools. Groups are metadata, not MCP profiles."
+
+        private val group by option(
+            "--group",
+            help = "Filter by generated CLI metadata group. Supported: ${supportedCliToolGroupNames()}."
+        ).convert(supportedCliToolGroupNames()) { parseCliToolGroup(it) }
+
+        override fun run() {
+            sink(HexanaCommand.Tools(group = group))
+        }
+    }
+
     private class VersionCommand(
         private val sink: (HexanaCommand) -> Unit
     ) : CliktCommand(name = "version") {
@@ -377,6 +398,27 @@ class HexanaCli(
             sink(HexanaCommand.Help)
         }
     }
+}
+
+internal fun renderCliToolsListing(command: HexanaCommand.Tools): String {
+    val tools = HexanaGeneratedCliToolRegistry.TOOLS
+        .filter { spec -> command.group == null || command.group in spec.groups }
+        .sortedBy { it.commandName }
+
+    return buildString {
+        appendLine("Hexana MCP CLI tools")
+        appendLine("Groups are generated CLI metadata, not MCP tool profiles.")
+        tools.forEachIndexed { index, spec ->
+            if (index > 0) {
+                appendLine()
+            }
+            appendLine(spec.commandName)
+            appendLine("  groups: ${spec.sortedGroupNames()}")
+            appendLine("  formats: ${spec.sortedFormatNames()}")
+            appendLine("  default: ${spec.defaultOutputFormat.cliName()}")
+            appendLine("  summary: ${spec.summary}")
+        }
+    }.trimEnd()
 }
 
 private fun summarizeModuleCliToolSpec(): HexanaCliToolSpec {
@@ -426,7 +468,26 @@ private fun HexanaCliToolSpec.supportedFormatNames(): String =
 private fun HexanaCliToolSpec.supportedFormatCompletionCandidates(): CompletionCandidates =
     CompletionCandidates.Fixed(outputFormats.map { it.cliName() }.toSet())
 
+private fun HexanaCliToolSpec.sortedGroupNames(): String =
+    groups.map { it.cliName() }.sorted().joinToString()
+
+private fun HexanaCliToolSpec.sortedFormatNames(): String =
+    outputFormats.map { it.cliName() }.sorted().joinToString()
+
 private fun HexanaCliOutputFormat.cliName(): String = name.lowercase()
+
+private fun HexanaCliToolGroup.cliName(): String = name.lowercase().replace('_', '-')
+
+private fun supportedCliToolGroupNames(): String =
+    HexanaCliToolGroup.entries.map { it.cliName() }.sorted().joinToString()
+
+private fun parseCliToolGroup(value: String): HexanaCliToolGroup {
+    val normalized = value.trim().lowercase()
+    return HexanaCliToolGroup.entries.firstOrNull { it.cliName() == normalized }
+        ?: throw UsageError(
+            "Unsupported CLI tool metadata group: $value. Supported groups: ${supportedCliToolGroupNames()}."
+        )
+}
 
 private fun parseLogLevel(value: String): HexanaLogLevel {
     return try {

@@ -240,6 +240,32 @@ class HexanaCliTest {
     }
 
     @Test
+    fun parseAcceptsToolsCommandWithoutGroupFilter() {
+        val command = cli().parse(arrayOf("tools"))
+
+        assertEquals(HexanaCommand.Tools(group = null), command)
+    }
+
+    @Test
+    fun parseAcceptsToolsCommandWithGeneratedKebabCaseGroupFilter() {
+        val command = cli().parse(arrayOf("tools", "--group", "converters"))
+
+        assertEquals(HexanaCommand.Tools(group = HexanaCliToolGroup.CONVERTERS), command)
+    }
+
+    @Test
+    fun parseRejectsUnknownToolsGroupWithSupportedGeneratedGroups() {
+        val error = assertFailsWith<CliktError> {
+            cli().parse(arrayOf("tools", "--group", "mcp-profile-production"))
+        }
+
+        assertTrue(error.message.orEmpty().contains("Unsupported CLI tool metadata group"))
+        assertTrue(error.message.orEmpty().contains("converters"))
+        assertTrue(error.message.orEmpty().contains("module"))
+        assertTrue(error.message.orEmpty().contains("function"))
+    }
+
+    @Test
     fun parseNormalizesHttpEndpointAndKeepsLoopbackDefaults() {
         val command = cli().parse(
             arrayOf(
@@ -291,9 +317,21 @@ class HexanaCliTest {
         assertTrue(help.contains("stdio"))
         assertTrue(help.contains("http"))
         assertTrue(help.contains("summarize-module"))
+        assertTrue(help.contains("tools"))
         assertTrue(help.contains("doctor"))
         assertTrue(help.contains("version"))
         assertTrue(help.contains("help"))
+    }
+
+    @Test
+    fun toolsHelpDocumentsGroupsAsMetadataNotMcpProfiles() {
+        val help = cli().helpText(arrayOf("tools", "--help"))
+
+        assertTrue(help.contains("Groups are metadata, not MCP profiles."))
+        assertTrue(help.contains("--group"))
+        assertTrue(help.contains("converters"))
+        assertTrue(help.contains("module"))
+        assertTrue(help.contains("function"))
     }
 
     @Test
