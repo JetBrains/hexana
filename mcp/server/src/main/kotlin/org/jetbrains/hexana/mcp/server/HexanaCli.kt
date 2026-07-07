@@ -414,6 +414,7 @@ internal fun renderCliToolsListing(command: HexanaCommand.Tools): String {
             }
             appendLine(spec.commandName)
             appendLine("  groups: ${spec.sortedGroupNames()}")
+            appendLine("  status: ${spec.executionStatus.cliName()}")
             appendLine("  formats: ${spec.sortedFormatNames()}")
             appendLine("  default: ${spec.defaultOutputFormat.cliName()}")
             appendLine("  summary: ${spec.summary}")
@@ -475,6 +476,8 @@ private fun HexanaCliToolSpec.sortedFormatNames(): String =
     outputFormats.map { it.cliName() }.sorted().joinToString()
 
 private fun HexanaCliOutputFormat.cliName(): String = name.lowercase()
+
+private fun HexanaCliExecutionStatus.cliName(): String = name.lowercase()
 
 private fun HexanaCliToolGroup.cliName(): String = name.lowercase().replace('_', '-')
 

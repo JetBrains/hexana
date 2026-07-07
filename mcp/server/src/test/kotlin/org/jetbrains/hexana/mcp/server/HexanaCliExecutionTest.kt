@@ -234,15 +234,27 @@ class HexanaCliExecutionTest {
 
         assertTrue(output.startsWith("Hexana MCP CLI tools\n"))
         assertTrue(output.contains("Groups are generated CLI metadata, not MCP tool profiles.\n"))
-        assertTrue(output.contains("summarize-module\n"))
-        assertTrue(output.contains("  groups: module\n"))
-        assertTrue(output.contains("  formats: json, pretty\n"))
-        assertTrue(output.contains("  default: pretty\n"))
-        assertTrue(output.contains("  summary: Summarize a WebAssembly module"))
-        assertTrue(output.contains("wasm-to-wat\n"))
-        assertTrue(output.contains("  groups: converters\n"))
-        assertTrue(output.contains("  formats: json, raw\n"))
-        assertTrue(output.contains("  default: raw\n"))
+        assertToolBlockContains(
+            output,
+            "summarize-module",
+            "  groups: module\n",
+            "  status: executable\n",
+            "  formats: json, pretty\n",
+            "  default: pretty\n",
+            "  summary: Summarize a WebAssembly module",
+        )
+        assertToolBlockContains(
+            output,
+            "summarize-binary",
+            "  status: todo\n",
+        )
+        assertToolBlockContains(
+            output,
+            "wasm-to-wat",
+            "  groups: converters\n",
+            "  formats: json, raw\n",
+            "  default: raw\n",
+        )
         assertTrue(output.indexOf("summarize-binary\n") < output.indexOf("summarize-module\n"))
         assertTrue(output.indexOf("summarize-module\n") < output.indexOf("wasm-to-wat\n"))
     }
@@ -252,8 +264,12 @@ class HexanaCliExecutionTest {
         val output = renderCliToolsListing(HexanaCommand.Tools(group = HexanaCliToolGroup.CONVERTERS))
 
         assertTrue(output.contains("Groups are generated CLI metadata, not MCP tool profiles.\n"))
-        assertTrue(output.contains("wasm-to-wat\n"))
-        assertTrue(output.contains("  groups: converters\n"))
+        assertToolBlockContains(
+            output,
+            "wasm-to-wat",
+            "  groups: converters\n",
+            "  status: executable\n",
+        )
         assertFalse(output.contains("summarize-module\n"))
         assertFalse(output.contains("  groups: module\n"))
     }
@@ -267,6 +283,18 @@ class HexanaCliExecutionTest {
         assertTrue(output.contains("  groups: module\n"))
         assertFalse(output.contains("wasm-to-wat\n"))
         assertFalse(output.contains("  groups: converters\n"))
+    }
+
+    private fun assertToolBlockContains(output: String, commandName: String, vararg expectedLines: String) {
+        val blockStart = output.indexOf("$commandName\n")
+        assertTrue(blockStart >= 0, "Expected listing to contain $commandName")
+        val nextBlockStart = output.indexOf("\n\n", startIndex = blockStart).let { index ->
+            if (index >= 0) index else output.length
+        }
+        val block = output.substring(blockStart, nextBlockStart)
+        expectedLines.forEach { expected ->
+            assertTrue(block.contains(expected), "Expected $commandName block to contain $expected")
+        }
     }
 
     private fun summarizeModuleCommand(
