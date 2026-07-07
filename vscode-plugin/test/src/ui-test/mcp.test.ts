@@ -4,8 +4,8 @@ import * as http from 'http';
 import * as https from 'https';
 import * as path from 'path';
 import * as readline from 'readline';
-import { expect } from 'chai';
-import { Workbench } from 'vscode-extension-tester';
+import {expect} from 'chai';
+import {Workbench} from 'vscode-extension-tester';
 
 type JsonRpcId = number;
 
@@ -116,23 +116,28 @@ describe('Hexana MCP Server Update - Acceptance Tests', function () {
             await client.initialize();
 
             const tools = await client.request<{ tools: Array<{ name: string }> }>('tools/list', {});
-            expect(tools.tools.map(tool => tool.name)).to.include('query_artifacts');
+            expect(tools.tools.map(tool => tool.name)).to.include('summarize_binary');
 
             const toolResult = await client.request<{
                 content: Array<{ type: string; text?: string }>;
-                structuredContent: { modules: Array<{ moduleSize: number; functions: number }> };
+                structuredContent: {
+                    module: { format: string; byteLength: number };
+                    counts: { functions: number };
+                    warnings: unknown[];
+                };
                 isError?: boolean;
             }>('tools/call', {
-                name: 'query_artifacts',
+                name: 'summarize_binary',
                 arguments: {
                     path: wasmFixture,
-                    operation: 'overview',
                 },
             });
 
             expect(toolResult.isError).to.not.equal(true);
-            expect(toolResult.structuredContent.modules[0].moduleSize).to.be.greaterThan(0);
-            expect(toolResult.structuredContent.modules[0].functions).to.be.greaterThan(0);
+            expect(toolResult.structuredContent.module.format).to.equal('wasm');
+            expect(toolResult.structuredContent.module.byteLength).to.be.greaterThan(0);
+            expect(toolResult.structuredContent.counts.functions).to.be.greaterThan(0);
+            expect(toolResult.structuredContent.warnings).to.be.empty;
             expect(toolResult.content[0].type).to.equal('text');
             expect(JSON.parse(toolResult.content[0].text || '{}')).to.deep.equal(toolResult.structuredContent);
         } finally {
