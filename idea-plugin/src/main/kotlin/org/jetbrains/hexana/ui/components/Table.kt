@@ -64,6 +64,7 @@ fun Table(
     searchPlaceholder: String? = null,
     searchBarLeading: (@Composable () -> Unit)? = null,
     onTableFocusChanged: ((Boolean) -> Unit)? = null,
+    onSearchChanged: ((String) -> Unit)? = null,
 ) {
     // Cache cell values lazily per row to avoid computing all cells upfront.
     // Only rows that are actually displayed, filtered, or sorted will be evaluated.
@@ -99,6 +100,7 @@ fun Table(
     LaunchedEffect(searchQuery.text) {
         selectedOriginalIndex = null
         lazyListState.scrollToItem(0)
+        onSearchChanged?.invoke(searchQuery.text)
     }
 
     val focusRequester = remember { FocusRequester() }
@@ -110,8 +112,11 @@ fun Table(
     val viewData = remember(columns, dataCount, sortIndex, sortAsc, searchQuery) {
         val indices = (0 until dataCount).toMutableList()
 
-        // Filter
-        if (searchQuery.text.isNotEmpty()) {
+        // Filter — when onSearchChanged is provided, the caller handles filtering externally
+        // (e.g. tree tables filter in flattenTree to include matching nested nodes with parents).
+        if (onSearchChanged != null) {
+            // no-op: external filter
+        } else if (searchQuery.text.isNotEmpty()) {
             indices.retainAll { index ->
                 getCellValues(index).any { it.representation.contains(searchQuery.text, ignoreCase = true) }
             }

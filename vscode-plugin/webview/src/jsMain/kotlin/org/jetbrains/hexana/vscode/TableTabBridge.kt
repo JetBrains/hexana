@@ -526,8 +526,11 @@ private fun flattenTreeVsc(
     expandedPaths: Set<List<Int>>,
     sortColumnIndex: Int = -1,
     sortAscending: Boolean = true,
+    searchQuery: String = "",
 ): List<VscFlatRow> {
     val result = mutableListOf<VscFlatRow>()
+    val lq = searchQuery.lowercase()
+    val isSearching = lq.isNotEmpty()
 
     fun sortedIndices(rowCount: Int, columns: List<ColumnDescriptor>): List<Int> {
         val indices = (0 until rowCount).toMutableList()
@@ -546,6 +549,25 @@ private fun flattenTreeVsc(
         return indices
     }
 
+    fun rowMatches(index: Int, columns: List<ColumnDescriptor>): Boolean {
+        return columns.any { col ->
+            col.cellProvider(index).representation.lowercase().contains(lq)
+        }
+    }
+
+    fun subtreeMatches(
+        index: Int,
+        columns: List<ColumnDescriptor>,
+        childrenProvider: ((Int) -> TableTabChildRows?)?,
+    ): Boolean {
+        if (rowMatches(index, columns)) return true
+        val children = childrenProvider?.invoke(index) ?: return false
+        if (children.rowCount == 0) return false
+        return (0 until children.rowCount).any { childIdx ->
+            subtreeMatches(childIdx, children.columns, children.childrenProvider)
+        }
+    }
+
     fun addLevel(
         rowCount: Int,
         columns: List<ColumnDescriptor>,
@@ -556,10 +578,12 @@ private fun flattenTreeVsc(
     ) {
         val order = if (depth == 0) sortedIndices(rowCount, columns) else (0 until rowCount).toList()
         for (i in order) {
+            if (isSearching && !subtreeMatches(i, columns, childrenProvider)) continue
             val path = parentPath + i
             val children = childrenProvider?.invoke(i)
             val hasChildren = children != null && children.rowCount > 0
-            val isExpanded = hasChildren && path in expandedPaths
+            val isExpanded = hasChildren && (path in expandedPaths ||
+                (isSearching && !rowMatches(i, columns)))
             result += VscFlatRow(depth, i, columns, hasChildren, isExpanded, rowSelectionProvider, path)
             if (isExpanded && children != null) {
                 addLevel(
@@ -615,16 +639,7 @@ private fun TreeTableTabContent(
     }
 
     val flatRows = remember(descriptor, expandedPaths.toList(), sortColumnIndex, sortAscending, debouncedQuery) {
-        val allRows = flattenTreeVsc(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending)
-        if (debouncedQuery.isEmpty()) allRows
-        else {
-            val lq = debouncedQuery.lowercase()
-            allRows.filter { row ->
-                row.columns.any { col ->
-                    col.cellProvider(row.index).representation.lowercase().contains(lq)
-                }
-            }
-        }
+        flattenTreeVsc(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending, debouncedQuery)
     }
 
     // Track which flattened row is currently focused (keyboard-navigated or clicked).

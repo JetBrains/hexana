@@ -263,8 +263,11 @@ private fun flattenTree(
     expandedPaths: Set<List<Int>>,
     sortColumnIndex: Int = -1,
     sortAscending: Boolean = true,
+    searchQuery: String = "",
 ): List<FlatRow> {
     val result = mutableListOf<FlatRow>()
+    val lq = searchQuery.lowercase()
+    val isSearching = lq.isNotEmpty()
 
     fun sortedIndices(rowCount: Int, columns: List<ColumnDescriptor>): List<Int> {
         val indices = (0 until rowCount).toMutableList()
@@ -283,6 +286,25 @@ private fun flattenTree(
         return indices
     }
 
+    fun rowMatches(index: Int, columns: List<ColumnDescriptor>): Boolean {
+        return columns.any { col ->
+            col.cellProvider(index).representation.lowercase().contains(lq)
+        }
+    }
+
+    fun subtreeMatches(
+        index: Int,
+        columns: List<ColumnDescriptor>,
+        childrenProvider: ((Int) -> TableTabChildRows?)?,
+    ): Boolean {
+        if (rowMatches(index, columns)) return true
+        val children = childrenProvider?.invoke(index) ?: return false
+        if (children.rowCount == 0) return false
+        return (0 until children.rowCount).any { childIdx ->
+            subtreeMatches(childIdx, children.columns, children.childrenProvider)
+        }
+    }
+
     fun addLevel(
         rowCount: Int,
         columns: List<ColumnDescriptor>,
@@ -293,10 +315,12 @@ private fun flattenTree(
     ) {
         val order = if (depth == 0) sortedIndices(rowCount, columns) else (0 until rowCount).toList()
         for (i in order) {
+            if (isSearching && !subtreeMatches(i, columns, childrenProvider)) continue
             val path = parentPath + i
             val children = childrenProvider?.invoke(i)
             val hasChildren = children != null && children.rowCount > 0
-            val isExpanded = hasChildren && path in expandedPaths
+            val isExpanded = hasChildren && (path in expandedPaths ||
+                (isSearching && !rowMatches(i, columns)))
             result += FlatRow(depth, i, columns, hasChildren, isExpanded, rowSelectionProvider, path)
             if (isExpanded && children != null) {
                 addLevel(
@@ -325,8 +349,9 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
     val expandedPaths = remember(descriptor) { mutableStateListOf<List<Int>>() }
     var sortColumnIndex by remember { mutableStateOf(descriptor.defaultSortColumn ?: -1) }
     var sortAscending by remember { mutableStateOf(descriptor.defaultSortAscending) }
-    val flatRows = remember(descriptor, expandedPaths.toList(), sortColumnIndex, sortAscending) {
-        flattenTree(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending)
+    var searchQuery by remember(descriptor) { mutableStateOf("") }
+    val flatRows = remember(descriptor, expandedPaths.toList(), sortColumnIndex, sortAscending, searchQuery) {
+        flattenTree(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending, searchQuery)
     }
 
     val textMeasurer = rememberTextMeasurer()
@@ -377,6 +402,7 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
         alwaysShowSearch = descriptor.alwaysShowSearch,
         searchPlaceholder = descriptor.searchPlaceholder,
         onTableFocusChanged = { focused -> state.isTableFocused = focused },
+        onSearchChanged = { query -> searchQuery = query },
         onSortChanged = { colIdx, asc ->
             sortColumnIndex = colIdx
             sortAscending = asc
