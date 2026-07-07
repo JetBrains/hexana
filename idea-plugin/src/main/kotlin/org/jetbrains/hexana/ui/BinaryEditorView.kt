@@ -755,19 +755,7 @@ private fun BinaryProvider.resolvePanels(
                 })
             }
         }
-        is DexBinaryProvider -> {
-            val parsed = this.parsedDexFile
-            if (parsed != null) {
-                dexFilePanels(parsed, this)
-            } else {
-                HexanaLog.LOG.warn("Failed to parse .dex file ${fileName ?: "unknown"}")
-                listOf(Panel("Parse Error") {
-                    Text(
-                        "Failed to parse ${fileName ?: "the file"} as an Android DEX file \u2014 see idea.log for details."
-                    )
-                })
-            }
-        }
+        is DexBinaryProvider -> emptyList()
         is GenericBinaryProvider -> emptyList()
         // ArchiveBinaryProvider IS-A NativeBinaryProvider — must precede the generic native
         // branch so archives don't fall through to the near-empty native view. The "Members"

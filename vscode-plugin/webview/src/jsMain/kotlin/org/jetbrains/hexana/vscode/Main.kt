@@ -5,7 +5,6 @@ import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.renderComposable
-import org.jetbrains.hexana.dex.DexFileParser
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.providers.*
@@ -120,14 +119,6 @@ private fun computeExtraTabs(buffer: org.jetbrains.hexana.io.CommonByteBuffer): 
             null
         }
         return if (classFile != null) classFileExtraTabs(classFile) else emptyList()
-    }
-    if (DexBinaryProvider.isDexFile(buffer)) {
-        val dexFile = try {
-            DexFileParser.parse(buffer.duplicate().position(0))
-        } catch (_: Exception) {
-            null
-        }
-        return if (dexFile != null) dexFileExtraTabs(dexFile, buffer) else emptyList()
     }
     return emptyList()
 }
