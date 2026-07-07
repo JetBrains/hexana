@@ -283,6 +283,9 @@ fun HexanaPanel(
                     showAddScriptDialog = false
                     onScriptTabConfirmed(path, dialogPickedContent)
                     onDialogPickedPathConsumed()
+                    // Switch to the newly added script tab
+                    val newLabel = path.substringAfterLast('/').substringAfterLast('\\')
+                    onActiveTabChange(newLabel)
                 },
                 onCancel = {
                     showAddScriptDialog = false

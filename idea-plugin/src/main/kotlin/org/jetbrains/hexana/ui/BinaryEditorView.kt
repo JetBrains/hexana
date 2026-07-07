@@ -415,6 +415,17 @@ private fun TabsPanel(
         tabOffsetPx = tabOffsetPx.coerceIn(0, maxTabOffsetPx)
     }
 
+    // When the last tab is selected (e.g. after adding a script tab),
+    // scroll the tab strip to the end so the new tab is visible.
+    // We also react to maxTabOffsetPx changes because the tab content width
+    // is measured asynchronously — the first LaunchedEffect may fire before
+    // the new tab has been laid out, so maxTabOffsetPx is still stale.
+    LaunchedEffect(state.tabIndex, panels.size, maxTabOffsetPx) {
+        if (state.tabIndex == panels.size - 1 && maxTabOffsetPx > 0) {
+            tabOffsetPx = maxTabOffsetPx
+        }
+    }
+
     val tabs by remember(state.tabIndex, panels, scriptTabIndices) {
         derivedStateOf {
             panels.mapIndexed { index, panel ->
