@@ -604,11 +604,30 @@ private fun TreeTableTabContent(
     val expandedPaths = remember(descriptor) { mutableStateListOf<List<Int>>() }
     var sortColumnIndex by remember { mutableStateOf(descriptor.defaultSortColumn ?: -1) }
     var sortAscending by remember { mutableStateOf(descriptor.defaultSortAscending) }
-    val flatRows = remember(descriptor, expandedPaths.toList(), sortColumnIndex, sortAscending) {
-        flattenTreeVsc(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending)
+
+    // --- Search state ---
+    var searchQuery by remember(descriptor) { mutableStateOf("") }
+    var isSearchVisible by remember(descriptor) { mutableStateOf(descriptor.alwaysShowSearch) }
+    var debouncedQuery by remember(descriptor) { mutableStateOf("") }
+    LaunchedEffect(searchQuery) {
+        delay(300)
+        debouncedQuery = searchQuery
     }
+
+    val flatRows = remember(descriptor, expandedPaths.toList(), sortColumnIndex, sortAscending, debouncedQuery) {
+        val allRows = flattenTreeVsc(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending)
+        if (debouncedQuery.isEmpty()) allRows
+        else {
+            val lq = debouncedQuery.lowercase()
+            allRows.filter { row ->
+                row.columns.any { col ->
+                    col.cellProvider(row.index).representation.lowercase().contains(lq)
+                }
+            }
+        }
+    }
+
     // Track which flattened row is currently focused (keyboard-navigated or clicked).
-    // This ensures nested rows without hex selection data still get highlighted.
     var focusedFlatIndex by remember(descriptor) { mutableStateOf(-1) }
 
     val headers = buildList {
@@ -627,139 +646,286 @@ private fun TreeTableTabContent(
         }
     }
 
-    // Sort state managed externally; the sort indicator column index is offset by +1
-    // because headers[0] is the empty action column.
+    // Sort state for header indicators; offset by +1 for the action column.
     val sortState = remember { TableSortState() }
-    // Sync sort state for header indicators
     sortState.columnIndex = if (sortColumnIndex >= 0) sortColumnIndex + 1 else -1
     sortState.direction = if (sortColumnIndex >= 0) {
         if (sortAscending) SortDirection.ASC else SortDirection.DESC
     } else SortDirection.NONE
 
-    SearchableTable(
-        headers = headers,
-        columnAligns = aligns,
-        defaultSortColumn = -1,
-        defaultSortDirection = SortDirection.NONE,
-        onSortToggle = { headerIndex ->
-            // headerIndex 0 is the empty action column, data columns start at 1
-            val dataColIndex = headerIndex - 1
-            if (dataColIndex >= 0) {
-                if (sortColumnIndex == dataColIndex) {
-                    sortAscending = !sortAscending
-                } else {
-                    sortColumnIndex = dataColIndex
-                    sortAscending = true
+    // --- Virtual scroll state ---
+    val rowHeight = 24
+    val bufferRows = 20
+    var scrollTop by remember { mutableStateOf(0.0) }
+    var viewportHeight by remember { mutableStateOf(600.0) }
+
+    val totalRows = flatRows.size
+    val firstVisible = maxOf(0, (scrollTop / rowHeight).toInt() - bufferRows)
+    val lastVisible = minOf(totalRows - 1, ((scrollTop + viewportHeight) / rowHeight).toInt() + bufferRows)
+
+    val searchBarLeading: (@Composable () -> Unit)? = if (debouncedQuery.isNotEmpty()) {
+        {
+            Span({ style { property("font-size", "11px"); color(Color("#888")) } }) {
+                Text("${flatRows.size} results")
+            }
+        }
+    } else null
+
+    Div({
+        classes("hexana-searchable-table")
+        tabIndex(-1)
+        style {
+            property("outline", "none")
+            display(DisplayStyle.Flex)
+            property("flex-direction", "column")
+            property("min-height", "0")
+        }
+        ref { container ->
+            val keyListener = EventListener { event ->
+                val ke = event as? KeyboardEvent ?: return@EventListener
+                val target = ke.target as? HTMLElement
+                if (target != null && !container.contains(target) && target != container) {
+                    val tabContent = container.closest(".hexana-tab-content")
+                    if (target != tabContent) return@EventListener
+                }
+                if (ke.key == "f" && (ke.metaKey || ke.ctrlKey)) {
+                    ke.preventDefault()
+                    ke.stopPropagation()
+                    isSearchVisible = true
+                    kotlinx.browser.window.requestAnimationFrame {
+                        container.querySelector(".hexana-search-input")
+                            ?.let { (it as? org.w3c.dom.HTMLInputElement)?.focus() }
+                    }
+                }
+                if (ke.key == "Escape" && isSearchVisible && !descriptor.alwaysShowSearch) {
+                    isSearchVisible = false
+                    searchQuery = ""
                 }
             }
-        },
-    ) {
-        for ((flatIndex, row) in flatRows.withIndex()) {
-            val selData = row.rowSelectionProvider(row.index)
-            val isHighlighted = if (focusedFlatIndex >= 0) {
-                flatIndex == focusedFlatIndex
-            } else {
-                selData != null && selection.hasSelection &&
-                    selection.selectionStart == selData.offset &&
-                    selection.selectionEnd == selData.offset + selData.size - 1
+            kotlinx.browser.window.addEventListener("keydown", keyListener, true)
+            onDispose {
+                kotlinx.browser.window.removeEventListener("keydown", keyListener, true)
             }
-
-            PanelTableRow(
-                isHighlighted = isHighlighted,
-                onClick = {
-                    focusedFlatIndex = flatIndex
-                    if (row.hasChildren) {
-                        if (row.isExpanded) {
-                            expandedPaths.remove(row.treePath)
-                        } else {
-                            expandedPaths.add(row.treePath)
-                        }
-                    } else {
-                        val highlightProvider = descriptor.rowHighlightRangesProvider
-                        if (highlightProvider != null && row.depth == 0) {
-                            // Web hex view has no multi-range highlight API; degrade to the
-                            // bounding span covering all returned ranges.
-                            applyHighlightRangesVsc(highlightProvider(row.index), selection)
-                        } else if (selData != null) {
-                            selection.anchorIndex = selData.offset
-                            selection.activeIndex = selData.offset + selData.size - 1
-                            selection.cursorIndex = selData.offset
-                            scrollHexViewerTo(selData.offset)
-                        }
-                    }
+        }
+    }) {
+        // Search bar
+        if (isSearchVisible || searchQuery.isNotEmpty()) {
+            SearchBar(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                onClose = {
+                    searchQuery = ""
+                    if (!descriptor.alwaysShowSearch) isSearchVisible = false
                 },
-                onSelect = {
-                    // Arrow up/down: scroll hex view without toggling expand/collapse
-                    focusedFlatIndex = flatIndex
-                    val highlightProvider = descriptor.rowHighlightRangesProvider
-                    if (highlightProvider != null && row.depth == 0) {
-                        applyHighlightRangesVsc(highlightProvider(row.index), selection)
-                    } else if (selData != null) {
-                        selection.anchorIndex = selData.offset
-                        selection.activeIndex = selData.offset + selData.size - 1
-                        selection.cursorIndex = selData.offset
-                        scrollHexViewerTo(selData.offset)
+                leading = searchBarLeading,
+            )
+        }
+
+        // Table with virtual scrolling
+        Div({
+            ref { tableWrapper ->
+                fun findScrollParent(el: HTMLElement): HTMLElement? {
+                    var current: HTMLElement? = el.parentElement as? HTMLElement
+                    while (current != null) {
+                        val overflow = kotlinx.browser.window.getComputedStyle(current)
+                            .getPropertyValue("overflow-y")
+                        if (overflow == "auto" || overflow == "scroll") return current
+                        current = current.parentElement as? HTMLElement
                     }
-                },
-                onActivate = {
-                    // Left/right arrows: toggle expand/collapse
-                    if (row.hasChildren) {
-                        if (row.isExpanded) {
-                            expandedPaths.remove(row.treePath)
-                        } else {
-                            expandedPaths.add(row.treePath)
+                    return null
+                }
+
+                val scrollParent = findScrollParent(tableWrapper)
+                if (scrollParent != null) {
+                    viewportHeight = scrollParent.clientHeight.toDouble()
+                    val wrapperTop = tableWrapper.getBoundingClientRect().top
+                    val parentTop = scrollParent.getBoundingClientRect().top
+                    scrollTop = maxOf(0.0, parentTop - wrapperTop)
+
+                    val listener = EventListener {
+                        viewportHeight = scrollParent.clientHeight.toDouble()
+                        val wt = tableWrapper.getBoundingClientRect().top
+                        val pt = scrollParent.getBoundingClientRect().top
+                        scrollTop = maxOf(0.0, pt - wt)
+                    }
+                    scrollParent.addEventListener("scroll", listener)
+                    onDispose { scrollParent.removeEventListener("scroll", listener) }
+                } else {
+                    onDispose { }
+                }
+            }
+        }) {
+            Table({
+                classes("hexana-panel-table")
+            }) {
+                // Header
+                Thead {
+                    Tr({
+                        style {
+                            property("border-bottom", "1px solid var(--hexana-border, #333)")
                         }
-                    }
-                },
-            ) {
-                // Action column placeholder
-                Td({ classes("cell-id"); style { property("width", "12px") } }) {}
-
-                // Data columns
-                for ((colIndex, col) in descriptor.columns.withIndex()) {
-                    val cell = row.columns[colIndex].cellProvider(row.index)
-                    val cssClass = when (col.widthBehavior) {
-                        is ColumnWidth.Fill -> "cell-muted"
-                        is ColumnWidth.Measured -> "cell"
-                        is ColumnWidth.MeasuredMin -> "cell"
-                    }
-
-                    Td({
-                        classes(cssClass)
-                        attr("title", cell.tooltip ?: cell.representation)
                     }) {
-                        if (colIndex == 0) {
-                            // Indentation and expand/collapse chevron
-                            val indentPx = row.depth * 16
-                            if (indentPx > 0) {
-                                Span({ style { property("display", "inline-block"); property("width", "${indentPx}px") } }) {}
+                        headers.forEachIndexed { index, header ->
+                            val align = aligns.getOrElse(index) { "left" }
+                            val isNarrow = header == "ID" || header == ""
+                            val isSorted = sortState.columnIndex == index
+                            val indicator = when {
+                                isSorted && sortState.direction == SortDirection.ASC -> " \u25B2"
+                                isSorted && sortState.direction == SortDirection.DESC -> " \u25BC"
+                                else -> ""
                             }
-                            if (row.hasChildren) {
-                                Span({
-                                    style {
+                            Th({
+                                classes("panel-th")
+                                if (isNarrow) classes("panel-th-narrow")
+                                if (header.isNotEmpty()) classes("panel-th-sortable")
+                                style {
+                                    property("text-align", align)
+                                    if (header.isNotEmpty()) {
                                         property("cursor", "pointer")
-                                        property("display", "inline-block")
-                                        property("width", "16px")
-                                        property("text-align", "center")
-                                        property("font-size", "10px")
                                         property("user-select", "none")
                                     }
-                                    onClick { event ->
-                                        event.stopPropagation()
-                                        if (row.isExpanded) {
-                                            expandedPaths.remove(row.treePath)
-                                        } else {
-                                            expandedPaths.add(row.treePath)
+                                }
+                                if (header.isNotEmpty()) {
+                                    onClick {
+                                        val dataColIndex = index - 1
+                                        if (dataColIndex >= 0) {
+                                            if (sortColumnIndex == dataColIndex) {
+                                                sortAscending = !sortAscending
+                                            } else {
+                                                sortColumnIndex = dataColIndex
+                                                sortAscending = true
+                                            }
                                         }
                                     }
-                                }) {
-                                    Text(if (row.isExpanded) CHEVRON_DOWN else CHEVRON_RIGHT)
                                 }
-                            } else {
-                                Span({ style { property("display", "inline-block"); property("width", "16px") } }) {}
+                            }) { Text(header + indicator) }
+                        }
+                    }
+                }
+
+                // Virtualized body
+                Tbody {
+                    // Top spacer
+                    if (firstVisible > 0) {
+                        Tr({
+                            style { property("height", "${firstVisible * rowHeight}px") }
+                        }) {}
+                    }
+
+                    for (flatIndex in firstVisible..lastVisible) {
+                        if (flatIndex < 0 || flatIndex >= flatRows.size) continue
+                        val row = flatRows[flatIndex]
+                        val selData = row.rowSelectionProvider(row.index)
+                        val isHighlighted = if (focusedFlatIndex >= 0) {
+                            flatIndex == focusedFlatIndex
+                        } else {
+                            selData != null && selection.hasSelection &&
+                                selection.selectionStart == selData.offset &&
+                                selection.selectionEnd == selData.offset + selData.size - 1
+                        }
+
+                        PanelTableRow(
+                            isHighlighted = isHighlighted,
+                            onClick = {
+                                focusedFlatIndex = flatIndex
+                                if (row.hasChildren) {
+                                    if (row.isExpanded) {
+                                        expandedPaths.remove(row.treePath)
+                                    } else {
+                                        expandedPaths.add(row.treePath)
+                                    }
+                                } else {
+                                    val highlightProvider = descriptor.rowHighlightRangesProvider
+                                    if (highlightProvider != null && row.depth == 0) {
+                                        applyHighlightRangesVsc(highlightProvider(row.index), selection)
+                                    } else if (selData != null) {
+                                        selection.anchorIndex = selData.offset
+                                        selection.activeIndex = selData.offset + selData.size - 1
+                                        selection.cursorIndex = selData.offset
+                                        scrollHexViewerTo(selData.offset)
+                                    }
+                                }
+                            },
+                            onSelect = {
+                                focusedFlatIndex = flatIndex
+                                val highlightProvider = descriptor.rowHighlightRangesProvider
+                                if (highlightProvider != null && row.depth == 0) {
+                                    applyHighlightRangesVsc(highlightProvider(row.index), selection)
+                                } else if (selData != null) {
+                                    selection.anchorIndex = selData.offset
+                                    selection.activeIndex = selData.offset + selData.size - 1
+                                    selection.cursorIndex = selData.offset
+                                    scrollHexViewerTo(selData.offset)
+                                }
+                            },
+                            onActivate = {
+                                if (row.hasChildren) {
+                                    if (row.isExpanded) {
+                                        expandedPaths.remove(row.treePath)
+                                    } else {
+                                        expandedPaths.add(row.treePath)
+                                    }
+                                }
+                            },
+                        ) {
+                            // Action column placeholder
+                            Td({ classes("cell-id"); style { property("width", "12px") } }) {}
+
+                            // Data columns
+                            for ((colIndex, col) in descriptor.columns.withIndex()) {
+                                val cell = row.columns[colIndex].cellProvider(row.index)
+                                val cssClass = when (col.widthBehavior) {
+                                    is ColumnWidth.Fill -> "cell-muted"
+                                    is ColumnWidth.Measured -> "cell"
+                                    is ColumnWidth.MeasuredMin -> "cell"
+                                }
+
+                                Td({
+                                    classes(cssClass)
+                                    attr("title", cell.tooltip ?: cell.representation)
+                                }) {
+                                    if (colIndex == 0) {
+                                        val indentPx = row.depth * 16
+                                        if (indentPx > 0) {
+                                            Span({ style { property("display", "inline-block"); property("width", "${indentPx}px") } }) {}
+                                        }
+                                        if (row.hasChildren) {
+                                            Span({
+                                                style {
+                                                    property("cursor", "pointer")
+                                                    property("display", "inline-block")
+                                                    property("width", "16px")
+                                                    property("text-align", "center")
+                                                    property("font-size", "10px")
+                                                    property("user-select", "none")
+                                                }
+                                                onClick { event ->
+                                                    event.stopPropagation()
+                                                    if (row.isExpanded) {
+                                                        expandedPaths.remove(row.treePath)
+                                                    } else {
+                                                        expandedPaths.add(row.treePath)
+                                                    }
+                                                }
+                                            }) {
+                                                Text(if (row.isExpanded) CHEVRON_DOWN else CHEVRON_RIGHT)
+                                            }
+                                        } else {
+                                            Span({ style { property("display", "inline-block"); property("width", "16px") } }) {}
+                                        }
+                                    }
+                                    Text(cell.representation)
+                                }
                             }
                         }
-                        Text(cell.representation)
+                    }
+
+                    // Bottom spacer
+                    val bottomRows = totalRows - lastVisible - 1
+                    if (bottomRows > 0) {
+                        Tr({
+                            style { property("height", "${bottomRows * rowHeight}px") }
+                        }) {}
                     }
                 }
             }
