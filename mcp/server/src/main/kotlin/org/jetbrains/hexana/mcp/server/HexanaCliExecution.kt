@@ -91,6 +91,9 @@ internal fun renderWasmToWatCommandOutput(
     )
 }
 
+internal fun renderTodoToolNotImplementedMessage(command: HexanaCommand.TodoTool): String =
+    "Hexana MCP CLI command '${command.spec.commandName}' for tool '${command.spec.toolName}' is not implemented yet (TODO)."
+
 private fun requireOutputWithinLimit(
     output: HexanaCliCommandOutput,
     maxOutputBytes: Int,

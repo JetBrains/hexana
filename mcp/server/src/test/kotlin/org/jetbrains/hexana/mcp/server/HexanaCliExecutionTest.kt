@@ -285,6 +285,17 @@ class HexanaCliExecutionTest {
         assertFalse(output.contains("  groups: converters\n"))
     }
 
+    @Test
+    fun renderTodoToolNotImplementedMessageNamesCommandAndTool() {
+        val spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == "summarize-binary" }
+        val output = renderTodoToolNotImplementedMessage(HexanaCommand.TodoTool(spec))
+
+        assertTrue(output.contains("summarize-binary"))
+        assertTrue(output.contains("summarize_binary"))
+        assertTrue(output.contains("not implemented"))
+        assertTrue(output.contains("TODO"))
+    }
+
     private fun assertToolBlockContains(output: String, commandName: String, vararg expectedLines: String) {
         val blockStart = output.indexOf("$commandName\n")
         assertTrue(blockStart >= 0, "Expected listing to contain $commandName")

@@ -56,6 +56,10 @@ fun main(args: Array<String>) {
                 is HexanaCommand.SummarizeModule -> printCommandOutput(renderSummarizeModuleCommandOutput(command))
                 is HexanaCommand.WasmToWat -> printCommandOutput(renderWasmToWatCommandOutput(command))
                 is HexanaCommand.Tools -> println(renderCliToolsListing(command))
+                is HexanaCommand.TodoTool -> {
+                    System.err.println(renderTodoToolNotImplementedMessage(command))
+                    exitProcess(1)
+                }
                 is HexanaCommand.Stdio -> runBlocking { runStdio(command) }
                 is HexanaCommand.Http -> runBlocking { runHttp(command) }
             }
@@ -76,6 +80,8 @@ fun main(args: Array<String>) {
                 "Hexana MCP wasm-to-wat command failed. See server logs for details."
             is HexanaCommand.Tools ->
                 "Hexana MCP tools command failed. See server logs for details."
+            is HexanaCommand.TodoTool ->
+                "Hexana MCP ${command.spec.commandName} command failed. See server logs for details."
             is HexanaCommand.Version,
             is HexanaCommand.Help -> "Hexana MCP server failed. See server logs for details."
         }
@@ -139,6 +145,7 @@ internal fun HexanaCommand.analytics(): CommandAnalytics? = when (this) {
     is HexanaCommand.SummarizeModule,
     is HexanaCommand.WasmToWat,
     is HexanaCommand.Tools,
+    is HexanaCommand.TodoTool,
     is HexanaCommand.Version -> null
 }
 
@@ -152,6 +159,7 @@ internal fun developmentVersionWarning(command: HexanaCommand, version: String):
         is HexanaCommand.SummarizeModule,
         is HexanaCommand.WasmToWat,
         is HexanaCommand.Tools,
+        is HexanaCommand.TodoTool,
         is HexanaCommand.Version -> null
 
         is HexanaCommand.Stdio,

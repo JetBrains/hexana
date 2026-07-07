@@ -3,6 +3,7 @@ package org.jetbrains.hexana.mcp.server
 import com.github.ajalt.clikt.core.*
 import com.github.ajalt.clikt.completion.CompletionCandidates
 import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.arguments.multiple
 import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.int
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
@@ -55,6 +56,10 @@ sealed interface HexanaCommand {
         val group: HexanaCliToolGroup?,
     ) : HexanaCommand
 
+    data class TodoTool(
+        val spec: HexanaCliToolSpec,
+    ) : HexanaCommand
+
     data object Version : HexanaCommand
     data object Help : HexanaCommand
 }
@@ -97,14 +102,16 @@ class HexanaCli(
 
         init {
             subcommands(
-                StdioCommand(envReader, sink),
-                HttpCommand(envReader, sink),
-                SummarizeModuleCommand(envReader, sink),
-                WasmToWatCommand(envReader, sink),
-                ToolsCommand(sink),
-                DoctorCommand(envReader, sink),
-                VersionCommand(sink),
-                HelpCommand(sink)
+                listOf<CliktCommand>(
+                    StdioCommand(envReader, sink),
+                    HttpCommand(envReader, sink),
+                    SummarizeModuleCommand(envReader, sink),
+                    WasmToWatCommand(envReader, sink),
+                    ToolsCommand(sink),
+                    DoctorCommand(envReader, sink),
+                    VersionCommand(sink),
+                    HelpCommand(sink),
+                ) + todoToolCommands(sink)
             )
         }
 
@@ -379,6 +386,25 @@ class HexanaCli(
         }
     }
 
+    private class TodoToolCommand(
+        private val spec: HexanaCliToolSpec,
+        private val sink: (HexanaCommand) -> Unit
+    ) : CliktCommand(name = spec.commandName) {
+        override val treatUnknownOptionsAsArgs: Boolean = true
+
+        override fun help(context: Context): String = spec.summary
+
+        @Suppress("unused")
+        private val ignoredArguments by argument(
+            name = "args",
+            help = "Future command arguments."
+        ).multiple()
+
+        override fun run() {
+            sink(HexanaCommand.TodoTool(spec))
+        }
+    }
+
     private class VersionCommand(
         private val sink: (HexanaCommand) -> Unit
     ) : CliktCommand(name = "version") {
@@ -397,6 +423,16 @@ class HexanaCli(
         override fun run() {
             sink(HexanaCommand.Help)
         }
+    }
+
+    private companion object {
+        fun todoToolCommands(sink: (HexanaCommand) -> Unit): List<CliktCommand> =
+            HexanaGeneratedCliToolRegistry.TOOLS
+                .asSequence()
+                .filter { it.executionStatus == HexanaCliExecutionStatus.TODO }
+                .sortedBy { it.commandName }
+                .map { TodoToolCommand(it, sink) }
+                .toList()
     }
 }
 

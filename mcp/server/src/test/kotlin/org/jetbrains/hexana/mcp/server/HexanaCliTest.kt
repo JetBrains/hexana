@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp.server
 
 import com.github.ajalt.clikt.core.CliktError
+import com.github.ajalt.clikt.core.NoSuchSubcommand
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import java.io.File
 import kotlin.test.*
@@ -240,6 +241,57 @@ class HexanaCliTest {
     }
 
     @Test
+    fun parseAcceptsGeneratedTodoCommandAsTodoToolVariant() {
+        val expectedSpec = generatedCliToolSpec("list-enabled-features")
+        val command = cli().parse(arrayOf("list-enabled-features"))
+
+        assertIs<HexanaCommand.TodoTool>(command)
+        assertEquals(expectedSpec, command.spec)
+        assertEquals("list_enabled_features", command.spec.toolName)
+        assertEquals(HexanaCliExecutionStatus.TODO, command.spec.executionStatus)
+    }
+
+    @Test
+    fun parseGeneratedTodoCommandAbsorbsFutureArguments() {
+        val expectedSpec = generatedCliToolSpec("summarize-binary")
+        val command = cli().parse(
+            arrayOf(
+                "summarize-binary",
+                "--input",
+                "app.wasm",
+                "--format=json",
+                "extra",
+            )
+        )
+
+        assertIs<HexanaCommand.TodoTool>(command)
+        assertEquals(expectedSpec, command.spec)
+        assertEquals("summarize_binary", command.spec.toolName)
+    }
+
+    @Test
+    fun parseRejectsUnknownCommandWithoutTreatingItAsTodo() {
+        val error = assertFailsWith<CliktError> {
+            cli().parse(arrayOf("definitely-not-a-command"))
+        }
+
+        assertIs<NoSuchSubcommand>(error)
+        assertFalse(error.message.orEmpty().contains("TODO"))
+        assertFalse(error.message.orEmpty().contains("not implemented"))
+    }
+
+    @Test
+    fun parseKeepsExecutableGeneratedCommandsOnHandWrittenVariants() {
+        val summarize = cli().parse(arrayOf("summarize-module", "app.wasm"))
+        val wat = cli().parse(arrayOf("wasm-to-wat", "app.wasm"))
+
+        assertIs<HexanaCommand.SummarizeModule>(summarize)
+        assertEquals("app.wasm", summarize.path)
+        assertIs<HexanaCommand.WasmToWat>(wat)
+        assertEquals("app.wasm", wat.path)
+    }
+
+    @Test
     fun parseAcceptsToolsCommandWithoutGroupFilter() {
         val command = cli().parse(arrayOf("tools"))
 
@@ -317,6 +369,7 @@ class HexanaCliTest {
         assertTrue(help.contains("stdio"))
         assertTrue(help.contains("http"))
         assertTrue(help.contains("summarize-module"))
+        assertTrue(help.contains("summarize-binary"))
         assertTrue(help.contains("tools"))
         assertTrue(help.contains("doctor"))
         assertTrue(help.contains("version"))
@@ -406,5 +459,8 @@ class HexanaCliTest {
 
     private companion object {
         const val GRAALVM_NATIVE_IMAGE_CODE_PROPERTY = "org.graalvm.nativeimage.imagecode"
+
+        fun generatedCliToolSpec(commandName: String): HexanaCliToolSpec =
+            HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == commandName }
     }
 }
