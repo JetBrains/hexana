@@ -254,6 +254,7 @@ object TableTabsProviderRegistry {
             WasmComponentTableTabsProvider(),
             WasmTableTabsProvider(),
             NativeTableTabsProvider(),
+            ArchiveTableTabsProvider(),
             ZipTableTabsProvider(),
             ProtobufTableTabsProvider(),
             ProtobufMessageTableTabsProvider(),

@@ -32,9 +32,20 @@ import org.jetbrains.hexana.document.journal.JournalPersister
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
+import com.intellij.openapi.application.EDT
+import com.intellij.openapi.application.PathManager
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VfsUtil
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.hexana.ArchiveMemberTabTitleProvider
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicReference
 import org.jetbrains.hexana.HexanaLog
 import org.jetbrains.hexana.nativebin.JVM_FILE_SYSTEM
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
@@ -758,12 +769,10 @@ private fun BinaryProvider.resolvePanels(
             }
         }
         is GenericBinaryProvider -> emptyList()
-        // Must precede the generic `is NativeBinaryProvider` branch below: ArchiveBinaryProvider
-        // IS-A NativeBinaryProvider, and Kotlin `when` is first-match — otherwise the archive
-        // would fall through to the near-empty generic native branch (blank editor).
-        is ArchiveBinaryProvider -> listOf(
-            Panel("Members") { ArchiveMembersPanel(this, state, archiveName = archiveName) },
-        )
+        // ArchiveBinaryProvider IS-A NativeBinaryProvider — must precede the generic native
+        // branch so archives don't fall through to the near-empty native view. The "Members"
+        // table tab is produced by ArchiveTableTabsProvider and enriched below.
+        is ArchiveBinaryProvider -> emptyList()
         is NativeBinaryProvider -> commonNativePanels(state)
         is WasmBinaryVirtualFileProvider -> {
             if (canProvideWasmModule()) {
@@ -867,6 +876,8 @@ private fun BinaryProvider.resolvePanels(
         tabEntries += enriched.map { tab ->
             val panel = if (tab.name == "Entries" && onOpenZipEntry != null && this is ZipBinaryProvider) {
                 enrichZipEntriesTab(tab, onOpenZipEntry).toPanel(state)
+            } else if (tab.name == "Members" && this is ArchiveBinaryProvider) {
+                enrichArchiveMembersTab(tab, state.project, archiveName).toPanel(state)
             } else {
                 tab.toPanel(state)
             }
@@ -916,6 +927,111 @@ private fun ZipBinaryProvider.enrichZipEntriesTab(
         showIdColumn = tab.showIdColumn,
         priority = tab.priority,
     )
+}
+
+/**
+ * Enriches the archive "Members" tab descriptor with a row-click action that
+ * extracts the clicked member to a temp file and opens it in a child editor.
+ *
+ * The extraction logic mirrors the original [ArchiveMembersPanel]: a single
+ * temp directory is created per archive, member bytes are sliced on demand,
+ * and the extracted file is opened via [FileEditorManager]. The service-level
+ * coroutine scope is used so the extraction outlives the panel.
+ */
+private fun ArchiveBinaryProvider.enrichArchiveMembersTab(
+    tab: TableTabDescriptor,
+    project: Project,
+    archiveName: String?,
+): TableTabDescriptor {
+    val provider = this
+    val members = provider.members.filterNot { it.isBookkeeping }
+    val ambiguousBaseNames = members.groupingBy { archiveMemberBaseName(it.name) }
+        .eachCount().filterValues { it > 1 }.keys
+    val classifications = members.map { classifyArchiveMember(provider.bytes, it.contentRange) }
+    val tempDir = AtomicReference<Path?>(null)
+    val scope = HexanaService.getInstance().coroutineScope
+
+    return TableTabDescriptor(
+        name = tab.name,
+        columns = tab.columns,
+        rowCount = tab.rowCount,
+        defaultSortColumn = tab.defaultSortColumn,
+        defaultSortAscending = tab.defaultSortAscending,
+        rowSelectionProvider = tab.rowSelectionProvider,
+        rowAction = tab.rowAction,
+        contextMenuItems = tab.contextMenuItems,
+        rowClickAction = { index ->
+            val member = members[index]
+            val cls = classifications[index]
+            if (!cls.openable) return@TableTabDescriptor
+            val base = archiveMemberBaseName(member.name)
+            val tabTitle = buildString {
+                archiveName?.let { append(it).append('/') }
+                append(base)
+                if (base in ambiguousBaseNames) append(" (").append(member.index).append(')')
+            }
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val dir = tempDir.updateAndGet { existing ->
+                        existing ?: Files.createTempDirectory(
+                            Path.of(PathManager.getTempPath()),
+                            "hexana-archive-",
+                        ).also { it.toFile().deleteOnExit() }
+                    }!!
+                    val bytes = provider.bytes
+                        .slice(member.contentRange.offset, member.contentRange.size)
+                        .toByteArray()
+                    val fileName = "${member.index}-${sanitizeArchiveMemberName(member.name)}${archiveMemberExtension(cls.kind)}"
+                    val path = dir.resolve(fileName)
+                    Files.write(path, bytes)
+                    path.toFile().deleteOnExit()
+                    val vf = VfsUtil.findFile(path, true) ?: return@launch
+                    withContext(Dispatchers.EDT) {
+                        if (project.isDisposed) return@withContext
+                        vf.putUserData(ArchiveMemberTabTitleProvider.TITLE_KEY, tabTitle)
+                        FileEditorManager.getInstance(project).openFile(vf, true)
+                    }
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (t: Throwable) {
+                    HexanaLog.LOG.warn("Failed to extract archive member ${member.name}", t)
+                }
+            }
+        },
+        dynamicContextMenuProvider = tab.dynamicContextMenuProvider,
+        prologueText = tab.prologueText,
+        emptyMessage = tab.emptyMessage,
+        childrenProvider = tab.childrenProvider,
+        alwaysShowSearch = tab.alwaysShowSearch,
+        searchPlaceholder = tab.searchPlaceholder,
+        showIdColumn = tab.showIdColumn,
+        priority = tab.priority,
+    )
+}
+
+/** The member's file name without any archive-internal directory path. */
+private fun archiveMemberBaseName(name: String): String =
+    name.substringAfterLast('/').substringAfterLast('\\').ifEmpty { name }
+
+/** Keeps only filesystem-safe characters so a member name can become a temp file name. */
+private fun sanitizeArchiveMemberName(name: String): String {
+    val base = archiveMemberBaseName(name)
+    val cleaned = base.map { ch ->
+        if (ch.isLetterOrDigit() || ch == '.' || ch == '_' || ch == '-') ch else '_'
+    }.joinToString("")
+    return cleaned.take(96).ifEmpty { "member" }
+}
+
+/** A file-name hint for the extracted member; the content detector re-sniffs the magic regardless. */
+private fun archiveMemberExtension(kind: ArchiveMemberKind): String = when (kind) {
+    ArchiveMemberKind.ELF,
+    ArchiveMemberKind.MACH_O,
+    ArchiveMemberKind.FAT_MACH_O,
+    ArchiveMemberKind.COFF -> ".o"
+    ArchiveMemberKind.PE -> ".exe"
+    ArchiveMemberKind.ARCHIVE -> ".a"
+    ArchiveMemberKind.SHORT_IMPORT,
+    ArchiveMemberKind.UNKNOWN -> ""
 }
 
 private fun BinaryVirtualFileProvider.errorPanel(state: HexViewStateHolder): List<Panel> = listOf(

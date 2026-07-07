@@ -6,6 +6,7 @@ import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
+import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
@@ -77,6 +78,8 @@ fun HexanaPanel(
                 for (d in enriched) {
                     val desc = if (d.name == "Entries" && zipProvider != null) {
                         enrichZipEntriesTab(d, zipProvider.displayEntries)
+                    } else if (d.name == "Members" && provider is ArchiveBinaryProvider) {
+                        enrichArchiveMembersTab(d, provider)
                     } else d
                     tabEntries += TabEntry(
                         PanelTab(desc.name) { sel -> TableTabContent(desc, sel) },
@@ -541,6 +544,50 @@ private fun TabScrollButton(
     }) {
         Text(label)
     }
+}
+
+/**
+ * Enriches the archive "Members" tab descriptor with a row-click action that
+ * extracts the clicked member's bytes and posts them to the extension host
+ * for opening in a new editor tab via [postOpenModuleToHost].
+ */
+private fun enrichArchiveMembersTab(
+    tab: TableTabDescriptor,
+    provider: ArchiveBinaryProvider,
+): TableTabDescriptor {
+    val members = provider.members.filterNot { it.isBookkeeping }
+    val classifications = members.map {
+        org.jetbrains.hexana.providers.classifyArchiveMember(provider.bytes, it.contentRange)
+    }
+    return TableTabDescriptor(
+        name = tab.name,
+        columns = tab.columns,
+        rowCount = tab.rowCount,
+        defaultSortColumn = tab.defaultSortColumn,
+        defaultSortAscending = tab.defaultSortAscending,
+        rowSelectionProvider = tab.rowSelectionProvider,
+        rowAction = tab.rowAction,
+        contextMenuItems = tab.contextMenuItems,
+        rowClickAction = { index ->
+            val member = members[index]
+            val cls = classifications[index]
+            if (cls.openable) {
+                val bytes = provider.bytes
+                    .slice(member.contentRange.offset, member.contentRange.size)
+                    .toByteArray()
+                val baseName = member.name.substringAfterLast('/').substringAfterLast('\\').ifEmpty { member.name }
+                postOpenModuleToHost(member.index, baseName, bytes)
+            }
+        },
+        dynamicContextMenuProvider = tab.dynamicContextMenuProvider,
+        prologueText = tab.prologueText,
+        emptyMessage = tab.emptyMessage,
+        childrenProvider = tab.childrenProvider,
+        alwaysShowSearch = tab.alwaysShowSearch,
+        searchPlaceholder = tab.searchPlaceholder,
+        showIdColumn = tab.showIdColumn,
+        priority = tab.priority,
+    )
 }
 
 /**
