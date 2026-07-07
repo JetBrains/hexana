@@ -335,6 +335,7 @@ fun TableTabContent(
             display(DisplayStyle.Flex)
             property("flex-direction", "column")
             property("min-height", "0")
+            property("flex", "1")
         }
         ref { container ->
             // Listen on window (capture phase) so we receive Cmd+F even when
@@ -368,7 +369,7 @@ fun TableTabContent(
             }
         }
     }) {
-        // Search bar
+        // Search bar (outside the scrollable area)
         if (isSearchVisible || searchQuery.isNotEmpty()) {
             SearchBar(
                 query = searchQuery,
@@ -381,42 +382,24 @@ fun TableTabContent(
             )
         }
 
-        // Table with virtual scrolling — we listen to scroll events on the
-        // nearest scrollable ancestor (hexana-tab-content) to determine
-        // which rows are visible.
+        // Table with virtual scrolling — the table wrapper itself is the
+        // scrollable container, keeping the search bar fixed above.
         Div({
+            style {
+                property("flex", "1")
+                property("overflow-y", "auto")
+                property("min-height", "0")
+            }
             ref { tableWrapper ->
-                // Find the scrollable ancestor (hexana-tab-content)
-                fun findScrollParent(el: HTMLElement): HTMLElement? {
-                    var current: HTMLElement? = el.parentElement as? HTMLElement
-                    while (current != null) {
-                        val overflow = kotlinx.browser.window.getComputedStyle(current)
-                            .getPropertyValue("overflow-y")
-                        if (overflow == "auto" || overflow == "scroll") return current
-                        current = current.parentElement as? HTMLElement
-                    }
-                    return null
-                }
+                viewportHeight = tableWrapper.clientHeight.toDouble()
+                scrollTop = tableWrapper.scrollTop
 
-                val scrollParent = findScrollParent(tableWrapper)
-                if (scrollParent != null) {
-                    viewportHeight = scrollParent.clientHeight.toDouble()
-                    // Compute initial scrollTop relative to the table wrapper
-                    val wrapperTop = tableWrapper.getBoundingClientRect().top
-                    val parentTop = scrollParent.getBoundingClientRect().top
-                    scrollTop = maxOf(0.0, parentTop - wrapperTop)
-
-                    val listener = EventListener {
-                        viewportHeight = scrollParent.clientHeight.toDouble()
-                        val wt = tableWrapper.getBoundingClientRect().top
-                        val pt = scrollParent.getBoundingClientRect().top
-                        scrollTop = maxOf(0.0, pt - wt)
-                    }
-                    scrollParent.addEventListener("scroll", listener)
-                    onDispose { scrollParent.removeEventListener("scroll", listener) }
-                } else {
-                    onDispose { }
+                val listener = EventListener {
+                    viewportHeight = tableWrapper.clientHeight.toDouble()
+                    scrollTop = tableWrapper.scrollTop
                 }
+                tableWrapper.addEventListener("scroll", listener)
+                onDispose { tableWrapper.removeEventListener("scroll", listener) }
             }
         }) {
             Table({
@@ -841,6 +824,7 @@ private fun TreeTableTabContent(
             display(DisplayStyle.Flex)
             property("flex-direction", "column")
             property("min-height", "0")
+            property("flex", "1")
         }
         ref { container ->
             val keyListener = EventListener { event ->
@@ -870,7 +854,7 @@ private fun TreeTableTabContent(
             }
         }
     }) {
-        // Search bar
+        // Search bar (outside the scrollable area)
         if (isSearchVisible || searchQuery.isNotEmpty()) {
             SearchBar(
                 query = searchQuery,
@@ -883,38 +867,24 @@ private fun TreeTableTabContent(
             )
         }
 
-        // Table with virtual scrolling
+        // Table with virtual scrolling — the table wrapper itself is the
+        // scrollable container, keeping the search bar fixed above.
         Div({
+            style {
+                property("flex", "1")
+                property("overflow-y", "auto")
+                property("min-height", "0")
+            }
             ref { tableWrapper ->
-                fun findScrollParent(el: HTMLElement): HTMLElement? {
-                    var current: HTMLElement? = el.parentElement as? HTMLElement
-                    while (current != null) {
-                        val overflow = kotlinx.browser.window.getComputedStyle(current)
-                            .getPropertyValue("overflow-y")
-                        if (overflow == "auto" || overflow == "scroll") return current
-                        current = current.parentElement as? HTMLElement
-                    }
-                    return null
-                }
+                viewportHeight = tableWrapper.clientHeight.toDouble()
+                scrollTop = tableWrapper.scrollTop
 
-                val scrollParent = findScrollParent(tableWrapper)
-                if (scrollParent != null) {
-                    viewportHeight = scrollParent.clientHeight.toDouble()
-                    val wrapperTop = tableWrapper.getBoundingClientRect().top
-                    val parentTop = scrollParent.getBoundingClientRect().top
-                    scrollTop = maxOf(0.0, parentTop - wrapperTop)
-
-                    val listener = EventListener {
-                        viewportHeight = scrollParent.clientHeight.toDouble()
-                        val wt = tableWrapper.getBoundingClientRect().top
-                        val pt = scrollParent.getBoundingClientRect().top
-                        scrollTop = maxOf(0.0, pt - wt)
-                    }
-                    scrollParent.addEventListener("scroll", listener)
-                    onDispose { scrollParent.removeEventListener("scroll", listener) }
-                } else {
-                    onDispose { }
+                val listener = EventListener {
+                    viewportHeight = tableWrapper.clientHeight.toDouble()
+                    scrollTop = tableWrapper.scrollTop
                 }
+                tableWrapper.addEventListener("scroll", listener)
+                onDispose { tableWrapper.removeEventListener("scroll", listener) }
             }
         }) {
             Table({

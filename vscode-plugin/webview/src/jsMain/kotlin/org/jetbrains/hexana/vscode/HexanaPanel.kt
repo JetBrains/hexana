@@ -325,6 +325,8 @@ fun HexanaPanel(
                 property("flex", "1")
                 property("min-height", "0")
                 property("outline", "none")
+                display(DisplayStyle.Flex)
+                property("flex-direction", "column")
             }
             onClick { e ->
                 val target = e.target as? HTMLElement ?: return@onClick

@@ -241,7 +241,7 @@ html, body {
     overflow: hidden;
     text-overflow: ellipsis;
     position: sticky;
-    top: -8px;
+    top: 0;
     background: var(--hexana-bg, #1e1e1e);
     z-index: 1;
 }
