@@ -60,6 +60,7 @@ val nativePackagingDir = layout.buildDirectory.dir("packaging-native")
 val claudeDesktopMcpbDir = layout.buildDirectory.dir("packaging-native/claude-desktop-mcpb")
 val claudeDesktopMcpbManifestTemplate = layout.projectDirectory.file("packaging/claude-desktop-mcpb/manifest.json")
 val claudeDesktopMcpbGeneratedManifest = layout.buildDirectory.file("generated/claude-desktop-mcpb/manifest.json")
+val claudeDesktopMcpbVerifiedManifest = layout.buildDirectory.file("verification/claude-desktop-mcpb/manifest.json")
 val obfuscatedInstallDir = project(":mcp").layout.buildDirectory.dir("install/server-r8")
 val nativeServerExecutableName = if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
     "hexana-mcp.exe"
@@ -458,6 +459,7 @@ val copyMcpServerRuntimeForR8 = tasks.register<Sync>("copyMcpServerRuntimeForR8"
 val r8ProgramJarFiles = r8OwnedJarNames.map { obfuscatedInstallDir.map { dir -> dir.file("lib/$it") } }
 val r8LibraryJarFiles = obfuscatedInstallDir.map { dir ->
     dir.dir("lib").asFileTree.matching {
+        include("*.jar")
         exclude(r8OwnedJarNames.map { name -> name })
     }
 }
@@ -812,6 +814,55 @@ tasks.register<JavaExec>("generateClaudeDesktopMcpbManifestTemplate") {
     inputs.files(project(":mcp:tools-generator").tasks.named("classes"))
     outputs.file(claudeDesktopMcpbManifestTemplate)
     dependsOn(":mcp:tools-generator:classes")
+}
+
+val regenerateClaudeDesktopMcpbManifestTemplateForVerification =
+    tasks.register<JavaExec>("regenerateClaudeDesktopMcpbManifestTemplateForVerification") {
+        group = "verification"
+        description = "Re-emits the Claude Desktop MCPB manifest template into build/ for drift verification."
+        classpath = project(":mcp:tools-generator").extensions
+            .getByType<SourceSetContainer>()
+            .named("main").get().runtimeClasspath
+        mainClass.set("org.jetbrains.hexana.mcp.tools.generator.McpbManifestMainKt")
+        argumentProviders.add(CommandLineArgumentProvider {
+            listOf(
+                claudeDesktopMcpbManifestTemplate.asFile.absolutePath,
+                claudeDesktopMcpbVerifiedManifest.get().asFile.absolutePath,
+                GENERATED_VERSION_TOKEN,
+                "__GENERATED_MCPB_PLATFORM__",
+            )
+        })
+        inputs.file(claudeDesktopMcpbManifestTemplate)
+        inputs.files(project(":mcp:tools-generator").tasks.named("classes"))
+        outputs.file(claudeDesktopMcpbVerifiedManifest)
+        dependsOn(":mcp:tools-generator:classes")
+    }
+
+tasks.register("verifyClaudeDesktopMcpbManifestTemplateUpToDate") {
+    group = "verification"
+    description = "Fails if the checked-in Claude Desktop MCPB manifest template drifts from the MCP tool catalog."
+    dependsOn(regenerateClaudeDesktopMcpbManifestTemplateForVerification)
+    mustRunAfter(tasks.named("generateClaudeDesktopMcpbManifestTemplate"))
+
+    inputs.file(claudeDesktopMcpbManifestTemplate)
+    inputs.file(claudeDesktopMcpbVerifiedManifest)
+
+    doLast {
+        val committed = claudeDesktopMcpbManifestTemplate.asFile
+        val regenerated = claudeDesktopMcpbVerifiedManifest.get().asFile
+        if (!committed.exists()) {
+            error("Committed Claude Desktop MCPB manifest template is missing at ${committed.absolutePath}.")
+        }
+        if (committed.readText().replace("\r\n", "\n") != regenerated.readText().replace("\r\n", "\n")) {
+            error(
+                "Claude Desktop MCPB manifest template is out of date with the MCP tool catalog.\n" +
+                    "  Committed:   ${committed.absolutePath}\n" +
+                    "  Regenerated: ${regenerated.absolutePath}\n" +
+                    "  Fix: ./gradlew :mcp:generateClaudeDesktopMcpbManifestTemplate, then commit " +
+                    "mcp/packaging/claude-desktop-mcpb/manifest.json."
+            )
+        }
+    }
 }
 
 val prepareClaudeDesktopMcpbNativeExecutable = tasks.register("prepareClaudeDesktopMcpbNativeExecutable") {

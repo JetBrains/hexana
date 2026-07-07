@@ -63,7 +63,7 @@ class HexanaStdioIntegrationTest {
         assertTrue(result.stdout.startsWith("Hexana MCP CLI tools\n"), result.stdout)
         assertTrue(result.stdout.contains("summarize-module\n"), result.stdout)
         assertTrue(result.stdout.contains("wasm-to-wat\n"), result.stdout)
-        assertTrue(result.stderr.isBlank(), result.stderr)
+        assertTrue(result.unexpectedStderr.isBlank(), result.stderr)
     }
 
     @Test
@@ -83,7 +83,7 @@ class HexanaStdioIntegrationTest {
         assertEquals("1", json.getValue("functions").jsonPrimitive.content)
         assertEquals("1", json.getValue("exports").jsonPrimitive.content)
         assertFalse("content" in json)
-        assertTrue(result.stderr.isBlank(), result.stderr)
+        assertTrue(result.unexpectedStderr.isBlank(), result.stderr)
     }
 
     @Test
@@ -101,7 +101,7 @@ class HexanaStdioIntegrationTest {
         assertInstalledCommandSucceeded(result)
         assertTrue(result.stdout.contains("(module"), result.stdout)
         assertFalse(result.stdout.trimStart().startsWith("{"), result.stdout)
-        assertTrue(result.stderr.isBlank(), result.stderr)
+        assertTrue(result.unexpectedStderr.isBlank(), result.stderr)
     }
 
     @Test

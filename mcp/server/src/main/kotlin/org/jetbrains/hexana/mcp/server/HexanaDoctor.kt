@@ -152,17 +152,17 @@ internal object HexanaDoctor {
             )
         }
 
-        val serverJar = environment.classPath
+        val installDirs = environment.classPath
             .split(File.pathSeparatorChar)
             .mapNotNull { rawEntry -> rawEntry.takeIf { it.isNotBlank() }?.let { Path.of(it) } }
-            .firstOrNull { path ->
+            .mapNotNull { path ->
                 val fileName = path.fileName?.toString().orEmpty()
-                fileName.startsWith("server-") &&
-                    fileName.endsWith(".jar") &&
-                    path.parent?.fileName?.toString() == "lib"
+                path.parent?.parent?.takeIf {
+                    fileName.endsWith(".jar") && path.parent?.fileName?.toString() == "lib"
+                }
             }
 
-        if (serverJar == null) {
+        if (installDirs.isEmpty()) {
             return DoctorCheck(
                 severity = DoctorSeverity.WARNING,
                 name = "installed layout",
@@ -170,7 +170,7 @@ internal object HexanaDoctor {
             )
         }
 
-        val installDir = serverJar.parent.parent
+        val installDir = installDirs.firstOrNull(::hasExpectedLauncher) ?: installDirs.first()
         val launcher = if (isWindows()) installDir.resolve("bin/server.bat") else installDir.resolve("bin/server")
         val missing = buildList {
             if (!Files.isDirectory(installDir.resolve("lib"))) {
@@ -194,6 +194,11 @@ internal object HexanaDoctor {
             name = "installed layout",
             message = "JVM distribution detected at $installDir"
         )
+    }
+
+    private fun hasExpectedLauncher(installDir: Path): Boolean {
+        val launcher = if (isWindows()) installDir.resolve("bin/server.bat") else installDir.resolve("bin/server")
+        return Files.isRegularFile(launcher)
     }
 }
 

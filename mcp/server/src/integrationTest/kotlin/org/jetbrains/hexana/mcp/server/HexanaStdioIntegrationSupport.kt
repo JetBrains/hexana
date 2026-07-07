@@ -300,7 +300,21 @@ internal data class InstalledCommandResult(
     val stdout: String,
     val stderr: String,
     val timedOut: Boolean,
-)
+) {
+    val unexpectedStderr: String
+        get() = stderr.withoutJvmLauncherDiagnostics()
+}
+
+private fun String.withoutJvmLauncherDiagnostics(): String =
+    lineSequence()
+        .filterNot { it.trimStart().isJvmLauncherDiagnostic() }
+        .joinToString("\n")
+        .trim()
+
+private fun String.isJvmLauncherDiagnostic(): Boolean =
+    startsWith("Picked up JAVA_TOOL_OPTIONS:") ||
+        startsWith("Picked up _JAVA_OPTIONS:") ||
+        startsWith("NOTE: Picked up JDK_JAVA_OPTIONS:")
 
 internal suspend inline fun <T> withInstalledStdioClient(
     logLevel: HexanaLogLevel = HexanaLogLevel.INFO,

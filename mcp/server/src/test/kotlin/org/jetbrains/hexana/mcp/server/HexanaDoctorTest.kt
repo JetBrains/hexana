@@ -29,6 +29,18 @@ class HexanaDoctorTest {
     }
 
     @Test
+    fun inspectDetectsInstalledDistributionFromObfuscatedRuntimeJar() {
+        val report = HexanaDoctor.inspect(
+            baseEnvironment(
+                classPath = installedDistributionClasspath("hexana-runtime-obfuscated.jar")
+            )
+        )
+
+        assertEquals(DoctorStatus.SUCCESS, report.status)
+        assertTrue(report.checks.any { it.severity == DoctorSeverity.OK && it.name == "installed layout" })
+    }
+
+    @Test
     fun inspectKeepsWarningOnlyReportSuccessfulForFirstRunSupport() {
         val report = HexanaDoctor.inspect(
             baseEnvironment(
@@ -83,7 +95,7 @@ class HexanaDoctorTest {
     }
 
     @Test
-    fun inspectFailsWhenDetectedInstalledDistributionIsMissingLauncher() {
+    fun inspectFailsWhenClasspathLibJarHasNoDistributionLauncher() {
         val installDir = temporaryFolder.newFolder("broken-install").toPath()
         Files.createDirectories(installDir.resolve("lib"))
         val classPath = installDir.resolve("lib/server-0.3.0.jar").toString()
@@ -103,15 +115,15 @@ class HexanaDoctorTest {
         assertTrue(report.checks.any { it.severity == DoctorSeverity.ERROR && it.name == checkName })
     }
 
-    private fun installedDistributionClasspath(): String {
+    private fun installedDistributionClasspath(jarName: String = "server-0.3.0.jar"): String {
         val installDir = temporaryFolder.newFolder("install").toPath()
         val libDir = installDir.resolve("lib")
         val binDir = installDir.resolve("bin")
         Files.createDirectories(libDir)
         Files.createDirectories(binDir)
-        Files.createFile(libDir.resolve("server-0.3.0.jar"))
+        Files.createFile(libDir.resolve(jarName))
         Files.createFile(binDir.resolve(launcherFileName()))
-        return libDir.resolve("server-0.3.0.jar").toString()
+        return libDir.resolve(jarName).toString()
     }
 
     private fun launcherFileName(): String {

@@ -60,6 +60,12 @@ After editing the DSL, run the affected generators and commit their output along
 These generation tasks are not wired into `compileKotlin` automatically — the checked-in outputs are committed and
 reviewed with the DSL change.
 
+Before sending a catalog change for review, run the generated-artifact drift checks:
+
+- `./gradlew :idea-plugin:verifyHexanaToolsetUpToDate`
+- `./gradlew :mcp:server:verifyHexanaToolDispatcherUpToDate`
+- `./gradlew :mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate`
+
 ## Guidance prose conventions
 
 - Generated MCP tool descriptions are the tool `summary` followed by the
