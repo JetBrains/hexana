@@ -23,6 +23,14 @@
 
 ### Security
 
+## 0.12.1 - 2026-07-01
+
+### Changed
+- Jar view – an option to view all files and not only classes
+- Automatic editor association for java class files without .class extension
+- If there are more information tabs than fits the view, now the list of tabs is scrollable
+- Tables showing information for native binary formats now have a correct layout (previously the rendering was broken)
+
 ## 0.12 - 2026-06-24
 
 ### Added
