@@ -4,6 +4,7 @@ import org.jetbrains.hexana.mcp.tools.BinaryInputClass
 import org.jetbrains.hexana.mcp.tools.ClassSpec
 import org.jetbrains.hexana.mcp.tools.CliExecutionStatus
 import org.jetbrains.hexana.mcp.tools.OutputConversionCapability
+import org.jetbrains.hexana.mcp.tools.StandaloneHandlerSpec
 import org.jetbrains.hexana.mcp.tools.ToolInputPattern
 import org.jetbrains.hexana.mcp.tools.ToolGroup
 import org.jetbrains.hexana.mcp.tools.ToolOutputPolicy
@@ -67,6 +68,7 @@ class ToolDescriptionGenerationTest {
         inputPattern = ToolInputPattern.BoundedBinaryQuery,
         surfaces = productionCliSurface("query-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
         handlerFqn = "org.jetbrains.hexana.mcp.query.queryBinary",
+        standaloneHandler = StandaloneHandlerSpec.defaultForToolName("query_binary"),
     )
 
     @Test
@@ -191,6 +193,33 @@ class ToolDescriptionGenerationTest {
         assertFalse(source.contains("registerWasmToWatTool"))
         assertFalse(source.contains("profile.includesTool(\"wasm_to_wat\")"))
         assertFalse(source.contains("name = \"wasm_to_wat\""))
+    }
+
+    @Test
+    fun `standalone dispatcher uses explicit standalone handler metadata`() {
+        val custom = summarizeBinarySpec.copy(
+            name = "custom_tool",
+            surfaces = productionCliSurface("custom-tool", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
+            standaloneHandler = StandaloneHandlerSpec("renamedStandaloneHandler"),
+        )
+
+        val source = buildDispatcherFile(listOf(custom)).toString()
+
+        assertTrue(source.contains("handlers.renamedStandaloneHandler(request.arguments)"))
+        assertFalse(source.contains("handlers.customTool(request.arguments)"))
+    }
+
+    @Test
+    fun `standalone dispatcher derives default handler from copied tool name`() {
+        val custom = summarizeBinarySpec.copy(
+            name = "custom_tool",
+            surfaces = productionCliSurface("custom-tool", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
+        )
+
+        val source = buildDispatcherFile(listOf(custom)).toString()
+
+        assertTrue(source.contains("handlers.customTool(request.arguments)"))
+        assertFalse(source.contains("handlers.summarizeBinary(request.arguments)"))
     }
 
     @Test

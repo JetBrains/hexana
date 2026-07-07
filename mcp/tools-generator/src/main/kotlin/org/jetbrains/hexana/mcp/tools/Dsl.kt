@@ -363,7 +363,20 @@ class FieldHandle internal constructor(
 
 // ---------- Tool spec ----------
 
-data class ToolSpec(
+data class StandaloneHandlerSpec(val methodName: String) {
+    init {
+        require(STANDALONE_HANDLER_METHOD_NAME_REGEX.matches(methodName)) {
+            "Standalone handler method name must be a Kotlin method name, got `$methodName`."
+        }
+    }
+
+    companion object {
+        fun defaultForToolName(toolName: String): StandaloneHandlerSpec =
+            StandaloneHandlerSpec(toolName.toDefaultStandaloneHandlerMethodName())
+    }
+}
+
+class ToolSpec(
     val name: String,
     val summary: String,
     val guidance: String?,
@@ -378,7 +391,67 @@ data class ToolSpec(
      * when they emit the dispatcher code that references it.
      */
     val handlerFqn: String,
-)
+    standaloneHandler: StandaloneHandlerSpec? = null,
+) {
+    private val standaloneHandlerOverride: StandaloneHandlerSpec? = standaloneHandler
+    val standaloneHandler: StandaloneHandlerSpec
+        get() = standaloneHandlerOverride ?: StandaloneHandlerSpec.defaultForToolName(name)
+
+    fun copy(
+        name: String = this.name,
+        summary: String = this.summary,
+        guidance: String? = this.guidance,
+        input: ClassSpec = this.input,
+        inputPattern: ToolInputPattern = this.inputPattern,
+        output: ClassSpec = this.output,
+        surfaces: ToolSurfaceSpec = this.surfaces,
+        handlerFqn: String = this.handlerFqn,
+        standaloneHandler: StandaloneHandlerSpec? = this.standaloneHandlerOverride,
+    ): ToolSpec = ToolSpec(
+        name = name,
+        summary = summary,
+        guidance = guidance,
+        input = input,
+        inputPattern = inputPattern,
+        output = output,
+        surfaces = surfaces,
+        handlerFqn = handlerFqn,
+        standaloneHandler = standaloneHandler,
+    )
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is ToolSpec) return false
+
+        return name == other.name &&
+            summary == other.summary &&
+            guidance == other.guidance &&
+            input == other.input &&
+            inputPattern == other.inputPattern &&
+            output == other.output &&
+            surfaces == other.surfaces &&
+            handlerFqn == other.handlerFqn &&
+            standaloneHandler == other.standaloneHandler
+    }
+
+    override fun hashCode(): Int {
+        var result = name.hashCode()
+        result = 31 * result + summary.hashCode()
+        result = 31 * result + (guidance?.hashCode() ?: 0)
+        result = 31 * result + input.hashCode()
+        result = 31 * result + inputPattern.hashCode()
+        result = 31 * result + output.hashCode()
+        result = 31 * result + surfaces.hashCode()
+        result = 31 * result + handlerFqn.hashCode()
+        result = 31 * result + standaloneHandler.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "ToolSpec(name=$name, summary=$summary, guidance=$guidance, input=$input, " +
+            "inputPattern=$inputPattern, output=$output, surfaces=$surfaces, handlerFqn=$handlerFqn, " +
+            "standaloneHandler=$standaloneHandler)"
+}
 
 data class ToolSurfaceSpec(
     val mcp: McpSurfaceSpec,
@@ -632,6 +705,7 @@ class ToolsBuilder internal constructor() {
 private val FQN_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)+$")
 private val FIELD_NAME_REGEX = Regex("^[a-z][A-Za-z0-9]*$")
 private val TOOL_NAME_REGEX = Regex("^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
+private val STANDALONE_HANDLER_METHOD_NAME_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]*$")
 private val CLI_COMMAND_NAME_REGEX = Regex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 
 @HexanaToolsDsl
@@ -643,6 +717,11 @@ class ToolBuilder internal constructor(private val name: String) {
     var output: ClassSpec? = null
     var surfaces: ToolSurfaceSpec? = null
     var handlerFqn: String? = null
+    private var standaloneHandlerSpec: StandaloneHandlerSpec? = null
+
+    fun standaloneHandler(methodName: String) {
+        standaloneHandlerSpec = StandaloneHandlerSpec(methodName.trim())
+    }
 
     internal fun build(): ToolSpec {
         require(TOOL_NAME_REGEX.matches(name)) {
@@ -669,8 +748,17 @@ class ToolBuilder internal constructor(private val name: String) {
             output = resolvedOutput,
             surfaces = resolvedSurfaces,
             handlerFqn = resolvedHandler,
+            standaloneHandler = standaloneHandlerSpec,
         )
     }
+}
+
+private fun String.toDefaultStandaloneHandlerMethodName(): String {
+    require(TOOL_NAME_REGEX.matches(this)) {
+        "Cannot derive standalone handler method name from non-snake-case tool name `$this`."
+    }
+    val parts = split('_')
+    return parts.first() + parts.drop(1).joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
 }
 
 private fun validateCliOutputSelection(toolName: String, output: ClassSpec, cli: CliSurfaceSpec) {

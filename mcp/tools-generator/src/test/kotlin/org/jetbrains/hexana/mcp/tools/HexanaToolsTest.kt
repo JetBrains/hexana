@@ -150,6 +150,20 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `catalog declares valid standalone handler metadata`() {
+        val methodName = Regex("^[A-Za-z_][A-Za-z0-9_]*$")
+
+        HexanaTools.forEach { spec ->
+            assertTrue(spec.standaloneHandler.methodName.isNotBlank(), "standalone handler blank for ${spec.name}")
+            assertTrue(
+                methodName.matches(spec.standaloneHandler.methodName),
+                "standalone handler `${spec.standaloneHandler.methodName}` is not a Kotlin method name",
+            )
+        }
+        assertEquals("summarizeModule", HexanaTools.single { it.name == "summarize_module" }.standaloneHandler.methodName)
+    }
+
+    @Test
     fun `MCP production metadata matches current production profile`() {
         assertEquals(
             CURRENT_PRODUCTION_MCP_TOOL_NAMES,
@@ -445,6 +459,19 @@ class HexanaToolsTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun `tool builder rejects invalid standalone handler names`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            tools {
+                tool("invalid_standalone_handler") {
+                    standaloneHandler("org.jetbrains.hexana.BadHandler")
+                }
+            }
+        }
+
+        assertTrue(error.message.orEmpty().contains("Standalone handler method name"))
     }
 
     @Test

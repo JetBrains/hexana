@@ -358,7 +358,7 @@ private fun buildDefaultProperty(name: String, default: Any): PropertySpec {
 }
 
 private fun renderAddToolCall(spec: ToolSpec): CodeBlock {
-    val handlerMethod = spec.name.toCamelCase()
+    val handlerMethod = spec.standaloneHandler.methodName
     val inputSchema = buildToolSchema(spec.input)
     val outputSchema = buildToolSchema(spec.output, includeDescriptions = false, includeNestedClasses = false)
 
@@ -631,16 +631,6 @@ private fun schemaDefaultValue(field: FieldSpec): CodeBlock {
         is String -> CodeBlock.of("%S", value)
         else -> error("Field '${field.name}' has unsupported schema default value `${field.default}`.")
     }
-}
-
-private fun String.toCamelCase(): String {
-    // Input contract: strict snake_case tool names (lowercase, single underscores). The Dsl enforces
-    // this via its validation; here we fail loudly if an odd shape slips through instead of silently
-    // producing weird handler method names.
-    require(isNotEmpty()) { "toCamelCase called on empty string" }
-    val parts = split('_').filter { it.isNotEmpty() }
-    require(parts.isNotEmpty()) { "tool name `$this` has no non-empty segments" }
-    return parts.first() + parts.drop(1).joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
 }
 
 private fun ToolSpec.registerFunctionName(): String =
