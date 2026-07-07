@@ -1,6 +1,11 @@
 # Unreleased
 
 - support for viewing compiled Protocol Buffers descriptor sets (.desc / .protoset), with Files/Messages/Fields/Enums/Services tabs
+- support for wazero in WASM run configurations (running only modules, not individual functions)
+- support for showing custom scriptable info tabs – write a JS script that uses 'print' to show information and 'binary' to access binary data; use "+" to add a script tab – a dialog with instructions and an API reference will be shown; csv and tsv are shown as tables
+- improved experience with table views – now all tables use the same table control and have proper built-in search
+- improved performance of table view rendering
+- added a button to ease sharing your feedback and reporting issues
 - MCP server setup now uses JetBrains downloads index native artifacts by default on supported platforms and no longer silently switches to GitHub when downloads metadata is unavailable
 
 # 0.5.0 - 24.06.2026
