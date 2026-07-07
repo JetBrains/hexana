@@ -49,6 +49,7 @@ fun HexanaPanel(
     dialogPickedContent: String = "",
     onDialogPickedPathConsumed: () -> Unit = {},
     onScriptTabConfirmed: (path: String, content: String) -> Unit = { _, _ -> },
+    onScriptTabRemoved: (path: String) -> Unit = {},
 ) {
     val pendingRun = rememberPendingRunState()
 
@@ -260,6 +261,7 @@ fun HexanaPanel(
                         it.path.substringAfterLast('/').substringAfterLast('\\') == label
                     }
                     if (st != null) {
+                        onScriptTabRemoved(st.path)
                         postScriptTabRemovedToHost(st.path)
                     }
                 },

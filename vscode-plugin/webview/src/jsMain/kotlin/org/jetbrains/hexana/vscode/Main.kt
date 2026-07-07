@@ -105,6 +105,9 @@ fun BinaryEditorApp() {
                     postScriptTabAddedToHost(path)
                 }
             },
+            onScriptTabRemoved = { path ->
+                scriptTabs.removeAll { it.path == path }
+            },
         )
     }
 }
@@ -142,6 +145,7 @@ fun BinaryEditorContent(
     dialogPickedContent: String = "",
     onDialogPickedPathConsumed: () -> Unit = {},
     onScriptTabConfirmed: (path: String, content: String) -> Unit = { _, _ -> },
+    onScriptTabRemoved: (path: String) -> Unit = {},
 ) {
     val selection = remember { HexSelectionState() }
     val buffer = remember(provider) { provider.bytes }
@@ -217,6 +221,7 @@ fun BinaryEditorContent(
             dialogPickedContent = dialogPickedContent,
             onDialogPickedPathConsumed = onDialogPickedPathConsumed,
             onScriptTabConfirmed = onScriptTabConfirmed,
+            onScriptTabRemoved = onScriptTabRemoved,
         )
     }
 }
