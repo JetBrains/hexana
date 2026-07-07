@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp.server
 
 import com.github.ajalt.clikt.core.*
+import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.int
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
@@ -33,6 +34,13 @@ sealed interface HexanaCommand {
 
     data class Doctor(
         val allowedRoots: List<String>,
+    ) : HexanaCommand
+
+    data class SummarizeModule(
+        val path: String,
+        val format: HexanaCliOutputFormat,
+        val allowedRoots: List<String>,
+        val resourceLimits: HexanaResourceLimits,
     ) : HexanaCommand
 
     data object Version : HexanaCommand
@@ -79,6 +87,7 @@ class HexanaCli(
             subcommands(
                 StdioCommand(envReader, sink),
                 HttpCommand(envReader, sink),
+                SummarizeModuleCommand(envReader, sink),
                 DoctorCommand(envReader, sink),
                 VersionCommand(sink),
                 HelpCommand(sink)
@@ -222,6 +231,51 @@ class HexanaCli(
         }
     }
 
+    private class SummarizeModuleCommand(
+        private val envReader: (String) -> String?,
+        private val sink: (HexanaCommand) -> Unit
+    ) : CliktCommand(name = summarizeModuleCliToolSpec().commandName) {
+        override fun help(context: Context): String = summarizeModuleCliToolSpec().summary
+
+        private val path by argument(
+            name = "wasm",
+            help = "Path to a WebAssembly module."
+        )
+
+        private val format by option(
+            "--format",
+            help = "Output format. Only json is supported for this command."
+        ).convert("json") { parseSummarizeModuleFormat(it) }.default(HexanaCliOutputFormat.JSON)
+
+        private val allowedRoots by allowedRootOption()
+        private val maxFileBytes by maxFileBytesOption()
+        private val maxInlineBytes by maxInlineBytesOption()
+        private val maxTextFileBytes by maxTextFileBytesOption()
+        private val maxOutputBytes by maxOutputBytesOption()
+        private val maxCandidateCount by maxCandidateCountOption()
+        private val maxScanRoots by maxScanRootsOption()
+        private val maxScanDepth by maxScanDepthOption()
+
+        override fun run() {
+            sink(
+                HexanaCommand.SummarizeModule(
+                    path = path,
+                    format = format,
+                    allowedRoots = allowedRoots + allowedRootsFromEnv(envReader),
+                    resourceLimits = buildResourceLimits(
+                        maxFileBytes = maxFileBytes,
+                        maxInlineBytes = maxInlineBytes,
+                        maxTextFileBytes = maxTextFileBytes,
+                        maxOutputBytes = maxOutputBytes,
+                        maxCandidateCount = maxCandidateCount,
+                        maxScanRoots = maxScanRoots,
+                        maxScanDepth = maxScanDepth,
+                    )
+                )
+            )
+        }
+    }
+
     private class DoctorCommand(
         private val envReader: (String) -> String?,
         private val sink: (HexanaCommand) -> Unit
@@ -259,6 +313,25 @@ class HexanaCli(
             sink(HexanaCommand.Help)
         }
     }
+}
+
+private fun summarizeModuleCliToolSpec(): HexanaCliToolSpec {
+    val spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == "summarize-module" }
+    require(HexanaCliInputMode.WASM_PATH in spec.inputModes) {
+        "Generated summarize-module CLI metadata must support wasm path input"
+    }
+    require(spec.outputFormats == setOf(HexanaCliOutputFormat.JSON)) {
+        "Generated summarize-module CLI metadata must expose only json output for this slice"
+    }
+    return spec
+}
+
+private fun parseSummarizeModuleFormat(value: String): HexanaCliOutputFormat {
+    val normalized = value.lowercase()
+    if (normalized == "json") {
+        return HexanaCliOutputFormat.JSON
+    }
+    throw UsageError("Unsupported summarize-module format: $value. Expected json.")
 }
 
 private fun parseLogLevel(value: String): HexanaLogLevel {

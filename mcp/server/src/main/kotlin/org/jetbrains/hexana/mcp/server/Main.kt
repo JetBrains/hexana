@@ -53,6 +53,7 @@ fun main(args: Array<String>) {
                         exitProcess(report.exitCode)
                     }
                 }
+                is HexanaCommand.SummarizeModule -> println(renderSummarizeModuleJson(command))
                 is HexanaCommand.Stdio -> runBlocking { runStdio(command) }
                 is HexanaCommand.Http -> runBlocking { runHttp(command) }
             }
@@ -67,6 +68,8 @@ fun main(args: Array<String>) {
             is HexanaCommand.Stdio -> "Hexana MCP server failed while running stdio transport. See server logs for details."
             is HexanaCommand.Http -> "Hexana MCP server failed while running HTTP transport. See server logs for details."
             is HexanaCommand.Doctor -> "Hexana MCP doctor failed. See server logs for details."
+            is HexanaCommand.SummarizeModule ->
+                "Hexana MCP summarize-module command failed. See server logs for details."
             is HexanaCommand.Version,
             is HexanaCommand.Help -> "Hexana MCP server failed. See server logs for details."
         }
@@ -120,6 +123,7 @@ internal fun HexanaCommand.analytics(): CommandAnalytics? = when (this) {
 
     is HexanaCommand.Help,
     is HexanaCommand.Doctor,
+    is HexanaCommand.SummarizeModule,
     is HexanaCommand.Version -> null
 }
 
@@ -130,6 +134,7 @@ internal fun developmentVersionWarning(command: HexanaCommand, version: String):
     return when (command) {
         is HexanaCommand.Help,
         is HexanaCommand.Doctor,
+        is HexanaCommand.SummarizeModule,
         is HexanaCommand.Version -> null
 
         is HexanaCommand.Stdio,

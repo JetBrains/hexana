@@ -152,6 +152,44 @@ class HexanaCliTest {
     }
 
     @Test
+    fun parseAcceptsSummarizeModuleJsonCommand() {
+        val command = cli().parse(arrayOf("summarize-module", "app.wasm", "--format", "json"))
+
+        assertIs<HexanaCommand.SummarizeModule>(command)
+        assertEquals("app.wasm", command.path)
+        assertEquals(HexanaCliOutputFormat.JSON, command.format)
+        assertEquals(emptyList(), command.allowedRoots)
+        assertEquals(HexanaAnalysisLimits.MAX_FILE_WASM_BYTES, command.resourceLimits.maxFileWasmBytes)
+    }
+
+    @Test
+    fun parseCombinesAllowedRootsFromCliAndEnvForSummarizeModule() {
+        val command = HexanaCli { name ->
+            if (name == "HEXANA_MCP_ALLOWED_ROOTS") "/env/project,/env/deps" else null
+        }.parse(
+            arrayOf(
+                "summarize-module",
+                "app.wasm",
+                "--allowed-root",
+                "/cli/project",
+            )
+        )
+
+        assertIs<HexanaCommand.SummarizeModule>(command)
+        assertEquals(listOf("/cli/project", "/env/project", "/env/deps"), command.allowedRoots)
+    }
+
+    @Test
+    fun parseRejectsUnsupportedSummarizeModuleFormat() {
+        val error = assertFailsWith<CliktError> {
+            cli().parse(arrayOf("summarize-module", "app.wasm", "--format", "pretty"))
+        }
+
+        assertTrue(error.message.orEmpty().contains("Unsupported summarize-module format"))
+        assertTrue(error.message.orEmpty().contains("Expected json"))
+    }
+
+    @Test
     fun parseNormalizesHttpEndpointAndKeepsLoopbackDefaults() {
         val command = cli().parse(
             arrayOf(
@@ -202,6 +240,7 @@ class HexanaCliTest {
         assertTrue(help.contains("Standalone Hexana MCP server"))
         assertTrue(help.contains("stdio"))
         assertTrue(help.contains("http"))
+        assertTrue(help.contains("summarize-module"))
         assertTrue(help.contains("doctor"))
         assertTrue(help.contains("version"))
         assertTrue(help.contains("help"))
