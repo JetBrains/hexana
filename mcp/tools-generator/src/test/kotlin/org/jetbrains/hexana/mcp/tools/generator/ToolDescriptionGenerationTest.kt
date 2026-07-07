@@ -9,6 +9,7 @@ import org.jetbrains.hexana.mcp.tools.ToolOutputPolicy
 import org.jetbrains.hexana.mcp.tools.ToolSpec
 import org.jetbrains.hexana.mcp.tools.class_
 import org.jetbrains.hexana.mcp.tools.list
+import org.jetbrains.hexana.mcp.tools.noMcpCliSurface
 import org.jetbrains.hexana.mcp.tools.productionCliSurface
 import org.jetbrains.hexana.mcp.tools.string
 import org.junit.Test
@@ -159,6 +160,36 @@ class ToolDescriptionGenerationTest {
 
         assertTrue(error.message.orEmpty().contains("has no supported CLI output format"))
         assertTrue(error.message.orEmpty().contains("mcp-wrapper-only"))
+    }
+
+    @Test
+    fun `standalone dispatcher excludes no MCP tools but keeps CLI registry metadata`() {
+        val converterResult = class_(
+            "ConverterResult",
+            kotlinPackage = "org.jetbrains.hexana.mcp.model.test",
+        ) {
+            outputCapabilities(OutputConversionCapability.SemanticJson, OutputConversionCapability.RawTextPlaceholder)
+            string("wat").describe("WAT text.")
+        }
+        val converter = summarizeBinarySpec.copy(
+            name = "wasm_to_wat",
+            output = converterResult,
+            surfaces = noMcpCliSurface(
+                "wasm-to-wat",
+                ToolGroup.Converters,
+                ToolOutputPolicy.ToolDefined,
+                defaultOutput = OutputConversionCapability.RawTextPlaceholder,
+            ),
+            handlerFqn = "org.jetbrains.hexana.mcp.server.wasmToWat",
+        )
+
+        val source = buildDispatcherFile(listOf(summarizeBinarySpec, converter)).toString()
+
+        assertTrue(source.contains("commandName = \"wasm-to-wat\""))
+        assertTrue(source.contains("toolName = \"wasm_to_wat\""))
+        assertFalse(source.contains("registerWasmToWatTool"))
+        assertFalse(source.contains("profile.includesTool(\"wasm_to_wat\")"))
+        assertFalse(source.contains("name = \"wasm_to_wat\""))
     }
 
     private fun renderGeneratedSource(mainClassName: String, generatedFile: Path): String {

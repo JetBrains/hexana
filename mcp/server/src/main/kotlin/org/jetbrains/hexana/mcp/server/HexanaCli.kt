@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp.server
 
 import com.github.ajalt.clikt.core.*
+import com.github.ajalt.clikt.completion.CompletionCandidates
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.int
@@ -37,6 +38,13 @@ sealed interface HexanaCommand {
     ) : HexanaCommand
 
     data class SummarizeModule(
+        val path: String,
+        val format: HexanaCliOutputFormat,
+        val allowedRoots: List<String>,
+        val resourceLimits: HexanaResourceLimits,
+    ) : HexanaCommand
+
+    data class WasmToWat(
         val path: String,
         val format: HexanaCliOutputFormat,
         val allowedRoots: List<String>,
@@ -88,6 +96,7 @@ class HexanaCli(
                 StdioCommand(envReader, sink),
                 HttpCommand(envReader, sink),
                 SummarizeModuleCommand(envReader, sink),
+                WasmToWatCommand(envReader, sink),
                 DoctorCommand(envReader, sink),
                 VersionCommand(sink),
                 HelpCommand(sink)
@@ -245,7 +254,10 @@ class HexanaCli(
         private val format by option(
             "--format",
             help = "Output format. Supported: ${summarizeModuleCliToolSpec().supportedFormatNames()}. Defaults to ${summarizeModuleCliToolSpec().defaultOutputFormat.cliName()}."
-        ).convert(summarizeModuleCliToolSpec().supportedFormatNames()) {
+        ).convert(
+            metavar = summarizeModuleCliToolSpec().supportedFormatNames(),
+            completionCandidates = summarizeModuleCliToolSpec().supportedFormatCompletionCandidates(),
+        ) {
             parseCliOutputFormat(summarizeModuleCliToolSpec(), it)
         }.default(summarizeModuleCliToolSpec().defaultOutputFormat)
 
@@ -296,6 +308,56 @@ class HexanaCli(
         }
     }
 
+    private class WasmToWatCommand(
+        private val envReader: (String) -> String?,
+        private val sink: (HexanaCommand) -> Unit
+    ) : CliktCommand(name = wasmToWatCliToolSpec().commandName) {
+        override fun help(context: Context): String = wasmToWatCliToolSpec().summary
+
+        private val path by argument(
+            name = "wasm",
+            help = "Path to a WebAssembly module."
+        )
+
+        private val format by option(
+            "--format",
+            help = "Output format. Supported: ${wasmToWatCliToolSpec().supportedFormatNames()}. Defaults to ${wasmToWatCliToolSpec().defaultOutputFormat.cliName()}."
+        ).convert(
+            metavar = wasmToWatCliToolSpec().supportedFormatNames(),
+            completionCandidates = wasmToWatCliToolSpec().supportedFormatCompletionCandidates(),
+        ) {
+            parseCliOutputFormat(wasmToWatCliToolSpec(), it)
+        }.default(wasmToWatCliToolSpec().defaultOutputFormat)
+
+        private val allowedRoots by allowedRootOption()
+        private val maxFileBytes by maxFileBytesOption()
+        private val maxInlineBytes by maxInlineBytesOption()
+        private val maxTextFileBytes by maxTextFileBytesOption()
+        private val maxOutputBytes by maxOutputBytesOption()
+        private val maxCandidateCount by maxCandidateCountOption()
+        private val maxScanRoots by maxScanRootsOption()
+        private val maxScanDepth by maxScanDepthOption()
+
+        override fun run() {
+            sink(
+                HexanaCommand.WasmToWat(
+                    path = path,
+                    format = format,
+                    allowedRoots = allowedRoots + allowedRootsFromEnv(envReader),
+                    resourceLimits = buildResourceLimits(
+                        maxFileBytes = maxFileBytes,
+                        maxInlineBytes = maxInlineBytes,
+                        maxTextFileBytes = maxTextFileBytes,
+                        maxOutputBytes = maxOutputBytes,
+                        maxCandidateCount = maxCandidateCount,
+                        maxScanRoots = maxScanRoots,
+                        maxScanDepth = maxScanDepth,
+                    )
+                )
+            )
+        }
+    }
+
     private class VersionCommand(
         private val sink: (HexanaCommand) -> Unit
     ) : CliktCommand(name = "version") {
@@ -331,6 +393,23 @@ private fun summarizeModuleCliToolSpec(): HexanaCliToolSpec {
     return spec
 }
 
+private fun wasmToWatCliToolSpec(): HexanaCliToolSpec {
+    val spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == "wasm-to-wat" }
+    require(HexanaCliInputMode.WASM_PATH in spec.inputModes) {
+        "Generated wasm-to-wat CLI metadata must support wasm path input"
+    }
+    require(HexanaCliOutputFormat.RAW in spec.outputFormats) {
+        "Generated wasm-to-wat CLI metadata must support raw output"
+    }
+    require(HexanaCliOutputFormat.JSON in spec.outputFormats) {
+        "Generated wasm-to-wat CLI metadata must support json output"
+    }
+    require(spec.defaultOutputFormat in spec.outputFormats) {
+        "Generated wasm-to-wat CLI metadata default output must be one of ${spec.outputFormats}"
+    }
+    return spec
+}
+
 internal fun parseCliOutputFormat(spec: HexanaCliToolSpec, value: String): HexanaCliOutputFormat {
     val format = HexanaCliOutputFormat.entries.firstOrNull { it.cliName() == value.trim().lowercase() }
     if (format != null && format in spec.outputFormats) {
@@ -343,6 +422,9 @@ internal fun parseCliOutputFormat(spec: HexanaCliToolSpec, value: String): Hexan
 
 private fun HexanaCliToolSpec.supportedFormatNames(): String =
     outputFormats.joinToString { it.cliName() }
+
+private fun HexanaCliToolSpec.supportedFormatCompletionCandidates(): CompletionCandidates =
+    CompletionCandidates.Fixed(outputFormats.map { it.cliName() }.toSet())
 
 private fun HexanaCliOutputFormat.cliName(): String = name.lowercase()
 

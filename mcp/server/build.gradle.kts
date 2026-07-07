@@ -141,6 +141,7 @@ tasks.register("verifyHexanaToolDispatcherUpToDate") {
 
 dependencies {
     implementation(project(":analytics"))
+    implementation(project(":graalwasm:wasmprinter"))
     implementation(project(":mcp:core"))
     implementation(libs.clikt)
     implementation(libs.kotlin.logging.jvm)
@@ -231,7 +232,15 @@ fun Test.configureMcpPackageSmoke(
     }
 }
 
+val java21RuntimeVersion = 21
 val java21ClassFileMajorVersion = 65
+
+fun isNewerMultiReleaseRuntimeClass(entryName: String): Boolean {
+    val versionPath = entryName.removePrefix("META-INF/versions/")
+    if (versionPath == entryName) return false
+    val version = versionPath.substringBefore('/').toIntOrNull() ?: return false
+    return version > java21RuntimeVersion
+}
 
 tasks.register("verifyMcpRuntimeClassFileVersions") {
     description = "Fails if the standalone MCP runtime contains class files newer than Java 21."
@@ -249,6 +258,8 @@ tasks.register("verifyMcpRuntimeClassFileVersions") {
             ZipFile(jarFile).use { jar ->
                 jar.entries().asSequence()
                     .filter { !it.isDirectory && it.name.endsWith(".class") }
+                    // Java 21 ignores multi-release entries for newer runtimes, such as GraalWasm's Java 25 module descriptor.
+                    .filterNot { isNewerMultiReleaseRuntimeClass(it.name) }
                     .forEach { entry ->
                         jar.getInputStream(entry).use { input ->
                             val header = ByteArray(8)

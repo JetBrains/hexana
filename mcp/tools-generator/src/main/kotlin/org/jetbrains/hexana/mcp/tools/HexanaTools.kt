@@ -5,6 +5,7 @@ private val HEXANA_TOOL_ORDER = listOf(
     "list_binary_functions",
     "search_binary_functions",
     "query_binary",
+    "wasm_to_wat",
     "summarize_module",
     "list_enabled_features",
     "get_entrypoint_policy",
@@ -57,6 +58,7 @@ val HexanaToolSchemaCompatibility = ToolCompatibilitySpec(
 
 val HexanaTools: List<ToolSpec> = orderedTools(
     BinaryTools,
+    ConverterTools,
     ModuleTools,
     EntrypointPolicyTools,
     RuntimeTools,

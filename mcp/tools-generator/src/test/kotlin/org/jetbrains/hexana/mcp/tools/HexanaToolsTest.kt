@@ -79,6 +79,7 @@ class HexanaToolsTest {
                 "list_binary_functions",
                 "search_binary_functions",
                 "query_binary",
+                "wasm_to_wat",
                 "summarize_module",
                 "list_enabled_features",
                 "get_entrypoint_policy",
@@ -163,7 +164,10 @@ class HexanaToolsTest {
     fun `tools declare explicit MCP and CLI surface metadata`() {
         val kebabCase = Regex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
         HexanaTools.forEach { spec ->
-            assertTrue(spec.surfaces.mcp.audiences.isNotEmpty(), "missing MCP audience for ${spec.name}")
+            assertTrue(
+                spec.surfaces.mcp.visible || spec.surfaces.cli.visible,
+                "missing MCP audience or CLI visibility for ${spec.name}",
+            )
             val cli = spec.surfaces.cli
             if (cli.visible) {
                 val commandName = requireNotNull(cli.commandName) { "missing CLI command for ${spec.name}" }
@@ -378,12 +382,15 @@ class HexanaToolsTest {
     }
 
     @Test
-    fun `MCP surface requires at least one audience declaration`() {
-        val error = assertFailsWith<IllegalArgumentException> {
-            McpSurfaceSpec(emptySet())
-        }
+    fun `no MCP CLI surface is explicitly distinct from advanced MCP`() {
+        val converter = HexanaTools.single { it.name == "wasm_to_wat" }
 
-        assertTrue(error.message.orEmpty().contains("at least one audience"))
+        assertFalse(converter.surfaces.mcp.visible)
+        assertEquals(emptySet(), converter.surfaces.mcp.audiences)
+        assertTrue(converter.surfaces.cli.visible)
+        assertEquals("wasm-to-wat", converter.surfaces.cli.commandName)
+        assertEquals(setOf(ToolGroup.Converters), converter.surfaces.cli.groups)
+        assertFalse(converter.surfaces.publicMcpb.included)
     }
 
     @Test
@@ -587,14 +594,17 @@ class HexanaToolsTest {
     @Test
     fun `existing catalog outputs declare minimal semantic JSON and MCP capabilities`() {
         HexanaTools.forEach { spec ->
-            val expectedCapabilities = if (spec.name == "summarize_module") {
-                setOf(
+            val expectedCapabilities = when (spec.name) {
+                "summarize_module" -> setOf(
                     OutputConversionCapability.SemanticJson,
                     OutputConversionCapability.McpWrapper,
                     OutputConversionCapability.PrettyPlaceholder,
                 )
-            } else {
-                setOf(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper)
+                "wasm_to_wat" -> setOf(
+                    OutputConversionCapability.SemanticJson,
+                    OutputConversionCapability.RawTextPlaceholder,
+                )
+                else -> setOf(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper)
             }
             assertEquals(
                 expectedCapabilities,

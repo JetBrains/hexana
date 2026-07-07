@@ -87,6 +87,29 @@ class HexanaMcpServerSchemaTest {
         assertEquals(HexanaCliOutputFormat.PRETTY, summarizeModule.defaultOutputFormat)
         assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, summarizeModule.defaultOutputPolicy)
 
+        val wasmToWat = tools.single { it.commandName == "wasm-to-wat" }
+        assertEquals("wasm_to_wat", wasmToWat.toolName)
+        assertEquals(setOf(HexanaCliToolGroup.CONVERTERS), wasmToWat.groups)
+        assertEquals(
+            setOf(
+                HexanaCliInputMode.JSON_OBJECT,
+                HexanaCliInputMode.WASM_PATH,
+                HexanaCliInputMode.WASM_FROM_STRING,
+                HexanaCliInputMode.STDIN,
+            ),
+            wasmToWat.inputModes,
+        )
+        assertEquals(setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.RAW), wasmToWat.outputFormats)
+        assertEquals(HexanaCliOutputFormat.RAW, wasmToWat.defaultOutputFormat)
+        assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, wasmToWat.defaultOutputPolicy)
+
+        val productionNames = HexanaGeneratedMcpToolProfiles.PRODUCTION_TOOL_NAMES
+        val advancedNames = HexanaGeneratedMcpToolProfiles.ADVANCED_TOOL_NAMES
+        assertFalse("wasm_to_wat" in productionNames)
+        assertFalse("wasm_to_wat" in advancedNames)
+        assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.PRODUCTION).tools.containsKey("wasm_to_wat"))
+        assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.ADVANCED).tools.containsKey("wasm_to_wat"))
+
         assertFalse(tools.any { it.commandName == "query-artifacts" })
         assertFalse(tools.any { it.toolName == "query_artifacts" })
     }

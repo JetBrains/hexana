@@ -207,6 +207,39 @@ class HexanaCliTest {
     }
 
     @Test
+    fun parseUsesGeneratedDefaultFormatForWasmToWat() {
+        val command = cli().parse(arrayOf("wasm-to-wat", "app.wasm"))
+
+        assertIs<HexanaCommand.WasmToWat>(command)
+        assertEquals("app.wasm", command.path)
+        assertEquals(HexanaCliOutputFormat.RAW, command.format)
+        assertEquals(emptyList(), command.allowedRoots)
+        assertEquals(HexanaAnalysisLimits.MAX_FILE_WASM_BYTES, command.resourceLimits.maxFileWasmBytes)
+    }
+
+    @Test
+    fun parseAcceptsExplicitWasmToWatRawAndJsonFormats() {
+        val raw = cli().parse(arrayOf("wasm-to-wat", "app.wasm", "--format", "raw"))
+        val json = cli().parse(arrayOf("wasm-to-wat", "app.wasm", "--format", "json"))
+
+        assertIs<HexanaCommand.WasmToWat>(raw)
+        assertEquals(HexanaCliOutputFormat.RAW, raw.format)
+        assertIs<HexanaCommand.WasmToWat>(json)
+        assertEquals(HexanaCliOutputFormat.JSON, json.format)
+    }
+
+    @Test
+    fun parseRejectsWasmToWatPrettyFormat() {
+        val error = assertFailsWith<CliktError> {
+            cli().parse(arrayOf("wasm-to-wat", "app.wasm", "--format", "pretty"))
+        }
+
+        assertTrue(error.message.orEmpty().contains("Unsupported wasm-to-wat format"))
+        assertTrue(error.message.orEmpty().contains("json"))
+        assertTrue(error.message.orEmpty().contains("raw"))
+    }
+
+    @Test
     fun parseNormalizesHttpEndpointAndKeepsLoopbackDefaults() {
         val command = cli().parse(
             arrayOf(

@@ -53,7 +53,8 @@ fun main(args: Array<String>) {
                         exitProcess(report.exitCode)
                     }
                 }
-                is HexanaCommand.SummarizeModule -> println(renderSummarizeModuleOutput(command))
+                is HexanaCommand.SummarizeModule -> printCommandOutput(renderSummarizeModuleCommandOutput(command))
+                is HexanaCommand.WasmToWat -> printCommandOutput(renderWasmToWatCommandOutput(command))
                 is HexanaCommand.Stdio -> runBlocking { runStdio(command) }
                 is HexanaCommand.Http -> runBlocking { runHttp(command) }
             }
@@ -70,6 +71,8 @@ fun main(args: Array<String>) {
             is HexanaCommand.Doctor -> "Hexana MCP doctor failed. See server logs for details."
             is HexanaCommand.SummarizeModule ->
                 "Hexana MCP summarize-module command failed. See server logs for details."
+            is HexanaCommand.WasmToWat ->
+                "Hexana MCP wasm-to-wat command failed. See server logs for details."
             is HexanaCommand.Version,
             is HexanaCommand.Help -> "Hexana MCP server failed. See server logs for details."
         }
@@ -77,6 +80,13 @@ fun main(args: Array<String>) {
         System.err.println(userMessage)
         exitProcess(1)
     }
+}
+
+private fun printCommandOutput(output: HexanaCliCommandOutput) {
+    if (output.stderr.isNotEmpty()) {
+        System.err.print(output.stderr)
+    }
+    println(output.stdout)
 }
 
 internal data class CommandAnalytics(
@@ -124,6 +134,7 @@ internal fun HexanaCommand.analytics(): CommandAnalytics? = when (this) {
     is HexanaCommand.Help,
     is HexanaCommand.Doctor,
     is HexanaCommand.SummarizeModule,
+    is HexanaCommand.WasmToWat,
     is HexanaCommand.Version -> null
 }
 
@@ -135,6 +146,7 @@ internal fun developmentVersionWarning(command: HexanaCommand, version: String):
         is HexanaCommand.Help,
         is HexanaCommand.Doctor,
         is HexanaCommand.SummarizeModule,
+        is HexanaCommand.WasmToWat,
         is HexanaCommand.Version -> null
 
         is HexanaCommand.Stdio,

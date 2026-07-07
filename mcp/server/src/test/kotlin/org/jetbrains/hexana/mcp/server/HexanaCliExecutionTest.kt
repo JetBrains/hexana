@@ -1,9 +1,12 @@
 package org.jetbrains.hexana.mcp.server
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.jetbrains.hexana.graalwasm.wasmprinter.WatWithWarnings
 import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
+import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
 import org.junit.Rule
@@ -29,7 +32,6 @@ class HexanaCliExecutionTest {
               (func (export "main")))
             """.trimIndent()
         )
-
         val output = renderSummarizeModuleOutput(
             summarizeModuleCommand(
                 path = wasm.toString(),
@@ -59,6 +61,7 @@ class HexanaCliExecutionTest {
               (func (export "main")))
             """.trimIndent()
         )
+        val moduleSize = Files.size(wasm)
 
         val output = renderSummarizeModuleOutput(
             summarizeModuleCommand(
@@ -81,10 +84,30 @@ class HexanaCliExecutionTest {
               Memories: 0
               Tables: 0
               Globals: 0
-            Module size: 61 bytes
+            Module size: $moduleSize bytes
             """.trimIndent(),
             output,
         )
+    }
+
+    @Test
+    fun renderSummarizeModuleEnforcesOutputLimitForJsonAndPrettyFormats() {
+        val wasm = createWasmFile("limited-summary.wasm", "(module (memory 1) (func (export \"main\")))")
+
+        listOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.PRETTY).forEach { format ->
+            val error = assertFailsWith<HexanaAnalysisException> {
+                renderSummarizeModuleOutput(
+                    summarizeModuleCommand(
+                        path = wasm.toString(),
+                        format = format,
+                        resourceLimits = HexanaResourceLimits(maxOutputBytes = 4),
+                    )
+                )
+            }
+
+            assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+            assertTrue(error.message.orEmpty().contains("maxOutputBytes=4"))
+        }
     }
 
     @Test
@@ -105,15 +128,128 @@ class HexanaCliExecutionTest {
         assertTrue(error.message.orEmpty().contains("outside allowed roots"))
     }
 
+    @Test
+    fun renderWasmToWatRawReturnsWatTextWithoutJsonWrapper() {
+        val wasm = createWasmFile(
+            "raw.wasm",
+            """
+            (module
+              (func (export "main")))
+            """.trimIndent()
+        )
+
+        val output = renderWasmToWatOutput(
+            wasmToWatCommand(
+                path = wasm.toString(),
+                format = HexanaCliOutputFormat.RAW,
+            )
+        )
+
+        assertTrue(output.contains("(module"))
+        assertTrue(output.contains("(func"))
+        assertFalse(output.trimStart().startsWith("{"))
+        assertFalse(output.contains("\"wat\""))
+    }
+
+    @Test
+    fun renderWasmToWatRawReturnsWarningsOnStderr() {
+        val wasm = createWasmFile("raw-warning.wasm", "(module)")
+
+        val output = renderWasmToWatCommandOutput(
+            wasmToWatCommand(
+                path = wasm.toString(),
+                format = HexanaCliOutputFormat.RAW,
+            ),
+            wasmPrinter = {
+                WatWithWarnings(
+                    wat = "(module)",
+                    warnings = "first warning\n\nsecond warning",
+                )
+            },
+        )
+
+        assertEquals("(module)", output.stdout)
+        assertTrue(output.stderr.contains("wasm-to-wat warning: first warning"))
+        assertTrue(output.stderr.contains("wasm-to-wat warning: second warning"))
+    }
+
+    @Test
+    fun renderWasmToWatJsonReturnsWatAndWarningsKeys() {
+        val wasm = createWasmFile("json.wasm", "(module)")
+
+        val output = renderWasmToWatOutput(
+            wasmToWatCommand(
+                path = wasm.toString(),
+                format = HexanaCliOutputFormat.JSON,
+            )
+        )
+
+        val json = Json.parseToJsonElement(output).jsonObject
+        assertTrue(json.getValue("wat").jsonPrimitive.content.contains("(module"))
+        assertTrue("warnings" in json)
+        json.getValue("warnings").jsonArray
+    }
+
+    @Test
+    fun renderWasmToWatEnforcesOutputLimitForRawAndJsonFormats() {
+        val wasm = createWasmFile("limited-output.wasm", "(module)")
+
+        listOf(HexanaCliOutputFormat.RAW, HexanaCliOutputFormat.JSON).forEach { format ->
+            val error = assertFailsWith<HexanaAnalysisException> {
+                renderWasmToWatOutput(
+                    wasmToWatCommand(
+                        path = wasm.toString(),
+                        format = format,
+                        resourceLimits = HexanaResourceLimits(maxOutputBytes = 4),
+                    )
+                )
+            }
+
+            assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+            assertTrue(error.message.orEmpty().contains("maxOutputBytes=4"))
+        }
+    }
+
+    @Test
+    fun renderWasmToWatRejectsFileOutsideAllowedRoot() {
+        val wasm = createWasmFile("outside-converter.wasm", "(module)")
+        val allowedRoot = temporaryFolder.newFolder("converter-allowed").toPath()
+
+        val error = assertFailsWith<HexanaAnalysisException> {
+            renderWasmToWatOutput(
+                wasmToWatCommand(
+                    path = wasm.toString(),
+                    format = HexanaCliOutputFormat.RAW,
+                    allowedRoots = listOf(allowedRoot.toString()),
+                )
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("outside allowed roots"))
+    }
+
     private fun summarizeModuleCommand(
         path: String,
         format: HexanaCliOutputFormat,
         allowedRoots: List<String> = emptyList(),
+        resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
     ) = HexanaCommand.SummarizeModule(
         path = path,
         format = format,
         allowedRoots = allowedRoots,
-        resourceLimits = HexanaResourceLimits(),
+        resourceLimits = resourceLimits,
+    )
+
+    private fun wasmToWatCommand(
+        path: String,
+        format: HexanaCliOutputFormat,
+        allowedRoots: List<String> = emptyList(),
+        resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
+    ) = HexanaCommand.WasmToWat(
+        path = path,
+        format = format,
+        allowedRoots = allowedRoots,
+        resourceLimits = resourceLimits,
     )
 
     private fun createWasmFile(name: String, wat: String) = temporaryFolder.newFile(name).toPath().also {

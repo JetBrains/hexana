@@ -389,13 +389,12 @@ data class ToolSurfaceSpec(
 data class McpSurfaceSpec(
     val audiences: Set<McpToolAudience>,
 ) {
-    init {
-        require(audiences.isNotEmpty()) { "MCP surface must declare at least one audience/profile." }
-    }
+    val visible: Boolean get() = audiences.isNotEmpty()
 
     companion object {
         fun production(): McpSurfaceSpec = McpSurfaceSpec(setOf(McpToolAudience.Production))
         fun advanced(): McpSurfaceSpec = McpSurfaceSpec(setOf(McpToolAudience.Advanced))
+        fun none(): McpSurfaceSpec = McpSurfaceSpec(emptySet())
     }
 }
 
@@ -471,6 +470,7 @@ enum class ToolGroup {
     ArtifactQuery,
     Binary,
     Component,
+    Converters,
     Data,
     Element,
     EntrypointPolicy,
@@ -531,6 +531,26 @@ fun publicMcpbProductionCliSurface(
 fun advancedHiddenCliSurface(): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.advanced(),
     cli = CliSurfaceSpec.hidden(),
+    publicMcpb = PublicMcpbSurfaceSpec.excluded(),
+)
+
+fun noMcpCliSurface(
+    commandName: String,
+    group: ToolGroup,
+    outputPolicy: ToolOutputPolicy,
+    vararg additionalGroups: ToolGroup,
+    outputOverride: OutputConversionCapability? = null,
+    defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
+): ToolSurfaceSpec = ToolSurfaceSpec(
+    mcp = McpSurfaceSpec.none(),
+    cli = CliSurfaceSpec.visible(
+        commandName,
+        group,
+        outputPolicy,
+        *additionalGroups,
+        outputOverride = outputOverride,
+        defaultOutput = defaultOutput,
+    ),
     publicMcpb = PublicMcpbSurfaceSpec.excluded(),
 )
 
