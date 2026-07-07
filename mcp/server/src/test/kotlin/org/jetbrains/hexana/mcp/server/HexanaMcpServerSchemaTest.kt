@@ -64,6 +64,33 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
+    fun generatedCliRegistryExposesVisibleCatalogMetadataOnly() {
+        val tools = HexanaGeneratedCliToolRegistry.TOOLS
+        val summarizeModule = tools.single { it.commandName == "summarize-module" }
+
+        assertEquals("summarize_module", summarizeModule.toolName)
+        assertEquals(
+            "Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types.",
+            summarizeModule.summary,
+        )
+        assertEquals(setOf(HexanaCliToolGroup.MODULE), summarizeModule.groups)
+        assertEquals(
+            setOf(
+                HexanaCliInputMode.JSON_OBJECT,
+                HexanaCliInputMode.WASM_PATH,
+                HexanaCliInputMode.WASM_FROM_STRING,
+                HexanaCliInputMode.STDIN,
+            ),
+            summarizeModule.inputModes,
+        )
+        assertEquals(setOf(HexanaCliOutputFormat.JSON), summarizeModule.outputFormats)
+        assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, summarizeModule.defaultOutputPolicy)
+
+        assertFalse(tools.any { it.commandName == "query-artifacts" })
+        assertFalse(tools.any { it.toolName == "query_artifacts" })
+    }
+
+    @Test
     fun productionRegistryPresentsFocusedAuditToolsBeforeGenericViews() {
         val names = createHexanaMcpServer().tools.keys.toList()
 

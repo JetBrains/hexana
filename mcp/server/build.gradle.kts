@@ -444,4 +444,5 @@ kotlin {
 
 tasks.named("compileKotlin") {
     dependsOn(generateHexanaBuildInfo)
+    mustRunAfter(tasks.named("generateHexanaToolDispatcher"))
 }

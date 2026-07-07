@@ -9,6 +9,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.String
+import kotlin.collections.List
 import kotlin.collections.Set
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -109,6 +110,335 @@ internal object HexanaGeneratedMcpToolProfiles {
         "list_data_segments",
         "audit_data_payload_policy",
         "query_artifacts",
+      )
+}
+
+/**
+ * Generated CLI input modes declared by catalog input conversion metadata.
+ */
+public enum class HexanaCliInputMode {
+  JSON_OBJECT,
+  WASM_PATH,
+  WASM_FROM_STRING,
+  BINARY_PATH,
+  STDIN,
+}
+
+/**
+ * Generated CLI output formats declared by catalog output conversion metadata.
+ */
+public enum class HexanaCliOutputFormat {
+  JSON,
+  PRETTY,
+  RAW,
+}
+
+/**
+ * Generated CLI tool groups declared by catalog surface metadata.
+ */
+public enum class HexanaCliToolGroup {
+  ARTIFACT_QUERY,
+  BINARY,
+  COMPONENT,
+  DATA,
+  ELEMENT,
+  ENTRYPOINT_POLICY,
+  EXPORT,
+  FUNCTION,
+  GLOBAL,
+  IMPORT,
+  MEMORY,
+  MODULE,
+  RUNTIME,
+  TYPE,
+}
+
+/**
+ * Generated CLI default output policies declared by catalog surface metadata.
+ */
+public enum class HexanaCliOutputPolicy {
+  TOOL_DEFINED,
+}
+
+/**
+ * Generated CLI-visible tool metadata derived from the catalog.
+ */
+public data class HexanaCliToolSpec(
+  public val commandName: String,
+  public val toolName: String,
+  public val summary: String,
+  public val groups: Set<HexanaCliToolGroup>,
+  public val inputModes: Set<HexanaCliInputMode>,
+  public val outputFormats: Set<HexanaCliOutputFormat>,
+  public val defaultOutputPolicy: HexanaCliOutputPolicy,
+)
+
+/**
+ * Generated registry for catalog-declared CLI-visible tools.
+ */
+public object HexanaGeneratedCliToolRegistry {
+  public val TOOLS: List<HexanaCliToolSpec> = listOf(
+        HexanaCliToolSpec(
+          commandName = "summarize-binary",
+          toolName = "summarize_binary",
+          summary = "Summarize a Wasm or native binary with compact identity and entity counts.",
+          groups = setOf(HexanaCliToolGroup.BINARY),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "summarize-module",
+          toolName = "summarize_module",
+          summary = "Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types.",
+          groups = setOf(HexanaCliToolGroup.MODULE),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "list-enabled-features",
+          toolName = "list_enabled_features",
+          summary = "List enabled or inferred WebAssembly feature flags for a `.wasm` module.",
+          groups = setOf(HexanaCliToolGroup.MODULE),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "get-entrypoint-policy",
+          toolName = "get_entrypoint_policy",
+          summary = "Return policy-ready direct host-call facts for exported WebAssembly entrypoints.",
+          groups = setOf(HexanaCliToolGroup.ENTRYPOINT_POLICY),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "list-required-proposals",
+          toolName = "list_required_proposals",
+          summary = "List required WebAssembly proposals inferred from detected module features.",
+          groups = setOf(HexanaCliToolGroup.RUNTIME),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "diff-required-proposals",
+          toolName = "diff_required_proposals",
+          summary = "Diff required WebAssembly proposals between a current and baseline module.",
+          groups = setOf(HexanaCliToolGroup.RUNTIME),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "check-runtime-compatibility",
+          toolName = "check_runtime_compatibility",
+          summary = "Check a WebAssembly module's required proposals against a conservative runtime support profile.",
+          groups = setOf(HexanaCliToolGroup.RUNTIME),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "check-component-compatibility",
+          toolName = "check_component_compatibility",
+          summary = "Compare current/previous component imports against provider candidates and lock/config files.",
+          groups = setOf(HexanaCliToolGroup.COMPONENT),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "plan-abi-binding-regeneration",
+          toolName = "plan_abi_binding_regeneration",
+          summary = "Plan report-ready ABI binding regeneration from current Wasm plus a stale binding file.",
+          groups = setOf(HexanaCliToolGroup.ARTIFACT_QUERY),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "check-memory-contract",
+          toolName = "check_memory_contract",
+          summary = "Check a memory contract with current/baseline Wasm and policy JSON; returns report-ready violations.",
+          groups = setOf(HexanaCliToolGroup.MEMORY),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "audit-global-state-policy",
+          toolName = "audit_global_state_policy",
+          summary = "Audit global-state policy with current/baseline Wasm and policy JSON; returns report-ready violations.",
+          groups = setOf(HexanaCliToolGroup.GLOBAL),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "audit-local-stack-budget",
+          toolName = "audit_local_stack_budget",
+          summary = "Audit exported function local counts against a local stack budget policy.",
+          groups = setOf(HexanaCliToolGroup.FUNCTION),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "list-imports",
+          toolName = "list_imports",
+          summary = "List imported functions declared by a `.wasm` module.",
+          groups = setOf(HexanaCliToolGroup.IMPORT),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "list-exports",
+          toolName = "list_exports",
+          summary = "List exports declared by a `.wasm` module.",
+          groups = setOf(HexanaCliToolGroup.EXPORT),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "search-exports",
+          toolName = "search_exports",
+          summary = "Search exports by name and resolve common export metadata.",
+          groups = setOf(HexanaCliToolGroup.EXPORT),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "list-exported-functions",
+          toolName = "list_exported_functions",
+          summary = "List exported functions within a closed range of the export section.",
+          groups = setOf(HexanaCliToolGroup.EXPORT),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "list-functions",
+          toolName = "list_functions",
+          summary = "List imported and defined functions with offset/limit pagination.",
+          groups = setOf(HexanaCliToolGroup.FUNCTION),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "resolve-function-signature",
+          toolName = "resolve_function_signature",
+          summary = "Resolve the type index and signature for one function index.",
+          groups = setOf(HexanaCliToolGroup.FUNCTION),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "disassemble-function",
+          toolName = "disassemble_function",
+          summary = "Disassemble one function by unified function index.",
+          groups = setOf(HexanaCliToolGroup.FUNCTION),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "get-function-call-graph",
+          toolName = "get_function_call_graph",
+          summary = "Return resolved direct calls and memory write sites for function indices.",
+          groups = setOf(HexanaCliToolGroup.FUNCTION),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "search-functions-by-name",
+          toolName = "search_functions_by_name",
+          summary = "Search function names across imports, exports, and debug names.",
+          groups = setOf(HexanaCliToolGroup.FUNCTION),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "resolve-wasm-frames",
+          toolName = "resolve_wasm_frames",
+          summary = "Aggregate WebAssembly crash-report and stack-frame triage from function indices, labels, and offsets.",
+          groups = setOf(HexanaCliToolGroup.FUNCTION),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "resolve-function-symbols",
+          toolName = "resolve_function_symbols",
+          summary = "Focused lookup for function indices, symbols, signatures, and metadata.",
+          groups = setOf(HexanaCliToolGroup.FUNCTION),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "resolve-source-locations",
+          toolName = "resolve_source_locations",
+          summary = "Focused source lookup for WebAssembly code offsets or function indices.",
+          groups = setOf(HexanaCliToolGroup.FUNCTION),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "list-memory",
+          toolName = "list_memory",
+          summary = "Low-level list of imported and defined memories from a `.wasm` module.",
+          groups = setOf(HexanaCliToolGroup.MEMORY),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "list-globals",
+          toolName = "list_globals",
+          summary = "Low-level list of imported and defined globals from a `.wasm` module.",
+          groups = setOf(HexanaCliToolGroup.GLOBAL),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "list-element-segments",
+          toolName = "list_element_segments",
+          summary = "List element segments declared by a `.wasm` module.",
+          groups = setOf(HexanaCliToolGroup.ELEMENT),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "list-data-segments",
+          toolName = "list_data_segments",
+          summary = "Return data-segment metadata with range slicing and optional export/global context.",
+          groups = setOf(HexanaCliToolGroup.DATA),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
+        HexanaCliToolSpec(
+          commandName = "audit-data-payload-policy",
+          toolName = "audit_data_payload_policy",
+          summary = "Audit data segments against a payload policy JSON file and return report-ready matches.",
+          groups = setOf(HexanaCliToolGroup.DATA),
+          inputModes = setOf(HexanaCliInputMode.JSON_OBJECT, HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.WASM_FROM_STRING, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON),
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+        ),
       )
 }
 

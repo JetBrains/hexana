@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.tools.generator
 
 import org.jetbrains.hexana.mcp.tools.BinaryInputClass
 import org.jetbrains.hexana.mcp.tools.ClassSpec
+import org.jetbrains.hexana.mcp.tools.OutputConversionCapability
 import org.jetbrains.hexana.mcp.tools.ToolInputPattern
 import org.jetbrains.hexana.mcp.tools.ToolGroup
 import org.jetbrains.hexana.mcp.tools.ToolOutputPolicy
@@ -14,6 +15,7 @@ import org.junit.Test
 import java.lang.reflect.InvocationTargetException
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -135,6 +137,28 @@ class ToolDescriptionGenerationTest {
         assertTrue(source.contains("\"bytes\""))
         assertTrue(source.contains("\"operation\""))
         assertTrue(source.contains("\"maxBytes\""))
+    }
+
+    @Test
+    fun `standalone CLI registry rejects visible tools without CLI output formats`() {
+        val mcpWrapperOnlyResult = class_(
+            "McpWrapperOnlyResult",
+            kotlinPackage = "org.jetbrains.hexana.mcp.model.test",
+        ) {
+            outputCapabilities(OutputConversionCapability.McpWrapper)
+            string("value").describe("Result value.")
+        }
+        val spec = summarizeBinarySpec.copy(
+            output = mcpWrapperOnlyResult,
+            surfaces = productionCliSurface("mcp-wrapper-only", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            buildDispatcherFile(listOf(spec))
+        }
+
+        assertTrue(error.message.orEmpty().contains("has no supported CLI output format"))
+        assertTrue(error.message.orEmpty().contains("mcp-wrapper-only"))
     }
 
     private fun renderGeneratedSource(mainClassName: String, generatedFile: Path): String {
