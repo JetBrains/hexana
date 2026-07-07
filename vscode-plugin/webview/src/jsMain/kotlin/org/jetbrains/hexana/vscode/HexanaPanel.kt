@@ -45,6 +45,10 @@ fun HexanaPanel(
     onActiveTabChange: (String) -> Unit = {},
     extraTabs: List<PanelTab> = emptyList(),
     scriptTabs: List<ScriptTabState> = emptyList(),
+    dialogPickedPath: String = "",
+    dialogPickedContent: String = "",
+    onDialogPickedPathConsumed: () -> Unit = {},
+    onScriptTabConfirmed: (path: String, content: String) -> Unit = { _, _ -> },
 ) {
     val pendingRun = rememberPendingRunState()
 
@@ -137,6 +141,9 @@ fun HexanaPanel(
     val scriptTabLabels = remember(scriptTabs.size) {
         scriptTabs.map { it.path.substringAfterLast('/').substringAfterLast('\\') }.toSet()
     }
+
+    // State for the "Add Script Tab" dialog
+    var showAddScriptDialog by remember { mutableStateOf(false) }
 
     // If the active tab was removed (e.g. switching from component to core), reset
     // to the first available tab.  Use SideEffect so the state update happens after
@@ -256,7 +263,29 @@ fun HexanaPanel(
                         postScriptTabRemovedToHost(st.path)
                     }
                 },
-                onAddTab = { postPickScriptFileToHost() },
+                onAddTab = { showAddScriptDialog = true },
+            )
+        }
+
+        if (showAddScriptDialog) {
+            AddScriptTabDialog(
+                scriptPath = dialogPickedPath,
+                existingScriptPaths = scriptTabs.map { it.path }.toSet(),
+                onBrowse = {
+                    postPickScriptFileToHost()
+                },
+                onOpenDts = {
+                    postOpenDtsToHost()
+                },
+                onConfirm = { path ->
+                    showAddScriptDialog = false
+                    onScriptTabConfirmed(path, dialogPickedContent)
+                    onDialogPickedPathConsumed()
+                },
+                onCancel = {
+                    showAddScriptDialog = false
+                    onDialogPickedPathConsumed()
+                },
             )
         }
 

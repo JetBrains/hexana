@@ -26,12 +26,17 @@ internal object BinaryProviderApiSummary {
     )
 
     fun showDtsInEditor(project: Project) {
-        val dts = generateDts()
+        val dts = loadPreBuiltDts() ?: generateDts()
         val vf = LightVirtualFile("hexana-scripting.d.ts", dts).apply { isWritable = false }
         FileEditorManager.getInstance(project).openFile(vf, true)
     }
 
-    private fun generateDts(): String {
+    /** Tries to load the pre-built .d.ts from plugin resources. */
+    private fun loadPreBuiltDts(): String? =
+        BinaryProviderApiSummary::class.java.getResourceAsStream("/hexana-scripting.d.ts")
+            ?.bufferedReader()?.readText()
+
+    fun generateDts(): String {
         val sb = StringBuilder()
         sb.appendLine("// Hexana Script Tab API type definitions")
         sb.appendLine()

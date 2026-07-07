@@ -285,6 +285,7 @@ html, body {
 
 .hexana-dialog-body {
     padding: 12px 16px;
+    font-size: 13px;
 }
 
 .hexana-dialog-field {
@@ -330,7 +331,7 @@ html, body {
 
 .hexana-dialog-btn {
     padding: 4px 14px;
-    font-size: 12px;
+    font-size: 13px;
     border-radius: 3px;
     border: none;
     cursor: pointer;

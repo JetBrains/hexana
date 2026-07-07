@@ -33,6 +33,8 @@ fun BinaryEditorApp() {
     var fileName by remember { mutableStateOf("") }
     var filePath by remember { mutableStateOf("") }
     val scriptTabs = remember { mutableStateListOf<ScriptTabState>() }
+    var dialogPickedPath by remember { mutableStateOf("") }
+    var dialogPickedContent by remember { mutableStateOf("") }
 
     VscodeMessageListener { message ->
         when (message.type) {
@@ -43,11 +45,9 @@ fun BinaryEditorApp() {
                 configuredRuntimeId = message.wasmRuntime
             }
             "script-file-picked" -> {
-                if (message.scriptPath.isNotBlank() &&
-                    scriptTabs.none { it.path == message.scriptPath }
-                ) {
-                    scriptTabs.add(ScriptTabState(message.scriptPath, message.scriptContent))
-                    postScriptTabAddedToHost(message.scriptPath)
+                if (message.scriptPath.isNotBlank()) {
+                    dialogPickedPath = message.scriptPath
+                    dialogPickedContent = message.scriptContent
                 }
             }
             "script-file-content" -> {
@@ -93,6 +93,18 @@ fun BinaryEditorApp() {
             provider = provider,
             extraTabs = extraTabs,
             scriptTabs = scriptTabs,
+            dialogPickedPath = dialogPickedPath,
+            dialogPickedContent = dialogPickedContent,
+            onDialogPickedPathConsumed = {
+                dialogPickedPath = ""
+                dialogPickedContent = ""
+            },
+            onScriptTabConfirmed = { path, content ->
+                if (scriptTabs.none { it.path == path }) {
+                    scriptTabs.add(ScriptTabState(path, content))
+                    postScriptTabAddedToHost(path)
+                }
+            },
         )
     }
 }
@@ -126,6 +138,10 @@ fun BinaryEditorContent(
     provider: BinaryProvider,
     extraTabs: List<PanelTab> = emptyList(),
     scriptTabs: List<ScriptTabState> = emptyList(),
+    dialogPickedPath: String = "",
+    dialogPickedContent: String = "",
+    onDialogPickedPathConsumed: () -> Unit = {},
+    onScriptTabConfirmed: (path: String, content: String) -> Unit = { _, _ -> },
 ) {
     val selection = remember { HexSelectionState() }
     val buffer = remember(provider) { provider.bytes }
@@ -197,6 +213,10 @@ fun BinaryEditorContent(
             onActiveTabChange = { activeTab = it },
             extraTabs = extraTabs,
             scriptTabs = scriptTabs,
+            dialogPickedPath = dialogPickedPath,
+            dialogPickedContent = dialogPickedContent,
+            onDialogPickedPathConsumed = onDialogPickedPathConsumed,
+            onScriptTabConfirmed = onScriptTabConfirmed,
         )
     }
 }

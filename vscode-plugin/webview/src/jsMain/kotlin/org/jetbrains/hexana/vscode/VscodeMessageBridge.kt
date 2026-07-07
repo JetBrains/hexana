@@ -238,6 +238,16 @@ fun postOpenModuleToHost(moduleIndex: Int, fileName: String, data: ByteArray) {
 }
 
 /**
+ * Asks the extension host to open the pre-built `hexana-scripting.d.ts`
+ * API reference in a new VS Code editor tab.
+ */
+fun postOpenDtsToHost() {
+    val msg = js("{}")
+    msg.type = "open-dts"
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to show a file picker for `.js` script files.
  * The host will respond with a `script-file-picked` message containing
  * the file path and content.

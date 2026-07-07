@@ -371,6 +371,26 @@ tasks.register("verifyHexanaToolsetUpToDate") {
     }
 }
 
+tasks.register<JavaExec>("generateHexanaScriptingDts") {
+    description = "Generates hexana-scripting.d.ts into idea-plugin resources and vscode-plugin src."
+    group = "generation"
+
+    mainClass.set("org.jetbrains.hexana.ui.panel.GenerateScriptingDtsKt")
+    classpath = sourceSets.main.get().runtimeClasspath + configurations.compileClasspath.get()
+    argumentProviders.add(CommandLineArgumentProvider {
+        listOf(
+            layout.projectDirectory.dir("src/main/resources").asFile.absolutePath,
+            rootProject.layout.projectDirectory.dir("vscode-plugin").asFile.absolutePath,
+        )
+    })
+    outputs.files(
+        layout.projectDirectory.file("src/main/resources/hexana-scripting.d.ts"),
+        rootProject.layout.projectDirectory.file("vscode-plugin/hexana-scripting.d.ts"),
+    )
+
+    dependsOn(tasks.named("classes"))
+}
+
 tasks.register("verifyReleaseWhatsNew") {
     description = "Fails release builds when the bundled What's New page for pluginVersion is missing or incomplete."
     group = "verification"

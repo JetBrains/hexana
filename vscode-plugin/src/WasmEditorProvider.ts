@@ -211,6 +211,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 this.overwriteFile(document, message);
             } else if (message.type === "save-copy") {
                 this.saveCopy(document, message);
+            } else if (message.type === "open-dts") {
+                this.openDtsReference();
             } else if (message.type === "pick-script-file") {
                 this.pickScriptFile(document, webviewPanel);
             } else if (message.type === "read-script-file") {
@@ -434,6 +436,30 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
     // -------------------------------------------------------------------
     // Script tab support
     // -------------------------------------------------------------------
+
+    /**
+     * Opens the pre-built `hexana-scripting.d.ts` API reference in a new
+     * VS Code editor tab.
+     */
+    private async openDtsReference(): Promise<void> {
+        try {
+            const dtsPath = path.join(this.context.extensionPath, "hexana-scripting.d.ts");
+            const dtsUri = vscode.Uri.file(dtsPath);
+            const bytes = await vscode.workspace.fs.readFile(dtsUri);
+            const content = new TextDecoder("utf-8").decode(bytes);
+            const doc = await vscode.workspace.openTextDocument({
+                content,
+                language: "typescript",
+            });
+            await vscode.window.showTextDocument(doc, {
+                viewColumn: vscode.ViewColumn.Beside,
+                preserveFocus: false,
+                preview: true,
+            });
+        } catch (err) {
+            vscode.window.showErrorMessage(`Failed to open API reference: ${err}`);
+        }
+    }
 
     /**
      * Shows a file picker for `.js` files and sends the selected file's
