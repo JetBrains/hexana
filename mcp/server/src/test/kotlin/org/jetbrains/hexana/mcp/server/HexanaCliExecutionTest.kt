@@ -258,6 +258,17 @@ class HexanaCliExecutionTest {
         assertFalse(output.contains("  groups: module\n"))
     }
 
+    @Test
+    fun renderToolsListingFiltersMultiCommandModuleGroup() {
+        val output = renderCliToolsListing(HexanaCommand.Tools(group = HexanaCliToolGroup.MODULE))
+
+        assertTrue(output.contains("summarize-module\n"))
+        assertTrue(output.contains("list-enabled-features\n"))
+        assertTrue(output.contains("  groups: module\n"))
+        assertFalse(output.contains("wasm-to-wat\n"))
+        assertFalse(output.contains("  groups: converters\n"))
+    }
+
     private fun summarizeModuleCommand(
         path: String,
         format: HexanaCliOutputFormat,
