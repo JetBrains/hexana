@@ -214,6 +214,28 @@ fun TableTabContent(
         }
     }
 
+    // Compute column width hints (in `ch` units) for Measured/MeasuredMin columns.
+    val idWidthCh = if (showId) maxOf(2, descriptor.rowCount.toString().length) + 2 else 0
+    val columnWidthsCh = buildList {
+        if (showId) {
+            add(2) // action column – just enough for the arrow
+            add(idWidthCh) // ID column – sized to fit the largest row number
+        }
+        descriptor.columns.forEach { col ->
+            when (val w = col.widthBehavior) {
+                is ColumnWidth.Measured -> {
+                    val sample = maxOf(col.name.length + 2, w.sample.length)
+                    add(sample)
+                }
+                is ColumnWidth.MeasuredMin -> {
+                    val sample = maxOf(col.name.length + 2, w.sample.length)
+                    add(sample)
+                }
+                is ColumnWidth.Fill -> add(null)
+            }
+        }
+    }
+
     // Map descriptor's defaultSortColumn to the header index in the rendered table.
     // The descriptor uses ID_COLUMN (-1) for the implicit ID column; the rendered
     // headers always prepend the action column placeholder and then "ID", so we
@@ -416,12 +438,16 @@ fun TableTabContent(
                                 isSorted && sortState.direction == SortDirection.DESC -> " \u25BC"
                                 else -> ""
                             }
+                            val widthCh = columnWidthsCh.getOrNull(index)
                             Th({
                                 classes("panel-th")
                                 if (isNarrow) classes("panel-th-narrow")
                                 if (header.isNotEmpty()) classes("panel-th-sortable")
                                 style {
                                     property("text-align", align)
+                                    if (widthCh != null) {
+                                        property("width", "${widthCh}ch")
+                                    }
                                     if (header.isNotEmpty()) {
                                         property("cursor", "pointer")
                                         property("user-select", "none")
@@ -746,6 +772,24 @@ private fun TreeTableTabContent(
         }
     }
 
+    // Compute column width hints (in `ch` units) for Measured/MeasuredMin columns.
+    val columnWidthsCh = buildList {
+        add(null) // action column
+        descriptor.columns.forEach { col ->
+            when (val w = col.widthBehavior) {
+                is ColumnWidth.Measured -> {
+                    val sample = maxOf(col.name.length + 2, w.sample.length)
+                    add(sample)
+                }
+                is ColumnWidth.MeasuredMin -> {
+                    val sample = maxOf(col.name.length + 2, w.sample.length)
+                    add(sample)
+                }
+                is ColumnWidth.Fill -> add(null)
+            }
+        }
+    }
+
     // Sort state for header indicators; offset by +1 for the action column.
     val sortState = remember { TableSortState() }
     sortState.columnIndex = if (sortColumnIndex >= 0) sortColumnIndex + 1 else -1
@@ -892,12 +936,16 @@ private fun TreeTableTabContent(
                                 isSorted && sortState.direction == SortDirection.DESC -> " \u25BC"
                                 else -> ""
                             }
+                            val widthCh = columnWidthsCh.getOrNull(index)
                             Th({
                                 classes("panel-th")
                                 if (isNarrow) classes("panel-th-narrow")
                                 if (header.isNotEmpty()) classes("panel-th-sortable")
                                 style {
                                     property("text-align", align)
+                                    if (widthCh != null) {
+                                        property("width", "${widthCh}ch")
+                                    }
                                     if (header.isNotEmpty()) {
                                         property("cursor", "pointer")
                                         property("user-select", "none")

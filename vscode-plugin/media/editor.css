@@ -238,6 +238,8 @@ html, body {
     padding: 4px 8px;
     font-weight: 600;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     position: sticky;
     top: -8px;
     background: var(--hexana-bg, #1e1e1e);
