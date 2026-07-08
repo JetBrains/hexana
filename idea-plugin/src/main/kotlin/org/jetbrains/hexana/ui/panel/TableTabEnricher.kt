@@ -285,7 +285,7 @@ private fun enrichWasmImportsTab(
     )
 }
 
-private fun runWasmExportedFunction(
+internal fun runWasmExportedFunction(
     wasmBinaryProvider: WasmBinaryProvider,
     file: VirtualFile,
     project: Project,

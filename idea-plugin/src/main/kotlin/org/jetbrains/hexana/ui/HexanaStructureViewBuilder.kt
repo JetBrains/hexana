@@ -2,9 +2,11 @@ package org.jetbrains.hexana.ui
 
 import com.intellij.icons.AllIcons
 import com.intellij.ide.structureView.*
+import com.intellij.ide.util.treeView.AbstractTreeNode
 import com.intellij.ide.util.treeView.smartTree.TreeElement
 import com.intellij.navigation.ItemPresentation
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.HexanaFileEditor
@@ -12,6 +14,10 @@ import org.jetbrains.hexana.parsing.common.NativeByteRange
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.providers.elf.*
 import org.jetbrains.hexana.wasm.intRange
+import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
+import org.jetbrains.hexana.shared.isInternalName
+import org.jetbrains.hexana.ui.panel.runWasmExportedFunction
+import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import javax.swing.Icon
 
 
@@ -37,6 +43,45 @@ internal class HexanaTreeStructureViewBuilder(
 
     override fun createStructureViewModel(editor: Editor?): StructureViewModel {
         return HexanaStructureViewModel(this.editor, binaryProvider)
+    }
+
+    override fun createStructureView(fileEditor: FileEditor?, project: Project): StructureView {
+        val structureView = super.createStructureView(fileEditor, project)
+        if (structureView !is com.intellij.ide.structureView.newStructureView.StructureViewComponent) return structureView
+        // Install a tree popup action for running exports directly from the tree node
+        val tree = structureView.tree
+        if (tree != null) {
+            tree.addMouseListener(object : java.awt.event.MouseAdapter() {
+                override fun mousePressed(e: java.awt.event.MouseEvent) = handlePopup(e)
+                override fun mouseReleased(e: java.awt.event.MouseEvent) = handlePopup(e)
+                private fun handlePopup(e: java.awt.event.MouseEvent) {
+                    if (!e.isPopupTrigger) return
+                    val path = tree.getPathForLocation(e.x, e.y) ?: return
+                    val node = path.lastPathComponent
+                    val element = when {
+                        node is HexanaStructureElement -> node
+                        node is AbstractTreeNode<*> && node.value is HexanaStructureElement -> node.value as HexanaStructureElement
+                        else -> {
+                            // Swing tree wraps in DefaultMutableTreeNode
+                            val userObj = (node as? javax.swing.tree.DefaultMutableTreeNode)?.userObject
+                            when {
+                                userObj is HexanaStructureElement -> userObj
+                                userObj is AbstractTreeNode<*> && userObj.value is HexanaStructureElement -> userObj.value as HexanaStructureElement
+                                else -> null
+                            }
+                        }
+                    }
+                    val runAction = element?.runAction ?: return
+                    val popup = javax.swing.JPopupMenu()
+                    val runItem = javax.swing.JMenuItem("Run Export", AllIcons.RunConfigurations.TestState.Run)
+                    runItem.addActionListener { runAction() }
+                    popup.add(runItem)
+                    popup.show(tree, e.x, e.y)
+                    e.consume()
+                }
+            })
+        }
+        return structureView
     }
 }
 
@@ -83,12 +128,13 @@ private class HexanaStructureViewModel(
 }
 
 
-private class HexanaStructureElement(
+internal class HexanaStructureElement(
     private val name: String,
     val range: IntRange,
     private val icon: Icon?,
     val children: List<HexanaStructureElement> = emptyList(),
     private val editor: HexanaFileEditor? = null,
+    val runAction: (() -> Unit)? = null,
 ) : StructureViewTreeElement {
 
     override fun getPresentation(): ItemPresentation = object : ItemPresentation {
@@ -146,9 +192,19 @@ private fun buildWasmElements(provider: WasmBinaryProvider, editor: HexanaFileEd
     }
     var functionsInserted = false
 
+    // Pre-compute runnable export lookup for the Exports section
+    val exports = provider.exports
+    val runnableExports = exports
+        .filterIsInstance<WasmFunctionExportRecordEntry>()
+        .filter { !isInternalName(it.name) }
+        .associateBy { it.offset }
+    val file = (provider as? WasmBinaryVirtualFileProvider)?.file
+    val project = editor.myProject
+
     for (section in wasmModule.sections) {
         if (section.name in mergedSectionNames) continue
         val records = provider.getRecords(section)
+        val isExportsSection = section.name == "Exports"
         result.add(
             HexanaStructureElement(
                 name = section.name,
@@ -156,11 +212,16 @@ private fun buildWasmElements(provider: WasmBinaryProvider, editor: HexanaFileEd
                 icon = AllIcons.Nodes.Folder,
                 editor = editor,
                 children = records.map { record ->
+                    val exportEntry = if (isExportsSection) runnableExports[record.range.offset] else null
+                    val runAction = if (exportEntry != null && file != null) {
+                        { runWasmExportedFunction(provider, file, project, exportEntry) }
+                    } else null
                     HexanaStructureElement(
                         name = record.name,
                         range = record.range.intRange,
-                        icon = AllIcons.Nodes.Property,
+                        icon = if (exportEntry != null) AllIcons.RunConfigurations.TestState.Run else AllIcons.Nodes.Property,
                         editor = editor,
+                        runAction = runAction,
                     )
                 },
             )
