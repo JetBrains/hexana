@@ -17,6 +17,8 @@ import org.jetbrains.hexana.wasm.intRange
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.shared.isInternalName
 import org.jetbrains.hexana.ui.panel.runWasmExportedFunction
+import org.jetbrains.hexana.wasm.components.WasmComponentExportSection
+import org.jetbrains.hexana.wasm.components.WasmComponentImportSection
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import javax.swing.Icon
 
@@ -159,10 +161,29 @@ internal class HexanaStructureElement(
 }
 
 
+private fun getNameMapForSection(sectionName: String, nameSection: org.jetbrains.hexana.wasm.sections.WasmNameSection?): Map<Int, String>? {
+    if (nameSection == null) return null
+    return when (sectionName) {
+        "Types" -> nameSection.typesSection?.namemap
+        "Tables" -> nameSection.tablesNameSection?.namemap
+        "Memory" -> nameSection.memoriesNameSection?.namemap
+        "Globals" -> nameSection.globalsNameSection?.namemap
+        "Elements" -> nameSection.elemsNameSection?.namemap
+        "Data" -> nameSection.dataSegmentsNameSection?.namemap
+        else -> null
+    }
+}
+
+private fun enrichRecordName(originalName: String, index: Int, nameMap: Map<Int, String>?): String {
+    val resolvedName = nameMap?.get(index) ?: return originalName
+    return "$originalName ($resolvedName)"
+}
+
 private fun buildWasmElements(provider: WasmBinaryProvider, editor: HexanaFileEditor): List<HexanaStructureElement> {
     val wasmModule = provider.wasmModule ?: return emptyList()
     val mergedSectionNames = setOf("Functions", "Code")
     val result = mutableListOf<HexanaStructureElement>()
+    val nameSection = provider.nameSection
 
     // Build merged "Functions" folder eagerly so we can insert it after Exports
     val functionsFolder = run {
@@ -206,19 +227,20 @@ private fun buildWasmElements(provider: WasmBinaryProvider, editor: HexanaFileEd
         if (section.name in mergedSectionNames) continue
         val records = provider.getRecords(section)
         val isExportsSection = section.name == "Exports"
+        val sectionNameMap = getNameMapForSection(section.name, nameSection)
         result.add(
             HexanaStructureElement(
                 name = section.name,
                 range = section.sectionRange,
                 icon = AllIcons.Nodes.Folder,
                 editor = editor,
-                children = records.map { record ->
+                children = records.mapIndexed { index, record ->
                     val exportEntry = if (isExportsSection) runnableExports[record.range.offset] else null
                     val runAction = if (exportEntry != null && file != null) {
                         { runWasmExportedFunction(provider, file, project, exportEntry) }
                     } else null
                     HexanaStructureElement(
-                        name = record.name,
+                        name = enrichRecordName(record.name, index, sectionNameMap),
                         range = record.range.intRange,
                         icon = if (exportEntry != null) AllIcons.RunConfigurations.TestState.Run else AllIcons.Nodes.Property,
                         editor = editor,
@@ -250,34 +272,79 @@ private fun buildWasmComponentElements(provider: WasmComponentBinaryProvider, ed
     val categoryOrder = mutableListOf<String>()
     val categorySections = mutableMapOf<String, MutableList<HexanaStructureElement>>()
 
+    // Pre-scan export/import names keyed by section offset for enrichment
+    val exportsBySection = mutableMapOf<Int, List<HexanaStructureElement>>()
+    var exportCounter = 0
     for (section in wasmComponent.sections) {
-        val records = try {
-            section.getRecordRanges(provider.bytes)
-        } catch (_: Throwable) {
-            emptyList()
+        if (section is WasmComponentExportSection) {
+            val parsed = try { with(section) { provider.bytes.scan() } } catch (_: Throwable) { emptyList() }
+            val baseIndex = exportCounter
+            exportsBySection[section.sectionOffset] = parsed.mapIndexed { i, exp ->
+                HexanaStructureElement(
+                    name = "${exp.exportName} (ComponentExport ${baseIndex + i})",
+                    range = IntRange(exp.offset, exp.offset + exp.size - 1),
+                    icon = AllIcons.Nodes.Property,
+                    editor = editor,
+                )
+            }
+            exportCounter += parsed.size
+        }
+    }
+    val importsBySection = mutableMapOf<Int, List<HexanaStructureElement>>()
+    var importCounter = 0
+    for (section in wasmComponent.sections) {
+        if (section is WasmComponentImportSection) {
+            val parsed = try { with(section) { provider.bytes.scan() } } catch (_: Throwable) { emptyList() }
+            val baseIndex = importCounter
+            importsBySection[section.sectionOffset] = parsed.mapIndexed { i, imp ->
+                HexanaStructureElement(
+                    name = "${imp.importName} (ComponentImport ${baseIndex + i})",
+                    range = IntRange(imp.offset, imp.offset + imp.size - 1),
+                    icon = AllIcons.Nodes.Property,
+                    editor = editor,
+                )
+            }
+            importCounter += parsed.size
+        }
+    }
+
+    for (section in wasmComponent.sections) {
+        // Use pre-scanned export/import children when available
+        val namedChildren = exportsBySection[section.sectionOffset]
+            ?: importsBySection[section.sectionOffset]
+        val records = if (namedChildren != null) {
+            null
+        } else {
+            try { section.getRecordRanges(provider.bytes) } catch (_: Throwable) { emptyList() }
         }
         if (section.name !in categorySections) {
             categoryOrder.add(section.name)
             categorySections[section.name] = mutableListOf()
         }
-        val sectionIndex = categorySections[section.name]!!.size
-        val recordChildren = records.mapIndexed { i, record ->
-            HexanaStructureElement(
-                name = "${record.name}",
-                range = record.range.intRange,
-                icon = AllIcons.Nodes.Property,
-                editor = editor,
+        // For named children (exports/imports), add them directly to the category
+        // instead of wrapping in an intermediate section-instance node
+        if (namedChildren != null) {
+            categorySections[section.name]!!.addAll(namedChildren)
+        } else {
+            val sectionIndex = categorySections[section.name]!!.size
+            val recordChildren = records!!.mapIndexed { i, record ->
+                HexanaStructureElement(
+                    name = "${record.name}",
+                    range = record.range.intRange,
+                    icon = AllIcons.Nodes.Property,
+                    editor = editor,
+                )
+            }
+            categorySections[section.name]!!.add(
+                HexanaStructureElement(
+                    name = "${section.name} $sectionIndex",
+                    range = section.sectionRange,
+                    icon = AllIcons.Nodes.Property,
+                    editor = editor,
+                    children = recordChildren,
+                )
             )
         }
-        categorySections[section.name]!!.add(
-            HexanaStructureElement(
-                name = "${section.name} $sectionIndex",
-                range = section.sectionRange,
-                icon = AllIcons.Nodes.Property,
-                editor = editor,
-                children = recordChildren,
-            )
-        )
     }
 
     return categoryOrder.map { name ->
