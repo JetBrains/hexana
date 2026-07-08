@@ -572,6 +572,10 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
             LOG.debug("queryProcessExited: detected exit via process status")
             return true
         }
+        lines.firstNotNullOfOrNull(::parseStopEvent)?.let { event ->
+            LOG.debug("queryProcessExited: re-offering process-status stop event=$event")
+            stopEvents.offer(event)
+        }
         return false
     }
 
