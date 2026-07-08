@@ -1,4 +1,4 @@
-# Unreleased
+# 0.6.0 - 08.07.2026
 
 - support for viewing compiled Protocol Buffers descriptor sets (.desc / .protoset), with Files/Messages/Fields/Enums/Services tabs
 - support for wazero in WASM run configurations (running only modules, not individual functions)
