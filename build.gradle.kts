@@ -93,6 +93,7 @@ tasks.register("teamcityCiTests") {
         ":mcp:server:test",
         ":mcp:server:verifyMcpRuntimeClassFileVersions",
         ":mcp:server:verifyNativeMcpVersionSmokeAssertion",
+        ":mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate",
         ":mcp:server:integrationTest",
         ":mcp:vscode-server:test",
     )
