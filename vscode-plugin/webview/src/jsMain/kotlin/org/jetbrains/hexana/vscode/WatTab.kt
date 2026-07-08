@@ -13,6 +13,8 @@ import org.jetbrains.hexana.document.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.providers.format.ComponentCoreModuleCollector
+import org.jetbrains.hexana.providers.format.EmbeddedCoreModule
 import org.jetbrains.hexana.providers.format.RowKind
 import org.jetbrains.hexana.providers.format.WasmHexanaWatRenderer
 import org.jetbrains.hexana.providers.format.WasmParsedBinary
@@ -22,10 +24,10 @@ import org.w3c.dom.HTMLElement
 import org.w3c.dom.events.Event
 
 /**
- * WAT tab content — for core Wasm modules, renders an inline virtualized
- * WAT view similar to the IntelliJ plugin's `WasmPanelWatVirtualized`.
- * For component-model binaries, falls back to the wasmprinter-based
- * conversion that opens WAT in a native VS Code editor tab.
+ * WAT tab content — for both core Wasm modules and component-model binaries,
+ * renders an inline virtualized WAT view similar to the IntelliJ plugin.
+ * Component binaries show their embedded core modules with a tab strip
+ * when more than one is present.
  */
 @Composable
 fun WatTabContent(
@@ -33,8 +35,103 @@ fun WatTabContent(
 ) {
     when (provider) {
         is WasmBinaryProvider -> VirtualizedWatView(provider)
-        is WasmComponentBinaryProvider -> WasmPrinterWat(provider.bytes.toByteArray())
+        is WasmComponentBinaryProvider -> VirtualizedComponentWatView(provider)
         else -> Div { Text("Not a recognized WebAssembly binary.") }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Virtualized WAT view for component-model binaries (embedded core modules)
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun VirtualizedComponentWatView(provider: WasmComponentBinaryProvider) {
+    var modules by remember { mutableStateOf<List<EmbeddedCoreModule>?>(null) }
+
+    LaunchedEffect(provider) {
+        modules = ComponentCoreModuleCollector.collect(provider)
+    }
+
+    val mods = modules
+    if (mods == null) {
+        Div({
+            style {
+                property("padding", "8px 0")
+                property("opacity", "0.7")
+            }
+        }) {
+            Text("Scanning embedded core modules…")
+        }
+        return
+    }
+
+    if (mods.isEmpty()) {
+        // No embedded core modules — fall back to wasmprinter conversion
+        WasmPrinterWat(provider.bytes.toByteArray())
+        return
+    }
+
+    ComponentModuleSelector(mods)
+}
+
+@Composable
+private fun ComponentModuleSelector(modules: List<EmbeddedCoreModule>) {
+    var selected by remember(modules) { mutableStateOf(0) }
+    val index = selected.coerceIn(0, modules.lastIndex)
+
+    Div({
+        style {
+            display(DisplayStyle.Flex)
+            property("flex-direction", "column")
+            height(100.percent)
+        }
+    }) {
+        if (modules.size > 1) {
+            // Tab strip for selecting among embedded core modules
+            Div({
+                style {
+                    display(DisplayStyle.Flex)
+                    property("flex-wrap", "wrap")
+                    property("gap", "0")
+                    property("border-bottom", "1px solid var(--hexana-border, #333)")
+                    property("flex-shrink", "0")
+                }
+            }) {
+                for ((i, m) in modules.withIndex()) {
+                    Div({
+                        style {
+                            property("padding", "4px 12px")
+                            property("font-size", "12px")
+                            property("cursor", "pointer")
+                            property("user-select", "none")
+                            if (i == index) {
+                                property("color", "var(--vscode-tab-activeForeground, #fff)")
+                                property("border-bottom", "2px solid var(--vscode-focusBorder, #007fd4)")
+                            } else {
+                                property("color", "var(--vscode-tab-inactiveForeground, #999)")
+                                property("opacity", "0.8")
+                            }
+                        }
+                        onClick { selected = i }
+                    }) {
+                        Text(m.path)
+                    }
+                }
+            }
+        }
+
+        val coreProvider = remember(modules, index) { WasmBinaryProvider(modules[index].bytes) }
+
+        Div({
+            style {
+                property("flex", "1")
+                property("min-height", "0")
+            }
+        }) {
+            key(index) {
+                VirtualizedWatView(coreProvider)
+            }
+        }
     }
 }
 
