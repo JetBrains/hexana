@@ -1,6 +1,6 @@
 {
   "name": "hexana",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "WebAssembly inspection tools for Codex backed by the Hexana MCP server.",
   "author": {
     "name": "JetBrains",
