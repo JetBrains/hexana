@@ -41,7 +41,7 @@ internal fun DataViewModeBar(
             val bg = if (selected) HexanaTheme.textColor.copy(alpha = 0.15f) else Color.Transparent
             Text(
                 text = labelFor(mode),
-                style = ROW_TEXT_STYLE.copy(
+                style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(
                     color = HexanaTheme.textColor,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 ),

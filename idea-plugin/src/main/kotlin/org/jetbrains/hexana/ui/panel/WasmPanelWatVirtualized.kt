@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableState
@@ -185,6 +186,7 @@ internal fun WasmPanelWatVirtualized(
         listState = listState,
         foldedSectionsExternal = foldedSectionsExternal,
         navTargetFlow = navTargetFlow,
+        onOffsetClicked = { offset -> state.scrollHexViewTo(offset) },
     )
 }
 
@@ -197,6 +199,7 @@ private fun WasmPanelWatVirtualizedContent(
     listState: LazyListState?,
     foldedSectionsExternal: MutableState<Set<ChunkId>>?,
     navTargetFlow: MutableStateFlow<WasmFunctionNavTarget?>,
+    onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     // Read provider from the bundle, not from a separate param: it must stay
     // matched to chunkTree/renderer/snapshot through edit-commit swaps.
@@ -435,225 +438,200 @@ private fun WasmPanelWatVirtualizedContent(
     }
     var gotoPopupOpen by remember { mutableStateOf(false) }
 
-    // Always-visible find-and-jump search bar. Results are matched against the
-    // bounded [funcNamesIndex] (one entry per defined function, ~14k for Skiko)
-    // — never the ~130k rendered rows — so the per-keystroke cost stays off the
-    // heavy EDT path. Held without a key so the query survives edit-commit
-    // rebuilds; results recompute because they key on [funcNamesIndex].
-    var searchQuery by remember { mutableStateOf(TextFieldValue("")) }
-    val searchResults = remember(searchQuery.text, funcNamesIndex) {
-        computeWatSearchResults(searchQuery.text, funcNamesIndex)
+    // Shared per-row callbacks used by both the small-chunk ChunkRow path
+    // and the big-function virtualized per-row items path.
+    val onSetEditing: (ChunkId, Int) -> Unit = { cid, ridx -> editingRow = cid to ridx }
+    val onClearEditing: (ChunkId, Int) -> Unit = { cid, ridx ->
+        if (editingRow == cid to ridx) editingRow = null
+    }
+    val onFollowTarget: (FollowTarget) -> Unit = { tgt -> navigator.gotoFunc(tgt.funcIdx, tgt.section) }
+
+    // Build the search results adapter: WAT search produces funcIdx-based
+    // results; we adapt them to ChunkSearchResult for the common panel.
+    val watSearchConfig = remember(chunkTree, funcNamesIndex, provider) {
+        VirtualizedChunkPanelConfig(
+            sectionDisplayName = { kind -> WasmSectionKinds.displayName(kind) },
+            colorForToken = ::defaultColorFor,
+            searchPlaceholder = "Search by name, index, or offset (hex)",
+            computeSearchResults = { query ->
+                computeWatSearchResults(query, funcNamesIndex).map { watResult ->
+                    // Resolve funcIdx to a code-section chunk id for navigation.
+                    val indexInSection = watResult.funcIdx - provider.importFuncCount
+                    val chunkId = if (indexInSection >= 0) {
+                        var found: ChunkId? = null
+                        for (i in 0 until chunkTree.totalChunks) {
+                            val c = chunkTree.chunkAt(i)
+                            if (c is BinaryChunk.Element && c.kind == WasmSectionKinds.FUNCTION &&
+                                c.indexInSection == indexInSection
+                            ) {
+                                found = c.id
+                                break
+                            }
+                        }
+                        found
+                    } else {
+                        null
+                    }
+                    WatChunkSearchResult(
+                        label = watResult.label,
+                        funcIdx = watResult.funcIdx,
+                        chunkId = chunkId ?: ChunkId.Indexed(WasmSectionKinds.CODE, indexInSection),
+                    )
+                }
+            },
+            itemCountForChunk = { chunkId -> watItemCount(chunkTree, bigFuncRowCache, chunkId) },
+        )
     }
 
-    // Panel-level shortcuts: Back / Forward / GotoSymbol. Attached at the
-    // outer Column so they fire regardless of which row currently owns
-    // keyboard focus. The preview pass runs before the focused element's
-    // own handler, so these win over any built-in BasicTextField caret
-    // bindings for the same combo.
-    val panelKeyHandler: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = handler@ { event ->
-        if (event.type != KeyEventType.KeyDown) return@handler false
-        if (KeymapShortcuts.isModifierOnly(event)) return@handler false
-        val back = KeymapShortcuts.matches(event, IdeActions.ACTION_GOTO_BACK)
-        val fwd = KeymapShortcuts.matches(event, IdeActions.ACTION_GOTO_FORWARD)
-        // No `IdeActions.ACTION_GOTO_SYMBOL` constant exists — the platform
-        // registers the id as a plain string in PlatformActions.xml.
-        val goto = KeymapShortcuts.matches(event, "GotoSymbol")
-        when {
-            back -> navigator.back()
-            fwd -> navigator.forward()
-            goto -> {
+    VirtualizedChunkPanel(
+        chunkTree = chunkTree,
+        config = watSearchConfig,
+        listState = effectiveListState,
+        foldedSectionsExternal = foldedSectionsState,
+        sectionHeaderContent = { chunk, folded, onToggle ->
+            SectionHeaderRow(
+                chunk = chunk,
+                snapshot = snapshot,
+                folded = folded,
+                onToggle = onToggle,
+                onOffsetClicked = onOffsetClicked,
+            )
+        },
+        onSearchResultPicked = { result, nav ->
+            val watResult = result as? WatChunkSearchResult
+            if (watResult != null) {
+                navigator.gotoFunc(watResult.funcIdx, WasmSectionKinds.FUNCTION)
+            } else {
+                nav.gotoChunk(result.chunkId)
+            }
+        },
+        extraKeyHandler = { event ->
+            if (event.type != KeyEventType.KeyDown) return@VirtualizedChunkPanel false
+            if (KeymapShortcuts.isModifierOnly(event)) return@VirtualizedChunkPanel false
+            val goto = KeymapShortcuts.matches(event, "GotoSymbol")
+            if (goto) {
                 gotoPopupOpen = true
                 true
+            } else {
+                false
             }
-            else -> false
-        }
-    }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(HexanaTheme.backgroundColor)
-            .onPreviewKeyEvent(panelKeyHandler),
-    ) {
-        WatSearchBar(
-            query = searchQuery,
-            onQueryChange = { searchQuery = it },
-            results = searchResults,
-            onResultPicked = { result ->
-                // Land on the Function-section declaration row, same starting
-                // view as the goto popup and Cmd+B from a call site.
-                navigator.gotoFunc(result.funcIdx, WasmSectionKinds.FUNCTION)
-                searchQuery = TextFieldValue("")
-            },
-        )
-        SectionShortcutBar(chunkTree = chunkTree, navigator = navigator)
-        // Shared per-row callbacks used by both the small-chunk ChunkRow path
-        // and the big-function virtualized per-row items path.
-        val onSetEditing: (ChunkId, Int) -> Unit = { cid, ridx -> editingRow = cid to ridx }
-        val onClearEditing: (ChunkId, Int) -> Unit = { cid, ridx ->
-            if (editingRow == cid to ridx) editingRow = null
-        }
-        val onFollowTarget: (FollowTarget) -> Unit = { tgt -> navigator.gotoFunc(tgt.funcIdx, tgt.section) }
-        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            LazyColumn(state = effectiveListState, modifier = Modifier.fillMaxSize()) {
-                var hidden = false
-                for (i in 0 until chunkTree.totalChunks) {
-                    val chunk = chunkTree.chunkAt(i)
-                    when (chunk) {
-                        is BinaryChunk.SectionHeader -> {
-                            hidden = chunk.id in foldedSections
-                            val isFolded = hidden
-                            stickyHeader(key = chunk.id) {
-                                SectionHeaderRow(
-                                    chunk = chunk,
-                                    snapshot = snapshot,
-                                    folded = isFolded,
-                                    onToggle = {
-                                        foldedSections = if (chunk.id in foldedSections) {
-                                            foldedSections - chunk.id
-                                        } else {
-                                            foldedSections + chunk.id
-                                        }
-                                    },
-                                )
+        },
+        elementContent = { chunk, _ ->
+            if (chunk.kind == WasmSectionKinds.TYPE_REC) {
+                // Collapsible header for a WasmGC (rec …) group.
+                val expanded = chunk.id in expandedRecGroups
+                item(key = chunk.id) {
+                    RecGroupHeaderRow(
+                        chunk = chunk,
+                        expanded = expanded,
+                        onToggle = {
+                            expandedRecGroups = if (chunk.id in expandedRecGroups) {
+                                expandedRecGroups - chunk.id
+                            } else {
+                                expandedRecGroups + chunk.id
                             }
-                        }
-                        is BinaryChunk.Element -> {
-                            if (chunk.kind == WasmSectionKinds.TYPE_REC) {
-                                // Collapsible header for a WasmGC (rec …) group.
-                                // Its member TYPE chunks (groupId == this id) are
-                                // gated below; default-collapsed so a 50k-type rec
-                                // never composes up front.
-                                if (!hidden) {
-                                    val expanded = chunk.id in expandedRecGroups
-                                    item(key = chunk.id) {
-                                        RecGroupHeaderRow(
-                                            chunk = chunk,
-                                            expanded = expanded,
-                                            onToggle = {
-                                                expandedRecGroups = if (chunk.id in expandedRecGroups) {
-                                                    expandedRecGroups - chunk.id
-                                                } else {
-                                                    expandedRecGroups + chunk.id
-                                                }
-                                            },
-                                        )
-                                    }
-                                }
-                            } else if (!hidden &&
-                                (chunk.groupId == null || chunk.groupId in expandedRecGroups)
-                            ) {
-                                val isBigFunc = chunk.kind == WasmSectionKinds.CODE &&
-                                    chunk.estimatedLines > BIG_FUNC_THRESHOLD
-                                val cachedRows = if (isBigFunc) bigFuncRowCache[chunk.id] else null
-                                val appended = chunk.kind == WasmSectionKinds.CODE &&
-                                    chunk.indexInSection in appendedCodeIndices
-                                if (isBigFunc && cachedRows == null) {
-                                    // Not yet decoded — one placeholder item that
-                                    // kicks off the off-EDT decode, then flips to
-                                    // per-row items once the cache fills.
-                                    item(key = "bigfunc-placeholder:${chunk.id}") {
-                                        BigFuncPlaceholderRow(
-                                            chunk = chunk,
-                                            renderer = renderer,
-                                            snapshot = snapshot,
-                                            rowCache = bigFuncRowCache,
-                                            editableIndicesCache = bigFuncEditableIndices,
-                                        )
-                                    }
-                                } else if (isBigFunc && cachedRows != null) {
-                                    // Per-row virtualization: one LazyColumn item
-                                    // per row, so only viewport rows compose/paint.
-                                    val editableIdx = bigFuncEditableIndices[chunk.id] ?: emptyList()
-                                    items(
-                                        count = cachedRows.size,
-                                        key = { rowIndex -> "bigfunc:${chunk.id}:$rowIndex" },
-                                    ) { rowIndex ->
-                                        // Resolve the symbol badge only on the
-                                        // header row (rowIndex 0) where it shows.
-                                        val graal = if (rowIndex == 0 && project != null) {
-                                            remember(chunk.id, provider) {
-                                                provider.graalSymbolFor(provider.importFuncCount + chunk.indexInSection)
-                                                    ?.takeIf { !it.isSynthetic }
-                                            }
-                                        } else {
-                                            null
-                                        }
-                                        val kotlinSym = if (rowIndex == 0 && project != null && graal == null) {
-                                            remember(chunk.id, provider) {
-                                                provider.kotlinSymbolFor(provider.importFuncCount + chunk.indexInSection)
-                                            }
-                                        } else {
-                                            null
-                                        }
-                                        WatRowItem(
-                                            chunk = chunk,
-                                            row = cachedRows[rowIndex],
-                                            rowIndex = rowIndex,
-                                            editableIndices = editableIdx,
-                                            editableDoc = editableDoc,
-                                            provider = provider,
-                                            project = project,
-                                            graalSymbol = graal,
-                                            kotlinSymbol = kotlinSym,
-                                            isAppendedFunc = appended,
-                                            viewMode = DataViewMode.U8_HEX,
-                                            isDataExpanded = false,
-                                            isImportExpanded = false,
-                                            isExportExpanded = false,
-                                            expandedDataChunks = null,
-                                            dataChunkViewModes = null,
-                                            expandedImportChunks = null,
-                                            expandedExportChunks = null,
-                                            focusMap = focusMap,
-                                            editingRow = editingRow,
-                                            onSetEditingRow = onSetEditing,
-                                            onClearEditingRow = onClearEditing,
-                                            onCrossChunkUp = navUp,
-                                            onCrossChunkDown = navDown,
-                                            onFollow = onFollowTarget,
-                                        )
-                                    }
-                                } else {
-                                    // Small chunk — render the whole chunk inline.
-                                    item(key = chunk.id) {
-                                        ChunkRow(
-                                            chunk = chunk,
-                                            renderer = renderer,
-                                            snapshot = snapshot,
-                                            provider = provider,
-                                            project = project,
-                                            editableDoc = editableDoc,
-                                            focusMap = focusMap,
-                                            onCrossChunkUp = navUp,
-                                            onCrossChunkDown = navDown,
-                                            editingRow = editingRow,
-                                            onSetEditingRow = onSetEditing,
-                                            onClearEditingRow = onClearEditing,
-                                            isAppendedFunc = appended,
-                                            expandedDataChunks = expandedDataChunksState,
-                                            dataChunkViewModes = dataChunkViewModesState,
-                                            expandedImportChunks = expandedImportChunksState,
-                                            expandedExportChunks = expandedExportChunksState,
-                                            onFollow = onFollowTarget,
-                                        )
-                                    }
-                                }
+                        },
+                    )
+                }
+            } else if (chunk.groupId == null || chunk.groupId in expandedRecGroups) {
+                val isBigFunc = chunk.kind == WasmSectionKinds.CODE &&
+                    chunk.estimatedLines > BIG_FUNC_THRESHOLD
+                val cachedRows = if (isBigFunc) bigFuncRowCache[chunk.id] else null
+                val appended = chunk.kind == WasmSectionKinds.CODE &&
+                    chunk.indexInSection in appendedCodeIndices
+                if (isBigFunc && cachedRows == null) {
+                    item(key = "bigfunc-placeholder:${chunk.id}") {
+                        BigFuncPlaceholderRow(
+                            chunk = chunk,
+                            renderer = renderer,
+                            snapshot = snapshot,
+                            rowCache = bigFuncRowCache,
+                            editableIndicesCache = bigFuncEditableIndices,
+                        )
+                    }
+                } else if (isBigFunc && cachedRows != null) {
+                    val editableIdx = bigFuncEditableIndices[chunk.id] ?: emptyList()
+                    items(
+                        count = cachedRows.size,
+                        key = { rowIndex -> "bigfunc:${chunk.id}:$rowIndex" },
+                    ) { rowIndex ->
+                        val graal = if (rowIndex == 0 && project != null) {
+                            remember(chunk.id, provider) {
+                                provider.graalSymbolFor(provider.importFuncCount + chunk.indexInSection)
+                                    ?.takeIf { !it.isSynthetic }
                             }
+                        } else {
+                            null
                         }
+                        val kotlinSym = if (rowIndex == 0 && project != null && graal == null) {
+                            remember(chunk.id, provider) {
+                                provider.kotlinSymbolFor(provider.importFuncCount + chunk.indexInSection)
+                            }
+                        } else {
+                            null
+                        }
+                        WatRowItem(
+                            chunk = chunk,
+                            row = cachedRows[rowIndex],
+                            rowIndex = rowIndex,
+                            editableIndices = editableIdx,
+                            editableDoc = editableDoc,
+                            provider = provider,
+                            project = project,
+                            graalSymbol = graal,
+                            kotlinSymbol = kotlinSym,
+                            isAppendedFunc = appended,
+                            viewMode = DataViewMode.U8_HEX,
+                            isDataExpanded = false,
+                            isImportExpanded = false,
+                            isExportExpanded = false,
+                            expandedDataChunks = null,
+                            dataChunkViewModes = null,
+                            expandedImportChunks = null,
+                            expandedExportChunks = null,
+                            focusMap = focusMap,
+                            editingRow = editingRow,
+                            onSetEditingRow = onSetEditing,
+                            onClearEditingRow = onClearEditing,
+                            onCrossChunkUp = navUp,
+                            onCrossChunkDown = navDown,
+                            onFollow = onFollowTarget,
+                            onOffsetClicked = onOffsetClicked,
+                        )
+                    }
+                } else {
+                    item(key = chunk.id) {
+                        ChunkRow(
+                            chunk = chunk,
+                            renderer = renderer,
+                            snapshot = snapshot,
+                            provider = provider,
+                            project = project,
+                            editableDoc = editableDoc,
+                            focusMap = focusMap,
+                            onCrossChunkUp = navUp,
+                            onCrossChunkDown = navDown,
+                            editingRow = editingRow,
+                            onSetEditingRow = onSetEditing,
+                            onClearEditingRow = onClearEditing,
+                            isAppendedFunc = appended,
+                            expandedDataChunks = expandedDataChunksState,
+                            dataChunkViewModes = dataChunkViewModesState,
+                            expandedImportChunks = expandedImportChunksState,
+                            expandedExportChunks = expandedExportChunksState,
+                            onFollow = onFollowTarget,
+                            onOffsetClicked = onOffsetClicked,
+                        )
                     }
                 }
             }
-        }
-        StatusBar(chunkTree = chunkTree, currentIndex = firstVisibleChunkIndex)
-    }
+        },
+    )
     if (gotoPopupOpen) {
         WasmGotoFuncPopup(
             funcNamesIndex = funcNamesIndex,
             onResolved = { funcIdx ->
                 gotoPopupOpen = false
-                // Land on the Function-section declaration row so the user
-                // gets the same starting view as Cmd+B from a call site —
-                // a second Cmd+B (or click) continues to the Code body.
                 navigator.gotoFunc(funcIdx, WasmSectionKinds.FUNCTION)
             },
             onDismiss = { gotoPopupOpen = false },
@@ -688,6 +666,7 @@ private fun SectionHeaderRow(
     snapshot: BinaryDocumentSnapshot,
     folded: Boolean,
     onToggle: () -> Unit,
+    onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     val bg = if (JewelTheme.isDark) Color(0xFF2B2D30) else Color(0xFFEBECF0)
     val textStyle = TextStyle(
@@ -727,18 +706,29 @@ private fun SectionHeaderRow(
             .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Offset gutter — matches GUTTER_WIDTH layout of body rows.
-        Text(
-            text = "0x${chunk.byteRange.first.toString(16).uppercase().padStart(8, '0')}",
-            style = textStyle.copy(color = HexanaTheme.hexTextColor),
-        )
-        Spacer(modifier = Modifier.width(WasmHexanaWatRenderer.GAP.dp))
-        // Hex preview column — mirrors the RAW_BYTES column in body rows.
-        Text(
-            text = hexPreview,
-            style = textStyle.copy(color = HexanaTheme.hexTextColor),
-        )
-        Spacer(modifier = Modifier.width(WasmHexanaWatRenderer.GAP.dp))
+        DisableSelection {
+            // Offset gutter — matches GUTTER_WIDTH layout of body rows.
+            val offsetText = "0x${chunk.byteRange.first.toString(16).uppercase().padStart(8, '0')}"
+            if (onOffsetClicked != null) {
+                Text(
+                    text = offsetText,
+                    style = textStyle.copy(color = HexanaTheme.hexTextColor),
+                    modifier = Modifier.clickable { onOffsetClicked(chunk.byteRange.first) },
+                )
+            } else {
+                Text(
+                    text = offsetText,
+                    style = textStyle.copy(color = HexanaTheme.hexTextColor),
+                )
+            }
+            Spacer(modifier = Modifier.width(WasmHexanaWatRenderer.GAP.dp))
+            // Hex preview column — mirrors the RAW_BYTES column in body rows.
+            Text(
+                text = hexPreview,
+                style = textStyle.copy(color = HexanaTheme.hexTextColor),
+            )
+            Spacer(modifier = Modifier.width(WasmHexanaWatRenderer.GAP.dp))
+        }
         Text(
             text = if (folded) "▶" else "▼",
             style = textStyle.copy(color = HexanaTheme.hexTextColor),
@@ -746,7 +736,7 @@ private fun SectionHeaderRow(
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = "(${WasmSectionKinds.displayName(chunk.kind)})  " +
-                "${chunk.elementCount} entries · ${formatBytes(chunk.totalSize)}",
+                "${chunk.elementCount} entries · ${chunkFormatBytes(chunk.totalSize)}",
             style = textStyle,
         )
     }
@@ -768,19 +758,13 @@ private fun RecGroupHeaderRow(
     val count = chunk.displayName ?: "?"
     Text(
         text = "$arrow (rec  (; $count types ;)",
-        style = ROW_TEXT_STYLE.copy(color = colorFor(RenderTokenKind.KEYWORD)),
+        style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = defaultColorFor(RenderTokenKind.KEYWORD)),
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onToggle() }
             .padding(horizontal = 16.dp, vertical = 1.dp),
     )
 }
-
-internal val ROW_TEXT_STYLE = TextStyle(
-    fontFamily = FontFamily.Monospace,
-    fontSize = 12.sp,
-    color = Color.Unspecified,
-)
 
 @Composable
 private fun ChunkRow(
@@ -857,6 +841,7 @@ private fun ChunkRow(
      * navigator is available.
      */
     onFollow: ((FollowTarget) -> Unit)? = null,
+    onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     // Re-render whenever the renderer or snapshot changes (i.e. after a
     // commit replaces `liveProvider` and rebuilds `panelState`). Keying on
@@ -938,6 +923,7 @@ private fun ChunkRow(
                 onCrossChunkUp = onCrossChunkUp,
                 onCrossChunkDown = onCrossChunkDown,
                 onFollow = onFollow,
+                onOffsetClicked = onOffsetClicked,
             )
         }
     }
@@ -979,6 +965,7 @@ private fun WatRowItem(
     onCrossChunkUp: ((ChunkId) -> Unit)?,
     onCrossChunkDown: ((ChunkId) -> Unit)?,
     onFollow: ((FollowTarget) -> Unit)?,
+    onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     // Skip Data body/descriptor rows when collapsed; the header + expander
     // stay visible as a click target.
@@ -989,7 +976,7 @@ private fun WatRowItem(
     if (row.kind is RowKind.ImportExpander && expandedImportChunks != null) {
         Text(
             text = if (isImportExpanded) "▼ hide details" else "▶ show details",
-            style = ROW_TEXT_STYLE.copy(color = colorFor(RenderTokenKind.KEYWORD)),
+            style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = defaultColorFor(RenderTokenKind.KEYWORD)),
             modifier = Modifier
                 .padding(start = 90.dp)
                 .clickable {
@@ -1005,7 +992,7 @@ private fun WatRowItem(
     if (row.kind is RowKind.ExportExpander && expandedExportChunks != null) {
         Text(
             text = if (isExportExpanded) "▼ hide details" else "▶ show details",
-            style = ROW_TEXT_STYLE.copy(color = colorFor(RenderTokenKind.KEYWORD)),
+            style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = defaultColorFor(RenderTokenKind.KEYWORD)),
             modifier = Modifier
                 .padding(start = 90.dp)
                 .clickable {
@@ -1023,7 +1010,7 @@ private fun WatRowItem(
         val label = if (isDataExpanded) "▼ hide $byteCount bytes" else "▶ show $byteCount bytes"
         Text(
             text = label,
-            style = ROW_TEXT_STYLE.copy(color = colorFor(RenderTokenKind.KEYWORD)),
+            style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = defaultColorFor(RenderTokenKind.KEYWORD)),
             modifier = Modifier
                 .padding(start = 90.dp)
                 .clickable {
@@ -1098,6 +1085,7 @@ private fun WatRowItem(
             onRequestEdit = { onSetEditingRow(chunk.id, rowIndex) },
             onClearEdit = { onClearEditingRow(chunk.id, rowIndex) },
             onFollow = onFollow,
+            onOffsetClicked = onOffsetClicked,
         )
     }
     // The "Java" / "Kotlin/Wasm" badge sits inline on the function's header row.
@@ -1182,7 +1170,7 @@ private fun BigFuncPlaceholderRow(
     val name = chunk.displayName ?: "func#${chunk.indexInSection}"
     Text(
         text = "(; decoding $name — ~${chunk.estimatedLines} rows… ;)",
-        style = ROW_TEXT_STYLE.copy(color = colorFor(RenderTokenKind.COMMENT)),
+        style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = defaultColorFor(RenderTokenKind.COMMENT)),
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 1.dp),
     )
 }
@@ -1201,7 +1189,7 @@ private fun GraalJavaBadge(symbol: GraalJavaSymbol, project: Project) {
     Tooltip(tooltip = { Text("Go to Java bytecode: ${symbol.display()}") }) {
         Text(
             text = "Java",
-            style = ROW_TEXT_STYLE.copy(color = badgeFg, fontSize = 10.sp),
+            style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = badgeFg, fontSize = 10.sp),
             modifier = Modifier
                 .padding(start = 8.dp)
                 .background(badgeBg, RoundedCornerShape(4.dp))
@@ -1225,7 +1213,7 @@ private fun KotlinWasmBadge(symbol: KotlinWasmSymbol, project: Project) {
     Tooltip(tooltip = { Text("Go to Kotlin source: ${symbol.display()}") }) {
         Text(
             text = "Kotlin/Wasm",
-            style = ROW_TEXT_STYLE.copy(color = badgeFg, fontSize = 10.sp),
+            style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = badgeFg, fontSize = 10.sp),
             modifier = Modifier
                 .padding(start = 8.dp)
                 .background(badgeBg, RoundedCornerShape(4.dp))
@@ -1291,6 +1279,7 @@ private fun RenderedRowView(
     onClearEdit: () -> Unit = {},
     /** See [ChunkRow.onFollow]. */
     onFollow: ((FollowTarget) -> Unit)? = null,
+    onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     val info = row.editable
     val color = HexanaTheme.textColor
@@ -1302,21 +1291,14 @@ private fun RenderedRowView(
             // the key event has somewhere to land; clicking the row also
             // grabs focus via the click handler.
             val rowFocus = remember(chunkId, rowIndex) { FocusRequester() }
-            Text(
-                text = row.tokens.toAnnotatedString(),
-                style = ROW_TEXT_STYLE.copy(color = color),
+            SelectableTokenRow(
+                tokens = row.tokens,
+                color = color,
+                onOffsetClicked = onOffsetClicked,
                 modifier = Modifier
                     .focusRequester(rowFocus)
                     .focusable()
                     .clickable {
-                        // Don't requestFocus() on the source row before
-                        // navigating — once `scrollToItem` jumps the
-                        // viewport, Compose's LazyColumn auto-scrolls a
-                        // focused-but-offscreen child back into view (a
-                        // smooth scroll), which makes the click feel like
-                        // a slow drift instead of an instant jump. Focus
-                        // stays wherever it was; the navigation does its
-                        // own scrolling.
                         onFollow.invoke(target)
                     }
                     .onPreviewKeyEvent { event ->
@@ -1331,9 +1313,10 @@ private fun RenderedRowView(
             )
             return
         }
-        Text(
-            text = row.tokens.toAnnotatedString(),
-            style = ROW_TEXT_STYLE.copy(color = color),
+        SelectableTokenRow(
+            tokens = row.tokens,
+            color = color,
+            onOffsetClicked = onOffsetClicked,
         )
         return
     }
@@ -1345,9 +1328,10 @@ private fun RenderedRowView(
     // fields at once (the EDT-freeze fix).
     if (!isEditing) {
         val rowFocus = focusRequester ?: remember(chunkId, rowIndex) { FocusRequester() }
-        Text(
-            text = row.tokens.toAnnotatedString(),
-            style = ROW_TEXT_STYLE.copy(color = color),
+        SelectableTokenRow(
+            tokens = row.tokens,
+            color = color,
+            onOffsetClicked = onOffsetClicked,
             modifier = Modifier
                 .focusRequester(rowFocus)
                 .focusable()
@@ -1385,13 +1369,13 @@ private fun RenderedRowView(
     // indent whitespace) and the editable suffix. The TextField only holds
     // the suffix's text, pre-filled with info.watText (which the renderer
     // already strips of structural decoration).
-    val prefixEnd = row.tokens.indexOfFirst { it.kind !in PREFIX_KINDS }
+    val prefixEnd = row.tokens.indexOfFirst { it.kind !in STRUCTURAL_PREFIX_KINDS }
     val prefixTokens = if (prefixEnd > 0) row.tokens.subList(0, prefixEnd) else row.tokens
-    val prefix = prefixTokens.toAnnotatedString()
+    val prefix = prefixTokens.toHighlightedAnnotatedString()
 
     var fieldText by remember(chunkId, rowIndex, info.watText) { mutableStateOf(info.watText) }
     var lastError by remember(chunkId, rowIndex) { mutableStateOf<String?>(null) }
-    val errorColor = colorFor(RenderTokenKind.ERROR)
+    val errorColor = defaultColorFor(RenderTokenKind.ERROR)
     // Pull focus into the field as soon as this row becomes the active edit
     // row. `hadFocus` guards the leave-edit-on-blur logic against the initial
     // isFocused=false callback that races this LaunchedEffect — without it the
@@ -1408,7 +1392,9 @@ private fun RenderedRowView(
     }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(text = prefix, style = ROW_TEXT_STYLE.copy(color = color))
+        DisableSelection {
+            Text(text = prefix, style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = color))
+        }
         // Local capture so the lambdas below see a stable reference even
         // when the parent recomposes the requester map.
         val requesterModifier = if (focusRequester != null) {
@@ -1421,7 +1407,7 @@ private fun RenderedRowView(
             onValueChange = { fieldText = it; lastError = null },
             singleLine = true,
             cursorBrush = SolidColor(color),
-            textStyle = ROW_TEXT_STYLE.copy(color = colorFor(RenderTokenKind.KEYWORD)),
+            textStyle = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = defaultColorFor(RenderTokenKind.KEYWORD)),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(
                 onDone = {
@@ -1508,7 +1494,7 @@ private fun RenderedRowView(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "(; ${lastError} ;)",
-                style = ROW_TEXT_STYLE.copy(color = errorColor),
+                style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = errorColor),
             )
         }
     }
@@ -1537,20 +1523,7 @@ internal fun parseCallTarget(fieldText: String, originalOp: OpCodes.Flow.Call): 
     return originalOp.value.toLong().takeIf { it in 0..Int.MAX_VALUE.toLong() }?.toInt()
 }
 
-private val PREFIX_KINDS = setOf(
-    RenderTokenKind.OFFSET_ANNOTATION,
-    RenderTokenKind.RAW_BYTES,
-    RenderTokenKind.WHITESPACE,
-)
 
-private fun List<RenderToken>.toAnnotatedString(): AnnotatedString = buildAnnotatedString {
-    for (t in this@toAnnotatedString) {
-        if (t.kind == RenderTokenKind.LINE_BREAK) continue
-        withStyle(SpanStyle(color = colorFor(t.kind))) {
-            append(t.text)
-        }
-    }
-}
 
 /**
  * Encodes the user's edited [text] for [info] and applies the resulting
@@ -1723,7 +1696,7 @@ private fun InsertedInstructionRow(
     var fieldText by remember { mutableStateOf("") }
     var lastError by remember { mutableStateOf<String?>(null) }
     val color = HexanaTheme.textColor
-    val errorColor = colorFor(RenderTokenKind.ERROR)
+    val errorColor = defaultColorFor(RenderTokenKind.ERROR)
     val borderModifier = if (lastError != null) {
         Modifier.border(width = 1.dp, color = errorColor, shape = RoundedCornerShape(2.dp))
     } else {
@@ -1754,7 +1727,7 @@ private fun InsertedInstructionRow(
     // very first onFocusChanged callback (initial isFocused = false),
     // before the LaunchedEffect even runs, and the row vanishes.
     var hadFocus by remember { mutableStateOf(false) }
-    val accentColor = colorFor(RenderTokenKind.KEYWORD)
+    val accentColor = defaultColorFor(RenderTokenKind.KEYWORD)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -1771,14 +1744,14 @@ private fun InsertedInstructionRow(
         // into the gutter without being flashy.
         Text(
             text = " + ",
-            style = ROW_TEXT_STYLE.copy(color = accentColor, fontWeight = FontWeight.Bold),
+            style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = accentColor, fontWeight = FontWeight.Bold),
         )
         BasicTextField(
             value = fieldText,
             onValueChange = { fieldText = it; lastError = null },
             singleLine = true,
             cursorBrush = SolidColor(accentColor),
-            textStyle = ROW_TEXT_STYLE.copy(color = accentColor),
+            textStyle = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = accentColor),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { tryCommit() }),
             modifier = Modifier
@@ -1815,7 +1788,7 @@ private fun InsertedInstructionRow(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "(; ${lastError} ;)",
-                style = ROW_TEXT_STYLE.copy(color = errorColor),
+                style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = errorColor),
             )
         }
     }
@@ -1902,70 +1875,14 @@ private fun commitInsertEdit(
     }
 }
 
-@Composable
-private fun StatusBar(chunkTree: WasmChunkTree, currentIndex: Int) {
-    Divider(orientation = Orientation.Horizontal, thickness = 1.dp, modifier = Modifier.fillMaxWidth())
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(HexanaTheme.backgroundColor)
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val style = TextStyle(
-            fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace,
-            color = HexanaTheme.hexTextColor,
-        )
-        if (chunkTree.totalChunks == 0) {
-            Text("No chunks", style = style)
-            return@Row
-        }
-        val chunk = chunkTree.chunkAt(currentIndex.coerceAtMost(chunkTree.totalChunks - 1))
-        val sectionLabel = WasmSectionKinds.displayName(chunk.kind)
-        val offsetLabel = "0x${chunk.byteRange.first.toString(16).uppercase().padStart(8, '0')}"
-        val nameLabel = when (chunk) {
-            is BinaryChunk.Element -> chunk.displayName ?: "${sectionLabel}#${chunk.indexInSection}"
-            is BinaryChunk.SectionHeader -> "(section header)"
-        }
-        Text("Chunk ${currentIndex + 1} / ${chunkTree.totalChunks}", style = style)
-        Text("Section: $sectionLabel", style = style)
-        Text("Offset: $offsetLabel", style = style)
-        Text(nameLabel, style = style)
-    }
-}
 
-private fun TokenStream.toAnnotatedString(): AnnotatedString = buildAnnotatedString {
-    for (t in tokens) {
-        if (t.kind == RenderTokenKind.LINE_BREAK) {
-            append('\n')
-            continue
-        }
-        withStyle(SpanStyle(color = colorFor(t.kind))) {
-            append(t.text)
-        }
-    }
-}
-
-private fun colorFor(kind: RenderTokenKind): Color = when (kind) {
-    RenderTokenKind.KEYWORD -> Color(0xFF569CD6)
-    RenderTokenKind.IDENTIFIER -> Color(0xFF9CDCFE)
-    RenderTokenKind.NUMBER -> Color(0xFFB5CEA8)
-    RenderTokenKind.STRING -> Color(0xFFCE9178)
-    RenderTokenKind.COMMENT -> Color(0xFF7F848E)
-    RenderTokenKind.OFFSET_ANNOTATION -> Color(0xFFD7BA7D)
-    RenderTokenKind.TYPE_REF -> Color(0xFF4EC9B0)
-    RenderTokenKind.FUNC_REF -> Color(0xFFDCDCAA)
-    RenderTokenKind.ERROR -> Color(0xFFF44747)
-    else -> Color.Unspecified
-}
-
-private fun formatBytes(size: Long): String = when {
-    size < 1024 -> "${size}B"
-    size < 1024 * 1024 -> "${size / 1024}KB"
-    else -> "${size / (1024 * 1024)}MB"
-}
+/** WAT-specific search result that carries a funcIdx for navigation. */
+private data class WatChunkSearchResult(
+    override val label: String,
+    val funcIdx: Int,
+    override val chunkId: ChunkId,
+    override val detail: String? = null,
+) : ChunkSearchResult
 
 private data class WatSearchResult(val label: String, val funcIdx: Int)
 
@@ -1998,47 +1915,4 @@ private fun computeWatSearchResults(
     return results
 }
 
-/**
- * Always-visible search bar for the WAT panel. Type a function name (substring,
- * case-insensitive) or an index / `$func$N`; the bounded result list jumps to
- * the function's declaration via [WasmWatNavigator.gotoFunc]. Enter activates
- * the first result. Mirrors `NativeDisassemblyPanelVirtualized`'s search bar.
- */
-@Composable
-private fun WatSearchBar(
-    query: TextFieldValue,
-    onQueryChange: (TextFieldValue) -> Unit,
-    results: List<WatSearchResult>,
-    onResultPicked: (WatSearchResult) -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        SearchField(
-            value = query,
-            onValueChange = onQueryChange,
-            placeholder = "Search function by name or index",
-            modifier = Modifier.onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
-                    results.firstOrNull()?.let(onResultPicked)
-                    true
-                } else {
-                    false
-                }
-            },
-        )
-        if (results.isNotEmpty()) {
-            LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp)) {
-                items(results) { result ->
-                    Text(
-                        result.label,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onResultPicked(result) }
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                        style = TextStyle(fontFamily = FontFamily.Monospace),
-                    )
-                }
-            }
-        }
-    }
-}
 

@@ -1530,22 +1530,6 @@ private fun ChunkLines(annotated: AnnotatedString) {
     )
 }
 
-private fun splitTokensIntoLines(tokens: List<RenderToken>): List<List<RenderToken>> {
-    if (tokens.isEmpty()) return emptyList()
-    val result = mutableListOf<List<RenderToken>>()
-    var current = mutableListOf<RenderToken>()
-    for (token in tokens) {
-        if (token.kind == RenderTokenKind.LINE_BREAK) {
-            result += current
-            current = mutableListOf()
-        } else {
-            current += token
-        }
-    }
-    if (current.isNotEmpty()) result += current
-    return result
-}
-
 private fun List<RenderToken>.toAnnotatedString(
     styleForKind: (RenderTokenKind) -> SpanStyle?,
 ): AnnotatedString = buildAnnotatedString {

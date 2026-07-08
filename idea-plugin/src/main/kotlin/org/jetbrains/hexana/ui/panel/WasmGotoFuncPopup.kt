@@ -66,13 +66,13 @@ internal fun WasmGotoFuncPopup(
                 .border(width = 1.dp, color = HexanaTheme.textColor, shape = RoundedCornerShape(4.dp))
                 .padding(12.dp),
         ) {
-            Text(text = "Go to function", style = ROW_TEXT_STYLE.copy(color = HexanaTheme.textColor))
+            Text(text = "Go to function", style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = HexanaTheme.textColor))
             BasicTextField(
                 value = query,
                 onValueChange = { query = it; error = null },
                 singleLine = true,
                 cursorBrush = SolidColor(HexanaTheme.textColor),
-                textStyle = ROW_TEXT_STYLE.copy(color = HexanaTheme.textColor),
+                textStyle = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = HexanaTheme.textColor),
                 modifier = Modifier
                     .focusRequester(requester)
                     .padding(top = 8.dp)
@@ -101,13 +101,13 @@ internal fun WasmGotoFuncPopup(
             if (msg != null) {
                 Text(
                     text = "(; $msg ;)",
-                    style = ROW_TEXT_STYLE.copy(color = HexanaTheme.textColor),
+                    style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = HexanaTheme.textColor),
                     modifier = Modifier.padding(top = 6.dp),
                 )
             } else {
                 Text(
                     text = "Enter: jump  ·  Esc: cancel",
-                    style = ROW_TEXT_STYLE.copy(color = HexanaTheme.textColor),
+                    style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = HexanaTheme.textColor),
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }

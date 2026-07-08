@@ -69,7 +69,7 @@ internal fun SectionShortcutBar(
         for ((chunkId, label) in entries) {
             Text(
                 text = label,
-                style = ROW_TEXT_STYLE.copy(
+                style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(
                     color = HexanaTheme.textColor,
                     fontWeight = FontWeight.Bold,
                 ),

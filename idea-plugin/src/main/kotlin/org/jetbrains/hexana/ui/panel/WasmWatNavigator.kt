@@ -268,7 +268,9 @@ internal class WasmWatNavigator(
         // thousands of items away (typical for GotoSymbol on a 14k-function
         // module) the animation runs for noticeable seconds while the user
         // waits. IDE Go-to-Definition semantics expect an immediate land.
-        listState.scrollToItem(lazyIdx)
+        // Scroll one item earlier so the target isn't hidden behind the
+        // sticky section header that Compose pins at the top of the viewport.
+        listState.scrollToItem(maxOf(0, lazyIdx - 1))
 
         // Focus polling only makes sense for code chunks (where the
         // editable opcode rows register requesters in `focusMap`). For
