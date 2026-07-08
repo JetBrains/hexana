@@ -30,7 +30,7 @@ class HexanaStructureViewBuilderProvider : StructureViewBuilderProvider {
         val editors = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project).getEditors(file)
         val hexEditor = editors.filterIsInstance<HexanaFileEditor>().firstOrNull() ?: return null
         val provider = hexEditor.binaryProvider ?: return null
-        if (provider !is WasmBinaryProvider && provider !is ElfBinaryProvider) return null
+        if (provider !is WasmBinaryProvider && provider !is WasmComponentBinaryProvider && provider !is ElfBinaryProvider) return null
         return HexanaTreeStructureViewBuilder(hexEditor, provider)
     }
 }
@@ -96,6 +96,7 @@ private class HexanaStructureViewModel(
     private fun buildRoot(): HexanaStructureElement {
         val children = when (binaryProvider) {
             is WasmBinaryProvider -> buildWasmElements(binaryProvider, editor)
+            is WasmComponentBinaryProvider -> buildWasmComponentElements(binaryProvider, editor)
             is ElfBinaryProvider -> buildElfElements(binaryProvider, editor)
             else -> emptyList()
         }
@@ -239,6 +240,68 @@ private fun buildWasmElements(provider: WasmBinaryProvider, editor: HexanaFileEd
     }
 
     return result
+}
+
+
+private fun buildWasmComponentElements(provider: WasmComponentBinaryProvider, editor: HexanaFileEditor): List<HexanaStructureElement> {
+    val wasmComponent = provider.wasmModule ?: return emptyList()
+
+    // Group sections by name; each section instance becomes a child node within its category folder
+    val categoryOrder = mutableListOf<String>()
+    val categorySections = mutableMapOf<String, MutableList<HexanaStructureElement>>()
+
+    for (section in wasmComponent.sections) {
+        val records = try {
+            section.getRecordRanges(provider.bytes)
+        } catch (_: Throwable) {
+            emptyList()
+        }
+        if (section.name !in categorySections) {
+            categoryOrder.add(section.name)
+            categorySections[section.name] = mutableListOf()
+        }
+        val sectionIndex = categorySections[section.name]!!.size
+        val recordChildren = records.mapIndexed { i, record ->
+            HexanaStructureElement(
+                name = "${record.name}",
+                range = record.range.intRange,
+                icon = AllIcons.Nodes.Property,
+                editor = editor,
+            )
+        }
+        categorySections[section.name]!!.add(
+            HexanaStructureElement(
+                name = "${section.name} $sectionIndex",
+                range = section.sectionRange,
+                icon = AllIcons.Nodes.Property,
+                editor = editor,
+                children = recordChildren,
+            )
+        )
+    }
+
+    return categoryOrder.map { name ->
+        val children = categorySections[name]!!
+        // If there's only one section instance, flatten: use its children directly
+        if (children.size == 1 && children[0].children.isNotEmpty()) {
+            HexanaStructureElement(
+                name = name,
+                range = children[0].range,
+                icon = AllIcons.Nodes.Folder,
+                editor = editor,
+                children = children[0].children,
+            )
+        } else {
+            val folderRange = children.map { it.range }.structureCoveringRange()
+            HexanaStructureElement(
+                name = name,
+                range = folderRange,
+                icon = AllIcons.Nodes.Folder,
+                editor = editor,
+                children = children,
+            )
+        }
+    }
 }
 
 

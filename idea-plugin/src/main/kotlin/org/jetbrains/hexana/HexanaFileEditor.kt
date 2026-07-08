@@ -522,7 +522,7 @@ class HexanaFileEditor(
 
     override fun getStructureViewBuilder(): StructureViewBuilder? {
         val provider = binaryProvider ?: return null
-        if (provider !is WasmBinaryProvider && provider !is ElfBinaryProvider) return null
+        if (provider !is WasmBinaryProvider && provider !is WasmComponentBinaryProvider && provider !is ElfBinaryProvider) return null
         return org.jetbrains.hexana.ui.HexanaTreeStructureViewBuilder(this, provider)
     }
 
