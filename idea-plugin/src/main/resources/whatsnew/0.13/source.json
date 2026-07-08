@@ -1,0 +1,105 @@
+{
+  "clusters": [
+    {
+      "asset": "screenshots/columnar-data.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Open Apache Parquet and Apache Arrow IPC file-format binaries for inspection. Both are recognised by content magic (`PAR1` for Parquet, `ARROW1` for Arrow IPC files) rather than by extension. A Parquet file opens to **Schema**, **Row Groups** (each expanding to its column chunks with path, type, codec, and value count), and **Metadata** tabs; an Arrow file opens to **Schema**, **Record Batches**, and **Metadata**."
+        },
+        {
+          "section": "Added",
+          "text": "Parquet and Arrow files gain a **Data** tab that decodes the actual contents into a table (one column per schema leaf field, one row per record) and links the table to the hex view: selecting a row highlights that record's bytes in the hex editor as disjoint spans, at the best granularity each value allows (an exact per-value range for uncompressed PLAIN data, a page or chunk box for compressed or encoded data). The first row group (Parquet) or first record batch (Arrow) is decoded, capped at 10,000 rows, with a note when more rows or batches exist. Decoding covers page compression (SNAPPY, GZIP, ZSTD, and LZ4 on the JVM), the Parquet encodings (PLAIN, dictionary, RLE/bit-packed, DELTA variants, BYTE_STREAM_SPLIT) with Dremel definition levels for nullable columns, and Arrow buffer reconstruction for primitive, boolean, string/binary, and the temporal, interval, and decimal types. A file that is recognised as Parquet or Arrow but decodes to no rows (empty or malformed) still shows the Data tab with an explanatory empty state instead of hiding it."
+        },
+        {
+          "section": "Added",
+          "text": "Parquet INT96 values (legacy 12-byte timestamps) are decoded and shown as their signed 96-bit integer in base-10, matching the BigInteger representation other Parquet tooling exposes."
+        }
+      ],
+      "eyebrow": "Data",
+      "id": "columnar-data",
+      "recipe": "parquet-data-table",
+      "summary": "Columnar files now open with schema, metadata, batch structure, decoded rows, and row-to-hex byte highlighting.",
+      "title": "Inspect Parquet and Arrow data in Hexana"
+    },
+    {
+      "asset": "screenshots/protobuf-inspection.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Open compiled Protocol Buffers descriptor sets (`.desc` / `.protoset`, produced by `protoc --descriptor_set_out`) for inspection. They are recognised by content structure (a leading length-delimited field whose embedded `FileDescriptorProto` name ends in `.proto`) as well as by the `.desc` / `.protoset` extensions. The file opens to **Files**, **Messages**, **Fields**, **Enums**, and **Services** tabs. Messages and enums are flattened with dotted qualified names (`Outer.Inner`), fields show their number, label, type, and any message or enum type reference, and services list each method with its input and output types and streaming flags. Raw schema-less wire messages are not covered by this auto-detection (a bare `.pb` message carries no field names or types and cannot be detected reliably); use the **Open As Protobuf Message** action below for those."
+        },
+        {
+          "section": "Added",
+          "text": "**Open As Protobuf Message** (project-view context menu) decodes any file as a raw Protocol Buffers wire message, best-effort and without a schema. Because a bare wire message has no magic bytes, this is an explicit action rather than auto-detection. The decoder walks the wire format and shows one row per field with its positional path, field number, guessed type, value, and byte range. Length-delimited fields are disambiguated (a payload that parses cleanly as a nested message is expanded into indented child rows; otherwise it is shown as a UTF-8 string when printable, or a hex byte preview). Varint, 64-bit, and 32-bit fields are rendered with their numeric and floating-point interpretations. Selecting a row highlights that field's bytes in the hex view. Decoding is fault-tolerant: malformed or non-protobuf input degrades to a marker row instead of failing, so the action is safe to try on any file. Field names and declared types are not recovered (they are not present in a schema-less message)."
+        }
+      ],
+      "eyebrow": "Protobuf",
+      "id": "protobuf-inspection",
+      "recipe": "protobuf-descriptor-and-wire-message",
+      "summary": "Descriptor sets open as structured tables, and any file can be decoded as a schema-less Protobuf wire message from the Hexana context menu.",
+      "title": "Browse Protobuf schemas and raw wire messages"
+    },
+    {
+      "asset": "screenshots/structure-tool-window.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Core WASM modules and ELF binaries now integrate with the IDE **Structure** tool window, and runnable WASM function exports expose a **Run Export** action from the structure tree context menu. The tree exposes sections and records as navigable byte ranges, so choosing an entry scrolls and selects the corresponding bytes in the Hexana editor. WASM modules also get a merged **Functions** folder."
+        }
+      ],
+      "eyebrow": "Navigation",
+      "id": "structure-tool-window",
+      "recipe": "structure-tool-window-navigation",
+      "summary": "Core WASM modules and ELF binaries now populate the IDE Structure tool window with byte-range trees, functions, symbols, and Run Export actions for runnable WASM exports.",
+      "title": "Navigate binaries from the IDE Structure tool window"
+    },
+    {
+      "asset": "screenshots/scriptable-tabs.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Support for showing custom scriptable info tabs \u2013 write a JS script that uses 'print' to show information and 'binary' to access binary data; use \"+\" to add a script tab \u2013 a dialog with instructions and an API reference will be shown; csv and tsv are shown as tables"
+        }
+      ],
+      "eyebrow": "Automation",
+      "id": "scriptable-tabs",
+      "recipe": "scriptable-analysis-tab",
+      "summary": "Attach JavaScript tabs to an opened binary, print custom output, and render CSV or TSV results as searchable tables.",
+      "title": "Add custom scriptable analysis tabs"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Support for wazero in WASM run configurations (running only modules, not individual functions)"
+        },
+        {
+          "section": "Changed",
+          "text": "Improved experience with table views \u2013 now all tables use the same table control and have proper built-in search"
+        },
+        {
+          "section": "Changed",
+          "text": "Improved performance of table view rendering"
+        }
+      ],
+      "eyebrow": "Workflow",
+      "id": "runtime-table-polish",
+      "recipe": "wazero-and-table-search",
+      "summary": "WASM run configurations add Wazero for module execution, while Hexana tables share one faster searchable control.",
+      "title": "Run with Wazero and search tables consistently"
+    }
+  ],
+  "date": null,
+  "schema": 1,
+  "sources": {
+    "assets": "docs/whatsnew/assets.yml",
+    "assets_sha256": "91a6759c87be04bf7ac84ebb39cc6f3950a659df8e9eadb73a93afb8e4e457c1",
+    "changelog": "idea-plugin/CHANGELOG.md",
+    "changelog_sha256": "39f0578f920803b3f1be6d1f6e93737df5eeb6a460ad12bf50f9ac540d7ef4bf",
+    "design": "docs/whatsnew/DESIGN.md",
+    "design_sha256": "9d78242126b778ea9b2e726407499489193e7c5a71661d09e2dda0f9c8238af4"
+  },
+  "version": "0.13"
+}

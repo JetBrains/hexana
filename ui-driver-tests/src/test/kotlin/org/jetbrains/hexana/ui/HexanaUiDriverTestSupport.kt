@@ -84,6 +84,20 @@ internal object HexanaUiDriverTestSupport {
         return context
     }
 
+    fun configureShowWhatsNewOnNewVersion(context: IDETestContext, enabled: Boolean): IDETestContext {
+        val optionsDir = context.paths.configDir.resolve("options").createDirectories()
+        optionsDir.resolve("hexana.xml").writeText(
+            """
+      <application>
+        <component name="Hexana">
+          <option name="showWhatsNewOnNewVersion" value="$enabled" />
+        </component>
+      </application>
+      """.trimIndent()
+        )
+        return context
+    }
+
     private fun resolveProjectDir(): Path =
         Path.of("testData", "projects", projectName)
             .toAbsolutePath().normalize()

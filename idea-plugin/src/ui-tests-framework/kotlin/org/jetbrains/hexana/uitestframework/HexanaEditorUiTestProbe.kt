@@ -7,6 +7,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.wm.ToolWindowId
+import com.intellij.openapi.wm.ToolWindowManager
 import org.jetbrains.hexana.HexanaComponentDiffVirtualFile
 import org.jetbrains.hexana.HexanaFileEditor
 import org.jetbrains.hexana.io.toCommonByteBuffer
@@ -22,6 +24,7 @@ import org.jetbrains.hexana.providers.classifyArchiveMember
 import org.jetbrains.hexana.providers.format.WasmComponentDiffOrchestrator
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
+import org.jetbrains.hexana.ui.ScriptTabSettings
 import org.jetbrains.hexana.ui.panel.WatConversionState
 import java.nio.file.Path
 
@@ -55,6 +58,49 @@ object HexanaEditorUiTestProbe {
                 ),
             )
         }
+    }
+
+    @JvmStatic
+    fun openAbsoluteFileWithScriptTab(path: String, scriptPath: String): List<String> {
+        val normalizedPath = Path.of(path).toAbsolutePath().normalize()
+        val normalizedScriptPath = Path.of(scriptPath).toAbsolutePath().normalize()
+        val file = VfsUtil.findFile(normalizedPath, true)
+            ?: throw IllegalStateException("Could not find file for screenshot capture: $normalizedPath")
+        if (!normalizedScriptPath.toFile().isFile) {
+            throw IllegalStateException("Could not find script for screenshot capture: $normalizedScriptPath")
+        }
+        return runOnEdt {
+            val project = singleOpenProject()
+            val scriptSettings = ScriptTabSettings.getInstance(project)
+            scriptSettings.getScriptPaths(file.name).forEach { scriptSettings.removeScriptPath(file.name, it) }
+            scriptSettings.addScriptPath(file.name, normalizedScriptPath.toString())
+            FileEditorManager.getInstance(project).openFile(file, true)
+            payload(
+                "hexana-open-absolute-file-with-script-tab",
+                listOf(
+                    "path=${normalizedPath.toString().toSystemIndependentPath()}",
+                    "fileName=${file.name}",
+                    "scriptPath=${normalizedScriptPath.toString().toSystemIndependentPath()}",
+                    "scriptName=${normalizedScriptPath.fileName}",
+                ),
+            )
+        }
+    }
+
+    @JvmStatic
+    fun activateStructureToolWindow(fileIdentifier: String): List<String> = runOnEdt {
+        val candidate = requireHexanaEditorCandidate(fileIdentifier)
+        FileEditorManager.getInstance(candidate.project).openFile(candidate.editor.myFile, true)
+        val toolWindow = ToolWindowManager.getInstance(candidate.project).getToolWindow(ToolWindowId.STRUCTURE_VIEW)
+            ?: throw IllegalStateException("Structure tool window is not registered")
+        toolWindow.activate(null, true)
+        payload(
+            "hexana-activate-structure-tool-window",
+            listOf(
+                "fileName=${candidate.editor.myFile.name}",
+                "toolWindow=${ToolWindowId.STRUCTURE_VIEW}",
+            ),
+        )
     }
 
     @JvmStatic
@@ -207,7 +253,10 @@ object HexanaEditorUiTestProbe {
     }
 
     private fun requireHexanaEditor(fileIdentifier: String): HexanaFileEditor =
-        findHexanaEditor(fileIdentifier)
+        requireHexanaEditorCandidate(fileIdentifier).editor
+
+    private fun requireHexanaEditorCandidate(fileIdentifier: String): HexanaEditorCandidate =
+        findHexanaEditorCandidate(fileIdentifier)
             ?: throw IllegalStateException(
                 "Expected Hexana editor for '$fileIdentifier', but selected/open Hexana editors are: ${
                     selectedHexanaEditorDescriptions().ifEmpty { listOf("<none>") }.joinToString()
@@ -230,12 +279,11 @@ object HexanaEditorUiTestProbe {
         return result[0]
     }
 
-    private fun findHexanaEditor(fileIdentifier: String): HexanaFileEditor? =
+    private fun findHexanaEditorCandidate(fileIdentifier: String): HexanaEditorCandidate? =
         runOnEdt {
             val request = FileLookupRequest.parse(fileIdentifier)
             selectedHexanaEditorCandidates()
                 .firstOrNull { request.matches(it) }
-                ?.editor
         }
 
     private fun selectedHexanaEditorDescriptions(): List<String> =
@@ -473,7 +521,10 @@ object HexanaEditorUiTestProbe {
             is NativeBinaryProvider -> listOf("Top", "Disassembly", "Disassembly (virtualized)")
             else -> emptyList()
         }
-        return (tablePanelNames + extraPanelNames).distinct()
+        val scriptPanelNames = ScriptTabSettings.getInstance(myProject)
+            .getScriptPaths(myFile.name)
+            .map { it.substringAfterLast('/') }
+        return (tablePanelNames + extraPanelNames + scriptPanelNames).distinct()
     }
 
     private fun BinaryProvider?.kindId(): String =

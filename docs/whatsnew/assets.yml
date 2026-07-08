@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "default_release": "0.12",
+  "default_release": "0.13",
   "asset_root": ".",
   "capture_policy": {
     "preferred_source": "ui-driver",
@@ -103,6 +103,131 @@
         "doc/images/idea/06-class-file-view.png",
         "doc/images/idea/07-jar-class-list.png"
       ],
+      "image_candidates": []
+    },
+    "columnar-data": {
+      "release": "0.13",
+      "eyebrow": "Data",
+      "title": "Inspect Parquet and Arrow data in Hexana",
+      "summary": "Columnar files now open with schema, metadata, batch structure, decoded rows, and row-to-hex byte highlighting.",
+      "recipe": "parquet-data-table",
+      "keywords": [
+        "Apache Parquet",
+        "Apache Arrow",
+        "Arrow IPC",
+        "PAR1",
+        "ARROW1",
+        "Data tab",
+        "Schema",
+        "Row Groups",
+        "Record Batches",
+        "Messages",
+        "Metadata",
+        "decoded",
+        "hex view",
+        "INT96"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.13/parquet-data.png"
+      ]
+    },
+    "protobuf-inspection": {
+      "release": "0.13",
+      "eyebrow": "Protobuf",
+      "title": "Browse Protobuf schemas and raw wire messages",
+      "summary": "Descriptor sets open as structured tables, and any file can be decoded as a schema-less Protobuf wire message from the Hexana context menu.",
+      "recipe": "protobuf-descriptor-and-wire-message",
+      "keywords": [
+        "Protocol Buffers",
+        "Protobuf",
+        ".desc",
+        ".protoset",
+        "descriptor sets",
+        "FileDescriptorProto",
+        "Files",
+        "Messages",
+        "Fields",
+        "Enums",
+        "Services",
+        "Open As Protobuf Message",
+        "wire message",
+        "byte range"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.13/protobuf-descriptor.png"
+      ]
+    },
+    "structure-tool-window": {
+      "release": "0.13",
+      "eyebrow": "Navigation",
+      "title": "Navigate binaries from the IDE Structure tool window",
+      "summary": "Core WASM modules and ELF binaries now populate the IDE Structure tool window with byte-range trees, functions, symbols, and Run Export actions for runnable WASM exports.",
+      "recipe": "structure-tool-window-navigation",
+      "keywords": [
+        "Structure tool window",
+        "Structure",
+        "Core WASM modules",
+        "ELF binaries",
+        "sections",
+        "records",
+        "byte ranges",
+        "Functions folder",
+        "Run Export",
+        "function exports",
+        "symbols",
+        "Relocations",
+        "Dynamic",
+        "Strings"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.13/structure-tool-window.png"
+      ]
+    },
+    "scriptable-tabs": {
+      "release": "0.13",
+      "eyebrow": "Automation",
+      "title": "Add custom scriptable analysis tabs",
+      "summary": "Attach JavaScript tabs to an opened binary, print custom output, and render CSV or TSV results as searchable tables.",
+      "recipe": "scriptable-analysis-tab",
+      "keywords": [
+        "custom scriptable info tabs",
+        "JS script",
+        "print",
+        "binary",
+        "+",
+        "script tab",
+        "dialog",
+        "API reference",
+        "csv",
+        "tsv",
+        "tables"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.13/scriptable-tabs.png"
+      ]
+    },
+    "runtime-table-polish": {
+      "release": "0.13",
+      "presentation": "text",
+      "eyebrow": "Workflow",
+      "title": "Run with Wazero and search tables consistently",
+      "summary": "WASM run configurations add Wazero for module execution, while Hexana tables share one faster searchable control.",
+      "recipe": "wazero-and-table-search",
+      "keywords": [
+        "wazero",
+        "WASM run configurations",
+        "modules",
+        "table views",
+        "same table control",
+        "built-in search",
+        "performance",
+        "rendering"
+      ],
+      "doc_candidates": [],
       "image_candidates": []
     }
   }

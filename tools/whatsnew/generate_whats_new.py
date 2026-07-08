@@ -82,6 +82,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="Print the planned output without writing files.")
     parser.add_argument("--version", help="Release version to generate. Defaults to the latest non-Unreleased changelog version.")
+    parser.add_argument("--source-version", help="Changelog heading to read. Defaults to --version; use Unreleased to render a pending release as a concrete version.")
     parser.add_argument("--changelog", type=Path, default=REPO_ROOT / "idea-plugin/CHANGELOG.md")
     parser.add_argument("--output", type=Path, help="Output resource folder. Defaults to idea-plugin/src/main/resources/whatsnew/<version>.")
     parser.add_argument("--design", type=Path, default=REPO_ROOT / "docs/whatsnew/DESIGN.md")
@@ -812,10 +813,12 @@ def generate(args: argparse.Namespace) -> tuple[Path, ReleaseNotes, tuple[Featur
     assets_path = args.assets.resolve()
     releases = parse_changelog(changelog)
     version = args.version or latest_release_version(releases)
-    if version not in releases:
-        raise ValueError(f"Version {version!r} was not found in {changelog}.")
+    source_version = args.source_version or version
+    if source_version not in releases:
+        raise ValueError(f"Version {source_version!r} was not found in {changelog}.")
 
-    release = releases[version]
+    source_release = releases[source_version]
+    release = ReleaseNotes(version, source_release.date, source_release.entries)
     assets = load_assets(assets_path)
     clusters = build_clusters(release, assets, assets_path)
     output = (args.output.resolve() if args.output else REPO_ROOT / f"idea-plugin/src/main/resources/whatsnew/{version}")

@@ -162,6 +162,71 @@ class GenerateWhatsNewTest(unittest.TestCase):
             self.assertIn("version: 0.12", stdout.getvalue())
             self.assertFalse(output.exists())
 
+    def test_source_version_renders_unreleased_as_target_version(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            changelog = root / "CHANGELOG.md"
+            changelog.write_text(
+                """# Changelog
+
+## Unreleased
+
+### Added
+- Parquet files open with a Data tab.
+""",
+                encoding="utf-8",
+            )
+            assets = root / "assets.yml"
+            assets.write_text(
+                json.dumps(
+                    {
+                        "schema": 1,
+                        "capture_policy": {"fallback_source": "none"},
+                        "clusters": {
+                            "columnar": {
+                                "release": "0.13",
+                                "presentation": "text",
+                                "eyebrow": "Data",
+                                "title": "Inspect columnar files",
+                                "summary": "Parquet data is visible in Hexana.",
+                                "recipe": "parquet-data",
+                                "keywords": ["Parquet", "Data tab"],
+                                "image_candidates": [],
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            design = root / "DESIGN.md"
+            design.write_text(DESIGN, encoding="utf-8")
+            output = root / "out"
+            args = gen.parse_args(
+                [
+                    "--version",
+                    "0.13",
+                    "--source-version",
+                    "Unreleased",
+                    "--changelog",
+                    str(changelog),
+                    "--assets",
+                    str(assets),
+                    "--design",
+                    str(design),
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                gen.generate(args)
+
+            html = (output / "index.html").read_text(encoding="utf-8")
+            source = json.loads((output / "source.json").read_text(encoding="utf-8"))
+            self.assertIn("<h1>What's New in Hexana 0.13</h1>", html)
+            self.assertEqual("0.13", source["version"])
+            self.assertEqual("columnar", source["clusters"][0]["id"])
+
     def test_render_inline_markdown_escapes_input_and_allows_static_inline_tags(self):
         rendered = gen.render_inline_markdown("Use **Size Impact**, `Entities`, and *moved* <script>")
 

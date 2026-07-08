@@ -69,6 +69,10 @@ internal class HexanaIdeConfiguration internal constructor() {
         patchContext { context -> HexanaUiDriverTestSupport.configureSendAnalytics(context, enabled) }
     }
 
+    fun showWhatsNewOnNewVersion(enabled: Boolean) {
+        patchContext { context -> HexanaUiDriverTestSupport.configureShowWhatsNewOnNewVersion(context, enabled) }
+    }
+
     internal fun applyToContext(context: IDETestContext): IDETestContext =
         contextPatches.fold(context) { patchedContext, patch -> patch(patchedContext) }
 }
@@ -82,6 +86,10 @@ internal class HexanaIde internal constructor(
 
     fun closeProjectToolWindow() {
         driver.closeToolWindow("Project")
+    }
+
+    fun closeStructureToolWindow() {
+        driver.closeToolWindow("Structure")
     }
 
     fun openFile(fileName: String): HexanaEditor {
@@ -100,6 +108,20 @@ internal class HexanaIde internal constructor(
             absolutePath.fileName?.toString() ?: absolutePath.toString(),
             ABSOLUTE_FILE_IDENTIFIER_PREFIX + absolutePath.toSystemIndependentPath(),
         )
+    }
+
+    fun openAbsoluteFileWithScriptTab(path: Path, scriptPath: Path): HexanaEditor {
+        val absolutePath = path.toAbsolutePath().normalize()
+        probe.openAbsoluteFileWithScriptTab(absolutePath.toString(), scriptPath.toAbsolutePath().normalize().toString())
+        return HexanaEditor(
+            driver,
+            absolutePath.fileName?.toString() ?: absolutePath.toString(),
+            ABSOLUTE_FILE_IDENTIFIER_PREFIX + absolutePath.toSystemIndependentPath(),
+        )
+    }
+
+    fun activateStructureToolWindow(editor: HexanaEditor) {
+        probe.activateStructureToolWindow(editor.fileIdentifier)
     }
 
     fun openComponentDiff(leftPath: String, rightPath: String): HexanaEditor {
@@ -335,6 +357,8 @@ internal interface HexanaEditorUiTestProbeRef {
     fun frameworkVersion(): String
     fun ping(): String
     fun openAbsoluteFile(path: String): List<String>
+    fun openAbsoluteFileWithScriptTab(path: String, scriptPath: String): List<String>
+    fun activateStructureToolWindow(fileName: String): List<String>
     fun openComponentDiff(leftPath: String, rightPath: String): List<String>
     fun selectTab(fileName: String, tabName: String): List<String>
     fun componentDiffState(fileName: String): List<String>

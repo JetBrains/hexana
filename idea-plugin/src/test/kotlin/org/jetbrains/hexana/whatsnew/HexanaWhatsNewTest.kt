@@ -40,6 +40,7 @@ class HexanaWhatsNewTest : UsefulTestCase() {
     fun testWhatsNewResourceResolvesExactFolderWhenSeveralVersionsExist() {
         assertEquals("0.11", resolveWhatsNewResourceVersion("0.11"))
         assertEquals("0.12", resolveWhatsNewResourceVersion("0.12"))
+        assertEquals("0.13", resolveWhatsNewResourceVersion("0.13"))
         assertNull(resolveWhatsNewResourceVersion("0.12.1"))
     }
 
@@ -82,6 +83,27 @@ class HexanaWhatsNewTest : UsefulTestCase() {
             assertTrue(content.rootDirectory.resolve("source.json").exists())
             assertTrue(content.rootDirectory.resolve("screenshots/wasm-component-model.png").exists())
             assertTrue(content.rootDirectory.resolve("screenshots/static-archives.png").exists())
+        } finally {
+            val root = content.rootDirectory
+            content.dispose()
+            assertFalse(root.exists())
+        }
+    }
+
+    fun testCreatesGeneratedBundledHtmlContentFor013() {
+        val content = HexanaWhatsNewContentService.createContent("0.13")
+        assertNotNull(content)
+        content!!
+
+        try {
+            assertEquals("0.13", content.resourceVersion)
+            assertTrue(content.indexFile.exists())
+            assertTrue(content.rootDirectory.resolve("style.css").exists())
+            assertTrue(content.rootDirectory.resolve("source.json").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/columnar-data.png").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/protobuf-inspection.png").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/structure-tool-window.png").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/scriptable-tabs.png").exists())
         } finally {
             val root = content.rootDirectory
             content.dispose()
@@ -152,6 +174,72 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         assertFalse(html.contains("Edit mode UX"))
     }
 
+    fun testGeneratedWhatsNew013StaticResourceContract() {
+        val root = "whatsnew/0.13"
+        val html = resourceText("$root/index.html")
+        val css = resourceText("$root/style.css")
+        val sourceJson = resourceText("$root/source.json")
+        val manifestLines = resourceText("$root/manifest.txt")
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .toList()
+        val manifestEntries = manifestLines.toSet()
+
+        assertTrue(manifestEntries.contains("index.html"))
+        assertTrue(manifestEntries.contains("style.css"))
+        assertTrue(manifestEntries.contains("source.json"))
+        assertEquals(manifestLines.size, manifestEntries.size)
+        for (entry in manifestEntries) {
+            assertResourceExists("$root/$entry")
+        }
+
+        val htmlLocalReferences = htmlAttributeReferences(html).filter(::isLocalReference).toSortedSet()
+        val cssLocalReferences = cssUrlReferences(css).filter(::isLocalReference).toSortedSet()
+        val sourceAssetReferences = sourceAssetReferences(sourceJson)
+        val expectedLocalReferences = sortedSetOf(
+            "style.css",
+            "screenshots/columnar-data.png",
+            "screenshots/protobuf-inspection.png",
+            "screenshots/structure-tool-window.png",
+            "screenshots/scriptable-tabs.png",
+        )
+
+        assertEquals(expectedLocalReferences, htmlLocalReferences)
+        assertTrue(cssLocalReferences.isEmpty())
+        assertTrue(manifestEntries.containsAll(htmlLocalReferences + cssLocalReferences + sourceAssetReferences))
+
+        for (heading in requiredGenerated013Headings()) {
+            assertTrue("Missing heading: $heading", html.contains(heading))
+        }
+        assertTrue(html.contains("""href="https://plugins.jetbrains.com/plugin/29090-hexana--webassembly--binary-inspector">Open release notes</a>"""))
+        assertTrue(html.contains("""href="https://github.com/JetBrains/hexana">Open GitHub</a>"""))
+        assertTrue(sourceJson.contains(""""version": "0.13""""))
+        assertTrue(sourceJson.contains(""""changelog": "idea-plugin/CHANGELOG.md""""))
+
+        val imageTags = Regex("""<img\b[^>]*>""").findAll(html).map { it.value }.toList()
+        assertEquals(4, imageTags.size)
+        for (imageTag in imageTags) {
+            assertTrue("Missing image alt text: $imageTag", Regex("""\balt="[^"]*\S[^"]*"""").containsMatchIn(imageTag))
+        }
+
+        val listItems = Regex("""<li>.*?</li>""", RegexOption.DOT_MATCHES_ALL).findAll(html).map { it.value }.toList()
+        assertTrue(listItems.isNotEmpty())
+        for (listItem in listItems) {
+            assertFalse("Raw bold marker leaked into generated HTML: $listItem", listItem.contains("**"))
+            assertFalse("Raw code marker leaked into generated HTML: $listItem", listItem.contains("`"))
+        }
+        assertTrue(html.contains("<code>PAR1</code>"))
+        assertTrue(html.contains("<code>ARROW1</code>"))
+        assertTrue(html.contains("<strong>Open As Protobuf Message</strong>"))
+        assertTrue(html.contains("<strong>Run Export</strong>"))
+        assertTrue(html.contains("<strong>Run with Wazero and search tables consistently</strong>"))
+        assertFalse(html.contains("0xFFFFFFFF"))
+        assertFalse(sourceJson.contains("0xFFFFFFFF"))
+        assertFalse(html.contains("Arrow IPC stream"))
+        assertFalse(sourceJson.contains("Arrow IPC stream"))
+    }
+
     private fun resourceText(path: String): String {
         val stream = HexanaWhatsNewTest::class.java.classLoader.getResourceAsStream(path)
         assertNotNull("Missing resource: $path", stream)
@@ -196,5 +284,14 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         "<h2>Compare and inspect Component Model binaries</h2>",
         "<h2>Inspect static libraries and object members</h2>",
         "<h2>Also in 0.12</h2>",
+    )
+
+    private fun requiredGenerated013Headings(): List<String> = listOf(
+        "<h1>What's New in Hexana 0.13</h1>",
+        "<h2>Inspect Parquet and Arrow data in Hexana</h2>",
+        "<h2>Browse Protobuf schemas and raw wire messages</h2>",
+        "<h2>Navigate binaries from the IDE Structure tool window</h2>",
+        "<h2>Add custom scriptable analysis tabs</h2>",
+        "<h2>Also in 0.13</h2>",
     )
 }
