@@ -184,6 +184,7 @@
                   extensions="pb"/>
 
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
+        <structureViewBuilder factoryClass="org.jetbrains.hexana.ui.HexanaStructureViewBuilderProvider"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.feedback.HexanaFeedbackFileEditorProvider"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.whatsnew.HexanaWhatsNewFileEditorProvider"/>
         <editorTabTitleProvider implementation="org.jetbrains.hexana.ArchiveMemberTabTitleProvider"/>

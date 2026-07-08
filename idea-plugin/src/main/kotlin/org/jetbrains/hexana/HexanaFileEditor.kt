@@ -56,6 +56,7 @@ import org.jetbrains.hexana.ui.setupSearchActions
 import org.jetbrains.hexana.wasm.analysis.diff.summarize
 import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
 import org.jetbrains.hexana.wat.WatFileset
+import com.intellij.ide.structureView.StructureViewBuilder
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
 import java.io.Serializable
@@ -517,6 +518,12 @@ class HexanaFileEditor(
         myTextEditor?.let {
             Disposer.dispose(it)
         }
+    }
+
+    override fun getStructureViewBuilder(): StructureViewBuilder? {
+        val provider = binaryProvider ?: return null
+        if (provider !is WasmBinaryProvider && provider !is ElfBinaryProvider) return null
+        return org.jetbrains.hexana.ui.HexanaTreeStructureViewBuilder(this, provider)
     }
 
     private fun disposeClosedEditors() {
