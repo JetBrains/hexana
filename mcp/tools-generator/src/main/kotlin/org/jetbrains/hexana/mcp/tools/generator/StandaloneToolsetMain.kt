@@ -579,7 +579,7 @@ private fun cliToolSpecInitializer(spec: ToolSpec): CodeBlock {
         .add("  toolName = %S,\n", spec.name)
         .add("  summary = %S,\n", spec.summary)
         .add("  groups = %L,\n", enumSetInitializer(CLI_TOOL_GROUP, cli.groups.map { it.generatedCliGroupName() }))
-        .add("  inputModes = %L,\n", enumSetInitializer(CLI_INPUT_MODE, spec.input.inputCapabilities.map { it.generatedCliInputModeName() }))
+        .add("  inputModes = %L,\n", enumSetInitializer(CLI_INPUT_MODE, spec.generatedCliInputModeNames()))
         .add("  outputFormats = %L,\n", enumSetInitializer(CLI_OUTPUT_FORMAT, outputFormats.map { it.generatedCliOutputFormatName() }))
         .add("  defaultOutputFormat = %T.%L,\n", CLI_OUTPUT_FORMAT, defaultOutput.generatedCliOutputFormatName())
         .add("  defaultOutputPolicy = %T.%L,\n", CLI_OUTPUT_POLICY, outputPolicy.generatedCliOutputPolicyName())
@@ -956,6 +956,13 @@ private fun InputConversionCapability.generatedCliInputModeName(): String =
         InputConversionCapability.WasmFromString -> "WASM_FROM_STRING"
         InputConversionCapability.BinaryPath -> "BINARY_PATH"
         InputConversionCapability.Stdin -> "STDIN"
+    }
+
+private fun ToolSpec.generatedCliInputModeNames(): List<String> =
+    when (surfaces.cli.executionStatus) {
+        CliExecutionStatus.Executable -> listOf(InputConversionCapability.WasmPath.generatedCliInputModeName())
+        CliExecutionStatus.Todo -> emptyList()
+        null -> emptyList()
     }
 
 private fun ToolSpec.cliOutputFormats(): List<OutputConversionCapability> {

@@ -90,14 +90,12 @@ class HexanaMcpServerSchemaTest {
         )
         assertEquals(setOf(HexanaCliToolGroup.MODULE), summarizeModule.groups)
         assertEquals(
-            setOf(
-                HexanaCliInputMode.JSON_OBJECT,
-                HexanaCliInputMode.WASM_PATH,
-                HexanaCliInputMode.WASM_FROM_STRING,
-                HexanaCliInputMode.STDIN,
-            ),
+            setOf(HexanaCliInputMode.WASM_PATH),
             summarizeModule.inputModes,
         )
+        assertFalse(HexanaCliInputMode.JSON_OBJECT in summarizeModule.inputModes)
+        assertFalse(HexanaCliInputMode.WASM_FROM_STRING in summarizeModule.inputModes)
+        assertFalse(HexanaCliInputMode.STDIN in summarizeModule.inputModes)
         assertEquals(setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.PRETTY), summarizeModule.outputFormats)
         assertEquals(HexanaCliOutputFormat.PRETTY, summarizeModule.defaultOutputFormat)
         assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, summarizeModule.defaultOutputPolicy)
@@ -107,14 +105,12 @@ class HexanaMcpServerSchemaTest {
         assertEquals("wasm_to_wat", wasmToWat.toolName)
         assertEquals(setOf(HexanaCliToolGroup.CONVERTERS), wasmToWat.groups)
         assertEquals(
-            setOf(
-                HexanaCliInputMode.JSON_OBJECT,
-                HexanaCliInputMode.WASM_PATH,
-                HexanaCliInputMode.WASM_FROM_STRING,
-                HexanaCliInputMode.STDIN,
-            ),
+            setOf(HexanaCliInputMode.WASM_PATH),
             wasmToWat.inputModes,
         )
+        assertFalse(HexanaCliInputMode.JSON_OBJECT in wasmToWat.inputModes)
+        assertFalse(HexanaCliInputMode.WASM_FROM_STRING in wasmToWat.inputModes)
+        assertFalse(HexanaCliInputMode.STDIN in wasmToWat.inputModes)
         assertEquals(setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.RAW), wasmToWat.outputFormats)
         assertEquals(HexanaCliOutputFormat.RAW, wasmToWat.defaultOutputFormat)
         assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, wasmToWat.defaultOutputPolicy)
@@ -122,6 +118,7 @@ class HexanaMcpServerSchemaTest {
 
         val futureModuleTool = tools.single { it.commandName == "list-enabled-features" }
         assertTrue(futureModuleTool.groups.contains(HexanaCliToolGroup.MODULE))
+        assertEquals(emptySet(), futureModuleTool.inputModes)
         assertEquals(HexanaCliExecutionStatus.TODO, futureModuleTool.executionStatus)
 
         val productionNames = HexanaGeneratedMcpToolProfiles.PRODUCTION_TOOL_NAMES

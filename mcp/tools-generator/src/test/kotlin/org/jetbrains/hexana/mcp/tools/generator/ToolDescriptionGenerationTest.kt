@@ -351,9 +351,14 @@ class ToolDescriptionGenerationTest {
 
         assertTrue(source.contains("public enum class HexanaCliExecutionStatus"))
         assertTrue(source.contains("executionStatus = HexanaCliExecutionStatus.EXECUTABLE"))
+        assertTrue(source.contains("inputModes = setOf(HexanaCliInputMode.WASM_PATH)"))
         assertTrue(source.contains("commandName = \"future-cli-only\""))
         assertTrue(source.contains("toolName = \"future_cli_only\""))
         assertTrue(source.contains("executionStatus = HexanaCliExecutionStatus.TODO"))
+        assertTrue(source.contains("inputModes = setOf()"))
+        assertFalse(source.contains("inputModes = setOf(HexanaCliInputMode.JSON_OBJECT"))
+        assertFalse(source.contains("HexanaCliInputMode.WASM_FROM_STRING"))
+        assertFalse(source.contains("HexanaCliInputMode.STDIN"))
         assertFalse(source.contains("profile.includesTool(\"future_cli_only\")"))
     }
 
