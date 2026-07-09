@@ -1,7 +1,7 @@
 ---
 title: Hexana for VS Code — Settings
 description: The VS Code settings the Hexana extension contributes, plus the telemetry consent model.
-version: "0.2.0"
+version: "0.6.0"
 ---
 
 # Settings
@@ -43,7 +43,9 @@ There are no analogous settings for `wasm-tools`, `wac`, WAMR, or GraalVM — al
 | **Type** | `string` |
 | **Default** | `""` (empty — Hexana looks at `JAVA_HOME` and the `PATH` `java` binary) |
 
-Absolute path to a Java 21+ home directory. Used to start the **Hexana MCP server**, which is downloaded on demand from GitHub Releases the first time an MCP client requests it.
+Absolute path to a Java 21+ home directory. Used to start the **Hexana MCP server** on platforms that use the JVM fallback package (e.g. Windows). On macOS arm64 and Linux x64 the server uses a bundled native executable, and this setting is ignored.
+
+The server is downloaded on demand the first time an MCP client requests it. Since 0.6.0, supported platforms fetch platform-native artifacts from the **JetBrains downloads index** by default; other platforms use GitHub Releases. If the downloads metadata is unavailable, a clear error is shown — the extension no longer silently falls back to GitHub.
 
 Use this setting when:
 
@@ -51,7 +53,7 @@ Use this setting when:
 - You want to pin the MCP server to a specific JDK distribution.
 - There is no `java` on `PATH` (e.g. headless containers).
 
-If unset and no suitable JDK is found, the MCP server fails to start with an actionable error in the **Output → Hexana MCP** channel; Run / Debug are not affected.
+If unset and no suitable JDK is found on a JVM-fallback platform, the MCP server fails to start with an actionable error in the **Output → Hexana MCP** channel; Run / Debug are not affected.
 
 You can also force a fresh download via the **Hexana: Reinstall MCP Server** command in the Command Palette.
 

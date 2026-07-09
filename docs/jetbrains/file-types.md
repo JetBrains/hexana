@@ -1,7 +1,7 @@
 ---
 title: File Types Registered by Hexana
 description: File types Hexana registers in the IntelliJ Platform — .wasm, .wat, .wit, native binaries (ELF/Mach-O/PE), JVM artifacts (.class, .jar, .war, .apk), static-library archives (.a/.lib), Android DEX (.dex), and JIT dumps.
-version: "0.12"
+version: "0.13"
 ---
 
 # File Types
@@ -19,6 +19,9 @@ Hexana registers and detects the following file types in the IntelliJ Platform.
 | JVM archive | `.jar`, `.zip`, `.war`, `.apk` (including ZIP64) | Hex view + searchable class list | Handled inside `HexanaFileEditorProvider` |
 | Static-library archive (0.12) | `!<arch>\n` magic; `.a`, `.lib` | Members list + per-member disassembly | Handled inside `HexanaFileEditorProvider` |
 | Android DEX (0.12) | `.dex` | Basic classes-and-members view | Handled inside `HexanaFileEditorProvider` |
+| Apache Parquet (0.13) | `PAR1` content magic (any extension) | Schema / Row Groups / Metadata / Data tabs | Handled inside `HexanaFileEditorProvider` |
+| Apache Arrow IPC (0.13) | `ARROW1` magic or `0xFFFFFFFF` stream continuation marker (any extension) | Schema / Record Batches or Messages / Metadata / Data tabs | Handled inside `HexanaFileEditorProvider` |
+| Protobuf descriptor set (0.13) | content structure; `.desc`, `.protoset` | Files / Messages / Fields / Enums / Services tabs | Handled inside `HexanaFileEditorProvider` |
 | JIT dump | `.jit` | Three-pane symbol / native / bytecode view | Handled inside `HexanaFileEditorProvider` |
 
 Hexana also registers a `fileTypeOverrider` (`HexFileTypeOverrider`) that claims `.wasm`, `.wat`, and `.wit` even when another plugin tries to register the same extension.
@@ -106,6 +109,14 @@ For relocatable object files (ELF `.o`, Windows COFF `.obj`/`.o`, Mach-O), the v
 ## Android DEX — `.dex` (0.12)
 
 `.dex` files open with a basic classes-and-members view listing the classes and their methods.
+
+## Apache Parquet and Arrow IPC (0.13)
+
+Columnar data files are recognised by content magic, not extension — `PAR1` for Parquet, `ARROW1` for the Arrow IPC file format, and the `0xFFFFFFFF` continuation marker for the Arrow IPC stream format. A Parquet file opens to **Schema**, **Row Groups**, and **Metadata** tabs; an Arrow file opens to **Schema**, **Record Batches** or **Messages** (by format), and **Metadata**. Both gain a **Data** tab that decodes the first row group or record batch (up to 10,000 rows) into a table and highlights the selected record's bytes in the hex editor. See [`features.md`](features.md#columnar-data-formats-013) for encoding and compression coverage.
+
+## Protocol Buffers descriptor sets — `.desc`, `.protoset` (0.13)
+
+Compiled descriptor sets (from `protoc --descriptor_set_out`) are recognised by content structure as well as by extension, and open to **Files**, **Messages**, **Fields**, **Enums**, and **Services** tabs. Bare `.pb` wire messages carry no magic bytes and are not auto-detected — decode those with the explicit **Open As Protobuf Message** action in the project-view context menu, which walks the wire format schema-lessly and is safe to try on any file. See [`features.md`](features.md#protocol-buffers-013).
 
 ## JIT dumps — `.jit`
 

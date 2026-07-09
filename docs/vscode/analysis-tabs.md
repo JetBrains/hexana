@@ -1,12 +1,12 @@
 ---
 title: Hexana for VS Code — Analysis Tab Reference
 description: Per-tab reference for all 11 analysis panels inside the Hexana VS Code editor.
-version: "0.5.0"
+version: "0.6.0"
 ---
 
 # Analysis Tab Reference
 
-The Hexana custom editor shows up to **11 tabs** in its analysis panel, surfaced based on the loaded binary's kind (core Wasm, Component Model, or generic). All tables on every tab are **sortable** (click a header) and **searchable** (type in the filter box at the top).
+The Hexana custom editor shows up to **11 built-in tabs** in its analysis panel, surfaced based on the loaded binary's kind (core Wasm, Component Model, or generic), plus any number of scriptable tabs you add with **"+"** (see [`features.md`](features.md#scriptable-info-tabs-060)). All tables on every tab are **sortable** (click a header) and **searchable** (type in the built-in search field — unified across all tabs since 0.6.0). Protocol Buffers descriptor sets open with their own five-tab set, documented at the end of this page.
 
 This page documents each tab in the order Hexana renders them.
 
@@ -166,6 +166,18 @@ The conversion runs in the webview via a WASM-based wat printer (`WasmPrinterJs`
 Since **0.5.0** the WAT view uses **virtual scrolling** — only the visible portion of the text is rendered at any given time. For large modules with thousands of functions (e.g. a multi-MB Emscripten or Kotlin/Wasm binary), this keeps initial render and section navigation fast.
 
 The WAT view is read-only and is regenerated on each open. Inline WAT editing — present in the JetBrains plugin — is not yet in the VS Code extension.
+
+## Protocol Buffers descriptor set tabs (0.6.0+)
+
+**Available for**: `.desc` and `.protoset` files (compiled Protocol Buffers descriptor sets).
+
+When a descriptor set is open, the analysis panel shows five tabs instead of the Wasm set:
+
+- **Files** — one row per embedded `.proto` file: name, package, syntax, top-level message / enum / service counts, and dependencies.
+- **Messages** — one row per message type: defining file, dotted qualified name (`Outer.Inner`), and field / nested-type / enum counts.
+- **Fields** — one row per field across all messages: file, message, field name, number, label, type, and any message or enum type reference.
+- **Enums** — one row per enum value: file, qualified enum name, value name, and number.
+- **Services** — one row per RPC method: file, service, method name, input and output types, and client / server streaming flags.
 
 ## See also
 

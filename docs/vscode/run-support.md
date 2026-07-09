@@ -1,12 +1,12 @@
 ---
 title: Running and Debugging WebAssembly from Hexana for VS Code
-description: How to run and debug .wasm modules through Wasmtime, WAMR, GraalVM, Node.js, or the browser — core modules with auto-generated import stubs and Component Model binaries with dependency composition.
-version: "0.4.0"
+description: How to run and debug .wasm modules through Wasmtime, WAMR, GraalVM, wazero, Node.js, or the browser — core modules with auto-generated import stubs and Component Model binaries with dependency composition.
+version: "0.6.0"
 ---
 
 # Running and Debugging WebAssembly from Hexana for VS Code
 
-Hexana ships **Run** and **Debug** buttons in the editor toolbar. You can invoke a module through one of five runtimes — **Wasmtime**, **WAMR**, **GraalVM**, **Node.js**, or the **browser** — and (experimental) attach a debugger to all of them except GraalVM: an `lldb`-backed debugger on Wasmtime and WAMR, and (since **0.4.0**) a Chrome DevTools Protocol debugger on Node.js and Chrome. Node.js and the browser were added as run targets in 0.3.0. Both core WebAssembly modules and Component Model binaries are supported, with different orchestration for each.
+Hexana ships **Run** and **Debug** buttons in the editor toolbar. You can invoke a module through one of six runtimes — **Wasmtime**, **WAMR**, **GraalVM**, **wazero**, **Node.js**, or the **browser** — and (experimental) attach a debugger to all of them except GraalVM and wazero: an `lldb`-backed debugger on Wasmtime and WAMR, and (since **0.4.0**) a Chrome DevTools Protocol debugger on Node.js and Chrome. Node.js and the browser were added as run targets in 0.3.0; wazero was added in 0.6.0. Both core WebAssembly modules and Component Model binaries are supported, with different orchestration for each.
 
 ## Requirements
 
@@ -15,6 +15,7 @@ Hexana ships **Run** and **Debug** buttons in the editor toolbar. You can invoke
 | **[wasmtime](https://wasmtime.dev/)** | Wasmtime runtime + Wasmtime debug | `curl https://wasmtime.dev/install.sh -sSf \| bash`, or via your package manager. |
 | **[WAMR](https://github.com/bytecodealliance/wasm-micro-runtime)** | WAMR runtime + WAMR debug | Build from source or grab a release binary. |
 | **[GraalVM](https://www.graalvm.org/) + GraalWasm** | GraalVM runtime | Install GraalVM and the GraalWasm component; or let Hexana auto-detect. |
+| **[wazero](https://wazero.io/)** | wazero runtime (0.6.0+) | Install the `wazero` CLI and make sure it is on `PATH`. |
 | **[wasm-tools](https://github.com/bytecodealliance/wasm-tools)** | Component Model composition (preferred) | `cargo install wasm-tools`. |
 | **[wac](https://github.com/bytecodealliance/wac)** | Component Model composition (alternative) | `cargo install wac-cli`. |
 | **LLVM 22.1+** (for debug only) | Wasmtime or WAMR debugging | Required because Hexana uses `lldb` 22.1+ wire-protocol features. |
@@ -26,7 +27,7 @@ At least one runtime must be on `PATH` (or pointed at via the corresponding sett
 ### How the Run flow works
 
 1. Click **Run** in the editor toolbar of an open `.wasm`.
-2. A dialog opens listing all exported functions and a **runtime picker** (Wasmtime / WAMR / GraalVM / Node.js / browser). Pick an entry point and the runtime.
+2. A dialog opens listing all exported functions and a **runtime picker** (Wasmtime / WAMR / GraalVM / wazero / Node.js / browser). Pick an entry point and the runtime. Under wazero the module is executed as a whole — individual exported-function invocation is not supported on that path.
 3. Optionally supply program arguments. Hexana parses the argument string using a shell-aware splitter (quoted strings are preserved as single arguments).
 4. Hexana checks for unresolved imports:
    - **All imports resolved**: invokes the chosen runtime directly.
@@ -66,7 +67,7 @@ You can install only one — Hexana adapts. If neither is installed and your bin
 
 The dialog has four sections:
 
-- **Runtime** — dropdown of detected runtimes (Wasmtime / WAMR / GraalVM / Node.js / browser). Unavailable runtimes are greyed out with a tooltip explaining why. All runtimes except GraalVM can also be debugged (see [Debugging](#debugging-experimental)).
+- **Runtime** — dropdown of detected runtimes (Wasmtime / WAMR / GraalVM / wazero / Node.js / browser). Unavailable runtimes are greyed out with a tooltip explaining why. All runtimes except GraalVM and wazero can also be debugged (see [Debugging](#debugging-experimental)).
 - **Export** — dropdown of all exported functions (core modules) or the component's primary entry interface (components).
 - **Arguments** — free-text field. Shell-style quoting is supported via Hexana's `splitShellArgs` Kotlin/JS utility. Backslash escapes work for spaces; single and double quotes group arguments.
 - **Environment** (implicit) — Hexana passes through your current shell environment to the chosen runtime.
@@ -95,6 +96,7 @@ Choosing **Debug** with the Node.js or browser runtime drives the runtime over t
 Known limitations:
 
 - GraalVM debug is not wired (run-only).
+- wazero debug is not wired (run-only).
 - Some compilers' DWARF (especially aggressive-CGU Rust builds) produces source paths that need fuzzy matching; if a breakpoint does not bind on the `lldb` path, check the **Debug Console** for the path Hexana tried to resolve and file a tracker issue.
 
 ## Terminal output
@@ -115,6 +117,7 @@ There is no setting to override `wasm-tools`, `wac`, WAMR, or GraalVM paths — 
 ## What this version does not do
 
 - **GraalVM debug is not wired.** GraalVM is run-only. (Wasmtime / WAMR debug over `lldb`; Node.js / Chrome debug over CDP since 0.4.0.)
+- **wazero is run-only, modules only.** Debugging under wazero is not wired, and individual exported-function invocation is not supported on the wazero path.
 - **No proposal-flag selection UI.** Hexana detects which proposals the binary uses and passes the appropriate `--wasm-features` flags automatically, but there is no UI to override.
 - **No run-configuration persistence.** Each Run is ad-hoc; arguments are not saved between runs. The dialog remembers the last set within the editor session but discards them on close.
 - **No host-function injection.** You cannot supply your own implementations for unresolved imports; you get auto-generated stubs or nothing.

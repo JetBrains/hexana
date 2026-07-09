@@ -1,7 +1,7 @@
 ---
 title: Hexana for VS Code — Feature Reference
 description: Complete capability reference for the Hexana VS Code extension.
-version: "0.5.0"
+version: "0.6.0"
 ---
 
 # Hexana for VS Code — Feature Reference
@@ -66,9 +66,23 @@ The decoded three-tab `.class` view (header / methods / constant pool) remains J
 
 Java `.class` files and Android DEX (`.dex`) files open directly in the Hexana custom editor by file-type detection, without needing to be inside a JAR or ZIP archive. Both formats open in the hex viewer. The full decoded class view (header / methods / constant pool) — available in the JetBrains plugin — is not present in the VS Code extension. See [What this version does not do](#what-this-version-does-not-do-yet).
 
+## Protocol Buffers descriptor sets (0.6.0+)
+
+Compiled Protocol Buffers descriptor sets — `.desc` and `.protoset` files, as produced by `protoc --descriptor_set_out` — open in the Hexana custom editor with five dedicated tabs:
+
+| Tab | Contents |
+|---|---|
+| **Files** | Each embedded `.proto` file with its package, syntax, message / enum / service counts, and dependencies. |
+| **Messages** | All message types with dotted qualified names (`Outer.Inner`), plus field, nested-type, and enum counts. |
+| **Fields** | Every field across all messages: field number, label, type, and any message or enum type reference. |
+| **Enums** | Enum values with their names and numbers, grouped by qualified enum name. |
+| **Services** | Each RPC method with its input and output types and client / server streaming flags. |
+
+This is useful for inspecting what a compiled API surface actually contains — particularly when the source `.proto` files are not available. Schema-less wire messages (bare `.pb` files) are not auto-detected; that decoder currently ships in the JetBrains plugin only.
+
 ## Analysis tabs
 
-Up to 11 tabs inside the same editor, surfaced by binary kind. All tables are **sortable** and **searchable**. See [`analysis-tabs.md`](analysis-tabs.md) for the per-tab reference.
+Up to 11 built-in tabs inside the same editor, surfaced by binary kind, plus any number of **scriptable tabs** you add yourself (see below). All tables are **sortable** and **searchable** through the same built-in table control (unified in 0.6.0, with faster rendering). See [`analysis-tabs.md`](analysis-tabs.md) for the per-tab reference.
 
 | Tab | Core Wasm | Component | Generic |
 |---|---|---|---|
@@ -86,11 +100,24 @@ Up to 11 tabs inside the same editor, surfaced by binary kind. All tables are **
 
 The WAT tab uses **virtual scrolling** since 0.5.0 — only the visible portion of the text is rendered, which keeps navigation fast in large modules. See [`analysis-tabs.md#wat`](analysis-tabs.md#wat) for details.
 
+## Scriptable info tabs (0.6.0+)
+
+Click **"+"** in the analysis tab bar to add a custom script tab. A dialog opens with usage instructions and an API reference. Write a JavaScript script using:
+
+- **`print(text)`** — append a line to the tab's output. Output formatted as CSV or TSV is rendered as a table.
+- **`binary`** — the current file's parsed binary provider: raw bytes, decoded strings, size analysis, and format-specific data (for example, the decoded table of an Arrow file).
+
+It is a lightweight way to add your own analysis layer — ad hoc queries, custom field decoders, whatever the built-in tabs don't cover.
+
+## Feedback button (0.6.0+)
+
+A dedicated **feedback / report-issue** button makes it easier to share feedback or file a bug without leaving the editor.
+
 ## Run support
 
 A **Run** button and a separate **Debug** button in the editor toolbar, present when at least one runtime is discoverable.
 
-- **Runtime picker** — Wasmtime, WAMR, GraalVM, Node.js, or the browser (Node.js and browser added in 0.3.0; debuggable since 0.4.0). Unavailable runtimes are greyed out with a tooltip explaining why.
+- **Runtime picker** — Wasmtime, WAMR, GraalVM, wazero, Node.js, or the browser (Node.js and browser added in 0.3.0, debuggable since 0.4.0; wazero added in 0.6.0, module execution only). Unavailable runtimes are greyed out with a tooltip explaining why.
 - **Core modules**: pick an export, the runtime, and supply arguments. Hexana invokes the chosen runtime in a VS Code terminal with auto-generated import stubs and the runtime's equivalent of `--preload` for data segments.
 - **Component Model binaries**: Hexana resolves imports by scanning workspace directories for matching `.wasm` files (transitively), composes the result through `wasm-tools compose` or `wac plug`, then invokes the chosen runtime on the composed component.
 
@@ -114,11 +141,11 @@ See [`run-support.md`](run-support.md) for the full reference and known limitati
 
 ## MCP server (downloaded on demand)
 
-Hexana integrates with VS Code's **Model Context Protocol server registration API**: AI tooling (Claude Desktop, Claude Code, Codex, Cursor's agent mode, Continue) can connect to the Hexana MCP server to inspect the currently open WASM file.
+Hexana integrates with VS Code's **Model Context Protocol server registration API**: AI tooling (Claude Code, Codex, Cursor's agent mode, Continue) can connect to the Hexana MCP server to inspect Wasm and native binaries (ELF, Mach-O, PE) currently open in VS Code.
 
-- **First-run download.** On first MCP use, Hexana downloads the standalone MCP server ZIP from the corresponding GitHub release and extracts it to `globalStorage`. Subsequent launches reuse the cached install. Stale download locks are detected and recovered automatically.
+- **First-run download.** On first MCP use, Hexana downloads the standalone MCP server and extracts it to `globalStorage`. Since 0.6.0, supported platforms fetch platform-native artifacts from the **JetBrains downloads index** by default; other platforms use GitHub Releases. If the downloads metadata is unavailable, a clear error is shown — the extension no longer silently switches to GitHub. Subsequent launches reuse the cached install; stale download locks are detected and recovered automatically.
 - **`Hexana: Reinstall MCP Server` command** (Command Palette) — re-runs the download to recover from a corrupted install or to re-pull after a Hexana update.
-- **Java requirement.** The MCP server runs on Java 21+. Hexana looks at `JAVA_HOME`, `PATH`, and the `hexana.mcp.javaHome` setting; if no suitable JDK is found, MCP fails to start with an actionable error and Run / Debug are unaffected.
+- **Java requirement.** On macOS arm64 and Linux x64, the MCP server uses a bundled native executable — no JDK needed. On other platforms (e.g. Windows), the server falls back to a JVM package; Java 21+ is required there. Hexana looks at `JAVA_HOME`, `PATH`, and the `hexana.mcp.javaHome` setting; if no suitable JDK is found on a JVM-fallback platform, MCP fails to start with an actionable error and Run / Debug are unaffected.
 
 ## Component Model support
 

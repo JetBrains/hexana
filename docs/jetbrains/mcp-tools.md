@@ -17,6 +17,7 @@ Hexana's MCP toolset runs as part of the IDE's built-in MCP server (`com.intelli
 
 - **Claude Desktop** — add the IDE's MCP endpoint in `claude_desktop_config.json`.
 - **Claude Code / Cursor / Continue** — configure the MCP server URL in the client's settings.
+- **Claude Code / Codex plugin (standalone, no IDE needed)** — a standalone build of the Hexana MCP server also installs directly into Claude Code and Codex from the GitHub marketplace: `/plugin marketplace add JetBrains/hexana` then `/plugin install hexana@hexana` (Claude Code); `codex plugin marketplace add JetBrains/hexana` then `codex plugin install hexana@hexana` (Codex). On macOS arm64 and Linux x64 it runs as a native executable; other platforms use a JVM fallback (Java 21+).
 
 See your client's documentation for the connection string. Hexana itself requires no configuration beyond the plugin being installed and the platform MCP server being enabled.
 

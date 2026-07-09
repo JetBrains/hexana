@@ -1,13 +1,13 @@
 ---
 title: Hexana VS Code Extension — Documentation
 description: User and contributor documentation for the Hexana VS Code extension.
-version: "0.5.0"
+version: "0.6.0"
 audience: [users]
 ---
 
 # Hexana — VS Code Extension Documentation
 
-**Hexana** is a Visual Studio Code extension by JetBrains for inspecting and running WebAssembly binaries — and, since 0.2.0, native binaries (ELF, Mach-O, PE); since 0.3.0, JVM archives (`.jar`, `.zip`, `.war`, `.apk`) as well. Open any `.wasm` file and Hexana replaces the default editor with a Compose-for-Web webview: a virtual-scrolling hex viewer alongside up to **11 structural-analysis tabs** (Summary, Exports, Imports, Functions, Data, Custom, Top, Monos, Garbage, Modules, WAT). Native binaries and archives open with the same hex + structure layout. Since 0.4.0 the hex viewer also supports **in-place byte editing** (overwrite-only — the file size never changes). Since 0.5.0 the WAT tab uses **virtual scrolling** for faster navigation in large modules, and the editor also opens Java `.class` and Android DEX files directly, as well as ZIP64 archives. Run modules through **Wasmtime**, **WAMR**, **GraalVM**, **Node.js**, or the **browser**, **debug** them (experimental) — `lldb`-backed on Wasmtime / WAMR (LLVM 22.1+), and, since 0.4.0, CDP-backed on Node.js and Chrome — resolve Component Model dependencies automatically, and drive analysis from an AI tool over the on-demand-downloaded **MCP server**.
+**Hexana** is a Visual Studio Code extension by JetBrains for inspecting and running WebAssembly binaries — and, since 0.2.0, native binaries (ELF, Mach-O, PE); since 0.3.0, JVM archives (`.jar`, `.zip`, `.war`, `.apk`) as well. Open any `.wasm` file and Hexana replaces the default editor with a Compose-for-Web webview: a virtual-scrolling hex viewer alongside up to **11 structural-analysis tabs** (Summary, Exports, Imports, Functions, Data, Custom, Top, Monos, Garbage, Modules, WAT). Native binaries and archives open with the same hex + structure layout. Since 0.4.0 the hex viewer also supports **in-place byte editing** (overwrite-only — the file size never changes). Since 0.5.0 the WAT tab uses **virtual scrolling** for faster navigation in large modules, and the editor also opens Java `.class` and Android DEX files directly, as well as ZIP64 archives. Since 0.6.0 compiled **Protocol Buffers descriptor sets** (`.desc` / `.protoset`) open with five dedicated tabs, and **scriptable "+" tabs** let you attach custom JS analysis to any open file. Run modules through **Wasmtime**, **WAMR**, **GraalVM**, **wazero** (0.6.0+), **Node.js**, or the **browser**, **debug** them (experimental) — `lldb`-backed on Wasmtime / WAMR (LLVM 22.1+), and, since 0.4.0, CDP-backed on Node.js and Chrome — resolve Component Model dependencies automatically, and drive analysis from an AI tool over the on-demand-downloaded **MCP server**.
 
 > Looking for the IntelliJ Platform plugin? See the [JetBrains IDEs section](../jetbrains/index.md). The VS Code and JetBrains products share the same WASM parser core but differ in language-support depth, run integrations, and target audience.
 
@@ -26,9 +26,9 @@ audience: [users]
 
 ## Version and compatibility
 
-- **Extension version**: 0.5.0.
+- **Extension version**: 0.6.0.
 - **VS Code requirement**: `^1.102.0` — required for the MCP-server registration API used by the on-demand MCP integration. Older 0.0.x releases ran on 1.85+.
-- **Optional Java**: 21 or newer for the MCP server. The server is downloaded on demand on first MCP use; set `hexana.mcp.javaHome` to point at a specific JDK if `JAVA_HOME` / `PATH` do not surface one.
+- **Optional Java**: 21 or newer for the MCP server on JVM-fallback platforms (e.g. Windows). On macOS arm64 and Linux x64 the server uses a bundled native executable and needs no JDK. The server is downloaded on demand on first MCP use; set `hexana.mcp.javaHome` to point at a specific JDK if `JAVA_HOME` / `PATH` do not surface one.
 - **Optional LLVM**: 22.1 or newer for the experimental debug path (Wasmtime + WAMR, `lldb` under the hood).
 - **Distribution**: Visual Studio Marketplace (`marketplace.visualstudio.com/items?itemName=JetBrains.hexana-wasm`) and Open VSX (`open-vsx.org`).
 - **Companion**: a JetBrains IntelliJ plugin, documented [here](../jetbrains/index.md).

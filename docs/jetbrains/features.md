@@ -1,12 +1,12 @@
 ---
 title: Hexana Feature Reference
 description: Complete capability reference for the Hexana IntelliJ plugin, grouped by surface.
-version: "0.12"
+version: "0.13"
 ---
 
 # Hexana Feature Reference
 
-This page enumerates every user-visible capability Hexana ships. Capabilities are grouped by *surface* (file type or interaction point), not by chronological release. For per-release changes, see [`changelog-0.12.md`](changelog-0.12.md), [`changelog-0.11.md`](changelog-0.11.md), [`changelog-0.10.md`](changelog-0.10.md), and the prior [`changelog-0.9.md`](changelog-0.9.md).
+This page enumerates every user-visible capability Hexana ships. Capabilities are grouped by *surface* (file type or interaction point), not by chronological release. For per-release changes, see [`changelog-0.13.md`](changelog-0.13.md), [`changelog-0.12.md`](changelog-0.12.md), [`changelog-0.11.md`](changelog-0.11.md), [`changelog-0.10.md`](changelog-0.10.md), and the prior [`changelog-0.9.md`](changelog-0.9.md).
 
 ![Hexana opens a `.wasm` file with the structure tabs visible](../images/idea/01-wasm-overview.png)
 
@@ -242,6 +242,51 @@ Archives are detected by `!<arch>\n` content magic, not extension. Plain MSVC im
 
 The agent is opt-in per Java run configuration — check **Hexana JIT Viewer** in the run-configuration editor. The agent attaches at JVM startup, records each `CompiledMethodLoad` event into a configurable dump file (`default.jit` by default), and Hexana auto-opens the dump when the run completes.
 
+## Columnar data formats (0.13)
+
+### Apache Parquet
+
+![Parquet Data tab with row-to-hex highlighting](../images/idea/17-parquet-data.png)
+
+Parquet files are recognised by their `PAR1` content magic, not by extension. A Parquet file opens to **Schema**, **Row Groups** (each expanding to its column chunks with path, type, codec, and value count), and **Metadata** tabs, plus a **Data** tab — see below.
+
+### Apache Arrow IPC
+
+Arrow IPC files are recognised by the `ARROW1` magic (file format) or the `0xFFFFFFFF` continuation marker (stream format). An Arrow file opens to **Schema**, a **Record Batches** or **Messages** tab depending on format, and **Metadata**, plus the same **Data** tab.
+
+### Data tab (Parquet and Arrow)
+
+- Decodes the actual contents into a table: one column per schema leaf field, one row per record.
+- Selecting a row highlights that record's bytes in the hex editor as disjoint spans — an exact per-value range for uncompressed PLAIN data, a page or chunk box for compressed or encoded data.
+- The first row group (Parquet) or first record batch (Arrow) is decoded, capped at 10,000 rows, with a note when more rows or batches exist.
+- Page compression: SNAPPY, GZIP, ZSTD, and LZ4 on the JVM. Parquet encodings: PLAIN, dictionary, RLE/bit-packed, the DELTA variants, and BYTE_STREAM_SPLIT, with Dremel definition levels for nullable columns. Arrow buffer reconstruction covers primitive, boolean, string/binary, and the temporal, interval, and decimal types.
+- Parquet INT96 values (legacy 12-byte timestamps) are shown as their signed 96-bit integer in base-10.
+- A recognised file that decodes to no rows (empty or malformed) still shows the Data tab with an explanatory empty state.
+
+## Protocol Buffers (0.13)
+
+### Descriptor sets — `.desc` / `.protoset`
+
+![Protobuf descriptor set tabs](../images/idea/18-protobuf-descriptor.png)
+
+Compiled descriptor sets (produced by `protoc --descriptor_set_out`) are recognised by content structure (a leading length-delimited field whose embedded `FileDescriptorProto` name ends in `.proto`) as well as by extension. They open to **Files**, **Messages**, **Fields**, **Enums**, and **Services** tabs. Messages and enums are flattened with dotted qualified names (`Outer.Inner`); fields show their number, label, type, and any message or enum type reference; services list each method with its input and output types and streaming flags.
+
+### Open As Protobuf Message
+
+**Open As Protobuf Message** (project-view context menu) decodes any file as a raw, schema-less Protocol Buffers wire message — an explicit action, since a bare wire message has no magic bytes. One row per field with positional path, field number, guessed type, value, and byte range; length-delimited payloads that parse cleanly as nested messages expand into indented child rows, otherwise showing as a UTF-8 string or hex preview. Selecting a row highlights that field's bytes in the hex view. Decoding is fault-tolerant, so the action is safe to try on any file. Field names and declared types are not recovered.
+
+## Structure tool window (0.13)
+
+![Structure tool window showing a WASM module](../images/idea/20-structure-tool-window.png)
+
+The IDE's **Structure** tool window populates for WASM modules, WASM components, and ELF files opened in Hexana.
+
+## Custom scriptable JS tabs (0.13)
+
+![A custom scriptable JS tab](../images/idea/19-scriptable-tabs.png)
+
+Any open binary can gain user-written JavaScript analysis tabs. Click **+** in the tab bar to add a script tab — a dialog with instructions and an API reference is shown. Use `print` to show information and `binary` to access the binary data; CSV and TSV output is shown as a table.
+
 ## Run configurations and debugging
 
 ![WASM run configuration dialog](../images/idea/11-wasm-run-config.png)
@@ -253,6 +298,7 @@ Hexana ships a `WasmRunConfigurationType` with a producer that creates a run con
 - **GraalWasm** (built-in or custom GraalVM installation) — run only. Builds of GraalVM without the embedded WASM runner are detected and supported.
 - **Node.js** — run and debug (0.11). Debugging uses Node's built-in inspector.
 - **Browser** — run and debug (0.11). Debugging drives **Chrome** via the Chrome DevTools Protocol.
+- **wazero** — run only (0.13). Module execution only; running individual functions is not supported.
 
 The runtime is selected per-project in **Settings → Build, Execution, Deployment → WASM Runtime**. The configuration also accepts a custom GraalVM home directory. See [`run-and-debug.md`](run-and-debug.md).
 

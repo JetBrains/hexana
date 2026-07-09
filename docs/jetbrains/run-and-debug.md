@@ -1,12 +1,12 @@
 ---
 title: Running and Debugging WebAssembly Modules with Hexana (0.11)
-description: How to run .wasm files from the IDE using Wasmtime, WAMR, GraalWasm, Node.js, or the browser, and how to use Hexana's experimental WASM debuggers.
-version: "0.11"
+description: How to run .wasm files from the IDE using Wasmtime, WAMR, GraalWasm, wazero, Node.js, or the browser, and how to use Hexana's experimental WASM debuggers.
+version: "0.13"
 ---
 
 # Running and Debugging WebAssembly
 
-Hexana ships full IDE run-configuration support for WebAssembly modules and experimental debugging. As of 0.11 it can run and debug under five runtimes — Wasmtime, WAMR, GraalWasm, Node.js, and the browser. This page covers configuration, runtime selection, proposal detection, and the debuggers.
+Hexana ships full IDE run-configuration support for WebAssembly modules and experimental debugging. As of 0.13 it can run under six runtimes — Wasmtime, WAMR, GraalWasm, wazero, Node.js, and the browser — and debug under all of them except GraalWasm and wazero. This page covers configuration, runtime selection, proposal detection, and the debuggers.
 
 ## Which runtimes does Hexana support?
 
@@ -15,6 +15,7 @@ Hexana ships full IDE run-configuration support for WebAssembly modules and expe
 | **Wasmtime** | Yes | Yes (experimental) | Debug requires LLVM 22.1 or newer; uses `lldb` against DWARF. |
 | **WAMR** (WebAssembly Micro Runtime) | Yes | Yes (experimental) | Same LLVM/`lldb` requirement for debug. Added in 0.9. |
 | **GraalWasm** (GraalVM) | Yes | No | Run-only. Built-in GraalVM image bundled; custom install supported. |
+| **wazero** | Yes | No | Added in 0.13. Run-only; module execution only — individual function runs are not supported. |
 | **Node.js** | Yes | Yes | Added in 0.11. Runs `node` with generated host glue; debug uses Node's built-in inspector. |
 | **Browser** | Yes | Yes | Added in 0.11. Serves the module over a local HTTP server; debug drives **Chrome** via the Chrome DevTools Protocol. |
 
@@ -28,6 +29,7 @@ Node.js and browser debugging do not use DWARF/`lldb`; they attach over an inspe
    - **Wasmtime** — path to the `wasmtime` executable.
    - **WAMR** — path to `iwasm` (or your WAMR binary).
    - **GraalWasm** — path to a GraalVM home directory that includes the GraalWasm component. Leave empty to use Hexana's built-in GraalVM image.
+   - **wazero** — path to the `wazero` CLI executable. Leave empty to resolve `wazero` from `PATH`.
    - **Node.js** — path to the `node` executable. Leave empty to resolve `node` from `PATH` (and common install locations). A run configuration may override the path and pass extra Node options.
    - **Browser** — no path needed for **Run**: Hexana serves the module from a local HTTP server and opens it in the IDE's configured browser. **Debug** requires **Chrome** (or a Chromium-based browser) because it attaches over the Chrome DevTools Protocol.
 

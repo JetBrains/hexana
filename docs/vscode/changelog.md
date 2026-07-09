@@ -1,12 +1,29 @@
 ---
 title: Hexana for VS Code — Release Notes
 description: Release notes for the Hexana VS Code extension.
-version: "0.5.0"
+version: "0.6.0"
 ---
 
 # Release Notes — Hexana for VS Code
 
 This page tracks releases of the VS Code extension.
+
+## 0.6.0
+
+Released **2026-07-08**.
+
+### Added
+
+- **Protocol Buffers descriptor sets.** Compiled `.desc` and `.protoset` files now open in Hexana's custom editor with five dedicated tabs: **Files**, **Messages**, **Fields**, **Enums**, and **Services**.
+- **Wazero runtime.** WASM run configurations now include **wazero** as a target for core WebAssembly modules (module execution only — individual function invocation is not supported on the wazero path).
+- **Scriptable info tabs.** Custom JS-powered tabs can be added alongside the built-in analysis tabs. Click **"+"** in the tab bar to open a dialog with instructions and an API reference, then write a script that uses `print` to emit content and `binary` to access the parsed binary. Output formatted as CSV or TSV is rendered as a table.
+- **Feedback / report-issue button.** A dedicated button makes it easier to share feedback or file a bug without leaving the editor.
+
+### Changed
+
+- **Unified table control with built-in search.** All analysis tables now use the same table component, giving every tab consistent behaviour including a proper built-in search field.
+- **Improved table rendering performance.** Table rendering is faster across all analysis tabs.
+- **MCP server download from the JetBrains downloads index.** On supported platforms the MCP server is now fetched from the JetBrains downloads index using platform-native artifacts by default. The extension no longer silently switches to GitHub when the downloads metadata is unavailable.
 
 ## 0.5.0
 
