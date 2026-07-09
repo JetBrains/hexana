@@ -102,16 +102,7 @@ class HexanaCli(
 
         init {
             subcommands(
-                listOf<CliktCommand>(
-                    StdioCommand(envReader, sink),
-                    HttpCommand(envReader, sink),
-                    SummarizeModuleCommand(envReader, sink),
-                    WasmToWatCommand(envReader, sink),
-                    ToolsCommand(sink),
-                    DoctorCommand(envReader, sink),
-                    VersionCommand(sink),
-                    HelpCommand(sink),
-                ) + todoToolCommands(sink)
+                manualServiceCommands(envReader, sink) + generatedToolCommands(envReader, sink)
             )
         }
 
@@ -253,10 +244,15 @@ class HexanaCli(
     }
 
     private class SummarizeModuleCommand(
+        private val spec: HexanaCliToolSpec,
         private val envReader: (String) -> String?,
         private val sink: (HexanaCommand) -> Unit
-    ) : CliktCommand(name = summarizeModuleCliToolSpec().commandName) {
-        override fun help(context: Context): String = summarizeModuleCliToolSpec().summary
+    ) : CliktCommand(name = spec.commandName) {
+        init {
+            validateSummarizeModuleCliToolSpec(spec)
+        }
+
+        override fun help(context: Context): String = spec.summary
 
         private val path by argument(
             name = "wasm",
@@ -265,13 +261,13 @@ class HexanaCli(
 
         private val format by option(
             "--format",
-            help = "Output format. Supported: ${summarizeModuleCliToolSpec().supportedFormatNames()}. Defaults to ${summarizeModuleCliToolSpec().defaultOutputFormat.cliName()}."
+            help = "Output format. Supported: ${spec.supportedFormatNames()}. Defaults to ${spec.defaultOutputFormat.cliName()}."
         ).convert(
-            metavar = summarizeModuleCliToolSpec().supportedFormatNames(),
-            completionCandidates = summarizeModuleCliToolSpec().supportedFormatCompletionCandidates(),
+            metavar = spec.supportedFormatNames(),
+            completionCandidates = spec.supportedFormatCompletionCandidates(),
         ) {
-            parseCliOutputFormat(summarizeModuleCliToolSpec(), it)
-        }.default(summarizeModuleCliToolSpec().defaultOutputFormat)
+            parseCliOutputFormat(spec, it)
+        }.default(spec.defaultOutputFormat)
 
         private val allowedRoots by allowedRootOption()
         private val maxFileBytes by maxFileBytesOption()
@@ -321,10 +317,15 @@ class HexanaCli(
     }
 
     private class WasmToWatCommand(
+        private val spec: HexanaCliToolSpec,
         private val envReader: (String) -> String?,
         private val sink: (HexanaCommand) -> Unit
-    ) : CliktCommand(name = wasmToWatCliToolSpec().commandName) {
-        override fun help(context: Context): String = wasmToWatCliToolSpec().summary
+    ) : CliktCommand(name = spec.commandName) {
+        init {
+            validateWasmToWatCliToolSpec(spec)
+        }
+
+        override fun help(context: Context): String = spec.summary
 
         private val path by argument(
             name = "wasm",
@@ -333,13 +334,13 @@ class HexanaCli(
 
         private val format by option(
             "--format",
-            help = "Output format. Supported: ${wasmToWatCliToolSpec().supportedFormatNames()}. Defaults to ${wasmToWatCliToolSpec().defaultOutputFormat.cliName()}."
+            help = "Output format. Supported: ${spec.supportedFormatNames()}. Defaults to ${spec.defaultOutputFormat.cliName()}."
         ).convert(
-            metavar = wasmToWatCliToolSpec().supportedFormatNames(),
-            completionCandidates = wasmToWatCliToolSpec().supportedFormatCompletionCandidates(),
+            metavar = spec.supportedFormatNames(),
+            completionCandidates = spec.supportedFormatCompletionCandidates(),
         ) {
-            parseCliOutputFormat(wasmToWatCliToolSpec(), it)
-        }.default(wasmToWatCliToolSpec().defaultOutputFormat)
+            parseCliOutputFormat(spec, it)
+        }.default(spec.defaultOutputFormat)
 
         private val allowedRoots by allowedRootOption()
         private val maxFileBytes by maxFileBytesOption()
@@ -426,13 +427,56 @@ class HexanaCli(
     }
 
     private companion object {
-        fun todoToolCommands(sink: (HexanaCommand) -> Unit): List<CliktCommand> =
-            HexanaGeneratedCliToolRegistry.TOOLS
+        fun manualServiceCommands(
+            envReader: (String) -> String?,
+            sink: (HexanaCommand) -> Unit,
+        ): List<CliktCommand> = listOf(
+            StdioCommand(envReader, sink),
+            HttpCommand(envReader, sink),
+            ToolsCommand(sink),
+            DoctorCommand(envReader, sink),
+            VersionCommand(sink),
+            HelpCommand(sink),
+        )
+
+        fun generatedToolCommands(
+            envReader: (String) -> String?,
+            sink: (HexanaCommand) -> Unit,
+        ): List<CliktCommand> {
+            val executableFactories = executableToolCommandFactories(envReader, sink)
+            val executableCommandNames = HexanaGeneratedCliToolRegistry.TOOLS
+                .filter { it.executionStatus == HexanaCliExecutionStatus.EXECUTABLE }
+                .mapTo(mutableSetOf()) { it.commandName }
+            require(executableCommandNames == executableFactories.keys) {
+                val missing = executableCommandNames - executableFactories.keys
+                val stale = executableFactories.keys - executableCommandNames
+                buildString {
+                    append("Runtime executable CLI command factories do not match generated executable CLI metadata.")
+                    if (missing.isNotEmpty()) append(" Missing: ${missing.sorted().joinToString()}.")
+                    if (stale.isNotEmpty()) append(" Stale: ${stale.sorted().joinToString()}.")
+                }
+            }
+            return HexanaGeneratedCliToolRegistry.TOOLS
                 .asSequence()
-                .filter { it.executionStatus == HexanaCliExecutionStatus.TODO }
                 .sortedBy { it.commandName }
-                .map { TodoToolCommand(it, sink) }
+                .map { spec ->
+                    when (spec.executionStatus) {
+                        HexanaCliExecutionStatus.EXECUTABLE ->
+                            executableFactories.getValue(spec.commandName).invoke(spec)
+
+                        HexanaCliExecutionStatus.TODO -> TodoToolCommand(spec, sink)
+                    }
+                }
                 .toList()
+        }
+
+        fun executableToolCommandFactories(
+            envReader: (String) -> String?,
+            sink: (HexanaCommand) -> Unit,
+        ): Map<String, (HexanaCliToolSpec) -> CliktCommand> = mapOf(
+            "summarize-module" to { spec -> SummarizeModuleCommand(spec, envReader, sink) },
+            "wasm-to-wat" to { spec -> WasmToWatCommand(spec, envReader, sink) },
+        )
     }
 }
 
@@ -458,8 +502,7 @@ internal fun renderCliToolsListing(command: HexanaCommand.Tools): String {
     }.trimEnd()
 }
 
-private fun summarizeModuleCliToolSpec(): HexanaCliToolSpec {
-    val spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == "summarize-module" }
+private fun validateSummarizeModuleCliToolSpec(spec: HexanaCliToolSpec) {
     require(HexanaCliInputMode.WASM_PATH in spec.inputModes) {
         "Generated summarize-module CLI metadata must support wasm path input"
     }
@@ -469,11 +512,9 @@ private fun summarizeModuleCliToolSpec(): HexanaCliToolSpec {
     require(spec.defaultOutputFormat in spec.outputFormats) {
         "Generated summarize-module CLI metadata default output must be one of ${spec.outputFormats}"
     }
-    return spec
 }
 
-private fun wasmToWatCliToolSpec(): HexanaCliToolSpec {
-    val spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == "wasm-to-wat" }
+private fun validateWasmToWatCliToolSpec(spec: HexanaCliToolSpec) {
     require(HexanaCliInputMode.WASM_PATH in spec.inputModes) {
         "Generated wasm-to-wat CLI metadata must support wasm path input"
     }
@@ -486,7 +527,6 @@ private fun wasmToWatCliToolSpec(): HexanaCliToolSpec {
     require(spec.defaultOutputFormat in spec.outputFormats) {
         "Generated wasm-to-wat CLI metadata default output must be one of ${spec.outputFormats}"
     }
-    return spec
 }
 
 internal fun parseCliOutputFormat(spec: HexanaCliToolSpec, value: String): HexanaCliOutputFormat {

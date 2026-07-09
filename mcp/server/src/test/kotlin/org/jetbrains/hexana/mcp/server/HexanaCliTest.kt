@@ -270,6 +270,27 @@ class HexanaCliTest {
     }
 
     @Test
+    fun parseRegistersEveryGeneratedCliToolFromGeneratedMetadata() {
+        HexanaGeneratedCliToolRegistry.TOOLS.forEach { spec ->
+            when (spec.executionStatus) {
+                HexanaCliExecutionStatus.EXECUTABLE -> {
+                    val command = parseExecutableGeneratedCliTool(spec)
+
+                    assertFalse(command is HexanaCommand.TodoTool, "${spec.commandName} must use a runtime command")
+                    assertNotEquals(HexanaCommand.Help, command, "${spec.commandName} must be registered as a subcommand")
+                }
+
+                HexanaCliExecutionStatus.TODO -> {
+                    val command = cli().parse(arrayOf(spec.commandName))
+
+                    assertIs<HexanaCommand.TodoTool>(command, "${spec.commandName} must use the TODO command path")
+                    assertEquals(spec, command.spec)
+                }
+            }
+        }
+    }
+
+    @Test
     fun parseRejectsUnknownCommandWithoutTreatingItAsTodo() {
         val error = assertFailsWith<CliktError> {
             cli().parse(arrayOf("definitely-not-a-command"))
@@ -462,5 +483,13 @@ class HexanaCliTest {
 
         fun generatedCliToolSpec(commandName: String): HexanaCliToolSpec =
             HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == commandName }
+
+        fun parseExecutableGeneratedCliTool(spec: HexanaCliToolSpec): HexanaCommand =
+            when (spec.commandName) {
+                "summarize-module",
+                "wasm-to-wat" -> HexanaCli().parse(arrayOf(spec.commandName, "app.wasm"))
+
+                else -> fail("No runtime parse assertion for generated executable CLI command: ${spec.commandName}")
+            }
     }
 }
