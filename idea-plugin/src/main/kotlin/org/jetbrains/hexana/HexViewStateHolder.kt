@@ -43,6 +43,12 @@ data class HexHighlightRange(
     val color: Color,
 )
 
+data class HexScrollRequest(
+    val offset: Long,
+    val setCursor: Boolean = false,
+    val highlightLine: Boolean = false,
+)
+
 class HexViewStateHolder(
     val project: Project,
 ) {
@@ -70,12 +76,12 @@ class HexViewStateHolder(
 
     // Keep the latest requested scroll offset so late collectors (e.g., HexViewer composed after
     // the emission from a LaunchedEffect) still receive it.
-    private val _hexScrollFlow = MutableSharedFlow<Long>(
+    private val _hexScrollFlow = MutableSharedFlow<HexScrollRequest>(
         replay = 1,
         extraBufferCapacity = 64,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
-    val hexScrollFlow: SharedFlow<Long> = _hexScrollFlow
+    val hexScrollFlow: SharedFlow<HexScrollRequest> = _hexScrollFlow
 
     // Replay-1 so requests issued before BinaryEditorView is composed (e.g., from a Goto Symbol
     // navigate() that opens the editor) still reach the late collector that resolves panel index.
@@ -135,8 +141,8 @@ class HexViewStateHolder(
         currentState.value = currentState.value.copy(tabIndex = tabIndex)
     }
 
-    fun scrollHexViewTo(offset: Long) {
-        _hexScrollFlow.tryEmit(offset)
+    fun scrollHexViewTo(offset: Long, setCursor: Boolean = false, highlightLine: Boolean = false) {
+        _hexScrollFlow.tryEmit(HexScrollRequest(offset, setCursor, highlightLine))
     }
 
     fun setCursorPosition(line: Int, lineOffset: Int) {

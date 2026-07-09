@@ -186,7 +186,7 @@ internal fun WasmPanelWatVirtualized(
         listState = listState,
         foldedSectionsExternal = foldedSectionsExternal,
         navTargetFlow = navTargetFlow,
-        onOffsetClicked = { offset -> state.scrollHexViewTo(offset) },
+        onOffsetClicked = { offset -> state.scrollHexViewTo(offset, setCursor = true) },
     )
 }
 

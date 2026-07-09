@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.ui
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -247,6 +248,10 @@ internal fun HexViewer(
         var selectionAnchor by remember { mutableStateOf<Pair<Int, Int>?>(null) }
         var currentPointerPosition by remember { mutableStateOf(Offset.Unspecified) }
         var isPointerPressed by remember { mutableStateOf(false) }
+
+        var flashLineIndex by remember { mutableStateOf(-1) }
+        val flashAlpha = remember { Animatable(0f) }
+        val flashColor = HexanaTheme.hexCellHoverColor
         var selectionAreaHeight by remember { mutableFloatStateOf(0f) }
         var selectionAreaWidth by remember { mutableFloatStateOf(0f) }
 
@@ -356,9 +361,18 @@ internal fun HexViewer(
         }
 
         LaunchedEffect(state) {
-            state.hexScrollFlow.collect { offset ->
-                val lineNo = (offset / bytesPerRow).toInt()
+            state.hexScrollFlow.collect { request ->
+                val lineNo = (request.offset / bytesPerRow).toInt()
                 hexDataListState.animateScrollToItem(lineNo)
+                if (request.setCursor) {
+                    state.setCursorPosition(request.offset, bytesPerRow)
+                }
+                if (request.highlightLine) {
+                    flashLineIndex = lineNo
+                    flashAlpha.snapTo(1f)
+                    flashAlpha.animateTo(0f, animationSpec = tween(durationMillis = 1000))
+                    flashLineIndex = -1
+                }
             }
         }
 
@@ -545,10 +559,16 @@ internal fun HexViewer(
                     Box {
                         LazyColumn(state = offsetListState) {
                             items(count = rowCount) { rowIndex ->
+                                val rowFlashAlpha = if (rowIndex == flashLineIndex) flashAlpha.value else 0f
                                 Box(
                                     modifier = Modifier
                                         .width(offsetWidth)
                                         .background(HexanaTheme.backgroundColor)
+                                        .drawBehind {
+                                            if (rowFlashAlpha > 0f) {
+                                                drawRect(flashColor.copy(alpha = rowFlashAlpha))
+                                            }
+                                        }
                                         .padding(horizontal = 8.dp),
                                     contentAlignment = Alignment.CenterEnd
                                 ) {
@@ -607,9 +627,15 @@ internal fun HexViewer(
                     ) {
                         LazyColumn(state = hexDataListState) {
                             items(count = rowCount) { rowIndex ->
+                                val rowFlashAlpha = if (rowIndex == flashLineIndex) flashAlpha.value else 0f
                                 Box(
                                     modifier = Modifier
                                         .background(HexanaTheme.backgroundColor)
+                                        .drawBehind {
+                                            if (rowFlashAlpha > 0f) {
+                                                drawRect(flashColor.copy(alpha = rowFlashAlpha))
+                                            }
+                                        }
                                         .padding(horizontal = 8.dp)
                                 ) {
                                     Row(
@@ -733,9 +759,16 @@ internal fun HexViewer(
                     ) {
                         LazyColumn(state = textDataListState) {
                             items(count = rowCount) { rowIndex ->
+                                val rowFlashAlpha = if (rowIndex == flashLineIndex) flashAlpha.value else 0f
                                 Row(
                                     modifier = Modifier
-                                        .background(HexanaTheme.backgroundColor).fillMaxWidth()
+                                        .background(HexanaTheme.backgroundColor)
+                                        .drawBehind {
+                                            if (rowFlashAlpha > 0f) {
+                                                drawRect(flashColor.copy(alpha = rowFlashAlpha))
+                                            }
+                                        }
+                                        .fillMaxWidth()
                                         .padding(horizontal = 8.dp),
                                     horizontalArrangement = Arrangement.Start
                                 ) {
