@@ -2,6 +2,8 @@
 
 This folder groups extracted MCP modules.
 
+For CLI ownership and split-boundary decisions, read `CLI_OWNERSHIP.md`.
+
 ## Read Order
 
 - If you touch `mcp/core/`, also read `mcp/core/AGENTS.md`.

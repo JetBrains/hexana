@@ -3,6 +3,9 @@
 This module contains the standalone Hexana MCP runtime. It exposes `mcp/core` through process and HTTP transports and
 must remain free of IntelliJ Platform APIs.
 
+For the current CLI ownership decision, read `../CLI_OWNERSHIP.md`: `hexana-mcp` is a real public CLI and remains in
+this module together with the MCP server launcher until a later split ticket changes the artifact layout.
+
 ## Start Here
 
 Read these files before making structural changes:
