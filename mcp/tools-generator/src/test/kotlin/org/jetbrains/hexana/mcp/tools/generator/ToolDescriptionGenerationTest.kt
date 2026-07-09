@@ -171,7 +171,7 @@ class ToolDescriptionGenerationTest {
             "ConverterResult",
             kotlinPackage = "org.jetbrains.hexana.mcp.model.test",
         ) {
-            outputCapabilities(OutputConversionCapability.SemanticJson, OutputConversionCapability.RawTextPlaceholder)
+            outputCapabilities(OutputConversionCapability.SemanticJson, OutputConversionCapability.RawText)
             string("wat").describe("WAT text.")
         }
         val converter = summarizeBinarySpec.copy(
@@ -181,7 +181,7 @@ class ToolDescriptionGenerationTest {
                 "wasm-to-wat",
                 ToolGroup.Converters,
                 ToolOutputPolicy.ToolDefined,
-                defaultOutput = OutputConversionCapability.RawTextPlaceholder,
+                defaultOutput = OutputConversionCapability.RawText,
             ),
             handlerFqn = "org.jetbrains.hexana.mcp.server.wasmToWat",
         )

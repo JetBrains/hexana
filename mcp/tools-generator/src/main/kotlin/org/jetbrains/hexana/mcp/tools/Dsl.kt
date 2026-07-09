@@ -119,15 +119,15 @@ enum class InputConversionCapability {
     WasmPath,
     WasmFromString,
     BinaryPath,
-    StdinPlaceholder,
+    Stdin,
 }
 
 enum class OutputConversionCapability {
     SemanticJson,
     McpWrapper,
-    PrettyPlaceholder,
-    RawTextPlaceholder,
-    RawBytesPlaceholder,
+    Pretty,
+    RawText,
+    RawBytes,
 }
 
 data class ClassSpec(

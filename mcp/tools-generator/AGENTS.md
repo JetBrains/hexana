@@ -33,8 +33,10 @@ template.
 - Public MCPB manifest exposure is generated from catalog metadata; do not maintain a separate manifest tool list.
 - Top-level tool output classes also declare their `mcp/core` model package here with `kotlinPackage = ...`; the
   idea-plugin generator must not carry a separate result-class package map.
-- Input/output conversion capability symbols are generator-local metadata on `ClassSpec`; keep them symbolic in this
-  module until a runtime renderer/converter explicitly consumes them.
+- Input/output conversion capability symbols are generator-local metadata on `ClassSpec`. `SemanticJson`, `McpWrapper`,
+  `Pretty`, and `RawText` are implemented for the current POC paths. `RawBytes` is symbolic/deferred for future
+  binary-safe rendering and is not exposed by current catalog tools. `Stdin` is symbolic input metadata for generated CLI
+  support.
 - Standalone server input and output JSON schemas are generated from `ClassSpec`/`FieldSpec`; add defaults and bounds
   such as `minimum`, `maxItems`, and `maxLength` to the DSL instead of adding per-tool schema helpers in `mcp/server`.
 - Idea-plugin argument defaults also come from `FieldSpec.default`; do not repeat numeric, boolean, or string defaults in

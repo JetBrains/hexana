@@ -651,7 +651,7 @@ private fun InputConversionCapability.generatedCliInputModeName(): String =
         InputConversionCapability.WasmPath -> "WASM_PATH"
         InputConversionCapability.WasmFromString -> "WASM_FROM_STRING"
         InputConversionCapability.BinaryPath -> "BINARY_PATH"
-        InputConversionCapability.StdinPlaceholder -> "STDIN"
+        InputConversionCapability.Stdin -> "STDIN"
     }
 
 private fun ToolSpec.cliOutputFormats(): List<OutputConversionCapability> {
@@ -667,9 +667,9 @@ private fun OutputConversionCapability.generatedCliOutputFormatName(): String =
 private fun OutputConversionCapability.generatedCliOutputFormatNameOrNull(): String? =
     when (this) {
         OutputConversionCapability.SemanticJson -> "JSON"
-        OutputConversionCapability.PrettyPlaceholder -> "PRETTY"
-        OutputConversionCapability.RawTextPlaceholder,
-        OutputConversionCapability.RawBytesPlaceholder -> "RAW"
+        OutputConversionCapability.Pretty -> "PRETTY"
+        OutputConversionCapability.RawText,
+        OutputConversionCapability.RawBytes -> "RAW"
         OutputConversionCapability.McpWrapper -> null
     }
 

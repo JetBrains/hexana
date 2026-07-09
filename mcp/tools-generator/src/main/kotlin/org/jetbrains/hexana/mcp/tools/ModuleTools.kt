@@ -15,7 +15,7 @@ val SummarizeModuleResultClass = class_("SummarizeModuleResult", kotlinPackage =
     outputCapabilities(
         OutputConversionCapability.SemanticJson,
         OutputConversionCapability.McpWrapper,
-        OutputConversionCapability.PrettyPlaceholder,
+        OutputConversionCapability.Pretty,
     )
     int("functions").describe("Total function count (imports + defined).")
     int("exports").describe("Number of exports declared by the module.")
@@ -73,7 +73,7 @@ internal val ModuleTools: List<ToolSpec> = tools {
             ToolGroup.Module,
             ToolOutputPolicy.ToolDefined,
             executionStatus = CliExecutionStatus.Executable,
-            defaultOutput = OutputConversionCapability.PrettyPlaceholder,
+            defaultOutput = OutputConversionCapability.Pretty,
         )
         guidance = """
             Summarize a WebAssembly (.wasm) module with high-level counts for its major sections and declarations.

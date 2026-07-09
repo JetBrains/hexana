@@ -231,11 +231,11 @@ class HexanaToolsTest {
             setOf(
                 OutputConversionCapability.SemanticJson,
                 OutputConversionCapability.McpWrapper,
-                OutputConversionCapability.PrettyPlaceholder,
+                OutputConversionCapability.Pretty,
             ),
             summarize.output.outputCapabilities,
         )
-        assertEquals(OutputConversionCapability.PrettyPlaceholder, summarize.surfaces.cli.defaultOutput)
+        assertEquals(OutputConversionCapability.Pretty, summarize.surfaces.cli.defaultOutput)
     }
 
     @Test
@@ -251,7 +251,7 @@ class HexanaToolsTest {
     fun `ClassSpec with inherits conversion capability metadata`() {
         val base = class_("Base") {
             inputCapabilities(InputConversionCapability.JsonObject, InputConversionCapability.WasmPath)
-            outputCapabilities(OutputConversionCapability.SemanticJson, OutputConversionCapability.RawTextPlaceholder)
+            outputCapabilities(OutputConversionCapability.SemanticJson, OutputConversionCapability.RawText)
             string("path").describe("Input path.")
         }
 
@@ -263,12 +263,12 @@ class HexanaToolsTest {
         assertEquals(base.outputCapabilities, derived.outputCapabilities)
 
         val overridden = base.with("Overridden") {
-            inputCapabilities(InputConversionCapability.StdinPlaceholder)
-            outputCapabilities(OutputConversionCapability.RawBytesPlaceholder)
+            inputCapabilities(InputConversionCapability.Stdin)
+            outputCapabilities(OutputConversionCapability.RawBytes)
         }
 
-        assertEquals(setOf(InputConversionCapability.StdinPlaceholder), overridden.inputCapabilities)
-        assertEquals(setOf(OutputConversionCapability.RawBytesPlaceholder), overridden.outputCapabilities)
+        assertEquals(setOf(InputConversionCapability.Stdin), overridden.inputCapabilities)
+        assertEquals(setOf(OutputConversionCapability.RawBytes), overridden.outputCapabilities)
     }
 
     @Test
@@ -357,14 +357,14 @@ class HexanaToolsTest {
                         "unsupported-output-override",
                         ToolGroup.Binary,
                         ToolOutputPolicy.ToolDefined,
-                        outputOverride = OutputConversionCapability.RawBytesPlaceholder,
+                        outputOverride = OutputConversionCapability.RawBytes,
                     )
                     handlerFqn = queryArtifacts.handlerFqn
                 }
             }
         }
 
-        assertTrue(error.message.orEmpty().contains("CLI output RawBytesPlaceholder is not declared"))
+        assertTrue(error.message.orEmpty().contains("CLI output RawBytes is not declared"))
     }
 
     @Test
@@ -425,14 +425,14 @@ class HexanaToolsTest {
                         "unsupported-default-output",
                         ToolGroup.Binary,
                         ToolOutputPolicy.ToolDefined,
-                        defaultOutput = OutputConversionCapability.PrettyPlaceholder,
+                        defaultOutput = OutputConversionCapability.Pretty,
                     )
                     handlerFqn = queryArtifacts.handlerFqn
                 }
             }
         }
 
-        assertTrue(error.message.orEmpty().contains("CLI output PrettyPlaceholder is not declared"))
+        assertTrue(error.message.orEmpty().contains("CLI output Pretty is not declared"))
     }
 
     @Test
@@ -680,7 +680,7 @@ class HexanaToolsTest {
                 InputConversionCapability.JsonObject,
                 InputConversionCapability.WasmPath,
                 InputConversionCapability.WasmFromString,
-                InputConversionCapability.StdinPlaceholder,
+                InputConversionCapability.Stdin,
             ),
             WasmInputClass.inputCapabilities,
         )
@@ -688,7 +688,7 @@ class HexanaToolsTest {
             setOf(
                 InputConversionCapability.JsonObject,
                 InputConversionCapability.BinaryPath,
-                InputConversionCapability.StdinPlaceholder,
+                InputConversionCapability.Stdin,
             ),
             BinaryInputClass.inputCapabilities,
         )
@@ -708,11 +708,11 @@ class HexanaToolsTest {
                 "summarize_module" -> setOf(
                     OutputConversionCapability.SemanticJson,
                     OutputConversionCapability.McpWrapper,
-                    OutputConversionCapability.PrettyPlaceholder,
+                    OutputConversionCapability.Pretty,
                 )
                 "wasm_to_wat" -> setOf(
                     OutputConversionCapability.SemanticJson,
-                    OutputConversionCapability.RawTextPlaceholder,
+                    OutputConversionCapability.RawText,
                 )
                 else -> setOf(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper)
             }

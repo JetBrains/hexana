@@ -10,7 +10,7 @@ val WasmInputClass = class_("WasmInput") {
         InputConversionCapability.JsonObject,
         InputConversionCapability.WasmPath,
         InputConversionCapability.WasmFromString,
-        InputConversionCapability.StdinPlaceholder,
+        InputConversionCapability.Stdin,
     )
     nullable("path", string())
         .describe("Readable local `.wasm` path. $WASM_INPUT_VALIDATION")
@@ -29,7 +29,7 @@ val BinaryInputClass = class_("BinaryInput") {
     inputCapabilities(
         InputConversionCapability.JsonObject,
         InputConversionCapability.BinaryPath,
-        InputConversionCapability.StdinPlaceholder,
+        InputConversionCapability.Stdin,
     )
     nullable("path", string())
         .describe("Readable local binary path. $BINARY_INPUT_VALIDATION")
