@@ -97,11 +97,11 @@ public object HexanaGeneratedCliToolRegistry {
           toolName = "summarize_binary",
           summary = "Summarize a Wasm or native binary with compact identity and entity counts.",
           groups = setOf(HexanaCliToolGroup.BINARY),
-          inputModes = setOf(),
+          inputModes = setOf(HexanaCliInputMode.BINARY_PATH),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
-          executionStatus = HexanaCliExecutionStatus.TODO,
+          executionStatus = HexanaCliExecutionStatus.EXECUTABLE,
         ),
         HexanaCliToolSpec(
           commandName = "wasm-to-wat",
@@ -425,12 +425,14 @@ public object HexanaGeneratedCliToolRegistry {
       )
 }
 
-private class GeneratedWasmPathCliToolCommand(
+private class GeneratedPathCliToolCommand(
   private val spec: HexanaCliToolSpec,
+  private val pathArgumentName: String,
+  private val pathHelp: String,
   private val envReader: (String) -> String?,
   private val sink: (HexanaCommand) -> Unit,
 ) : CliktCommand(name = spec.commandName) {
-  private val path: String by argument(name = "wasm", help = "Path to a WebAssembly module.")
+  private val path: String by argument(name = pathArgumentName, help = pathHelp)
 
   private val format: HexanaCliOutputFormat by option(
         "--format",
@@ -610,17 +612,24 @@ internal fun generatedCliToolCommands(envReader: (String) -> String?, sink: (Hex
     spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == "search_functions_by_name" },
     sink = sink,
   ),
-  GeneratedTodoCliToolCommand(
+  GeneratedPathCliToolCommand(
     spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == "summarize_binary" },
-    sink = sink,
-  ),
-  GeneratedWasmPathCliToolCommand(
-    spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == "summarize_module" },
+    pathArgumentName = "binary",
+    pathHelp = "Path to a binary file.",
     envReader = envReader,
     sink = sink,
   ),
-  GeneratedWasmPathCliToolCommand(
+  GeneratedPathCliToolCommand(
+    spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == "summarize_module" },
+    pathArgumentName = "wasm",
+    pathHelp = "Path to a WebAssembly module.",
+    envReader = envReader,
+    sink = sink,
+  ),
+  GeneratedPathCliToolCommand(
     spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == "wasm_to_wat" },
+    pathArgumentName = "wasm",
+    pathHelp = "Path to a WebAssembly module.",
     envReader = envReader,
     sink = sink,
   ),
@@ -630,6 +639,7 @@ internal fun generatedCliToolCommands(envReader: (String) -> String?, sink: (Hex
  * Generated executable CLI renderer dispatch derived from catalog CLI surface metadata.
  */
 internal fun generatedExecutableCliToolCommandOutput(command: HexanaCommand.ExecutableTool): HexanaCliCommandOutput = when (command.spec.toolName) {
+  "summarize_binary" -> renderSummarizeBinaryCommandOutput(command)
   "summarize_module" -> renderSummarizeModuleCommandOutput(command)
   "wasm_to_wat" -> renderWasmToWatCommandOutput(command)
   else -> error("Executable CLI tool '${command.spec.toolName}' has no generated runtime renderer.")

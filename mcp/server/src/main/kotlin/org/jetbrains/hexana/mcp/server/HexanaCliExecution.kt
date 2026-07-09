@@ -4,12 +4,14 @@ import kotlinx.serialization.encodeToString
 import org.jetbrains.hexana.graalwasm.wasmprinter.WatWithWarnings
 import org.jetbrains.hexana.graalwasm.wasmprinter.printWat
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
+import org.jetbrains.hexana.mcp.BinaryInput
 import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.HexanaAnalysisService
 import org.jetbrains.hexana.mcp.HexanaJson
 import org.jetbrains.hexana.mcp.WasmInputBytesLoader
 import org.jetbrains.hexana.mcp.WasmInput
+import org.jetbrains.hexana.mcp.model.binaries.BinarySummaryResult
 import org.jetbrains.hexana.mcp.model.converters.WasmToWatResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import java.nio.charset.StandardCharsets
@@ -40,6 +42,35 @@ internal fun renderSummarizeModuleCommandOutput(
         HexanaCliOutputFormat.JSON -> HexanaJson.compact.encodeToString(SummarizeModuleResult.serializer(), result)
         HexanaCliOutputFormat.PRETTY -> renderSummarizeModulePretty(result)
         HexanaCliOutputFormat.RAW -> error("summarize-module does not support raw output")
+    }
+    return requireOutputWithinLimit(
+        output = HexanaCliCommandOutput(stdout = output),
+        maxOutputBytes = command.resourceLimits.maxOutputBytes,
+        commandName = command.spec.commandName,
+    )
+}
+
+internal fun renderSummarizeBinaryOutput(
+    command: HexanaCommand.ExecutableTool,
+    analysisService: HexanaAnalysisService = createStandaloneHexanaAnalysisService(
+        command.allowedRoots,
+        command.resourceLimits
+    ),
+): String = renderSummarizeBinaryCommandOutput(command, analysisService).stdout
+
+internal fun renderSummarizeBinaryCommandOutput(
+    command: HexanaCommand.ExecutableTool,
+    analysisService: HexanaAnalysisService = createStandaloneHexanaAnalysisService(
+        command.allowedRoots,
+        command.resourceLimits
+    ),
+): HexanaCliCommandOutput {
+    requireExecutableTool(command, toolName = "summarize_binary")
+    val result = analysisService.summarizeBinary(BinaryInput.FilePath(command.path))
+    val output = when (command.format) {
+        HexanaCliOutputFormat.JSON -> HexanaJson.compact.encodeToString(BinarySummaryResult.serializer(), result)
+        HexanaCliOutputFormat.PRETTY -> error("summarize-binary does not support pretty output")
+        HexanaCliOutputFormat.RAW -> error("summarize-binary does not support raw output")
     }
     return requireOutputWithinLimit(
         output = HexanaCliCommandOutput(stdout = output),

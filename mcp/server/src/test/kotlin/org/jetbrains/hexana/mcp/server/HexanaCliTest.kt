@@ -183,6 +183,39 @@ class HexanaCliTest {
     }
 
     @Test
+    fun parseUsesGeneratedDefaultFormatForSummarizeBinary() {
+        val command = assertGeneratedExecutableTool(
+            cli().parse(arrayOf("summarize-binary", "app.bin")),
+            "summarize-binary",
+        )
+        assertEquals("app.bin", command.path)
+        assertEquals(HexanaCliOutputFormat.JSON, command.format)
+        assertEquals(emptyList(), command.allowedRoots)
+        assertEquals(HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES, command.resourceLimits.maxFileBinaryBytes)
+    }
+
+    @Test
+    fun parseAcceptsExplicitSummarizeBinaryJsonFormat() {
+        val command = assertGeneratedExecutableTool(
+            cli().parse(arrayOf("summarize-binary", "app.bin", "--format", "json")),
+            "summarize-binary",
+        )
+        assertEquals(HexanaCliOutputFormat.JSON, command.format)
+    }
+
+    @Test
+    fun parseRejectsSummarizeBinaryFormatsNotSupportedByGeneratedMetadata() {
+        listOf("pretty", "raw").forEach { format ->
+            val error = assertFailsWith<CliktError> {
+                cli().parse(arrayOf("summarize-binary", "app.bin", "--format", format))
+            }
+
+            assertTrue(error.message.orEmpty().contains("Unsupported summarize-binary format"))
+            assertTrue(error.message.orEmpty().contains("json"))
+        }
+    }
+
+    @Test
     fun parseCombinesAllowedRootsFromCliAndEnvForSummarizeModule() {
         val command = assertGeneratedExecutableTool(
             HexanaCli { name ->
@@ -258,10 +291,10 @@ class HexanaCliTest {
 
     @Test
     fun parseGeneratedTodoCommandAbsorbsFutureArguments() {
-        val expectedSpec = generatedCliToolSpec("summarize-binary")
+        val expectedSpec = generatedCliToolSpec("list-enabled-features")
         val command = cli().parse(
             arrayOf(
-                "summarize-binary",
+                "list-enabled-features",
                 "--input",
                 "app.wasm",
                 "--format=json",
@@ -271,7 +304,7 @@ class HexanaCliTest {
 
         assertIs<HexanaCommand.TodoTool>(command)
         assertEquals(expectedSpec, command.spec)
-        assertEquals("summarize_binary", command.spec.toolName)
+        assertEquals("list_enabled_features", command.spec.toolName)
     }
 
     @Test
@@ -293,7 +326,12 @@ class HexanaCliTest {
                     "${spec.commandName} help must include generated summary"
                 )
                 assertTrue(help.contains("Usage:"), "${spec.commandName} help must include normal command usage")
-                assertTrue(help.contains("Path to a WebAssembly module."), "${spec.commandName} help must document wasm path")
+                val expectedPathHelp = if (HexanaCliInputMode.BINARY_PATH in spec.inputModes) {
+                    "Path to a binary file."
+                } else {
+                    "Path to a WebAssembly module."
+                }
+                assertTrue(help.contains(expectedPathHelp), "${spec.commandName} help must document path input")
                 assertTrue(help.contains("--format"), "${spec.commandName} help must document format option")
                 assertTrue(help.contains(spec.supportedFormatNames()), "${spec.commandName} help must document generated formats")
             }

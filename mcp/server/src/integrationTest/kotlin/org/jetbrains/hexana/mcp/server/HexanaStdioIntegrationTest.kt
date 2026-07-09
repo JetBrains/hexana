@@ -4,6 +4,7 @@ import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
 import io.modelcontextprotocol.kotlin.sdk.types.ListToolsRequest
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
@@ -12,6 +13,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.slf4j.LoggerFactory
 import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -106,13 +108,59 @@ class HexanaStdioIntegrationTest {
 
     @Test
     fun installedServerTodoCommandFailsOnStderr() = runBlocking {
-        val result = HexanaInstalledStdioClient.runCommand(StdioLauncher.Server, "summarize-binary", "app.wasm")
+        val result = HexanaInstalledStdioClient.runCommand(StdioLauncher.Server, "list-enabled-features")
 
         assertFalse(result.timedOut, "Command timed out. stdout=${result.stdout}, stderr=${result.stderr}")
         assertEquals(1, result.exitCode, "stdout=${result.stdout}, stderr=${result.stderr}")
         assertTrue(result.stdout.isBlank(), result.stdout)
-        assertTrue(result.stderr.contains("summarize-binary"), result.stderr)
+        assertTrue(result.stderr.contains("list-enabled-features"), result.stderr)
         assertTrue(result.stderr.contains("not implemented"), result.stderr)
+    }
+
+    @Test
+    fun installedServerSummarizeBinaryCommandReturnsJsonOnStdout() = runBlocking {
+        val wasm = createWasmFile("installed-binary-summary.wasm", "(module (memory 1) (func (export \"main\")))")
+
+        val result = HexanaInstalledStdioClient.runCommand(
+            StdioLauncher.Server,
+            "summarize-binary",
+            wasm.toString(),
+            "--format",
+            "json",
+        )
+
+        assertInstalledCommandSucceeded(result)
+        val json = Json.parseToJsonElement(result.stdout.trim()).jsonObject
+        val module = json.getValue("module").jsonObject
+        val counts = json.getValue("counts").jsonObject
+        assertEquals("wasm", module.getValue("format").jsonPrimitive.content)
+        assertEquals("1", counts.getValue("functions").jsonPrimitive.content)
+        assertEquals("1", counts.getValue("exports").jsonPrimitive.content)
+        assertTrue(json.getValue("warnings").jsonArray.isEmpty(), result.stdout)
+        assertTrue(result.unexpectedStderr.isBlank(), result.stderr)
+    }
+
+    @Test
+    fun installedServerSummarizeBinaryCommandReturnsNativeJsonOnStdout() = runBlocking {
+        val elf = nativeFixture("elf/sample.o")
+
+        val result = HexanaInstalledStdioClient.runCommand(
+            StdioLauncher.Server,
+            "summarize-binary",
+            elf.toString(),
+            "--format",
+            "json",
+        )
+
+        assertInstalledCommandSucceeded(result)
+        val json = Json.parseToJsonElement(result.stdout.trim()).jsonObject
+        val module = json.getValue("module").jsonObject
+        val counts = json.getValue("counts").jsonObject
+        assertEquals("elf", module.getValue("format").jsonPrimitive.content)
+        assertTrue(module.getValue("architecture").jsonPrimitive.content.isNotBlank(), result.stdout)
+        assertTrue(counts.getValue("sections").jsonPrimitive.content.toInt() > 0, result.stdout)
+        assertTrue(counts.getValue("symbols").jsonPrimitive.content.toInt() > 0, result.stdout)
+        assertTrue(result.unexpectedStderr.isBlank(), result.stderr)
     }
 
     @Test
@@ -147,5 +195,15 @@ class HexanaStdioIntegrationTest {
 
     private fun createWasmFile(name: String, wat: String) = temporaryFolder.newFile(name).toPath().also {
         Files.write(it, wat2wasm(wat))
+    }
+
+    private fun nativeFixture(relativePath: String): Path {
+        var current = Path.of(System.getProperty("user.dir")).toAbsolutePath()
+        while (true) {
+            val candidate = current.resolve("parsing/native-fixtures/test-data").resolve(relativePath)
+            if (Files.exists(candidate)) return candidate
+            current = current.parent ?: break
+        }
+        error("Cannot find parsing/native-fixtures/test-data/$relativePath from ${System.getProperty("user.dir")}")
     }
 }

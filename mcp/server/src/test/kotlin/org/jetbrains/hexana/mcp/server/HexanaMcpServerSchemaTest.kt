@@ -101,6 +101,21 @@ class HexanaMcpServerSchemaTest {
         assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, summarizeModule.defaultOutputPolicy)
         assertEquals(HexanaCliExecutionStatus.EXECUTABLE, summarizeModule.executionStatus)
 
+        val summarizeBinary = tools.single { it.commandName == "summarize-binary" }
+        assertEquals("summarize_binary", summarizeBinary.toolName)
+        assertEquals(setOf(HexanaCliToolGroup.BINARY), summarizeBinary.groups)
+        assertEquals(
+            setOf(HexanaCliInputMode.BINARY_PATH),
+            summarizeBinary.inputModes,
+        )
+        assertFalse(HexanaCliInputMode.JSON_OBJECT in summarizeBinary.inputModes)
+        assertFalse(HexanaCliInputMode.WASM_PATH in summarizeBinary.inputModes)
+        assertFalse(HexanaCliInputMode.STDIN in summarizeBinary.inputModes)
+        assertEquals(setOf(HexanaCliOutputFormat.JSON), summarizeBinary.outputFormats)
+        assertEquals(HexanaCliOutputFormat.JSON, summarizeBinary.defaultOutputFormat)
+        assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, summarizeBinary.defaultOutputPolicy)
+        assertEquals(HexanaCliExecutionStatus.EXECUTABLE, summarizeBinary.executionStatus)
+
         val wasmToWat = tools.single { it.commandName == "wasm-to-wat" }
         assertEquals("wasm_to_wat", wasmToWat.toolName)
         assertEquals(setOf(HexanaCliToolGroup.CONVERTERS), wasmToWat.groups)

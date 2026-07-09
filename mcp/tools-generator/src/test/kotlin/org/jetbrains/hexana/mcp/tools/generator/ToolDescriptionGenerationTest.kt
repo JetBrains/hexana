@@ -237,7 +237,7 @@ class ToolDescriptionGenerationTest {
                 "HexanaCliExecutionStatus",
                 "generatedCliToolCommands",
                 "generatedExecutableCliToolCommandOutput",
-                "GeneratedWasmPathCliToolCommand",
+                "GeneratedPathCliToolCommand",
                 "GeneratedTodoCliToolCommand",
                 "CliktCommand",
                 "com.github.ajalt.clikt",
@@ -251,7 +251,7 @@ class ToolDescriptionGenerationTest {
                 "import com.github.ajalt.clikt.core.CliktCommand",
                 "public data class HexanaCliToolSpec",
                 "public object HexanaGeneratedCliToolRegistry",
-                "private class GeneratedWasmPathCliToolCommand",
+                "private class GeneratedPathCliToolCommand",
                 "private class GeneratedTodoCliToolCommand",
                 "internal fun generatedCliToolCommands",
                 "internal fun generatedExecutableCliToolCommandOutput",
@@ -372,7 +372,7 @@ class ToolDescriptionGenerationTest {
         val source = buildCliToolsetFile(listOf(summarizeModuleSpec, cliOnlyTodo)).toString()
 
         assertTrue(source.contains("internal fun generatedCliToolCommands"))
-        assertTrue(source.contains("GeneratedWasmPathCliToolCommand("))
+        assertTrue(source.contains("GeneratedPathCliToolCommand("))
         assertTrue(source.contains("spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == \"summarize_module\" }"))
         assertTrue(source.contains("GeneratedTodoCliToolCommand("))
         assertTrue(source.contains("spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == \"future_cli_only\" }"))
@@ -424,7 +424,7 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
-    fun `standalone CLI toolset rejects executable CLI tools without generated command support`() {
+    fun `standalone CLI toolset supports executable BinaryOnly path tools`() {
         val executableBinary = summarizeBinarySpec.copy(
             surfaces = productionCliSurface(
                 "summarize-binary",
@@ -435,12 +435,33 @@ class ToolDescriptionGenerationTest {
             ),
         )
 
+        val source = buildCliToolsetFile(listOf(executableBinary)).toString()
+
+        assertTrue(source.contains("inputModes = setOf(HexanaCliInputMode.BINARY_PATH)"))
+        assertTrue(source.contains("pathArgumentName = \"binary\""))
+        assertTrue(source.contains("pathHelp = \"Path to a binary file.\""))
+        assertTrue(source.contains("\"summarize_binary\" -> renderSummarizeBinaryCommandOutput(command)"))
+    }
+
+    @Test
+    fun `standalone CLI toolset rejects executable CLI tools without generated command support`() {
+        val executableQuery = queryBinarySpec.copy(
+            surfaces = productionCliSurface(
+                "query-binary",
+                ToolGroup.Binary,
+                ToolOutputPolicy.ToolDefined,
+                executionStatus = CliExecutionStatus.Executable,
+                executableRenderer = executableCliRenderer("renderQueryBinaryCommandOutput"),
+            ),
+        )
+
         val error = assertFailsWith<IllegalArgumentException> {
-            buildCliToolsetFile(listOf(executableBinary)).toString()
+            buildCliToolsetFile(listOf(executableQuery)).toString()
         }
 
         assertTrue(error.message.orEmpty().contains("ToolInputPattern.WasmOnly"))
-        assertTrue(error.message.orEmpty().contains("summarize_binary"))
+        assertTrue(error.message.orEmpty().contains("ToolInputPattern.BinaryOnly"))
+        assertTrue(error.message.orEmpty().contains("query_binary"))
     }
 
     private data class RenderedStandaloneSources(

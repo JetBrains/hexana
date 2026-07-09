@@ -128,7 +128,7 @@ internal fun buildCliToolsetFile(tools: List<ToolSpec>): FileSpec {
         .addType(buildCliExecutionStatusEnum())
         .addType(buildCliToolSpecClass())
         .addType(buildCliToolRegistryObject(tools))
-        .addType(buildGeneratedWasmPathCliToolCommandClass())
+        .addType(buildGeneratedPathCliToolCommandClass())
         .addType(buildGeneratedTodoCliToolCommandClass())
         .addFunction(buildGeneratedCliToolCommandsFunction(tools))
         .addFunction(buildGeneratedExecutableCliToolCommandOutputFunction(tools))
@@ -288,7 +288,7 @@ private fun buildGeneratedCliToolCommandsFunction(tools: List<ToolSpec>): FunSpe
     visibleTools.forEach { spec ->
         val cli = spec.surfaces.cli
         val commandClass = when (cli.executionStatus) {
-            CliExecutionStatus.Executable -> "GeneratedWasmPathCliToolCommand"
+            CliExecutionStatus.Executable -> "GeneratedPathCliToolCommand"
             CliExecutionStatus.Todo -> "GeneratedTodoCliToolCommand"
             null -> error("Visible CLI tool '${spec.name}' is missing execution status.")
         }
@@ -296,6 +296,8 @@ private fun buildGeneratedCliToolCommandsFunction(tools: List<ToolSpec>): FunSpe
         code.indent()
         code.add("spec = %L,\n", cliToolSpecLookup(spec))
         if (cli.executionStatus == CliExecutionStatus.Executable) {
+            code.add("pathArgumentName = %S,\n", spec.generatedPathArgumentName())
+            code.add("pathHelp = %S,\n", spec.generatedPathHelp())
             code.add("envReader = envReader,\n")
         }
         code.add("sink = sink,\n")
@@ -307,14 +309,16 @@ private fun buildGeneratedCliToolCommandsFunction(tools: List<ToolSpec>): FunSpe
     return function.addCode(code.build()).build()
 }
 
-private fun buildGeneratedWasmPathCliToolCommandClass(): TypeSpec {
+private fun buildGeneratedPathCliToolCommandClass(): TypeSpec {
     val nullableInt = Int::class.asTypeName().copy(nullable = true)
     val stringList = KOTLIN_LIST.parameterizedBy(String::class.asTypeName())
-    return TypeSpec.classBuilder("GeneratedWasmPathCliToolCommand")
+    return TypeSpec.classBuilder("GeneratedPathCliToolCommand")
         .addModifiers(KModifier.PRIVATE)
         .primaryConstructor(
             FunSpec.constructorBuilder()
                 .addParameter("spec", CLI_TOOL_SPEC)
+                .addParameter("pathArgumentName", String::class)
+                .addParameter("pathHelp", String::class)
                 .addParameter("envReader", envReaderType())
                 .addParameter("sink", commandSinkType())
                 .build()
@@ -322,6 +326,8 @@ private fun buildGeneratedWasmPathCliToolCommandClass(): TypeSpec {
         .superclass(CLIKT_COMMAND)
         .addSuperclassConstructorParameter("name = spec.commandName")
         .addProperty(PropertySpec.builder("spec", CLI_TOOL_SPEC, KModifier.PRIVATE).initializer("spec").build())
+        .addProperty(PropertySpec.builder("pathArgumentName", String::class, KModifier.PRIVATE).initializer("pathArgumentName").build())
+        .addProperty(PropertySpec.builder("pathHelp", String::class, KModifier.PRIVATE).initializer("pathHelp").build())
         .addProperty(PropertySpec.builder("envReader", envReaderType(), KModifier.PRIVATE).initializer("envReader").build())
         .addProperty(PropertySpec.builder("sink", commandSinkType(), KModifier.PRIVATE).initializer("sink").build())
         .addFunction(
@@ -336,10 +342,8 @@ private fun buildGeneratedWasmPathCliToolCommandClass(): TypeSpec {
             PropertySpec.builder("path", String::class, KModifier.PRIVATE)
                 .delegate(
                     CodeBlock.of(
-                        "%M(name = %S, help = %S)",
+                        "%M(name = pathArgumentName, help = pathHelp)",
                         ARGUMENT,
-                        "wasm",
-                        "Path to a WebAssembly module.",
                     )
                 )
                 .build()
@@ -524,11 +528,10 @@ private fun validateGeneratedExecutableCliToolShape(spec: ToolSpec) {
     val commandName = requireNotNull(cli.commandName) {
         "Executable CLI tool '${spec.name}' is missing commandName."
     }
-    require(spec.inputPattern == ToolInputPattern.WasmOnly) {
-        "Executable CLI tool '${spec.name}' command '$commandName' must use ToolInputPattern.WasmOnly for generated CLI command support."
-    }
-    require(InputConversionCapability.WasmPath in spec.input.inputCapabilities) {
-        "Executable CLI tool '${spec.name}' command '$commandName' must support WasmPath input for generated CLI command support."
+    val pathInputCapability = spec.executablePathInputCapability()
+    require(pathInputCapability in spec.input.inputCapabilities) {
+        "Executable CLI tool '${spec.name}' command '$commandName' must use ToolInputPattern.WasmOnly or " +
+            "ToolInputPattern.BinaryOnly and support $pathInputCapability input for generated CLI command support."
     }
     requireNotNull(cli.defaultOutput) {
         "Executable CLI tool '${spec.name}' command '$commandName' must declare a default CLI output."
@@ -960,9 +963,33 @@ private fun InputConversionCapability.generatedCliInputModeName(): String =
 
 private fun ToolSpec.generatedCliInputModeNames(): List<String> =
     when (surfaces.cli.executionStatus) {
-        CliExecutionStatus.Executable -> listOf(InputConversionCapability.WasmPath.generatedCliInputModeName())
+        CliExecutionStatus.Executable -> listOf(executablePathInputCapability().generatedCliInputModeName())
         CliExecutionStatus.Todo -> emptyList()
         null -> emptyList()
+    }
+
+private fun ToolSpec.executablePathInputCapability(): InputConversionCapability =
+    when (inputPattern) {
+        ToolInputPattern.WasmOnly -> InputConversionCapability.WasmPath
+        ToolInputPattern.BinaryOnly -> InputConversionCapability.BinaryPath
+        else -> throw IllegalArgumentException(
+            "Executable CLI tool '$name' must use ToolInputPattern.WasmOnly or ToolInputPattern.BinaryOnly " +
+                "for generated CLI command support, got ${inputPattern::class.simpleName}."
+        )
+    }
+
+private fun ToolSpec.generatedPathArgumentName(): String =
+    when (executablePathInputCapability()) {
+        InputConversionCapability.WasmPath -> "wasm"
+        InputConversionCapability.BinaryPath -> "binary"
+        else -> error("Unsupported executable path input for '$name'.")
+    }
+
+private fun ToolSpec.generatedPathHelp(): String =
+    when (executablePathInputCapability()) {
+        InputConversionCapability.WasmPath -> "Path to a WebAssembly module."
+        InputConversionCapability.BinaryPath -> "Path to a binary file."
+        else -> error("Unsupported executable path input for '$name'.")
     }
 
 private fun ToolSpec.cliOutputFormats(): List<OutputConversionCapability> {

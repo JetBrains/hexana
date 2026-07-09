@@ -160,7 +160,13 @@ private val BinaryFunctionsResultClass = class_("BinaryFunctionsResult", kotlinP
 internal val BinaryTools: List<ToolSpec> = tools {
     tool("summarize_binary") {
         summary = "Summarize a Wasm or native binary with compact identity and entity counts."
-        surfaces = publicMcpbProductionCliSurface("summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
+        surfaces = publicMcpbProductionCliSurface(
+            "summarize-binary",
+            ToolGroup.Binary,
+            ToolOutputPolicy.ToolDefined,
+            executionStatus = CliExecutionStatus.Executable,
+            executableRenderer = executableCliRenderer("renderSummarizeBinaryCommandOutput"),
+        )
         guidance = """
             Use this first for an unknown binary before choosing a format-specific follow-up tool.
             Returns format, path label, size, known architecture/endian details, and bounded counts only; never raw bytes or unbounded lists.

@@ -50,6 +50,30 @@ class HexanaCliExecutionTest {
     }
 
     @Test
+    fun renderSummarizeBinaryJsonReturnsSemanticJsonWithoutMcpWrapper() {
+        val binary = temporaryFolder.newFile("sample.bin").toPath()
+        Files.write(binary, byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8))
+
+        val output = generatedExecutableCliToolCommandOutput(
+            summarizeBinaryCommand(
+                path = binary.toString(),
+                format = HexanaCliOutputFormat.JSON,
+            )
+        ).stdout
+
+        val json = Json.parseToJsonElement(output).jsonObject
+        val module = json.getValue("module").jsonObject
+        assertEquals("generic", module.getValue("format").jsonPrimitive.content)
+        assertEquals(binary.toString(), module.getValue("path").jsonPrimitive.content)
+        assertTrue(module.getValue("byteLength").jsonPrimitive.content.toInt() > 0)
+        assertTrue("counts" in json)
+        assertTrue("warnings" in json)
+        assertFalse("content" in json)
+        assertFalse("structuredContent" in json)
+        assertFalse("isError" in json)
+    }
+
+    @Test
     fun renderSummarizeModulePrettyReturnsDeterministicPlainText() {
         val wasm = createWasmFile(
             "pretty-summary.wasm",
@@ -246,7 +270,10 @@ class HexanaCliExecutionTest {
         assertToolBlockContains(
             output,
             "summarize-binary",
-            "  status: todo\n",
+            "  groups: binary\n",
+            "  status: executable\n",
+            "  formats: json\n",
+            "  default: json\n",
         )
         assertToolBlockContains(
             output,
@@ -303,11 +330,11 @@ class HexanaCliExecutionTest {
 
     @Test
     fun renderTodoToolNotImplementedMessageNamesCommandAndTool() {
-        val spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == "summarize-binary" }
+        val spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == "list-enabled-features" }
         val output = renderTodoToolNotImplementedMessage(HexanaCommand.TodoTool(spec))
 
-        assertTrue(output.contains("summarize-binary"))
-        assertTrue(output.contains("summarize_binary"))
+        assertTrue(output.contains("list-enabled-features"))
+        assertTrue(output.contains("list_enabled_features"))
         assertTrue(output.contains("not implemented"))
         assertTrue(output.contains("TODO"))
     }
@@ -338,6 +365,19 @@ class HexanaCliExecutionTest {
         resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
     ) = executableToolCommand(
         commandName = "summarize-module",
+        path = path,
+        format = format,
+        allowedRoots = allowedRoots,
+        resourceLimits = resourceLimits,
+    )
+
+    private fun summarizeBinaryCommand(
+        path: String,
+        format: HexanaCliOutputFormat,
+        allowedRoots: List<String> = emptyList(),
+        resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
+    ) = executableToolCommand(
+        commandName = "summarize-binary",
         path = path,
         format = format,
         allowedRoots = allowedRoots,
