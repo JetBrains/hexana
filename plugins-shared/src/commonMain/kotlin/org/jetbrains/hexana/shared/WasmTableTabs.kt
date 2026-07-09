@@ -31,7 +31,7 @@ class WasmTableTabsProvider : TableTabsProvider {
             if (module.dataSection != null) add("Data")
             if (module.exportSection != null) add("Exports")
             if (module.importSection != null) add("Imports")
-            if (module.functionSection != null) add("Functions")
+            if (module.codeSection != null) add("Functions")
             if (module.customSections.isNotEmpty()) add("Custom")
         }
         return Pair(names, emptyList())
@@ -151,27 +151,31 @@ private fun importsTab(provider: WasmBinaryProvider): TableTabDescriptor? {
 }
 
 private fun functionsTab(provider: WasmBinaryProvider): TableTabDescriptor? {
-    val functions = provider.functions
-    if (functions.isEmpty()) return null
+    // Use codeOffsets (lightweight byte-position scan) instead of provider.functions
+    // which triggers expensive parseTypes() for all type definitions.
+    val codeOffsets = provider.codeOffsets
+    if (codeOffsets.isEmpty()) return null
 
-    val nameSection = provider.nameSection
-    val functionNamesMap = nameSection?.functionSubsection?.namemap
-    val typeNames = nameSection?.typesSection?.namemap
+    // Check whether function names exist without triggering the (potentially huge) parse.
+    val hasFunctionNames = provider.nameSection?.functionSubsection != null
 
-    // The name section's function subsection is keyed by the GLOBAL function index (imported
-    // functions occupy [0, importFuncCount), defined functions follow), whereas this table's row
-    // index is 0-based over defined functions only. Convert before indexing the name map.
-    val importFuncCount = provider.importFuncCount
+    // Defer expensive property accesses to cell render time so the tab descriptor
+    // is created instantly even for modules with 100k+ functions.
+    val lazyImportFuncCount by lazy { provider.importFuncCount }
+    val lazyFunctions by lazy { provider.functions }
 
     return TableTabDescriptor(
         name = "Functions",
         columns = buildList {
-            if (functionNamesMap != null) {
+            if (hasFunctionNames) {
                 add(ColumnDescriptor(
                     name = "Name",
                     widthBehavior = ColumnWidth.Measured(UNIVERSAL_NAME_MEASURE),
                 ) { index ->
-                    val nameResolved = resolveFunctionName(functionNamesMap, importFuncCount + index)
+                    val functionNamesMap = provider.nameSection?.functionSubsection?.namemap
+                    val nameResolved = if (functionNamesMap != null) {
+                        resolveFunctionName(functionNamesMap, lazyImportFuncCount + index)
+                    } else "func $index"
                     CellValue(
                         nameResolved,
                         tooltip = nameResolved.takeIf { it.length > UNIVERSAL_NAME_MEASURE.length },
@@ -182,14 +186,16 @@ private fun functionsTab(provider: WasmBinaryProvider): TableTabDescriptor? {
                 name = "Signature",
                 widthBehavior = ColumnWidth.Fill(),
             ) { index ->
-                val signatureDescription = functions[index].getDescription(index, typeNames)
+                val typeNames = provider.nameSection?.typesSection?.namemap
+                val signatureDescription = lazyFunctions.getOrNull(index)?.getDescription(index, typeNames)
+                    ?: "func $index"
                 CellValue(signatureDescription, tooltip = signatureDescription)
             })
         },
-        rowCount = functions.size,
+        rowCount = codeOffsets.size,
         rowSelectionProvider = { index ->
-            val record = functions.getOrNull(index)
-            record?.let { RowSelectionData(it.offset, it.size) }
+            val entry = codeOffsets.getOrNull(index)
+            entry?.let { RowSelectionData(it.offset, it.size) }
         },
     )
 }
