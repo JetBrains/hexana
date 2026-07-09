@@ -1534,6 +1534,18 @@ class HexanaToolHandlersTest {
             InvalidInputCase("resolve_component_dependencies scanRoots", "`scanRoots` must contain at most 8 items") {
                 it.resolveComponentDependencies(wasmPathWith("scanRoots", jsonStringArray(9)))
             },
+            InvalidInputCase("check_component_compatibility dependencyPaths", "`dependencyPaths` must contain at most 64 items") {
+                it.checkComponentCompatibility(wasmPathWith("dependencyPaths", jsonStringArray(65)))
+            },
+            InvalidInputCase("audit_local_stack_budget checkedExports", "`checkedExports` must contain at most 500 items") {
+                it.auditLocalStackBudget(wasmPathWith("checkedExports", jsonStringArray(501)))
+            },
+            InvalidInputCase("resolve_wasm_frames frames", "`frames` must contain at most 200 items") {
+                it.resolveWasmFrames(wasmPathWith("frames", jsonObjectArray(201)))
+            },
+            InvalidInputCase("resolve_source_locations locations", "`locations` must contain at most 200 items") {
+                it.resolveSourceLocations(wasmPathWith("locations", jsonObjectArray(201)))
+            },
             InvalidInputCase("functions_for_indices indices", "`indices` must contain at most 10000 items") {
                 it.functionsForIndices(wasmPathWith("indices", jsonIntArray(10_001)))
             },
@@ -1840,6 +1852,12 @@ class HexanaToolHandlersTest {
     private fun jsonIntArray(size: Int): JsonArray = buildJsonArray {
         repeat(size) { index ->
             add(JsonPrimitive(index))
+        }
+    }
+
+    private fun jsonObjectArray(size: Int): JsonArray = buildJsonArray {
+        repeat(size) {
+            add(buildJsonObject {})
         }
     }
 

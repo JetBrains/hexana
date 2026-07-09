@@ -29,6 +29,10 @@ import org.slf4j.LoggerFactory
 
 private const val QUERY_FILTER_MAX_ITEMS = 20
 private const val INDICES_MAX_ITEMS = 10_000
+private const val DEPENDENCY_PATHS_MAX_ITEMS = 64
+private const val CHECKED_EXPORTS_MAX_ITEMS = 500
+private const val RESOLVE_WASM_FRAMES_MAX_ITEMS = 200
+private const val SOURCE_LOCATIONS_MAX_ITEMS = 200
 private const val SEARCH_EXPORTS_LIMIT_MAX = 200
 private const val FUNCTION_NAME_SEARCH_LIMIT_MAX = 200
 
@@ -229,7 +233,10 @@ class HexanaToolHandlers(
         return execute("check_component_compatibility", CheckComponentCompatibilityResult.serializer()) {
             analysisService.checkComponentCompatibility(
                 input = wasmInput(arguments),
-                dependencyPaths = arguments.optionalStringList("dependencyPaths").orEmpty(),
+                dependencyPaths = arguments.optionalStringList(
+                    "dependencyPaths",
+                    maxItems = DEPENDENCY_PATHS_MAX_ITEMS
+                ).orEmpty(),
                 projectRoot = arguments.optionalNonBlankString("projectRoot"),
                 previousPath = arguments.optionalNonBlankString("previousPath"),
                 dependencyLockPath = arguments.optionalNonBlankString("dependencyLockPath")
@@ -318,7 +325,10 @@ class HexanaToolHandlers(
                 input = wasmInput(arguments),
                 policyInput = arguments.optionalNonBlankString("policyPath")?.let(TextInput::FilePath),
                 logInput = arguments.optionalNonBlankString("logPath")?.let(TextInput::FilePath),
-                checkedExports = arguments.optionalStringList("checkedExports").orEmpty(),
+                checkedExports = arguments.optionalStringList(
+                    "checkedExports",
+                    maxItems = CHECKED_EXPORTS_MAX_ITEMS
+                ).orEmpty(),
                 maxLocals = arguments.nullableInt("maxLocals", minimum = 0),
                 countParams = arguments.booleanOrDefault(
                     "countParams",
@@ -346,7 +356,7 @@ class HexanaToolHandlers(
         return execute("resolve_wasm_frames", ResolveWasmFramesResult.serializer()) {
             analysisService.resolveWasmFrames(
                 input = wasmInput(arguments),
-                frames = arguments.optionalFrameInputs("frames"),
+                frames = arguments.optionalFrameInputs("frames", maxItems = RESOLVE_WASM_FRAMES_MAX_ITEMS),
                 sourceMapInput = arguments.optionalNonBlankString("sourceMapPath")?.let(TextInput::FilePath),
                 crashReportInput = arguments.optionalNonBlankString("crashReportPath")?.let(TextInput::FilePath),
             )
@@ -367,7 +377,7 @@ class HexanaToolHandlers(
         return execute("resolve_source_locations", ResolveSourceLocationsResult.serializer()) {
             analysisService.resolveSourceLocations(
                 input = wasmInput(arguments),
-                locations = arguments.requireSourceLocationInputs("locations"),
+                locations = arguments.requireSourceLocationInputs("locations", maxItems = SOURCE_LOCATIONS_MAX_ITEMS),
                 sourceMapInput = arguments.optionalNonBlankString("sourceMapPath")?.let(TextInput::FilePath)
             )
         }
@@ -807,8 +817,8 @@ class HexanaToolHandlers(
         }
     }
 
-    private fun JsonObject?.optionalFrameInputs(name: String): List<WasmFrameInput> {
-        val array = optionalObjectArray(name) ?: return emptyList()
+    private fun JsonObject?.optionalFrameInputs(name: String, maxItems: Int? = null): List<WasmFrameInput> {
+        val array = optionalObjectArray(name, maxItems) ?: return emptyList()
         return parseFrameInputs(name, array)
     }
 
@@ -823,8 +833,8 @@ class HexanaToolHandlers(
         }
     }
 
-    private fun JsonObject?.requireSourceLocationInputs(name: String): List<SourceLocationInput> {
-        val array = requireObjectArray(name)
+    private fun JsonObject?.requireSourceLocationInputs(name: String, maxItems: Int? = null): List<SourceLocationInput> {
+        val array = requireObjectArray(name, maxItems)
         return array.mapIndexed { index, value ->
             SourceLocationInput(
                 funcidx = value.optionalInt("$name[$index]", "funcidx", minimum = 0),
