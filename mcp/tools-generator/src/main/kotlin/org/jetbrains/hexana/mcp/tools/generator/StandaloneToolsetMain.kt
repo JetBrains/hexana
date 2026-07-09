@@ -91,7 +91,7 @@ internal fun buildDispatcherFile(tools: List<ToolSpec>): FileSpec {
         .addParameter(ParameterSpec.builder("handlers", TOOL_HANDLERS).build())
         .addParameter(
             ParameterSpec.builder("profile", TOOL_PROFILE)
-                .defaultValue("%T.ADVANCED", TOOL_PROFILE)
+                .defaultValue("%T.PRODUCTION", TOOL_PROFILE)
                 .build()
         )
         .addKdoc(

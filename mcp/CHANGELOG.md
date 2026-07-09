@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+- `hexana-mcp summarize-binary <binary> --format json` can now summarize Wasm and native binaries as a public CLI command, returning JSON-only compact identity, counts, and warnings without raw bytes.
+
+### Changed
+- Standalone MCP now defaults generated tool registration to the production profile; callers that need hidden or advanced tools must request `HexanaMcpToolProfile.ADVANCED`.
+- MCP tool schemas now use schema version 2 and advertise bounded list inputs such as `indices.maxItems` for clients that validate requests before calling tools.
+
 ## 0.4.0 - 2026-07-06
 
 ### Added

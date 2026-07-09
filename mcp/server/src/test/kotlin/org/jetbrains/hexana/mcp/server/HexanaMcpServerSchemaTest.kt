@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.mcp.server
 
+import io.modelcontextprotocol.kotlin.sdk.server.Server
+import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
+import io.modelcontextprotocol.kotlin.sdk.types.Implementation
+import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonArray
@@ -61,6 +65,17 @@ class HexanaMcpServerSchemaTest {
         assertTrue(advancedNames.all { HexanaMcpToolProfile.ADVANCED.includesTool(it) })
         assertTrue(productionNames.all { HexanaMcpToolProfile.PRODUCTION.includesTool(it) })
         assertFalse(HexanaMcpToolProfile.PRODUCTION.includesTool("query_artifacts"))
+    }
+
+    @Test
+    fun directGeneratedRegistrationDefaultsToProductionProfile() {
+        val server = createServerWithDirectGeneratedRegistration()
+
+        assertEquals(
+            HexanaGeneratedMcpToolProfiles.PRODUCTION_TOOL_NAMES,
+            server.tools.keys.toSet(),
+        )
+        assertFalse(server.tools.containsKey("query_artifacts"))
     }
 
     @Test
@@ -395,6 +410,20 @@ class HexanaMcpServerSchemaTest {
             .properties
             ?.jsonObject
             ?: error("Missing $toolName input schema properties")
+    }
+
+    private fun createServerWithDirectGeneratedRegistration(): Server {
+        val handlers = HexanaToolHandlers()
+        return Server(
+            serverInfo = Implementation("hexana-test", "test"),
+            options = ServerOptions(
+                capabilities = ServerCapabilities(
+                    tools = ServerCapabilities.Tools(listChanged = false)
+                )
+            )
+        ) {
+            registerHexanaTools(handlers)
+        }
     }
 
     private fun schemaTypes(schema: JsonObject): List<String> {
