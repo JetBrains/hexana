@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp.server
 
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.*
 import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
 import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
@@ -35,9 +36,11 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.slf4j.Logger
+import java.lang.reflect.Proxy
 import java.nio.file.Files
 import java.util.*
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -1608,6 +1611,20 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun cancellationIsPropagatedInsteadOfReturnedAsToolError() {
+        val handlers = HexanaToolHandlers(
+            analysisService = cancellationThrowingAnalysisService(),
+            logger = RecordingLogger()
+        )
+
+        val error = assertFailsWith<CancellationException> {
+            handlers.summarizeModule(jsonPath("/tmp/module.wasm"))
+        }
+
+        assertEquals("cancelled", error.message)
+    }
+
+    @Test
     fun internalAnalysisExceptionKeepsUserMessageAndLogsCause() {
         val logger = RecordingLogger()
         val handlers = HexanaToolHandlers(
@@ -1722,6 +1739,19 @@ class HexanaToolHandlersTest {
             0x2e, 0x64, 0x65, 0x62, 0x75, 0x67, 0x5f, 0x69, 0x6e, 0x66, 0x6f,
             0x04, 0x00, 0x00, 0x00, 0x11, 0xff,
         ).map { it.toByte() }.toByteArray()
+    }
+
+    private fun cancellationThrowingAnalysisService(): HexanaAnalysisService {
+        return Proxy.newProxyInstance(
+            HexanaAnalysisService::class.java.classLoader,
+            arrayOf(HexanaAnalysisService::class.java)
+        ) { _, method, _ ->
+            when (method.name) {
+                "summarizeModule" -> throw CancellationException("cancelled")
+                "toString" -> "CancellationThrowingAnalysisService"
+                else -> error("Unexpected service call: ${method.name}")
+            }
+        } as HexanaAnalysisService
     }
 
     private class RecordingLogger : Logger by LoggerStub() {

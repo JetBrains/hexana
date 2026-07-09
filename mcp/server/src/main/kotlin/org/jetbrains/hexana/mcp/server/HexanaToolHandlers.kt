@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.server
 
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.*
 import org.jetbrains.hexana.analytics.HexanaAnalytics
@@ -501,6 +502,8 @@ class HexanaToolHandlers(
                 content = listOf(TextContent(jsonResult)),
                 structuredContent = structuredContent
             )
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: HexanaAnalysisException) {
             captureToolEvent(toolName, startTime, success = false)
             logAnalysisFailure(toolName, error)
