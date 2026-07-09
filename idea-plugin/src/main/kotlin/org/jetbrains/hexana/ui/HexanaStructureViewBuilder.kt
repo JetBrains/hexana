@@ -20,6 +20,7 @@ import org.jetbrains.hexana.ui.panel.runWasmExportedFunction
 import org.jetbrains.hexana.wasm.components.WasmComponentExportSection
 import org.jetbrains.hexana.wasm.components.WasmComponentImportSection
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
+import java.util.concurrent.atomic.AtomicReference
 import javax.swing.Icon
 
 
@@ -93,22 +94,33 @@ private class HexanaStructureViewModel(
     private val binaryProvider: BinaryProvider,
 ) : StructureViewModel.ElementInfoProvider, StructureViewModel {
 
+    private val modelListeners = mutableListOf<ModelListener>()
     private val root = buildRoot()
 
     private fun buildRoot(): HexanaStructureElement {
-        val children = when (binaryProvider) {
-            is WasmBinaryProvider -> buildWasmElements(binaryProvider, editor)
-            is WasmComponentBinaryProvider -> buildWasmComponentElements(binaryProvider, editor)
-            is ElfBinaryProvider -> buildElfElements(binaryProvider, editor)
-            else -> emptyList()
-        }
-        return HexanaStructureElement(
+        val rootElement = HexanaStructureElement(
             name = editor.file?.name ?: "Binary",
             range = IntRange.EMPTY,
             icon = AllIcons.FileTypes.Any_type,
-            children = children,
             editor = editor,
+            hasChildren = true,
         )
+        // Compute children on a pooled thread so the EDT is never blocked
+        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+            val children = when (binaryProvider) {
+                is WasmBinaryProvider -> buildWasmElements(binaryProvider, editor)
+                is WasmComponentBinaryProvider -> buildWasmComponentElements(binaryProvider, editor)
+                is ElfBinaryProvider -> buildElfElements(binaryProvider, editor)
+                else -> emptyList()
+            }
+            rootElement.setResolvedChildren(children)
+            com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
+                synchronized(modelListeners) {
+                    modelListeners.forEach { it.onModelChanged() }
+                }
+            }
+        }
+        return rootElement
     }
 
     override fun getRoot(): StructureViewTreeElement = root
@@ -117,13 +129,18 @@ private class HexanaStructureViewModel(
     override fun getSorters() = emptyArray<com.intellij.ide.util.treeView.smartTree.Sorter>()
     override fun getGroupers() = emptyArray<com.intellij.ide.util.treeView.smartTree.Grouper>()
 
-    override fun shouldEnterElement(element: Any?): Boolean = element is HexanaStructureElement && element.children.isNotEmpty()
-    override fun isAlwaysShowsPlus(element: StructureViewTreeElement?): Boolean = false
+    override fun shouldEnterElement(element: Any?): Boolean = element is HexanaStructureElement && element.hasChildren
+    override fun isAlwaysShowsPlus(element: StructureViewTreeElement?): Boolean =
+        element is HexanaStructureElement && element.hasChildren
     override fun isAlwaysLeaf(element: StructureViewTreeElement?): Boolean =
-        element is HexanaStructureElement && element.children.isEmpty()
+        element is HexanaStructureElement && !element.hasChildren
 
-    override fun addModelListener(modelListener: ModelListener) {}
-    override fun removeModelListener(modelListener: ModelListener) {}
+    override fun addModelListener(modelListener: ModelListener) {
+        synchronized(modelListeners) { modelListeners.add(modelListener) }
+    }
+    override fun removeModelListener(modelListener: ModelListener) {
+        synchronized(modelListeners) { modelListeners.remove(modelListener) }
+    }
     override fun addEditorPositionListener(listener: com.intellij.ide.structureView.FileEditorPositionListener) {}
     override fun removeEditorPositionListener(listener: com.intellij.ide.structureView.FileEditorPositionListener) {}
     override fun dispose() {}
@@ -138,14 +155,30 @@ internal class HexanaStructureElement(
     val children: List<HexanaStructureElement> = emptyList(),
     private val editor: HexanaFileEditor? = null,
     val runAction: (() -> Unit)? = null,
+    private val childrenProvider: (() -> List<HexanaStructureElement>)? = null,
+    val hasChildren: Boolean = children.isNotEmpty() || childrenProvider != null,
 ) : StructureViewTreeElement {
+
+    // Async-resolved children set from background thread; takes priority over lazy provider
+    private val asyncChildren: AtomicReference<List<HexanaStructureElement>?> = AtomicReference(null)
+
+    private val resolvedChildren: List<HexanaStructureElement> by lazy {
+        childrenProvider?.invoke() ?: children
+    }
+
+    fun setResolvedChildren(value: List<HexanaStructureElement>) {
+        asyncChildren.set(value)
+    }
 
     override fun getPresentation(): ItemPresentation = object : ItemPresentation {
         override fun getPresentableText(): String = name
         override fun getIcon(unused: Boolean): Icon? = icon
     }
 
-    override fun getChildren(): Array<TreeElement> = children.toTypedArray()
+    override fun getChildren(): Array<TreeElement> {
+        val async = asyncChildren.get()
+        return (async ?: resolvedChildren).toTypedArray()
+    }
 
     override fun getValue(): Any = this
 
@@ -183,69 +216,72 @@ private fun buildWasmElements(provider: WasmBinaryProvider, editor: HexanaFileEd
     val wasmModule = provider.wasmModule ?: return emptyList()
     val mergedSectionNames = setOf("Functions", "Code")
     val result = mutableListOf<HexanaStructureElement>()
-    val nameSection = provider.nameSection
 
-    // Build merged "Functions" folder eagerly so we can insert it after Exports
-    val functionsFolder = run {
-        val codeOffsets = provider.codeOffsets
-        if (codeOffsets.isEmpty()) return@run null
-        val nameMap = provider.nameSection?.functionSubsection?.namemap ?: emptyMap()
-        val importFuncCount = provider.importFuncCount
-        val children = codeOffsets.mapIndexed { codeIndex, entry ->
-            val globalIndex = importFuncCount + codeIndex
-            val name = nameMap[globalIndex]?.let { "$it (func $globalIndex)" } ?: "func $globalIndex"
-            val range = IntRange(entry.offset, entry.offset + entry.size - 1)
-            HexanaStructureElement(
-                name = name,
-                range = range,
-                icon = AllIcons.Nodes.Function,
-                editor = editor,
-            )
-        }
-        val codeSection = wasmModule.codeSection
-        val folderRange = codeSection?.sectionRange ?: children.map { it.range }.structureCoveringRange()
+    // Build merged "Functions" folder lazily so structure view opens fast for large modules
+    // Use codeSection range directly to avoid triggering expensive codeOffsets parse
+    val codeSection = wasmModule.codeSection
+    val functionsFolder = if (codeSection != null) {
         HexanaStructureElement(
             name = "Functions",
-            range = folderRange,
+            range = codeSection.sectionRange,
             icon = AllIcons.Nodes.Folder,
             editor = editor,
-            children = children,
+            childrenProvider = {
+                val codeOffsets = provider.codeOffsets
+                val nameMap = provider.nameSection?.functionSubsection?.namemap ?: emptyMap()
+                val importFuncCount = provider.importFuncCount
+                codeOffsets.mapIndexed { codeIndex, entry ->
+                    val globalIndex = importFuncCount + codeIndex
+                    val name = nameMap[globalIndex]?.let { "$it (func $globalIndex)" } ?: "func $globalIndex"
+                    val range = IntRange(entry.offset, entry.offset + entry.size - 1)
+                    HexanaStructureElement(
+                        name = name,
+                        range = range,
+                        icon = AllIcons.Nodes.Function,
+                        editor = editor,
+                    )
+                }
+            },
         )
-    }
+    } else null
     var functionsInserted = false
 
-    // Pre-compute runnable export lookup for the Exports section
-    val exports = provider.exports
-    val runnableExports = exports
-        .filterIsInstance<WasmFunctionExportRecordEntry>()
-        .filter { !isInternalName(it.name) }
-        .associateBy { it.offset }
     val file = (provider as? WasmBinaryVirtualFileProvider)?.file
     val project = editor.myProject
 
     for (section in wasmModule.sections) {
         if (section.name in mergedSectionNames) continue
-        val records = provider.getRecords(section)
         val isExportsSection = section.name == "Exports"
-        val sectionNameMap = getNameMapForSection(section.name, nameSection)
+        val capturedSection = section
         result.add(
             HexanaStructureElement(
                 name = section.name,
                 range = section.sectionRange,
                 icon = AllIcons.Nodes.Folder,
                 editor = editor,
-                children = records.mapIndexed { index, record ->
-                    val exportEntry = if (isExportsSection) runnableExports[record.range.offset] else null
-                    val runAction = if (exportEntry != null && file != null) {
-                        { runWasmExportedFunction(provider, file, project, exportEntry) }
+                childrenProvider = {
+                    val records = provider.getRecords(capturedSection)
+                    val sectionNameMap = getNameMapForSection(capturedSection.name, provider.nameSection)
+                    // Compute runnable exports lazily only for the Exports section
+                    val runnableExports = if (isExportsSection) {
+                        provider.exports
+                            .filterIsInstance<WasmFunctionExportRecordEntry>()
+                            .filter { !isInternalName(it.name) }
+                            .associateBy { it.offset }
                     } else null
-                    HexanaStructureElement(
-                        name = enrichRecordName(record.name, index, sectionNameMap),
-                        range = record.range.intRange,
-                        icon = if (exportEntry != null) AllIcons.RunConfigurations.TestState.Run else AllIcons.Nodes.Property,
-                        editor = editor,
-                        runAction = runAction,
-                    )
+                    records.mapIndexed { index, record ->
+                        val exportEntry = runnableExports?.get(record.range.offset)
+                        val runAction = if (exportEntry != null && file != null) {
+                            { runWasmExportedFunction(provider, file, project, exportEntry) }
+                        } else null
+                        HexanaStructureElement(
+                            name = enrichRecordName(record.name, index, sectionNameMap),
+                            range = record.range.intRange,
+                            icon = if (exportEntry != null) AllIcons.RunConfigurations.TestState.Run else AllIcons.Nodes.Property,
+                            editor = editor,
+                            runAction = runAction,
+                        )
+                    }
                 },
             )
         )
@@ -268,106 +304,87 @@ private fun buildWasmElements(provider: WasmBinaryProvider, editor: HexanaFileEd
 private fun buildWasmComponentElements(provider: WasmComponentBinaryProvider, editor: HexanaFileEditor): List<HexanaStructureElement> {
     val wasmComponent = provider.wasmModule ?: return emptyList()
 
-    // Group sections by name; each section instance becomes a child node within its category folder
+    // Group sections by name; collect section ranges and section instances for lazy children building
+    data class SectionInfo(val section: Any, val sectionRange: IntRange)
     val categoryOrder = mutableListOf<String>()
-    val categorySections = mutableMapOf<String, MutableList<HexanaStructureElement>>()
-
-    // Pre-scan export/import names keyed by section offset for enrichment
-    val exportsBySection = mutableMapOf<Int, List<HexanaStructureElement>>()
-    var exportCounter = 0
-    for (section in wasmComponent.sections) {
-        if (section is WasmComponentExportSection) {
-            val parsed = try { with(section) { provider.bytes.scan() } } catch (_: Throwable) { emptyList() }
-            val baseIndex = exportCounter
-            exportsBySection[section.sectionOffset] = parsed.mapIndexed { i, exp ->
-                HexanaStructureElement(
-                    name = "${exp.exportName} (ComponentExport ${baseIndex + i})",
-                    range = IntRange(exp.offset, exp.offset + exp.size - 1),
-                    icon = AllIcons.Nodes.Property,
-                    editor = editor,
-                )
-            }
-            exportCounter += parsed.size
-        }
-    }
-    val importsBySection = mutableMapOf<Int, List<HexanaStructureElement>>()
-    var importCounter = 0
-    for (section in wasmComponent.sections) {
-        if (section is WasmComponentImportSection) {
-            val parsed = try { with(section) { provider.bytes.scan() } } catch (_: Throwable) { emptyList() }
-            val baseIndex = importCounter
-            importsBySection[section.sectionOffset] = parsed.mapIndexed { i, imp ->
-                HexanaStructureElement(
-                    name = "${imp.importName} (ComponentImport ${baseIndex + i})",
-                    range = IntRange(imp.offset, imp.offset + imp.size - 1),
-                    icon = AllIcons.Nodes.Property,
-                    editor = editor,
-                )
-            }
-            importCounter += parsed.size
-        }
-    }
+    val categorySectionInfos = mutableMapOf<String, MutableList<SectionInfo>>()
 
     for (section in wasmComponent.sections) {
-        // Use pre-scanned export/import children when available
-        val namedChildren = exportsBySection[section.sectionOffset]
-            ?: importsBySection[section.sectionOffset]
-        val records = if (namedChildren != null) {
-            null
-        } else {
-            try { section.getRecordRanges(provider.bytes) } catch (_: Throwable) { emptyList() }
-        }
-        if (section.name !in categorySections) {
+        if (section.name !in categorySectionInfos) {
             categoryOrder.add(section.name)
-            categorySections[section.name] = mutableListOf()
+            categorySectionInfos[section.name] = mutableListOf()
         }
-        // For named children (exports/imports), add them directly to the category
-        // instead of wrapping in an intermediate section-instance node
-        if (namedChildren != null) {
-            categorySections[section.name]!!.addAll(namedChildren)
-        } else {
-            val sectionIndex = categorySections[section.name]!!.size
-            val recordChildren = records!!.mapIndexed { i, record ->
-                HexanaStructureElement(
-                    name = "${record.name}",
-                    range = record.range.intRange,
-                    icon = AllIcons.Nodes.Property,
-                    editor = editor,
-                )
-            }
-            categorySections[section.name]!!.add(
-                HexanaStructureElement(
-                    name = "${section.name} $sectionIndex",
-                    range = section.sectionRange,
-                    icon = AllIcons.Nodes.Property,
-                    editor = editor,
-                    children = recordChildren,
-                )
-            )
-        }
+        categorySectionInfos[section.name]!!.add(SectionInfo(section, section.sectionRange))
     }
 
     return categoryOrder.map { name ->
-        val children = categorySections[name]!!
-        // If there's only one section instance, flatten: use its children directly
-        if (children.size == 1 && children[0].children.isNotEmpty()) {
-            HexanaStructureElement(
-                name = name,
-                range = children[0].range,
-                icon = AllIcons.Nodes.Folder,
-                editor = editor,
-                children = children[0].children,
-            )
-        } else {
-            val folderRange = children.map { it.range }.structureCoveringRange()
-            HexanaStructureElement(
-                name = name,
-                range = folderRange,
-                icon = AllIcons.Nodes.Folder,
-                editor = editor,
-                children = children,
-            )
-        }
+        val sectionInfos = categorySectionInfos[name]!!
+        val folderRange = sectionInfos.map { it.sectionRange }.structureCoveringRange()
+        HexanaStructureElement(
+            name = name,
+            range = folderRange,
+            icon = AllIcons.Nodes.Folder,
+            editor = editor,
+            childrenProvider = {
+                val result = mutableListOf<HexanaStructureElement>()
+                var exportBase = 0
+                var importBase = 0
+                for ((idx, info) in sectionInfos.withIndex()) {
+                    val section = info.section
+                    when {
+                        section is WasmComponentExportSection -> {
+                            val parsed = try { with(section) { provider.bytes.scan() } } catch (_: Throwable) { emptyList() }
+                            val baseIndex = exportBase
+                            exportBase += parsed.size
+                            parsed.mapIndexedTo(result) { i, exp ->
+                                HexanaStructureElement(
+                                    name = "${exp.exportName} (ComponentExport ${baseIndex + i})",
+                                    range = IntRange(exp.offset, exp.offset + exp.size - 1),
+                                    icon = AllIcons.Nodes.Property,
+                                    editor = editor,
+                                )
+                            }
+                        }
+                        section is WasmComponentImportSection -> {
+                            val parsed = try { with(section) { provider.bytes.scan() } } catch (_: Throwable) { emptyList() }
+                            val baseIndex = importBase
+                            importBase += parsed.size
+                            parsed.mapIndexedTo(result) { i, imp ->
+                                HexanaStructureElement(
+                                    name = "${imp.importName} (ComponentImport ${baseIndex + i})",
+                                    range = IntRange(imp.offset, imp.offset + imp.size - 1),
+                                    icon = AllIcons.Nodes.Property,
+                                    editor = editor,
+                                )
+                            }
+                        }
+                        else -> {
+                            @Suppress("UNCHECKED_CAST")
+                            val wasmSection = section as org.jetbrains.hexana.wasm.components.WasmComponentSection
+                            val records = try { wasmSection.getRecordRanges(provider.bytes) } catch (_: Throwable) { emptyList() }
+                            val recordChildren = records.mapIndexed { i, record ->
+                                HexanaStructureElement(
+                                    name = "${record.name}",
+                                    range = record.range.intRange,
+                                    icon = AllIcons.Nodes.Property,
+                                    editor = editor,
+                                )
+                            }
+                            result.add(
+                                HexanaStructureElement(
+                                    name = "${name} $idx",
+                                    range = info.sectionRange,
+                                    icon = AllIcons.Nodes.Property,
+                                    editor = editor,
+                                    children = recordChildren,
+                                )
+                            )
+                        }
+                    }
+                }
+                result
+            },
+        )
     }
 }
 
