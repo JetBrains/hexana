@@ -74,6 +74,7 @@ internal val ModuleTools: List<ToolSpec> = tools {
             ToolOutputPolicy.ToolDefined,
             executionStatus = CliExecutionStatus.Executable,
             defaultOutput = OutputConversionCapability.Pretty,
+            executableRenderer = executableCliRenderer("renderSummarizeModuleCommandOutput"),
         )
         guidance = """
             Summarize a WebAssembly (.wasm) module with high-level counts for its major sections and declarations.

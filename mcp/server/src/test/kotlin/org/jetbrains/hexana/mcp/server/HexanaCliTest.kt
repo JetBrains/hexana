@@ -154,9 +154,10 @@ class HexanaCliTest {
 
     @Test
     fun parseUsesGeneratedDefaultFormatForSummarizeModule() {
-        val command = cli().parse(arrayOf("summarize-module", "app.wasm"))
-
-        assertIs<HexanaCommand.SummarizeModule>(command)
+        val command = assertGeneratedExecutableTool(
+            cli().parse(arrayOf("summarize-module", "app.wasm")),
+            "summarize-module",
+        )
         assertEquals("app.wasm", command.path)
         assertEquals(HexanaCliOutputFormat.PRETTY, command.format)
         assertEquals(emptyList(), command.allowedRoots)
@@ -165,34 +166,37 @@ class HexanaCliTest {
 
     @Test
     fun parseAcceptsExplicitSummarizeModuleJsonFormat() {
-        val command = cli().parse(arrayOf("summarize-module", "app.wasm", "--format", "json"))
-
-        assertIs<HexanaCommand.SummarizeModule>(command)
+        val command = assertGeneratedExecutableTool(
+            cli().parse(arrayOf("summarize-module", "app.wasm", "--format", "json")),
+            "summarize-module",
+        )
         assertEquals(HexanaCliOutputFormat.JSON, command.format)
     }
 
     @Test
     fun parseAcceptsExplicitSummarizeModulePrettyFormat() {
-        val command = cli().parse(arrayOf("summarize-module", "app.wasm", "--format", "pretty"))
-
-        assertIs<HexanaCommand.SummarizeModule>(command)
+        val command = assertGeneratedExecutableTool(
+            cli().parse(arrayOf("summarize-module", "app.wasm", "--format", "pretty")),
+            "summarize-module",
+        )
         assertEquals(HexanaCliOutputFormat.PRETTY, command.format)
     }
 
     @Test
     fun parseCombinesAllowedRootsFromCliAndEnvForSummarizeModule() {
-        val command = HexanaCli { name ->
-            if (name == "HEXANA_MCP_ALLOWED_ROOTS") "/env/project,/env/deps" else null
-        }.parse(
-            arrayOf(
-                "summarize-module",
-                "app.wasm",
-                "--allowed-root",
-                "/cli/project",
-            )
+        val command = assertGeneratedExecutableTool(
+            HexanaCli { name ->
+                if (name == "HEXANA_MCP_ALLOWED_ROOTS") "/env/project,/env/deps" else null
+            }.parse(
+                arrayOf(
+                    "summarize-module",
+                    "app.wasm",
+                    "--allowed-root",
+                    "/cli/project",
+                )
+            ),
+            "summarize-module",
         )
-
-        assertIs<HexanaCommand.SummarizeModule>(command)
         assertEquals(listOf("/cli/project", "/env/project", "/env/deps"), command.allowedRoots)
     }
 
@@ -209,9 +213,10 @@ class HexanaCliTest {
 
     @Test
     fun parseUsesGeneratedDefaultFormatForWasmToWat() {
-        val command = cli().parse(arrayOf("wasm-to-wat", "app.wasm"))
-
-        assertIs<HexanaCommand.WasmToWat>(command)
+        val command = assertGeneratedExecutableTool(
+            cli().parse(arrayOf("wasm-to-wat", "app.wasm")),
+            "wasm-to-wat",
+        )
         assertEquals("app.wasm", command.path)
         assertEquals(HexanaCliOutputFormat.RAW, command.format)
         assertEquals(emptyList(), command.allowedRoots)
@@ -223,10 +228,10 @@ class HexanaCliTest {
         val raw = cli().parse(arrayOf("wasm-to-wat", "app.wasm", "--format", "raw"))
         val json = cli().parse(arrayOf("wasm-to-wat", "app.wasm", "--format", "json"))
 
-        assertIs<HexanaCommand.WasmToWat>(raw)
-        assertEquals(HexanaCliOutputFormat.RAW, raw.format)
-        assertIs<HexanaCommand.WasmToWat>(json)
-        assertEquals(HexanaCliOutputFormat.JSON, json.format)
+        val rawCommand = assertGeneratedExecutableTool(raw, "wasm-to-wat")
+        assertEquals(HexanaCliOutputFormat.RAW, rawCommand.format)
+        val jsonCommand = assertGeneratedExecutableTool(json, "wasm-to-wat")
+        assertEquals(HexanaCliOutputFormat.JSON, jsonCommand.format)
     }
 
     @Test
@@ -274,10 +279,12 @@ class HexanaCliTest {
         HexanaGeneratedCliToolRegistry.TOOLS
             .filter { it.executionStatus == HexanaCliExecutionStatus.EXECUTABLE }
             .forEach { spec ->
-                val command = parseExecutableGeneratedCliTool(spec)
+                val command = assertGeneratedExecutableTool(
+                    cli().parse(arrayOf(spec.commandName, "app.wasm")),
+                    spec.commandName,
+                )
 
-                assertFalse(command is HexanaCommand.TodoTool, "${spec.commandName} must use a runtime command")
-                assertNotEquals(HexanaCommand.Help, command, "${spec.commandName} must be registered as a subcommand")
+                assertEquals(spec, command.spec)
 
                 val help = cli().helpText(arrayOf(spec.commandName, "--help"))
 
@@ -333,13 +340,17 @@ class HexanaCliTest {
     }
 
     @Test
-    fun parseKeepsExecutableGeneratedCommandsOnHandWrittenVariants() {
-        val summarize = cli().parse(arrayOf("summarize-module", "app.wasm"))
-        val wat = cli().parse(arrayOf("wasm-to-wat", "app.wasm"))
+    fun parseKeepsExecutableGeneratedCommandsOnGeneratedExecutableVariant() {
+        val summarize = assertGeneratedExecutableTool(
+            cli().parse(arrayOf("summarize-module", "app.wasm")),
+            "summarize-module",
+        )
+        val wat = assertGeneratedExecutableTool(
+            cli().parse(arrayOf("wasm-to-wat", "app.wasm")),
+            "wasm-to-wat",
+        )
 
-        assertIs<HexanaCommand.SummarizeModule>(summarize)
         assertEquals("app.wasm", summarize.path)
-        assertIs<HexanaCommand.WasmToWat>(wat)
         assertEquals("app.wasm", wat.path)
     }
 
@@ -560,13 +571,16 @@ class HexanaCliTest {
         fun generatedCliToolSpec(commandName: String): HexanaCliToolSpec =
             HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == commandName }
 
-        fun parseExecutableGeneratedCliTool(spec: HexanaCliToolSpec): HexanaCommand =
-            when (spec.commandName) {
-                "summarize-module",
-                "wasm-to-wat" -> HexanaCli().parse(arrayOf(spec.commandName, "app.wasm"))
-
-                else -> fail("No runtime parse assertion for generated executable CLI command: ${spec.commandName}")
-            }
+        fun assertGeneratedExecutableTool(
+            command: HexanaCommand,
+            commandName: String,
+        ): HexanaCommand.ExecutableTool {
+            val expectedSpec = generatedCliToolSpec(commandName)
+            assertIs<HexanaCommand.ExecutableTool>(command, "$commandName must use generated executable command path")
+            assertEquals(expectedSpec, command.spec)
+            assertEquals(HexanaCliExecutionStatus.EXECUTABLE, command.spec.executionStatus)
+            return command
+        }
 
         fun HexanaCliToolSpec.supportedFormatNames(): String =
             outputFormats.joinToString { it.name.lowercase() }

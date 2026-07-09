@@ -9,7 +9,9 @@ import org.jetbrains.hexana.mcp.tools.ToolInputPattern
 import org.jetbrains.hexana.mcp.tools.ToolGroup
 import org.jetbrains.hexana.mcp.tools.ToolOutputPolicy
 import org.jetbrains.hexana.mcp.tools.ToolSpec
+import org.jetbrains.hexana.mcp.tools.WasmInputClass
 import org.jetbrains.hexana.mcp.tools.class_
+import org.jetbrains.hexana.mcp.tools.executableCliRenderer
 import org.jetbrains.hexana.mcp.tools.list
 import org.jetbrains.hexana.mcp.tools.noMcpCliSurface
 import org.jetbrains.hexana.mcp.tools.productionCliSurface
@@ -69,6 +71,19 @@ class ToolDescriptionGenerationTest {
         surfaces = productionCliSurface("query-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
         handlerFqn = "org.jetbrains.hexana.mcp.query.queryBinary",
         standaloneHandler = StandaloneHandlerSpec.defaultForToolName("query_binary"),
+    )
+    private val summarizeModuleSpec = summarizeBinarySpec.copy(
+        name = "summarize_module",
+        input = WasmInputClass,
+        inputPattern = ToolInputPattern.WasmOnly,
+        surfaces = productionCliSurface(
+            "summarize-module",
+            ToolGroup.Module,
+            ToolOutputPolicy.ToolDefined,
+            executionStatus = CliExecutionStatus.Executable,
+            executableRenderer = executableCliRenderer("renderSummarizeModuleCommandOutput"),
+        ),
+        handlerFqn = "org.jetbrains.hexana.mcp.query.readModuleSummary",
     )
 
     @Test
@@ -224,20 +239,12 @@ class ToolDescriptionGenerationTest {
 
     @Test
     fun `standalone CLI registry emits execution status independently from MCP visibility`() {
-        val executable = summarizeBinarySpec.copy(
-            surfaces = productionCliSurface(
-                "summarize-binary",
-                ToolGroup.Binary,
-                ToolOutputPolicy.ToolDefined,
-                executionStatus = CliExecutionStatus.Executable,
-            ),
-        )
         val cliOnlyTodo = summarizeBinarySpec.copy(
             name = "future_cli_only",
             surfaces = noMcpCliSurface("future-cli-only", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
         )
 
-        val source = buildDispatcherFile(listOf(executable, cliOnlyTodo)).toString()
+        val source = buildDispatcherFile(listOf(summarizeModuleSpec, cliOnlyTodo)).toString()
 
         assertTrue(source.contains("public enum class HexanaCliExecutionStatus"))
         assertTrue(source.contains("executionStatus = HexanaCliExecutionStatus.EXECUTABLE"))
@@ -245,6 +252,87 @@ class ToolDescriptionGenerationTest {
         assertTrue(source.contains("toolName = \"future_cli_only\""))
         assertTrue(source.contains("executionStatus = HexanaCliExecutionStatus.TODO"))
         assertFalse(source.contains("profile.includesTool(\"future_cli_only\")"))
+    }
+
+    @Test
+    fun `standalone dispatcher generates CLI tool commands from catalog metadata`() {
+        val cliOnlyTodo = summarizeBinarySpec.copy(
+            name = "future_cli_only",
+            surfaces = noMcpCliSurface("future-cli-only", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
+        )
+
+        val source = buildDispatcherFile(listOf(summarizeModuleSpec, cliOnlyTodo)).toString()
+
+        assertTrue(source.contains("internal fun generatedCliToolCommands"))
+        assertTrue(source.contains("GeneratedWasmPathCliToolCommand("))
+        assertTrue(source.contains("spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == \"summarize_module\" }"))
+        assertTrue(source.contains("GeneratedTodoCliToolCommand("))
+        assertTrue(source.contains("spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == \"future_cli_only\" }"))
+    }
+
+    @Test
+    fun `standalone dispatcher generates executable CLI renderer mapping from catalog metadata`() {
+        val converterResult = class_(
+            "ConverterResult",
+            kotlinPackage = "org.jetbrains.hexana.mcp.model.test",
+        ) {
+            outputCapabilities(OutputConversionCapability.SemanticJson, OutputConversionCapability.RawText)
+            string("wat").describe("WAT text.")
+        }
+        val converter = summarizeModuleSpec.copy(
+            name = "wasm_to_wat",
+            output = converterResult,
+            surfaces = noMcpCliSurface(
+                "wasm-to-wat",
+                ToolGroup.Converters,
+                ToolOutputPolicy.ToolDefined,
+                executionStatus = CliExecutionStatus.Executable,
+                defaultOutput = OutputConversionCapability.RawText,
+                executableRenderer = executableCliRenderer("renderWasmToWatCommandOutput"),
+            ),
+            handlerFqn = "org.jetbrains.hexana.mcp.server.wasmToWat",
+        )
+
+        val source = buildDispatcherFile(listOf(summarizeModuleSpec, converter)).toString()
+
+        assertTrue(source.contains("internal fun generatedExecutableCliToolCommandOutput"))
+        assertTrue(source.contains("\"summarize_module\" -> renderSummarizeModuleCommandOutput(command)"))
+        assertTrue(source.contains("\"wasm_to_wat\" -> renderWasmToWatCommandOutput(command)"))
+    }
+
+    @Test
+    fun `standalone dispatcher rejects executable CLI tools missing renderer metadata`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            productionCliSurface(
+                "missing-renderer",
+                ToolGroup.Module,
+                ToolOutputPolicy.ToolDefined,
+                executionStatus = CliExecutionStatus.Executable,
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("must declare an executable renderer"))
+        assertTrue(error.message.orEmpty().contains("missing-renderer"))
+    }
+
+    @Test
+    fun `standalone dispatcher rejects executable CLI tools without generated command support`() {
+        val executableBinary = summarizeBinarySpec.copy(
+            surfaces = productionCliSurface(
+                "summarize-binary",
+                ToolGroup.Binary,
+                ToolOutputPolicy.ToolDefined,
+                executionStatus = CliExecutionStatus.Executable,
+                executableRenderer = executableCliRenderer("renderSummarizeBinaryCommandOutput"),
+            ),
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            buildDispatcherFile(listOf(executableBinary)).toString()
+        }
+
+        assertTrue(error.message.orEmpty().contains("ToolInputPattern.WasmOnly"))
+        assertTrue(error.message.orEmpty().contains("summarize_binary"))
     }
 
     private fun renderGeneratedSource(mainClassName: String, generatedFile: Path): String {

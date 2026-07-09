@@ -321,7 +321,8 @@ class HexanaCliExecutionTest {
         format: HexanaCliOutputFormat,
         allowedRoots: List<String> = emptyList(),
         resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
-    ) = HexanaCommand.SummarizeModule(
+    ) = executableToolCommand(
+        commandName = "summarize-module",
         path = path,
         format = format,
         allowedRoots = allowedRoots,
@@ -333,7 +334,22 @@ class HexanaCliExecutionTest {
         format: HexanaCliOutputFormat,
         allowedRoots: List<String> = emptyList(),
         resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
-    ) = HexanaCommand.WasmToWat(
+    ) = executableToolCommand(
+        commandName = "wasm-to-wat",
+        path = path,
+        format = format,
+        allowedRoots = allowedRoots,
+        resourceLimits = resourceLimits,
+    )
+
+    private fun executableToolCommand(
+        commandName: String,
+        path: String,
+        format: HexanaCliOutputFormat,
+        allowedRoots: List<String>,
+        resourceLimits: HexanaResourceLimits,
+    ) = HexanaCommand.ExecutableTool(
+        spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == commandName },
         path = path,
         format = format,
         allowedRoots = allowedRoots,

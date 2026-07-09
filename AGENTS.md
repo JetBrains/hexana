@@ -137,7 +137,9 @@ Existing IDE run configurations currently include:
     `HexanaTools.kt` only composes the catalog order, while feature files such as `FunctionTools.kt` and `DataTools.kt`
     own their related inputs, result schema mirrors, and tool definitions.
     Regenerate with `./gradlew :idea-plugin:generateHexanaToolset`.
-- `mcp/server/src/main/gen/HexanaToolDispatcher.kt` is generated from the same DSL; regenerate with
+- `mcp/server/src/main/gen/HexanaToolDispatcher.kt` is generated from the same DSL. It contains standalone MCP tool
+  registration plus generated CLI-visible tool metadata, CLI tool command construction, and executable CLI renderer
+  dispatch. Regenerate with
   `./gradlew :mcp:server:generateHexanaToolDispatcher`. If you change a tool's name, description, input shape, or output
   shape, edit the DSL and rerun both generators in the same change.
 - Embedded converter binaries live here:

@@ -485,6 +485,17 @@ data class PublicMcpbSurfaceSpec(
     }
 }
 
+data class ExecutableCliRendererSpec(val methodName: String) {
+    init {
+        require(STANDALONE_HANDLER_METHOD_NAME_REGEX.matches(methodName)) {
+            "Executable CLI renderer method name must be a Kotlin method name, got `$methodName`."
+        }
+    }
+}
+
+fun executableCliRenderer(methodName: String): ExecutableCliRendererSpec =
+    ExecutableCliRendererSpec(methodName.trim())
+
 data class CliSurfaceSpec(
     val visible: Boolean,
     val commandName: String?,
@@ -493,6 +504,7 @@ data class CliSurfaceSpec(
     val executionStatus: CliExecutionStatus? = null,
     val outputOverride: OutputConversionCapability? = null,
     val defaultOutput: OutputConversionCapability? = null,
+    val executableRenderer: ExecutableCliRendererSpec? = null,
 ) {
     init {
         if (visible) {
@@ -504,6 +516,16 @@ data class CliSurfaceSpec(
             require(outputPolicy != null) { "Visible CLI surface '$commandName' must declare an output policy." }
             require(executionStatus != null) { "Visible CLI surface '$commandName' must declare an execution status." }
             require(defaultOutput != null) { "Visible CLI surface '$commandName' must declare a default output." }
+            if (executionStatus == CliExecutionStatus.Executable) {
+                require(executableRenderer != null) {
+                    "Executable CLI surface '$commandName' must declare an executable renderer."
+                }
+            }
+            if (executionStatus == CliExecutionStatus.Todo) {
+                require(executableRenderer == null) {
+                    "TODO CLI surface '$commandName' must not declare an executable renderer."
+                }
+            }
         } else {
             require(commandName == null) { "Hidden CLI surface must not declare a command name." }
             require(groups.isEmpty()) { "Hidden CLI surface must not declare groups." }
@@ -511,6 +533,7 @@ data class CliSurfaceSpec(
             require(executionStatus == null) { "Hidden CLI surface must not declare an execution status." }
             require(outputOverride == null) { "Hidden CLI surface must not declare an output override." }
             require(defaultOutput == null) { "Hidden CLI surface must not declare a default output." }
+            require(executableRenderer == null) { "Hidden CLI surface must not declare an executable renderer." }
         }
     }
 
@@ -523,6 +546,7 @@ data class CliSurfaceSpec(
             executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
             outputOverride: OutputConversionCapability? = null,
             defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
+            executableRenderer: ExecutableCliRendererSpec? = null,
         ): CliSurfaceSpec = CliSurfaceSpec(
             visible = true,
             commandName = commandName,
@@ -531,6 +555,7 @@ data class CliSurfaceSpec(
             executionStatus = executionStatus,
             outputOverride = outputOverride,
             defaultOutput = defaultOutput,
+            executableRenderer = executableRenderer,
         )
 
         fun hidden(): CliSurfaceSpec = CliSurfaceSpec(
@@ -541,6 +566,7 @@ data class CliSurfaceSpec(
             executionStatus = null,
             outputOverride = null,
             defaultOutput = null,
+            executableRenderer = null,
         )
     }
 }
@@ -580,6 +606,7 @@ fun productionCliSurface(
     executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
     outputOverride: OutputConversionCapability? = null,
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
+    executableRenderer: ExecutableCliRendererSpec? = null,
 ): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.production(),
     cli = CliSurfaceSpec.visible(
@@ -590,6 +617,7 @@ fun productionCliSurface(
         executionStatus = executionStatus,
         outputOverride = outputOverride,
         defaultOutput = defaultOutput,
+        executableRenderer = executableRenderer,
     ),
     publicMcpb = PublicMcpbSurfaceSpec.excluded(),
 )
@@ -602,6 +630,7 @@ fun publicMcpbProductionCliSurface(
     executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
     outputOverride: OutputConversionCapability? = null,
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
+    executableRenderer: ExecutableCliRendererSpec? = null,
 ): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.production(),
     cli = CliSurfaceSpec.visible(
@@ -612,6 +641,7 @@ fun publicMcpbProductionCliSurface(
         executionStatus = executionStatus,
         outputOverride = outputOverride,
         defaultOutput = defaultOutput,
+        executableRenderer = executableRenderer,
     ),
     publicMcpb = PublicMcpbSurfaceSpec.included(),
 )
@@ -630,6 +660,7 @@ fun noMcpCliSurface(
     executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
     outputOverride: OutputConversionCapability? = null,
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
+    executableRenderer: ExecutableCliRendererSpec? = null,
 ): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.none(),
     cli = CliSurfaceSpec.visible(
@@ -640,6 +671,7 @@ fun noMcpCliSurface(
         executionStatus = executionStatus,
         outputOverride = outputOverride,
         defaultOutput = defaultOutput,
+        executableRenderer = executableRenderer,
     ),
     publicMcpb = PublicMcpbSurfaceSpec.excluded(),
 )

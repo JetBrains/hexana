@@ -212,6 +212,11 @@ class HexanaToolsTest {
                 assertNotNull(cli.executionStatus, "missing CLI execution status for ${spec.name}")
                 assertEquals(null, cli.outputOverride, "unexpected output override for ${spec.name}")
                 assertNotNull(cli.defaultOutput, "missing default output for ${spec.name}")
+                if (cli.executionStatus == CliExecutionStatus.Executable) {
+                    assertNotNull(cli.executableRenderer, "missing executable renderer for ${spec.name}")
+                } else {
+                    assertEquals(null, cli.executableRenderer, "unexpected executable renderer for ${spec.name}")
+                }
             } else {
                 assertEquals(null, cli.commandName, "hidden CLI surface has command for ${spec.name}")
                 assertTrue(cli.groups.isEmpty(), "hidden CLI surface has groups for ${spec.name}")
@@ -219,6 +224,7 @@ class HexanaToolsTest {
                 assertEquals(null, cli.executionStatus, "hidden CLI surface has execution status for ${spec.name}")
                 assertEquals(null, cli.outputOverride, "hidden CLI surface has output override for ${spec.name}")
                 assertEquals(null, cli.defaultOutput, "hidden CLI surface has default output for ${spec.name}")
+                assertEquals(null, cli.executableRenderer, "hidden CLI surface has executable renderer for ${spec.name}")
             }
         }
     }
@@ -245,6 +251,8 @@ class HexanaToolsTest {
 
         assertEquals(CliExecutionStatus.Executable, summarizeModule.surfaces.cli.executionStatus)
         assertEquals(CliExecutionStatus.Executable, wasmToWat.surfaces.cli.executionStatus)
+        assertEquals("renderSummarizeModuleCommandOutput", summarizeModule.surfaces.cli.executableRenderer?.methodName)
+        assertEquals("renderWasmToWatCommandOutput", wasmToWat.surfaces.cli.executableRenderer?.methodName)
     }
 
     @Test

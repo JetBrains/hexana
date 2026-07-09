@@ -7,7 +7,8 @@ DSL and emit checked-in Kotlin files into the two consumers:
   `McpTool` descriptors and call bodies, consumed
   by `plugin.xml`.
 - `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt` — `Server.registerHexanaTools(handlers)`
-  extension for the standalone MCP runtime.
+  extension, generated CLI-visible tool metadata, generated CLI tool command construction, and executable CLI renderer
+  dispatch for the standalone MCP runtime.
 
 A separate Claude Desktop MCPB manifest generator consumes catalog metadata and refreshes the checked-in packaging
 template.
@@ -20,7 +21,8 @@ template.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/*Tools.kt` — feature-owned specs and definitions. Keep each tool's
   input specs, input pattern, result schema mirrors, descriptions, and handler FQN in the same feature file when possible.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt` — catalog composition and canonical tool ordering.
-- `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/StandaloneToolsetMain.kt` — server dispatcher generator.
+- `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/StandaloneToolsetMain.kt` — standalone server dispatcher
+  and CLI command generator.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/IdeaToolsetMain.kt` — idea-plugin toolset generator.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/McpbManifestMain.kt` — Claude Desktop MCPB manifest generator.
 

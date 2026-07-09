@@ -20,7 +20,7 @@ internal data class HexanaCliCommandOutput(
 )
 
 internal fun renderSummarizeModuleOutput(
-    command: HexanaCommand.SummarizeModule,
+    command: HexanaCommand.ExecutableTool,
     analysisService: HexanaAnalysisService = createStandaloneHexanaAnalysisService(
         command.allowedRoots,
         command.resourceLimits
@@ -28,12 +28,13 @@ internal fun renderSummarizeModuleOutput(
 ): String = renderSummarizeModuleCommandOutput(command, analysisService).stdout
 
 internal fun renderSummarizeModuleCommandOutput(
-    command: HexanaCommand.SummarizeModule,
+    command: HexanaCommand.ExecutableTool,
     analysisService: HexanaAnalysisService = createStandaloneHexanaAnalysisService(
         command.allowedRoots,
         command.resourceLimits
     ),
 ): HexanaCliCommandOutput {
+    requireExecutableTool(command, toolName = "summarize_module")
     val result = analysisService.summarizeModule(WasmInput.FilePath(command.path))
     val output = when (command.format) {
         HexanaCliOutputFormat.JSON -> HexanaJson.compact.encodeToString(SummarizeModuleResult.serializer(), result)
@@ -43,17 +44,18 @@ internal fun renderSummarizeModuleCommandOutput(
     return requireOutputWithinLimit(
         output = HexanaCliCommandOutput(stdout = output),
         maxOutputBytes = command.resourceLimits.maxOutputBytes,
-        commandName = "summarize-module",
+        commandName = command.spec.commandName,
     )
 }
 
-internal fun renderWasmToWatOutput(command: HexanaCommand.WasmToWat): String =
+internal fun renderWasmToWatOutput(command: HexanaCommand.ExecutableTool): String =
     renderWasmToWatCommandOutput(command).stdout
 
 internal fun renderWasmToWatCommandOutput(
-    command: HexanaCommand.WasmToWat,
+    command: HexanaCommand.ExecutableTool,
     wasmPrinter: (ByteArray) -> WatWithWarnings = ::printWat,
 ): HexanaCliCommandOutput {
+    requireExecutableTool(command, toolName = "wasm_to_wat")
     val allowedFilePolicy = if (command.allowedRoots.none { it.isNotBlank() }) {
         AllowedFilePolicy.allowAll
     } else {
@@ -87,7 +89,7 @@ internal fun renderWasmToWatCommandOutput(
     return requireOutputWithinLimit(
         output = output,
         maxOutputBytes = command.resourceLimits.maxOutputBytes,
-        commandName = "wasm-to-wat",
+        commandName = command.spec.commandName,
     )
 }
 
@@ -107,6 +109,12 @@ private fun requireOutputWithinLimit(
         )
     }
     return output
+}
+
+private fun requireExecutableTool(command: HexanaCommand.ExecutableTool, toolName: String) {
+    require(command.spec.toolName == toolName) {
+        "Expected CLI tool '$toolName', got '${command.spec.toolName}'."
+    }
 }
 
 private fun List<String>.toStderrWarnings(): String {

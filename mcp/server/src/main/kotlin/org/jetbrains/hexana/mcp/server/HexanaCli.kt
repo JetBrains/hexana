@@ -2,8 +2,6 @@ package org.jetbrains.hexana.mcp.server
 
 import com.github.ajalt.clikt.core.*
 import com.github.ajalt.clikt.completion.CompletionCandidates
-import com.github.ajalt.clikt.parameters.arguments.argument
-import com.github.ajalt.clikt.parameters.arguments.multiple
 import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.int
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
@@ -38,14 +36,8 @@ sealed interface HexanaCommand {
         val allowedRoots: List<String>,
     ) : HexanaCommand
 
-    data class SummarizeModule(
-        val path: String,
-        val format: HexanaCliOutputFormat,
-        val allowedRoots: List<String>,
-        val resourceLimits: HexanaResourceLimits,
-    ) : HexanaCommand
-
-    data class WasmToWat(
+    data class ExecutableTool(
+        val spec: HexanaCliToolSpec,
         val path: String,
         val format: HexanaCliOutputFormat,
         val allowedRoots: List<String>,
@@ -102,7 +94,7 @@ class HexanaCli(
 
         init {
             val manualCommands = manualServiceCommands(envReader, sink)
-            val generatedCommands = generatedToolCommands(envReader, sink)
+            val generatedCommands = generatedCliToolCommands(envReader, sink)
             validateRootCliCommandNames(
                 manualCommandNames = manualCommands.map { it.commandName },
                 generatedCommandNames = generatedCommands.map { it.commandName },
@@ -247,61 +239,6 @@ class HexanaCli(
         }
     }
 
-    private class SummarizeModuleCommand(
-        private val spec: HexanaCliToolSpec,
-        private val envReader: (String) -> String?,
-        private val sink: (HexanaCommand) -> Unit
-    ) : CliktCommand(name = spec.commandName) {
-        init {
-            validateSummarizeModuleCliToolSpec(spec)
-        }
-
-        override fun help(context: Context): String = spec.summary
-
-        private val path by argument(
-            name = "wasm",
-            help = "Path to a WebAssembly module."
-        )
-
-        private val format by option(
-            "--format",
-            help = "Output format. Supported: ${spec.supportedFormatNames()}. Defaults to ${spec.defaultOutputFormat.cliName()}."
-        ).convert(
-            metavar = spec.supportedFormatNames(),
-            completionCandidates = spec.supportedFormatCompletionCandidates(),
-        ) {
-            parseCliOutputFormat(spec, it)
-        }.default(spec.defaultOutputFormat)
-
-        private val allowedRoots by allowedRootOption()
-        private val maxFileBytes by maxFileBytesOption()
-        private val maxInlineBytes by maxInlineBytesOption()
-        private val maxTextFileBytes by maxTextFileBytesOption()
-        private val maxOutputBytes by maxOutputBytesOption()
-        private val maxCandidateCount by maxCandidateCountOption()
-        private val maxScanRoots by maxScanRootsOption()
-        private val maxScanDepth by maxScanDepthOption()
-
-        override fun run() {
-            sink(
-                HexanaCommand.SummarizeModule(
-                    path = path,
-                    format = format,
-                    allowedRoots = allowedRoots + allowedRootsFromEnv(envReader),
-                    resourceLimits = buildResourceLimits(
-                        maxFileBytes = maxFileBytes,
-                        maxInlineBytes = maxInlineBytes,
-                        maxTextFileBytes = maxTextFileBytes,
-                        maxOutputBytes = maxOutputBytes,
-                        maxCandidateCount = maxCandidateCount,
-                        maxScanRoots = maxScanRoots,
-                        maxScanDepth = maxScanDepth,
-                    )
-                )
-            )
-        }
-    }
-
     private class DoctorCommand(
         private val envReader: (String) -> String?,
         private val sink: (HexanaCommand) -> Unit
@@ -320,61 +257,6 @@ class HexanaCli(
         }
     }
 
-    private class WasmToWatCommand(
-        private val spec: HexanaCliToolSpec,
-        private val envReader: (String) -> String?,
-        private val sink: (HexanaCommand) -> Unit
-    ) : CliktCommand(name = spec.commandName) {
-        init {
-            validateWasmToWatCliToolSpec(spec)
-        }
-
-        override fun help(context: Context): String = spec.summary
-
-        private val path by argument(
-            name = "wasm",
-            help = "Path to a WebAssembly module."
-        )
-
-        private val format by option(
-            "--format",
-            help = "Output format. Supported: ${spec.supportedFormatNames()}. Defaults to ${spec.defaultOutputFormat.cliName()}."
-        ).convert(
-            metavar = spec.supportedFormatNames(),
-            completionCandidates = spec.supportedFormatCompletionCandidates(),
-        ) {
-            parseCliOutputFormat(spec, it)
-        }.default(spec.defaultOutputFormat)
-
-        private val allowedRoots by allowedRootOption()
-        private val maxFileBytes by maxFileBytesOption()
-        private val maxInlineBytes by maxInlineBytesOption()
-        private val maxTextFileBytes by maxTextFileBytesOption()
-        private val maxOutputBytes by maxOutputBytesOption()
-        private val maxCandidateCount by maxCandidateCountOption()
-        private val maxScanRoots by maxScanRootsOption()
-        private val maxScanDepth by maxScanDepthOption()
-
-        override fun run() {
-            sink(
-                HexanaCommand.WasmToWat(
-                    path = path,
-                    format = format,
-                    allowedRoots = allowedRoots + allowedRootsFromEnv(envReader),
-                    resourceLimits = buildResourceLimits(
-                        maxFileBytes = maxFileBytes,
-                        maxInlineBytes = maxInlineBytes,
-                        maxTextFileBytes = maxTextFileBytes,
-                        maxOutputBytes = maxOutputBytes,
-                        maxCandidateCount = maxCandidateCount,
-                        maxScanRoots = maxScanRoots,
-                        maxScanDepth = maxScanDepth,
-                    )
-                )
-            )
-        }
-    }
-
     private class ToolsCommand(
         private val sink: (HexanaCommand) -> Unit
     ) : CliktCommand(name = "tools") {
@@ -388,25 +270,6 @@ class HexanaCli(
 
         override fun run() {
             sink(HexanaCommand.Tools(group = group))
-        }
-    }
-
-    private class TodoToolCommand(
-        private val spec: HexanaCliToolSpec,
-        private val sink: (HexanaCommand) -> Unit
-    ) : CliktCommand(name = spec.commandName) {
-        override val treatUnknownOptionsAsArgs: Boolean = true
-
-        override fun help(context: Context): String = spec.summary
-
-        @Suppress("unused")
-        private val ignoredArguments by argument(
-            name = "args",
-            help = "Future command arguments."
-        ).multiple()
-
-        override fun run() {
-            sink(HexanaCommand.TodoTool(spec))
         }
     }
 
@@ -441,45 +304,6 @@ class HexanaCli(
             DoctorCommand(envReader, sink),
             VersionCommand(sink),
             HelpCommand(sink),
-        )
-
-        fun generatedToolCommands(
-            envReader: (String) -> String?,
-            sink: (HexanaCommand) -> Unit,
-        ): List<CliktCommand> {
-            val executableFactories = executableToolCommandFactories(envReader, sink)
-            val executableCommandNames = HexanaGeneratedCliToolRegistry.TOOLS
-                .filter { it.executionStatus == HexanaCliExecutionStatus.EXECUTABLE }
-                .mapTo(mutableSetOf()) { it.commandName }
-            require(executableCommandNames == executableFactories.keys) {
-                val missing = executableCommandNames - executableFactories.keys
-                val stale = executableFactories.keys - executableCommandNames
-                buildString {
-                    append("Runtime executable CLI command factories do not match generated executable CLI metadata.")
-                    if (missing.isNotEmpty()) append(" Missing: ${missing.sorted().joinToString()}.")
-                    if (stale.isNotEmpty()) append(" Stale: ${stale.sorted().joinToString()}.")
-                }
-            }
-            return HexanaGeneratedCliToolRegistry.TOOLS
-                .asSequence()
-                .sortedBy { it.commandName }
-                .map { spec ->
-                    when (spec.executionStatus) {
-                        HexanaCliExecutionStatus.EXECUTABLE ->
-                            executableFactories.getValue(spec.commandName).invoke(spec)
-
-                        HexanaCliExecutionStatus.TODO -> TodoToolCommand(spec, sink)
-                    }
-                }
-                .toList()
-        }
-
-        fun executableToolCommandFactories(
-            envReader: (String) -> String?,
-            sink: (HexanaCommand) -> Unit,
-        ): Map<String, (HexanaCliToolSpec) -> CliktCommand> = mapOf(
-            "summarize-module" to { spec -> SummarizeModuleCommand(spec, envReader, sink) },
-            "wasm-to-wat" to { spec -> WasmToWatCommand(spec, envReader, sink) },
         )
     }
 }
@@ -534,33 +358,6 @@ internal fun renderCliToolsListing(command: HexanaCommand.Tools): String {
     }.trimEnd()
 }
 
-private fun validateSummarizeModuleCliToolSpec(spec: HexanaCliToolSpec) {
-    require(HexanaCliInputMode.WASM_PATH in spec.inputModes) {
-        "Generated summarize-module CLI metadata must support wasm path input"
-    }
-    require(HexanaCliOutputFormat.JSON in spec.outputFormats) {
-        "Generated summarize-module CLI metadata must support json output"
-    }
-    require(spec.defaultOutputFormat in spec.outputFormats) {
-        "Generated summarize-module CLI metadata default output must be one of ${spec.outputFormats}"
-    }
-}
-
-private fun validateWasmToWatCliToolSpec(spec: HexanaCliToolSpec) {
-    require(HexanaCliInputMode.WASM_PATH in spec.inputModes) {
-        "Generated wasm-to-wat CLI metadata must support wasm path input"
-    }
-    require(HexanaCliOutputFormat.RAW in spec.outputFormats) {
-        "Generated wasm-to-wat CLI metadata must support raw output"
-    }
-    require(HexanaCliOutputFormat.JSON in spec.outputFormats) {
-        "Generated wasm-to-wat CLI metadata must support json output"
-    }
-    require(spec.defaultOutputFormat in spec.outputFormats) {
-        "Generated wasm-to-wat CLI metadata default output must be one of ${spec.outputFormats}"
-    }
-}
-
 internal fun parseCliOutputFormat(spec: HexanaCliToolSpec, value: String): HexanaCliOutputFormat {
     val format = HexanaCliOutputFormat.entries.firstOrNull { it.cliName() == value.trim().lowercase() }
     if (format != null && format in spec.outputFormats) {
@@ -571,10 +368,10 @@ internal fun parseCliOutputFormat(spec: HexanaCliToolSpec, value: String): Hexan
     )
 }
 
-private fun HexanaCliToolSpec.supportedFormatNames(): String =
+internal fun HexanaCliToolSpec.supportedFormatNames(): String =
     outputFormats.joinToString { it.cliName() }
 
-private fun HexanaCliToolSpec.supportedFormatCompletionCandidates(): CompletionCandidates =
+internal fun HexanaCliToolSpec.supportedFormatCompletionCandidates(): CompletionCandidates =
     CompletionCandidates.Fixed(outputFormats.map { it.cliName() }.toSet())
 
 private fun HexanaCliToolSpec.sortedGroupNames(): String =
@@ -583,7 +380,7 @@ private fun HexanaCliToolSpec.sortedGroupNames(): String =
 private fun HexanaCliToolSpec.sortedFormatNames(): String =
     outputFormats.map { it.cliName() }.sorted().joinToString()
 
-private fun HexanaCliOutputFormat.cliName(): String = name.lowercase()
+internal fun HexanaCliOutputFormat.cliName(): String = name.lowercase()
 
 private fun HexanaCliExecutionStatus.cliName(): String = name.lowercase()
 
@@ -632,48 +429,48 @@ private fun CliktCommand.toolProfileOption() = option(
     envvar = "HEXANA_MCP_TOOL_PROFILE"
 ).convert("production|advanced") { parseToolProfile(it) }.default(HexanaMcpToolProfile.PRODUCTION)
 
-private fun CliktCommand.allowedRootOption() = option(
+internal fun CliktCommand.allowedRootOption() = option(
     "--allowed-root",
     help = "Directory whose files may be read by path-backed MCP inputs. Repeat to allow multiple roots; HEXANA_MCP_ALLOWED_ROOTS may also provide ${File.pathSeparator}-separated roots."
 ).multiple()
 
-private fun CliktCommand.maxFileBytesOption() = positiveIntOption(
+internal fun CliktCommand.maxFileBytesOption() = positiveIntOption(
     "--max-file-bytes",
     "Maximum input file size accepted by MCP tools.",
     "HEXANA_MCP_MAX_FILE_BYTES",
 )
 
-private fun CliktCommand.maxInlineBytesOption() = positiveIntOption(
+internal fun CliktCommand.maxInlineBytesOption() = positiveIntOption(
     "--max-inline-bytes",
     "Maximum inline payload size accepted in MCP tool arguments.",
     "HEXANA_MCP_MAX_INLINE_BYTES",
 )
 
-private fun CliktCommand.maxTextFileBytesOption() = positiveIntOption(
+internal fun CliktCommand.maxTextFileBytesOption() = positiveIntOption(
     "--max-text-file-bytes",
     "Maximum text file size accepted by text-oriented MCP tool inputs.",
     "HEXANA_MCP_MAX_TEXT_FILE_BYTES",
 )
 
-private fun CliktCommand.maxOutputBytesOption() = positiveIntOption(
+internal fun CliktCommand.maxOutputBytesOption() = positiveIntOption(
     "--max-output-bytes",
     "Maximum bounded query output budget accepted for one MCP tool call.",
     "HEXANA_MCP_MAX_OUTPUT_BYTES",
 )
 
-private fun CliktCommand.maxCandidateCountOption() = positiveIntOption(
+internal fun CliktCommand.maxCandidateCountOption() = positiveIntOption(
     "--max-candidate-count",
     "Maximum number of candidate files or records kept during discovery.",
     "HEXANA_MCP_MAX_CANDIDATE_COUNT",
 )
 
-private fun CliktCommand.maxScanRootsOption() = positiveIntOption(
+internal fun CliktCommand.maxScanRootsOption() = positiveIntOption(
     "--max-scan-roots",
     "Maximum number of scan root directories accepted for discovery tools.",
     "HEXANA_MCP_MAX_SCAN_ROOTS",
 )
 
-private fun CliktCommand.maxScanDepthOption() = positiveIntOption(
+internal fun CliktCommand.maxScanDepthOption() = positiveIntOption(
     "--max-scan-depth",
     "Maximum directory depth traversed while scanning roots.",
     "HEXANA_MCP_MAX_SCAN_DEPTH",
@@ -684,7 +481,7 @@ private fun CliktCommand.positiveIntOption(name: String, description: String, en
         require(it > 0) { "Value must be greater than 0" }
     }
 
-private fun buildResourceLimits(
+internal fun buildResourceLimits(
     maxFileBytes: Int?,
     maxInlineBytes: Int?,
     maxTextFileBytes: Int?,

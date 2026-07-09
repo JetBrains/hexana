@@ -53,8 +53,7 @@ fun main(args: Array<String>) {
                         exitProcess(report.exitCode)
                     }
                 }
-                is HexanaCommand.SummarizeModule -> printCommandOutput(renderSummarizeModuleCommandOutput(command))
-                is HexanaCommand.WasmToWat -> printCommandOutput(renderWasmToWatCommandOutput(command))
+                is HexanaCommand.ExecutableTool -> printCommandOutput(generatedExecutableCliToolCommandOutput(command))
                 is HexanaCommand.Tools -> println(renderCliToolsListing(command))
                 is HexanaCommand.TodoTool -> {
                     System.err.println(renderTodoToolNotImplementedMessage(command))
@@ -74,10 +73,8 @@ fun main(args: Array<String>) {
             is HexanaCommand.Stdio -> "Hexana MCP server failed while running stdio transport. See server logs for details."
             is HexanaCommand.Http -> "Hexana MCP server failed while running HTTP transport. See server logs for details."
             is HexanaCommand.Doctor -> "Hexana MCP doctor failed. See server logs for details."
-            is HexanaCommand.SummarizeModule ->
-                "Hexana MCP summarize-module command failed. See server logs for details."
-            is HexanaCommand.WasmToWat ->
-                "Hexana MCP wasm-to-wat command failed. See server logs for details."
+            is HexanaCommand.ExecutableTool ->
+                "Hexana MCP ${command.spec.commandName} command failed. See server logs for details."
             is HexanaCommand.Tools ->
                 "Hexana MCP tools command failed. See server logs for details."
             is HexanaCommand.TodoTool ->
@@ -142,8 +139,7 @@ internal fun HexanaCommand.analytics(): CommandAnalytics? = when (this) {
 
     is HexanaCommand.Help,
     is HexanaCommand.Doctor,
-    is HexanaCommand.SummarizeModule,
-    is HexanaCommand.WasmToWat,
+    is HexanaCommand.ExecutableTool,
     is HexanaCommand.Tools,
     is HexanaCommand.TodoTool,
     is HexanaCommand.Version -> null
@@ -156,8 +152,7 @@ internal fun developmentVersionWarning(command: HexanaCommand, version: String):
     return when (command) {
         is HexanaCommand.Help,
         is HexanaCommand.Doctor,
-        is HexanaCommand.SummarizeModule,
-        is HexanaCommand.WasmToWat,
+        is HexanaCommand.ExecutableTool,
         is HexanaCommand.Tools,
         is HexanaCommand.TodoTool,
         is HexanaCommand.Version -> null
