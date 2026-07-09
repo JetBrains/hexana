@@ -27,6 +27,11 @@ import org.jetbrains.hexana.mcp.model.types.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
+private const val QUERY_FILTER_MAX_ITEMS = 20
+private const val INDICES_MAX_ITEMS = 10_000
+private const val SEARCH_EXPORTS_LIMIT_MAX = 200
+private const val FUNCTION_NAME_SEARCH_LIMIT_MAX = 200
+
 class HexanaToolHandlers(
     resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
     maxInlineInputBytes: Int? = null,
@@ -58,14 +63,23 @@ class HexanaToolHandlers(
                     "operation",
                     HexanaToolInputDefaults.QUERY_ARTIFACTS_OPERATION
                 ),
-                entityTypes = arguments.optionalStringList("entityTypes").orEmpty(),
-                query = arguments.optionalStringList("query").orEmpty(),
+                entityTypes = arguments.optionalStringList("entityTypes", maxItems = QUERY_FILTER_MAX_ITEMS).orEmpty(),
+                query = arguments.optionalStringList("query", maxItems = QUERY_FILTER_MAX_ITEMS).orEmpty(),
                 startName = arguments.optionalNonBlankString("startName"),
-                startFuncidx = arguments.nullableInt("startFuncidx"),
-                relations = arguments.optionalStringList("relations").orEmpty(),
-                limit = arguments.limitOrResourceDefault("limit", HexanaToolInputDefaults.QUERY_ARTIFACTS_LIMIT),
+                startFuncidx = arguments.nullableInt("startFuncidx", minimum = 0),
+                relations = arguments.optionalStringList("relations", maxItems = QUERY_FILTER_MAX_ITEMS).orEmpty(),
+                limit = arguments.limitOrResourceDefault(
+                    "limit",
+                    HexanaToolInputDefaults.QUERY_ARTIFACTS_LIMIT,
+                    maximum = HexanaAnalysisLimits.MAX_QUERY_LIMIT
+                ),
                 detail = arguments.stringOrDefault("detail", HexanaToolInputDefaults.QUERY_ARTIFACTS_DETAIL),
-                maxBytes = arguments.intOrDefault("maxBytes", HexanaToolInputDefaults.QUERY_ARTIFACTS_MAX_BYTES)
+                maxBytes = arguments.intOrDefault(
+                    "maxBytes",
+                    HexanaToolInputDefaults.QUERY_ARTIFACTS_MAX_BYTES,
+                    minimum = 1,
+                    maximum = HexanaAnalysisLimits.MAX_OUTPUT_BYTES
+                )
             )
         }
     }
@@ -99,12 +113,21 @@ class HexanaToolHandlers(
                     "operation",
                     HexanaToolInputDefaults.QUERY_BINARY_OPERATION
                 ),
-                entityTypes = arguments.optionalStringList("entityTypes").orEmpty(),
-                query = arguments.optionalStringList("query").orEmpty(),
-                offset = arguments.intOrDefault("offset", HexanaToolInputDefaults.QUERY_BINARY_OFFSET),
-                limit = arguments.limitOrResourceDefault("limit", HexanaToolInputDefaults.QUERY_BINARY_LIMIT),
+                entityTypes = arguments.optionalStringList("entityTypes", maxItems = QUERY_FILTER_MAX_ITEMS).orEmpty(),
+                query = arguments.optionalStringList("query", maxItems = QUERY_FILTER_MAX_ITEMS).orEmpty(),
+                offset = arguments.intOrDefault("offset", HexanaToolInputDefaults.QUERY_BINARY_OFFSET, minimum = 0),
+                limit = arguments.limitOrResourceDefault(
+                    "limit",
+                    HexanaToolInputDefaults.QUERY_BINARY_LIMIT,
+                    maximum = HexanaAnalysisLimits.MAX_QUERY_LIMIT
+                ),
                 detail = arguments.stringOrDefault("detail", HexanaToolInputDefaults.QUERY_BINARY_DETAIL),
-                maxBytes = arguments.intOrDefault("maxBytes", HexanaToolInputDefaults.QUERY_BINARY_MAX_BYTES)
+                maxBytes = arguments.intOrDefault(
+                    "maxBytes",
+                    HexanaToolInputDefaults.QUERY_BINARY_MAX_BYTES,
+                    minimum = 1,
+                    maximum = HexanaAnalysisLimits.MAX_OUTPUT_BYTES
+                )
             )
         }
     }
@@ -113,8 +136,16 @@ class HexanaToolHandlers(
         return execute("list_binary_functions", BinaryFunctionsResult.serializer()) {
             analysisService.listBinaryFunctions(
                 input = binaryInput(arguments),
-                offset = arguments.intOrDefault("offset", HexanaToolInputDefaults.LIST_BINARY_FUNCTIONS_OFFSET),
-                limit = arguments.limitOrResourceDefault("limit", HexanaToolInputDefaults.LIST_BINARY_FUNCTIONS_LIMIT)
+                offset = arguments.intOrDefault(
+                    "offset",
+                    HexanaToolInputDefaults.LIST_BINARY_FUNCTIONS_OFFSET,
+                    minimum = 0
+                ),
+                limit = arguments.limitOrResourceDefault(
+                    "limit",
+                    HexanaToolInputDefaults.LIST_BINARY_FUNCTIONS_LIMIT,
+                    maximum = HexanaAnalysisLimits.MAX_QUERY_LIMIT
+                )
             )
         }
     }
@@ -123,9 +154,17 @@ class HexanaToolHandlers(
         return execute("search_binary_functions", BinaryFunctionsResult.serializer()) {
             analysisService.searchBinaryFunctions(
                 input = binaryInput(arguments),
-                query = arguments.requireStringList("query"),
-                offset = arguments.intOrDefault("offset", HexanaToolInputDefaults.SEARCH_BINARY_FUNCTIONS_OFFSET),
-                limit = arguments.limitOrResourceDefault("limit", HexanaToolInputDefaults.SEARCH_BINARY_FUNCTIONS_LIMIT)
+                query = arguments.requireStringList("query", maxItems = QUERY_FILTER_MAX_ITEMS),
+                offset = arguments.intOrDefault(
+                    "offset",
+                    HexanaToolInputDefaults.SEARCH_BINARY_FUNCTIONS_OFFSET,
+                    minimum = 0
+                ),
+                limit = arguments.limitOrResourceDefault(
+                    "limit",
+                    HexanaToolInputDefaults.SEARCH_BINARY_FUNCTIONS_LIMIT,
+                    maximum = HexanaAnalysisLimits.MAX_QUERY_LIMIT
+                )
             )
         }
     }
@@ -178,7 +217,10 @@ class HexanaToolHandlers(
             analysisService.resolveComponentDependencies(
                 input = wasmInput(arguments),
                 projectRoot = arguments.optionalNonBlankString("projectRoot"),
-                scanRoots = arguments.optionalStringList("scanRoots").orEmpty()
+                scanRoots = arguments.optionalStringList(
+                    "scanRoots",
+                    maxItems = resourceLimits.maxScanRoots
+                ).orEmpty()
             )
         }
     }
@@ -217,8 +259,12 @@ class HexanaToolHandlers(
         return execute("search_exports", SearchExportsResult.serializer()) {
             analysisService.searchExports(
                 input = wasmInput(arguments),
-                query = arguments.requireStringList("query"),
-                limit = arguments.limitOrResourceDefault("limit", HexanaToolInputDefaults.SEARCH_EXPORTS_LIMIT)
+                query = arguments.requireStringList("query", maxItems = QUERY_FILTER_MAX_ITEMS),
+                limit = arguments.limitOrResourceDefault(
+                    "limit",
+                    HexanaToolInputDefaults.SEARCH_EXPORTS_LIMIT,
+                    maximum = SEARCH_EXPORTS_LIMIT_MAX
+                )
             )
         }
     }
@@ -227,7 +273,7 @@ class HexanaToolHandlers(
         return execute("list_functions", FunctionsResult.serializer()) {
             analysisService.listFunctions(
                 input = wasmInput(arguments),
-                offset = arguments.intOrDefault("offset", HexanaToolInputDefaults.LIST_FUNCTIONS_OFFSET),
+                offset = arguments.intOrDefault("offset", HexanaToolInputDefaults.LIST_FUNCTIONS_OFFSET, minimum = 0),
                 limit = arguments.limitOrResourceDefault("limit", HexanaToolInputDefaults.LIST_FUNCTIONS_LIMIT)
             )
         }
@@ -243,7 +289,7 @@ class HexanaToolHandlers(
         return execute("resolve_function_signature", ResolveFunctionSignatureResult.serializer()) {
             analysisService.resolveFunctionSignature(
                 input = wasmInput(arguments),
-                funcidx = arguments.requireIntArgument("funcidx")
+                funcidx = arguments.requireIntArgument("funcidx", minimum = 0)
             )
         }
     }
@@ -252,7 +298,7 @@ class HexanaToolHandlers(
         return execute("disassemble_function", DisassembleFunctionResult.serializer()) {
             analysisService.disassembleFunction(
                 input = wasmInput(arguments),
-                funcidx = arguments.requireIntArgument("funcidx")
+                funcidx = arguments.requireIntArgument("funcidx", minimum = 0)
             )
         }
     }
@@ -261,7 +307,7 @@ class HexanaToolHandlers(
         return execute("get_function_call_graph", GetFunctionCallGraphResult.serializer()) {
             analysisService.getFunctionCallGraph(
                 input = wasmInput(arguments),
-                indices = arguments.requireIntList("indices")
+                indices = arguments.requireIntList("indices", maxItems = INDICES_MAX_ITEMS, minimum = 0)
             )
         }
     }
@@ -273,7 +319,7 @@ class HexanaToolHandlers(
                 policyInput = arguments.optionalNonBlankString("policyPath")?.let(TextInput::FilePath),
                 logInput = arguments.optionalNonBlankString("logPath")?.let(TextInput::FilePath),
                 checkedExports = arguments.optionalStringList("checkedExports").orEmpty(),
-                maxLocals = arguments.nullableInt("maxLocals"),
+                maxLocals = arguments.nullableInt("maxLocals", minimum = 0),
                 countParams = arguments.booleanOrDefault(
                     "countParams",
                     HexanaToolInputDefaults.AUDIT_LOCAL_STACK_BUDGET_COUNT_PARAMS
@@ -287,7 +333,11 @@ class HexanaToolHandlers(
             analysisService.searchFunctionsByName(
                 input = wasmInput(arguments),
                 query = arguments.requireNonBlankString("query"),
-                limit = arguments.limitOrResourceDefault("limit", HexanaToolInputDefaults.SEARCH_FUNCTIONS_BY_NAME_LIMIT)
+                limit = arguments.limitOrResourceDefault(
+                    "limit",
+                    HexanaToolInputDefaults.SEARCH_FUNCTIONS_BY_NAME_LIMIT,
+                    maximum = FUNCTION_NAME_SEARCH_LIMIT_MAX
+                )
             )
         }
     }
@@ -307,7 +357,7 @@ class HexanaToolHandlers(
         return execute("resolve_function_symbols", ResolveFunctionSymbolsResult.serializer()) {
             analysisService.resolveFunctionSymbols(
                 input = wasmInput(arguments),
-                indices = arguments.requireIntList("indices"),
+                indices = arguments.requireIntList("indices", maxItems = INDICES_MAX_ITEMS, minimum = 0),
                 sourceMapInput = arguments.optionalNonBlankString("sourceMapPath")?.let(TextInput::FilePath)
             )
         }
@@ -336,7 +386,7 @@ class HexanaToolHandlers(
         return execute("functions_for_indices", FunctionsResult.serializer()) {
             analysisService.functionsForIndices(
                 input = wasmInput(arguments),
-                indices = arguments.requireIntList("indices")
+                indices = arguments.requireIntList("indices", maxItems = INDICES_MAX_ITEMS, minimum = 0)
             )
         }
     }
@@ -399,7 +449,7 @@ class HexanaToolHandlers(
         return execute("get_globals_for_indices", ListGlobalsResult.serializer()) {
             analysisService.getGlobalsForIndices(
                 input = wasmInput(arguments),
-                indices = arguments.requireIntList("indices")
+                indices = arguments.requireIntList("indices", maxItems = INDICES_MAX_ITEMS, minimum = 0)
             )
         }
     }
@@ -428,7 +478,7 @@ class HexanaToolHandlers(
                     "includeGlobals",
                     HexanaToolInputDefaults.LIST_DATA_SEGMENTS_INCLUDE_GLOBALS
                 ),
-                minByteLength = arguments.nullableInt("minByteLength")
+                minByteLength = arguments.nullableInt("minByteLength", minimum = 0)
             )
         }
     }
@@ -446,7 +496,7 @@ class HexanaToolHandlers(
         return execute("get_memory_for_indices", ListMemoryResult.serializer()) {
             analysisService.getMemoryForIndices(
                 input = wasmInput(arguments),
-                indices = arguments.requireIntList("indices")
+                indices = arguments.requireIntList("indices", maxItems = INDICES_MAX_ITEMS, minimum = 0)
             )
         }
     }
@@ -455,7 +505,7 @@ class HexanaToolHandlers(
         return execute("get_types_for_indices", TypesResult.serializer()) {
             analysisService.getTypesForIndices(
                 input = wasmInput(arguments),
-                indices = arguments.requireIntList("indices")
+                indices = arguments.requireIntList("indices", maxItems = INDICES_MAX_ITEMS, minimum = 0)
             )
         }
     }
@@ -464,7 +514,7 @@ class HexanaToolHandlers(
         return execute("get_locals_for_functions", GetLocalsForFunctionsResult.serializer()) {
             analysisService.getLocalsForFunctions(
                 input = wasmInput(arguments),
-                indices = arguments.requireIntList("indices")
+                indices = arguments.requireIntList("indices", maxItems = INDICES_MAX_ITEMS, minimum = 0)
             )
         }
     }
@@ -473,7 +523,7 @@ class HexanaToolHandlers(
         return execute("get_instructions_for_functions", GetInstructionsForFunctionsResult.serializer()) {
             analysisService.getInstructionsForFunctions(
                 input = wasmInput(arguments),
-                indices = arguments.requireIntList("indices")
+                indices = arguments.requireIntList("indices", maxItems = INDICES_MAX_ITEMS, minimum = 0)
             )
         }
     }
@@ -657,21 +707,28 @@ class HexanaToolHandlers(
         }
     }
 
-    private fun JsonObject?.intOrDefault(name: String, default: Int): Int {
+    private fun JsonObject?.intOrDefault(
+        name: String,
+        default: Int,
+        minimum: Int? = null,
+        maximum: Int? = null,
+    ): Int {
         val element = this?.get(name) ?: return default
-        return element.jsonPrimitive.intOrNull
+        val value = element.jsonPrimitive.intOrNull
             ?: throw ToolInputException("`$name` must be an integer")
+        return value.validateIntBounds(name, minimum, maximum)
     }
 
-    private fun JsonObject?.limitOrResourceDefault(name: String, default: Int): Int {
-        if (this?.containsKey(name) == true) return intOrDefault(name, default)
+    private fun JsonObject?.limitOrResourceDefault(name: String, default: Int, maximum: Int? = null): Int {
+        if (this?.containsKey(name) == true) return intOrDefault(name, default, minimum = 1, maximum = maximum)
         return minOf(default, resourceLimits.maxCandidateCount)
     }
 
-    private fun JsonObject?.requireIntArgument(name: String): Int {
+    private fun JsonObject?.requireIntArgument(name: String, minimum: Int? = null, maximum: Int? = null): Int {
         val element = this?.get(name) ?: throw ToolInputException("`$name` is required")
-        return element.jsonPrimitive.intOrNull
+        val value = element.jsonPrimitive.intOrNull
             ?: throw ToolInputException("`$name` must be an integer")
+        return value.validateIntBounds(name, minimum, maximum)
     }
 
     private fun JsonObject?.requireNonBlankString(name: String): String {
@@ -700,24 +757,27 @@ class HexanaToolHandlers(
         return element as? JsonObject ?: throw ToolInputException("`$name` must be an object")
     }
 
-    private fun JsonObject.requireInt(name: String): Int {
+    private fun JsonObject.requireInt(name: String, minimum: Int? = null, maximum: Int? = null): Int {
         val element = get(name) ?: throw ToolInputException("`$name` is required")
-        return element.jsonPrimitive.intOrNull
+        val value = element.jsonPrimitive.intOrNull
             ?: throw ToolInputException("`$name` must be an integer")
+        return value.validateIntBounds(name, minimum, maximum)
     }
 
-    private fun JsonObject.optionalInt(name: String): Int? {
+    private fun JsonObject.optionalInt(name: String, minimum: Int? = null, maximum: Int? = null): Int? {
         val element = get(name) ?: return null
         if (element == JsonNull) return null
-        return element.jsonPrimitive.intOrNull
+        val value = element.jsonPrimitive.intOrNull
             ?: throw ToolInputException("`$name` must be an integer")
+        return value.validateIntBounds(name, minimum, maximum)
     }
 
-    private fun JsonObject?.nullableInt(name: String): Int? {
+    private fun JsonObject?.nullableInt(name: String, minimum: Int? = null, maximum: Int? = null): Int? {
         val element = this?.get(name) ?: return null
         if (element == JsonNull) return null
-        return element.jsonPrimitive.intOrNull
+        val value = element.jsonPrimitive.intOrNull
             ?: throw ToolInputException("`$name` must be an integer")
+        return value.validateIntBounds(name, minimum, maximum)
     }
 
     private fun JsonObject?.booleanOrDefault(name: String, default: Boolean): Boolean {
@@ -726,18 +786,21 @@ class HexanaToolHandlers(
             ?: throw ToolInputException("`$name` must be a boolean")
     }
 
-    private fun JsonObject?.requireIntList(name: String): List<Int> {
+    private fun JsonObject?.requireIntList(name: String, maxItems: Int? = null, minimum: Int? = null): List<Int> {
         val element = this?.get(name) ?: throw ToolInputException("`$name` is required")
         val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
+        array.requireMaxItems(name, maxItems)
         return array.mapIndexed { index, value ->
-            value.jsonPrimitive.intOrNull
+            val item = value.jsonPrimitive.intOrNull
                 ?: throw ToolInputException("`$name[$index]` must be an integer")
+            item.validateIntBounds("$name[$index]", minimum, maximum = null)
         }
     }
 
-    private fun JsonObject?.requireStringList(name: String): List<String> {
+    private fun JsonObject?.requireStringList(name: String, maxItems: Int? = null): List<String> {
         val element = this?.get(name) ?: throw ToolInputException("`$name` is required")
         val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
+        array.requireMaxItems(name, maxItems)
         return array.mapIndexed { index, value ->
             value.jsonPrimitive.contentOrNull
                 ?: throw ToolInputException("`$name[$index]` must be a string")
@@ -752,7 +815,7 @@ class HexanaToolHandlers(
     private fun parseFrameInputs(name: String, array: List<JsonObject>): List<WasmFrameInput> {
         return array.mapIndexed { index, value ->
             WasmFrameInput(
-                funcidx = value.requireInt("$name[$index]", "funcidx"),
+                funcidx = value.requireInt("$name[$index]", "funcidx", minimum = 0),
                 codeOffset = value.optionalLong("$name[$index]", "codeOffset"),
                 module = value.optionalString("$name[$index]", "module"),
                 label = value.optionalString("$name[$index]", "label"),
@@ -764,40 +827,44 @@ class HexanaToolHandlers(
         val array = requireObjectArray(name)
         return array.mapIndexed { index, value ->
             SourceLocationInput(
-                funcidx = value.optionalInt("$name[$index]", "funcidx"),
+                funcidx = value.optionalInt("$name[$index]", "funcidx", minimum = 0),
                 codeOffset = value.optionalLong("$name[$index]", "codeOffset"),
             )
         }
     }
 
-    private fun JsonObject?.requireObjectArray(name: String): List<JsonObject> {
+    private fun JsonObject?.requireObjectArray(name: String, maxItems: Int? = null): List<JsonObject> {
         val element = this?.get(name) ?: throw ToolInputException("`$name` is required")
         val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
+        array.requireMaxItems(name, maxItems)
         return array.mapIndexed { index, value ->
             value as? JsonObject ?: throw ToolInputException("`$name[$index]` must be an object")
         }
     }
 
-    private fun JsonObject?.optionalObjectArray(name: String): List<JsonObject>? {
+    private fun JsonObject?.optionalObjectArray(name: String, maxItems: Int? = null): List<JsonObject>? {
         val element = this?.get(name) ?: return null
         if (element == JsonNull) return null
         val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
+        array.requireMaxItems(name, maxItems)
         return array.mapIndexed { index, value ->
             value as? JsonObject ?: throw ToolInputException("`$name[$index]` must be an object")
         }
     }
 
-    private fun JsonObject.requireInt(owner: String, name: String): Int {
+    private fun JsonObject.requireInt(owner: String, name: String, minimum: Int? = null, maximum: Int? = null): Int {
         val element = get(name) ?: throw ToolInputException("`$owner.$name` is required")
-        return element.jsonPrimitive.intOrNull
+        val value = element.jsonPrimitive.intOrNull
             ?: throw ToolInputException("`$owner.$name` must be an integer")
+        return value.validateIntBounds("$owner.$name", minimum, maximum)
     }
 
-    private fun JsonObject.optionalInt(owner: String, name: String): Int? {
+    private fun JsonObject.optionalInt(owner: String, name: String, minimum: Int? = null, maximum: Int? = null): Int? {
         val element = get(name) ?: return null
         if (element == JsonNull) return null
-        return element.jsonPrimitive.intOrNull
+        val value = element.jsonPrimitive.intOrNull
             ?: throw ToolInputException("`$owner.$name` must be an integer")
+        return value.validateIntBounds("$owner.$name", minimum, maximum)
     }
 
     private fun JsonObject.optionalLong(owner: String, name: String): Long? {
@@ -814,10 +881,11 @@ class HexanaToolHandlers(
             ?: throw ToolInputException("`$owner.$name` must be a string")
     }
 
-    private fun JsonObject?.optionalStringList(name: String): List<String>? {
+    private fun JsonObject?.optionalStringList(name: String, maxItems: Int? = null): List<String>? {
         val element = this?.get(name) ?: return null
         if (element == JsonNull) return null
         val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
+        array.requireMaxItems(name, maxItems)
         return array.mapIndexed { index, value ->
             value.jsonPrimitive.contentOrNull
                 ?: throw ToolInputException("`$name[$index]` must be a string")
@@ -836,15 +904,35 @@ class HexanaToolHandlers(
 
     private fun JsonObject?.requireHalfOpenRange(name: String): Pair<Int, Int> {
         val value = requireObject(name)
-        val from = value.requireInt("from")
-        val toExclusive = value.optionalInt("to") ?: Int.MAX_VALUE
+        val from = value.requireInt("from", minimum = 0)
+        val toExclusive = value.optionalInt("to", minimum = 0) ?: Int.MAX_VALUE
         return from to toExclusive
     }
 
     private fun JsonObject.requireRangeInt(rangeName: String, fieldName: String): Int {
         val element = get(fieldName) ?: throw ToolInputException("`$rangeName.$fieldName` is required")
-        return (element as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull
+        val value = (element as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull
             ?: throw ToolInputException("`$rangeName.$fieldName` must be an integer")
+        return value.validateIntBounds("$rangeName.$fieldName", minimum = 0, maximum = null)
+    }
+
+    private fun JsonArray.requireMaxItems(name: String, maxItems: Int?) {
+        if (maxItems != null && size > maxItems) {
+            throw ToolInputException("`$name` must contain at most $maxItems items")
+        }
+    }
+
+    private fun Int.validateIntBounds(name: String, minimum: Int?, maximum: Int?): Int {
+        if (minimum != null && maximum != null && (this < minimum || this > maximum)) {
+            throw ToolInputException("`$name` must be between $minimum and $maximum")
+        }
+        if (minimum != null && this < minimum) {
+            throw ToolInputException("`$name` must be >= $minimum")
+        }
+        if (maximum != null && this > maximum) {
+            throw ToolInputException("`$name` must be <= $maximum")
+        }
+        return this
     }
 }
 

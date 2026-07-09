@@ -5,6 +5,7 @@
 ### Added
 
 ### Changed
+- Hexana's IntelliJ MCP toolset now uses schema version 2 and advertises/enforces bounded list inputs such as `indices.maxItems`, allowing MCP clients to validate oversized requests before invoking tools.
 
 ### Deprecated
 

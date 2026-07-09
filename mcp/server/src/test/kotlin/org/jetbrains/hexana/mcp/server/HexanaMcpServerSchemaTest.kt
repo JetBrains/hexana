@@ -39,7 +39,7 @@ class HexanaMcpServerSchemaTest {
 
     @Test
     fun generatedCompatibilityMarkerIsAvailable() {
-        assertEquals(1, HexanaMcpToolCompatibility.SCHEMA_VERSION)
+        assertEquals(2, HexanaMcpToolCompatibility.SCHEMA_VERSION)
         assertTrue(HexanaMcpToolCompatibility.POLICY.contains("append-compatible within a version"))
         assertTrue(HexanaMcpToolCompatibility.POLICY.contains("schema version bump"))
     }
@@ -222,8 +222,8 @@ class HexanaMcpServerSchemaTest {
         val estimatedTokens = (schemaBytes + 3) / 4
 
         assertTrue(
-            estimatedTokens <= 13_875,
-            "Production MCP schema estimate is $estimatedTokens tokens ($schemaBytes bytes), expected <= 13875",
+            estimatedTokens <= 13_885,
+            "Production MCP schema estimate is $estimatedTokens tokens ($schemaBytes bytes), expected <= 13885",
         )
     }
 
@@ -297,6 +297,13 @@ class HexanaMcpServerSchemaTest {
         assertEquals(100, limit.getValue("maximum").jsonPrimitive.int)
         assertEquals(1, maxBytes.getValue("minimum").jsonPrimitive.int)
         assertEquals(60_000, maxBytes.getValue("maximum").jsonPrimitive.int)
+    }
+
+    @Test
+    fun indicesSchemaCarriesSharedMaxItemsBound() {
+        val indices = toolInputSchema("functions_for_indices").getValue("indices").jsonObject
+
+        assertEquals(10_000, indices.getValue("maxItems").jsonPrimitive.int)
     }
 
     @Test

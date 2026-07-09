@@ -13,6 +13,7 @@ import kotlin.Int
 import kotlin.String
 import kotlin.collections.List
 import kotlin.collections.Map
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -79,7 +80,7 @@ import org.jetbrains.hexana.mcp.query.searchBinaryFunctions
  * Generated MCP tool schema compatibility marker.
  */
 public object HexanaMcpToolCompatibility {
-  public const val SCHEMA_VERSION: Int = 1
+  public const val SCHEMA_VERSION: Int = 2
 
   public const val POLICY: String =
       "Tool schemas are append-compatible within a version; breaking changes to names, required inputs, defaults, bounds, output keys, or descriptions require a schema version bump."
@@ -161,7 +162,7 @@ public class HexanaToolset : McpToolsProvider {
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.optionalStringArgument("path")
       val bytesBase64 = args.optionalStringArgument("bytesBase64")
-      val bytes = args.optionalIntListArgument("bytes")
+      val bytes = args.optionalIntListArgument("bytes", maxItems = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES)
       val input = requireBinaryProviderInput(path = path, bytesBase64 = bytesBase64, bytes = bytes)
       val provider = input.provider
       val pathLabel = input.pathLabel
@@ -286,7 +287,7 @@ public class HexanaToolset : McpToolsProvider {
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.optionalStringArgument("path")
       val bytesBase64 = args.optionalStringArgument("bytesBase64")
-      val bytes = args.optionalIntListArgument("bytes")
+      val bytes = args.optionalIntListArgument("bytes", maxItems = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES)
       val offset = args.optionalIntArgument("offset") ?: 0
       val limit = args.optionalIntArgument("limit") ?: 25
       val input = requireBinaryProviderInput(path = path, bytesBase64 = bytesBase64, bytes = bytes)
@@ -421,8 +422,8 @@ public class HexanaToolset : McpToolsProvider {
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.optionalStringArgument("path")
       val bytesBase64 = args.optionalStringArgument("bytesBase64")
-      val bytes = args.optionalIntListArgument("bytes")
-      val query = args.requireStringListArgument("query")
+      val bytes = args.optionalIntListArgument("bytes", maxItems = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES)
+      val query = args.requireStringListArgument("query", maxItems = 20)
       val offset = args.optionalIntArgument("offset") ?: 0
       val limit = args.optionalIntArgument("limit") ?: 25
       val input = requireBinaryProviderInput(path = path, bytesBase64 = bytesBase64, bytes = bytes)
@@ -587,10 +588,10 @@ public class HexanaToolset : McpToolsProvider {
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.optionalStringArgument("path")
       val bytesBase64 = args.optionalStringArgument("bytesBase64")
-      val bytes = args.optionalIntListArgument("bytes")
+      val bytes = args.optionalIntListArgument("bytes", maxItems = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES)
       val operation = args.optionalStringArgument("operation") ?: "overview"
-      val entityTypes = args.optionalStringListArgument("entityTypes")
-      val query = args.optionalStringListArgument("query")
+      val entityTypes = args.optionalStringListArgument("entityTypes", maxItems = 20)
+      val query = args.optionalStringListArgument("query", maxItems = 20)
       val offset = args.optionalIntArgument("offset") ?: 0
       val limit = args.optionalIntArgument("limit") ?: 25
       val detail = args.optionalStringArgument("detail") ?: "summary"
@@ -1178,7 +1179,7 @@ public class HexanaToolset : McpToolsProvider {
     )
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.requireStringArgument("path")
-      val dependencyPaths = args.optionalStringListArgument("dependencyPaths")
+      val dependencyPaths = args.optionalStringListArgument("dependencyPaths", maxItems = 64)
       val projectRoot = args.optionalStringArgument("projectRoot")
       val previousPath = args.optionalStringArgument("previousPath")
       val dependencyLockPath = args.optionalStringArgument("dependencyLockPath")
@@ -1310,7 +1311,7 @@ public class HexanaToolset : McpToolsProvider {
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.requireStringArgument("path")
       val projectRoot = args.optionalStringArgument("projectRoot")
-      val scanRoots = args.optionalStringListArgument("scanRoots")
+      val scanRoots = args.optionalStringListArgument("scanRoots", maxItems = 8)
       val file = requireWasmFile(path)
       val provider = file.requireComponentWasmBinaryProvider()
       val result = provider.resolveComponentDependencies(path = file.path, projectRoot = projectRoot, scanRoots = scanRoots.orEmpty())
@@ -1834,7 +1835,7 @@ public class HexanaToolset : McpToolsProvider {
       val path = args.requireStringArgument("path")
       val policyPath = args.optionalStringArgument("policyPath")
       val logPath = args.optionalStringArgument("logPath")
-      val checkedExports = args.optionalStringListArgument("checkedExports")
+      val checkedExports = args.optionalStringListArgument("checkedExports", maxItems = 500)
       val maxLocals = args.optionalIntArgument("maxLocals")
       val countParams = args.optionalBooleanArgument("countParams") ?: false
       val file = requireWasmFile(path)
@@ -2052,7 +2053,7 @@ public class HexanaToolset : McpToolsProvider {
     )
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.requireStringArgument("path")
-      val query = args.requireStringListArgument("query")
+      val query = args.requireStringListArgument("query", maxItems = 20)
       val limit = args.optionalIntArgument("limit") ?: 50
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
@@ -2285,6 +2286,7 @@ public class HexanaToolset : McpToolsProvider {
             put("minimum", JsonPrimitive(0))
           })
           put("description", JsonPrimitive("List of unified function indices (`funcidx`) to resolve."))
+          put("maxItems", JsonPrimitive(10_000))
         })
         put("projectPath", buildJsonObject {
           put("type", JsonPrimitive("string"))
@@ -2309,7 +2311,7 @@ public class HexanaToolset : McpToolsProvider {
     )
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.requireStringArgument("path")
-      val indices = args.requireIntListArgument("indices")
+      val indices = args.requireIntListArgument("indices", maxItems = 10_000)
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
       val result = provider.readFunctionsByIndices(indices)
@@ -2552,6 +2554,7 @@ public class HexanaToolset : McpToolsProvider {
             put("minimum", JsonPrimitive(0))
           })
           put("description", JsonPrimitive("List of unified function indices (`funcidx`) whose direct call graph and effect summary should be returned."))
+          put("maxItems", JsonPrimitive(10_000))
         })
         put("projectPath", buildJsonObject {
           put("type", JsonPrimitive("string"))
@@ -2576,7 +2579,7 @@ public class HexanaToolset : McpToolsProvider {
     )
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.requireStringArgument("path")
-      val indices = args.requireIntListArgument("indices")
+      val indices = args.requireIntListArgument("indices", maxItems = 10_000)
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
       val result = provider.readFunctionCallGraph(indices)
@@ -2783,7 +2786,7 @@ public class HexanaToolset : McpToolsProvider {
     )
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.requireStringArgument("path")
-      val frames = args.optionalWasmFrameListArgument("frames").orEmpty()
+      val frames = args.optionalWasmFrameListArgument("frames", maxItems = 200).orEmpty()
       val crashReportPath = args.optionalStringArgument("crashReportPath")
       val sourceMapPath = args.optionalStringArgument("sourceMapPath")
       val file = requireWasmFile(path)
@@ -2821,6 +2824,7 @@ public class HexanaToolset : McpToolsProvider {
             put("minimum", JsonPrimitive(0))
           })
           put("description", JsonPrimitive("List of unified function indices (`funcidx`) to resolve to compact symbols and metadata."))
+          put("maxItems", JsonPrimitive(10_000))
         })
         put("sourceMapPath", buildJsonObject {
           put("type", buildJsonArray {
@@ -2853,7 +2857,7 @@ public class HexanaToolset : McpToolsProvider {
     )
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.requireStringArgument("path")
-      val indices = args.requireIntListArgument("indices")
+      val indices = args.requireIntListArgument("indices", maxItems = 10_000)
       val sourceMapPath = args.optionalStringArgument("sourceMapPath")
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
@@ -2937,7 +2941,7 @@ public class HexanaToolset : McpToolsProvider {
     )
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.requireStringArgument("path")
-      val locations = args.requireSourceLocationListArgument("locations")
+      val locations = args.requireSourceLocationListArgument("locations", maxItems = 200)
       val sourceMapPath = args.optionalStringArgument("sourceMapPath")
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
@@ -2970,6 +2974,7 @@ public class HexanaToolset : McpToolsProvider {
             put("minimum", JsonPrimitive(0))
           })
           put("description", JsonPrimitive("List of unified function indices (`funcidx`) whose locals should be returned."))
+          put("maxItems", JsonPrimitive(10_000))
         })
         put("projectPath", buildJsonObject {
           put("type", JsonPrimitive("string"))
@@ -2994,7 +2999,7 @@ public class HexanaToolset : McpToolsProvider {
     )
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.requireStringArgument("path")
-      val indices = args.requireIntListArgument("indices")
+      val indices = args.requireIntListArgument("indices", maxItems = 10_000)
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
       val result = provider.readLocalsForFunctions(indices)
@@ -3028,6 +3033,7 @@ public class HexanaToolset : McpToolsProvider {
             put("minimum", JsonPrimitive(0))
           })
           put("description", JsonPrimitive("List of unified function indices (`funcidx`) whose instructions should be returned."))
+          put("maxItems", JsonPrimitive(10_000))
         })
         put("projectPath", buildJsonObject {
           put("type", JsonPrimitive("string"))
@@ -3052,7 +3058,7 @@ public class HexanaToolset : McpToolsProvider {
     )
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.requireStringArgument("path")
-      val indices = args.requireIntListArgument("indices")
+      val indices = args.requireIntListArgument("indices", maxItems = 10_000)
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
       val result = provider.readInstructionsForFunctions(indices)
@@ -3130,6 +3136,7 @@ public class HexanaToolset : McpToolsProvider {
             put("minimum", JsonPrimitive(0))
           })
           put("description", JsonPrimitive("List of memory indices (`memidx`) to return."))
+          put("maxItems", JsonPrimitive(10_000))
         })
         put("projectPath", buildJsonObject {
           put("type", JsonPrimitive("string"))
@@ -3154,7 +3161,7 @@ public class HexanaToolset : McpToolsProvider {
     )
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.requireStringArgument("path")
-      val indices = args.requireIntListArgument("indices")
+      val indices = args.requireIntListArgument("indices", maxItems = 10_000)
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
       val result = provider.readMemoryByIndices(indices)
@@ -3232,6 +3239,7 @@ public class HexanaToolset : McpToolsProvider {
             put("minimum", JsonPrimitive(0))
           })
           put("description", JsonPrimitive("List of global indices (`globalidx`) to return."))
+          put("maxItems", JsonPrimitive(10_000))
         })
         put("projectPath", buildJsonObject {
           put("type", JsonPrimitive("string"))
@@ -3256,7 +3264,7 @@ public class HexanaToolset : McpToolsProvider {
     )
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.requireStringArgument("path")
-      val indices = args.requireIntListArgument("indices")
+      val indices = args.requireIntListArgument("indices", maxItems = 10_000)
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
       val result = provider.readGlobalsByIndices(indices)
@@ -3435,6 +3443,7 @@ public class HexanaToolset : McpToolsProvider {
             put("minimum", JsonPrimitive(0))
           })
           put("description", JsonPrimitive("List of type indices (`typeidx`) to return."))
+          put("maxItems", JsonPrimitive(10_000))
         })
         put("projectPath", buildJsonObject {
           put("type", JsonPrimitive("string"))
@@ -3459,7 +3468,7 @@ public class HexanaToolset : McpToolsProvider {
     )
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.requireStringArgument("path")
-      val indices = args.requireIntListArgument("indices")
+      val indices = args.requireIntListArgument("indices", maxItems = 10_000)
       val file = requireWasmFile(path)
       val provider = file.requireCoreWasmBinaryProvider()
       val result = provider.readTypesByIndices(indices)
@@ -3962,13 +3971,13 @@ public class HexanaToolset : McpToolsProvider {
     override suspend fun call(args: JsonObject): McpToolCallResult {
       val path = args.requireStringArgument("path")
       val operation = args.optionalStringArgument("operation") ?: "overview"
-      val entityTypes = args.optionalStringListArgument("entityTypes")
-      val query = args.optionalStringListArgument("query")
+      val entityTypes = args.optionalStringListArgument("entityTypes", maxItems = 20)
+      val query = args.optionalStringListArgument("query", maxItems = 20)
       val baselinePath = args.optionalStringArgument("baselinePath")
       val bindingPath = args.optionalStringArgument("bindingPath")
       val startName = args.optionalStringArgument("startName")
       val startFuncidx = args.optionalIntArgument("startFuncidx")
-      val relations = args.optionalStringListArgument("relations")
+      val relations = args.optionalStringListArgument("relations", maxItems = 20)
       val limit = args.optionalIntArgument("limit") ?: 25
       val detail = args.optionalStringArgument("detail") ?: "summary"
       val maxBytes = args.optionalIntArgument("maxBytes") ?: 24_000
@@ -3997,32 +4006,39 @@ private fun JsonObject.optionalIntArgument(name: String): Int? = this[name]?.jso
 
 private fun JsonObject.optionalBooleanArgument(name: String): Boolean? = this[name]?.jsonPrimitive?.booleanOrNull
 
-private fun JsonObject.requireStringListArgument(name: String): List<String> = this[name]?.jsonArray?.map { it.jsonPrimitive.content }
-    ?: mcpFail("Missing required argument `$name`")
-
-private fun JsonObject.optionalStringListArgument(name: String): List<String>? = this[name]?.jsonArray?.map { it.jsonPrimitive.content }
-
-private fun JsonObject.requireIntListArgument(name: String): List<Int> = this[name]?.jsonArray?.map { it.jsonPrimitive.int }
-    ?: mcpFail("Missing required argument `$name`")
-
-private fun JsonObject.optionalIntListArgument(name: String): List<Int>? = this[name]?.jsonArray?.map { it.jsonPrimitive.int }
-
-private fun JsonObject.requireWasmFrameListArgument(name: String): List<WasmFrameInput> {
-  val array = this[name]?.jsonArray ?: mcpFail("Missing required argument `$name`")
-  return array.mapIndexed { index, element ->
-      val value = element.jsonObject
-      WasmFrameInput(
-          funcidx = value["funcidx"]?.jsonPrimitive?.int
-              ?: mcpFail("Invalid `$name[$index].funcidx`: expected integer"),
-          codeOffset = value["codeOffset"]?.jsonPrimitive?.longOrNull,
-          module = value["module"]?.jsonPrimitive?.content,
-          label = value["label"]?.jsonPrimitive?.content,
-      )
+private fun JsonArray.requireMaxItems(name: String, maxItems: Int? = null) {
+  if (maxItems != null && size > maxItems) {
+      mcpFail("`$name` must contain at most $maxItems items")
   }
 }
 
-private fun JsonObject.optionalWasmFrameListArgument(name: String): List<WasmFrameInput>? {
+private fun JsonObject.requireStringListArgument(name: String, maxItems: Int? = null): List<String> {
+  val array = this[name]?.jsonArray ?: mcpFail("Missing required argument `$name`")
+  array.requireMaxItems(name, maxItems)
+  return array.map { it.jsonPrimitive.content }
+}
+
+private fun JsonObject.optionalStringListArgument(name: String, maxItems: Int? = null): List<String>? {
   val array = this[name]?.jsonArray ?: return null
+  array.requireMaxItems(name, maxItems)
+  return array.map { it.jsonPrimitive.content }
+}
+
+private fun JsonObject.requireIntListArgument(name: String, maxItems: Int? = null): List<Int> {
+  val array = this[name]?.jsonArray ?: mcpFail("Missing required argument `$name`")
+  array.requireMaxItems(name, maxItems)
+  return array.map { it.jsonPrimitive.int }
+}
+
+private fun JsonObject.optionalIntListArgument(name: String, maxItems: Int? = null): List<Int>? {
+  val array = this[name]?.jsonArray ?: return null
+  array.requireMaxItems(name, maxItems)
+  return array.map { it.jsonPrimitive.int }
+}
+
+private fun JsonObject.requireWasmFrameListArgument(name: String, maxItems: Int? = null): List<WasmFrameInput> {
+  val array = this[name]?.jsonArray ?: mcpFail("Missing required argument `$name`")
+  array.requireMaxItems(name, maxItems)
   return array.mapIndexed { index, element ->
       val value = element.jsonObject
       WasmFrameInput(
@@ -4035,8 +4051,24 @@ private fun JsonObject.optionalWasmFrameListArgument(name: String): List<WasmFra
   }
 }
 
-private fun JsonObject.requireSourceLocationListArgument(name: String): List<SourceLocationInput> {
+private fun JsonObject.optionalWasmFrameListArgument(name: String, maxItems: Int? = null): List<WasmFrameInput>? {
+  val array = this[name]?.jsonArray ?: return null
+  array.requireMaxItems(name, maxItems)
+  return array.mapIndexed { index, element ->
+      val value = element.jsonObject
+      WasmFrameInput(
+          funcidx = value["funcidx"]?.jsonPrimitive?.int
+              ?: mcpFail("Invalid `$name[$index].funcidx`: expected integer"),
+          codeOffset = value["codeOffset"]?.jsonPrimitive?.longOrNull,
+          module = value["module"]?.jsonPrimitive?.content,
+          label = value["label"]?.jsonPrimitive?.content,
+      )
+  }
+}
+
+private fun JsonObject.requireSourceLocationListArgument(name: String, maxItems: Int? = null): List<SourceLocationInput> {
   val array = this[name]?.jsonArray ?: mcpFail("Missing required argument `$name`")
+  array.requireMaxItems(name, maxItems)
   return array.map { element ->
       val value = element.jsonObject
       SourceLocationInput(

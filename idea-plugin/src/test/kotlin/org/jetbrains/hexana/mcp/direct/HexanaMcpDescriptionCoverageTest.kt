@@ -39,7 +39,7 @@ class HexanaMcpDescriptionCoverageTest : HexanaMcpToolsetDirectTestBase() {
     }
 
     fun testGeneratedCompatibilityMarkerIsAvailable() {
-        assertEquals(1, HexanaMcpToolCompatibility.SCHEMA_VERSION)
+        assertEquals(2, HexanaMcpToolCompatibility.SCHEMA_VERSION)
         assertContains(HexanaMcpToolCompatibility.POLICY, "append-compatible within a version")
         assertContains(HexanaMcpToolCompatibility.POLICY, "schema version bump")
     }

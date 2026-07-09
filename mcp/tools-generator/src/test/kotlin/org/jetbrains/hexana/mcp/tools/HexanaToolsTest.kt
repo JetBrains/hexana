@@ -701,7 +701,12 @@ class HexanaToolsTest {
             ),
             BinaryInputClass.inputCapabilities,
         )
-        assertEquals(WasmInputClass.inputCapabilities, indicesInput("SampleIndicesInput", "Indices.").inputCapabilities)
+        val sampleIndicesInput = indicesInput("SampleIndicesInput", "Indices.")
+        assertEquals(WasmInputClass.inputCapabilities, sampleIndicesInput.inputCapabilities)
+        assertEquals(
+            SchemaIntValue.Literal(10_000),
+            sampleIndicesInput.fields.single { it.name == "indices" }.maxItems,
+        )
         assertEquals(
             BinaryInputClass.inputCapabilities,
             BinaryInputClass.with("SampleBinaryInput") {

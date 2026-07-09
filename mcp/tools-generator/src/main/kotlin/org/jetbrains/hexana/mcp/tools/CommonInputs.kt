@@ -54,4 +54,5 @@ internal fun indicesInput(name: String, indicesDescription: String): ClassSpec =
         list("indices", of = int())
             .describe(indicesDescription)
             .itemsMinimum(0)
+            .maxItems(10_000)
     }

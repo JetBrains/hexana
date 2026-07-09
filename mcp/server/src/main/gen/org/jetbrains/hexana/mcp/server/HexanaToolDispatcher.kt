@@ -19,7 +19,7 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
  * Generated MCP tool schema compatibility marker.
  */
 public object HexanaMcpToolCompatibility {
-  public const val SCHEMA_VERSION: Int = 1
+  public const val SCHEMA_VERSION: Int = 2
 
   public const val POLICY: String =
       "Tool schemas are append-compatible within a version; breaking changes to names, required inputs, defaults, bounds, output keys, or descriptions require a schema version bump."
@@ -2658,6 +2658,7 @@ private fun Server.registerFunctionsForIndicesTool(handlers: HexanaToolHandlers)
           put("minimum", JsonPrimitive(0))
         })
         put("description", JsonPrimitive("List of unified function indices (`funcidx`) to resolve."))
+        put("maxItems", JsonPrimitive(10_000))
       })
     },
     required = listOf("indices")
@@ -2970,6 +2971,7 @@ private fun Server.registerGetFunctionCallGraphTool(handlers: HexanaToolHandlers
           put("minimum", JsonPrimitive(0))
         })
         put("description", JsonPrimitive("List of unified function indices (`funcidx`) whose direct call graph and effect summary should be returned."))
+        put("maxItems", JsonPrimitive(10_000))
       })
     },
     required = listOf("indices")
@@ -3278,6 +3280,7 @@ private fun Server.registerResolveFunctionSymbolsTool(handlers: HexanaToolHandle
           put("minimum", JsonPrimitive(0))
         })
         put("description", JsonPrimitive("List of unified function indices (`funcidx`) to resolve to compact symbols and metadata."))
+        put("maxItems", JsonPrimitive(10_000))
       })
       put("sourceMapPath", buildJsonObject {
         put("type", buildJsonArray {
@@ -3453,6 +3456,7 @@ private fun Server.registerGetLocalsForFunctionsTool(handlers: HexanaToolHandler
           put("minimum", JsonPrimitive(0))
         })
         put("description", JsonPrimitive("List of unified function indices (`funcidx`) whose locals should be returned."))
+        put("maxItems", JsonPrimitive(10_000))
       })
     },
     required = listOf("indices")
@@ -3526,6 +3530,7 @@ private fun Server.registerGetInstructionsForFunctionsTool(handlers: HexanaToolH
           put("minimum", JsonPrimitive(0))
         })
         put("description", JsonPrimitive("List of unified function indices (`funcidx`) whose instructions should be returned."))
+        put("maxItems", JsonPrimitive(10_000))
       })
     },
     required = listOf("indices")
@@ -3659,6 +3664,7 @@ private fun Server.registerGetMemoryForIndicesTool(handlers: HexanaToolHandlers)
           put("minimum", JsonPrimitive(0))
         })
         put("description", JsonPrimitive("List of memory indices (`memidx`) to return."))
+        put("maxItems", JsonPrimitive(10_000))
       })
     },
     required = listOf("indices")
@@ -3792,6 +3798,7 @@ private fun Server.registerGetGlobalsForIndicesTool(handlers: HexanaToolHandlers
           put("minimum", JsonPrimitive(0))
         })
         put("description", JsonPrimitive("List of global indices (`globalidx`) to return."))
+        put("maxItems", JsonPrimitive(10_000))
       })
     },
     required = listOf("indices")
@@ -4058,6 +4065,7 @@ private fun Server.registerGetTypesForIndicesTool(handlers: HexanaToolHandlers) 
           put("minimum", JsonPrimitive(0))
         })
         put("description", JsonPrimitive("List of type indices (`typeidx`) to return."))
+        put("maxItems", JsonPrimitive(10_000))
       })
     },
     required = listOf("indices")

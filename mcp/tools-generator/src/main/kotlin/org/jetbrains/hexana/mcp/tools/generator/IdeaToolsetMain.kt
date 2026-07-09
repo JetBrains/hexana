@@ -6,6 +6,7 @@ import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.MemberName
+import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.TypeSpec
@@ -44,6 +45,7 @@ private val MCP_TOOL_SCHEMA = ClassName("com.intellij.mcpserver", "McpToolSchema
 private val MCP_FAIL = MemberName("com.intellij.mcpserver", "mcpFail")
 private val HEXANA_ANALYSIS_LIMITS = ClassName("org.jetbrains.hexana.mcp", "HexanaAnalysisLimits")
 private val JSON_ELEMENT = ClassName("kotlinx.serialization.json", "JsonElement")
+private val JSON_ARRAY = ClassName("kotlinx.serialization.json", "JsonArray")
 private val JSON_OBJECT = ClassName("kotlinx.serialization.json", "JsonObject")
 private val JSON_PRIMITIVE = ClassName("kotlinx.serialization.json", "JsonPrimitive")
 private val WASM_FRAME_INPUT = ClassName("org.jetbrains.hexana.mcp.model.functions", "WasmFrameInput")
@@ -92,6 +94,7 @@ private fun buildToolsetFile(tools: List<ToolSpec>): FileSpec {
         .addFunction(optionalStringArgumentFunction())
         .addFunction(optionalIntArgumentFunction())
         .addFunction(optionalBooleanArgumentFunction())
+        .addFunction(requireMaxItemsFunction())
         .addFunction(requireStringListArgumentFunction())
         .addFunction(optionalStringListArgumentFunction())
         .addFunction(requireIntListArgumentFunction())
@@ -169,7 +172,11 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
     if (spec.inputPattern.isBinaryPattern()) {
         code.addStatement("val path = args.optionalStringArgument(%S)", "path")
         code.addStatement("val bytesBase64 = args.optionalStringArgument(%S)", "bytesBase64")
-        code.addStatement("val bytes = args.optionalIntListArgument(%S)", "bytes")
+        code.addStatement(
+            "val bytes = args.optionalIntListArgument(%S%L)",
+            "bytes",
+            maxItemsArgument(inputField(spec.input, "bytes")),
+        )
     } else {
         code.addStatement("val path = args.requireStringArgument(%S)", "path")
     }
@@ -195,22 +202,42 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
         }
         ToolInputPattern.ExportNameSearch -> {
             val limit = inputField(spec.input, "limit").defaultOrError<Int>()
-            code.addStatement("val query = args.requireStringListArgument(%S)", "query")
+            code.addStatement(
+                "val query = args.requireStringListArgument(%S%L)",
+                "query",
+                maxItemsArgument(inputField(spec.input, "query")),
+            )
             code.addStatement("val limit = args.optionalIntArgument(%S) ?: %L", "limit", limit)
         }
         ToolInputPattern.Indices ->
-            code.addStatement("val indices = args.requireIntListArgument(%S)", "indices")
+            code.addStatement(
+                "val indices = args.requireIntListArgument(%S%L)",
+                "indices",
+                maxItemsArgument(inputField(spec.input, "indices")),
+            )
         ToolInputPattern.SourceMappedIndices -> {
-            code.addStatement("val indices = args.requireIntListArgument(%S)", "indices")
+            code.addStatement(
+                "val indices = args.requireIntListArgument(%S%L)",
+                "indices",
+                maxItemsArgument(inputField(spec.input, "indices")),
+            )
             code.addStatement("val sourceMapPath = args.optionalStringArgument(%S)", "sourceMapPath")
         }
         ToolInputPattern.WasmFrames -> {
-            code.addStatement("val frames = args.optionalWasmFrameListArgument(%S).orEmpty()", "frames")
+            code.addStatement(
+                "val frames = args.optionalWasmFrameListArgument(%S%L).orEmpty()",
+                "frames",
+                maxItemsArgument(inputField(spec.input, "frames")),
+            )
             code.addStatement("val crashReportPath = args.optionalStringArgument(%S)", "crashReportPath")
             code.addStatement("val sourceMapPath = args.optionalStringArgument(%S)", "sourceMapPath")
         }
         ToolInputPattern.SourceLocations -> {
-            code.addStatement("val locations = args.requireSourceLocationListArgument(%S)", "locations")
+            code.addStatement(
+                "val locations = args.requireSourceLocationListArgument(%S%L)",
+                "locations",
+                maxItemsArgument(inputField(spec.input, "locations")),
+            )
             code.addStatement("val sourceMapPath = args.optionalStringArgument(%S)", "sourceMapPath")
         }
         is ToolInputPattern.ClosedRange -> {
@@ -238,7 +265,11 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             val countParams = inputField(spec.input, "countParams").defaultOrError<Boolean>()
             code.addStatement("val policyPath = args.optionalStringArgument(%S)", "policyPath")
             code.addStatement("val logPath = args.optionalStringArgument(%S)", "logPath")
-            code.addStatement("val checkedExports = args.optionalStringListArgument(%S)", "checkedExports")
+            code.addStatement(
+                "val checkedExports = args.optionalStringListArgument(%S%L)",
+                "checkedExports",
+                maxItemsArgument(inputField(spec.input, "checkedExports")),
+            )
             code.addStatement("val maxLocals = args.optionalIntArgument(%S)", "maxLocals")
             code.addStatement("val countParams = args.optionalBooleanArgument(%S) ?: %L", "countParams", countParams)
         }
@@ -248,13 +279,25 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             val detail = inputField(spec.input, "detail").defaultOrError<String>()
             val maxBytes = inputField(spec.input, "maxBytes").defaultOrError<Int>()
             code.addStatement("val operation = args.optionalStringArgument(%S) ?: %S", "operation", operation)
-            code.addStatement("val entityTypes = args.optionalStringListArgument(%S)", "entityTypes")
-            code.addStatement("val query = args.optionalStringListArgument(%S)", "query")
+            code.addStatement(
+                "val entityTypes = args.optionalStringListArgument(%S%L)",
+                "entityTypes",
+                maxItemsArgument(inputField(spec.input, "entityTypes")),
+            )
+            code.addStatement(
+                "val query = args.optionalStringListArgument(%S%L)",
+                "query",
+                maxItemsArgument(inputField(spec.input, "query")),
+            )
             code.addStatement("val baselinePath = args.optionalStringArgument(%S)", "baselinePath")
             code.addStatement("val bindingPath = args.optionalStringArgument(%S)", "bindingPath")
             code.addStatement("val startName = args.optionalStringArgument(%S)", "startName")
             code.addStatement("val startFuncidx = args.optionalIntArgument(%S)", "startFuncidx")
-            code.addStatement("val relations = args.optionalStringListArgument(%S)", "relations")
+            code.addStatement(
+                "val relations = args.optionalStringListArgument(%S%L)",
+                "relations",
+                maxItemsArgument(inputField(spec.input, "relations")),
+            )
             code.addStatement("val limit = args.optionalIntArgument(%S) ?: %L", "limit", limit)
             code.addStatement("val detail = args.optionalStringArgument(%S) ?: %S", "detail", detail)
             code.addStatement("val maxBytes = args.optionalIntArgument(%S) ?: %L", "maxBytes", maxBytes)
@@ -278,10 +321,18 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
         ToolInputPattern.ComponentSurface -> Unit
         ToolInputPattern.ComponentDependencies -> {
             code.addStatement("val projectRoot = args.optionalStringArgument(%S)", "projectRoot")
-            code.addStatement("val scanRoots = args.optionalStringListArgument(%S)", "scanRoots")
+            code.addStatement(
+                "val scanRoots = args.optionalStringListArgument(%S%L)",
+                "scanRoots",
+                maxItemsArgument(inputField(spec.input, "scanRoots")),
+            )
         }
         ToolInputPattern.ComponentCompatibility -> {
-            code.addStatement("val dependencyPaths = args.optionalStringListArgument(%S)", "dependencyPaths")
+            code.addStatement(
+                "val dependencyPaths = args.optionalStringListArgument(%S%L)",
+                "dependencyPaths",
+                maxItemsArgument(inputField(spec.input, "dependencyPaths")),
+            )
             code.addStatement("val projectRoot = args.optionalStringArgument(%S)", "projectRoot")
             code.addStatement("val previousPath = args.optionalStringArgument(%S)", "previousPath")
             code.addStatement("val dependencyLockPath = args.optionalStringArgument(%S)", "dependencyLockPath")
@@ -294,8 +345,16 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
             val detail = inputField(spec.input, "detail").defaultOrError<String>()
             val maxBytes = inputField(spec.input, "maxBytes").defaultOrError<Int>()
             code.addStatement("val operation = args.optionalStringArgument(%S) ?: %S", "operation", operation)
-            code.addStatement("val entityTypes = args.optionalStringListArgument(%S)", "entityTypes")
-            code.addStatement("val query = args.optionalStringListArgument(%S)", "query")
+            code.addStatement(
+                "val entityTypes = args.optionalStringListArgument(%S%L)",
+                "entityTypes",
+                maxItemsArgument(inputField(spec.input, "entityTypes")),
+            )
+            code.addStatement(
+                "val query = args.optionalStringListArgument(%S%L)",
+                "query",
+                maxItemsArgument(inputField(spec.input, "query")),
+            )
             code.addStatement("val offset = args.optionalIntArgument(%S) ?: %L", "offset", offset)
             code.addStatement("val limit = args.optionalIntArgument(%S) ?: %L", "limit", limit)
             code.addStatement("val detail = args.optionalStringArgument(%S) ?: %S", "detail", detail)
@@ -310,7 +369,11 @@ private fun buildToolBody(spec: ToolSpec): CodeBlock {
         ToolInputPattern.BinaryFunctionSearch -> {
             val offset = inputField(spec.input, "offset").defaultOrError<Int>()
             val limit = inputField(spec.input, "limit").defaultOrError<Int>()
-            code.addStatement("val query = args.requireStringListArgument(%S)", "query")
+            code.addStatement(
+                "val query = args.requireStringListArgument(%S%L)",
+                "query",
+                maxItemsArgument(inputField(spec.input, "query")),
+            )
             code.addStatement("val offset = args.optionalIntArgument(%S) ?: %L", "offset", offset)
             code.addStatement("val limit = args.optionalIntArgument(%S) ?: %L", "limit", limit)
         }
@@ -867,6 +930,12 @@ private fun schemaIntValue(value: SchemaIntValue): CodeBlock {
     }
 }
 
+private fun maxItemsArgument(field: FieldSpec): CodeBlock {
+    return field.maxItems?.let {
+        CodeBlock.of(", maxItems = %L", schemaIntValue(it))
+    } ?: CodeBlock.of("")
+}
+
 private fun schemaDefaultValue(field: FieldSpec): CodeBlock {
     return when (val value = field.default) {
         is Int,
@@ -940,16 +1009,43 @@ private fun optionalBooleanArgumentFunction(): FunSpec {
         .build()
 }
 
+private fun requireMaxItemsFunction(): FunSpec {
+    return FunSpec.builder("requireMaxItems")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_ARRAY)
+        .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
+        .addCode(
+            """
+            if (maxItems != null && size > maxItems) {
+                %M("`${'$'}name` must contain at most ${'$'}maxItems items")
+            }
+            """.trimIndent(),
+            MCP_FAIL,
+        )
+        .build()
+}
+
 private fun requireStringListArgumentFunction(): FunSpec {
     return FunSpec.builder("requireStringListArgument")
         .addModifiers(KModifier.PRIVATE)
         .receiver(JSON_OBJECT)
         .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
         .returns(LIST.parameterizedBy(String::class.asTypeName()))
         .addCode(
             """
-            return this[name]?.jsonArray?.map { it.jsonPrimitive.content }
-                ?: %M("Missing required argument `${'$'}name`")
+            val array = this[name]?.jsonArray ?: %M("Missing required argument `${'$'}name`")
+            array.requireMaxItems(name, maxItems)
+            return array.map { it.jsonPrimitive.content }
             """.trimIndent(),
             MCP_FAIL,
         )
@@ -961,8 +1057,19 @@ private fun optionalStringListArgumentFunction(): FunSpec {
         .addModifiers(KModifier.PRIVATE)
         .receiver(JSON_OBJECT)
         .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
         .returns(LIST.parameterizedBy(String::class.asTypeName()).copy(nullable = true))
-        .addCode("return this[name]?.jsonArray?.map { it.jsonPrimitive.content }\n")
+        .addCode(
+            """
+            val array = this[name]?.jsonArray ?: return null
+            array.requireMaxItems(name, maxItems)
+            return array.map { it.jsonPrimitive.content }
+            """.trimIndent()
+        )
         .build()
 }
 
@@ -971,11 +1078,17 @@ private fun requireIntListArgumentFunction(): FunSpec {
         .addModifiers(KModifier.PRIVATE)
         .receiver(JSON_OBJECT)
         .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
         .returns(LIST.parameterizedBy(Int::class.asTypeName()))
         .addCode(
             """
-            return this[name]?.jsonArray?.map { it.jsonPrimitive.int }
-                ?: %M("Missing required argument `${'$'}name`")
+            val array = this[name]?.jsonArray ?: %M("Missing required argument `${'$'}name`")
+            array.requireMaxItems(name, maxItems)
+            return array.map { it.jsonPrimitive.int }
             """.trimIndent(),
             MCP_FAIL,
         )
@@ -987,8 +1100,19 @@ private fun optionalIntListArgumentFunction(): FunSpec {
         .addModifiers(KModifier.PRIVATE)
         .receiver(JSON_OBJECT)
         .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
         .returns(LIST.parameterizedBy(Int::class.asTypeName()).copy(nullable = true))
-        .addCode("return this[name]?.jsonArray?.map { it.jsonPrimitive.int }\n")
+        .addCode(
+            """
+            val array = this[name]?.jsonArray ?: return null
+            array.requireMaxItems(name, maxItems)
+            return array.map { it.jsonPrimitive.int }
+            """.trimIndent()
+        )
         .build()
 }
 
@@ -997,10 +1121,16 @@ private fun requireWasmFrameListArgumentFunction(): FunSpec {
         .addModifiers(KModifier.PRIVATE)
         .receiver(JSON_OBJECT)
         .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
         .returns(LIST.parameterizedBy(WASM_FRAME_INPUT))
         .addCode(
             """
             val array = this[name]?.jsonArray ?: %M("Missing required argument `${'$'}name`")
+            array.requireMaxItems(name, maxItems)
             return array.mapIndexed { index, element ->
                 val value = element.jsonObject
                 %T(
@@ -1024,10 +1154,16 @@ private fun optionalWasmFrameListArgumentFunction(): FunSpec {
         .addModifiers(KModifier.PRIVATE)
         .receiver(JSON_OBJECT)
         .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
         .returns(LIST.parameterizedBy(WASM_FRAME_INPUT).copy(nullable = true))
         .addCode(
             """
             val array = this[name]?.jsonArray ?: return null
+            array.requireMaxItems(name, maxItems)
             return array.mapIndexed { index, element ->
                 val value = element.jsonObject
                 %T(
@@ -1050,10 +1186,16 @@ private fun requireSourceLocationListArgumentFunction(): FunSpec {
         .addModifiers(KModifier.PRIVATE)
         .receiver(JSON_OBJECT)
         .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
         .returns(LIST.parameterizedBy(SOURCE_LOCATION_INPUT))
         .addCode(
             """
             val array = this[name]?.jsonArray ?: %M("Missing required argument `${'$'}name`")
+            array.requireMaxItems(name, maxItems)
             return array.map { element ->
                 val value = element.jsonObject
                 %T(

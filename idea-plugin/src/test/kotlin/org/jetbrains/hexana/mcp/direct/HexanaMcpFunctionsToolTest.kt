@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.direct
 
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonPrimitive
@@ -114,6 +115,23 @@ class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(2, functions.size)
         assertEquals(0, functions.obj(0).int("funcidx"))
         assertEquals(1, functions.obj(1).int("funcidx"))
+    }
+
+    fun testFunctionsForIndicesRejectsOversizedIndicesBeforeResolvingFile() {
+        val result = callTool(
+            "functions_for_indices",
+            buildJsonObject {
+                put("path", JsonPrimitive("fixtures/direct/functions/missing.wasm"))
+                put("indices", buildJsonArray {
+                    repeat(10_001) { index ->
+                        add(JsonPrimitive(index))
+                    }
+                })
+            }
+        )
+
+        assertTrue(result.isError)
+        assertEquals("`indices` must contain at most 10000 items", result.textPayloads.single())
     }
 
     fun testResolveFunctionSignatureReturnsTypeIndexAndSignature() {

@@ -9,7 +9,7 @@ class HexanaToolCompatibilityTest {
 
     @Test
     fun `tool schema compatibility marker is explicit`() {
-        assertEquals(1, HexanaToolSchemaCompatibility.schemaVersion)
+        assertEquals(2, HexanaToolSchemaCompatibility.schemaVersion)
         assertEquals(
             "Tool schemas are append-compatible within a version; breaking changes to names, required inputs, defaults, bounds, output keys, or descriptions require a schema version bump.",
             HexanaToolSchemaCompatibility.policy,
@@ -169,6 +169,6 @@ class HexanaToolCompatibilityTest {
     }
 
     private companion object {
-        const val EXPECTED_COMPATIBILITY_FINGERPRINT = "2a46881220a5d10ce807354268fe1faff76834ff17af1b3bbaf4bafe9fa15047"
+        const val EXPECTED_COMPATIBILITY_FINGERPRINT = "75539feb5502e386c534f87f51355122d370c575fbde06d8ae5789f34c43fa55"
     }
 }

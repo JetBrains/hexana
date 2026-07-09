@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp.server
 
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.*
@@ -9,6 +10,8 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.HexanaAnalysisService
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
 import org.jetbrains.hexana.mcp.WasmInput
+import org.jetbrains.hexana.mcp.model.components.ComponentDependencySummaryResult
+import org.jetbrains.hexana.mcp.model.components.ResolveComponentDependenciesResult
 import org.jetbrains.hexana.mcp.model.data.ListDataSectionsResult
 import org.jetbrains.hexana.mcp.model.data.ListDataSegmentsResult
 import org.jetbrains.hexana.mcp.model.elements.ListElementSegmentsResult
@@ -1511,6 +1514,93 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun schemaArrayBoundsRejectBeforeServiceCall() {
+        val cases = listOf(
+            InvalidInputCase("query_artifacts entityTypes", "`entityTypes` must contain at most 20 items") {
+                it.queryArtifacts(wasmPathWith("entityTypes", jsonStringArray(21)))
+            },
+            InvalidInputCase("query_artifacts query", "`query` must contain at most 20 items") {
+                it.queryArtifacts(wasmPathWith("query", jsonStringArray(21)))
+            },
+            InvalidInputCase("query_artifacts relations", "`relations` must contain at most 20 items") {
+                it.queryArtifacts(wasmPathWith("relations", jsonStringArray(21)))
+            },
+            InvalidInputCase("query_binary entityTypes", "`entityTypes` must contain at most 20 items") {
+                it.queryBinary(binaryPathWith("entityTypes", jsonStringArray(21)))
+            },
+            InvalidInputCase("query_binary query", "`query` must contain at most 20 items") {
+                it.queryBinary(binaryPathWith("query", jsonStringArray(21)))
+            },
+            InvalidInputCase("resolve_component_dependencies scanRoots", "`scanRoots` must contain at most 8 items") {
+                it.resolveComponentDependencies(wasmPathWith("scanRoots", jsonStringArray(9)))
+            },
+            InvalidInputCase("functions_for_indices indices", "`indices` must contain at most 10000 items") {
+                it.functionsForIndices(wasmPathWith("indices", jsonIntArray(10_001)))
+            },
+        )
+
+        cases.forEach { case ->
+            assertInvalidInputBeforeServiceCall(case)
+        }
+    }
+
+    @Test
+    fun scanRootsValidationUsesConfiguredResourceLimit() {
+        val calls = mutableListOf<List<String>>()
+        val handlers = HexanaToolHandlers(
+            resourceLimits = HexanaResourceLimits(maxScanRoots = 10),
+            analysisService = resolveComponentDependenciesRecordingService(calls),
+            logger = RecordingLogger()
+        )
+
+        val result = handlers.resolveComponentDependencies(wasmPathWith("scanRoots", jsonStringArray(9)))
+
+        assertFalse(result.isError == true)
+        assertEquals(listOf((0 until 9).map { "item-$it" }), calls)
+    }
+
+    @Test
+    fun schemaNumericBoundsRejectBeforeServiceCall() {
+        val cases = listOf(
+            InvalidInputCase("query_artifacts startFuncidx", "`startFuncidx` must be >= 0") {
+                it.queryArtifacts(wasmPathWith("startFuncidx", JsonPrimitive(-1)))
+            },
+            InvalidInputCase("query_artifacts limit", "`limit` must be between 1 and 100") {
+                it.queryArtifacts(wasmPathWith("limit", JsonPrimitive(0)))
+            },
+            InvalidInputCase("query_artifacts maxBytes", "`maxBytes` must be between 1 and 60000") {
+                it.queryArtifacts(wasmPathWith("maxBytes", JsonPrimitive(60_001)))
+            },
+            InvalidInputCase("query_binary offset", "`offset` must be >= 0") {
+                it.queryBinary(binaryPathWith("offset", JsonPrimitive(-1)))
+            },
+            InvalidInputCase("list_binary_functions limit", "`limit` must be between 1 and 100") {
+                it.listBinaryFunctions(binaryPathWith("limit", JsonPrimitive(101)))
+            },
+            InvalidInputCase("search_exports limit", "`limit` must be between 1 and 200") {
+                it.searchExports(wasmPathWith("limit", JsonPrimitive(201)).withQueryArray())
+            },
+            InvalidInputCase("list_functions limit", "`limit` must be >= 1") {
+                it.listFunctions(wasmPathWith("limit", JsonPrimitive(0)))
+            },
+            InvalidInputCase("disassemble_function funcidx", "`funcidx` must be >= 0") {
+                it.disassembleFunction(wasmPathWith("funcidx", JsonPrimitive(-1)))
+            },
+            InvalidInputCase("functions_for_indices item", "`indices[0]` must be >= 0") {
+                it.functionsForIndices(
+                    wasmPathWith("indices", buildJsonArray {
+                        add(JsonPrimitive(-1))
+                    })
+                )
+            },
+        )
+
+        cases.forEach { case ->
+            assertInvalidInputBeforeServiceCall(case)
+        }
+    }
+
+    @Test
     fun listDataSegmentsValidatesSegmentRangeInput() {
         val result = handlers.listDataSegments(
             buildJsonObject {
@@ -1724,6 +1814,35 @@ class HexanaToolHandlersTest {
         put("path", JsonPrimitive(path))
     }
 
+    private fun wasmPathWith(name: String, value: JsonElement): JsonObject = buildJsonObject {
+        put("path", JsonPrimitive("/tmp/module.wasm"))
+        put(name, value)
+    }
+
+    private fun binaryPathWith(name: String, value: JsonElement): JsonObject = buildJsonObject {
+        put("path", JsonPrimitive("/tmp/module.bin"))
+        put(name, value)
+    }
+
+    private fun JsonObject.withQueryArray(): JsonObject = buildJsonObject {
+        this@withQueryArray.forEach { (name, value) -> put(name, value) }
+        put("query", buildJsonArray {
+            add(JsonPrimitive("main"))
+        })
+    }
+
+    private fun jsonStringArray(size: Int): JsonArray = buildJsonArray {
+        repeat(size) { index ->
+            add(JsonPrimitive("item-$index"))
+        }
+    }
+
+    private fun jsonIntArray(size: Int): JsonArray = buildJsonArray {
+        repeat(size) { index ->
+            add(JsonPrimitive(index))
+        }
+    }
+
     private fun createWasmFile(name: String, wat: String) = temporaryFolder.newFile(name).toPath().also {
         Files.write(it, wat2wasm(wat))
     }
@@ -1753,6 +1872,88 @@ class HexanaToolHandlersTest {
             }
         } as HexanaAnalysisService
     }
+
+    private fun resolveComponentDependenciesRecordingService(calls: MutableList<List<String>>): HexanaAnalysisService {
+        return Proxy.newProxyInstance(
+            HexanaAnalysisService::class.java.classLoader,
+            arrayOf(HexanaAnalysisService::class.java)
+        ) { proxy, method, args ->
+            when (method.name) {
+                "resolveComponentDependencies" -> {
+                    @Suppress("UNCHECKED_CAST")
+                    val scanRoots = args?.get(2) as List<String>
+                    calls += scanRoots
+                    ResolveComponentDependenciesResult(
+                        path = (args[0] as WasmInput.FilePath).path,
+                        scanRoots = scanRoots,
+                        requiredNonRuntimeImports = emptyList(),
+                        ignoredRuntimeImports = emptyList(),
+                        resolvedDependencyPaths = emptyList(),
+                        directDependencies = emptyList(),
+                        transitiveDependencies = emptyList(),
+                        unresolvedImports = emptyList(),
+                        candidateConflicts = emptyList(),
+                        rejectedCandidates = emptyList(),
+                        minimalRunBuildFix = "No dependency changes required.",
+                        summary = ComponentDependencySummaryResult(
+                            directRequiredImportCount = 0,
+                            transitiveRequiredImportCount = 0,
+                            ignoredRuntimeImportCount = 0,
+                            directResolvedCount = 0,
+                            transitiveResolvedCount = 0,
+                            unresolvedCount = 0,
+                            ambiguousCount = 0,
+                            rejectedCandidateCount = 0,
+                            scannedFileCount = 0,
+                            truncated = false,
+                        ),
+                    )
+                }
+                "toString" -> "ResolveComponentDependenciesRecordingService"
+                "hashCode" -> System.identityHashCode(proxy)
+                "equals" -> proxy === args?.singleOrNull()
+                else -> error("Unexpected service call: ${method.name}")
+            }
+        } as HexanaAnalysisService
+    }
+
+    private fun assertInvalidInputBeforeServiceCall(case: InvalidInputCase) {
+        val calls = mutableListOf<String>()
+        val handlers = HexanaToolHandlers(
+            analysisService = unexpectedCallAnalysisService(calls),
+            logger = RecordingLogger()
+        )
+
+        val result = case.invoke(handlers)
+
+        assertEquals(true, result.isError, case.name)
+        assertEquals("INVALID_INPUT", result.structuredContent?.get("code")?.jsonPrimitive?.content, case.name)
+        assertEquals(case.expectedMessage, (result.content.single() as TextContent).text, case.name)
+        assertEquals(emptyList(), calls, "${case.name} should not call HexanaAnalysisService")
+    }
+
+    private fun unexpectedCallAnalysisService(calls: MutableList<String>): HexanaAnalysisService {
+        return Proxy.newProxyInstance(
+            HexanaAnalysisService::class.java.classLoader,
+            arrayOf(HexanaAnalysisService::class.java)
+        ) { proxy, method, args ->
+            when (method.name) {
+                "toString" -> "UnexpectedCallAnalysisService"
+                "hashCode" -> System.identityHashCode(proxy)
+                "equals" -> proxy === args?.singleOrNull()
+                else -> {
+                    calls += method.name
+                    error("Unexpected service call: ${method.name}")
+                }
+            }
+        } as HexanaAnalysisService
+    }
+
+    private data class InvalidInputCase(
+        val name: String,
+        val expectedMessage: String,
+        val invoke: (HexanaToolHandlers) -> CallToolResult,
+    )
 
     private class RecordingLogger : Logger by LoggerStub() {
         val errorEvents = mutableListOf<ErrorEvent>()

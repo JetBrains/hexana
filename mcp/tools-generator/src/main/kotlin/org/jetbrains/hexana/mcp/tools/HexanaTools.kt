@@ -52,7 +52,7 @@ private val HEXANA_TOOL_ORDER = listOf(
 )
 
 val HexanaToolSchemaCompatibility = ToolCompatibilitySpec(
-    schemaVersion = 1,
+    schemaVersion = 2,
     policy = "Tool schemas are append-compatible within a version; breaking changes to names, required inputs, defaults, bounds, output keys, or descriptions require a schema version bump.",
 )
 
