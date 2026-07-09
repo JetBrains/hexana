@@ -12,6 +12,7 @@ import org.jetbrains.hexana.mcp.tools.ToolSpec
 import org.jetbrains.hexana.mcp.tools.WasmInputClass
 import org.jetbrains.hexana.mcp.tools.class_
 import org.jetbrains.hexana.mcp.tools.executableCliRenderer
+import org.jetbrains.hexana.mcp.tools.HexanaTools
 import org.jetbrains.hexana.mcp.tools.list
 import org.jetbrains.hexana.mcp.tools.noMcpCliSurface
 import org.jetbrains.hexana.mcp.tools.productionCliSurface
@@ -20,11 +21,14 @@ import org.junit.Test
 import java.lang.reflect.InvocationTargetException
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ToolDescriptionGenerationTest {
+    private val standaloneDispatcherPath = "org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt"
+    private val standaloneCliToolsetPath = "org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt"
 
     private val binarySummaryResult = class_(
         "BinarySummaryResult",
@@ -90,7 +94,7 @@ class ToolDescriptionGenerationTest {
     fun `standalone dispatcher tool descriptions include DSL guidance`() {
         val source = renderGeneratedSource(
             mainClassName = "org.jetbrains.hexana.mcp.tools.generator.StandaloneToolsetMainKt",
-            generatedFile = Path.of("org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt"),
+            generatedFile = Path.of(standaloneDispatcherPath),
         )
 
         assertAggregateToolGuidance(source)
@@ -181,22 +185,99 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
-    fun `standalone generator writes CLI toolset separately from MCP dispatcher`() {
-        val dispatcher = renderGeneratedSource(
-            mainClassName = "org.jetbrains.hexana.mcp.tools.generator.StandaloneToolsetMainKt",
-            generatedFile = Path.of("org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt"),
-        )
-        val cliToolset = renderGeneratedSource(
-            mainClassName = "org.jetbrains.hexana.mcp.tools.generator.StandaloneToolsetMainKt",
-            generatedFile = Path.of("org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt"),
-        )
+    fun `standalone generator declares exactly dispatcher and CLI toolset files`() {
+        val files = buildStandaloneServerFiles(HexanaTools)
 
-        assertTrue(dispatcher.contains("fun Server.registerHexanaTools"))
-        assertFalse(dispatcher.contains("generatedCliToolCommands"))
-        assertFalse(dispatcher.contains("HexanaGeneratedCliToolRegistry"))
-        assertTrue(cliToolset.contains("internal fun generatedCliToolCommands"))
-        assertTrue(cliToolset.contains("internal fun generatedExecutableCliToolCommandOutput"))
-        assertTrue(cliToolset.contains("object HexanaGeneratedCliToolRegistry"))
+        assertEquals(
+            listOf("HexanaToolDispatcher", "HexanaCliToolset"),
+            files.map { it.name },
+        )
+        assertEquals(
+            listOf("org.jetbrains.hexana.mcp.server", "org.jetbrains.hexana.mcp.server"),
+            files.map { it.packageName },
+        )
+    }
+
+    @Test
+    fun `standalone generator writes CLI toolset separately from MCP dispatcher`() {
+        val generated = renderStandaloneSources()
+        val dispatcher = generated.sources.getValue(standaloneDispatcherPath)
+        val cliToolset = generated.sources.getValue(standaloneCliToolsetPath)
+
+        assertEquals(
+            listOf(standaloneCliToolsetPath, standaloneDispatcherPath),
+            generated.files,
+        )
+        assertContainsAll(
+            dispatcher,
+            "HexanaToolDispatcher.kt",
+            listOf(
+                "package org.jetbrains.hexana.mcp.server",
+                "public object HexanaMcpToolCompatibility",
+                "internal object HexanaGeneratedMcpToolProfiles",
+                "internal object HexanaToolInputDefaults",
+                "public fun Server.registerHexanaTools",
+                "private fun Server.registerSummarizeModuleTool",
+                "addTool(tool = Tool(",
+                "inputSchema = ToolSchema(",
+                "request: CallToolRequest -> handlers.summarizeModule",
+                "profile.includesTool(\"summarize_module\")",
+            ),
+        )
+        assertContainsNone(
+            dispatcher,
+            "HexanaToolDispatcher.kt",
+            listOf(
+                "HexanaCliToolSpec",
+                "HexanaGeneratedCliToolRegistry",
+                "HexanaCliInputMode",
+                "HexanaCliOutputFormat",
+                "HexanaCliToolGroup",
+                "HexanaCliOutputPolicy",
+                "HexanaCliExecutionStatus",
+                "generatedCliToolCommands",
+                "generatedExecutableCliToolCommandOutput",
+                "GeneratedWasmPathCliToolCommand",
+                "GeneratedTodoCliToolCommand",
+                "CliktCommand",
+                "com.github.ajalt.clikt",
+            ),
+        )
+        assertContainsAll(
+            cliToolset,
+            "HexanaCliToolset.kt",
+            listOf(
+                "package org.jetbrains.hexana.mcp.server",
+                "import com.github.ajalt.clikt.core.CliktCommand",
+                "public data class HexanaCliToolSpec",
+                "public object HexanaGeneratedCliToolRegistry",
+                "private class GeneratedWasmPathCliToolCommand",
+                "private class GeneratedTodoCliToolCommand",
+                "internal fun generatedCliToolCommands",
+                "internal fun generatedExecutableCliToolCommandOutput",
+                "HexanaCliExecutionStatus.EXECUTABLE",
+                "HexanaCliExecutionStatus.TODO",
+                "\"summarize_module\" -> renderSummarizeModuleCommandOutput(command)",
+                "\"wasm_to_wat\" -> renderWasmToWatCommandOutput(command)",
+            ),
+        )
+        assertContainsNone(
+            cliToolset,
+            "HexanaCliToolset.kt",
+            listOf(
+                "Server.registerHexanaTools",
+                "HexanaMcpToolCompatibility",
+                "HexanaGeneratedMcpToolProfiles",
+                "HexanaToolInputDefaults",
+                "ToolSchema",
+                "CallToolRequest",
+                "ToolAnnotations",
+                "addTool(",
+                "profile.includesTool",
+                "io.modelcontextprotocol.kotlin.sdk.server.Server",
+                "io.modelcontextprotocol.kotlin.sdk.types",
+            ),
+        )
     }
 
     @Test
@@ -357,16 +438,56 @@ class ToolDescriptionGenerationTest {
         assertTrue(error.message.orEmpty().contains("summarize_binary"))
     }
 
+    private data class RenderedStandaloneSources(
+        val files: List<String>,
+        val sources: Map<String, String>,
+    )
+
+    private fun renderStandaloneSources(): RenderedStandaloneSources {
+        val outputRoot = Files.createTempDirectory("hexana-tool-generator-test")
+        return try {
+            invokeGeneratorMain("org.jetbrains.hexana.mcp.tools.generator.StandaloneToolsetMainKt", outputRoot)
+            val files = listRegularFiles(outputRoot)
+            RenderedStandaloneSources(
+                files = files,
+                sources = files.associateWith { relativePath ->
+                    Files.readString(outputRoot.resolve(relativePath))
+                },
+            )
+        } finally {
+            outputRoot.toFile().deleteRecursively()
+        }
+    }
+
     private fun renderGeneratedSource(mainClassName: String, generatedFile: Path): String {
         val outputRoot = Files.createTempDirectory("hexana-tool-generator-test")
         return try {
-            val main = Class.forName(mainClassName).getMethod("main", Array<String>::class.java)
-            main.invoke(null, arrayOf(outputRoot.toString()) as Any)
+            invokeGeneratorMain(mainClassName, outputRoot)
             Files.readString(outputRoot.resolve(generatedFile))
-        } catch (error: InvocationTargetException) {
-            throw error.targetException
         } finally {
             outputRoot.toFile().deleteRecursively()
+        }
+    }
+
+    private fun invokeGeneratorMain(mainClassName: String, outputRoot: Path) {
+        try {
+            val main = Class.forName(mainClassName).getMethod("main", Array<String>::class.java)
+            main.invoke(null, arrayOf(outputRoot.toString()) as Any)
+        } catch (error: InvocationTargetException) {
+            throw error.targetException
+        }
+    }
+
+    private fun listRegularFiles(root: Path): List<String> {
+        val stream = Files.walk(root)
+        return try {
+            stream
+                .filter { Files.isRegularFile(it) }
+                .map { root.relativize(it).toString().replace('\\', '/') }
+                .sorted()
+                .toList()
+        } finally {
+            stream.close()
         }
     }
 
@@ -435,6 +556,24 @@ class ToolDescriptionGenerationTest {
 
     private fun assertBoundaryPhrase(source: String, phrase: String, message: String) {
         assertTrue(source.contains(phrase), message)
+    }
+
+    private fun assertContainsAll(source: String, sourceName: String, fragments: List<String>) {
+        fragments.forEach { fragment ->
+            assertTrue(
+                source.contains(fragment),
+                "$sourceName must contain `$fragment`",
+            )
+        }
+    }
+
+    private fun assertContainsNone(source: String, sourceName: String, fragments: List<String>) {
+        fragments.forEach { fragment ->
+            assertFalse(
+                source.contains(fragment),
+                "$sourceName must not contain `$fragment`",
+            )
+        }
     }
 
     private fun invokePrivateGeneratorFunction(
