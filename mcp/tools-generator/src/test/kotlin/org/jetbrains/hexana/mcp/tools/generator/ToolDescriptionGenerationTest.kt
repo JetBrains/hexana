@@ -173,7 +173,7 @@ class ToolDescriptionGenerationTest {
         )
 
         val error = assertFailsWith<IllegalArgumentException> {
-            buildDispatcherFile(listOf(spec))
+            buildCliToolsetFile(listOf(spec))
         }
 
         assertTrue(error.message.orEmpty().contains("has no supported CLI output format"))
@@ -181,7 +181,26 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
-    fun `standalone dispatcher excludes no MCP tools but keeps CLI registry metadata`() {
+    fun `standalone generator writes CLI toolset separately from MCP dispatcher`() {
+        val dispatcher = renderGeneratedSource(
+            mainClassName = "org.jetbrains.hexana.mcp.tools.generator.StandaloneToolsetMainKt",
+            generatedFile = Path.of("org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt"),
+        )
+        val cliToolset = renderGeneratedSource(
+            mainClassName = "org.jetbrains.hexana.mcp.tools.generator.StandaloneToolsetMainKt",
+            generatedFile = Path.of("org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt"),
+        )
+
+        assertTrue(dispatcher.contains("fun Server.registerHexanaTools"))
+        assertFalse(dispatcher.contains("generatedCliToolCommands"))
+        assertFalse(dispatcher.contains("HexanaGeneratedCliToolRegistry"))
+        assertTrue(cliToolset.contains("internal fun generatedCliToolCommands"))
+        assertTrue(cliToolset.contains("internal fun generatedExecutableCliToolCommandOutput"))
+        assertTrue(cliToolset.contains("object HexanaGeneratedCliToolRegistry"))
+    }
+
+    @Test
+    fun `standalone CLI toolset keeps no MCP CLI registry metadata outside dispatcher`() {
         val converterResult = class_(
             "ConverterResult",
             kotlinPackage = "org.jetbrains.hexana.mcp.model.test",
@@ -201,13 +220,16 @@ class ToolDescriptionGenerationTest {
             handlerFqn = "org.jetbrains.hexana.mcp.server.wasmToWat",
         )
 
-        val source = buildDispatcherFile(listOf(summarizeBinarySpec, converter)).toString()
+        val dispatcherSource = buildDispatcherFile(listOf(summarizeBinarySpec, converter)).toString()
+        val cliSource = buildCliToolsetFile(listOf(summarizeBinarySpec, converter)).toString()
 
-        assertTrue(source.contains("commandName = \"wasm-to-wat\""))
-        assertTrue(source.contains("toolName = \"wasm_to_wat\""))
-        assertFalse(source.contains("registerWasmToWatTool"))
-        assertFalse(source.contains("profile.includesTool(\"wasm_to_wat\")"))
-        assertFalse(source.contains("name = \"wasm_to_wat\""))
+        assertFalse(dispatcherSource.contains("commandName = \"wasm-to-wat\""))
+        assertFalse(dispatcherSource.contains("toolName = \"wasm_to_wat\""))
+        assertFalse(dispatcherSource.contains("registerWasmToWatTool"))
+        assertFalse(dispatcherSource.contains("profile.includesTool(\"wasm_to_wat\")"))
+        assertFalse(dispatcherSource.contains("name = \"wasm_to_wat\""))
+        assertTrue(cliSource.contains("commandName = \"wasm-to-wat\""))
+        assertTrue(cliSource.contains("toolName = \"wasm_to_wat\""))
     }
 
     @Test
@@ -244,7 +266,7 @@ class ToolDescriptionGenerationTest {
             surfaces = noMcpCliSurface("future-cli-only", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
         )
 
-        val source = buildDispatcherFile(listOf(summarizeModuleSpec, cliOnlyTodo)).toString()
+        val source = buildCliToolsetFile(listOf(summarizeModuleSpec, cliOnlyTodo)).toString()
 
         assertTrue(source.contains("public enum class HexanaCliExecutionStatus"))
         assertTrue(source.contains("executionStatus = HexanaCliExecutionStatus.EXECUTABLE"))
@@ -255,13 +277,13 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
-    fun `standalone dispatcher generates CLI tool commands from catalog metadata`() {
+    fun `standalone CLI toolset generates CLI tool commands from catalog metadata`() {
         val cliOnlyTodo = summarizeBinarySpec.copy(
             name = "future_cli_only",
             surfaces = noMcpCliSurface("future-cli-only", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
         )
 
-        val source = buildDispatcherFile(listOf(summarizeModuleSpec, cliOnlyTodo)).toString()
+        val source = buildCliToolsetFile(listOf(summarizeModuleSpec, cliOnlyTodo)).toString()
 
         assertTrue(source.contains("internal fun generatedCliToolCommands"))
         assertTrue(source.contains("GeneratedWasmPathCliToolCommand("))
@@ -271,7 +293,7 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
-    fun `standalone dispatcher generates executable CLI renderer mapping from catalog metadata`() {
+    fun `standalone CLI toolset generates executable CLI renderer mapping from catalog metadata`() {
         val converterResult = class_(
             "ConverterResult",
             kotlinPackage = "org.jetbrains.hexana.mcp.model.test",
@@ -293,7 +315,7 @@ class ToolDescriptionGenerationTest {
             handlerFqn = "org.jetbrains.hexana.mcp.server.wasmToWat",
         )
 
-        val source = buildDispatcherFile(listOf(summarizeModuleSpec, converter)).toString()
+        val source = buildCliToolsetFile(listOf(summarizeModuleSpec, converter)).toString()
 
         assertTrue(source.contains("internal fun generatedExecutableCliToolCommandOutput"))
         assertTrue(source.contains("\"summarize_module\" -> renderSummarizeModuleCommandOutput(command)"))
@@ -301,7 +323,7 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
-    fun `standalone dispatcher rejects executable CLI tools missing renderer metadata`() {
+    fun `standalone CLI toolset rejects executable CLI tools missing renderer metadata`() {
         val error = assertFailsWith<IllegalArgumentException> {
             productionCliSurface(
                 "missing-renderer",
@@ -316,7 +338,7 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
-    fun `standalone dispatcher rejects executable CLI tools without generated command support`() {
+    fun `standalone CLI toolset rejects executable CLI tools without generated command support`() {
         val executableBinary = summarizeBinarySpec.copy(
             surfaces = productionCliSurface(
                 "summarize-binary",
@@ -328,7 +350,7 @@ class ToolDescriptionGenerationTest {
         )
 
         val error = assertFailsWith<IllegalArgumentException> {
-            buildDispatcherFile(listOf(executableBinary)).toString()
+            buildCliToolsetFile(listOf(executableBinary)).toString()
         }
 
         assertTrue(error.message.orEmpty().contains("ToolInputPattern.WasmOnly"))

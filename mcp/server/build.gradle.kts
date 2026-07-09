@@ -9,7 +9,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
 }
 
-// Mark `src/main/gen` (generated HexanaToolDispatcher.kt) as generated so IntelliJ dims the file,
+// Mark `src/main/gen` (generated standalone tool files) as generated so IntelliJ dims the files,
 // keeps it out of default Find-in-Path scope, and warns on hand edits.
 idea {
     module {
@@ -41,6 +41,14 @@ configurations.named(integrationTestSourceSet.runtimeOnlyConfigurationName) {
 
 val generatedToolDispatcherDir = layout.projectDirectory.dir("src/main/gen")
 val verifiedToolDispatcherDir = layout.buildDirectory.dir("generator-verify/dispatcher")
+val generatedToolDispatcherFile = generatedToolDispatcherDir.file("org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt")
+val generatedCliToolsetFile = generatedToolDispatcherDir.file("org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt")
+val verifiedToolDispatcherFile = verifiedToolDispatcherDir.map {
+    it.file("org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt").asFile
+}
+val verifiedCliToolsetFile = verifiedToolDispatcherDir.map {
+    it.file("org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt").asFile
+}
 val generatedBuildInfoDir = layout.buildDirectory.dir("generated/sources/hexanaBuildInfo/main/kotlin")
 val generatedBuildInfoFile = generatedBuildInfoDir.map {
     it.file("org/jetbrains/hexana/mcp/server/HexanaBuildInfo.kt")
@@ -76,7 +84,7 @@ val generateHexanaBuildInfo = tasks.register("generateHexanaBuildInfo") {
 }
 
 tasks.register<JavaExec>("generateHexanaToolDispatcher") {
-    description = "Regenerates HexanaToolDispatcher.kt into src/main/gen; the output is checked into git."
+    description = "Regenerates standalone Hexana tool files into src/main/gen; the output is checked into git."
     group = "generation"
 
     classpath = project(":mcp:tools-generator").extensions
@@ -88,13 +96,13 @@ tasks.register<JavaExec>("generateHexanaToolDispatcher") {
     })
 
     inputs.files(project(":mcp:tools-generator").tasks.named("classes"))
-    outputs.file(generatedToolDispatcherDir.file("org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt"))
+    outputs.files(generatedToolDispatcherFile, generatedCliToolsetFile)
 
     dependsOn(":mcp:tools-generator:classes")
 }
 
 val regenerateHexanaToolDispatcherForVerification = tasks.register<JavaExec>("regenerateHexanaToolDispatcherForVerification") {
-    description = "Re-emits HexanaToolDispatcher.kt into build/ so verifyHexanaToolDispatcherUpToDate can diff it."
+    description = "Re-emits standalone Hexana tool files into build/ so verifyHexanaToolDispatcherUpToDate can diff them."
     group = "verification"
 
     classpath = project(":mcp:tools-generator").extensions
@@ -106,35 +114,41 @@ val regenerateHexanaToolDispatcherForVerification = tasks.register<JavaExec>("re
     })
     doFirst { verifiedToolDispatcherDir.get().asFile.deleteRecursively() }
 
+    inputs.files(project(":mcp:tools-generator").tasks.named("classes"))
+    outputs.files(verifiedToolDispatcherFile, verifiedCliToolsetFile)
+
     dependsOn(":mcp:tools-generator:classes")
 }
 
 tasks.register("verifyHexanaToolDispatcherUpToDate") {
-    description = "Fails if src/main/gen/HexanaToolDispatcher.kt drifts from the tools-generator DSL."
+    description = "Fails if standalone generated tool files drift from the tools-generator DSL."
     group = "verification"
     dependsOn(regenerateHexanaToolDispatcherForVerification)
     mustRunAfter(tasks.named("generateHexanaToolDispatcher"))
 
-    val committed = generatedToolDispatcherDir.file("org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt").asFile
-    val fresh = verifiedToolDispatcherDir.map {
-        it.file("org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt").asFile
-    }
+    val generatedFiles = listOf(
+        "HexanaToolDispatcher.kt" to (generatedToolDispatcherFile.asFile to verifiedToolDispatcherFile),
+        "HexanaCliToolset.kt" to (generatedCliToolsetFile.asFile to verifiedCliToolsetFile),
+    )
 
-    inputs.file(committed)
-    inputs.dir(verifiedToolDispatcherDir)
+    inputs.files(generatedFiles.map { it.second.first })
+    inputs.files(generatedFiles.map { it.second.second })
 
     doLast {
-        if (!committed.exists()) {
-            error("Committed HexanaToolDispatcher.kt is missing at $committed. Run :mcp:server:generateHexanaToolDispatcher.")
-        }
-        val freshFile = fresh.get()
-        if (committed.readText().replace("\r\n", "\n") != freshFile.readText().replace("\r\n", "\n")) {
-            error(
-                "HexanaToolDispatcher.kt is out of date with the tools-generator DSL.\n" +
-                    "  Committed:   ${committed.absolutePath}\n" +
-                    "  Regenerated: ${freshFile.absolutePath}\n" +
-                    "  Fix: ./gradlew :mcp:server:generateHexanaToolDispatcher, then commit src/main/gen/."
-            )
+        generatedFiles.forEach { (fileName, files) ->
+            val committed = files.first
+            if (!committed.exists()) {
+                error("Committed $fileName is missing at $committed. Run :mcp:server:generateHexanaToolDispatcher.")
+            }
+            val freshFile = files.second.get()
+            if (committed.readText().replace("\r\n", "\n") != freshFile.readText().replace("\r\n", "\n")) {
+                error(
+                    "$fileName is out of date with the tools-generator DSL.\n" +
+                        "  Committed:   ${committed.absolutePath}\n" +
+                        "  Regenerated: ${freshFile.absolutePath}\n" +
+                        "  Fix: ./gradlew :mcp:server:generateHexanaToolDispatcher, then commit src/main/gen/."
+                )
+            }
         }
     }
 }

@@ -7,8 +7,9 @@ DSL and emit checked-in Kotlin files into the two consumers:
   `McpTool` descriptors and call bodies, consumed
   by `plugin.xml`.
 - `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt` — `Server.registerHexanaTools(handlers)`
-  extension, generated CLI-visible tool metadata, generated CLI tool command construction, and executable CLI renderer
-  dispatch for the standalone MCP runtime.
+  extension, generated MCP profile membership, and generated input defaults for the standalone MCP runtime.
+- `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt` — generated CLI-visible tool metadata,
+  generated CLI tool command construction, and executable CLI renderer dispatch for the standalone CLI.
 
 A separate Claude Desktop MCPB manifest generator consumes catalog metadata and refreshes the checked-in packaging
 template.

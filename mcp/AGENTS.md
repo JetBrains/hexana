@@ -19,7 +19,7 @@ This folder groups extracted MCP modules.
 - `vscode-server/`: thin VS Code-facing MCP server distribution that runs as a separate stdio/http process for the
   VS Code extension while reusing `server/` runtime code.
 - `tools-generator/`: DSL declaring all Hexana MCP tools and KotlinPoet generators that emit the idea-plugin
-  `HexanaToolset.kt` and the standalone-server `HexanaToolDispatcher.kt`.
+  `HexanaToolset.kt` and standalone-server generated files such as `HexanaToolDispatcher.kt` and `HexanaCliToolset.kt`.
 - `packaging/`: thin Claude/Codex wrapper layouts around the standalone runtime in `server/`.
 
 ## Boundary

@@ -38,7 +38,7 @@ All agents — the main session and every subagent it dispatches — MUST treat 
   analysis logic, not IntelliJ registration or file-system integration.
 - `mcp/server/`: standalone Kotlin/JVM MCP runtime that exposes `mcp/core` over `stdio` and HTTP transports.
 - `mcp/tools-generator/`: single source of truth for Hexana MCP tool definitions (DSL + KotlinPoet generators for
-  `idea-plugin`'s `HexanaToolset.kt` and `mcp/server`'s `HexanaToolDispatcher.kt`).
+  `idea-plugin`'s `HexanaToolset.kt` and `mcp/server`'s standalone generated files).
 - `mcp/vscode-server/`: thin VS Code-facing MCP server distribution that launches the standalone runtime as a separate
   process for the VS Code extension.
 - `mcp/packaging/`: thin Claude/Codex wrapper layouts that point at the standalone runtime from `mcp/server/`.
@@ -95,7 +95,7 @@ Run the narrowest command that proves your change.
 - Build the standalone MCP server: `./gradlew :mcp:server:build`
 - Build the VS Code MCP server distribution: `./gradlew :mcp:vscode-server:installDist`
 - Regenerate the idea-plugin toolset: `./gradlew :idea-plugin:generateHexanaToolset`
-- Regenerate the standalone server dispatcher: `./gradlew :mcp:server:generateHexanaToolDispatcher`
+- Regenerate the standalone server generated files: `./gradlew :mcp:server:generateHexanaToolDispatcher`
 - Build the plugin ZIP: `./gradlew :idea-plugin:buildPlugin`
 - Build the FUS scheme artifact: `./gradlew :idea-plugin:buildEventsScheme`
 - Run JVM parser tests: `./gradlew :wasmParser:jvmTest`
@@ -137,9 +137,10 @@ Existing IDE run configurations currently include:
     `HexanaTools.kt` only composes the catalog order, while feature files such as `FunctionTools.kt` and `DataTools.kt`
     own their related inputs, result schema mirrors, and tool definitions.
     Regenerate with `./gradlew :idea-plugin:generateHexanaToolset`.
-- `mcp/server/src/main/gen/HexanaToolDispatcher.kt` is generated from the same DSL. It contains standalone MCP tool
-  registration plus generated CLI-visible tool metadata, CLI tool command construction, and executable CLI renderer
-  dispatch. Regenerate with
+- `mcp/server/src/main/gen/HexanaToolDispatcher.kt` is generated from the same DSL and contains standalone MCP tool
+  registration plus MCP profile/default metadata.
+- `mcp/server/src/main/gen/HexanaCliToolset.kt` is generated from the same DSL and contains generated CLI-visible tool
+  metadata, CLI tool command construction, and executable CLI renderer dispatch. Regenerate both files with
   `./gradlew :mcp:server:generateHexanaToolDispatcher`. If you change a tool's name, description, input shape, or output
   shape, edit the DSL and rerun both generators in the same change.
 - Embedded converter binaries live here:

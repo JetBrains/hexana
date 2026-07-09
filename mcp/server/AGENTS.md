@@ -13,18 +13,20 @@ Read these files before making structural changes:
 - `src/main/kotlin/org/jetbrains/hexana/mcp/server/HexanaMcpServer.kt`
 - `src/main/kotlin/org/jetbrains/hexana/mcp/server/HexanaToolHandlers.kt`
 - `src/main/gen/org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt` (generated — do not hand-edit; DSL sources live
-  under `../tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/`; includes MCP registration plus generated
+  under `../tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/`; includes standalone MCP tool registration
+  plus MCP profile/default metadata)
+- `src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt` (generated — do not hand-edit; includes
   CLI-visible tool metadata, CLI tool command construction, and executable CLI renderer dispatch)
 - `../core/src/main/kotlin/org/jetbrains/hexana/mcp/HexanaAnalysisService.kt`
 
 ## Ownership Boundary
 
 - Keep MCP transport wiring and CLI parsing here.
-- Tool registration (`Server.registerHexanaTools`), CLI-visible tool command construction, and executable CLI renderer
-  dispatch are generated from the DSL in `mcp/tools-generator/`. To change a tool's name, description, input, output
-  shape, or CLI surface, edit the DSL and regenerate with
-  `./gradlew :mcp:server:generateHexanaToolDispatcher`; commit the regenerated file under `src/main/gen/`.
-- The same generated file also exposes `HexanaToolInputDefaults`; use those constants in hand-written argument parsing
+- Tool registration (`Server.registerHexanaTools`) is generated into `HexanaToolDispatcher.kt`; CLI-visible tool command
+  construction and executable CLI renderer dispatch are generated into `HexanaCliToolset.kt`. To change a tool's name,
+  description, input, output shape, or CLI surface, edit the DSL and regenerate with
+  `./gradlew :mcp:server:generateHexanaToolDispatcher`; commit the regenerated files under `src/main/gen/`.
+- The generated dispatcher also exposes `HexanaToolInputDefaults`; use those constants in hand-written argument parsing
   instead of repeating defaults from the DSL.
 - Do not add hand-written per-tool input schema helpers here. Standalone input schemas are generated from
   `ClassSpec`/`FieldSpec` in `mcp/tools-generator`.
