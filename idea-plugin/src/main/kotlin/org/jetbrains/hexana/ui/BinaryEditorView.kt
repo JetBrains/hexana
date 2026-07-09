@@ -247,12 +247,34 @@ internal fun BinaryEditorView(
         // reads the current value on each composition and recomposes when
         // it changes. Non-edit panel lambdas use `this` (the original
         // provider) and stay frozen across edits.
+        //
+        // Tab headers are shown immediately using cheap heuristics
+        // (provider type checks, section existence) with loading spinners
+        // in the content area. The full panel content is resolved on a
+        // background thread and swapped in once ready.
+        // Track whether panel resolution has completed so we don't
+        // re-resolve when the composable re-enters composition (e.g.
+        // switching IDE editor tabs and back). The flag is keyed to the
+        // same inputs as the panels list so it resets on provider change.
+        val panelsResolved = remember(binaryProvider, hexEditedSinceOpen) { mutableStateOf(false) }
         val panels = remember(binaryProvider, hexEditedSinceOpen) {
-            val p: Array<Panel> = if (hexEditedSinceOpen) {
-                // Demoted to generic — only the Hex view + status bar remain.
-                emptyArray()
-            } else {
-                binaryProvider.resolvePanels(
+            val scriptSettings = ScriptTabSettings.getInstance(state.project)
+            val scriptPanels = scriptSettings.getScriptPaths(fileName).map { scriptPath ->
+                createScriptPanel(scriptPath, binaryProvider)
+            }
+            val placeholders = if (hexEditedSinceOpen) emptyList() else binaryProvider.discoverPanelNames()
+                .map { name -> Panel(name) { LoadingTabContent() } }
+            mutableStateListOf(*(placeholders + scriptPanels).toTypedArray())
+        }
+        LaunchedEffect(binaryProvider, hexEditedSinceOpen) {
+            if (hexEditedSinceOpen) return@LaunchedEffect
+            if (panelsResolved.value) return@LaunchedEffect
+            // Resolve hardcoded panels (Dominators, WAT, DWARF, etc.) and
+            // table-tab panels independently so whichever finishes first
+            // replaces its placeholders immediately — the user doesn't wait
+            // for the slowest tab before seeing any content.
+            val hardcodedJob = launch(Dispatchers.Default) {
+                val hardcoded = binaryProvider.resolveHardcodedPanels(
                     state = state,
                     pathsNav = pathsNav,
                     editableDoc = editableDoc,
@@ -260,17 +282,92 @@ internal fun BinaryEditorView(
                     watVirtualizedFolded = watVirtualizedFolded,
                     liveProviderProvider = { liveProvider },
                     wasmFunctionNavTargetFlow = wasmNavFlow,
-                    archiveName = fileName,
                     classFileNavTargetFlow = classFileNavTargetFlow,
                     fileName = fileName,
-                    onOpenZipEntry = onOpenZipEntry,
                 )
+                withContext(Dispatchers.Main) {
+                    replacePlaceholders(panels, hardcoded)
+                }
             }
-            val scriptSettings = ScriptTabSettings.getInstance(state.project)
-            val scriptPanels = scriptSettings.getScriptPaths(fileName).map { scriptPath ->
-                createScriptPanel(scriptPath, binaryProvider)
+            // Launch each table-tab provider independently so fast providers
+            // (e.g. Top, Sections) appear before slow ones (Size, Garbage).
+            // Within each provider, each tab descriptor is resolved in its own
+            // coroutine so individual tabs replace their placeholders as soon
+            // as they're ready — a slow "Functions" tab won't block "Data".
+            val enricher = binaryProvider.getTabEnricher()
+            val providers = TableTabsProviderRegistry.providers
+            val tableTabJobs = providers.mapIndexed { index, p ->
+                launch(Dispatchers.Default) {
+                    val tableTabsContext = TableTabsContext(
+                        nativeDebugData = (binaryProvider as? NativeBinaryProvider)
+                            ?.let { NativeDebugTabData.scan(it, JVM_FILE_SYSTEM, state.project.basePath) },
+                    )
+                    val availableNames = p.availableTabNames(binaryProvider, tableTabsContext)
+                    if (availableNames != null) {
+                        // Provider supports cheap name discovery — resolve
+                        // each tab independently via singleTab() so a slow
+                        // tab (e.g. Functions) doesn't block fast ones.
+                        val (ordinaryNames, groupedNames) = availableNames
+                        val tabJobs = ordinaryNames.map { tabName ->
+                            launch {
+                                val tab = p.singleTab(tabName, binaryProvider, tableTabsContext)
+                                    ?: return@launch
+                                val enriched = enricher(listOf(tab), state, pathsNav).firstOrNull()
+                                    ?: return@launch
+                                val panel = binaryProvider.resolveOrdinaryTabPanel(
+                                    tab = enriched,
+                                    state = state,
+                                    archiveName = fileName,
+                                    onOpenZipEntry = onOpenZipEntry,
+                                )
+                                withContext(Dispatchers.Main) {
+                                    replacePlaceholders(panels, listOf(panel))
+                                }
+                            }
+                        }
+                        // Grouped tabs are typically fewer; resolve each independently too.
+                        val grouped = p.groupedTabs(binaryProvider, tableTabsContext)
+                        val groupedJobs = grouped.map { g ->
+                            launch {
+                                val panel = binaryProvider.resolveGroupedTabPanel(
+                                    g = g, state = state, pathsNav = pathsNav,
+                                )
+                                if (panel != null) {
+                                    withContext(Dispatchers.Main) {
+                                        replacePlaceholders(panels, listOf(panel))
+                                    }
+                                }
+                            }
+                        }
+                        tabJobs.forEach { it.join() }
+                        groupedJobs.forEach { it.join() }
+                    } else {
+                        // Fallback: resolve all tabs at once for providers
+                        // without cheap name discovery.
+                        val ordinary = p.tableTabs(binaryProvider, tableTabsContext)
+                        val grouped = p.groupedTabs(binaryProvider, tableTabsContext)
+                        val enrichedOrdinary = enricher(ordinary, state, pathsNav)
+                        val ordinaryPanels = enrichedOrdinary.map { tab ->
+                            binaryProvider.resolveOrdinaryTabPanel(
+                                tab = tab, state = state,
+                                archiveName = fileName, onOpenZipEntry = onOpenZipEntry,
+                            )
+                        }
+                        val groupedPanels = grouped.mapNotNull { g ->
+                            binaryProvider.resolveGroupedTabPanel(
+                                g = g, state = state, pathsNav = pathsNav,
+                            )
+                        }
+                        withContext(Dispatchers.Main) {
+                            replacePlaceholders(panels, ordinaryPanels + groupedPanels)
+                        }
+                    }
+                }
             }
-            mutableStateListOf(*(p + scriptPanels))
+            // Wait for all jobs so cancellation propagates correctly.
+            hardcodedJob.join()
+            tableTabJobs.forEach { it.join() }
+            panelsResolved.value = true
         }
 
         // Track which panels are script tabs so we know which are closable.
@@ -692,21 +789,30 @@ private fun NativeBinaryProvider.commonNativePanels(state: HexViewStateHolder): 
 }
 
 /**
- * Resolves the panel list for an editor.
- *
- * `this` is the ORIGINAL, immutable [BinaryProvider]. All non-edit panels
- * (size, functions, imports, exports, dominators, …) bind to it directly —
- * they never re-derive from intermediate edit bytes, so their analyses
- * stay stable while the user is mid-edit.
- *
- * [liveProviderProvider] is a closure that returns the CURRENT live
- * provider (rebuilt from `editableDoc` bytes on every commit). It's read
- * inside the WAT virtualized panel's lambda so Compose recomposes that
- * panel — and only that panel — whenever the live provider changes.
- * `null` means "no live state, use original everywhere" (callers without
- * an editable doc).
+ * Replaces placeholder panels (those showing [LoadingTabContent]) with
+ * resolved panels by matching on [Panel.description]. Placeholders whose
+ * name matches a resolved panel are swapped in-place; resolved panels
+ * with no matching placeholder are appended before script panels.
  */
-private fun BinaryProvider.resolvePanels(
+private fun replacePlaceholders(panels: MutableList<Panel>, resolved: List<Panel>) {
+    for (panel in resolved) {
+        val idx = panels.indexOfFirst { it.description == panel.description && it !is ScriptPanel }
+        if (idx >= 0) {
+            panels[idx] = panel
+        } else {
+            // Insert before script panels
+            val scriptStart = panels.indexOfFirst { it is ScriptPanel }.takeIf { it >= 0 } ?: panels.size
+            panels.add(scriptStart, panel)
+        }
+    }
+}
+
+/**
+ * Resolves the hardcoded (non-table-tab) panels for this provider.
+ * These are typically cheap to create — they just wrap Composable lambdas
+ * without triggering expensive analysis. Examples: Dominators, WAT, DWARF.
+ */
+private fun BinaryProvider.resolveHardcodedPanels(
     state: HexViewStateHolder,
     pathsNav: PathsNavigationState,
     editableDoc: EditableBinaryDocument? = null,
@@ -714,176 +820,136 @@ private fun BinaryProvider.resolvePanels(
     watVirtualizedFolded: MutableState<Set<ChunkId>>? = null,
     liveProviderProvider: (() -> BinaryProvider)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?>? = null,
-    archiveName: String? = null,
     classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?>? = null,
     fileName: String? = null,
-    onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
-): Array<Panel> {
-    val enricher = getTabEnricher()
-    val providers = TableTabsProviderRegistry.providers
-    // Precompute filesystem-dependent debug data for native providers
-    // outside the rendering path so tableTabs() never touches the FS.
-    val tableTabsContext = TableTabsContext(
-        nativeDebugData = (this as? NativeBinaryProvider)
-            ?.let { NativeDebugTabData.scan(it, JVM_FILE_SYSTEM, state.project.basePath) },
-    )
-    // Collect ordinary and grouped tab descriptors per provider, preserving
-    // provider order: for each provider ordinary tabs come first, then grouped.
-    data class ProviderTabs(
-        val ordinary: List<TableTabDescriptor>,
-        val grouped: List<GroupedTableTabDescriptor>,
-        val providerIndex: Int,
-    )
-    val perProvider = providers.mapIndexed { index, p ->
-        ProviderTabs(
-            ordinary = p.tableTabs(this, tableTabsContext),
-            grouped = p.groupedTabs(this, tableTabsContext),
-            providerIndex = index,
-        )
-    }
-    val providerPanels = when (this) {
-        is ClassFileBinaryProvider -> {
-            val parsed = this.parsedClassFile
-            if (parsed != null) {
-                classFilePanels(parsed, classFileNavTargetFlow ?: MutableStateFlow(null))
-            } else {
-                HexanaLog.LOG.warn("Failed to parse .class file ${fileName ?: "unknown"}")
-                listOf(Panel("Parse Error") {
-                    Text(
-                        "Failed to parse ${fileName ?: "the file"} as a JVM class file \u2014 see idea.log for details."
-                    )
-                })
-            }
-        }
-        is DexBinaryProvider -> emptyList()
-        is GenericBinaryProvider -> emptyList()
-        // ArchiveBinaryProvider IS-A NativeBinaryProvider — must precede the generic native
-        // branch so archives don't fall through to the near-empty native view. The "Members"
-        // table tab is produced by ArchiveTableTabsProvider and enriched below.
-        is ArchiveBinaryProvider -> emptyList()
-        is NativeBinaryProvider -> commonNativePanels(state)
-        is WasmBinaryVirtualFileProvider -> {
-            if (canProvideWasmModule()) {
-                listOf(
-                    Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
-                    Panel("Wat") { WasmPanelWat(this, state) },
-                    Panel("WAT (virtualized)") {
-                        // Read the live provider INSIDE the lambda so Compose
-                        // re-renders this panel (and only this panel) on each
-                        // post-commit rebuild. Falls back to `this` (original)
-                        // when no live provider is wired.
-                        val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
-                        WasmPanelWatVirtualized(
-                            provider = live,
-                            state = state,
-                            editableDoc = editableDoc,
-                            listState = watVirtualizedListState,
-                            foldedSectionsExternal = watVirtualizedFolded,
-                            navTargetFlow = wasmFunctionNavTargetFlow
-                                ?: remember { MutableStateFlow(null) },
-                        )
-                    },
-                ) + dwarfPanels(this, state)
-            } else {
-                errorPanel(state)
-            }
-        }
-        is WasmComponentBinaryVirtualFileProvider -> {
-            if (canProvideWasmModule()) {
-                listOf(
-                    Panel("Wat") { WasmPanelWat(this, state) },
-                    Panel("WAT (virtualized)") { WasmComponentPanelWatVirtualized(this, state) },
-                )
-            } else {
-                errorPanel(state)
-            }
-        }
-        is WasmBinaryProvider -> {
-            if (canProvideWasmModule()) {
-                listOf(
-                    Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
-                    Panel("WAT (virtualized)") {
-                        val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
-                        WasmPanelWatVirtualized(
-                            provider = live,
-                            state = state,
-                            editableDoc = editableDoc,
-                            listState = watVirtualizedListState,
-                            foldedSectionsExternal = watVirtualizedFolded,
-                            navTargetFlow = wasmFunctionNavTargetFlow
-                                ?: remember { MutableStateFlow(null) },
-                        )
-                    },
-                ) + dwarfPanels(this, state)
-            } else emptyList()
-        }
-        is WasmComponentBinaryProvider -> {
-            if (canProvideWasmModule()) {
-                listOf(
-                    Panel("WAT (virtualized)") { WasmComponentPanelWatVirtualized(this, state) },
-                )
-            } else emptyList()
-        }
-        else -> emptyList()
-    }
-    // Build tab panels in provider order: ordinary tabs then grouped tabs per provider.
-    // Grouped tabs may need enrichment (e.g. Garbage → Dominators cross-navigation),
-    // which depends on providerPanels already being present, so we assemble the
-    // full panel list first with providerPanels, then interleave provider tabs.
-    val allGroupedDescriptors = perProvider.flatMap { it.grouped }
-    val hasDominators = providerPanels.any { it.description == "Dominators" }
-    val enrichedGrouped: Map<GroupedTableTabDescriptor, Panel?> =
-        if (hasDominators && this is WasmBinaryProvider) {
-            val garbageEntries = this.garbageAnalysis?.entries ?: emptyList()
-            allGroupedDescriptors.associateWith { grouped ->
-                if (grouped.name == "Garbage" && garbageEntries.isNotEmpty()) {
-                    enrichGarbageGroupedTab(
-                        grouped, garbageEntries,
-                        onShowInDominators = { fIdx ->
-                            pathsNav.targetFuncIndex = fIdx
-                            state.requestSelectTabByDescription("Dominators")
-                        },
-                        onShowCallers = { fIdx ->
-                            pathsNav.targetFuncIndex = fIdx
-                            state.requestSelectTabByDescription("Dominators")
-                        },
-                    ).toPanel(state)
-                } else {
-                    grouped.toPanel(state)
-                }
-            }
+): List<Panel> = when (this) {
+    is ClassFileBinaryProvider -> {
+        val parsed = this.parsedClassFile
+        if (parsed != null) {
+            classFilePanels(parsed, classFileNavTargetFlow ?: MutableStateFlow(null))
         } else {
-            allGroupedDescriptors.associateWith { it.toPanel(state) }
-        }
-
-    // Collect all tab entries with their priority and provider index for sorting.
-    data class TabEntry(val panel: Panel, val priority: TabPriority, val providerIndex: Int)
-    val tabEntries = mutableListOf<TabEntry>()
-    for (pt in perProvider) {
-        val enriched = enricher(pt.ordinary, state, pathsNav)
-        tabEntries += enriched.map { tab ->
-            val panel = if (tab.name == "Entries" && onOpenZipEntry != null && this is ZipBinaryProvider) {
-                enrichZipEntriesTab(tab, onOpenZipEntry).toPanel(state)
-            } else if (tab.name == "Members" && this is ArchiveBinaryProvider) {
-                enrichArchiveMembersTab(tab, state.project, archiveName).toPanel(state)
-            } else {
-                tab.toPanel(state)
-            }
-            TabEntry(panel, tab.priority, pt.providerIndex)
-        }
-        tabEntries += pt.grouped.mapNotNull { grouped ->
-            enrichedGrouped[grouped]?.let { panel -> TabEntry(panel, grouped.priority, pt.providerIndex) }
+            HexanaLog.LOG.warn("Failed to parse .class file ${fileName ?: "unknown"}")
+            listOf(Panel("Parse Error") {
+                Text(
+                    "Failed to parse ${fileName ?: "the file"} as a JVM class file \u2014 see idea.log for details."
+                )
+            })
         }
     }
-    // Sort by priority first (High < Medium < Low ordinal), then by provider order.
-    tabEntries.sortWith(compareBy<TabEntry> { it.priority }.thenBy { it.providerIndex })
-    // Low-priority tabs go after all other panels (including non-table provider panels).
-    val (lowEntries, normalEntries) = tabEntries.partition { it.priority == TabPriority.Low }
-    val panels = mutableListOf<Panel>()
-    panels += normalEntries.map { it.panel }
-    panels += providerPanels
-    panels += lowEntries.map { it.panel }
-    return panels.toTypedArray()
+    is DexBinaryProvider -> emptyList()
+    is GenericBinaryProvider -> emptyList()
+    is ArchiveBinaryProvider -> emptyList()
+    is NativeBinaryProvider -> commonNativePanels(state)
+    is WasmBinaryVirtualFileProvider -> {
+        if (canProvideWasmModule()) {
+            listOf(
+                Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
+                Panel("Wat") { WasmPanelWat(this, state) },
+                Panel("WAT (virtualized)") {
+                    val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
+                    WasmPanelWatVirtualized(
+                        provider = live,
+                        state = state,
+                        editableDoc = editableDoc,
+                        listState = watVirtualizedListState,
+                        foldedSectionsExternal = watVirtualizedFolded,
+                        navTargetFlow = wasmFunctionNavTargetFlow
+                            ?: remember { MutableStateFlow(null) },
+                    )
+                },
+            ) + dwarfPanels(this, state)
+        } else {
+            errorPanel(state)
+        }
+    }
+    is WasmComponentBinaryVirtualFileProvider -> {
+        if (canProvideWasmModule()) {
+            listOf(
+                Panel("Wat") { WasmPanelWat(this, state) },
+                Panel("WAT (virtualized)") { WasmComponentPanelWatVirtualized(this, state) },
+            )
+        } else {
+            errorPanel(state)
+        }
+    }
+    is WasmBinaryProvider -> {
+        if (canProvideWasmModule()) {
+            listOf(
+                Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
+                Panel("WAT (virtualized)") {
+                    val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
+                    WasmPanelWatVirtualized(
+                        provider = live,
+                        state = state,
+                        editableDoc = editableDoc,
+                        listState = watVirtualizedListState,
+                        foldedSectionsExternal = watVirtualizedFolded,
+                        navTargetFlow = wasmFunctionNavTargetFlow
+                            ?: remember { MutableStateFlow(null) },
+                    )
+                },
+            ) + dwarfPanels(this, state)
+        } else emptyList()
+    }
+    is WasmComponentBinaryProvider -> {
+        if (canProvideWasmModule()) {
+            listOf(
+                Panel("WAT (virtualized)") { WasmComponentPanelWatVirtualized(this, state) },
+            )
+        } else emptyList()
+    }
+    else -> emptyList()
+}
+
+/**
+ * Resolves a single ordinary [TableTabDescriptor] into a [Panel].
+ * Called per-tab on a background thread so each tab replaces its
+ * placeholder independently.
+ */
+private fun BinaryProvider.resolveOrdinaryTabPanel(
+    tab: TableTabDescriptor,
+    state: HexViewStateHolder,
+    archiveName: String? = null,
+    onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
+): Panel {
+    return if (tab.name == "Entries" && onOpenZipEntry != null && this is ZipBinaryProvider) {
+        enrichZipEntriesTab(tab, onOpenZipEntry).toPanel(state)
+    } else if (tab.name == "Members" && this is ArchiveBinaryProvider) {
+        enrichArchiveMembersTab(tab, state.project, archiveName).toPanel(state)
+    } else {
+        tab.toPanel(state)
+    }
+}
+
+/**
+ * Resolves a single [GroupedTableTabDescriptor] into a [Panel],
+ * enriching Garbage tabs with Dominators cross-navigation when applicable.
+ */
+private fun BinaryProvider.resolveGroupedTabPanel(
+    g: GroupedTableTabDescriptor,
+    state: HexViewStateHolder,
+    pathsNav: PathsNavigationState,
+): Panel? {
+    return if (g.name == "Garbage" && this is WasmBinaryProvider) {
+        val garbageEntries = this.garbageAnalysis?.entries ?: emptyList()
+        if (garbageEntries.isNotEmpty()) {
+            enrichGarbageGroupedTab(
+                g, garbageEntries,
+                onShowInDominators = { fIdx ->
+                    pathsNav.targetFuncIndex = fIdx
+                    state.requestSelectTabByDescription("Dominators")
+                },
+                onShowCallers = { fIdx ->
+                    pathsNav.targetFuncIndex = fIdx
+                    state.requestSelectTabByDescription("Dominators")
+                },
+            ).toPanel(state)
+        } else {
+            g.toPanel(state)
+        }
+    } else {
+        g.toPanel(state)
+    }
 }
 
 /**
@@ -1040,3 +1106,123 @@ private fun BinaryVirtualFileProvider.errorPanel(state: HexViewStateHolder): Lis
     },
     Panel("Wat") { WasmPanelWat(this, state) },
 )
+
+/**
+ * Cheaply discovers the tab names that [resolvePanels] will likely produce,
+ * without performing expensive parsing or analysis. Used to show tab headers
+ * immediately with loading indicators while the full content resolves on a
+ * background thread.
+ */
+private fun BinaryProvider.discoverPanelNames(): List<String> {
+    val providers = TableTabsProviderRegistry.providers
+    val context = TableTabsContext()
+
+    // Collect table-tab names from providers that support cheap discovery.
+    // For providers that return null (unknown), we skip them — their tabs
+    // will appear when the full resolution completes.
+    data class NameEntry(val name: String, val priority: TabPriority, val providerIndex: Int)
+    val nameEntries = mutableListOf<NameEntry>()
+    for ((index, p) in providers.withIndex()) {
+        val available = p.availableTabNames(this, context)
+        if (available != null) {
+            val (ordinary, grouped) = available
+            ordinary.forEach { nameEntries.add(NameEntry(it, TabPriority.High, index)) }
+            grouped.forEach { nameEntries.add(NameEntry(it, TabPriority.High, index)) }
+        } else {
+            // Fall back to full computation for cheap providers
+            val tabs = p.tableTabs(this, context)
+            tabs.forEach { nameEntries.add(NameEntry(it.name, it.priority, index)) }
+            val grouped = p.groupedTabs(this, context)
+            grouped.forEach { g ->
+                if (g.innerTabs.isNotEmpty() || g.emptyMessage != null) {
+                    // Match the naming logic in GroupedTableTabDescriptor.toPanel
+                    val displayName = if (g.innerTabs.size == 1) "${g.name}: ${g.innerTabs.single().name}" else g.name
+                    nameEntries.add(NameEntry(displayName, g.priority, index))
+                }
+            }
+        }
+    }
+    nameEntries.sortWith(compareBy<NameEntry> { it.priority }.thenBy { it.providerIndex })
+    val (lowEntries, normalEntries) = nameEntries.partition { it.priority == TabPriority.Low }
+
+    // Hardcoded provider panel names (non-table panels like Dominators, WAT, etc.)
+    val providerPanelNames = discoverHardcodedPanelNames()
+
+    return normalEntries.map { it.name } + providerPanelNames + lowEntries.map { it.name }
+}
+
+/**
+ * Returns the names of hardcoded (non-table-tab) panels that this provider
+ * will produce, based on cheap type checks only.
+ */
+private fun BinaryProvider.discoverHardcodedPanelNames(): List<String> = when (this) {
+    is ClassFileBinaryProvider -> listOf("Class File")
+    is DexBinaryProvider -> emptyList()
+    is GenericBinaryProvider -> emptyList()
+    is ArchiveBinaryProvider -> emptyList()
+    is NativeBinaryProvider -> {
+        // SBOM depends on nativeImageInfo which is lazy/expensive — skip it in discovery.
+        // The SBOM tab will appear when the full resolution completes.
+        listOf("Disassembly", "Disassembly (virtualized)")
+    }
+    is WasmBinaryVirtualFileProvider -> {
+        if (canProvideWasmModule()) {
+            buildList {
+                add("Dominators")
+                add("Wat")
+                add("WAT (virtualized)")
+                discoverDwarfPanelNames()?.let { addAll(it) }
+            }
+        } else listOf("Something is wrong :(", "Wat")
+    }
+    is WasmComponentBinaryVirtualFileProvider -> {
+        if (canProvideWasmModule()) listOf("Wat", "WAT (virtualized)")
+        else listOf("Something is wrong :(", "Wat")
+    }
+    is WasmBinaryProvider -> {
+        if (canProvideWasmModule()) {
+            buildList {
+                add("Dominators")
+                add("WAT (virtualized)")
+                discoverDwarfPanelNames()?.let { addAll(it) }
+            }
+        } else emptyList()
+    }
+    is WasmComponentBinaryProvider -> {
+        if (canProvideWasmModule()) listOf("WAT (virtualized)")
+        else emptyList()
+    }
+    else -> emptyList()
+}
+
+/**
+ * Cheaply discovers which DWARF panels will be available by checking
+ * for the presence of custom sections with known DWARF names.
+ */
+private fun BinaryProvider.discoverDwarfPanelNames(): List<String>? {
+    val module = (this as? WasmBinaryProvider)?.wasmModule
+        ?: (this as? WasmComponentBinaryProvider)?.wasmModule
+        ?: return null
+    return buildList {
+        if (module.getCustomSectionByName(".debug_abbrev") != null) add(".debug_abbrev")
+        if (module.getCustomSectionByName(".debug_info") != null) add(".debug_info")
+        if (module.getCustomSectionByName(".debug_line") != null) add(".debug_line")
+    }.ifEmpty { null }
+}
+
+/**
+ * A centered loading spinner shown inside tab content while the full
+ * panel content is being resolved on a background thread.
+ */
+@Composable
+private fun LoadingTabContent() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator()
+            Text("Loading\u2026")
+        }
+    }
+}

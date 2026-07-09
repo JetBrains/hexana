@@ -17,6 +17,16 @@ import org.jetbrains.hexana.wasm.sections.WasmDataRecord
 class SizeTableTabsProvider : TableTabsProvider {
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> =
         listOfNotNull(sizeTab(provider))
+
+    override fun availableTabNames(provider: BinaryProvider, context: TableTabsContext): Pair<List<String>, List<String>>? {
+        // sizeAnalysis is expensive (full module parse); check cheaply whether the provider
+        // is a type that supports it. For Wasm we know it will be available if the module parsed.
+        // For other providers we can't tell cheaply, so return null to fall back to full computation.
+        return when (provider) {
+            is WasmBinaryProvider -> Pair(if (provider.canProvideWasmModule()) listOf("Top") else emptyList(), emptyList())
+            else -> null
+        }
+    }
 }
 
 /**

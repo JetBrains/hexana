@@ -23,6 +23,32 @@ class WasmTableTabsProvider : TableTabsProvider {
             customTab(provider)?.let { add(it) }
         }
     }
+
+    override fun availableTabNames(provider: BinaryProvider, context: TableTabsContext): Pair<List<String>, List<String>>? {
+        if (provider !is WasmBinaryProvider) return Pair(emptyList(), emptyList())
+        val module = provider.wasmModule ?: return Pair(emptyList(), emptyList())
+        val names = buildList {
+            if (module.dataSection != null) add("Data")
+            if (module.exportSection != null) add("Exports")
+            if (module.importSection != null) add("Imports")
+            if (module.functionSection != null) add("Functions")
+            if (module.customSections.isNotEmpty()) add("Custom")
+        }
+        return Pair(names, emptyList())
+    }
+
+    override fun singleTab(name: String, provider: BinaryProvider, context: TableTabsContext): TableTabDescriptor? {
+        if (provider !is WasmBinaryProvider) return null
+        if (!provider.canProvideWasmModule()) return null
+        return when (name) {
+            "Data" -> dataTab(provider)
+            "Exports" -> exportsTab(provider)
+            "Imports" -> importsTab(provider)
+            "Functions" -> functionsTab(provider)
+            "Custom" -> customTab(provider)
+            else -> null
+        }
+    }
 }
 
 private fun dataTab(provider: WasmBinaryProvider): TableTabDescriptor? {
@@ -218,6 +244,28 @@ class WasmProfilerTabsProvider : TableTabsProvider {
         if (provider !is WasmBinaryProvider) return emptyList()
         if (!provider.canProvideWasmModule()) return emptyList()
         return listOfNotNull(garbageGroupedTab(provider))
+    }
+
+    override fun availableTabNames(provider: BinaryProvider, context: TableTabsContext): Pair<List<String>, List<String>>? {
+        if (provider !is WasmBinaryProvider) return Pair(emptyList(), emptyList())
+        if (!provider.canProvideWasmModule()) return Pair(emptyList(), emptyList())
+        // Both Monos and Garbage require nameSection + codeOffsets which are expensive;
+        // assume they will be available if the module has a code section and name section.
+        val module = provider.wasmModule ?: return Pair(emptyList(), emptyList())
+        val hasCode = module.codeSection != null
+        val hasNames = module.getCustomSectionByName("name") != null
+        val ordinary = if (hasCode && hasNames) listOf("Monos") else emptyList()
+        val grouped = if (hasCode) listOf("Garbage") else emptyList()
+        return Pair(ordinary, grouped)
+    }
+
+    override fun singleTab(name: String, provider: BinaryProvider, context: TableTabsContext): TableTabDescriptor? {
+        if (provider !is WasmBinaryProvider) return null
+        if (!provider.canProvideWasmModule()) return null
+        return when (name) {
+            "Monos" -> monosTab(provider)
+            else -> null
+        }
     }
 }
 

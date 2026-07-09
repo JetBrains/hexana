@@ -258,6 +258,36 @@ interface TableTabsProvider {
 
     fun groupedTabs(provider: BinaryProvider, context: TableTabsContext): List<GroupedTableTabDescriptor> =
         groupedTabs(provider)
+
+    /**
+     * Cheap heuristic returning tab names that this provider will likely produce
+     * for the given [provider], without performing expensive parsing or analysis.
+     *
+     * Returns a pair of (ordinary tab names, grouped tab names). When `null`,
+     * the caller must fall back to the full [tableTabs]/[groupedTabs] to discover names.
+     *
+     * The default implementation returns `null` (unknown). Override in providers
+     * where the full computation is expensive but availability can be checked cheaply.
+     */
+    fun availableTabNames(
+        provider: BinaryProvider,
+        context: TableTabsContext = TableTabsContext(),
+    ): Pair<List<String>, List<String>>? = null
+
+    /**
+     * Resolves a single ordinary tab by [name]. Returns `null` if the tab
+     * doesn't exist or the provider doesn't support per-tab resolution.
+     *
+     * The default implementation falls back to [tableTabs] and filters by name,
+     * which is no better than batch resolution. Override in providers where
+     * individual tabs can be computed independently to avoid blocking on
+     * unrelated expensive tabs.
+     */
+    fun singleTab(
+        name: String,
+        provider: BinaryProvider,
+        context: TableTabsContext = TableTabsContext(),
+    ): TableTabDescriptor? = tableTabs(provider, context).firstOrNull { it.name == name }
 }
 
 class TableTabsContext(
