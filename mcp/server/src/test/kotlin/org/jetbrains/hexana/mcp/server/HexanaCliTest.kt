@@ -270,24 +270,55 @@ class HexanaCliTest {
     }
 
     @Test
-    fun parseRegistersEveryGeneratedCliToolFromGeneratedMetadata() {
-        HexanaGeneratedCliToolRegistry.TOOLS.forEach { spec ->
-            when (spec.executionStatus) {
-                HexanaCliExecutionStatus.EXECUTABLE -> {
-                    val command = parseExecutableGeneratedCliTool(spec)
+    fun parseRegistersEveryExecutableGeneratedCliToolAsRuntimeCommandWithHelp() {
+        HexanaGeneratedCliToolRegistry.TOOLS
+            .filter { it.executionStatus == HexanaCliExecutionStatus.EXECUTABLE }
+            .forEach { spec ->
+                val command = parseExecutableGeneratedCliTool(spec)
 
-                    assertFalse(command is HexanaCommand.TodoTool, "${spec.commandName} must use a runtime command")
-                    assertNotEquals(HexanaCommand.Help, command, "${spec.commandName} must be registered as a subcommand")
-                }
+                assertFalse(command is HexanaCommand.TodoTool, "${spec.commandName} must use a runtime command")
+                assertNotEquals(HexanaCommand.Help, command, "${spec.commandName} must be registered as a subcommand")
 
-                HexanaCliExecutionStatus.TODO -> {
-                    val command = cli().parse(arrayOf(spec.commandName))
+                val help = cli().helpText(arrayOf(spec.commandName, "--help"))
 
-                    assertIs<HexanaCommand.TodoTool>(command, "${spec.commandName} must use the TODO command path")
-                    assertEquals(spec, command.spec)
-                }
+                assertTrue(
+                    help.normalizedWhitespace().contains(spec.summary.normalizedWhitespace()),
+                    "${spec.commandName} help must include generated summary"
+                )
+                assertTrue(help.contains("Usage:"), "${spec.commandName} help must include normal command usage")
+                assertTrue(help.contains("Path to a WebAssembly module."), "${spec.commandName} help must document wasm path")
+                assertTrue(help.contains("--format"), "${spec.commandName} help must document format option")
+                assertTrue(help.contains(spec.supportedFormatNames()), "${spec.commandName} help must document generated formats")
             }
-        }
+    }
+
+    @Test
+    fun parseRegistersEveryTodoGeneratedCliToolAsTodoWithFutureArguments() {
+        HexanaGeneratedCliToolRegistry.TOOLS
+            .filter { it.executionStatus == HexanaCliExecutionStatus.TODO }
+            .forEach { spec ->
+                val command = cli().parse(
+                    arrayOf(
+                        spec.commandName,
+                        "--input",
+                        "app.wasm",
+                        "--format=json",
+                        "--future-option",
+                        "value",
+                        "extra",
+                    )
+                )
+
+                assertIs<HexanaCommand.TodoTool>(command, "${spec.commandName} must use the TODO command path")
+                assertEquals(spec, command.spec)
+
+                val output = renderTodoToolNotImplementedMessage(command)
+
+                assertTrue(output.contains(spec.commandName), "${spec.commandName} TODO output must name command")
+                assertTrue(output.contains(spec.toolName), "${spec.commandName} TODO output must name tool")
+                assertTrue(output.contains("not implemented"), "${spec.commandName} TODO output must say not implemented")
+                assertTrue(output.contains("TODO"), "${spec.commandName} TODO output must include TODO status")
+            }
     }
 
     @Test
@@ -491,5 +522,11 @@ class HexanaCliTest {
 
                 else -> fail("No runtime parse assertion for generated executable CLI command: ${spec.commandName}")
             }
+
+        fun HexanaCliToolSpec.supportedFormatNames(): String =
+            outputFormats.joinToString { it.name.lowercase() }
+
+        fun String.normalizedWhitespace(): String =
+            trim().replace(Regex("\\s+"), " ")
     }
 }

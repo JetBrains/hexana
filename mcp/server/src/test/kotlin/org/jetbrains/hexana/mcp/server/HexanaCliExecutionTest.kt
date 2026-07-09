@@ -264,6 +264,7 @@ class HexanaCliExecutionTest {
         val output = renderCliToolsListing(HexanaCommand.Tools(group = HexanaCliToolGroup.CONVERTERS))
 
         assertTrue(output.contains("Groups are generated CLI metadata, not MCP tool profiles.\n"))
+        assertEquals(listOf("wasm-to-wat"), listedCommandNames(output))
         assertToolBlockContains(
             output,
             "wasm-to-wat",
@@ -307,6 +308,13 @@ class HexanaCliExecutionTest {
             assertTrue(block.contains(expected), "Expected $commandName block to contain $expected")
         }
     }
+
+    private fun listedCommandNames(output: String): List<String> =
+        output
+            .lineSequence()
+            .drop(2)
+            .filter { it.isNotBlank() && !it.startsWith("  ") }
+            .toList()
 
     private fun summarizeModuleCommand(
         path: String,
