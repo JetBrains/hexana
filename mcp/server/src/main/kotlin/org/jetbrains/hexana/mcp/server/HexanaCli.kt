@@ -101,9 +101,13 @@ class HexanaCli(
         override val printHelpOnEmptyArgs: Boolean = false
 
         init {
-            subcommands(
-                manualServiceCommands(envReader, sink) + generatedToolCommands(envReader, sink)
+            val manualCommands = manualServiceCommands(envReader, sink)
+            val generatedCommands = generatedToolCommands(envReader, sink)
+            validateRootCliCommandNames(
+                manualCommandNames = manualCommands.map { it.commandName },
+                generatedCommandNames = generatedCommands.map { it.commandName },
             )
+            subcommands(manualCommands + generatedCommands)
         }
 
         override fun run() = Unit
@@ -479,6 +483,34 @@ class HexanaCli(
         )
     }
 }
+
+internal fun validateRootCliCommandNames(
+    manualCommandNames: List<String>,
+    generatedCommandNames: List<String>,
+) {
+    val duplicateManualNames = duplicateRootCliCommandNames(manualCommandNames)
+    require(duplicateManualNames.isEmpty()) {
+        "Manual service CLI command names must be unique: ${duplicateManualNames.joinToString()}."
+    }
+
+    val manualCollisions = generatedCommandNames.toSet().intersect(manualCommandNames)
+    require(manualCollisions.isEmpty()) {
+        "Generated CLI command names must not duplicate manual service command names: ${manualCollisions.sorted().joinToString()}."
+    }
+
+    val duplicateGeneratedNames = duplicateRootCliCommandNames(generatedCommandNames)
+    require(duplicateGeneratedNames.isEmpty()) {
+        "Generated CLI command names must be unique: ${duplicateGeneratedNames.joinToString()}."
+    }
+}
+
+private fun duplicateRootCliCommandNames(commandNames: List<String>): List<String> =
+    commandNames
+        .groupingBy { it }
+        .eachCount()
+        .filterValues { it > 1 }
+        .keys
+        .sorted()
 
 internal fun renderCliToolsListing(command: HexanaCommand.Tools): String {
     val tools = HexanaGeneratedCliToolRegistry.TOOLS

@@ -344,6 +344,51 @@ class HexanaCliTest {
     }
 
     @Test
+    fun rootCliCommandNameGuardAcceptsCurrentRegistration() {
+        val command = cli().parse(emptyArray())
+
+        assertEquals(HexanaCommand.Help, command)
+    }
+
+    @Test
+    fun generatedCommandNamesAreUnique() {
+        val duplicateNames = HexanaGeneratedCliToolRegistry.TOOLS
+            .map { it.commandName }
+            .groupingBy { it }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
+
+        assertEquals(emptySet(), duplicateNames)
+    }
+
+    @Test
+    fun rootCliCommandNameGuardRejectsGeneratedCommandCollidingWithManualServiceCommand() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            validateRootCliCommandNames(
+                manualCommandNames = listOf("stdio", "tools"),
+                generatedCommandNames = listOf("summarize-module", "stdio"),
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("manual service command names"))
+        assertTrue(error.message.orEmpty().contains("stdio"))
+    }
+
+    @Test
+    fun rootCliCommandNameGuardRejectsDuplicateGeneratedCommands() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            validateRootCliCommandNames(
+                manualCommandNames = listOf("stdio", "tools"),
+                generatedCommandNames = listOf("summarize-module", "summarize-module"),
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("Generated CLI command names must be unique"))
+        assertTrue(error.message.orEmpty().contains("summarize-module"))
+    }
+
+    @Test
     fun parseAcceptsToolsCommandWithoutGroupFilter() {
         val command = cli().parse(arrayOf("tools"))
 
