@@ -329,6 +329,22 @@ class HexanaCliTest {
     }
 
     @Test
+    fun todoGeneratedCommandsRemainVisibleInRootHelpAndParseAsTodoTools() {
+        val rootHelp = cli().helpText()
+
+        HexanaGeneratedCliToolRegistry.TOOLS
+            .filter { it.executionStatus == HexanaCliExecutionStatus.TODO }
+            .forEach { spec ->
+                assertTrue(rootHelp.contains(spec.commandName), "${spec.commandName} must stay visible in root help")
+
+                val command = cli().parse(arrayOf(spec.commandName))
+
+                assertIs<HexanaCommand.TodoTool>(command, "${spec.commandName} must parse as a TODO tool")
+                assertEquals(spec, command.spec)
+            }
+    }
+
+    @Test
     fun parseRejectsUnknownCommandWithoutTreatingItAsTodo() {
         val error = assertFailsWith<CliktError> {
             cli().parse(arrayOf("definitely-not-a-command"))

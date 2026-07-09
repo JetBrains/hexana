@@ -260,6 +260,21 @@ class HexanaCliExecutionTest {
     }
 
     @Test
+    fun renderToolsListingKeepsTodoCommandsVisibleWithTodoStatus() {
+        val output = renderCliToolsListing(HexanaCommand.Tools(group = null))
+
+        HexanaGeneratedCliToolRegistry.TOOLS
+            .filter { it.executionStatus == HexanaCliExecutionStatus.TODO }
+            .forEach { spec ->
+                assertToolBlockContains(
+                    output,
+                    spec.commandName,
+                    "  status: todo\n",
+                )
+            }
+    }
+
+    @Test
     fun renderToolsListingFiltersByGeneratedGroupMetadataNotMcpProfile() {
         val output = renderCliToolsListing(HexanaCommand.Tools(group = HexanaCliToolGroup.CONVERTERS))
 
