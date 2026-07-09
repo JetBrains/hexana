@@ -74,6 +74,44 @@ class HexanaCliExecutionTest {
     }
 
     @Test
+    fun renderSummarizeBinaryJsonEnforcesOutputLimit() {
+        val binary = temporaryFolder.newFile("limited-binary.bin").toPath()
+        Files.write(binary, byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8))
+
+        val error = assertFailsWith<HexanaAnalysisException> {
+            generatedExecutableCliToolCommandOutput(
+                summarizeBinaryCommand(
+                    path = binary.toString(),
+                    format = HexanaCliOutputFormat.JSON,
+                    resourceLimits = HexanaResourceLimits(maxOutputBytes = 4),
+                )
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertTrue(error.message.orEmpty().contains("maxOutputBytes=4"))
+    }
+
+    @Test
+    fun renderSummarizeBinaryJsonRejectsFileOutsideAllowedRoot() {
+        val binary = temporaryFolder.newFile("outside-binary.bin").toPath()
+        Files.write(binary, byteArrayOf(1, 2, 3, 4))
+        val allowedRoot = temporaryFolder.newFolder("binary-allowed").toPath()
+
+        val error = assertFailsWith<HexanaAnalysisException> {
+            generatedExecutableCliToolCommandOutput(
+                summarizeBinaryCommand(
+                    path = binary.toString(),
+                    format = HexanaCliOutputFormat.JSON,
+                    allowedRoots = listOf(allowedRoot.toString()),
+                )
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("outside allowed roots"))
+    }
+
+    @Test
     fun renderSummarizeModulePrettyReturnsDeterministicPlainText() {
         val wasm = createWasmFile(
             "pretty-summary.wasm",
