@@ -27,13 +27,6 @@ import org.jetbrains.hexana.mcp.model.types.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
-private const val LEGACY_SEARCH_EXPORTS_LIMIT = 50
-private const val LEGACY_LIST_FUNCTIONS_OFFSET = 0
-private const val LEGACY_LIST_FUNCTIONS_LIMIT = 200
-private const val LEGACY_SEARCH_FUNCTIONS_BY_NAME_LIMIT = 50
-private const val LEGACY_LIST_DATA_SEGMENTS_INCLUDE_EXPORTS = false
-private const val LEGACY_LIST_DATA_SEGMENTS_INCLUDE_GLOBALS = true
-
 class HexanaToolHandlers(
     resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
     maxInlineInputBytes: Int? = null,
@@ -225,7 +218,7 @@ class HexanaToolHandlers(
             analysisService.searchExports(
                 input = wasmInput(arguments),
                 query = arguments.requireStringList("query"),
-                limit = arguments.limitOrResourceDefault("limit", LEGACY_SEARCH_EXPORTS_LIMIT)
+                limit = arguments.limitOrResourceDefault("limit", HexanaToolInputDefaults.SEARCH_EXPORTS_LIMIT)
             )
         }
     }
@@ -234,8 +227,8 @@ class HexanaToolHandlers(
         return execute("list_functions", FunctionsResult.serializer()) {
             analysisService.listFunctions(
                 input = wasmInput(arguments),
-                offset = arguments.intOrDefault("offset", LEGACY_LIST_FUNCTIONS_OFFSET),
-                limit = arguments.limitOrResourceDefault("limit", LEGACY_LIST_FUNCTIONS_LIMIT)
+                offset = arguments.intOrDefault("offset", HexanaToolInputDefaults.LIST_FUNCTIONS_OFFSET),
+                limit = arguments.limitOrResourceDefault("limit", HexanaToolInputDefaults.LIST_FUNCTIONS_LIMIT)
             )
         }
     }
@@ -294,7 +287,7 @@ class HexanaToolHandlers(
             analysisService.searchFunctionsByName(
                 input = wasmInput(arguments),
                 query = arguments.requireNonBlankString("query"),
-                limit = arguments.limitOrResourceDefault("limit", LEGACY_SEARCH_FUNCTIONS_BY_NAME_LIMIT)
+                limit = arguments.limitOrResourceDefault("limit", HexanaToolInputDefaults.SEARCH_FUNCTIONS_BY_NAME_LIMIT)
             )
         }
     }
@@ -429,11 +422,11 @@ class HexanaToolHandlers(
                 segmentEndExclusive = toExclusive,
                 includeExports = arguments.booleanOrDefault(
                     "includeExports",
-                    LEGACY_LIST_DATA_SEGMENTS_INCLUDE_EXPORTS
+                    HexanaToolInputDefaults.LIST_DATA_SEGMENTS_INCLUDE_EXPORTS
                 ),
                 includeGlobals = arguments.booleanOrDefault(
                     "includeGlobals",
-                    LEGACY_LIST_DATA_SEGMENTS_INCLUDE_GLOBALS
+                    HexanaToolInputDefaults.LIST_DATA_SEGMENTS_INCLUDE_GLOBALS
                 ),
                 minByteLength = arguments.nullableInt("minByteLength")
             )

@@ -11,6 +11,16 @@ class HexanaGeneratedToolFilesTest {
     private val generatedPackageDir = generatedPackageDir()
 
     @Test
+    fun handWrittenToolHandlersDoNotReintroduceLegacyDefaultConstants() {
+        val handlers = Files.readString(handlerSourceFile())
+
+        assertFalse(
+            handlers.contains("LEGACY_"),
+            "HexanaToolHandlers.kt must use generated HexanaToolInputDefaults instead of LEGACY_ defaults",
+        )
+    }
+
+    @Test
     fun checkedInGeneratedToolFilesKeepClosedMcpAndCliSplit() {
         val generatedFiles = generatedKotlinFiles()
 
@@ -96,6 +106,16 @@ class HexanaGeneratedToolFilesTest {
         } finally {
             stream.close()
         }
+    }
+
+    private fun handlerSourceFile(): Path {
+        val relative = Path.of("src/main/kotlin/org/jetbrains/hexana/mcp/server/HexanaToolHandlers.kt")
+        val candidates = listOf(
+            Path.of("").toAbsolutePath().resolve(relative),
+            Path.of("").toAbsolutePath().resolve("mcp/server").resolve(relative),
+        )
+        return candidates.firstOrNull { Files.isRegularFile(it) }
+            ?: error("Could not locate HexanaToolHandlers.kt under $candidates")
     }
 
     private fun generatedPackageDir(): Path {
