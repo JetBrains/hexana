@@ -371,6 +371,10 @@ tasks.register("verifyHexanaToolsetUpToDate") {
     }
 }
 
+tasks.named("check") {
+    dependsOn(tasks.named("verifyHexanaToolsetUpToDate"))
+}
+
 tasks.register<JavaExec>("generateHexanaScriptingDts") {
     description = "Generates hexana-scripting.d.ts into idea-plugin resources and vscode-plugin src."
     group = "generation"

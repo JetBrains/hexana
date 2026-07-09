@@ -361,6 +361,7 @@ tasks.register("verifyNativeMcpVersionSmokeAssertion") {
 tasks.named("check") {
     dependsOn(tasks.named("verifyMcpRuntimeClassFileVersions"))
     dependsOn(tasks.named("verifyNativeMcpVersionSmokeAssertion"))
+    dependsOn(tasks.named("verifyHexanaToolDispatcherUpToDate"))
 }
 
 tasks.register<Test>("plainMcpPackagingSmoke") {

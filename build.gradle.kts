@@ -93,6 +93,8 @@ tasks.register("teamcityCiTests") {
         ":mcp:server:test",
         ":mcp:server:verifyMcpRuntimeClassFileVersions",
         ":mcp:server:verifyNativeMcpVersionSmokeAssertion",
+        ":mcp:server:verifyHexanaToolDispatcherUpToDate",
+        ":idea-plugin:verifyHexanaToolsetUpToDate",
         ":mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate",
         ":mcp:server:integrationTest",
         ":mcp:vscode-server:test",
