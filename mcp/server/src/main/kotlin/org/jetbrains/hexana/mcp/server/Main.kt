@@ -214,7 +214,7 @@ private suspend fun runStdio(command: HexanaCommand.Stdio) {
     val finished = CompletableDeferred<Unit>()
     val transport = HexanaStdioServerTransport(
         inputStream = System.`in`.asSource().buffered(),
-        outputStream = System.out.asSink().buffered()
+        outputStream = System.out.asSink()
     )
 
     transport.onClose {

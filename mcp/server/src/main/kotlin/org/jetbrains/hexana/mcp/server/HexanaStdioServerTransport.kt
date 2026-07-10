@@ -18,7 +18,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.io.Buffer
-import kotlinx.io.Sink
+import kotlinx.io.RawSink
 import kotlinx.io.Source
 import kotlinx.io.buffered
 import kotlinx.io.readByteArray
@@ -42,7 +42,10 @@ internal const val HEXANA_STDIO_MESSAGE_LIMIT_ERROR_MESSAGE =
  * message read and delivery branches split into simpler methods.
  */
 @OptIn(ExperimentalAtomicApi::class)
-internal class HexanaStdioServerTransport(private val inputStream: Source, outputStream: Sink) : AbstractTransport() {
+internal class HexanaStdioServerTransport(
+    private val inputStream: Source,
+    private val outputStream: RawSink,
+) : AbstractTransport() {
 
     private val logger = KotlinLogging.logger {}
     private val readBuffer = ReadBuffer()
@@ -214,8 +217,17 @@ internal class HexanaStdioServerTransport(private val inputStream: Source, outpu
             _onError.invoke(error)
         }
         scope.launch {
+            closeOutputSinkAfterFailure()
+        }
+        scope.launch {
             close()
         }
+    }
+
+    private fun closeOutputSinkAfterFailure() {
+        runCatching {
+            outputStream.close()
+        }.onFailure { logger.warn(it) { "Failed to close stdout after fatal transport error" } }
     }
 
     private fun logJobCompletion(jobName: String, cause: Throwable?) {

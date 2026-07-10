@@ -7,8 +7,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.io.Buffer
+import kotlinx.io.RawSink
 import kotlinx.io.RawSource
 import kotlinx.io.buffered
+import kotlinx.io.readByteArray
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -102,13 +104,18 @@ class HexanaStdioServerTransportTest {
 
     @Test
     fun closesAndReportsErrorWhenOutboundWriteQueueOverflows() = runBlocking {
+        val writeStarted = CompletableDeferred<Unit>()
+        val outputStream = BlockingSink(writeStarted)
         val transport = HexanaStdioServerTransport(
             inputStream = ChunkedRawSource(emptyList()).buffered(),
-            outputStream = Buffer(),
+            outputStream = outputStream,
         )
         val reportedError = CompletableDeferred<Throwable>()
 
         transport.onError { reportedError.complete(it) }
+        transport.start()
+        transport.send(JSONRPCNotification("notifications/progress"))
+        withTimeout(5.seconds) { writeStarted.await() }
         repeat(1024) {
             transport.send(JSONRPCNotification("notifications/progress"))
         }
@@ -118,8 +125,8 @@ class HexanaStdioServerTransportTest {
         }
         assertEquals("Hexana stdio MCP transport write queue exceeded capacity of 1024 messages.", thrown.message)
         assertEquals(thrown, withTimeout(5.seconds) { reportedError.await() })
-
-        transport.close()
+        withTimeout(5.seconds) { transport.close() }
+        assertTrue(outputStream.closed)
     }
 
     @Test
@@ -179,6 +186,30 @@ class HexanaStdioServerTransportTest {
                 Thread.sleep(10)
             }
             return -1
+        }
+
+        override fun close() {
+            closed = true
+        }
+    }
+
+    private class BlockingSink(private val writeStarted: CompletableDeferred<Unit>) : RawSink {
+        @Volatile
+        var closed = false
+            private set
+
+        override fun write(source: Buffer, byteCount: Long) {
+            writeStarted.complete(Unit)
+            while (!closed) {
+                Thread.sleep(10)
+            }
+            source.readByteArray(byteCount.toInt())
+        }
+
+        override fun flush() {
+            while (!closed) {
+                Thread.sleep(10)
+            }
         }
 
         override fun close() {
