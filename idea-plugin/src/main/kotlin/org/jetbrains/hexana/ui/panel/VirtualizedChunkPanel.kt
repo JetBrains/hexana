@@ -117,6 +117,12 @@ internal data class VirtualizedChunkPanelConfig(
      * one item per row).
      */
     val itemCountForChunk: (ChunkId) -> Int = { 1 },
+    /**
+     * Hierarchical section nesting: maps a child [SectionKind] to its parent.
+     * When a parent section header is folded, all child section headers (and
+     * their elements) are hidden too. Empty by default (flat fold behaviour).
+     */
+    val sectionParent: Map<SectionKind, SectionKind> = emptyMap(),
 )
 
 /**
@@ -167,6 +173,11 @@ internal fun VirtualizedChunkPanel(
      * back/forward/goto shortcuts. Return true to consume the event.
      */
     extraKeyHandler: ((androidx.compose.ui.input.key.KeyEvent) -> Boolean)? = null,
+    /**
+     * Called once the navigator is created, so callers can hold a reference
+     * for external navigation (e.g. goto-offset bar in a toolbar slot).
+     */
+    onNavigatorReady: ((ChunkPanelNavigator) -> Unit)? = null,
 ) {
     val effectiveListState = listState ?: rememberLazyListState()
     val foldedSectionsState: MutableState<Set<ChunkId>> =
@@ -183,8 +194,10 @@ internal fun VirtualizedChunkPanel(
             scope = scope,
             history = navHistory,
             itemCountForChunk = config.itemCountForChunk,
+            sectionParent = config.sectionParent,
         )
     }
+    onNavigatorReady?.invoke(navigator)
 
     val firstVisibleChunkIndex by remember(effectiveListState, chunkTree) {
         derivedStateOf {
@@ -256,12 +269,26 @@ internal fun VirtualizedChunkPanel(
         SelectionContainer(modifier = Modifier.fillMaxWidth().weight(1f)) {
           Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(state = effectiveListState, modifier = Modifier.fillMaxSize()) {
+                // `hidden` tracks the nearest section header's fold state (flat).
+                // `ancestorHidden` is set when a parent-level header (per
+                // sectionParent) is folded, hiding all child headers + elements.
                 var hidden = false
+                var ancestorHidden = false
                 for (i in 0 until chunkTree.totalChunks) {
                     val chunk = chunkTree.chunkAt(i)
                     when (chunk) {
                         is BinaryChunk.SectionHeader -> {
-                            hidden = chunk.id in foldedSections
+                            val parentKind = config.sectionParent[chunk.kind]
+                            if (parentKind == null) {
+                                // Top-level header: update ancestorHidden for children.
+                                val selfFolded = chunk.id in foldedSections
+                                ancestorHidden = selfFolded
+                                hidden = selfFolded
+                            } else {
+                                // Child header: hidden when ancestor is folded.
+                                if (ancestorHidden) { continue }
+                                hidden = chunk.id in foldedSections
+                            }
                             val isFolded = hidden
                             stickyHeader(key = chunk.id) {
                                 if (sectionHeaderContent != null) {
@@ -289,7 +316,7 @@ internal fun VirtualizedChunkPanel(
                             }
                         }
                         is BinaryChunk.Element -> {
-                            if (!hidden) {
+                            if (!hidden && !ancestorHidden) {
                                 if (elementContent != null) {
                                     with(this@LazyColumn) { elementContent(chunk, navigator) }
                                 } else {
@@ -342,6 +369,7 @@ internal class ChunkPanelNavigator(
     private val scope: kotlinx.coroutines.CoroutineScope,
     private val history: ChunkNavHistoryState,
     private val itemCountForChunk: (ChunkId) -> Int = { 1 },
+    private val sectionParent: Map<SectionKind, SectionKind> = emptyMap(),
 ) {
     fun gotoChunk(chunkId: ChunkId, recordHistory: Boolean = true): Boolean {
         val target = ChunkNavTarget(chunkId = chunkId)
@@ -387,16 +415,29 @@ internal class ChunkPanelNavigator(
     private fun computeLazyItemIndex(chunkId: ChunkId): Int {
         var cursor = 0
         var hidden = false
+        var ancestorHidden = false
+        val folded = foldedSectionsState.value
         for (i in 0 until chunkTree.totalChunks) {
             val c = chunkTree.chunkAt(i)
             when (c) {
                 is BinaryChunk.SectionHeader -> {
-                    hidden = c.id in foldedSectionsState.value
+                    val parentKind = sectionParent[c.kind]
+                    if (parentKind == null) {
+                        val selfFolded = c.id in folded
+                        ancestorHidden = selfFolded
+                        hidden = selfFolded
+                    } else {
+                        if (ancestorHidden) {
+                            if (c.id == chunkId) return -1
+                            continue
+                        }
+                        hidden = c.id in folded
+                    }
                     if (c.id == chunkId) return cursor
                     cursor++
                 }
                 is BinaryChunk.Element -> {
-                    if (!hidden) {
+                    if (!hidden && !ancestorHidden) {
                         if (c.id == chunkId) return cursor
                         cursor += itemCountForChunk(c.id)
                     }
@@ -407,19 +448,39 @@ internal class ChunkPanelNavigator(
     }
 
     private fun unfoldSectionContaining(chunkId: ChunkId) {
-        var currentHeader: ChunkId? = null
+        // Collect all ancestor section headers on the path to the target chunk
+        // and unfold every one of them so the target becomes visible.
+        val headerStack = mutableListOf<ChunkId>()
         for (i in 0 until chunkTree.totalChunks) {
             val c = chunkTree.chunkAt(i)
             when (c) {
-                is BinaryChunk.SectionHeader -> currentHeader = c.id
+                is BinaryChunk.SectionHeader -> {
+                    if (sectionParent[c.kind] == null) headerStack.clear()
+                    headerStack += c.id
+                }
                 is BinaryChunk.Element -> if (c.id == chunkId) {
-                    val header = currentHeader ?: return
-                    if (header in foldedSectionsState.value) {
-                        foldedSectionsState.value = foldedSectionsState.value - header
-                    }
+                    var updated = foldedSectionsState.value
+                    for (hdr in headerStack) updated = updated - hdr
+                    foldedSectionsState.value = updated
                     return
                 }
             }
+        }
+        // Handle the case where chunkId is a SectionHeader itself.
+        val idx = chunkTree.chunkForId(chunkId) ?: return
+        val target = chunkTree.chunkAt(idx)
+        if (target is BinaryChunk.SectionHeader && sectionParent[target.kind] != null) {
+            val ancestors = mutableListOf<ChunkId>()
+            for (j in 0 until idx) {
+                val h = chunkTree.chunkAt(j)
+                if (h is BinaryChunk.SectionHeader) {
+                    if (sectionParent[h.kind] == null) ancestors.clear()
+                    ancestors += h.id
+                }
+            }
+            var updated = foldedSectionsState.value
+            for (hdr in ancestors) updated = updated - hdr
+            foldedSectionsState.value = updated
         }
     }
 
