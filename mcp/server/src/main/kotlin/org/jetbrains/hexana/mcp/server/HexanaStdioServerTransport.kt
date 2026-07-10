@@ -28,6 +28,11 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.CoroutineContext
 
 private const val STDIO_READ_BUFFER_SIZE = 8192L
+private const val STDIO_READ_CHANNEL_CAPACITY = 128
+private const val STDIO_WRITE_CHANNEL_CAPACITY = 1024
+internal const val HEXANA_STDIO_MAX_MESSAGE_BYTES = 128L * 1024L * 1024L
+internal const val HEXANA_STDIO_MESSAGE_LIMIT_ERROR_MESSAGE =
+    "Hexana stdio MCP transport message exceeded maximum size of 134217728 bytes."
 
 /**
  * Local stdio transport equivalent to the SDK transport.
@@ -42,14 +47,17 @@ internal class HexanaStdioServerTransport(private val inputStream: Source, outpu
     private val logger = KotlinLogging.logger {}
     private val readBuffer = ReadBuffer()
     private val initialized = AtomicBoolean(false)
+    private val fatalErrorReported = AtomicBoolean(false)
     private var readingJob: Job? = null
     private var sendingJob: Job? = null
     private var processingJob: Job? = null
+    private var bufferedLineBytes = 0L
+    private var pendingCarriageReturn = false
 
     private val coroutineContext: CoroutineContext = Dispatchers.IO + SupervisorJob()
     private val scope = CoroutineScope(coroutineContext)
-    private val readChannel = Channel<ByteArray>(Channel.UNLIMITED)
-    private val writeChannel = Channel<JSONRPCMessage>(Channel.UNLIMITED)
+    private val readChannel = Channel<StdioReadChunk>(STDIO_READ_CHANNEL_CAPACITY)
+    private val writeChannel = Channel<JSONRPCMessage>(STDIO_WRITE_CHANNEL_CAPACITY)
     private val outputSink = outputStream.buffered()
 
     override suspend fun start() {
@@ -70,7 +78,9 @@ internal class HexanaStdioServerTransport(private val inputStream: Source, outpu
                     val bytesRead = inputStream.readAtMostTo(buffer, STDIO_READ_BUFFER_SIZE)
                     if (bytesRead == -1L) break
                     if (bytesRead > 0) {
-                        readChannel.send(buffer.readByteArray())
+                        val chunk = buffer.readByteArray()
+                        val containsLineBreak = checkMessageSize(chunk)
+                        readChannel.send(StdioReadChunk(bytes = chunk, containsLineBreak = containsLineBreak))
                     }
                 }
             } catch (error: CancellationException) {
@@ -92,8 +102,10 @@ internal class HexanaStdioServerTransport(private val inputStream: Source, outpu
         val job = scope.launch {
             try {
                 for (chunk in readChannel) {
-                    readBuffer.append(chunk)
-                    processBufferedMessages()
+                    readBuffer.append(chunk.bytes)
+                    if (chunk.containsLineBreak) {
+                        processBufferedMessages()
+                    }
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -131,6 +143,44 @@ internal class HexanaStdioServerTransport(private val inputStream: Source, outpu
         return job
     }
 
+    private fun checkMessageSize(chunk: ByteArray): Boolean {
+        var containsLineBreak = false
+        for (byte in chunk) {
+            when (byte) {
+                '\n'.code.toByte() -> {
+                    containsLineBreak = true
+                    bufferedLineBytes = 0L
+                    pendingCarriageReturn = false
+                }
+
+                '\r'.code.toByte() -> {
+                    countPendingCarriageReturn()
+                    pendingCarriageReturn = true
+                }
+
+                else -> {
+                    countPendingCarriageReturn()
+                    countMessageByte()
+                }
+            }
+        }
+        return containsLineBreak
+    }
+
+    private fun countPendingCarriageReturn() {
+        if (pendingCarriageReturn) {
+            pendingCarriageReturn = false
+            countMessageByte()
+        }
+    }
+
+    private fun countMessageByte() {
+        bufferedLineBytes += 1
+        if (bufferedLineBytes > HEXANA_STDIO_MAX_MESSAGE_BYTES) {
+            throw HexanaStdioTransportMessageLimitException()
+        }
+    }
+
     private suspend fun processBufferedMessages() {
         while (true) {
             val message = readNextMessageOrReportError() ?: return
@@ -155,6 +205,15 @@ internal class HexanaStdioServerTransport(private val inputStream: Source, outpu
         } catch (error: Throwable) {
             logger.error(error) { "Error processing message" }
             _onError.invoke(error)
+        }
+    }
+
+    private fun failTransport(error: Throwable) {
+        if (fatalErrorReported.compareAndSet(expectedValue = false, newValue = true)) {
+            _onError.invoke(error)
+        }
+        scope.launch {
+            close()
         }
     }
 
@@ -201,6 +260,22 @@ internal class HexanaStdioServerTransport(private val inputStream: Source, outpu
     }
 
     override suspend fun send(message: JSONRPCMessage, options: TransportSendOptions?) {
-        writeChannel.send(message)
+        val sendResult = writeChannel.trySend(message)
+        if (sendResult.isSuccess) return
+        if (sendResult.isClosed) {
+            throw sendResult.exceptionOrNull() ?: CancellationException("Hexana stdio MCP transport is closed.")
+        }
+
+        val error = HexanaStdioTransportQueueOverflowException(
+            "Hexana stdio MCP transport write queue exceeded capacity of $STDIO_WRITE_CHANNEL_CAPACITY messages."
+        )
+        failTransport(error)
+        throw error
     }
 }
+
+private class HexanaStdioTransportMessageLimitException : IllegalStateException(HEXANA_STDIO_MESSAGE_LIMIT_ERROR_MESSAGE)
+
+private class HexanaStdioTransportQueueOverflowException(message: String) : IllegalStateException(message)
+
+private data class StdioReadChunk(val bytes: ByteArray, val containsLineBreak: Boolean)
