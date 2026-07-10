@@ -10,6 +10,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.long
 import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
 import org.junit.Rule
 import org.junit.Test
@@ -35,8 +36,18 @@ class HexanaClaudePluginWrapperIntegrationTest {
     }
 
     @Test
+    fun assembledClaudePluginRunsExecutableCliCommand() = runBlocking {
+        assertExecutableCliCommandRunsThroughWrapper(StdioLauncher.ClaudePluginWrapper)
+    }
+
+    @Test
     fun assembledCodexPluginVersionCommandExitsPromptly() = runBlocking {
         assertVersionCommandExitsPromptly(StdioLauncher.CodexPluginWrapper)
+    }
+
+    @Test
+    fun assembledCodexPluginRunsExecutableCliCommand() = runBlocking {
+        assertExecutableCliCommandRunsThroughWrapper(StdioLauncher.CodexPluginWrapper)
     }
 
     @Test
@@ -146,6 +157,45 @@ class HexanaClaudePluginWrapperIntegrationTest {
             result.stdout.trim().matches(Regex("""hexana-mcp \S+""")),
             "Unexpected version output: ${result.stdout}"
         )
+    }
+
+    private suspend fun assertExecutableCliCommandRunsThroughWrapper(launcher: StdioLauncher) {
+        val wasm = temporaryFolder.newFile("${launcher.clientName}-summary.wasm").toPath().also {
+            Files.write(
+                it,
+                wat2wasm(
+                    """
+                    (module
+                      (memory 1)
+                      (func (export "main")))
+                    """.trimIndent()
+                )
+            )
+        }
+
+        val result = HexanaInstalledStdioClient.runCommand(
+            launcher,
+            "summarize-binary",
+            wasm.toString(),
+            "--format",
+            "json",
+        )
+        assertFalse(
+            result.timedOut,
+            "summarize-binary command timed out. stdout=${result.stdout}, stderr=${result.stderr}, command=${result.command}"
+        )
+        assertEquals(0, result.exitCode, "stderr=${result.stderr}, command=${result.command}")
+        assertEquals("", result.unexpectedStderr, "Executable CLI command should not log to stderr.")
+
+        val json = Json.parseToJsonElement(result.stdout).jsonObject
+        val module = json.getValue("module").jsonObject
+        val counts = json.getValue("counts").jsonObject
+        assertEquals("wasm", module.getValue("format").jsonPrimitive.content)
+        assertEquals(wasm.toString(), module.getValue("path").jsonPrimitive.content)
+        assertTrue(module.getValue("byteLength").jsonPrimitive.long > 0)
+        assertEquals(1, counts.getValue("functions").jsonPrimitive.int)
+        assertEquals(1, counts.getValue("memories").jsonPrimitive.int)
+        assertEquals(1, counts.getValue("exports").jsonPrimitive.int)
     }
 
     private suspend fun assertWrapperExposesToolsOverStdio(

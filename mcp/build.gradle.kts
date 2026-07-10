@@ -1605,7 +1605,51 @@ fun validateMcpbNativeCliSurface(nativeRuntime: File, allowedRoot: File, working
         Build the MCPB native override from the current branch/foundation, or omit the override so `:mcp:server:nativeCompile` is used.
         """.trimIndent()
     }
+
+    val wasmFixture = allowedRoot.resolve("mcpb-native-summary.wasm")
+    wasmFixture.writeBytes(minimalWasmModuleBytes())
+    val summary = runProcess(
+        listOf(
+            nativeRuntime.absolutePath,
+            "summarize-binary",
+            wasmFixture.absolutePath,
+            "--format",
+            "json",
+        ),
+        workingDir,
+    )
+    val summaryJson = runCatching {
+        JsonSlurper().parseText(summary.output) as? Map<*, *>
+    }.getOrNull()
+    val module = summaryJson?.mapField("module")
+    val counts = summaryJson?.mapField("counts")
+    check(
+        summary.exitCode == 0 &&
+            module?.get("format") == "wasm" &&
+            module?.get("path") == wasmFixture.absolutePath &&
+            (module?.get("byteLength") as? Number)?.toInt() == wasmFixture.length().toInt() &&
+            (counts?.get("functions") as? Number)?.toInt() == 1 &&
+            (counts?.get("memories") as? Number)?.toInt() == 1 &&
+            (counts?.get("exports") as? Number)?.toInt() == 1
+    ) {
+        """
+        MCPB native executable lacks the required executable CLI surface.
+        Expected direct native `summarize-binary ${wasmFixture.absolutePath} --format json` to summarize a Wasm fixture, got exit ${summary.exitCode}:
+        ${summary.output}
+        Build the MCPB native override from the current branch/foundation, or omit the override so `:mcp:server:nativeCompile` is used.
+        """.trimIndent()
+    }
 }
+
+fun minimalWasmModuleBytes(): ByteArray = byteArrayOf(
+    0x00, 0x61, 0x73, 0x6d,
+    0x01, 0x00, 0x00, 0x00,
+    0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
+    0x03, 0x02, 0x01, 0x00,
+    0x05, 0x03, 0x01, 0x00, 0x01,
+    0x07, 0x08, 0x01, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00,
+    0x0a, 0x04, 0x01, 0x02, 0x00, 0x0b,
+)
 
 fun currentNativePlatformName(): String {
     val os = when {
