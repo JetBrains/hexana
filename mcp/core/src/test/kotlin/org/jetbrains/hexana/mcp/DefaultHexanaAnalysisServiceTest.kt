@@ -1515,6 +1515,23 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun rejectsMalformedUtf8TextFileAsReadFailure() {
+        val binding = temporaryFolder.newFile("malformed-binding.json").toPath()
+        Files.write(binding, byteArrayOf(0x7b, 0x22, 0xc3.toByte(), 0x28, 0x22, 0x7d))
+        val minimalWasm = byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00)
+
+        val error = assertFailsWith<HexanaAnalysisException> {
+            service.planAbiBindingRegeneration(
+                input = WasmInput.RawBytes(minimalWasm),
+                bindingInput = TextInput.FilePath(binding.toString()),
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.INTERNAL_ERROR, error.code)
+        assertEquals("Failed to read text file", error.message)
+    }
+
+    @Test
     fun rejectsNonWasmAndMalformedFiles() {
         val textFile = temporaryFolder.newFile("not_wasm.txt").toPath()
         Files.writeString(textFile, "not wasm")

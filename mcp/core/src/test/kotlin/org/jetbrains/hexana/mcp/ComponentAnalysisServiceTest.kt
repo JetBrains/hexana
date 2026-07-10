@@ -439,6 +439,54 @@ class ComponentAnalysisServiceTest {
     }
 
     @Test
+    fun resolveComponentDependenciesRejectsTransitiveProviderThatExceedsLimitAfterRead() {
+        val root = temporaryFolder.newFolder("growing-transitive-provider").toPath()
+        val checkout = writeComponent(
+            root.resolve("dist/checkout.component.wasm"),
+            imports = listOf("acme:pricing/calculate@1.0.0"),
+            exports = listOf("acme:checkout/run@1.0.0"),
+        )
+        val pricing = writeComponent(
+            root.resolve("components/pricing.component.wasm"),
+            imports = listOf("acme:tax/rates@1.0.0"),
+            exports = listOf("acme:pricing/calculate@1.0.0"),
+        )
+        val tax = writeComponent(
+            root.resolve("components/tax.component.wasm"),
+            imports = emptyList(),
+            exports = listOf("acme:tax/rates@1.0.0"),
+        )
+        val maxFileBytes = listOf(checkout, pricing, tax).maxOf { Files.size(it) }.toInt()
+        var pricingReads = 0
+
+        val result = ComponentProviderFileAccessOverride.withFileAccess(
+            fileSizeOrNull = { path ->
+                if (path.fileName == pricing.fileName) Files.size(pricing) else Files.size(path)
+            },
+            fileBytesReader = { path ->
+                if (path.fileName == pricing.fileName && pricingReads++ > 0) {
+                    ByteArray(maxFileBytes + 1)
+                } else {
+                    Files.readAllBytes(path)
+                }
+            },
+        ) {
+            DefaultHexanaAnalysisService(
+                limits = HexanaResourceLimits(maxFileWasmBytes = maxFileBytes)
+            ).resolveComponentDependencies(
+                input = WasmInput.FilePath(checkout.toString()),
+                projectRoot = root.toString(),
+                scanRoots = emptyList(),
+            )
+        }
+
+        assertTrue(result.rejectedCandidates.any {
+            it.candidatePath.endsWith("pricing.component.wasm") &&
+                it.reason == "file size ${maxFileBytes + 1} bytes exceeds configured maximum file size of $maxFileBytes bytes"
+        })
+    }
+
+    @Test
     fun checkComponentCompatibilityRejectsOversizedPreviousComponent() {
         val root = temporaryFolder.newFolder("oversized-previous-component").toPath()
         val current = writeComponentEntries(

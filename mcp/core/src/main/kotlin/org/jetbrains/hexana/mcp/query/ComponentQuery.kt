@@ -81,12 +81,22 @@ fun WasmComponentBinaryProvider.resolveComponentDependencies(
 
     val transitiveImports = linkedSetOf<ComponentImportRef>()
     val transitiveRuntimeImports = linkedMapOf<String, ComponentIgnoredRuntimeImportResult>()
+    val transitiveRejectedCandidates = mutableListOf<RejectedScannedCandidate>()
     val visitedDependencies = mutableSetOf<String>()
     val queue = ArrayDeque(directDeps.map { it.dependencyPath }.distinct())
     while (queue.isNotEmpty()) {
         val depPath = queue.removeFirst()
         if (!visitedDependencies.add(depPath)) continue
-        val provider = readComponentProvider(Path.of(depPath), allowedFilePolicy, limits) ?: continue
+        val depFile = Path.of(depPath)
+        val provider = try {
+            readComponentProvider(depFile, allowedFilePolicy, limits)
+        } catch (error: ComponentProviderTooLargeException) {
+            transitiveRejectedCandidates += RejectedScannedCandidate(
+                depFile.normalize(),
+                componentProviderRejectedReason(error.size, limits)
+            )
+            continue
+        } ?: continue
         val depImports = provider.imports.map { it.importRef() }
         depImports
             .filter { isRuntimeImport(it.fullName) }
@@ -125,7 +135,7 @@ fun WasmComponentBinaryProvider.resolveComponentDependencies(
         .toMutableSet()
     allConflicts.flatMap { conflict -> conflict.candidates }
         .mapTo(excludedRejectedPaths) { it.dependency.path.normalize() }
-    val rejectedCandidates = index.rejectedCandidates + buildRejectedComponentCandidates(
+    val rejectedCandidates = index.rejectedCandidates + transitiveRejectedCandidates + buildRejectedComponentCandidates(
         index = index,
         requiredImports = direct + transitiveImports,
         excludedPaths = excludedRejectedPaths,

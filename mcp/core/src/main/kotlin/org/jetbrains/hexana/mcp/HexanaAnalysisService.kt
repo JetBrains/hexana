@@ -53,6 +53,8 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.*
@@ -834,7 +836,19 @@ class DefaultHexanaAnalysisService(
             )
         }
         requireTextFileByteCount(bytes.size)
-        val text = bytes.toString(Charsets.UTF_8)
+        val text = try {
+            Charsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(bytes))
+                .toString()
+        } catch (error: Exception) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.INTERNAL_ERROR,
+                "Failed to read text file",
+                error
+            )
+        }
         return LoadedText(text, pathLabel)
     }
 
