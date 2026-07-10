@@ -164,6 +164,50 @@ class HexanaStdioIntegrationTest {
     }
 
     @Test
+    fun installedExecutableToolInputFailuresStayConciseOnStderr() = runBlocking {
+        val outsideWasm = createWasmFile("outside-root.wasm", "(module)")
+        val allowedRoot = temporaryFolder.newFolder("allowed-root").toPath()
+        val textFile = temporaryFolder.newFile("not-wasm.txt").toPath()
+        Files.writeString(textFile, "not a wasm module")
+        val directoryInput = temporaryFolder.newFolder("directory-input").toPath()
+        val outputLimitedWasm = createWasmFile("output-limit.wasm", "(module (memory 1) (func (export \"main\")))")
+
+        val cases = listOf(
+            listOf("summarize-module", missingPath("missing.wasm").toString(), "--format", "json") to "File not found",
+            listOf(
+                "summarize-module",
+                outsideWasm.toString(),
+                "--format",
+                "json",
+                "--allowed-root",
+                allowedRoot.toString(),
+            ) to "outside allowed roots",
+            listOf("summarize-module", directoryInput.toString(), "--format", "json") to "File not found",
+            listOf("wasm-to-wat", textFile.toString(), "--format", "raw") to "Not a .wasm file",
+            listOf(
+                "summarize-module",
+                outputLimitedWasm.toString(),
+                "--format",
+                "json",
+                "--max-output-bytes",
+                "4",
+            ) to "maxOutputBytes=4",
+        )
+
+        cases.forEach { (arguments, expectedMessage) ->
+            val result = HexanaInstalledStdioClient.runCommand(StdioLauncher.Server, *arguments.toTypedArray())
+
+            assertFalse(result.timedOut, "Command timed out. stdout=${result.stdout}, stderr=${result.stderr}")
+            assertEquals(1, result.exitCode, "stdout=${result.stdout}, stderr=${result.stderr}")
+            assertTrue(result.stdout.isBlank(), "Expected stdout to stay empty, got: ${result.stdout}")
+            assertTrue(result.stderr.contains(expectedMessage), result.stderr)
+            assertTrue(result.stderr.contains("Hexana MCP ${arguments.first()} failed"), result.stderr)
+            assertNoStackTrace(result.stderr)
+            assertFalse(result.stderr.contains("See server logs"), result.stderr)
+        }
+    }
+
+    @Test
     fun installedServerSupportsListToolsAndToolCallsOverStdio() = runBlocking {
         KotlinLoggingConfiguration.logStartupMessage = false
         val fixtureDirectory = temporaryFolder.root.toPath()
@@ -193,9 +237,16 @@ class HexanaStdioIntegrationTest {
         assertEquals(0, result.exitCode, "stdout=${result.stdout}, stderr=${result.stderr}")
     }
 
+    private fun assertNoStackTrace(stderr: String) {
+        assertFalse(Regex("""(?m)^\s+at\s""").containsMatchIn(stderr), stderr)
+        assertFalse(stderr.contains("HexanaAnalysisException"), stderr)
+    }
+
     private fun createWasmFile(name: String, wat: String) = temporaryFolder.newFile(name).toPath().also {
         Files.write(it, wat2wasm(wat))
     }
+
+    private fun missingPath(name: String): Path = temporaryFolder.root.toPath().resolve(name)
 
     private fun nativeFixture(relativePath: String): Path {
         var current = Path.of(System.getProperty("user.dir")).toAbsolutePath()
