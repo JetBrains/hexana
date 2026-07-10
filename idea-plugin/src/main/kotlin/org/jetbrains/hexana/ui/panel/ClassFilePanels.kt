@@ -3,8 +3,6 @@ package org.jetbrains.hexana.ui.panel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -12,17 +10,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.jetbrains.hexana.document.format.BinaryChunk
+import org.jetbrains.hexana.document.format.ChunkId
+import org.jetbrains.hexana.document.format.ChunkTree
+import org.jetbrains.hexana.document.format.SectionKind
 import org.jetbrains.hexana.javabytecode.*
 import org.jetbrains.hexana.ui.ClassFileNavTarget
 import org.jetbrains.hexana.ui.HexanaTheme
-import org.jetbrains.hexana.ui.SearchField
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
-import org.jetbrains.jewel.ui.component.VerticalScrollbar
 
 internal fun classFilePanels(
     classFile: JavaClassFile,
@@ -66,8 +65,78 @@ private fun ClassHeaderTab(cf: JavaClassFile) {
 }
 
 // -----------------------------------------------------------------------------
-// Methods tab — WAT (virtualized) style: each method is a foldable section
+// Methods tab — common virtualized chunk panel
 // -----------------------------------------------------------------------------
+
+/** Section kinds for the JVM class-file methods view. */
+private object JvmSectionKinds {
+    val METHODS: SectionKind = SectionKind("jvm.methods")
+    val METHOD: SectionKind = SectionKind("jvm.method")
+    val METHOD_BODY: SectionKind = SectionKind("jvm.method-body")
+}
+
+/**
+ * [ChunkTree] over [MethodSection]s. Layout mirrors the disassembly panel:
+ * one top-level METHODS header, then per method a foldable METHOD header +
+ * a METHOD_BODY element whose body rows are rendered by [elementContent].
+ */
+private class JvmMethodChunkTree(
+    private val sections: List<MethodSection>,
+) : ChunkTree {
+    private val chunks: List<BinaryChunk> = buildList {
+        val firstOffset = sections.minOfOrNull { it.methodOffset.toLong() } ?: 0L
+        val lastOffset = sections.maxOfOrNull {
+            val last = it.bodyRows.lastOrNull()?.fileOffset?.toLong() ?: it.methodOffset.toLong()
+            last + 1
+        } ?: firstOffset
+        add(
+            BinaryChunk.SectionHeader(
+                id = ChunkId.Header(JvmSectionKinds.METHODS),
+                byteRange = firstOffset..lastOffset,
+                estimatedLines = 1,
+                kind = JvmSectionKinds.METHODS,
+                elementCount = sections.size,
+                totalSize = (lastOffset - firstOffset).coerceAtLeast(0),
+            ),
+        )
+        sections.forEachIndexed { idx, section ->
+            val sectionStart = section.methodOffset.toLong()
+            val sectionEnd = (section.bodyRows.lastOrNull()?.fileOffset?.toLong() ?: sectionStart) + 1
+            val byteRange = sectionStart..sectionEnd
+            add(
+                BinaryChunk.SectionHeader(
+                    id = ChunkId.Symbolic(JvmSectionKinds.METHOD, "${section.name}${section.descriptor}"),
+                    byteRange = byteRange,
+                    estimatedLines = 1,
+                    kind = JvmSectionKinds.METHOD,
+                    elementCount = section.bodyRows.size,
+                    totalSize = sectionEnd - sectionStart,
+                ),
+            )
+            add(
+                BinaryChunk.Element(
+                    id = ChunkId.Indexed(JvmSectionKinds.METHOD_BODY, idx),
+                    byteRange = byteRange,
+                    estimatedLines = section.bodyRows.size,
+                    kind = JvmSectionKinds.METHOD_BODY,
+                    indexInSection = idx,
+                    displayName = section.signature,
+                ),
+            )
+        }
+    }
+
+    override val totalChunks: Int get() = chunks.size
+    override fun chunkAt(index: Int): BinaryChunk = chunks[index]
+    override fun chunkContainingByte(offset: Long): Int? {
+        chunks.forEachIndexed { i, c -> if (offset in c.byteRange) return i }
+        return null
+    }
+    override fun chunkForId(id: ChunkId): Int? {
+        chunks.forEachIndexed { i, c -> if (c.id == id) return i }
+        return null
+    }
+}
 
 @Composable
 private fun ClassMethodsTab(
@@ -75,76 +144,125 @@ private fun ClassMethodsTab(
     navTargetFlow: MutableStateFlow<ClassFileNavTarget?>,
 ) {
     val sections = remember(cf) { buildMethodSections(cf) }
-    var searchQuery by remember(cf) { mutableStateOf(TextFieldValue("")) }
-    val filteredSections = remember(cf, searchQuery.text) {
-        if (searchQuery.text.isBlank()) sections
-        else {
-            val q = searchQuery.text.trim().lowercase()
-            sections.filter { it.signature.lowercase().contains(q) }
-        }
-    }
-    var folded by remember(cf) { mutableStateOf(emptySet<Int>()) }
-    val listState = rememberLazyListState()
-    val navTarget by navTargetFlow.collectAsState()
+    val tree = remember(sections) { JvmMethodChunkTree(sections) }
 
-    LaunchedEffect(navTarget, sections) {
+    // Build a name → ChunkId index for search.
+    val methodIndex: Map<String, ChunkId> = remember(sections) {
+        val out = HashMap<String, ChunkId>(sections.size)
+        sections.forEachIndexed { idx, s ->
+            out[s.signature.lowercase()] = ChunkId.Indexed(JvmSectionKinds.METHOD_BODY, idx)
+        }
+        out
+    }
+
+    val config = remember(tree, methodIndex) {
+        VirtualizedChunkPanelConfig(
+            sectionDisplayName = { kind ->
+                when (kind) {
+                    JvmSectionKinds.METHODS -> "Methods"
+                    JvmSectionKinds.METHOD -> "method"
+                    JvmSectionKinds.METHOD_BODY -> "body"
+                    else -> kind.id
+                }
+            },
+            colorForToken = ::defaultColorFor,
+            searchPlaceholder = "Search methods",
+            computeSearchResults = { query ->
+                val q = query.trim().lowercase()
+                if (q.isEmpty()) emptyList()
+                else methodIndex.entries
+                    .filter { q in it.key }
+                    .take(50)
+                    .map { (name, chunkId) ->
+                        SimpleChunkSearchResult(label = name, chunkId = chunkId)
+                    }
+            },
+            sectionParent = mapOf(
+                JvmSectionKinds.METHOD to JvmSectionKinds.METHODS,
+                JvmSectionKinds.METHOD_BODY to JvmSectionKinds.METHOD,
+            ),
+        )
+    }
+
+    // External navigation: capture navigator ref, then scroll on nav target.
+    var navigatorRef by remember { mutableStateOf<ChunkPanelNavigator?>(null) }
+    val navTarget by navTargetFlow.collectAsState()
+    LaunchedEffect(navTarget, navigatorRef) {
         val target = navTarget ?: return@LaunchedEffect
+        val nav = navigatorRef ?: return@LaunchedEffect
         val sectionIdx = sections.indexOfFirst {
             it.name == target.methodName && it.descriptor == target.methodDescriptor
         }
-        if (sectionIdx < 0) {
-            // Method not found in this class — leave the view alone and clear
-            // the request so a later identical click can retry.
-            navTargetFlow.value = null
-            return@LaunchedEffect
+        if (sectionIdx >= 0) {
+            val methodHeaderId = ChunkId.Symbolic(
+                JvmSectionKinds.METHOD,
+                "${sections[sectionIdx].name}${sections[sectionIdx].descriptor}",
+            )
+            nav.gotoChunk(methodHeaderId)
         }
-        // Clear search so the full list is rendered and scroll indices are valid.
-        searchQuery = TextFieldValue("")
-        // Ensure the target method is unfolded so its body rows participate
-        // in the LazyColumn index computation below.
-        val targetOffset = sections[sectionIdx].methodOffset
-        folded = folded - targetOffset
-        val globalIdx = globalRowIndex(sections, folded, sectionIdx, target.bci)
-        listState.scrollToItem(globalIdx)
         navTargetFlow.value = null
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        SearchField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            placeholder = "Search methods",
+    VirtualizedChunkPanel(
+        chunkTree = tree,
+        config = config,
+        onNavigatorReady = { navigatorRef = it },
+        sectionHeaderContent = { chunk, folded, onToggle ->
+            if (chunk.kind == JvmSectionKinds.METHOD) {
+                val key = (chunk.id as? ChunkId.Symbolic)?.name ?: ""
+                val section = sections.firstOrNull { "${it.name}${it.descriptor}" == key }
+                if (section != null) {
+                    MethodHeaderRow(section = section, folded = folded, onToggle = onToggle)
+                } else {
+                    DefaultJvmSectionHeader(chunk, folded, onToggle)
+                }
+            } else {
+                DefaultJvmSectionHeader(chunk, folded, onToggle)
+            }
+        },
+        elementContent = { chunk, _ ->
+            val idx = chunk.indexInSection
+            val section = sections.getOrNull(idx)
+            if (section != null) {
+                items(
+                    count = section.bodyRows.size,
+                    key = { rowIdx -> "body-${section.methodOffset}-$rowIdx" },
+                ) { rowIdx ->
+                    MethodBodyRow(section.bodyRows[rowIdx])
+                }
+            }
+        },
+    )
+}
+
+/** Default section header for the top-level "Methods" row. */
+@Composable
+private fun DefaultJvmSectionHeader(
+    chunk: BinaryChunk.SectionHeader,
+    folded: Boolean,
+    onToggle: () -> Unit,
+) {
+    val bg = if (JewelTheme.isDark) Color(0xFF2B2D30) else Color(0xFFEBECF0)
+    val headerStyle = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = HexanaTheme.textColor,
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bg)
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(if (folded) "▶" else "▼", style = headerStyle.copy(color = HexanaTheme.hexTextColor))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            "${chunk.elementCount} entries",
+            style = headerStyle,
         )
-        Box(modifier = Modifier.fillMaxSize().weight(1f)) {
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-            if (filteredSections.isEmpty()) {
-                item { Text(if (searchQuery.text.isNotEmpty()) "No methods match the search." else "(no methods)", style = RowTextStyle) }
-                return@LazyColumn
-            }
-            for (section in filteredSections) {
-                val isFolded = section.methodOffset in folded
-                item(key = "header-${section.methodOffset}") {
-                    MethodHeaderRow(
-                        section = section,
-                        folded = isFolded,
-                        onToggle = {
-                            folded = if (isFolded) folded - section.methodOffset
-                            else folded + section.methodOffset
-                        },
-                    )
-                }
-                if (!isFolded) {
-                    items(
-                        count = section.bodyRows.size,
-                        key = { idx -> "body-${section.methodOffset}-$idx" },
-                    ) { idx ->
-                        MethodBodyRow(section.bodyRows[idx])
-                    }
-                }
-            }
-        }
-        VerticalScrollbar(listState, modifier = Modifier.align(Alignment.CenterEnd))
-    }
     }
 }
 
@@ -216,30 +334,6 @@ private data class MethodSection(
     val bodyRows: List<MethodRow>,
 )
 
-/**
- * Compute the LazyColumn item index that [ClassMethodsTab] should scroll to
- * for [navBci] inside the section at [targetSectionIdx], assuming that
- * section is currently unfolded. Walks preceding sections, counting one
- * item per header plus body rows when the section isn't in [folded].
- */
-private fun globalRowIndex(
-    sections: List<MethodSection>,
-    folded: Set<Int>,
-    targetSectionIdx: Int,
-    navBci: Int?,
-): Int {
-    var idx = 0
-    for (i in 0 until targetSectionIdx) {
-        val s = sections[i]
-        idx += 1 // header row
-        if (s.methodOffset !in folded) idx += s.bodyRows.size
-    }
-    // idx now points at the target section's header.
-    if (navBci == null) return idx
-    val target = sections[targetSectionIdx]
-    val rowIdx = target.bodyRows.indexOfFirst { it.bci == navBci }
-    return if (rowIdx >= 0) idx + 1 + rowIdx else idx
-}
 
 private fun buildMethodSections(cf: JavaClassFile): List<MethodSection> {
     val sections = ArrayList<MethodSection>()
