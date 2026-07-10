@@ -325,17 +325,13 @@ class HexanaCliExecutionTest {
     }
 
     @Test
-    fun renderToolsListingKeepsTodoCommandsVisibleWithTodoStatus() {
+    fun renderToolsListingHidesTodoCommandsByDefault() {
         val output = renderCliToolsListing(HexanaCommand.Tools(group = null))
 
         HexanaGeneratedCliToolRegistry.TOOLS
             .filter { it.executionStatus == HexanaCliExecutionStatus.TODO }
             .forEach { spec ->
-                assertToolBlockContains(
-                    output,
-                    spec.commandName,
-                    "  status: todo\n",
-                )
+                assertFalse(output.contains("${spec.commandName}\n"), "${spec.commandName} must stay out of tools listing")
             }
     }
 
@@ -360,7 +356,7 @@ class HexanaCliExecutionTest {
         val output = renderCliToolsListing(HexanaCommand.Tools(group = HexanaCliToolGroup.MODULE))
 
         assertTrue(output.contains("summarize-module\n"))
-        assertTrue(output.contains("list-enabled-features\n"))
+        assertFalse(output.contains("list-enabled-features\n"))
         assertTrue(output.contains("  groups: module\n"))
         assertFalse(output.contains("wasm-to-wat\n"))
         assertFalse(output.contains("  groups: converters\n"))

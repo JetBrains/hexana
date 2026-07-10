@@ -338,6 +338,7 @@ private fun duplicateRootCliCommandNames(commandNames: List<String>): List<Strin
 
 internal fun renderCliToolsListing(command: HexanaCommand.Tools): String {
     val tools = HexanaGeneratedCliToolRegistry.TOOLS
+        .filter { spec -> spec.executionStatus == HexanaCliExecutionStatus.EXECUTABLE }
         .filter { spec -> command.group == null || command.group in spec.groups }
         .sortedBy { it.commandName }
 

@@ -279,32 +279,22 @@ class HexanaCliTest {
     }
 
     @Test
-    fun parseAcceptsGeneratedTodoCommandAsTodoToolVariant() {
-        val expectedSpec = generatedCliToolSpec("list-enabled-features")
-        val command = cli().parse(arrayOf("list-enabled-features"))
+    fun generatedRegistryKeepsTodoMetadataWithoutRegisteringTodoRootCommands() {
+        val rootHelp = cli().helpText()
 
-        assertIs<HexanaCommand.TodoTool>(command)
-        assertEquals(expectedSpec, command.spec)
-        assertEquals("list_enabled_features", command.spec.toolName)
-        assertEquals(HexanaCliExecutionStatus.TODO, command.spec.executionStatus)
-    }
+        HexanaGeneratedCliToolRegistry.TOOLS
+            .filter { it.executionStatus == HexanaCliExecutionStatus.TODO }
+            .forEach { spec ->
+                assertFalse(rootHelp.contains(spec.commandName), "${spec.commandName} must not appear in root help")
 
-    @Test
-    fun parseGeneratedTodoCommandAbsorbsFutureArguments() {
-        val expectedSpec = generatedCliToolSpec("list-enabled-features")
-        val command = cli().parse(
-            arrayOf(
-                "list-enabled-features",
-                "--input",
-                "app.wasm",
-                "--format=json",
-                "extra",
-            )
-        )
+                val error = assertFailsWith<CliktError> {
+                    cli().parse(arrayOf(spec.commandName))
+                }
 
-        assertIs<HexanaCommand.TodoTool>(command)
-        assertEquals(expectedSpec, command.spec)
-        assertEquals("list_enabled_features", command.spec.toolName)
+                assertIs<NoSuchSubcommand>(error, "${spec.commandName} must not parse as a root command")
+                assertFalse(error.message.orEmpty().contains("TODO"))
+                assertFalse(error.message.orEmpty().contains("not implemented"))
+            }
     }
 
     @Test
@@ -334,51 +324,6 @@ class HexanaCliTest {
                 assertTrue(help.contains(expectedPathHelp), "${spec.commandName} help must document path input")
                 assertTrue(help.contains("--format"), "${spec.commandName} help must document format option")
                 assertTrue(help.contains(spec.supportedFormatNames()), "${spec.commandName} help must document generated formats")
-            }
-    }
-
-    @Test
-    fun parseRegistersEveryTodoGeneratedCliToolAsTodoWithFutureArguments() {
-        HexanaGeneratedCliToolRegistry.TOOLS
-            .filter { it.executionStatus == HexanaCliExecutionStatus.TODO }
-            .forEach { spec ->
-                val command = cli().parse(
-                    arrayOf(
-                        spec.commandName,
-                        "--input",
-                        "app.wasm",
-                        "--format=json",
-                        "--future-option",
-                        "value",
-                        "extra",
-                    )
-                )
-
-                assertIs<HexanaCommand.TodoTool>(command, "${spec.commandName} must use the TODO command path")
-                assertEquals(spec, command.spec)
-
-                val output = renderTodoToolNotImplementedMessage(command)
-
-                assertTrue(output.contains(spec.commandName), "${spec.commandName} TODO output must name command")
-                assertTrue(output.contains(spec.toolName), "${spec.commandName} TODO output must name tool")
-                assertTrue(output.contains("not implemented"), "${spec.commandName} TODO output must say not implemented")
-                assertTrue(output.contains("TODO"), "${spec.commandName} TODO output must include TODO status")
-            }
-    }
-
-    @Test
-    fun todoGeneratedCommandsRemainVisibleInRootHelpAndParseAsTodoTools() {
-        val rootHelp = cli().helpText()
-
-        HexanaGeneratedCliToolRegistry.TOOLS
-            .filter { it.executionStatus == HexanaCliExecutionStatus.TODO }
-            .forEach { spec ->
-                assertTrue(rootHelp.contains(spec.commandName), "${spec.commandName} must stay visible in root help")
-
-                val command = cli().parse(arrayOf(spec.commandName))
-
-                assertIs<HexanaCommand.TodoTool>(command, "${spec.commandName} must parse as a TODO tool")
-                assertEquals(spec, command.spec)
             }
     }
 
@@ -532,6 +477,11 @@ class HexanaCliTest {
         assertTrue(help.contains("http"))
         assertTrue(help.contains("summarize-module"))
         assertTrue(help.contains("summarize-binary"))
+        HexanaGeneratedCliToolRegistry.TOOLS
+            .filter { it.executionStatus == HexanaCliExecutionStatus.TODO }
+            .forEach { spec ->
+                assertFalse(help.contains(spec.commandName), "${spec.commandName} must stay out of root help")
+            }
         assertTrue(help.contains("tools"))
         assertTrue(help.contains("doctor"))
         assertTrue(help.contains("version"))

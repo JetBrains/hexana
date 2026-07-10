@@ -66,6 +66,7 @@ class HexanaStdioIntegrationTest {
         assertTrue(result.stdout.startsWith("Hexana MCP CLI tools\n"), result.stdout)
         assertTrue(result.stdout.contains("summarize-module\n"), result.stdout)
         assertTrue(result.stdout.contains("wasm-to-wat\n"), result.stdout)
+        assertFalse(result.stdout.contains("list-enabled-features\n"), result.stdout)
         assertTrue(result.unexpectedStderr.isBlank(), result.stderr)
     }
 
@@ -108,14 +109,14 @@ class HexanaStdioIntegrationTest {
     }
 
     @Test
-    fun installedServerTodoCommandFailsOnStderr() = runBlocking {
+    fun installedServerTodoCommandIsHiddenByDefault() = runBlocking {
         val result = HexanaInstalledStdioClient.runCommand(StdioLauncher.Server, "list-enabled-features")
 
         assertFalse(result.timedOut, "Command timed out. stdout=${result.stdout}, stderr=${result.stderr}")
         assertEquals(1, result.exitCode, "stdout=${result.stdout}, stderr=${result.stderr}")
         assertTrue(result.stdout.isBlank(), result.stdout)
-        assertTrue(result.stderr.contains("list-enabled-features"), result.stderr)
-        assertTrue(result.stderr.contains("not implemented"), result.stderr)
+        assertTrue(result.stderr.contains("no such subcommand"), result.stderr)
+        assertFalse(result.stderr.contains("not implemented"), result.stderr)
     }
 
     @Test

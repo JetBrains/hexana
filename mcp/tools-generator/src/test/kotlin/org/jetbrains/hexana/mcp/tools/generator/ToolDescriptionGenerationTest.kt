@@ -363,7 +363,7 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
-    fun `standalone CLI toolset generates CLI tool commands from catalog metadata`() {
+    fun `standalone CLI toolset generates commands only for executable catalog metadata`() {
         val cliOnlyTodo = summarizeBinarySpec.copy(
             name = "future_cli_only",
             surfaces = noMcpCliSurface("future-cli-only", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
@@ -374,8 +374,10 @@ class ToolDescriptionGenerationTest {
         assertTrue(source.contains("internal fun generatedCliToolCommands"))
         assertTrue(source.contains("GeneratedPathCliToolCommand("))
         assertTrue(source.contains("spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == \"summarize_module\" }"))
-        assertTrue(source.contains("GeneratedTodoCliToolCommand("))
-        assertTrue(source.contains("spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == \"future_cli_only\" }"))
+        val generatedCommands = source.substringAfter("internal fun generatedCliToolCommands")
+            .substringBefore("private class GeneratedPathCliToolCommand")
+        assertFalse(generatedCommands.contains("GeneratedTodoCliToolCommand("))
+        assertFalse(generatedCommands.contains("spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == \"future_cli_only\" }"))
     }
 
     @Test

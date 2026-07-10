@@ -269,10 +269,9 @@ private fun buildCliToolRegistryObject(tools: List<ToolSpec>): TypeSpec {
 private fun buildGeneratedCliToolCommandsFunction(tools: List<ToolSpec>): FunSpec {
     val visibleTools = tools
         .filter { it.surfaces.cli.visible }
-        .sortedBy { it.surfaces.cli.commandName }
-    visibleTools
         .filter { it.surfaces.cli.executionStatus == CliExecutionStatus.Executable }
-        .forEach(::validateGeneratedExecutableCliToolShape)
+        .sortedBy { it.surfaces.cli.commandName }
+    visibleTools.forEach(::validateGeneratedExecutableCliToolShape)
 
     val listOfCliktCommand = KOTLIN_LIST.parameterizedBy(CLIKT_COMMAND)
     val function = FunSpec.builder("generatedCliToolCommands")
@@ -286,20 +285,12 @@ private fun buildGeneratedCliToolCommandsFunction(tools: List<ToolSpec>): FunSpe
     code.add("return listOf(\n")
     code.indent()
     visibleTools.forEach { spec ->
-        val cli = spec.surfaces.cli
-        val commandClass = when (cli.executionStatus) {
-            CliExecutionStatus.Executable -> "GeneratedPathCliToolCommand"
-            CliExecutionStatus.Todo -> "GeneratedTodoCliToolCommand"
-            null -> error("Visible CLI tool '${spec.name}' is missing execution status.")
-        }
-        code.add("%L(\n", commandClass)
+        code.add("GeneratedPathCliToolCommand(\n")
         code.indent()
         code.add("spec = %L,\n", cliToolSpecLookup(spec))
-        if (cli.executionStatus == CliExecutionStatus.Executable) {
-            code.add("pathArgumentName = %S,\n", spec.generatedPathArgumentName())
-            code.add("pathHelp = %S,\n", spec.generatedPathHelp())
-            code.add("envReader = envReader,\n")
-        }
+        code.add("pathArgumentName = %S,\n", spec.generatedPathArgumentName())
+        code.add("pathHelp = %S,\n", spec.generatedPathHelp())
+        code.add("envReader = envReader,\n")
         code.add("sink = sink,\n")
         code.unindent()
         code.add("),\n")
