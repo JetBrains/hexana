@@ -452,7 +452,7 @@ private fun WasmPanelWatVirtualizedContent(
         VirtualizedChunkPanelConfig(
             sectionDisplayName = { kind -> WasmSectionKinds.displayName(kind) },
             colorForToken = ::defaultColorFor,
-            searchPlaceholder = "Search by name, index, or offset (hex)",
+            searchPlaceholder = "Search by name, index, or hex offset (use 0x prefix)",
             computeSearchResults = { query ->
                 computeWatSearchResults(query, funcNamesIndex).map { watResult ->
                     // Resolve funcIdx to a code-section chunk id for navigation.
@@ -1909,7 +1909,7 @@ private fun computeWatSearchResults(
         if (needle in name) results += WatSearchResult(name, idx)
     }
 
-    if (results.isEmpty()) {
+    if (results.isEmpty() && !needle.startsWith("0x")) {
         parseFuncQuery(query, funcNamesIndex)?.let { results += WatSearchResult("func[$it]", it) }
     }
     return results
