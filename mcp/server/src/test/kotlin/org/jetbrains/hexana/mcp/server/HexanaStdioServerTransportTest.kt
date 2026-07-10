@@ -41,20 +41,29 @@ class HexanaStdioServerTransportTest {
 
     @Test
     fun closesAndReportsApprovedErrorWhenInboundMessageExceedsMaximumSize() = runBlocking {
-        val transport = HexanaStdioServerTransport(
-            inputStream = RepeatingRawSource(byte = 'x'.code.toByte(), totalBytes = HEXANA_STDIO_MAX_MESSAGE_BYTES + 1)
-                .buffered(),
-            outputStream = Buffer(),
-        )
-        val reportedError = CompletableDeferred<Throwable>()
+        assertInboundMessageLimit(byte = 'x'.code.toByte())
+    }
 
-        transport.onError { reportedError.complete(it) }
-        transport.start()
+    @Test
+    fun closesAndReportsApprovedErrorWhenBareCarriageReturnsExceedMaximumSize() = runBlocking {
+        assertInboundMessageLimit(byte = '\r'.code.toByte())
+    }
 
-        val error = withTimeout(10.seconds) { reportedError.await() }
-        assertEquals(HEXANA_STDIO_MESSAGE_LIMIT_ERROR_MESSAGE, error.message)
+    @Test
+    fun acceptsCrlfTerminatorWithoutCountingCarriageReturnWithinChunk() {
+        val transport = testTransport()
+        transport.setBufferedLineBytesForTest(HEXANA_STDIO_MAX_MESSAGE_BYTES)
 
-        transport.close()
+        assertTrue(transport.checkMessageSizeForTest("\r\n".encodeToByteArray()))
+    }
+
+    @Test
+    fun acceptsCrlfTerminatorWithoutCountingCarriageReturnAcrossChunks() {
+        val transport = testTransport()
+        transport.setBufferedLineBytesForTest(HEXANA_STDIO_MAX_MESSAGE_BYTES)
+
+        assertFalse(transport.checkMessageSizeForTest(byteArrayOf('\r'.code.toByte())))
+        assertTrue(transport.checkMessageSizeForTest(byteArrayOf('\n'.code.toByte())))
     }
 
     @Test
@@ -132,6 +141,24 @@ class HexanaStdioServerTransportTest {
         assertFalse(thrown.message.orEmpty().contains("write queue exceeded capacity"))
     }
 
+    private fun testTransport(): HexanaStdioServerTransport =
+        HexanaStdioServerTransport(
+            inputStream = ChunkedRawSource(emptyList()).buffered(),
+            outputStream = Buffer(),
+        )
+
+    private fun HexanaStdioServerTransport.checkMessageSizeForTest(bytes: ByteArray): Boolean {
+        val method = HexanaStdioServerTransport::class.java.getDeclaredMethod("checkMessageSize", ByteArray::class.java)
+        method.isAccessible = true
+        return method.invoke(this, bytes) as Boolean
+    }
+
+    private fun HexanaStdioServerTransport.setBufferedLineBytesForTest(value: Long) {
+        val field = HexanaStdioServerTransport::class.java.getDeclaredField("bufferedLineBytes")
+        field.isAccessible = true
+        field.setLong(this, value)
+    }
+
     private class ChunkedRawSource(chunks: List<String>) : RawSource {
         private val chunks = ArrayDeque(chunks.map { it.encodeToByteArray() })
         @Volatile
@@ -157,6 +184,27 @@ class HexanaStdioServerTransportTest {
         override fun close() {
             closed = true
         }
+    }
+
+    private suspend fun assertInboundMessageLimit(byte: Byte) {
+        val totalBytes = if (byte == '\r'.code.toByte()) {
+            HEXANA_STDIO_MAX_MESSAGE_BYTES + 2
+        } else {
+            HEXANA_STDIO_MAX_MESSAGE_BYTES + 1
+        }
+        val transport = HexanaStdioServerTransport(
+            inputStream = RepeatingRawSource(byte = byte, totalBytes = totalBytes).buffered(),
+            outputStream = Buffer(),
+        )
+        val reportedError = CompletableDeferred<Throwable>()
+
+        transport.onError { reportedError.complete(it) }
+        transport.start()
+
+        val error = withTimeout(10.seconds) { reportedError.await() }
+        assertEquals(HEXANA_STDIO_MESSAGE_LIMIT_ERROR_MESSAGE, error.message)
+
+        transport.close()
     }
 
     private class RepeatingRawSource(private val byte: Byte, private val totalBytes: Long) : RawSource {

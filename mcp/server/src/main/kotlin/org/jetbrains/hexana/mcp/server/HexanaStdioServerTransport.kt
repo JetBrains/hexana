@@ -83,6 +83,7 @@ internal class HexanaStdioServerTransport(private val inputStream: Source, outpu
                         readChannel.send(StdioReadChunk(bytes = chunk, containsLineBreak = containsLineBreak))
                     }
                 }
+                countPendingCarriageReturn()
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
@@ -147,15 +148,15 @@ internal class HexanaStdioServerTransport(private val inputStream: Source, outpu
         var containsLineBreak = false
         for (byte in chunk) {
             when (byte) {
-                '\n'.code.toByte() -> {
-                    containsLineBreak = true
-                    bufferedLineBytes = 0L
-                    pendingCarriageReturn = false
-                }
-
                 '\r'.code.toByte() -> {
                     countPendingCarriageReturn()
                     pendingCarriageReturn = true
+                }
+
+                '\n'.code.toByte() -> {
+                    containsLineBreak = true
+                    pendingCarriageReturn = false
+                    bufferedLineBytes = 0L
                 }
 
                 else -> {
