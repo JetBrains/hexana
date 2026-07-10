@@ -75,6 +75,7 @@ import org.jetbrains.hexana.document.format.RenderTokenKind
 import org.jetbrains.hexana.document.format.TokenStream
 import org.jetbrains.hexana.document.BinaryDocumentSnapshot
 import org.jetbrains.hexana.document.format.ChunkId
+import org.jetbrains.hexana.document.format.ChunkTree
 import org.jetbrains.hexana.document.journal.JournalOp
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.format.EditableRowEncoder
@@ -454,7 +455,7 @@ private fun WasmPanelWatVirtualizedContent(
             colorForToken = ::defaultColorFor,
             searchPlaceholder = "Search by name, index, or hex offset (use 0x prefix)",
             computeSearchResults = { query ->
-                computeWatSearchResults(query, funcNamesIndex).map { watResult ->
+                computeWatSearchResults(query, funcNamesIndex, chunkTree, provider.importFuncCount).map { watResult ->
                     // Resolve funcIdx to a code-section chunk id for navigation.
                     val indexInSection = watResult.funcIdx - provider.importFuncCount
                     val chunkId = if (indexInSection >= 0) {
@@ -1896,10 +1897,16 @@ private data class WatSearchResult(val label: String, val funcIdx: Int)
 private fun computeWatSearchResults(
     query: String,
     funcNamesIndex: Map<String, Int>,
+    chunkTree: ChunkTree,
+    importFuncCount: Int,
     limit: Int = 50,
 ): List<WatSearchResult> {
     val needle = query.trim().lowercase()
     if (needle.isEmpty()) return emptyList()
+
+    // 0x-prefixed queries are handled by the common searchChunksByOffset in
+    // VirtualizedChunkPanel — skip them here to avoid duplicate "Go to offset" items.
+    if (needle.startsWith("0x")) return emptyList()
 
     val results = ArrayList<WatSearchResult>(limit)
     funcNamesIndex[needle]?.let { results += WatSearchResult(needle, it) }
@@ -1909,7 +1916,7 @@ private fun computeWatSearchResults(
         if (needle in name) results += WatSearchResult(name, idx)
     }
 
-    if (results.isEmpty() && !needle.startsWith("0x")) {
+    if (results.isEmpty()) {
         parseFuncQuery(query, funcNamesIndex)?.let { results += WatSearchResult("func[$it]", it) }
     }
     return results

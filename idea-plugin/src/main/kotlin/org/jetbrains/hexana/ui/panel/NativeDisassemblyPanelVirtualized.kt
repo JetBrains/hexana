@@ -30,7 +30,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineDispatcher
@@ -65,9 +64,7 @@ import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.CircularProgressIndicator
-import org.jetbrains.jewel.ui.component.DefaultButton
 import org.jetbrains.jewel.ui.component.Text
-import org.jetbrains.jewel.ui.component.TextField
 
 // ---------------------------------------------------------------------------
 // Disassembly model (self-contained)
@@ -938,12 +935,18 @@ private fun computeSearchResults(
     limit: Int = 50,
 ): List<DisasmSearchResult> {
     if (query.isBlank()) return emptyList()
-    val q = query.trim().lowercase()
+    val q = query.trim()
+
+    // 0x-prefixed queries are handled by the common searchChunksByOffset in
+    // VirtualizedChunkPanel — skip them here to avoid duplicate "Go to offset" items.
+    if (q.startsWith("0x", ignoreCase = true)) return emptyList()
+
+    val qLower = q.lowercase()
     val results = mutableListOf<DisasmSearchResult>()
 
     for (range in catalog.ranges) {
         if (results.size >= limit) break
-        if (range.displayName.contains(q, ignoreCase = true)) {
+        if (range.displayName.contains(qLower, ignoreCase = true)) {
             val vaddrHex = range.virtualAddress.toString(16)
             results += DisasmSearchResult.Symbol(
                 label = range.displayName,
@@ -958,7 +961,7 @@ private fun computeSearchResults(
         var stringHits = 0
         for (record in provider.strings) {
             if (stringHits >= remaining) break
-            if (!record.value.contains(q, ignoreCase = true)) continue
+            if (!record.value.contains(qLower, ignoreCase = true)) continue
             val bodyId = tree.findFunctionBodyContaining(record.offset.toLong()) ?: continue
             val offsetHex = record.offset.toString(16)
             results += DisasmSearchResult.StringHit(
@@ -1028,52 +1031,6 @@ internal fun resolveGoto(
     return DisasmGotoResolution.NotInText
 }
 
-/** Error color used for inline "not in .text" / "invalid number" feedback. */
-private val GOTO_ERROR_COLOR = Color(0xFFD05050)
-
-@Composable
-private fun DisasmGotoBar(
-    value: TextFieldValue,
-    onValueChange: (TextFieldValue) -> Unit,
-    error: String?,
-    onSubmit: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        TextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier
-                .weight(1f)
-                .onPreviewKeyEvent { event ->
-                    if (event.key == Key.Enter && event.type == KeyEventType.KeyDown) {
-                        onSubmit()
-                        true
-                    } else {
-                        false
-                    }
-                },
-            placeholder = { Text("Go to offset (0x… or decimal)") },
-        )
-        DefaultButton(
-            onClick = onSubmit,
-            modifier = Modifier.padding(start = 8.dp),
-        ) {
-            Text("Go")
-        }
-        if (error != null) {
-            Text(
-                text = error,
-                style = androidx.compose.ui.text.TextStyle(color = GOTO_ERROR_COLOR),
-                modifier = Modifier.padding(start = 8.dp),
-            )
-        }
-    }
-}
 
 @Composable
 private fun VirtualizedDisasmListing(
@@ -1115,11 +1072,6 @@ private fun VirtualizedDisasmListing(
         return
     }
 
-    // Go-to-offset state, rendered in the toolbar slot.
-    var gotoInput by remember(catalog) { mutableStateOf(TextFieldValue("")) }
-    var gotoError by remember(catalog) { mutableStateOf<String?>(null) }
-    // Navigator reference, set by onNavigatorReady once the common panel creates it.
-    var navigatorRef by remember { mutableStateOf<ChunkPanelNavigator?>(null) }
 
     val disasmConfig = remember(catalog, provider, tree) {
         VirtualizedChunkPanelConfig(
@@ -1132,7 +1084,7 @@ private fun VirtualizedDisasmListing(
                 }
             },
             colorForToken = ::defaultColorFor,
-            searchPlaceholder = "Search symbol or string",
+            searchPlaceholder = "Search symbol, string, or hex offset (0x…)",
             computeSearchResults = { query ->
                 computeSearchResults(query, catalog, provider, tree).map { result ->
                     SimpleChunkSearchResult(
@@ -1153,24 +1105,6 @@ private fun VirtualizedDisasmListing(
         chunkTree = tree,
         config = disasmConfig,
         foldedSectionsExternal = foldedState,
-        onNavigatorReady = { navigatorRef = it },
-        toolbar = {
-            DisasmGotoBar(
-                value = gotoInput,
-                onValueChange = { gotoInput = it; gotoError = null },
-                error = gotoError,
-                onSubmit = {
-                    when (val res = resolveGoto(gotoInput.text, catalog, tree)) {
-                        is DisasmGotoResolution.Hit -> {
-                            gotoError = null
-                            navigatorRef?.gotoChunk(res.chunkId)
-                        }
-                        DisasmGotoResolution.NotInText -> gotoError = "not in .text"
-                        DisasmGotoResolution.Invalid -> gotoError = "invalid number"
-                    }
-                },
-            )
-        },
         sectionHeaderContent = { chunk, folded, onToggle ->
             FoldableSectionHeader(
                 tokens = renderer.render(snapshot, chunk).tokens,

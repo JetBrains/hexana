@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -529,9 +531,34 @@ private fun searchChunksByOffset(
     if (needle.isEmpty()) return emptyList()
 
     val results = ArrayList<ChunkSearchResult>(limit)
+
+    // When the query is a full 0x-prefixed offset, add a "Go to offset" item
+    // first that jumps to the chunk containing that exact byte offset.
+    var gotoChunkId: ChunkId? = null
+    if (trimmed.startsWith("0x", ignoreCase = true)) {
+        val exactOffset = needle.toLongOrNull(radix = 16)
+        if (exactOffset != null) {
+            val chunkIdx = chunkTree.chunkContainingByte(exactOffset)
+            if (chunkIdx != null) {
+                val target = chunkTree.chunkAt(chunkIdx)
+                gotoChunkId = target.id
+                results += SimpleChunkSearchResult(
+                    label = "Go to offset $trimmed",
+                    detail = when (target) {
+                        is BinaryChunk.SectionHeader -> sectionDisplayName(target.kind)
+                        is BinaryChunk.Element -> target.displayName ?: "${sectionDisplayName(target.kind)}[${target.indexInSection}]"
+                    },
+                    chunkId = target.id,
+                )
+            }
+        }
+    }
+
     for (i in 0 until chunkTree.totalChunks) {
         if (results.size >= limit) break
         val chunk = chunkTree.chunkAt(i)
+        // Skip the chunk already covered by the "Go to offset" item above.
+        if (chunk.id == gotoChunkId) continue
         val offsetHex = chunk.byteRange.first.toString(16).lowercase()
         if (needle in offsetHex) {
             val label = when (chunk) {
@@ -561,30 +588,54 @@ private fun ChunkPanelSearchBar(
     colorForToken: (RenderTokenKind) -> Color,
     onResultPicked: (ChunkSearchResult) -> Unit,
 ) {
+    // Index of the currently highlighted suggestion (arrow-key navigable).
+    // Defaults to 0 (first item) whenever results change.
+    var selectedIndex by remember { mutableStateOf(0) }
+    LaunchedEffect(results) { selectedIndex = 0 }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         SearchField(
             value = query,
             onValueChange = onQueryChange,
             placeholder = placeholder,
             modifier = Modifier.onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown &&
-                    event.key == Key.Enter
-                ) {
-                    results.firstOrNull()?.let(onResultPicked)
-                    true
-                } else {
-                    false
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionDown -> {
+                        if (results.isNotEmpty()) {
+                            selectedIndex = (selectedIndex + 1).coerceAtMost(results.size - 1)
+                        }
+                        true
+                    }
+                    Key.DirectionUp -> {
+                        if (results.isNotEmpty()) {
+                            selectedIndex = (selectedIndex - 1).coerceAtLeast(0)
+                        }
+                        true
+                    }
+                    Key.Enter -> {
+                        results.getOrNull(selectedIndex)?.let(onResultPicked)
+                        true
+                    }
+                    else -> false
                 }
             },
         )
         if (results.isNotEmpty()) {
             val suggestionsListState = rememberLazyListState()
+            // Keep the selected item scrolled into view.
+            LaunchedEffect(selectedIndex) {
+                suggestionsListState.animateScrollToItem(selectedIndex)
+            }
+            val highlightColor = if (JewelTheme.isDark) Color(0xFF2E436E) else Color(0xFFD0DEF7)
             Box(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp)) {
                 LazyColumn(state = suggestionsListState, modifier = Modifier.fillMaxWidth()) {
-                    items(results) { result ->
+                    itemsIndexed(results) { index, result ->
+                        val bg = if (index == selectedIndex) highlightColor else Color.Transparent
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .background(bg)
                                 .clickable { onResultPicked(result) }
                                 .padding(horizontal = 12.dp, vertical = 4.dp),
                         ) {
