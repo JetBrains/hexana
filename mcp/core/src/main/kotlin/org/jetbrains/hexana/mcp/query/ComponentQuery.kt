@@ -458,6 +458,76 @@ private data class RejectedScannedCandidate(
         )
 }
 
+internal object ComponentProviderFileAccessOverride {
+    private val accessOverride = ThreadLocal<ComponentProviderFileAccess?>()
+
+    fun <T> withFileAccess(
+        fileSizeOrNull: (Path) -> Long?,
+        fileBytesReader: (Path) -> ByteArray,
+        block: () -> T,
+    ): T {
+        val previous = accessOverride.get()
+        accessOverride.set(ComponentProviderFileAccess(fileSizeOrNull, fileBytesReader))
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                accessOverride.remove()
+            } else {
+                accessOverride.set(previous)
+            }
+        }
+    }
+
+    internal fun fileSizeOrNull(path: Path): Long? {
+        val fileAccess = accessOverride.get()
+        return if (fileAccess != null) fileAccess.fileSizeOrNull(path) else fileSizeOrNullDefault(path)
+    }
+
+    internal fun readAllBytes(path: Path): ByteArray =
+        accessOverride.get()?.fileBytesReader?.invoke(path) ?: Files.readAllBytes(path)
+
+    private data class ComponentProviderFileAccess(
+        val fileSizeOrNull: (Path) -> Long?,
+        val fileBytesReader: (Path) -> ByteArray,
+    )
+}
+
+internal object ComponentDependencyLockFileAccessOverride {
+    private val accessOverride = ThreadLocal<ComponentDependencyLockFileAccess?>()
+
+    fun <T> withFileAccess(
+        fileSizeOrNull: (Path) -> Long?,
+        fileBytesReader: (Path) -> ByteArray,
+        block: () -> T,
+    ): T {
+        val previous = accessOverride.get()
+        accessOverride.set(ComponentDependencyLockFileAccess(fileSizeOrNull, fileBytesReader))
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                accessOverride.remove()
+            } else {
+                accessOverride.set(previous)
+            }
+        }
+    }
+
+    internal fun fileSizeOrNull(path: Path): Long? {
+        val fileAccess = accessOverride.get()
+        return if (fileAccess != null) fileAccess.fileSizeOrNull(path) else fileSizeOrNullDefault(path)
+    }
+
+    internal fun readAllBytes(path: Path): ByteArray =
+        accessOverride.get()?.fileBytesReader?.invoke(path) ?: Files.readAllBytes(path)
+
+    private data class ComponentDependencyLockFileAccess(
+        val fileSizeOrNull: (Path) -> Long?,
+        val fileBytesReader: (Path) -> ByteArray,
+    )
+}
+
 private data class ComponentScanIndex(
     val components: List<ScannedComponent>,
     val rejectedCandidates: List<RejectedScannedCandidate>,
@@ -490,7 +560,7 @@ private data class ComponentScanIndex(
                         val normalized = path.normalize()
                         if (normalized in excludedPaths) continue
                         scanned += 1
-                        val fileSize = fileSizeOrNull(path)
+                        val fileSize = ComponentProviderFileAccessOverride.fileSizeOrNull(path)
                         if (fileSize != null && fileSize > limits.maxFileWasmBytes) {
                             rejectedCandidates += RejectedScannedCandidate(
                                 normalized,
@@ -498,7 +568,15 @@ private data class ComponentScanIndex(
                             )
                             continue
                         }
-                        val provider = readComponentProvider(path, allowedFilePolicy, limits)
+                        val provider = try {
+                            readComponentProvider(path, allowedFilePolicy, limits)
+                        } catch (error: ComponentProviderTooLargeException) {
+                            rejectedCandidates += RejectedScannedCandidate(
+                                normalized,
+                                componentProviderRejectedReason(error.size, limits)
+                            )
+                            continue
+                        }
                         if (provider == null) {
                             rejectedCandidates += RejectedScannedCandidate(
                                 normalized,
@@ -850,15 +928,20 @@ private fun readDependencyLock(
     val rawPath = dependencyLockPath?.takeIf { it.isNotBlank() } ?: return DependencyLock(null, emptyList())
     val resolvedPath = resolveOptionalProjectPath(rawPath, projectRoot) ?: return DependencyLock(rawPath, emptyList())
     val allowedPath = allowedFilePolicy.resolveAllowedRegularFile(resolvedPath.toString(), "Dependency lock")
-    val fileSize = fileSizeOrNull(allowedPath)
+    val fileSize = ComponentDependencyLockFileAccessOverride.fileSizeOrNull(allowedPath)
     if (fileSize != null && fileSize > limits.maxTextFileBytes) {
-        throw HexanaAnalysisException(
-            HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
-            "Dependency lock size $fileSize bytes exceeds configured maximum text file size of ${limits.maxTextFileBytes}. Use a smaller lock file or increase the configured MCP text-file-size limit."
-        )
+        throw dependencyLockTooLarge(fileSize, limits)
+    }
+    val bytes = try {
+        ComponentDependencyLockFileAccessOverride.readAllBytes(allowedPath)
+    } catch (_: Exception) {
+        return DependencyLock(rawPath, emptyList())
+    }
+    if (bytes.size > limits.maxTextFileBytes) {
+        throw dependencyLockTooLarge(bytes.size.toLong(), limits)
     }
     val providers = try {
-        val root = Json.parseToJsonElement(Files.readString(allowedPath)).jsonObject
+        val root = Json.parseToJsonElement(bytes.decodeToString(throwOnInvalidSequence = true)).jsonObject
         val providerArray = root["providers"] as? JsonArray ?: return DependencyLock(rawPath, emptyList())
         providerArray.mapNotNull { provider ->
             val obj = provider as? JsonObject ?: return@mapNotNull null
@@ -872,6 +955,12 @@ private fun readDependencyLock(
     }
     return DependencyLock(rawPath, providers)
 }
+
+private fun dependencyLockTooLarge(size: Long, limits: HexanaResourceLimits): HexanaAnalysisException =
+    HexanaAnalysisException(
+        HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+        "Dependency lock size $size bytes exceeds configured maximum text file size of ${limits.maxTextFileBytes}. Use a smaller lock file or increase the configured MCP text-file-size limit."
+    )
 
 private fun JsonObject.stringField(name: String): String? =
     this[name]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
@@ -1174,28 +1263,42 @@ private fun readComponentProvider(
 ): WasmComponentBinaryProvider? {
     val allowedPath = allowedFilePolicy.resolveAllowedRegularFile(path.toString(), "Component provider")
     if (limits != null) {
-        val fileSize = fileSizeOrNull(allowedPath)
+        val fileSize = ComponentProviderFileAccessOverride.fileSizeOrNull(allowedPath)
         if (fileSize != null && fileSize > limits.maxFileWasmBytes) {
             if (rejectOversized) {
-                throw HexanaAnalysisException(
-                    HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
-                    "Component provider size $fileSize bytes exceeds configured maximum file size of ${limits.maxFileWasmBytes}. Use a smaller dependency component or increase the configured MCP file-size limit."
-                )
+                throw componentProviderTooLarge(fileSize, limits)
             }
             return null
         }
     }
     val bytes = try {
-        Files.readAllBytes(allowedPath)
+        ComponentProviderFileAccessOverride.readAllBytes(allowedPath)
     } catch (_: Exception) {
         return null
+    }
+    if (limits != null && bytes.size > limits.maxFileWasmBytes) {
+        if (rejectOversized) {
+            throw componentProviderTooLarge(bytes.size.toLong(), limits)
+        }
+        throw ComponentProviderTooLargeException(bytes.size.toLong())
     }
     val buffer = bytes.toCommonByteBuffer()
     if (WasmBinaryProviderSelector.select(buffer) != BinaryProviderType.WasmComponent) return null
     return WasmComponentBinaryProvider(buffer).takeIf(WasmComponentBinaryProvider::canProvideWasmModule)
 }
 
-private fun fileSizeOrNull(path: Path): Long? =
+private class ComponentProviderTooLargeException(val size: Long) : RuntimeException()
+
+private fun componentProviderTooLarge(size: Long, limits: HexanaResourceLimits): HexanaAnalysisException =
+    HexanaAnalysisException(
+        HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+        "Component provider size $size bytes exceeds configured maximum file size of ${limits.maxFileWasmBytes}. Use a smaller dependency component or increase the configured MCP file-size limit."
+    )
+
+private fun componentProviderRejectedReason(size: Long, limits: HexanaResourceLimits): String =
+    "file size $size bytes exceeds configured maximum file size of ${limits.maxFileWasmBytes} bytes"
+
+private fun fileSizeOrNullDefault(path: Path): Long? =
     try {
         Files.size(path)
     } catch (_: Exception) {

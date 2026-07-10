@@ -1490,6 +1490,31 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun rejectsTextFileThatExceedsLimitAfterRead() {
+        val binding = temporaryFolder.newFile("growing-binding.json").toPath()
+        Files.writeString(binding, "abc")
+        val minimalWasm = byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00)
+        val service = DefaultHexanaAnalysisService(
+            limits = HexanaResourceLimits(maxTextFileBytes = 3),
+            fileSizeReader = { 3L },
+            fileBytesReader = { "abcd".encodeToByteArray() },
+        )
+
+        val error = assertFailsWith<HexanaAnalysisException> {
+            service.planAbiBindingRegeneration(
+                input = WasmInput.RawBytes(minimalWasm),
+                bindingInput = TextInput.FilePath(binding.toString()),
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertEquals(
+            "Text file exceeds maximum size of 3 bytes. Use a smaller text file or increase the configured MCP text-file limit.",
+            error.message
+        )
+    }
+
+    @Test
     fun rejectsNonWasmAndMalformedFiles() {
         val textFile = temporaryFolder.newFile("not_wasm.txt").toPath()
         Files.writeString(textFile, "not wasm")

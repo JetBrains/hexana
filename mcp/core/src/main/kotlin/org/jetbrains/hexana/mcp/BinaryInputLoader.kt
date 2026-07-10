@@ -28,6 +28,20 @@ class BinaryInputLoader(
     private val maxFileInputBytes: Int = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
     private val allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
 ) {
+    private var fileSizeReader: (Path) -> Long = Files::size
+    private var fileBytesReader: (Path) -> ByteArray = Files::readAllBytes
+
+    internal constructor(
+        maxInlineInputBytes: Int,
+        maxFileInputBytes: Int,
+        allowedFilePolicy: AllowedFilePolicy,
+        fileSizeReader: (Path) -> Long,
+        fileBytesReader: (Path) -> ByteArray,
+    ) : this(maxInlineInputBytes, maxFileInputBytes, allowedFilePolicy) {
+        this.fileSizeReader = fileSizeReader
+        this.fileBytesReader = fileBytesReader
+    }
+
     fun load(input: BinaryInput): LoadedBinary {
         return when (input) {
             is BinaryInput.FilePath -> loadFromPath(input.path)
@@ -41,7 +55,7 @@ class BinaryInputLoader(
         requireFileByteCount(path)
 
         val bytes = try {
-            Files.readAllBytes(path)
+            fileBytesReader(path)
         } catch (error: Exception) {
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.INTERNAL_ERROR,
@@ -50,6 +64,7 @@ class BinaryInputLoader(
             )
         }
 
+        requireFileByteCount(bytes.size)
         return loadFromBytes(bytes, pathLabel = rawPath)
     }
 
@@ -95,7 +110,7 @@ class BinaryInputLoader(
 
     private fun requireFileByteCount(path: Path) {
         val size = try {
-            Files.size(path)
+            fileSizeReader(path)
         } catch (error: Exception) {
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.INTERNAL_ERROR,
@@ -104,6 +119,12 @@ class BinaryInputLoader(
             )
         }
         if (size > maxFileInputBytes.toLong()) {
+            throw fileTooLarge()
+        }
+    }
+
+    private fun requireFileByteCount(size: Int) {
+        if (size > maxFileInputBytes) {
             throw fileTooLarge()
         }
     }

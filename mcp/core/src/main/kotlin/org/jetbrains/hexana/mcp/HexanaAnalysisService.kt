@@ -255,6 +255,21 @@ class DefaultHexanaAnalysisService(
     maxFileInputBytes: Int = limits.maxFileWasmBytes,
     private val allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
 ) : HexanaAnalysisService {
+    private var fileSizeReader: (Path) -> Long = Files::size
+    private var fileBytesReader: (Path) -> ByteArray = Files::readAllBytes
+
+    internal constructor(
+        limits: HexanaResourceLimits = HexanaResourceLimits(),
+        maxInlineInputBytes: Int = limits.maxInlineWasmBytes,
+        maxFileInputBytes: Int = limits.maxFileWasmBytes,
+        allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
+        fileSizeReader: (Path) -> Long,
+        fileBytesReader: (Path) -> ByteArray,
+    ) : this(limits, maxInlineInputBytes, maxFileInputBytes, allowedFilePolicy) {
+        this.fileSizeReader = fileSizeReader
+        this.fileBytesReader = fileBytesReader
+    }
+
     private val limits = limits.copy(
         maxInlineWasmBytes = maxInlineInputBytes,
         maxFileWasmBytes = maxFileInputBytes,
@@ -808,8 +823,9 @@ class DefaultHexanaAnalysisService(
 
     private fun loadTextFromPath(rawPath: String, pathLabel: String? = rawPath): LoadedText {
         val path = allowedFilePolicy.resolveAllowedRegularFile(rawPath, "Text file")
-        val size = try {
-            Files.size(path)
+        requireTextFileByteCount(path)
+        val bytes = try {
+            fileBytesReader(path)
         } catch (error: Exception) {
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.INTERNAL_ERROR,
@@ -817,21 +833,8 @@ class DefaultHexanaAnalysisService(
                 error
             )
         }
-        if (size > limits.maxTextFileBytes.toLong()) {
-            throw HexanaAnalysisException(
-                HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
-                "Text file exceeds maximum size of ${limits.maxTextFileBytes} bytes. Use a smaller text file or increase the configured MCP text-file limit."
-            )
-        }
-        val text = try {
-            Files.readString(path)
-        } catch (error: Exception) {
-            throw HexanaAnalysisException(
-                HexanaAnalysisErrorCode.INTERNAL_ERROR,
-                "Failed to read text file",
-                error
-            )
-        }
+        requireTextFileByteCount(bytes.size)
+        val text = bytes.toString(Charsets.UTF_8)
         return LoadedText(text, pathLabel)
     }
 
@@ -855,7 +858,7 @@ class DefaultHexanaAnalysisService(
         requireFileByteCount(path)
 
         val bytes = try {
-            Files.readAllBytes(path)
+            fileBytesReader(path)
         } catch (error: Exception) {
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.INTERNAL_ERROR,
@@ -864,6 +867,7 @@ class DefaultHexanaAnalysisService(
             )
         }
 
+        requireFileByteCount(bytes.size)
         return loadFromBytes(bytes)
     }
 
@@ -875,7 +879,7 @@ class DefaultHexanaAnalysisService(
         requireFileByteCount(path)
 
         val bytes = try {
-            Files.readAllBytes(path)
+            fileBytesReader(path)
         } catch (error: Exception) {
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.INTERNAL_ERROR,
@@ -884,6 +888,7 @@ class DefaultHexanaAnalysisService(
             )
         }
 
+        requireFileByteCount(bytes.size)
         return loadComponentFromBytes(bytes)
     }
 
@@ -953,7 +958,7 @@ class DefaultHexanaAnalysisService(
 
     private fun requireFileByteCount(path: Path) {
         val size = try {
-            Files.size(path)
+            fileSizeReader(path)
         } catch (error: Exception) {
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.INTERNAL_ERROR,
@@ -965,6 +970,33 @@ class DefaultHexanaAnalysisService(
             throw fileTooLarge()
         }
     }
+    private fun requireFileByteCount(size: Int) {
+        if (size > limits.maxFileWasmBytes) {
+            throw fileTooLarge()
+        }
+    }
+
+    private fun requireTextFileByteCount(path: Path) {
+        val size = try {
+            fileSizeReader(path)
+        } catch (error: Exception) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.INTERNAL_ERROR,
+                "Failed to read text file",
+                error
+            )
+        }
+        if (size > limits.maxTextFileBytes.toLong()) {
+            throw textFileTooLarge()
+        }
+    }
+
+    private fun requireTextFileByteCount(size: Int) {
+        if (size > limits.maxTextFileBytes) {
+            throw textFileTooLarge()
+        }
+    }
+
     private fun requireInlineByteCount(size: Int) {
         if (size > limits.maxInlineWasmBytes) {
             throw inlineBytesTooLarge()
@@ -977,6 +1009,13 @@ class DefaultHexanaAnalysisService(
             "File exceeds maximum size of ${limits.maxFileWasmBytes} bytes. Use a smaller file or increase the configured MCP file-size limit."
         )
     }
+    private fun textFileTooLarge(): HexanaAnalysisException {
+        return HexanaAnalysisException(
+            HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+            "Text file exceeds maximum size of ${limits.maxTextFileBytes} bytes. Use a smaller text file or increase the configured MCP text-file limit."
+        )
+    }
+
     private fun inlineBytesTooLarge(): HexanaAnalysisException {
         return HexanaAnalysisException(
             HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,

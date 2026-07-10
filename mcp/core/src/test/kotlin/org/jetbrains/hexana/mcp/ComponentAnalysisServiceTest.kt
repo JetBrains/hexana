@@ -2,6 +2,8 @@ package org.jetbrains.hexana.mcp
 
 import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.mcp.query.ComponentDependencyLockFileAccessOverride
+import org.jetbrains.hexana.mcp.query.ComponentProviderFileAccessOverride
 import org.jetbrains.hexana.mcp.query.resolveComponentDependencies
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.junit.Rule
@@ -353,6 +355,90 @@ class ComponentAnalysisServiceTest {
     }
 
     @Test
+    fun checkComponentCompatibilityRejectsExplicitDependencyThatExceedsLimitAfterRead() {
+        val root = temporaryFolder.newFolder("growing-explicit-dependency").toPath()
+        val current = writeComponentEntries(
+            root.resolve("current.component.wasm"),
+            imports = emptyList(),
+            exports = emptyList(),
+        )
+        val dependency = root.resolve("deps/growing.component.wasm")
+        Files.createDirectories(dependency.parent)
+        Files.write(dependency, byteArrayOf(0, 1, 2))
+        val maxFileBytes = Files.size(current).toInt()
+
+        val error = ComponentProviderFileAccessOverride.withFileAccess(
+            fileSizeOrNull = { path ->
+                if (path.fileName == dependency.fileName) 3L else Files.size(path)
+            },
+            fileBytesReader = { path ->
+                if (path.fileName == dependency.fileName) ByteArray(maxFileBytes + 1) else Files.readAllBytes(path)
+            },
+        ) {
+            assertFailsWith<HexanaAnalysisException> {
+                DefaultHexanaAnalysisService(
+                    limits = HexanaResourceLimits(maxFileWasmBytes = maxFileBytes)
+                ).checkComponentCompatibility(
+                    input = WasmInput.FilePath(current.toString()),
+                    dependencyPaths = listOf(dependency.toString()),
+                    projectRoot = root.toString(),
+                    previousPath = null,
+                    dependencyLockPath = null,
+                )
+            }
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertEquals(
+            "Component provider size ${maxFileBytes + 1} bytes exceeds configured maximum file size of $maxFileBytes. Use a smaller dependency component or increase the configured MCP file-size limit.",
+            error.message
+        )
+    }
+
+    @Test
+    fun checkComponentCompatibilityKeepsProviderOverrideUnknownSize() {
+        val root = temporaryFolder.newFolder("unknown-provider-size").toPath()
+        val current = writeComponentEntries(
+            root.resolve("current.component.wasm"),
+            imports = listOf(componentImport("acme:pricing/calculate@1.0.0")),
+            exports = emptyList(),
+        )
+        val dependency = root.resolve("deps/pricing.component.wasm")
+        val providerBytes = buildComponent(
+            imports = emptyList(),
+            exports = listOf(componentExport("acme:pricing/calculate@1.0.0")),
+        )
+        val maxFileBytes = maxOf(Files.size(current).toInt(), providerBytes.size)
+        Files.createDirectories(dependency.parent)
+        Files.write(dependency, ByteArray(maxFileBytes + 1))
+
+        val result = ComponentProviderFileAccessOverride.withFileAccess(
+            fileSizeOrNull = { path ->
+                if (path.fileName == dependency.fileName) null else Files.size(path)
+            },
+            fileBytesReader = { path ->
+                if (path.fileName == dependency.fileName) providerBytes else Files.readAllBytes(path)
+            },
+        ) {
+            DefaultHexanaAnalysisService(
+                limits = HexanaResourceLimits(maxFileWasmBytes = maxFileBytes)
+            ).checkComponentCompatibility(
+                input = WasmInput.FilePath(current.toString()),
+                dependencyPaths = listOf(dependency.toString()),
+                projectRoot = root.toString(),
+                previousPath = null,
+                dependencyLockPath = null,
+            )
+        }
+
+        assertTrue(result.compatible)
+        assertTrue(result.matches.any {
+            it.importName == "acme:pricing/calculate@1.0.0" &&
+                it.dependencyPath == dependency.toString()
+        })
+    }
+
+    @Test
     fun checkComponentCompatibilityRejectsOversizedPreviousComponent() {
         val root = temporaryFolder.newFolder("oversized-previous-component").toPath()
         val current = writeComponentEntries(
@@ -406,6 +492,115 @@ class ComponentAnalysisServiceTest {
 
         assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
         assertTrue(error.message.contains("Dependency lock size"))
+    }
+
+    @Test
+    fun checkComponentCompatibilityRejectsDependencyLockThatExceedsLimitAfterRead() {
+        val root = temporaryFolder.newFolder("growing-dependency-lock").toPath()
+        val current = writeComponentEntries(
+            root.resolve("current.component.wasm"),
+            imports = emptyList(),
+            exports = emptyList(),
+        )
+        val lockPath = root.resolve("config/component-lock.json")
+        val maxTextBytes = 8
+        Files.createDirectories(lockPath.parent)
+        Files.writeString(lockPath, "{}")
+
+        val error = ComponentDependencyLockFileAccessOverride.withFileAccess(
+            fileSizeOrNull = { path ->
+                if (path.fileName == lockPath.fileName) 2L else Files.size(path)
+            },
+            fileBytesReader = { path ->
+                if (path.fileName == lockPath.fileName) ByteArray(maxTextBytes + 1) else Files.readAllBytes(path)
+            },
+        ) {
+            assertFailsWith<HexanaAnalysisException> {
+                DefaultHexanaAnalysisService(
+                    limits = HexanaResourceLimits(maxTextFileBytes = maxTextBytes)
+                ).checkComponentCompatibility(
+                    input = WasmInput.FilePath(current.toString()),
+                    dependencyPaths = emptyList(),
+                    projectRoot = root.toString(),
+                    previousPath = null,
+                    dependencyLockPath = "config/component-lock.json",
+                )
+            }
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertEquals(
+            "Dependency lock size ${maxTextBytes + 1} bytes exceeds configured maximum text file size of $maxTextBytes. Use a smaller lock file or increase the configured MCP text-file-size limit.",
+            error.message
+        )
+    }
+
+    @Test
+    fun checkComponentCompatibilityKeepsDependencyLockOverrideUnknownSize() {
+        val root = temporaryFolder.newFolder("unknown-lock-size").toPath()
+        val current = writeComponentEntries(
+            root.resolve("current.component.wasm"),
+            imports = emptyList(),
+            exports = emptyList(),
+        )
+        val lockPath = root.resolve("config/component-lock.json")
+        val lockBytes = """
+            {"providers":[{"interface":"acme:inventory/check","version":"1.0.0","path":"components/inventory.component.wasm"}]}
+        """.trimIndent().toByteArray(Charsets.UTF_8)
+        Files.createDirectories(lockPath.parent)
+        Files.write(lockPath, ByteArray(lockBytes.size + 1))
+
+        val result = ComponentDependencyLockFileAccessOverride.withFileAccess(
+            fileSizeOrNull = { path ->
+                if (path.fileName == lockPath.fileName) null else Files.size(path)
+            },
+            fileBytesReader = { path ->
+                if (path.fileName == lockPath.fileName) lockBytes else Files.readAllBytes(path)
+            },
+        ) {
+            DefaultHexanaAnalysisService(
+                limits = HexanaResourceLimits(maxTextFileBytes = lockBytes.size)
+            ).checkComponentCompatibility(
+                input = WasmInput.FilePath(current.toString()),
+                dependencyPaths = emptyList(),
+                projectRoot = root.toString(),
+                previousPath = null,
+                dependencyLockPath = "config/component-lock.json",
+            )
+        }
+
+        assertTrue(result.configuredProviders.any {
+            it.interfaceName == "acme:inventory/check" &&
+                it.path == "components/inventory.component.wasm"
+        })
+    }
+
+    @Test
+    fun checkComponentCompatibilityIgnoresMalformedUtf8DependencyLock() {
+        val root = temporaryFolder.newFolder("malformed-lock-utf8").toPath()
+        val current = writeComponentEntries(
+            root.resolve("current.component.wasm"),
+            imports = emptyList(),
+            exports = emptyList(),
+        )
+        val lockPath = root.resolve("config/component-lock.json")
+        val lockPrefix = """{"providers":[{"interface":"acme:inventory/check","version":"1.0.0","path":"components/"""
+        val lockSuffix = """.component.wasm"}]}"""
+        val malformedLockBytes = lockPrefix.toByteArray(Charsets.UTF_8) +
+            byteArrayOf(0xc3.toByte(), 0x28.toByte()) +
+            lockSuffix.toByteArray(Charsets.UTF_8)
+        Files.createDirectories(lockPath.parent)
+        Files.write(lockPath, malformedLockBytes)
+
+        val result = service.checkComponentCompatibility(
+            input = WasmInput.FilePath(current.toString()),
+            dependencyPaths = emptyList(),
+            projectRoot = root.toString(),
+            previousPath = null,
+            dependencyLockPath = "config/component-lock.json",
+        )
+
+        assertTrue(result.configuredProviders.isEmpty())
     }
 
     @Test

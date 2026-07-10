@@ -161,6 +161,33 @@ class BinaryInputLoaderTest {
     }
 
     @Test
+    fun rejectsFileThatExceedsLimitAfterRead() {
+        val file = Files.createTempFile("hexana-binary-input-growing", ".bin")
+        try {
+            Files.write(file, byteArrayOf(1, 2, 3))
+            val loader = BinaryInputLoader(
+                maxInlineInputBytes = 1024,
+                maxFileInputBytes = 3,
+                allowedFilePolicy = AllowedFilePolicy.allowAll,
+                fileSizeReader = { 3L },
+                fileBytesReader = { byteArrayOf(1, 2, 3, 4) },
+            )
+
+            val error = assertFailsWith<HexanaAnalysisException> {
+                loader.load(BinaryInput.FilePath(file.toString()))
+            }
+
+            assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+            assertEquals(
+                "File exceeds maximum size of 3 bytes. Use a smaller file or increase the configured MCP file-size limit.",
+                error.message
+            )
+        } finally {
+            Files.deleteIfExists(file)
+        }
+    }
+
+    @Test
     fun defaultServiceCanLoadBinaryIdentity() {
         val service = DefaultHexanaAnalysisService()
 
