@@ -104,7 +104,9 @@ private fun printCommandOutput(output: HexanaCliCommandOutput) {
     if (output.stderr.isNotEmpty()) {
         System.err.print(output.stderr)
     }
-    println(output.stdout)
+    if (output.stdout.isNotEmpty()) {
+        System.out.print(output.stdout)
+    }
 }
 
 private fun renderExecutableToolDomainError(

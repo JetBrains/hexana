@@ -12,6 +12,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.slf4j.LoggerFactory
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.assertEquals
@@ -205,6 +206,38 @@ class HexanaStdioIntegrationTest {
             assertNoStackTrace(result.stderr)
             assertFalse(result.stderr.contains("See server logs"), result.stderr)
         }
+    }
+
+    @Test
+    fun installedExecutableToolCanEmitExactlyMaxOutputBytes() = runBlocking {
+        val binary = temporaryFolder.newFile("exact-output-budget.bin").toPath()
+        Files.write(binary, byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8))
+        val initial = HexanaInstalledStdioClient.runCommand(
+            StdioLauncher.Server,
+            "summarize-binary",
+            binary.toString(),
+            "--format",
+            "json",
+        )
+        assertInstalledCommandSucceeded(initial)
+        assertFalse(initial.stdout.endsWith("\n"), "Executable CLI output must not append a trailing newline")
+
+        val renderedStdout = initial.stdout.trimEnd('\r', '\n')
+        val maxOutputBytes = renderedStdout.toByteArray(StandardCharsets.UTF_8).size
+        val exactBudget = HexanaInstalledStdioClient.runCommand(
+            StdioLauncher.Server,
+            "summarize-binary",
+            binary.toString(),
+            "--format",
+            "json",
+            "--max-output-bytes",
+            maxOutputBytes.toString(),
+        )
+
+        assertInstalledCommandSucceeded(exactBudget)
+        assertEquals(renderedStdout, exactBudget.stdout)
+        assertEquals(maxOutputBytes, exactBudget.stdout.toByteArray(StandardCharsets.UTF_8).size)
+        assertTrue(exactBudget.unexpectedStderr.isBlank(), exactBudget.stderr)
     }
 
     @Test
