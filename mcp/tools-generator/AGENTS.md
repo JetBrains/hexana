@@ -17,7 +17,7 @@ template.
 ## Start Here
 
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/Dsl.kt` — `class_`/`tools` builders, `FieldType` hierarchy,
-  `FieldSpec` schema constraints, `ToolInputPattern`, and `ToolSpec`.
+  `FieldSpec` schema constraints, `ToolInputModel`/source-slot CLI input metadata, `ToolInputPattern`, and `ToolSpec`.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/CommonInputs.kt` — Wasm input and tiny shared input helpers.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/*Tools.kt` — feature-owned specs and definitions. Keep each tool's
   input specs, input pattern, result schema mirrors, descriptions, and handler FQN in the same feature file when possible.
@@ -38,8 +38,9 @@ template.
   idea-plugin generator must not carry a separate result-class package map.
 - Input/output conversion capability symbols are generator-local metadata on `ClassSpec`. `SemanticJson`, `McpWrapper`,
   `Pretty`, and `RawText` are implemented for the current POC paths. `RawBytes` is symbolic/deferred for future
-  binary-safe rendering and is not exposed by current catalog tools. `Stdin` is symbolic input metadata for generated CLI
-  support.
+  binary-safe rendering and is not exposed by current catalog tools. CLI source-slot input behavior belongs in
+  `ToolInputModel` and its source/param specs; keep this as DSL metadata rather than duplicating it in generated or
+  handwritten server code.
 - Standalone server input and output JSON schemas are generated from `ClassSpec`/`FieldSpec`; add defaults and bounds
   such as `minimum`, `maxItems`, and `maxLength` to the DSL instead of adding per-tool schema helpers in `mcp/server`.
 - Idea-plugin argument defaults also come from `FieldSpec.default`; do not repeat numeric, boolean, or string defaults in
@@ -90,10 +91,11 @@ Before sending a catalog change for review, run the generated-artifact drift che
    the generators can emit MCP output schemas and structured-content encoding. Add cross-feature reusable input pieces
    to `CommonInputs.kt`.
 3. Set `inputPattern` beside `input`. If the input needs a new IDE method parameter pattern, add it to
-   `ToolInputPattern` and update the pattern handling in `IdeaToolsetMain.kt`. The standalone dispatcher derives its
-   input schema from `input`; update `StandaloneToolsetMain.kt` only when the DSL needs a new schema feature or field
-   type. The existing patterns cover path-only, offset/limit, indices, closed range, and half-open segment range with
-   filters.
+   `ToolInputPattern` and update the pattern handling in `IdeaToolsetMain.kt`. If the CLI needs path/stdin/base64/raw
+   source selection or ordinary/JSON parameter binding, model that through `ToolInputModel` instead of adding ad hoc
+   generated command code. The standalone dispatcher derives its input schema from `input`; update
+   `StandaloneToolsetMain.kt` only when the DSL needs a new schema feature, field type, or generated CLI source behavior.
+   The existing patterns cover path-only, offset/limit, indices, closed range, and half-open segment range with filters.
 4. Set `surfaces` beside the tool contract. Choose the explicit MCP audience/profile, public MCPB manifest exposure,
    and CLI surface independently: public MCPB tools should use the public MCPB helper; visible CLI tools need a
    kebab-case command name, group/domain, and output policy; advanced-only or otherwise hidden CLI tools should use the
