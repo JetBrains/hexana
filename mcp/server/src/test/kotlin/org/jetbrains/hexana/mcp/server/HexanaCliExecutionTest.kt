@@ -9,10 +9,12 @@ import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
 import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
+import org.jetbrains.hexana.mcp.tool.runtime.ToolInputSourceSelection
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.nio.file.Files
+import java.util.Base64
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -109,6 +111,61 @@ class HexanaCliExecutionTest {
         }
 
         assertTrue(error.message.orEmpty().contains("outside allowed roots"))
+    }
+
+    @Test
+    fun renderSummarizeBinaryJsonReadsStdinBytesWithoutAllowedRoot() {
+        val allowedRoot = temporaryFolder.newFolder("stdin-allowed").toPath()
+
+        val output = generatedExecutableCliToolCommandOutput(
+            summarizeBinaryCommand(
+                sourceSelection = ToolInputSourceSelection.StdinBytes(byteArrayOf(1, 2, 3), slotName = "binary"),
+                format = HexanaCliOutputFormat.JSON,
+                allowedRoots = listOf(allowedRoot.toString()),
+            )
+        ).stdout
+
+        val module = Json.parseToJsonElement(output).jsonObject.getValue("module").jsonObject
+        assertEquals("generic", module.getValue("format").jsonPrimitive.content)
+        assertFalse("path" in module)
+        assertEquals("3", module.getValue("byteLength").jsonPrimitive.content)
+    }
+
+    @Test
+    fun renderSummarizeBinaryJsonReadsBase64WithoutAllowedRoot() {
+        val allowedRoot = temporaryFolder.newFolder("base64-allowed").toPath()
+
+        val output = generatedExecutableCliToolCommandOutput(
+            summarizeBinaryCommand(
+                sourceSelection = ToolInputSourceSelection.Base64(
+                    bytesBase64 = Base64.getEncoder().encodeToString(byteArrayOf(4, 5, 6, 7)),
+                    slotName = "binary",
+                ),
+                format = HexanaCliOutputFormat.JSON,
+                allowedRoots = listOf(allowedRoot.toString()),
+            )
+        ).stdout
+
+        val module = Json.parseToJsonElement(output).jsonObject.getValue("module").jsonObject
+        assertEquals("generic", module.getValue("format").jsonPrimitive.content)
+        assertFalse("path" in module)
+        assertEquals("4", module.getValue("byteLength").jsonPrimitive.content)
+    }
+
+    @Test
+    fun renderSummarizeBinaryJsonEnforcesInlineLimitForStdinBytes() {
+        val error = assertFailsWith<HexanaAnalysisException> {
+            generatedExecutableCliToolCommandOutput(
+                summarizeBinaryCommand(
+                    sourceSelection = ToolInputSourceSelection.StdinBytes(byteArrayOf(1, 2, 3), slotName = "binary"),
+                    format = HexanaCliOutputFormat.JSON,
+                    resourceLimits = HexanaResourceLimits(maxInlineBinaryBytes = 2),
+                )
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertTrue(error.message.orEmpty().contains("Inline bytes exceed maximum size of 2 bytes"))
     }
 
     @Test
@@ -399,7 +456,7 @@ class HexanaCliExecutionTest {
         resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
     ) = executableToolCommand(
         commandName = "summarize-module",
-        path = path,
+        sourceSelection = ToolInputSourceSelection.Path(path = path, slotName = "wasm"),
         format = format,
         allowedRoots = allowedRoots,
         resourceLimits = resourceLimits,
@@ -412,7 +469,20 @@ class HexanaCliExecutionTest {
         resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
     ) = executableToolCommand(
         commandName = "summarize-binary",
-        path = path,
+        sourceSelection = ToolInputSourceSelection.Path(path = path, slotName = "binary"),
+        format = format,
+        allowedRoots = allowedRoots,
+        resourceLimits = resourceLimits,
+    )
+
+    private fun summarizeBinaryCommand(
+        sourceSelection: ToolInputSourceSelection,
+        format: HexanaCliOutputFormat,
+        allowedRoots: List<String> = emptyList(),
+        resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
+    ) = executableToolCommand(
+        commandName = "summarize-binary",
+        sourceSelection = sourceSelection,
         format = format,
         allowedRoots = allowedRoots,
         resourceLimits = resourceLimits,
@@ -425,7 +495,7 @@ class HexanaCliExecutionTest {
         resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
     ) = executableToolCommand(
         commandName = "wasm-to-wat",
-        path = path,
+        sourceSelection = ToolInputSourceSelection.Path(path = path, slotName = "wasm"),
         format = format,
         allowedRoots = allowedRoots,
         resourceLimits = resourceLimits,
@@ -433,13 +503,13 @@ class HexanaCliExecutionTest {
 
     private fun executableToolCommand(
         commandName: String,
-        path: String,
+        sourceSelection: ToolInputSourceSelection,
         format: HexanaCliOutputFormat,
         allowedRoots: List<String>,
         resourceLimits: HexanaResourceLimits,
     ) = HexanaCommand.ExecutableTool(
         spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == commandName },
-        path = path,
+        sourceSelection = sourceSelection,
         format = format,
         allowedRoots = allowedRoots,
         resourceLimits = resourceLimits,

@@ -4,6 +4,7 @@
 
 ### Added
 - `hexana-mcp summarize-binary <binary> --format json` can now summarize Wasm and native binaries as a public CLI command, returning JSON-only compact identity, counts, and warnings without raw bytes.
+- Executable public CLI commands can now read input from a file path, `-`, `--stdin`, auto-detected piped stdin, or explicit base64 options such as `--binary-base64`, `--wasm-base64`, and `--bytes-base64`.
 
 ### Changed
 - Standalone MCP now defaults generated tool registration to the production profile; callers that need hidden or advanced tools must request `HexanaMcpToolProfile.ADVANCED`.

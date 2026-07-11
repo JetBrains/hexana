@@ -14,6 +14,7 @@ import org.jetbrains.hexana.mcp.WasmInput
 import org.jetbrains.hexana.mcp.model.binaries.BinarySummaryResult
 import org.jetbrains.hexana.mcp.model.converters.WasmToWatResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
+import org.jetbrains.hexana.mcp.tool.runtime.ToolInputSourceSelection
 import java.nio.charset.StandardCharsets
 
 internal data class HexanaCliCommandOutput(
@@ -37,7 +38,7 @@ internal fun renderSummarizeModuleCommandOutput(
     ),
 ): HexanaCliCommandOutput {
     requireExecutableTool(command, toolName = "summarize_module")
-    val result = analysisService.summarizeModule(WasmInput.FilePath(command.path))
+    val result = analysisService.summarizeModule(WasmInput.FilePath(command.pathSource()))
     val output = when (command.format) {
         HexanaCliOutputFormat.JSON -> HexanaJson.compact.encodeToString(SummarizeModuleResult.serializer(), result)
         HexanaCliOutputFormat.PRETTY -> renderSummarizeModulePretty(result)
@@ -66,7 +67,7 @@ internal fun renderSummarizeBinaryCommandOutput(
     ),
 ): HexanaCliCommandOutput {
     requireExecutableTool(command, toolName = "summarize_binary")
-    val result = analysisService.summarizeBinary(BinaryInput.FilePath(command.path))
+    val result = analysisService.summarizeBinary(command.binaryInputSource())
     val output = when (command.format) {
         HexanaCliOutputFormat.JSON -> HexanaJson.compact.encodeToString(BinarySummaryResult.serializer(), result)
         HexanaCliOutputFormat.PRETTY -> error("summarize-binary does not support pretty output")
@@ -96,7 +97,7 @@ internal fun renderWasmToWatCommandOutput(
         maxInlineInputBytes = command.resourceLimits.maxInlineWasmBytes,
         maxFileInputBytes = command.resourceLimits.maxFileWasmBytes,
         allowedFilePolicy = allowedFilePolicy,
-    ).load(WasmInput.FilePath(command.path))
+    ).load(WasmInput.FilePath(command.pathSource()))
     val watWithWarnings = wasmPrinter(loaded.bytes)
     val result = WasmToWatResult(
         wat = watWithWarnings.wat,
@@ -147,6 +148,28 @@ private fun requireExecutableTool(command: HexanaCommand.ExecutableTool, toolNam
         "Expected CLI tool '$toolName', got '${command.spec.toolName}'."
     }
 }
+
+internal fun HexanaCommand.ExecutableTool.pathSource(): String {
+    return when (val source = sourceSelection) {
+        is ToolInputSourceSelection.Path -> source.path
+        else -> error("${spec.commandName} requires a path source, got ${source.mcpPayloadFieldName}.")
+    }
+}
+
+internal val HexanaCommand.ExecutableTool.path: String
+    get() = pathSource()
+
+private fun HexanaCommand.ExecutableTool.binaryInputSource(): BinaryInput {
+    return when (val source = sourceSelection) {
+        is ToolInputSourceSelection.Path -> BinaryInput.FilePath(source.path)
+        is ToolInputSourceSelection.Base64 -> BinaryInput.InlineBytes(source.bytesBase64)
+        is ToolInputSourceSelection.StdinBytes -> BinaryInput.RawBytes(source.bytes())
+        is ToolInputSourceSelection.ByteList -> BinaryInput.RawBytes(source.bytes.toByteArray())
+    }
+}
+
+private fun List<Int>.toByteArray(): ByteArray =
+    ByteArray(size) { index -> this[index].toByte() }
 
 private fun List<String>.toStderrWarnings(): String {
     if (isEmpty()) {

@@ -109,6 +109,24 @@ class HexanaStdioIntegrationTest {
     }
 
     @Test
+    fun installedExecutableToolAutoStdinDoesNotWaitForOpenEmptyStdin() = runBlocking {
+        val result = HexanaInstalledStdioClient.runCommand(
+            launcher = StdioLauncher.Server,
+            arguments = listOf("summarize-module", "--format", "json"),
+            stdinBytes = null,
+            closeStdin = false,
+        )
+
+        assertFalse(
+            result.timedOut,
+            "Command waited for open empty stdin. stdout=${result.stdout}, stderr=${result.stderr}"
+        )
+        assertTrue(result.exitCode != 0, "stdout=${result.stdout}, stderr=${result.stderr}")
+        assertTrue(result.stderr.contains("Missing summarize-module source"), result.stderr)
+        assertNoStackTrace(result.stderr)
+    }
+
+    @Test
     fun installedServerTodoCommandIsHiddenByDefault() = runBlocking {
         val result = HexanaInstalledStdioClient.runCommand(StdioLauncher.Server, "list-enabled-features")
 

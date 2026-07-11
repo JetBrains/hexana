@@ -6,8 +6,13 @@ import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.int
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
+import org.jetbrains.hexana.mcp.tool.runtime.ToolInputSourceSelection
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
 import java.net.InetAddress
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 sealed interface HexanaCommand {
     data class Stdio(
@@ -38,7 +43,7 @@ sealed interface HexanaCommand {
 
     data class ExecutableTool(
         val spec: HexanaCliToolSpec,
-        val path: String,
+        val sourceSelection: ToolInputSourceSelection,
         val format: HexanaCliOutputFormat,
         val allowedRoots: List<String>,
         val resourceLimits: HexanaResourceLimits,
@@ -56,11 +61,75 @@ sealed interface HexanaCommand {
     data object Help : HexanaCommand
 }
 
+interface HexanaCliStdin {
+    fun readExplicitBytes(maxBytes: Int): ByteArray
+    fun readAutoBytesOrNull(maxBytes: Int): ByteArray?
+}
+
+object SystemHexanaCliStdin : HexanaCliStdin {
+    private const val AUTO_STDIN_READ_TIMEOUT_MILLIS = 2_000L
+    private const val BUFFER_SIZE = 8 * 1024
+
+    override fun readExplicitBytes(maxBytes: Int): ByteArray =
+        System.`in`.readAtMost(maxBytes)
+
+    override fun readAutoBytesOrNull(maxBytes: Int): ByteArray? {
+        if (System.console() != null) {
+            return null
+        }
+        val input = System.`in`
+        if (input.available() > 0) {
+            return input.readAtMost(maxBytes).takeIf { it.isNotEmpty() }
+        }
+
+        return input.readAtMostAsync(maxBytes)
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun InputStream.readAtMost(maxBytes: Int): ByteArray {
+        require(maxBytes > 0) { "Maximum stdin byte count must be positive." }
+        val output = ByteArrayOutputStream()
+        val limit = maxBytes.toLong() + 1L
+        val bufferSize = if (limit < BUFFER_SIZE) limit.toInt() else BUFFER_SIZE
+        val buffer = ByteArray(bufferSize)
+        var total = 0L
+        while (total < limit) {
+            val bytesToRead = (limit - total).coerceAtMost(buffer.size.toLong()).toInt()
+            val bytesRead = read(buffer, 0, bytesToRead)
+            if (bytesRead < 0) {
+                break
+            }
+            output.write(buffer, 0, bytesRead)
+            total += bytesRead
+        }
+        return output.toByteArray()
+    }
+
+    private fun InputStream.readAtMostAsync(maxBytes: Int): ByteArray? {
+        val latch = CountDownLatch(1)
+        var result: Result<ByteArray>? = null
+        val reader = Thread(
+            {
+                result = runCatching { readAtMost(maxBytes) }
+                latch.countDown()
+            },
+            "hexana-cli-auto-stdin-reader"
+        )
+        reader.isDaemon = true
+        reader.start()
+        if (!latch.await(AUTO_STDIN_READ_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+            return null
+        }
+        return requireNotNull(result).getOrThrow()
+    }
+}
+
 class HexanaCli(
-    private val envReader: (String) -> String? = System::getenv
+    private val envReader: (String) -> String? = System::getenv,
+    private val stdin: HexanaCliStdin = SystemHexanaCliStdin,
 ) {
     private var parsedCommand: HexanaCommand? = null
-    private val rootCommand = RootCommand(envReader) { parsedCommand = it }
+    private val rootCommand = RootCommand(envReader, stdin) { parsedCommand = it }
 
     fun parse(args: Array<String>): HexanaCommand {
         parsedCommand = null
@@ -85,6 +154,7 @@ class HexanaCli(
 
     private class RootCommand(
         private val envReader: (String) -> String?,
+        private val stdin: HexanaCliStdin,
         private val sink: (HexanaCommand) -> Unit
     ) : CliktCommand(name = "hexana-mcp") {
         override fun help(context: Context): String = "Standalone Hexana MCP server for WebAssembly inspection."
@@ -94,7 +164,7 @@ class HexanaCli(
 
         init {
             val manualCommands = manualServiceCommands(envReader, sink)
-            val generatedCommands = generatedCliToolCommands(envReader, sink)
+            val generatedCommands = generatedCliToolCommands(envReader, stdin, sink)
             validateRootCliCommandNames(
                 manualCommandNames = manualCommands.map { it.commandName },
                 generatedCommandNames = generatedCommands.map { it.commandName },

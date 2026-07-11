@@ -3,18 +3,25 @@ package org.jetbrains.hexana.mcp.server
 
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
+import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.multiple
+import com.github.ajalt.clikt.parameters.arguments.optional
 import com.github.ajalt.clikt.parameters.options.convert
 import com.github.ajalt.clikt.parameters.options.default
+import com.github.ajalt.clikt.parameters.options.flag
+import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
 import kotlin.Boolean
+import kotlin.ByteArray
 import kotlin.Int
 import kotlin.String
 import kotlin.Suppress
 import kotlin.Unit
 import kotlin.collections.List
 import kotlin.collections.Set
+import org.jetbrains.hexana.mcp.HexanaResourceLimits
+import org.jetbrains.hexana.mcp.tool.runtime.ToolInputSourceSelection
 
 /**
  * Generated CLI input modes declared by catalog input conversion metadata.
@@ -97,7 +104,7 @@ public object HexanaGeneratedCliToolRegistry {
           toolName = "summarize_binary",
           summary = "Summarize a Wasm or native binary with compact identity and entity counts.",
           groups = setOf(HexanaCliToolGroup.BINARY),
-          inputModes = setOf(HexanaCliInputMode.BINARY_PATH),
+          inputModes = setOf(HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -425,8 +432,9 @@ public object HexanaGeneratedCliToolRegistry {
       )
 }
 
-private class GeneratedPathCliToolCommand(
+private class GeneratedPathOnlyCliToolCommand(
   private val spec: HexanaCliToolSpec,
+  private val sourceSlotName: String,
   private val pathArgumentName: String,
   private val pathHelp: String,
   private val envReader: (String) -> String?,
@@ -466,7 +474,7 @@ private class GeneratedPathCliToolCommand(
     sink(
       HexanaCommand.ExecutableTool(
         spec = spec,
-        path = path,
+        sourceSelection = ToolInputSourceSelection.Path(path = path, slotName = sourceSlotName),
         format = format,
         allowedRoots = allowedRoots + allowedRootsFromEnv(envReader),
         resourceLimits = buildResourceLimits(
@@ -480,6 +488,130 @@ private class GeneratedPathCliToolCommand(
         ),
       )
     )
+  }
+}
+
+private class GeneratedSourceCliToolCommand(
+  private val spec: HexanaCliToolSpec,
+  private val sourceSlotName: String,
+  private val pathArgumentName: String,
+  private val pathHelp: String,
+  private val stdinOptionName: String,
+  private val base64OptionNames: List<String>,
+  private val autoStdin: Boolean,
+  private val stdin: HexanaCliStdin,
+  private val maxInlineInputBytes: (HexanaResourceLimits) -> Int,
+  private val envReader: (String) -> String?,
+  private val sink: (HexanaCommand) -> Unit,
+) : CliktCommand(name = spec.commandName) {
+  private val path: String? by argument(name = pathArgumentName, help = pathHelp).optional()
+
+  private val readStdin: Boolean by
+      option(stdinOptionName, help = "Read raw input bytes from stdin.").flag(default = false)
+
+  private val bytesBase64: List<String> by
+      option(*base64OptionNames.toTypedArray(), help = "Base64-encoded input bytes.").convert {
+        if (it.isBlank()) throw UsageError("${base64OptionNames.first()} must not be blank.")
+        it
+      }.multiple()
+
+  private val format: HexanaCliOutputFormat by option(
+        "--format",
+        help = "Output format. Supported: ${spec.supportedFormatNames()}. Defaults to ${spec.defaultOutputFormat.cliName()}.",
+      ).convert(
+        metavar = spec.supportedFormatNames(),
+        completionCandidates = spec.supportedFormatCompletionCandidates(),
+      ) {
+        parseCliOutputFormat(spec, it)
+      }.default(spec.defaultOutputFormat)
+
+  private val allowedRoots: List<String> by allowedRootOption()
+
+  private val maxFileBytes: Int? by maxFileBytesOption()
+
+  private val maxInlineBytes: Int? by maxInlineBytesOption()
+
+  private val maxTextFileBytes: Int? by maxTextFileBytesOption()
+
+  private val maxOutputBytes: Int? by maxOutputBytesOption()
+
+  private val maxCandidateCount: Int? by maxCandidateCountOption()
+
+  private val maxScanRoots: Int? by maxScanRootsOption()
+
+  private val maxScanDepth: Int? by maxScanDepthOption()
+
+  override fun help(context: Context): String = spec.summary
+
+  override fun run() {
+    val resourceLimits = buildResourceLimits(
+      maxFileBytes = maxFileBytes,
+      maxInlineBytes = maxInlineBytes,
+      maxTextFileBytes = maxTextFileBytes,
+      maxOutputBytes = maxOutputBytes,
+      maxCandidateCount = maxCandidateCount,
+      maxScanRoots = maxScanRoots,
+      maxScanDepth = maxScanDepth,
+    )
+    sink(
+      HexanaCommand.ExecutableTool(
+        spec = spec,
+        sourceSelection = selectedSource(resourceLimits),
+        format = format,
+        allowedRoots = allowedRoots + allowedRootsFromEnv(envReader),
+        resourceLimits = resourceLimits,
+      )
+    )
+  }
+
+  private fun selectedSource(resourceLimits: HexanaResourceLimits): ToolInputSourceSelection {
+    val pathSource = path?.takeUnless { it == "-" }
+    val positionalStdin = path == "-"
+    if (bytesBase64.size > 1) {
+      throw UsageError("Provide exactly one ${spec.commandName} source: path, -, ${stdinOptionName}, or ${base64OptionNames.first()}.")
+    }
+    val base64Source = bytesBase64.singleOrNull()
+    val selectedSourceCount = listOfNotNull(
+      pathSource,
+      positionalStdin.takeIf { it },
+      readStdin.takeIf { it },
+      base64Source,
+    ).size
+    if (selectedSourceCount > 1) {
+      throw UsageError("Provide exactly one ${spec.commandName} source: path, -, ${stdinOptionName}, or ${base64OptionNames.first()}.")
+    }
+    if (pathSource != null) {
+      if (pathSource.isBlank()) throw UsageError("Path source must not be blank.")
+      return ToolInputSourceSelection.Path(path = pathSource, slotName = sourceSlotName)
+    }
+    if (base64Source != null) {
+      return ToolInputSourceSelection.Base64(bytesBase64 = base64Source, slotName = sourceSlotName)
+    }
+    if (positionalStdin || readStdin) {
+      return ToolInputSourceSelection.StdinBytes(bytes = readExplicitStdinBytes(resourceLimits), slotName = sourceSlotName)
+    }
+    val autoStdinBytes = if (autoStdin) readAutoStdinBytesOrNull(resourceLimits) else null
+    if (autoStdinBytes != null) {
+      return ToolInputSourceSelection.StdinBytes(bytes = autoStdinBytes, slotName = sourceSlotName)
+    }
+    throw UsageError("Missing ${spec.commandName} source. Pass a path, -, ${stdinOptionName}, or ${base64OptionNames.first()}.")
+  }
+
+  private fun readExplicitStdinBytes(resourceLimits: HexanaResourceLimits): ByteArray {
+    val maxInlineBytes = maxInlineInputBytes(resourceLimits)
+    return requireStdinBytesWithinLimit(stdin.readExplicitBytes(maxInlineBytes), maxInlineBytes)
+  }
+
+  private fun readAutoStdinBytesOrNull(resourceLimits: HexanaResourceLimits): ByteArray? {
+    val maxInlineBytes = maxInlineInputBytes(resourceLimits)
+    return stdin.readAutoBytesOrNull(maxInlineBytes)?.let { requireStdinBytesWithinLimit(it, maxInlineBytes) }
+  }
+
+  private fun requireStdinBytesWithinLimit(bytes: ByteArray, maxInlineBytes: Int): ByteArray {
+    if (bytes.size > maxInlineBytes) {
+      throw UsageError("Inline bytes exceed maximum size of ${maxInlineBytes} bytes. Send a smaller inline payload or increase the configured MCP inline-size limit.")
+    }
+    return bytes
   }
 }
 
@@ -503,23 +635,35 @@ private class GeneratedTodoCliToolCommand(
 /**
  * Generated CLI tool commands derived from catalog CLI surface metadata.
  */
-internal fun generatedCliToolCommands(envReader: (String) -> String?, sink: (HexanaCommand) -> Unit): List<CliktCommand> = listOf(
-  GeneratedPathCliToolCommand(
+internal fun generatedCliToolCommands(
+  envReader: (String) -> String?,
+  stdin: HexanaCliStdin,
+  sink: (HexanaCommand) -> Unit,
+): List<CliktCommand> = listOf(
+  GeneratedSourceCliToolCommand(
     spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == "summarize_binary" },
+    sourceSlotName = "binary",
     pathArgumentName = "binary",
-    pathHelp = "Path to a binary file.",
+    pathHelp = "Path to a binary file, or '-' to read raw stdin bytes.",
+    stdinOptionName = "--stdin",
+    base64OptionNames = listOf("--binary-base64", "--bytes-base64"),
+    autoStdin = true,
+    stdin = stdin,
+    maxInlineInputBytes = { it.maxInlineBinaryBytes },
     envReader = envReader,
     sink = sink,
   ),
-  GeneratedPathCliToolCommand(
+  GeneratedPathOnlyCliToolCommand(
     spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == "summarize_module" },
+    sourceSlotName = "wasm",
     pathArgumentName = "wasm",
     pathHelp = "Path to a WebAssembly module.",
     envReader = envReader,
     sink = sink,
   ),
-  GeneratedPathCliToolCommand(
+  GeneratedPathOnlyCliToolCommand(
     spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == "wasm_to_wat" },
+    sourceSlotName = "wasm",
     pathArgumentName = "wasm",
     pathHelp = "Path to a WebAssembly module.",
     envReader = envReader,

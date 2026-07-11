@@ -238,6 +238,8 @@ class ToolDescriptionGenerationTest {
                 "generatedCliToolCommands",
                 "generatedExecutableCliToolCommandOutput",
                 "GeneratedPathCliToolCommand",
+                "GeneratedPathOnlyCliToolCommand",
+                "GeneratedSourceCliToolCommand",
                 "GeneratedTodoCliToolCommand",
                 "CliktCommand",
                 "com.github.ajalt.clikt",
@@ -251,12 +253,15 @@ class ToolDescriptionGenerationTest {
                 "import com.github.ajalt.clikt.core.CliktCommand",
                 "public data class HexanaCliToolSpec",
                 "public object HexanaGeneratedCliToolRegistry",
-                "private class GeneratedPathCliToolCommand",
+                "private class GeneratedPathOnlyCliToolCommand",
+                "private class GeneratedSourceCliToolCommand",
                 "private class GeneratedTodoCliToolCommand",
                 "internal fun generatedCliToolCommands",
                 "internal fun generatedExecutableCliToolCommandOutput",
+                "base64OptionNames = listOf(\"--binary-base64\", \"--bytes-base64\")",
                 "HexanaCliExecutionStatus.EXECUTABLE",
                 "HexanaCliExecutionStatus.TODO",
+                "\"summarize_binary\" -> renderSummarizeBinaryCommandOutput(command)",
                 "\"summarize_module\" -> renderSummarizeModuleCommandOutput(command)",
                 "\"wasm_to_wat\" -> renderWasmToWatCommandOutput(command)",
             ),
@@ -276,8 +281,51 @@ class ToolDescriptionGenerationTest {
                 "profile.includesTool",
                 "io.modelcontextprotocol.kotlin.sdk.server.Server",
                 "io.modelcontextprotocol.kotlin.sdk.types",
+                "GeneratedPathCliToolCommand",
             ),
         )
+    }
+
+    @Test
+    fun `standalone CLI generator maps executable binary sources to path stdin and base64`() {
+        val executableBinary = summarizeBinarySpec.copy(
+            surfaces = productionCliSurface(
+                "summarize-binary",
+                ToolGroup.Binary,
+                ToolOutputPolicy.ToolDefined,
+                executionStatus = CliExecutionStatus.Executable,
+                executableRenderer = executableCliRenderer("renderSummarizeBinaryCommandOutput"),
+            ),
+        )
+
+        val source = buildCliToolsetFile(listOf(executableBinary, summarizeModuleSpec)).toString()
+
+        assertContainsAll(
+            source,
+            "HexanaCliToolset.kt",
+            listOf(
+                "toolName = \"summarize_binary\"",
+                "inputModes = setOf(HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN)",
+                "GeneratedSourceCliToolCommand(",
+                "sourceSlotName = \"binary\"",
+                "pathArgumentName = \"binary\"",
+                "stdinOptionName = \"--stdin\"",
+                "base64OptionNames = listOf(\"--binary-base64\", \"--bytes-base64\")",
+                "autoStdin = true",
+                "maxInlineInputBytes = { it.maxInlineBinaryBytes }",
+                "private val bytesBase64: List<String> by",
+                ".multiple()",
+                "if (bytesBase64.size > 1)",
+                "ToolInputSourceSelection.Path(path = pathSource, slotName = sourceSlotName)",
+                "ToolInputSourceSelection.Base64(bytesBase64 = base64Source, slotName = sourceSlotName)",
+                "ToolInputSourceSelection.StdinBytes(bytes = readExplicitStdinBytes(resourceLimits), slotName = sourceSlotName)",
+                "stdin.readExplicitBytes(maxInlineBytes)",
+                "\"summarize_binary\" -> renderSummarizeBinaryCommandOutput(command)",
+            ),
+        )
+        assertTrue(source.contains("toolName = \"summarize_module\""))
+        assertTrue(source.contains("GeneratedPathOnlyCliToolCommand("))
+        assertFalse(source.contains("GeneratedPathCliToolCommand"))
     }
 
     @Test
@@ -372,10 +420,10 @@ class ToolDescriptionGenerationTest {
         val source = buildCliToolsetFile(listOf(summarizeModuleSpec, cliOnlyTodo)).toString()
 
         assertTrue(source.contains("internal fun generatedCliToolCommands"))
-        assertTrue(source.contains("GeneratedPathCliToolCommand("))
+        assertTrue(source.contains("GeneratedPathOnlyCliToolCommand("))
         assertTrue(source.contains("spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == \"summarize_module\" }"))
         val generatedCommands = source.substringAfter("internal fun generatedCliToolCommands")
-            .substringBefore("private class GeneratedPathCliToolCommand")
+            .substringBefore("internal fun generatedExecutableCliToolCommandOutput")
         assertFalse(generatedCommands.contains("GeneratedTodoCliToolCommand("))
         assertFalse(generatedCommands.contains("spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == \"future_cli_only\" }"))
     }
@@ -426,7 +474,7 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
-    fun `standalone CLI toolset supports executable BinaryOnly path tools`() {
+    fun `standalone CLI toolset supports executable BinaryOnly source tools`() {
         val executableBinary = summarizeBinarySpec.copy(
             surfaces = productionCliSurface(
                 "summarize-binary",
@@ -439,9 +487,12 @@ class ToolDescriptionGenerationTest {
 
         val source = buildCliToolsetFile(listOf(executableBinary)).toString()
 
-        assertTrue(source.contains("inputModes = setOf(HexanaCliInputMode.BINARY_PATH)"))
+        assertTrue(source.contains("inputModes = setOf(HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN)"))
+        assertTrue(source.contains("GeneratedSourceCliToolCommand("))
         assertTrue(source.contains("pathArgumentName = \"binary\""))
-        assertTrue(source.contains("pathHelp = \"Path to a binary file.\""))
+        assertTrue(source.contains("pathHelp = \"Path to a binary file, or '-' to read raw stdin bytes.\""))
+        assertTrue(source.contains("stdinOptionName = \"--stdin\""))
+        assertTrue(source.contains("base64OptionNames = listOf(\"--binary-base64\", \"--bytes-base64\")"))
         assertTrue(source.contains("\"summarize_binary\" -> renderSummarizeBinaryCommandOutput(command)"))
     }
 
@@ -461,8 +512,7 @@ class ToolDescriptionGenerationTest {
             buildCliToolsetFile(listOf(executableQuery)).toString()
         }
 
-        assertTrue(error.message.orEmpty().contains("ToolInputPattern.WasmOnly"))
-        assertTrue(error.message.orEmpty().contains("ToolInputPattern.BinaryOnly"))
+        assertTrue(error.message.orEmpty().contains("does not have a CLI input model"))
         assertTrue(error.message.orEmpty().contains("query_binary"))
     }
 

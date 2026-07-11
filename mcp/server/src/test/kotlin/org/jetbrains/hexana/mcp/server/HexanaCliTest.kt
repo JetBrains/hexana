@@ -3,11 +3,19 @@ package org.jetbrains.hexana.mcp.server
 import com.github.ajalt.clikt.core.CliktError
 import com.github.ajalt.clikt.core.NoSuchSubcommand
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
+import org.jetbrains.hexana.mcp.tool.runtime.ToolInputSourceSelection
+import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.InputStream
+import java.io.PipedInputStream
+import java.io.PipedOutputStream
 import kotlin.test.*
 
 class HexanaCliTest {
-    private fun cli() = HexanaCli()
+    private fun cli(
+        envReader: (String) -> String? = { null },
+        stdin: HexanaCliStdin = FakeCliStdin(),
+    ) = HexanaCli(envReader = envReader, stdin = stdin)
 
     @Test
     fun parseReturnsHelpWhenNoArgumentsAreProvided() {
@@ -108,13 +116,13 @@ class HexanaCliTest {
 
     @Test
     fun parseAcceptsAllowedRootsFromEnvForStdio() {
-        val command = HexanaCli { name ->
+        val command = HexanaCli(envReader = { name ->
             if (name == "HEXANA_MCP_ALLOWED_ROOTS") {
                 listOf("/env/project", "/env/deps").joinToString(File.pathSeparator)
             } else {
                 null
             }
-        }.parse(arrayOf("stdio"))
+        }).parse(arrayOf("stdio"))
 
         assertIs<HexanaCommand.Stdio>(command)
         assertEquals(listOf("/env/project", "/env/deps"), command.allowedRoots)
@@ -122,9 +130,9 @@ class HexanaCliTest {
 
     @Test
     fun parseCombinesAllowedRootsFromCliAndEnvForHttp() {
-        val command = HexanaCli { name ->
+        val command = HexanaCli(envReader = { name ->
             if (name == "HEXANA_MCP_ALLOWED_ROOTS") "/env/project,/env/deps" else null
-        }.parse(
+        }).parse(
             arrayOf(
                 "http",
                 "--allowed-root",
@@ -138,9 +146,9 @@ class HexanaCliTest {
 
     @Test
     fun parseCombinesAllowedRootsFromCliAndEnvForDoctor() {
-        val command = HexanaCli { name ->
+        val command = HexanaCli(envReader = { name ->
             if (name == "HEXANA_MCP_ALLOWED_ROOTS") "/env/project,/env/deps" else null
-        }.parse(
+        }).parse(
             arrayOf(
                 "doctor",
                 "--allowed-root",
@@ -182,16 +190,135 @@ class HexanaCliTest {
         assertEquals(HexanaCliOutputFormat.PRETTY, command.format)
     }
 
-    @Test
     fun parseUsesGeneratedDefaultFormatForSummarizeBinary() {
         val command = assertGeneratedExecutableTool(
             cli().parse(arrayOf("summarize-binary", "app.bin")),
             "summarize-binary",
         )
+        val source = assertIs<ToolInputSourceSelection.Path>(command.sourceSelection)
+        assertEquals("binary", source.slotName)
         assertEquals("app.bin", command.path)
         assertEquals(HexanaCliOutputFormat.JSON, command.format)
         assertEquals(emptyList(), command.allowedRoots)
         assertEquals(HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES, command.resourceLimits.maxFileBinaryBytes)
+    }
+
+    @Test
+    fun parseAcceptsSummarizeBinaryDashAsRawStdinBytes() {
+        val stdin = FakeCliStdin(explicitBytes = byteArrayOf(1, 2, 3))
+        val command = assertGeneratedExecutableTool(
+            cli(stdin = stdin).parse(arrayOf("summarize-binary", "-", "--format", "json")),
+            "summarize-binary",
+        )
+
+        val source = assertIs<ToolInputSourceSelection.StdinBytes>(command.sourceSelection)
+        assertEquals("binary", source.slotName)
+        assertContentEquals(byteArrayOf(1, 2, 3), source.bytes())
+        assertEquals(1, stdin.explicitReadCount)
+        assertEquals(listOf(HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES), stdin.explicitMaxBytes)
+        assertEquals(0, stdin.autoReadCount)
+    }
+
+    @Test
+    fun parseAcceptsSummarizeBinaryStdinOptionAsRawStdinBytes() {
+        val stdin = FakeCliStdin(explicitBytes = byteArrayOf(4, 5, 6))
+        val command = assertGeneratedExecutableTool(
+            cli(stdin = stdin).parse(arrayOf("summarize-binary", "--stdin", "--format", "json")),
+            "summarize-binary",
+        )
+
+        val source = assertIs<ToolInputSourceSelection.StdinBytes>(command.sourceSelection)
+        assertEquals("binary", source.slotName)
+        assertContentEquals(byteArrayOf(4, 5, 6), source.bytes())
+        assertEquals(1, stdin.explicitReadCount)
+        assertEquals(listOf(HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES), stdin.explicitMaxBytes)
+        assertEquals(0, stdin.autoReadCount)
+    }
+
+    @Test
+    fun parseAcceptsSummarizeBinaryAutoStdinWhenNoSourceIsProvided() {
+        val stdin = FakeCliStdin(autoBytes = byteArrayOf(7, 8, 9))
+        val command = assertGeneratedExecutableTool(
+            cli(stdin = stdin).parse(arrayOf("summarize-binary", "--format", "json")),
+            "summarize-binary",
+        )
+
+        val source = assertIs<ToolInputSourceSelection.StdinBytes>(command.sourceSelection)
+        assertEquals("binary", source.slotName)
+        assertContentEquals(byteArrayOf(7, 8, 9), source.bytes())
+        assertEquals(0, stdin.explicitReadCount)
+        assertEquals(1, stdin.autoReadCount)
+        assertEquals(listOf(HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES), stdin.autoMaxBytes)
+    }
+
+    @Test
+    fun parseRejectsSummarizeBinaryStdinOverInlineLimit() {
+        val stdin = FakeCliStdin(explicitBytes = byteArrayOf(1, 2, 3))
+        val error = assertFailsWith<CliktError> {
+            cli(stdin = stdin).parse(
+                arrayOf("summarize-binary", "--stdin", "--format", "json", "--max-inline-bytes", "2")
+            )
+        }
+
+        assertEquals(listOf(2), stdin.explicitMaxBytes)
+        assertTrue(error.message.orEmpty().contains("Inline bytes exceed maximum size of 2 bytes"))
+    }
+
+    @Test
+    fun parseRejectsSummarizeBinaryAutoStdinOverInlineLimit() {
+        val stdin = FakeCliStdin(autoBytes = byteArrayOf(1, 2, 3))
+        val error = assertFailsWith<CliktError> {
+            cli(stdin = stdin).parse(
+                arrayOf("summarize-binary", "--format", "json", "--max-inline-bytes", "2")
+            )
+        }
+
+        assertEquals(0, stdin.explicitReadCount)
+        assertEquals(listOf(2), stdin.autoMaxBytes)
+        assertTrue(error.message.orEmpty().contains("Inline bytes exceed maximum size of 2 bytes"))
+    }
+
+    @Test
+    fun parseAcceptsSummarizeBinaryBase64Source() {
+        val command = assertGeneratedExecutableTool(
+            cli().parse(arrayOf("summarize-binary", "--binary-base64", "AQID", "--format", "json")),
+            "summarize-binary",
+        )
+
+        val source = assertIs<ToolInputSourceSelection.Base64>(command.sourceSelection)
+        assertEquals("binary", source.slotName)
+        assertEquals("AQID", source.bytesBase64)
+    }
+
+    @Test
+    fun parseRejectsMissingSummarizeBinarySourceWhenNoStdinIsPiped() {
+        val error = assertFailsWith<CliktError> {
+            cli(stdin = FakeCliStdin(autoBytes = null)).parse(arrayOf("summarize-binary", "--format", "json"))
+        }
+
+        assertTrue(error.message.orEmpty().contains("Missing summarize-binary source"))
+        assertTrue(error.message.orEmpty().contains("--stdin"))
+        assertTrue(error.message.orEmpty().contains("--binary-base64"))
+    }
+
+    @Test
+    fun parseRejectsMutuallyExclusiveSummarizeBinarySources() {
+        val conflictingArgs = listOf(
+            arrayOf("summarize-binary", "app.bin", "--stdin", "--format", "json"),
+            arrayOf("summarize-binary", "-", "--binary-base64", "AQID", "--format", "json"),
+            arrayOf("summarize-binary", "--stdin", "--binary-base64", "AQID", "--format", "json"),
+            arrayOf("summarize-binary", "--binary-base64", "AQID", "--bytes-base64", "BAUG", "--format", "json"),
+            arrayOf("summarize-binary", "--binary-base64", "AQID", "--binary-base64", "BAUG", "--format", "json"),
+        )
+
+        conflictingArgs.forEach { args ->
+            val error = assertFailsWith<CliktError> {
+                cli(stdin = FakeCliStdin(explicitBytes = byteArrayOf(1))).parse(args)
+            }
+
+            assertTrue(error.message.orEmpty().contains("Provide exactly one summarize-binary source"))
+            assertTrue(error.message.orEmpty().contains("--binary-base64"))
+        }
     }
 
     @Test
@@ -218,9 +345,9 @@ class HexanaCliTest {
     @Test
     fun parseCombinesAllowedRootsFromCliAndEnvForSummarizeModule() {
         val command = assertGeneratedExecutableTool(
-            HexanaCli { name ->
+            HexanaCli(envReader = { name ->
                 if (name == "HEXANA_MCP_ALLOWED_ROOTS") "/env/project,/env/deps" else null
-            }.parse(
+            }).parse(
                 arrayOf(
                     "summarize-module",
                     "app.wasm",
@@ -317,11 +444,19 @@ class HexanaCliTest {
                 )
                 assertTrue(help.contains("Usage:"), "${spec.commandName} help must include normal command usage")
                 val expectedPathHelp = if (HexanaCliInputMode.BINARY_PATH in spec.inputModes) {
-                    "Path to a binary file."
+                    if (spec.commandName == "summarize-binary") {
+                        "Path to a binary file, or '-' to read raw stdin bytes."
+                    } else {
+                        "Path to a binary file."
+                    }
                 } else {
                     "Path to a WebAssembly module."
                 }
                 assertTrue(help.contains(expectedPathHelp), "${spec.commandName} help must document path input")
+                if (spec.commandName == "summarize-binary") {
+                    assertTrue(help.contains("--stdin"), "${spec.commandName} help must document stdin input")
+                    assertTrue(help.contains("--binary-base64"), "${spec.commandName} help must document base64 input")
+                }
                 assertTrue(help.contains("--format"), "${spec.commandName} help must document format option")
                 assertTrue(help.contains(spec.supportedFormatNames()), "${spec.commandName} help must document generated formats")
             }
@@ -549,6 +684,29 @@ class HexanaCliTest {
     }
 
     @Test
+    fun systemStdinReadsAtMostInlineLimitPlusOne() {
+        withSystemIn(ByteArrayInputStream(byteArrayOf(1, 2, 3, 4))) {
+            assertContentEquals(byteArrayOf(1, 2, 3), SystemHexanaCliStdin.readExplicitBytes(maxBytes = 2))
+        }
+    }
+
+    @Test
+    fun systemAutoStdinWaitsForDelayedPipeBytes() {
+        val pipeInput = PipedInputStream()
+        val pipeOutput = PipedOutputStream(pipeInput)
+        val writer = Thread {
+            Thread.sleep(250)
+            pipeOutput.use { it.write(byteArrayOf(4, 5, 6)) }
+        }
+
+        withSystemIn(pipeInput) {
+            writer.start()
+            assertContentEquals(byteArrayOf(4, 5, 6), SystemHexanaCliStdin.readAutoBytesOrNull(maxBytes = 8))
+            writer.join(1_000)
+        }
+    }
+
+    @Test
     fun nativeImageRuntimeDetectionChecksGraalVmRuntimeMarker() {
         assertFalse(isRunningInGraalVmNativeImage(imageCodeProperty = null))
         assertFalse(isRunningInGraalVmNativeImage(imageCodeProperty = "buildtime"))
@@ -591,5 +749,40 @@ class HexanaCliTest {
 
         fun String.normalizedWhitespace(): String =
             trim().replace(Regex("\\s+"), " ")
+
+        fun withSystemIn(input: InputStream, block: () -> Unit) {
+            val previousInput = System.`in`
+            try {
+                System.setIn(input)
+                block()
+            } finally {
+                System.setIn(previousInput)
+                input.close()
+            }
+        }
+    }
+}
+
+private class FakeCliStdin(
+    private val explicitBytes: ByteArray = byteArrayOf(),
+    private val autoBytes: ByteArray? = null,
+) : HexanaCliStdin {
+    var explicitReadCount: Int = 0
+        private set
+    var autoReadCount: Int = 0
+        private set
+    val explicitMaxBytes = mutableListOf<Int>()
+    val autoMaxBytes = mutableListOf<Int>()
+
+    override fun readExplicitBytes(maxBytes: Int): ByteArray {
+        explicitReadCount++
+        explicitMaxBytes += maxBytes
+        return explicitBytes.copyOf()
+    }
+
+    override fun readAutoBytesOrNull(maxBytes: Int): ByteArray? {
+        autoReadCount++
+        autoMaxBytes += maxBytes
+        return autoBytes?.copyOf()
     }
 }

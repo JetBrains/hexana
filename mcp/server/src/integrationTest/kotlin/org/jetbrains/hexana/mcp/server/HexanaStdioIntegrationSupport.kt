@@ -174,6 +174,17 @@ internal class HexanaInstalledStdioClient private constructor(
         suspend fun runCommand(
             launcher: StdioLauncher,
             vararg arguments: String
+        ): InstalledCommandResult = runCommand(
+            launcher = launcher,
+            arguments = arguments.toList(),
+            stdinBytes = null,
+        )
+
+        suspend fun runCommand(
+            launcher: StdioLauncher,
+            arguments: List<String>,
+            stdinBytes: ByteArray?,
+            closeStdin: Boolean = true,
         ): InstalledCommandResult {
             val processSpec = processSpec(launcher)
             val command = buildCommand(
@@ -189,8 +200,20 @@ internal class HexanaInstalledStdioClient private constructor(
                     .useCurrentJvm(logger)
                     .start()
             }
+            if (closeStdin || stdinBytes != null) {
+                withContext(Dispatchers.IO) {
+                    process.outputStream.use { stdin ->
+                        if (stdinBytes != null) {
+                            stdin.write(stdinBytes)
+                        }
+                    }
+                }
+            }
             val completed = withContext(Dispatchers.IO) {
                 process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            }
+            if (!closeStdin) {
+                runCatching { process.outputStream.close() }
             }
             if (!completed) {
                 logger.warn(

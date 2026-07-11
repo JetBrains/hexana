@@ -157,6 +157,7 @@ dependencies {
     implementation(project(":analytics"))
     implementation(project(":graalwasm:wasmprinter"))
     implementation(project(":mcp:core"))
+    implementation(project(":mcp:tool-runtime"))
     implementation(libs.clikt)
     implementation(libs.kotlin.logging.jvm)
     implementation(libs.logback.classic)
