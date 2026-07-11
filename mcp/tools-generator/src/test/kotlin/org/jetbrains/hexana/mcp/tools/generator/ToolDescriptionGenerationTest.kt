@@ -259,6 +259,7 @@ class ToolDescriptionGenerationTest {
                 "internal fun generatedCliToolCommands",
                 "internal fun generatedExecutableCliToolCommandOutput",
                 "base64OptionNames = listOf(\"--binary-base64\", \"--bytes-base64\")",
+                "base64OptionNames = listOf(\"--wasm-base64\", \"--bytes-base64\")",
                 "HexanaCliExecutionStatus.EXECUTABLE",
                 "HexanaCliExecutionStatus.TODO",
                 "\"summarize_binary\" -> renderSummarizeBinaryCommandOutput(command)",
@@ -321,9 +322,15 @@ class ToolDescriptionGenerationTest {
                 "ToolInputSourceSelection.StdinBytes(bytes = readExplicitStdinBytes(resourceLimits), slotName = sourceSlotName)",
                 "stdin.readExplicitBytes(maxInlineBytes)",
                 "\"summarize_binary\" -> renderSummarizeBinaryCommandOutput(command)",
+                "toolName = \"summarize_module\"",
+                "inputModes = setOf(HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.STDIN)",
+                "sourceSlotName = \"wasm\"",
+                "pathArgumentName = \"wasm\"",
+                "pathHelp = \"Path to a WebAssembly module, or '-' to read raw stdin bytes.\"",
+                "base64OptionNames = listOf(\"--wasm-base64\", \"--bytes-base64\")",
+                "maxInlineInputBytes = { it.maxInlineWasmBytes }",
             ),
         )
-        assertTrue(source.contains("toolName = \"summarize_module\""))
         assertTrue(source.contains("GeneratedPathOnlyCliToolCommand("))
         assertFalse(source.contains("GeneratedPathCliToolCommand"))
     }
@@ -399,14 +406,13 @@ class ToolDescriptionGenerationTest {
 
         assertTrue(source.contains("public enum class HexanaCliExecutionStatus"))
         assertTrue(source.contains("executionStatus = HexanaCliExecutionStatus.EXECUTABLE"))
-        assertTrue(source.contains("inputModes = setOf(HexanaCliInputMode.WASM_PATH)"))
+        assertTrue(source.contains("inputModes = setOf(HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.STDIN)"))
         assertTrue(source.contains("commandName = \"future-cli-only\""))
         assertTrue(source.contains("toolName = \"future_cli_only\""))
         assertTrue(source.contains("executionStatus = HexanaCliExecutionStatus.TODO"))
         assertTrue(source.contains("inputModes = setOf()"))
         assertFalse(source.contains("inputModes = setOf(HexanaCliInputMode.JSON_OBJECT"))
         assertFalse(source.contains("HexanaCliInputMode.WASM_FROM_STRING"))
-        assertFalse(source.contains("HexanaCliInputMode.STDIN"))
         assertFalse(source.contains("profile.includesTool(\"future_cli_only\")"))
     }
 
@@ -420,10 +426,10 @@ class ToolDescriptionGenerationTest {
         val source = buildCliToolsetFile(listOf(summarizeModuleSpec, cliOnlyTodo)).toString()
 
         assertTrue(source.contains("internal fun generatedCliToolCommands"))
-        assertTrue(source.contains("GeneratedPathOnlyCliToolCommand("))
-        assertTrue(source.contains("spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == \"summarize_module\" }"))
+        assertTrue(source.contains("GeneratedSourceCliToolCommand("))
         val generatedCommands = source.substringAfter("internal fun generatedCliToolCommands")
             .substringBefore("internal fun generatedExecutableCliToolCommandOutput")
+        assertTrue(generatedCommands.contains("spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == \"summarize_module\" }"))
         assertFalse(generatedCommands.contains("GeneratedTodoCliToolCommand("))
         assertFalse(generatedCommands.contains("spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == \"future_cli_only\" }"))
     }
@@ -494,6 +500,19 @@ class ToolDescriptionGenerationTest {
         assertTrue(source.contains("stdinOptionName = \"--stdin\""))
         assertTrue(source.contains("base64OptionNames = listOf(\"--binary-base64\", \"--bytes-base64\")"))
         assertTrue(source.contains("\"summarize_binary\" -> renderSummarizeBinaryCommandOutput(command)"))
+    }
+
+    @Test
+    fun `standalone CLI toolset supports executable WasmOnly source tools`() {
+        val source = buildCliToolsetFile(listOf(summarizeModuleSpec)).toString()
+
+        assertTrue(source.contains("inputModes = setOf(HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.STDIN)"))
+        assertTrue(source.contains("GeneratedSourceCliToolCommand("))
+        assertTrue(source.contains("pathArgumentName = \"wasm\""))
+        assertTrue(source.contains("pathHelp = \"Path to a WebAssembly module, or '-' to read raw stdin bytes.\""))
+        assertTrue(source.contains("stdinOptionName = \"--stdin\""))
+        assertTrue(source.contains("base64OptionNames = listOf(\"--wasm-base64\", \"--bytes-base64\")"))
+        assertTrue(source.contains("\"summarize_module\" -> renderSummarizeModuleCommandOutput(command)"))
     }
 
     @Test

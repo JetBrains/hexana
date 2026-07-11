@@ -190,6 +190,141 @@ class HexanaCliTest {
         assertEquals(HexanaCliOutputFormat.PRETTY, command.format)
     }
 
+    @Test
+    fun parseAcceptsWasmExecutableDashAsRawStdinBytes() {
+        wasmExecutableCommandNames.forEach { commandName ->
+            val stdin = FakeCliStdin(explicitBytes = byteArrayOf(1, 2, 3))
+            val command = assertGeneratedExecutableTool(
+                cli(stdin = stdin).parse(arrayOf(commandName, "-", "--format", "json")),
+                commandName,
+            )
+
+            val source = assertIs<ToolInputSourceSelection.StdinBytes>(command.sourceSelection)
+            assertEquals("wasm", source.slotName)
+            assertContentEquals(byteArrayOf(1, 2, 3), source.bytes())
+            assertEquals(1, stdin.explicitReadCount)
+            assertEquals(listOf(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES), stdin.explicitMaxBytes)
+            assertEquals(0, stdin.autoReadCount)
+        }
+    }
+
+    @Test
+    fun parseAcceptsWasmExecutableStdinOptionAsRawStdinBytes() {
+        wasmExecutableCommandNames.forEach { commandName ->
+            val stdin = FakeCliStdin(explicitBytes = byteArrayOf(4, 5, 6))
+            val command = assertGeneratedExecutableTool(
+                cli(stdin = stdin).parse(arrayOf(commandName, "--stdin", "--format", "json")),
+                commandName,
+            )
+
+            val source = assertIs<ToolInputSourceSelection.StdinBytes>(command.sourceSelection)
+            assertEquals("wasm", source.slotName)
+            assertContentEquals(byteArrayOf(4, 5, 6), source.bytes())
+            assertEquals(1, stdin.explicitReadCount)
+            assertEquals(listOf(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES), stdin.explicitMaxBytes)
+            assertEquals(0, stdin.autoReadCount)
+        }
+    }
+
+    @Test
+    fun parseAcceptsWasmExecutableAutoStdinWhenNoSourceIsProvided() {
+        wasmExecutableCommandNames.forEach { commandName ->
+            val stdin = FakeCliStdin(autoBytes = byteArrayOf(7, 8, 9))
+            val command = assertGeneratedExecutableTool(
+                cli(stdin = stdin).parse(arrayOf(commandName, "--format", "json")),
+                commandName,
+            )
+
+            val source = assertIs<ToolInputSourceSelection.StdinBytes>(command.sourceSelection)
+            assertEquals("wasm", source.slotName)
+            assertContentEquals(byteArrayOf(7, 8, 9), source.bytes())
+            assertEquals(0, stdin.explicitReadCount)
+            assertEquals(1, stdin.autoReadCount)
+            assertEquals(listOf(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES), stdin.autoMaxBytes)
+        }
+    }
+
+    @Test
+    fun parseRejectsWasmExecutableStdinOverInlineLimit() {
+        wasmExecutableCommandNames.forEach { commandName ->
+            val stdin = FakeCliStdin(explicitBytes = byteArrayOf(1, 2, 3))
+            val error = assertFailsWith<CliktError> {
+                cli(stdin = stdin).parse(
+                    arrayOf(commandName, "--stdin", "--format", "json", "--max-inline-bytes", "2")
+                )
+            }
+
+            assertEquals(listOf(2), stdin.explicitMaxBytes)
+            assertTrue(error.message.orEmpty().contains("Inline bytes exceed maximum size of 2 bytes"))
+        }
+    }
+
+    @Test
+    fun parseRejectsWasmExecutableAutoStdinOverInlineLimit() {
+        wasmExecutableCommandNames.forEach { commandName ->
+            val stdin = FakeCliStdin(autoBytes = byteArrayOf(1, 2, 3))
+            val error = assertFailsWith<CliktError> {
+                cli(stdin = stdin).parse(
+                    arrayOf(commandName, "--format", "json", "--max-inline-bytes", "2")
+                )
+            }
+
+            assertEquals(0, stdin.explicitReadCount)
+            assertEquals(listOf(2), stdin.autoMaxBytes)
+            assertTrue(error.message.orEmpty().contains("Inline bytes exceed maximum size of 2 bytes"))
+        }
+    }
+
+    @Test
+    fun parseAcceptsWasmExecutableBase64Source() {
+        wasmExecutableCommandNames.forEach { commandName ->
+            val command = assertGeneratedExecutableTool(
+                cli().parse(arrayOf(commandName, "--wasm-base64", "AQID", "--format", "json")),
+                commandName,
+            )
+
+            val source = assertIs<ToolInputSourceSelection.Base64>(command.sourceSelection)
+            assertEquals("wasm", source.slotName)
+            assertEquals("AQID", source.bytesBase64)
+        }
+    }
+
+    @Test
+    fun parseRejectsMissingWasmExecutableSourceWhenNoStdinIsPiped() {
+        wasmExecutableCommandNames.forEach { commandName ->
+            val error = assertFailsWith<CliktError> {
+                cli(stdin = FakeCliStdin(autoBytes = null)).parse(arrayOf(commandName, "--format", "json"))
+            }
+
+            assertTrue(error.message.orEmpty().contains("Missing $commandName source"))
+            assertTrue(error.message.orEmpty().contains("--stdin"))
+            assertTrue(error.message.orEmpty().contains("--wasm-base64"))
+        }
+    }
+
+    @Test
+    fun parseRejectsMutuallyExclusiveWasmExecutableSources() {
+        wasmExecutableCommandNames.forEach { commandName ->
+            val conflictingArgs = listOf(
+                arrayOf(commandName, "app.wasm", "--stdin", "--format", "json"),
+                arrayOf(commandName, "-", "--wasm-base64", "AQID", "--format", "json"),
+                arrayOf(commandName, "--stdin", "--wasm-base64", "AQID", "--format", "json"),
+                arrayOf(commandName, "--wasm-base64", "AQID", "--bytes-base64", "BAUG", "--format", "json"),
+                arrayOf(commandName, "--wasm-base64", "AQID", "--wasm-base64", "BAUG", "--format", "json"),
+            )
+
+            conflictingArgs.forEach { args ->
+                val error = assertFailsWith<CliktError> {
+                    cli(stdin = FakeCliStdin(explicitBytes = byteArrayOf(1))).parse(args)
+                }
+
+                assertTrue(error.message.orEmpty().contains("Provide exactly one $commandName source"))
+                assertTrue(error.message.orEmpty().contains("--wasm-base64"))
+            }
+        }
+    }
+
+    @Test
     fun parseUsesGeneratedDefaultFormatForSummarizeBinary() {
         val command = assertGeneratedExecutableTool(
             cli().parse(arrayOf("summarize-binary", "app.bin")),
@@ -449,6 +584,8 @@ class HexanaCliTest {
                     } else {
                         "Path to a binary file."
                     }
+                } else if (HexanaCliInputMode.STDIN in spec.inputModes) {
+                    "Path to a WebAssembly module, or '-' to read raw stdin bytes."
                 } else {
                     "Path to a WebAssembly module."
                 }
@@ -456,6 +593,9 @@ class HexanaCliTest {
                 if (spec.commandName == "summarize-binary") {
                     assertTrue(help.contains("--stdin"), "${spec.commandName} help must document stdin input")
                     assertTrue(help.contains("--binary-base64"), "${spec.commandName} help must document base64 input")
+                } else if (HexanaCliInputMode.STDIN in spec.inputModes) {
+                    assertTrue(help.contains("--stdin"), "${spec.commandName} help must document stdin input")
+                    assertTrue(help.contains("--wasm-base64"), "${spec.commandName} help must document base64 input")
                 }
                 assertTrue(help.contains("--format"), "${spec.commandName} help must document format option")
                 assertTrue(help.contains(spec.supportedFormatNames()), "${spec.commandName} help must document generated formats")
@@ -729,6 +869,7 @@ class HexanaCliTest {
 
     private companion object {
         const val GRAALVM_NATIVE_IMAGE_CODE_PROPERTY = "org.graalvm.nativeimage.imagecode"
+        val wasmExecutableCommandNames = listOf("summarize-module", "wasm-to-wat")
 
         fun generatedCliToolSpec(commandName: String): HexanaCliToolSpec =
             HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == commandName }

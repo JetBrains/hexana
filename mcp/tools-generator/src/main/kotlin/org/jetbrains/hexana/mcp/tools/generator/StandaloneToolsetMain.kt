@@ -832,8 +832,8 @@ private fun validateGeneratedExecutableCliToolShape(spec: ToolSpec) {
             "$pathInputCapability input for generated CLI command support."
     }
     if (source.usesGeneratedSourceCommand()) {
-        require(source.kind == SourceKind.Binary) {
-            "Generated source-aware CLI commands are only enabled for Binary sources in this slice."
+        require(source.kind == SourceKind.Wasm || source.kind == SourceKind.Binary) {
+            "Generated source-aware CLI commands are only enabled for Wasm or Binary sources in this slice."
         }
         require(InputConversionCapability.Stdin in spec.input.inputCapabilities) {
             "Executable CLI tool '${spec.name}' command '$commandName' source '${source.name}' must support " +
@@ -1319,7 +1319,8 @@ private fun SourceSlotSpec.pathInputCapability(): InputConversionCapability =
     }
 
 private fun SourceSlotSpec.usesGeneratedSourceCommand(): Boolean =
-    kind == SourceKind.Binary && (cli.stdinOption != null || cli.base64Option != null || cli.autoStdin)
+    (kind == SourceKind.Wasm || kind == SourceKind.Binary) &&
+        (cli.stdinOption != null || cli.base64Option != null || cli.autoStdin)
 
 private fun SourceSlotSpec.generatedPathArgumentName(): String =
     requireNotNull(cli.positionalPathName) {
@@ -1328,7 +1329,13 @@ private fun SourceSlotSpec.generatedPathArgumentName(): String =
 
 private fun SourceSlotSpec.generatedPathHelp(): String =
     when (kind) {
-        SourceKind.Wasm -> "Path to a WebAssembly module."
+        SourceKind.Wasm -> {
+            if (usesGeneratedSourceCommand()) {
+                "Path to a WebAssembly module, or '-' to read raw stdin bytes."
+            } else {
+                "Path to a WebAssembly module."
+            }
+        }
         SourceKind.Binary -> {
             if (usesGeneratedSourceCommand()) {
                 "Path to a binary file, or '-' to read raw stdin bytes."
@@ -1342,6 +1349,7 @@ private fun SourceSlotSpec.generatedPathHelp(): String =
 private fun SourceSlotSpec.generatedBase64OptionNames(): List<String> {
     val metadataOption = cli.base64Option
     val primaryOption = when (kind) {
+        SourceKind.Wasm -> "--wasm-base64"
         SourceKind.Binary -> "--binary-base64"
         else -> metadataOption
     }

@@ -15,6 +15,8 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.nio.file.Files
 import java.util.Base64
+import java.util.concurrent.CancellationException
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -248,6 +250,90 @@ class HexanaCliExecutionTest {
     }
 
     @Test
+    fun renderSummarizeModuleJsonReadsStdinBytesWithoutAllowedRoot() {
+        val wasmBytes = wat2wasm("(module (func (export \"main\")))")
+        val allowedRoot = temporaryFolder.newFolder("summary-stdin-allowed").toPath()
+
+        val output = generatedExecutableCliToolCommandOutput(
+            summarizeModuleCommand(
+                sourceSelection = ToolInputSourceSelection.StdinBytes(wasmBytes, slotName = "wasm"),
+                format = HexanaCliOutputFormat.JSON,
+                allowedRoots = listOf(allowedRoot.toString()),
+            )
+        ).stdout
+
+        val json = Json.parseToJsonElement(output).jsonObject
+        assertEquals("1", json.getValue("functions").jsonPrimitive.content)
+        assertEquals("1", json.getValue("exports").jsonPrimitive.content)
+    }
+
+    @Test
+    fun renderSummarizeModuleJsonReadsBase64WithoutAllowedRoot() {
+        val wasmBytes = wat2wasm("(module (memory 1))")
+        val allowedRoot = temporaryFolder.newFolder("summary-base64-allowed").toPath()
+
+        val output = generatedExecutableCliToolCommandOutput(
+            summarizeModuleCommand(
+                sourceSelection = ToolInputSourceSelection.Base64(
+                    bytesBase64 = Base64.getEncoder().encodeToString(wasmBytes),
+                    slotName = "wasm",
+                ),
+                format = HexanaCliOutputFormat.JSON,
+                allowedRoots = listOf(allowedRoot.toString()),
+            )
+        ).stdout
+
+        val json = Json.parseToJsonElement(output).jsonObject
+        assertEquals("1", json.getValue("memories").jsonPrimitive.content)
+    }
+
+    @Test
+    fun renderSummarizeModuleJsonEnforcesInlineLimitForStdinBytes() {
+        val error = assertFailsWith<HexanaAnalysisException> {
+            generatedExecutableCliToolCommandOutput(
+                summarizeModuleCommand(
+                    sourceSelection = ToolInputSourceSelection.StdinBytes(byteArrayOf(1, 2, 3), slotName = "wasm"),
+                    format = HexanaCliOutputFormat.JSON,
+                    resourceLimits = HexanaResourceLimits(maxInlineWasmBytes = 2),
+                )
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertTrue(error.message.orEmpty().contains("Inline bytes exceed maximum size of 2 bytes"))
+    }
+
+    @Test
+    fun renderSummarizeModuleRejectsInvalidStdinWasmWithDomainError() {
+        val error = assertFailsWith<HexanaAnalysisException> {
+            generatedExecutableCliToolCommandOutput(
+                summarizeModuleCommand(
+                    sourceSelection = ToolInputSourceSelection.StdinBytes(byteArrayOf(1, 2, 3), slotName = "wasm"),
+                    format = HexanaCliOutputFormat.JSON,
+                )
+            )
+        }
+
+        assertTrue(error.code != HexanaAnalysisErrorCode.INTERNAL_ERROR)
+        assertFalse(error.message.orEmpty().contains("server logs"))
+    }
+
+    @Test
+    fun renderSummarizeModuleRejectsInvalidBase64WasmWithDomainError() {
+        val error = assertFailsWith<HexanaAnalysisException> {
+            generatedExecutableCliToolCommandOutput(
+                summarizeModuleCommand(
+                    sourceSelection = ToolInputSourceSelection.Base64(bytesBase64 = "AQID", slotName = "wasm"),
+                    format = HexanaCliOutputFormat.JSON,
+                )
+            )
+        }
+
+        assertTrue(error.code != HexanaAnalysisErrorCode.INTERNAL_ERROR)
+        assertFalse(error.message.orEmpty().contains("server logs"))
+    }
+
+    @Test
     fun renderWasmToWatRawReturnsWatTextWithoutJsonWrapper() {
         val wasm = createWasmFile(
             "raw.wasm",
@@ -268,6 +354,98 @@ class HexanaCliExecutionTest {
         assertTrue(output.contains("(func"))
         assertFalse(output.trimStart().startsWith("{"))
         assertFalse(output.contains("\"wat\""))
+    }
+
+    @Test
+    fun renderWasmToWatRawReadsStdinBytesWithoutAllowedRoot() {
+        val wasmBytes = wat2wasm("(module)")
+        val allowedRoot = temporaryFolder.newFolder("wat-stdin-allowed").toPath()
+
+        val output = renderWasmToWatCommandOutput(
+            wasmToWatCommand(
+                sourceSelection = ToolInputSourceSelection.StdinBytes(wasmBytes, slotName = "wasm"),
+                format = HexanaCliOutputFormat.RAW,
+                allowedRoots = listOf(allowedRoot.toString()),
+            ),
+            wasmPrinter = { bytes ->
+                assertContentEquals(wasmBytes, bytes)
+                WatWithWarnings(wat = "(module)", warnings = "stdin warning")
+            },
+        )
+
+        assertEquals("(module)", output.stdout)
+        assertTrue(output.stderr.contains("wasm-to-wat warning: stdin warning"))
+    }
+
+    @Test
+    fun renderWasmToWatRawReadsBase64WithoutAllowedRoot() {
+        val wasmBytes = wat2wasm("(module)")
+        val allowedRoot = temporaryFolder.newFolder("wat-base64-allowed").toPath()
+
+        val output = renderWasmToWatCommandOutput(
+            wasmToWatCommand(
+                sourceSelection = ToolInputSourceSelection.Base64(
+                    bytesBase64 = Base64.getEncoder().encodeToString(wasmBytes),
+                    slotName = "wasm",
+                ),
+                format = HexanaCliOutputFormat.RAW,
+                allowedRoots = listOf(allowedRoot.toString()),
+            ),
+            wasmPrinter = { bytes ->
+                assertContentEquals(wasmBytes, bytes)
+                WatWithWarnings(wat = "(module)", warnings = null)
+            },
+        )
+
+        assertEquals("(module)", output.stdout)
+        assertEquals("", output.stderr)
+    }
+
+    @Test
+    fun renderWasmToWatRawEnforcesInlineLimitForStdinBytes() {
+        val error = assertFailsWith<HexanaAnalysisException> {
+            renderWasmToWatCommandOutput(
+                wasmToWatCommand(
+                    sourceSelection = ToolInputSourceSelection.StdinBytes(byteArrayOf(1, 2, 3), slotName = "wasm"),
+                    format = HexanaCliOutputFormat.RAW,
+                    resourceLimits = HexanaResourceLimits(maxInlineWasmBytes = 2),
+                )
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+        assertTrue(error.message.orEmpty().contains("Inline bytes exceed maximum size of 2 bytes"))
+    }
+
+    @Test
+    fun renderWasmToWatMapsInvalidWasmPrinterFailureToDomainError() {
+        val error = assertFailsWith<HexanaAnalysisException> {
+            renderWasmToWatCommandOutput(
+                wasmToWatCommand(
+                    sourceSelection = ToolInputSourceSelection.StdinBytes(byteArrayOf(1, 2, 3), slotName = "wasm"),
+                    format = HexanaCliOutputFormat.RAW,
+                ),
+                wasmPrinter = { throw IllegalArgumentException("bad magic") },
+            )
+        }
+
+        assertEquals(HexanaAnalysisErrorCode.NOT_WASM, error.code)
+        assertEquals("Input is not a valid WebAssembly module.", error.message)
+    }
+
+    @Test
+    fun renderWasmToWatPropagatesCancellation() {
+        val error = assertFailsWith<CancellationException> {
+            renderWasmToWatCommandOutput(
+                wasmToWatCommand(
+                    sourceSelection = ToolInputSourceSelection.StdinBytes(wat2wasm("(module)"), slotName = "wasm"),
+                    format = HexanaCliOutputFormat.RAW,
+                ),
+                wasmPrinter = { throw CancellationException("cancelled") },
+            )
+        }
+
+        assertEquals("cancelled", error.message)
     }
 
     @Test
@@ -454,9 +632,21 @@ class HexanaCliExecutionTest {
         format: HexanaCliOutputFormat,
         allowedRoots: List<String> = emptyList(),
         resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
+    ) = summarizeModuleCommand(
+        sourceSelection = ToolInputSourceSelection.Path(path = path, slotName = "wasm"),
+        format = format,
+        allowedRoots = allowedRoots,
+        resourceLimits = resourceLimits,
+    )
+
+    private fun summarizeModuleCommand(
+        sourceSelection: ToolInputSourceSelection,
+        format: HexanaCliOutputFormat,
+        allowedRoots: List<String> = emptyList(),
+        resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
     ) = executableToolCommand(
         commandName = "summarize-module",
-        sourceSelection = ToolInputSourceSelection.Path(path = path, slotName = "wasm"),
+        sourceSelection = sourceSelection,
         format = format,
         allowedRoots = allowedRoots,
         resourceLimits = resourceLimits,
@@ -493,9 +683,21 @@ class HexanaCliExecutionTest {
         format: HexanaCliOutputFormat,
         allowedRoots: List<String> = emptyList(),
         resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
+    ) = wasmToWatCommand(
+        sourceSelection = ToolInputSourceSelection.Path(path = path, slotName = "wasm"),
+        format = format,
+        allowedRoots = allowedRoots,
+        resourceLimits = resourceLimits,
+    )
+
+    private fun wasmToWatCommand(
+        sourceSelection: ToolInputSourceSelection,
+        format: HexanaCliOutputFormat,
+        allowedRoots: List<String> = emptyList(),
+        resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
     ) = executableToolCommand(
         commandName = "wasm-to-wat",
-        sourceSelection = ToolInputSourceSelection.Path(path = path, slotName = "wasm"),
+        sourceSelection = sourceSelection,
         format = format,
         allowedRoots = allowedRoots,
         resourceLimits = resourceLimits,

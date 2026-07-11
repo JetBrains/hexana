@@ -16,6 +16,7 @@ import org.jetbrains.hexana.mcp.model.converters.WasmToWatResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.mcp.tool.runtime.ToolInputSourceSelection
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.CancellationException
 
 internal data class HexanaCliCommandOutput(
     val stdout: String,
@@ -38,7 +39,7 @@ internal fun renderSummarizeModuleCommandOutput(
     ),
 ): HexanaCliCommandOutput {
     requireExecutableTool(command, toolName = "summarize_module")
-    val result = analysisService.summarizeModule(WasmInput.FilePath(command.pathSource()))
+    val result = analysisService.summarizeModule(command.wasmInputSource())
     val output = when (command.format) {
         HexanaCliOutputFormat.JSON -> HexanaJson.compact.encodeToString(SummarizeModuleResult.serializer(), result)
         HexanaCliOutputFormat.PRETTY -> renderSummarizeModulePretty(result)
@@ -97,8 +98,20 @@ internal fun renderWasmToWatCommandOutput(
         maxInlineInputBytes = command.resourceLimits.maxInlineWasmBytes,
         maxFileInputBytes = command.resourceLimits.maxFileWasmBytes,
         allowedFilePolicy = allowedFilePolicy,
-    ).load(WasmInput.FilePath(command.pathSource()))
-    val watWithWarnings = wasmPrinter(loaded.bytes)
+    ).load(command.wasmInputSource())
+    val watWithWarnings = try {
+        wasmPrinter(loaded.bytes)
+    } catch (error: HexanaAnalysisException) {
+        throw error
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: RuntimeException) {
+        throw HexanaAnalysisException(
+            HexanaAnalysisErrorCode.NOT_WASM,
+            "Input is not a valid WebAssembly module.",
+            error,
+        )
+    }
     val result = WasmToWatResult(
         wat = watWithWarnings.wat,
         warnings = watWithWarnings.warnings
@@ -158,6 +171,15 @@ internal fun HexanaCommand.ExecutableTool.pathSource(): String {
 
 internal val HexanaCommand.ExecutableTool.path: String
     get() = pathSource()
+
+private fun HexanaCommand.ExecutableTool.wasmInputSource(): WasmInput {
+    return when (val source = sourceSelection) {
+        is ToolInputSourceSelection.Path -> WasmInput.FilePath(source.path)
+        is ToolInputSourceSelection.Base64 -> WasmInput.InlineBytes(source.bytesBase64)
+        is ToolInputSourceSelection.StdinBytes -> WasmInput.RawBytes(source.bytes())
+        is ToolInputSourceSelection.ByteList -> WasmInput.RawBytes(source.bytes.toByteArray())
+    }
+}
 
 private fun HexanaCommand.ExecutableTool.binaryInputSource(): BinaryInput {
     return when (val source = sourceSelection) {

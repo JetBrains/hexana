@@ -90,12 +90,11 @@ class HexanaMcpServerSchemaTest {
         )
         assertEquals(setOf(HexanaCliToolGroup.MODULE), summarizeModule.groups)
         assertEquals(
-            setOf(HexanaCliInputMode.WASM_PATH),
+            setOf(HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.STDIN),
             summarizeModule.inputModes,
         )
         assertFalse(HexanaCliInputMode.JSON_OBJECT in summarizeModule.inputModes)
         assertFalse(HexanaCliInputMode.WASM_FROM_STRING in summarizeModule.inputModes)
-        assertFalse(HexanaCliInputMode.STDIN in summarizeModule.inputModes)
         assertEquals(setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.PRETTY), summarizeModule.outputFormats)
         assertEquals(HexanaCliOutputFormat.PRETTY, summarizeModule.defaultOutputFormat)
         assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, summarizeModule.defaultOutputPolicy)
@@ -119,12 +118,11 @@ class HexanaMcpServerSchemaTest {
         assertEquals("wasm_to_wat", wasmToWat.toolName)
         assertEquals(setOf(HexanaCliToolGroup.CONVERTERS), wasmToWat.groups)
         assertEquals(
-            setOf(HexanaCliInputMode.WASM_PATH),
+            setOf(HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.STDIN),
             wasmToWat.inputModes,
         )
         assertFalse(HexanaCliInputMode.JSON_OBJECT in wasmToWat.inputModes)
         assertFalse(HexanaCliInputMode.WASM_FROM_STRING in wasmToWat.inputModes)
-        assertFalse(HexanaCliInputMode.STDIN in wasmToWat.inputModes)
         assertEquals(setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.RAW), wasmToWat.outputFormats)
         assertEquals(HexanaCliOutputFormat.RAW, wasmToWat.defaultOutputFormat)
         assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, wasmToWat.defaultOutputPolicy)
