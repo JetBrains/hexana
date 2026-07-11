@@ -70,4 +70,121 @@ class ToolRuntimeContractsTest {
         assertFalse(byteSources.toString().contains("[1, 2, 3]"))
         assertTrue(byteSources.toString().contains("stdinBytesSize=3"))
     }
+
+    @Test
+    fun pathSourceStoresPathStringWithoutResolvingFiles() {
+        val source = ToolInputSourceSelection.Path(
+            path = "../missing/module.wasm",
+            slotName = "input",
+        )
+
+        assertEquals("../missing/module.wasm", source.path)
+        assertEquals("input", source.slotName)
+        assertEquals(ToolInputSourceMcpPayloadField.Path, source.mcpPayloadField)
+        assertEquals("path", source.mcpPayloadFieldName)
+    }
+
+    @Test
+    fun stdinByteSourceCopiesBytesAndRedactsPayload() {
+        val bytes = byteArrayOf(1, 2, 3)
+        val source = ToolInputSourceSelection.StdinBytes(
+            bytes = bytes,
+            slotName = "input",
+        )
+        bytes[0] = 9
+
+        val firstRead = source.bytes()
+        firstRead[1] = 8
+
+        assertContentEquals(byteArrayOf(1, 2, 3), source.bytes())
+        assertEquals(ToolInputSourceMcpPayloadField.Bytes, source.mcpPayloadField)
+        assertEquals("bytes", source.mcpPayloadFieldName)
+        assertFalse(source.toString().contains("[1, 2, 3]"))
+        assertTrue(source.toString().contains("byteSize=3"))
+    }
+
+    @Test
+    fun base64SourceStoresStringWithoutDecodingAndRedactsPayload() {
+        val payload = "not valid base64!"
+        val source = ToolInputSourceSelection.Base64(
+            bytesBase64 = payload,
+            slotName = "input",
+        )
+
+        assertEquals(payload, source.bytesBase64)
+        assertEquals(ToolInputSourceMcpPayloadField.BytesBase64, source.mcpPayloadField)
+        assertEquals("bytesBase64", source.mcpPayloadFieldName)
+        assertFalse(source.toString().contains(payload))
+        assertTrue(source.toString().contains("bytesBase64Length=${payload.length}"))
+    }
+
+    @Test
+    fun byteListSourceStoresMcpBytesAndRedactsPayload() {
+        val bytes = mutableListOf(1, 2, 3)
+        val source = ToolInputSourceSelection.ByteList(
+            bytes = bytes,
+            slotName = "input",
+        )
+        bytes[0] = 9
+
+        assertEquals(listOf(1, 2, 3), source.bytes)
+        assertEquals(ToolInputSourceMcpPayloadField.Bytes, source.mcpPayloadField)
+        assertEquals("bytes", source.mcpPayloadFieldName)
+        assertFalse(source.toString().contains("[1, 2, 3]"))
+        assertTrue(source.toString().contains("byteCount=3"))
+        assertFailsWith<IllegalArgumentException> {
+            ToolInputSourceSelection.ByteList(bytes = listOf(0, 256), slotName = "input")
+        }
+    }
+
+    @Test
+    fun inputSourcesRepresentMultipleNamedSourceSelections() {
+        val selections = mutableListOf<ToolInputSourceSelection>(
+            ToolInputSourceSelection.Path(path = "current.wasm", slotName = "current"),
+            ToolInputSourceSelection.Base64(bytesBase64 = "AA==", slotName = "baseline"),
+        )
+        val sources = ToolInputSources(sourceSelections = selections)
+        selections += ToolInputSourceSelection.Path(path = "ignored.wasm", slotName = "ignored")
+
+        assertEquals(listOf("current", "baseline"), sources.sourceSelections.map { it.slotName })
+        assertEquals(listOf("path", "bytesBase64"), sources.sourceSelections.map { it.mcpPayloadFieldName })
+    }
+
+    @Test
+    fun inputSourcesRejectDuplicatePathAndSelectionNames() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            ToolInputSources(
+                pathArguments = mapOf("input" to "module.wasm"),
+                sourceSelections = listOf(
+                    ToolInputSourceSelection.Base64(bytesBase64 = "AA==", slotName = "input"),
+                ),
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("input"))
+    }
+
+    @Test
+    fun sourceNamesMustNotBeBlank() {
+        assertFailsWith<IllegalArgumentException> {
+            ToolInputSourceSelection.Path(path = "module.wasm", slotName = " ")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            ToolInputSources(pathArguments = mapOf(" " to "module.wasm"))
+        }
+    }
+
+    @Test
+    fun sourcePayloadFactoryRejectsConflictingForms() {
+        assertFailsWith<IllegalArgumentException> {
+            ToolInputSourceSelection.fromPayload(
+                slotName = "input",
+                path = "module.wasm",
+                bytesBase64 = "AA==",
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            ToolInputSourceSelection.fromPayload(slotName = "input")
+        }
+    }
 }
