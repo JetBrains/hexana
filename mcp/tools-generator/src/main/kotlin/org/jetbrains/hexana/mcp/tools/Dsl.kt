@@ -689,6 +689,241 @@ data class ToolCompatibilitySpec(
     }
 }
 
+data class ToolInputModel(
+    val sources: List<SourceSlotSpec> = emptyList(),
+    val params: List<ParamBindingSpec> = emptyList(),
+) {
+    init {
+        val duplicateSourceNames = sources.groupBy { it.name }.filterValues { it.size > 1 }.keys
+        require(duplicateSourceNames.isEmpty()) { "Duplicate input source names: $duplicateSourceNames" }
+
+        val rootSources = sources.filter { it.target == SourceTargetSpec.RootInput }
+        require(rootSources.size <= 1) {
+            "Input model can bind at most one source slot to the root input, got ${rootSources.map { it.name }}."
+        }
+
+        val duplicateSourceTargets = sources
+            .mapNotNull { source -> (source.target as? SourceTargetSpec.Field)?.name?.let { it to source.name } }
+            .groupBy({ it.first }, { it.second })
+            .filterValues { it.size > 1 }
+        require(duplicateSourceTargets.isEmpty()) {
+            "Duplicate input source target fields: " +
+                duplicateSourceTargets.entries.joinToString { (field, names) -> "`$field` used by $names" }
+        }
+
+        val duplicateCliSourceBindings = sources
+            .flatMap { source -> source.cli.bindings().map { it to source.name } }
+            .groupBy({ it.first.value }, { it.first.kind to it.second })
+            .filterValues { it.size > 1 }
+        require(duplicateCliSourceBindings.isEmpty()) {
+            "Duplicate CLI source bindings in input model: " +
+                duplicateCliSourceBindings.entries.joinToString { (value, bindings) ->
+                    "`$value` used by ${bindings.map { (kind, sourceName) -> "$kind source `$sourceName`" }}"
+                }
+        }
+
+        val autoStdinSources = sources.filter { it.cli.autoStdin }
+        require(autoStdinSources.size <= 1) {
+            "Input model can enable CLI auto-stdin for at most one source slot, got ${autoStdinSources.map { it.name }}."
+        }
+
+        val duplicateParamNames = params.groupBy { it.name }.filterValues { it.size > 1 }.keys
+        require(duplicateParamNames.isEmpty()) { "Duplicate input param names: $duplicateParamNames" }
+
+        val duplicateParamTargets = params
+            .groupBy { it.targetField }
+            .filterValues { it.size > 1 }
+        require(duplicateParamTargets.isEmpty()) {
+            "Duplicate input param target fields: " +
+                duplicateParamTargets.entries.joinToString { (field, params) -> "`$field` used by ${params.map { it.name }}" }
+        }
+    }
+}
+
+data class SourceSlotSpec(
+    val name: String,
+    val kind: SourceKind,
+    val target: SourceTargetSpec,
+    val required: Boolean = true,
+    val cli: CliSourceSpec,
+) {
+    init {
+        requireInputModelName(name, "Source slot")
+    }
+}
+
+enum class SourceKind {
+    Wasm,
+    Binary,
+    Text,
+    Json,
+}
+
+sealed class SourceTargetSpec {
+    object RootInput : SourceTargetSpec()
+
+    data class Field(val name: String) : SourceTargetSpec() {
+        init {
+            requireInputModelName(name, "Source target field")
+        }
+    }
+}
+
+data class CliSourceSpec(
+    val positionalPathName: String? = null,
+    val pathOption: String? = null,
+    val stdinOption: String? = null,
+    val base64Option: String? = null,
+    val bytesOption: String? = null,
+    val autoStdin: Boolean = false,
+) {
+    init {
+        positionalPathName?.let { validateCliName(it, "CLI positional path name") }
+        optionBindings().forEach { validateCliOption(it.value, "CLI source ${it.kind}") }
+        require(positionalPathName != null || optionBindings().isNotEmpty() || autoStdin) {
+            "CLI source spec must declare a positional path, option, or auto-stdin binding."
+        }
+
+        val duplicateOptions = optionBindings()
+            .groupBy { it.value }
+            .filterValues { it.size > 1 }
+        require(duplicateOptions.isEmpty()) {
+            "CLI source spec reuses option bindings: " +
+                duplicateOptions.entries.joinToString { (option, bindings) -> "$option used by ${bindings.map { it.kind }}" }
+        }
+    }
+
+    internal fun bindings(): List<CliSourceBinding> =
+        listOfNotNull(positionalPathName?.let { CliSourceBinding("positional path", it) }) + optionBindings()
+
+    private fun optionBindings(): List<CliSourceBinding> = listOfNotNull(
+        pathOption?.let { CliSourceBinding("path option", it) },
+        stdinOption?.let { CliSourceBinding("stdin option", it) },
+        base64Option?.let { CliSourceBinding("base64 option", it) },
+        bytesOption?.let { CliSourceBinding("bytes option", it) },
+    )
+}
+
+internal data class CliSourceBinding(val kind: String, val value: String)
+
+data class ParamBindingSpec(
+    val name: String,
+    val kind: ParamBindingKind,
+    val targetField: String = name,
+    val cliOption: String? = null,
+) {
+    init {
+        requireInputModelName(name, "Param")
+        requireInputModelName(targetField, "Param target field")
+        cliOption?.let { validateCliOption(it, "CLI param option") }
+    }
+}
+
+enum class ParamBindingKind {
+    Value,
+    Json,
+}
+
+@HexanaToolsDsl
+class ToolInputModelBuilder internal constructor() {
+    private val sources = mutableListOf<SourceSlotSpec>()
+    private val params = mutableListOf<ParamBindingSpec>()
+
+    fun source(
+        name: String,
+        kind: SourceKind,
+        target: SourceTargetSpec = SourceTargetSpec.RootInput,
+        required: Boolean = true,
+        cli: CliSourceSpec,
+    ) {
+        sources += SourceSlotSpec(
+            name = name,
+            kind = kind,
+            target = target,
+            required = required,
+            cli = cli,
+        )
+    }
+
+    fun param(
+        name: String,
+        targetField: String = name,
+        cliOption: String? = null,
+    ) {
+        params += ParamBindingSpec(
+            name = name,
+            kind = ParamBindingKind.Value,
+            targetField = targetField,
+            cliOption = cliOption,
+        )
+    }
+
+    fun jsonParam(
+        name: String,
+        targetField: String = name,
+        cliOption: String? = null,
+    ) {
+        params += ParamBindingSpec(
+            name = name,
+            kind = ParamBindingKind.Json,
+            targetField = targetField,
+            cliOption = cliOption,
+        )
+    }
+
+    internal fun build(): ToolInputModel = ToolInputModel(
+        sources = sources.toList(),
+        params = params.toList(),
+    )
+}
+
+fun toolInputModel(block: ToolInputModelBuilder.() -> Unit): ToolInputModel =
+    ToolInputModelBuilder().apply(block).build()
+
+fun ToolSpec.inputModelForCli(): ToolInputModel =
+    inputPattern.inputModelForCli(name)
+
+fun ToolInputPattern.inputModelForCli(toolName: String? = null): ToolInputModel =
+    when (this) {
+        ToolInputPattern.WasmOnly -> legacyRootSourceInputModel(
+            sourceName = "wasm",
+            kind = SourceKind.Wasm,
+            positionalPathName = "wasm",
+        )
+        ToolInputPattern.BinaryOnly -> legacyRootSourceInputModel(
+            sourceName = "binary",
+            kind = SourceKind.Binary,
+            positionalPathName = "binary",
+        )
+        else -> {
+            val prefix = toolName?.let { "Tool '$it' input pattern" } ?: "Input pattern"
+            throw IllegalArgumentException("$prefix ${this::class.simpleName} does not have a CLI input model yet.")
+        }
+    }
+
+private fun legacyRootSourceInputModel(
+    sourceName: String,
+    kind: SourceKind,
+    positionalPathName: String,
+): ToolInputModel =
+    ToolInputModel(
+        sources = listOf(
+            SourceSlotSpec(
+                name = sourceName,
+                kind = kind,
+                target = SourceTargetSpec.RootInput,
+                required = true,
+                cli = CliSourceSpec(
+                    positionalPathName = positionalPathName,
+                    stdinOption = "--stdin",
+                    base64Option = "--bytes-base64",
+                    autoStdin = true,
+                ),
+            )
+        ),
+        params = emptyList(),
+    )
+
 sealed class ToolInputPattern {
     object WasmOnly : ToolInputPattern()
     object WasmPathLabel : ToolInputPattern()
@@ -739,6 +974,25 @@ private val FIELD_NAME_REGEX = Regex("^[a-z][A-Za-z0-9]*$")
 private val TOOL_NAME_REGEX = Regex("^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
 private val STANDALONE_HANDLER_METHOD_NAME_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]*$")
 private val CLI_COMMAND_NAME_REGEX = Regex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
+private val CLI_OPTION_NAME_REGEX = Regex("^--[a-z][a-z0-9]*(-[a-z0-9]+)*$")
+
+private fun requireInputModelName(name: String, owner: String) {
+    require(FIELD_NAME_REGEX.matches(name)) {
+        "$owner name '$name' must be lowerCamelCase."
+    }
+}
+
+private fun validateCliName(name: String, owner: String) {
+    require(CLI_COMMAND_NAME_REGEX.matches(name)) {
+        "$owner '$name' must be strict kebab-case."
+    }
+}
+
+private fun validateCliOption(option: String, owner: String) {
+    require(CLI_OPTION_NAME_REGEX.matches(option)) {
+        "$owner '$option' must be a strict kebab-case long option like `--input-path`."
+    }
+}
 
 @HexanaToolsDsl
 class ToolBuilder internal constructor(private val name: String) {
