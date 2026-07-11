@@ -105,12 +105,11 @@ class HexanaMcpServerSchemaTest {
         assertEquals("summarize_binary", summarizeBinary.toolName)
         assertEquals(setOf(HexanaCliToolGroup.BINARY), summarizeBinary.groups)
         assertEquals(
-            setOf(HexanaCliInputMode.BINARY_PATH),
+            setOf(HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN),
             summarizeBinary.inputModes,
         )
         assertFalse(HexanaCliInputMode.JSON_OBJECT in summarizeBinary.inputModes)
         assertFalse(HexanaCliInputMode.WASM_PATH in summarizeBinary.inputModes)
-        assertFalse(HexanaCliInputMode.STDIN in summarizeBinary.inputModes)
         assertEquals(setOf(HexanaCliOutputFormat.JSON), summarizeBinary.outputFormats)
         assertEquals(HexanaCliOutputFormat.JSON, summarizeBinary.defaultOutputFormat)
         assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, summarizeBinary.defaultOutputPolicy)
