@@ -5,6 +5,7 @@ import org.jetbrains.hexana.mcp.tools.ClassSpec
 import org.jetbrains.hexana.mcp.tools.CliExecutionStatus
 import org.jetbrains.hexana.mcp.tools.OutputConversionCapability
 import org.jetbrains.hexana.mcp.tools.StandaloneHandlerSpec
+import org.jetbrains.hexana.mcp.tools.ToolInputModel
 import org.jetbrains.hexana.mcp.tools.ToolInputPattern
 import org.jetbrains.hexana.mcp.tools.ToolGroup
 import org.jetbrains.hexana.mcp.tools.ToolOutputPolicy
@@ -17,6 +18,7 @@ import org.jetbrains.hexana.mcp.tools.list
 import org.jetbrains.hexana.mcp.tools.noMcpCliSurface
 import org.jetbrains.hexana.mcp.tools.productionCliSurface
 import org.jetbrains.hexana.mcp.tools.string
+import org.jetbrains.hexana.mcp.tools.toolInputModel
 import org.junit.Test
 import java.lang.reflect.InvocationTargetException
 import java.nio.file.Files
@@ -160,6 +162,34 @@ class ToolDescriptionGenerationTest {
         assertTrue(source.contains("\"bytes\""))
         assertTrue(source.contains("\"operation\""))
         assertTrue(source.contains("\"maxBytes\""))
+    }
+
+    @Test
+    fun `standalone schemas emit JSON object fields as object schemas`() {
+        val schema = invokePrivateGeneratorFunction(
+            className = "org.jetbrains.hexana.mcp.tools.generator.StandaloneToolsetMainKt",
+            methodName = "buildToolSchema",
+            parameterTypes = arrayOf(ClassSpec::class.java, Boolean::class.javaPrimitiveType!!, Boolean::class.javaPrimitiveType!!),
+            args = arrayOf(jsonPolicyInput(), true, true),
+        )
+
+        val source = schema.toString()
+        assertTrue(source.contains("\"policyJson\""))
+        assertTrue(source.contains("JsonPrimitive(\"object\")"))
+    }
+
+    @Test
+    fun `IDEA schemas emit JSON object fields as object schemas`() {
+        val schema = invokePrivateGeneratorFunction(
+            className = "org.jetbrains.hexana.mcp.tools.generator.IdeaToolsetMainKt",
+            methodName = "buildToolSchema",
+            parameterTypes = arrayOf(ClassSpec::class.java, Boolean::class.javaPrimitiveType!!, Boolean::class.javaPrimitiveType!!),
+            args = arrayOf(jsonPolicyInput(), true, true),
+        )
+
+        val source = schema.toString()
+        assertTrue(source.contains("\"policyJson\""))
+        assertTrue(source.contains("JsonPrimitive(\"object\")"))
     }
 
     @Test
@@ -534,6 +564,141 @@ class ToolDescriptionGenerationTest {
         assertTrue(error.message.orEmpty().contains("does not have a CLI input model"))
         assertTrue(error.message.orEmpty().contains("query_binary"))
     }
+
+    @Test
+    fun `standalone CLI registry can carry TODO explicit multi-source and param metadata`() {
+        val futureCompare = futureCompareModulesSpec(twoWasmSourcesWithParamsModel())
+
+        val source = buildCliToolsetFile(listOf(futureCompare)).toString()
+
+        assertTrue(source.contains("commandName = \"compare-modules\""))
+        assertTrue(source.contains("toolName = \"compare_modules\""))
+        assertTrue(source.contains("executionStatus = HexanaCliExecutionStatus.TODO"))
+        assertTrue(source.contains("inputModes = setOf()"))
+        val generatedCommands = source.substringAfter("internal fun generatedCliToolCommands")
+            .substringBefore("internal fun generatedExecutableCliToolCommandOutput")
+        assertFalse(generatedCommands.contains("compare_modules"))
+    }
+
+    @Test
+    fun `standalone executable CLI generator rejects explicit params clearly`() {
+        val executableCompare = futureCompareModulesSpec(singleWasmSourceWithParamModel()).copy(
+            surfaces = productionCliSurface(
+                "compare-modules",
+                ToolGroup.Module,
+                ToolOutputPolicy.ToolDefined,
+                executionStatus = CliExecutionStatus.Executable,
+                executableRenderer = executableCliRenderer("renderCompareModulesCommandOutput"),
+            ),
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            buildCliToolsetFile(listOf(executableCompare)).toString()
+        }
+
+        assertTrue(error.message.orEmpty().contains("generated CLI params that are not supported yet"))
+        assertTrue(error.message.orEmpty().contains("compare_modules"))
+    }
+
+    @Test
+    fun `standalone executable CLI generator rejects multi-source models clearly`() {
+        val executableCompare = futureCompareModulesSpec(twoWasmSourcesOnlyModel()).copy(
+            surfaces = productionCliSurface(
+                "compare-modules",
+                ToolGroup.Module,
+                ToolOutputPolicy.ToolDefined,
+                executionStatus = CliExecutionStatus.Executable,
+                executableRenderer = executableCliRenderer("renderCompareModulesCommandOutput"),
+            ),
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            buildCliToolsetFile(listOf(executableCompare)).toString()
+        }
+
+        assertTrue(error.message.orEmpty().contains("must declare exactly one CLI source slot"))
+        assertTrue(error.message.orEmpty().contains("current"))
+        assertTrue(error.message.orEmpty().contains("baseline"))
+    }
+
+    private fun jsonPolicyInput(): ClassSpec =
+        class_("JsonPolicyInput") {
+            jsonObject("policyJson").describe("Policy JSON object.")
+        }
+
+    private fun futureCompareModulesSpec(inputModel: ToolInputModel): ToolSpec =
+        summarizeModuleSpec.copy(
+            name = "compare_modules",
+            input = WasmInputClass.with("CompareModulesInput") {
+                embed("current", WasmInputClass).describe("Current WebAssembly module source.")
+                nullable("baseline", of = WasmInputClass).describe("Baseline WebAssembly module source.")
+                int("limit", default = 25).describe("Maximum comparison findings.")
+                string("query", default = "").describe("Optional query filter.")
+                string("operation", default = "diff").describe("Comparison operation.")
+                jsonObject("policyJson").describe("Comparison policy JSON object.")
+            },
+            inputModel = inputModel,
+            output = class_("CompareModulesResult") {
+                string("status").describe("Comparison status.")
+            },
+            surfaces = productionCliSurface("compare-modules", ToolGroup.Module, ToolOutputPolicy.ToolDefined),
+            handlerFqn = "org.jetbrains.hexana.mcp.query.compareModules",
+        )
+
+    private fun twoWasmSourcesWithParamsModel(): ToolInputModel =
+        toolInputModel {
+            wasmSource("current") {
+                cli {
+                    positional("current")
+                    stdin("--stdin")
+                    base64("--current-base64")
+                    autoStdin()
+                }
+            }
+            wasmSource("baseline", required = false) {
+                cli {
+                    pathOption("--baseline")
+                    stdin("--baseline-stdin")
+                    base64("--baseline-base64")
+                }
+            }
+            param(name = "limit", cliOption = "--limit")
+            param(name = "query", cliOption = "--query")
+            param(name = "operation", cliOption = "--operation")
+            jsonParam(name = "policy", targetField = "policyJson", cliOption = "--policy-json")
+        }
+
+    private fun twoWasmSourcesOnlyModel(): ToolInputModel =
+        toolInputModel {
+            wasmSource("current") {
+                cli {
+                    positional("current")
+                    stdin("--stdin")
+                    base64("--current-base64")
+                    autoStdin()
+                }
+            }
+            wasmSource("baseline", required = false) {
+                cli {
+                    pathOption("--baseline")
+                    stdin("--baseline-stdin")
+                    base64("--baseline-base64")
+                }
+            }
+        }
+
+    private fun singleWasmSourceWithParamModel(): ToolInputModel =
+        toolInputModel {
+            wasmSource("current") {
+                cli {
+                    positional("current")
+                    stdin("--stdin")
+                    base64("--current-base64")
+                    autoStdin()
+                }
+            }
+            param(name = "limit", cliOption = "--limit")
+        }
 
     private data class RenderedStandaloneSources(
         val files: List<String>,

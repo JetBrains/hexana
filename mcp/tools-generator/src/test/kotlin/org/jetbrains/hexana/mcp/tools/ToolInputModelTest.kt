@@ -93,6 +93,39 @@ class ToolInputModelTest {
     }
 
     @Test
+    fun `explicit CLI input model can describe future two Wasm source tool ergonomically`() {
+        val spec = futureCompareModulesSpec(twoWasmSourcesWithParamsModel())
+        val model = spec.inputModelForCli()
+
+        assertEquals(spec.inputModel, model)
+        assertEquals(listOf("current", "baseline"), model.sources.map { it.name })
+        assertEquals(listOf(SourceTargetSpec.Field("current"), SourceTargetSpec.Field("baseline")), model.sources.map { it.target })
+        assertEquals(
+            CliSourceSpec(
+                positionalPathName = "current",
+                stdinOption = "--stdin",
+                base64Option = "--current-base64",
+                autoStdin = true,
+            ),
+            model.sources.single { it.name == "current" }.cli,
+        )
+        assertEquals(
+            CliSourceSpec(
+                pathOption = "--baseline",
+                stdinOption = "--baseline-stdin",
+                base64Option = "--baseline-base64",
+            ),
+            model.sources.single { it.name == "baseline" }.cli,
+        )
+        assertEquals(
+            listOf("--limit", "--query", "--operation", "--policy-json"),
+            model.params.map { it.cliOption },
+        )
+        assertEquals(ParamBindingKind.Json, model.params.single { it.cliOption == "--policy-json" }.kind)
+        assertEquals("policyJson", model.params.single { it.cliOption == "--policy-json" }.targetField)
+    }
+
+    @Test
     fun `input model rejects duplicate source names`() {
         val error = assertFailsWith<IllegalArgumentException> {
             toolInputModel {
@@ -136,6 +169,117 @@ class ToolInputModelTest {
 
         assertTrue(error.message.orEmpty().contains("Duplicate CLI source bindings"))
         assertTrue(error.message.orEmpty().contains("--input-wasm"))
+    }
+
+    @Test
+    fun `CLI source spec rejects duplicate options inside one source`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            CliSourceSpec(
+                pathOption = "--input",
+                stdinOption = "--input",
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("CLI source spec reuses option bindings"))
+        assertTrue(error.message.orEmpty().contains("--input"))
+    }
+
+    @Test
+    fun `input model rejects duplicate CLI param options`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            toolInputModel {
+                param(name = "limit", cliOption = "--shared")
+                param(name = "query", cliOption = "--shared")
+            }
+        }
+
+        assertTrue(error.message.orEmpty().contains("Duplicate CLI param options"))
+        assertTrue(error.message.orEmpty().contains("--shared"))
+    }
+
+    @Test
+    fun `input model rejects CLI option collisions between sources and params`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            toolInputModel {
+                wasmSource("current") {
+                    cli {
+                        pathOption("--limit")
+                    }
+                }
+                param(name = "limit", cliOption = "--limit")
+            }
+        }
+
+        assertTrue(error.message.orEmpty().contains("Duplicate CLI option bindings"))
+        assertTrue(error.message.orEmpty().contains("--limit"))
+    }
+
+    @Test
+    fun `input model rejects multiple auto stdin sources`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            toolInputModel {
+                wasmSource("current") {
+                    cli {
+                        positional("current")
+                        autoStdin()
+                    }
+                }
+                wasmSource("baseline") {
+                    cli {
+                        pathOption("--baseline")
+                        autoStdin()
+                    }
+                }
+            }
+        }
+
+        assertTrue(error.message.orEmpty().contains("at most one source slot"))
+        assertTrue(error.message.orEmpty().contains("current"))
+        assertTrue(error.message.orEmpty().contains("baseline"))
+    }
+
+    @Test
+    fun `explicit input model rejects unknown source target fields`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            futureCompareModulesSpec(
+                toolInputModel {
+                    wasmSource("current", targetField = "missingCurrent") {
+                        cli {
+                            positional("current")
+                        }
+                    }
+                }
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("unknown input field `missingCurrent`"))
+    }
+
+    @Test
+    fun `explicit input model rejects unknown param target fields`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            futureCompareModulesSpec(
+                toolInputModel {
+                    param(name = "limit", targetField = "missingLimit", cliOption = "--limit")
+                }
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("unknown input field `missingLimit`"))
+    }
+
+    @Test
+    fun `explicit input model JSON params must target JSON object fields`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            futureCompareModulesSpec(
+                toolInputModel {
+                    jsonParam(name = "policy", targetField = "query", cliOption = "--policy-json")
+                }
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("must target a JSON object input field"))
+        assertTrue(error.message.orEmpty().contains("policy"))
     }
 
     @Test
@@ -199,6 +343,54 @@ class ToolInputModelTest {
             model.params,
         )
     }
+
+    private fun twoWasmSourcesWithParamsModel(): ToolInputModel =
+        toolInputModel {
+            wasmSource("current") {
+                cli {
+                    positional("current")
+                    stdin("--stdin")
+                    base64("--current-base64")
+                    autoStdin()
+                }
+            }
+            wasmSource("baseline", required = false) {
+                cli {
+                    pathOption("--baseline")
+                    stdin("--baseline-stdin")
+                    base64("--baseline-base64")
+                }
+            }
+            param(name = "limit", cliOption = "--limit")
+            param(name = "query", cliOption = "--query")
+            param(name = "operation", cliOption = "--operation")
+            jsonParam(name = "policy", targetField = "policyJson", cliOption = "--policy-json")
+        }
+
+    private fun futureCompareModulesSpec(inputModel: ToolInputModel): ToolSpec =
+        tools {
+            tool("compare_modules") {
+                summary = "Compare two WebAssembly modules."
+                input = futureCompareModulesInput()
+                inputPattern = ToolInputPattern.WasmOnly
+                this.inputModel = inputModel
+                output = class_("CompareModulesResult") {
+                    string("status").describe("Comparison status.")
+                }
+                surfaces = productionCliSurface("compare-modules", ToolGroup.Module, ToolOutputPolicy.ToolDefined)
+                handlerFqn = "org.jetbrains.hexana.mcp.query.compareModules"
+            }
+        }.single()
+
+    private fun futureCompareModulesInput(): ClassSpec =
+        WasmInputClass.with("CompareModulesInput") {
+            embed("current", WasmInputClass).describe("Current WebAssembly module source.")
+            nullable("baseline", of = WasmInputClass).describe("Baseline WebAssembly module source.")
+            int("limit", default = 25).describe("Maximum comparison findings.")
+            string("query", default = "").describe("Optional query filter.")
+            string("operation", default = "diff").describe("Comparison operation.")
+            jsonObject("policyJson").describe("Comparison policy JSON object.")
+        }
 
     private fun rootWasmCli(): CliSourceSpec =
         CliSourceSpec(

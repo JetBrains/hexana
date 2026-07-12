@@ -1154,6 +1154,8 @@ private fun emitTypeSchema(
         FieldType.ByteArrayT ->
             emitJsonType(builder, indent, "string", nullable)
 
+        FieldType.JsonObjectT -> emitJsonType(builder, indent, "object", nullable)
+
         is FieldType.ListOf -> {
             emitJsonType(builder, indent, "array", nullable)
             builder.add("${indent}put(%S, %M {\n", "items", BUILD_JSON_OBJECT)

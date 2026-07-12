@@ -94,6 +94,7 @@ class HexanaToolCompatibilityTest {
             FieldType.Float64,
             FieldType.Int32,
             FieldType.Int64,
+            FieldType.JsonObjectT,
             FieldType.StringT,
             FieldType.UInt32 -> Unit
         }
@@ -119,6 +120,7 @@ class HexanaToolCompatibilityTest {
             FieldType.BooleanT -> "Boolean"
             FieldType.StringT -> "String"
             FieldType.ByteArrayT -> "ByteArray"
+            FieldType.JsonObjectT -> "JsonObject"
             is FieldType.ListOf -> "List<${element.compatibilityText()}>"
             is FieldType.MapOf -> "Map<${value.compatibilityText()}>"
             is FieldType.ClassRef -> "Class<${clazz.name}>"

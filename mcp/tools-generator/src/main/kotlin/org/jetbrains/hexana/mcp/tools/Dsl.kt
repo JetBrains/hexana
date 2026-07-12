@@ -11,6 +11,7 @@ sealed class FieldType {
     object BooleanT : FieldType()
     object StringT : FieldType()
     object ByteArrayT : FieldType()
+    object JsonObjectT : FieldType()
     data class ListOf(val element: FieldType) : FieldType()
     data class MapOf(val value: FieldType) : FieldType()
     data class ClassRef(val clazz: ClassSpec) : FieldType()
@@ -25,6 +26,7 @@ fun byte(): FieldType = FieldType.ByteT
 fun string(): FieldType = FieldType.StringT
 fun boolean(): FieldType = FieldType.BooleanT
 fun bytes(): FieldType = FieldType.ByteArrayT
+fun jsonObject(): FieldType = FieldType.JsonObjectT
 
 // Top-level `list(of = …)` usable wherever a `FieldType` is expected
 // (e.g. `nullable("superTypes", of = list(of = uint()))`).
@@ -53,8 +55,8 @@ data class FieldSpec(
 ) {
     init {
         if (default != null) {
-            require(type !is FieldType.ClassRef) {
-                "Field '$name': defaults are not supported for embedded classes."
+            require(type !is FieldType.ClassRef && type != FieldType.JsonObjectT) {
+                "Field '$name': defaults are not supported for embedded classes or JSON object fields."
             }
             val expected: Class<*> = when (type) {
                 FieldType.Int32, FieldType.UInt32, FieldType.ByteT -> Int::class.javaObjectType
@@ -65,7 +67,8 @@ data class FieldSpec(
                 FieldType.ByteArrayT -> ByteArray::class.java
                 is FieldType.ListOf -> List::class.java
                 is FieldType.MapOf -> Map::class.java
-                is FieldType.ClassRef -> error("unreachable — filtered by require above")
+                FieldType.JsonObjectT,
+                is FieldType.ClassRef -> error("unreachable - filtered by require above")
             }
             require(expected.isInstance(default)) {
                 "Field '$name': default value `$default` (${default.javaClass.simpleName}) does not match declared type $type."
@@ -216,6 +219,9 @@ class ClassBuilder internal constructor(
 
     fun bytes(name: String): FieldHandle =
         addField(name, FieldType.ByteArrayT)
+
+    fun jsonObject(name: String): FieldHandle =
+        addField(name, FieldType.JsonObjectT)
 
     fun list(name: String, of: FieldType): FieldHandle =
         addField(name, FieldType.ListOf(of))
@@ -382,6 +388,7 @@ class ToolSpec(
     val guidance: String?,
     val input: ClassSpec,
     val inputPattern: ToolInputPattern,
+    val inputModel: ToolInputModel? = null,
     val output: ClassSpec,
     val surfaces: ToolSurfaceSpec,
     /**
@@ -393,6 +400,10 @@ class ToolSpec(
     val handlerFqn: String,
     standaloneHandler: StandaloneHandlerSpec? = null,
 ) {
+    init {
+        inputModel?.let { validateExplicitInputModel(name, input, it) }
+    }
+
     private val standaloneHandlerOverride: StandaloneHandlerSpec? = standaloneHandler
     val standaloneHandler: StandaloneHandlerSpec
         get() = standaloneHandlerOverride ?: StandaloneHandlerSpec.defaultForToolName(name)
@@ -403,6 +414,7 @@ class ToolSpec(
         guidance: String? = this.guidance,
         input: ClassSpec = this.input,
         inputPattern: ToolInputPattern = this.inputPattern,
+        inputModel: ToolInputModel? = this.inputModel,
         output: ClassSpec = this.output,
         surfaces: ToolSurfaceSpec = this.surfaces,
         handlerFqn: String = this.handlerFqn,
@@ -413,6 +425,7 @@ class ToolSpec(
         guidance = guidance,
         input = input,
         inputPattern = inputPattern,
+        inputModel = inputModel,
         output = output,
         surfaces = surfaces,
         handlerFqn = handlerFqn,
@@ -428,6 +441,7 @@ class ToolSpec(
             guidance == other.guidance &&
             input == other.input &&
             inputPattern == other.inputPattern &&
+            inputModel == other.inputModel &&
             output == other.output &&
             surfaces == other.surfaces &&
             handlerFqn == other.handlerFqn &&
@@ -440,6 +454,7 @@ class ToolSpec(
         result = 31 * result + (guidance?.hashCode() ?: 0)
         result = 31 * result + input.hashCode()
         result = 31 * result + inputPattern.hashCode()
+        result = 31 * result + (inputModel?.hashCode() ?: 0)
         result = 31 * result + output.hashCode()
         result = 31 * result + surfaces.hashCode()
         result = 31 * result + handlerFqn.hashCode()
@@ -449,7 +464,7 @@ class ToolSpec(
 
     override fun toString(): String =
         "ToolSpec(name=$name, summary=$summary, guidance=$guidance, input=$input, " +
-            "inputPattern=$inputPattern, output=$output, surfaces=$surfaces, handlerFqn=$handlerFqn, " +
+            "inputPattern=$inputPattern, inputModel=$inputModel, output=$output, surfaces=$surfaces, handlerFqn=$handlerFqn, " +
             "standaloneHandler=$standaloneHandler)"
 }
 
@@ -737,6 +752,29 @@ data class ToolInputModel(
             "Duplicate input param target fields: " +
                 duplicateParamTargets.entries.joinToString { (field, params) -> "`$field` used by ${params.map { it.name }}" }
         }
+
+        val duplicateParamCliOptions = params
+            .mapNotNull { param -> param.cliOption?.let { it to param.name } }
+            .groupBy({ it.first }, { it.second })
+            .filterValues { it.size > 1 }
+        require(duplicateParamCliOptions.isEmpty()) {
+            "Duplicate CLI param options in input model: " +
+                duplicateParamCliOptions.entries.joinToString { (option, params) -> "`$option` used by $params" }
+        }
+
+        val sourceCliOptions = sources.flatMap { source ->
+            source.cli.bindings()
+                .filter { it.value.startsWith("--") }
+                .map { it.value to source.name }
+        }
+        val paramCliOptions = params.mapNotNull { param -> param.cliOption?.let { it to param.name } }
+        val sourceParamCliOptionCollisions = (sourceCliOptions + paramCliOptions)
+            .groupBy({ it.first }, { it.second })
+            .filterValues { it.size > 1 }
+        require(sourceParamCliOptionCollisions.isEmpty()) {
+            "Duplicate CLI option bindings in input model: " +
+                sourceParamCliOptionCollisions.entries.joinToString { (option, names) -> "`$option` used by $names" }
+        }
     }
 }
 
@@ -806,6 +844,80 @@ data class CliSourceSpec(
 
 internal data class CliSourceBinding(val kind: String, val value: String)
 
+@HexanaToolsDsl
+class CliSourceSpecBuilder internal constructor() {
+    private var positionalPathName: String? = null
+    private var pathOption: String? = null
+    private var stdinOption: String? = null
+    private var base64Option: String? = null
+    private var bytesOption: String? = null
+    private var autoStdin: Boolean = false
+
+    fun positional(name: String) {
+        require(positionalPathName == null) { "CLI source positional path is already declared." }
+        positionalPathName = name
+    }
+
+    fun pathOption(option: String) {
+        require(pathOption == null) { "CLI source path option is already declared." }
+        pathOption = option
+    }
+
+    fun stdin(option: String) {
+        require(stdinOption == null) { "CLI source stdin option is already declared." }
+        stdinOption = option
+    }
+
+    fun base64(option: String) {
+        require(base64Option == null) { "CLI source base64 option is already declared." }
+        base64Option = option
+    }
+
+    fun bytes(option: String) {
+        require(bytesOption == null) { "CLI source bytes option is already declared." }
+        bytesOption = option
+    }
+
+    fun autoStdin() {
+        autoStdin = true
+    }
+
+    internal fun build(): CliSourceSpec = CliSourceSpec(
+        positionalPathName = positionalPathName,
+        pathOption = pathOption,
+        stdinOption = stdinOption,
+        base64Option = base64Option,
+        bytesOption = bytesOption,
+        autoStdin = autoStdin,
+    )
+}
+
+fun cliSource(block: CliSourceSpecBuilder.() -> Unit): CliSourceSpec =
+    CliSourceSpecBuilder().apply(block).build()
+
+@HexanaToolsDsl
+class SourceSlotBuilder internal constructor(
+    private val name: String,
+    private val kind: SourceKind,
+    private val target: SourceTargetSpec,
+    private val required: Boolean,
+) {
+    private var cli: CliSourceSpec? = null
+
+    fun cli(block: CliSourceSpecBuilder.() -> Unit) {
+        require(cli == null) { "Source slot '$name' already declares cli metadata." }
+        cli = cliSource(block)
+    }
+
+    internal fun build(): SourceSlotSpec = SourceSlotSpec(
+        name = name,
+        kind = kind,
+        target = target,
+        required = required,
+        cli = requireNotNull(cli) { "Source slot '$name' is missing `cli { }` metadata." },
+    )
+}
+
 data class ParamBindingSpec(
     val name: String,
     val kind: ParamBindingKind,
@@ -845,6 +957,42 @@ class ToolInputModelBuilder internal constructor() {
         )
     }
 
+    fun wasmSource(
+        name: String,
+        target: SourceTargetSpec = SourceTargetSpec.Field(name),
+        required: Boolean = true,
+        block: SourceSlotBuilder.() -> Unit,
+    ) {
+        sourceSlot(name, SourceKind.Wasm, target, required, block)
+    }
+
+    fun wasmSource(
+        name: String,
+        targetField: String,
+        required: Boolean = true,
+        block: SourceSlotBuilder.() -> Unit,
+    ) {
+        wasmSource(name, SourceTargetSpec.Field(targetField), required, block)
+    }
+
+    fun binarySource(
+        name: String,
+        target: SourceTargetSpec = SourceTargetSpec.Field(name),
+        required: Boolean = true,
+        block: SourceSlotBuilder.() -> Unit,
+    ) {
+        sourceSlot(name, SourceKind.Binary, target, required, block)
+    }
+
+    fun binarySource(
+        name: String,
+        targetField: String,
+        required: Boolean = true,
+        block: SourceSlotBuilder.() -> Unit,
+    ) {
+        binarySource(name, SourceTargetSpec.Field(targetField), required, block)
+    }
+
     fun param(
         name: String,
         targetField: String = name,
@@ -871,6 +1019,16 @@ class ToolInputModelBuilder internal constructor() {
         )
     }
 
+    private fun sourceSlot(
+        name: String,
+        kind: SourceKind,
+        target: SourceTargetSpec,
+        required: Boolean,
+        block: SourceSlotBuilder.() -> Unit,
+    ) {
+        sources += SourceSlotBuilder(name, kind, target, required).apply(block).build()
+    }
+
     internal fun build(): ToolInputModel = ToolInputModel(
         sources = sources.toList(),
         params = params.toList(),
@@ -881,7 +1039,7 @@ fun toolInputModel(block: ToolInputModelBuilder.() -> Unit): ToolInputModel =
     ToolInputModelBuilder().apply(block).build()
 
 fun ToolSpec.inputModelForCli(): ToolInputModel =
-    inputPattern.inputModelForCli(name)
+    inputModel ?: inputPattern.inputModelForCli(name)
 
 fun ToolInputPattern.inputModelForCli(toolName: String? = null): ToolInputModel =
     when (this) {
@@ -1000,6 +1158,7 @@ class ToolBuilder internal constructor(private val name: String) {
     var guidance: String? = null
     var input: ClassSpec? = null
     var inputPattern: ToolInputPattern? = null
+    var inputModel: ToolInputModel? = null
     var output: ClassSpec? = null
     var surfaces: ToolSurfaceSpec? = null
     var handlerFqn: String? = null
@@ -1031,6 +1190,7 @@ class ToolBuilder internal constructor(private val name: String) {
             guidance = guidance?.trimIndent()?.trim()?.takeIf { it.isNotEmpty() },
             input = resolvedInput,
             inputPattern = resolvedInputPattern,
+            inputModel = inputModel,
             output = resolvedOutput,
             surfaces = resolvedSurfaces,
             handlerFqn = resolvedHandler,
@@ -1053,6 +1213,31 @@ private fun validateCliOutputSelection(toolName: String, output: ClassSpec, cli:
         require(selectedOutput in output.outputCapabilities) {
             "Tool '$toolName' CLI output $selectedOutput is not declared by output class " +
                 "`${output.name}`. Declared output capabilities: ${output.outputCapabilities}."
+        }
+    }
+}
+
+private fun validateExplicitInputModel(toolName: String, input: ClassSpec, inputModel: ToolInputModel) {
+    fun requireInputField(fieldName: String): FieldSpec {
+        return input.fields.singleOrNull { it.name == fieldName } ?: throw IllegalArgumentException(
+            "Tool '$toolName' explicit CLI input model references unknown input field `$fieldName` on `${input.name}`."
+        )
+    }
+
+    inputModel.sources.forEach { source ->
+        when (val target = source.target) {
+            SourceTargetSpec.RootInput -> Unit
+            is SourceTargetSpec.Field -> requireInputField(target.name)
+        }
+    }
+
+    inputModel.params.forEach { param ->
+        val field = requireInputField(param.targetField)
+        if (param.kind == ParamBindingKind.Json) {
+            require(field.type == FieldType.JsonObjectT) {
+                "Tool '$toolName' JSON CLI param `${param.name}` must target a JSON object input field, " +
+                    "got `${param.targetField}` with type ${field.type}."
+            }
         }
     }
 }
