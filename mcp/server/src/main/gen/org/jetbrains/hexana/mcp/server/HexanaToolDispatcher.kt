@@ -111,7 +111,9 @@ internal object HexanaGeneratedMcpToolProfiles {
         "query_artifacts",
       )
 
-  internal val SCRIPTING_TOOL_NAMES: Set<String> = emptySet()
+  internal val SCRIPTING_TOOL_NAMES: Set<String> = setOf(
+        "run_binary_script",
+      )
 }
 
 /**
@@ -171,6 +173,7 @@ public fun Server.registerHexanaTools(handlers: HexanaToolHandlers, profile: Hex
   if (profile.includesTool("list_binary_functions")) registerListBinaryFunctionsTool(handlers)
   if (profile.includesTool("search_binary_functions")) registerSearchBinaryFunctionsTool(handlers)
   if (profile.includesTool("query_binary")) registerQueryBinaryTool(handlers)
+  if (profile.includesTool("run_binary_script")) registerRunBinaryScriptTool(handlers)
   if (profile.includesTool("summarize_module")) registerSummarizeModuleTool(handlers)
   if (profile.includesTool("list_enabled_features")) registerListEnabledFeaturesTool(handlers)
   if (profile.includesTool("get_entrypoint_policy")) registerGetEntrypointPolicyTool(handlers)
@@ -671,6 +674,112 @@ private fun Server.registerQueryBinaryTool(handlers: HexanaToolHandlers) {
     ),
   ))  {
     request: CallToolRequest -> handlers.queryBinary(request.arguments)
+  }
+}
+
+private fun Server.registerRunBinaryScriptTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "run_binary_script",
+    description = """
+  |Run a Hexana JavaScript script over a Wasm or native binary.
+  |Use this only in the dedicated scripting profile or explicit CLI command when a small custom script is needed over the loaded `binary` object.
+  |The script runtime exposes the existing globals `binary` and `print(text)`; it does not expose host classes, file IO, process creation, or native access.
+  |Pass exactly one binary source and exactly one script source, either `scriptPath` or inline `script`.
+  """.trimMargin(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Readable local binary path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64 binary bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw binary bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES))
+      })
+      put("scriptPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Readable local JavaScript file path. Provide exactly one of `scriptPath` or `script`."))
+        put("maxLength", JsonPrimitive(4_096))
+      })
+      put("script", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Inline JavaScript source text. Provide exactly one of `scriptPath` or `script`."))
+        put("maxLength", JsonPrimitive(1_000_000))
+      })
+    },
+    required = listOf()
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("status", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+      })
+      put("success", buildJsonObject {
+        put("type", JsonPrimitive("boolean"))
+      })
+      put("output", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+      put("diagnostics", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("binary", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("object"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("sourceName", buildJsonObject {
+        put("type", JsonPrimitive("string"))
+      })
+      put("sourcePath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("durationMillis", buildJsonObject {
+        put("type", JsonPrimitive("integer"))
+      })
+    },
+    required = listOf("status", "success", "output", "diagnostics", "sourceName", "durationMillis")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.runBinaryScript(request.arguments)
   }
 }
 

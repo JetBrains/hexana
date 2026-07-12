@@ -2,8 +2,10 @@ package org.jetbrains.hexana.mcp.server
 
 import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
 import io.modelcontextprotocol.kotlin.sdk.types.ListToolsRequest
+import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -170,6 +172,111 @@ class HexanaStdioIntegrationTest {
     }
 
     @Test
+    fun installedServerRunScriptCommandReturnsScriptOutput() = runBlocking {
+        val binary = temporaryFolder.newFile("run-script-success.bin").toPath()
+        Files.write(binary, byteArrayOf(1, 2, 3))
+
+        val result = HexanaInstalledStdioClient.runCommand(
+            StdioLauncher.Server,
+            "run-script",
+            binary.toString(),
+            "--script-text",
+            "print(binary.bytes.size); print(binary.bytes.get(1));",
+            "--format",
+            "raw",
+        )
+
+        assertInstalledCommandSucceeded(result)
+        assertEquals("3\n2", result.stdout)
+        assertTrue(result.unexpectedStderr.isBlank(), result.stderr)
+    }
+
+    @Test
+    fun installedServerRunScriptRawCanEmitExactlyMaxOutputBytes() = runBlocking {
+        val binary = temporaryFolder.newFile("run-script-exact-output-budget.bin").toPath()
+        Files.write(binary, byteArrayOf(1, 2, 3))
+
+        val result = HexanaInstalledStdioClient.runCommand(
+            StdioLauncher.Server,
+            "run-script",
+            binary.toString(),
+            "--script-text",
+            "print('abcd');",
+            "--format",
+            "raw",
+            "--max-output-bytes",
+            "4",
+        )
+
+        assertInstalledCommandSucceeded(result)
+        assertEquals("abcd", result.stdout)
+        assertEquals(4, result.stdout.toByteArray(StandardCharsets.UTF_8).size)
+        assertTrue(result.unexpectedStderr.isBlank(), result.stderr)
+    }
+
+    @Test
+    fun installedServerRunScriptFailuresExitNonZero() = runBlocking {
+        val binary = temporaryFolder.newFile("run-script-failure.bin").toPath()
+        Files.write(binary, byteArrayOf(1, 2, 3))
+        val script = temporaryFolder.newFile("run-script-failure.js").toPath()
+        Files.writeString(script, "print(1);")
+        val allowedRoot = temporaryFolder.newFolder("run-script-allowed-root").toPath()
+        val allowedBinary = allowedRoot.resolve("inside.bin")
+        Files.write(allowedBinary, byteArrayOf(4, 5, 6))
+        val outsideScript = temporaryFolder.newFile("run-script-outside.js").toPath()
+        Files.writeString(outsideScript, "print(1);")
+
+        val cases = listOf(
+            listOf(
+                "run-script",
+                binary.toString(),
+                "--script-text",
+                "throw new Error('boom');",
+                "--format",
+                "raw",
+            ) to listOf("RUNTIME_ERROR", "boom"),
+            listOf(
+                "run-script",
+                binary.toString(),
+                "--format",
+                "raw",
+            ) to listOf("INVALID_INPUT", "Exactly one of --script or --script-text is required"),
+            listOf(
+                "run-script",
+                binary.toString(),
+                "--script",
+                script.toString(),
+                "--script-text",
+                "print(1);",
+                "--format",
+                "raw",
+            ) to listOf("INVALID_INPUT", "Provide exactly one of --script or --script-text"),
+            listOf(
+                "run-script",
+                allowedBinary.toString(),
+                "--script",
+                outsideScript.toString(),
+                "--format",
+                "raw",
+                "--allowed-root",
+                allowedRoot.toString(),
+            ) to listOf("INVALID_INPUT", "outside allowed roots"),
+        )
+
+        cases.forEach { (arguments, expectedMessages) ->
+            val result = HexanaInstalledStdioClient.runCommand(StdioLauncher.Server, *arguments.toTypedArray())
+
+            assertFalse(result.timedOut, "Command timed out. stdout=${result.stdout}, stderr=${result.stderr}")
+            assertEquals(1, result.exitCode, "stdout=${result.stdout}, stderr=${result.stderr}")
+            assertTrue(result.stdout.isBlank(), "Expected stdout to stay empty, got: ${result.stdout}")
+            expectedMessages.forEach { expected ->
+                assertTrue(result.stderr.contains(expected), result.stderr)
+            }
+            assertNoStackTrace(result.stderr)
+        }
+    }
+
+    @Test
     fun installedExecutableToolInputFailuresStayConciseOnStderr() = runBlocking {
         val outsideWasm = createWasmFile("outside-root.wasm", "(module)")
         val allowedRoot = temporaryFolder.newFolder("allowed-root").toPath()
@@ -257,6 +364,60 @@ class HexanaStdioIntegrationTest {
                 label = "installed"
             )
         }
+    }
+
+    @Test
+    fun installedServerScriptingProfileSupportsRunBinaryScriptToolCallOverStdio() = runBlocking {
+        KotlinLoggingConfiguration.logStartupMessage = false
+        val fixtureDirectory = temporaryFolder.root.toPath()
+        val binary = fixtureDirectory.resolve("scripting-profile.bin")
+        Files.write(binary, byteArrayOf(5, 6, 7, 8))
+
+        withInstalledStdioClient(
+            toolProfile = HexanaMcpToolProfile.SCRIPTING,
+            allowedRoots = listOf(fixtureDirectory),
+        ) { server ->
+            val tools = server.client.listTools(ListToolsRequest())
+            assertEquals(listOf("run_binary_script"), tools.tools.map { it.name }.sorted())
+
+            val result = server.client.callTool(
+                name = "run_binary_script",
+                arguments = mapOf(
+                    "path" to binary.toString(),
+                    "script" to "print(binary.bytes.size); print(binary.bytes.get(2));",
+                ),
+                meta = emptyMap<String, Any?>(),
+            )
+
+            assertFalse(result.isError == true)
+            val text = result.content.single() as TextContent
+            assertEquals(result.structuredContent, Json.parseToJsonElement(text.text).jsonObject)
+            val structured = result.structuredContent ?: error("Missing structured run_binary_script content")
+            assertEquals(true, structured.getValue("success").jsonPrimitive.boolean)
+            assertEquals("SUCCESS", structured.getValue("status").jsonPrimitive.content)
+            assertEquals(
+                listOf("4", "7"),
+                structured.getValue("output")
+                    .jsonObject
+                    .getValue("lines")
+                    .jsonArray
+                    .map { it.jsonPrimitive.content },
+            )
+            assertTrue(server.stderr.contains("Starting stdio MCP transport"), server.stderr)
+        }
+    }
+
+    @Test
+    fun installedObfuscatedServerRuntimeShipsOnlyObfuscatedHexanaRuntimeJar() {
+        val installDir = integrationInstallDir(StdioLauncher.Server)
+        if (installDir.fileName.toString() != "server-r8") {
+            return
+        }
+
+        assertNoPreObfuscationHexanaRuntimeJars(
+            libDir = installDir.resolve("lib"),
+            label = "standalone obfuscated MCP runtime",
+        )
     }
 
     @Test

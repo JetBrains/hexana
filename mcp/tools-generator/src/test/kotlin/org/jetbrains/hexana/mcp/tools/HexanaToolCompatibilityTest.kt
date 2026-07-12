@@ -277,6 +277,6 @@ class HexanaToolCompatibilityTest {
     }
 
     private companion object {
-        const val EXPECTED_COMPATIBILITY_FINGERPRINT = "adcbc37a692ec81701c813de430c4faa13b99a5f1e592162a4544833c97fd7e9"
+        const val EXPECTED_COMPATIBILITY_FINGERPRINT = "54dd7448e9ecc4a48edd00965ac99c8366b1fe18f66a6e957a67e2e285610359"
     }
 }

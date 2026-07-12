@@ -72,6 +72,49 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun runBinaryScriptAcceptsBinaryPathAndScriptPath() {
+        val binary = temporaryFolder.newFile("handler-script-binary.bin").toPath()
+        Files.write(binary, byteArrayOf(1, 2, 3))
+        val script = temporaryFolder.newFile("handler-script-file.js").toPath()
+        Files.writeString(script, "print(binary.bytes.size);")
+
+        val result = handlers.runBinaryScript(
+            buildJsonObject {
+                put("path", JsonPrimitive(binary.toString()))
+                put("scriptPath", JsonPrimitive(script.toString()))
+            }
+        )
+
+        assertFalse(result.isError == true)
+        val textPayload = result.content.single() as TextContent
+        val structured = result.structuredContent ?: error("Expected structured content")
+        assertEquals(structured, Json.parseToJsonElement(textPayload.text).jsonObject)
+        assertEquals("SUCCESS", structured["status"]!!.jsonPrimitive.content)
+        assertEquals(true, structured["success"]!!.jsonPrimitive.boolean)
+        assertEquals(listOf("3"), structured["output"]!!.jsonObject["lines"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(script.toRealPath().toString(), structured["sourcePath"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun runBinaryScriptAcceptsBinaryPathAndInlineScript() {
+        val binary = temporaryFolder.newFile("handler-inline-binary.bin").toPath()
+        Files.write(binary, byteArrayOf(4, 5, 6, 7))
+
+        val result = handlers.runBinaryScript(
+            buildJsonObject {
+                put("path", JsonPrimitive(binary.toString()))
+                put("script", JsonPrimitive("print(binary.bytes.get(2));"))
+            }
+        )
+
+        assertFalse(result.isError == true)
+        val structured = result.structuredContent ?: error("Expected structured content")
+        assertEquals("SUCCESS", structured["status"]!!.jsonPrimitive.content)
+        assertEquals(listOf("6"), structured["output"]!!.jsonObject["lines"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals("<inline>", structured["sourceName"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun queryBinaryAcceptsRawByteArrayInput() {
         val result = handlers.queryBinary(
             buildJsonObject {

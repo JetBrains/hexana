@@ -67,7 +67,7 @@ class HexanaMcpServerSchemaTest {
         assertFalse(HexanaMcpToolProfile.PRODUCTION.includesTool("query_artifacts"))
 
         val scriptingNames = HexanaGeneratedMcpToolProfiles.SCRIPTING_TOOL_NAMES
-        assertEquals(emptySet(), scriptingNames)
+        assertEquals(setOf("run_binary_script"), scriptingNames)
         assertEquals(
             scriptingNames,
             createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.SCRIPTING).tools.keys.toSet(),
@@ -76,6 +76,7 @@ class HexanaMcpServerSchemaTest {
         assertTrue(scriptingNames.intersect(advancedNames).isEmpty())
         assertFalse(HexanaMcpToolProfile.SCRIPTING.includesTool("summarize_module"))
         assertFalse(HexanaMcpToolProfile.SCRIPTING.includesTool("query_artifacts"))
+        assertTrue(HexanaMcpToolProfile.SCRIPTING.includesTool("run_binary_script"))
     }
 
     @Test
@@ -139,6 +140,18 @@ class HexanaMcpServerSchemaTest {
         assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, wasmToWat.defaultOutputPolicy)
         assertEquals(HexanaCliExecutionStatus.EXECUTABLE, wasmToWat.executionStatus)
 
+        val runScript = tools.single { it.commandName == "run-script" }
+        assertEquals("run_binary_script", runScript.toolName)
+        assertEquals(setOf(HexanaCliToolGroup.SCRIPTING), runScript.groups)
+        assertEquals(
+            setOf(HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN),
+            runScript.inputModes,
+        )
+        assertEquals(setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.RAW), runScript.outputFormats)
+        assertEquals(HexanaCliOutputFormat.RAW, runScript.defaultOutputFormat)
+        assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, runScript.defaultOutputPolicy)
+        assertEquals(HexanaCliExecutionStatus.EXECUTABLE, runScript.executionStatus)
+
         val futureModuleTool = tools.single { it.commandName == "list-enabled-features" }
         assertTrue(futureModuleTool.groups.contains(HexanaCliToolGroup.MODULE))
         assertEquals(emptySet(), futureModuleTool.inputModes)
@@ -150,9 +163,13 @@ class HexanaMcpServerSchemaTest {
         assertFalse("wasm_to_wat" in productionNames)
         assertFalse("wasm_to_wat" in advancedNames)
         assertFalse("wasm_to_wat" in scriptingNames)
+        assertFalse("run_binary_script" in productionNames)
+        assertFalse("run_binary_script" in advancedNames)
+        assertTrue("run_binary_script" in scriptingNames)
         assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.PRODUCTION).tools.containsKey("wasm_to_wat"))
         assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.ADVANCED).tools.containsKey("wasm_to_wat"))
         assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.SCRIPTING).tools.containsKey("wasm_to_wat"))
+        assertTrue(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.SCRIPTING).tools.containsKey("run_binary_script"))
 
         assertFalse(tools.any { it.commandName == "query-artifacts" })
         assertFalse(tools.any { it.toolName == "query_artifacts" })
@@ -169,7 +186,7 @@ class HexanaMcpServerSchemaTest {
             "Production MCP tools missing from generated CLI registry",
         )
         assertEquals(
-            setOf("wasm_to_wat"),
+            setOf("wasm_to_wat", "run_binary_script"),
             cliNames - productionNames,
             "Generated CLI registry should only contain documented CLI-only tools outside production MCP",
         )

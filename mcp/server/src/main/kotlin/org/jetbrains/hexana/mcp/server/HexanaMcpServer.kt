@@ -13,12 +13,14 @@ fun createHexanaMcpServer(
     resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
     analysisService: HexanaAnalysisService = DefaultHexanaAnalysisService(resourceLimits),
     transport: HexanaEvent.McpTransport = HexanaEvent.McpTransport.STDIO,
-    toolProfile: HexanaMcpToolProfile = HexanaMcpToolProfile.PRODUCTION
+    toolProfile: HexanaMcpToolProfile = HexanaMcpToolProfile.PRODUCTION,
+    allowedRoots: List<String> = emptyList(),
 ): Server {
     val toolHandlers = HexanaToolHandlers(
         analysisService = analysisService,
         resourceLimits = resourceLimits,
-        transport = transport
+        transport = transport,
+        allowedFilePolicy = standaloneAllowedFilePolicy(allowedRoots),
     )
 
     return Server(
@@ -38,16 +40,18 @@ fun createStandaloneHexanaAnalysisService(
     resourceLimits: HexanaResourceLimits,
 ): HexanaAnalysisService {
     // TODO: Replace this compatibility default with client-provided workspace roots once wrappers can pass them reliably.
-    val allowedFilePolicy = if (allowedRoots.none { it.isNotBlank() }) {
+    return DefaultHexanaAnalysisService(
+        limits = resourceLimits,
+        allowedFilePolicy = standaloneAllowedFilePolicy(allowedRoots)
+    )
+}
+
+internal fun standaloneAllowedFilePolicy(allowedRoots: List<String>): AllowedFilePolicy =
+    if (allowedRoots.none { it.isNotBlank() }) {
         AllowedFilePolicy.allowAll
     } else {
         AllowedFilePolicy.requiringAllowedRoots(allowedRoots)
     }
-    return DefaultHexanaAnalysisService(
-        limits = resourceLimits,
-        allowedFilePolicy = allowedFilePolicy
-    )
-}
 
 internal fun hexanaServerVersion(): String {
     return System.getProperty("hexana.version")

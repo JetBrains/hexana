@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.server
 
 import com.github.ajalt.clikt.core.CliktError
 import com.github.ajalt.clikt.core.NoSuchSubcommand
+import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.tool.runtime.ToolInputSourceSelection
 import java.io.ByteArrayInputStream
@@ -474,6 +475,86 @@ class HexanaCliTest {
     }
 
     @Test
+    fun parsePassesRunScriptScriptPathParam() {
+        val command = assertGeneratedExecutableTool(
+            cli().parse(arrayOf("run-script", "app.bin", "--script", "script.js")),
+            "run-script",
+        )
+
+        val source = assertIs<ToolInputSourceSelection.Path>(command.sourceSelection)
+        assertEquals("binary", source.slotName)
+        assertEquals("app.bin", source.path)
+        assertEquals(HexanaCliOutputFormat.RAW, command.format)
+        assertEquals("script.js", command.params.getValue("scriptPath").jsonPrimitive.content)
+        assertFalse("script" in command.params)
+    }
+
+    @Test
+    fun parsePassesRunScriptInlineScriptParam() {
+        val command = assertGeneratedExecutableTool(
+            cli().parse(arrayOf("run-script", "app.bin", "--script-text", "print(binary.bytes.size);")),
+            "run-script",
+        )
+
+        assertEquals("print(binary.bytes.size);", command.params.getValue("script").jsonPrimitive.content)
+        assertFalse("scriptPath" in command.params)
+    }
+
+    @Test
+    fun parseAcceptsRunScriptStdinBinaryAndInlineScript() {
+        val stdin = FakeCliStdin(explicitBytes = byteArrayOf(1, 2, 3))
+        val command = assertGeneratedExecutableTool(
+            cli(stdin = stdin).parse(arrayOf("run-script", "--stdin", "--script-text", "print(1);")),
+            "run-script",
+        )
+
+        val source = assertIs<ToolInputSourceSelection.StdinBytes>(command.sourceSelection)
+        assertEquals("binary", source.slotName)
+        assertContentEquals(byteArrayOf(1, 2, 3), source.bytes())
+        assertEquals("print(1);", command.params.getValue("script").jsonPrimitive.content)
+        assertEquals(listOf(HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES), stdin.explicitMaxBytes)
+    }
+
+    @Test
+    fun parseAcceptsRunScriptBase64BinaryAndInlineScript() {
+        val command = assertGeneratedExecutableTool(
+            cli().parse(arrayOf("run-script", "--binary-base64", "AQID", "--script-text", "print(1);")),
+            "run-script",
+        )
+
+        val source = assertIs<ToolInputSourceSelection.Base64>(command.sourceSelection)
+        assertEquals("binary", source.slotName)
+        assertEquals("AQID", source.bytesBase64)
+        assertEquals("print(1);", command.params.getValue("script").jsonPrimitive.content)
+    }
+
+    @Test
+    fun parseAcceptsRunScriptRawAndJsonFormats() {
+        val raw = assertGeneratedExecutableTool(
+            cli().parse(arrayOf("run-script", "app.bin", "--script-text", "print(1);", "--format", "raw")),
+            "run-script",
+        )
+        val json = assertGeneratedExecutableTool(
+            cli().parse(arrayOf("run-script", "app.bin", "--script-text", "print(1);", "--format", "json")),
+            "run-script",
+        )
+
+        assertEquals(HexanaCliOutputFormat.RAW, raw.format)
+        assertEquals(HexanaCliOutputFormat.JSON, json.format)
+    }
+
+    @Test
+    fun parseRejectsRunScriptPrettyFormat() {
+        val error = assertFailsWith<CliktError> {
+            cli().parse(arrayOf("run-script", "app.bin", "--script-text", "print(1);", "--format", "pretty"))
+        }
+
+        assertTrue(error.message.orEmpty().contains("Unsupported run-script format"))
+        assertTrue(error.message.orEmpty().contains("json"))
+        assertTrue(error.message.orEmpty().contains("raw"))
+    }
+
+    @Test
     fun parseRejectsSummarizeBinaryFormatsNotSupportedByGeneratedMetadata() {
         listOf("pretty", "raw").forEach { format ->
             val error = assertFailsWith<CliktError> {
@@ -587,7 +668,7 @@ class HexanaCliTest {
                 )
                 assertTrue(help.contains("Usage:"), "${spec.commandName} help must include normal command usage")
                 val expectedPathHelp = if (HexanaCliInputMode.BINARY_PATH in spec.inputModes) {
-                    if (spec.commandName == "summarize-binary") {
+                    if (HexanaCliInputMode.STDIN in spec.inputModes) {
                         "Path to a binary file, or '-' to read raw stdin bytes."
                     } else {
                         "Path to a binary file."
@@ -598,7 +679,7 @@ class HexanaCliTest {
                     "Path to a WebAssembly module."
                 }
                 assertTrue(help.contains(expectedPathHelp), "${spec.commandName} help must document path input")
-                if (spec.commandName == "summarize-binary") {
+                if (HexanaCliInputMode.BINARY_PATH in spec.inputModes) {
                     assertTrue(help.contains("--stdin"), "${spec.commandName} help must document stdin input")
                     assertTrue(help.contains("--binary-base64"), "${spec.commandName} help must document base64 input")
                 } else if (HexanaCliInputMode.STDIN in spec.inputModes) {
@@ -705,6 +786,7 @@ class HexanaCliTest {
         assertTrue(error.message.orEmpty().contains("converters"))
         assertTrue(error.message.orEmpty().contains("module"))
         assertTrue(error.message.orEmpty().contains("function"))
+        assertTrue(error.message.orEmpty().contains("scripting"))
     }
 
     @Test
@@ -768,6 +850,7 @@ class HexanaCliTest {
         assertTrue(help.contains("http"))
         assertTrue(help.contains("summarize-module"))
         assertTrue(help.contains("summarize-binary"))
+        assertTrue(help.contains("run-script"))
         HexanaGeneratedCliToolRegistry.TOOLS
             .filter { it.executionStatus == HexanaCliExecutionStatus.TODO }
             .forEach { spec ->
@@ -788,6 +871,7 @@ class HexanaCliTest {
         assertTrue(help.contains("converters"))
         assertTrue(help.contains("module"))
         assertTrue(help.contains("function"))
+        assertTrue(help.contains("scripting"))
     }
 
     @Test

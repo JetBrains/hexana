@@ -67,6 +67,7 @@ public enum class HexanaCliToolGroup {
   MEMORY,
   MODULE,
   RUNTIME,
+  SCRIPTING,
   TYPE,
 }
 
@@ -113,6 +114,17 @@ public object HexanaGeneratedCliToolRegistry {
           inputModes = setOf(HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.EXECUTABLE,
+        ),
+        HexanaCliToolSpec(
+          commandName = "run-script",
+          toolName = "run_binary_script",
+          summary = "Run a Hexana JavaScript script over a Wasm or native binary.",
+          groups = setOf(HexanaCliToolGroup.SCRIPTING),
+          inputModes = setOf(HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.RAW),
+          defaultOutputFormat = HexanaCliOutputFormat.RAW,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
           executionStatus = HexanaCliExecutionStatus.EXECUTABLE,
         ),
@@ -747,6 +759,35 @@ internal fun generatedCliToolCommands(
   sink: (HexanaCommand) -> Unit,
 ): List<CliktCommand> = listOf(
   GeneratedSourceCliToolCommand(
+    spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == "run_binary_script" },
+    sourceSlotName = "binary",
+    pathArgumentName = "binary",
+    pathHelp = "Path to a binary file, or '-' to read raw stdin bytes.",
+    paramBindings = listOf(
+      GeneratedCliParamBinding(
+        targetField = "scriptPath",
+        optionName = "--script",
+        help = "Readable local JavaScript file path. Provide exactly one of `scriptPath` or `script`.",
+        kind = GeneratedCliParamKind.STRING,
+        required = false,
+      ),
+      GeneratedCliParamBinding(
+        targetField = "script",
+        optionName = "--script-text",
+        help = "Inline JavaScript source text. Provide exactly one of `scriptPath` or `script`.",
+        kind = GeneratedCliParamKind.STRING,
+        required = false,
+      ),
+    ),
+    stdinOptionName = "--stdin",
+    base64OptionNames = listOf("--binary-base64", "--bytes-base64"),
+    autoStdin = true,
+    stdin = stdin,
+    maxInlineInputBytes = { it.maxInlineBinaryBytes },
+    envReader = envReader,
+    sink = sink,
+  ),
+  GeneratedSourceCliToolCommand(
     spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == "summarize_binary" },
     sourceSlotName = "binary",
     pathArgumentName = "binary",
@@ -794,6 +835,7 @@ internal fun generatedCliToolCommands(
  * Generated executable CLI renderer dispatch derived from catalog CLI surface metadata.
  */
 internal fun generatedExecutableCliToolCommandOutput(command: HexanaCommand.ExecutableTool): HexanaCliCommandOutput = when (command.spec.toolName) {
+  "run_binary_script" -> renderRunBinaryScriptCommandOutput(command)
   "summarize_binary" -> renderSummarizeBinaryCommandOutput(command)
   "summarize_module" -> renderSummarizeModuleCommandOutput(command)
   "wasm_to_wat" -> renderWasmToWatCommandOutput(command)

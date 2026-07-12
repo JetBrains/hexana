@@ -608,6 +608,7 @@ enum class ToolGroup {
     Memory,
     Module,
     Runtime,
+    Scripting,
     Type,
 }
 
@@ -672,6 +673,30 @@ fun advancedHiddenCliSurface(): ToolSurfaceSpec = ToolSurfaceSpec(
 fun scriptingHiddenCliSurface(): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.scripting(),
     cli = CliSurfaceSpec.hidden(),
+    publicMcpb = PublicMcpbSurfaceSpec.excluded(),
+)
+
+fun scriptingCliSurface(
+    commandName: String,
+    group: ToolGroup,
+    outputPolicy: ToolOutputPolicy,
+    vararg additionalGroups: ToolGroup,
+    executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
+    outputOverride: OutputConversionCapability? = null,
+    defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
+    executableRenderer: ExecutableCliRendererSpec? = null,
+): ToolSurfaceSpec = ToolSurfaceSpec(
+    mcp = McpSurfaceSpec.scripting(),
+    cli = CliSurfaceSpec.visible(
+        commandName,
+        group,
+        outputPolicy,
+        *additionalGroups,
+        executionStatus = executionStatus,
+        outputOverride = outputOverride,
+        defaultOutput = defaultOutput,
+        executableRenderer = executableRenderer,
+    ),
     publicMcpb = PublicMcpbSurfaceSpec.excluded(),
 )
 

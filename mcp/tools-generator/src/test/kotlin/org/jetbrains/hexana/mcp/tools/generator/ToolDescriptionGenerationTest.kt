@@ -114,6 +114,28 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
+    fun `IDEA toolset excludes scripting only tools while standalone emits them`() {
+        val ideaSource = renderGeneratedSource(
+            mainClassName = "org.jetbrains.hexana.mcp.tools.generator.IdeaToolsetMainKt",
+            generatedFile = Path.of("org/jetbrains/hexana/mcp/HexanaToolset.kt"),
+        )
+        val standalone = renderStandaloneSources()
+        val dispatcher = standalone.sources.getValue(standaloneDispatcherPath)
+        val cliToolset = standalone.sources.getValue(standaloneCliToolsetPath)
+
+        assertFalse(ideaSource.contains("run_binary_script"))
+        assertFalse(ideaSource.contains("runBinaryScript"))
+        assertTrue(dispatcher.contains("profile.includesTool(\"run_binary_script\")"))
+        assertTrue(dispatcher.contains("handlers.runBinaryScript(request.arguments)"))
+        assertEquals(setOf("run_binary_script"), generatedProfileNames(dispatcher, "SCRIPTING_TOOL_NAMES"))
+        assertTrue(cliToolset.contains("commandName = \"run-script\""))
+        assertTrue(cliToolset.contains("toolName = \"run_binary_script\""))
+        assertTrue(cliToolset.contains("optionName = \"--script\""))
+        assertTrue(cliToolset.contains("optionName = \"--script-text\""))
+        assertTrue(cliToolset.contains("\"run_binary_script\" -> renderRunBinaryScriptCommandOutput(command)"))
+    }
+
+    @Test
     fun `IDEA binary schemas expose path base64 and raw byte inputs`() {
         val schema = invokePrivateGeneratorFunction(
             className = "org.jetbrains.hexana.mcp.tools.generator.IdeaToolsetMainKt",

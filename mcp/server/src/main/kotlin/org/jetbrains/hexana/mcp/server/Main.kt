@@ -210,6 +210,7 @@ private suspend fun runStdio(command: HexanaCommand.Stdio) {
         transport = HexanaEvent.McpTransport.STDIO,
         toolProfile = command.toolProfile,
         resourceLimits = command.resourceLimits,
+        allowedRoots = command.allowedRoots,
     )
     val finished = CompletableDeferred<Unit>()
     val transport = HexanaStdioServerTransport(
@@ -265,6 +266,7 @@ private suspend fun runHttp(command: HexanaCommand.Http) {
                 transport = HexanaEvent.McpTransport.HTTP,
                 toolProfile = command.toolProfile,
                 resourceLimits = command.resourceLimits,
+                allowedRoots = command.allowedRoots,
             )
         }
     }.start(wait = true)

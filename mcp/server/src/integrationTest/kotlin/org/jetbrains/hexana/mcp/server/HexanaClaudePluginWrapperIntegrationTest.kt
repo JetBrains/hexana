@@ -198,6 +198,28 @@ class HexanaClaudePluginWrapperIntegrationTest {
         assertEquals(1, counts.getValue("exports").jsonPrimitive.int)
     }
 
+    private suspend fun assertRunScriptCliCommandRunsThroughWrapper(launcher: StdioLauncher) {
+        val binary = temporaryFolder.newFile("${launcher.clientName}-run-script.bin").toPath()
+        Files.write(binary, byteArrayOf(5, 6, 7))
+
+        val result = HexanaInstalledStdioClient.runCommand(
+            launcher,
+            "run-script",
+            binary.toString(),
+            "--script-text",
+            "print(binary.bytes.size); print(binary.bytes.get(2));",
+            "--format",
+            "raw",
+        )
+        assertFalse(
+            result.timedOut,
+            "run-script command timed out. stdout=${result.stdout}, stderr=${result.stderr}, command=${result.command}"
+        )
+        assertEquals(0, result.exitCode, "stderr=${result.stderr}, command=${result.command}")
+        assertEquals("", result.unexpectedStderr, "Executable CLI command should not log to stderr.")
+        assertEquals("3\n7", result.stdout)
+    }
+
     private suspend fun assertWrapperExposesToolsOverStdio(
         clientLabel: String,
         launcher: StdioLauncher,

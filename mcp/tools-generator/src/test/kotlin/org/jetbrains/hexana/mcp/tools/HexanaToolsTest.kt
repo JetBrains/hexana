@@ -79,6 +79,7 @@ class HexanaToolsTest {
                 "list_binary_functions",
                 "search_binary_functions",
                 "query_binary",
+                "run_binary_script",
                 "wasm_to_wat",
                 "summarize_module",
                 "list_enabled_features",
@@ -175,10 +176,10 @@ class HexanaToolsTest {
     }
 
     @Test
-    fun `MCP scripting metadata is first class but currently empty`() {
+    fun `MCP scripting metadata is first class and dedicated`() {
         assertEquals(setOf(McpToolAudience.Scripting), McpSurfaceSpec.scripting().audiences)
         assertEquals(
-            emptySet(),
+            setOf("run_binary_script"),
             HexanaTools
                 .filter { McpToolAudience.Scripting in it.surfaces.mcp.audiences }
                 .map { it.name }
@@ -204,6 +205,8 @@ class HexanaToolsTest {
         )
         assertTrue("wasm_to_wat" in cliVisibleToolNames, "wasm_to_wat should stay CLI-visible")
         assertFalse("wasm_to_wat" in productionToolNames, "wasm_to_wat should stay outside production MCP")
+        assertTrue("run_binary_script" in cliVisibleToolNames, "run_binary_script should stay CLI-visible")
+        assertFalse("run_binary_script" in productionToolNames, "run_binary_script should stay outside production MCP")
         assertFalse("query_artifacts" in cliVisibleToolNames, "query_artifacts should stay hidden from CLI")
     }
 
@@ -260,11 +263,16 @@ class HexanaToolsTest {
     fun `implemented CLI commands are marked executable`() {
         val summarizeModule = HexanaTools.single { it.name == "summarize_module" }
         val wasmToWat = HexanaTools.single { it.name == "wasm_to_wat" }
+        val runBinaryScript = HexanaTools.single { it.name == "run_binary_script" }
 
         assertEquals(CliExecutionStatus.Executable, summarizeModule.surfaces.cli.executionStatus)
         assertEquals(CliExecutionStatus.Executable, wasmToWat.surfaces.cli.executionStatus)
+        assertEquals(CliExecutionStatus.Executable, runBinaryScript.surfaces.cli.executionStatus)
         assertEquals("renderSummarizeModuleCommandOutput", summarizeModule.surfaces.cli.executableRenderer?.methodName)
         assertEquals("renderWasmToWatCommandOutput", wasmToWat.surfaces.cli.executableRenderer?.methodName)
+        assertEquals("renderRunBinaryScriptCommandOutput", runBinaryScript.surfaces.cli.executableRenderer?.methodName)
+        assertEquals(setOf(McpToolAudience.Scripting), runBinaryScript.surfaces.mcp.audiences)
+        assertEquals("run-script", runBinaryScript.surfaces.cli.commandName)
     }
 
     @Test
@@ -738,6 +746,11 @@ class HexanaToolsTest {
                 )
                 "wasm_to_wat" -> setOf(
                     OutputConversionCapability.SemanticJson,
+                    OutputConversionCapability.RawText,
+                )
+                "run_binary_script" -> setOf(
+                    OutputConversionCapability.SemanticJson,
+                    OutputConversionCapability.McpWrapper,
                     OutputConversionCapability.RawText,
                 )
                 else -> setOf(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper)

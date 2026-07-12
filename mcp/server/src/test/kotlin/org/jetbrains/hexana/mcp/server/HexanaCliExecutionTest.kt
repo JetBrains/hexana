@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.server
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -14,6 +15,7 @@ import org.jetbrains.hexana.mcp.tool.runtime.ToolInputSourceSelection
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.Base64
 import java.util.concurrent.CancellationException
@@ -527,6 +529,137 @@ class HexanaCliExecutionTest {
     }
 
     @Test
+    fun renderRunScriptRawUsesBinaryPathAndScriptPath() {
+        val binary = temporaryFolder.newFile("script-binary.bin").toPath()
+        Files.write(binary, byteArrayOf(10, 20, 30, 40))
+        val script = temporaryFolder.newFile("script-file.js").toPath()
+        Files.writeString(script, "print(binary.bytes.size); print(binary.bytes.get(2));")
+
+        val output = generatedExecutableCliToolCommandOutput(
+            runScriptCommand(
+                sourceSelection = ToolInputSourceSelection.Path(path = binary.toString(), slotName = "binary"),
+                params = mapOf("scriptPath" to JsonPrimitive(script.toString())),
+                format = HexanaCliOutputFormat.RAW,
+            )
+        )
+
+        assertEquals("4\n30", output.stdout)
+        assertEquals("", output.stderr)
+    }
+
+    @Test
+    fun renderRunScriptJsonUsesStdinBinaryAndInlineScript() {
+        val output = generatedExecutableCliToolCommandOutput(
+            runScriptCommand(
+                sourceSelection = ToolInputSourceSelection.StdinBytes(byteArrayOf(1, 2, 3), slotName = "binary"),
+                params = mapOf("script" to JsonPrimitive("print(binary.bytes.get(1));")),
+                format = HexanaCliOutputFormat.JSON,
+            )
+        ).stdout
+
+        val json = Json.parseToJsonElement(output).jsonObject
+        assertEquals("SUCCESS", json.getValue("status").jsonPrimitive.content)
+        assertEquals(true, json.getValue("success").jsonPrimitive.boolean)
+        assertEquals(listOf("2"), json.getValue("output").jsonObject.getValue("lines").jsonArray.map { it.jsonPrimitive.content })
+        assertEquals("generic", json.getValue("binary").jsonObject.getValue("format").jsonPrimitive.content)
+        assertFalse("path" in json.getValue("binary").jsonObject)
+    }
+
+    @Test
+    fun renderRunScriptRawUsesBase64BinaryAndInlineScript() {
+        val output = generatedExecutableCliToolCommandOutput(
+            runScriptCommand(
+                sourceSelection = ToolInputSourceSelection.Base64(
+                    bytesBase64 = Base64.getEncoder().encodeToString(byteArrayOf(5, 6)),
+                    slotName = "binary",
+                ),
+                params = mapOf("script" to JsonPrimitive("print(binary.bytes.size);")),
+                format = HexanaCliOutputFormat.RAW,
+            )
+        )
+
+        assertEquals("2", output.stdout)
+        assertEquals("", output.stderr)
+        assertEquals(0, output.exitCode)
+    }
+
+    @Test
+    fun renderRunScriptRawAcceptsExactOutputBudgetWithoutTrailingNewline() {
+        val output = generatedExecutableCliToolCommandOutput(
+            runScriptCommand(
+                sourceSelection = ToolInputSourceSelection.StdinBytes(byteArrayOf(1, 2, 3), slotName = "binary"),
+                params = mapOf("script" to JsonPrimitive("print('abcd');")),
+                format = HexanaCliOutputFormat.RAW,
+                resourceLimits = HexanaResourceLimits(maxOutputBytes = 4),
+            )
+        )
+
+        assertEquals("abcd", output.stdout)
+        assertEquals("", output.stderr)
+        assertEquals(4, output.byteSize())
+        assertEquals(0, output.exitCode)
+    }
+
+    @Test
+    fun renderRunScriptRawTrimsStdoutToKeepTruncationDiagnosticWithinOutputBudget() {
+        val maxOutputBytes = 100
+
+        val output = generatedExecutableCliToolCommandOutput(
+            runScriptCommand(
+                sourceSelection = ToolInputSourceSelection.StdinBytes(byteArrayOf(1, 2, 3), slotName = "binary"),
+                params = mapOf("script" to JsonPrimitive("print('x'.repeat(1000));")),
+                format = HexanaCliOutputFormat.RAW,
+                resourceLimits = HexanaResourceLimits(maxOutputBytes = maxOutputBytes),
+            )
+        )
+
+        assertEquals(0, output.exitCode)
+        assertTrue(output.stdout.isNotEmpty())
+        assertTrue(output.stderr.contains("OUTPUT_TRUNCATED: Script output exceeded the configured output limit"))
+        assertTrue(output.byteSize() <= maxOutputBytes, "Output size was ${output.byteSize()} bytes")
+    }
+
+    @Test
+    fun renderRunScriptRawWritesDiagnosticsToStderr() {
+        val output = generatedExecutableCliToolCommandOutput(
+            runScriptCommand(
+                sourceSelection = ToolInputSourceSelection.StdinBytes(byteArrayOf(1, 2, 3), slotName = "binary"),
+                params = mapOf("script" to JsonPrimitive("throw new Error('boom');")),
+                format = HexanaCliOutputFormat.RAW,
+            )
+        )
+
+        assertEquals("", output.stdout)
+        assertTrue(output.stderr.startsWith("RUNTIME_ERROR: "))
+        assertTrue(output.stderr.contains("boom"))
+    }
+
+    @Test
+    fun renderRunScriptRawRequiresExactlyOneScriptSource() {
+        val missing = generatedExecutableCliToolCommandOutput(
+            runScriptCommand(
+                sourceSelection = ToolInputSourceSelection.StdinBytes(byteArrayOf(1), slotName = "binary"),
+                params = emptyMap(),
+                format = HexanaCliOutputFormat.RAW,
+            )
+        )
+        val duplicate = generatedExecutableCliToolCommandOutput(
+            runScriptCommand(
+                sourceSelection = ToolInputSourceSelection.StdinBytes(byteArrayOf(1), slotName = "binary"),
+                params = mapOf(
+                    "scriptPath" to JsonPrimitive("script.js"),
+                    "script" to JsonPrimitive("print(1);"),
+                ),
+                format = HexanaCliOutputFormat.RAW,
+            )
+        )
+
+        assertEquals("", missing.stdout)
+        assertEquals("INVALID_INPUT: Exactly one of --script or --script-text is required.\n", missing.stderr)
+        assertEquals("INVALID_INPUT: Provide exactly one of --script or --script-text.\n", duplicate.stderr)
+    }
+
+    @Test
     fun renderToolsListingReturnsDeterministicGeneratedCliMetadata() {
         val output = renderCliToolsListing(HexanaCommand.Tools(group = null))
 
@@ -556,7 +689,15 @@ class HexanaCliExecutionTest {
             "  formats: json, raw\n",
             "  default: raw\n",
         )
+        assertToolBlockContains(
+            output,
+            "run-script",
+            "  groups: scripting\n",
+            "  formats: json, raw\n",
+            "  default: raw\n",
+        )
         assertTrue(output.indexOf("summarize-binary\n") < output.indexOf("summarize-module\n"))
+        assertTrue(output.indexOf("run-script\n") < output.indexOf("summarize-binary\n"))
         assertTrue(output.indexOf("summarize-module\n") < output.indexOf("wasm-to-wat\n"))
     }
 
@@ -728,6 +869,21 @@ class HexanaCliExecutionTest {
         resourceLimits = resourceLimits,
     )
 
+    private fun runScriptCommand(
+        sourceSelection: ToolInputSourceSelection,
+        params: Map<String, JsonPrimitive>,
+        format: HexanaCliOutputFormat,
+        allowedRoots: List<String> = emptyList(),
+        resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
+    ) = HexanaCommand.ExecutableTool(
+        spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == "run-script" },
+        sourceSelections = listOf(sourceSelection),
+        params = params,
+        format = format,
+        allowedRoots = allowedRoots,
+        resourceLimits = resourceLimits,
+    )
+
     private fun executableToolCommand(
         commandName: String,
         sourceSelection: ToolInputSourceSelection,
@@ -745,4 +901,7 @@ class HexanaCliExecutionTest {
     private fun createWasmFile(name: String, wat: String) = temporaryFolder.newFile(name).toPath().also {
         Files.write(it, wat2wasm(wat))
     }
+
+    private fun HexanaCliCommandOutput.byteSize(): Int =
+        stdout.toByteArray(StandardCharsets.UTF_8).size + stderr.toByteArray(StandardCharsets.UTF_8).size
 }

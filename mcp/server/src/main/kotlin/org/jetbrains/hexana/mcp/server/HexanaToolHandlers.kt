@@ -22,8 +22,15 @@ import org.jetbrains.hexana.mcp.model.imports.*
 import org.jetbrains.hexana.mcp.model.memory.*
 import org.jetbrains.hexana.mcp.model.runtime.*
 import org.jetbrains.hexana.mcp.model.sections.*
+import org.jetbrains.hexana.mcp.model.scripting.*
 import org.jetbrains.hexana.mcp.model.summary.*
 import org.jetbrains.hexana.mcp.model.types.*
+import org.jetbrains.hexana.mcp.scripting.HexanaScriptDiagnostic
+import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
+import org.jetbrains.hexana.mcp.scripting.HexanaScriptOutput
+import org.jetbrains.hexana.mcp.scripting.HexanaScriptResult
+import org.jetbrains.hexana.mcp.scripting.HexanaScriptRunner
+import org.jetbrains.hexana.mcp.scripting.HexanaScriptSource
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -48,6 +55,7 @@ class HexanaToolHandlers(
         } ?: resourceLimits
     ),
     private val transport: HexanaEvent.McpTransport = HexanaEvent.McpTransport.STDIO,
+    private val allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
     private val logger: Logger = LoggerFactory.getLogger(HexanaToolHandlers::class.java)
 ) {
     private val resourceLimits = maxInlineInputBytes?.let {
@@ -106,6 +114,15 @@ class HexanaToolHandlers(
     fun summarizeBinary(arguments: JsonObject?): CallToolResult {
         return execute("summarize_binary", BinarySummaryResult.serializer()) {
             analysisService.summarizeBinary(binaryInput(arguments))
+        }
+    }
+
+    fun runBinaryScript(arguments: JsonObject?): CallToolResult {
+        return execute("run_binary_script", RunBinaryScriptResult.serializer()) {
+            runBinaryScriptResult(
+                input = binaryInput(arguments),
+                source = scriptSource(arguments),
+            )
         }
     }
 
@@ -650,6 +667,69 @@ class HexanaToolHandlers(
             else -> error("Unreachable input state")
         }
     }
+
+    private fun scriptSource(arguments: JsonObject?): HexanaScriptSource {
+        val scriptPath = arguments.optionalNonBlankString("scriptPath")
+        val script = arguments.optionalNonBlankString("script")
+        val providedInputs = listOf(scriptPath, script).count { it != null }
+        if (providedInputs == 0) {
+            throw ToolInputException("Exactly one of `scriptPath` or `script` is required")
+        }
+        if (providedInputs > 1) {
+            throw ToolInputException("Provide exactly one of `scriptPath` or `script`")
+        }
+
+        return when {
+            scriptPath != null -> HexanaScriptSource.FilePath(scriptPath)
+            script != null -> HexanaScriptSource.Inline(script)
+            else -> error("Unreachable script source state")
+        }
+    }
+
+    private fun runBinaryScriptResult(input: BinaryInput, source: HexanaScriptSource): RunBinaryScriptResult {
+        return HexanaScriptRunner(
+            limits = HexanaScriptLimits(
+                maxOutputBytes = resourceLimits.maxOutputBytes,
+                maxInlineScriptBytes = resourceLimits.maxTextFileBytes,
+                maxScriptFileBytes = resourceLimits.maxTextFileBytes,
+                maxInlineBinaryBytes = resourceLimits.maxInlineBinaryBytes,
+                maxFileBinaryBytes = resourceLimits.maxFileBinaryBytes,
+            ),
+            allowedFilePolicy = allowedFilePolicy,
+        ).run(input, source).toRunBinaryScriptResult()
+    }
+
+    private fun HexanaScriptResult.toRunBinaryScriptResult(): RunBinaryScriptResult =
+        RunBinaryScriptResult(
+            status = status.name,
+            success = success,
+            output = output.toRunBinaryScriptOutputResult(),
+            diagnostics = diagnostics.map { it.toRunBinaryScriptDiagnosticResult() },
+            binary = binary,
+            sourceName = sourceName,
+            sourcePath = sourcePath,
+            durationMillis = durationMillis,
+        )
+
+    private fun HexanaScriptOutput.toRunBinaryScriptOutputResult(): RunBinaryScriptOutputResult =
+        RunBinaryScriptOutputResult(
+            lines = lines,
+            truncated = truncated,
+            emittedBytes = emittedBytes,
+            maxLines = maxLines,
+            maxBytes = maxBytes,
+        )
+
+    private fun HexanaScriptDiagnostic.toRunBinaryScriptDiagnosticResult(): RunBinaryScriptDiagnosticResult =
+        RunBinaryScriptDiagnosticResult(
+            code = code,
+            message = message,
+            severity = severity.name,
+            exceptionClass = exceptionClass,
+            sourceName = sourceName,
+            line = line,
+            column = column,
+        )
 
     private fun decodeInlineBase64(encoded: String, maxInlineBytes: Int): ByteArray {
         var nonWhitespaceLen = 0
