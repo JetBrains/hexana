@@ -2,7 +2,8 @@ package org.jetbrains.hexana.mcp.server
 
 enum class HexanaMcpToolProfile {
     PRODUCTION,
-    ADVANCED;
+    ADVANCED,
+    SCRIPTING;
 
     fun cliValue(): String = name.lowercase()
 
@@ -10,6 +11,7 @@ enum class HexanaMcpToolProfile {
         return when (this) {
             PRODUCTION -> toolName in HexanaGeneratedMcpToolProfiles.PRODUCTION_TOOL_NAMES
             ADVANCED -> toolName in HexanaGeneratedMcpToolProfiles.ADVANCED_TOOL_NAMES
+            SCRIPTING -> toolName in HexanaGeneratedMcpToolProfiles.SCRIPTING_TOOL_NAMES
         }
     }
 
@@ -20,6 +22,7 @@ enum class HexanaMcpToolProfile {
             "advanced" to ADVANCED,
             "debug" to ADVANCED,
             "full" to ADVANCED,
+            "scripting" to SCRIPTING,
         )
 
         fun parseCliValue(value: String): HexanaMcpToolProfile {

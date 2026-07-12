@@ -45,7 +45,7 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
-    fun generatedProfileMetadataDrivesDefaultProductionAndAdvancedRegistries() {
+    fun generatedProfileMetadataDrivesDefaultProductionAdvancedAndScriptingRegistries() {
         val productionNames = HexanaGeneratedMcpToolProfiles.PRODUCTION_TOOL_NAMES
         assertEquals(29, productionNames.size)
         assertEquals(
@@ -65,6 +65,17 @@ class HexanaMcpServerSchemaTest {
         assertTrue(advancedNames.all { HexanaMcpToolProfile.ADVANCED.includesTool(it) })
         assertTrue(productionNames.all { HexanaMcpToolProfile.PRODUCTION.includesTool(it) })
         assertFalse(HexanaMcpToolProfile.PRODUCTION.includesTool("query_artifacts"))
+
+        val scriptingNames = HexanaGeneratedMcpToolProfiles.SCRIPTING_TOOL_NAMES
+        assertEquals(emptySet(), scriptingNames)
+        assertEquals(
+            scriptingNames,
+            createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.SCRIPTING).tools.keys.toSet(),
+        )
+        assertTrue(scriptingNames.intersect(productionNames).isEmpty())
+        assertTrue(scriptingNames.intersect(advancedNames).isEmpty())
+        assertFalse(HexanaMcpToolProfile.SCRIPTING.includesTool("summarize_module"))
+        assertFalse(HexanaMcpToolProfile.SCRIPTING.includesTool("query_artifacts"))
     }
 
     @Test
@@ -135,10 +146,13 @@ class HexanaMcpServerSchemaTest {
 
         val productionNames = HexanaGeneratedMcpToolProfiles.PRODUCTION_TOOL_NAMES
         val advancedNames = HexanaGeneratedMcpToolProfiles.ADVANCED_TOOL_NAMES
+        val scriptingNames = HexanaGeneratedMcpToolProfiles.SCRIPTING_TOOL_NAMES
         assertFalse("wasm_to_wat" in productionNames)
         assertFalse("wasm_to_wat" in advancedNames)
+        assertFalse("wasm_to_wat" in scriptingNames)
         assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.PRODUCTION).tools.containsKey("wasm_to_wat"))
         assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.ADVANCED).tools.containsKey("wasm_to_wat"))
+        assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.SCRIPTING).tools.containsKey("wasm_to_wat"))
 
         assertFalse(tools.any { it.commandName == "query-artifacts" })
         assertFalse(tools.any { it.toolName == "query_artifacts" })

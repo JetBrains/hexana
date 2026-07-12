@@ -482,6 +482,7 @@ data class McpSurfaceSpec(
     companion object {
         fun production(): McpSurfaceSpec = McpSurfaceSpec(setOf(McpToolAudience.Production))
         fun advanced(): McpSurfaceSpec = McpSurfaceSpec(setOf(McpToolAudience.Advanced))
+        fun scripting(): McpSurfaceSpec = McpSurfaceSpec(setOf(McpToolAudience.Scripting))
         fun none(): McpSurfaceSpec = McpSurfaceSpec(emptySet())
     }
 }
@@ -489,6 +490,7 @@ data class McpSurfaceSpec(
 enum class McpToolAudience {
     Advanced,
     Production,
+    Scripting,
 }
 
 data class PublicMcpbSurfaceSpec(
@@ -663,6 +665,12 @@ fun publicMcpbProductionCliSurface(
 
 fun advancedHiddenCliSurface(): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.advanced(),
+    cli = CliSurfaceSpec.hidden(),
+    publicMcpb = PublicMcpbSurfaceSpec.excluded(),
+)
+
+fun scriptingHiddenCliSurface(): ToolSurfaceSpec = ToolSurfaceSpec(
+    mcp = McpSurfaceSpec.scripting(),
     cli = CliSurfaceSpec.hidden(),
     publicMcpb = PublicMcpbSurfaceSpec.excluded(),
 )

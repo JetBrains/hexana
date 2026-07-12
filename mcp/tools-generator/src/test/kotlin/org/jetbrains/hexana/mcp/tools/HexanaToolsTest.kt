@@ -175,6 +175,18 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `MCP scripting metadata is first class but currently empty`() {
+        assertEquals(setOf(McpToolAudience.Scripting), McpSurfaceSpec.scripting().audiences)
+        assertEquals(
+            emptySet(),
+            HexanaTools
+                .filter { McpToolAudience.Scripting in it.surfaces.mcp.audiences }
+                .map { it.name }
+                .toSet(),
+        )
+    }
+
+    @Test
     fun `production MCP tools declare visible CLI metadata except documented divergence`() {
         val productionToolNames = HexanaTools
             .filter { McpToolAudience.Production in it.surfaces.mcp.audiences }

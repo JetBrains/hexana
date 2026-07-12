@@ -99,6 +99,14 @@ class HexanaCliTest {
     }
 
     @Test
+    fun parseAcceptsScriptingToolProfileForStdio() {
+        val command = cli().parse(arrayOf("stdio", "--tool-profile", "scripting"))
+
+        assertIs<HexanaCommand.Stdio>(command)
+        assertEquals(HexanaMcpToolProfile.SCRIPTING, command.toolProfile)
+    }
+
+    @Test
     fun parseAcceptsRepeatedAllowedRootsForStdio() {
         val command = cli().parse(
             arrayOf(
@@ -727,6 +735,14 @@ class HexanaCliTest {
     }
 
     @Test
+    fun parseAcceptsScriptingToolProfileForHttp() {
+        val command = cli().parse(arrayOf("http", "--tool-profile", "scripting"))
+
+        assertIs<HexanaCommand.Http>(command)
+        assertEquals(HexanaMcpToolProfile.SCRIPTING, command.toolProfile)
+    }
+
+    @Test
     fun parseRejectsPublicBindWithoutExplicitOptIn() {
         val error = assertFailsWith<CliktError> {
             cli().parse(arrayOf("http", "--host", "0.0.0.0"))
@@ -812,6 +828,7 @@ class HexanaCliTest {
 
         assertTrue(error.message.orEmpty().contains("production"))
         assertTrue(error.message.orEmpty().contains("advanced"))
+        assertTrue(error.message.orEmpty().contains("scripting"))
     }
 
     @Test

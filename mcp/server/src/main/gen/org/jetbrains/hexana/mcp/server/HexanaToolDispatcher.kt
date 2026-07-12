@@ -110,6 +110,8 @@ internal object HexanaGeneratedMcpToolProfiles {
         "audit_data_payload_policy",
         "query_artifacts",
       )
+
+  internal val SCRIPTING_TOOL_NAMES: Set<String> = emptySet()
 }
 
 /**

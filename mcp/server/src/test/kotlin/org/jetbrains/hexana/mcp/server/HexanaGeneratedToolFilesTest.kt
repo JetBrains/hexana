@@ -38,6 +38,7 @@ class HexanaGeneratedToolFilesTest {
             listOf(
                 "public object HexanaMcpToolCompatibility",
                 "internal object HexanaGeneratedMcpToolProfiles",
+                "SCRIPTING_TOOL_NAMES",
                 "internal object HexanaToolInputDefaults",
                 "public fun Server.registerHexanaTools",
                 "addTool(tool = Tool(",

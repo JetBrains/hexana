@@ -174,7 +174,12 @@ private fun buildToolProfilesObject(tools: List<ToolSpec>): TypeSpec {
         )
         .addProperty(
             PropertySpec.builder("ADVANCED_TOOL_NAMES", setOfString, KModifier.INTERNAL)
-                .initializer(toolNameSetInitializer(tools.map { it.name }))
+                .initializer(toolNameSetInitializer(tools.advancedToolNames()))
+                .build()
+        )
+        .addProperty(
+            PropertySpec.builder("SCRIPTING_TOOL_NAMES", setOfString, KModifier.INTERNAL)
+                .initializer(toolNameSetInitializer(tools.scriptingToolNames()))
                 .build()
         )
         .build()
@@ -931,7 +936,20 @@ private fun List<ToolSpec>.productionToolNames(): List<String> =
     filter { McpToolAudience.Production in it.surfaces.mcp.audiences }
         .map { it.name }
 
+private fun List<ToolSpec>.advancedToolNames(): List<String> =
+    filter {
+        McpToolAudience.Production in it.surfaces.mcp.audiences ||
+            McpToolAudience.Advanced in it.surfaces.mcp.audiences
+    }.map { it.name }
+
+private fun List<ToolSpec>.scriptingToolNames(): List<String> =
+    filter { McpToolAudience.Scripting in it.surfaces.mcp.audiences }
+        .map { it.name }
+
 private fun toolNameSetInitializer(names: List<String>): CodeBlock {
+    if (names.isEmpty()) {
+        return CodeBlock.of("emptySet()")
+    }
     val builder = CodeBlock.builder()
     builder.add("setOf(\n")
     builder.indent()

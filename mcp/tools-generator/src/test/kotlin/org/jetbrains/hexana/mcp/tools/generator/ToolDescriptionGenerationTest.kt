@@ -17,6 +17,7 @@ import org.jetbrains.hexana.mcp.tools.HexanaTools
 import org.jetbrains.hexana.mcp.tools.list
 import org.jetbrains.hexana.mcp.tools.noMcpCliSurface
 import org.jetbrains.hexana.mcp.tools.productionCliSurface
+import org.jetbrains.hexana.mcp.tools.scriptingHiddenCliSurface
 import org.jetbrains.hexana.mcp.tools.string
 import org.jetbrains.hexana.mcp.tools.toolInputModel
 import org.junit.Test
@@ -245,6 +246,7 @@ class ToolDescriptionGenerationTest {
                 "package org.jetbrains.hexana.mcp.server",
                 "public object HexanaMcpToolCompatibility",
                 "internal object HexanaGeneratedMcpToolProfiles",
+                "SCRIPTING_TOOL_NAMES",
                 "internal object HexanaToolInputDefaults",
                 "public fun Server.registerHexanaTools",
                 "private fun Server.registerSummarizeModuleTool",
@@ -315,6 +317,21 @@ class ToolDescriptionGenerationTest {
                 "GeneratedPathCliToolCommand",
             ),
         )
+    }
+
+    @Test
+    fun `standalone dispatcher keeps scripting profile separate from production and advanced`() {
+        val scriptingSpec = summarizeBinarySpec.copy(
+            name = "script_fixture",
+            surfaces = scriptingHiddenCliSurface(),
+        )
+
+        val dispatcher = buildDispatcherFile(listOf(summarizeBinarySpec, scriptingSpec)).toString()
+
+        assertEquals(setOf("summarize_binary"), generatedProfileNames(dispatcher, "PRODUCTION_TOOL_NAMES"))
+        assertEquals(setOf("summarize_binary"), generatedProfileNames(dispatcher, "ADVANCED_TOOL_NAMES"))
+        assertEquals(setOf("script_fixture"), generatedProfileNames(dispatcher, "SCRIPTING_TOOL_NAMES"))
+        assertTrue(dispatcher.contains("profile.includesTool(\"script_fixture\")"))
     }
 
     @Test
@@ -729,6 +746,19 @@ class ToolDescriptionGenerationTest {
         } finally {
             outputRoot.toFile().deleteRecursively()
         }
+    }
+
+    private fun generatedProfileNames(source: String, propertyName: String): Set<String> {
+        val marker = "internal val $propertyName: Set<String> = setOf("
+        val start = source.indexOf(marker)
+        assertTrue(start >= 0, "Missing generated profile set $propertyName")
+        val bodyStart = start + marker.length
+        val bodyEnd = source.indexOf(")", bodyStart)
+        assertTrue(bodyEnd > bodyStart, "Malformed generated profile set $propertyName")
+        return Regex("\"([^\"]+)\"")
+            .findAll(source.substring(bodyStart, bodyEnd))
+            .map { it.groupValues[1] }
+            .toSet()
     }
 
     private fun invokeGeneratorMain(mainClassName: String, outputRoot: Path) {
