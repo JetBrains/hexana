@@ -30,14 +30,34 @@ class HexanaToolCompatibilityTest {
         )
     }
 
-    private fun compatibilitySnapshot(): String = buildString {
+    @Test
+    fun `compatibility snapshot includes CLI input model metadata`() {
+        val snapshot = compatibilitySnapshot(listOf(explicitCliInputModelTool()))
+
+        assertTrue(snapshot.contains("tool[0].cliInputModel.origin=explicit"))
+        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].name=current"))
+        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].kind=Wasm"))
+        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].target=field:current"))
+        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].required=true"))
+        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].cli.positionalPathName=current"))
+        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].cli.stdinOption=--stdin"))
+        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].cli.base64Option=--current-base64"))
+        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].cli.autoStdin=true"))
+        assertTrue(snapshot.contains("tool[0].cliInputModel.param[0].name=limit"))
+        assertTrue(snapshot.contains("tool[0].cliInputModel.param[0].kind=Value"))
+        assertTrue(snapshot.contains("tool[0].cliInputModel.param[0].targetField=limit"))
+        assertTrue(snapshot.contains("tool[0].cliInputModel.param[0].cliOption=--limit"))
+    }
+
+    private fun compatibilitySnapshot(tools: List<ToolSpec> = HexanaTools): String = buildString {
         appendLine("compatibility.schemaVersion=${HexanaToolSchemaCompatibility.schemaVersion}")
         appendLine("compatibility.policy=${HexanaToolSchemaCompatibility.policy.compatibilityText()}")
-        HexanaTools.forEachIndexed { index, tool ->
+        tools.forEachIndexed { index, tool ->
             val prefix = "tool[$index]"
             appendLine("$prefix.name=${tool.name}")
             appendLine("$prefix.description=${tool.mcpDescription.compatibilityText()}")
             appendLine("$prefix.inputPattern=${tool.inputPattern.compatibilityText()}")
+            appendCliInputModel("$prefix.cliInputModel", tool)
             appendLine("$prefix.mcpAudiences=${tool.surfaces.mcp.audiences.joinToString(",")}")
             appendLine("$prefix.publicMcpb.included=${tool.surfaces.publicMcpb.included}")
             appendLine("$prefix.cli.visible=${tool.surfaces.cli.visible}")
@@ -52,6 +72,57 @@ class HexanaToolCompatibilityTest {
             appendClass("$prefix.input", tool.input)
             appendClass("$prefix.output", tool.output)
         }
+    }
+
+    private fun StringBuilder.appendCliInputModel(prefix: String, tool: ToolSpec) {
+        val explicitModel = tool.inputModel
+        val model = when {
+            explicitModel != null -> explicitModel.also {
+                appendLine("$prefix.origin=explicit")
+            }
+            tool.surfaces.cli.executionStatus == CliExecutionStatus.Executable -> {
+                val derivedModel = runCatching { tool.inputModelForCli() }.getOrElse { error ->
+                    appendLine("$prefix.origin=unsupported")
+                    appendLine("$prefix.unsupportedReason=${error.message.orEmpty().compatibilityText()}")
+                    return
+                }
+                appendLine("$prefix.origin=derived")
+                derivedModel
+            }
+            else -> {
+                appendLine("$prefix.origin=not-applicable")
+                return
+            }
+        }
+
+        appendLine("$prefix.sources=${model.sources.size}")
+        model.sources.forEachIndexed { index, source ->
+            appendSourceSlot("$prefix.source[$index]", source)
+        }
+        appendLine("$prefix.params=${model.params.size}")
+        model.params.forEachIndexed { index, param ->
+            appendParamBinding("$prefix.param[$index]", param)
+        }
+    }
+
+    private fun StringBuilder.appendSourceSlot(prefix: String, source: SourceSlotSpec) {
+        appendLine("$prefix.name=${source.name}")
+        appendLine("$prefix.kind=${source.kind.name}")
+        appendLine("$prefix.target=${source.target.compatibilityText()}")
+        appendLine("$prefix.required=${source.required}")
+        appendLine("$prefix.cli.positionalPathName=${source.cli.positionalPathName.orEmpty()}")
+        appendLine("$prefix.cli.pathOption=${source.cli.pathOption.orEmpty()}")
+        appendLine("$prefix.cli.stdinOption=${source.cli.stdinOption.orEmpty()}")
+        appendLine("$prefix.cli.base64Option=${source.cli.base64Option.orEmpty()}")
+        appendLine("$prefix.cli.bytesOption=${source.cli.bytesOption.orEmpty()}")
+        appendLine("$prefix.cli.autoStdin=${source.cli.autoStdin}")
+    }
+
+    private fun StringBuilder.appendParamBinding(prefix: String, param: ParamBindingSpec) {
+        appendLine("$prefix.name=${param.name}")
+        appendLine("$prefix.kind=${param.kind.name}")
+        appendLine("$prefix.targetField=${param.targetField}")
+        appendLine("$prefix.cliOption=${param.cliOption.orEmpty()}")
     }
 
     private fun StringBuilder.appendClass(prefix: String, spec: ClassSpec) {
@@ -110,6 +181,13 @@ class HexanaToolCompatibilityTest {
         }
     }
 
+    private fun SourceTargetSpec.compatibilityText(): String {
+        return when (this) {
+            SourceTargetSpec.RootInput -> "root"
+            is SourceTargetSpec.Field -> "field:$name"
+        }
+    }
+
     private fun FieldType.compatibilityText(): String {
         return when (this) {
             FieldType.Int32 -> "Int32"
@@ -126,6 +204,34 @@ class HexanaToolCompatibilityTest {
             is FieldType.ClassRef -> "Class<${clazz.name}>"
         }
     }
+
+    private fun explicitCliInputModelTool(): ToolSpec =
+        tools {
+            tool("snapshot_input_model") {
+                summary = "Snapshot CLI input model."
+                input = WasmInputClass.with("SnapshotInputModelInput") {
+                    embed("current", WasmInputClass).describe("Current WebAssembly module source.")
+                    int("limit", default = 25).describe("Maximum result count.")
+                }
+                inputPattern = ToolInputPattern.WasmOnly
+                inputModel = toolInputModel {
+                    wasmSource("current") {
+                        cli {
+                            positional("current")
+                            stdin("--stdin")
+                            base64("--current-base64")
+                            autoStdin()
+                        }
+                    }
+                    param(name = "limit", cliOption = "--limit")
+                }
+                output = class_("SnapshotInputModelResult") {
+                    string("status").describe("Snapshot status.")
+                }
+                surfaces = productionCliSurface("snapshot-input-model", ToolGroup.Module, ToolOutputPolicy.ToolDefined)
+                handlerFqn = "org.jetbrains.hexana.mcp.query.snapshotInputModel"
+            }
+        }.single()
 
     private fun SchemaIntValue?.compatibilityText(): String {
         return when (this) {
@@ -171,6 +277,6 @@ class HexanaToolCompatibilityTest {
     }
 
     private companion object {
-        const val EXPECTED_COMPATIBILITY_FINGERPRINT = "75539feb5502e386c534f87f51355122d370c575fbde06d8ae5789f34c43fa55"
+        const val EXPECTED_COMPATIBILITY_FINGERPRINT = "adcbc37a692ec81701c813de430c4faa13b99a5f1e592162a4544833c97fd7e9"
     }
 }
