@@ -256,6 +256,59 @@ class ToolInputModelTest {
     }
 
     @Test
+    fun `explicit input model rejects Wasm source targeting non Wasm field`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            futureCompareModulesSpec(
+                toolInputModel {
+                    wasmSource("current", targetField = "query") {
+                        cli {
+                            positional("current")
+                        }
+                    }
+                }
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("kind Wasm"))
+        assertTrue(error.message.orEmpty().contains("`query`"))
+        assertTrue(error.message.orEmpty().contains("`WasmInput`"))
+    }
+
+    @Test
+    fun `explicit input model rejects Binary source targeting non Binary field`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            futureCompareBinariesSpec(
+                toolInputModel {
+                    binarySource("binary", targetField = "query") {
+                        cli {
+                            positional("binary")
+                        }
+                    }
+                }
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("kind Binary"))
+        assertTrue(error.message.orEmpty().contains("`query`"))
+        assertTrue(error.message.orEmpty().contains("`BinaryInput`"))
+    }
+
+    @Test
+    fun `explicit input model accepts Binary source targeting Binary field`() {
+        val spec = futureCompareBinariesSpec(
+            toolInputModel {
+                binarySource("binary") {
+                    cli {
+                        positional("binary")
+                    }
+                }
+            }
+        )
+
+        assertEquals(SourceTargetSpec.Field("binary"), spec.inputModelForCli().sources.single().target)
+    }
+
+    @Test
     fun `explicit input model rejects unknown param target fields`() {
         val error = assertFailsWith<IllegalArgumentException> {
             futureCompareModulesSpec(
@@ -382,6 +435,21 @@ class ToolInputModelTest {
             }
         }.single()
 
+    private fun futureCompareBinariesSpec(inputModel: ToolInputModel): ToolSpec =
+        tools {
+            tool("compare_binaries") {
+                summary = "Compare two binaries."
+                input = futureCompareBinariesInput()
+                inputPattern = ToolInputPattern.BinaryOnly
+                this.inputModel = inputModel
+                output = class_("CompareBinariesResult") {
+                    string("status").describe("Comparison status.")
+                }
+                surfaces = productionCliSurface("compare-binaries", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
+                handlerFqn = "org.jetbrains.hexana.mcp.query.compareBinaries"
+            }
+        }.single()
+
     private fun futureCompareModulesInput(): ClassSpec =
         WasmInputClass.with("CompareModulesInput") {
             embed("current", WasmInputClass).describe("Current WebAssembly module source.")
@@ -390,6 +458,12 @@ class ToolInputModelTest {
             string("query", default = "").describe("Optional query filter.")
             string("operation", default = "diff").describe("Comparison operation.")
             jsonObject("policyJson").describe("Comparison policy JSON object.")
+        }
+
+    private fun futureCompareBinariesInput(): ClassSpec =
+        BinaryInputClass.with("CompareBinariesInput") {
+            embed("binary", BinaryInputClass).describe("Binary source.")
+            string("query", default = "").describe("Optional query filter.")
         }
 
     private fun rootWasmCli(): CliSourceSpec =

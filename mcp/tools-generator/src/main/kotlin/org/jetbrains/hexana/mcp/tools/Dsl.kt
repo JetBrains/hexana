@@ -1227,7 +1227,10 @@ private fun validateExplicitInputModel(toolName: String, input: ClassSpec, input
     inputModel.sources.forEach { source ->
         when (val target = source.target) {
             SourceTargetSpec.RootInput -> Unit
-            is SourceTargetSpec.Field -> requireInputField(target.name)
+            is SourceTargetSpec.Field -> {
+                val field = requireInputField(target.name)
+                validateExplicitSourceTargetField(toolName, source, field)
+            }
         }
     }
 
@@ -1241,6 +1244,41 @@ private fun validateExplicitInputModel(toolName: String, input: ClassSpec, input
         }
     }
 }
+
+private fun validateExplicitSourceTargetField(toolName: String, source: SourceSlotSpec, field: FieldSpec) {
+    val expectedClass = when (source.kind) {
+        SourceKind.Wasm -> WasmInputClass
+        SourceKind.Binary -> BinaryInputClass
+        SourceKind.Text,
+        SourceKind.Json -> return
+    }
+    val actualClass = (field.type as? FieldType.ClassRef)?.clazz
+    require(actualClass == expectedClass) {
+        "Tool '$toolName' explicit CLI source `${source.name}` of kind ${source.kind} must target " +
+            "input field `${field.name}` as `${expectedClass.name}`, got ${field.describeType()}."
+    }
+}
+
+private fun FieldSpec.describeType(): String {
+    val base = type.describeForValidation()
+    return if (nullable) "$base?" else base
+}
+
+private fun FieldType.describeForValidation(): String =
+    when (this) {
+        FieldType.Int32 -> "Int32"
+        FieldType.Int64 -> "Int64"
+        FieldType.Float64 -> "Float64"
+        FieldType.UInt32 -> "UInt32"
+        FieldType.ByteT -> "Byte"
+        FieldType.BooleanT -> "Boolean"
+        FieldType.StringT -> "String"
+        FieldType.ByteArrayT -> "ByteArray"
+        FieldType.JsonObjectT -> "JsonObject"
+        is FieldType.ListOf -> "List<${element.describeForValidation()}>"
+        is FieldType.MapOf -> "Map<${value.describeForValidation()}>"
+        is FieldType.ClassRef -> clazz.name
+    }
 
 internal fun validateToolCollection(specs: List<ToolSpec>) {
     val duplicateToolNames = specs.groupBy { it.name }.filterValues { it.size > 1 }.keys
