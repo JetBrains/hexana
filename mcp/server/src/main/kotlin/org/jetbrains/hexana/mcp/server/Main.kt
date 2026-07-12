@@ -107,6 +107,9 @@ private fun printCommandOutput(output: HexanaCliCommandOutput) {
     if (output.stdout.isNotEmpty()) {
         System.out.print(output.stdout)
     }
+    if (output.exitCode != 0) {
+        exitProcess(output.exitCode)
+    }
 }
 
 private fun renderExecutableToolDomainError(

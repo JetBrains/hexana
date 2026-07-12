@@ -29,6 +29,7 @@ import java.util.concurrent.CancellationException
 internal data class HexanaCliCommandOutput(
     val stdout: String,
     val stderr: String = "",
+    val exitCode: Int = 0,
 )
 
 internal fun renderSummarizeModuleOutput(
@@ -162,7 +163,8 @@ internal fun renderRunBinaryScriptCommandOutput(
     }
     val output = when (command.format) {
         HexanaCliOutputFormat.JSON -> HexanaCliCommandOutput(
-            stdout = HexanaJson.compact.encodeToString(RunBinaryScriptResult.serializer(), result)
+            stdout = HexanaJson.compact.encodeToString(RunBinaryScriptResult.serializer(), result),
+            exitCode = result.runScriptExitCode(),
         )
         HexanaCliOutputFormat.RAW -> result.toRawRunScriptOutput(command.resourceLimits.maxOutputBytes)
         HexanaCliOutputFormat.PRETTY -> error("run-script does not support pretty output")
@@ -306,6 +308,9 @@ private fun RunBinaryScriptResult.toRawRunScriptOutput(maxOutputBytes: Int): Hex
         exitCode = runScriptExitCode(),
     )
 }
+
+private fun RunBinaryScriptResult.runScriptExitCode(): Int =
+    if (success) 0 else 1
 
 private fun List<RunBinaryScriptDiagnosticResult>.toRunScriptDiagnosticsStderr(): String {
     if (isEmpty()) {

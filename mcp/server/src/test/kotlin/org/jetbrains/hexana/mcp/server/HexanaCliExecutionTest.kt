@@ -545,6 +545,7 @@ class HexanaCliExecutionTest {
 
         assertEquals("4\n30", output.stdout)
         assertEquals("", output.stderr)
+        assertEquals(0, output.exitCode)
     }
 
     @Test
@@ -555,14 +556,15 @@ class HexanaCliExecutionTest {
                 params = mapOf("script" to JsonPrimitive("print(binary.bytes.get(1));")),
                 format = HexanaCliOutputFormat.JSON,
             )
-        ).stdout
+        )
 
-        val json = Json.parseToJsonElement(output).jsonObject
+        val json = Json.parseToJsonElement(output.stdout).jsonObject
         assertEquals("SUCCESS", json.getValue("status").jsonPrimitive.content)
         assertEquals(true, json.getValue("success").jsonPrimitive.boolean)
         assertEquals(listOf("2"), json.getValue("output").jsonObject.getValue("lines").jsonArray.map { it.jsonPrimitive.content })
         assertEquals("generic", json.getValue("binary").jsonObject.getValue("format").jsonPrimitive.content)
         assertFalse("path" in json.getValue("binary").jsonObject)
+        assertEquals(0, output.exitCode)
     }
 
     @Test
@@ -632,6 +634,24 @@ class HexanaCliExecutionTest {
         assertEquals("", output.stdout)
         assertTrue(output.stderr.startsWith("RUNTIME_ERROR: "))
         assertTrue(output.stderr.contains("boom"))
+        assertEquals(1, output.exitCode)
+    }
+
+    @Test
+    fun renderRunScriptJsonMarksFailedScriptAsNonZeroExit() {
+        val output = generatedExecutableCliToolCommandOutput(
+            runScriptCommand(
+                sourceSelection = ToolInputSourceSelection.StdinBytes(byteArrayOf(1, 2, 3), slotName = "binary"),
+                params = mapOf("script" to JsonPrimitive("throw new Error('boom');")),
+                format = HexanaCliOutputFormat.JSON,
+            )
+        )
+
+        val json = Json.parseToJsonElement(output.stdout).jsonObject
+        assertEquals(false, json.getValue("success").jsonPrimitive.boolean)
+        assertEquals("SCRIPT_ERROR", json.getValue("status").jsonPrimitive.content)
+        assertEquals("", output.stderr)
+        assertEquals(1, output.exitCode)
     }
 
     @Test
@@ -655,8 +675,33 @@ class HexanaCliExecutionTest {
         )
 
         assertEquals("", missing.stdout)
+        assertEquals(1, missing.exitCode)
         assertEquals("INVALID_INPUT: Exactly one of --script or --script-text is required.\n", missing.stderr)
+        assertEquals(1, duplicate.exitCode)
         assertEquals("INVALID_INPUT: Provide exactly one of --script or --script-text.\n", duplicate.stderr)
+    }
+
+    @Test
+    fun renderRunScriptRawRejectsScriptPathOutsideAllowedRootWithNonZeroExit() {
+        val allowedRoot = temporaryFolder.newFolder("run-script-allowed").toPath()
+        val binary = allowedRoot.resolve("inside.bin")
+        Files.write(binary, byteArrayOf(1, 2, 3))
+        val script = temporaryFolder.newFile("outside-script.js").toPath()
+        Files.writeString(script, "print(1);")
+
+        val output = generatedExecutableCliToolCommandOutput(
+            runScriptCommand(
+                sourceSelection = ToolInputSourceSelection.Path(path = binary.toString(), slotName = "binary"),
+                params = mapOf("scriptPath" to JsonPrimitive(script.toString())),
+                format = HexanaCliOutputFormat.RAW,
+                allowedRoots = listOf(allowedRoot.toString()),
+            )
+        )
+
+        assertEquals("", output.stdout)
+        assertTrue(output.stderr.contains("INVALID_INPUT: "), output.stderr)
+        assertTrue(output.stderr.contains("outside allowed roots"), output.stderr)
+        assertEquals(1, output.exitCode)
     }
 
     @Test
