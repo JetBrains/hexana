@@ -20,6 +20,7 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - If you touch `idea-plugin/`, also read `idea-plugin/AGENTS.md`.
 - If you touch `mcp/`, also read `mcp/AGENTS.md`.
 - If you touch `mcp/core/`, also read `mcp/core/AGENTS.md`.
+- If you touch `mcp/scripting/`, also read `mcp/scripting/AGENTS.md`.
 - If you touch `mcp/server/`, also read `mcp/server/AGENTS.md`.
 - If you touch `mcp/tools-generator/`, also read `mcp/tools-generator/AGENTS.md`.
 - If you touch `mcp/vscode-server/`, also read `mcp/vscode-server/AGENTS.md`.
@@ -36,6 +37,8 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - `mcp/`: parent folder for extracted MCP modules.
 - `mcp/core/`: JVM-only Wasm MCP query/model library extracted from the plugin. It contains pure MCP-facing Wasm
   analysis logic, not IntelliJ registration or file-system integration.
+- `mcp/scripting/`: JVM-only GraalJS scripting runtime for running Hexana scripts over loaded binary providers. It owns
+  script source loading, script-output limits, sandboxed `binary`/`print` bindings, and structured script results.
 - `mcp/server/`: standalone Kotlin/JVM MCP runtime that exposes `mcp/core` over `stdio` and HTTP transports.
 - `mcp/tools-generator/`: single source of truth for Hexana MCP tool definitions (DSL + KotlinPoet generators for
   `idea-plugin`'s `HexanaToolset.kt` and `mcp/server`'s standalone generated files).
@@ -92,6 +95,7 @@ Run the narrowest command that proves your change.
 - Start the plugin in a sandbox IDE: `./gradlew :idea-plugin:runIde`
 - Run plugin tests: `./gradlew :idea-plugin:test`
 - Build the extracted MCP core module: `./gradlew :mcp:core:build`
+- Run the shared MCP scripting runtime tests: `./gradlew :mcp:scripting:test`
 - Build the standalone MCP server: `./gradlew :mcp:server:build`
 - Build the VS Code MCP server distribution: `./gradlew :mcp:vscode-server:installDist`
 - Regenerate the idea-plugin toolset: `./gradlew :idea-plugin:generateHexanaToolset`
@@ -169,6 +173,8 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
 - `idea-plugin/` changes: run `:idea-plugin:test`.
 - `mcp/core/` changes: run `:mcp:core:build` and the affected `:idea-plugin:test` coverage when the plugin bridge or
   tool contracts change.
+- `mcp/scripting/` changes: run `:mcp:scripting:test`; also run the affected `mcp/server` or plugin coverage when a
+  caller starts using the runtime.
 - `mcp/server/` changes: run `:mcp:server:build` and the narrowest affected `mcp/core` or plugin MCP coverage.
 - `mcp/packaging/` changes: run `:mcp:assembleMcpPackaging` and smoke-test the affected packaged launcher under
   `mcp/build/packaging/*/bin/hexana-mcp version`.
