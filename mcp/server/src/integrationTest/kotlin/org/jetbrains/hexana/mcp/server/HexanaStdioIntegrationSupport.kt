@@ -190,7 +190,7 @@ internal class HexanaInstalledStdioClient private constructor(
             val command = buildCommand(
                 processSpec = processSpec,
                 launcher = launcher,
-                arguments = arguments.toList()
+                arguments = arguments,
             )
             logger.info("Starting command from {} command={}", processSpec.workingDirectory, command.joinToString(" "))
 

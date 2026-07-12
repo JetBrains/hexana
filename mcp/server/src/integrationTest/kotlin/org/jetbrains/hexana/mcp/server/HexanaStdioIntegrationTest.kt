@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Base64
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -71,41 +72,33 @@ class HexanaStdioIntegrationTest {
     }
 
     @Test
-    fun installedServerSummarizeModuleCommandReturnsJsonOnStdout() = runBlocking {
+    fun installedServerSummarizeModuleCommandSupportsInstalledInputSources() = runBlocking {
         val wasm = createWasmFile("installed-summary.wasm", "(module (memory 1) (func (export \"main\")))")
+        val wasmBytes = Files.readAllBytes(wasm)
 
-        val result = HexanaInstalledStdioClient.runCommand(
-            StdioLauncher.Server,
-            "summarize-module",
-            wasm.toString(),
-            "--format",
-            "json",
+        assertInstalledToolSourceModes(
+            command = "summarize-module",
+            path = wasm,
+            stdinBytes = wasmBytes,
+            base64Option = "--wasm-base64",
+            format = "json",
+            assertStdout = ::assertSummarizeModuleJson,
         )
-
-        assertInstalledCommandSucceeded(result)
-        val json = Json.parseToJsonElement(result.stdout.trim()).jsonObject
-        assertEquals("1", json.getValue("functions").jsonPrimitive.content)
-        assertEquals("1", json.getValue("exports").jsonPrimitive.content)
-        assertFalse("content" in json)
-        assertTrue(result.unexpectedStderr.isBlank(), result.stderr)
     }
 
     @Test
-    fun installedServerWasmToWatCommandReturnsRawWatOnStdout() = runBlocking {
+    fun installedServerWasmToWatCommandSupportsInstalledInputSources() = runBlocking {
         val wasm = createWasmFile("installed-wat.wasm", "(module (func (export \"main\")))")
+        val wasmBytes = Files.readAllBytes(wasm)
 
-        val result = HexanaInstalledStdioClient.runCommand(
-            StdioLauncher.Server,
-            "wasm-to-wat",
-            wasm.toString(),
-            "--format",
-            "raw",
+        assertInstalledToolSourceModes(
+            command = "wasm-to-wat",
+            path = wasm,
+            stdinBytes = wasmBytes,
+            base64Option = "--wasm-base64",
+            format = "raw",
+            assertStdout = ::assertRawWat,
         )
-
-        assertInstalledCommandSucceeded(result)
-        assertTrue(result.stdout.contains("(module"), result.stdout)
-        assertFalse(result.stdout.trimStart().startsWith("{"), result.stdout)
-        assertTrue(result.unexpectedStderr.isBlank(), result.stderr)
     }
 
     @Test
@@ -138,26 +131,19 @@ class HexanaStdioIntegrationTest {
     }
 
     @Test
-    fun installedServerSummarizeBinaryCommandReturnsJsonOnStdout() = runBlocking {
+    fun installedServerSummarizeBinaryCommandSupportsInstalledInputSources() = runBlocking {
         val wasm = createWasmFile("installed-binary-summary.wasm", "(module (memory 1) (func (export \"main\")))")
+        val wasmBytes = Files.readAllBytes(wasm)
 
-        val result = HexanaInstalledStdioClient.runCommand(
-            StdioLauncher.Server,
-            "summarize-binary",
-            wasm.toString(),
-            "--format",
-            "json",
+        assertInstalledToolSourceModes(
+            command = "summarize-binary",
+            path = wasm,
+            stdinBytes = wasmBytes,
+            base64Option = "--binary-base64",
+            format = "json",
+            assertStdout = ::assertSummarizeBinaryWasmJson,
+            extraBase64Options = listOf("--bytes-base64"),
         )
-
-        assertInstalledCommandSucceeded(result)
-        val json = Json.parseToJsonElement(result.stdout.trim()).jsonObject
-        val module = json.getValue("module").jsonObject
-        val counts = json.getValue("counts").jsonObject
-        assertEquals("wasm", module.getValue("format").jsonPrimitive.content)
-        assertEquals("1", counts.getValue("functions").jsonPrimitive.content)
-        assertEquals("1", counts.getValue("exports").jsonPrimitive.content)
-        assertTrue(json.getValue("warnings").jsonArray.isEmpty(), result.stdout)
-        assertTrue(result.unexpectedStderr.isBlank(), result.stderr)
     }
 
     @Test
@@ -289,6 +275,83 @@ class HexanaStdioIntegrationTest {
         assertEquals(0, result.exitCode, "stdout=${result.stdout}, stderr=${result.stderr}")
     }
 
+    private suspend fun assertInstalledToolSourceModes(
+        command: String,
+        path: Path,
+        stdinBytes: ByteArray,
+        base64Option: String,
+        format: String,
+        extraBase64Options: List<String> = emptyList(),
+        assertStdout: (String, String) -> Unit,
+    ) {
+        val bytesBase64 = Base64.getEncoder().encodeToString(stdinBytes)
+        val cases = listOf(
+            InstalledToolSourceCase(
+                label = "path",
+                arguments = listOf(command, path.toString(), "--format", format),
+            ),
+            InstalledToolSourceCase(
+                label = "-",
+                arguments = listOf(command, "-", "--format", format),
+                stdinBytes = stdinBytes,
+            ),
+            InstalledToolSourceCase(
+                label = "--stdin",
+                arguments = listOf(command, "--stdin", "--format", format),
+                stdinBytes = stdinBytes,
+            ),
+            InstalledToolSourceCase(
+                label = "auto-stdin",
+                arguments = listOf(command, "--format", format),
+                stdinBytes = stdinBytes,
+            ),
+            InstalledToolSourceCase(
+                label = base64Option,
+                arguments = listOf(command, base64Option, bytesBase64, "--format", format),
+            ),
+        ) + extraBase64Options.map { optionName ->
+            InstalledToolSourceCase(
+                label = optionName,
+                arguments = listOf(command, optionName, bytesBase64, "--format", format),
+            )
+        }
+
+        cases.forEach { case ->
+            val result = HexanaInstalledStdioClient.runCommand(
+                launcher = StdioLauncher.Server,
+                arguments = case.arguments,
+                stdinBytes = case.stdinBytes,
+            )
+
+            assertInstalledCommandSucceeded(result)
+            assertStdout(result.stdout, case.label)
+            assertTrue(result.unexpectedStderr.isBlank(), "${case.label}: ${result.stderr}")
+        }
+    }
+
+    private fun assertSummarizeModuleJson(stdout: String, sourceLabel: String) {
+        val json = Json.parseToJsonElement(stdout.trim()).jsonObject
+        assertEquals("1", json.getValue("functions").jsonPrimitive.content, sourceLabel)
+        assertEquals("1", json.getValue("exports").jsonPrimitive.content, sourceLabel)
+        assertFalse("content" in json, sourceLabel)
+    }
+
+    private fun assertSummarizeBinaryWasmJson(stdout: String, sourceLabel: String) {
+        val json = Json.parseToJsonElement(stdout.trim()).jsonObject
+        val module = json.getValue("module").jsonObject
+        val counts = json.getValue("counts").jsonObject
+        assertEquals("wasm", module.getValue("format").jsonPrimitive.content, sourceLabel)
+        assertEquals("1", counts.getValue("functions").jsonPrimitive.content, sourceLabel)
+        assertEquals("1", counts.getValue("exports").jsonPrimitive.content, sourceLabel)
+        assertTrue(json.getValue("warnings").jsonArray.isEmpty(), "$sourceLabel: $stdout")
+    }
+
+    private fun assertRawWat(stdout: String, sourceLabel: String) {
+        assertTrue(stdout.contains("(module"), "$sourceLabel: $stdout")
+        assertTrue(stdout.contains("\"main\""), "$sourceLabel: $stdout")
+        assertFalse(stdout.trimStart().startsWith("{"), "$sourceLabel: $stdout")
+    }
+
     private fun assertNoStackTrace(stderr: String) {
         assertFalse(Regex("""(?m)^\s+at\s""").containsMatchIn(stderr), stderr)
         assertFalse(stderr.contains("HexanaAnalysisException"), stderr)
@@ -309,4 +372,10 @@ class HexanaStdioIntegrationTest {
         }
         error("Cannot find parsing/native-fixtures/test-data/$relativePath from ${System.getProperty("user.dir")}")
     }
+
+    private data class InstalledToolSourceCase(
+        val label: String,
+        val arguments: List<String>,
+        val stdinBytes: ByteArray? = null,
+    )
 }
