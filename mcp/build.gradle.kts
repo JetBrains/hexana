@@ -83,18 +83,28 @@ val thirdPartyNoticesFileName = "THIRD-PARTY-NOTICES.md"
 val r8RulesFile = layout.projectDirectory.file("packaging/r8-rules.pro")
 val r8OwnedJarNames = setOf(
     "analytics-jvm.jar",
+    "arrow-jvm.jar",
     "binaryProvider-jvm.jar",
+    "codec-jvm.jar",
     "common-jvm.jar",
     "core.jar",
+    "dex-jvm.jar",
     "dwarf-jvm.jar",
     "elf-jvm.jar",
     "encdec-jvm.jar",
+    "flatbuffers-jvm.jar",
     "hexanaDocument-jvm.jar",
+    "javaBytecode-jvm.jar",
     "macho-jvm.jar",
+    "parquet-jvm.jar",
     "pe-jvm.jar",
     "plugins-shared-jvm.jar",
+    "protobuf-jvm.jar",
     "server-$mcpServerVersion.jar",
+    "thrift-jvm.jar",
+    "tool-runtime.jar",
     "wasmParser-jvm.jar",
+    "zip-jvm.jar",
 )
 
 val r8Tool by configurations.creating {
