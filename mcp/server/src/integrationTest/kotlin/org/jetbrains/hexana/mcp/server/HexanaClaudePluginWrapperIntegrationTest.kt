@@ -41,6 +41,11 @@ class HexanaClaudePluginWrapperIntegrationTest {
     }
 
     @Test
+    fun assembledClaudePluginRunsRunScriptCliCommand() = runBlocking {
+        assertRunScriptCliCommandRunsThroughWrapper(StdioLauncher.ClaudePluginWrapper)
+    }
+
+    @Test
     fun assembledCodexPluginVersionCommandExitsPromptly() = runBlocking {
         assertVersionCommandExitsPromptly(StdioLauncher.CodexPluginWrapper)
     }
@@ -48,6 +53,11 @@ class HexanaClaudePluginWrapperIntegrationTest {
     @Test
     fun assembledCodexPluginRunsExecutableCliCommand() = runBlocking {
         assertExecutableCliCommandRunsThroughWrapper(StdioLauncher.CodexPluginWrapper)
+    }
+
+    @Test
+    fun assembledCodexPluginRunsRunScriptCliCommand() = runBlocking {
+        assertRunScriptCliCommandRunsThroughWrapper(StdioLauncher.CodexPluginWrapper)
     }
 
     @Test
@@ -65,17 +75,26 @@ class HexanaClaudePluginWrapperIntegrationTest {
 
     @Test
     fun assembledPluginWrappersShipWindowsLaunchers() {
-        val claudeInstallDir = Path.of(
-            System.getProperty(StdioLauncher.ClaudePluginWrapper.installDirSystemProperty)
-                ?: error("Missing `${StdioLauncher.ClaudePluginWrapper.installDirSystemProperty}` system property")
-        )
-        val codexInstallDir = Path.of(
-            System.getProperty(StdioLauncher.CodexPluginWrapper.installDirSystemProperty)
-                ?: error("Missing `${StdioLauncher.CodexPluginWrapper.installDirSystemProperty}` system property")
-        )
+        val claudeInstallDir = integrationInstallDir(StdioLauncher.ClaudePluginWrapper)
+        val codexInstallDir = integrationInstallDir(StdioLauncher.CodexPluginWrapper)
 
         assertTrue(Files.isRegularFile(claudeInstallDir.resolve("bin/hexana-mcp.cmd")))
         assertTrue(Files.isRegularFile(codexInstallDir.resolve("bin/hexana-mcp.cmd")))
+    }
+
+    @Test
+    fun assembledObfuscatedPluginWrappersShipOnlyObfuscatedHexanaRuntimeJar() {
+        for (launcher in listOf(StdioLauncher.ClaudePluginWrapper, StdioLauncher.CodexPluginWrapper)) {
+            val installDir = integrationInstallDir(launcher)
+            if (!installDir.containsPathName("packaging") || installDir.containsPathName("packaging-plain")) {
+                continue
+            }
+
+            assertNoPreObfuscationHexanaRuntimeJars(
+                libDir = installDir.resolve("server/lib"),
+                label = "${launcher.clientName} obfuscated wrapper runtime",
+            )
+        }
     }
 
     @Test
@@ -343,6 +362,9 @@ class HexanaClaudePluginWrapperIntegrationTest {
         Files.createDirectories(target.parent)
         return Files.copy(componentFixture(name), target)
     }
+
+    private fun Path.containsPathName(name: String): Boolean =
+        any { it.fileName.toString() == name }
 
     private fun componentFixture(name: String): Path =
         repoRoot().resolve("wasmParser/src/commonTest/resources/component/$name")

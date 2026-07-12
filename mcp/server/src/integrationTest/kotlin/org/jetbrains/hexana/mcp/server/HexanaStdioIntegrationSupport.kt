@@ -15,6 +15,8 @@ import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipFile
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
 internal data class StdioLauncher(
@@ -338,6 +340,57 @@ private fun String.isJvmLauncherDiagnostic(): Boolean =
     startsWith("Picked up JAVA_TOOL_OPTIONS:") ||
         startsWith("Picked up _JAVA_OPTIONS:") ||
         startsWith("NOTE: Picked up JDK_JAVA_OPTIONS:")
+
+internal fun integrationInstallDir(launcher: StdioLauncher): Path {
+    val rawPath = System.getProperty(launcher.installDirSystemProperty)
+        ?: error("Missing `${launcher.installDirSystemProperty}` system property")
+    return Path.of(rawPath)
+}
+
+internal fun assertNoPreObfuscationHexanaRuntimeJars(libDir: Path, label: String) {
+    val jars = mutableListOf<Path>()
+    Files.list(libDir).use { stream ->
+        stream.forEach { path ->
+            if (Files.isRegularFile(path) && path.fileName.toString().endsWith(".jar")) {
+                jars.add(path)
+            }
+        }
+    }
+    jars.sortBy { it.fileName.toString() }
+    val jarNames = jars.map { it.fileName.toString() }
+
+    assertTrue(
+        OBFUSCATED_HEXANA_RUNTIME_JAR in jarNames,
+        "$label must ship $OBFUSCATED_HEXANA_RUNTIME_JAR in $libDir. Jars: $jarNames"
+    )
+    assertTrue(
+        SCRIPTING_RUNTIME_JAR !in jarNames,
+        "$label must not ship pre-obfuscation $SCRIPTING_RUNTIME_JAR beside $OBFUSCATED_HEXANA_RUNTIME_JAR. Jars: $jarNames"
+    )
+
+    val preObfuscationHexanaJars = jars
+        .filterNot { it.fileName.toString() == OBFUSCATED_HEXANA_RUNTIME_JAR }
+        .filter { it.containsHexanaClasses() }
+        .map { it.fileName.toString() }
+
+    assertTrue(
+        preObfuscationHexanaJars.isEmpty(),
+        "$label must not ship pre-obfuscation Hexana runtime jars beside " +
+            "$OBFUSCATED_HEXANA_RUNTIME_JAR. Found: $preObfuscationHexanaJars"
+    )
+}
+
+private const val OBFUSCATED_HEXANA_RUNTIME_JAR = "hexana-runtime-obfuscated.jar"
+private const val SCRIPTING_RUNTIME_JAR = "scripting.jar"
+
+private fun Path.containsHexanaClasses(): Boolean =
+    ZipFile(toFile()).use { zip ->
+        zip.entries().asSequence().any { entry ->
+            !entry.isDirectory &&
+                entry.name.startsWith("org/jetbrains/hexana/") &&
+                entry.name.endsWith(".class")
+        }
+    }
 
 internal suspend inline fun <T> withInstalledStdioClient(
     logLevel: HexanaLogLevel = HexanaLogLevel.INFO,

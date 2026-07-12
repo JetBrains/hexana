@@ -7,6 +7,8 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.slf4j.LoggerFactory
 import java.nio.file.Files
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class HexanaNativeStdioIntegrationTest {
     private val logger = LoggerFactory.getLogger(HexanaNativeStdioIntegrationTest::class.java)
