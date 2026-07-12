@@ -598,8 +598,48 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
-    fun `standalone executable CLI generator rejects explicit params clearly`() {
-        val executableCompare = futureCompareModulesSpec(singleWasmSourceWithParamModel()).copy(
+    fun `standalone executable CLI generator supports future binary script params`() {
+        val executableScript = futureRunBinaryScriptSpec(binaryScriptInputModel()).copy(
+            surfaces = productionCliSurface(
+                "run-script",
+                ToolGroup.Binary,
+                ToolOutputPolicy.ToolDefined,
+                executionStatus = CliExecutionStatus.Executable,
+                executableRenderer = executableCliRenderer("renderRunBinaryScriptCommandOutput"),
+            ),
+        )
+
+        val source = buildCliToolsetFile(listOf(executableScript)).toString()
+
+        assertContainsAll(
+            source,
+            "HexanaCliToolset.kt",
+            listOf(
+                "toolName = \"run_binary_script\"",
+                "GeneratedSourceCliToolCommand(",
+                "sourceSlotName = \"binary\"",
+                "paramBindings = listOf(",
+                "targetField = \"scriptPath\"",
+                "optionName = \"--script\"",
+                "kind = GeneratedCliParamKind.STRING",
+                "required = true",
+                "targetField = \"maxFindings\"",
+                "optionName = \"--max-findings\"",
+                "kind = GeneratedCliParamKind.INT",
+                "intDefault = 25",
+                "targetField = \"dryRun\"",
+                "optionName = \"--dry-run\"",
+                "kind = GeneratedCliParamKind.BOOLEAN",
+                "booleanDefault = false",
+                "params = generatedCliParamValues(paramOptions)",
+                "\"run_binary_script\" -> renderRunBinaryScriptCommandOutput(command)",
+            ),
+        )
+    }
+
+    @Test
+    fun `standalone executable CLI generator rejects JSON params clearly`() {
+        val executableCompare = futureCompareModulesSpec(singleWasmSourceWithJsonParamModel()).copy(
             surfaces = productionCliSurface(
                 "compare-modules",
                 ToolGroup.Module,
@@ -613,7 +653,7 @@ class ToolDescriptionGenerationTest {
             buildCliToolsetFile(listOf(executableCompare)).toString()
         }
 
-        assertTrue(error.message.orEmpty().contains("generated CLI params that are not supported yet"))
+        assertTrue(error.message.orEmpty().contains("only value params are supported"))
         assertTrue(error.message.orEmpty().contains("compare_modules"))
     }
 
@@ -716,6 +756,51 @@ class ToolDescriptionGenerationTest {
             }
             param(name = "limit", cliOption = "--limit")
         }
+
+    private fun singleWasmSourceWithJsonParamModel(): ToolInputModel =
+        toolInputModel {
+            wasmSource("current") {
+                cli {
+                    positional("current")
+                    stdin("--stdin")
+                    base64("--current-base64")
+                    autoStdin()
+                }
+            }
+            jsonParam(name = "policy", targetField = "policyJson", cliOption = "--policy-json")
+        }
+
+    private fun binaryScriptInputModel(): ToolInputModel =
+        toolInputModel {
+            binarySource("binary") {
+                cli {
+                    positional("binary")
+                    stdin("--stdin")
+                    base64("--binary-base64")
+                    autoStdin()
+                }
+            }
+            param(name = "scriptPath", cliOption = "--script")
+            param(name = "maxFindings", cliOption = "--max-findings")
+            param(name = "dryRun", cliOption = "--dry-run")
+        }
+
+    private fun futureRunBinaryScriptSpec(inputModel: ToolInputModel): ToolSpec =
+        summarizeBinarySpec.copy(
+            name = "run_binary_script",
+            input = BinaryInputClass.with("RunBinaryScriptInput") {
+                embed("binary", BinaryInputClass).describe("Binary source.")
+                string("scriptPath").describe("Required script file path.")
+                int("maxFindings", default = 25).describe("Maximum finding count.")
+                boolean("dryRun", default = false).describe("Validate without running mutations.")
+            },
+            inputModel = inputModel,
+            output = class_("RunBinaryScriptResult") {
+                string("status").describe("Script run status.")
+            },
+            surfaces = productionCliSurface("run-script", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
+            handlerFqn = "org.jetbrains.hexana.mcp.query.runBinaryScript",
+        )
 
     private data class RenderedStandaloneSources(
         val files: List<String>,

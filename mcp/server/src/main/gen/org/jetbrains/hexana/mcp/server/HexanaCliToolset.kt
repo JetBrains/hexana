@@ -3,6 +3,7 @@ package org.jetbrains.hexana.mcp.server
 
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
+import com.github.ajalt.clikt.core.ParameterHolder
 import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.multiple
@@ -12,6 +13,9 @@ import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.multiple
 import com.github.ajalt.clikt.parameters.options.option
+import com.github.ajalt.clikt.parameters.options.required
+import com.github.ajalt.clikt.parameters.types.boolean
+import com.github.ajalt.clikt.parameters.types.int
 import kotlin.Boolean
 import kotlin.ByteArray
 import kotlin.Int
@@ -19,7 +23,9 @@ import kotlin.String
 import kotlin.Suppress
 import kotlin.Unit
 import kotlin.collections.List
+import kotlin.collections.Map
 import kotlin.collections.Set
+import kotlinx.serialization.json.JsonPrimitive
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
 import org.jetbrains.hexana.mcp.tool.runtime.ToolInputSourceSelection
 
@@ -432,14 +438,108 @@ public object HexanaGeneratedCliToolRegistry {
       )
 }
 
+private enum class GeneratedCliParamKind {
+  STRING,
+  INT,
+  BOOLEAN,
+}
+
+private data class GeneratedCliParamBinding(
+  public val targetField: String,
+  public val optionName: String,
+  public val help: String,
+  public val kind: GeneratedCliParamKind,
+  public val required: Boolean,
+  public val stringDefault: String? = null,
+  public val intDefault: Int? = null,
+  public val booleanDefault: Boolean? = null,
+)
+
+private class GeneratedCliParamOption(
+  public val targetField: String,
+  private val valueReader: () -> JsonPrimitive?,
+) {
+  public fun `value`(): JsonPrimitive? = valueReader()
+}
+
+private fun generatedCliParamOptions(bindings: List<GeneratedCliParamBinding>, holder: ParameterHolder): List<GeneratedCliParamOption> = bindings.map { binding ->
+  when (binding.kind) {
+    GeneratedCliParamKind.STRING -> {
+      val option = holder.option(binding.optionName, help = binding.help).convert { JsonPrimitive(it) }
+      when {
+        binding.required -> {
+          val requiredOption = option.required()
+          holder.registerOption(requiredOption)
+          GeneratedCliParamOption(binding.targetField) { requiredOption.value }
+        }
+        binding.stringDefault != null -> {
+          val defaultOption = option.default(JsonPrimitive(binding.stringDefault!!))
+          holder.registerOption(defaultOption)
+          GeneratedCliParamOption(binding.targetField) { defaultOption.value }
+        }
+        else -> {
+          holder.registerOption(option)
+          GeneratedCliParamOption(binding.targetField) { option.value }
+        }
+      }
+    }
+    GeneratedCliParamKind.INT -> {
+      val option = holder.option(binding.optionName, help = binding.help).int()
+      when {
+        binding.required -> {
+          val requiredOption = option.required()
+          holder.registerOption(requiredOption)
+          GeneratedCliParamOption(binding.targetField) { JsonPrimitive(requiredOption.value) }
+        }
+        binding.intDefault != null -> {
+          val defaultOption = option.default(binding.intDefault!!)
+          holder.registerOption(defaultOption)
+          GeneratedCliParamOption(binding.targetField) { JsonPrimitive(defaultOption.value) }
+        }
+        else -> {
+          holder.registerOption(option)
+          GeneratedCliParamOption(binding.targetField) { option.value?.let { JsonPrimitive(it) } }
+        }
+      }
+    }
+    GeneratedCliParamKind.BOOLEAN -> {
+      val option = holder.option(binding.optionName, help = binding.help).boolean()
+      when {
+        binding.required -> {
+          val requiredOption = option.required()
+          holder.registerOption(requiredOption)
+          GeneratedCliParamOption(binding.targetField) { JsonPrimitive(requiredOption.value) }
+        }
+        binding.booleanDefault != null -> {
+          val defaultOption = option.default(binding.booleanDefault!!)
+          holder.registerOption(defaultOption)
+          GeneratedCliParamOption(binding.targetField) { JsonPrimitive(defaultOption.value) }
+        }
+        else -> {
+          holder.registerOption(option)
+          GeneratedCliParamOption(binding.targetField) { option.value?.let { JsonPrimitive(it) } }
+        }
+      }
+    }
+  }
+}
+
+private fun generatedCliParamValues(options: List<GeneratedCliParamOption>): Map<String, JsonPrimitive> = options.mapNotNull { option ->
+  option.value()?.let { option.targetField to it }
+}.toMap()
+
 private class GeneratedPathOnlyCliToolCommand(
   private val spec: HexanaCliToolSpec,
   private val sourceSlotName: String,
   private val pathArgumentName: String,
   private val pathHelp: String,
+  paramBindings: List<GeneratedCliParamBinding>,
   private val envReader: (String) -> String?,
   private val sink: (HexanaCommand) -> Unit,
 ) : CliktCommand(name = spec.commandName) {
+  private val paramOptions: List<GeneratedCliParamOption> =
+      generatedCliParamOptions(paramBindings, this)
+
   private val path: String by argument(name = pathArgumentName, help = pathHelp)
 
   private val format: HexanaCliOutputFormat by option(
@@ -474,7 +574,8 @@ private class GeneratedPathOnlyCliToolCommand(
     sink(
       HexanaCommand.ExecutableTool(
         spec = spec,
-        sourceSelection = ToolInputSourceSelection.Path(path = path, slotName = sourceSlotName),
+        sourceSelections = listOf(ToolInputSourceSelection.Path(path = path, slotName = sourceSlotName)),
+        params = generatedCliParamValues(paramOptions),
         format = format,
         allowedRoots = allowedRoots + allowedRootsFromEnv(envReader),
         resourceLimits = buildResourceLimits(
@@ -496,6 +597,7 @@ private class GeneratedSourceCliToolCommand(
   private val sourceSlotName: String,
   private val pathArgumentName: String,
   private val pathHelp: String,
+  paramBindings: List<GeneratedCliParamBinding>,
   private val stdinOptionName: String,
   private val base64OptionNames: List<String>,
   private val autoStdin: Boolean,
@@ -504,6 +606,9 @@ private class GeneratedSourceCliToolCommand(
   private val envReader: (String) -> String?,
   private val sink: (HexanaCommand) -> Unit,
 ) : CliktCommand(name = spec.commandName) {
+  private val paramOptions: List<GeneratedCliParamOption> =
+      generatedCliParamOptions(paramBindings, this)
+
   private val path: String? by argument(name = pathArgumentName, help = pathHelp).optional()
 
   private val readStdin: Boolean by
@@ -556,7 +661,8 @@ private class GeneratedSourceCliToolCommand(
     sink(
       HexanaCommand.ExecutableTool(
         spec = spec,
-        sourceSelection = selectedSource(resourceLimits),
+        sourceSelections = listOf(selectedSource(resourceLimits)),
+        params = generatedCliParamValues(paramOptions),
         format = format,
         allowedRoots = allowedRoots + allowedRootsFromEnv(envReader),
         resourceLimits = resourceLimits,
@@ -645,6 +751,7 @@ internal fun generatedCliToolCommands(
     sourceSlotName = "binary",
     pathArgumentName = "binary",
     pathHelp = "Path to a binary file, or '-' to read raw stdin bytes.",
+    paramBindings = emptyList(),
     stdinOptionName = "--stdin",
     base64OptionNames = listOf("--binary-base64", "--bytes-base64"),
     autoStdin = true,
@@ -658,6 +765,7 @@ internal fun generatedCliToolCommands(
     sourceSlotName = "wasm",
     pathArgumentName = "wasm",
     pathHelp = "Path to a WebAssembly module, or '-' to read raw stdin bytes.",
+    paramBindings = emptyList(),
     stdinOptionName = "--stdin",
     base64OptionNames = listOf("--wasm-base64", "--bytes-base64"),
     autoStdin = true,
@@ -671,6 +779,7 @@ internal fun generatedCliToolCommands(
     sourceSlotName = "wasm",
     pathArgumentName = "wasm",
     pathHelp = "Path to a WebAssembly module, or '-' to read raw stdin bytes.",
+    paramBindings = emptyList(),
     stdinOptionName = "--stdin",
     base64OptionNames = listOf("--wasm-base64", "--bytes-base64"),
     autoStdin = true,

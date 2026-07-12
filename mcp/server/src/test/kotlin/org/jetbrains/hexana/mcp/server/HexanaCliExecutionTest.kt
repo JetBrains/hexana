@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp.server
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -606,6 +607,30 @@ class HexanaCliExecutionTest {
         assertTrue(output.contains("list_enabled_features"))
         assertTrue(output.contains("not implemented"))
         assertTrue(output.contains("TODO"))
+    }
+
+    @Test
+    fun executableToolCarriesNamedSourcesAndParamsWithSingleSourceCompatibilityGuard() {
+        val spec = HexanaGeneratedCliToolRegistry.TOOLS.single { it.commandName == "summarize-binary" }
+        val command = HexanaCommand.ExecutableTool(
+            spec = spec,
+            sourceSelections = listOf(
+                ToolInputSourceSelection.Path(path = "app.bin", slotName = "binary"),
+                ToolInputSourceSelection.Path(path = "script.js", slotName = "script"),
+            ),
+            params = mapOf("scriptPath" to JsonPrimitive("script.js")),
+            format = HexanaCliOutputFormat.JSON,
+            allowedRoots = emptyList(),
+            resourceLimits = HexanaResourceLimits(),
+        )
+
+        assertEquals(listOf("binary", "script"), command.sourceSelections.map { it.slotName })
+        assertEquals(JsonPrimitive("script.js"), command.params["scriptPath"])
+        val error = assertFailsWith<IllegalStateException> {
+            command.sourceSelection
+        }
+        assertTrue(error.message.orEmpty().contains("has 2 source selections"))
+        assertTrue(error.message.orEmpty().contains("single-source accessor"))
     }
 
     private fun assertToolBlockContains(output: String, commandName: String, vararg expectedLines: String) {

@@ -4,6 +4,7 @@ import com.github.ajalt.clikt.core.*
 import com.github.ajalt.clikt.completion.CompletionCandidates
 import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.int
+import kotlinx.serialization.json.JsonPrimitive
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
 import org.jetbrains.hexana.mcp.tool.runtime.ToolInputSourceSelection
@@ -43,11 +44,54 @@ sealed interface HexanaCommand {
 
     data class ExecutableTool(
         val spec: HexanaCliToolSpec,
-        val sourceSelection: ToolInputSourceSelection,
+        val sourceSelections: List<ToolInputSourceSelection>,
+        val params: Map<String, JsonPrimitive> = emptyMap(),
         val format: HexanaCliOutputFormat,
         val allowedRoots: List<String>,
         val resourceLimits: HexanaResourceLimits,
-    ) : HexanaCommand
+    ) : HexanaCommand {
+        constructor(
+            spec: HexanaCliToolSpec,
+            sourceSelection: ToolInputSourceSelection,
+            format: HexanaCliOutputFormat,
+            allowedRoots: List<String>,
+            resourceLimits: HexanaResourceLimits,
+            params: Map<String, JsonPrimitive> = emptyMap(),
+        ) : this(
+            spec = spec,
+            sourceSelections = listOf(sourceSelection),
+            params = params,
+            format = format,
+            allowedRoots = allowedRoots,
+            resourceLimits = resourceLimits,
+        )
+
+        init {
+            require(sourceSelections.isNotEmpty()) {
+                "Executable CLI tool '${spec.commandName}' must carry at least one source selection."
+            }
+            val duplicateSourceNames = sourceSelections
+                .map { it.slotName }
+                .groupingBy { it }
+                .eachCount()
+                .filterValues { it > 1 }
+                .keys
+            require(duplicateSourceNames.isEmpty()) {
+                "Executable CLI tool '${spec.commandName}' has duplicate source selections: $duplicateSourceNames."
+            }
+            val blankParamNames = params.keys.filter { it.isBlank() }
+            require(blankParamNames.isEmpty()) {
+                "Executable CLI tool '${spec.commandName}' has blank parameter names."
+            }
+        }
+
+        val sourceSelection: ToolInputSourceSelection
+            get() = sourceSelections.singleOrNull()
+                ?: error(
+                    "Executable CLI tool '${spec.commandName}' has ${sourceSelections.size} source selections; " +
+                        "use named sourceSelections instead of the single-source accessor."
+                )
+    }
 
     data class Tools(
         val group: HexanaCliToolGroup?,

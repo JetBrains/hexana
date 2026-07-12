@@ -309,6 +309,37 @@ class ToolInputModelTest {
     }
 
     @Test
+    fun `explicit input model can describe future binary script tool with required script param`() {
+        val spec = futureRunBinaryScriptSpec(
+            toolInputModel {
+                binarySource("binary") {
+                    cli {
+                        positional("binary")
+                        stdin("--stdin")
+                        base64("--binary-base64")
+                        autoStdin()
+                    }
+                }
+                param(name = "scriptPath", cliOption = "--script")
+                param(name = "maxFindings", cliOption = "--max-findings")
+                param(name = "dryRun", cliOption = "--dry-run")
+            }
+        )
+        val model = spec.inputModelForCli()
+
+        assertEquals(listOf("binary"), model.sources.map { it.name })
+        assertEquals(SourceTargetSpec.Field("binary"), model.sources.single().target)
+        assertEquals(
+            listOf("scriptPath", "maxFindings", "dryRun"),
+            model.params.map { it.targetField },
+        )
+        assertEquals(
+            listOf("--script", "--max-findings", "--dry-run"),
+            model.params.map { it.cliOption },
+        )
+    }
+
+    @Test
     fun `explicit input model rejects unknown param target fields`() {
         val error = assertFailsWith<IllegalArgumentException> {
             futureCompareModulesSpec(
@@ -465,6 +496,26 @@ class ToolInputModelTest {
             embed("binary", BinaryInputClass).describe("Binary source.")
             string("query", default = "").describe("Optional query filter.")
         }
+
+    private fun futureRunBinaryScriptSpec(inputModel: ToolInputModel): ToolSpec =
+        tools {
+            tool("run_binary_script") {
+                summary = "Run a script over a binary."
+                input = BinaryInputClass.with("RunBinaryScriptInput") {
+                    embed("binary", BinaryInputClass).describe("Binary source.")
+                    string("scriptPath").describe("Required script file path.")
+                    int("maxFindings", default = 25).describe("Maximum finding count.")
+                    boolean("dryRun", default = false).describe("Validate without running mutations.")
+                }
+                inputPattern = ToolInputPattern.BinaryOnly
+                this.inputModel = inputModel
+                output = class_("RunBinaryScriptResult") {
+                    string("status").describe("Script run status.")
+                }
+                surfaces = productionCliSurface("run-script", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
+                handlerFqn = "org.jetbrains.hexana.mcp.query.runBinaryScript"
+            }
+        }.single()
 
     private fun rootWasmCli(): CliSourceSpec =
         CliSourceSpec(
