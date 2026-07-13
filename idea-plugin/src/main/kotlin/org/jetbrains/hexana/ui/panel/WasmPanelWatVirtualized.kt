@@ -499,11 +499,11 @@ private fun WasmPanelWatVirtualizedContent(
             itemCountForChunk = { chunkId -> watItemCount(chunkTree, bigFuncRowCache, chunkId) },
             statusBarExtra = {
                 val shortcutText = remember {
-                    com.intellij.openapi.keymap.KeymapUtil.getFirstKeyboardShortcutText("GotoSymbol")
+                    com.intellij.openapi.keymap.KeymapUtil.getFirstKeyboardShortcutText("FileStructurePopup")
                 }
                 if (shortcutText.isNotEmpty()) {
                     Text(
-                        text = "$shortcutText Go to Function",
+                        text = "$shortcutText View Structure",
                         style = TextStyle(
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
