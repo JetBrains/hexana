@@ -125,6 +125,32 @@ class HexanaGeneratedToolFilesTest {
         )
     }
 
+    @Test
+    fun compiledGeneratedCliProductsKeepExactExecutableInventoriesAndClosure() {
+        val expectedCommands = mapOf(
+            HexanaCliReleaseProduct.HEXANA_MCP to
+                setOf("summarize-binary", "summarize-module", "wasm-to-wat", "run-script"),
+            HexanaCliReleaseProduct.HEXANA_CLI to
+                setOf("summarize-binary", "summarize-module", "wasm-to-wat"),
+            HexanaCliReleaseProduct.HEXANA_CLI_SCRIPT to setOf("run-script"),
+        )
+        val selections = HexanaGeneratedCliProducts.PRODUCTS
+
+        assertEquals(expectedCommands.keys, selections.keys)
+        expectedCommands.forEach { (product, commands) ->
+            assertEquals(commands, selections.getValue(product).map { it.commandName }.toSet(), product.productId)
+        }
+        selections.values.flatten().forEach { selection ->
+            assertTrue(selection.toolName.isNotBlank())
+            assertTrue(selection.commandName.isNotBlank())
+            assertTrue(selection.outputPolicy.isNotBlank())
+            assertTrue(selection.defaultOutput.isNotBlank())
+            assertTrue(selection.handlerFqn.isNotBlank())
+            assertTrue(selection.standaloneHandlerMethod.isNotBlank())
+            assertTrue(selection.executableRendererMethod.isNotBlank())
+        }
+    }
+
     private fun generatedKotlinFiles(): List<Path> {
         val stream = Files.list(generatedPackageDir)
         return try {
