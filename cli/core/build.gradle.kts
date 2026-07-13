@@ -12,6 +12,7 @@ base {
 dependencies {
     api(project(":cli:runtime"))
     api(project(":mcp:core"))
+    implementation(project(":graalwasm:wasmprinter"))
 
     testImplementation(libs.junit4)
     testImplementation(libs.kotlin.test)

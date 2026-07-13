@@ -15,4 +15,18 @@ data class ToolExecutionRequest(
 
 data class ToolExecutionResult(
     val semanticResult: JsonElement,
+    val diagnostics: List<ToolExecutionDiagnostic> = emptyList(),
 )
+
+data class ToolExecutionDiagnostic(
+    val severity: ToolExecutionDiagnosticSeverity,
+    val message: String,
+) {
+    init {
+        require(message.isNotBlank()) { "diagnostic message must not be blank." }
+    }
+}
+
+enum class ToolExecutionDiagnosticSeverity {
+    WARNING,
+}

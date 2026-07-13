@@ -34,15 +34,13 @@ ticket intentionally updates the launcher contract and its smoke coverage.
 This keeps the public CLI, server launcher, and packaging entrypoint in one reviewable runtime while the command surface
 is still stabilizing.
 
-`:cli:runtime` now owns the framework-neutral runtime contracts for input conversion, semantic execution, source
-selection, output format selection, rendered payloads, render options, and runtime context. `:cli:core` owns the proven
-`summarize-binary` converter, executor, renderer, and neutral command adapter. `:cli:scripting` owns the isolated
-script-only `run-script` contribution and delegates script execution to `mcp:scripting` without standard command
-composition or MCP transports. `mcp:server` keeps only the legacy CLI parsing and final output-budget enforcement for
-`hexana-mcp summarize-binary` and `hexana-mcp run-script`; it must not duplicate those commands' converter, executor,
-renderer, or output model.
-
-The other executable commands are not migrated yet.
+`:cli:runtime` now owns the framework-neutral runtime contracts for input conversion, semantic execution diagnostics,
+source selection, output format selection, rendered payloads, render options, and runtime context. `:cli:core` owns the
+standard analysis command converters, executors, renderers, and neutral command adapter for `summarize-binary`,
+`summarize-module`, and `wasm-to-wat`. `:cli:scripting` owns the isolated script-only `run-script` contribution and
+delegates script execution to `mcp:scripting` without standard command composition or MCP transports. `mcp:server` keeps
+only the legacy CLI parsing and final output-budget enforcement for these migrated commands; it must not duplicate their
+converters, executors, renderers, or output models.
 
 ## Future Split Boundary
 
@@ -75,14 +73,12 @@ contract is explicitly versioned and smoke-tested.
 Keep implementation tickets small enough for review:
 
 1. Define the remaining CLI runtime contract gaps between current generated CLI adapters and `cli:runtime`, including
-   renderer options, stdin/path source handling, diagnostics, and terminal color behavior.
-2. Move one implemented executable CLI tool to consume the contract layer while leaving the binary and module layout
-   unchanged.
-3. Add focused compatibility tests that prove `hexana-mcp stdio`, `hexana-mcp version`, and the implemented executable
-   CLI tool still work through the packaged launcher.
-4. Decide whether generated CLI command construction should stay generated into `mcp:server` or move behind a
-   generated contract consumed by both `mcp:server` and a future `mcp:cli`.
-5. Only after the contract layer is exercised, evaluate a separate `mcp:cli` module or artifact split and update
+   terminal color behavior and any future binary-safe rendering.
+2. Add focused compatibility tests that prove `hexana-mcp stdio`, `hexana-mcp version`, and implemented executable CLI
+   tools still work through the packaged launcher.
+3. Decide when generated CLI command construction should move behind a generated contract consumed by both `mcp:server`
+   and a future `mcp:cli`.
+4. Only after the contract layer is exercised, evaluate a separate `mcp:cli` module or artifact split and update
    package launcher smoke gates in the same implementation ticket.
 
 ## Breaking Proof
@@ -96,8 +92,9 @@ Breaking-proof coverage for this branch is:
 - server and generator unit coverage for CLI metadata, generated files, schema compatibility, and runtime argument
   handling;
 - generated artifact drift checks for both standalone MCP and IDEA toolset outputs;
-- `cli/core` ownership coverage proving generated summarize-binary metadata and the legacy server adapter resolve to
-  the neutral adapter instead of a server-local implementation;
+- `cli/core` ownership coverage proving generated standard analysis metadata and the legacy server adapters resolve to
+  the neutral adapter instead of server-local implementations;
 - installed-runtime smokes for `hexana-mcp stdio`, `hexana-mcp version`, and executable public CLI commands including
-  `hexana-mcp summarize-binary <file> --format json`;
+  `hexana-mcp summarize-binary <file> --format json`, `hexana-mcp summarize-module <file> --format pretty`, and
+  `hexana-mcp wasm-to-wat <file> --format raw`;
 - package-level smoke gates when release packaging layouts or launcher scripts change.

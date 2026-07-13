@@ -2,27 +2,24 @@ package org.jetbrains.hexana.mcp.server
 
 import kotlinx.serialization.encodeToString
 import org.jetbrains.hexana.cli.core.SUMMARIZE_BINARY_TOOL_NAME
+import org.jetbrains.hexana.cli.core.SUMMARIZE_MODULE_TOOL_NAME
 import org.jetbrains.hexana.cli.core.SummarizeBinaryCliRequest
+import org.jetbrains.hexana.cli.core.StandardCliRequest
+import org.jetbrains.hexana.cli.core.WASM_TO_WAT_TOOL_NAME
+import org.jetbrains.hexana.cli.core.standardCli
 import org.jetbrains.hexana.cli.core.summarizeBinaryCli
+import org.jetbrains.hexana.cli.runtime.ToolExecutionDiagnostic
+import org.jetbrains.hexana.cli.runtime.ToolExecutionDiagnosticSeverity
 import org.jetbrains.hexana.cli.runtime.RenderedToolOutput
 import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
 import org.jetbrains.hexana.cli.scripting.RUN_BINARY_SCRIPT_TOOL_NAME
 import org.jetbrains.hexana.cli.scripting.RunScriptCliRequest
 import org.jetbrains.hexana.cli.scripting.runScriptCli
-import org.jetbrains.hexana.graalwasm.wasmprinter.WatWithWarnings
-import org.jetbrains.hexana.graalwasm.wasmprinter.printWat
-import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.HexanaAnalysisService
-import org.jetbrains.hexana.mcp.HexanaJson
-import org.jetbrains.hexana.mcp.WasmInputBytesLoader
-import org.jetbrains.hexana.mcp.WasmInput
-import org.jetbrains.hexana.mcp.model.converters.WasmToWatResult
-import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.CancellationException
 
 internal data class HexanaCliCommandOutput(
     val stdout: String,
@@ -45,15 +42,22 @@ internal fun renderSummarizeModuleCommandOutput(
         command.resourceLimits
     ),
 ): HexanaCliCommandOutput {
-    requireExecutableTool(command, toolName = "summarize_module")
-    val result = analysisService.summarizeModule(command.wasmInputSource())
-    val output = when (command.format) {
-        HexanaCliOutputFormat.JSON -> HexanaJson.compact.encodeToString(SummarizeModuleResult.serializer(), result)
-        HexanaCliOutputFormat.PRETTY -> renderSummarizeModulePretty(result)
-        HexanaCliOutputFormat.RAW -> error("summarize-module does not support raw output")
+    requireExecutableTool(command, toolName = SUMMARIZE_MODULE_TOOL_NAME)
+    val standardOutput = standardCli(
+        StandardCliRequest(
+            toolName = command.spec.toolName,
+            sourceSelections = command.sourceSelections,
+            params = command.params,
+            format = command.format,
+        ),
+        analysisService,
+    )
+    val output = when (val rendered = standardOutput.rendered) {
+        is RenderedToolOutput.Text -> rendered.text
+        is RenderedToolOutput.Binary -> error("summarize-module does not support binary output")
     }
     return requireOutputWithinLimit(
-        output = HexanaCliCommandOutput(stdout = output),
+        output = HexanaCliCommandOutput(stdout = output, stderr = standardOutput.diagnostics.toStderrWarnings("summarize-module")),
         maxOutputBytes = command.resourceLimits.maxOutputBytes,
         commandName = command.spec.commandName,
     )
@@ -98,52 +102,30 @@ internal fun renderSummarizeBinaryCliCommandOutput(
 internal fun renderWasmToWatOutput(command: HexanaCommand.ExecutableTool): String =
     renderWasmToWatCommandOutput(command).stdout
 
-internal fun renderWasmToWatCommandOutput(
-    command: HexanaCommand.ExecutableTool,
-    wasmPrinter: (ByteArray) -> WatWithWarnings = ::printWat,
-): HexanaCliCommandOutput {
-    requireExecutableTool(command, toolName = "wasm_to_wat")
-    val allowedFilePolicy = if (command.allowedRoots.none { it.isNotBlank() }) {
-        AllowedFilePolicy.allowAll
-    } else {
-        AllowedFilePolicy.requiringAllowedRoots(command.allowedRoots)
-    }
-    val loaded = WasmInputBytesLoader(
-        maxInlineInputBytes = command.resourceLimits.maxInlineWasmBytes,
-        maxFileInputBytes = command.resourceLimits.maxFileWasmBytes,
-        allowedFilePolicy = allowedFilePolicy,
-    ).load(command.wasmInputSource())
-    val watWithWarnings = try {
-        wasmPrinter(loaded.bytes)
-    } catch (error: HexanaAnalysisException) {
-        throw error
-    } catch (error: CancellationException) {
-        throw error
-    } catch (error: RuntimeException) {
-        throw HexanaAnalysisException(
-            HexanaAnalysisErrorCode.NOT_WASM,
-            "Input is not a valid WebAssembly module.",
-            error,
-        )
-    }
-    val result = WasmToWatResult(
-        wat = watWithWarnings.wat,
-        warnings = watWithWarnings.warnings
-            ?.lineSequence()
-            ?.map { it.trim() }
-            ?.filter { it.isNotEmpty() }
-            ?.toList()
-            .orEmpty(),
+internal fun renderWasmToWatCommandOutput(command: HexanaCommand.ExecutableTool): HexanaCliCommandOutput {
+    requireExecutableTool(command, toolName = WASM_TO_WAT_TOOL_NAME)
+    val standardOutput = standardCli(
+        StandardCliRequest(
+            toolName = command.spec.toolName,
+            sourceSelections = command.sourceSelections,
+            params = command.params,
+            format = command.format,
+            maxInlineWasmBytes = command.resourceLimits.maxInlineWasmBytes,
+            maxFileWasmBytes = command.resourceLimits.maxFileWasmBytes,
+            allowedFilePolicy = standaloneAllowedFilePolicy(command.allowedRoots),
+        ),
+        createStandaloneHexanaAnalysisService(command.allowedRoots, command.resourceLimits),
     )
-    val output = when (command.format) {
-        HexanaCliOutputFormat.JSON -> HexanaCliCommandOutput(
-            stdout = HexanaJson.compact.encodeToString(WasmToWatResult.serializer(), result)
+    val output = when (val rendered = standardOutput.rendered) {
+        is RenderedToolOutput.Text -> HexanaCliCommandOutput(
+            stdout = rendered.text,
+            stderr = if (command.format == HexanaCliOutputFormat.RAW) {
+                standardOutput.diagnostics.toStderrWarnings(command.spec.commandName)
+            } else {
+                ""
+            },
         )
-        HexanaCliOutputFormat.RAW -> HexanaCliCommandOutput(
-            stdout = result.wat,
-            stderr = result.warnings.toStderrWarnings()
-        )
-        HexanaCliOutputFormat.PRETTY -> error("wasm-to-wat does not support pretty output")
+        is RenderedToolOutput.Binary -> error("wasm-to-wat does not support binary output")
     }
     return requireOutputWithinLimit(
         output = output,
@@ -211,15 +193,6 @@ internal fun HexanaCommand.ExecutableTool.pathSource(): String {
 internal val HexanaCommand.ExecutableTool.path: String
     get() = pathSource()
 
-private fun HexanaCommand.ExecutableTool.wasmInputSource(): WasmInput {
-    return when (val source = sourceSelection) {
-        is ToolInputSourceSelection.Path -> WasmInput.FilePath(source.path)
-        is ToolInputSourceSelection.Base64 -> WasmInput.InlineBytes(source.bytesBase64)
-        is ToolInputSourceSelection.StdinBytes -> WasmInput.RawBytes(source.bytes())
-        is ToolInputSourceSelection.ByteList -> WasmInput.RawBytes(source.bytes.toByteArray())
-    }
-}
-
 private fun HexanaCommand.ExecutableTool.scriptLimits(): HexanaScriptLimits =
     HexanaScriptLimits(
         maxOutputBytes = resourceLimits.maxOutputBytes,
@@ -229,16 +202,14 @@ private fun HexanaCommand.ExecutableTool.scriptLimits(): HexanaScriptLimits =
         maxFileBinaryBytes = resourceLimits.maxFileBinaryBytes,
     )
 
-private fun List<Int>.toByteArray(): ByteArray =
-    ByteArray(size) { index -> this[index].toByte() }
-
-private fun List<String>.toStderrWarnings(): String {
+private fun List<ToolExecutionDiagnostic>.toStderrWarnings(commandName: String): String {
     if (isEmpty()) {
         return ""
     }
-    return joinToString(separator = System.lineSeparator(), postfix = System.lineSeparator()) { warning ->
-        "wasm-to-wat warning: $warning"
-    }
+    return filter { it.severity == ToolExecutionDiagnosticSeverity.WARNING }
+        .joinToString(separator = System.lineSeparator(), postfix = System.lineSeparator()) { warning ->
+            "$commandName warning: ${warning.message}"
+        }
 }
 
 private fun String.byteSize(): Int = toByteArray(StandardCharsets.UTF_8).size

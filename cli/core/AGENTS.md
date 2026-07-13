@@ -5,11 +5,12 @@ This module owns neutral CLI command orchestration and adapters that have a prod
 ## Boundary
 
 - Keep command implementation independent from `mcp:server`, Clikt, Ktor, MCP SDK, analytics, and IntelliJ Platform APIs.
-- It may depend on `cli:runtime` and the extracted analysis/model layer in `mcp:core`.
-- `summarize-binary` lives here. The legacy `hexana-mcp` server module may adapt parsed CLI state into this module, but
-  must not own a duplicate converter, executor, renderer, or output model for the migrated command.
+- It may depend on `cli:runtime`, `graalwasm:wasmprinter`, and the extracted analysis/model layer in `mcp:core`.
+- Standard analysis commands live here: `summarize-binary`, `summarize-module`, and `wasm-to-wat`. The legacy
+  `hexana-mcp` server module may adapt parsed CLI state into this module, but must not own duplicate converters,
+  executors, renderers, or output models for migrated standard commands.
 
 ## Verification
 
 - Run `./gradlew :cli:core:test`.
-- Keep ownership coverage proving generated summarize-binary metadata resolves through the neutral adapter.
+- Keep ownership coverage proving generated standard analysis metadata resolves through the neutral adapter.

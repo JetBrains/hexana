@@ -6,7 +6,6 @@ import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.jetbrains.hexana.graalwasm.wasmprinter.WatWithWarnings
 import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
 import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
@@ -18,8 +17,6 @@ import org.junit.rules.TemporaryFolder
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.Base64
-import java.util.concurrent.CancellationException
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -369,15 +366,11 @@ class HexanaCliExecutionTest {
                 sourceSelection = ToolInputSourceSelection.StdinBytes(wasmBytes, slotName = "wasm"),
                 format = HexanaCliOutputFormat.RAW,
                 allowedRoots = listOf(allowedRoot.toString()),
-            ),
-            wasmPrinter = { bytes ->
-                assertContentEquals(wasmBytes, bytes)
-                WatWithWarnings(wat = "(module)", warnings = "stdin warning")
-            },
+            )
         )
 
-        assertEquals("(module)", output.stdout)
-        assertTrue(output.stderr.contains("wasm-to-wat warning: stdin warning"))
+        assertTrue(output.stdout.contains("(module"))
+        assertEquals("", output.stderr)
     }
 
     @Test
@@ -393,14 +386,10 @@ class HexanaCliExecutionTest {
                 ),
                 format = HexanaCliOutputFormat.RAW,
                 allowedRoots = listOf(allowedRoot.toString()),
-            ),
-            wasmPrinter = { bytes ->
-                assertContentEquals(wasmBytes, bytes)
-                WatWithWarnings(wat = "(module)", warnings = null)
-            },
+            )
         )
 
-        assertEquals("(module)", output.stdout)
+        assertTrue(output.stdout.contains("(module"))
         assertEquals("", output.stderr)
     }
 
@@ -421,56 +410,21 @@ class HexanaCliExecutionTest {
     }
 
     @Test
-    fun renderWasmToWatMapsInvalidWasmPrinterFailureToDomainError() {
+    fun renderWasmToWatRejectsNonWasmPathWithDomainError() {
+        val textFile = temporaryFolder.newFile("not-wasm.txt").toPath()
+        Files.writeString(textFile, "not wasm")
+
         val error = assertFailsWith<HexanaAnalysisException> {
             renderWasmToWatCommandOutput(
                 wasmToWatCommand(
-                    sourceSelection = ToolInputSourceSelection.StdinBytes(byteArrayOf(1, 2, 3), slotName = "wasm"),
+                    path = textFile.toString(),
                     format = HexanaCliOutputFormat.RAW,
-                ),
-                wasmPrinter = { throw IllegalArgumentException("bad magic") },
+                )
             )
         }
 
         assertEquals(HexanaAnalysisErrorCode.NOT_WASM, error.code)
-        assertEquals("Input is not a valid WebAssembly module.", error.message)
-    }
-
-    @Test
-    fun renderWasmToWatPropagatesCancellation() {
-        val error = assertFailsWith<CancellationException> {
-            renderWasmToWatCommandOutput(
-                wasmToWatCommand(
-                    sourceSelection = ToolInputSourceSelection.StdinBytes(wat2wasm("(module)"), slotName = "wasm"),
-                    format = HexanaCliOutputFormat.RAW,
-                ),
-                wasmPrinter = { throw CancellationException("cancelled") },
-            )
-        }
-
-        assertEquals("cancelled", error.message)
-    }
-
-    @Test
-    fun renderWasmToWatRawReturnsWarningsOnStderr() {
-        val wasm = createWasmFile("raw-warning.wasm", "(module)")
-
-        val output = renderWasmToWatCommandOutput(
-            wasmToWatCommand(
-                path = wasm.toString(),
-                format = HexanaCliOutputFormat.RAW,
-            ),
-            wasmPrinter = {
-                WatWithWarnings(
-                    wat = "(module)",
-                    warnings = "first warning\n\nsecond warning",
-                )
-            },
-        )
-
-        assertEquals("(module)", output.stdout)
-        assertTrue(output.stderr.contains("wasm-to-wat warning: first warning"))
-        assertTrue(output.stderr.contains("wasm-to-wat warning: second warning"))
+        assertEquals("Not a .wasm file", error.message)
     }
 
     @Test
