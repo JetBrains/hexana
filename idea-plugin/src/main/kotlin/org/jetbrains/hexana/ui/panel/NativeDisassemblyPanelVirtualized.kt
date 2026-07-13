@@ -1205,73 +1205,44 @@ private fun AsyncFunctionBody(
     snapshot: BinaryDocumentSnapshot,
     project: com.intellij.openapi.project.Project,
 ) {
-    val accentColor = HexanaTheme.hexTextColor
-    var annotated by remember(chunk.id, renderer, accentColor) {
-        mutableStateOf<AnnotatedString?>(null)
+    var lines by remember(chunk.id, renderer) {
+        mutableStateOf<List<List<RenderToken>>?>(null)
     }
-    LaunchedEffect(chunk.id, renderer, accentColor) {
-        // Status-bar tracker: every in-flight decode+render contributes +1
-        // to the project-level activity counter; the widget surfaces the
-        // total. The try/finally guarantees decrement even if the
-        // coroutine is cancelled (e.g. the item left composition before
-        // decode landed).
+    LaunchedEffect(chunk.id, renderer) {
         val tracker = DisasmActivityTracker.getInstance(project)
         tracker.begin()
         try {
-            // Phase 1: await Capstone on the catalog's single-slot dispatcher.
-            // Concurrent AsyncFunctionBody instances queue here; the wait is
-            // suspending, so Default-pool threads aren't blocked while
-            // ahead-of-them decodes drain.
             val perfTracing = com.intellij.openapi.util.registry.Registry.`is`(
                 "hexana.disassembly.perf.logging",
             )
             val t0 = if (perfTracing) System.nanoTime() else 0L
             catalog.decode(chunk.indexInSection)
             val tAfterDecode = if (perfTracing) System.nanoTime() else 0L
-            // Phase 2: token build + AnnotatedString assembly. Pure CPU
-            // work with no Capstone interaction, fully reentrant — run on
-            // Default so multiple chunks whose decode landed can render
-            // in parallel.
             val rendered = withContext(Dispatchers.Default) {
-                val tokens = renderer.render(snapshot, chunk).tokens
-                tokensToAnnotatedString(tokens, accentColor)
+                splitTokensIntoLines(renderer.render(snapshot, chunk).tokens)
             }
             val tAfterRender = if (perfTracing) System.nanoTime() else 0L
-            annotated = rendered
+            lines = rendered
             if (perfTracing) {
                 org.jetbrains.hexana.HexanaLog.LOG.warn(
                     "[disasm-perf] chunk=${chunk.id} " +
                         "decodeMs=${(tAfterDecode - t0) / 1_000_000} " +
                         "renderMs=${(tAfterRender - tAfterDecode) / 1_000_000} " +
-                        "annotatedLen=${rendered.length}",
+                        "lines=${rendered.size}",
                 )
             }
         } finally {
             tracker.end()
         }
     }
-    val current = annotated
+    val current = lines
     if (current == null) {
         DecodingPlaceholder()
     } else {
-        ChunkLines(current)
-    }
-}
-
-private fun tokensToAnnotatedString(
-    tokens: List<RenderToken>,
-    accentColor: Color,
-): AnnotatedString = buildAnnotatedString {
-    for (token in tokens) {
-        when (token.kind) {
-            RenderTokenKind.LINE_BREAK -> append('\n')
-            RenderTokenKind.KEYWORD, RenderTokenKind.LABEL_REF ->
-                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(token.text) }
-            RenderTokenKind.OFFSET_ANNOTATION,
-            RenderTokenKind.RAW_BYTES,
-            RenderTokenKind.COMMENT ->
-                withStyle(SpanStyle(color = accentColor)) { append(token.text) }
-            else -> append(token.text)
+        Column {
+            for (line in current) {
+                SelectableTokenRow(tokens = line)
+            }
         }
     }
 }
@@ -1281,15 +1252,6 @@ private fun DecodingPlaceholder() {
     Text(
         text = "  // decoding…",
         style = TextStyle(color = HexanaTheme.hexTextColor, fontFamily = FontFamily.Monospace),
-        modifier = Modifier.padding(vertical = 1.dp),
-    )
-}
-
-@Composable
-private fun ChunkLines(annotated: AnnotatedString) {
-    Text(
-        text = annotated,
-        style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
         modifier = Modifier.padding(vertical = 1.dp),
     )
 }

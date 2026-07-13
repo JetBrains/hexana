@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.jetbrains.hexana.document.format.BinaryChunk
 import org.jetbrains.hexana.document.format.ChunkId
 import org.jetbrains.hexana.document.format.ChunkTree
+import org.jetbrains.hexana.document.format.RenderToken
+import org.jetbrains.hexana.document.format.RenderTokenKind
 import org.jetbrains.hexana.document.format.SectionKind
 import org.jetbrains.hexana.javabytecode.*
 import org.jetbrains.hexana.ui.ClassFileNavTarget
@@ -298,19 +300,21 @@ private fun MethodHeaderRow(
 
 @Composable
 private fun MethodBodyRow(row: MethodRow) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            formatFileOffset(row.fileOffset),
-            style = RowTextStyle.copy(color = HexanaTheme.hexTextColor),
+    val tokens = remember(row) {
+        listOf(
+            RenderToken(
+                text = formatFileOffset(row.fileOffset),
+                kind = RenderTokenKind.OFFSET_ANNOTATION,
+                sourceOffset = row.fileOffset.toLong(),
+            ),
+            RenderToken(text = "  ", kind = RenderTokenKind.WHITESPACE),
+            RenderToken(text = row.text, kind = RenderTokenKind.IDENTIFIER),
         )
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(row.text, style = RowTextStyle)
     }
+    SelectableTokenRow(
+        tokens = tokens,
+        modifier = Modifier.padding(horizontal = 12.dp),
+    )
 }
 
 // -----------------------------------------------------------------------------
@@ -416,7 +420,6 @@ private fun appendInstructionRows(
 // -----------------------------------------------------------------------------
 
 private val MonoStyle = TextStyle(fontFamily = FontFamily.Monospace)
-private val RowTextStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
 
 private fun formatFileOffset(offset: Int): String =
     "0x" + offset.toString(16).padStart(6, '0')
