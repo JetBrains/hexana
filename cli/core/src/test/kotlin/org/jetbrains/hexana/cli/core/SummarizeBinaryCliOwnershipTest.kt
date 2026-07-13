@@ -1,8 +1,10 @@
 package org.jetbrains.hexana.cli.core
 
+import org.jetbrains.hexana.mcp.DefaultHexanaAnalysisService
 import org.junit.Test
 import java.nio.file.Path
 import kotlin.io.path.readText
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -41,6 +43,34 @@ class SummarizeBinaryCliOwnershipTest {
 
         assertFalse(generatedToolset.contains(""""summarize_binary" -> renderSummarizeBinaryCommandOutput(command)"""))
         assertFalse(generatedProducts.contains("renderSummarizeBinaryCommandOutput"))
+    }
+
+    @Test
+    fun legacyMcpSelectedStandardExecutablesHaveNeutralRuntimeClosure() {
+        val selectedStandardTools = root.resolve(
+            "mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliProducts.kt"
+        ).readText()
+            .productToolNames("HEXANA_MCP")
+            .filterTo(sortedSetOf()) { it in STANDARD_ANALYSIS_TOOL_NAMES }
+
+        assertEquals(STANDARD_ANALYSIS_TOOL_NAMES.toSortedSet(), selectedStandardTools)
+
+        val registry = standardRuntimeRegistry(DefaultHexanaAnalysisService())
+        selectedStandardTools.forEach { toolName ->
+            val binding = registry.binding(toolName)
+            assertTrue(
+                binding.converter::class.qualifiedName.orEmpty().startsWith("org.jetbrains.hexana.cli.core."),
+                "$toolName converter must be owned by cli:core",
+            )
+            assertTrue(
+                binding.executor::class.qualifiedName.orEmpty().startsWith("org.jetbrains.hexana.cli.core."),
+                "$toolName executor must be owned by cli:core",
+            )
+            assertTrue(
+                binding.renderer::class.qualifiedName.orEmpty().startsWith("org.jetbrains.hexana.cli.core."),
+                "$toolName renderer must be owned by cli:core",
+            )
+        }
     }
 
     @Test
@@ -120,5 +150,20 @@ class SummarizeBinaryCliOwnershipTest {
         val end = indexOf("HexanaCliReleaseProduct.HEXANA_CLI_SCRIPT to listOf(", start)
         assertTrue(end > start)
         return substring(start, end)
+    }
+
+    private fun String.productToolNames(productName: String): List<String> {
+        val start = indexOf("HexanaCliReleaseProduct.$productName to listOf(")
+        assertTrue(start >= 0, "Generated product block $productName must exist")
+        val remaining = substring(start)
+        val nextProduct = Regex("""\n\s*HexanaCliReleaseProduct\.""").find(remaining, startIndex = 1)
+        val end = nextProduct?.range?.first ?: remaining.indexOf("\n      )")
+        assertTrue(end > 0, "Generated product block $productName must have an end")
+        val block = remaining.substring(0, end)
+
+        return Regex("""HexanaCliProductToolSelection\("([^"]+)""")
+            .findAll(block)
+            .map { it.groupValues[1] }
+            .toList()
     }
 }

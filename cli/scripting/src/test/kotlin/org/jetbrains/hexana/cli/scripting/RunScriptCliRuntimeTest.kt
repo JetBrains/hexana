@@ -25,7 +25,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.nio.file.Files
+import java.nio.file.Path
 import java.util.Base64
+import kotlin.io.path.readText
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -44,6 +46,31 @@ class RunScriptCliRuntimeTest {
 
         assertEquals(setOf(RUN_BINARY_SCRIPT_TOOL_NAME), contribution.toolNames)
         assertEquals(setOf(RUN_SCRIPT_COMMAND_NAME), contribution.commandNames)
+    }
+
+    @Test
+    fun legacyMcpSelectedScriptExecutableHasNeutralRuntimeClosure() {
+        val selectedScriptTools = Path.of("..", "..").normalize()
+            .resolve("mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliProducts.kt")
+            .readText()
+            .productToolNames("HEXANA_MCP")
+            .filterTo(sortedSetOf()) { it == RUN_BINARY_SCRIPT_TOOL_NAME }
+
+        assertEquals(setOf(RUN_BINARY_SCRIPT_TOOL_NAME), selectedScriptTools)
+
+        val binding = runScriptRuntimeContribution().binding(RUN_BINARY_SCRIPT_TOOL_NAME)
+        assertTrue(
+            binding.converter::class.qualifiedName.orEmpty().startsWith("org.jetbrains.hexana.cli.scripting."),
+            "run-script converter must be owned by cli:scripting",
+        )
+        assertTrue(
+            binding.executor::class.qualifiedName.orEmpty().startsWith("org.jetbrains.hexana.cli.scripting."),
+            "run-script executor must be owned by cli:scripting",
+        )
+        assertTrue(
+            binding.renderer::class.qualifiedName.orEmpty().startsWith("org.jetbrains.hexana.cli.scripting."),
+            "run-script renderer must be owned by cli:scripting",
+        )
     }
 
     @Test
@@ -316,6 +343,21 @@ class RunScriptCliRuntimeTest {
             )
         }
     }
+}
+
+private fun String.productToolNames(productName: String): List<String> {
+    val start = indexOf("HexanaCliReleaseProduct.$productName to listOf(")
+    assertTrue(start >= 0, "Generated product block $productName must exist")
+    val remaining = substring(start)
+    val nextProduct = Regex("""\n\s*HexanaCliReleaseProduct\.""").find(remaining, startIndex = 1)
+    val end = nextProduct?.range?.first ?: remaining.indexOf("\n      )")
+    assertTrue(end > 0, "Generated product block $productName must have an end")
+    val block = remaining.substring(0, end)
+
+    return Regex("""HexanaCliProductToolSelection\("([^"]+)""")
+        .findAll(block)
+        .map { it.groupValues[1] }
+        .toList()
 }
 
 private fun RunScriptCliOutput.byteSize(): Int =

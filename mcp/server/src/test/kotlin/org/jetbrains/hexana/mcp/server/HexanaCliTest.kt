@@ -863,6 +863,44 @@ class HexanaCliTest {
     }
 
     @Test
+    fun rootHelpExposesExactlyLegacyPublicCommands() {
+        assertEquals(
+            listOf(
+                "stdio",
+                "http",
+                "tools",
+                "doctor",
+                "version",
+                "help",
+                "run-script",
+                "summarize-binary",
+                "summarize-module",
+                "wasm-to-wat",
+            ),
+            rootCommandNames(cli().helpText()),
+        )
+    }
+
+    @Test
+    fun generatedReleaseProductsKeepExpectedExecutableSelections() {
+        assertEquals(
+            listOf("summarize-binary", "run-script", "wasm-to-wat", "summarize-module"),
+            HexanaGeneratedCliProducts.PRODUCTS.getValue(HexanaCliReleaseProduct.HEXANA_MCP)
+                .map { it.commandName },
+        )
+        assertEquals(
+            listOf("summarize-binary", "wasm-to-wat", "summarize-module"),
+            HexanaGeneratedCliProducts.PRODUCTS.getValue(HexanaCliReleaseProduct.HEXANA_CLI)
+                .map { it.commandName },
+        )
+        assertEquals(
+            listOf("run-script"),
+            HexanaGeneratedCliProducts.PRODUCTS.getValue(HexanaCliReleaseProduct.HEXANA_CLI_SCRIPT)
+                .map { it.commandName },
+        )
+    }
+
+    @Test
     fun toolsHelpDocumentsGroupsAsMetadataNotMcpProfiles() {
         val help = cli().helpText(arrayOf("tools", "--help"))
 
@@ -991,6 +1029,15 @@ class HexanaCliTest {
 
         fun String.normalizedWhitespace(): String =
             trim().replace(Regex("\\s+"), " ")
+
+        fun rootCommandNames(help: String): List<String> =
+            help
+                .lineSequence()
+                .dropWhile { it.trim() != "Commands:" }
+                .drop(1)
+                .mapNotNull { Regex("""^  ([a-z0-9][a-z0-9-]+)\s{2,}""").find(it)?.groupValues?.get(1) }
+                .filter { it.isNotBlank() }
+                .toList()
 
         fun withSystemIn(input: InputStream, block: () -> Unit) {
             val previousInput = System.`in`
