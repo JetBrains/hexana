@@ -2141,8 +2141,8 @@ public class WasmHexanaWatRenderer(
         /** Gap (in monospace columns) between offset, hex, and content columns. */
         public const val GAP: Int = 2
 
-        /** Total width of the hex-bytes column: ~6 byte pairs + slack. */
-        public const val BYTES_WIDTH: Int = 18
+        /** Total width of the hex-bytes column: 6 byte pairs + ellipsis + slack. */
+        public const val BYTES_WIDTH: Int = 20
 
         /** Max bytes shown in the hex column before truncating with `…`. */
         public const val MAX_BYTES_DISPLAYED: Int = 6
