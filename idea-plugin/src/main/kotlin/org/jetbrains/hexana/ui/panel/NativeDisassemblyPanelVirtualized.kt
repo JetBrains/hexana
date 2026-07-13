@@ -1037,7 +1037,7 @@ private fun VirtualizedDisasmListing(
     catalog: DisasmCatalog,
     provider: NativeBinaryProvider,
     syntax: AssemblySyntax,
-    @Suppress("UNUSED_PARAMETER") state: HexViewStateHolder,
+    state: HexViewStateHolder,
 ) {
     // Snapshot satisfies the ChunkRenderer contract; the renderer reads
     // instructions through the catalog's lazy decoder.
@@ -1098,6 +1098,7 @@ private fun VirtualizedDisasmListing(
                 DisasmSectionKinds.FUNCTION to DisasmSectionKinds.TEXT,
                 DisasmSectionKinds.FUNCTION_BODY to DisasmSectionKinds.FUNCTION,
             ),
+            onOffsetClicked = { offset -> state.scrollHexViewTo(offset, setCursor = true) },
         )
     }
 

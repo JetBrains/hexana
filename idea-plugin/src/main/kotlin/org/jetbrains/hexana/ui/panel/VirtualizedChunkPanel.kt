@@ -21,8 +21,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -125,6 +127,11 @@ internal data class VirtualizedChunkPanelConfig(
      * their elements) are hidden too. Empty by default (flat fold behaviour).
      */
     val sectionParent: Map<SectionKind, SectionKind> = emptyMap(),
+    /**
+     * Called when the user clicks an offset annotation in a [SelectableTokenRow].
+     * Typically scrolls the main hex view to the given byte offset.
+     */
+    val onOffsetClicked: ((Long) -> Unit)? = null,
 )
 
 /**
@@ -241,6 +248,7 @@ internal fun VirtualizedChunkPanel(
         }
     }
 
+    CompositionLocalProvider(LocalOffsetClickHandler provides config.onOffsetClicked) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -340,6 +348,7 @@ internal fun VirtualizedChunkPanel(
             sectionDisplayName = config.sectionDisplayName,
         )
     }
+    } // CompositionLocalProvider
 }
 
 // ---------------------------------------------------------------------------
@@ -841,6 +850,14 @@ internal fun defaultColorFor(kind: RenderTokenKind): Color = when (kind) {
     else -> Color.Unspecified
 }
 
+/**
+ * Composition-local callback for offset-annotation clicks. Provided by
+ * [VirtualizedChunkPanel] from [VirtualizedChunkPanelConfig.onOffsetClicked]
+ * so that every [SelectableTokenRow] inside the panel automatically makes
+ * offset tokens clickable without explicit parameter threading.
+ */
+internal val LocalOffsetClickHandler = compositionLocalOf<((Long) -> Unit)?> { null }
+
 /** Token kinds that form the structural prefix (offset gutter, hex bytes, indent). */
 internal val STRUCTURAL_PREFIX_KINDS = setOf(
     RenderTokenKind.OFFSET_ANNOTATION,
@@ -863,6 +880,7 @@ internal fun SelectableTokenRow(
     modifier: Modifier = Modifier,
     onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
+    val effectiveOnOffsetClicked = onOffsetClicked ?: LocalOffsetClickHandler.current
     val prefixEnd = tokens.indexOfFirst { it.kind !in STRUCTURAL_PREFIX_KINDS }
     if (prefixEnd <= 0) {
         // No prefix or all-prefix — render as a single Text.
@@ -877,7 +895,7 @@ internal fun SelectableTokenRow(
     val contentTokens = tokens.subList(prefixEnd, tokens.size)
     Row(modifier = modifier) {
         DisableSelection {
-            if (onOffsetClicked != null) {
+            if (effectiveOnOffsetClicked != null) {
                 // Render offset tokens as clickable; others as plain text.
                 for (token in prefixTokens) {
                     val offset = token.sourceOffset
@@ -885,7 +903,7 @@ internal fun SelectableTokenRow(
                         Text(
                             text = AnnotatedString(token.text, SpanStyle(color = colorForToken(token.kind))),
                             style = style.copy(color = color),
-                            modifier = Modifier.clickable { onOffsetClicked(offset) },
+                            modifier = Modifier.clickable { effectiveOnOffsetClicked(offset) },
                         )
                     } else {
                         Text(

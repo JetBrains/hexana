@@ -20,6 +20,7 @@ import org.jetbrains.hexana.document.format.RenderToken
 import org.jetbrains.hexana.document.format.RenderTokenKind
 import org.jetbrains.hexana.document.format.SectionKind
 import org.jetbrains.hexana.javabytecode.*
+import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.ui.ClassFileNavTarget
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -28,9 +29,10 @@ import org.jetbrains.jewel.ui.component.Text
 internal fun classFilePanels(
     classFile: JavaClassFile,
     navTargetFlow: MutableStateFlow<ClassFileNavTarget?>,
+    state: HexViewStateHolder,
 ): List<Panel> = listOf(
     Panel("Header") { ClassHeaderTab(classFile) },
-    Panel("Methods") { ClassMethodsTab(classFile, navTargetFlow) },
+    Panel("Methods") { ClassMethodsTab(classFile, navTargetFlow, state) },
 )
 
 @Composable
@@ -144,6 +146,7 @@ private class JvmMethodChunkTree(
 private fun ClassMethodsTab(
     cf: JavaClassFile,
     navTargetFlow: MutableStateFlow<ClassFileNavTarget?>,
+    state: HexViewStateHolder,
 ) {
     val sections = remember(cf) { buildMethodSections(cf) }
     val tree = remember(sections) { JvmMethodChunkTree(sections) }
@@ -183,6 +186,7 @@ private fun ClassMethodsTab(
                 JvmSectionKinds.METHOD to JvmSectionKinds.METHODS,
                 JvmSectionKinds.METHOD_BODY to JvmSectionKinds.METHOD,
             ),
+            onOffsetClicked = { offset -> state.scrollHexViewTo(offset, setCursor = true) },
         )
     }
 
