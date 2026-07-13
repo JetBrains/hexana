@@ -72,6 +72,8 @@ tasks.register("teamcityCiTests") {
         ":jvm-jit:allTests",
         ":cli:runtime:build",
         ":cli:core:test",
+        ":cli:hexana-cli:integrationTest",
+        ":cli:hexana-cli-script:integrationTest",
         ":mcp:tools-generator:test",
         ":parsing:arrow:allTests",
         ":parsing:codec:allTests",
