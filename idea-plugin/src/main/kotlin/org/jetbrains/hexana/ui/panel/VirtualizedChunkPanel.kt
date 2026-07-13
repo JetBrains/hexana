@@ -198,7 +198,7 @@ internal fun VirtualizedChunkPanel(
 
     val scope = rememberCoroutineScope()
     val navHistory = remember { ChunkNavHistoryState() }
-    val navigator = remember(chunkTree, effectiveListState, config) {
+    val navigator = remember(chunkTree, effectiveListState) {
         ChunkPanelNavigator(
             chunkTree = chunkTree,
             listState = effectiveListState,
@@ -211,20 +211,26 @@ internal fun VirtualizedChunkPanel(
     }
     onNavigatorReady?.invoke(navigator)
 
-    val firstVisibleChunkIndex by remember(effectiveListState, chunkTree) {
-        derivedStateOf {
-            val targetItem = effectiveListState.firstVisibleItemIndex
-            var cursor = 0
-            var chunkIdx = 0
-            for (i in 0 until chunkTree.totalChunks) {
-                chunkIdx = i
-                val count = config.itemCountForChunk(chunkTree.chunkAt(i).id)
-                if (cursor + count > targetItem) break
-                cursor += count
-            }
-            chunkIdx
+    // Precompute a prefix-sum of item counts so that mapping a LazyColumn
+    // item index back to a chunk index is O(log n) instead of O(n).
+    // This avoids an O(n) scan on every scroll frame inside derivedStateOf.
+    val chunkItemPrefixSums = remember(chunkTree) {
+        val n = chunkTree.totalChunks
+        val sums = IntArray(n)
+        var acc = 0
+        for (i in 0 until n) {
+            acc += config.itemCountForChunk(chunkTree.chunkAt(i).id)
+            sums[i] = acc
         }
+        sums
     }
+
+    // NOTE: firstVisibleChunkIndex is intentionally NOT read at this scope.
+    // Reading scroll-dependent derived state here would cause the entire
+    // VirtualizedChunkPanel (including the O(n) LazyColumn builder) to
+    // recompose on every scroll frame. Instead, the prefix sums and list
+    // state are passed to ChunkPanelStatusBar which computes the index
+    // internally, limiting recomposition to the status bar alone.
 
     var searchQuery by remember { mutableStateOf(TextFieldValue("")) }
     val searchResults = remember(searchQuery.text, chunkTree) {
@@ -348,7 +354,8 @@ internal fun VirtualizedChunkPanel(
         }
         ChunkPanelStatusBar(
             chunkTree = chunkTree,
-            currentIndex = firstVisibleChunkIndex,
+            listState = effectiveListState,
+            chunkItemPrefixSums = chunkItemPrefixSums,
             sectionDisplayName = config.sectionDisplayName,
             extra = config.statusBarExtra,
         )
@@ -796,10 +803,32 @@ private fun DefaultElementRow(
 @Composable
 private fun ChunkPanelStatusBar(
     chunkTree: ChunkTree,
-    currentIndex: Int,
+    listState: LazyListState,
+    chunkItemPrefixSums: IntArray,
     sectionDisplayName: (SectionKind) -> String,
     extra: @Composable (() -> Unit)? = null,
 ) {
+    // Compute the first visible chunk index inside the status bar so that
+    // scroll-dependent state reads are scoped here and do NOT cause the
+    // parent VirtualizedChunkPanel (with its O(n) LazyColumn builder) to
+    // recompose on every scroll frame.
+    val currentIndex by remember(listState, chunkItemPrefixSums) {
+        derivedStateOf {
+            val targetItem = listState.firstVisibleItemIndex
+            val sums = chunkItemPrefixSums
+            if (sums.isEmpty()) {
+                0
+            } else {
+                var lo = 0
+                var hi = sums.size - 1
+                while (lo < hi) {
+                    val mid = (lo + hi) ushr 1
+                    if (sums[mid] <= targetItem) lo = mid + 1 else hi = mid
+                }
+                lo
+            }
+        }
+    }
     Divider(orientation = Orientation.Horizontal, thickness = 1.dp, modifier = Modifier.fillMaxWidth())
     Row(
         modifier = Modifier

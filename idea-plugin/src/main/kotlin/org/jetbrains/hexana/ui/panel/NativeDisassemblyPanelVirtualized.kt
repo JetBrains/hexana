@@ -289,6 +289,15 @@ internal class NativeDisasmChunkTree(ranges: List<DisasmRange>, totalBytes: Long
         val firstOffset = ranges.minOfOrNull { it.fileOffset } ?: 0L
         val lastOffset = ranges.maxOfOrNull { it.fileOffset + it.size } ?: firstOffset
 
+        // Disambiguate duplicate display names by appending an occurrence
+        // index so that every ChunkId used as a LazyColumn key is unique.
+        val nameCounts = HashMap<String, Int>()
+        val uniqueNames = ranges.map { range ->
+            val count = nameCounts.getOrDefault(range.displayName, 0)
+            nameCounts[range.displayName] = count + 1
+            if (count == 0) range.displayName else "${range.displayName}#$count"
+        }
+
         add(
             BinaryChunk.SectionHeader(
                 id = ChunkId.Header(DisasmSectionKinds.TEXT),
@@ -301,9 +310,10 @@ internal class NativeDisasmChunkTree(ranges: List<DisasmRange>, totalBytes: Long
         )
         ranges.forEachIndexed { rangeIdx, range ->
             val byteRange = range.fileOffset..(range.fileOffset + range.size)
+            val uniqueName = uniqueNames[rangeIdx]
             add(
                 BinaryChunk.SectionHeader(
-                    id = ChunkId.Symbolic(DisasmSectionKinds.FUNCTION, range.displayName),
+                    id = ChunkId.Symbolic(DisasmSectionKinds.FUNCTION, uniqueName),
                     byteRange = byteRange,
                     estimatedLines = 1,
                     kind = DisasmSectionKinds.FUNCTION,
@@ -317,7 +327,7 @@ internal class NativeDisasmChunkTree(ranges: List<DisasmRange>, totalBytes: Long
             for (windowIdx in 0 until windowCount) {
                 add(
                     BinaryChunk.Element(
-                        id = chunkBodyId(range.displayName, windowIdx),
+                        id = chunkBodyId(uniqueName, windowIdx),
                         byteRange = byteRange,
                         estimatedLines = INSTRUCTIONS_PER_WINDOW.toInt(),
                         kind = DisasmSectionKinds.FUNCTION_BODY,

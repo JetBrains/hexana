@@ -302,22 +302,8 @@ private fun WasmPanelWatVirtualizedContent(
     val bigFuncRowCache = remember(renderer, snapshot) { mutableStateMapOf<ChunkId, List<RenderedRow>>() }
     val bigFuncEditableIndices = remember(renderer, snapshot) { mutableStateMapOf<ChunkId, List<Int>>() }
 
-    // The LazyColumn's first-visible item is now a per-row index (big funcs emit
-    // many items), so map it back to a chunk-tree index for the StatusBar.
-    val firstVisibleChunkIndex by remember(effectiveListState, chunkTree, bigFuncRowCache) {
-        derivedStateOf {
-            val targetItem = effectiveListState.firstVisibleItemIndex
-            var cursor = 0
-            var chunkIdx = 0
-            for (i in 0 until chunkTree.totalChunks) {
-                chunkIdx = i
-                val count = watItemCount(chunkTree, bigFuncRowCache, chunkTree.chunkAt(i).id)
-                if (cursor + count > targetItem) break
-                cursor += count
-            }
-            chunkIdx
-        }
-    }
+    // firstVisibleChunkIndex is computed inside VirtualizedChunkPanel's
+    // ChunkPanelStatusBar — no need to track it at this scope.
 
     // Cross-chunk arrow nav now moves the edit row to the neighbor's boundary
     // editable row; the newly-editing row pulls focus via its own
@@ -360,7 +346,7 @@ private fun WasmPanelWatVirtualizedContent(
     // there.
     val navHistory = remember { NavHistoryState() }
     val navScope = rememberCoroutineScope()
-    val navigator = remember(chunkTree, effectiveListState, focusMap, bigFuncRowCache) {
+    val navigator = remember(chunkTree, effectiveListState, focusMap) {
         WasmWatNavigator(
             chunkTree = chunkTree,
             provider = provider,
