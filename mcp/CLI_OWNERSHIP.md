@@ -44,10 +44,12 @@ converters, executors, renderers, or output models.
 
 ## Future Split Boundary
 
-The catalog now declares three atomically versioned release products independently from MCP profiles: legacy
-`hexana-mcp` keeps all four executable direct commands, `hexana-cli` selects the three non-scripting commands, and
-`hexana-cli-script` selects only `run-script`. This is selection metadata only; the separate applications and artifacts
-remain follow-up work.
+The catalog declares three atomically versioned release products independently from MCP profiles: legacy `hexana-mcp`
+keeps all four executable direct commands, `hexana-cli` selects the three non-scripting commands, and
+`hexana-cli-script` selects only `run-script`. The `:cli:hexana-cli` and `:cli:hexana-cli-script` JVM applications now
+exist as installed distributions, backed by the shared `:cli:product` layer. This branch also wires their R8 release
+ZIPs, native release archives, and GitHub Release/downloads publication into the MCP release flow. Package-manager
+artifacts and any change to MCP wrapper topology remain follow-up work.
 
 Future split work should move contracts before moving artifacts. The likely boundary is:
 
@@ -55,10 +57,10 @@ Future split work should move contracts before moving artifacts. The likely boun
   working-directory context, and environment access belong in `cli:runtime`;
 - neutral standard command orchestration and already exercised non-scripting adapters belong in `cli:core`;
 - the isolated script-only `run-script` adapter belongs in `cli:scripting`;
-- generated metadata can continue to describe CLI-visible commands, but concrete executable command construction should
-  eventually depend on those runtime contracts instead of server-only helpers;
-- a future `mcp:cli` module may own public command composition, terminal rendering, and interactive input handling after
-  the contracts are stable;
+- generated metadata continues to describe CLI-visible commands and release-product selections, while the split
+  applications consume those selections through `:cli:product`;
+- a future module split may move generated CLI metadata out of `mcp:server`, but product command composition, terminal
+  rendering, and installed-process behavior now live under `cli/`;
 - `mcp:server` should keep MCP transports, MCP tool registration, server analytics, and server-specific resource
   policies after such a split;
 - `mcp:packaging` should keep wrapper scripts and manifests only, forwarding to the selected binary without duplicating

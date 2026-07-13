@@ -64,6 +64,12 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - `cli/scripting/`: neutral script-only CLI runtime contribution for `run-script`. It reuses `mcp:scripting` and
   `cli:runtime`, but stays free of standard command composition, MCP transports, Clikt, Ktor, analytics, IntelliJ APIs,
   and `mcp:server`.
+- `cli/product/`: shared JVM product CLI layer for the split installed apps. It composes generated release-product
+  selections with `cli:core` and `cli:scripting`, and owns `HEXANA_CLI_*` env handling, output writing, exit mapping,
+  and product telemetry.
+- `cli/hexana-cli/`: JVM application distribution for `summarize-binary`, `summarize-module`, and `wasm-to-wat`, plus
+  product `tools`, `version`, and `help`.
+- `cli/hexana-cli-script/`: JVM application distribution for `run-script`, plus product `tools`, `version`, and `help`.
 - `encdec/`: shared `CommonByteBuffer` abstraction and platform-specific byte-buffer helpers.
 - `graalwasm/`: JVM wrappers around embedded `.wasm` utilities used for built-in `wasm -> wat` and `wat -> wasm`.
 - `wasm-modules/`: Rust sources and Docker build flow that produce the embedded `.wasm` artifacts consumed by `graalwasm/`.
@@ -115,6 +121,8 @@ Run the narrowest command that proves your change.
 - Build shared module: `./gradlew :plugins-shared:build`
 - Build neutral CLI runtime contracts: `./gradlew :cli:runtime:build`
 - Run neutral CLI core tests: `./gradlew :cli:core:test`
+- Run installed standard CLI tests: `./gradlew :cli:hexana-cli:integrationTest`
+- Run installed script CLI tests: `./gradlew :cli:hexana-cli-script:integrationTest`
 - Run buffer abstraction tests: `./gradlew :encdec:test`
 - Compile UI-driver tests: `./gradlew :ui-driver-tests:compileTestKotlin`
 - Run UI-driver test module through the TeamCity aggregator:
@@ -184,8 +192,9 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
   tool contracts change.
 - `mcp/scripting/` changes: run `:mcp:scripting:test`; also run the affected `mcp/server` or plugin coverage when a
   caller starts using the runtime.
-- `cli/` changes: run `:cli:runtime:build`, `:cli:core:test`, or `:cli:scripting:test` as appropriate, plus affected
-  legacy adapter coverage when public CLI behavior is involved.
+- `cli/` changes: run `:cli:runtime:build`, `:cli:core:test`, `:cli:scripting:test`,
+  `:cli:hexana-cli:integrationTest`, or `:cli:hexana-cli-script:integrationTest` as appropriate, plus affected legacy
+  adapter coverage when public CLI behavior is involved.
 - `mcp/server/` changes: run `:mcp:server:build` and the narrowest affected `mcp/core`, `cli/core`, or plugin MCP coverage.
 - `mcp/packaging/` changes: run `:mcp:assembleMcpPackaging` and smoke-test the affected packaged launcher under
   `mcp/build/packaging/*/bin/hexana-mcp version`.

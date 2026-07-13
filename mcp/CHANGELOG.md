@@ -16,6 +16,7 @@
 - Claude Desktop MCPB packaging can build platform-specific `hexana-core-<platform>.mcpb` bundles with the native Hexana MCP runtime, generated tool metadata, local validation, and smoke checks.
 - Standalone MCP resource limits can be configured with CLI flags or environment variables, and oversized inputs now return deterministic resource-limit errors.
 - MCP downloads publication now produces a root `releases.json` index for latest-version discovery in addition to the versioned release manifest.
+- Split CLI launchers are packaged as `hexana-cli` for `summarize-binary`, `summarize-module`, and `wasm-to-wat`, plus `hexana-cli-script` for `run-script`; both use the shared MCP version, `tools`, `version`, `help`, and `HEXANA_CLI_*` resource, allowed-root, and telemetry environment variables.
 
 ### Changed
 - The standalone MCP CLI accepts repeated `--allowed-root` arguments so MCPB directory-picker selections can be forwarded directly to the server.

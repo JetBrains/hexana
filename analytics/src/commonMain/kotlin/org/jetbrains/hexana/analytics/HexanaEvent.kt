@@ -128,6 +128,17 @@ sealed class HexanaEvent {
         )
     }
 
+    data class CliCommandInvoked(
+        val productId: String,
+        val commandName: String,
+    ) : HexanaEvent() {
+        override val name = "cli_command_invoked"
+        override val properties = mapOf(
+            "product_id" to productId,
+            "command_name" to commandName,
+        )
+    }
+
     // -- UI --
 
     data class WatViewActivated(
