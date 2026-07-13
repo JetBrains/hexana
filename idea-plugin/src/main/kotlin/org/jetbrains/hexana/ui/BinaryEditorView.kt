@@ -1156,7 +1156,7 @@ private fun BinaryProvider.discoverPanelNames(): List<String> {
  * will produce, based on cheap type checks only.
  */
 private fun BinaryProvider.discoverHardcodedPanelNames(): List<String> = when (this) {
-    is ClassFileBinaryProvider -> listOf("Class File")
+    is ClassFileBinaryProvider -> listOf("Header", "Methods")
     is DexBinaryProvider -> emptyList()
     is GenericBinaryProvider -> emptyList()
     is ArchiveBinaryProvider -> emptyList()
