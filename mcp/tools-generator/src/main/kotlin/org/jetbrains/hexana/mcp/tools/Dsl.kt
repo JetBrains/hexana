@@ -513,6 +513,15 @@ data class ExecutableCliRendererSpec(val methodName: String) {
 fun executableCliRenderer(methodName: String): ExecutableCliRendererSpec =
     ExecutableCliRendererSpec(methodName.trim())
 
+enum class CliReleaseProduct(
+    val productId: String,
+    val executableName: String,
+) {
+    HexanaMcp(productId = "hexana-mcp", executableName = "hexana-mcp"),
+    HexanaCli(productId = "hexana-cli", executableName = "hexana-cli"),
+    HexanaCliScript(productId = "hexana-cli-script", executableName = "hexana-cli-script"),
+}
+
 data class CliSurfaceSpec(
     val visible: Boolean,
     val commandName: String?,
@@ -522,6 +531,7 @@ data class CliSurfaceSpec(
     val outputOverride: OutputConversionCapability? = null,
     val defaultOutput: OutputConversionCapability? = null,
     val executableRenderer: ExecutableCliRendererSpec? = null,
+    val releaseProducts: Set<CliReleaseProduct> = emptySet(),
 ) {
     init {
         if (visible) {
@@ -542,6 +552,9 @@ data class CliSurfaceSpec(
                 require(executableRenderer == null) {
                     "TODO CLI surface '$commandName' must not declare an executable renderer."
                 }
+                require(releaseProducts.isEmpty()) {
+                    "TODO CLI surface '$commandName' must not belong to a release product."
+                }
             }
         } else {
             require(commandName == null) { "Hidden CLI surface must not declare a command name." }
@@ -551,6 +564,7 @@ data class CliSurfaceSpec(
             require(outputOverride == null) { "Hidden CLI surface must not declare an output override." }
             require(defaultOutput == null) { "Hidden CLI surface must not declare a default output." }
             require(executableRenderer == null) { "Hidden CLI surface must not declare an executable renderer." }
+            require(releaseProducts.isEmpty()) { "Hidden CLI surface must not belong to a release product." }
         }
     }
 
@@ -564,6 +578,7 @@ data class CliSurfaceSpec(
             outputOverride: OutputConversionCapability? = null,
             defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
             executableRenderer: ExecutableCliRendererSpec? = null,
+            releaseProducts: Set<CliReleaseProduct> = emptySet(),
         ): CliSurfaceSpec = CliSurfaceSpec(
             visible = true,
             commandName = commandName,
@@ -573,6 +588,7 @@ data class CliSurfaceSpec(
             outputOverride = outputOverride,
             defaultOutput = defaultOutput,
             executableRenderer = executableRenderer,
+            releaseProducts = releaseProducts,
         )
 
         fun hidden(): CliSurfaceSpec = CliSurfaceSpec(
@@ -584,6 +600,7 @@ data class CliSurfaceSpec(
             outputOverride = null,
             defaultOutput = null,
             executableRenderer = null,
+            releaseProducts = emptySet(),
         )
     }
 }
@@ -625,6 +642,7 @@ fun productionCliSurface(
     outputOverride: OutputConversionCapability? = null,
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
     executableRenderer: ExecutableCliRendererSpec? = null,
+    releaseProducts: Set<CliReleaseProduct> = emptySet(),
 ): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.production(),
     cli = CliSurfaceSpec.visible(
@@ -636,6 +654,7 @@ fun productionCliSurface(
         outputOverride = outputOverride,
         defaultOutput = defaultOutput,
         executableRenderer = executableRenderer,
+        releaseProducts = releaseProducts,
     ),
     publicMcpb = PublicMcpbSurfaceSpec.excluded(),
 )
@@ -649,6 +668,7 @@ fun publicMcpbProductionCliSurface(
     outputOverride: OutputConversionCapability? = null,
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
     executableRenderer: ExecutableCliRendererSpec? = null,
+    releaseProducts: Set<CliReleaseProduct> = emptySet(),
 ): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.production(),
     cli = CliSurfaceSpec.visible(
@@ -660,6 +680,7 @@ fun publicMcpbProductionCliSurface(
         outputOverride = outputOverride,
         defaultOutput = defaultOutput,
         executableRenderer = executableRenderer,
+        releaseProducts = releaseProducts,
     ),
     publicMcpb = PublicMcpbSurfaceSpec.included(),
 )
@@ -685,6 +706,7 @@ fun scriptingCliSurface(
     outputOverride: OutputConversionCapability? = null,
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
     executableRenderer: ExecutableCliRendererSpec? = null,
+    releaseProducts: Set<CliReleaseProduct> = emptySet(),
 ): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.scripting(),
     cli = CliSurfaceSpec.visible(
@@ -696,6 +718,7 @@ fun scriptingCliSurface(
         outputOverride = outputOverride,
         defaultOutput = defaultOutput,
         executableRenderer = executableRenderer,
+        releaseProducts = releaseProducts,
     ),
     publicMcpb = PublicMcpbSurfaceSpec.excluded(),
 )
@@ -709,6 +732,7 @@ fun noMcpCliSurface(
     outputOverride: OutputConversionCapability? = null,
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
     executableRenderer: ExecutableCliRendererSpec? = null,
+    releaseProducts: Set<CliReleaseProduct> = emptySet(),
 ): ToolSurfaceSpec = ToolSurfaceSpec(
     mcp = McpSurfaceSpec.none(),
     cli = CliSurfaceSpec.visible(
@@ -720,6 +744,7 @@ fun noMcpCliSurface(
         outputOverride = outputOverride,
         defaultOutput = defaultOutput,
         executableRenderer = executableRenderer,
+        releaseProducts = releaseProducts,
     ),
     publicMcpb = PublicMcpbSurfaceSpec.excluded(),
 )
@@ -1324,6 +1349,55 @@ internal fun validateToolCollection(specs: List<ToolSpec>) {
     require(duplicateCliCommandNames.isEmpty()) {
         "Duplicate CLI command names: " +
             duplicateCliCommandNames.entries.joinToString { (command, tools) -> "$command used by $tools" }
+    }
+}
+
+internal fun validateCliReleaseProducts(
+    specs: List<ToolSpec>,
+    requireCompleteSelection: Boolean = true,
+) {
+    val selectedTools = specs.filter { it.surfaces.cli.releaseProducts.isNotEmpty() }
+    selectedTools.forEach { spec ->
+        val cli = spec.surfaces.cli
+        require(cli.visible && cli.executionStatus == CliExecutionStatus.Executable) {
+            "Release product tool '${spec.name}' must be an executable CLI tool."
+        }
+        requireNotNull(cli.executableRenderer) {
+            "Release product tool '${spec.name}' is missing an executable renderer."
+        }
+        require(FQN_REGEX.matches(spec.handlerFqn)) {
+            "Release product tool '${spec.name}' is missing a valid handler FQN."
+        }
+    }
+
+    val toolsToCheck = if (requireCompleteSelection) {
+        specs.filter { it.surfaces.cli.executionStatus == CliExecutionStatus.Executable }
+    } else {
+        selectedTools
+    }
+    toolsToCheck.forEach { spec ->
+        val products = spec.surfaces.cli.releaseProducts
+        val standaloneProducts = products intersect setOf(
+            CliReleaseProduct.HexanaCli,
+            CliReleaseProduct.HexanaCliScript,
+        )
+        require(CliReleaseProduct.HexanaMcp in products && standaloneProducts.size == 1 && products.size == 2) {
+            "Executable CLI tool '${spec.name}' must select hexana-mcp and exactly one standalone CLI product, " +
+                "got $products."
+        }
+    }
+
+    CliReleaseProduct.entries.forEach { product ->
+        val duplicateCommands = selectedTools
+            .filter { product in it.surfaces.cli.releaseProducts }
+            .groupBy { it.surfaces.cli.commandName }
+            .filterValues { it.size > 1 }
+        require(duplicateCommands.isEmpty()) {
+            "Duplicate command names in ${product.productId}: " +
+                duplicateCommands.entries.joinToString { (command, tools) ->
+                    "$command used by ${tools.map { it.name }}"
+                }
+        }
     }
 }
 

@@ -22,6 +22,7 @@ val ConverterTools = tools {
             executionStatus = CliExecutionStatus.Executable,
             defaultOutput = OutputConversionCapability.RawText,
             executableRenderer = executableCliRenderer("renderWasmToWatCommandOutput"),
+            releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCli),
         )
         handlerFqn = "org.jetbrains.hexana.mcp.server.wasmToWat"
     }

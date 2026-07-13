@@ -1,14 +1,10 @@
-import java.util.Properties
-
 plugins {
     application
     alias(libs.plugins.kotlin.jvm)
 }
 
 group = "org.jetbrains.hexana"
-version = Properties().apply {
-    rootProject.layout.projectDirectory.file("mcp/server/gradle.properties").asFile.inputStream().use(::load)
-}.getProperty("mcpServerVersion")
+version = providers.gradleProperty("hexanaToolsVersion").get()
 
 dependencies {
     implementation(project(":mcp:server"))

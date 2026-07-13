@@ -49,9 +49,25 @@ class HexanaToolCompatibilityTest {
         assertTrue(snapshot.contains("tool[0].cliInputModel.param[0].cliOption=--limit"))
     }
 
+    @Test
+    fun `compatibility snapshot includes CLI product identity and closure metadata`() {
+        val snapshot = compatibilitySnapshot()
+
+        assertTrue(snapshot.contains("product[HexanaCli].productId=hexana-cli"))
+        assertTrue(snapshot.contains("product[HexanaCliScript].executableName=hexana-cli-script"))
+        assertTrue(snapshot.contains("tool[0].cli.releaseProducts=HexanaMcp,HexanaCli"))
+        assertTrue(snapshot.contains("tool[0].cli.outputPolicy=ToolDefined"))
+        assertTrue(snapshot.contains("tool[0].standaloneHandler=summarizeBinary"))
+        assertTrue(snapshot.contains("tool[0].cli.executableRenderer=renderSummarizeBinaryCommandOutput"))
+    }
+
     private fun compatibilitySnapshot(tools: List<ToolSpec> = HexanaTools): String = buildString {
         appendLine("compatibility.schemaVersion=${HexanaToolSchemaCompatibility.schemaVersion}")
         appendLine("compatibility.policy=${HexanaToolSchemaCompatibility.policy.compatibilityText()}")
+        CliReleaseProduct.entries.forEach { product ->
+            appendLine("product[${product.name}].productId=${product.productId}")
+            appendLine("product[${product.name}].executableName=${product.executableName}")
+        }
         tools.forEachIndexed { index, tool ->
             val prefix = "tool[$index]"
             appendLine("$prefix.name=${tool.name}")
@@ -68,7 +84,9 @@ class HexanaToolCompatibilityTest {
             appendLine("$prefix.cli.outputOverride=${tool.surfaces.cli.outputOverride?.name.orEmpty()}")
             appendLine("$prefix.cli.defaultOutput=${tool.surfaces.cli.defaultOutput?.name.orEmpty()}")
             appendLine("$prefix.cli.executableRenderer=${tool.surfaces.cli.executableRenderer?.methodName.orEmpty()}")
+            appendLine("$prefix.cli.releaseProducts=${tool.surfaces.cli.releaseProducts.joinToString(",")}")
             appendLine("$prefix.handlerFqn=${tool.handlerFqn}")
+            appendLine("$prefix.standaloneHandler=${tool.standaloneHandler.methodName}")
             appendClass("$prefix.input", tool.input)
             appendClass("$prefix.output", tool.output)
         }
@@ -277,6 +295,6 @@ class HexanaToolCompatibilityTest {
     }
 
     private companion object {
-        const val EXPECTED_COMPATIBILITY_FINGERPRINT = "54dd7448e9ecc4a48edd00965ac99c8366b1fe18f66a6e957a67e2e285610359"
+        const val EXPECTED_COMPATIBILITY_FINGERPRINT = "ced4777bf63e25e91b142f466227384f7c4449683b6d6b9d62297b1342c835e5"
     }
 }

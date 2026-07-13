@@ -32,6 +32,7 @@ import kotlin.test.assertTrue
 class ToolDescriptionGenerationTest {
     private val standaloneDispatcherPath = "org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt"
     private val standaloneCliToolsetPath = "org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt"
+    private val standaloneCliProductsPath = "org/jetbrains/hexana/mcp/server/HexanaCliProducts.kt"
 
     private val binarySummaryResult = class_(
         "BinarySummaryResult",
@@ -242,11 +243,11 @@ class ToolDescriptionGenerationTest {
         val files = buildStandaloneServerFiles(HexanaTools)
 
         assertEquals(
-            listOf("HexanaToolDispatcher", "HexanaCliToolset"),
+            listOf("HexanaToolDispatcher", "HexanaCliToolset", "HexanaCliProducts"),
             files.map { it.name },
         )
         assertEquals(
-            listOf("org.jetbrains.hexana.mcp.server", "org.jetbrains.hexana.mcp.server"),
+            List(3) { "org.jetbrains.hexana.mcp.server" },
             files.map { it.packageName },
         )
     }
@@ -256,10 +257,22 @@ class ToolDescriptionGenerationTest {
         val generated = renderStandaloneSources()
         val dispatcher = generated.sources.getValue(standaloneDispatcherPath)
         val cliToolset = generated.sources.getValue(standaloneCliToolsetPath)
+        val cliProducts = generated.sources.getValue(standaloneCliProductsPath)
 
         assertEquals(
-            listOf(standaloneCliToolsetPath, standaloneDispatcherPath),
+            listOf(standaloneCliProductsPath, standaloneCliToolsetPath, standaloneDispatcherPath),
             generated.files,
+        )
+        assertContainsAll(
+            cliProducts,
+            "HexanaCliProducts.kt",
+            listOf(
+                "public enum class HexanaCliReleaseProduct",
+                "HEXANA_CLI_SCRIPT(\"hexana-cli-script\", \"hexana-cli-script\")",
+                "public object HexanaGeneratedCliProducts",
+                "\"run_binary_script\"",
+                "\"renderRunBinaryScriptCommandOutput\"",
+            ),
         )
         assertContainsAll(
             dispatcher,

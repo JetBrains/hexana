@@ -1,3 +1,22 @@
+import java.util.Properties
+
+val hexanaToolsVersion = providers.gradleProperty("hexanaToolsVersion")
+    .orNull
+    ?.takeIf { it.isNotBlank() }
+    ?: error("Missing `hexanaToolsVersion` in root gradle.properties")
+val mcpServerPropertiesFile = file("mcp/server/gradle.properties")
+val mcpServerVersion = Properties().apply {
+    require(mcpServerPropertiesFile.isFile) {
+        "Missing MCP server compatibility properties file: ${mcpServerPropertiesFile.absolutePath}"
+    }
+    mcpServerPropertiesFile.inputStream().use(::load)
+}.getProperty("mcpServerVersion")?.takeIf { it.isNotBlank() }
+    ?: error("Missing `mcpServerVersion` in ${mcpServerPropertiesFile.absolutePath}")
+require(mcpServerVersion == hexanaToolsVersion) {
+    "mcpServerVersion compatibility alias ($mcpServerVersion) must match " +
+        "hexanaToolsVersion ($hexanaToolsVersion)."
+}
+
 val testIdeType = gradle.startParameter.projectProperties["testIdeType"]
 val testIdeVersion = gradle.startParameter.projectProperties["testIdeVersion"]
 val testSinceBuild = gradle.startParameter.projectProperties["testSinceBuild"]

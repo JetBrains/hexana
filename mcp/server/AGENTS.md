@@ -20,6 +20,8 @@ Read these files before making structural changes:
   plus MCP profile/default metadata)
 - `src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt` (generated — do not hand-edit; includes
   CLI-visible tool metadata, CLI tool command construction, and executable CLI renderer dispatch)
+- `src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliProducts.kt` (generated — do not hand-edit; includes CLI
+  product identities and selected executable closure metadata)
 - `../core/src/main/kotlin/org/jetbrains/hexana/mcp/HexanaAnalysisService.kt`
 
 ## Ownership Boundary
@@ -36,7 +38,8 @@ Read these files before making structural changes:
 - Use the shared JVM CLI/logging stack here rather than ad hoc parsing or `System.err.println` wrappers.
 - Keep Wasm parsing, query semantics, and result DTOs in `mcp/core`.
 - Do not add IntelliJ APIs, `VirtualFile`, or plugin.xml-style registration here.
-- The standalone MCP version is owned by `mcp/server/gradle.properties`, not by `idea-plugin/gradle.properties`.
+- The shared tools version is owned by root `gradle.properties:hexanaToolsVersion`. The
+  `mcp/server/gradle.properties:mcpServerVersion` value is a temporary compatibility alias and must stay equal.
 
 ## Transport Rules
 
@@ -66,7 +69,8 @@ Read these files before making structural changes:
 - The experimental GraalVM Native Image prototype is intentionally separate from JVM/R8 packaging. Use
   `./gradlew :mcp:server:nativeCompile` to build `build/native/nativeCompile/hexana-mcp`, and
   `./gradlew :mcp:server:nativeMcpVersionSmoke` to verify `hexana-mcp version` reports the exact
-  `mcp/server/gradle.properties:mcpServerVersion` when a GraalVM Native Image toolchain is available. Use
+  root `gradle.properties:hexanaToolsVersion` (and its matching compatibility alias) when a GraalVM Native Image
+  toolchain is available. Use
   `./gradlew :mcp:server:nativeMcpStdioSmoke` to run the native executable through
   the stdio MCP startup/tools/list/tool-call integration smoke.
 - Run `./gradlew :mcp:server:build` after changes here.

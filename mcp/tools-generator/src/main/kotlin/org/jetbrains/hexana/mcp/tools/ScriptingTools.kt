@@ -57,6 +57,7 @@ internal val ScriptingTools: List<ToolSpec> = tools {
             executionStatus = CliExecutionStatus.Executable,
             defaultOutput = OutputConversionCapability.RawText,
             executableRenderer = executableCliRenderer("renderRunBinaryScriptCommandOutput"),
+            releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCliScript),
         )
         guidance = """
             Use this only in the dedicated scripting profile or explicit CLI command when a small custom script is needed over the loaded `binary` object.

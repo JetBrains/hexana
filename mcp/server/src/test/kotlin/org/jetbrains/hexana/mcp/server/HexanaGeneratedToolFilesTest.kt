@@ -25,10 +25,11 @@ class HexanaGeneratedToolFilesTest {
         val generatedFiles = generatedKotlinFiles()
 
         assertEquals(
-            listOf("HexanaCliToolset.kt", "HexanaToolDispatcher.kt"),
+            listOf("HexanaCliProducts.kt", "HexanaCliToolset.kt", "HexanaToolDispatcher.kt"),
             generatedFiles.map { it.fileName.toString() },
         )
 
+        val cliProducts = Files.readString(generatedPackageDir.resolve("HexanaCliProducts.kt"))
         val dispatcher = Files.readString(generatedPackageDir.resolve("HexanaToolDispatcher.kt"))
         val cliToolset = Files.readString(generatedPackageDir.resolve("HexanaCliToolset.kt"))
 
@@ -62,6 +63,22 @@ class HexanaGeneratedToolFilesTest {
                 "GeneratedTodoCliToolCommand",
                 "CliktCommand",
                 "com.github.ajalt.clikt",
+            ),
+        )
+
+        assertContainsAll(
+            cliProducts,
+            "HexanaCliProducts.kt",
+            listOf(
+                "public enum class HexanaCliReleaseProduct",
+                "HEXANA_MCP(\"hexana-mcp\", \"hexana-mcp\")",
+                "HEXANA_CLI(\"hexana-cli\", \"hexana-cli\")",
+                "HEXANA_CLI_SCRIPT(\"hexana-cli-script\", \"hexana-cli-script\")",
+                "public data class HexanaCliProductToolSelection",
+                "public object HexanaGeneratedCliProducts",
+                "HexanaCliProductToolSelection(\"summarize_binary\", \"summarize-binary\"",
+                "HexanaCliProductToolSelection(\"run_binary_script\", \"run-script\"",
+                "\"renderRunBinaryScriptCommandOutput\"",
             ),
         )
 

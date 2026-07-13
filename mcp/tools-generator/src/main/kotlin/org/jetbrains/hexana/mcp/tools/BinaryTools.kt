@@ -166,6 +166,7 @@ internal val BinaryTools: List<ToolSpec> = tools {
             ToolOutputPolicy.ToolDefined,
             executionStatus = CliExecutionStatus.Executable,
             executableRenderer = executableCliRenderer("renderSummarizeBinaryCommandOutput"),
+            releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCli),
         )
         guidance = """
             Use this first for an unknown binary before choosing a format-specific follow-up tool.

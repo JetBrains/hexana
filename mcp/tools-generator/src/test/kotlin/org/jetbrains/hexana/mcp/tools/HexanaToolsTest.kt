@@ -276,6 +276,86 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `CLI release products select the approved executable inventories`() {
+        fun commands(product: CliReleaseProduct): Set<String> = HexanaTools
+            .filter { product in it.surfaces.cli.releaseProducts }
+            .map { requireNotNull(it.surfaces.cli.commandName) }
+            .toSet()
+
+        assertEquals(
+            setOf("summarize-binary", "summarize-module", "wasm-to-wat", "run-script"),
+            commands(CliReleaseProduct.HexanaMcp),
+        )
+        assertEquals(
+            setOf("summarize-binary", "summarize-module", "wasm-to-wat"),
+            commands(CliReleaseProduct.HexanaCli),
+        )
+        assertEquals(setOf("run-script"), commands(CliReleaseProduct.HexanaCliScript))
+    }
+
+    @Test
+    fun `TODO CLI tools remain visible metadata but are excluded from release products`() {
+        val todoTools = HexanaTools.filter { it.surfaces.cli.executionStatus == CliExecutionStatus.Todo }
+
+        assertEquals(27, todoTools.size)
+        assertTrue(todoTools.all { it.surfaces.cli.visible })
+        assertTrue(todoTools.all { it.surfaces.cli.releaseProducts.isEmpty() })
+    }
+
+    @Test
+    fun `release product validation rejects cross-product selection`() {
+        val summarize = HexanaTools.single { it.name == "summarize_binary" }
+        val mutated = summarize.copy(
+            surfaces = summarize.surfaces.copy(
+                cli = summarize.surfaces.cli.copy(
+                    releaseProducts = summarize.surfaces.cli.releaseProducts + CliReleaseProduct.HexanaCliScript,
+                ),
+            ),
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            validateCliReleaseProducts(HexanaTools.map { if (it.name == mutated.name) mutated else it })
+        }
+        assertTrue(error.message.orEmpty().contains("summarize_binary"))
+        assertTrue(error.message.orEmpty().contains("HexanaCliScript"))
+    }
+
+    @Test
+    fun `release product validation rejects TODO selection and incomplete handler closure`() {
+        val todo = HexanaTools.first { it.surfaces.cli.executionStatus == CliExecutionStatus.Todo }
+        val todoError = assertFailsWith<IllegalArgumentException> {
+            todo.copy(
+                surfaces = todo.surfaces.copy(
+                    cli = todo.surfaces.cli.copy(releaseProducts = setOf(CliReleaseProduct.HexanaMcp)),
+                ),
+            )
+        }
+        assertTrue(todoError.message.orEmpty().contains("must not belong to a release product"))
+
+        val summarize = HexanaTools.single { it.name == "summarize_binary" }.copy(handlerFqn = "")
+        val handlerError = assertFailsWith<IllegalArgumentException> {
+            validateCliReleaseProducts(HexanaTools.map { if (it.name == summarize.name) summarize else it })
+        }
+        assertTrue(handlerError.message.orEmpty().contains("valid handler FQN"))
+    }
+
+    @Test
+    fun `release product validation rejects command collisions`() {
+        val summarizeBinary = HexanaTools.single { it.name == "summarize_binary" }
+        val summarizeModule = HexanaTools.single { it.name == "summarize_module" }
+        val collidedModule = summarizeModule.copy(
+            surfaces = summarizeModule.surfaces.copy(
+                cli = summarizeModule.surfaces.cli.copy(commandName = summarizeBinary.surfaces.cli.commandName),
+            ),
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            validateCliReleaseProducts(listOf(summarizeBinary, collidedModule))
+        }
+        assertTrue(error.message.orEmpty().contains("Duplicate command names in hexana-mcp"))
+    }
+
+    @Test
     fun `ClassSpec with inherits conversion capability metadata`() {
         val base = class_("Base") {
             inputCapabilities(InputConversionCapability.JsonObject, InputConversionCapability.WasmPath)

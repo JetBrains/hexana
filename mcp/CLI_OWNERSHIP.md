@@ -36,6 +36,11 @@ is still stabilizing.
 
 ## Future Split Boundary
 
+The catalog now declares three atomically versioned release products independently from MCP profiles: legacy
+`hexana-mcp` keeps all four executable direct commands, `hexana-cli` selects the three non-scripting commands, and
+`hexana-cli-script` selects only `run-script`. This is selection metadata only; the separate applications and artifacts
+remain follow-up work.
+
 Future split work should move contracts before moving artifacts. The likely boundary is:
 
 - CLI runtime contracts for input conversion, output rendering, output format selection, rendered text/binary payloads,

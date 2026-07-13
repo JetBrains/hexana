@@ -9,17 +9,7 @@ import java.util.jar.JarFile
 import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
 
-val serverPropertiesFile = layout.projectDirectory.file("server/gradle.properties").asFile
-require(serverPropertiesFile.isFile) {
-    "Missing MCP server properties file: ${serverPropertiesFile.absolutePath}"
-}
-
-val serverProperties = Properties().apply {
-    serverPropertiesFile.inputStream().use(::load)
-}
-val mcpServerVersion = serverProperties.getProperty("mcpServerVersion")
-    ?.takeIf { it.isNotBlank() }
-    ?: error("Missing `mcpServerVersion` in ${serverPropertiesFile.absolutePath}")
+val mcpServerVersion = providers.gradleProperty("hexanaToolsVersion").get()
 
 plugins {
     application

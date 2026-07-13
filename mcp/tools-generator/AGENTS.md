@@ -10,6 +10,8 @@ DSL and emit checked-in Kotlin files into the two consumers:
   extension, generated MCP profile membership, and generated input defaults for the standalone MCP runtime.
 - `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt` — generated CLI-visible tool metadata,
   generated CLI tool command construction, and executable CLI renderer dispatch for the standalone CLI.
+- `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliProducts.kt` — generated product identities,
+  selected executable tools, output policy, and executable closure metadata.
 
 A separate Claude Desktop MCPB manifest generator consumes catalog metadata and refreshes the checked-in packaging
 template.
@@ -33,6 +35,8 @@ template.
 - Tool surface metadata also lives only in this module. Each tool must explicitly declare its MCP audience/profile intent,
   public MCPB manifest exposure, and CLI visibility, command name, group/domain, and output policy instead of deriving
   those facts from production profile membership.
+- CLI release-product membership is catalog metadata independent from MCP profiles. TODO tools stay visible in the global
+  CLI registry but must not belong to `hexana-mcp`, `hexana-cli`, or `hexana-cli-script` release selections.
 - Public MCPB manifest exposure is generated from catalog metadata; do not maintain a separate manifest tool list.
 - Top-level tool output classes also declare their `mcp/core` model package here with `kotlinPackage = ...`; the
   idea-plugin generator must not carry a separate result-class package map.
@@ -70,6 +74,7 @@ Before sending a catalog change for review, run the generated-artifact drift che
 
 - `./gradlew :idea-plugin:verifyHexanaToolsetUpToDate`
 - `./gradlew :mcp:server:verifyHexanaToolDispatcherUpToDate`
+- `./gradlew :mcp:server:verifyHexanaCliProductsUpToDate`
 - `./gradlew :mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate`
 
 ## Guidance prose conventions

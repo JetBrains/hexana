@@ -144,9 +144,11 @@ Existing IDE run configurations currently include:
 - `mcp/server/src/main/gen/HexanaToolDispatcher.kt` is generated from the same DSL and contains standalone MCP tool
   registration plus MCP profile/default metadata.
 - `mcp/server/src/main/gen/HexanaCliToolset.kt` is generated from the same DSL and contains generated CLI-visible tool
-  metadata, CLI tool command construction, and executable CLI renderer dispatch. Regenerate both files with
+  metadata, CLI tool command construction, and executable CLI renderer dispatch. Regenerate all standalone files with
   `./gradlew :mcp:server:generateHexanaToolDispatcher`. If you change a tool's name, description, input shape, or output
   shape, edit the DSL and rerun both generators in the same change.
+- `mcp/server/src/main/gen/HexanaCliProducts.kt` is generated from catalog-owned CLI release-product membership. Verify
+  it with `./gradlew :mcp:server:verifyHexanaCliProductsUpToDate`.
 - Embedded converter binaries live here:
   - `graalwasm/wasmprinter/src/main/resources/wasmprinter_wrapper.wasm`
   - `graalwasm/wat2wasm/src/main/resources/wat2wasm_full.wasm`

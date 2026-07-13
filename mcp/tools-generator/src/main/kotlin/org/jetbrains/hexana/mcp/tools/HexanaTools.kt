@@ -79,6 +79,7 @@ val HexanaTools: List<ToolSpec> = orderedTools(
 private fun orderedTools(vararg groups: List<ToolSpec>): List<ToolSpec> {
     val tools = groups.flatMap { it }
     validateToolCollection(tools)
+    validateCliReleaseProducts(tools)
     val byName = tools.groupBy { it.name }
 
     val actualNames = byName.keys
