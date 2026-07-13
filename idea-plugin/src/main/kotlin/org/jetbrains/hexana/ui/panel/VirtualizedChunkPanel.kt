@@ -429,9 +429,25 @@ internal class ChunkPanelNavigator(
         unfoldSectionContaining(target.chunkId)
         val lazyIdx = computeLazyItemIndex(target.chunkId)
         if (lazyIdx >= 0) {
-            // Scroll one item earlier so the target isn't hidden behind the
-            // sticky section header that Compose pins at the top of the viewport.
-            listState.scrollToItem(maxOf(0, lazyIdx - 1))
+            val chunkIdx = chunkTree.chunkForId(target.chunkId)
+            val isSectionHeader = chunkIdx != null && chunkTree.chunkAt(chunkIdx) is BinaryChunk.SectionHeader
+            if (isSectionHeader) {
+                // Section headers become sticky — scroll directly to them.
+                listState.scrollToItem(lazyIdx)
+            } else {
+                // Scroll one item earlier so the target isn't hidden behind
+                // the sticky section header that Compose pins at the top.
+                listState.scrollToItem(maxOf(0, lazyIdx - 1))
+                // After the initial scroll the sticky header is the first
+                // visible item. Read its height and scroll the preceding
+                // item by that amount so the target's top edge clears it.
+                val headerHeight = listState.layoutInfo.visibleItemsInfo
+                    .firstOrNull()
+                    ?.size ?: 0
+                if (lazyIdx > 0 && headerHeight > 0) {
+                    listState.scrollToItem(lazyIdx - 1, headerHeight)
+                }
+            }
         }
     }
 
@@ -700,7 +716,8 @@ internal fun ChunkPanelSectionShortcutBar(
         for (i in 0 until chunkTree.totalChunks) {
             val c = chunkTree.chunkAt(i)
             if (c is BinaryChunk.SectionHeader && c.kind !in sectionParent) {
-                val base = sectionDisplayName(c.kind)
+                val symbolicName = (c.id as? ChunkId.Symbolic)?.name
+                val base = symbolicName ?: sectionDisplayName(c.kind)
                 val count = nameCounts[base] ?: 0
                 nameCounts[base] = count + 1
                 val label = if (count == 0) base else "$base#$count"
@@ -852,7 +869,10 @@ private fun ChunkPanelStatusBar(
         val offsetLabel = "0x${chunk.byteRange.first.toString(16).uppercase().padStart(8, '0')}"
         val nameLabel = when (chunk) {
             is BinaryChunk.Element -> chunk.displayName ?: "${sectionLabel}#${chunk.indexInSection}"
-            is BinaryChunk.SectionHeader -> "(section header)"
+            is BinaryChunk.SectionHeader -> {
+                val symbolicName = (chunk.id as? ChunkId.Symbolic)?.name
+                symbolicName ?: "(section header)"
+            }
         }
         Text("Chunk ${currentIndex + 1} / ${chunkTree.totalChunks}", style = style)
         Text("Section: $sectionLabel", style = style)

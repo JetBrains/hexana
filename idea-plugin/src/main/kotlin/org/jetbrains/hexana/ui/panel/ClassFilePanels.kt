@@ -167,6 +167,14 @@ private fun ClassMethodsTab(
                         SimpleChunkSearchResult(label = name, chunkId = chunkId)
                     }
             },
+            itemCountForChunk = { chunkId ->
+                val idx = (chunkId as? ChunkId.Indexed)?.index
+                if (idx != null && chunkId.sectionKind == JvmSectionKinds.METHOD_BODY) {
+                    sections.getOrNull(idx)?.bodyRows?.size ?: 1
+                } else {
+                    1
+                }
+            },
             sectionParent = mapOf(
                 JvmSectionKinds.METHOD_BODY to JvmSectionKinds.METHOD,
             ),
