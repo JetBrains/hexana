@@ -274,6 +274,7 @@ internal fun VirtualizedChunkPanel(
             chunkTree = chunkTree,
             navigator = navigator,
             sectionDisplayName = config.sectionDisplayName,
+            sectionParent = config.sectionParent,
         )
         toolbar?.invoke()
         SelectionContainer(modifier = Modifier.fillMaxWidth().weight(1f)) {
@@ -680,13 +681,14 @@ internal fun ChunkPanelSectionShortcutBar(
     chunkTree: ChunkTree,
     navigator: ChunkPanelNavigator,
     sectionDisplayName: (SectionKind) -> String,
+    sectionParent: Map<SectionKind, SectionKind> = emptyMap(),
 ) {
     val entries: List<Pair<ChunkId, String>> = remember(chunkTree) {
         val out = ArrayList<Pair<ChunkId, String>>()
         val nameCounts = HashMap<String, Int>()
         for (i in 0 until chunkTree.totalChunks) {
             val c = chunkTree.chunkAt(i)
-            if (c is BinaryChunk.SectionHeader) {
+            if (c is BinaryChunk.SectionHeader && c.kind !in sectionParent) {
                 val base = sectionDisplayName(c.kind)
                 val count = nameCounts[base] ?: 0
                 nameCounts[base] = count + 1

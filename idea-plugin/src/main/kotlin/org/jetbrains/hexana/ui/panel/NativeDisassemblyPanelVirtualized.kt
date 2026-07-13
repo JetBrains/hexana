@@ -225,6 +225,18 @@ internal sealed interface DisasmLoadState {
     data class Error(val message: String) : DisasmLoadState
 }
 
+/**
+ * Lightweight result of the fast first phase: range discovery + arch
+ * detection. Enough to show the folded function list immediately.
+ */
+internal data class DisasmRangeDiscovery(
+    val arch: Arch,
+    val ranges: List<DisasmRange>,
+    val totalBytes: Long,
+    val bytes: CommonByteBuffer,
+    val bytesLimit: Int,
+)
+
 // ---------------------------------------------------------------------------
 // Section kinds + chunk tree + renderer
 // ---------------------------------------------------------------------------
@@ -546,39 +558,36 @@ private fun machOArch(cpuType: Int?): Arch = when (cpuType) {
 // ---------------------------------------------------------------------------
 
 /**
- * Builds the [DisasmCatalog] for the virtualised panel — discovers the
- * function ranges, brings up the Capstone module, and returns. No bodies
- * are decoded here; per-body Capstone calls happen lazily inside
- * [NativeDisasmChunkRenderer] when each chunk first enters composition.
- *
- * Two range-sourcing modes, with the symbol path preferred:
- *
- * 1. **Symbol-driven** — pulls function records from
- *    [NativeBinaryProvider.nativeFunctions] (built by `NativeFunctionDiscovery`
- *    over the ELF/Mach-O/PE sym + dynsym tables). Each non-imported symbol
- *    with a known `(fileOffset, size)` becomes a [DisasmRange] named after
- *    the symbol.
- *
- * 2. **Stripped fallback** — when the symbol path yields no candidates (the
- *    binary is stripped, or the symbol source isn't recognised), enumerate
- *    the format's executable sections and emit one synthetic [DisasmRange]
- *    per section. The synthetic name uses `<section-name>` framing so the
- *    UI makes the absence of symbols visible.
- *
- * A single probe decode runs on the first range so arch-detection errors
- * surface immediately as a load-time `Error` rather than as silent empty
- * function bodies during scroll.
+ * Fast first phase: discovers function ranges from the binary's symbol
+ * tables. No Capstone work — pure metadata walk. Returns immediately
+ * so the UI can show the folded function list while Capstone loads in
+ * the background.
  */
-internal suspend fun loadCapstoneDisassembly(
+internal fun discoverDisasmRanges(
     provider: NativeBinaryProvider,
-): DisasmLoadState {
+): DisasmRangeDiscovery? {
     val arch = provider.archForDisasm()
     val ranges = provider.collectDisasmRanges()
-    if (ranges.isEmpty()) {
-        return DisasmLoadState.Error(
-            "Disassembly: no symbol-discovered functions and no executable sections detected."
-        )
-    }
+    if (ranges.isEmpty()) return null
+    return DisasmRangeDiscovery(
+        arch = arch,
+        ranges = ranges,
+        totalBytes = ranges.sumOf { it.size },
+        bytes = provider.bytes,
+        bytesLimit = provider.bytes.size,
+    )
+}
+
+/**
+ * Expensive second phase: loads the Capstone WASM module and builds the
+ * [DisasmCatalog]. Runs on a background thread; the UI is already showing
+ * the folded function list from [discoverDisasmRanges] while this executes.
+ */
+internal suspend fun loadCapstoneDisassembly(
+    discovery: DisasmRangeDiscovery,
+): DisasmLoadState {
+    val arch = discovery.arch
+    val ranges = discovery.ranges
 
     // Backend + perf gating are driven by IntelliJ Registry keys —
     // toggleable live via Help → Find Action → Registry. The Capstone WASM
@@ -602,15 +611,13 @@ internal suspend fun loadCapstoneDisassembly(
     // Use the backend's native dialect for both decode and formatter — the
     // renderer adapts to the user-selected dialect downstream.
     val formatter = disassembler.formatter(arch, AssemblySyntax.INTEL)
-    val bytes = provider.bytes
-    val bytesLimit = bytes.size
 
     val catalog = DisasmCatalog(
         arch = arch,
         disassembler = disassembler,
         formatter = formatter,
-        bytes = bytes,
-        bytesLimit = bytesLimit,
+        bytes = discovery.bytes,
+        bytesLimit = discovery.bytesLimit,
         ranges = ranges,
     )
 
@@ -798,16 +805,20 @@ internal fun NativeDisassemblyPanelVirtualized(
     var syntax by remember(provider) { mutableStateOf(defaultSyntaxFor(provider.archForDisasm())) }
     var reloadRequest by remember(provider) { mutableStateOf(0) }
 
-    // Decoding is dialect-independent — switching syntax must not re-run
-    // Capstone over the binary. The renderer applies the dialect transform
-    // on the catalog's cached instructions; the catalog survives toggles.
+    // Single-phase background load: discovery + Capstone + probe decode all
+    // run on IO. The UI shows a spinner until the catalog is ready, then
+    // composes the full panel once — no partial/nullable-catalog recomposition.
     val activityTracker = DisasmActivityTracker.getInstance(state.project)
     LaunchedEffect(provider, reloadRequest) {
         result = DisasmLoadState.Loading
         activityTracker.begin()
         try {
             result = withContext(Dispatchers.IO) {
-                loadCapstoneDisassembly(provider)
+                val disc = discoverDisasmRanges(provider)
+                    ?: return@withContext DisasmLoadState.Error(
+                        "Disassembly: no symbol-discovered functions and no executable sections detected."
+                    )
+                loadCapstoneDisassembly(disc)
             }
         } finally {
             activityTracker.end()
@@ -1039,26 +1050,17 @@ private fun VirtualizedDisasmListing(
     syntax: AssemblySyntax,
     state: HexViewStateHolder,
 ) {
-    // Snapshot satisfies the ChunkRenderer contract; the renderer reads
-    // instructions through the catalog's lazy decoder.
     val snapshot = remember(catalog, provider) {
         binaryDocumentOf(provider.bytes).snapshot()
     }
     val arch = catalog.arch
     val tree = remember(catalog) { NativeDisasmChunkTree(catalog.ranges, catalog.totalBytes) }
-    // Keyed on `syntax` so a dialect switch rebuilds the renderer instance
-    // (which invalidates per-chunk token caches downstream via the `remember`
-    // key on `chunk.id, renderer`). The decoded-instruction cache lives on
-    // the catalog and survives this rebuild — Capstone is not re-run.
     val renderer = remember(catalog, arch, syntax) {
         NativeDisasmChunkRenderer(catalog, arch, syntax)
     }
 
-    // Start with every FUNCTION sticky header folded. Disassembly is
-    // expensive (one Capstone WASM call + token build + AnnotatedString
-    // assembly per chunk), so the panel only pays that cost when the user
-    // actively opens a function. The TEXT-level header stays unfolded so
-    // the function list itself is visible from the start.
+    // Start with every FUNCTION sticky header folded so the function list
+    // is visible immediately without any Capstone work.
     val foldedState: MutableState<Set<ChunkId>> = remember(catalog) {
         val initial: Set<ChunkId> = catalog.ranges
             .mapTo(HashSet(catalog.ranges.size)) {
@@ -1071,7 +1073,6 @@ private fun VirtualizedDisasmListing(
         Text("Disassembly: absent. No instructions were returned.", modifier = Modifier.padding(8.dp))
         return
     }
-
 
     val disasmConfig = remember(catalog, provider, tree) {
         VirtualizedChunkPanelConfig(
@@ -1114,7 +1115,6 @@ private fun VirtualizedDisasmListing(
             )
         },
         onSearchResultPicked = { result, navigator ->
-            // For FUNCTION_BODY results, also unfold the parent FUNCTION header.
             val chunkId = result.chunkId
             if (chunkId is ChunkId.Symbolic && chunkId.sectionKind == DisasmSectionKinds.FUNCTION_BODY) {
                 val funcName = displayNameFromWindowed(chunkId.name)
@@ -1206,10 +1206,11 @@ private fun AsyncFunctionBody(
     snapshot: BinaryDocumentSnapshot,
     project: com.intellij.openapi.project.Project,
 ) {
-    var lines by remember(chunk.id, renderer) {
-        mutableStateOf<List<List<RenderToken>>?>(null)
+    val accentColor = HexanaTheme.hexTextColor
+    var annotated by remember(chunk.id, renderer, accentColor) {
+        mutableStateOf<AnnotatedString?>(null)
     }
-    LaunchedEffect(chunk.id, renderer) {
+    LaunchedEffect(chunk.id, renderer, accentColor) {
         val tracker = DisasmActivityTracker.getInstance(project)
         tracker.begin()
         try {
@@ -1220,31 +1221,84 @@ private fun AsyncFunctionBody(
             catalog.decode(chunk.indexInSection)
             val tAfterDecode = if (perfTracing) System.nanoTime() else 0L
             val rendered = withContext(Dispatchers.Default) {
-                splitTokensIntoLines(renderer.render(snapshot, chunk).tokens)
+                val tokens = renderer.render(snapshot, chunk).tokens
+                tokensToAnnotatedString(tokens, accentColor)
             }
             val tAfterRender = if (perfTracing) System.nanoTime() else 0L
-            lines = rendered
+            annotated = rendered
             if (perfTracing) {
                 org.jetbrains.hexana.HexanaLog.LOG.warn(
                     "[disasm-perf] chunk=${chunk.id} " +
                         "decodeMs=${(tAfterDecode - t0) / 1_000_000} " +
                         "renderMs=${(tAfterRender - tAfterDecode) / 1_000_000} " +
-                        "lines=${rendered.size}",
+                        "annotatedLen=${rendered.length}",
                 )
             }
         } finally {
             tracker.end()
         }
     }
-    val current = lines
+    val current = annotated
     if (current == null) {
         DecodingPlaceholder()
     } else {
-        Column {
-            for (line in current) {
-                SelectableTokenRow(tokens = line)
+        ChunkLines(current)
+    }
+}
+
+/**
+ * Builds a single [AnnotatedString] from the token list, applying accent
+ * colour to structural tokens and bold to keywords. Offset-annotation tokens
+ * are tagged with a `"offset"` [StringAnnotation][androidx.compose.ui.text.AnnotatedString]
+ * whose value is the decimal source offset, so [ChunkLines] can make them
+ * clickable without splitting into per-line composables.
+ */
+private fun tokensToAnnotatedString(
+    tokens: List<RenderToken>,
+    accentColor: Color,
+): AnnotatedString = buildAnnotatedString {
+    for (token in tokens) {
+        when (token.kind) {
+            RenderTokenKind.LINE_BREAK -> append('\n')
+            RenderTokenKind.KEYWORD, RenderTokenKind.LABEL_REF ->
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(token.text) }
+            RenderTokenKind.OFFSET_ANNOTATION -> {
+                val start = length
+                withStyle(SpanStyle(color = accentColor)) { append(token.text) }
+                if (token.sourceOffset != null) {
+                    addStringAnnotation("offset", token.sourceOffset.toString(), start, length)
+                }
             }
+            RenderTokenKind.RAW_BYTES,
+            RenderTokenKind.COMMENT ->
+                withStyle(SpanStyle(color = accentColor)) { append(token.text) }
+            else -> append(token.text)
         }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ChunkLines(annotated: AnnotatedString) {
+    val onOffsetClicked = LocalOffsetClickHandler.current
+    if (onOffsetClicked != null) {
+        @Suppress("DEPRECATION")
+        androidx.compose.foundation.text.ClickableText(
+            text = annotated,
+            style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
+            modifier = Modifier.padding(vertical = 1.dp),
+            onClick = { charOffset ->
+                annotated.getStringAnnotations("offset", charOffset, charOffset)
+                    .firstOrNull()
+                    ?.let { onOffsetClicked(it.item.toLong()) }
+            },
+        )
+    } else {
+        Text(
+            text = annotated,
+            style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
+            modifier = Modifier.padding(vertical = 1.dp),
+        )
     }
 }
 
