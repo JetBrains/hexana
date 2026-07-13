@@ -1140,6 +1140,7 @@ private fun VirtualizedDisasmListing(
                 AsyncFunctionBody(chunk, catalog, renderer, snapshot, state.project)
             }
         },
+        showSectionShortcutBar = false,
     )
 }
 

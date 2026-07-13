@@ -190,6 +190,8 @@ internal fun VirtualizedChunkPanel(
      * for external navigation (e.g. goto-offset bar in a toolbar slot).
      */
     onNavigatorReady: ((ChunkPanelNavigator) -> Unit)? = null,
+    /** When false, the section shortcut bar is hidden. */
+    showSectionShortcutBar: Boolean = true,
 ) {
     val effectiveListState = listState ?: rememberLazyListState()
     val foldedSectionsState: MutableState<Set<ChunkId>> =
@@ -279,12 +281,14 @@ internal fun VirtualizedChunkPanel(
                 searchQuery = TextFieldValue("")
             },
         )
-        ChunkPanelSectionShortcutBar(
-            chunkTree = chunkTree,
-            navigator = navigator,
-            sectionDisplayName = config.sectionDisplayName,
-            sectionParent = config.sectionParent,
-        )
+        if (showSectionShortcutBar) {
+            ChunkPanelSectionShortcutBar(
+                chunkTree = chunkTree,
+                navigator = navigator,
+                sectionDisplayName = config.sectionDisplayName,
+                sectionParent = config.sectionParent,
+            )
+        }
         toolbar?.invoke()
         SelectionContainer(modifier = Modifier.fillMaxWidth().weight(1f)) {
           Box(modifier = Modifier.fillMaxSize()) {
