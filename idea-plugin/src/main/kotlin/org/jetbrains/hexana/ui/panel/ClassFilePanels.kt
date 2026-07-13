@@ -88,21 +88,6 @@ private class JvmMethodChunkTree(
     private val sections: List<MethodSection>,
 ) : ChunkTree {
     private val chunks: List<BinaryChunk> = buildList {
-        val firstOffset = sections.minOfOrNull { it.methodOffset.toLong() } ?: 0L
-        val lastOffset = sections.maxOfOrNull {
-            val last = it.bodyRows.lastOrNull()?.fileOffset?.toLong() ?: it.methodOffset.toLong()
-            last + 1
-        } ?: firstOffset
-        add(
-            BinaryChunk.SectionHeader(
-                id = ChunkId.Header(JvmSectionKinds.METHODS),
-                byteRange = firstOffset..lastOffset,
-                estimatedLines = 1,
-                kind = JvmSectionKinds.METHODS,
-                elementCount = sections.size,
-                totalSize = (lastOffset - firstOffset).coerceAtLeast(0),
-            ),
-        )
         sections.forEachIndexed { idx, section ->
             val sectionStart = section.methodOffset.toLong()
             val sectionEnd = (section.bodyRows.lastOrNull()?.fileOffset?.toLong() ?: sectionStart) + 1
@@ -183,7 +168,6 @@ private fun ClassMethodsTab(
                     }
             },
             sectionParent = mapOf(
-                JvmSectionKinds.METHOD to JvmSectionKinds.METHODS,
                 JvmSectionKinds.METHOD_BODY to JvmSectionKinds.METHOD,
             ),
             onOffsetClicked = { offset -> state.scrollHexViewTo(offset, setCursor = true) },
