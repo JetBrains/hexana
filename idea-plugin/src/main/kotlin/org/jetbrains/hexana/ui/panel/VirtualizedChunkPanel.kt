@@ -828,9 +828,8 @@ private fun ChunkPanelStatusBar(
         Text("Chunk ${currentIndex + 1} / ${chunkTree.totalChunks}", style = style)
         Text("Section: $sectionLabel", style = style)
         Text("Offset: $offsetLabel", style = style)
-        Text(nameLabel, style = style)
+        Text(nameLabel, style = style, modifier = Modifier.weight(1f), softWrap = true)
         if (extra != null) {
-            Spacer(modifier = Modifier.weight(1f))
             extra()
         }
     }
