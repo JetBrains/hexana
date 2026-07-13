@@ -286,6 +286,7 @@ class HexanaStdioIntegrationTest {
         val outputLimitedWasm = createWasmFile("output-limit.wasm", "(module (memory 1) (func (export \"main\")))")
 
         val cases = listOf(
+            listOf("summarize-binary", missingPath("missing.bin").toString(), "--format", "json") to "File not found",
             listOf("summarize-module", missingPath("missing.wasm").toString(), "--format", "json") to "File not found",
             listOf(
                 "summarize-module",

@@ -13,7 +13,6 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisService
 import org.jetbrains.hexana.mcp.HexanaJson
 import org.jetbrains.hexana.mcp.WasmInputBytesLoader
 import org.jetbrains.hexana.mcp.WasmInput
-import org.jetbrains.hexana.mcp.model.binaries.BinarySummaryResult
 import org.jetbrains.hexana.mcp.model.converters.WasmToWatResult
 import org.jetbrains.hexana.mcp.model.scripting.RunBinaryScriptDiagnosticResult
 import org.jetbrains.hexana.mcp.model.scripting.RunBinaryScriptOutputResult
@@ -23,6 +22,7 @@ import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptRunner
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptSource
 import org.jetbrains.hexana.mcp.tool.runtime.ToolInputSourceSelection
+import org.jetbrains.hexana.mcp.tool.runtime.RenderedToolOutput
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.CancellationException
 
@@ -77,11 +77,9 @@ internal fun renderSummarizeBinaryCommandOutput(
     ),
 ): HexanaCliCommandOutput {
     requireExecutableTool(command, toolName = "summarize_binary")
-    val result = analysisService.summarizeBinary(command.binaryInputSource())
-    val output = when (command.format) {
-        HexanaCliOutputFormat.JSON -> HexanaJson.compact.encodeToString(BinarySummaryResult.serializer(), result)
-        HexanaCliOutputFormat.PRETTY -> error("summarize-binary does not support pretty output")
-        HexanaCliOutputFormat.RAW -> error("summarize-binary does not support raw output")
+    val output = when (val rendered = executeSummarizeBinaryRuntime(command, analysisService)) {
+        is RenderedToolOutput.Text -> rendered.text
+        is RenderedToolOutput.Binary -> error("summarize-binary does not support binary output")
     }
     return requireOutputWithinLimit(
         output = HexanaCliCommandOutput(stdout = output),

@@ -34,6 +34,9 @@ ticket intentionally updates the launcher contract and its smoke coverage.
 This keeps the public CLI, server launcher, and packaging entrypoint in one reviewable runtime while the command surface
 is still stabilizing.
 
+`summarize-binary` now exercises the neutral converter/executor/renderer contracts end to end while its concrete
+adapters and final CLI output budgeting remain server-owned. The other executable commands are not migrated yet.
+
 ## Future Split Boundary
 
 The catalog now declares three atomically versioned release products independently from MCP profiles: legacy

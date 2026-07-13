@@ -27,6 +27,7 @@ val verifyToolRuntimeBoundary = tasks.register("verifyToolRuntimeBoundary") {
         val forbiddenProjectPaths = setOf(
             ":idea-plugin",
             ":mcp:core",
+            ":mcp:scripting",
             ":mcp:server",
             ":mcp:tools-generator",
         )

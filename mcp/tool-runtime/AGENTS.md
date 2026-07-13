@@ -1,6 +1,6 @@
 # AGENTS.md for `mcp/tool-runtime`
 
-This module contains runtime-facing contracts for CLI renderers and converters.
+This module contains runtime-facing contracts for CLI converters, semantic executors, and renderers.
 
 ## Boundary
 

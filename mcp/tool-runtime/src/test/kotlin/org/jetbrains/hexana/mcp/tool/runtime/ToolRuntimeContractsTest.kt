@@ -25,6 +25,24 @@ class ToolRuntimeContractsTest {
     }
 
     @Test
+    fun executorCarriesSemanticArgumentsAndResultWithoutRuntimeDependencies() {
+        val context = ToolRuntimeContext(toolName = "inspect")
+        val arguments = JsonObject(mapOf("path" to JsonPrimitive("module.wasm")))
+        val semanticResult = JsonObject(mapOf("format" to JsonPrimitive("wasm")))
+        var received: ToolExecutionRequest? = null
+        val executor = ToolExecutor { request ->
+            received = request
+            ToolExecutionResult(semanticResult)
+        }
+
+        val result = executor.execute(ToolExecutionRequest(context, arguments))
+
+        assertEquals(context, received?.context)
+        assertEquals(arguments, received?.arguments)
+        assertEquals(semanticResult, result.semanticResult)
+    }
+
+    @Test
     fun inputSourcesModelPathAndStdinContext() {
         val stdinBytes = byteArrayOf(4, 5, 6)
         val sources = ToolInputSources(
