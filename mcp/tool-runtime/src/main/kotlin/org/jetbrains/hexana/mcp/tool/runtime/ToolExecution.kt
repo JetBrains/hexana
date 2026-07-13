@@ -10,6 +10,7 @@ fun interface ToolExecutor {
 data class ToolExecutionRequest(
     val context: ToolRuntimeContext,
     val arguments: JsonObject,
+    val sources: ToolInputSources = ToolInputSources(),
 )
 
 data class ToolExecutionResult(

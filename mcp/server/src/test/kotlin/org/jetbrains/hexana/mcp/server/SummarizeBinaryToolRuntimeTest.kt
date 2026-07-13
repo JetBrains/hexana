@@ -1,6 +1,5 @@
 package org.jetbrains.hexana.mcp.server
 
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -27,6 +26,7 @@ import org.jetbrains.hexana.mcp.tool.runtime.ToolRenderOptions
 import org.jetbrains.hexana.mcp.tool.runtime.ToolRuntimeContext
 import org.junit.Test
 import java.nio.charset.StandardCharsets
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -39,20 +39,16 @@ class SummarizeBinaryToolRuntimeTest {
     private val converter = SummarizeBinaryInputConverter()
 
     @Test
-    fun converterMapsEveryLegacySourceToCanonicalSemanticJson() {
-        val cases = listOf(
-            ToolInputSourceSelection.Path("sample.bin", "binary") to
-                JsonObject(mapOf("path" to JsonPrimitive("sample.bin"))),
-            ToolInputSourceSelection.Base64("AQID", "binary") to
-                JsonObject(mapOf("bytesBase64" to JsonPrimitive("AQID"))),
-            ToolInputSourceSelection.StdinBytes(byteArrayOf(0, 127, -1), "binary") to
-                JsonObject(mapOf("bytes" to JsonArray(listOf(0, 127, 255).map(::JsonPrimitive)))),
-            ToolInputSourceSelection.ByteList(listOf(0, 127, 255), "binary") to
-                JsonObject(mapOf("bytes" to JsonArray(listOf(0, 127, 255).map(::JsonPrimitive)))),
+    fun converterKeepsEveryLegacySourceOutOfSemanticJson() {
+        val sources = listOf(
+            ToolInputSourceSelection.Path("sample.bin", "binary"),
+            ToolInputSourceSelection.Base64("AQID", "binary"),
+            ToolInputSourceSelection.StdinBytes(byteArrayOf(0, 127, -1), "binary"),
+            ToolInputSourceSelection.ByteList(listOf(0, 127, 255), "binary"),
         )
 
-        cases.forEach { (source, expected) ->
-            assertEquals(expected, converter.convert(conversionRequest(source)))
+        sources.forEach { source ->
+            assertEquals(JsonObject(emptyMap()), converter.convert(conversionRequest(source)))
         }
     }
 
@@ -98,16 +94,22 @@ class SummarizeBinaryToolRuntimeTest {
             result
         }
         val cases = listOf(
-            JsonObject(mapOf("path" to JsonPrimitive("sample.bin"))) to BinaryInput.FilePath("sample.bin"),
-            JsonObject(mapOf("bytesBase64" to JsonPrimitive("AQID"))) to BinaryInput.InlineBytes("AQID"),
-            JsonObject(mapOf("bytes" to JsonArray(listOf(1, 2, 255).map(::JsonPrimitive)))) to
+            ToolInputSourceSelection.Path("sample.bin", "binary") to BinaryInput.FilePath("sample.bin"),
+            ToolInputSourceSelection.Base64("AQID", "binary") to BinaryInput.InlineBytes("AQID"),
+            ToolInputSourceSelection.ByteList(listOf(1, 2, 255), "binary") to
                 BinaryInput.RawBytes(byteArrayOf(1, 2, -1)),
         )
 
-        cases.forEach { (arguments, expectedInput) ->
-            val execution = executor.execute(ToolExecutionRequest(context, arguments))
+        cases.forEach { (source, expectedInput) ->
+            val execution = executor.execute(
+                ToolExecutionRequest(
+                    context,
+                    JsonObject(emptyMap()),
+                    ToolInputSources(sourceSelections = listOf(source)),
+                )
+            )
 
-            assertEquals(expectedInput, received.last())
+            assertBinaryInputEquals(expectedInput, received.last())
             assertEquals(
                 HexanaJson.compact.encodeToJsonElement(BinarySummaryResult.serializer(), result),
                 execution.semanticResult,
@@ -117,13 +119,38 @@ class SummarizeBinaryToolRuntimeTest {
     }
 
     @Test
+    fun largeStdinStaysOutOfArgumentsAndReachesExecutorLosslessly() {
+        val bytes = ByteArray(1024 * 1024 + 1) { it.toByte() }
+        val sources = ToolInputSources(
+            sourceSelections = listOf(ToolInputSourceSelection.StdinBytes(bytes, "binary"))
+        )
+        val arguments = converter.convert(ToolInputConversionRequest(context, JsonObject(emptyMap()), sources))
+        var received: BinaryInput? = null
+        val executor = SummarizeBinaryExecutor { input ->
+            received = input
+            sampleResult()
+        }
+
+        executor.execute(ToolExecutionRequest(context, arguments, sources))
+
+        assertTrue(arguments.isEmpty())
+        assertContentEquals(bytes, assertIs<BinaryInput.RawBytes>(received).bytes)
+    }
+
+    @Test
     fun executorPropagatesDomainExceptionWithoutWrapping() {
         val expected = HexanaAnalysisException(HexanaAnalysisErrorCode.FILE_NOT_FOUND, "missing")
         val executor = SummarizeBinaryExecutor { throw expected }
 
         val actual = assertFailsWith<HexanaAnalysisException> {
             executor.execute(
-                ToolExecutionRequest(context, JsonObject(mapOf("path" to JsonPrimitive("missing.bin"))))
+                ToolExecutionRequest(
+                    context,
+                    JsonObject(emptyMap()),
+                    ToolInputSources(
+                        sourceSelections = listOf(ToolInputSourceSelection.Path("missing.bin", "binary"))
+                    ),
+                )
             )
         }
 
@@ -228,4 +255,12 @@ class SummarizeBinaryToolRuntimeTest {
         ),
         counts = BinarySummaryCountsResult(functions = 1),
     )
+
+    private fun assertBinaryInputEquals(expected: BinaryInput, actual: BinaryInput) {
+        if (expected is BinaryInput.RawBytes) {
+            assertContentEquals(expected.bytes, assertIs<BinaryInput.RawBytes>(actual).bytes)
+        } else {
+            assertEquals(expected, actual)
+        }
+    }
 }

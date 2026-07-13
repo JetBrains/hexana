@@ -1,13 +1,8 @@
 package org.jetbrains.hexana.mcp.server
 
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.int
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.hexana.mcp.BinaryInput
 import org.jetbrains.hexana.mcp.HexanaAnalysisService
 import org.jetbrains.hexana.mcp.HexanaJson
@@ -41,17 +36,7 @@ internal class SummarizeBinaryInputConverter : ToolInputConverter {
         require(source.slotName == "binary") {
             "summarize-binary source must use slot 'binary', got '${source.slotName}'."
         }
-        return when (source) {
-            is ToolInputSourceSelection.Path -> JsonObject(mapOf("path" to JsonPrimitive(source.path)))
-            is ToolInputSourceSelection.Base64 ->
-                JsonObject(mapOf("bytesBase64" to JsonPrimitive(source.bytesBase64)))
-            is ToolInputSourceSelection.StdinBytes -> JsonObject(
-                mapOf("bytes" to source.bytes().toUnsignedJsonArray())
-            )
-            is ToolInputSourceSelection.ByteList -> JsonObject(
-                mapOf("bytes" to JsonArray(source.bytes.map(::JsonPrimitive)))
-            )
-        }
+        return JsonObject(emptyMap())
     }
 }
 
@@ -62,7 +47,7 @@ internal class SummarizeBinaryExecutor(
 
     override fun execute(request: ToolExecutionRequest): ToolExecutionResult {
         require(request.context.toolName == SUMMARIZE_BINARY_TOOL_NAME)
-        val result = summarize(request.arguments.toBinaryInput())
+        val result = summarize(request.sources.singleBinaryInput())
         return ToolExecutionResult(
             HexanaJson.compact.encodeToJsonElement(BinarySummaryResult.serializer(), result)
         )
@@ -127,14 +112,15 @@ internal fun executeSummarizeBinaryRuntime(
     val context = ToolRuntimeContext(toolName = command.spec.toolName)
     val registry = summarizeBinaryRuntimeRegistry(analysisService)
     val binding = registry.binding(context.toolName)
+    val sources = ToolInputSources(sourceSelections = command.sourceSelections)
     val arguments = binding.converter.convert(
         ToolInputConversionRequest(
             context = context,
             rawArguments = JsonObject(command.params),
-            sources = ToolInputSources(sourceSelections = command.sourceSelections),
+            sources = sources,
         )
     )
-    val execution = binding.executor.execute(ToolExecutionRequest(context, arguments))
+    val execution = binding.executor.execute(ToolExecutionRequest(context, arguments, sources))
     return binding.renderer.render(
         ToolOutputRenderRequest(
             context = context,
@@ -153,25 +139,14 @@ private fun summarizeBinaryRuntimeRegistry(analysisService: HexanaAnalysisServic
         renderers = mapOf(SUMMARIZE_BINARY_TOOL_NAME to SummarizeBinaryJsonRenderer),
     )
 
-private fun ByteArray.toUnsignedJsonArray(): JsonArray =
-    JsonArray(map { JsonPrimitive(it.toInt() and 0xff) })
-
-private fun JsonObject.toBinaryInput(): BinaryInput {
-    val supportedFields = setOf("path", "bytesBase64", "bytes")
-    require(keys.all { it in supportedFields }) { "Unsupported summarize-binary fields: ${keys - supportedFields}." }
-    val selectedFields = supportedFields.filter(::containsKey)
-    require(selectedFields.size == 1) { "summarize-binary requires exactly one semantic input field." }
-    return when (val field = selectedFields.single()) {
-        "path" -> BinaryInput.FilePath(getValue(field).jsonPrimitive.content)
-        "bytesBase64" -> BinaryInput.InlineBytes(getValue(field).jsonPrimitive.content)
-        "bytes" -> BinaryInput.RawBytes(
-            getValue(field).jsonArray.map {
-                it.jsonPrimitive.int.also { value ->
-                    require(value in 0..255) { "summarize-binary byte values must be in the 0..255 range." }
-                }.toByte()
-            }.toByteArray()
-        )
-        else -> error("Unreachable summarize-binary input field '$field'.")
+private fun ToolInputSources.singleBinaryInput(): BinaryInput {
+    require(pathArguments.isEmpty() && stdinText == null && stdinBytesCopy() == null)
+    return when (val source = sourceSelections.singleOrNull()) {
+        is ToolInputSourceSelection.Path -> BinaryInput.FilePath(source.path)
+        is ToolInputSourceSelection.Base64 -> BinaryInput.InlineBytes(source.bytesBase64)
+        is ToolInputSourceSelection.StdinBytes -> BinaryInput.RawBytes(source.bytes())
+        is ToolInputSourceSelection.ByteList -> BinaryInput.RawBytes(source.bytes.map(Int::toByte).toByteArray())
+        null -> throw IllegalArgumentException("summarize-binary requires exactly one binary source selection.")
     }
 }
 
