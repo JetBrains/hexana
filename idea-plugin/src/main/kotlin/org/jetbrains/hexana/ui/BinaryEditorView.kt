@@ -287,7 +287,6 @@ internal fun BinaryEditorView(
                     liveProviderProvider = { liveProvider },
                     wasmFunctionNavTargetFlow = wasmNavFlow,
                     wasmByteOffsetNavFlow = wasmOffsetNavFlow,
-                    archiveName = fileName,
                     classFileNavTargetFlow = classFileNavTargetFlow,
                     fileName = fileName,
                 )
@@ -827,14 +826,13 @@ private fun BinaryProvider.resolveHardcodedPanels(
     liveProviderProvider: (() -> BinaryProvider)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?>? = null,
     wasmByteOffsetNavFlow: MutableStateFlow<Int?>? = null,
-    archiveName: String? = null,
     classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?>? = null,
     fileName: String? = null,
 ): List<Panel> = when (this) {
     is ClassFileBinaryProvider -> {
         val parsed = this.parsedClassFile
         if (parsed != null) {
-            classFilePanels(parsed, classFileNavTargetFlow ?: MutableStateFlow(null))
+            classFilePanels(parsed, classFileNavTargetFlow ?: MutableStateFlow(null), state)
         } else {
             HexanaLog.LOG.warn("Failed to parse .class file ${fileName ?: "unknown"}")
             listOf(Panel("Parse Error") {
@@ -863,6 +861,8 @@ private fun BinaryProvider.resolveHardcodedPanels(
                         foldedSectionsExternal = watVirtualizedFolded,
                         navTargetFlow = wasmFunctionNavTargetFlow
                             ?: remember { MutableStateFlow(null) },
+                        byteOffsetNavFlow = wasmByteOffsetNavFlow
+                            ?: remember { MutableStateFlow(null) }
                     )
                 },
             ) + dwarfPanels(this, state)
