@@ -75,9 +75,11 @@ internal fun renderSummarizeBinaryCommandOutput(
         command.allowedRoots,
         command.resourceLimits
     ),
+    runtime: (HexanaCommand.ExecutableTool, HexanaAnalysisService) -> RenderedToolOutput =
+        ::executeSummarizeBinaryRuntime,
 ): HexanaCliCommandOutput {
     requireExecutableTool(command, toolName = "summarize_binary")
-    val output = when (val rendered = executeSummarizeBinaryRuntime(command, analysisService)) {
+    val output = when (val rendered = runtime(command, analysisService)) {
         is RenderedToolOutput.Text -> rendered.text
         is RenderedToolOutput.Binary -> error("summarize-binary does not support binary output")
     }

@@ -25,7 +25,6 @@ import org.jetbrains.hexana.mcp.tool.runtime.ToolOutputRenderer
 import org.jetbrains.hexana.mcp.tool.runtime.ToolRenderOptions
 import org.jetbrains.hexana.mcp.tool.runtime.ToolRuntimeContext
 import org.junit.Test
-import java.nio.charset.StandardCharsets
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -205,21 +204,25 @@ class SummarizeBinaryToolRuntimeTest {
     }
 
     @Test
-    fun legacyAdapterPreservesSemanticJsonAndExactOutputBudgetBoundary() {
-        val initial = renderSummarizeBinaryCommandOutput(command())
-        val byteSize = initial.stdout.toByteArray(StandardCharsets.UTF_8).size
+    fun legacyAdapterInvokesInjectedRuntimeOnceAndAppliesOutputLimit() {
+        val command = command(maxOutputBytes = 8)
+        val analysisService = createStandaloneHexanaAnalysisService(command.allowedRoots, command.resourceLimits)
+        val sentinel = RenderedToolOutput.Text("sentinel")
+        var invocations = 0
+        val output = renderSummarizeBinaryCommandOutput(command, analysisService) { receivedCommand, receivedService ->
+            invocations++
+            assertSame(command, receivedCommand)
+            assertSame(analysisService, receivedService)
+            sentinel
+        }
 
-        assertTrue(initial.stdout.contains("\"format\":\"generic\""))
-        assertFalse(initial.stdout.endsWith("\n"))
-        assertEquals("", initial.stderr)
-        assertEquals(0, initial.exitCode)
-        assertEquals(initial.stdout, renderSummarizeBinaryCommandOutput(command(byteSize)).stdout)
-
+        assertEquals(1, invocations)
+        assertEquals(HexanaCliCommandOutput(stdout = "sentinel"), output)
         val error = assertFailsWith<HexanaAnalysisException> {
-            renderSummarizeBinaryCommandOutput(command(byteSize - 1))
+            renderSummarizeBinaryCommandOutput(command(maxOutputBytes = 7), analysisService) { _, _ -> sentinel }
         }
         assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
-        assertTrue(error.message.orEmpty().contains("maxOutputBytes=${byteSize - 1}"))
+        assertTrue(error.message.orEmpty().contains("maxOutputBytes=7"))
     }
 
     private fun conversionRequest(
