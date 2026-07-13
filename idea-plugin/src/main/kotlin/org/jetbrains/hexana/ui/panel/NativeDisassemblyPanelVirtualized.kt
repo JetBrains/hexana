@@ -1,6 +1,5 @@
 package org.jetbrains.hexana.ui.panel
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -1179,24 +1178,16 @@ private fun FoldableSectionHeader(
 }
 
 /**
- * Decodes + token-builds + annotated-string-builds a FUNCTION_BODY chunk on
- * [Dispatchers.Default] so the EDT stays free during fast scroll. Two EDT
- * costs were folded into the background dispatch:
- *  - Capstone WASM decode (see `CapstoneWasmDisassembler.disassemble` — the
- *    returned `Sequence` wraps an already-eagerly-decoded list).
- *  - Token → [AnnotatedString] conversion. For a function with thousands
- *    of instructions the renderer emits ~5x that many tokens and the
- *    builder iterates them all; doing this on the EDT during scroll
- *    re-introduced the stutter even after the decode moved off it.
+ * Decodes + splits tokens into lines for a FUNCTION_BODY chunk. Capstone
+ * decode and token splitting run off-EDT via [Dispatchers.Default] so the
+ * EDT stays free during fast scroll.
  *
- * The EDT emits a single [Text] per chunk (vs the previous
- * `Column { for line in lines Text(...) }` of N widgets); LazyColumn
- * virtualises items but not the contents within one item, so collapsing
- * to one [Text] is the main lever for chunk layout cost.
- *
- * The catalog cache survives recomposition, so scroll-back to a previously
- * decoded chunk skips Capstone — only the token + annotated-string build
- * re-runs, and that still runs off-EDT through the same [LaunchedEffect].
+ * Each line is rendered as a [SelectableTokenRow] so that content tokens
+ * (mnemonic + operands) are multiline-selectable while offset/byte columns
+ * are excluded from selection — matching the WAT and java-methods views.
+ * With windows capped at [INSTRUCTIONS_PER_WINDOW] (256) lines and only
+ * visible windows composed by LazyColumn, the per-line composable count
+ * stays bounded.
  */
 @Composable
 private fun AsyncFunctionBody(
@@ -1206,11 +1197,10 @@ private fun AsyncFunctionBody(
     snapshot: BinaryDocumentSnapshot,
     project: com.intellij.openapi.project.Project,
 ) {
-    val accentColor = HexanaTheme.hexTextColor
-    var annotated by remember(chunk.id, renderer, accentColor) {
-        mutableStateOf<AnnotatedString?>(null)
+    var lines by remember(chunk.id, renderer) {
+        mutableStateOf<List<List<RenderToken>>?>(null)
     }
-    LaunchedEffect(chunk.id, renderer, accentColor) {
+    LaunchedEffect(chunk.id, renderer) {
         val tracker = DisasmActivityTracker.getInstance(project)
         tracker.begin()
         try {
@@ -1222,85 +1212,34 @@ private fun AsyncFunctionBody(
             val tAfterDecode = if (perfTracing) System.nanoTime() else 0L
             val rendered = withContext(Dispatchers.Default) {
                 val tokens = renderer.render(snapshot, chunk).tokens
-                tokensToAnnotatedString(tokens, accentColor)
+                splitTokensIntoLines(tokens)
             }
             val tAfterRender = if (perfTracing) System.nanoTime() else 0L
-            annotated = rendered
+            lines = rendered
             if (perfTracing) {
                 org.jetbrains.hexana.HexanaLog.LOG.warn(
                     "[disasm-perf] chunk=${chunk.id} " +
                         "decodeMs=${(tAfterDecode - t0) / 1_000_000} " +
                         "renderMs=${(tAfterRender - tAfterDecode) / 1_000_000} " +
-                        "annotatedLen=${rendered.length}",
+                        "lines=${rendered.size}",
                 )
             }
         } finally {
             tracker.end()
         }
     }
-    val current = annotated
+    val current = lines
     if (current == null) {
         DecodingPlaceholder()
     } else {
-        ChunkLines(current)
-    }
-}
-
-/**
- * Builds a single [AnnotatedString] from the token list, applying accent
- * colour to structural tokens and bold to keywords. Offset-annotation tokens
- * are tagged with a `"offset"` [StringAnnotation][androidx.compose.ui.text.AnnotatedString]
- * whose value is the decimal source offset, so [ChunkLines] can make them
- * clickable without splitting into per-line composables.
- */
-private fun tokensToAnnotatedString(
-    tokens: List<RenderToken>,
-    accentColor: Color,
-): AnnotatedString = buildAnnotatedString {
-    for (token in tokens) {
-        when (token.kind) {
-            RenderTokenKind.LINE_BREAK -> append('\n')
-            RenderTokenKind.KEYWORD, RenderTokenKind.LABEL_REF ->
-                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(token.text) }
-            RenderTokenKind.OFFSET_ANNOTATION -> {
-                val start = length
-                withStyle(SpanStyle(color = accentColor)) { append(token.text) }
-                if (token.sourceOffset != null) {
-                    addStringAnnotation("offset", token.sourceOffset.toString(), start, length)
-                }
+        Column {
+            for (line in current) {
+                SelectableTokenRow(tokens = line)
             }
-            RenderTokenKind.RAW_BYTES,
-            RenderTokenKind.COMMENT ->
-                withStyle(SpanStyle(color = accentColor)) { append(token.text) }
-            else -> append(token.text)
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun ChunkLines(annotated: AnnotatedString) {
-    val onOffsetClicked = LocalOffsetClickHandler.current
-    if (onOffsetClicked != null) {
-        @Suppress("DEPRECATION")
-        androidx.compose.foundation.text.ClickableText(
-            text = annotated,
-            style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
-            modifier = Modifier.padding(vertical = 1.dp),
-            onClick = { charOffset ->
-                annotated.getStringAnnotations("offset", charOffset, charOffset)
-                    .firstOrNull()
-                    ?.let { onOffsetClicked(it.item.toLong()) }
-            },
-        )
-    } else {
-        Text(
-            text = annotated,
-            style = TextStyle(color = HexanaTheme.textColor, fontFamily = FontFamily.Monospace),
-            modifier = Modifier.padding(vertical = 1.dp),
-        )
-    }
-}
 
 @Composable
 private fun DecodingPlaceholder() {
