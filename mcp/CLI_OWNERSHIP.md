@@ -36,9 +36,11 @@ is still stabilizing.
 
 `:cli:runtime` now owns the framework-neutral runtime contracts for input conversion, semantic execution, source
 selection, output format selection, rendered payloads, render options, and runtime context. `:cli:core` owns the proven
-`summarize-binary` converter, executor, renderer, and neutral command adapter. `mcp:server` keeps only the legacy CLI
-parsing and final output-budget enforcement for `hexana-mcp summarize-binary`; it must not duplicate that command's
-converter, executor, renderer, or output model.
+`summarize-binary` converter, executor, renderer, and neutral command adapter. `:cli:scripting` owns the isolated
+script-only `run-script` contribution and delegates script execution to `mcp:scripting` without standard command
+composition or MCP transports. `mcp:server` keeps only the legacy CLI parsing and final output-budget enforcement for
+`hexana-mcp summarize-binary` and `hexana-mcp run-script`; it must not duplicate those commands' converter, executor,
+renderer, or output model.
 
 The other executable commands are not migrated yet.
 
@@ -53,7 +55,8 @@ Future split work should move contracts before moving artifacts. The likely boun
 
 - CLI runtime contracts for input conversion, output rendering, output format selection, rendered text/binary payloads,
   working-directory context, and environment access belong in `cli:runtime`;
-- neutral command orchestration and already exercised adapters belong in `cli:core`;
+- neutral standard command orchestration and already exercised non-scripting adapters belong in `cli:core`;
+- the isolated script-only `run-script` adapter belongs in `cli:scripting`;
 - generated metadata can continue to describe CLI-visible commands, but concrete executable command construction should
   eventually depend on those runtime contracts instead of server-only helpers;
 - a future `mcp:cli` module may own public command composition, terminal rendering, and interactive input handling after

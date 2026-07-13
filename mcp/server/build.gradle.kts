@@ -184,6 +184,7 @@ tasks.register("verifyHexanaToolDispatcherUpToDate") {
 dependencies {
     implementation(project(":analytics"))
     implementation(project(":cli:core"))
+    implementation(project(":cli:scripting"))
     implementation(project(":graalwasm:wasmprinter"))
     implementation(project(":mcp:core"))
     implementation(project(":mcp:scripting"))

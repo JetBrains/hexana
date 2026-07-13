@@ -1,18 +1,17 @@
 package org.jetbrains.hexana.mcp.server
 
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import org.jetbrains.hexana.cli.core.SUMMARIZE_BINARY_TOOL_NAME
 import org.jetbrains.hexana.cli.core.SummarizeBinaryCliRequest
 import org.jetbrains.hexana.cli.core.summarizeBinaryCli
 import org.jetbrains.hexana.cli.runtime.RenderedToolOutput
 import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
-import org.jetbrains.hexana.cli.runtime.ToolOutputFormat
+import org.jetbrains.hexana.cli.scripting.RUN_BINARY_SCRIPT_TOOL_NAME
+import org.jetbrains.hexana.cli.scripting.RunScriptCliRequest
+import org.jetbrains.hexana.cli.scripting.runScriptCli
 import org.jetbrains.hexana.graalwasm.wasmprinter.WatWithWarnings
 import org.jetbrains.hexana.graalwasm.wasmprinter.printWat
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
-import org.jetbrains.hexana.mcp.BinaryInput
 import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.HexanaAnalysisService
@@ -20,13 +19,8 @@ import org.jetbrains.hexana.mcp.HexanaJson
 import org.jetbrains.hexana.mcp.WasmInputBytesLoader
 import org.jetbrains.hexana.mcp.WasmInput
 import org.jetbrains.hexana.mcp.model.converters.WasmToWatResult
-import org.jetbrains.hexana.mcp.model.scripting.RunBinaryScriptDiagnosticResult
-import org.jetbrains.hexana.mcp.model.scripting.RunBinaryScriptOutputResult
-import org.jetbrains.hexana.mcp.model.scripting.RunBinaryScriptResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
-import org.jetbrains.hexana.mcp.scripting.HexanaScriptRunner
-import org.jetbrains.hexana.mcp.scripting.HexanaScriptSource
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.CancellationException
 
@@ -160,28 +154,24 @@ internal fun renderWasmToWatCommandOutput(
 
 internal fun renderRunBinaryScriptCommandOutput(
     command: HexanaCommand.ExecutableTool,
-    scriptRunner: (BinaryInput, HexanaScriptSource) -> RunBinaryScriptResult = { input, source ->
-        HexanaScriptRunner(
+): HexanaCliCommandOutput {
+    requireExecutableTool(command, toolName = RUN_BINARY_SCRIPT_TOOL_NAME)
+    val rendered = runScriptCli(
+        RunScriptCliRequest(
+            sourceSelections = command.sourceSelections,
+            params = command.params,
+            format = command.format,
             limits = command.scriptLimits(),
             allowedFilePolicy = standaloneAllowedFilePolicy(command.allowedRoots),
-        ).run(input, source).toRunBinaryScriptResult()
-    },
-): HexanaCliCommandOutput {
-    requireExecutableTool(command, toolName = "run_binary_script")
-    val result = when (val source = command.scriptSourceSelection()) {
-        is ScriptSourceSelection.Valid -> scriptRunner(command.binaryInputSource(slotName = "binary"), source.source)
-        is ScriptSourceSelection.Invalid -> command.invalidRunBinaryScriptResult(source.message)
-    }
-    val output = when (command.format) {
-        HexanaCliOutputFormat.JSON -> HexanaCliCommandOutput(
-            stdout = HexanaJson.compact.encodeToString(RunBinaryScriptResult.serializer(), result),
-            exitCode = result.runScriptExitCode(),
+            toolName = command.spec.toolName,
         )
-        HexanaCliOutputFormat.RAW -> result.toRawRunScriptOutput(command.resourceLimits.maxOutputBytes)
-        HexanaCliOutputFormat.PRETTY -> error("run-script does not support pretty output")
-    }
+    )
     return requireOutputWithinLimit(
-        output = output,
+        output = HexanaCliCommandOutput(
+            stdout = rendered.stdout,
+            stderr = rendered.stderr,
+            exitCode = rendered.exitCode,
+        ),
         maxOutputBytes = command.resourceLimits.maxOutputBytes,
         commandName = command.spec.commandName,
     )
@@ -230,28 +220,6 @@ private fun HexanaCommand.ExecutableTool.wasmInputSource(): WasmInput {
     }
 }
 
-private fun HexanaCommand.ExecutableTool.binaryInputSource(): BinaryInput {
-    return when (val source = sourceSelection) {
-        is ToolInputSourceSelection.Path -> BinaryInput.FilePath(source.path)
-        is ToolInputSourceSelection.Base64 -> BinaryInput.InlineBytes(source.bytesBase64)
-        is ToolInputSourceSelection.StdinBytes -> BinaryInput.RawBytes(source.bytes())
-        is ToolInputSourceSelection.ByteList -> BinaryInput.RawBytes(source.bytes.toByteArray())
-    }
-}
-
-private fun HexanaCommand.ExecutableTool.binaryInputSource(slotName: String): BinaryInput {
-    return when (val source = sourceSelection(slotName)) {
-        is ToolInputSourceSelection.Path -> BinaryInput.FilePath(source.path)
-        is ToolInputSourceSelection.Base64 -> BinaryInput.InlineBytes(source.bytesBase64)
-        is ToolInputSourceSelection.StdinBytes -> BinaryInput.RawBytes(source.bytes())
-        is ToolInputSourceSelection.ByteList -> BinaryInput.RawBytes(source.bytes.toByteArray())
-    }
-}
-
-private fun HexanaCommand.ExecutableTool.sourceSelection(slotName: String): ToolInputSourceSelection =
-    sourceSelections.singleOrNull { it.slotName == slotName }
-        ?: error("${spec.commandName} requires exactly one `$slotName` source selection.")
-
 private fun HexanaCommand.ExecutableTool.scriptLimits(): HexanaScriptLimits =
     HexanaScriptLimits(
         maxOutputBytes = resourceLimits.maxOutputBytes,
@@ -260,116 +228,6 @@ private fun HexanaCommand.ExecutableTool.scriptLimits(): HexanaScriptLimits =
         maxInlineBinaryBytes = resourceLimits.maxInlineBinaryBytes,
         maxFileBinaryBytes = resourceLimits.maxFileBinaryBytes,
     )
-
-private fun HexanaCommand.ExecutableTool.scriptSourceSelection(): ScriptSourceSelection {
-    val scriptPath = params.optionalStringParam("scriptPath")
-    val script = params.optionalStringParam("script")
-    val providedInputs = listOf(scriptPath, script).count { it != null }
-    if (providedInputs == 0) {
-        return ScriptSourceSelection.Invalid("Exactly one of --script or --script-text is required.")
-    }
-    if (providedInputs > 1) {
-        return ScriptSourceSelection.Invalid("Provide exactly one of --script or --script-text.")
-    }
-    return when {
-        scriptPath != null -> ScriptSourceSelection.Valid(HexanaScriptSource.FilePath(scriptPath))
-        script != null -> ScriptSourceSelection.Valid(HexanaScriptSource.Inline(script))
-        else -> error("Unreachable script source state")
-    }
-}
-
-private fun Map<String, JsonPrimitive>.optionalStringParam(name: String): String? {
-    val value = this[name]?.contentOrNull ?: return null
-    if (value.isBlank()) {
-        return null
-    }
-    return value
-}
-
-private fun HexanaCommand.ExecutableTool.invalidRunBinaryScriptResult(message: String): RunBinaryScriptResult =
-    RunBinaryScriptResult(
-        status = "INVALID_INPUT",
-        success = false,
-        output = RunBinaryScriptOutputResult(
-            lines = emptyList(),
-            truncated = false,
-            emittedBytes = 0,
-            maxLines = 0,
-            maxBytes = resourceLimits.maxOutputBytes,
-        ),
-        diagnostics = listOf(
-            RunBinaryScriptDiagnosticResult(
-                code = "INVALID_INPUT",
-                message = message,
-                severity = "ERROR",
-            )
-        ),
-        binary = null,
-        sourceName = "<script>",
-        sourcePath = null,
-        durationMillis = 0,
-    )
-
-private fun RunBinaryScriptResult.toRawRunScriptOutput(maxOutputBytes: Int): HexanaCliCommandOutput {
-    val stderr = diagnostics.toRunScriptDiagnosticsStderr()
-    val stdoutBudget = maxOutputBytes - stderr.byteSize()
-    return HexanaCliCommandOutput(
-        stdout = output.lines.joinToString(separator = "\n").takeUtf8Prefix(stdoutBudget),
-        stderr = stderr,
-        exitCode = runScriptExitCode(),
-    )
-}
-
-private fun RunBinaryScriptResult.runScriptExitCode(): Int =
-    if (success) 0 else 1
-
-private fun List<RunBinaryScriptDiagnosticResult>.toRunScriptDiagnosticsStderr(): String {
-    if (isEmpty()) {
-        return ""
-    }
-    return joinToString(separator = "\n", postfix = "\n") { diagnostic ->
-        "${diagnostic.code}: ${diagnostic.message.asSingleLine()}"
-    }
-}
-
-private fun String.asSingleLine(): String =
-    lineSequence()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-        .joinToString(" ")
-
-private fun org.jetbrains.hexana.mcp.scripting.HexanaScriptResult.toRunBinaryScriptResult(): RunBinaryScriptResult =
-    RunBinaryScriptResult(
-        status = status.name,
-        success = success,
-        output = RunBinaryScriptOutputResult(
-            lines = output.lines,
-            truncated = output.truncated,
-            emittedBytes = output.emittedBytes,
-            maxLines = output.maxLines,
-            maxBytes = output.maxBytes,
-        ),
-        diagnostics = diagnostics.map { diagnostic ->
-            RunBinaryScriptDiagnosticResult(
-                code = diagnostic.code,
-                message = diagnostic.message,
-                severity = diagnostic.severity.name,
-                exceptionClass = diagnostic.exceptionClass,
-                sourceName = diagnostic.sourceName,
-                line = diagnostic.line,
-                column = diagnostic.column,
-            )
-        },
-        binary = binary,
-        sourceName = sourceName,
-        sourcePath = sourcePath,
-        durationMillis = durationMillis,
-    )
-
-private sealed interface ScriptSourceSelection {
-    data class Valid(val source: HexanaScriptSource) : ScriptSourceSelection
-    data class Invalid(val message: String) : ScriptSourceSelection
-}
 
 private fun List<Int>.toByteArray(): ByteArray =
     ByteArray(size) { index -> this[index].toByte() }
@@ -384,60 +242,3 @@ private fun List<String>.toStderrWarnings(): String {
 }
 
 private fun String.byteSize(): Int = toByteArray(StandardCharsets.UTF_8).size
-
-private fun String.takeUtf8Prefix(maxBytes: Int): String {
-    if (maxBytes <= 0) return ""
-    var used = 0
-    var index = 0
-    var builder: StringBuilder? = null
-    while (index < length) {
-        val char = this[index]
-        val codePoint: Int
-        val charCount: Int
-        val replacedSurrogate: Boolean
-        when {
-            Character.isHighSurrogate(char) && index + 1 < length && Character.isLowSurrogate(this[index + 1]) -> {
-                codePoint = Character.toCodePoint(char, this[index + 1])
-                charCount = 2
-                replacedSurrogate = false
-            }
-            Character.isSurrogate(char) -> {
-                codePoint = REPLACEMENT_CHARACTER_CODE_POINT
-                charCount = 1
-                replacedSurrogate = true
-            }
-            else -> {
-                codePoint = char.code
-                charCount = 1
-                replacedSurrogate = false
-            }
-        }
-
-        val codePointBytes = codePoint.utf8ByteCount()
-        if (used + codePointBytes > maxBytes) break
-
-        if (builder != null) {
-            builder.appendCodePoint(codePoint)
-        } else if (replacedSurrogate) {
-            builder = StringBuilder(index + charCount).append(this, 0, index).appendCodePoint(codePoint)
-        }
-        used += codePointBytes
-        index += charCount
-    }
-
-    return when {
-        builder != null -> builder.toString()
-        index < length -> substring(0, index)
-        else -> this
-    }
-}
-
-private fun Int.utf8ByteCount(): Int =
-    when {
-        this <= 0x7F -> 1
-        this <= 0x7FF -> 2
-        this <= 0xFFFF -> 3
-        else -> 4
-    }
-
-private const val REPLACEMENT_CHARACTER_CODE_POINT = 0xFFFD

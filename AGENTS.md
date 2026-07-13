@@ -61,6 +61,9 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - `plugins-shared/`: Kotlin Multiplatform shared logic (no UI framework) used by both `idea-plugin` and `vscode-plugin:webview` — component description formatting, type labels, signature resolution, WAT text generation.
 - `cli/runtime/`: framework-neutral CLI runtime contracts for input conversion, semantic execution, output format selection, rendered payloads, source selections, and runtime context. It must not depend on MCP SDK, Ktor, Clikt, analytics, IntelliJ APIs, or server modules.
 - `cli/core/`: neutral CLI command orchestration and adapters that are already exercised by production behavior. `summarize-binary` lives here and is invoked by the legacy `mcp:server` CLI adapter.
+- `cli/scripting/`: neutral script-only CLI runtime contribution for `run-script`. It reuses `mcp:scripting` and
+  `cli:runtime`, but stays free of standard command composition, MCP transports, Clikt, Ktor, analytics, IntelliJ APIs,
+  and `mcp:server`.
 - `encdec/`: shared `CommonByteBuffer` abstraction and platform-specific byte-buffer helpers.
 - `graalwasm/`: JVM wrappers around embedded `.wasm` utilities used for built-in `wasm -> wat` and `wat -> wasm`.
 - `wasm-modules/`: Rust sources and Docker build flow that produce the embedded `.wasm` artifacts consumed by `graalwasm/`.
@@ -181,8 +184,8 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
   tool contracts change.
 - `mcp/scripting/` changes: run `:mcp:scripting:test`; also run the affected `mcp/server` or plugin coverage when a
   caller starts using the runtime.
-- `cli/` changes: run `:cli:runtime:build`, `:cli:core:test`, and affected legacy adapter coverage when public CLI
-  behavior is involved.
+- `cli/` changes: run `:cli:runtime:build`, `:cli:core:test`, or `:cli:scripting:test` as appropriate, plus affected
+  legacy adapter coverage when public CLI behavior is involved.
 - `mcp/server/` changes: run `:mcp:server:build` and the narrowest affected `mcp/core`, `cli/core`, or plugin MCP coverage.
 - `mcp/packaging/` changes: run `:mcp:assembleMcpPackaging` and smoke-test the affected packaged launcher under
   `mcp/build/packaging/*/bin/hexana-mcp version`.

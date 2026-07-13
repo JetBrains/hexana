@@ -28,8 +28,9 @@ Read these files before making structural changes:
 
 - Keep MCP transport wiring and CLI parsing here.
 - Keep only legacy CLI parsing and server-specific output limits here for migrated CLI commands. `summarize-binary`
-  delegates to `cli/core`; do not reintroduce a server-local converter, executor, renderer, output model, or duplicate
-  format model for that command. The other executable commands retain legacy paths.
+  delegates to `cli/core`, and `run-script` delegates to `cli/scripting`; do not reintroduce a server-local converter,
+  executor, renderer, output model, or duplicate format model for those commands. The other executable commands retain
+  legacy paths.
 - Tool registration (`Server.registerHexanaTools`) is generated into `HexanaToolDispatcher.kt`; CLI-visible tool command
   construction and executable CLI renderer dispatch are generated into `HexanaCliToolset.kt`. To change a tool's name,
   description, input, output shape, or CLI surface, edit the DSL and regenerate with
