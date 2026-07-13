@@ -143,6 +143,7 @@ internal fun WasmPanelWatVirtualized(
      * [org.jetbrains.hexana.HexanaFileEditor.requestWasmFunctionNav].
      */
     navTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
+    byteOffsetNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
 ) {
     // WAT model build (parse + DWARF symbol resolution + the ~130k-chunk
     // tree) runs OFF the EDT on Dispatchers.IO; a spinner shows on first
@@ -187,6 +188,7 @@ internal fun WasmPanelWatVirtualized(
         listState = listState,
         foldedSectionsExternal = foldedSectionsExternal,
         navTargetFlow = navTargetFlow,
+        byteOffsetNavFlow = byteOffsetNavFlow,
         onOffsetClicked = { offset -> state.scrollHexViewTo(offset, setCursor = true) },
     )
 }
@@ -200,6 +202,7 @@ private fun WasmPanelWatVirtualizedContent(
     listState: LazyListState?,
     foldedSectionsExternal: MutableState<Set<ChunkId>>?,
     navTargetFlow: MutableStateFlow<WasmFunctionNavTarget?>,
+    byteOffsetNavFlow: MutableStateFlow<Int?> = MutableStateFlow(null),
     onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     // Read provider from the bundle, not from a separate param: it must stay
@@ -421,6 +424,19 @@ private fun WasmPanelWatVirtualizedContent(
         val target = navTarget ?: return@LaunchedEffect
         navigator.gotoFunc(target.funcIdx)
         navTargetFlow.value = null
+    }
+
+    // External byte-offset navigation (e.g. from the IDE structure view).
+    // Resolves the offset to the containing chunk and scrolls there.
+    val byteOffsetNav by byteOffsetNavFlow.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(byteOffsetNav) {
+        val offset = byteOffsetNav ?: return@LaunchedEffect
+        val chunkIdx = chunkTree.chunkContainingByte(offset.toLong())
+        if (chunkIdx != null) {
+            val chunk = chunkTree.chunkAt(chunkIdx)
+            navigator.gotoChunk(chunk.id)
+        }
+        byteOffsetNavFlow.value = null
     }
 
     // Lowercase function name → global funcidx, built from the chunk tree's

@@ -74,6 +74,7 @@ internal fun BinaryEditorView(
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
+    wasmByteOffsetNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
     classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?> = remember { MutableStateFlow(null) },
     onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
     decompiledContentPanel: Panel? = null,
@@ -203,6 +204,7 @@ internal fun BinaryEditorView(
     // rebuilds triggered by edit commits. The default is the flow passed in
     // from HexanaFileEditor; panels capture it by reference.
     val wasmNavFlow: MutableStateFlow<WasmFunctionNavTarget?> = wasmFunctionNavTargetFlow
+    val wasmOffsetNavFlow: MutableStateFlow<Int?> = wasmByteOffsetNavFlow
 
     // IDE-keymap-routed Undo / Redo for the editable document. Attached at
     // the BinaryEditorView root so the shortcut fires from anywhere inside
@@ -284,6 +286,8 @@ internal fun BinaryEditorView(
                     watVirtualizedFolded = watVirtualizedFolded,
                     liveProviderProvider = { liveProvider },
                     wasmFunctionNavTargetFlow = wasmNavFlow,
+                    wasmByteOffsetNavFlow = wasmOffsetNavFlow,
+                    archiveName = fileName,
                     classFileNavTargetFlow = classFileNavTargetFlow,
                     fileName = fileName,
                 )
@@ -822,6 +826,8 @@ private fun BinaryProvider.resolveHardcodedPanels(
     watVirtualizedFolded: MutableState<Set<ChunkId>>? = null,
     liveProviderProvider: (() -> BinaryProvider)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?>? = null,
+    wasmByteOffsetNavFlow: MutableStateFlow<Int?>? = null,
+    archiveName: String? = null,
     classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?>? = null,
     fileName: String? = null,
 ): List<Panel> = when (this) {

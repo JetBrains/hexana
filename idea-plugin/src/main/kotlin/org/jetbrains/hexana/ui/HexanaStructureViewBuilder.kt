@@ -187,6 +187,7 @@ internal class HexanaStructureElement(
         if (range.isEmpty()) return
         ed.stateHolder.scrollHexViewTo(range.first.toLong())
         ed.stateHolder.setSelection(range.first.toLong()..range.last.toLong())
+        ed.requestWasmByteOffsetNav(range.first)
     }
 
     override fun canNavigate(): Boolean = editor != null && !range.isEmpty()

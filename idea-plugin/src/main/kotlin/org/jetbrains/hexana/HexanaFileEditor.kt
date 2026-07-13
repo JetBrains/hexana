@@ -139,6 +139,22 @@ class HexanaFileEditor(
     }
 
     /**
+     * Pending byte-offset navigation request for the WAT virtualized panel.
+     * Structure-view navigation pushes a byte offset here; the panel resolves
+     * it to the containing chunk and scrolls there.
+     */
+    private val wasmByteOffsetNavFlow: MutableStateFlow<Int?> = MutableStateFlow(null)
+
+    /**
+     * Drive the embedded WAT virtualized view to the chunk that contains
+     * [byteOffset]. Safe to call from any thread; the flow is consumed
+     * inside the Compose tree.
+     */
+    fun requestWasmByteOffsetNav(byteOffset: Int) {
+        wasmByteOffsetNavFlow.value = byteOffset
+    }
+
+    /**
      * WASM-diff models, computed once off the EDT and held for the lifetime of this
      * editor (this tab). Switching the inner tabs — or the IDE editor tab, which may
      * tear down and rebuild the Compose composition — re-collects these flows rather
@@ -219,6 +235,7 @@ class HexanaFileEditor(
                         { FileEditorManager.getInstance(myProject).openFile(pf, true) }
                     },
                     wasmFunctionNavTargetFlow = wasmFunctionNavTargetFlow,
+                    wasmByteOffsetNavFlow = wasmByteOffsetNavFlow,
                     classFileNavTargetFlow = classFileNavTargetFlow,
                     onOpenZipEntry = { entry -> openZipEntry(entry, commonBuffer) },
                     decompiledContentPanel = decompPanel,
