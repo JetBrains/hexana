@@ -59,6 +59,8 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - `disassembly/native-fixtures/`: Docker-based generator for committed `llvm-objdump` disassembly snapshots built from `parsing/native-fixtures/test-data`.
 - `binaryProvider/`: thin provider layer that wraps parsed Wasm and native binary data for the UI and navigation features. Native providers are a sealed hierarchy (`ElfBinaryProvider`, `MachOBinaryProvider`, `FatMachOBinaryProvider`, `PeBinaryProvider`, `CoffBinaryProvider`, `ArchiveBinaryProvider`) under `NativeBinaryProvider`; format detection is done by `NativeBinaryFormatDetector` and the factory `nativeOrGenericBinaryProvider`.
 - `plugins-shared/`: Kotlin Multiplatform shared logic (no UI framework) used by both `idea-plugin` and `vscode-plugin:webview` — component description formatting, type labels, signature resolution, WAT text generation.
+- `cli/runtime/`: framework-neutral CLI runtime contracts for input conversion, semantic execution, output format selection, rendered payloads, source selections, and runtime context. It must not depend on MCP SDK, Ktor, Clikt, analytics, IntelliJ APIs, or server modules.
+- `cli/core/`: neutral CLI command orchestration and adapters that are already exercised by production behavior. `summarize-binary` lives here and is invoked by the legacy `mcp:server` CLI adapter.
 - `encdec/`: shared `CommonByteBuffer` abstraction and platform-specific byte-buffer helpers.
 - `graalwasm/`: JVM wrappers around embedded `.wasm` utilities used for built-in `wasm -> wat` and `wat -> wasm`.
 - `wasm-modules/`: Rust sources and Docker build flow that produce the embedded `.wasm` artifacts consumed by `graalwasm/`.
@@ -108,6 +110,8 @@ Run the narrowest command that proves your change.
 - Run JS browser parser tests: `./gradlew :wasmParser:jsBrowserTest`
 - Run WasmJS browser parser tests: `./gradlew :wasmParser:wasmJsBrowserTest`
 - Build shared module: `./gradlew :plugins-shared:build`
+- Build neutral CLI runtime contracts: `./gradlew :cli:runtime:build`
+- Run neutral CLI core tests: `./gradlew :cli:core:test`
 - Run buffer abstraction tests: `./gradlew :encdec:test`
 - Compile UI-driver tests: `./gradlew :ui-driver-tests:compileTestKotlin`
 - Run UI-driver test module through the TeamCity aggregator:
@@ -144,7 +148,7 @@ Existing IDE run configurations currently include:
 - `mcp/server/src/main/gen/HexanaToolDispatcher.kt` is generated from the same DSL and contains standalone MCP tool
   registration plus MCP profile/default metadata.
 - `mcp/server/src/main/gen/HexanaCliToolset.kt` is generated from the same DSL and contains generated CLI-visible tool
-  metadata, CLI tool command construction, and executable CLI renderer dispatch. Regenerate all standalone files with
+  metadata, CLI tool command construction, and executable CLI adapter dispatch. Regenerate all standalone files with
   `./gradlew :mcp:server:generateHexanaToolDispatcher`. If you change a tool's name, description, input shape, or output
   shape, edit the DSL and rerun both generators in the same change.
 - `mcp/server/src/main/gen/HexanaCliProducts.kt` is generated from catalog-owned CLI release-product membership. Verify
@@ -177,7 +181,9 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
   tool contracts change.
 - `mcp/scripting/` changes: run `:mcp:scripting:test`; also run the affected `mcp/server` or plugin coverage when a
   caller starts using the runtime.
-- `mcp/server/` changes: run `:mcp:server:build` and the narrowest affected `mcp/core` or plugin MCP coverage.
+- `cli/` changes: run `:cli:runtime:build`, `:cli:core:test`, and affected legacy adapter coverage when public CLI
+  behavior is involved.
+- `mcp/server/` changes: run `:mcp:server:build` and the narrowest affected `mcp/core`, `cli/core`, or plugin MCP coverage.
 - `mcp/packaging/` changes: run `:mcp:assembleMcpPackaging` and smoke-test the affected packaged launcher under
   `mcp/build/packaging/*/bin/hexana-mcp version`.
 - MCP downloads publication script changes: run `bash -n mcp/packaging/publish-downloads-release-bundle.sh` and

@@ -183,10 +183,10 @@ tasks.register("verifyHexanaToolDispatcherUpToDate") {
 
 dependencies {
     implementation(project(":analytics"))
+    implementation(project(":cli:core"))
     implementation(project(":graalwasm:wasmprinter"))
     implementation(project(":mcp:core"))
     implementation(project(":mcp:scripting"))
-    implementation(project(":mcp:tool-runtime"))
     implementation(libs.clikt)
     implementation(libs.kotlin.logging.jvm)
     implementation(libs.logback.classic)

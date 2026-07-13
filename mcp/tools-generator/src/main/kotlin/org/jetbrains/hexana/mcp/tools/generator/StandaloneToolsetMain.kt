@@ -9,6 +9,7 @@ import com.squareup.kotlinpoet.LambdaTypeName
 import com.squareup.kotlinpoet.MemberName
 import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.TypeAliasSpec
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.asTypeName
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
@@ -58,6 +59,7 @@ private val TOOL_PROFILE = ClassName(SERVER_PACKAGE, "HexanaMcpToolProfile")
 private val CLI_TOOL_SPEC = ClassName(SERVER_PACKAGE, "HexanaCliToolSpec")
 private val CLI_INPUT_MODE = ClassName(SERVER_PACKAGE, "HexanaCliInputMode")
 private val CLI_OUTPUT_FORMAT = ClassName(SERVER_PACKAGE, "HexanaCliOutputFormat")
+private val TOOL_OUTPUT_FORMAT = ClassName("org.jetbrains.hexana.cli.runtime", "ToolOutputFormat")
 private val CLI_TOOL_GROUP = ClassName(SERVER_PACKAGE, "HexanaCliToolGroup")
 private val CLI_OUTPUT_POLICY = ClassName(SERVER_PACKAGE, "HexanaCliOutputPolicy")
 private val CLI_EXECUTION_STATUS = ClassName(SERVER_PACKAGE, "HexanaCliExecutionStatus")
@@ -70,7 +72,7 @@ private val KOTLIN_LIST = ClassName("kotlin.collections", "List")
 private val KOTLIN_MAP = ClassName("kotlin.collections", "Map")
 private val KOTLIN_SET = ClassName("kotlin.collections", "Set")
 private val HEXANA_ANALYSIS_LIMITS = ClassName("org.jetbrains.hexana.mcp", "HexanaAnalysisLimits")
-private val TOOL_INPUT_SOURCE_SELECTION = ClassName("org.jetbrains.hexana.mcp.tool.runtime", "ToolInputSourceSelection")
+private val TOOL_INPUT_SOURCE_SELECTION = ClassName("org.jetbrains.hexana.cli.runtime", "ToolInputSourceSelection")
 private val TOOL_SCHEMA = ClassName("io.modelcontextprotocol.kotlin.sdk.types", "ToolSchema")
 private val JSON_PRIMITIVE = ClassName("kotlinx.serialization.json", "JsonPrimitive")
 private val BUILD_JSON_OBJECT = MemberName("kotlinx.serialization.json", "buildJsonObject")
@@ -147,7 +149,7 @@ internal fun buildCliToolsetFile(tools: List<ToolSpec>): FileSpec {
         .addImport("com.github.ajalt.clikt.parameters.options", "convert", "default", "flag", "multiple", "required")
         .addImport("com.github.ajalt.clikt.parameters.types", "boolean", "int")
         .addType(buildCliInputModeEnum())
-        .addType(buildCliOutputFormatEnum())
+        .addTypeAlias(buildCliOutputFormatAlias())
         .addType(buildCliToolGroupEnum())
         .addType(buildCliOutputPolicyEnum())
         .addType(buildCliExecutionStatusEnum())
@@ -305,13 +307,10 @@ private fun buildCliInputModeEnum(): TypeSpec =
         .addEnumConstant("STDIN")
         .build()
 
-private fun buildCliOutputFormatEnum(): TypeSpec =
-    TypeSpec.enumBuilder(CLI_OUTPUT_FORMAT)
+private fun buildCliOutputFormatAlias(): TypeAliasSpec =
+    TypeAliasSpec.builder(CLI_OUTPUT_FORMAT.simpleName, TOOL_OUTPUT_FORMAT)
         .addModifiers(KModifier.PUBLIC)
-        .addKdoc("Generated CLI output formats declared by catalog output conversion metadata.\n")
-        .addEnumConstant("JSON")
-        .addEnumConstant("PRETTY")
-        .addEnumConstant("RAW")
+        .addKdoc("Compatibility alias for neutral CLI output formats declared by catalog metadata.\n")
         .build()
 
 private fun buildCliToolGroupEnum(): TypeSpec =

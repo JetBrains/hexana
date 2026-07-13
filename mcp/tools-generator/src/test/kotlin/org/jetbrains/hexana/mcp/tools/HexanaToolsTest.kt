@@ -386,7 +386,7 @@ class HexanaToolsTest {
         assertTrue(production.surfaces.cli.visible)
         assertEquals("summarize-binary", production.surfaces.cli.commandName)
         assertEquals(CliExecutionStatus.Executable, production.surfaces.cli.executionStatus)
-        assertEquals("renderSummarizeBinaryCommandOutput", production.surfaces.cli.executableRenderer?.methodName)
+        assertEquals("renderSummarizeBinaryCliCommandOutput", production.surfaces.cli.executableRenderer?.methodName)
 
         val advanced = HexanaTools.single { it.name == "query_artifacts" }
         assertEquals(setOf(McpToolAudience.Advanced), advanced.surfaces.mcp.audiences)

@@ -58,7 +58,7 @@ class HexanaToolCompatibilityTest {
         assertTrue(snapshot.contains("tool[0].cli.releaseProducts=HexanaMcp,HexanaCli"))
         assertTrue(snapshot.contains("tool[0].cli.outputPolicy=ToolDefined"))
         assertTrue(snapshot.contains("tool[0].standaloneHandler=summarizeBinary"))
-        assertTrue(snapshot.contains("tool[0].cli.executableRenderer=renderSummarizeBinaryCommandOutput"))
+        assertTrue(snapshot.contains("tool[0].cli.executableRenderer=renderSummarizeBinaryCliCommandOutput"))
     }
 
     private fun compatibilitySnapshot(tools: List<ToolSpec> = HexanaTools): String = buildString {

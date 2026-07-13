@@ -25,7 +25,7 @@ ticket intentionally updates the launcher contract and its smoke coverage.
 - HTTP transport startup and local-first bind validation;
 - the Clikt root command and service subcommand parsing for `hexana-mcp`;
 - generated CLI command adapters from `HexanaCliToolset.kt`;
-- direct executable CLI command dispatch and output rendering for implemented CLI tools;
+- direct executable CLI command dispatch for legacy commands that have not moved yet;
 - generated MCP tool registration through `HexanaToolDispatcher.kt`;
 - standalone analysis-service wiring to `mcp:core`;
 - version, doctor, logging, analytics, and resource-limit command plumbing;
@@ -34,8 +34,13 @@ ticket intentionally updates the launcher contract and its smoke coverage.
 This keeps the public CLI, server launcher, and packaging entrypoint in one reviewable runtime while the command surface
 is still stabilizing.
 
-`summarize-binary` now exercises the neutral converter/executor/renderer contracts end to end while its concrete
-adapters and final CLI output budgeting remain server-owned. The other executable commands are not migrated yet.
+`:cli:runtime` now owns the framework-neutral runtime contracts for input conversion, semantic execution, source
+selection, output format selection, rendered payloads, render options, and runtime context. `:cli:core` owns the proven
+`summarize-binary` converter, executor, renderer, and neutral command adapter. `mcp:server` keeps only the legacy CLI
+parsing and final output-budget enforcement for `hexana-mcp summarize-binary`; it must not duplicate that command's
+converter, executor, renderer, or output model.
+
+The other executable commands are not migrated yet.
 
 ## Future Split Boundary
 
@@ -47,7 +52,8 @@ remain follow-up work.
 Future split work should move contracts before moving artifacts. The likely boundary is:
 
 - CLI runtime contracts for input conversion, output rendering, output format selection, rendered text/binary payloads,
-  working-directory context, and environment access belong in `mcp:tool-runtime` or another small contract module;
+  working-directory context, and environment access belong in `cli:runtime`;
+- neutral command orchestration and already exercised adapters belong in `cli:core`;
 - generated metadata can continue to describe CLI-visible commands, but concrete executable command construction should
   eventually depend on those runtime contracts instead of server-only helpers;
 - a future `mcp:cli` module may own public command composition, terminal rendering, and interactive input handling after
@@ -65,7 +71,7 @@ contract is explicitly versioned and smoke-tested.
 
 Keep implementation tickets small enough for review:
 
-1. Define the CLI runtime contract gaps between current generated CLI adapters and `mcp:tool-runtime`, including
+1. Define the remaining CLI runtime contract gaps between current generated CLI adapters and `cli:runtime`, including
    renderer options, stdin/path source handling, diagnostics, and terminal color behavior.
 2. Move one implemented executable CLI tool to consume the contract layer while leaving the binary and module layout
    unchanged.
@@ -87,6 +93,8 @@ Breaking-proof coverage for this branch is:
 - server and generator unit coverage for CLI metadata, generated files, schema compatibility, and runtime argument
   handling;
 - generated artifact drift checks for both standalone MCP and IDEA toolset outputs;
+- `cli/core` ownership coverage proving generated summarize-binary metadata and the legacy server adapter resolve to
+  the neutral adapter instead of a server-local implementation;
 - installed-runtime smokes for `hexana-mcp stdio`, `hexana-mcp version`, and executable public CLI commands including
   `hexana-mcp summarize-binary <file> --format json`;
 - package-level smoke gates when release packaging layouts or launcher scripts change.

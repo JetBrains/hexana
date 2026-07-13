@@ -100,7 +100,7 @@ class HexanaGeneratedToolFilesTest {
                 "stdin.readExplicitBytes(maxInlineBytes)",
                 "maxInlineInputBytes = { it.maxInlineBinaryBytes }",
                 "maxInlineInputBytes = { it.maxInlineWasmBytes }",
-                "\"summarize_binary\" -> renderSummarizeBinaryCommandOutput(command)",
+                "\"summarize_binary\" -> renderSummarizeBinaryCliCommandOutput(command)",
                 "\"summarize_module\" -> renderSummarizeModuleCommandOutput(command)",
                 "\"wasm_to_wat\" -> renderWasmToWatCommandOutput(command)",
             ),

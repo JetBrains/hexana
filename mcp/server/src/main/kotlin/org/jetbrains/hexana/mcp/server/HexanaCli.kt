@@ -7,7 +7,7 @@ import com.github.ajalt.clikt.parameters.types.int
 import kotlinx.serialization.json.JsonPrimitive
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
-import org.jetbrains.hexana.mcp.tool.runtime.ToolInputSourceSelection
+import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream

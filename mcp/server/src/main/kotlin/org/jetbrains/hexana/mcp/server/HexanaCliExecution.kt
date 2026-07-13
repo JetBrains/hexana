@@ -3,6 +3,12 @@ package org.jetbrains.hexana.mcp.server
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import org.jetbrains.hexana.cli.core.SUMMARIZE_BINARY_TOOL_NAME
+import org.jetbrains.hexana.cli.core.SummarizeBinaryCliRequest
+import org.jetbrains.hexana.cli.core.summarizeBinaryCli
+import org.jetbrains.hexana.cli.runtime.RenderedToolOutput
+import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
+import org.jetbrains.hexana.cli.runtime.ToolOutputFormat
 import org.jetbrains.hexana.graalwasm.wasmprinter.WatWithWarnings
 import org.jetbrains.hexana.graalwasm.wasmprinter.printWat
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
@@ -21,8 +27,6 @@ import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptRunner
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptSource
-import org.jetbrains.hexana.mcp.tool.runtime.ToolInputSourceSelection
-import org.jetbrains.hexana.mcp.tool.runtime.RenderedToolOutput
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.CancellationException
 
@@ -67,19 +71,26 @@ internal fun renderSummarizeBinaryOutput(
         command.allowedRoots,
         command.resourceLimits
     ),
-): String = renderSummarizeBinaryCommandOutput(command, analysisService).stdout
+): String = renderSummarizeBinaryCliCommandOutput(command, analysisService).stdout
 
-internal fun renderSummarizeBinaryCommandOutput(
+internal fun renderSummarizeBinaryCliCommandOutput(
     command: HexanaCommand.ExecutableTool,
     analysisService: HexanaAnalysisService = createStandaloneHexanaAnalysisService(
         command.allowedRoots,
         command.resourceLimits
     ),
-    runtime: (HexanaCommand.ExecutableTool, HexanaAnalysisService) -> RenderedToolOutput =
-        ::executeSummarizeBinaryRuntime,
 ): HexanaCliCommandOutput {
-    requireExecutableTool(command, toolName = "summarize_binary")
-    val output = when (val rendered = runtime(command, analysisService)) {
+    requireExecutableTool(command, toolName = SUMMARIZE_BINARY_TOOL_NAME)
+    val rendered = summarizeBinaryCli(
+        SummarizeBinaryCliRequest(
+            sourceSelections = command.sourceSelections,
+            params = command.params,
+            format = command.format,
+            toolName = command.spec.toolName,
+        ),
+        analysisService,
+    )
+    val output = when (rendered) {
         is RenderedToolOutput.Text -> rendered.text
         is RenderedToolOutput.Binary -> error("summarize-binary does not support binary output")
     }

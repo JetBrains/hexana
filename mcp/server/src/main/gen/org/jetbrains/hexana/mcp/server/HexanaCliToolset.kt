@@ -26,8 +26,9 @@ import kotlin.collections.List
 import kotlin.collections.Map
 import kotlin.collections.Set
 import kotlinx.serialization.json.JsonPrimitive
+import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
+import org.jetbrains.hexana.cli.runtime.ToolOutputFormat
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
-import org.jetbrains.hexana.mcp.tool.runtime.ToolInputSourceSelection
 
 /**
  * Generated CLI input modes declared by catalog input conversion metadata.
@@ -41,13 +42,9 @@ public enum class HexanaCliInputMode {
 }
 
 /**
- * Generated CLI output formats declared by catalog output conversion metadata.
+ * Compatibility alias for neutral CLI output formats declared by catalog metadata.
  */
-public enum class HexanaCliOutputFormat {
-  JSON,
-  PRETTY,
-  RAW,
-}
+public typealias HexanaCliOutputFormat = ToolOutputFormat
 
 /**
  * Generated CLI tool groups declared by catalog surface metadata.
@@ -836,7 +833,7 @@ internal fun generatedCliToolCommands(
  */
 internal fun generatedExecutableCliToolCommandOutput(command: HexanaCommand.ExecutableTool): HexanaCliCommandOutput = when (command.spec.toolName) {
   "run_binary_script" -> renderRunBinaryScriptCommandOutput(command)
-  "summarize_binary" -> renderSummarizeBinaryCommandOutput(command)
+  "summarize_binary" -> renderSummarizeBinaryCliCommandOutput(command)
   "summarize_module" -> renderSummarizeModuleCommandOutput(command)
   "wasm_to_wat" -> renderWasmToWatCommandOutput(command)
   else -> error("Executable CLI tool '${command.spec.toolName}' has no generated runtime renderer.")

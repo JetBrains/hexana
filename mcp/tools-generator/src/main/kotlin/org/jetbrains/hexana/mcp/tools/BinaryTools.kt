@@ -165,7 +165,7 @@ internal val BinaryTools: List<ToolSpec> = tools {
             ToolGroup.Binary,
             ToolOutputPolicy.ToolDefined,
             executionStatus = CliExecutionStatus.Executable,
-            executableRenderer = executableCliRenderer("renderSummarizeBinaryCommandOutput"),
+            executableRenderer = executableCliRenderer("renderSummarizeBinaryCliCommandOutput"),
             releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCli),
         )
         guidance = """

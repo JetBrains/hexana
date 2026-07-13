@@ -37,13 +37,13 @@ public data class HexanaCliProductToolSelection(
 public object HexanaGeneratedCliProducts {
   public val PRODUCTS: Map<HexanaCliReleaseProduct, List<HexanaCliProductToolSelection>> = mapOf(
         HexanaCliReleaseProduct.HEXANA_MCP to listOf(
-          HexanaCliProductToolSelection("summarize_binary", "summarize-binary", "ToolDefined", "SemanticJson", "org.jetbrains.hexana.mcp.query.readBinarySummary", "summarizeBinary", "renderSummarizeBinaryCommandOutput"),
+          HexanaCliProductToolSelection("summarize_binary", "summarize-binary", "ToolDefined", "SemanticJson", "org.jetbrains.hexana.mcp.query.readBinarySummary", "summarizeBinary", "renderSummarizeBinaryCliCommandOutput"),
           HexanaCliProductToolSelection("run_binary_script", "run-script", "ToolDefined", "RawText", "org.jetbrains.hexana.mcp.server.runBinaryScript", "runBinaryScript", "renderRunBinaryScriptCommandOutput"),
           HexanaCliProductToolSelection("wasm_to_wat", "wasm-to-wat", "ToolDefined", "RawText", "org.jetbrains.hexana.mcp.server.wasmToWat", "wasmToWat", "renderWasmToWatCommandOutput"),
           HexanaCliProductToolSelection("summarize_module", "summarize-module", "ToolDefined", "Pretty", "org.jetbrains.hexana.mcp.query.readModuleSummary", "summarizeModule", "renderSummarizeModuleCommandOutput"),
         ),
         HexanaCliReleaseProduct.HEXANA_CLI to listOf(
-          HexanaCliProductToolSelection("summarize_binary", "summarize-binary", "ToolDefined", "SemanticJson", "org.jetbrains.hexana.mcp.query.readBinarySummary", "summarizeBinary", "renderSummarizeBinaryCommandOutput"),
+          HexanaCliProductToolSelection("summarize_binary", "summarize-binary", "ToolDefined", "SemanticJson", "org.jetbrains.hexana.mcp.query.readBinarySummary", "summarizeBinary", "renderSummarizeBinaryCliCommandOutput"),
           HexanaCliProductToolSelection("wasm_to_wat", "wasm-to-wat", "ToolDefined", "RawText", "org.jetbrains.hexana.mcp.server.wasmToWat", "wasmToWat", "renderWasmToWatCommandOutput"),
           HexanaCliProductToolSelection("summarize_module", "summarize-module", "ToolDefined", "Pretty", "org.jetbrains.hexana.mcp.query.readModuleSummary", "summarizeModule", "renderSummarizeModuleCommandOutput"),
         ),

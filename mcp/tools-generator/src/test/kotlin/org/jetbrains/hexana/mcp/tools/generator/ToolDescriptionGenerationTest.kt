@@ -329,7 +329,7 @@ class ToolDescriptionGenerationTest {
                 "base64OptionNames = listOf(\"--wasm-base64\", \"--bytes-base64\")",
                 "HexanaCliExecutionStatus.EXECUTABLE",
                 "HexanaCliExecutionStatus.TODO",
-                "\"summarize_binary\" -> renderSummarizeBinaryCommandOutput(command)",
+                "\"summarize_binary\" -> renderSummarizeBinaryCliCommandOutput(command)",
                 "\"summarize_module\" -> renderSummarizeModuleCommandOutput(command)",
                 "\"wasm_to_wat\" -> renderWasmToWatCommandOutput(command)",
             ),
@@ -377,7 +377,7 @@ class ToolDescriptionGenerationTest {
                 ToolGroup.Binary,
                 ToolOutputPolicy.ToolDefined,
                 executionStatus = CliExecutionStatus.Executable,
-                executableRenderer = executableCliRenderer("renderSummarizeBinaryCommandOutput"),
+                executableRenderer = executableCliRenderer("renderSummarizeBinaryCliCommandOutput"),
             ),
         )
 
@@ -403,7 +403,7 @@ class ToolDescriptionGenerationTest {
                 "ToolInputSourceSelection.Base64(bytesBase64 = base64Source, slotName = sourceSlotName)",
                 "ToolInputSourceSelection.StdinBytes(bytes = readExplicitStdinBytes(resourceLimits), slotName = sourceSlotName)",
                 "stdin.readExplicitBytes(maxInlineBytes)",
-                "\"summarize_binary\" -> renderSummarizeBinaryCommandOutput(command)",
+                "\"summarize_binary\" -> renderSummarizeBinaryCliCommandOutput(command)",
                 "toolName = \"summarize_module\"",
                 "inputModes = setOf(HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.STDIN)",
                 "sourceSlotName = \"wasm\"",
@@ -569,7 +569,7 @@ class ToolDescriptionGenerationTest {
                 ToolGroup.Binary,
                 ToolOutputPolicy.ToolDefined,
                 executionStatus = CliExecutionStatus.Executable,
-                executableRenderer = executableCliRenderer("renderSummarizeBinaryCommandOutput"),
+                executableRenderer = executableCliRenderer("renderSummarizeBinaryCliCommandOutput"),
             ),
         )
 
@@ -581,7 +581,7 @@ class ToolDescriptionGenerationTest {
         assertTrue(source.contains("pathHelp = \"Path to a binary file, or '-' to read raw stdin bytes.\""))
         assertTrue(source.contains("stdinOptionName = \"--stdin\""))
         assertTrue(source.contains("base64OptionNames = listOf(\"--binary-base64\", \"--bytes-base64\")"))
-        assertTrue(source.contains("\"summarize_binary\" -> renderSummarizeBinaryCommandOutput(command)"))
+        assertTrue(source.contains("\"summarize_binary\" -> renderSummarizeBinaryCliCommandOutput(command)"))
     }
 
     @Test
