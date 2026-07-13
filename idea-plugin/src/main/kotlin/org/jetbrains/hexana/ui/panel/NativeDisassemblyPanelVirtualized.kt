@@ -5,9 +5,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -31,6 +33,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -1155,23 +1158,28 @@ private fun FoldableSectionHeader(
         }
     }
     val lines = remember(tokens) { splitTokensIntoLines(tokens) }
-    val indicator = if (folded) "▶" else "▼"
-    val monospace = TextStyle(color = textColor, fontFamily = FontFamily.Monospace)
+    val headerStyle = TextStyle(
+        color = textColor,
+        fontFamily = FontFamily.Monospace,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(bg)
             .clickable(onClick = onToggle)
-            .padding(horizontal = 8.dp, vertical = 3.dp),
+            .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "$indicator ",
-            style = monospace.copy(color = accentColor),
+            text = if (folded) "▶" else "▼",
+            style = headerStyle.copy(color = accentColor),
         )
+        Spacer(modifier = Modifier.width(8.dp))
         Column {
             for (line in lines) {
-                Text(text = line.toAnnotatedString(styleForKind), style = monospace)
+                Text(text = line.toAnnotatedString(styleForKind), style = headerStyle)
             }
         }
     }
