@@ -179,6 +179,31 @@ internal class DisasmCatalog(
         .associate { (i, r) -> r.displayName to i }
 
     /**
+     * Like [rangesByName] but keyed on the disambiguated names produced by
+     * [NativeDisasmChunkTree.uniqueNames]. For non-duplicate names the key
+     * is identical to [rangesByName]; for duplicates it includes the `#N`
+     * suffix so the renderer can resolve every chunk header.
+     */
+    fun rangeIndexForUniqueName(uniqueName: String): Int? {
+        // Strip the disambiguation suffix to get the original displayName,
+        // then verify via rangesByName. For the common non-duplicate case
+        // this is a single map lookup.
+        val hashIdx = uniqueName.lastIndexOf('#')
+        if (hashIdx < 0) return rangesByName[uniqueName]
+        val baseName = uniqueName.substring(0, hashIdx)
+        val suffix = uniqueName.substring(hashIdx + 1).toIntOrNull() ?: return rangesByName[uniqueName]
+        // Walk ranges to find the Nth occurrence of baseName
+        var count = 0
+        for ((i, r) in ranges.withIndex()) {
+            if (r.displayName == baseName) {
+                if (count == suffix) return i
+                count++
+            }
+        }
+        return null
+    }
+
+    /**
      * Decoded instructions for [rangeIndex]; computed lazily and cached.
      * Suspending because Capstone is single-threaded: concurrent callers
      * queue on [capstoneDispatcher] and the runtime hands them out one at
@@ -274,6 +299,21 @@ internal object DisasmSectionKinds {
 internal class NativeDisasmChunkTree(ranges: List<DisasmRange>, totalBytes: Long) : ChunkTree {
 
     /**
+     * Disambiguated display names for each range, in the same order as
+     * [ranges]. Duplicate names get `#1`, `#2`, … suffixes so that every
+     * [ChunkId] used as a LazyColumn key is unique. Exposed so that
+     * callers (search, fold-state init) can build matching [ChunkId]s.
+     */
+    val uniqueNames: List<String> = run {
+        val nameCounts = HashMap<String, Int>()
+        ranges.map { range ->
+            val count = nameCounts.getOrDefault(range.displayName, 0)
+            nameCounts[range.displayName] = count + 1
+            if (count == 0) range.displayName else "${range.displayName}#$count"
+        }
+    }
+
+    /**
      * One catalog decode per range still produces the full, correctly-aligned
      * instruction list (no byte-aligned mid-instruction garbage). The tree
      * sub-divides the *displayed* instruction list into windows of
@@ -288,15 +328,6 @@ internal class NativeDisasmChunkTree(ranges: List<DisasmRange>, totalBytes: Long
     private val chunks: List<BinaryChunk> = buildList {
         val firstOffset = ranges.minOfOrNull { it.fileOffset } ?: 0L
         val lastOffset = ranges.maxOfOrNull { it.fileOffset + it.size } ?: firstOffset
-
-        // Disambiguate duplicate display names by appending an occurrence
-        // index so that every ChunkId used as a LazyColumn key is unique.
-        val nameCounts = HashMap<String, Int>()
-        val uniqueNames = ranges.map { range ->
-            val count = nameCounts.getOrDefault(range.displayName, 0)
-            nameCounts[range.displayName] = count + 1
-            if (count == 0) range.displayName else "${range.displayName}#$count"
-        }
 
         add(
             BinaryChunk.SectionHeader(
@@ -456,7 +487,7 @@ internal class NativeDisasmChunkRenderer(
 
     private fun renderFunctionHeader(chunk: BinaryChunk.SectionHeader): TokenStream {
         val name = (chunk.id as? ChunkId.Symbolic)?.name ?: return TokenStream.EMPTY
-        val rangeIdx = catalog.rangesByName[name] ?: return TokenStream.EMPTY
+        val rangeIdx = catalog.rangeIndexForUniqueName(name) ?: return TokenStream.EMPTY
         val range = catalog.ranges.getOrNull(rangeIdx) ?: return TokenStream.EMPTY
         val tokens = mutableListOf<RenderToken>()
         tokens += RenderToken("${range.displayName}:", RenderTokenKind.LABEL_REF, range.fileOffset)
@@ -967,14 +998,18 @@ private fun computeSearchResults(
     val qLower = q.lowercase()
     val results = mutableListOf<DisasmSearchResult>()
 
-    for (range in catalog.ranges) {
+    for ((rangeIdx, range) in catalog.ranges.withIndex()) {
         if (results.size >= limit) break
         if (range.displayName.contains(qLower, ignoreCase = true)) {
             val vaddrHex = range.virtualAddress.toString(16)
+            // Use the disambiguated name from the chunk tree so the
+            // ChunkId matches the actual chunk identity.
+            val uniqueName = tree.uniqueNames.getOrNull(rangeIdx)
+                ?: range.displayName
             results += DisasmSearchResult.Symbol(
                 label = range.displayName,
                 detail = "fn · 0x$vaddrHex · ${range.size} B",
-                chunkId = ChunkId.Symbolic(DisasmSectionKinds.FUNCTION_BODY, range.displayName),
+                chunkId = ChunkId.Symbolic(DisasmSectionKinds.FUNCTION_BODY, uniqueName),
             )
         }
     }
@@ -1041,12 +1076,15 @@ internal fun resolveGoto(
         if (chunkId != null) return DisasmGotoResolution.Hit(chunkId)
     }
 
-    // 2. Try as virtual address.
-    for (range in catalog.ranges) {
+    // 2. Try as virtual address — use disambiguated names so the ChunkId
+    //    matches the actual chunk identity in the tree.
+    for ((rangeIdx, range) in catalog.ranges.withIndex()) {
         val rangeEnd = range.virtualAddress + range.size.toULong()
         if (value >= range.virtualAddress && value < rangeEnd) {
+            val uniqueName = tree.uniqueNames.getOrNull(rangeIdx)
+                ?: range.displayName
             return DisasmGotoResolution.Hit(
-                ChunkId.Symbolic(DisasmSectionKinds.FUNCTION_BODY, range.displayName)
+                ChunkId.Symbolic(DisasmSectionKinds.FUNCTION_BODY, uniqueName)
             )
         }
     }
@@ -1073,10 +1111,10 @@ private fun VirtualizedDisasmListing(
 
     // Start with every FUNCTION sticky header folded so the function list
     // is visible immediately without any Capstone work.
-    val foldedState: MutableState<Set<ChunkId>> = remember(catalog) {
-        val initial: Set<ChunkId> = catalog.ranges
-            .mapTo(HashSet(catalog.ranges.size)) {
-                ChunkId.Symbolic(DisasmSectionKinds.FUNCTION, it.displayName)
+    val foldedState: MutableState<Set<ChunkId>> = remember(catalog, tree) {
+        val initial: Set<ChunkId> = tree.uniqueNames
+            .mapTo(HashSet(tree.uniqueNames.size)) {
+                ChunkId.Symbolic(DisasmSectionKinds.FUNCTION, it)
             }
         mutableStateOf(initial)
     }
