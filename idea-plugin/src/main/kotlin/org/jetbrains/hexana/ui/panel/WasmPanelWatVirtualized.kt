@@ -481,6 +481,21 @@ private fun WasmPanelWatVirtualizedContent(
                 }
             },
             itemCountForChunk = { chunkId -> watItemCount(chunkTree, bigFuncRowCache, chunkId) },
+            statusBarExtra = {
+                val shortcutText = remember {
+                    com.intellij.openapi.keymap.KeymapUtil.getFirstKeyboardShortcutText("GotoSymbol")
+                }
+                if (shortcutText.isNotEmpty()) {
+                    Text(
+                        text = "$shortcutText Go to Function",
+                        style = TextStyle(
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = HexanaTheme.hexTextColor,
+                        ),
+                    )
+                }
+            },
         )
     }
 

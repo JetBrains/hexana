@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -132,6 +133,8 @@ internal data class VirtualizedChunkPanelConfig(
      * Typically scrolls the main hex view to the given byte offset.
      */
     val onOffsetClicked: ((Long) -> Unit)? = null,
+    /** Extra content appended to the right side of the status bar. */
+    val statusBarExtra: @Composable (() -> Unit)? = null,
 )
 
 /**
@@ -347,6 +350,7 @@ internal fun VirtualizedChunkPanel(
             chunkTree = chunkTree,
             currentIndex = firstVisibleChunkIndex,
             sectionDisplayName = config.sectionDisplayName,
+            extra = config.statusBarExtra,
         )
     }
     } // CompositionLocalProvider
@@ -794,6 +798,7 @@ private fun ChunkPanelStatusBar(
     chunkTree: ChunkTree,
     currentIndex: Int,
     sectionDisplayName: (SectionKind) -> String,
+    extra: @Composable (() -> Unit)? = null,
 ) {
     Divider(orientation = Orientation.Horizontal, thickness = 1.dp, modifier = Modifier.fillMaxWidth())
     Row(
@@ -824,6 +829,10 @@ private fun ChunkPanelStatusBar(
         Text("Section: $sectionLabel", style = style)
         Text("Offset: $offsetLabel", style = style)
         Text(nameLabel, style = style)
+        if (extra != null) {
+            Spacer(modifier = Modifier.weight(1f))
+            extra()
+        }
     }
 }
 
