@@ -1,8 +1,17 @@
 package org.jetbrains.hexana
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.unit.dp
 import com.intellij.openapi.actionSystem.DataKey
 import com.intellij.openapi.actionSystem.UiDataProvider
 import com.intellij.openapi.application.EDT
@@ -48,7 +57,10 @@ import org.jetbrains.hexana.ui.WASM_FUNCTION_NAV_TARGET_KEY
 import org.jetbrains.hexana.ui.WasmFunctionNavTarget
 import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.hexana.ui.panel.DiffLoadable
+import org.jetbrains.hexana.ui.panel.Panel
 import org.jetbrains.hexana.ui.panel.SizeReady
+import org.jetbrains.hexana.ui.panel.decompiledContentPanel
+import org.jetbrains.hexana.ui.panel.decompiledEditorComposable
 import org.jetbrains.hexana.ui.panel.WasmComponentDiffEditorView
 import org.jetbrains.hexana.ui.panel.WasmDiffEditorView
 import org.jetbrains.hexana.ui.panel.buildRows
@@ -191,6 +203,8 @@ class HexanaFileEditor(
 
         val parentFile = myFile.getUserData(HexanaBinaryVirtualFile.PARENT_FILE_KEY)
 
+        val decompPanel = createDecompiledPanel(decompilerFile = resolveDecompilerFile() ?: myFile)
+
         val hexView = createComposePanel {
             val hexFocusRequester = remember { FocusRequester() }
             Column {
@@ -207,12 +221,290 @@ class HexanaFileEditor(
                     wasmFunctionNavTargetFlow = wasmFunctionNavTargetFlow,
                     classFileNavTargetFlow = classFileNavTargetFlow,
                     onOpenZipEntry = { entry -> openZipEntry(entry, commonBuffer) },
+                    decompiledContentPanel = decompPanel,
                 )
             }
         }
         panel.add(hexView)
 
         setupSearchActions(hexView, stateHolder)
+    }
+
+    /**
+     * If the file's type has a decompiler registered (either a
+     * [BinaryFileTypeDecompilers] entry or a [com.intellij.psi.compiled.ClassFileDecompilers.Light]),
+     * returns a [Panel] that embeds a read-only IntelliJ text editor showing the
+     * decompiled source. Returns `null` when no decompiler is available.
+     */
+    private fun createDecompiledPanel(decompilerFile: VirtualFile): Panel? {
+        val fileType = decompilerFile.fileType
+
+        // 1. Try BinaryFileTypeDecompilers (simple binary types).
+        //    Skip this path for .class files — the generic binary decompiler produces
+        //    only stubs; step 2 below uses Fernflower for full decompilation.
+        val ext = (decompilerFile.extension ?: myFile.extension)?.lowercase()
+        val binaryDecompiler = if (ext != "class") BinaryFileTypeDecompilers.getInstance().forFileType(fileType) else null
+        if (binaryDecompiler != null) {
+            val decompiled = try {
+                binaryDecompiler.decompile(decompilerFile)
+            } catch (e: Exception) {
+                HexanaLog.LOG.warn("Decompiler failed for ${myFile.name}", e)
+                return null
+            }
+            val language = com.intellij.lang.LanguageUtil.getFileTypeLanguage(fileType)
+            val lightFileName = decompiledFileName(myFile.nameWithoutExtension, myFile.extension, language)
+            val lightFile = if (language != null) {
+                LightVirtualFile(lightFileName, language, decompiled)
+            } else {
+                LightVirtualFile(lightFileName, decompiled)
+            }
+            return decompiledContentPanel(myProject, lightFile)
+        }
+
+        // 2. Try ClassFileDecompilers.Light (e.g. Fernflower for .class files).
+        //    Only attempt this for .class files — other binary formats (JARs, ZIPs)
+        //    should not show a "Decompiled" tab.
+        if (ext != "class") return null
+
+        // Return a lazy panel — the legal notice dialog and actual decompilation
+        // are deferred until the user switches to the "Decompiled" tab.
+        return createLazyClassDecompiledPanel(decompilerFile)
+    }
+
+    /**
+     * Creates a [Panel] for `.class` file decompilation that defers the legal
+     * notice dialog and actual Fernflower invocation until the tab is first
+     * composed (i.e. the user switches to the "Decompiled" tab).
+     */
+    private fun createLazyClassDecompiledPanel(decompilerFile: VirtualFile): Panel =
+        Panel("Decompiled") {
+            val decompileState = remember { androidx.compose.runtime.mutableStateOf<LazyDecompileState>(LazyDecompileState.Initial) }
+
+            when (val current = decompileState.value) {
+                LazyDecompileState.Initial -> {
+                    // First composition — check notice and decompile.
+                    androidx.compose.runtime.LaunchedEffect(Unit) {
+                        val props = com.intellij.ide.util.PropertiesComponent.getInstance()
+                        val noticeAccepted = props.isValueSet("decompiler.legal.notice.accepted")
+                        val noticeSuppressed = props.getBoolean("hexana.decompiler.legal.notice.suppressed", false)
+                        if (!noticeAccepted && !noticeSuppressed) {
+                            val accepted = withContext(Dispatchers.EDT) {
+                                showFernflowerLegalNoticeDialog(decompilerFile)
+                            }
+                            if (!accepted) {
+                                // Fall back to stub decompiler.
+                                val fallback = BinaryFileTypeDecompilers.getInstance().forFileType(decompilerFile.fileType)
+                                val stubText = try { fallback?.decompile(decompilerFile) } catch (_: Exception) { null }
+                                decompileState.value = LazyDecompileState.NoticeRejected(stubText ?: "// Decompilation unavailable")
+                                return@LaunchedEffect
+                            }
+                        }
+                        val text = tryDecompileViaClassFileDecompiler(decompilerFile)
+                        if (text != null) {
+                            decompileState.value = LazyDecompileState.Decompiled(text)
+                        } else {
+                            // Fernflower unavailable — try fallback stub decompiler.
+                            val fallback = BinaryFileTypeDecompilers.getInstance().forFileType(decompilerFile.fileType)
+                            val fallbackText = try { fallback?.decompile(decompilerFile) } catch (_: Exception) { null }
+                            if (fallbackText != null) {
+                                decompileState.value = LazyDecompileState.Decompiled(fallbackText)
+                            } else {
+                                decompileState.value = LazyDecompileState.Failed
+                            }
+                        }
+                    }
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        org.jetbrains.jewel.ui.component.Text("Loading\u2026")
+                    }
+                }
+
+                is LazyDecompileState.NoticeRejected -> {
+                    val fileType = decompilerFile.fileType
+                    val language = com.intellij.lang.Language.findLanguageByID("JAVA")
+                        ?: com.intellij.lang.LanguageUtil.getFileTypeLanguage(fileType)
+                    val lightFileName = decompiledFileName(myFile.nameWithoutExtension, myFile.extension, language)
+                    val lightFile = remember(current.stubText) {
+                        if (language != null) {
+                            LightVirtualFile(lightFileName, language, current.stubText)
+                        } else {
+                            LightVirtualFile(lightFileName, current.stubText)
+                        }
+                    }
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(org.jetbrains.jewel.foundation.theme.JewelTheme.globalColors.outlines.warning)
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            org.jetbrains.jewel.ui.component.Text(
+                                "Showing stub decompilation — accept the Fernflower legal notice for full decompilation.",
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                org.jetbrains.jewel.ui.component.OutlinedButton(
+                                    onClick = {
+                                        com.intellij.ide.util.PropertiesComponent.getInstance()
+                                            .setValue("hexana.decompiler.legal.notice.suppressed", true)
+                                        decompileState.value = LazyDecompileState.NoticeSuppressed(current.stubText)
+                                    },
+                                ) {
+                                    org.jetbrains.jewel.ui.component.Text("Don\u2019t show again")
+                                }
+                                org.jetbrains.jewel.ui.component.DefaultButton(
+                                    onClick = {
+                                        val accepted = showFernflowerLegalNoticeDialog(decompilerFile)
+                                        if (accepted) {
+                                            decompileState.value = LazyDecompileState.Initial
+                                        }
+                                    },
+                                ) {
+                                    org.jetbrains.jewel.ui.component.Text("Accept and Decompile")
+                                }
+                            }
+                        }
+                        decompiledEditorComposable(myProject, lightFile)
+                    }
+                }
+
+                is LazyDecompileState.NoticeSuppressed -> {
+                    val fileType = decompilerFile.fileType
+                    val language = com.intellij.lang.Language.findLanguageByID("JAVA")
+                        ?: com.intellij.lang.LanguageUtil.getFileTypeLanguage(fileType)
+                    val lightFileName = decompiledFileName(myFile.nameWithoutExtension, myFile.extension, language)
+                    val lightFile = remember(current.stubText) {
+                        if (language != null) {
+                            LightVirtualFile(lightFileName, language, current.stubText)
+                        } else {
+                            LightVirtualFile(lightFileName, current.stubText)
+                        }
+                    }
+                    decompiledEditorComposable(myProject, lightFile)
+                }
+
+                is LazyDecompileState.Decompiled -> {
+                    val fileType = decompilerFile.fileType
+                    val language = com.intellij.lang.Language.findLanguageByID("JAVA")
+                        ?: com.intellij.lang.LanguageUtil.getFileTypeLanguage(fileType)
+                    val lightFileName = decompiledFileName(myFile.nameWithoutExtension, myFile.extension, language)
+                    val lightFile = remember(current.text) {
+                        if (language != null) {
+                            LightVirtualFile(lightFileName, language, current.text)
+                        } else {
+                            LightVirtualFile(lightFileName, current.text)
+                        }
+                    }
+                    decompiledEditorComposable(myProject, lightFile)
+                }
+
+                LazyDecompileState.Failed -> {
+                    org.jetbrains.jewel.ui.component.Text(
+                        "Decompilation failed — see idea.log for details.",
+                    )
+                }
+            }
+        }
+
+    /**
+     * Shows the Fernflower legal notice dialog using the platform's
+     * [com.intellij.ui.components.LegalNoticeDialog]. Returns `true` when the
+     * user accepts, `false` otherwise (postponed or rejected).
+     */
+    private fun showFernflowerLegalNoticeDialog(file: VirtualFile): Boolean {
+        val title = "JetBrains Decompiler - ${file.name}"
+        val message = "<b>IMPORTANT: BY ACCESSING AND USING JETBRAINS DECOMPILER, YOU AGREE TO THE CERTAIN TERMS AND CONDITIONS " +
+            "SET FORTH IN THE END-USER LICENSE AGREEMENT AND QUOTED BELOW. IF YOU DO NOT AGREE WITH THESE TERMS OR CONDITIONS, " +
+            "DO NOT ACCESS OR USE JETBRAINS DECOMPILER.</b>" +
+            "<br><br>" +
+            "The Software includes decompiling functionality (\"JetBrains Decompiler\") that enables reproducing source code " +
+            "from the original binary code. Licensee acknowledges that binary code and source code might be protected " +
+            "by copyright and trademark laws. Before using JetBrains Decompiler, Licensee should make sure " +
+            "that decompilation of binary code is not prohibited by the applicable license agreement " +
+            "(except to the extent that Licensee may be expressly permitted under applicable law) " +
+            "or that Licensee has obtained permission to decompile the binary code from the copyright owner." +
+            "<br><br>" +
+            "Using JetBrains Decompiler is entirely optional. Licensor does neither encourage nor condone " +
+            "the use of JetBrains Decompiler, and disclaims any liability for Licensee's use of JetBrains Decompiler " +
+            "in violation of applicable laws."
+        return try {
+            val result = com.intellij.ui.components.LegalNoticeDialog
+                .build(title, message)
+                .show()
+            if (result == 0) {
+                com.intellij.ide.util.PropertiesComponent.getInstance()
+                    .setValue("decompiler.legal.notice.accepted", true)
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            HexanaLog.LOG.warn("Failed to show Fernflower legal notice dialog", e)
+            false
+        }
+    }
+
+    /**
+     * Resolves a [VirtualFile] suitable for decompilation when [myFile] is an
+     * in-memory file (e.g. opened from a ZIP/JAR entry via [openZipEntry]) or
+     * lives on a non-local file system.
+     *
+     * Prefers [com.intellij.openapi.vfs.JarFileSystem] resolution when the parent
+     * archive is on disk — this gives decompilers like Fernflower access to sibling
+     * classes in the same JAR, enabling full decompilation with method bodies
+     * (not just signatures/stubs). Falls back to extracting bytes to a temporary
+     * file when JarFileSystem resolution is not possible.
+     *
+     * Returns `null` when the file is already on the local file system (no
+     * extraction needed) or when the bytes cannot be obtained.
+     */
+    private fun resolveDecompilerFile(): VirtualFile? {
+        // If the file is already on the local file system, no extraction needed.
+        if (myFile.toNioPathOrNull() != null && myFile !is LightVirtualFile) return null
+
+        // 1. Prefer JarFileSystem resolution when the parent archive is on disk.
+        //    This gives decompilers like Fernflower access to sibling classes in the
+        //    same JAR, enabling full decompilation (not just signatures/stubs).
+        val parentFile = myFile.getUserData(HexanaBinaryVirtualFile.PARENT_FILE_KEY)
+        if (parentFile != null) {
+            val parentPath = parentFile.toNioPathOrNull()
+            if (parentPath != null) {
+                val jarFs = com.intellij.openapi.vfs.JarFileSystem.getInstance()
+                val jarEntry = jarFs.findFileByPath("${parentPath}!/${myFile.name}")
+                if (jarEntry != null) return jarEntry
+            }
+        }
+
+        // 2. Fallback: extract bytes to a temp file for decompilers that need a
+        //    real file on disk (won't have classpath context, may produce stubs).
+        val bytes: ByteArray = try {
+            val inMemoryBuffer = myFile.getUserData(HexanaBinaryVirtualFile.BUFFER_KEY)
+            if (inMemoryBuffer != null) {
+                val size = inMemoryBuffer.size
+                ByteArray(size) { inMemoryBuffer[it] }
+            } else {
+                myFile.contentsToByteArray()
+            }
+        } catch (e: Exception) {
+            HexanaLog.LOG.warn("Cannot read bytes from ${myFile.name} for decompilation", e)
+            return null
+        }
+
+        return try {
+            val tempDir = java.nio.file.Files.createTempDirectory("hexana-decompile")
+            val tempFile = tempDir.resolve(myFile.name)
+            java.nio.file.Files.write(tempFile, bytes)
+            tempFile.toFile().deleteOnExit()
+            tempDir.toFile().deleteOnExit()
+            com.intellij.openapi.vfs.LocalFileSystem.getInstance()
+                .refreshAndFindFileByNioFile(tempFile)
+        } catch (e: Exception) {
+            HexanaLog.LOG.warn("Cannot create temp file for decompilation of ${myFile.name}", e)
+            null
+        }
     }
 
     private fun resolveProvider(
@@ -652,6 +944,44 @@ class HexanaFileEditor(
     }
 }
 
+/**
+ * Attempts to decompile [file] using `ClassFileDecompilers.Light` (e.g. Fernflower
+ * for `.class` files). Access is reflective to avoid a hard compile-time dependency
+ * on the optional Java plugin.
+ *
+ * The caller must ensure that the Fernflower legal notice has been accepted
+ * (`PropertiesComponent "decompiler.legal.notice.accepted"`) before calling this
+ * function; otherwise Fernflower silently falls back to stubs.
+ *
+ * Returns the decompiled text, or `null` when the Java plugin is not loaded,
+ * no decompiler accepts the file, or only a stub is produced.
+ */
+private fun tryDecompileViaClassFileDecompiler(file: VirtualFile): CharSequence? {
+    // Use ClassFileDecompilers.Light directly (reflective to avoid hard dependency
+    // on the optional Java plugin). This calls IdeaDecompiler.getText() which runs
+    // the full Fernflower pipeline — unlike PsiManager.findFile().text which may
+    // return only a stub during editor construction.
+    //
+    // IdeaDecompiler.getText() checks whether the user has accepted the Fernflower
+    // legal notice (PropertiesComponent "decompiler.legal.notice.accepted"). The
+    // caller (createDecompiledPanel) is responsible for showing the legal notice
+    // dialog and setting the property before invoking this function.
+    return try {
+        val clsDecompilers = Class.forName("com.intellij.psi.compiled.ClassFileDecompilers")
+        val getInstance = clsDecompilers.getMethod("getInstance")
+        val instance = getInstance.invoke(null)
+        val lightClass = Class.forName("com.intellij.psi.compiled.ClassFileDecompilers\$Light")
+        val findMethod = clsDecompilers.getMethod("find", VirtualFile::class.java, Class::class.java)
+        val decompiler = findMethod.invoke(instance, file, lightClass) ?: return null
+        val getTextMethod = lightClass.getMethod("getText", VirtualFile::class.java)
+        val text = getTextMethod.invoke(decompiler, file) as? CharSequence
+        if (text.isNullOrBlank() || text.contains("Implementation of methods is not available")) null else text
+    } catch (e: Exception) {
+        HexanaLog.LOG.warn("ClassFileDecompiler lookup failed for ${file.name}", e)
+        null
+    }
+}
+
 private const val WASM_DIFF_PARSE_ERROR =
     "Could not analyze one or both modules (not a core WASM module?)."
 
@@ -721,6 +1051,25 @@ private fun decompressZipEntry(
     }
 }
 
+/**
+ * Builds a file name with a proper extension for the decompiled [LightVirtualFile].
+ * A correct extension is essential so that [EditorHighlighterFactory] can resolve
+ * the right syntax highlighter by file name.
+ */
+private fun decompiledFileName(baseName: String, originalExtension: String?, language: com.intellij.lang.Language?): String {
+    // Hardcoded mappings for well-known compiled → source extensions.
+    val hardcoded = when (originalExtension?.lowercase()) {
+        "class" -> "java"
+        else -> null
+    }
+    if (hardcoded != null) return "$baseName.$hardcoded"
+    if (language != null) {
+        val ext = language.associatedFileType?.defaultExtension
+        if (ext != null) return "$baseName.$ext"
+    }
+    return "$baseName.decompiled"
+}
+
 data class HexViewState(
     val topFraction: Float = 0.6f,
     val tabIndex: Int = 0,
@@ -779,4 +1128,15 @@ private fun HexanaFileEditor.initSourceLocationProvider(ref: AtomicReference<Hex
         }
         ref.set(filteringLocationProvider)
     }
+}
+
+/**
+ * Internal state machine for the lazy class-file decompilation panel.
+ */
+private sealed class LazyDecompileState {
+    data object Initial : LazyDecompileState()
+    data class NoticeRejected(val stubText: CharSequence) : LazyDecompileState()
+    data class NoticeSuppressed(val stubText: CharSequence) : LazyDecompileState()
+    data class Decompiled(val text: CharSequence) : LazyDecompileState()
+    data object Failed : LazyDecompileState()
 }

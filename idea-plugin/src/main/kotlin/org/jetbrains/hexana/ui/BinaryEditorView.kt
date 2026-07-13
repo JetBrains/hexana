@@ -76,6 +76,7 @@ internal fun BinaryEditorView(
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
     classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?> = remember { MutableStateFlow(null) },
     onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
+    decompiledContentPanel: Panel? = null,
 ) {
     // Phase F: every opened file gets one editable BinaryDocument shared by
     // the editor's lifecycle. Edits land in this doc, but ONLY the WAT
@@ -264,7 +265,8 @@ internal fun BinaryEditorView(
             }
             val placeholders = if (hexEditedSinceOpen) emptyList() else binaryProvider.discoverPanelNames()
                 .map { name -> Panel(name) { LoadingTabContent() } }
-            mutableStateListOf(*(placeholders + scriptPanels).toTypedArray())
+            val decompiled = if (decompiledContentPanel != null) listOf(decompiledContentPanel) else emptyList()
+            mutableStateListOf(*(placeholders + decompiled + scriptPanels).toTypedArray())
         }
         LaunchedEffect(binaryProvider, hexEditedSinceOpen) {
             if (hexEditedSinceOpen) return@LaunchedEffect
