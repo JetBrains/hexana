@@ -118,6 +118,7 @@ val cliR8OutputRootDir = layout.buildDirectory.dir("r8/cli/output")
 val cliR8JarRootDir = layout.buildDirectory.dir("r8/cli/jars")
 val cliR8MappingRootDir = layout.buildDirectory.dir("r8/cli/mapping")
 val cliReleaseDistributionDir = layout.buildDirectory.dir("distributions")
+val cliArchiveVerificationRootDir = layout.buildDirectory.dir("verification/cli-r8-archives")
 
 val r8Tool by configurations.creating {
     isCanBeConsumed = false
@@ -345,6 +346,9 @@ fun cliObfuscatedRuntimeJarFile(product: CliR8Product): Provider<RegularFile> =
 fun cliReleaseArchiveFile(product: CliR8Product): Provider<RegularFile> =
     cliReleaseDistributionDir.map { it.file(cliReleaseArchiveName(product)) }
 
+fun cliExtractedArchiveDir(product: CliR8Product): Provider<Directory> =
+    cliArchiveVerificationRootDir.map { it.dir(product.id) }
+
 fun jarNameHasAnyPrefix(jarName: String, prefixes: Iterable<String>): Boolean =
     prefixes.any { prefix -> jarName.startsWith(prefix) }
 
@@ -542,6 +546,27 @@ fun assertCliReleaseArchive(product: CliR8Product, archiveFile: File) {
             "${archiveFile.name} contains denied runtime library files: $deniedLibFiles"
         }
     }
+}
+
+fun assertCliExtractedReleaseRoot(product: CliR8Product, extractionDir: File): File {
+    val rootName = cliReleaseProductRootName(product)
+    val unexpectedFiles = extractionDir
+        .listFiles { file -> file.isFile }
+        .orEmpty()
+        .map { it.name }
+        .sorted()
+    check(unexpectedFiles.isEmpty()) {
+        "${product.executableName} extracted archive must not contain files beside root `$rootName`. Found: $unexpectedFiles"
+    }
+    val rootDirs = extractionDir
+        .listFiles { file -> file.isDirectory }
+        .orEmpty()
+        .map { it.name }
+        .sorted()
+    check(rootDirs == listOf(rootName)) {
+        "${product.executableName} extracted archive must contain exactly one root `$rootName`. Found: $rootDirs"
+    }
+    return extractionDir.resolve(rootName)
 }
 
 fun assertCliReleaseProcessSmoke(product: CliR8Product, installDir: File) {
@@ -961,6 +986,7 @@ fun registerCliR8ProductTasks(product: CliR8Product): CliR8Tasks {
     val mappingFile = cliR8MappingFile(product)
     val runtimeJarFile = cliObfuscatedRuntimeJarFile(product)
     val archiveFile = cliReleaseArchiveFile(product)
+    val extractedArchiveDir = cliExtractedArchiveDir(product)
     val capitalizedProductId = product.id.replaceFirstChar { it.uppercaseChar() }
 
     val copyRuntime = tasks.register<Sync>("copy${capitalizedProductId}CliRuntimeForR8") {
@@ -1091,15 +1117,31 @@ fun registerCliR8ProductTasks(product: CliR8Product): CliR8Tasks {
         inputs.dir(installDir)
         inputs.file(mappingFile)
         inputs.file(archiveFile)
+        outputs.dir(extractedArchiveDir)
         outputs.upToDateWhen { false }
 
         doLast {
             val productInstallDir = installDir.get().asFile
+            val productArchiveFile = archiveFile.get().asFile
+            val archiveExtractionDir = extractedArchiveDir.get().asFile
             assertCliReleaseRuntimeLayout(product, productInstallDir, product.executableName)
             assertJava21RuntimeClasses(productInstallDir.resolve("lib"), product.executableName)
             assertCliR8MappingPolicy(product, mappingFile.get().asFile)
-            assertCliReleaseArchive(product, archiveFile.get().asFile)
-            assertCliReleaseProcessSmoke(product, productInstallDir)
+            assertCliReleaseArchive(product, productArchiveFile)
+
+            archiveExtractionDir.deleteRecursively()
+            archiveExtractionDir.mkdirs()
+            copy {
+                from(zipTree(productArchiveFile))
+                into(archiveExtractionDir)
+            }
+            val extractedProductRoot = assertCliExtractedReleaseRoot(product, archiveExtractionDir)
+            assertCliReleaseRuntimeLayout(product, extractedProductRoot, "${product.executableName} extracted archive")
+            assertJava21RuntimeClasses(
+                extractedProductRoot.resolve("lib"),
+                "${product.executableName} extracted archive",
+            )
+            assertCliReleaseProcessSmoke(product, extractedProductRoot)
         }
     }
 
