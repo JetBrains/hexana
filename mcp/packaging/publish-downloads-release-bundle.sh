@@ -82,6 +82,69 @@ artifact_kind_for_name() {
   esac
 }
 
+artifact_product_for_name() {
+  local file_name="$1"
+  case "$file_name" in
+    hexana-mcp-native-*) printf 'hexana-mcp' ;;
+    hexana-cli-native-*) printf 'hexana-cli' ;;
+    hexana-cli-script-native-*) printf 'hexana-cli-script' ;;
+    hexana-claude-plugin-*) printf 'hexana-claude-plugin' ;;
+    hexana-codex-plugin-*) printf 'hexana-codex-plugin' ;;
+    *) die "Unexpected MCP release artifact name: $file_name" ;;
+  esac
+}
+
+artifact_launcher_for_name() {
+  local file_name="$1"
+  case "$file_name" in
+    hexana-mcp-native-*) printf 'hexana-mcp' ;;
+    hexana-cli-native-*) printf 'hexana-cli' ;;
+    hexana-cli-script-native-*) printf 'hexana-cli-script' ;;
+    hexana-claude-plugin-*) printf 'claude-plugin' ;;
+    hexana-codex-plugin-*) printf 'codex-plugin' ;;
+    *) die "Unexpected MCP release artifact name: $file_name" ;;
+  esac
+}
+
+artifact_runtime_kind_for_name() {
+  local file_name="$1"
+  case "$file_name" in
+    hexana-mcp-native-*|hexana-cli-native-*|hexana-cli-script-native-*) printf 'native' ;;
+    hexana-claude-plugin-*|hexana-codex-plugin-*) printf 'native-wrapper' ;;
+    *) die "Unexpected MCP release artifact name: $file_name" ;;
+  esac
+}
+
+artifact_minimum_java_json_for_name() {
+  local file_name="$1"
+  case "$file_name" in
+    hexana-mcp-native-*|hexana-cli-native-*|hexana-cli-script-native-*) printf 'null' ;;
+    hexana-claude-plugin-*|hexana-codex-plugin-*) printf '21' ;;
+    *) die "Unexpected MCP release artifact name: $file_name" ;;
+  esac
+}
+
+zip_entry_sha256() {
+  local zip_file="$1"
+  local entry_name="$2"
+  local extracted_file
+  local digest
+
+  extracted_file="$(mktemp "${TMPDIR:-/tmp}/hexana-mcp-zip-entry.XXXXXX")"
+  if ! unzip -p "$zip_file" "$entry_name" > "$extracted_file"; then
+    rm -f "$extracted_file"
+    die "Artifact $zip_file is missing required ZIP entry: $entry_name"
+  fi
+  if [ ! -s "$extracted_file" ]; then
+    rm -f "$extracted_file"
+    die "Artifact $zip_file has empty required ZIP entry: $entry_name"
+  fi
+
+  digest="$(sha256_file "$extracted_file")"
+  rm -f "$extracted_file"
+  printf '%s\n' "$digest"
+}
+
 url_join() {
   local base="$1"
   local file_name="$2"
@@ -129,6 +192,12 @@ append_manifest_artifact() {
   local sha256="$6"
   local github_url="$7"
   local downloads_url="$8"
+  local product="$9"
+  local launcher="${10}"
+  local runtime_kind="${11}"
+  local minimum_java="${12}"
+  local license_file_sha256="${13}"
+  local third_party_notices_sha256="${14}"
   local next_manifest="$manifest_tmp.next"
 
   jq \
@@ -139,6 +208,12 @@ append_manifest_artifact() {
     --arg sha256 "$sha256" \
     --arg githubReleaseAssetUrl "$github_url" \
     --arg downloadsUrl "$downloads_url" \
+    --arg product "$product" \
+    --arg launcher "$launcher" \
+    --arg runtimeKind "$runtime_kind" \
+    --argjson minimumJava "$minimum_java" \
+    --arg licenseFileSha256 "$license_file_sha256" \
+    --arg thirdPartyNoticesSha256 "$third_party_notices_sha256" \
     '.artifacts += [{
       name: $name,
       platform: $platform,
@@ -146,7 +221,13 @@ append_manifest_artifact() {
       size: $size,
       sha256: $sha256,
       githubReleaseAssetUrl: (if ($githubReleaseAssetUrl | length) > 0 then $githubReleaseAssetUrl else null end),
-      downloadsUrl: $downloadsUrl
+      downloadsUrl: $downloadsUrl,
+      product: $product,
+      launcher: $launcher,
+      runtimeKind: $runtimeKind,
+      minimumJava: $minimumJava,
+      licenseFileSha256: $licenseFileSha256,
+      thirdPartyNoticesSha256: $thirdPartyNoticesSha256
     }]' "$manifest_tmp" > "$next_manifest"
   mv "$next_manifest" "$manifest_tmp"
 }
@@ -165,7 +246,14 @@ generate_downloads_bundle() {
   local kind
   local github_url
   local downloads_url
+  local product
+  local launcher
+  local runtime_kind
+  local minimum_java
+  local license_file_sha256
+  local third_party_notices_sha256
 
+  require_tool "unzip"
   validate_path_segment "MCP_VERSION" "$MCP_VERSION"
   rm -rf "$bundle_dir"
   mkdir -p "$bundle_dir"
@@ -186,10 +274,30 @@ generate_downloads_bundle() {
       digest="$(sha256_file "$bundled_file")"
       size="$(file_size "$bundled_file")"
       kind="$(artifact_kind_for_name "$artifact")"
+      product="$(artifact_product_for_name "$artifact")"
+      launcher="$(artifact_launcher_for_name "$artifact")"
+      runtime_kind="$(artifact_runtime_kind_for_name "$artifact")"
+      minimum_java="$(artifact_minimum_java_json_for_name "$artifact")"
+      license_file_sha256="$(zip_entry_sha256 "$bundled_file" "LICENSE.txt")"
+      third_party_notices_sha256="$(zip_entry_sha256 "$bundled_file" "THIRD-PARTY-NOTICES.md")"
       printf '%s  %s\n' "$digest" "$artifact" > "$bundle_dir/$artifact.sha256"
       github_url="$(url_join "$GITHUB_RELEASE_ASSET_BASE_URL" "$artifact")"
       downloads_url="$(url_join "$DOWNLOADS_PUBLIC_PREFIX" "$artifact")"
-      append_manifest_artifact "$manifest_tmp" "$platform" "$artifact" "$kind" "$size" "$digest" "$github_url" "$downloads_url"
+      append_manifest_artifact \
+        "$manifest_tmp" \
+        "$platform" \
+        "$artifact" \
+        "$kind" \
+        "$size" \
+        "$digest" \
+        "$github_url" \
+        "$downloads_url" \
+        "$product" \
+        "$launcher" \
+        "$runtime_kind" \
+        "$minimum_java" \
+        "$license_file_sha256" \
+        "$third_party_notices_sha256"
     done
   done
 
@@ -361,6 +469,29 @@ verify_checksum_files() {
   fi
 }
 
+create_self_test_zip_fixture() {
+  local artifact_file="$1"
+  local license_text="$2"
+  local notices_text="$3"
+  local include_wrapper_runtime="$4"
+  local fixture_dir
+
+  fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/hexana-mcp-downloads-zip-fixture.XXXXXX")"
+  rm -f "$artifact_file"
+  printf '%s' "$license_text" > "$fixture_dir/LICENSE.txt"
+  printf '%s' "$notices_text" > "$fixture_dir/THIRD-PARTY-NOTICES.md"
+  if [ "$include_wrapper_runtime" = "true" ]; then
+    mkdir -p "$fixture_dir/server/bin" "$fixture_dir/server/lib"
+    printf '#!/usr/bin/env sh\nexec java -jar "$(dirname "$0")/../lib/hexana-runtime-obfuscated.jar" "$@"\n' > "$fixture_dir/server/bin/server"
+    printf 'runtime fixture\n' > "$fixture_dir/server/lib/hexana-runtime-obfuscated.jar"
+    chmod +x "$fixture_dir/server/bin/server"
+    (cd "$fixture_dir" && zip -q -r "$artifact_file" LICENSE.txt THIRD-PARTY-NOTICES.md server)
+  else
+    (cd "$fixture_dir" && zip -q "$artifact_file" LICENSE.txt THIRD-PARTY-NOTICES.md)
+  fi
+  rm -rf "$fixture_dir"
+}
+
 self_test_downloads_bundle() {
   local temp_dir
   local artifact_dir
@@ -372,7 +503,10 @@ self_test_downloads_bundle() {
   local artifact_count
   local sha_count
   local scan_status
+  local license_sha256
+  local notices_sha256
 
+  require_tool "zip"
   temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/hexana-mcp-downloads-bundle.XXXXXX")"
   trap "rm -rf '$temp_dir'" RETURN
   artifact_dir="$temp_dir/artifacts"
@@ -381,11 +515,11 @@ self_test_downloads_bundle() {
   existing_index="$temp_dir/existing-releases.json"
   mkdir -p "$artifact_dir"
 
-  printf 'native fixture\n' > "$artifact_dir/hexana-mcp-native-linux-x64-0.2.0.zip"
-  printf 'claude fixture\n' > "$artifact_dir/hexana-claude-plugin-linux-x64-0.2.0.zip"
-  printf 'codex fixture\n' > "$artifact_dir/hexana-codex-plugin-linux-x64-0.2.0.zip"
-  printf 'standard cli native fixture\n' > "$artifact_dir/hexana-cli-native-linux-x64-0.2.0.zip"
-  printf 'script cli native fixture\n' > "$artifact_dir/hexana-cli-script-native-linux-x64-0.2.0.zip"
+  create_self_test_zip_fixture "$artifact_dir/hexana-mcp-native-linux-x64-0.2.0.zip" "Hexana MCP license fixture"$'\n' "Hexana MCP notices fixture"$'\n' "false"
+  create_self_test_zip_fixture "$artifact_dir/hexana-claude-plugin-linux-x64-0.2.0.zip" "Hexana Claude plugin license fixture"$'\n' "Hexana Claude plugin notices fixture"$'\n' "true"
+  create_self_test_zip_fixture "$artifact_dir/hexana-codex-plugin-linux-x64-0.2.0.zip" "Hexana Codex plugin license fixture"$'\n' "Hexana Codex plugin notices fixture"$'\n' "true"
+  create_self_test_zip_fixture "$artifact_dir/hexana-cli-native-linux-x64-0.2.0.zip" "Hexana CLI license fixture"$'\n' "Hexana CLI notices fixture"$'\n' "false"
+  create_self_test_zip_fixture "$artifact_dir/hexana-cli-script-native-linux-x64-0.2.0.zip" "Hexana CLI script license fixture"$'\n' "Hexana CLI script notices fixture"$'\n' "false"
 
   MCP_VERSION="0.2.0"
   MCP_RELEASE_PLATFORMS="linux-x64"
@@ -469,9 +603,91 @@ self_test_downloads_bundle() {
   jq -e '.teamcity.buildId == "12345"' "$manifest" >/dev/null
   jq -e '.downloadsPrefix == "https://download.jetbrains.com/resources/hexana/mcp/0.2.0"' "$manifest" >/dev/null
   jq -e 'all(.artifacts[].downloadsUrl; contains("/mcp//") | not)' "$manifest" >/dev/null
-  jq -e '.artifacts[] | select(.name == "hexana-mcp-native-linux-x64-0.2.0.zip" and .platform == "linux-x64" and .kind == "native-executable" and (.sha256 | test("^[0-9a-f]{64}$")))' "$manifest" >/dev/null
-  jq -e '.artifacts[] | select(.name == "hexana-cli-native-linux-x64-0.2.0.zip" and .platform == "linux-x64" and .kind == "standard-cli-native" and (.sha256 | test("^[0-9a-f]{64}$")))' "$manifest" >/dev/null
-  jq -e '.artifacts[] | select(.name == "hexana-cli-script-native-linux-x64-0.2.0.zip" and .platform == "linux-x64" and .kind == "script-cli-native" and (.sha256 | test("^[0-9a-f]{64}$")))' "$manifest" >/dev/null
+  license_sha256="$(printf 'Hexana MCP license fixture\n' | sha256_file /dev/stdin)"
+  notices_sha256="$(printf 'Hexana MCP notices fixture\n' | sha256_file /dev/stdin)"
+  jq -e \
+    --arg licenseFileSha256 "$license_sha256" \
+    --arg thirdPartyNoticesSha256 "$notices_sha256" \
+    '.artifacts[] | select(
+      .name == "hexana-mcp-native-linux-x64-0.2.0.zip"
+      and .platform == "linux-x64"
+      and .kind == "native-executable"
+      and .product == "hexana-mcp"
+      and .launcher == "hexana-mcp"
+      and .runtimeKind == "native"
+      and .minimumJava == null
+      and .licenseFileSha256 == $licenseFileSha256
+      and .thirdPartyNoticesSha256 == $thirdPartyNoticesSha256
+      and (.sha256 | test("^[0-9a-f]{64}$"))
+    )' "$manifest" >/dev/null
+  license_sha256="$(printf 'Hexana CLI license fixture\n' | sha256_file /dev/stdin)"
+  notices_sha256="$(printf 'Hexana CLI notices fixture\n' | sha256_file /dev/stdin)"
+  jq -e \
+    --arg licenseFileSha256 "$license_sha256" \
+    --arg thirdPartyNoticesSha256 "$notices_sha256" \
+    '.artifacts[] | select(
+      .name == "hexana-cli-native-linux-x64-0.2.0.zip"
+      and .platform == "linux-x64"
+      and .kind == "standard-cli-native"
+      and .product == "hexana-cli"
+      and .launcher == "hexana-cli"
+      and .runtimeKind == "native"
+      and .minimumJava == null
+      and .licenseFileSha256 == $licenseFileSha256
+      and .thirdPartyNoticesSha256 == $thirdPartyNoticesSha256
+      and (.sha256 | test("^[0-9a-f]{64}$"))
+    )' "$manifest" >/dev/null
+  license_sha256="$(printf 'Hexana CLI script license fixture\n' | sha256_file /dev/stdin)"
+  notices_sha256="$(printf 'Hexana CLI script notices fixture\n' | sha256_file /dev/stdin)"
+  jq -e \
+    --arg licenseFileSha256 "$license_sha256" \
+    --arg thirdPartyNoticesSha256 "$notices_sha256" \
+    '.artifacts[] | select(
+      .name == "hexana-cli-script-native-linux-x64-0.2.0.zip"
+      and .platform == "linux-x64"
+      and .kind == "script-cli-native"
+      and .product == "hexana-cli-script"
+      and .launcher == "hexana-cli-script"
+      and .runtimeKind == "native"
+      and .minimumJava == null
+      and .licenseFileSha256 == $licenseFileSha256
+      and .thirdPartyNoticesSha256 == $thirdPartyNoticesSha256
+      and (.sha256 | test("^[0-9a-f]{64}$"))
+    )' "$manifest" >/dev/null
+  license_sha256="$(printf 'Hexana Claude plugin license fixture\n' | sha256_file /dev/stdin)"
+  notices_sha256="$(printf 'Hexana Claude plugin notices fixture\n' | sha256_file /dev/stdin)"
+  jq -e \
+    --arg licenseFileSha256 "$license_sha256" \
+    --arg thirdPartyNoticesSha256 "$notices_sha256" \
+    '.artifacts[] | select(
+      .name == "hexana-claude-plugin-linux-x64-0.2.0.zip"
+      and .platform == "linux-x64"
+      and .kind == "claude-plugin"
+      and .product == "hexana-claude-plugin"
+      and .launcher == "claude-plugin"
+      and .runtimeKind == "native-wrapper"
+      and .minimumJava == 21
+      and .licenseFileSha256 == $licenseFileSha256
+      and .thirdPartyNoticesSha256 == $thirdPartyNoticesSha256
+      and (.sha256 | test("^[0-9a-f]{64}$"))
+    )' "$manifest" >/dev/null
+  license_sha256="$(printf 'Hexana Codex plugin license fixture\n' | sha256_file /dev/stdin)"
+  notices_sha256="$(printf 'Hexana Codex plugin notices fixture\n' | sha256_file /dev/stdin)"
+  jq -e \
+    --arg licenseFileSha256 "$license_sha256" \
+    --arg thirdPartyNoticesSha256 "$notices_sha256" \
+    '.artifacts[] | select(
+      .name == "hexana-codex-plugin-linux-x64-0.2.0.zip"
+      and .platform == "linux-x64"
+      and .kind == "codex-plugin"
+      and .product == "hexana-codex-plugin"
+      and .launcher == "codex-plugin"
+      and .runtimeKind == "native-wrapper"
+      and .minimumJava == 21
+      and .licenseFileSha256 == $licenseFileSha256
+      and .thirdPartyNoticesSha256 == $thirdPartyNoticesSha256
+      and (.sha256 | test("^[0-9a-f]{64}$"))
+    )' "$manifest" >/dev/null
   sha_count="$(find "$bundle_dir" -maxdepth 1 -type f -name '*.sha256' | wc -l | tr -d '[:space:]')"
   [ "$sha_count" -eq 5 ] || die "Self-test expected 5 checksum files, got $sha_count"
   verify_checksum_files "$bundle_dir"
@@ -497,6 +713,22 @@ self_test_downloads_bundle() {
   grep -F -q "Missing release artifact: $artifact_dir/hexana-cli-script-native-linux-x64-0.2.0.zip" "$temp_dir/missing-cli-script-native.out" ||
     die "Self-test did not record the missing script CLI native artifact failure"
   log "Downloads bundle self-test recorded missing hexana-cli-script-native-linux-x64-0.2.0.zip failure"
+
+  create_self_test_zip_fixture "$artifact_dir/hexana-cli-script-native-linux-x64-0.2.0.zip" "Hexana CLI script license fixture"$'\n' "" "false"
+  set +e
+  (
+    set -e
+    generate_downloads_bundle "$artifact_dir" "$temp_dir/empty-notices-bundle"
+  ) >"$temp_dir/empty-notices.out" 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Self-test did not reject an empty THIRD-PARTY-NOTICES.md entry"
+  grep -F -q "has empty required ZIP entry: THIRD-PARTY-NOTICES.md" "$temp_dir/empty-notices.out" ||
+    die "Self-test did not record the empty THIRD-PARTY-NOTICES.md metadata failure"
+  log "Downloads bundle self-test recorded empty THIRD-PARTY-NOTICES.md metadata failure"
+
+  create_self_test_zip_fixture "$artifact_dir/hexana-cli-script-native-linux-x64-0.2.0.zip" "Hexana CLI script license fixture"$'\n' "Hexana CLI script notices fixture"$'\n' "false"
+  generate_downloads_bundle "$artifact_dir" "$temp_dir/restored-bundle"
 
   log "Downloads bundle self-test passed"
 }
