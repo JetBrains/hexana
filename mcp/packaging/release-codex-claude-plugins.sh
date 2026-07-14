@@ -142,7 +142,9 @@ collect_native_release_artifacts() {
     for artifact in \
       "hexana-mcp-native-$platform-$PLUGIN_VERSION.zip" \
       "hexana-claude-plugin-$platform-$PLUGIN_VERSION.zip" \
-      "hexana-codex-plugin-$platform-$PLUGIN_VERSION.zip"; do
+      "hexana-codex-plugin-$platform-$PLUGIN_VERSION.zip" \
+      "hexana-cli-native-$platform-$PLUGIN_VERSION.zip" \
+      "hexana-cli-script-native-$platform-$PLUGIN_VERSION.zip"; do
       native_zip="$(versioned_release_artifact "$NATIVE_RELEASE_ARTIFACT_DIR" "$artifact")"
       [ -n "$native_zip" ] || die "No $artifact produced under $NATIVE_RELEASE_ARTIFACT_DIR"
       cp "$native_zip" "$release_dir/"
@@ -162,14 +164,20 @@ collect_release_artifacts() {
   fi
   claude_zip="$(versioned_release_artifact "mcp/build/distributions" "hexana-claude-plugin-$PLUGIN_VERSION.zip")"
   codex_zip="$(versioned_release_artifact "mcp/build/distributions" "hexana-codex-plugin-$PLUGIN_VERSION.zip")"
+  standard_cli_zip="$(versioned_release_artifact "mcp/build/distributions" "hexana-cli-$PLUGIN_VERSION.zip")"
+  script_cli_zip="$(versioned_release_artifact "mcp/build/distributions" "hexana-cli-script-$PLUGIN_VERSION.zip")"
 
   [ -n "$server_zip" ] || die "No server-$PLUGIN_VERSION.zip produced under mcp/build/distributions or mcp/server/build/distributions"
   [ -n "$claude_zip" ] || die "No hexana-claude-plugin-$PLUGIN_VERSION.zip produced under mcp/build/distributions"
   [ -n "$codex_zip" ] || die "No hexana-codex-plugin-$PLUGIN_VERSION.zip produced under mcp/build/distributions"
+  [ -n "$standard_cli_zip" ] || die "No hexana-cli-$PLUGIN_VERSION.zip produced under mcp/build/distributions"
+  [ -n "$script_cli_zip" ] || die "No hexana-cli-script-$PLUGIN_VERSION.zip produced under mcp/build/distributions"
 
   cp "$server_zip" "$release_dir/"
   cp "$claude_zip" "$release_dir/"
   cp "$codex_zip" "$release_dir/"
+  cp "$standard_cli_zip" "$release_dir/"
+  cp "$script_cli_zip" "$release_dir/"
 
   if [ "$INCLUDE_NATIVE_ARTIFACTS" = "true" ]; then
     collect_native_release_artifacts
@@ -461,14 +469,35 @@ self_test_release_native_artifact_default() {
   local temp_dir
   local version="0.2.0"
   local scan_status
+  local error_file
 
   temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/hexana-native-artifact-default.XXXXXX")"
   register_cleanup_dir "$temp_dir"
+  error_file="$temp_dir/error.log"
   mkdir -p "$temp_dir/mcp/build/distributions" "$temp_dir/mcp/build/distributions-native"
   touch \
     "$temp_dir/mcp/build/distributions/server-$version.zip" \
     "$temp_dir/mcp/build/distributions/hexana-claude-plugin-$version.zip" \
-    "$temp_dir/mcp/build/distributions/hexana-codex-plugin-$version.zip"
+    "$temp_dir/mcp/build/distributions/hexana-codex-plugin-$version.zip" \
+    "$temp_dir/mcp/build/distributions/hexana-cli-$version.zip"
+
+  set +e
+  (
+    cd "$temp_dir"
+    PLUGIN_VERSION="$version"
+    INCLUDE_NATIVE_ARTIFACTS="false"
+    NATIVE_RELEASE_ARTIFACT_DIR="mcp/build/distributions-native"
+    NATIVE_RELEASE_PLATFORMS="macos-arm64"
+    collect_release_artifacts
+  ) >"$error_file" 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Native artifact default self-test did not require the script CLI JVM artifact"
+  grep -F -q "No hexana-cli-script-$version.zip produced under mcp/build/distributions" "$error_file" ||
+    die "Native artifact default self-test did not record the missing script CLI JVM artifact failure"
+  log "Native artifact default self-test recorded missing hexana-cli-script-$version.zip failure"
+
+  touch "$temp_dir/mcp/build/distributions/hexana-cli-script-$version.zip"
 
   set +e
   (
@@ -487,7 +516,27 @@ self_test_release_native_artifact_default() {
   touch \
     "$temp_dir/mcp/build/distributions-native/hexana-mcp-native-macos-arm64-$version.zip" \
     "$temp_dir/mcp/build/distributions-native/hexana-claude-plugin-macos-arm64-$version.zip" \
-    "$temp_dir/mcp/build/distributions-native/hexana-codex-plugin-macos-arm64-$version.zip"
+    "$temp_dir/mcp/build/distributions-native/hexana-codex-plugin-macos-arm64-$version.zip" \
+    "$temp_dir/mcp/build/distributions-native/hexana-cli-native-macos-arm64-$version.zip"
+
+  set +e
+  (
+    cd "$temp_dir"
+    unset INCLUDE_NATIVE_ARTIFACTS
+    PLUGIN_VERSION="$version"
+    INCLUDE_NATIVE_ARTIFACTS="$(to_bool "${INCLUDE_NATIVE_ARTIFACTS:-true}" "INCLUDE_NATIVE_ARTIFACTS")"
+    NATIVE_RELEASE_ARTIFACT_DIR="mcp/build/distributions-native"
+    NATIVE_RELEASE_PLATFORMS="macos-arm64"
+    collect_release_artifacts
+  ) >"$error_file" 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Native artifact default self-test did not require the script CLI native artifact"
+  grep -F -q "No hexana-cli-script-native-macos-arm64-$version.zip produced under mcp/build/distributions-native" "$error_file" ||
+    die "Native artifact default self-test did not record the missing script CLI native artifact failure"
+  log "Native artifact default self-test recorded missing hexana-cli-script-native-macos-arm64-$version.zip failure"
+
+  touch "$temp_dir/mcp/build/distributions-native/hexana-cli-script-native-macos-arm64-$version.zip"
 
   (
     cd "$temp_dir"
@@ -500,6 +549,8 @@ self_test_release_native_artifact_default() {
     [ -f "mcp/out/teamcity/release/hexana-mcp-native-macos-arm64-$version.zip" ]
     [ -f "mcp/out/teamcity/release/hexana-claude-plugin-macos-arm64-$version.zip" ]
     [ -f "mcp/out/teamcity/release/hexana-codex-plugin-macos-arm64-$version.zip" ]
+    [ -f "mcp/out/teamcity/release/hexana-cli-native-macos-arm64-$version.zip" ]
+    [ -f "mcp/out/teamcity/release/hexana-cli-script-native-macos-arm64-$version.zip" ]
   )
 
   log "Native artifact default self-test passed"
@@ -737,11 +788,41 @@ check_release_artifact_legal_files() {
       require_nonempty_file "Release artifact $zip_name" "$root/server/LICENSE.txt"
       require_nonempty_file "Release artifact $zip_name" "$root/server/THIRD-PARTY-NOTICES.md"
       ;;
+    hexana-cli-native-*.zip)
+      require_nonempty_file "Release artifact $zip_name" "$root/LICENSE.txt"
+      require_nonempty_file "Release artifact $zip_name" "$root/THIRD-PARTY-NOTICES.md"
+      if [ ! -f "$root/bin/hexana-cli" ] && [ ! -f "$root/bin/hexana-cli.exe" ]; then
+        die "Release artifact $zip_name is missing native executable under bin/"
+      fi
+      ;;
+    hexana-cli-script-native-*.zip)
+      require_nonempty_file "Release artifact $zip_name" "$root/LICENSE.txt"
+      require_nonempty_file "Release artifact $zip_name" "$root/THIRD-PARTY-NOTICES.md"
+      if [ ! -f "$root/bin/hexana-cli-script" ] && [ ! -f "$root/bin/hexana-cli-script.exe" ]; then
+        die "Release artifact $zip_name is missing native executable under bin/"
+      fi
+      ;;
     hexana-mcp-native-*.zip)
       require_nonempty_file "Release artifact $zip_name" "$root/LICENSE.txt"
       require_nonempty_file "Release artifact $zip_name" "$root/THIRD-PARTY-NOTICES.md"
       if [ ! -f "$root/bin/hexana-mcp" ] && [ ! -f "$root/bin/hexana-mcp.exe" ]; then
         die "Release artifact $zip_name is missing native executable under bin/"
+      fi
+      ;;
+    hexana-cli-script-*.zip)
+      require_nonempty_file "Release artifact $zip_name" "$root/hexana-cli-script/LICENSE.txt"
+      require_nonempty_file "Release artifact $zip_name" "$root/hexana-cli-script/THIRD-PARTY-NOTICES.md"
+      require_nonempty_file "Release artifact $zip_name" "$root/hexana-cli-script/lib/hexana-runtime-obfuscated.jar"
+      if [ ! -f "$root/hexana-cli-script/bin/hexana-cli-script" ] && [ ! -f "$root/hexana-cli-script/bin/hexana-cli-script.bat" ]; then
+        die "Release artifact $zip_name is missing JVM CLI executable under bin/"
+      fi
+      ;;
+    hexana-cli-*.zip)
+      require_nonempty_file "Release artifact $zip_name" "$root/hexana-cli/LICENSE.txt"
+      require_nonempty_file "Release artifact $zip_name" "$root/hexana-cli/THIRD-PARTY-NOTICES.md"
+      require_nonempty_file "Release artifact $zip_name" "$root/hexana-cli/lib/hexana-runtime-obfuscated.jar"
+      if [ ! -f "$root/hexana-cli/bin/hexana-cli" ] && [ ! -f "$root/hexana-cli/bin/hexana-cli.bat" ]; then
+        die "Release artifact $zip_name is missing JVM CLI executable under bin/"
       fi
       ;;
     *)
@@ -863,6 +944,16 @@ check_obfuscated_runtime_hardening() {
   local suspicious_class
   local obfuscated_class_count
   local forbidden_debug_string
+  local allowed_hexana_class_regex
+
+  case "$zip_name" in
+    hexana-cli-script-*.zip|hexana-cli-*.zip)
+      allowed_hexana_class_regex='^org/jetbrains/hexana/cli/(hexanacli|hexanacliscript)/MainKt\.class$|^org/jetbrains/hexana/cli/runtime/|^org/jetbrains/hexana/mcp/[^/]+\.class$|^org/jetbrains/hexana/mcp/model/|^org/jetbrains/hexana/mcp/server/(HexanaCliInputMode|HexanaCliToolGroup|HexanaCliOutputPolicy|HexanaCliExecutionStatus|HexanaCliToolSpec|HexanaGeneratedCliToolRegistry|HexanaCliReleaseProduct|HexanaCliProductToolSelection|HexanaGeneratedCliProducts)\.class$|^org/jetbrains/hexana/providers/a\.class$'
+      ;;
+    *)
+      allowed_hexana_class_regex='^org/jetbrains/hexana/mcp/model/|^org/jetbrains/hexana/mcp/server/(MainKt|HexanaLogLevel)\.class$|^org/jetbrains/hexana/providers/a\.class$'
+      ;;
+  esac
 
   while IFS= read -r jar_file; do
     jar_rel="$(artifact_relative_path "$root" "$jar_file")"
@@ -870,7 +961,7 @@ check_obfuscated_runtime_hardening() {
     suspicious_class="$(
       jar tf "$jar_file" |
         grep -E '^org/jetbrains/hexana/.*\.class$' |
-        grep -Ev '^org/jetbrains/hexana/mcp/model/|^org/jetbrains/hexana/mcp/server/(MainKt|HexanaLogLevel)\.class$|^org/jetbrains/hexana/providers/a\.class$' |
+        grep -Ev "$allowed_hexana_class_regex" |
         head -n 1 || true
     )"
     if [ -n "$suspicious_class" ]; then
@@ -922,7 +1013,7 @@ security_check_release_artifacts() {
 
     check_embedded_jar_entries "$zip_name" "$extract_dir"
     case "$zip_name" in
-      hexana-mcp-native-*.zip)
+      hexana-mcp-native-*.zip|hexana-cli-native-*.zip|hexana-cli-script-native-*.zip)
         ;;
       *)
         check_obfuscated_runtime_layout "$zip_name" "$extract_dir"
@@ -1665,6 +1756,10 @@ main() {
     ./gradlew --no-daemon \
       :mcp:assembleMcpPackaging \
       :mcp:server:obfuscatedMcpPackagingSmoke
+
+    log "Building and verifying split CLI release archives"
+    ./gradlew --no-daemon \
+      :mcp:verifyCliR8ReleaseArchives
   fi
 
   collect_release_artifacts

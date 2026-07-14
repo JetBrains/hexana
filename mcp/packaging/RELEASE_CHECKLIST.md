@@ -25,8 +25,11 @@ That task builds the current-host native executable, verifies `hexana-mcp
 version` prints exactly `hexana-mcp <mcpServerVersion>` from
 `mcp/server/gradle.properties`, runs the native stdio MCP smoke test, and writes
 native standalone, Claude plugin, and Codex plugin ZIPs under
-`mcp/build/distributions-native/`. A native executable that falls back to
-`hexana-mcp dev` must fail this gate.
+`mcp/build/distributions-native/`. It also verifies the current-host
+`hexana-cli-native-<platform>-<version>.zip` and
+`hexana-cli-script-native-<platform>-<version>.zip` archives and their
+`version` launchers. A native executable that falls back to `hexana-mcp dev`
+must fail this gate.
 
 Run the optional native HTTP smoke when qualifying HTTP support on a platform:
 
@@ -99,6 +102,9 @@ release:
 - Download the native matrix artifacts into `NATIVE_RELEASE_ARTIFACT_DIR`, or use
   the default `mcp/build/distributions-native` if the release job assembled them
   in the same checkout.
+- Include the split CLI native ZIPs for every supported platform:
+  `hexana-cli-native-<platform>-<version>.zip` and
+  `hexana-cli-script-native-<platform>-<version>.zip`.
 - Leave `INCLUDE_NATIVE_ARTIFACTS=true` at its default. Setting it to `false`
   is only for explicit JVM fallback diagnostics and must not be used for
   release publishing.

@@ -189,16 +189,21 @@ available. The script:
 2. smoke-tests the pre-R8 JVM fallback runtime plus Claude and Codex wrappers,
 3. builds R8-obfuscated JVM fallback standalone, Claude, and Codex MCP packages,
 4. smoke-tests the R8-obfuscated JVM fallback runtime plus Claude and Codex wrappers,
-5. runs the release artifact security check,
-6. validates the generated public marketplace bundle JSON files and native artifact policy,
-7. validates, commits, pushes, and creates or updates the public marketplace pull request,
-8. creates or updates the GitHub Release and uploads ZIP assets.
+5. builds and verifies the split CLI R8 release ZIPs with `:mcp:verifyCliR8ReleaseArchives`,
+6. collects the versioned JVM fallback ZIPs for `hexana-mcp`, `hexana-cli`, `hexana-cli-script`, Claude, and Codex,
+7. collects the required native ZIPs for `hexana-mcp`, `hexana-cli`, `hexana-cli-script`, Claude, and Codex,
+8. runs the release artifact security check,
+9. validates the generated public marketplace bundle JSON files and native artifact policy,
+10. validates, commits, pushes, and creates or updates the public marketplace pull request,
+11. creates or updates the GitHub Release with the collected ZIP assets.
 
 Downloads publication is handled by `publish-downloads-release-bundle.sh` after the same release chain has passed. It
 does not rebuild anything: TeamCity downloads the already verified native matrix ZIPs into `mcp/build/distributions-native`,
 then the script prepares `mcp/out/teamcity/downloads-release` with:
 
 - `hexana-mcp-native-<platform>-<version>.zip`
+- `hexana-cli-native-<platform>-<version>.zip`
+- `hexana-cli-script-native-<platform>-<version>.zip`
 - `hexana-claude-plugin-<platform>-<version>.zip`
 - `hexana-codex-plugin-<platform>-<version>.zip`
 - `<artifact>.sha256` for every ZIP, generated from the copied file
@@ -236,6 +241,8 @@ That task builds the current host's GraalVM Native Image executable, requires `h
 versioned artifacts to `mcp/build/distributions-native/`:
 
 - `hexana-mcp-native-<platform>-<version>.zip`: standalone native executable with license files.
+- `hexana-cli-native-<platform>-<version>.zip`: standard CLI native executable with license files.
+- `hexana-cli-script-native-<platform>-<version>.zip`: script CLI native executable with license files.
 - `hexana-claude-plugin-<platform>-<version>.zip`: Claude wrapper with the native executable and JVM fallback.
 - `hexana-codex-plugin-<platform>-<version>.zip`: Codex wrapper with the native executable and JVM fallback.
 

@@ -2168,6 +2168,7 @@ tasks.register("assembleNativeMcpReleaseArtifacts") {
     dependsOn(
         ":mcp:server:nativeMcpVersionSmoke",
         ":mcp:server:nativeMcpStdioSmoke",
+        "verifyNativeCliReleaseArchives",
         assembleNativeMcpPackaging,
     )
 }

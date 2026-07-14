@@ -74,6 +74,8 @@ artifact_kind_for_name() {
   local file_name="$1"
   case "$file_name" in
     hexana-mcp-native-*) printf 'native-executable' ;;
+    hexana-cli-native-*) printf 'standard-cli-native' ;;
+    hexana-cli-script-native-*) printf 'script-cli-native' ;;
     hexana-claude-plugin-*) printf 'claude-plugin' ;;
     hexana-codex-plugin-*) printf 'codex-plugin' ;;
     *) die "Unexpected MCP release artifact name: $file_name" ;;
@@ -175,7 +177,9 @@ generate_downloads_bundle() {
     for artifact in \
       "hexana-mcp-native-$platform-$MCP_VERSION.zip" \
       "hexana-claude-plugin-$platform-$MCP_VERSION.zip" \
-      "hexana-codex-plugin-$platform-$MCP_VERSION.zip"; do
+      "hexana-codex-plugin-$platform-$MCP_VERSION.zip" \
+      "hexana-cli-native-$platform-$MCP_VERSION.zip" \
+      "hexana-cli-script-native-$platform-$MCP_VERSION.zip"; do
       source_file="$(require_one_artifact "$artifact_dir" "$artifact")"
       bundled_file="$bundle_dir/$artifact"
       cp "$source_file" "$bundled_file"
@@ -367,6 +371,7 @@ self_test_downloads_bundle() {
   local manifest
   local artifact_count
   local sha_count
+  local scan_status
 
   temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/hexana-mcp-downloads-bundle.XXXXXX")"
   trap "rm -rf '$temp_dir'" RETURN
@@ -379,6 +384,8 @@ self_test_downloads_bundle() {
   printf 'native fixture\n' > "$artifact_dir/hexana-mcp-native-linux-x64-0.2.0.zip"
   printf 'claude fixture\n' > "$artifact_dir/hexana-claude-plugin-linux-x64-0.2.0.zip"
   printf 'codex fixture\n' > "$artifact_dir/hexana-codex-plugin-linux-x64-0.2.0.zip"
+  printf 'standard cli native fixture\n' > "$artifact_dir/hexana-cli-native-linux-x64-0.2.0.zip"
+  printf 'script cli native fixture\n' > "$artifact_dir/hexana-cli-script-native-linux-x64-0.2.0.zip"
 
   MCP_VERSION="0.2.0"
   MCP_RELEASE_PLATFORMS="linux-x64"
@@ -457,14 +464,16 @@ self_test_downloads_bundle() {
   manifest="$bundle_dir/hexana-mcp-release-0.2.0.json"
   releases_index="$index_dir/releases.json"
   artifact_count="$(jq '.artifacts | length' "$manifest")"
-  [ "$artifact_count" -eq 3 ] || die "Self-test expected 3 manifest artifacts, got $artifact_count"
+  [ "$artifact_count" -eq 5 ] || die "Self-test expected 5 manifest artifacts, got $artifact_count"
   jq -e '.version == "0.2.0"' "$manifest" >/dev/null
   jq -e '.teamcity.buildId == "12345"' "$manifest" >/dev/null
   jq -e '.downloadsPrefix == "https://download.jetbrains.com/resources/hexana/mcp/0.2.0"' "$manifest" >/dev/null
   jq -e 'all(.artifacts[].downloadsUrl; contains("/mcp//") | not)' "$manifest" >/dev/null
   jq -e '.artifacts[] | select(.name == "hexana-mcp-native-linux-x64-0.2.0.zip" and .platform == "linux-x64" and .kind == "native-executable" and (.sha256 | test("^[0-9a-f]{64}$")))' "$manifest" >/dev/null
+  jq -e '.artifacts[] | select(.name == "hexana-cli-native-linux-x64-0.2.0.zip" and .platform == "linux-x64" and .kind == "standard-cli-native" and (.sha256 | test("^[0-9a-f]{64}$")))' "$manifest" >/dev/null
+  jq -e '.artifacts[] | select(.name == "hexana-cli-script-native-linux-x64-0.2.0.zip" and .platform == "linux-x64" and .kind == "script-cli-native" and (.sha256 | test("^[0-9a-f]{64}$")))' "$manifest" >/dev/null
   sha_count="$(find "$bundle_dir" -maxdepth 1 -type f -name '*.sha256' | wc -l | tr -d '[:space:]')"
-  [ "$sha_count" -eq 3 ] || die "Self-test expected 3 checksum files, got $sha_count"
+  [ "$sha_count" -eq 5 ] || die "Self-test expected 5 checksum files, got $sha_count"
   verify_checksum_files "$bundle_dir"
   jq -e '.schemaVersion == 1 and .latest == "0.2.0" and .downloadsRoot == "https://download.jetbrains.com/resources/hexana/mcp/"' "$releases_index" >/dev/null
   jq -e '.releases | length == 6' "$releases_index" >/dev/null
@@ -473,8 +482,21 @@ self_test_downloads_bundle() {
   jq -e '.releases[2] | .version == "0.2.0-rc.2"' "$releases_index" >/dev/null
   jq -e '.releases[3] | .version == "0.2.0-beta.11"' "$releases_index" >/dev/null
   jq -e '.releases[4] | .version == "0.2.0-beta.2"' "$releases_index" >/dev/null
-  jq -e '.releases[0].platforms == ["linux-x64"] and (.releases[0].artifactKinds | index("native-executable"))' "$releases_index" >/dev/null
+  jq -e '.releases[0].platforms == ["linux-x64"] and (.releases[0].artifactKinds | index("native-executable")) and (.releases[0].artifactKinds | index("standard-cli-native")) and (.releases[0].artifactKinds | index("script-cli-native"))' "$releases_index" >/dev/null
   jq -e 'all(.releases[].manifestUrl; contains("/mcp//") | not) and all(.releases[].downloadsPrefix; contains("/mcp//") | not)' "$releases_index" >/dev/null
+
+  rm "$artifact_dir/hexana-cli-script-native-linux-x64-0.2.0.zip"
+  set +e
+  (
+    set -e
+    generate_downloads_bundle "$artifact_dir" "$temp_dir/missing-cli-script-native-bundle"
+  ) >"$temp_dir/missing-cli-script-native.out" 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Self-test did not require the script CLI native artifact"
+  grep -F -q "Missing release artifact: $artifact_dir/hexana-cli-script-native-linux-x64-0.2.0.zip" "$temp_dir/missing-cli-script-native.out" ||
+    die "Self-test did not record the missing script CLI native artifact failure"
+  log "Downloads bundle self-test recorded missing hexana-cli-script-native-linux-x64-0.2.0.zip failure"
 
   log "Downloads bundle self-test passed"
 }
