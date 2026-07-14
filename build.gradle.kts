@@ -58,52 +58,73 @@ plugins.withType<WasmNodeJsRootPlugin> {
 
 // Aggregator task driven by ci-configuration's `Tests` build configuration.
 // The list travels with the code branch so release branches stay self-contained.
+val teamcityCiTestTaskPaths = listOf(
+    ":analytics:allTests",
+    ":binaryProvider:allTests",
+    ":debugInfo:dwarf:allTests",
+    ":disassembly:capstone-wasm:allTests",
+    ":disassembly:core:allTests",
+    ":disassembly:llvm-objdump:test",
+    ":encdec:allTests",
+    ":hexanaDocument:allTests",
+    ":jvm-jit:allTests",
+    ":cli:runtime:build",
+    ":cli:core:test",
+    ":cli:scripting:test",
+    ":cli:hexana-cli:integrationTest",
+    ":cli:hexana-cli-script:integrationTest",
+    ":mcp:tools-generator:test",
+    ":parsing:arrow:allTests",
+    ":parsing:codec:allTests",
+    ":parsing:common:allTests",
+    ":parsing:dex:allTests",
+    ":parsing:elf:allTests",
+    ":parsing:flatbuffers:allTests",
+    ":parsing:javaBytecode:allTests",
+    ":parsing:macho:allTests",
+    ":parsing:parquet:allTests",
+    ":parsing:pe:allTests",
+    ":parsing:protobuf:allTests",
+    ":parsing:thrift:allTests",
+    ":parsing:zip:allTests",
+    ":plugins-shared:allTests",
+    ":vscode-plugin:extension-lib:allTests",
+    ":wasmParser:allTests",
+    ":idea-plugin:test",
+    ":mcp:core:build",
+    ":mcp:scripting:test",
+    ":mcp:server:test",
+    ":mcp:server:verifyMcpRuntimeClassFileVersions",
+    ":mcp:server:verifyNativeMcpVersionSmokeAssertion",
+    ":mcp:server:verifyHexanaToolDispatcherUpToDate",
+    ":idea-plugin:verifyHexanaToolsetUpToDate",
+    ":mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate",
+    ":mcp:verifyCliR8ReleaseArchives",
+    ":mcp:server:integrationTest",
+    ":mcp:vscode-server:test",
+)
+
+tasks.register("verifyTeamcityCiTestsCliReleaseGateCoverage") {
+    group = "verification"
+    description = "Verify TeamCity CI aggregate includes the CLI release gates required by MCP-116."
+    doLast {
+        val requiredTaskPaths = listOf(
+            ":cli:scripting:test",
+            ":mcp:scripting:test",
+            ":mcp:verifyCliR8ReleaseArchives",
+        )
+        val missingTaskPaths = requiredTaskPaths.filterNot(teamcityCiTestTaskPaths::contains)
+        check(missingTaskPaths.isEmpty()) {
+            "teamcityCiTests is missing required CLI release gate tasks: ${missingTaskPaths.joinToString()}"
+        }
+    }
+}
+
 tasks.register("teamcityCiTests") {
     group = "verification"
     description = "Aggregate every subproject's test surface for the TeamCity Tests build."
-    val taskPaths = listOf(
-        ":analytics:allTests",
-        ":binaryProvider:allTests",
-        ":debugInfo:dwarf:allTests",
-        ":disassembly:capstone-wasm:allTests",
-        ":disassembly:core:allTests",
-        ":disassembly:llvm-objdump:test",
-        ":encdec:allTests",
-        ":hexanaDocument:allTests",
-        ":jvm-jit:allTests",
-        ":cli:runtime:build",
-        ":cli:core:test",
-        ":cli:hexana-cli:integrationTest",
-        ":cli:hexana-cli-script:integrationTest",
-        ":mcp:tools-generator:test",
-        ":parsing:arrow:allTests",
-        ":parsing:codec:allTests",
-        ":parsing:common:allTests",
-        ":parsing:dex:allTests",
-        ":parsing:elf:allTests",
-        ":parsing:flatbuffers:allTests",
-        ":parsing:javaBytecode:allTests",
-        ":parsing:macho:allTests",
-        ":parsing:parquet:allTests",
-        ":parsing:pe:allTests",
-        ":parsing:protobuf:allTests",
-        ":parsing:thrift:allTests",
-        ":parsing:zip:allTests",
-        ":plugins-shared:allTests",
-        ":vscode-plugin:extension-lib:allTests",
-        ":wasmParser:allTests",
-        ":idea-plugin:test",
-        ":mcp:core:build",
-        ":mcp:server:test",
-        ":mcp:server:verifyMcpRuntimeClassFileVersions",
-        ":mcp:server:verifyNativeMcpVersionSmokeAssertion",
-        ":mcp:server:verifyHexanaToolDispatcherUpToDate",
-        ":idea-plugin:verifyHexanaToolsetUpToDate",
-        ":mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate",
-        ":mcp:server:integrationTest",
-        ":mcp:vscode-server:test",
-    )
-    taskPaths.forEach { dependsOn(it) }
+    dependsOn("verifyTeamcityCiTestsCliReleaseGateCoverage")
+    teamcityCiTestTaskPaths.forEach { dependsOn(it) }
 }
 
 subprojects {
