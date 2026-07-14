@@ -24,6 +24,26 @@ configurations.named(integrationTestSourceSet.runtimeOnlyConfigurationName) {
     extendsFrom(configurations.named("testRuntimeOnly").get())
 }
 
+val generatedVersionSourceDir = layout.buildDirectory.dir("generated/sources/hexanaCliVersion/main/kotlin")
+val generateHexanaCliVersion by tasks.registering {
+    val versionValue = version.toString()
+    inputs.property("hexanaCliVersion", versionValue)
+    outputs.dir(generatedVersionSourceDir)
+
+    doLast {
+        val escapedVersion = versionValue.replace("\\", "\\\\").replace("\"", "\\\"")
+        val outputDir = generatedVersionSourceDir.get().asFile.resolve("org/jetbrains/hexana/cli/hexanacli")
+        outputDir.mkdirs()
+        outputDir.resolve("HexanaCliVersion.kt").writeText(
+            """
+            package org.jetbrains.hexana.cli.hexanacli
+
+            internal const val HEXANA_CLI_VERSION: String = "$escapedVersion"
+            """.trimIndent() + "\n"
+        )
+    }
+}
+
 dependencies {
     implementation(project(":cli:product"))
 
@@ -75,5 +95,8 @@ tasks.register<Test>("integrationTest") {
 }
 
 kotlin {
+    sourceSets.named("main") {
+        kotlin.srcDir(generateHexanaCliVersion)
+    }
     jvmToolchain(21)
 }

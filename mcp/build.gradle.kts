@@ -1,5 +1,7 @@
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.result.ResolvedArtifactResult
+import org.gradle.jvm.toolchain.JavaLanguageVersion
+import org.gradle.jvm.toolchain.JavaToolchainService
 import org.gradle.maven.MavenModule
 import org.gradle.maven.MavenPomArtifact
 import groovy.json.JsonSlurper
@@ -120,6 +122,10 @@ val cliR8MappingRootDir = layout.buildDirectory.dir("r8/cli/mapping")
 val cliReleaseDistributionDir = layout.buildDirectory.dir("distributions")
 val cliArchiveVerificationRootDir = layout.buildDirectory.dir("verification/cli-r8-archives")
 val nativeCliArchiveVerificationRootDir = layout.buildDirectory.dir("verification/native-cli-archives")
+val javaToolchains = extensions.getByType<JavaToolchainService>()
+val jvmCliReferenceJavaHome = javaToolchains.launcherFor {
+    languageVersion.set(JavaLanguageVersion.of(21))
+}.map { it.metadata.installationPath.asFile.absolutePath }
 
 val r8Tool by configurations.creating {
     isCanBeConsumed = false
@@ -1253,6 +1259,16 @@ fun assertNativeCliExtractedLayout(product: NativeCliProduct, extractionDir: Fil
 fun runCliWithTelemetryOptOut(commandLine: List<String>, workingDir: File): ProcessResult =
     runProcess(commandLine, workingDir, environment = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"))
 
+fun runJvmCliReferenceWithTelemetryOptOut(commandLine: List<String>, workingDir: File): ProcessResult =
+    runProcess(
+        commandLine,
+        workingDir,
+        environment = mapOf(
+            "HEXANA_CLI_TELEMETRY_ENABLED" to "false",
+            "JAVA_HOME" to jvmCliReferenceJavaHome.get(),
+        ),
+    )
+
 fun assertNativeAndJvmCliAgreement(
     product: NativeCliProduct,
     nativeExecutable: File,
@@ -1261,7 +1277,7 @@ fun assertNativeAndJvmCliAgreement(
     workingDir: File,
 ) {
     val nativeResult = runCliWithTelemetryOptOut(listOf(nativeExecutable.absolutePath) + args, workingDir)
-    val jvmResult = runCliWithTelemetryOptOut(listOf(jvmExecutable.absolutePath) + args, workingDir)
+    val jvmResult = runJvmCliReferenceWithTelemetryOptOut(listOf(jvmExecutable.absolutePath) + args, workingDir)
     check(nativeResult.exitCode == jvmResult.exitCode && nativeResult.output == jvmResult.output) {
         """
         ${product.executableName} native/JVM disagreement for `${args.joinToString(" ")}`.
@@ -1272,6 +1288,14 @@ fun assertNativeAndJvmCliAgreement(
         """.trimIndent()
     }
 }
+
+fun parseCliToolCommandRows(output: String): Set<String> =
+    output
+        .lineSequence()
+        .drop(1)
+        .map { it.trimEnd() }
+        .filter { it.isNotBlank() && !it.startsWith(" ") && !it.startsWith("\t") }
+        .toSet()
 
 fun assertNativeCliProductSmoke(product: NativeCliProduct, nativeExecutable: File, jvmInstallDir: File, workingDir: File) {
     val jvmExecutable = jvmInstallDir.resolve("bin/${product.executableName}")
@@ -1290,11 +1314,7 @@ fun assertNativeCliProductSmoke(product: NativeCliProduct, nativeExecutable: Fil
     check(tools.exitCode == 0) {
         "Expected `${product.executableName} tools` to succeed, got exit ${tools.exitCode}:\n${tools.output}"
     }
-    val inventory = tools.output
-        .lineSequence()
-        .drop(1)
-        .filter { it.isNotBlank() }
-        .toSet()
+    val inventory = parseCliToolCommandRows(tools.output)
     check(inventory == product.expectedCommands) {
         "${product.executableName} tools output must expose exactly ${product.expectedCommands}. Found: $inventory"
     }
