@@ -72,6 +72,7 @@ internal fun binaryFormatOf(
 internal data class GenericDetail(
     val ext: HexanaEvent.GenericExt,
     val detected: HexanaEvent.DetectedFormat?,
+    val header: String?,
 )
 
 internal fun genericDetailOf(
@@ -80,6 +81,7 @@ internal fun genericDetailOf(
 ): GenericDetail = GenericDetail(
     ext = HexanaEvent.GenericExt.fromExtension(file?.extension),
     detected = provider?.let { detectMagic(it.bytes) },
+    header = provider?.let { readGenericHeader(it.bytes) },
 )
 
 /**
@@ -105,6 +107,24 @@ private fun detectMagic(buffer: CommonByteBuffer): HexanaEvent.DetectedFormat? =
         // Classification table is shared with the VS Code surface; see
         // HexanaEvent.DetectedFormat.fromMagic.
         HexanaEvent.DetectedFormat.fromMagic(head)
+    }
+} catch (_: Throwable) {
+    null
+}
+
+/**
+ * Reads the first 8 bytes from [buffer] and classifies them via
+ * [HexanaEvent.GenericHeader.of]. Returns null on any failure — analytics
+ * must never break the editor open path.
+ */
+private fun readGenericHeader(buffer: CommonByteBuffer): String? = try {
+    if (buffer.size < 8) {
+        null
+    } else {
+        val head = ByteArray(8)
+        buffer.position(0)
+        buffer.get(head, 0, 8)
+        HexanaEvent.GenericHeader.of(head)
     }
 } catch (_: Throwable) {
     null

@@ -276,6 +276,99 @@ class HexanaEventTest {
         // Should not throw
     }
 
+    // -- GenericHeader classifier --
+
+    @Test
+    fun genericHeaderTooFewBytesReturnsNull() {
+        assertNull(HexanaEvent.GenericHeader.of(ByteArray(7)))
+        assertNull(HexanaEvent.GenericHeader.of(ByteArray(0)))
+    }
+
+    @Test
+    fun genericHeaderElfMagicIsHex() {
+        val elfHeader = byteArrayOf(0x7F, 0x45, 0x4C, 0x46, 0x02, 0x01, 0x01, 0x00)
+        val result = HexanaEvent.GenericHeader.of(elfHeader)!!
+        assertFalse(result == HexanaEvent.GenericHeader.TEXT_SENTINEL)
+        assertEquals(16, result.length)
+        assertEquals("7f454c4602010100", result)
+    }
+
+    @Test
+    fun genericHeaderAsciiLettersIsText() {
+        val ascii = "ABCDEFgh".encodeToByteArray()
+        assertEquals(HexanaEvent.GenericHeader.TEXT_SENTINEL, HexanaEvent.GenericHeader.of(ascii))
+    }
+
+    @Test
+    fun genericHeaderCyrillicUtf8IsText() {
+        // "Привет!" is Cyrillic UTF-8; take first 8 bytes of the encoding.
+        val cyrillic = "Привет!!".encodeToByteArray().copyOf(8)
+        // May truncate a multibyte sequence; should still be "text".
+        assertEquals(HexanaEvent.GenericHeader.TEXT_SENTINEL, HexanaEvent.GenericHeader.of(cyrillic))
+    }
+
+    @Test
+    fun genericHeaderNullByteIsHex() {
+        val withNull = byteArrayOf(0x00, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67)
+        val result = HexanaEvent.GenericHeader.of(withNull)!!
+        assertFalse(result == HexanaEvent.GenericHeader.TEXT_SENTINEL)
+        assertEquals(16, result.length)
+    }
+
+    @Test
+    fun genericHeaderControlByteIsHex() {
+        // 0x01 is a control byte (not \t \n \r).
+        val withCtrl = byteArrayOf(0x01, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67)
+        val result = HexanaEvent.GenericHeader.of(withCtrl)!!
+        assertFalse(result == HexanaEvent.GenericHeader.TEXT_SENTINEL)
+        assertEquals(16, result.length)
+    }
+
+    @Test
+    fun genericHeaderTabNewlineIsText() {
+        // \t \n \r are allowed whitespace.
+        val ws = byteArrayOf(0x09, 0x0A, 0x0D, 0x20, 0x41, 0x42, 0x43, 0x44)
+        assertEquals(HexanaEvent.GenericHeader.TEXT_SENTINEL, HexanaEvent.GenericHeader.of(ws))
+    }
+
+    @Test
+    fun genericHeaderTruncatedUtf8IsText() {
+        // "ABCDE" (5 bytes) + first 3 bytes of a 3-byte Cyrillic char (truncated at 8-byte boundary).
+        // "А" in UTF-8 is 0xD0 0x90 (2 bytes). "Д" is 0xD0 0x94. Use a 3-byte char: "€" = 0xE2 0x82 0xAC.
+        // Construct: "ABCDE" + 0xE2 0x82 0xAC (fully 3 bytes, total 8, not truncated at boundary).
+        // For a truncated case: "ABCDE\x00" is 6 bytes + 0xE2 0x82 (2-byte partial of a 3-byte sequence).
+        val truncated = byteArrayOf(
+            0x41, 0x42, 0x43, 0x44, 0x45, // "ABCDE"
+            0xE2.toByte(), 0x82.toByte(), 0xAC.toByte() // "€" complete, still text
+        )
+        assertEquals(HexanaEvent.GenericHeader.TEXT_SENTINEL, HexanaEvent.GenericHeader.of(truncated))
+        // Partial: only 2 of 3 bytes of "€" included (truncated at boundary).
+        val partial = byteArrayOf(
+            0x41, 0x42, 0x43, 0x44, 0x45, 0x46, // "ABCDEF"
+            0xE2.toByte(), 0x82.toByte()          // first 2 bytes of 3-byte "€"
+        )
+        assertEquals(HexanaEvent.GenericHeader.TEXT_SENTINEL, HexanaEvent.GenericHeader.of(partial))
+    }
+
+    @Test
+    fun genericHeaderPropertyPresentOnlyWhenNonNull() {
+        val withHeader = HexanaEvent.BinaryOpened(
+            format = HexanaEvent.BinaryFormat.GENERIC,
+            fileSizeBytes = 100L,
+            surface = HexanaEvent.Surface.IDE_PLUGIN,
+            genericHeader = "7f454c4602010100",
+        )
+        assertEquals("7f454c4602010100", withHeader.properties["generic_header"])
+
+        val withoutHeader = HexanaEvent.BinaryOpened(
+            format = HexanaEvent.BinaryFormat.GENERIC,
+            fileSizeBytes = 100L,
+            surface = HexanaEvent.Surface.IDE_PLUGIN,
+            genericHeader = null,
+        )
+        assertFalse("generic_header" in withoutHeader.properties)
+    }
+
     @Test
     fun allEventNamesAreSnakeCase() {
         val events = listOf(

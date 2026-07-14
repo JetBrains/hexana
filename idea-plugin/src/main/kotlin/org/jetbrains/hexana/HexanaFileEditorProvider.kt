@@ -139,6 +139,7 @@ private fun buildBinaryOpenedEvent(
         },
         genericExt = genericDetail?.ext,
         detectedFormat = genericDetail?.detected,
+        genericHeader = genericDetail?.header,
     )
 }
 

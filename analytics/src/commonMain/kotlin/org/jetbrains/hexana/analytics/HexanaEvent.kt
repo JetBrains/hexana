@@ -22,14 +22,16 @@ sealed class HexanaEvent {
      * never sent.
      *
      * When [format] is [BinaryFormat.GENERIC] — the catch-all for files
-     * Hexana opened but could not structurally identify — two extra
+     * Hexana opened but could not structurally identify -- three extra
      * sub-classification fields break the bucket down so we can see *what*
      * those files actually are: [genericExt] (the file extension, mapped
-     * through a bounded allowlist — never the raw string) and
-     * [detectedFormat] (a content magic-byte sniff into a bounded enum).
-     * Both are bounded-cardinality enum values; no raw extension string and
-     * no file bytes are ever transmitted. They are populated only when
-     * [format] is GENERIC and stay null otherwise.
+     * through a bounded allowlist (never the raw string), [detectedFormat]
+     * (a content magic-byte sniff into a bounded enum), and [genericHeader]
+     * (the first 8 bytes of the file, transmitted only when they are not
+     * text-like; text-like headers are reported as the constant "text" and
+     * no bytes leave the machine; non-text headers are hex-encoded to exactly
+     * 16 lowercase hex chars). All three are populated only when [format] is
+     * GENERIC and stay null otherwise.
      */
     data class BinaryOpened(
         val format: BinaryFormat,
@@ -41,6 +43,7 @@ sealed class HexanaEvent {
         val symbolCountBucket: SymbolCountBucket? = null,
         val genericExt: GenericExt? = null,
         val detectedFormat: DetectedFormat? = null,
+        val genericHeader: String? = null,
     ) : HexanaEvent() {
         override val name = "binary_opened"
         override val properties = buildMap {
@@ -53,6 +56,7 @@ sealed class HexanaEvent {
             symbolCountBucket?.let { put("symbol_count_bucket", it.value) }
             genericExt?.let { put("generic_ext", it.value) }
             detectedFormat?.let { put("detected_format", it.value) }
+            genericHeader?.let { put("generic_header", it) }
         }
     }
 
@@ -411,6 +415,101 @@ sealed class HexanaEvent {
                 }
                 return true
             }
+        }
+    }
+
+    /**
+     * Classifier for the first 8 bytes of a [BinaryFormat.GENERIC] file.
+     *
+     * Returns "text" when the bytes decode as valid UTF-8 and every decoded
+     * character is printable or whitespace (letters, digits, punctuation,
+     * symbols, space, tab, newline, carriage return; Unicode letters and
+     * digits count as printable). Returns a 16-char lowercase hex string when
+     * the bytes are not text-like. Returns null when fewer than 8 bytes are
+     * available.
+     *
+     * A trailing incomplete UTF-8 multibyte sequence counts as valid: only the
+     * code points that are fully encoded must all be printable; the truncated
+     * tail bytes are treated as continuing a valid sequence. Control bytes
+     * other than \t, \n, \r, invalid UTF-8 sequences, or a null byte (0x00)
+     * trigger the hex path.
+     */
+    object GenericHeader {
+        /** Sentinel returned when the header bytes decode as text-like. No bytes leave the machine. */
+        const val TEXT_SENTINEL = "text"
+
+        /**
+         * Classifies [header] (must be exactly 8 bytes). Returns null when [header] has fewer
+         * than 8 elements. Returns [TEXT_SENTINEL] when text-like; otherwise a 16-char lowercase
+         * hex string.
+         */
+        fun of(header: ByteArray): String? {
+            if (header.size < 8) return null
+            val bytes = header.copyOf(8)
+            return if (isTextLike(bytes)) TEXT_SENTINEL else bytes.toHexString()
+        }
+
+        private fun isTextLike(bytes: ByteArray): Boolean {
+            var i = 0
+            while (i < bytes.size) {
+                val b = bytes[i].toInt() and 0xFF
+                val (codePoint, seqLen) = when {
+                    b and 0x80 == 0 -> {
+                        // Single-byte ASCII. Control bytes other than \t \n \r are not text-like.
+                        if (b < 0x20 && b != 0x09 && b != 0x0A && b != 0x0D) return false
+                        if (b == 0x00) return false
+                        Pair(b, 1)
+                    }
+                    b and 0xE0 == 0xC0 -> {
+                        // 2-byte sequence. If it extends past the array end, treat as truncated valid.
+                        if (i + 1 >= bytes.size) return true
+                        val b2 = bytes[i + 1].toInt() and 0xFF
+                        if (b2 and 0xC0 != 0x80) return false
+                        Pair(((b and 0x1F) shl 6) or (b2 and 0x3F), 2)
+                    }
+                    b and 0xF0 == 0xE0 -> {
+                        // 3-byte sequence.
+                        if (i + 2 >= bytes.size) return true
+                        val b2 = bytes[i + 1].toInt() and 0xFF
+                        val b3 = bytes[i + 2].toInt() and 0xFF
+                        if (b2 and 0xC0 != 0x80 || b3 and 0xC0 != 0x80) return false
+                        Pair(((b and 0x0F) shl 12) or ((b2 and 0x3F) shl 6) or (b3 and 0x3F), 3)
+                    }
+                    b and 0xF8 == 0xF0 -> {
+                        // 4-byte sequence.
+                        if (i + 3 >= bytes.size) return true
+                        val b2 = bytes[i + 1].toInt() and 0xFF
+                        val b3 = bytes[i + 2].toInt() and 0xFF
+                        val b4 = bytes[i + 3].toInt() and 0xFF
+                        if (b2 and 0xC0 != 0x80 || b3 and 0xC0 != 0x80 || b4 and 0xC0 != 0x80) return false
+                        Pair(
+                            ((b and 0x07) shl 18) or ((b2 and 0x3F) shl 12) or ((b3 and 0x3F) shl 6) or (b4 and 0x3F),
+                            4,
+                        )
+                    }
+                    else -> return false // Invalid UTF-8 lead byte.
+                }
+                if (!isPrintableOrWhitespace(codePoint)) return false
+                i += seqLen
+            }
+            return true
+        }
+
+        private fun isPrintableOrWhitespace(cp: Int): Boolean {
+            if (cp == 0x09 || cp == 0x0A || cp == 0x0D) return true  // \t \n \r
+            if (cp < 0x20) return false                               // C0 controls
+            if (cp == 0x7F) return false                              // DEL
+            if (cp in 0x80..0x9F) return false                       // C1 controls
+            val ch = cp.toChar()
+            return ch.isLetterOrDigit() || ch.isWhitespace() || isPunct(cp)
+        }
+
+        /** Allows punctuation, symbols, and general printable non-control characters. */
+        private fun isPunct(cp: Int): Boolean {
+            if (cp < 0x20) return false
+            val ch = cp.toChar()
+            // Reject confirmed control ranges already handled; accept everything else printable.
+            return !ch.isISOControl()
         }
     }
 

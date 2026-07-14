@@ -66,6 +66,7 @@ fun initAnalytics(storagePath: String, telemetryEnabled: Boolean, appName: Strin
 fun captureBinaryOpened(fileName: String, bytes: ByteArray) {
     val format = resolveBinaryFormat(fileName, bytes)
     val isGeneric = format == HexanaEvent.BinaryFormat.GENERIC
+    val genericHeader = if (isGeneric && bytes.size >= 8) HexanaEvent.GenericHeader.of(bytes) else null
     HexanaAnalytics.client.capture(
         HexanaEvent.BinaryOpened(
             format = format,
@@ -73,6 +74,7 @@ fun captureBinaryOpened(fileName: String, bytes: ByteArray) {
             surface = HexanaEvent.Surface.VSCODE_EXTENSION,
             genericExt = if (isGeneric) HexanaEvent.GenericExt.fromExtension(extensionOf(fileName)) else null,
             detectedFormat = if (isGeneric) HexanaEvent.DetectedFormat.fromMagic(bytes) else null,
+            genericHeader = genericHeader,
         )
     )
 }
