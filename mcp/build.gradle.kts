@@ -119,6 +119,7 @@ val cliR8JarRootDir = layout.buildDirectory.dir("r8/cli/jars")
 val cliR8MappingRootDir = layout.buildDirectory.dir("r8/cli/mapping")
 val cliReleaseDistributionDir = layout.buildDirectory.dir("distributions")
 val cliArchiveVerificationRootDir = layout.buildDirectory.dir("verification/cli-r8-archives")
+val nativeCliArchiveVerificationRootDir = layout.buildDirectory.dir("verification/native-cli-archives")
 
 val r8Tool by configurations.creating {
     isCanBeConsumed = false
@@ -1150,6 +1151,294 @@ fun registerCliR8ProductTasks(product: CliR8Product): CliR8Tasks {
 
 val cliR8Tasks = cliR8Products.map(::registerCliR8ProductTasks)
 
+data class NativeCliProduct(
+    val id: String,
+    val executableName: String,
+    val projectPath: String,
+    val nativeExecutable: Provider<RegularFile>,
+    val jvmInstallDir: Provider<Directory>,
+    val expectedCommands: Set<String>,
+    val rejectedCommands: Set<String>,
+)
+
+data class NativeCliTasks(
+    val zipRuntime: TaskProvider<Zip>,
+    val verifyRuntime: TaskProvider<Task>,
+)
+
+fun nativeCliArchiveName(product: NativeCliProduct, platform: String): String =
+    "${product.executableName}-native-$platform-$mcpServerVersion.zip"
+
+fun nativeCliArchiveFile(product: NativeCliProduct): Provider<RegularFile> =
+    nativeDistributionDir.map { it.file(nativeCliArchiveName(product, nativeHostPlatformName)) }
+
+fun nativeCliExtractedArchiveDir(product: NativeCliProduct): Provider<Directory> =
+    nativeCliArchiveVerificationRootDir.map { it.dir(product.id) }
+
+fun requireSupportedNativeCliHost() {
+    check(nativeHostPlatformName in nativeReleasePlatforms) {
+        "Native CLI release archives are supported only for ${nativeReleasePlatforms.joinToString()} hosts; " +
+            "current host is $nativeHostPlatformName."
+    }
+}
+
+fun assertNativeCliArchive(product: NativeCliProduct, archiveFile: File) {
+    check(archiveFile.name == nativeCliArchiveName(product, nativeHostPlatformName)) {
+        "Unexpected ${product.executableName} native archive name: ${archiveFile.name}"
+    }
+    ZipFile(archiveFile).use { zip ->
+        val fileEntries = zip.entries().asSequence()
+            .filterNot { it.isDirectory }
+            .map { it.name }
+            .sorted()
+            .toList()
+        val expectedEntries = listOf(
+            "LICENSE.txt",
+            thirdPartyNoticesFileName,
+            "bin/${product.executableName}",
+        ).sorted()
+        check(fileEntries == expectedEntries) {
+            "${archiveFile.name} must contain only ${expectedEntries.joinToString()}. Found: $fileEntries"
+        }
+        val executableEntry = zip.getEntry("bin/${product.executableName}")
+        check(executableEntry != null && executableEntry.size > 0L) {
+            "${archiveFile.name} contains an empty native executable entry for ${product.executableName}."
+        }
+    }
+}
+
+fun assertNativeCliExtractedLayout(product: NativeCliProduct, extractionDir: File): File {
+    val executable = extractionDir.resolve("bin/${product.executableName}")
+    val binEntries = extractionDir.resolve("bin")
+        .listFiles()
+        .orEmpty()
+        .map { it.name }
+        .sorted()
+    check(binEntries == listOf(product.executableName)) {
+        "${product.executableName} native archive must contain only bin/${product.executableName}. Found: $binEntries"
+    }
+    check(executable.isFile && executable.length() > 0L) {
+        "${product.executableName} native archive executable is missing or empty: ${executable.absolutePath}"
+    }
+    check(executable.canExecute()) {
+        "${product.executableName} native archive executable bit is not preserved: ${executable.absolutePath}"
+    }
+    assertSameFileBytes(extractionDir.resolve("LICENSE.txt"), pluginLicenseFile.asFile, "${product.executableName} native LICENSE.txt")
+    assertSameFileBytes(
+        extractionDir.resolve(thirdPartyNoticesFileName),
+        thirdPartyNoticesDir.get().file(thirdPartyNoticesFileName).asFile,
+        "${product.executableName} native $thirdPartyNoticesFileName",
+    )
+    val topLevelFiles = extractionDir
+        .listFiles { file -> file.isFile }
+        .orEmpty()
+        .map { it.name }
+        .sorted()
+    check(topLevelFiles == listOf("LICENSE.txt", thirdPartyNoticesFileName).sorted()) {
+        "${product.executableName} native archive has unexpected top-level files: $topLevelFiles"
+    }
+    val topLevelDirs = extractionDir
+        .listFiles { file -> file.isDirectory }
+        .orEmpty()
+        .map { it.name }
+        .sorted()
+    check(topLevelDirs == listOf("bin")) {
+        "${product.executableName} native archive has unexpected top-level directories: $topLevelDirs"
+    }
+    return executable
+}
+
+fun runCliWithTelemetryOptOut(commandLine: List<String>, workingDir: File): ProcessResult =
+    runProcess(commandLine, workingDir, environment = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"))
+
+fun assertNativeAndJvmCliAgreement(
+    product: NativeCliProduct,
+    nativeExecutable: File,
+    jvmExecutable: File,
+    args: List<String>,
+    workingDir: File,
+) {
+    val nativeResult = runCliWithTelemetryOptOut(listOf(nativeExecutable.absolutePath) + args, workingDir)
+    val jvmResult = runCliWithTelemetryOptOut(listOf(jvmExecutable.absolutePath) + args, workingDir)
+    check(nativeResult.exitCode == jvmResult.exitCode && nativeResult.output == jvmResult.output) {
+        """
+        ${product.executableName} native/JVM disagreement for `${args.joinToString(" ")}`.
+        Native exit ${nativeResult.exitCode}:
+        ${nativeResult.output}
+        JVM exit ${jvmResult.exitCode}:
+        ${jvmResult.output}
+        """.trimIndent()
+    }
+}
+
+fun assertNativeCliProductSmoke(product: NativeCliProduct, nativeExecutable: File, jvmInstallDir: File, workingDir: File) {
+    val jvmExecutable = jvmInstallDir.resolve("bin/${product.executableName}")
+    check(jvmExecutable.canExecute()) {
+        "Expected JVM ${product.executableName} executable at ${jvmExecutable.absolutePath}."
+    }
+
+    assertNativeAndJvmCliAgreement(product, nativeExecutable, jvmExecutable, listOf("version"), workingDir)
+    val version = runCliWithTelemetryOptOut(listOf(nativeExecutable.absolutePath, "version"), workingDir)
+    check(version.exitCode == 0 && version.output.trim() == "${product.executableName} $mcpServerVersion") {
+        "Expected `${product.executableName} version` to report $mcpServerVersion, got exit ${version.exitCode}:\n${version.output}"
+    }
+
+    assertNativeAndJvmCliAgreement(product, nativeExecutable, jvmExecutable, listOf("tools"), workingDir)
+    val tools = runCliWithTelemetryOptOut(listOf(nativeExecutable.absolutePath, "tools"), workingDir)
+    check(tools.exitCode == 0) {
+        "Expected `${product.executableName} tools` to succeed, got exit ${tools.exitCode}:\n${tools.output}"
+    }
+    val inventory = tools.output
+        .lineSequence()
+        .drop(1)
+        .filter { it.isNotBlank() }
+        .toSet()
+    check(inventory == product.expectedCommands) {
+        "${product.executableName} tools output must expose exactly ${product.expectedCommands}. Found: $inventory"
+    }
+    product.rejectedCommands.forEach { command ->
+        val rejected = runCliWithTelemetryOptOut(listOf(nativeExecutable.absolutePath, command), workingDir)
+        check(rejected.exitCode == 2 && rejected.output.contains("no such subcommand")) {
+            "Expected `${product.executableName} $command` to be rejected, got exit ${rejected.exitCode}:\n${rejected.output}"
+        }
+    }
+
+    val wasmFixture = workingDir.resolve("${product.id}-native-cli-smoke.wasm")
+    wasmFixture.writeBytes(minimalWasmModuleBytes())
+    if (product.executableName == "hexana-cli") {
+        assertNativeAndJvmCliAgreement(
+            product,
+            nativeExecutable,
+            jvmExecutable,
+            listOf("summarize-binary", wasmFixture.absolutePath, "--format", "json"),
+            workingDir,
+        )
+        val missing = workingDir.resolve("missing-${System.nanoTime()}.wasm")
+        assertNativeAndJvmCliAgreement(
+            product,
+            nativeExecutable,
+            jvmExecutable,
+            listOf("wasm-to-wat", missing.absolutePath, "--format", "raw"),
+            workingDir,
+        )
+    } else {
+        assertNativeAndJvmCliAgreement(
+            product,
+            nativeExecutable,
+            jvmExecutable,
+            listOf(
+                "run-script",
+                wasmFixture.absolutePath,
+                "--script-text",
+                "print(binary.bytes.size);",
+                "--format",
+                "raw",
+            ),
+            workingDir,
+        )
+        assertNativeAndJvmCliAgreement(
+            product,
+            nativeExecutable,
+            jvmExecutable,
+            listOf(
+                "run-script",
+                wasmFixture.absolutePath,
+                "--script-text",
+                "throw new Error('native-smoke');",
+                "--format",
+                "raw",
+            ),
+            workingDir,
+        )
+    }
+    wasmFixture.delete()
+}
+
+fun registerNativeCliProductTasks(product: NativeCliProduct): NativeCliTasks {
+    val archiveFile = nativeCliArchiveFile(product)
+    val extractedArchiveDir = nativeCliExtractedArchiveDir(product)
+    val capitalizedProductId = product.id.replaceFirstChar { it.uppercaseChar() }
+
+    val zipRuntime = tasks.register<Zip>("zipNative${capitalizedProductId}Cli") {
+        group = "distribution"
+        description = "Zip the current host's GraalVM native ${product.executableName} executable into mcp/build/distributions-native."
+        dependsOn("${product.projectPath}:nativeCompile", generateThirdPartyNotices)
+        doFirst {
+            requireSupportedNativeCliHost()
+        }
+        from(product.nativeExecutable) {
+            into("bin")
+            rename { product.executableName }
+            filesMatching(product.executableName) {
+                permissions { unix("rwxr-xr-x") }
+            }
+        }
+        from(pluginLicenseFile)
+        from(generateThirdPartyNotices)
+        archiveFileName.set(nativeCliArchiveName(product, nativeHostPlatformName))
+        destinationDirectory.set(nativeDistributionDir)
+        isReproducibleFileOrder = true
+        isPreserveFileTimestamps = false
+    }
+
+    val verifyRuntime = tasks.register("verifyNative${capitalizedProductId}CliRelease") {
+        group = "verification"
+        description = "Verifies the current-host native ${product.executableName} release archive."
+        dependsOn(zipRuntime, "${product.projectPath}:installDist")
+        inputs.file(archiveFile)
+        inputs.dir(product.jvmInstallDir)
+        outputs.dir(extractedArchiveDir)
+        outputs.upToDateWhen { false }
+
+        doLast {
+            requireSupportedNativeCliHost()
+            val productArchiveFile = archiveFile.get().asFile
+            val archiveExtractionDir = extractedArchiveDir.get().asFile
+            assertNativeCliArchive(product, productArchiveFile)
+
+            archiveExtractionDir.deleteRecursively()
+            archiveExtractionDir.mkdirs()
+            copy {
+                from(zipTree(productArchiveFile))
+                into(archiveExtractionDir)
+            }
+
+            val nativeExecutable = assertNativeCliExtractedLayout(product, archiveExtractionDir)
+            assertNativeCliProductSmoke(
+                product,
+                nativeExecutable,
+                product.jvmInstallDir.get().asFile,
+                archiveExtractionDir,
+            )
+        }
+    }
+
+    return NativeCliTasks(zipRuntime, verifyRuntime)
+}
+
+val nativeStandardCliProduct = NativeCliProduct(
+    id = "standard",
+    executableName = "hexana-cli",
+    projectPath = ":cli:hexana-cli",
+    nativeExecutable = project(":cli:hexana-cli").layout.buildDirectory.file("native/nativeCompile/hexana-cli"),
+    jvmInstallDir = project(":cli:hexana-cli").layout.buildDirectory.dir("install/hexana-cli"),
+    expectedCommands = standardCliR8Product.expectedCommands,
+    rejectedCommands = standardCliR8Product.rejectedCommands,
+)
+
+val nativeScriptCliProduct = NativeCliProduct(
+    id = "script",
+    executableName = "hexana-cli-script",
+    projectPath = ":cli:hexana-cli-script",
+    nativeExecutable = project(":cli:hexana-cli-script").layout.buildDirectory.file("native/nativeCompile/hexana-cli-script"),
+    jvmInstallDir = project(":cli:hexana-cli-script").layout.buildDirectory.dir("install/hexana-cli-script"),
+    expectedCommands = scriptCliR8Product.expectedCommands,
+    rejectedCommands = scriptCliR8Product.rejectedCommands,
+)
+
+val nativeCliProducts = listOf(nativeStandardCliProduct, nativeScriptCliProduct)
+val nativeCliTasks = nativeCliProducts.map(::registerNativeCliProductTasks)
+
 val zipObfuscatedMcpServer = tasks.register<Zip>("zipObfuscatedMcpServer") {
     group = "distribution"
     description = "Zips the R8-obfuscated standalone MCP server runtime into mcp/build/distributions."
@@ -1803,6 +2092,38 @@ tasks.register("verifyCliR8ReleaseArchives") {
     group = "verification"
     description = "Verify R8-obfuscated JVM release archives for hexana-cli and hexana-cli-script."
     dependsOn(cliR8Tasks.map { it.verifyRuntime })
+}
+
+tasks.register("assembleNativeCliReleaseArchives") {
+    group = "distribution"
+    description = "Assemble current-host native release archives for hexana-cli and hexana-cli-script."
+    dependsOn(nativeCliTasks.map { it.zipRuntime })
+    doFirst {
+        requireSupportedNativeCliHost()
+    }
+}
+
+tasks.register("verifyNativeCliReleaseArchives") {
+    group = "verification"
+    description = "Verify current-host native release archives for hexana-cli and hexana-cli-script."
+    dependsOn(nativeCliTasks.map { it.verifyRuntime })
+    outputs.upToDateWhen { false }
+
+    doLast {
+        requireSupportedNativeCliHost()
+        val versionOutputs = nativeCliProducts.associate { product ->
+            val executable = nativeCliExtractedArchiveDir(product).get().asFile.resolve("bin/${product.executableName}")
+            val result = runCliWithTelemetryOptOut(listOf(executable.absolutePath, "version"), executable.parentFile)
+            check(result.exitCode == 0) {
+                "Expected `${product.executableName} version` to succeed, got exit ${result.exitCode}:\n${result.output}"
+            }
+            product.executableName to result.output.trim()
+        }
+        val versions = versionOutputs.mapValues { (_, output) -> output.substringAfter(' ') }
+        check(versions.values.toSet() == setOf(mcpServerVersion)) {
+            "Native CLI products must share version $mcpServerVersion. Observed: $versionOutputs"
+        }
+    }
 }
 
 val assembleNativeMcpPackaging = tasks.register("assembleNativeMcpPackaging") {

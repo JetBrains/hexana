@@ -1,5 +1,6 @@
 plugins {
     application
+    alias(libs.plugins.graalvm.native)
     alias(libs.plugins.kotlin.jvm)
 }
 
@@ -38,6 +39,24 @@ application {
     applicationName = "hexana-cli-script"
     mainClass = "org.jetbrains.hexana.cli.hexanacliscript.MainKt"
     applicationDefaultJvmArgs = listOf("-Dhexana.version=$version")
+}
+
+graalvmNative {
+    testSupport.set(false)
+    toolchainDetection.set(true)
+
+    binaries {
+        named("main") {
+            imageName.set("hexana-cli-script")
+            mainClass.set(application.mainClass)
+            fallback.set(false)
+            buildArgs.addAll(
+                "-Dhexana.version=$version",
+                "-H:+ReportExceptionStackTraces",
+                "--initialize-at-build-time=kotlin.DeprecationLevel",
+            )
+        }
+    }
 }
 
 tasks.register<Test>("integrationTest") {

@@ -8,6 +8,7 @@ import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsRootPlugin
 import org.jetbrains.kotlin.gradle.testing.internal.KotlinTestReport
 
 plugins {
+    alias(libs.plugins.graalvm.native) apply(false)
     alias(libs.plugins.kotlin.jvm) apply(false)
     alias(libs.plugins.kotlin.multiplatform) apply(false)
     alias(libs.plugins.compose.compiler) apply(false)
