@@ -1175,8 +1175,10 @@ fun nativeCliArchiveFile(product: NativeCliProduct): Provider<RegularFile> =
 fun nativeCliExtractedArchiveDir(product: NativeCliProduct): Provider<Directory> =
     nativeCliArchiveVerificationRootDir.map { it.dir(product.id) }
 
+val nativeCliHostSupported = nativeHostPlatformName in nativeReleasePlatforms
+
 fun requireSupportedNativeCliHost() {
-    check(nativeHostPlatformName in nativeReleasePlatforms) {
+    check(nativeCliHostSupported) {
         "Native CLI release archives are supported only for ${nativeReleasePlatforms.joinToString()} hosts; " +
             "current host is $nativeHostPlatformName."
     }
@@ -1362,7 +1364,9 @@ fun registerNativeCliProductTasks(product: NativeCliProduct): NativeCliTasks {
     val zipRuntime = tasks.register<Zip>("zipNative${capitalizedProductId}Cli") {
         group = "distribution"
         description = "Zip the current host's GraalVM native ${product.executableName} executable into mcp/build/distributions-native."
-        dependsOn("${product.projectPath}:nativeCompile", generateThirdPartyNotices)
+        if (nativeCliHostSupported) {
+            dependsOn("${product.projectPath}:nativeCompile", generateThirdPartyNotices)
+        }
         doFirst {
             requireSupportedNativeCliHost()
         }
@@ -1384,7 +1388,9 @@ fun registerNativeCliProductTasks(product: NativeCliProduct): NativeCliTasks {
     val verifyRuntime = tasks.register("verifyNative${capitalizedProductId}CliRelease") {
         group = "verification"
         description = "Verifies the current-host native ${product.executableName} release archive."
-        dependsOn(zipRuntime, "${product.projectPath}:installDist")
+        if (nativeCliHostSupported) {
+            dependsOn(zipRuntime, "${product.projectPath}:installDist")
+        }
         inputs.file(archiveFile)
         inputs.dir(product.jvmInstallDir)
         outputs.dir(extractedArchiveDir)
@@ -2097,7 +2103,9 @@ tasks.register("verifyCliR8ReleaseArchives") {
 tasks.register("assembleNativeCliReleaseArchives") {
     group = "distribution"
     description = "Assemble current-host native release archives for hexana-cli and hexana-cli-script."
-    dependsOn(nativeCliTasks.map { it.zipRuntime })
+    if (nativeCliHostSupported) {
+        dependsOn(nativeCliTasks.map { it.zipRuntime })
+    }
     doFirst {
         requireSupportedNativeCliHost()
     }
@@ -2106,7 +2114,9 @@ tasks.register("assembleNativeCliReleaseArchives") {
 tasks.register("verifyNativeCliReleaseArchives") {
     group = "verification"
     description = "Verify current-host native release archives for hexana-cli and hexana-cli-script."
-    dependsOn(nativeCliTasks.map { it.verifyRuntime })
+    if (nativeCliHostSupported) {
+        dependsOn(nativeCliTasks.map { it.verifyRuntime })
+    }
     outputs.upToDateWhen { false }
 
     doLast {
