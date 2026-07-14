@@ -195,7 +195,12 @@ available. The script:
 8. runs the release artifact security check,
 9. validates the generated public marketplace bundle JSON files and native artifact policy,
 10. validates, commits, pushes, and creates or updates the public marketplace pull request,
-11. creates or updates the GitHub Release with the collected ZIP assets.
+11. creates a new GitHub Release with all collected ZIP assets, or updates title/notes for an existing release only
+    after verifying its ZIP asset names and SHA-256 digests exactly match the locally collected release set.
+
+Existing GitHub Release ZIP assets are immutable for this flow. If `RELEASE_TAG` already exists, the script downloads
+the existing ZIP assets and fails when an asset is missing, extra, or has a different digest; it does not supplement or
+replace ZIP assets on an existing release. Delete or retag the release deliberately when the artifact set must change.
 
 Downloads publication is handled by `publish-downloads-release-bundle.sh` after the same release chain has passed. It
 does not rebuild anything: TeamCity downloads the already verified native matrix ZIPs into `mcp/build/distributions-native`,

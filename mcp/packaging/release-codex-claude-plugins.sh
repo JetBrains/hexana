@@ -55,6 +55,79 @@ lower_ascii() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
 }
 
+sha256_file() {
+  local file="$1"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file" | awk '{ print $1 }'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" | awk '{ print $1 }'
+  else
+    die "Required tool 'shasum' or 'sha256sum' is not installed"
+  fi
+}
+
+write_zip_digest_manifest() {
+  local dir="$1"
+  local output_file="$2"
+  local zip_file
+  local zip_name
+
+  : > "$output_file"
+  find "$dir" -maxdepth 1 -type f -name '*.zip' -print | sort | while IFS= read -r zip_file; do
+    zip_name="${zip_file##*/}"
+    printf '%s  %s\n' "$(sha256_file "$zip_file")" "$zip_name" >> "$output_file"
+  done
+}
+
+require_matching_release_zip_assets() {
+  local local_dir="$1"
+  local existing_dir="$2"
+  local local_manifest
+  local existing_manifest
+  local local_names
+  local existing_names
+  local missing_names
+  local extra_names
+  local diff_file
+
+  local_manifest="$(mktemp "${TMPDIR:-/tmp}/hexana-local-release-zips.XXXXXX")"
+  existing_manifest="$(mktemp "${TMPDIR:-/tmp}/hexana-existing-release-zips.XXXXXX")"
+  local_names="$(mktemp "${TMPDIR:-/tmp}/hexana-local-release-zip-names.XXXXXX")"
+  existing_names="$(mktemp "${TMPDIR:-/tmp}/hexana-existing-release-zip-names.XXXXXX")"
+  missing_names="$(mktemp "${TMPDIR:-/tmp}/hexana-missing-release-zips.XXXXXX")"
+  extra_names="$(mktemp "${TMPDIR:-/tmp}/hexana-extra-release-zips.XXXXXX")"
+  diff_file="$(mktemp "${TMPDIR:-/tmp}/hexana-release-zip-digest-diff.XXXXXX")"
+  register_cleanup_dir "$local_manifest"
+  register_cleanup_dir "$existing_manifest"
+  register_cleanup_dir "$local_names"
+  register_cleanup_dir "$existing_names"
+  register_cleanup_dir "$missing_names"
+  register_cleanup_dir "$extra_names"
+  register_cleanup_dir "$diff_file"
+
+  write_zip_digest_manifest "$local_dir" "$local_manifest"
+  write_zip_digest_manifest "$existing_dir" "$existing_manifest"
+  awk '{ print $2 }' "$local_manifest" > "$local_names"
+  awk '{ print $2 }' "$existing_manifest" > "$existing_names"
+
+  comm -23 "$local_names" "$existing_names" > "$missing_names"
+  if [ -s "$missing_names" ]; then
+    sed 's/^/[codex-claude-release] Missing existing GitHub release ZIP asset: /' "$missing_names" >&2
+    die "Existing GitHub release $RELEASE_TAG is missing required ZIP assets"
+  fi
+
+  comm -13 "$local_names" "$existing_names" > "$extra_names"
+  if [ -s "$extra_names" ]; then
+    sed 's/^/[codex-claude-release] Extra existing GitHub release ZIP asset: /' "$extra_names" >&2
+    die "Existing GitHub release $RELEASE_TAG has unexpected ZIP assets"
+  fi
+
+  if ! diff -u "$existing_manifest" "$local_manifest" > "$diff_file"; then
+    cat "$diff_file" >&2
+    die "Existing GitHub release $RELEASE_TAG has ZIP assets with different SHA-256 digests"
+  fi
+}
+
 default_release_tag() {
   case "$PUBLICATION_MODE" in
     production)
@@ -713,7 +786,60 @@ self_test_publication_mode_guard() {
   log "Publication mode guard self-test passed"
 }
 
+self_test_existing_release_asset_immutability() {
+  local temp_dir
+  local local_dir
+  local existing_dir
+  local scan_status
+
+  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/hexana-existing-release-assets.XXXXXX")"
+  register_cleanup_dir "$temp_dir"
+  RELEASE_TAG="self-test"
+  local_dir="$temp_dir/local"
+  existing_dir="$temp_dir/existing"
+  mkdir -p "$local_dir" "$existing_dir"
+
+  printf 'alpha\n' > "$local_dir/hexana-alpha.zip"
+  printf 'beta\n' > "$local_dir/hexana-beta.zip"
+  cp "$local_dir/hexana-alpha.zip" "$existing_dir/hexana-alpha.zip"
+  cp "$local_dir/hexana-beta.zip" "$existing_dir/hexana-beta.zip"
+  require_matching_release_zip_assets "$local_dir" "$existing_dir"
+
+  rm "$existing_dir/hexana-beta.zip"
+  set +e
+  (
+    require_matching_release_zip_assets "$local_dir" "$existing_dir"
+  ) >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Existing release asset immutability self-test did not reject a missing required asset"
+  cp "$local_dir/hexana-beta.zip" "$existing_dir/hexana-beta.zip"
+
+  printf 'gamma\n' > "$existing_dir/hexana-gamma.zip"
+  set +e
+  (
+    require_matching_release_zip_assets "$local_dir" "$existing_dir"
+  ) >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Existing release asset immutability self-test did not reject an extra existing asset"
+  rm "$existing_dir/hexana-gamma.zip"
+
+  printf 'different beta\n' > "$existing_dir/hexana-beta.zip"
+  set +e
+  (
+    require_matching_release_zip_assets "$local_dir" "$existing_dir"
+  ) >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Existing release asset immutability self-test did not reject a digest mismatch"
+
+  log "Existing release asset immutability self-test passed"
+}
+
 publish_github_release() {
+  local existing_dir
+
   require_public_github_text_file "GitHub release notes" "$release_notes"
 
   if [ "$DRY_RUN" = "true" ]; then
@@ -723,7 +849,13 @@ publish_github_release() {
 
   log "Publishing GitHub release $RELEASE_TAG in $PUBLIC_REPO_SLUG"
   if gh release view "$RELEASE_TAG" --repo "$PUBLIC_REPO_SLUG" >/dev/null 2>&1; then
-    gh release upload "$RELEASE_TAG" "$release_dir"/*.zip --repo "$PUBLIC_REPO_SLUG" --clobber
+    existing_dir="$(mktemp -d "${TMPDIR:-/tmp}/hexana-existing-release-assets.XXXXXX")"
+    register_cleanup_dir "$existing_dir"
+    gh release download "$RELEASE_TAG" \
+      --repo "$PUBLIC_REPO_SLUG" \
+      --pattern "*.zip" \
+      --dir "$existing_dir"
+    require_matching_release_zip_assets "$release_dir" "$existing_dir"
     gh release edit "$RELEASE_TAG" \
       --repo "$PUBLIC_REPO_SLUG" \
       --title "Hexana MCP $PLUGIN_VERSION" \
@@ -1692,6 +1824,10 @@ main() {
   fi
   if [ "$(to_bool "${PUBLICATION_MODE_GUARD_SELF_TEST:-false}" "PUBLICATION_MODE_GUARD_SELF_TEST")" = "true" ]; then
     self_test_publication_mode_guard
+    return
+  fi
+  if [ "$(to_bool "${EXISTING_RELEASE_ASSET_IMMUTABILITY_SELF_TEST:-false}" "EXISTING_RELEASE_ASSET_IMMUTABILITY_SELF_TEST")" = "true" ]; then
+    self_test_existing_release_asset_immutability
     return
   fi
 
