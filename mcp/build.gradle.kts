@@ -71,12 +71,14 @@ val pluginLicenseFile = layout.projectDirectory.file("packaging/LICENSE.txt")
 val thirdPartyNoticesDir = layout.buildDirectory.dir("generated/third-party-notices")
 val thirdPartyNoticesFileName = "THIRD-PARTY-NOTICES.md"
 val r8RulesFile = layout.projectDirectory.file("packaging/r8-rules.pro")
+val cliR8RulesFile = layout.projectDirectory.file("packaging/r8-cli-rules.pro")
 val r8OwnedJarNames = setOf(
     "analytics-jvm.jar",
     "arrow-jvm.jar",
     "binaryProvider-jvm.jar",
     "cli-core.jar",
     "cli-runtime.jar",
+    "cli-scripting.jar",
     "codec-jvm.jar",
     "common.jar",
     "common-jvm.jar",
@@ -100,6 +102,22 @@ val r8OwnedJarNames = setOf(
     "wasmParser-jvm.jar",
     "zip-jvm.jar",
 )
+val cliProductJarNames = setOf(
+    "cli-product.jar",
+    "hexana-cli-$mcpServerVersion.jar",
+    "hexana-cli-script-$mcpServerVersion.jar",
+)
+val cliReleaseHexanaJarNames = r8OwnedJarNames + cliProductJarNames
+val mcpSdkJarNamePrefixes = listOf("kotlin-sdk")
+val ktorJarNamePrefixes = listOf("ktor-")
+val cliServerOnlyJarNamePrefixes = listOf("clikt", "colormath", "jansi", "kotlin-logging", "logback", "mordant")
+val graalJsJarNamePrefixes = listOf("icu4j", "js-", "js-language", "regex", "xz")
+val graalWasmJarNamePrefixes = listOf("wasm-", "wasm-language")
+val cliObfuscatedInstallRootDir = layout.buildDirectory.dir("install/cli-r8")
+val cliR8OutputRootDir = layout.buildDirectory.dir("r8/cli/output")
+val cliR8JarRootDir = layout.buildDirectory.dir("r8/cli/jars")
+val cliR8MappingRootDir = layout.buildDirectory.dir("r8/cli/mapping")
+val cliReleaseDistributionDir = layout.buildDirectory.dir("distributions")
 
 val r8Tool by configurations.creating {
     isCanBeConsumed = false
@@ -243,6 +261,23 @@ fun rewriteMcpServerLauncherClasspaths(installDir: File) {
     }
 }
 
+fun rewriteCliLauncherClasspaths(installDir: File, executableName: String) {
+    installDir.resolve("bin/$executableName").takeIf { it.isFile }?.let { script ->
+        script.writeText(
+            Regex("(?m)^CLASSPATH=.*$").replace(script.readText()) {
+                "CLASSPATH=\$APP_HOME/lib/*"
+            }
+        )
+    }
+    installDir.resolve("bin/$executableName.bat").takeIf { it.isFile }?.let { script ->
+        script.writeText(
+            Regex("(?m)^set CLASSPATH=.*$").replace(script.readText()) {
+                "set CLASSPATH=%APP_HOME%\\\\lib\\\\*"
+            }
+        )
+    }
+}
+
 fun rewritePackagedMcpServerLauncherClasspaths(pluginDir: File) {
     rewriteMcpServerLauncherClasspaths(pluginDir.resolve("server"))
 }
@@ -273,6 +308,319 @@ fun validateNativeExecutableZip(platform: String, zipFile: File) {
             "Malformed native executable ZIP for $platform: ${zipFile.absolutePath} contains empty bin/hexana-mcp."
         }
     }
+}
+
+data class CliR8Product(
+    val id: String,
+    val executableName: String,
+    val projectPath: String,
+    val installDir: Provider<Directory>,
+    val programJarNames: Set<String>,
+    val deniedJarNamePrefixes: List<String>,
+    val expectedCommands: Set<String>,
+    val rejectedCommands: Set<String>,
+    val deniedMappedClassPrefixes: List<String>,
+)
+
+fun cliReleaseProductRootName(product: CliR8Product): String = product.executableName
+
+fun cliReleaseArchiveName(product: CliR8Product): String =
+    "${product.executableName}-$mcpServerVersion.zip"
+
+fun cliObfuscatedInstallDir(product: CliR8Product): Provider<Directory> =
+    cliObfuscatedInstallRootDir.map { it.dir(product.executableName) }
+
+fun cliR8OutputDir(product: CliR8Product): Provider<Directory> =
+    cliR8OutputRootDir.map { it.dir(product.id) }
+
+fun cliR8JarDir(product: CliR8Product): Provider<Directory> =
+    cliR8JarRootDir.map { it.dir(product.id) }
+
+fun cliR8MappingFile(product: CliR8Product): Provider<RegularFile> =
+    cliR8MappingRootDir.map { it.file("${product.id}-mapping.txt") }
+
+fun cliObfuscatedRuntimeJarFile(product: CliR8Product): Provider<RegularFile> =
+    cliR8JarDir(product).map { it.file(obfuscatedRuntimeJarName) }
+
+fun cliReleaseArchiveFile(product: CliR8Product): Provider<RegularFile> =
+    cliReleaseDistributionDir.map { it.file(cliReleaseArchiveName(product)) }
+
+fun jarNameHasAnyPrefix(jarName: String, prefixes: Iterable<String>): Boolean =
+    prefixes.any { prefix -> jarName.startsWith(prefix) }
+
+fun jarContainsClassPrefix(jarFile: File, classPrefix: String): Boolean =
+    ZipFile(jarFile).use { zip ->
+        zip.entries().asSequence().any { entry ->
+            !entry.isDirectory && entry.name.startsWith(classPrefix) && entry.name.endsWith(".class")
+        }
+    }
+
+fun assertSameFileBytes(actual: File, expected: File, label: String) {
+    check(actual.isFile) { "$label is missing: ${actual.absolutePath}" }
+    check(expected.isFile) { "$label source is missing: ${expected.absolutePath}" }
+    check(actual.readBytes().contentEquals(expected.readBytes())) {
+        "$label must match ${expected.absolutePath}: ${actual.absolutePath}"
+    }
+}
+
+fun assertCliReleaseRuntimeLayout(product: CliR8Product, installDir: File, label: String) {
+    val executable = installDir.resolve("bin/${product.executableName}")
+    check(executable.canExecute()) {
+        "$label must contain executable launcher ${executable.absolutePath}."
+    }
+    val unexpectedLaunchers = installDir.resolve("bin")
+        .listFiles()
+        .orEmpty()
+        .map { it.name }
+        .filterNot { it == product.executableName || it == "${product.executableName}.bat" }
+        .sorted()
+    check(unexpectedLaunchers.isEmpty()) {
+        "$label must not contain unrelated launchers. Found: $unexpectedLaunchers"
+    }
+
+    assertSameFileBytes(installDir.resolve("LICENSE.txt"), pluginLicenseFile.asFile, "$label LICENSE.txt")
+    assertSameFileBytes(
+        installDir.resolve(thirdPartyNoticesFileName),
+        thirdPartyNoticesDir.get().file(thirdPartyNoticesFileName).asFile,
+        "$label $thirdPartyNoticesFileName",
+    )
+
+    val libDir = installDir.resolve("lib")
+    val jarNames = libDir
+        .listFiles { file -> file.isFile && file.name.endsWith(".jar") }
+        .orEmpty()
+        .map { it.name }
+        .sorted()
+    check(jarNames.count { it == obfuscatedRuntimeJarName } == 1) {
+        "$label must contain exactly one $obfuscatedRuntimeJarName. Jars: $jarNames"
+    }
+    val preObfuscationHexanaJars = jarNames.filter { it in cliReleaseHexanaJarNames }
+    check(preObfuscationHexanaJars.isEmpty()) {
+        "$label must not contain pre-obfuscation Hexana runtime jars. Found: $preObfuscationHexanaJars"
+    }
+    val deniedLibFiles = libDir
+        .listFiles { file -> file.isFile }
+        .orEmpty()
+        .map { it.name }
+        .filter {
+            jarNameHasAnyPrefix(it, mcpSdkJarNamePrefixes + ktorJarNamePrefixes + product.deniedJarNamePrefixes)
+        }
+        .sorted()
+    check(deniedLibFiles.isEmpty()) {
+        "$label contains denied runtime library files: $deniedLibFiles"
+    }
+    val deniedJars = jarNames.filter {
+        jarNameHasAnyPrefix(it, mcpSdkJarNamePrefixes + ktorJarNamePrefixes)
+    }
+    check(deniedJars.isEmpty()) {
+        "$label contains denied runtime jars: $deniedJars"
+    }
+    val plainHexanaClassJars = libDir
+        .listFiles { file -> file.isFile && file.name.endsWith(".jar") && file.name != obfuscatedRuntimeJarName }
+        .orEmpty()
+        .filter { jarContainsClassPrefix(it, "org/jetbrains/hexana/") }
+        .map { it.name }
+        .sorted()
+    check(plainHexanaClassJars.isEmpty()) {
+        "$label must not contain pre-obfuscation Hexana classes outside $obfuscatedRuntimeJarName. Found: $plainHexanaClassJars"
+    }
+}
+
+fun assertCliR8MappingPolicy(product: CliR8Product, mappingFile: File) {
+    check(mappingFile.isFile) {
+        "Missing R8 mapping for ${product.executableName}: ${mappingFile.absolutePath}"
+    }
+    val deniedMappings = mappingFile.readLines()
+        .filter { line -> line.isNotBlank() && !line.startsWith(" ") }
+        .map { it.substringBefore(" ->") }
+        .filter { className -> product.deniedMappedClassPrefixes.any(className::startsWith) }
+        .take(50)
+    check(deniedMappings.isEmpty()) {
+        "${product.executableName} R8 output contains denied implementation classes: $deniedMappings"
+    }
+}
+
+fun classFileMajorVersion(zip: ZipFile, entryName: String): Int? {
+    val entry = zip.getEntry(entryName) ?: return null
+    return zip.getInputStream(entry).use { input ->
+        val header = ByteArray(8)
+        var offset = 0
+        while (offset < header.size) {
+            val read = input.read(header, offset, header.size - offset)
+            if (read == -1) break
+            offset += read
+        }
+        if (offset == header.size) {
+            ((header[6].toInt() and 0xff) shl 8) or (header[7].toInt() and 0xff)
+        } else {
+            null
+        }
+    }
+}
+
+fun isNewerThanJava21MultiReleaseClass(entryName: String): Boolean {
+    val versionPath = entryName.removePrefix("META-INF/versions/")
+    if (versionPath == entryName) return false
+    val version = versionPath.substringBefore('/').toIntOrNull() ?: return false
+    return version > 21
+}
+
+fun assertJava21RuntimeClasses(libDir: File, label: String) {
+    val tooNewClasses = mutableListOf<String>()
+    libDir.listFiles { file -> file.isFile && file.name.endsWith(".jar") }
+        .orEmpty()
+        .sortedBy { it.name }
+        .forEach { jarFile ->
+            ZipFile(jarFile).use { zip ->
+                zip.entries().asSequence()
+                    .filter { !it.isDirectory && it.name.endsWith(".class") }
+                    .filterNot { isNewerThanJava21MultiReleaseClass(it.name) }
+                    .forEach { entry ->
+                        val majorVersion = classFileMajorVersion(zip, entry.name)
+                        if (majorVersion != null && majorVersion > 65) {
+                            tooNewClasses += "${jarFile.name}!/${entry.name} has class file major version $majorVersion"
+                        }
+                    }
+            }
+        }
+    check(tooNewClasses.isEmpty()) {
+        buildString {
+            appendLine("$label must run on Java 21, but found newer class files:")
+            tooNewClasses.take(50).forEach { appendLine("  $it") }
+            if (tooNewClasses.size > 50) {
+                appendLine("  ... and ${tooNewClasses.size - 50} more")
+            }
+        }
+    }
+}
+
+fun assertCliReleaseArchive(product: CliR8Product, archiveFile: File) {
+    val rootName = cliReleaseProductRootName(product)
+    check(archiveFile.name == cliReleaseArchiveName(product)) {
+        "Unexpected ${product.executableName} archive name: ${archiveFile.name}"
+    }
+    ZipFile(archiveFile).use { zip ->
+        val entries = zip.entries().asSequence().map { it.name }.toList()
+        val rootPrefixes = entries
+            .filter { it.isNotBlank() }
+            .map { it.substringBefore('/') }
+            .distinct()
+            .sorted()
+        check(rootPrefixes == listOf(rootName)) {
+            "${archiveFile.name} must contain exactly one root `$rootName`. Found: $rootPrefixes"
+        }
+        val requiredEntries = listOf(
+            "$rootName/bin/${product.executableName}",
+            "$rootName/lib/$obfuscatedRuntimeJarName",
+            "$rootName/LICENSE.txt",
+            "$rootName/$thirdPartyNoticesFileName",
+        )
+        val missing = requiredEntries.filter { zip.getEntry(it) == null }
+        check(missing.isEmpty()) {
+            "${archiveFile.name} is missing required entries: $missing"
+        }
+        val unexpectedLaunchers = entries
+            .filter { it.startsWith("$rootName/bin/") && !it.endsWith("/") }
+            .map { it.removePrefix("$rootName/bin/") }
+            .filterNot { it == product.executableName || it == "${product.executableName}.bat" }
+            .sorted()
+        check(unexpectedLaunchers.isEmpty()) {
+            "${archiveFile.name} contains unrelated launchers: $unexpectedLaunchers"
+        }
+        val preObfuscationHexanaJars = entries
+            .filter { it.startsWith("$rootName/lib/") && it.substringAfterLast('/') in cliReleaseHexanaJarNames }
+            .sorted()
+        check(preObfuscationHexanaJars.isEmpty()) {
+            "${archiveFile.name} contains pre-obfuscation Hexana runtime jars: $preObfuscationHexanaJars"
+        }
+        val deniedLibFiles = entries
+            .filter { it.startsWith("$rootName/lib/") && !it.endsWith("/") }
+            .map { it.substringAfterLast('/') }
+            .filter { jarNameHasAnyPrefix(it, mcpSdkJarNamePrefixes + ktorJarNamePrefixes + product.deniedJarNamePrefixes) }
+            .sorted()
+        check(deniedLibFiles.isEmpty()) {
+            "${archiveFile.name} contains denied runtime library files: $deniedLibFiles"
+        }
+    }
+}
+
+fun assertCliReleaseProcessSmoke(product: CliR8Product, installDir: File) {
+    val executable = installDir.resolve("bin/${product.executableName}")
+    val version = runProcess(
+        listOf(executable.absolutePath, "version"),
+        installDir,
+        environment = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
+    )
+    check(version.exitCode == 0 && version.output.trim() == "${product.executableName} $mcpServerVersion") {
+        "Expected `${product.executableName} version` to report $mcpServerVersion, got exit ${version.exitCode}:\n${version.output}"
+    }
+
+    val tools = runProcess(
+        listOf(executable.absolutePath, "tools"),
+        installDir,
+        environment = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
+    )
+    check(tools.exitCode == 0) {
+        "Expected `${product.executableName} tools` to succeed, got exit ${tools.exitCode}:\n${tools.output}"
+    }
+    product.expectedCommands.forEach { command ->
+        check(tools.output.contains("\n$command\n")) {
+            "${product.executableName} tools output must include `$command`:\n${tools.output}"
+        }
+    }
+    product.rejectedCommands.forEach { command ->
+        check(!tools.output.contains("\n$command\n")) {
+            "${product.executableName} tools output must not include `$command`:\n${tools.output}"
+        }
+        val rejected = runProcess(
+            listOf(executable.absolutePath, command),
+            installDir,
+            environment = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
+        )
+        check(rejected.exitCode == 2 && rejected.output.contains("no such subcommand")) {
+            "Expected `${product.executableName} $command` to be rejected, got exit ${rejected.exitCode}:\n${rejected.output}"
+        }
+    }
+
+    val wasmFixture = installDir.resolve("cli-r8-smoke.wasm")
+    wasmFixture.writeBytes(minimalWasmModuleBytes())
+    if (product.executableName == "hexana-cli") {
+        val summary = runProcess(
+            listOf(executable.absolutePath, "summarize-binary", wasmFixture.absolutePath, "--format", "json"),
+            installDir,
+            environment = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
+        )
+        check(summary.exitCode == 0 && summary.output.contains("\"format\":\"wasm\"")) {
+            "Expected obfuscated hexana-cli summarize-binary to succeed, got exit ${summary.exitCode}:\n${summary.output}"
+        }
+        val rawWat = runProcess(
+            listOf(executable.absolutePath, "wasm-to-wat", wasmFixture.absolutePath, "--format", "raw"),
+            installDir,
+            environment = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
+        )
+        check(rawWat.exitCode == 0 && rawWat.output.contains("(module")) {
+            "Expected obfuscated hexana-cli wasm-to-wat raw output, got exit ${rawWat.exitCode}:\n${rawWat.output}"
+        }
+    } else {
+        val script = runProcess(
+            listOf(
+                executable.absolutePath,
+                "run-script",
+                wasmFixture.absolutePath,
+                "--script-text",
+                "print(binary.bytes.size);",
+                "--format",
+                "raw",
+            ),
+            installDir,
+            environment = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
+        )
+        val scriptPayload = script.output.lineSequence().filter { it.isNotBlank() }.lastOrNull()
+        check(script.exitCode == 0 && scriptPayload == wasmFixture.length().toString()) {
+            "Expected obfuscated hexana-cli-script run-script raw output, got exit ${script.exitCode}:\n${script.output}"
+        }
+    }
+    wasmFixture.delete()
 }
 
 jib {
@@ -545,6 +893,220 @@ val installObfuscatedMcpServerRuntime = tasks.register("installObfuscatedMcpServ
         rewriteMcpServerLauncherClasspaths(installDir)
     }
 }
+
+val cliServerImplementationClassPrefixes = listOf(
+    "org.jetbrains.hexana.mcp.server.HexanaCliKt",
+    "org.jetbrains.hexana.mcp.server.HexanaDoctor",
+    "org.jetbrains.hexana.mcp.server.HexanaHttp",
+    "org.jetbrains.hexana.mcp.server.HexanaLog",
+    "org.jetbrains.hexana.mcp.server.HexanaMcp",
+    "org.jetbrains.hexana.mcp.server.HexanaStdio",
+    "org.jetbrains.hexana.mcp.server.HexanaToolDispatcher",
+    "org.jetbrains.hexana.mcp.server.HexanaToolHandlers",
+    "org.jetbrains.hexana.mcp.server.MainKt",
+)
+
+val standardCliR8Product = CliR8Product(
+    id = "standard",
+    executableName = "hexana-cli",
+    projectPath = ":cli:hexana-cli",
+    installDir = project(":cli:hexana-cli").layout.buildDirectory.dir("install/hexana-cli"),
+    programJarNames = (r8OwnedJarNames - "cli-scripting.jar" - "scripting.jar") + setOf(
+        "cli-product.jar",
+        "hexana-cli-$mcpServerVersion.jar",
+    ),
+    deniedJarNamePrefixes = cliServerOnlyJarNamePrefixes + graalJsJarNamePrefixes,
+    expectedCommands = setOf("summarize-binary", "summarize-module", "wasm-to-wat"),
+    rejectedCommands = setOf("run-script", "stdio", "http", "doctor"),
+    deniedMappedClassPrefixes = cliServerImplementationClassPrefixes + listOf(
+        "org.jetbrains.hexana.cli.scripting.",
+        "org.jetbrains.hexana.mcp.scripting.",
+    ),
+)
+
+val scriptCliR8Product = CliR8Product(
+    id = "script",
+    executableName = "hexana-cli-script",
+    projectPath = ":cli:hexana-cli-script",
+    installDir = project(":cli:hexana-cli-script").layout.buildDirectory.dir("install/hexana-cli-script"),
+    programJarNames = (r8OwnedJarNames - "cli-core.jar" - "wasmprinter.jar") + setOf(
+        "cli-product.jar",
+        "cli-scripting.jar",
+        "hexana-cli-script-$mcpServerVersion.jar",
+    ),
+    deniedJarNamePrefixes = cliServerOnlyJarNamePrefixes + graalWasmJarNamePrefixes,
+    expectedCommands = setOf("run-script"),
+    rejectedCommands = setOf("summarize-binary", "summarize-module", "wasm-to-wat", "stdio", "http", "doctor"),
+    deniedMappedClassPrefixes = cliServerImplementationClassPrefixes + listOf(
+        "org.jetbrains.hexana.cli.core.",
+        "org.jetbrains.hexana.graalwasm.wasmprinter.",
+    ),
+)
+
+val cliR8Products = listOf(standardCliR8Product, scriptCliR8Product)
+
+data class CliR8Tasks(
+    val copyRuntime: TaskProvider<Sync>,
+    val obfuscateRuntime: TaskProvider<JavaExec>,
+    val jarRuntime: TaskProvider<Jar>,
+    val installRuntime: TaskProvider<Task>,
+    val zipRuntime: TaskProvider<Zip>,
+    val verifyRuntime: TaskProvider<Task>,
+)
+
+fun registerCliR8ProductTasks(product: CliR8Product): CliR8Tasks {
+    val installDir = cliObfuscatedInstallDir(product)
+    val outputDir = cliR8OutputDir(product)
+    val jarDir = cliR8JarDir(product)
+    val mappingFile = cliR8MappingFile(product)
+    val runtimeJarFile = cliObfuscatedRuntimeJarFile(product)
+    val archiveFile = cliReleaseArchiveFile(product)
+    val capitalizedProductId = product.id.replaceFirstChar { it.uppercaseChar() }
+
+    val copyRuntime = tasks.register<Sync>("copy${capitalizedProductId}CliRuntimeForR8") {
+        group = "distribution"
+        description = "Copies the ${product.executableName} runtime before R8 obfuscation."
+        dependsOn("${product.projectPath}:installDist")
+        from(product.installDir)
+        into(installDir)
+    }
+
+    val programJarFiles = product.programJarNames.map { jarName -> installDir.map { dir -> dir.file("lib/$jarName") } }
+    val libraryJarFiles = installDir.map { dir ->
+        dir.dir("lib").asFileTree.matching {
+            include("*.jar")
+            exclude(product.programJarNames.map { name -> name })
+        }
+    }
+
+    val obfuscateRuntime = tasks.register<JavaExec>("obfuscate${capitalizedProductId}CliRuntime") {
+        group = "distribution"
+        description = "Runs R8 over Hexana-owned ${product.executableName} runtime JARs."
+        dependsOn(copyRuntime)
+
+        javaLauncher.set(javaToolchains.launcherFor {
+            languageVersion.set(JavaLanguageVersion.of(21))
+        })
+        classpath = r8Tool
+        mainClass.set("com.android.tools.r8.R8")
+
+        inputs.file(cliR8RulesFile)
+        inputs.files(programJarFiles)
+        inputs.files(libraryJarFiles)
+        outputs.dir(outputDir)
+        outputs.file(mappingFile)
+
+        doFirst {
+            outputDir.get().asFile.deleteRecursively()
+            outputDir.get().asFile.mkdirs()
+            mappingFile.get().asFile.parentFile.mkdirs()
+            args(
+                "--classfile",
+                "--release",
+                "--pg-conf",
+                cliR8RulesFile.asFile.absolutePath,
+                "--output",
+                outputDir.get().asFile.absolutePath,
+                "--pg-map-output",
+                mappingFile.get().asFile.absolutePath,
+                "--lib",
+                javaLauncher.get().metadata.installationPath.asFile.absolutePath,
+            )
+            libraryJarFiles.get().files.sortedBy { it.name }.forEach { jar ->
+                args("--lib", jar.absolutePath)
+            }
+            programJarFiles.forEach { jar ->
+                val jarFile = jar.get().asFile
+                check(jarFile.isFile) {
+                    "Missing ${product.executableName} R8 program jar: ${jarFile.absolutePath}"
+                }
+                args(jarFile.absolutePath)
+            }
+        }
+    }
+
+    val jarRuntime = tasks.register<Jar>("jarObfuscated${capitalizedProductId}CliRuntime") {
+        group = "distribution"
+        description = "Packs ${product.executableName} R8 output into a single obfuscated Hexana runtime JAR."
+        dependsOn(obfuscateRuntime)
+        from(outputDir)
+        archiveFileName.set(obfuscatedRuntimeJarName)
+        destinationDirectory.set(jarDir)
+    }
+
+    val installRuntime = tasks.register("installObfuscated${capitalizedProductId}CliRuntime") {
+        group = "distribution"
+        description = "Installs ${product.executableName} with obfuscated Hexana-owned classes."
+        dependsOn(copyRuntime, jarRuntime, generateThirdPartyNotices)
+        inputs.file(runtimeJarFile)
+        inputs.files(installDir.map { dir -> cliReleaseHexanaJarNames.map { dir.file("lib/$it") } })
+        outputs.dir(installDir)
+
+        doLast {
+            val productInstallDir = installDir.get().asFile
+            val libDir = productInstallDir.resolve("lib")
+            cliReleaseHexanaJarNames.forEach { jarName ->
+                libDir.resolve(jarName).delete()
+            }
+            libDir
+                .listFiles { file -> file.isFile }
+                .orEmpty()
+                .filter { jarNameHasAnyPrefix(it.name, mcpSdkJarNamePrefixes + ktorJarNamePrefixes + product.deniedJarNamePrefixes) }
+                .forEach { it.delete() }
+            runtimeJarFile.get().asFile.copyTo(
+                libDir.resolve(obfuscatedRuntimeJarName),
+                overwrite = true,
+            )
+            pluginLicenseFile.asFile.copyTo(productInstallDir.resolve("LICENSE.txt"), overwrite = true)
+            thirdPartyNoticesDir.get().file(thirdPartyNoticesFileName).asFile.copyTo(
+                productInstallDir.resolve(thirdPartyNoticesFileName),
+                overwrite = true,
+            )
+            rewriteCliLauncherClasspaths(productInstallDir, product.executableName)
+        }
+    }
+
+    val zipRuntime = tasks.register<Zip>("zipObfuscated${capitalizedProductId}Cli") {
+        group = "distribution"
+        description = "Zips the R8-obfuscated ${product.executableName} release archive."
+        dependsOn(installRuntime)
+        from(installDir) {
+            into(cliReleaseProductRootName(product))
+            filesMatching("bin/*") {
+                if (!name.endsWith(".bat") && !name.endsWith(".cmd")) {
+                    permissions { unix("rwxr-xr-x") }
+                }
+            }
+        }
+        archiveFileName.set(cliReleaseArchiveName(product))
+        destinationDirectory.set(cliReleaseDistributionDir)
+        isReproducibleFileOrder = true
+        isPreserveFileTimestamps = false
+    }
+
+    val verifyRuntime = tasks.register("verifyObfuscated${capitalizedProductId}CliRelease") {
+        group = "verification"
+        description = "Verifies the staged and archived R8-obfuscated ${product.executableName} release."
+        dependsOn(zipRuntime)
+        inputs.dir(installDir)
+        inputs.file(mappingFile)
+        inputs.file(archiveFile)
+        outputs.upToDateWhen { false }
+
+        doLast {
+            val productInstallDir = installDir.get().asFile
+            assertCliReleaseRuntimeLayout(product, productInstallDir, product.executableName)
+            assertJava21RuntimeClasses(productInstallDir.resolve("lib"), product.executableName)
+            assertCliR8MappingPolicy(product, mappingFile.get().asFile)
+            assertCliReleaseArchive(product, archiveFile.get().asFile)
+            assertCliReleaseProcessSmoke(product, productInstallDir)
+        }
+    }
+
+    return CliR8Tasks(copyRuntime, obfuscateRuntime, jarRuntime, installRuntime, zipRuntime, verifyRuntime)
+}
+
+val cliR8Tasks = cliR8Products.map(::registerCliR8ProductTasks)
 
 val zipObfuscatedMcpServer = tasks.register<Zip>("zipObfuscatedMcpServer") {
     group = "distribution"
@@ -1189,6 +1751,18 @@ tasks.register("assembleMcpPackaging") {
     dependsOn(assembleClaudePluginPackage, assembleCodexPluginPackage, zipClaudePlugin, zipCodexPlugin, zipObfuscatedMcpServer)
 }
 
+tasks.register("assembleCliR8ReleaseArchives") {
+    group = "distribution"
+    description = "Assemble R8-obfuscated JVM release archives for hexana-cli and hexana-cli-script."
+    dependsOn(cliR8Tasks.map { it.zipRuntime })
+}
+
+tasks.register("verifyCliR8ReleaseArchives") {
+    group = "verification"
+    description = "Verify R8-obfuscated JVM release archives for hexana-cli and hexana-cli-script."
+    dependsOn(cliR8Tasks.map { it.verifyRuntime })
+}
+
 val assembleNativeMcpPackaging = tasks.register("assembleNativeMcpPackaging") {
     group = "distribution"
     description = "Assemble native-enabled Claude and Codex MCP wrapper layouts for the current host platform while keeping JVM fallback."
@@ -1692,6 +2266,7 @@ fun runProcess(commandLine: List<String>, workingDir: File, environment: Map<Str
     val processBuilder = ProcessBuilder(commandLine)
         .directory(workingDir)
         .redirectErrorStream(true)
+    processBuilder.environment().keys.removeAll { it == "JAVA_TOOL_OPTIONS" || it == "JDK_JAVA_OPTIONS" }
     processBuilder.environment().putAll(environment)
     val process = processBuilder
         .start()
