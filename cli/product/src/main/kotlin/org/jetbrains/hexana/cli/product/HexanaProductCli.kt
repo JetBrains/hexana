@@ -44,11 +44,6 @@ import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.concurrent.Callable
-import java.util.concurrent.ExecutionException
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
 import kotlin.concurrent.thread
 import kotlin.system.exitProcess
 
@@ -642,29 +637,7 @@ private fun readAutoStdinBytes(stdin: InputStream, maxBytes: Int): ByteArray? {
     if (System.console() != null) {
         return null
     }
-    if (stdin.available() > 0) {
-        return readStdinBytes(stdin, maxBytes).takeIf { it.isNotEmpty() }
-    }
-    return readAutoStdinBytesWithTimeout(stdin, maxBytes)
-}
-
-private fun readAutoStdinBytesWithTimeout(stdin: InputStream, maxBytes: Int): ByteArray? {
-    val executor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "hexana-cli-stdin-probe").apply { isDaemon = true }
-    }
-    return try {
-        val future = executor.submit(Callable { readStdinBytes(stdin, maxBytes) })
-        try {
-            future.get(AUTO_STDIN_READ_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS).takeIf { it.isNotEmpty() }
-        } catch (error: ExecutionException) {
-            throw error.cause ?: error
-        } catch (_: TimeoutException) {
-            future.cancel(true)
-            null
-        }
-    } finally {
-        executor.shutdownNow()
-    }
+    return readStdinBytes(stdin, maxBytes).takeIf { it.isNotEmpty() }
 }
 
 private fun InputStream.readAtMost(maxBytes: Int): ByteArray {
@@ -918,7 +891,6 @@ private fun hexanaProductVersion(): String =
         ?: "dev"
 
 private val analyticsJson = Json
-private const val AUTO_STDIN_READ_TIMEOUT_MILLIS = 100L
 private const val CLI_ANALYTICS_FLUSH_MILLIS = 100L
 private const val CLI_ANALYTICS_SHUTDOWN_FLUSH_MILLIS = 1_000L
 
