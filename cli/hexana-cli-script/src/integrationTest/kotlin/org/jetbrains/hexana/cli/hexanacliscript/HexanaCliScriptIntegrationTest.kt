@@ -34,8 +34,19 @@ class HexanaCliScriptIntegrationTest {
         val help = runScriptCli()
         assertEquals(0, help.exitCode, help.stderr)
         assertTrue(help.stdout.startsWith("hexana-cli-script <command> [options]\n"), help.stdout)
+        listOf("-h", "--help").forEach { helpFlag ->
+            val aliasHelp = runScriptCli(helpFlag)
+            assertEquals(0, aliasHelp.exitCode, aliasHelp.stderr)
+            assertEquals(help.stdout, aliasHelp.stdout)
+        }
         listOf("run-script", "tools", "version", "help").forEach {
             assertTrue(help.stdout.contains(it), help.stdout)
+            listOf("-h", "--help").forEach { helpFlag ->
+                val commandHelp = runScriptCli(it, helpFlag)
+                assertEquals(0, commandHelp.exitCode, commandHelp.stderr)
+                assertTrue(commandHelp.stdout.startsWith("Usage: hexana-cli-script $it"), commandHelp.stdout)
+                assertFalse(commandHelp.stdout.contains("summarize-binary"), commandHelp.stdout)
+            }
         }
         listOf("summarize-binary", "summarize-module", "wasm-to-wat", "stdio", "http", "doctor").forEach {
             assertFalse(help.stdout.contains(it), help.stdout)
@@ -53,6 +64,12 @@ class HexanaCliScriptIntegrationTest {
         val helpCommand = runScriptCli("help", "run-script")
         assertEquals(0, helpCommand.exitCode, helpCommand.stderr)
         assertTrue(helpCommand.stdout.startsWith("Usage: hexana-cli-script run-script"), helpCommand.stdout)
+
+        val version = runScriptCli("version")
+        val versionFlag = runScriptCli("--version")
+        assertEquals(0, version.exitCode, version.stderr)
+        assertEquals(0, versionFlag.exitCode, versionFlag.stderr)
+        assertEquals(version.stdout, versionFlag.stdout)
     }
 
     @Test
@@ -160,14 +177,30 @@ class HexanaCliScriptIntegrationTest {
             assertEquals(0, standardVersion.exitCode, standardVersion.stderr)
             val scriptVersion = runScriptCli("version", env = telemetryEnv)
             assertEquals(0, scriptVersion.exitCode, scriptVersion.stderr)
+            val standardHelp = runStandardCli("--help", env = telemetryEnv)
+            assertEquals(0, standardHelp.exitCode, standardHelp.stderr)
+            val scriptCommandHelp = runScriptCli("run-script", "--help", env = telemetryEnv)
+            assertEquals(0, scriptCommandHelp.exitCode, scriptCommandHelp.stderr)
 
-            val events = server.awaitEvents(2)
-            val standardEvent = events.single { it.property("product_id") == "hexana-cli" }
-            val scriptEvent = events.single { it.property("product_id") == "hexana-cli-script" }
+            val events = server.awaitEvents(4)
+            val standardEvent = events.single {
+                it.property("product_id") == "hexana-cli" && it.property("command_name") == "version"
+            }
+            val scriptEvent = events.single {
+                it.property("product_id") == "hexana-cli-script" && it.property("command_name") == "version"
+            }
+            val standardHelpEvent = events.single {
+                it.property("product_id") == "hexana-cli" && it.property("command_name") == "help"
+            }
+            val scriptHelpEvent = events.single {
+                it.property("product_id") == "hexana-cli-script" && it.property("command_name") == "run-script"
+            }
             assertEquals("version", standardEvent.property("command_name"))
             assertEquals("version", scriptEvent.property("command_name"))
             assertEquals(setOf("product_id", "command_name"), standardEvent.customPropertyKeys())
             assertEquals(setOf("product_id", "command_name"), scriptEvent.customPropertyKeys())
+            assertEquals(setOf("product_id", "command_name"), standardHelpEvent.customPropertyKeys())
+            assertEquals(setOf("product_id", "command_name"), scriptHelpEvent.customPropertyKeys())
             assertEquals(standardEvent.distinctId, scriptEvent.distinctId)
             assertTrue(Files.exists(home.resolve(".hexana/analytics-id")))
         }

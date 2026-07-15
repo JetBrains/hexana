@@ -25,8 +25,19 @@ class HexanaCliIntegrationTest {
         val help = runCli()
         assertEquals(0, help.exitCode, help.stderr)
         assertTrue(help.stdout.startsWith("hexana-cli <command> [options]\n"), help.stdout)
+        listOf("-h", "--help").forEach { helpFlag ->
+            val aliasHelp = runCli(helpFlag)
+            assertEquals(0, aliasHelp.exitCode, aliasHelp.stderr)
+            assertEquals(help.stdout, aliasHelp.stdout)
+        }
         listOf("summarize-binary", "summarize-module", "wasm-to-wat", "tools", "version", "help").forEach {
             assertTrue(help.stdout.contains(it), help.stdout)
+            listOf("-h", "--help").forEach { helpFlag ->
+                val commandHelp = runCli(it, helpFlag)
+                assertEquals(0, commandHelp.exitCode, commandHelp.stderr)
+                assertTrue(commandHelp.stdout.startsWith("Usage: hexana-cli $it"), commandHelp.stdout)
+                assertFalse(commandHelp.stdout.contains("run-script"), commandHelp.stdout)
+            }
         }
         listOf("run-script", "stdio", "http", "doctor").forEach {
             assertFalse(help.stdout.contains(it), help.stdout)
@@ -48,6 +59,12 @@ class HexanaCliIntegrationTest {
         val helpCommand = runCli("help", "summarize-module")
         assertEquals(0, helpCommand.exitCode, helpCommand.stderr)
         assertTrue(helpCommand.stdout.startsWith("Usage: hexana-cli summarize-module"), helpCommand.stdout)
+
+        val version = runCli("version")
+        val versionFlag = runCli("--version")
+        assertEquals(0, version.exitCode, version.stderr)
+        assertEquals(0, versionFlag.exitCode, versionFlag.stderr)
+        assertEquals(version.stdout, versionFlag.stdout)
     }
 
     @Test

@@ -9,6 +9,20 @@ import kotlin.test.assertTrue
 
 class HexanaProductCliTest {
     @Test
+    fun commandHelpDoesNotReadStdinOrRequireSource() {
+        listOf("-h", "--help").forEach { helpFlag ->
+            val result = HexanaProductCli(HexanaCliProduct.STANDARD).run(
+                args = arrayOf("summarize-binary", helpFlag),
+                stdin = FailOnReadInputStream,
+                env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
+            )
+
+            assertEquals(SUCCESS_EXIT_CODE, result.exitCode, result.stderr)
+            assertTrue(result.stdout.startsWith("Usage: hexana-cli summarize-binary"), result.stdout)
+        }
+    }
+
+    @Test
     fun implicitStdinDoesNotRequireAvailableBytes() {
         assumeTrue("Implicit stdin is disabled when a console is attached", System.console() == null)
 
@@ -35,6 +49,14 @@ class HexanaProductCliTest {
         assertEquals(USAGE_EXIT_CODE, result.exitCode, result.stderr)
         assertTrue(result.stderr.contains("Inline bytes exceed maximum size of 1 bytes."), result.stderr)
     }
+}
+
+private object FailOnReadInputStream : InputStream() {
+    override fun read(): Int =
+        error("help must not read stdin")
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+        error("help must not read stdin")
 }
 
 private class ZeroAvailableInputStream(bytes: ByteArray) : InputStream() {

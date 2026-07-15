@@ -135,19 +135,37 @@ public class HexanaProductCli(
         }
 
         val commandName = args.removeAt(0)
+        if (isHelpFlag(commandName)) {
+            requireNoArgs(commandName, args)
+            return ParsedCommand.Help(commandName = "help", topic = null, analytics = analytics)
+        }
         return when (commandName) {
             "help" -> {
                 val topic = args.removeFirstOrNull()
+                if (topic != null && isHelpFlag(topic)) {
+                    requireNoArgs(topic, args)
+                    return ParsedCommand.Help(commandName = "help", topic = "help", analytics = analytics)
+                }
                 if (args.isNotEmpty()) {
                     throw ProductUsageException("Usage: ${product.executableName} help [command]")
                 }
                 ParsedCommand.Help(commandName = "help", topic = topic, analytics = analytics)
             }
+            "--version" -> {
+                requireNoArgs(commandName, args)
+                ParsedCommand.Version(analytics)
+            }
             "version" -> {
+                if (args.any(::isHelpFlag)) {
+                    return ParsedCommand.Help(commandName = commandName, topic = commandName, analytics = analytics)
+                }
                 requireNoArgs(commandName, args)
                 ParsedCommand.Version(analytics)
             }
             "tools" -> {
+                if (args.any(::isHelpFlag)) {
+                    return ParsedCommand.Help(commandName = commandName, topic = commandName, analytics = analytics)
+                }
                 requireNoArgs(commandName, args)
                 ParsedCommand.Tools(analytics)
             }
@@ -165,7 +183,11 @@ public class HexanaProductCli(
         stdin: InputStream,
         env: Map<String, String>,
         analytics: CliAnalyticsSettings,
-    ): ParsedCommand.Executable {
+    ): ParsedCommand {
+        if (args.any(::isHelpFlag)) {
+            return ParsedCommand.Help(commandName = spec.commandName, topic = spec.commandName, analytics = analytics)
+        }
+
         val options = CommandOptions.fromEnv(env)
         val params = mutableMapOf<String, JsonPrimitive>()
         var pathArgument: String? = null
@@ -339,6 +361,8 @@ public class HexanaProductCli(
                 appendLine("  help  Print help for the product or one command.")
                 appendLine()
                 appendLine("Global options:")
+                appendLine("  -h, --help")
+                appendLine("  --version")
                 appendLine("  --telemetry-enabled <true|false>")
                 appendLine("  --telemetry-key <key>")
                 appendLine("  --telemetry-host <url>")
@@ -356,6 +380,7 @@ public class HexanaProductCli(
                     appendLine(spec.summary)
                     appendLine()
                     appendLine("Options:")
+                    appendLine("  -h, --help")
                     appendLine("  --format <${spec.outputFormats.joinToString("|") { it.cliName() }}>")
                     appendLine("  --stdin")
                     if (HexanaCliInputMode.BINARY_PATH in spec.inputModes) {
@@ -812,6 +837,9 @@ private fun requireNoArgs(commandName: String, args: List<String>) {
         throw ProductUsageException("Unexpected $commandName argument: ${args.first()}")
     }
 }
+
+private fun isHelpFlag(value: String): Boolean =
+    value == "-h" || value == "--help"
 
 private fun parseBoolean(name: String, value: String): Boolean = when (value.trim().lowercase()) {
     "true" -> true
