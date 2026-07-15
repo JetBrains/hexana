@@ -76,6 +76,7 @@ Read these files before making structural changes:
   root `gradle.properties:hexanaToolsVersion` (and its matching compatibility alias) when a GraalVM Native Image
   toolchain is available. Use
   `./gradlew :mcp:server:nativeMcpStdioSmoke` to run the native executable through
-  the stdio MCP startup/tools/list/tool-call integration smoke.
+  the stdio MCP startup/tools/list/tool-call integration smoke, and
+  `./gradlew :mcp:server:nativeMcpHttpSmoke` to verify native HTTP `/healthz`, tools/list, and local HTTP protection.
 - Run `./gradlew :mcp:server:build` after changes here.
 - If a change crosses the `mcp/core` boundary, also run `./gradlew :mcp:core:build`.

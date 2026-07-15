@@ -168,10 +168,8 @@ HEXANA_MCP_MAX_FILE_BYTES=10485760 mcp/build/packaging/claude-plugin/bin/hexana-
 
 ## Native support policy
 
-Native MCP releases are stdio-first. The release artifact task runs `hexana-mcp version` and the native stdio MCP smoke
-test before writing current-host artifacts. Native HTTP support is validated by the separate
-`:mcp:server:nativeMcpHttpSmoke` task; it is not part of `:mcp:assembleNativeMcpReleaseArtifacts` until the HTTP path is
-proven on the supported platform matrix.
+Native MCP releases are stdio-first and HTTP-verified. The release artifact task runs `hexana-mcp version`, native stdio
+MCP smoke, native HTTP MCP smoke, and native archive checks before writing current-host artifacts.
 
 Standalone MCP analytics are enabled by default for JVM and GraalVM Native Image `stdio` and `http`; explicit opt-out
 works everywhere with `--telemetry-enabled false` or `HEXANA_MCP_TELEMETRY_ENABLED=false`. PostHog networking and
@@ -242,8 +240,8 @@ matrix leg must run:
 ```
 
 That task builds the current host's GraalVM Native Image executable, requires `hexana-mcp version` to print exactly
-`hexana-mcp <mcpServerVersion>` from `mcp/server/gradle.properties`, runs the native stdio MCP smoke test, and writes
-versioned artifacts to `mcp/build/distributions-native/`:
+`hexana-mcp <mcpServerVersion>` from `mcp/server/gradle.properties`, runs the native stdio and HTTP MCP smoke tests,
+verifies native archives, and writes versioned artifacts to `mcp/build/distributions-native/`:
 
 - `hexana-mcp-native-<platform>-<version>.zip`: standalone native executable with license files.
 - `hexana-cli-native-<platform>-<version>.zip`: standard CLI native executable with license files.
