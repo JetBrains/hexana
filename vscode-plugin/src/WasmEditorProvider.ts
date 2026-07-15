@@ -169,8 +169,10 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             const rightName = path.basename(right.fsPath);
 
             // Build a synthetic URI for the diff tab.
+            // Encode the original file paths so the diff can be restored
+            // after a VS Code restart without re-prompting the user.
             const diffUri = vscode.Uri.parse(
-                `hexana-module:/${leftName} ↔ ${rightName}?diff=true`,
+                `hexana-module:/${leftName} ↔ ${rightName}?diff=true&left=${encodeURIComponent(left.toString())}&right=${encodeURIComponent(right.toString())}`,
             );
             const key = diffUri.toString();
 
@@ -258,7 +260,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         webviewPanel.webview.html = getWebviewContent(webviewPanel.webview, this.context.extensionUri);
 
         // Once the webview signals it is ready, send the binary payload.
-        webviewPanel.webview.onDidReceiveMessage((message) => {
+        webviewPanel.webview.onDidReceiveMessage(async (message) => {
             if (message.type === "ready") {
                 // Check if this is a diff view.
                 const diffKey = document.uri.toString();
@@ -280,10 +282,36 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 }
 
                 // Diff URI whose payload was lost (e.g. after VS Code restart).
+                // Try to reload from disk using the file paths encoded in the URI.
                 if (document.uri.query.includes("diff=true")) {
+                    const params = new URLSearchParams(document.uri.query);
+                    const leftUriStr = params.get("left");
+                    const rightUriStr = params.get("right");
+                    if (leftUriStr && rightUriStr) {
+                        try {
+                            const leftUri = vscode.Uri.parse(leftUriStr);
+                            const rightUri = vscode.Uri.parse(rightUriStr);
+                            const leftData = await vscode.workspace.fs.readFile(leftUri);
+                            const rightData = await vscode.workspace.fs.readFile(rightUri);
+                            const toPayload = (d: Uint8Array) =>
+                                d instanceof Buffer
+                                    ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength)
+                                    : d;
+                            webviewPanel.webview.postMessage({
+                                type: "load-diff",
+                                leftData: toPayload(leftData),
+                                leftName: path.basename(leftUri.fsPath),
+                                rightData: toPayload(rightData),
+                                rightName: path.basename(rightUri.fsPath),
+                            });
+                            return;
+                        } catch (err) {
+                            console.warn("[Hexana] Failed to reload diff files from disk:", err);
+                        }
+                    }
                     webviewPanel.webview.postMessage({
                         type: "load-expired",
-                        message: "This diff session has expired. Please run \"Compare WASM With…\" again.",
+                        message: "This diff session has expired and the original files could not be read. Please run \"Compare WASM With…\" again.",
                     });
                     return;
                 }
