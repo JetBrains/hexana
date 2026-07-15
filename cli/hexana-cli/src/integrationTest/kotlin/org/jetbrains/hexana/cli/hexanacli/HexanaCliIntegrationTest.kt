@@ -215,6 +215,61 @@ class HexanaCliIntegrationTest {
     }
 
     @Test
+    fun finalNormalizedOutputLimitBoundariesApplyToStdoutAndOutputFiles() {
+        val wasm = wasmFile("(module)")
+        val args = arrayOf("summarize-module", wasm.toString(), "--format", "json")
+
+        val baseline = runCli(*args)
+        assertEquals(0, baseline.exitCode, baseline.stderr)
+        assertEquals(1, trailingNewlineCount(baseline.stdout), baseline.stdout)
+        val finalBytes = baseline.stdout.toByteArray(Charsets.UTF_8).size
+
+        val stdoutUnderLimit = runCli(*args, "--max-output-bytes", (finalBytes - 1).toString())
+        assertOutputLimitFailure(stdoutUnderLimit, finalBytes - 1)
+        val stdoutExactLimit = runCli(*args, "--max-output-bytes", finalBytes.toString())
+        assertEquals(0, stdoutExactLimit.exitCode, stdoutExactLimit.stderr)
+        assertEquals(baseline.stdout, stdoutExactLimit.stdout)
+        val stdoutOverLimit = runCli(*args, "--max-output-bytes", (finalBytes + 1).toString())
+        assertEquals(0, stdoutOverLimit.exitCode, stdoutOverLimit.stderr)
+        assertEquals(baseline.stdout, stdoutOverLimit.stdout)
+
+        val fileUnderLimit = temporaryFolder.root.toPath().resolve("under-limit.json")
+        val fileUnderResult = runCli(
+            *args,
+            "--output",
+            fileUnderLimit.toString(),
+            "--max-output-bytes",
+            (finalBytes - 1).toString(),
+        )
+        assertOutputLimitFailure(fileUnderResult, finalBytes - 1)
+        assertFalse(Files.exists(fileUnderLimit), "output file must not be written when normalized output exceeds limit")
+
+        val fileExactLimit = temporaryFolder.root.toPath().resolve("exact-limit.json")
+        val fileExactResult = runCli(
+            *args,
+            "--output",
+            fileExactLimit.toString(),
+            "--max-output-bytes",
+            finalBytes.toString(),
+        )
+        assertEquals(0, fileExactResult.exitCode, fileExactResult.stderr)
+        assertEquals("", fileExactResult.stdout)
+        assertEquals(baseline.stdout, Files.readString(fileExactLimit))
+
+        val fileOverLimit = temporaryFolder.root.toPath().resolve("over-limit.json")
+        val fileOverResult = runCli(
+            *args,
+            "--output",
+            fileOverLimit.toString(),
+            "--max-output-bytes",
+            (finalBytes + 1).toString(),
+        )
+        assertEquals(0, fileOverResult.exitCode, fileOverResult.stderr)
+        assertEquals("", fileOverResult.stdout)
+        assertEquals(baseline.stdout, Files.readString(fileOverLimit))
+    }
+
+    @Test
     fun blankInstalledStandardSourcesAreUsageErrorsWithoutStackTraces() {
         listOf(
             listOf("summarize-binary", ""),
@@ -235,6 +290,13 @@ class HexanaCliIntegrationTest {
         assertEquals(2, result.exitCode, result.stderr)
         assertTrue(result.stdout.isBlank(), result.stdout)
         assertEquals("Blank source value is not allowed.\n", result.stderr)
+        assertNoStackTraceMarkers(result.stderr)
+    }
+
+    private fun assertOutputLimitFailure(result: ProcessResult, maxOutputBytes: Int) {
+        assertEquals(1, result.exitCode, result.stderr)
+        assertEquals("", result.stdout)
+        assertTrue(result.stderr.contains("maxOutputBytes=$maxOutputBytes"), result.stderr)
         assertNoStackTraceMarkers(result.stderr)
     }
 

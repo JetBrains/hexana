@@ -280,7 +280,9 @@ public class HexanaProductCli(
     }
 
     private fun executeTool(command: ParsedCommand.Executable): ProductCliResult {
-        val output = renderTool(command).normalize(command.format)
+        val output = renderTool(command)
+            .normalize(command.format)
+            .requireWithinOutputLimit(command)
         command.outputPath?.let { path ->
             path.toAbsolutePath().parent?.let(Files::createDirectories)
             Files.write(path, output.stdout.toByteArray(StandardCharsets.UTF_8))
@@ -346,7 +348,7 @@ public class HexanaProductCli(
                 ProductCliResult(stdout = rendered.stdout, stderr = rendered.stderr, exitCode = rendered.exitCode)
             }
             else -> error("Unsupported selected CLI tool: ${command.spec.toolName}")
-        }.requireWithinOutputLimit(command)
+        }
     }
 
     private fun helpText(topic: String?): String {

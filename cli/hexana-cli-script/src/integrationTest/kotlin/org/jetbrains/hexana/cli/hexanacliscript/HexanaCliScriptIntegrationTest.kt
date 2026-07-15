@@ -268,6 +268,27 @@ class HexanaCliScriptIntegrationTest {
     }
 
     @Test
+    fun rawOutputStaysByteExactAtOutputLimit() {
+        val binary = temporaryFolder.newFile("raw-limit.bin").toPath()
+        Files.write(binary, byteArrayOf(1, 2, 3))
+
+        val result = runScriptCli(
+            "run-script",
+            binary.toString(),
+            "--script-text",
+            "print('abc');",
+            "--format",
+            "raw",
+            "--max-output-bytes",
+            "3",
+        )
+
+        assertEquals(0, result.exitCode, result.stderr)
+        assertEquals("abc", result.stdout)
+        assertEquals(3, result.stdout.toByteArray(Charsets.UTF_8).size)
+    }
+
+    @Test
     fun blankInstalledScriptSourcesAreUsageErrorsWithoutStackTraces() {
         listOf(
             listOf("run-script", "", "--script-text", "print(1);"),
