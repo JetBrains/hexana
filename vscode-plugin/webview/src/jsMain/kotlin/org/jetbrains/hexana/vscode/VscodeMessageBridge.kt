@@ -25,6 +25,7 @@ data class VscodeMessage(
     val leftName: String = "",
     val rightData: ByteArray? = null,
     val rightName: String = "",
+    val message: String = "",
 )
 
 /**
@@ -347,6 +348,12 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                             leftName = (data.leftName as? String) ?: "",
                             rightData = toByteArray(data.rightData),
                             rightName = (data.rightName as? String) ?: "",
+                        )
+                    }
+                    "load-expired" -> {
+                        VscodeMessage(
+                            type = type,
+                            message = (data.message as? String) ?: "",
                         )
                     }
                     "script-file-picked", "script-file-content" -> {

@@ -42,6 +42,7 @@ fun BinaryEditorApp() {
     var fileName by remember { mutableStateOf("") }
     var filePath by remember { mutableStateOf("") }
     var diffPayload by remember { mutableStateOf<DiffPayload?>(null) }
+    var expiredMessage by remember { mutableStateOf<String?>(null) }
     val scriptTabs = remember { mutableStateListOf<ScriptTabState>() }
     var dialogPickedPath by remember { mutableStateOf("") }
     var dialogPickedContent by remember { mutableStateOf("") }
@@ -59,6 +60,11 @@ fun BinaryEditorApp() {
                 val right = message.rightData
                 if (left != null && right != null) {
                     diffPayload = DiffPayload(left, message.leftName, right, message.rightName)
+                }
+            }
+            "load-expired" -> {
+                expiredMessage = message.message.ifBlank {
+                    "This diff session has expired. Please run \"Compare WASM With…\" again."
                 }
             }
             "script-file-picked" -> {
@@ -82,6 +88,13 @@ fun BinaryEditorApp() {
                 }
             }
         }
+    }
+
+    if (expiredMessage != null) {
+        Div({ classes("loading") }) {
+            Text(expiredMessage!!)
+        }
+        return
     }
 
     val dp = diffPayload

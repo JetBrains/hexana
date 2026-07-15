@@ -74,23 +74,39 @@ class HexanaModuleFS implements vscode.FileSystemProvider {
 
     stat(uri: vscode.Uri): vscode.FileStat {
         const entry = inMemoryModules.get(uri.toString());
-        if (!entry) {
-            throw vscode.FileSystemError.FileNotFound(uri);
+        if (entry) {
+            return {
+                type: vscode.FileType.File,
+                ctime: 0,
+                mtime: 0,
+                size: entry.data.byteLength,
+            };
         }
-        return {
-            type: vscode.FileType.File,
-            ctime: 0,
-            mtime: 0,
-            size: entry.data.byteLength,
-        };
+        // Diff or nested-module URIs whose in-memory data was lost after
+        // a VS Code restart — return an empty placeholder so the editor
+        // can open and show a friendly "session expired" message.
+        if (uri.scheme === "hexana-module") {
+            return {
+                type: vscode.FileType.File,
+                ctime: 0,
+                mtime: 0,
+                size: 0,
+            };
+        }
+        throw vscode.FileSystemError.FileNotFound(uri);
     }
 
     readFile(uri: vscode.Uri): Uint8Array {
         const entry = inMemoryModules.get(uri.toString());
-        if (!entry) {
-            throw vscode.FileSystemError.FileNotFound(uri);
+        if (entry) {
+            return entry.data;
         }
-        return entry.data;
+        // Return empty bytes for expired in-memory URIs so the editor
+        // can open and display a recovery message.
+        if (uri.scheme === "hexana-module") {
+            return new Uint8Array(0);
+        }
+        throw vscode.FileSystemError.FileNotFound(uri);
     }
 
     readDirectory(): [string, vscode.FileType][] {
@@ -259,6 +275,15 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                         leftName: diff.leftName,
                         rightData: toPayload(diff.rightData),
                         rightName: diff.rightName,
+                    });
+                    return;
+                }
+
+                // Diff URI whose payload was lost (e.g. after VS Code restart).
+                if (document.uri.query.includes("diff=true")) {
+                    webviewPanel.webview.postMessage({
+                        type: "load-expired",
+                        message: "This diff session has expired. Please run \"Compare WASM With…\" again.",
                     });
                     return;
                 }
