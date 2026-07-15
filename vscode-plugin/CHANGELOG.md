@@ -1,3 +1,9 @@
+# 0.6.1 - 15.07.2026
+
+- component-model binaries now use the inline virtualized WAT view for embedded core modules, with a selector when a component contains multiple modules
+- improved performance of WASM table tabs, especially the Functions tab on large modules
+- updated the bundled MCP server packaging to the split CLI release-product layout
+
 # 0.6.0 - 08.07.2026
 
 - support for viewing compiled Protocol Buffers descriptor sets (.desc / .protoset), with Files/Messages/Fields/Enums/Services tabs
