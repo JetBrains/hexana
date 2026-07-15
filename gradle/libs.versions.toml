@@ -55,7 +55,10 @@ graalvm-polyglot = { module = "org.graalvm.polyglot:polyglot", version.ref = "gr
 graalvm-wasm = { module = "org.graalvm.polyglot:wasm", version.ref = "graalvm" }
 graalvm-js = { module = "org.graalvm.polyglot:js", version.ref = "graalvm" }
 kotlinx-browser = { module = "org.jetbrains.kotlinx:kotlinx-browser", version.ref = "kotlinx-browser" }
+ktor-serialization-kotlinx-json-jvm = { module = "io.ktor:ktor-serialization-kotlinx-json-jvm", version.ref = "ktor" }
 ktor-server-cio-jvm = { module = "io.ktor:ktor-server-cio-jvm", version.ref = "ktor" }
+ktor-server-content-negotiation-jvm = { module = "io.ktor:ktor-server-content-negotiation-jvm", version.ref = "ktor" }
+ktor-server-sse-jvm = { module = "io.ktor:ktor-server-sse-jvm", version.ref = "ktor" }
 ktor-client-cio-jvm = { module = "io.ktor:ktor-client-cio-jvm", version.ref = "ktor" }
 ktor-client-websockets-jvm = { module = "io.ktor:ktor-client-websockets-jvm", version.ref = "ktor" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }

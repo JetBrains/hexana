@@ -9,7 +9,6 @@ import io.ktor.server.engine.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.modelcontextprotocol.kotlin.sdk.server.mcpStatelessStreamableHttp
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import kotlinx.io.asSink
@@ -257,7 +256,7 @@ private suspend fun runHttp(command: HexanaCommand.Http) {
                 call.respondText("OK", ContentType.Text.Plain)
             }
         }
-        mcpStatelessStreamableHttp(
+        hexanaStatelessMcpStreamableHttp(
             path = command.endpoint,
             enableDnsRebindingProtection = localOnlyBinding,
             allowedHosts = if (localOnlyBinding) localAllowedHosts(command.host, command.port) else null,

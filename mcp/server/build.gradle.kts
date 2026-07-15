@@ -192,7 +192,10 @@ dependencies {
     implementation(libs.kotlin.logging.jvm)
     implementation(libs.logback.classic)
     implementation(libs.mcp.kotlin.sdk.jvm)
+    implementation(libs.ktor.serialization.kotlinx.json.jvm)
     implementation(libs.ktor.server.cio.jvm)
+    implementation(libs.ktor.server.content.negotiation.jvm)
+    implementation(libs.ktor.server.sse.jvm)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.slf4j.api)
 
