@@ -8,12 +8,14 @@ import com.sun.net.httpserver.HttpServer
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.IOException
 import java.net.InetSocketAddress
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.util.Base64
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -221,6 +223,28 @@ class HexanaCliScriptIntegrationTest {
     }
 
     @Test
+    fun telemetryDoesNotConsumeStreamingResponseBody() {
+        val home = temporaryFolder.newFolder("streaming-telemetry-home").toPath()
+        FakePostHogServer.startStreamingResponse().use { server ->
+            val result = runScriptCli(
+                "version",
+                env = mapOf(
+                    "HEXANA_CLI_POSTHOG_HOST" to server.url,
+                    "HEXANA_CLI_POSTHOG_KEY" to "test-key",
+                    "HOME" to home.toString(),
+                    "JAVA_TOOL_OPTIONS" to "-Duser.home=$home",
+                )
+            )
+
+            assertEquals(0, result.exitCode, result.stderr)
+            val event = server.awaitEvents(1).single()
+            assertEquals("hexana-cli-script", event.property("product_id"))
+            assertEquals("version", event.property("command_name"))
+            server.assertStreamingResponseClosed()
+        }
+    }
+
+    @Test
     fun versionsAreSharedAcrossProductsAndMcpEnvIsIgnored() {
         val standard = runStandardCli("version")
         val script = runScriptCli("version")
@@ -415,9 +439,11 @@ private fun ExecutorService.readAsync(block: () -> ByteArray): CompletableFuture
 
 private class FakePostHogServer private constructor(
     private val server: HttpServer,
+    private val responseMode: ResponseMode,
 ) : AutoCloseable {
     private val executor = Executors.newCachedThreadPool()
     private val recordedRequests = CopyOnWriteArrayList<String>()
+    private val streamingResponseClosed = CountDownLatch(1)
 
     val url: String
         get() = "http://127.0.0.1:${server.address.port}"
@@ -425,7 +451,10 @@ private class FakePostHogServer private constructor(
     init {
         server.executor = executor
         server.createContext("/") { exchange ->
-            exchange.recordAndRespond()
+            when (responseMode) {
+                ResponseMode.OK -> exchange.recordAndRespond()
+                ResponseMode.STREAMING_BODY -> exchange.recordAndStreamBody()
+            }
         }
         server.start()
     }
@@ -450,6 +479,13 @@ private class FakePostHogServer private constructor(
         } while (System.nanoTime() < deadline)
     }
 
+    fun assertStreamingResponseClosed() {
+        assertTrue(
+            streamingResponseClosed.await(1, TimeUnit.SECONDS),
+            "Expected telemetry client to close the streaming response without reading the body",
+        )
+    }
+
     override fun close() {
         server.stop(0)
         executor.shutdownNow()
@@ -463,6 +499,32 @@ private class FakePostHogServer private constructor(
         }
 
     private fun HttpExchange.recordAndRespond() {
+        recordRequest()
+        val response = """{"status":"ok"}""".toByteArray(Charsets.UTF_8)
+        sendResponseHeaders(200, response.size.toLong())
+        responseBody.use { it.write(response) }
+    }
+
+    private fun HttpExchange.recordAndStreamBody() {
+        recordRequest()
+        sendResponseHeaders(200, 0)
+        val chunk = """{"status":"ok"}""".toByteArray(Charsets.UTF_8)
+        try {
+            while (true) {
+                responseBody.write(chunk)
+                responseBody.flush()
+                Thread.sleep(25)
+            }
+        } catch (_: IOException) {
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        } finally {
+            streamingResponseClosed.countDown()
+            runCatching { responseBody.close() }
+        }
+    }
+
+    private fun HttpExchange.recordRequest() {
         val raw = requestBody.use { it.readBytes() }
         val body = if (requestHeaders["Content-Encoding"].orEmpty().any { it.equals("gzip", ignoreCase = true) }) {
             GZIPInputStream(raw.inputStream()).use { it.readBytes() }
@@ -470,15 +532,20 @@ private class FakePostHogServer private constructor(
             raw
         }
         recordedRequests += body.toString(Charsets.UTF_8)
-        val response = """{"status":"ok"}""".toByteArray(Charsets.UTF_8)
-        sendResponseHeaders(200, response.size.toLong())
-        responseBody.use { it.write(response) }
     }
 
     companion object {
         fun start(): FakePostHogServer =
-            FakePostHogServer(HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0))
+            FakePostHogServer(HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0), ResponseMode.OK)
+
+        fun startStreamingResponse(): FakePostHogServer =
+            FakePostHogServer(HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0), ResponseMode.STREAMING_BODY)
     }
+}
+
+private enum class ResponseMode {
+    OK,
+    STREAMING_BODY,
 }
 
 private data class RecordedEvent(

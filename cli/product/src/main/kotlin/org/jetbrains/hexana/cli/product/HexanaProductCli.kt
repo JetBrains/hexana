@@ -777,15 +777,19 @@ private fun sendCliAnalytics(
         }
         val host = settings.host ?: AnalyticsConfig.DEFAULT_HOST
         val connection = URI("${host.trimEnd('/')}/capture/").toURL().openConnection() as HttpURLConnection
-        connection.requestMethod = "POST"
-        connection.connectTimeout = 1_000
-        connection.readTimeout = 1_000
-        connection.doOutput = true
-        connection.setRequestProperty("Content-Type", "application/json")
-        connection.outputStream.use { output ->
-            output.write(analyticsJson.encodeToString(body).toByteArray(StandardCharsets.UTF_8))
+        try {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 1_000
+            connection.readTimeout = 1_000
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.outputStream.use { output ->
+                output.write(analyticsJson.encodeToString(body).toByteArray(StandardCharsets.UTF_8))
+            }
+            connection.responseCode
+        } finally {
+            connection.disconnect()
         }
-        connection.inputStream.use { it.readBytes() }
     }
 }
 

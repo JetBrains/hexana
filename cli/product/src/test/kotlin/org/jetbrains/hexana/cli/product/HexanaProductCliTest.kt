@@ -1,13 +1,25 @@
 package org.jetbrains.hexana.cli.product
 
+import com.sun.net.httpserver.HttpExchange
+import com.sun.net.httpserver.HttpServer
 import org.junit.Assume.assumeTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayInputStream
+import java.io.IOException
 import java.io.InputStream
+import java.net.InetSocketAddress
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class HexanaProductCliTest {
+    @get:Rule
+    val temporaryFolder = TemporaryFolder()
+
     @Test
     fun commandHelpDoesNotReadStdinOrRequireSource() {
         listOf("-h", "--help").forEach { helpFlag ->
@@ -61,6 +73,101 @@ class HexanaProductCliTest {
         assertEquals(USAGE_EXIT_CODE, result.exitCode, result.stderr)
         assertEquals("Exactly one of --script or --script-text is required.\n", result.stderr)
         assertEquals("", result.stdout)
+    }
+
+    @Test
+    fun telemetryDoesNotConsumeStreamingResponseBody() {
+        val home = temporaryFolder.newFolder("telemetry-home")
+        withUserHome(home.absolutePath) {
+            StreamingTelemetryServer.start().use { server ->
+                val result = HexanaProductCli(HexanaCliProduct.SCRIPT).run(
+                    args = arrayOf("version"),
+                    stdin = ByteArrayInputStream(ByteArray(0)),
+                    env = mapOf(
+                        "HEXANA_CLI_POSTHOG_HOST" to server.url,
+                        "HEXANA_CLI_POSTHOG_KEY" to "test-key",
+                    ),
+                )
+
+                assertEquals(SUCCESS_EXIT_CODE, result.exitCode, result.stderr)
+                server.assertRequestRecorded()
+                server.assertResponseClosed()
+            }
+        }
+    }
+}
+
+private inline fun withUserHome(value: String, block: () -> Unit) {
+    val original = System.getProperty("user.home")
+    try {
+        System.setProperty("user.home", value)
+        block()
+    } finally {
+        if (original == null) {
+            System.clearProperty("user.home")
+        } else {
+            System.setProperty("user.home", original)
+        }
+    }
+}
+
+private class StreamingTelemetryServer private constructor(
+    private val server: HttpServer,
+) : AutoCloseable {
+    private val executor = Executors.newCachedThreadPool()
+    private val requestRecorded = CountDownLatch(1)
+    private val responseClosed = CountDownLatch(1)
+
+    val url: String
+        get() = "http://127.0.0.1:${server.address.port}"
+
+    init {
+        server.executor = executor
+        server.createContext("/") { exchange ->
+            exchange.recordAndStreamBody()
+        }
+        server.start()
+    }
+
+    fun assertRequestRecorded() {
+        assertTrue(requestRecorded.await(1, TimeUnit.SECONDS), "Expected telemetry request to be recorded")
+    }
+
+    fun assertResponseClosed() {
+        assertTrue(
+            responseClosed.await(1, TimeUnit.SECONDS),
+            "Expected telemetry client to close the streaming response without reading the body",
+        )
+    }
+
+    override fun close() {
+        server.stop(0)
+        executor.shutdownNow()
+    }
+
+    private fun HttpExchange.recordAndStreamBody() {
+        requestBody.use { it.readBytes() }
+        requestRecorded.countDown()
+        sendResponseHeaders(200, 1_000_000_000L)
+        val chunk = """{"status":"ok"}""".toByteArray(Charsets.UTF_8)
+        try {
+            while (true) {
+                responseBody.write(chunk)
+                responseBody.flush()
+                Thread.sleep(25)
+            }
+        } catch (_: IOException) {
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        } finally {
+            responseClosed.countDown()
+            runCatching { responseBody.close() }
+        }
+    }
+
+    companion object {
+        fun start(): StreamingTelemetryServer =
+            StreamingTelemetryServer(HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0))
     }
 }
 
