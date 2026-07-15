@@ -4,6 +4,7 @@ This directory contains client-specific wrapper templates for the standalone run
 
 Related documents:
 
+- [Run Script CLI](../RUN_SCRIPT.md) shows deterministic `run-script` examples and the `run_binary_script` profile.
 - [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) lists the native release gates and JVM fallback compatibility checks.
 - [CLAUDE_DESKTOP_MCPB.md](CLAUDE_DESKTOP_MCPB.md) describes the local Claude Desktop MCPB prototype and demo checklist.
 - [Hexana MCP Native Image Release Design](../../docs/superpowers/specs/2026-06-19-mcp-native-image-release-design.md)
