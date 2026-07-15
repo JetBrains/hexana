@@ -15,6 +15,19 @@ import { extensionLib, getSelectedRuntime, runExport } from "./WasmRunConfigurat
 const inMemoryModules = new Map<string, { data: Uint8Array; fileName: string }>();
 
 /**
+ * In-memory store for pending diff payloads keyed by a synthetic
+ * `hexana-module:` URI.  When the user invokes "Compare WASM With…" we
+ * store both byte arrays here and open a new custom editor tab whose URI
+ * matches the key.  `resolveCustomEditor` checks this map and, when a
+ * diff entry is present, sends a `load-diff` message instead of the
+ * normal `load-wasm`.
+ */
+const pendingDiffs = new Map<string, {
+    leftData: Uint8Array; leftName: string;
+    rightData: Uint8Array; rightName: string;
+}>();
+
+/**
  * In-memory store for WAT text keyed by a synthetic `hexana-wat:` URI.
  *
  * When the webview produces WAT output for a wasm binary, it sends the text
@@ -107,6 +120,62 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
     private static readonly viewType = "hexana.wasmEditor";
 
+    /**
+     * Registers the `hexana.compareWasm` command that lets the user pick two
+     * `.wasm` files and opens a diff view in a new custom editor tab.
+     */
+    public static registerCompareCommand(context: vscode.ExtensionContext): vscode.Disposable {
+        return vscode.commands.registerCommand("hexana.compareWasm", async (contextUri?: vscode.Uri) => {
+            const wasmFilter = { "WebAssembly": ["wasm"] };
+
+            // Left file: use the context-menu URI if available, otherwise prompt.
+            const left = contextUri && !contextUri.fsPath.endsWith("/")
+                ? contextUri
+                : await vscode.window.showOpenDialog({
+                    canSelectMany: false,
+                    filters: wasmFilter,
+                    title: "Compare WASM — Select First Module",
+                }).then(uris => uris?.[0]);
+            if (!left) return;
+
+            // Right file: always prompt.
+            const right = await vscode.window.showOpenDialog({
+                canSelectMany: false,
+                filters: wasmFilter,
+                title: `Compare With WASM File (against ${path.basename(left.fsPath)})`,
+                defaultUri: vscode.Uri.file(path.dirname(left.fsPath)),
+            }).then(uris => uris?.[0]);
+            if (!right) return;
+
+            const leftData = await vscode.workspace.fs.readFile(left);
+            const rightData = await vscode.workspace.fs.readFile(right);
+            const leftName = path.basename(left.fsPath);
+            const rightName = path.basename(right.fsPath);
+
+            // Build a synthetic URI for the diff tab.
+            const diffUri = vscode.Uri.parse(
+                `hexana-module:/${leftName} ↔ ${rightName}?diff=true`,
+            );
+            const key = diffUri.toString();
+
+            // Store the left side as the "document" bytes so openCustomDocument
+            // can serve something, and store the diff payload separately.
+            inMemoryModules.set(key, { data: leftData, fileName: `${leftName} ↔ ${rightName}` });
+            pendingDiffs.set(key, { leftData, leftName, rightData, rightName });
+
+            try {
+                await vscode.commands.executeCommand(
+                    "vscode.openWith",
+                    diffUri,
+                    WasmEditorProvider.viewType,
+                );
+            } catch (err) {
+                console.error("[Hexana] Failed to open diff view:", err);
+                vscode.window.showErrorMessage(`Failed to open diff view: ${err}`);
+            }
+        });
+    }
+
     public static register(context: vscode.ExtensionContext): vscode.Disposable {
         // Register a virtual file-system for the hexana-module scheme so
         // that vscode.openWith can resolve nested-module URIs.
@@ -175,6 +244,25 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         // Once the webview signals it is ready, send the binary payload.
         webviewPanel.webview.onDidReceiveMessage((message) => {
             if (message.type === "ready") {
+                // Check if this is a diff view.
+                const diffKey = document.uri.toString();
+                const diff = pendingDiffs.get(diffKey);
+                if (diff) {
+                    pendingDiffs.delete(diffKey);
+                    const toPayload = (d: Uint8Array) =>
+                        d instanceof Buffer
+                            ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength)
+                            : d;
+                    webviewPanel.webview.postMessage({
+                        type: "load-diff",
+                        leftData: toPayload(diff.leftData),
+                        leftName: diff.leftName,
+                        rightData: toPayload(diff.rightData),
+                        rightName: diff.rightName,
+                    });
+                    return;
+                }
+
                 const payload = document.data instanceof Buffer
                     ? new Uint8Array(document.data.buffer, document.data.byteOffset, document.data.byteLength)
                     : document.data;

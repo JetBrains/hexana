@@ -21,6 +21,10 @@ data class VscodeMessage(
     val scriptPath: String = "",
     val scriptContent: String = "",
     val scriptPaths: List<String> = emptyList(),
+    val leftData: ByteArray? = null,
+    val leftName: String = "",
+    val rightData: ByteArray? = null,
+    val rightName: String = "",
 )
 
 /**
@@ -329,6 +333,20 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                             filePath = (data.filePath as? String) ?: "",
                             data = byteArray,
                             wasmRuntime = (data.wasmRuntime as? String),
+                        )
+                    }
+                    "load-diff" -> {
+                        fun toByteArray(jsArr: dynamic): ByteArray? {
+                            if (jsArr == null) return null
+                            val len = jsArr.length as Int
+                            return ByteArray(len) { i -> (jsArr[i] as Number).toByte() }
+                        }
+                        VscodeMessage(
+                            type = type,
+                            leftData = toByteArray(data.leftData),
+                            leftName = (data.leftName as? String) ?: "",
+                            rightData = toByteArray(data.rightData),
+                            rightName = (data.rightName as? String) ?: "",
                         )
                     }
                     "script-file-picked", "script-file-content" -> {

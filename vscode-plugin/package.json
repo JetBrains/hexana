@@ -59,8 +59,26 @@
       {
         "command": "hexana.mcp.showServerStatus",
         "title": "Hexana MCP: Show Server Status"
+      },
+      {
+        "command": "hexana.compareWasm",
+        "title": "Hexana: Compare WASM With…"
       }
     ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "hexana.compareWasm",
+          "when": "resourceExtname == .wasm",
+          "group": "3_compare"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "hexana.compareWasm"
+        }
+      ]
+    },
     "breakpoints": [
       { "language": "c" },
       { "language": "cpp" },

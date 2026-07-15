@@ -26,11 +26,22 @@ class ScriptTabState(
     var content by mutableStateOf(content)
 }
 
+/**
+ * Holds the state for a diff view: the two binary payloads and their names.
+ */
+class DiffPayload(
+    val leftData: ByteArray,
+    val leftName: String,
+    val rightData: ByteArray,
+    val rightName: String,
+)
+
 @Composable
 fun BinaryEditorApp() {
     var wasmBytes by remember { mutableStateOf<ByteArray?>(null) }
     var fileName by remember { mutableStateOf("") }
     var filePath by remember { mutableStateOf("") }
+    var diffPayload by remember { mutableStateOf<DiffPayload?>(null) }
     val scriptTabs = remember { mutableStateListOf<ScriptTabState>() }
     var dialogPickedPath by remember { mutableStateOf("") }
     var dialogPickedContent by remember { mutableStateOf("") }
@@ -42,6 +53,13 @@ fun BinaryEditorApp() {
                 filePath = message.filePath
                 wasmBytes = message.data
                 configuredRuntimeId = message.wasmRuntime
+            }
+            "load-diff" -> {
+                val left = message.leftData
+                val right = message.rightData
+                if (left != null && right != null) {
+                    diffPayload = DiffPayload(left, message.leftName, right, message.rightName)
+                }
             }
             "script-file-picked" -> {
                 if (message.scriptPath.isNotBlank()) {
@@ -64,6 +82,17 @@ fun BinaryEditorApp() {
                 }
             }
         }
+    }
+
+    val dp = diffPayload
+    if (dp != null) {
+        WasmDiffView(
+            leftData = dp.leftData,
+            leftName = dp.leftName,
+            rightData = dp.rightData,
+            rightName = dp.rightName,
+        )
+        return
     }
 
     if (wasmBytes == null) {
