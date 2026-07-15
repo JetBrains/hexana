@@ -2,6 +2,7 @@ import org.gradle.api.artifacts.ExternalModuleDependency
 import org.gradle.api.artifacts.ProjectDependency
 
 plugins {
+    `java-library`
     alias(libs.plugins.kotlin.jvm)
 }
 
@@ -11,10 +12,32 @@ base {
     archivesName.set("cli-scripting")
 }
 
+val cliScriptingPublishedApiClasspath = configurations.create("cliScriptingPublishedApiClasspath") {
+    description = "Classpath used by the isolated cli:scripting public API consumer proof."
+    isCanBeResolved = true
+    isCanBeConsumed = false
+    extendsFrom(configurations.named("api").get())
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage.JAVA_API))
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category.LIBRARY))
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.JAR))
+        attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named(Bundling.EXTERNAL))
+        attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 21)
+    }
+}
+
+val sourceSets = extensions.getByType<SourceSetContainer>()
+val apiConsumerSourceSet = sourceSets.create("apiConsumer") {
+    java.srcDir("src/apiConsumer/kotlin")
+    compileClasspath += files(tasks.named("jar")) + cliScriptingPublishedApiClasspath
+    runtimeClasspath += output + files(tasks.named("jar")) + configurations.named("runtimeClasspath").get()
+}
+
 dependencies {
-    implementation(project(":cli:runtime"))
-    implementation(project(":mcp:core"))
-    implementation(project(":mcp:scripting"))
+    api(project(":cli:runtime"))
+    api(project(":mcp:core"))
+    api(project(":mcp:scripting"))
+    api(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit4)
     testImplementation(libs.kotlin.test)
@@ -79,6 +102,15 @@ val verifyCliScriptingBoundary = tasks.register("verifyCliScriptingBoundary") {
     }
 }
 
+val runCliScriptingApiConsumer = tasks.register<JavaExec>("runCliScriptingApiConsumer") {
+    description = "Compiles and runs an isolated consumer that depends on the cli:scripting public API."
+    group = "verification"
+    dependsOn(tasks.named(apiConsumerSourceSet.classesTaskName))
+    mainClass.set("org.jetbrains.hexana.cli.scripting.consumer.CliScriptingApiConsumerKt")
+    classpath = apiConsumerSourceSet.runtimeClasspath
+}
+
 tasks.named("check") {
     dependsOn(verifyCliScriptingBoundary)
+    dependsOn(runCliScriptingApiConsumer)
 }
