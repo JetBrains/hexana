@@ -105,6 +105,16 @@ class HexanaCliIntegrationTest {
         assertEquals(1, trailingNewlineCount(binary.stdout), binary.stdout)
         assertTrue(binary.stdout.contains("\"format\":\"wasm\""), binary.stdout)
 
+        val implicitDelayedBinary = runCliWithDelayedImplicitStdin(
+            "summarize-binary",
+            "--format",
+            "json",
+            stdin = wasmBytes,
+        )
+        assertEquals(0, implicitDelayedBinary.exitCode, implicitDelayedBinary.stderr)
+        assertEquals(1, trailingNewlineCount(implicitDelayedBinary.stdout), implicitDelayedBinary.stdout)
+        assertTrue(implicitDelayedBinary.stdout.contains("\"format\":\"wasm\""), implicitDelayedBinary.stdout)
+
         val output = temporaryFolder.newFile("summary.json").toPath()
         val toFile = runCli("summarize-binary", wasm.toString(), "--output", output.toString())
         assertEquals(0, toFile.exitCode, toFile.stderr)
@@ -312,6 +322,19 @@ class HexanaCliIntegrationTest {
         env = env + ("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
     )
 
+    private fun runCliWithDelayedImplicitStdin(
+        vararg args: String,
+        stdin: ByteArray,
+        env: Map<String, String> = emptyMap(),
+    ): ProcessResult = runInstalledWithDelayedStdin(
+        installDir = Path.of(requireNotNull(System.getProperty("hexana.cli.integration.installDir"))),
+        executableName = "hexana-cli",
+        args = args.toList(),
+        stdin = stdin,
+        delayMillis = 500,
+        env = env + ("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
+    )
+
     private fun wasmFile(wat: String): Path {
         val file = temporaryFolder.newFile("fixture-${System.nanoTime()}.wasm").toPath()
         Files.write(file, wat2wasm(wat))
@@ -334,15 +357,7 @@ private fun runInstalled(
     stdin: ByteArray?,
     env: Map<String, String>,
 ): ProcessResult {
-    val executable = installedLauncher(installDir, executableName)
-    val process = ProcessBuilder(listOf(executable.toString()) + args)
-        .redirectErrorStream(false)
-        .apply {
-            environment().keys.removeAll { it.startsWith("HEXANA_CLI_") || it.startsWith("HEXANA_MCP_") }
-            environment().putAll(env)
-            environment()["JAVA_HOME"] = System.getProperty("java.home")
-        }
-        .start()
+    val process = startInstalledProcess(installDir, executableName, args, env)
     if (stdin != null) {
         process.outputStream.use { it.write(stdin) }
     } else {
@@ -364,6 +379,59 @@ private fun runInstalled(
     } finally {
         executor.shutdownNow()
     }
+}
+
+private fun runInstalledWithDelayedStdin(
+    installDir: Path,
+    executableName: String,
+    args: List<String>,
+    stdin: ByteArray,
+    delayMillis: Long,
+    env: Map<String, String>,
+): ProcessResult {
+    val process = startInstalledProcess(installDir, executableName, args, env)
+    val executor = Executors.newFixedThreadPool(2)
+    try {
+        val stdout = executor.readAsync { process.inputStream.readBytes() }
+        val stderr = executor.readAsync { process.errorStream.readBytes() }
+        assertFalse(
+            process.waitFor(delayMillis, TimeUnit.MILLISECONDS),
+            "Process exited before delayed stdin producer wrote bytes",
+        )
+        process.outputStream.use { it.write(stdin) }
+        check(process.waitFor(10, TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            "Timed out running $executableName ${args.joinToString(" ")}"
+        }
+        return ProcessResult(
+            exitCode = process.exitValue(),
+            stdout = stdout.get().toString(Charsets.UTF_8),
+            stderr = stderr.get().toString(Charsets.UTF_8),
+        )
+    } finally {
+        runCatching { process.outputStream.close() }
+        if (process.isAlive) {
+            process.destroyForcibly()
+        }
+        executor.shutdownNow()
+    }
+}
+
+private fun startInstalledProcess(
+    installDir: Path,
+    executableName: String,
+    args: List<String>,
+    env: Map<String, String>,
+): Process {
+    val executable = installedLauncher(installDir, executableName)
+    return ProcessBuilder(listOf(executable.toString()) + args)
+        .redirectErrorStream(false)
+        .apply {
+            environment().keys.removeAll { it.startsWith("HEXANA_CLI_") || it.startsWith("HEXANA_MCP_") }
+            environment().putAll(env)
+            environment()["JAVA_HOME"] = System.getProperty("java.home")
+        }
+        .start()
 }
 
 private fun installedLauncher(installDir: Path, executableName: String): Path =
