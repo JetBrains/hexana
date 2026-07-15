@@ -13,4 +13,5 @@ This module owns neutral CLI command orchestration and adapters that have a prod
 ## Verification
 
 - Run `./gradlew :cli:core:test`.
+- Keep `verifyCliCoreBoundary` wired into `check` so forbidden dependencies and imports fail early.
 - Keep ownership coverage proving generated standard analysis metadata resolves through the neutral adapter.
