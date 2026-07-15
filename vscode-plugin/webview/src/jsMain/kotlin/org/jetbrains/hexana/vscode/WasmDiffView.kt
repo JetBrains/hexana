@@ -509,6 +509,8 @@ private fun WatDiffCell(gutter: String, text: String?, isHighlighted: Boolean, c
     Div({
         style {
             property("flex", "1")
+            property("min-width", "0")
+            property("overflow-x", "auto")
             property("white-space", "pre")
             property("min-height", "1.4em")
             property("padding-right", "8px")
