@@ -190,6 +190,7 @@ public class HexanaProductCli(
 
         val options = CommandOptions.fromEnv(env)
         val params = mutableMapOf<String, JsonPrimitive>()
+        val scriptSources = ScriptSourceOptions()
         var pathArgument: String? = null
         var stdinRequested = false
         var base64Source: String? = null
@@ -216,11 +217,11 @@ public class HexanaProductCli(
                 }
                 "--script" -> {
                     requireScriptOption(spec, arg)
-                    params["scriptPath"] = JsonPrimitive(args.requireValue(arg))
+                    scriptSources.addPath(args.requireValue(arg))
                 }
                 "--script-text" -> {
                     requireScriptOption(spec, arg)
-                    params["script"] = JsonPrimitive(args.requireValue(arg))
+                    scriptSources.addInline(args.requireValue(arg))
                 }
                 "--allowed-root" -> options.allowedRoots += args.requireValue(arg)
                 "--max-file-bytes" -> options.maxFileBytes = args.requirePositiveInt(arg)
@@ -245,6 +246,9 @@ public class HexanaProductCli(
                 }
             }
         }
+
+        scriptSources.validate(spec)
+        params += scriptSources.params()
 
         val resourceLimits = options.toResourceLimits()
         val sourceSelection = selectSource(
@@ -532,6 +536,38 @@ private class CommandOptions private constructor(
 }
 
 private class ProductUsageException(message: String) : RuntimeException(message)
+
+private class ScriptSourceOptions {
+    private var scriptPath: String? = null
+    private var script: String? = null
+    private var occurrences = 0
+
+    fun addPath(value: String) {
+        scriptPath = value
+        occurrences++
+    }
+
+    fun addInline(value: String) {
+        script = value
+        occurrences++
+    }
+
+    fun validate(spec: HexanaCliToolSpec) {
+        if (spec.toolName != RUN_BINARY_SCRIPT_TOOL_NAME) {
+            return
+        }
+        when (occurrences) {
+            0 -> throw ProductUsageException("Exactly one of --script or --script-text is required.")
+            1 -> Unit
+            else -> throw ProductUsageException("Provide exactly one of --script or --script-text.")
+        }
+    }
+
+    fun params(): Map<String, JsonPrimitive> = buildMap {
+        scriptPath?.let { put("scriptPath", JsonPrimitive(it)) }
+        script?.let { put("script", JsonPrimitive(it)) }
+    }
+}
 
 private fun selectedProductTools(product: HexanaCliProduct): Map<String, HexanaCliToolSpec> {
     val selections = HexanaGeneratedCliProducts.PRODUCTS[product.releaseProduct].orEmpty()

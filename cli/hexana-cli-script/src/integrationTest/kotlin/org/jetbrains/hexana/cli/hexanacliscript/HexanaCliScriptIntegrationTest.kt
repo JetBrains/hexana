@@ -254,10 +254,76 @@ class HexanaCliScriptIntegrationTest {
         }
     }
 
+    @Test
+    fun installedRunScriptRequiresExactlyOneScriptSourceBeforeExecution() {
+        val binary = temporaryFolder.newFile("script-cardinality-input.bin").toPath()
+        Files.write(binary, byteArrayOf(1, 2, 3))
+        val scriptA = temporaryFolder.newFile("script-a.js").toPath()
+        val scriptB = temporaryFolder.newFile("script-b.js").toPath()
+        Files.writeString(scriptA, "print('executed-a');")
+        Files.writeString(scriptB, "print('executed-b');")
+
+        assertScriptSourceUsage(
+            args = listOf("run-script", binary.toString(), "--format", "raw"),
+            expectedError = "Exactly one of --script or --script-text is required.",
+        )
+        assertScriptSourceUsage(
+            args = listOf(
+                "run-script",
+                binary.toString(),
+                "--script-text",
+                "print('executed-a');",
+                "--script-text",
+                "print('executed-b');",
+                "--format",
+                "raw",
+            ),
+            expectedError = "Provide exactly one of --script or --script-text.",
+        )
+        assertScriptSourceUsage(
+            args = listOf(
+                "run-script",
+                binary.toString(),
+                "--script",
+                scriptA.toString(),
+                "--script",
+                scriptB.toString(),
+                "--format",
+                "raw",
+            ),
+            expectedError = "Provide exactly one of --script or --script-text.",
+        )
+        assertScriptSourceUsage(
+            args = listOf(
+                "run-script",
+                binary.toString(),
+                "--script",
+                scriptA.toString(),
+                "--script-text",
+                "print('executed-b');",
+                "--format",
+                "raw",
+            ),
+            expectedError = "Provide exactly one of --script or --script-text.",
+        )
+    }
+
     private fun assertBlankSourceUsage(result: ProcessResult) {
         assertEquals(2, result.exitCode, result.stderr)
         assertTrue(result.stdout.isBlank(), result.stdout)
         assertEquals("Blank source value is not allowed.\n", result.stderr)
+        assertNoStackTraceMarkers(result.stderr)
+    }
+
+    private fun assertScriptSourceUsage(args: List<String>, expectedError: String) {
+        val output = temporaryFolder.newFile().toPath()
+        Files.delete(output)
+        val result = runScriptCli(*(args + listOf("--output", output.toString())).toTypedArray())
+
+        assertEquals(2, result.exitCode, "stdout=${result.stdout}, stderr=${result.stderr}")
+        assertEquals("", result.stdout)
+        assertEquals("$expectedError\n", result.stderr)
+        assertFalse(Files.exists(output), "ambiguous run-script input must not execute or write output")
         assertNoStackTraceMarkers(result.stderr)
     }
 

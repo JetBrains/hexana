@@ -49,6 +49,19 @@ class HexanaProductCliTest {
         assertEquals(USAGE_EXIT_CODE, result.exitCode, result.stderr)
         assertTrue(result.stderr.contains("Inline bytes exceed maximum size of 1 bytes."), result.stderr)
     }
+
+    @Test
+    fun missingRunScriptSourceFailsBeforeReadingBinarySource() {
+        val result = HexanaProductCli(HexanaCliProduct.SCRIPT).run(
+            args = arrayOf("run-script", "--stdin"),
+            stdin = FailOnReadInputStream,
+            env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
+        )
+
+        assertEquals(USAGE_EXIT_CODE, result.exitCode, result.stderr)
+        assertEquals("Exactly one of --script or --script-text is required.\n", result.stderr)
+        assertEquals("", result.stdout)
+    }
 }
 
 private object FailOnReadInputStream : InputStream() {
