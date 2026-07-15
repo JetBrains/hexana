@@ -368,6 +368,34 @@ class HexanaStdioIntegrationTest {
     }
 
     @Test
+    fun installedServerDrainsSingleResponseAfterFiniteStdinEof() = runBlocking {
+        val result = HexanaInstalledStdioClient.runCommand(
+            launcher = StdioLauncher.Server,
+            arguments = listOf("stdio", "--telemetry-enabled", "false"),
+            stdinBytes = stdioFrames(initializeRequest(id = 1)),
+        )
+
+        assertFiniteStdinStdioSucceeded(result)
+        assertSuccessfulStdoutResponses(result.stdout, listOf("1"))
+    }
+
+    @Test
+    fun installedServerDrainsMultipleResponsesAfterFiniteStdinEof() = runBlocking {
+        val result = HexanaInstalledStdioClient.runCommand(
+            launcher = StdioLauncher.Server,
+            arguments = listOf("stdio", "--telemetry-enabled", "false"),
+            stdinBytes = stdioFrames(
+                initializeRequest(id = 1),
+                """{"jsonrpc":"2.0","method":"notifications/initialized"}""",
+                """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""",
+            ),
+        )
+
+        assertFiniteStdinStdioSucceeded(result)
+        assertSuccessfulStdoutResponses(result.stdout, listOf("1", "2"))
+    }
+
+    @Test
     fun installedServerScriptingProfileSupportsRunBinaryScriptToolCallOverStdio() = runBlocking {
         KotlinLoggingConfiguration.logStartupMessage = false
         val fixtureDirectory = temporaryFolder.root.toPath()
@@ -436,6 +464,53 @@ class HexanaStdioIntegrationTest {
         )
         assertEquals(0, result.exitCode, "stdout=${result.stdout}, stderr=${result.stderr}")
     }
+
+    private fun assertFiniteStdinStdioSucceeded(result: InstalledCommandResult) {
+        assertFalse(
+            result.timedOut,
+            "Finite stdio command timed out. stdout=${result.stdout}, stderr=${result.stderr}, command=${result.command}"
+        )
+        assertEquals(0, result.exitCode, "stdout=${result.stdout}, stderr=${result.stderr}")
+    }
+
+    private fun assertSuccessfulStdoutResponses(stdout: String, expectedIds: List<String>) {
+        val responses = stdout.lineSequence()
+            .filter { it.isNotBlank() }
+            .map { Json.parseToJsonElement(it).jsonObject }
+            .toList()
+        val ids = responses
+            .map { message ->
+                message["id"]?.jsonPrimitive?.content
+                    ?: error("Unexpected id-less JSON-RPC message on stdout: $message")
+            }
+            .toList()
+
+        assertEquals(expectedIds, ids, stdout)
+        responses.forEach { response ->
+            val id = response.getValue("id").jsonPrimitive.content
+            assertFalse("error" in response, "Unexpected JSON-RPC error response for id=$id: $response")
+            val result = response["result"]?.jsonObject
+                ?: error("Missing JSON-RPC result for id=$id: $response")
+            when (id) {
+                "1" -> assertTrue("protocolVersion" in result, "Missing initialize result: $response")
+                "2" -> assertEquals(
+                    EXPECTED_PRODUCTION_HEXANA_TOOL_NAMES,
+                    result.getValue("tools")
+                        .jsonArray
+                        .map { tool -> tool.jsonObject.getValue("name").jsonPrimitive.content }
+                        .sorted(),
+                    response.toString()
+                )
+            }
+        }
+    }
+
+    private fun stdioFrames(vararg frames: String): ByteArray =
+        frames.joinToString(separator = "") { frame -> frame.trimIndent().trim() + "\n" }
+            .encodeToByteArray()
+
+    private fun initializeRequest(id: Int): String =
+        """{"jsonrpc":"2.0","id":$id,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"hexana-finite-stdin-integration-test","version":"1.0"}}}"""
 
     private suspend fun assertInstalledToolSourceModes(
         command: String,

@@ -49,8 +49,9 @@ internal class HexanaStdioServerTransport(
 
     private val logger = KotlinLogging.logger {}
     private val readBuffer = ReadBuffer()
-    private val initialized = AtomicBoolean(false)
     private val fatalErrorReported = AtomicBoolean(false)
+    private val lifecycleLock = Any()
+    private var lifecycleState = StdioTransportLifecycleState.NEW
     private var readingJob: Job? = null
     private var sendingJob: Job? = null
     private var processingJob: Job? = null
@@ -64,13 +65,71 @@ internal class HexanaStdioServerTransport(
     private val outputSink = outputStream.buffered()
 
     override suspend fun start() {
-        if (!initialized.compareAndSet(expectedValue = false, newValue = true)) {
-            error("HexanaStdioServerTransport already started!")
+        markRunningForStart()
+
+        try {
+            readingJob = launchReadingJob()
+            processingJob = launchProcessingJob()
+            sendingJob = launchSendingJob()
+        } catch (error: Throwable) {
+            markClosedAfterStartFailure()
+            throw error
+        }
+    }
+
+    private fun markRunningForStart() {
+        synchronized(lifecycleLock) {
+            if (lifecycleState != StdioTransportLifecycleState.NEW) {
+                error("HexanaStdioServerTransport already started!")
+            }
+            lifecycleState = StdioTransportLifecycleState.RUNNING
+        }
+    }
+
+    private fun markClosedAfterStartFailure() {
+        synchronized(lifecycleLock) {
+            lifecycleState = StdioTransportLifecycleState.CLOSED
+        }
+    }
+
+    private fun beginEofDrain(): Boolean =
+        synchronized(lifecycleLock) {
+            if (lifecycleState != StdioTransportLifecycleState.RUNNING) return@synchronized false
+            lifecycleState = StdioTransportLifecycleState.DRAINING_INPUT_EOF
+            true
         }
 
-        readingJob = launchReadingJob()
-        processingJob = launchProcessingJob()
-        sendingJob = launchSendingJob()
+    private fun eofDrainStillActive(): Boolean =
+        synchronized(lifecycleLock) {
+            lifecycleState == StdioTransportLifecycleState.DRAINING_INPUT_EOF
+        }
+
+    private fun completeEofDrain(): Boolean =
+        synchronized(lifecycleLock) {
+            if (lifecycleState != StdioTransportLifecycleState.DRAINING_INPUT_EOF) return@synchronized false
+            lifecycleState = StdioTransportLifecycleState.CLOSED
+            true
+        }
+
+    private fun beginForcedClose(): Boolean =
+        synchronized(lifecycleLock) {
+            when (lifecycleState) {
+                StdioTransportLifecycleState.NEW,
+                StdioTransportLifecycleState.CLOSING,
+                StdioTransportLifecycleState.CLOSED -> false
+
+                StdioTransportLifecycleState.RUNNING,
+                StdioTransportLifecycleState.DRAINING_INPUT_EOF -> {
+                    lifecycleState = StdioTransportLifecycleState.CLOSING
+                    true
+                }
+            }
+        }
+
+    private fun completeForcedClose() {
+        synchronized(lifecycleLock) {
+            lifecycleState = StdioTransportLifecycleState.CLOSED
+        }
     }
 
     private fun launchReadingJob(): Job {
@@ -87,19 +146,42 @@ internal class HexanaStdioServerTransport(
                     }
                 }
                 countPendingCarriageReturn()
+                drainAfterInputEof()
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
                 logger.error(error) { "Error reading from stdin" }
-                _onError.invoke(error)
-            } finally {
-                close()
+                failTransport(error)
             }
         }
         job.invokeOnCompletion { cause ->
             logJobCompletion("Message reading", cause)
         }
         return job
+    }
+
+    private suspend fun drainAfterInputEof() {
+        if (!beginEofDrain()) return
+
+        readChannel.close()
+        processingJob?.join()
+        if (!eofDrainStillActive()) return
+
+        readBuffer.clear()
+        writeChannel.close()
+        sendingJob?.join()
+        if (!eofDrainStillActive()) return
+
+        runCatching {
+            outputSink.flush()
+            outputSink.close()
+        }.onFailure { error ->
+            logger.warn(error) { "Failed to close stdout after stdin EOF" }
+        }
+
+        if (completeEofDrain()) {
+            invokeOnCloseCallback()
+        }
     }
 
     private fun launchProcessingJob(): Job {
@@ -246,7 +328,7 @@ internal class HexanaStdioServerTransport(
     }
 
     override suspend fun close() {
-        if (!initialized.compareAndSet(expectedValue = true, newValue = false)) return
+        if (!beginForcedClose()) return
 
         withContext(NonCancellable) {
             writeChannel.close()
@@ -268,6 +350,7 @@ internal class HexanaStdioServerTransport(
                 outputSink.close()
             }.onFailure { logger.warn(it) { "Failed to close stdout" } }
 
+            completeForcedClose()
             invokeOnCloseCallback()
         }
     }
@@ -290,5 +373,13 @@ internal class HexanaStdioServerTransport(
 private class HexanaStdioTransportMessageLimitException : IllegalStateException(HEXANA_STDIO_MESSAGE_LIMIT_ERROR_MESSAGE)
 
 private class HexanaStdioTransportQueueOverflowException(message: String) : IllegalStateException(message)
+
+private enum class StdioTransportLifecycleState {
+    NEW,
+    RUNNING,
+    DRAINING_INPUT_EOF,
+    CLOSING,
+    CLOSED,
+}
 
 private data class StdioReadChunk(val bytes: ByteArray, val containsLineBreak: Boolean)

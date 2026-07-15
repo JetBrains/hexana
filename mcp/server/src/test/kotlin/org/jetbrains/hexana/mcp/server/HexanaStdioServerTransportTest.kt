@@ -2,6 +2,9 @@ package org.jetbrains.hexana.mcp.server
 
 import io.modelcontextprotocol.kotlin.sdk.types.JSONRPCMessage
 import io.modelcontextprotocol.kotlin.sdk.types.JSONRPCNotification
+import io.modelcontextprotocol.kotlin.sdk.types.JSONRPCRequest
+import io.modelcontextprotocol.kotlin.sdk.types.JSONRPCResponse
+import io.modelcontextprotocol.kotlin.sdk.types.RequestId
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -39,6 +42,34 @@ class HexanaStdioServerTransportTest {
         assertEquals("notifications/initialized", notification.method)
 
         transport.close()
+    }
+
+    @Test
+    fun drainsResponseGeneratedAfterInputEofBeforeClosingOutput() = runBlocking {
+        val source = FiniteRawSource(
+            listOf("""{"jsonrpc":"2.0","id":7,"method":"tools/list"}""" + "\n")
+        )
+        val output = Buffer()
+        val transport = HexanaStdioServerTransport(
+            inputStream = source.buffered(),
+            outputStream = output,
+        )
+        val closed = CompletableDeferred<Unit>()
+
+        transport.onMessage { message ->
+            val request = assertIs<JSONRPCRequest>(message)
+            assertEquals(RequestId(7L), request.id)
+            source.eofReached.await()
+            transport.send(JSONRPCResponse(id = request.id))
+        }
+        transport.onClose { closed.complete(Unit) }
+        transport.start()
+
+        withTimeout(5.seconds) { closed.await() }
+
+        val stdout = output.readByteArray().decodeToString()
+        assertTrue(stdout.contains(""""id":7"""), stdout)
+        assertTrue(stdout.endsWith("\n"), stdout)
     }
 
     @Test
@@ -190,6 +221,35 @@ class HexanaStdioServerTransportTest {
 
         override fun close() {
             closed = true
+        }
+    }
+
+    private class FiniteRawSource(chunks: List<String>) : RawSource {
+        private val chunks = ArrayDeque(chunks.map { it.encodeToByteArray() })
+        val eofReached = CompletableDeferred<Unit>()
+        @Volatile
+        private var closed = false
+
+        override fun readAtMostTo(sink: Buffer, byteCount: Long): Long {
+            if (closed) {
+                eofReached.complete(Unit)
+                return -1
+            }
+
+            val chunk = synchronized(chunks) { chunks.removeFirstOrNull() }
+            if (chunk == null) {
+                eofReached.complete(Unit)
+                return -1
+            }
+
+            require(chunk.size <= byteCount) { "Test chunk is larger than requested byteCount=$byteCount" }
+            sink.write(chunk)
+            return chunk.size.toLong()
+        }
+
+        override fun close() {
+            closed = true
+            eofReached.complete(Unit)
         }
     }
 
