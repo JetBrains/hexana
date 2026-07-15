@@ -316,6 +316,45 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     return;
                 }
 
+                // Expired nested module or zip entry — try to reload from
+                // the parent file using the metadata encoded in the URI.
+                if (document.uri.scheme === "hexana-module" && document.data.byteLength === 0) {
+                    const reloaded = await this.tryReloadExpiredModule(document.uri);
+                    if (reloaded) {
+                        // Re-populate in-memory store so subsequent reopens
+                        // within this session don't need to re-extract.
+                        const key = document.uri.toString();
+                        const displayName = document.displayName ?? document.uri.path.replace(/^\//, "");
+                        inMemoryModules.set(key, { data: reloaded, fileName: displayName });
+                        const toPayload = (d: Uint8Array) =>
+                            d instanceof Buffer
+                                ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength)
+                                : d;
+                        webviewPanel.webview.postMessage({
+                            type: "load-wasm",
+                            fileName: displayName,
+                            filePath: document.uri.fsPath,
+                            data: toPayload(reloaded),
+                            wasmRuntime: getSelectedRuntime(),
+                        });
+                        return;
+                    }
+
+                    // For nested modules (archive/component members) we
+                    // cannot extract on the TS side — send the parent bytes
+                    // to the webview and let Kotlin re-extract the member.
+                    const nestedReloaded = await this.tryReloadNestedModule(document.uri, webviewPanel);
+                    if (nestedReloaded) {
+                        return;
+                    }
+
+                    webviewPanel.webview.postMessage({
+                        type: "load-expired",
+                        message: "This session has expired and the original content could not be restored. Please reopen from the parent file.",
+                    });
+                    return;
+                }
+
                 const payload = document.data instanceof Buffer
                     ? new Uint8Array(document.data.buffer, document.data.byteOffset, document.data.byteLength)
                     : document.data;
@@ -426,6 +465,175 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         } catch (err) {
             console.error("[Hexana] Failed to navigate to parent:", err);
         }
+    }
+
+    /**
+     * Attempts to reload an expired `hexana-module:` URI by reading the
+     * parent file and re-extracting the nested content.
+     *
+     * Supports two kinds of nested URIs:
+     * - Zip entries: `?parent=<uri>&entry=<name>` — scans the parent zip
+     *   for the local file header matching the entry name and decompresses.
+     * - Nested modules: `?parent=<uri>&index=<n>` — not re-extractable on
+     *   the TS side (requires Kotlin parsing), so this falls back to `null`.
+     *
+     * The parent itself may be an expired `hexana-module:` URI, in which
+     * case this method recurses to resolve the full chain.
+     *
+     * @returns the extracted bytes, or `null` if recovery is not possible.
+     */
+    private async tryReloadExpiredModule(uri: vscode.Uri): Promise<Uint8Array | null> {
+        const params = new URLSearchParams(uri.query);
+        const parentKey = params.get("parent");
+        if (!parentKey) {
+            return null;
+        }
+
+        // Resolve parent bytes — may itself be an expired in-memory URI.
+        let parentBytes: Uint8Array;
+        const parentUri = vscode.Uri.parse(decodeURIComponent(parentKey));
+        try {
+            const existing = inMemoryModules.get(parentUri.toString());
+            if (existing && existing.data.byteLength > 0) {
+                parentBytes = existing.data;
+            } else if (parentUri.scheme === "hexana-module") {
+                // Recursively reload the parent.
+                const resolved = await this.tryReloadExpiredModule(parentUri);
+                if (!resolved) {
+                    return null;
+                }
+                parentBytes = resolved;
+                // Cache so we don't re-extract on every child.
+                const parentName = parentUri.path.replace(/^\//, "");
+                inMemoryModules.set(parentUri.toString(), { data: parentBytes, fileName: parentName });
+            } else {
+                parentBytes = await vscode.workspace.fs.readFile(parentUri);
+            }
+        } catch {
+            return null;
+        }
+
+        // Zip entry: scan the parent for the local file header by entry name.
+        const entryName = params.get("entry");
+        if (entryName) {
+            return this.extractZipEntryByName(parentBytes, decodeURIComponent(entryName));
+        }
+
+        // Nested module (wasm component / archive member): the extraction
+        // logic lives in Kotlin and is not available on the TS side.
+        // We cannot re-extract here, so return null.
+        return null;
+    }
+
+    /**
+     * Handles expired nested module URIs (with `?parent=...&index=N`) by
+     * reading the parent bytes and sending a `load-nested-module` message
+     * to the webview, which uses Kotlin-side parsing to extract the member.
+     *
+     * @returns `true` if the message was sent, `false` if recovery failed.
+     */
+    private async tryReloadNestedModule(
+        uri: vscode.Uri,
+        webviewPanel: vscode.WebviewPanel,
+    ): Promise<boolean> {
+        const params = new URLSearchParams(uri.query);
+        const parentKey = params.get("parent");
+        const indexStr = params.get("index");
+        if (!parentKey || indexStr == null) {
+            return false;
+        }
+        const moduleIndex = parseInt(indexStr, 10);
+        if (isNaN(moduleIndex)) {
+            return false;
+        }
+
+        // Resolve parent bytes.
+        let parentBytes: Uint8Array;
+        const parentUri = vscode.Uri.parse(decodeURIComponent(parentKey));
+        try {
+            const existing = inMemoryModules.get(parentUri.toString());
+            if (existing && existing.data.byteLength > 0) {
+                parentBytes = existing.data;
+            } else if (parentUri.scheme === "hexana-module") {
+                const resolved = await this.tryReloadExpiredModule(parentUri);
+                if (!resolved) {
+                    return false;
+                }
+                parentBytes = resolved;
+                const parentName = parentUri.path.replace(/^\//, "");
+                inMemoryModules.set(parentUri.toString(), { data: parentBytes, fileName: parentName });
+            } else {
+                parentBytes = await vscode.workspace.fs.readFile(parentUri);
+            }
+        } catch {
+            return false;
+        }
+
+        const displayName = uri.path.replace(/^\//, "");
+        const toPayload = (d: Uint8Array) =>
+            d instanceof Buffer
+                ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength)
+                : d;
+        webviewPanel.webview.postMessage({
+            type: "load-nested-module",
+            parentData: toPayload(parentBytes),
+            moduleIndex,
+            fileName: displayName,
+            wasmRuntime: getSelectedRuntime(),
+        });
+        return true;
+    }
+
+    /**
+     * Scans a zip archive for a local file header matching the given entry
+     * name and returns the decompressed bytes, or `null` on failure.
+     */
+    private extractZipEntryByName(archive: Uint8Array, entryName: string): Uint8Array | null {
+        // Scan for local file headers (PK\x03\x04).
+        const nameBytes = new TextEncoder().encode(entryName);
+        for (let i = 0; i <= archive.length - 30; i++) {
+            if (archive[i] !== 0x50 || archive[i + 1] !== 0x4B ||
+                archive[i + 2] !== 0x03 || archive[i + 3] !== 0x04) {
+                continue;
+            }
+            const compressionMethod = archive[i + 8] | (archive[i + 9] << 8);
+            const compressedSize = archive[i + 18] | (archive[i + 19] << 8) |
+                (archive[i + 20] << 16) | (archive[i + 21] << 24);
+            const nameLen = archive[i + 26] | (archive[i + 27] << 8);
+            const extraLen = archive[i + 28] | (archive[i + 29] << 8);
+
+            if (i + 30 + nameLen > archive.length) {
+                continue;
+            }
+
+            // Compare entry name.
+            if (nameLen !== nameBytes.length) {
+                continue;
+            }
+            let match = true;
+            for (let j = 0; j < nameLen; j++) {
+                if (archive[i + 30 + j] !== nameBytes[j]) {
+                    match = false;
+                    break;
+                }
+            }
+            if (!match) {
+                continue;
+            }
+
+            const dataOffset = i + 30 + nameLen + extraLen;
+            try {
+                const compressed = archive.slice(dataOffset, dataOffset + compressedSize);
+                if (compressionMethod === 0) {
+                    return compressed;
+                } else if (compressionMethod === 8) {
+                    return zlib.inflateRawSync(compressed);
+                }
+            } catch {
+                return null;
+            }
+        }
+        return null;
     }
 
     /**

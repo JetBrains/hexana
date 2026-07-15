@@ -26,6 +26,8 @@ data class VscodeMessage(
     val rightData: ByteArray? = null,
     val rightName: String = "",
     val message: String = "",
+    val parentData: ByteArray? = null,
+    val moduleIndex: Int = -1,
 )
 
 /**
@@ -354,6 +356,20 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                         VscodeMessage(
                             type = type,
                             message = (data.message as? String) ?: "",
+                        )
+                    }
+                    "load-nested-module" -> {
+                        fun toByteArray(jsArr: dynamic): ByteArray? {
+                            if (jsArr == null) return null
+                            val len = jsArr.length as Int
+                            return ByteArray(len) { i -> (jsArr[i] as Number).toByte() }
+                        }
+                        VscodeMessage(
+                            type = type,
+                            parentData = toByteArray(data.parentData),
+                            moduleIndex = (data.moduleIndex as? Number)?.toInt() ?: -1,
+                            fileName = (data.fileName as? String) ?: "",
+                            wasmRuntime = (data.wasmRuntime as? String),
                         )
                     }
                     "script-file-picked", "script-file-content" -> {

@@ -16,6 +16,51 @@ fun main() {
 }
 
 /**
+ * Extracts nested module bytes from a parent binary at the given member index.
+ *
+ * Supports two parent formats:
+ * - **Wasm component**: uses [WasmComponentBinaryProvider] to locate the core
+ *   module at [moduleIndex] by its content offset/size.
+ * - **Archive** (Unix `ar` / COFF): uses [ArchiveBinaryProvider] to find the
+ *   member whose [PeArchiveMember.index] matches [moduleIndex].
+ *
+ * @return the extracted bytes, or `null` if extraction fails.
+ */
+private fun extractNestedModuleBytes(parentData: ByteArray, moduleIndex: Int): ByteArray? {
+    val buffer = parentData.toCommonByteBuffer()
+    buffer.position(0)
+
+    // Try as wasm component first.
+    when (WasmBinaryProviderSelector.select(buffer)) {
+        BinaryProviderType.WasmComponent -> {
+            val provider = WasmComponentBinaryProvider(buffer)
+            val module = provider.modules.getOrNull(moduleIndex) ?: return null
+            val result = ByteArray(module.contentSize)
+            val src = provider.bytes
+            src.position(module.contentOffset)
+            src.get(result, 0, module.contentSize)
+            return result
+        }
+        else -> {}
+    }
+
+    // Try as archive.
+    buffer.position(0)
+    val nativeProvider = nativeOrGenericBinaryProvider(buffer)
+    if (nativeProvider is ArchiveBinaryProvider) {
+        val member = nativeProvider.members
+            .filterNot { it.isBookkeeping }
+            .find { it.index == moduleIndex }
+            ?: return null
+        return nativeProvider.bytes
+            .slice(member.contentRange.offset, member.contentRange.size)
+            .toByteArray()
+    }
+
+    return null
+}
+
+/**
  * Holds the state for a single script tab: its file path and the latest
  * content read from the extension host.
  */
@@ -65,6 +110,21 @@ fun BinaryEditorApp() {
             "load-expired" -> {
                 expiredMessage = message.message.ifBlank {
                     "This diff session has expired. Please run \"Compare WASM With…\" again."
+                }
+            }
+            "load-nested-module" -> {
+                val parentData = message.parentData
+                val idx = message.moduleIndex
+                if (parentData != null && idx >= 0) {
+                    val extracted = extractNestedModuleBytes(parentData, idx)
+                    if (extracted != null) {
+                        fileName = message.fileName
+                        filePath = ""
+                        wasmBytes = extracted
+                        configuredRuntimeId = message.wasmRuntime
+                    } else {
+                        expiredMessage = "Failed to extract nested module from parent. Please reopen from the parent file."
+                    }
                 }
             }
             "script-file-picked" -> {
