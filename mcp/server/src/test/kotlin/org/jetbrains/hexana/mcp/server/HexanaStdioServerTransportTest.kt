@@ -73,6 +73,32 @@ class HexanaStdioServerTransportTest {
     }
 
     @Test
+    fun assignsDrainJobsBeforeReadingFiniteInput() = runBlocking {
+        val inspected = CompletableDeferred<Unit>()
+        val closed = CompletableDeferred<Unit>()
+        lateinit var transport: HexanaStdioServerTransport
+        val source = InspectingEofRawSource {
+            runCatching {
+                check(transport.hasAssignedJobForTest("processingJob")) { "processingJob was not assigned before read" }
+                check(transport.hasAssignedJobForTest("sendingJob")) { "sendingJob was not assigned before read" }
+            }.fold(
+                onSuccess = { inspected.complete(Unit) },
+                onFailure = { inspected.completeExceptionally(it) },
+            )
+        }
+
+        transport = HexanaStdioServerTransport(
+            inputStream = source.buffered(),
+            outputStream = Buffer(),
+        )
+        transport.onClose { closed.complete(Unit) }
+        transport.start()
+
+        withTimeout(5.seconds) { inspected.await() }
+        withTimeout(5.seconds) { closed.await() }
+    }
+
+    @Test
     fun closesAndReportsApprovedErrorWhenInboundMessageExceedsMaximumSize() = runBlocking {
         assertInboundMessageLimit(byte = 'x'.code.toByte())
     }
@@ -197,6 +223,12 @@ class HexanaStdioServerTransportTest {
         field.setLong(this, value)
     }
 
+    private fun HexanaStdioServerTransport.hasAssignedJobForTest(fieldName: String): Boolean {
+        val field = HexanaStdioServerTransport::class.java.getDeclaredField(fieldName)
+        field.isAccessible = true
+        return field.get(this) != null
+    }
+
     private class ChunkedRawSource(chunks: List<String>) : RawSource {
         private val chunks = ArrayDeque(chunks.map { it.encodeToByteArray() })
         @Volatile
@@ -250,6 +282,22 @@ class HexanaStdioServerTransportTest {
         override fun close() {
             closed = true
             eofReached.complete(Unit)
+        }
+    }
+
+    private class InspectingEofRawSource(private val onFirstRead: () -> Unit) : RawSource {
+        @Volatile
+        private var inspected = false
+
+        override fun readAtMostTo(sink: Buffer, byteCount: Long): Long {
+            if (!inspected) {
+                inspected = true
+                onFirstRead()
+            }
+            return -1
+        }
+
+        override fun close() {
         }
     }
 

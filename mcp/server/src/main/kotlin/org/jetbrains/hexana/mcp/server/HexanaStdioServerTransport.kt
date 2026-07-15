@@ -68,9 +68,9 @@ internal class HexanaStdioServerTransport(
         markRunningForStart()
 
         try {
-            readingJob = launchReadingJob()
             processingJob = launchProcessingJob()
             sendingJob = launchSendingJob()
+            readingJob = launchReadingJob()
         } catch (error: Throwable) {
             markClosedAfterStartFailure()
             throw error
