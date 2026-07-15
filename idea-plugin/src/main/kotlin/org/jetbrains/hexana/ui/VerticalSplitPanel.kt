@@ -36,7 +36,9 @@ fun VerticalSplitPanel(
     // delta callback so divider drags stay correct across recomposition.
     VerticalSplitPanel(
         topFraction = state.topFraction,
-        onDragFraction = { delta -> state.setTopFraction(state.topFraction + delta) },
+        onDragFraction = { delta ->
+            state.setTopFraction((state.topFraction + delta).coerceIn(MIN_TOP_FRACTION, 1f - MIN_BOTTOM_FRACTION))
+        },
         northPanel = northPanel,
         southPanel = southPanel,
     )
@@ -58,7 +60,7 @@ fun VerticalSplitPanel(
 ) {
     var containerHeightPx by remember { mutableFloatStateOf(0f) }
 
-    val weightRange = 0.0001f..0.9999f
+    val weightRange = MIN_TOP_FRACTION..(1f - MIN_BOTTOM_FRACTION)
 
     Column(
         modifier = Modifier
@@ -93,19 +95,10 @@ fun VerticalSplitPanel(
 private fun HorizontalDraggableDivider(onDrag: (deltaY: Float) -> Unit) {
     val dragHitAreaThickness = 8.dp
 
-    Divider(
-        orientation = org.jetbrains.jewel.ui.Orientation.Horizontal,
-        modifier = Modifier
-            .fillMaxWidth().height(dragHitAreaThickness / 2).background(Color.Gray)
-            .pointerHoverIcon(PointerIcon(Cursor(Cursor.N_RESIZE_CURSOR)))
-    )
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(dragHitAreaThickness)
             .pointerHoverIcon(PointerIcon(Cursor(Cursor.N_RESIZE_CURSOR)))
-            .background(Color.Transparent)
             .draggable(
                 orientation = Orientation.Vertical,
                 state = rememberDraggableState { delta ->
@@ -113,6 +106,26 @@ private fun HorizontalDraggableDivider(onDrag: (deltaY: Float) -> Unit) {
                 },
                 startDragImmediately = true
             )
+    ) {
+        Column {
+            Divider(
+                orientation = org.jetbrains.jewel.ui.Orientation.Horizontal,
+                modifier = Modifier
+                    .fillMaxWidth().height(dragHitAreaThickness / 2).background(Color.Gray)
+            )
 
-    )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(dragHitAreaThickness)
+                    .background(Color.Transparent)
+            )
+        }
+    }
 }
+
+/** Minimum fraction reserved for the top pane so the splitter cannot be dragged to the very top. */
+private const val MIN_TOP_FRACTION = 0.2f
+
+/** Minimum fraction reserved for the bottom pane so the splitter cannot be dragged to the very bottom. */
+private const val MIN_BOTTOM_FRACTION = 0.1f
