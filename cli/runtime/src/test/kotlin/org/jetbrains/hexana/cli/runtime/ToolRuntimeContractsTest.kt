@@ -7,6 +7,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class ToolRuntimeContractsTest {
@@ -22,6 +23,69 @@ class ToolRuntimeContractsTest {
         assertFailsWith<IllegalArgumentException> {
             ToolRuntimeContext(toolName = " ")
         }
+    }
+
+    @Test
+    fun runtimeContextSnapshotsEnvironmentAndKeepsItImmutable() {
+        val environment = mutableMapOf("HEXANA_TOKEN" to "initial-token")
+        val context = ToolRuntimeContext(
+            toolName = "inspect",
+            environment = environment,
+        )
+        environment["HEXANA_TOKEN"] = "mutated-token"
+        environment["NEW_SECRET"] = "new-secret"
+
+        assertEquals(mapOf("HEXANA_TOKEN" to "initial-token"), context.environment)
+        assertFailsWith<UnsupportedOperationException> {
+            @Suppress("UNCHECKED_CAST")
+            (context.environment as MutableMap<String, String>)["HEXANA_TOKEN"] = "written-through-view"
+        }
+    }
+
+    @Test
+    fun runtimeContextRedactsEnvironmentFromStringsAndExceptionOutput() {
+        val secretKey = "HEXANA_SECRET_SENTINEL_KEY"
+        val secretValue = "hexana-secret-sentinel-value"
+        val context = ToolRuntimeContext(
+            toolName = "inspect",
+            environment = mapOf(secretKey to secretValue),
+        )
+        val request = ToolInputConversionRequest(
+            context = context,
+            rawArguments = JsonObject(emptyMap()),
+        )
+        val exception = IllegalStateException("failed while handling $request")
+
+        val renderedOutputs = listOf(
+            context.toString(),
+            request.toString(),
+            exception.toString(),
+            exception.stackTraceToString(),
+        )
+
+        renderedOutputs.forEach { rendered ->
+            assertFalse(rendered.contains(secretKey), rendered)
+            assertFalse(rendered.contains(secretValue), rendered)
+        }
+    }
+
+    @Test
+    fun runtimeContextEqualityUsesEnvironmentSnapshot() {
+        val environment = mutableMapOf("HEXANA_TOKEN" to "initial-token")
+        val context = ToolRuntimeContext(
+            toolName = "inspect",
+            environment = environment,
+        )
+        environment["HEXANA_TOKEN"] = "mutated-token"
+
+        assertEquals(
+            ToolRuntimeContext(toolName = "inspect", environment = mapOf("HEXANA_TOKEN" to "initial-token")),
+            context,
+        )
+        assertNotEquals(
+            ToolRuntimeContext(toolName = "inspect", environment = mapOf("HEXANA_TOKEN" to "mutated-token")),
+            context,
+        )
     }
 
     @Test
