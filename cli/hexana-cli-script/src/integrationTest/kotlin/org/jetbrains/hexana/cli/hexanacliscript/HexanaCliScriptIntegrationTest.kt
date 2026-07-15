@@ -243,6 +243,24 @@ class HexanaCliScriptIntegrationTest {
         assertEquals("3", mcpIgnored.stdout)
     }
 
+    @Test
+    fun blankInstalledScriptSourcesAreUsageErrorsWithoutStackTraces() {
+        listOf(
+            listOf("run-script", "", "--script-text", "print(1);"),
+            listOf("run-script", "--binary-base64", "", "--script-text", "print(1);"),
+            listOf("run-script", "--bytes-base64", "", "--script-text", "print(1);"),
+        ).forEach { args ->
+            assertBlankSourceUsage(runScriptCli(*args.toTypedArray()))
+        }
+    }
+
+    private fun assertBlankSourceUsage(result: ProcessResult) {
+        assertEquals(2, result.exitCode, result.stderr)
+        assertTrue(result.stdout.isBlank(), result.stdout)
+        assertEquals("Blank source value is not allowed.\n", result.stderr)
+        assertNoStackTraceMarkers(result.stderr)
+    }
+
     private fun runScriptCli(
         vararg args: String,
         stdin: ByteArray? = null,
@@ -422,3 +440,9 @@ private fun JsonElement.asJsonObjectOrNull(): JsonObject? =
 
 private fun trailingNewlineCount(value: String): Int =
     value.reversed().takeWhile { it == '\n' }.length
+
+private fun assertNoStackTraceMarkers(stderr: String) {
+    listOf("Exception", "Caused by:", "\tat ").forEach { marker ->
+        assertFalse(stderr.contains(marker), stderr)
+    }
+}

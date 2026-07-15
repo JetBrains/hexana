@@ -214,6 +214,30 @@ class HexanaCliIntegrationTest {
         )
     }
 
+    @Test
+    fun blankInstalledStandardSourcesAreUsageErrorsWithoutStackTraces() {
+        listOf(
+            listOf("summarize-binary", ""),
+            listOf("summarize-binary", "--binary-base64", ""),
+            listOf("summarize-binary", "--bytes-base64", ""),
+            listOf("summarize-module", ""),
+            listOf("summarize-module", "--wasm-base64", ""),
+            listOf("summarize-module", "--bytes-base64", ""),
+            listOf("wasm-to-wat", ""),
+            listOf("wasm-to-wat", "--wasm-base64", ""),
+            listOf("wasm-to-wat", "--bytes-base64", ""),
+        ).forEach { args ->
+            assertBlankSourceUsage(runCli(*args.toTypedArray()))
+        }
+    }
+
+    private fun assertBlankSourceUsage(result: ProcessResult) {
+        assertEquals(2, result.exitCode, result.stderr)
+        assertTrue(result.stdout.isBlank(), result.stdout)
+        assertEquals("Blank source value is not allowed.\n", result.stderr)
+        assertNoStackTraceMarkers(result.stderr)
+    }
+
     private fun runCli(
         vararg args: String,
         stdin: ByteArray? = null,
@@ -291,3 +315,9 @@ private fun ExecutorService.readAsync(block: () -> ByteArray): CompletableFuture
 
 private fun trailingNewlineCount(value: String): Int =
     value.reversed().takeWhile { it == '\n' }.length
+
+private fun assertNoStackTraceMarkers(stderr: String) {
+    listOf("Exception", "Caused by:", "\tat ").forEach { marker ->
+        assertFalse(stderr.contains(marker), stderr)
+    }
+}

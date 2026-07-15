@@ -564,6 +564,16 @@ private fun selectSource(
     } else {
         "binary"
     }
+    pathArgument?.let {
+        if (it.isBlank()) {
+            throw ProductUsageException("Blank source value is not allowed.")
+        }
+    }
+    base64Source?.let {
+        if (it.isBlank()) {
+            throw ProductUsageException("Blank source value is not allowed.")
+        }
+    }
     if (pathArgument == "-") {
         return ToolInputSourceSelection.StdinBytes(readStdinBytes(stdin, maxInlineBytes(slotName, resourceLimits)), slotName)
     }
