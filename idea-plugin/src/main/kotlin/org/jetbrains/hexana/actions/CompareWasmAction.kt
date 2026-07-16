@@ -32,11 +32,13 @@ class CompareWasmAction : AnAction() {
 
     override fun update(e: AnActionEvent) {
         val project = e.project
+        val files = e.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY)
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
         e.presentation.isEnabledAndVisible = if (e.isFromContextMenu) {
-            // In the Project-view popup, only show the item for an actual .wasm selection so
-            // it does not clutter the right-click menu of every file.
-            project != null && file != null && isWasm(file)
+            // In the Project-view popup, show the item when exactly two .wasm files are
+            // selected, or when a single .wasm file is selected (prompts for the second).
+            project != null && (files != null && files.size == 2 && files.all { isWasm(it) }
+                || file != null && isWasm(file))
         } else {
             // Search Everywhere / main menu / keymap: always available. actionPerformed
             // prompts for both modules when nothing suitable is selected.
@@ -47,21 +49,34 @@ class CompareWasmAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
 
-        // The Project-view selection is the left-hand module. When invoked without a .wasm
-        // selection (Search Everywhere, Keymap, or main menu), prompt for the first module
-        // instead of silently doing nothing.
-        val left = e.getData(CommonDataKeys.VIRTUAL_FILE)?.takeIf { isWasm(it) }
-            ?: FileChooser.chooseFile(
-                wasmChooser("Compare WASM — Select First Module", "Select the first .wasm module to compare"),
-                project,
-                null,
-            ) ?: return
+        // When exactly two .wasm files are selected in the project tree, use them directly
+        // without prompting for file chooser dialogs.
+        val selectedFiles = e.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY)
+        val twoWasmSelected = selectedFiles != null && selectedFiles.size == 2 && selectedFiles.all { isWasm(it) }
 
-        val right = FileChooser.chooseFile(
-            wasmChooser("Compare With WASM File", "Select the second .wasm module to compare against ${left.name}"),
-            project,
-            left.parent,
-        ) ?: return
+        val left: VirtualFile
+        val right: VirtualFile
+
+        if (twoWasmSelected) {
+            left = selectedFiles!![0]
+            right = selectedFiles[1]
+        } else {
+            // The Project-view selection is the left-hand module. When invoked without a .wasm
+            // selection (Search Everywhere, Keymap, or main menu), prompt for the first module
+            // instead of silently doing nothing.
+            left = e.getData(CommonDataKeys.VIRTUAL_FILE)?.takeIf { isWasm(it) }
+                ?: FileChooser.chooseFile(
+                    wasmChooser("Compare WASM — Select First Module", "Select the first .wasm module to compare"),
+                    project,
+                    null,
+                ) ?: return
+
+            right = FileChooser.chooseFile(
+                wasmChooser("Compare With WASM File", "Select the second .wasm module to compare against ${left.name}"),
+                project,
+                left.parent,
+            ) ?: return
+        }
 
         val leftBuffer = left.toCommonByteBuffer()
         val rightBuffer = right.toCommonByteBuffer()

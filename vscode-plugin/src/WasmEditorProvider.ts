@@ -141,8 +141,40 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
      * `.wasm` files and opens a diff view in a new custom editor tab.
      */
     public static registerCompareCommand(context: vscode.ExtensionContext): vscode.Disposable {
-        return vscode.commands.registerCommand("hexana.compareWasm", async (contextUri?: vscode.Uri) => {
+        return vscode.commands.registerCommand("hexana.compareWasm", async (contextUri?: vscode.Uri, selectedUris?: vscode.Uri[]) => {
             const wasmFilter = { "WebAssembly": ["wasm"] };
+            const isWasm = (uri: vscode.Uri) => uri.fsPath.endsWith(".wasm");
+
+            // When exactly two .wasm files are selected in the explorer, use them directly.
+            if (selectedUris && selectedUris.length === 2 && selectedUris.every(isWasm)) {
+                const left = selectedUris[0];
+                const right = selectedUris[1];
+
+                const leftData = await vscode.workspace.fs.readFile(left);
+                const rightData = await vscode.workspace.fs.readFile(right);
+                const leftName = path.basename(left.fsPath);
+                const rightName = path.basename(right.fsPath);
+
+                const diffUri = vscode.Uri.parse(
+                    `hexana-module:/${leftName} ↔ ${rightName}?diff=true&left=${encodeURIComponent(left.toString())}&right=${encodeURIComponent(right.toString())}`,
+                );
+                const key = diffUri.toString();
+
+                inMemoryModules.set(key, { data: leftData, fileName: `${leftName} ↔ ${rightName}` });
+                pendingDiffs.set(key, { leftData, leftName, rightData, rightName });
+
+                try {
+                    await vscode.commands.executeCommand(
+                        "vscode.openWith",
+                        diffUri,
+                        WasmEditorProvider.viewType,
+                    );
+                } catch (err) {
+                    console.error("[Hexana] Failed to open diff view:", err);
+                    vscode.window.showErrorMessage(`Failed to open diff view: ${err}`);
+                }
+                return;
+            }
 
             // Left file: use the context-menu URI if available, otherwise prompt.
             const left = contextUri && !contextUri.fsPath.endsWith("/")

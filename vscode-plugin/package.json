@@ -69,7 +69,7 @@
       "explorer/context": [
         {
           "command": "hexana.compareWasm",
-          "when": "resourceExtname == .wasm",
+          "when": "resourceExtname == .wasm || listMultiSelection",
           "group": "3_compare"
         }
       ],
