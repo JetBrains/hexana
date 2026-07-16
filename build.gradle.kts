@@ -6,6 +6,7 @@ import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsEnvSpec
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsPlugin
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsRootPlugin
 import org.jetbrains.kotlin.gradle.testing.internal.KotlinTestReport
+import java.util.concurrent.TimeUnit
 
 plugins {
     alias(libs.plugins.graalvm.native) apply(false)
@@ -16,6 +17,8 @@ plugins {
 }
 
 val kotlinNodeVersion = "22.22.0"
+val graalVmVersion = libs.versions.graalvm.get()
+val requiredGraalVmMajorVersion = graalVmVersion.substringBefore('.').toInt()
 
 repositories {
     maven("https://www.jetbrains.com/intellij-repository/releases")
@@ -132,6 +135,76 @@ tasks.register("teamcityCiTests") {
 }
 
 subprojects {
+    plugins.withId("org.graalvm.buildtools.native") {
+        val verifyNativeImageVersion = tasks.register("verifyNativeImageVersion") {
+            group = "verification"
+            description = "Verifies that native-image is GraalVM $requiredGraalVmMajorVersion or newer before native builds."
+
+            doLast {
+                val nativeImageExecutableName = if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
+                    "native-image.cmd"
+                } else {
+                    "native-image"
+                }
+                val candidates = listOfNotNull(
+                    providers.environmentVariable("GRAALVM_HOME").orNull?.let {
+                        file(it).resolve("bin").resolve(nativeImageExecutableName).absolutePath
+                    },
+                    providers.environmentVariable("JAVA_HOME").orNull?.let {
+                        file(it).resolve("bin").resolve(nativeImageExecutableName).absolutePath
+                    },
+                    nativeImageExecutableName,
+                )
+
+                var versionOutput = ""
+                val command = candidates.firstOrNull { candidate ->
+                    try {
+                        val process = ProcessBuilder(candidate, "--version")
+                            .redirectErrorStream(true)
+                            .start()
+                        if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                            process.destroyForcibly()
+                            false
+                        } else {
+                            versionOutput = process.inputStream.bufferedReader().readText().trim()
+                            process.exitValue() == 0
+                        }
+                    } catch (_: Exception) {
+                        false
+                    }
+                } ?: error(
+                    "nativeCompile requires GraalVM $requiredGraalVmMajorVersion native-image, but no usable native-image " +
+                        "was found via GRAALVM_HOME, JAVA_HOME, or PATH. The repository JVM baseline remains JDK 21; " +
+                        "native packaging requires GraalVM $requiredGraalVmMajorVersion because wasm-language " +
+                        "$graalVmVersion uses VectorAPISupport."
+                )
+                val majorVersion = Regex("""\b(?:GraalVM\s+)?(?:CE\s+)?(\d+)\.""")
+                    .find(versionOutput)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.toIntOrNull()
+
+                check(majorVersion != null && majorVersion >= requiredGraalVmMajorVersion) {
+                    "nativeCompile requires GraalVM $requiredGraalVmMajorVersion native-image, but `$command --version` " +
+                        "reported:\n$versionOutput\n\nThe repository JVM baseline remains JDK 21; native packaging " +
+                        "requires GraalVM $requiredGraalVmMajorVersion because wasm-language $graalVmVersion " +
+                        "uses VectorAPISupport."
+                }
+            }
+        }
+
+        tasks.matching { it.name == "nativeCompile" }.configureEach {
+            dependsOn(verifyNativeImageVersion)
+        }
+
+        extensions.configure<org.graalvm.buildtools.gradle.dsl.GraalVMExtension>("graalvmNative") {
+            binaries.configureEach {
+                @Suppress("DEPRECATION")
+                requiredVersion.set(requiredGraalVmMajorVersion.toString())
+            }
+        }
+    }
+
     val ignoreTestFailuresOnTeamCity = providers.gradleProperty("teamcityIgnoreTestFailures")
         .map(String::toBoolean)
         .getOrElse(false)

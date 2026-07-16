@@ -51,9 +51,10 @@ Build and smoke-test the local Claude Desktop MCPB prototype for the current hos
 ./gradlew :mcp:assembleClaudeDesktopMcpb
 ```
 
-Native builds require a GraalVM distribution with `native-image` installed. Set `GRAALVM_HOME` or `JAVA_HOME` to that
-distribution before running native tasks if Gradle does not auto-detect it. JBR and ordinary JDKs can run JVM package
-gates, but they cannot rebuild the native executable.
+Native builds require GraalVM 25 or newer with `native-image` installed. Set `GRAALVM_HOME` or `JAVA_HOME` to that
+distribution before running native tasks if Gradle does not auto-detect it. The repository JVM baseline and JVM fallback
+packages remain on JDK 21; native packaging requires GraalVM 25 because `wasm-language` 25.0.0 uses
+`VectorAPISupport`. JBR and ordinary JDKs can run JVM package gates, but they cannot rebuild the native executable.
 
 Install the Codex plugin into the repo-local marketplace layout with:
 
@@ -234,7 +235,7 @@ TeamCity stays responsible for branch policy, secure parameters, build-chain dep
 packaging repository stays responsible for the release mechanics and public-file safety rules.
 
 Native release artifacts are built by a platform CI matrix rather than by the GitHub release script on one host. Each
-matrix leg must run:
+matrix leg must run on GraalVM 25 or newer with `native-image`:
 
 ```bash
 ./gradlew :mcp:assembleNativeMcpReleaseArtifacts

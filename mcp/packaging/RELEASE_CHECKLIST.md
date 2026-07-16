@@ -4,8 +4,10 @@ Use this checklist for Claude and Codex MCP wrapper releases.
 
 ## Native Matrix Gates
 
-Run each native matrix leg on a host with a GraalVM distribution that includes
-`native-image`:
+Run each native matrix leg on a host with GraalVM 25 or newer that includes
+`native-image`. The repository JVM baseline and JVM fallback packages remain on
+JDK 21; native packaging requires GraalVM 25 because `wasm-language` 25.0.0 uses
+`VectorAPISupport`.
 
 | Platform tag | Host requirement |
 |--------------|------------------|
@@ -32,6 +34,9 @@ and writes native standalone, Claude plugin, and Codex plugin ZIPs under
 must fail this gate.
 
 ## JVM Fallback Compatibility Checks
+
+These checks exercise the ordinary JVM fallback packages. They require JDK 21,
+not GraalVM 25 `native-image`.
 
 - Update `mcp/CHANGELOG.md` before release publishing. The release script
   extracts the `mcp/server/gradle.properties:mcpServerVersion` section and
