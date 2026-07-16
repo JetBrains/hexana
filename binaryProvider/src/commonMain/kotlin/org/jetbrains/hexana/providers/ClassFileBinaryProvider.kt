@@ -57,10 +57,15 @@ class ClassFileBinaryProvider(
                 buffer[3] == 0xBE.toByte()
             if (!hasMagic) return false
             // Read bytes 4..7 as a big-endian 32-bit unsigned value.
-            val word4 = ((buffer[4].toInt() and 0xFF) shl 24) or
-                ((buffer[5].toInt() and 0xFF) shl 16) or
-                ((buffer[6].toInt() and 0xFF) shl 8) or
-                (buffer[7].toInt() and 0xFF)
+            return isDefinitelyClass { i -> buffer[i] }
+        }
+
+        // Checks if the given buffer is a Java class file using an extended heuristic guarding against Mach-O fat binaries.
+        fun isDefinitelyClass(byteByIndex: (Int) -> Byte): Boolean {
+            val word4 = ((byteByIndex(4).toInt() and 0xFF) shl 24) or
+                    ((byteByIndex(5).toInt() and 0xFF) shl 16) or
+                    ((byteByIndex(6).toInt() and 0xFF) shl 8) or
+                    (byteByIndex(7).toInt() and 0xFF)
             // Mach-O fat binaries have a small arch count here (≤ ~18);
             // Java class files have minor_version (u16) | major_version (u16 ≥ 43),
             // so the combined 32-bit value is always > 30.

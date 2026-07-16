@@ -1,9 +1,11 @@
 package org.jetbrains.hexana
 
+import com.intellij.ide.highlighter.JavaClassFileType
 import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.fileTypes.FileTypeRegistry
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.util.io.ByteSequence
+import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 
 /**
  * Magic-byte detector that routes extensionless (or ambiguously-named) binaries to the
@@ -63,6 +65,7 @@ class NativeBinaryFileTypeDetector : FileTypeRegistry.FileTypeDetector {
             (b3 == 0xCA && b2 == 0xFE && b1 == 0xBA && (b0 == 0xBE || b0 == 0xBF))
         ) {
             if (file.extension.equals("class", ignoreCase = true)) return null
+            if (ClassFileBinaryProvider.isDefinitelyClass { i -> firstBytes.byteAt(i) }) return JavaClassFileType.INSTANCE
             return MachOFileType.INSTANCE
         }
 
