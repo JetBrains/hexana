@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.analytics
 
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -192,5 +193,16 @@ class BinaryFormatDetectionTest {
         val detail = genericDetailOf(file = null, provider = null)
         assertNull(detail.detected)
         assertEquals(HexanaEvent.GenericExt.OTHER, detail.ext)
+    }
+
+    @Test
+    fun classFileProviderReportsClassRegardlessOfFileName() {
+        // Java 11 class-file header: 0xCAFEBABE, minor 0, major 55. The provider
+        // type is content-verified, so the format must be CLASS even with no file.
+        val head = ByteArray(16) { i ->
+            intArrayOf(0xCA, 0xFE, 0xBA, 0xBE, 0x00, 0x00, 0x00, 0x37).getOrElse(i) { 0 }.toByte()
+        }
+        val provider = ClassFileBinaryProvider(head.toCommonByteBuffer())
+        assertEquals(HexanaEvent.BinaryFormat.CLASS, binaryFormatOf(file = null, provider = provider))
     }
 }

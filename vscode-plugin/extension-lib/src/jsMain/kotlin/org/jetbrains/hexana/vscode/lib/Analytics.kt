@@ -7,6 +7,7 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormatDetector
 import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.shared.detectBinaryType
 
 /** Safely converts a JS [Double] to [Long], clamping NaN, Infinity, and negative values to 0. */
@@ -81,8 +82,9 @@ fun captureBinaryOpened(fileName: String, bytes: ByteArray) {
 
 /**
  * Resolves the analytics [HexanaEvent.BinaryFormat] from file content,
- * mirroring the IDE plugin's `binaryFormatOf`: Wasm magic first, then native
- * formats, then archive / class by extension, else GENERIC. `.a` static
+ * mirroring the IDE plugin's `binaryFormatOf`: Wasm magic first, then Java
+ * class by content magic, then native formats, then archive by extension,
+ * else GENERIC. `.a` static
  * archives ([NativeBinaryFormat.Archive]) fall through to GENERIC, matching
  * the IDE.
  */
@@ -91,6 +93,12 @@ private fun resolveBinaryFormat(fileName: String, bytes: ByteArray): HexanaEvent
         BinaryProviderType.Wasm -> return HexanaEvent.BinaryFormat.WASM
         BinaryProviderType.WasmComponent -> return HexanaEvent.BinaryFormat.WASM_COMPONENT
         BinaryProviderType.Generic -> Unit
+    }
+    // Class check must precede the native detector: both key off 0xCAFEBABE
+    // (Java class file vs Mach-O universal), and the editor's provider
+    // dispatch resolves the ambiguity in this order too.
+    if (ClassFileBinaryProvider.isClassFile(bytes.toCommonByteBuffer())) {
+        return HexanaEvent.BinaryFormat.CLASS
     }
     when (NativeBinaryFormatDetector.detect(bytes.toCommonByteBuffer())) {
         is NativeBinaryFormat.Elf -> return HexanaEvent.BinaryFormat.ELF

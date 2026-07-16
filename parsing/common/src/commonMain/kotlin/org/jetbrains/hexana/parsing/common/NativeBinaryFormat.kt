@@ -201,23 +201,30 @@ object NativeBinaryFormatDetector {
                 endian = NativeBinaryEndian.Little,
                 cpuType = reader.i32OrNull(4, NativeBinaryEndian.Little),
             )
-            0xCAFEBABEu -> NativeBinaryFormat.FatMachO(
-                wordSize = NativeBinaryWordSize.Bits32,
-                endian = NativeBinaryEndian.Big,
-            )
-            0xBEBAFECAu -> NativeBinaryFormat.FatMachO(
-                wordSize = NativeBinaryWordSize.Bits32,
-                endian = NativeBinaryEndian.Little,
-            )
-            0xCAFEBABFu -> NativeBinaryFormat.FatMachO(
-                wordSize = NativeBinaryWordSize.Bits64,
-                endian = NativeBinaryEndian.Big,
-            )
-            0xBFBAFECAu -> NativeBinaryFormat.FatMachO(
-                wordSize = NativeBinaryWordSize.Bits64,
-                endian = NativeBinaryEndian.Little,
-            )
+            0xCAFEBABEu -> fatMachO(reader, NativeBinaryWordSize.Bits32, NativeBinaryEndian.Big)
+            0xBEBAFECAu -> fatMachO(reader, NativeBinaryWordSize.Bits32, NativeBinaryEndian.Little)
+            0xCAFEBABFu -> fatMachO(reader, NativeBinaryWordSize.Bits64, NativeBinaryEndian.Big)
+            0xBFBAFECAu -> fatMachO(reader, NativeBinaryWordSize.Bits64, NativeBinaryEndian.Little)
             else -> null
         }
     }
+
+    /**
+     * Claims a fat Mach-O only when the arch count at offset 4 (read in the
+     * header's endianness) is plausibly small. Java class files share the
+     * `0xCAFEBABE` magic but hold `minor_version | major_version` there,
+     * which reads > 30 for every released class-file version; the threshold
+     * mirrors `ClassFileBinaryProvider.isClassFile`.
+     */
+    private fun fatMachO(
+        reader: NativeBinaryReader,
+        wordSize: NativeBinaryWordSize,
+        endian: NativeBinaryEndian,
+    ): NativeBinaryFormat.FatMachO? {
+        val archCount = reader.u32OrNull(4, endian) ?: return null
+        if (archCount > MAX_FAT_ARCH_COUNT) return null
+        return NativeBinaryFormat.FatMachO(wordSize = wordSize, endian = endian)
+    }
+
+    private const val MAX_FAT_ARCH_COUNT = 30u
 }

@@ -93,6 +93,45 @@ class NativeBinaryFormatDetectorTest {
     }
 
     @Test
+    fun `detects big endian fat Mach-O with plausible arch count`() {
+        val bytes = ByteArray(16)
+        bytes.putU32Be(0, 0xCAFEBABEu)
+        bytes.putU32Be(4, 2u)
+
+        val format = assertIs<NativeBinaryFormat.FatMachO>(NativeBinaryFormatDetector.detect(bytes.toCommonByteBuffer()))
+        assertEquals(NativeBinaryWordSize.Bits32, format.wordSize)
+        assertEquals(NativeBinaryEndian.Big, format.endian)
+    }
+
+    @Test
+    fun `detects byte-swapped fat Mach-O with plausible arch count`() {
+        val bytes = ByteArray(16)
+        bytes.putU32Be(0, 0xBEBAFECAu)
+        bytes.putU32Le(4, 2u)
+
+        val format = assertIs<NativeBinaryFormat.FatMachO>(NativeBinaryFormatDetector.detect(bytes.toCommonByteBuffer()))
+        assertEquals(NativeBinaryEndian.Little, format.endian)
+    }
+
+    @Test
+    fun `does not classify Java class file as fat Mach-O`() {
+        // A Java 11 class file: 0xCAFEBABE magic, minor 0, major 55 (0x37).
+        val bytes = ByteArray(16)
+        bytes.putU32Be(0, 0xCAFEBABEu)
+        bytes.putU32Be(4, 0x37u)
+
+        assertNull(NativeBinaryFormatDetector.detect(bytes.toCommonByteBuffer()))
+    }
+
+    @Test
+    fun `rejects fat Mach-O magic without an arch count`() {
+        val bytes = ByteArray(4)
+        bytes.putU32Be(0, 0xCAFEBABEu)
+
+        assertNull(NativeBinaryFormatDetector.detect(bytes.toCommonByteBuffer()))
+    }
+
+    @Test
     fun `detects Unix archive`() {
         val bytes = byteArrayOf(
             '!'.code.toByte(),

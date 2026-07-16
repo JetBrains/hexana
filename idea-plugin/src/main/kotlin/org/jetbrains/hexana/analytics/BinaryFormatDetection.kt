@@ -44,10 +44,14 @@ internal fun binaryFormatOf(
         is ParquetBinaryProvider -> return HexanaEvent.BinaryFormat.PARQUET
         is ArrowBinaryProvider -> return HexanaEvent.BinaryFormat.ARROW_IPC
         is ArchiveBinaryProvider -> return HexanaEvent.BinaryFormat.GENERIC
+        // Content-verified (0xCAFEBABE + version check) — report CLASS even
+        // when the file isn't named `.class`. Must precede the
+        // GenericBinaryProvider branch, which this provider extends.
+        is ClassFileBinaryProvider -> return HexanaEvent.BinaryFormat.CLASS
         // ProtobufMessageBinaryProvider (explicit Open-As) intentionally reports as GENERIC — not an auto-detected format.
         is GenericBinaryProvider -> return HexanaEvent.BinaryFormat.GENERIC
-        // Zip / class / dex providers are classified by extension below (jar/war/apk/zip/class).
-        is ZipBinaryProvider, is ClassFileBinaryProvider, is DexBinaryProvider, null -> Unit
+        // Zip / dex providers are classified by extension below (jar/war/apk/zip).
+        is ZipBinaryProvider, is DexBinaryProvider, null -> Unit
     }
     return when (file?.extension?.lowercase()) {
         "class" -> HexanaEvent.BinaryFormat.CLASS
