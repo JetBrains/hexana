@@ -51,6 +51,9 @@ Build and smoke-test the local Claude Desktop MCPB prototype for the current hos
 ./gradlew :mcp:assembleClaudeDesktopMcpb
 ```
 
+This task requires the official `mcpb` CLI on `PATH` and uses `mcpb pack` to
+produce the `.mcpb` artifact.
+
 Native builds require GraalVM 25 or newer with `native-image` installed. Set `GRAALVM_HOME` or `JAVA_HOME` to that
 distribution before running native tasks if Gradle does not auto-detect it. The repository JVM baseline and JVM fallback
 packages remain on JDK 21; native packaging requires GraalVM 25 because `wasm-language` 25.0.0 uses

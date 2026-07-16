@@ -7,6 +7,9 @@ Build it from the repository root with:
 ./gradlew :mcp:assembleClaudeDesktopMcpb
 ```
 
+This task requires the official `mcpb` CLI on `PATH`; TeamCity and local
+developer machines should install `@anthropic-ai/mcpb` before running it.
+
 The assembled bundle is written to:
 
 ```text

@@ -68,6 +68,7 @@ val mcpbNativeZipOverridePath = providers.gradleProperty("hexanaMcpbNativeZip").
 val mcpbPreparedNativeExecutable = layout.buildDirectory.file("mcpb-native-runtime/$nativeHostPlatformName/$nativeServerExecutableName")
 val nativeDistributionDir = layout.buildDirectory.dir("distributions-native")
 val claudeDesktopMcpbArchiveName = "hexana-core-$nativeHostPlatformName.mcpb"
+val claudeDesktopMcpbArchive = nativeDistributionDir.map { it.file(claudeDesktopMcpbArchiveName) }
 val publicMarketplaceDir = layout.projectDirectory.dir("out/teamcity/public-marketplace")
 val pluginLicenseFile = layout.projectDirectory.file("packaging/LICENSE.txt")
 val thirdPartyNoticesDir = layout.buildDirectory.dir("generated/third-party-notices")
@@ -1900,6 +1901,15 @@ val assembleClaudeDesktopMcpbPackage = tasks.register<Sync>("assembleClaudeDeskt
     }
 }
 
+val assertMcpbCliAvailable = tasks.register("assertMcpbCliAvailable") {
+    group = "verification"
+    description = "Assert that the official mcpb CLI is installed on PATH."
+
+    doLast {
+        runRequiredMcpbCommand(listOf("--help"), printOutput = false)
+    }
+}
+
 tasks.register("validateClaudeDesktopMcpbManifest") {
     group = "verification"
     description = "Validate generated Claude Desktop MCPB manifest fields used by the local prototype."
@@ -1931,22 +1941,22 @@ tasks.register("validateClaudeDesktopMcpbNativeRuntime") {
     }
 }
 
-val packClaudeDesktopMcpb = tasks.register<Zip>("packClaudeDesktopMcpb") {
+val packClaudeDesktopMcpb = tasks.register("packClaudeDesktopMcpb") {
     group = "distribution"
-    description = "Pack the local Claude Desktop MCPB bundle into mcp/build/distributions-native."
-    dependsOn("validateClaudeDesktopMcpbManifest", "validateClaudeDesktopMcpbNativeRuntime")
+    description = "Pack the local Claude Desktop MCPB bundle with the official mcpb CLI."
+    dependsOn(assertMcpbCliAvailable, "mcpbValidateClaudeDesktopMcpb", "validateClaudeDesktopMcpbManifest", "validateClaudeDesktopMcpbNativeRuntime")
 
-    from(claudeDesktopMcpbDir) {
-        filesMatching(listOf("bin/hexana-mcp", "bin/hexana-mcp-claude-desktop", "server/bin/*", "native/**/hexana-mcp")) {
-            if (!name.endsWith(".bat") && !name.endsWith(".cmd")) {
-                permissions { unix("rwxr-xr-x") }
-            }
-        }
+    inputs.dir(claudeDesktopMcpbDir)
+    outputs.file(claudeDesktopMcpbArchive)
+
+    doLast {
+        val outputFile = claudeDesktopMcpbArchive.get().asFile
+        outputFile.parentFile.mkdirs()
+        outputFile.delete()
+        runRequiredMcpbCommand(
+            listOf("pack", claudeDesktopMcpbDir.get().asFile.absolutePath, outputFile.absolutePath)
+        )
     }
-    archiveFileName.set(claudeDesktopMcpbArchiveName)
-    destinationDirectory.set(nativeDistributionDir)
-    isReproducibleFileOrder = true
-    isPreserveFileTimestamps = false
 }
 
 tasks.register("claudeDesktopMcpbSmoke") {
@@ -1955,7 +1965,7 @@ tasks.register("claudeDesktopMcpbSmoke") {
     dependsOn(packClaudeDesktopMcpb)
 
     val packageDir = claudeDesktopMcpbDir
-    val archiveFile = nativeDistributionDir.map { it.file(claudeDesktopMcpbArchiveName) }
+    val archiveFile = claudeDesktopMcpbArchive
     val smokeAllowedRoot = layout.buildDirectory.dir("mcpb-smoke/allowed root")
     val smokeSecondAllowedRoot = layout.buildDirectory.dir("mcpb-smoke/second allowed root")
     val fakeServerExecutable = layout.buildDirectory.file("mcpb-smoke/fake server/hexana-mcp")
@@ -2052,48 +2062,29 @@ tasks.register("claudeDesktopMcpbSmoke") {
 tasks.register("mcpbValidateClaudeDesktopMcpb") {
     group = "verification"
     description = "Run the official mcpb CLI validate command against the staged Claude Desktop MCPB manifest."
-    dependsOn(assembleClaudeDesktopMcpbPackage)
+    dependsOn(assertMcpbCliAvailable, assembleClaudeDesktopMcpbPackage)
 
     doLast {
-        runRequiredMcpbCommand(
-            listOf("validate", claudeDesktopMcpbDir.get().asFile.absolutePath),
-            "Install with `npm install -g @anthropic-ai/mcpb`, or pass `-PmcpbCli=/path/to/mcpb`."
-        )
-    }
-}
-
-tasks.register("mcpbPackClaudeDesktopMcpb") {
-    group = "distribution"
-    description = "Run the official mcpb CLI pack command for comparison with the Gradle-packed MCPB."
-    dependsOn(assembleClaudeDesktopMcpbPackage)
-
-    doLast {
-        val outputFile = nativeDistributionDir.get().file("hexana-core-$nativeHostPlatformName.mcpb").asFile
-        outputFile.parentFile.mkdirs()
-        runRequiredMcpbCommand(
-            listOf("pack", claudeDesktopMcpbDir.get().asFile.absolutePath, outputFile.absolutePath),
-            "Install with `npm install -g @anthropic-ai/mcpb`, or pass `-PmcpbCli=/path/to/mcpb`."
-        )
+        runRequiredMcpbCommand(listOf("validate", claudeDesktopMcpbDir.get().asFile.absolutePath))
     }
 }
 
 tasks.register("mcpbInfoClaudeDesktopMcpb") {
     group = "verification"
     description = "Run the official mcpb CLI info command against the packed Claude Desktop MCPB."
-    dependsOn(packClaudeDesktopMcpb)
+    dependsOn(assertMcpbCliAvailable, packClaudeDesktopMcpb)
 
     doLast {
         runRequiredMcpbCommand(
-            listOf("info", nativeDistributionDir.get().file(claudeDesktopMcpbArchiveName).asFile.absolutePath),
-            "Install with `npm install -g @anthropic-ai/mcpb`, or pass `-PmcpbCli=/path/to/mcpb`."
+            listOf("info", claudeDesktopMcpbArchive.get().asFile.absolutePath)
         )
     }
 }
 
 tasks.register("assembleClaudeDesktopMcpb") {
     group = "distribution"
-    description = "Assemble, validate, pack, and smoke-test the local Claude Desktop MCPB bundle."
-    dependsOn(packClaudeDesktopMcpb, "claudeDesktopMcpbSmoke")
+    description = "Assemble, validate, pack with mcpb, inspect, and smoke-test the local Claude Desktop MCPB bundle."
+    dependsOn(packClaudeDesktopMcpb, "mcpbInfoClaudeDesktopMcpb", "claudeDesktopMcpbSmoke")
 }
 
 tasks.register("assembleMcpPackagingPlain") {
@@ -2669,17 +2660,17 @@ fun runProcess(commandLine: List<String>, workingDir: File, environment: Map<Str
     return ProcessResult(process.waitFor(), output)
 }
 
-fun runRequiredMcpbCommand(args: List<String>, missingCliHint: String) {
-    val cli = providers.gradleProperty("mcpbCli").orElse("mcpb").get()
+fun runRequiredMcpbCommand(args: List<String>, printOutput: Boolean = true) {
+    val cli = "mcpb"
     val result = try {
         runProcess(listOf(cli) + args, projectDir)
     } catch (error: java.io.IOException) {
-        error("Could not run `$cli`: ${error.message}. $missingCliHint")
+        error("Could not run `$cli`: ${error.message}. Install the official MCPB CLI before running Claude Desktop MCPB tasks.")
     }
     check(result.exitCode == 0) {
         "mcpb ${args.joinToString(" ")} failed with exit ${result.exitCode}:\n${result.output}"
     }
-    if (result.output.isNotBlank()) {
+    if (printOutput && result.output.isNotBlank()) {
         println(result.output.trimEnd())
     }
 }

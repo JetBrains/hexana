@@ -16,6 +16,13 @@ From the repository root:
 ./gradlew :mcp:assembleClaudeDesktopMcpb
 ```
 
+The official `mcpb` CLI must be installed on `PATH` before running this task.
+Install it with:
+
+```bash
+npm install -g @anthropic-ai/mcpb
+```
+
 Output:
 
 ```text
@@ -30,9 +37,10 @@ shares the native-enabled wrapper layout that validates that fallback.
 ## Validate
 
 The Gradle task above runs local manifest, launcher, native `version`, native
-`doctor`, missing-root, and archive-content checks.
+`doctor`, missing-root, official `mcpb validate`, official `mcpb pack`,
+official `mcpb info`, and archive-content checks.
 
-If the official MCPB CLI is installed:
+The underlying MCPB CLI commands are:
 
 ```bash
 mcpb validate mcp/build/packaging-native/claude-desktop-mcpb
@@ -40,16 +48,10 @@ mcpb pack mcp/build/packaging-native/claude-desktop-mcpb mcp/build/distributions
 mcpb info mcp/build/distributions-native/hexana-core-<platform>.mcpb
 ```
 
-The same checks are available through Gradle:
+The individual Gradle tasks are:
 
 ```bash
-./gradlew :mcp:mcpbValidateClaudeDesktopMcpb :mcp:mcpbPackClaudeDesktopMcpb :mcp:mcpbInfoClaudeDesktopMcpb
-```
-
-If `mcpb` is not on `PATH`, install it with:
-
-```bash
-npm install -g @anthropic-ai/mcpb
+./gradlew :mcp:mcpbValidateClaudeDesktopMcpb :mcp:packClaudeDesktopMcpb :mcp:mcpbInfoClaudeDesktopMcpb
 ```
 
 ## Preflight
