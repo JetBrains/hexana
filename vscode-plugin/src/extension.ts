@@ -6,6 +6,7 @@ import { WasmEditorProvider } from "./WasmEditorProvider";
 import type * as ExtensionLib from "./extension-lib";
 import { registerHexanaMcpServerCommands } from "./mcpServerDownloader";
 import { registerMcpServerDefinitionProvider } from "./mcpServerProvider";
+import { registerNativeBinaryDetector } from "./NativeBinaryFileTypeDetector";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const extensionLib: typeof ExtensionLib | null = (() => {
@@ -64,6 +65,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const message = error instanceof Error ? error.message : String(error);
         console.warn(`[Hexana] MCP integration disabled: ${message}`);
     }
+
+    // Register content-based binary file type detection for extensionless files.
+    registerNativeBinaryDetector(context);
 
     // Ensure .wasm files are associated with the Hexana custom editor so that
     // VS Code does not show the "binary file not displayed" warning.  The
