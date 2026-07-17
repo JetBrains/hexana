@@ -74,6 +74,7 @@ internal fun SearchableTable(
             display(DisplayStyle.Flex)
             property("flex-direction", "column")
             property("min-height", "0")
+            property("flex", "1")
         }
         ref { container ->
             containerRef = container
@@ -122,7 +123,13 @@ internal fun SearchableTable(
             else TableSortState()
         }
 
-        Div {
+        Div({
+            style {
+                property("flex", "1")
+                property("min-height", "0")
+                property("overflow-y", "auto")
+            }
+        }) {
             PanelTable(
                 headers = headers,
                 columnAligns = columnAligns,

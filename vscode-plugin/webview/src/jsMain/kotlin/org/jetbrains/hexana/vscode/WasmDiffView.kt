@@ -131,7 +131,9 @@ fun WasmDiffView(
             style {
                 property("flex", "1")
                 property("min-height", "0")
-                property("overflow-y", "auto")
+                display(DisplayStyle.Flex)
+                property("flex-direction", "column")
+                property("overflow", "hidden")
                 property("padding", "8px 12px")
             }
         }) {
