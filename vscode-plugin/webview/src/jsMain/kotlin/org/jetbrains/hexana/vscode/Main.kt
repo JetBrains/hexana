@@ -81,12 +81,23 @@ class DiffPayload(
     val rightName: String,
 )
 
+/**
+ * Holds the state for a native binary diff view.
+ */
+class NativeDiffPayload(
+    val leftData: ByteArray,
+    val leftName: String,
+    val rightData: ByteArray,
+    val rightName: String,
+)
+
 @Composable
 fun BinaryEditorApp() {
     var wasmBytes by remember { mutableStateOf<ByteArray?>(null) }
     var fileName by remember { mutableStateOf("") }
     var filePath by remember { mutableStateOf("") }
     var diffPayload by remember { mutableStateOf<DiffPayload?>(null) }
+    var nativeDiffPayload by remember { mutableStateOf<NativeDiffPayload?>(null) }
     var expiredMessage by remember { mutableStateOf<String?>(null) }
     val scriptTabs = remember { mutableStateListOf<ScriptTabState>() }
     var dialogPickedPath by remember { mutableStateOf("") }
@@ -105,6 +116,13 @@ fun BinaryEditorApp() {
                 val right = message.rightData
                 if (left != null && right != null) {
                     diffPayload = DiffPayload(left, message.leftName, right, message.rightName)
+                }
+            }
+            "load-native-diff" -> {
+                val left = message.leftData
+                val right = message.rightData
+                if (left != null && right != null) {
+                    nativeDiffPayload = NativeDiffPayload(left, message.leftName, right, message.rightName)
                 }
             }
             "load-expired" -> {
@@ -154,6 +172,17 @@ fun BinaryEditorApp() {
         Div({ classes("loading") }) {
             Text(expiredMessage!!)
         }
+        return
+    }
+
+    val ndp = nativeDiffPayload
+    if (ndp != null) {
+        NativeDiffView(
+            leftData = ndp.leftData,
+            leftName = ndp.leftName,
+            rightData = ndp.rightData,
+            rightName = ndp.rightName,
+        )
         return
     }
 

@@ -352,6 +352,20 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                             rightName = (data.rightName as? String) ?: "",
                         )
                     }
+                    "load-native-diff" -> {
+                        fun toByteArray(jsArr: dynamic): ByteArray? {
+                            if (jsArr == null) return null
+                            val len = jsArr.length as Int
+                            return ByteArray(len) { i -> (jsArr[i] as Number).toByte() }
+                        }
+                        VscodeMessage(
+                            type = type,
+                            leftData = toByteArray(data.leftData),
+                            leftName = (data.leftName as? String) ?: "",
+                            rightData = toByteArray(data.rightData),
+                            rightName = (data.rightName as? String) ?: "",
+                        )
+                    }
                     "load-expired" -> {
                         VscodeMessage(
                             type = type,

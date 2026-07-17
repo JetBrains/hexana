@@ -136,6 +136,109 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
     private static readonly viewType = "hexana.wasmEditor";
 
+    private static readonly nativeExtensions = new Set([
+        "o", "obj", "so", "dylib", "dll", "exe", "elf", "a", "lib",
+        "ko", "sys", "axf", "bin", "out",
+    ]);
+
+    /**
+     * Returns true when the URI looks like a native binary: either it has a
+     * known native extension, or the file name has no extension at all
+     * (extensionless files are common for native executables on Unix).
+     */
+    private static isNativeBinary(uri: vscode.Uri): boolean {
+        const base = path.basename(uri.fsPath);
+        if (!base.includes(".")) return true; // extensionless → treat as native
+        const ext = base.split(".").pop()?.toLowerCase() ?? "";
+        return WasmEditorProvider.nativeExtensions.has(ext);
+    }
+
+    /**
+     * Registers the `hexana.compareBinary` command that lets the user pick two
+     * native binary files and opens a diff view showing per-section size differences.
+     */
+    public static registerCompareBinaryCommand(context: vscode.ExtensionContext): vscode.Disposable {
+        return vscode.commands.registerCommand("hexana.compareBinary", async (contextUri?: vscode.Uri, selectedUris?: vscode.Uri[]) => {
+            const isNative = WasmEditorProvider.isNativeBinary;
+            const nativeFilter = { "Native Binary": ["o", "obj", "so", "dylib", "dll", "exe", "elf", "a", "lib", "ko", "sys", "axf", "bin", "out", "*"] };
+
+            // When exactly two files are selected and both look like native binaries
+            // (known extension or extensionless), compare them directly.
+            if (selectedUris && selectedUris.length === 2 && selectedUris.every(u => isNative(u))) {
+                const left = selectedUris[0];
+                const right = selectedUris[1];
+
+                const leftData = await vscode.workspace.fs.readFile(left);
+                const rightData = await vscode.workspace.fs.readFile(right);
+                const leftName = path.basename(left.fsPath);
+                const rightName = path.basename(right.fsPath);
+
+                const diffUri = vscode.Uri.parse(
+                    `hexana-module:/${leftName} ↔ ${rightName}?diff=true&native=true&left=${encodeURIComponent(left.toString())}&right=${encodeURIComponent(right.toString())}`,
+                );
+                const key = diffUri.toString();
+
+                inMemoryModules.set(key, { data: leftData, fileName: `${leftName} ↔ ${rightName}` });
+                pendingDiffs.set(key, { leftData, leftName, rightData, rightName });
+
+                try {
+                    await vscode.commands.executeCommand(
+                        "vscode.openWith",
+                        diffUri,
+                        WasmEditorProvider.viewType,
+                    );
+                } catch (err) {
+                    console.error("[Hexana] Failed to open native diff view:", err);
+                    vscode.window.showErrorMessage(`Failed to open diff view: ${err}`);
+                }
+                return;
+            }
+
+            // Left file: use the context-menu URI if available, otherwise prompt.
+            const left = contextUri && !contextUri.fsPath.endsWith("/") && isNative(contextUri)
+                ? contextUri
+                : await vscode.window.showOpenDialog({
+                    canSelectMany: false,
+                    filters: nativeFilter,
+                    title: "Compare Binary — Select First File",
+                }).then(uris => uris?.[0]);
+            if (!left) return;
+
+            // Right file: always prompt.
+            const right = await vscode.window.showOpenDialog({
+                canSelectMany: false,
+                filters: nativeFilter,
+                title: `Compare With Binary File (against ${path.basename(left.fsPath)})`,
+                defaultUri: vscode.Uri.file(path.dirname(left.fsPath)),
+            }).then(uris => uris?.[0]);
+            if (!right) return;
+
+            const leftData = await vscode.workspace.fs.readFile(left);
+            const rightData = await vscode.workspace.fs.readFile(right);
+            const leftName = path.basename(left.fsPath);
+            const rightName = path.basename(right.fsPath);
+
+            const diffUri = vscode.Uri.parse(
+                `hexana-module:/${leftName} ↔ ${rightName}?diff=true&native=true&left=${encodeURIComponent(left.toString())}&right=${encodeURIComponent(right.toString())}`,
+            );
+            const key = diffUri.toString();
+
+            inMemoryModules.set(key, { data: leftData, fileName: `${leftName} ↔ ${rightName}` });
+            pendingDiffs.set(key, { leftData, leftName, rightData, rightName });
+
+            try {
+                await vscode.commands.executeCommand(
+                    "vscode.openWith",
+                    diffUri,
+                    WasmEditorProvider.viewType,
+                );
+            } catch (err) {
+                console.error("[Hexana] Failed to open native diff view:", err);
+                vscode.window.showErrorMessage(`Failed to open diff view: ${err}`);
+            }
+        });
+    }
+
     /**
      * Registers the `hexana.compareWasm` command that lets the user pick two
      * `.wasm` files and opens a diff view in a new custom editor tab.
@@ -299,12 +402,13 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 const diff = pendingDiffs.get(diffKey);
                 if (diff) {
                     pendingDiffs.delete(diffKey);
+                    const isNativeDiff = document.uri.query.includes("native=true");
                     const toPayload = (d: Uint8Array) =>
                         d instanceof Buffer
                             ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength)
                             : d;
                     webviewPanel.webview.postMessage({
-                        type: "load-diff",
+                        type: isNativeDiff ? "load-native-diff" : "load-diff",
                         leftData: toPayload(diff.leftData),
                         leftName: diff.leftName,
                         rightData: toPayload(diff.rightData),
@@ -317,6 +421,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 // Try to reload from disk using the file paths encoded in the URI.
                 if (document.uri.query.includes("diff=true")) {
                     const params = new URLSearchParams(document.uri.query);
+                    const isNativeDiff = params.get("native") === "true";
                     const leftUriStr = params.get("left");
                     const rightUriStr = params.get("right");
                     if (leftUriStr && rightUriStr) {
@@ -330,7 +435,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                                     ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength)
                                     : d;
                             webviewPanel.webview.postMessage({
-                                type: "load-diff",
+                                type: isNativeDiff ? "load-native-diff" : "load-diff",
                                 leftData: toPayload(leftData),
                                 leftName: path.basename(leftUri.fsPath),
                                 rightData: toPayload(rightData),

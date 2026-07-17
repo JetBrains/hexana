@@ -62,20 +62,32 @@
       },
       {
         "command": "hexana.compareWasm",
-        "title": "Hexana: Compare WASM With…"
+        "title": "Hexana: Compare WASM"
+      },
+      {
+        "command": "hexana.compareBinary",
+        "title": "Hexana: Compare Binary"
       }
     ],
     "menus": {
       "explorer/context": [
         {
           "command": "hexana.compareWasm",
-          "when": "resourceExtname == .wasm || listMultiSelection",
+          "when": "resourceExtname == .wasm",
+          "group": "3_compare"
+        },
+        {
+          "command": "hexana.compareBinary",
+          "when": "resourceExtname == .o || resourceExtname == .obj || resourceExtname == .so || resourceExtname == .dylib || resourceExtname == .dll || resourceExtname == .exe || resourceExtname == .elf || resourceExtname == .a || resourceExtname == .lib || resourceExtname == .ko || resourceExtname == .sys || resourceExtname == .axf || resourceExtname == .bin || resourceExtname == .out || resourceExtname == ''",
           "group": "3_compare"
         }
       ],
       "commandPalette": [
         {
           "command": "hexana.compareWasm"
+        },
+        {
+          "command": "hexana.compareBinary"
         }
       ]
     },
