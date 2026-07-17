@@ -34,16 +34,17 @@ class CompareWasmAction : AnAction() {
         val project = e.project
         val files = e.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY)
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
+        val twoSelected = files != null && files.size == 2 && files.all { isWasm(it) }
         e.presentation.isEnabledAndVisible = if (e.isFromContextMenu) {
             // In the Project-view popup, show the item when exactly two .wasm files are
             // selected, or when a single .wasm file is selected (prompts for the second).
-            project != null && (files != null && files.size == 2 && files.all { isWasm(it) }
-                || file != null && isWasm(file))
+            project != null && (twoSelected || file != null && isWasm(file))
         } else {
             // Search Everywhere / main menu / keymap: always available. actionPerformed
             // prompts for both modules when nothing suitable is selected.
             project != null
         }
+        e.presentation.text = if (twoSelected) "Compare WASM Files" else "Compare WASM With\u2026"
     }
 
     override fun actionPerformed(e: AnActionEvent) {
