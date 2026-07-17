@@ -76,8 +76,10 @@ val teamcityCiTestTaskPaths = listOf(
     ":cli:core:check",
     ":cli:core:test",
     ":cli:scripting:check",
-    ":cli:product:test",
+    ":cli:product:check",
+    ":cli:hexana-cli:check",
     ":cli:hexana-cli:integrationTest",
+    ":cli:hexana-cli-script:check",
     ":cli:hexana-cli-script:integrationTest",
     ":mcp:tools-generator:test",
     ":parsing:arrow:allTests",
@@ -117,7 +119,9 @@ tasks.register("verifyTeamcityCiTestsCliReleaseGateCoverage") {
         val requiredTaskPaths = listOf(
             ":cli:core:check",
             ":cli:scripting:check",
-            ":cli:product:test",
+            ":cli:product:check",
+            ":cli:hexana-cli:check",
+            ":cli:hexana-cli-script:check",
             ":mcp:scripting:test",
             ":mcp:verifyCliR8ReleaseArchives",
         )
