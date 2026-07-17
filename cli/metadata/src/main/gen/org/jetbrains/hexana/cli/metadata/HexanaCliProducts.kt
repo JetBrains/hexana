@@ -19,16 +19,13 @@ public enum class HexanaCliReleaseProduct(
 }
 
 /**
- * Generated executable closure metadata for one product-selected tool.
+ * Generated product inventory metadata for one product-selected tool.
  */
 public data class HexanaCliProductToolSelection(
   public val toolName: String,
   public val commandName: String,
   public val outputPolicy: String,
   public val defaultOutput: String,
-  public val handlerFqn: String,
-  public val standaloneHandlerMethod: String,
-  public val executableRendererMethod: String,
 )
 
 /**
@@ -37,18 +34,18 @@ public data class HexanaCliProductToolSelection(
 public object HexanaGeneratedCliProducts {
   public val PRODUCTS: Map<HexanaCliReleaseProduct, List<HexanaCliProductToolSelection>> = mapOf(
         HexanaCliReleaseProduct.HEXANA_MCP to listOf(
-          HexanaCliProductToolSelection("summarize_binary", "summarize-binary", "ToolDefined", "SemanticJson", "org.jetbrains.hexana.mcp.query.readBinarySummary", "summarizeBinary", "renderSummarizeBinaryCliCommandOutput"),
-          HexanaCliProductToolSelection("run_binary_script", "run-script", "ToolDefined", "RawText", "org.jetbrains.hexana.mcp.server.runBinaryScript", "runBinaryScript", "renderRunBinaryScriptCommandOutput"),
-          HexanaCliProductToolSelection("wasm_to_wat", "wasm-to-wat", "ToolDefined", "RawText", "org.jetbrains.hexana.mcp.server.wasmToWat", "wasmToWat", "renderWasmToWatCommandOutput"),
-          HexanaCliProductToolSelection("summarize_module", "summarize-module", "ToolDefined", "Pretty", "org.jetbrains.hexana.mcp.query.readModuleSummary", "summarizeModule", "renderSummarizeModuleCommandOutput"),
+          HexanaCliProductToolSelection("summarize_binary", "summarize-binary", "ToolDefined", "SemanticJson"),
+          HexanaCliProductToolSelection("run_binary_script", "run-script", "ToolDefined", "RawText"),
+          HexanaCliProductToolSelection("wasm_to_wat", "wasm-to-wat", "ToolDefined", "RawText"),
+          HexanaCliProductToolSelection("summarize_module", "summarize-module", "ToolDefined", "Pretty"),
         ),
         HexanaCliReleaseProduct.HEXANA_CLI to listOf(
-          HexanaCliProductToolSelection("summarize_binary", "summarize-binary", "ToolDefined", "SemanticJson", "org.jetbrains.hexana.mcp.query.readBinarySummary", "summarizeBinary", "renderSummarizeBinaryCliCommandOutput"),
-          HexanaCliProductToolSelection("wasm_to_wat", "wasm-to-wat", "ToolDefined", "RawText", "org.jetbrains.hexana.mcp.server.wasmToWat", "wasmToWat", "renderWasmToWatCommandOutput"),
-          HexanaCliProductToolSelection("summarize_module", "summarize-module", "ToolDefined", "Pretty", "org.jetbrains.hexana.mcp.query.readModuleSummary", "summarizeModule", "renderSummarizeModuleCommandOutput"),
+          HexanaCliProductToolSelection("summarize_binary", "summarize-binary", "ToolDefined", "SemanticJson"),
+          HexanaCliProductToolSelection("wasm_to_wat", "wasm-to-wat", "ToolDefined", "RawText"),
+          HexanaCliProductToolSelection("summarize_module", "summarize-module", "ToolDefined", "Pretty"),
         ),
         HexanaCliReleaseProduct.HEXANA_CLI_SCRIPT to listOf(
-          HexanaCliProductToolSelection("run_binary_script", "run-script", "ToolDefined", "RawText", "org.jetbrains.hexana.mcp.server.runBinaryScript", "runBinaryScript", "renderRunBinaryScriptCommandOutput"),
+          HexanaCliProductToolSelection("run_binary_script", "run-script", "ToolDefined", "RawText"),
         ),
       )
 }

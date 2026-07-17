@@ -82,7 +82,18 @@ class HexanaGeneratedToolFilesTest {
                 "public object HexanaGeneratedCliProducts",
                 "HexanaCliProductToolSelection(\"summarize_binary\", \"summarize-binary\"",
                 "HexanaCliProductToolSelection(\"run_binary_script\", \"run-script\"",
-                "\"renderRunBinaryScriptCommandOutput\"",
+            ),
+        )
+        assertContainsNone(
+            cliProducts,
+            "HexanaCliProducts.kt",
+            listOf(
+                "org.jetbrains.hexana.mcp.server",
+                "handlerFqn",
+                "standaloneHandlerMethod",
+                "executableRendererMethod",
+                "renderRunBinaryScriptCommandOutput",
+                "wasmToWat",
             ),
         )
 
@@ -145,7 +156,7 @@ class HexanaGeneratedToolFilesTest {
     }
 
     @Test
-    fun compiledGeneratedCliProductsKeepExactExecutableInventoriesAndClosure() {
+    fun compiledGeneratedCliProductsKeepExactExecutableInventoriesAndNeutralMetadata() {
         val expectedCommands = mapOf(
             HexanaCliReleaseProduct.HEXANA_MCP to
                 setOf("summarize-binary", "summarize-module", "wasm-to-wat", "run-script"),
@@ -164,10 +175,18 @@ class HexanaGeneratedToolFilesTest {
             assertTrue(selection.commandName.isNotBlank())
             assertTrue(selection.outputPolicy.isNotBlank())
             assertTrue(selection.defaultOutput.isNotBlank())
-            assertTrue(selection.handlerFqn.isNotBlank())
-            assertTrue(selection.standaloneHandlerMethod.isNotBlank())
-            assertTrue(selection.executableRendererMethod.isNotBlank())
         }
+        val cliProducts = Files.readString(generatedMetadataPackageDir.resolve("HexanaCliProducts.kt"))
+        assertContainsNone(
+            cliProducts,
+            "HexanaCliProducts.kt",
+            listOf(
+                "org.jetbrains.hexana.mcp.server",
+                "handlerFqn",
+                "standaloneHandlerMethod",
+                "executableRendererMethod",
+            ),
+        )
     }
 
     private fun generatedKotlinFiles(): List<Path> {

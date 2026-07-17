@@ -223,16 +223,13 @@ private fun buildCliProductToolSelectionClass(): TypeSpec {
         "commandName",
         "outputPolicy",
         "defaultOutput",
-        "handlerFqn",
-        "standaloneHandlerMethod",
-        "executableRendererMethod",
     )
     val constructor = FunSpec.constructorBuilder().apply {
         fields.forEach { addParameter(it, String::class) }
     }.build()
     return TypeSpec.classBuilder(CLI_PRODUCT_TOOL_SELECTION)
         .addModifiers(KModifier.PUBLIC, KModifier.DATA)
-        .addKdoc("Generated executable closure metadata for one product-selected tool.\n")
+        .addKdoc("Generated product inventory metadata for one product-selected tool.\n")
         .primaryConstructor(constructor)
         .apply {
             fields.forEach { field ->
@@ -251,15 +248,12 @@ private fun buildCliProductsObject(tools: List<ToolSpec>): TypeSpec {
         tools.filter { product in it.surfaces.cli.releaseProducts }.forEach { spec ->
             val cli = spec.surfaces.cli
             initializer.add(
-                "%T(%S, %S, %S, %S, %S, %S, %S),\n",
+                "%T(%S, %S, %S, %S),\n",
                 CLI_PRODUCT_TOOL_SELECTION,
                 spec.name,
                 cli.commandName,
                 cli.outputPolicy?.name,
                 cli.defaultOutput?.name,
-                spec.handlerFqn,
-                spec.standaloneHandler.methodName,
-                cli.executableRenderer?.methodName,
             )
         }
         initializer.unindent().add("),\n")

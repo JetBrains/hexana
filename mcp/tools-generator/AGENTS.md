@@ -13,7 +13,7 @@ DSL and emit checked-in Kotlin files into the two consumers:
 - `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt` — generated CLI tool command
   construction and executable CLI renderer dispatch for the standalone legacy server CLI.
 - `cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt` — generated product identities,
-  selected executable tools, output policy, and executable closure metadata.
+  selected executable tools, output policy, and default output metadata.
 
 A separate Claude Desktop MCPB manifest generator consumes catalog metadata and refreshes the checked-in packaging
 template.

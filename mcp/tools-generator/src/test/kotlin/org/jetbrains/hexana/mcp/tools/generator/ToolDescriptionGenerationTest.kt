@@ -284,7 +284,18 @@ class ToolDescriptionGenerationTest {
                 "HEXANA_CLI_SCRIPT(\"hexana-cli-script\", \"hexana-cli-script\")",
                 "public object HexanaGeneratedCliProducts",
                 "\"run_binary_script\"",
-                "\"renderRunBinaryScriptCommandOutput\"",
+            ),
+        )
+        assertContainsNone(
+            cliProducts,
+            "HexanaCliProducts.kt",
+            listOf(
+                "org.jetbrains.hexana.mcp.server",
+                "handlerFqn",
+                "standaloneHandlerMethod",
+                "executableRendererMethod",
+                "renderRunBinaryScriptCommandOutput",
+                "wasmToWat",
             ),
         )
         assertContainsAll(
