@@ -114,10 +114,13 @@
                   fieldName="INSTANCE"
                   extensions="wasm" />
 
+        <!-- No extensions: `.bin` is too generic to claim by name. The type is
+             assigned on demand by HexFileTypeOverrider (the "Open in Hex View"
+             action); files with recognisable content are typed by
+             NativeBinaryFileTypeDetector regardless of extension. -->
         <fileType name="binary"
                   implementationClass="org.jetbrains.hexana.BinaryFileType"
-                  fieldName="INSTANCE"
-                  extensions="bin"/>
+                  fieldName="INSTANCE"/>
 
         <fileType name="ELF"
                   implementationClass="org.jetbrains.hexana.ElfFileType"

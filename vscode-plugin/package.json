@@ -183,7 +183,7 @@
         "displayName": "Hexana Editor",
         "selector": [
           {
-            "filenamePattern": "{*.wasm,*.bin,*.elf,*.exe,*.so,*.o,*.a,*.dll,*.dylib,*.jar,*.zip,*.war,*.apk,*.class,*.dex,*.desc,*.protoset}"
+            "filenamePattern": "{*.wasm,*.elf,*.exe,*.so,*.o,*.a,*.dll,*.dylib,*.jar,*.zip,*.war,*.apk,*.class,*.dex,*.desc,*.protoset}"
           }
         ],
         "priority": "default"
@@ -292,7 +292,7 @@
     },
     "configurationDefaults": {
       "workbench.editorAssociations": {
-        "{*.wasm,*.bin,*.elf,*.exe,*.so,*.o,*.a,*.dll,*.dylib}": "hexana.wasmEditor"
+        "{*.wasm,*.elf,*.exe,*.so,*.o,*.a,*.dll,*.dylib}": "hexana.wasmEditor"
       }
     }
   },

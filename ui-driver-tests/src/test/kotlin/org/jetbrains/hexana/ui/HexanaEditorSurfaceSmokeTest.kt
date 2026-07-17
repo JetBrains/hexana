@@ -64,19 +64,6 @@ class HexanaEditorSurfaceSmokeTest {
     }
 
     @Test
-    fun genericBinaryEditorReportsGenericWithoutWasmTabs() {
-        hexanaIde(testName = "hexana-editor-surface-generic-bin") {
-            hexanaEditor("generic_payload.bin") {
-                expect {
-                    providerKind(HexanaProviderKind.GENERIC)
-                    fileName("generic_payload.bin")
-                    noWasmTabs()
-                }
-            }
-        }
-    }
-
-    @Test
     fun dwarfWasmEditorReportsDwarfTabs() {
         hexanaIde(testName = "hexana-editor-surface-dwarf-wasm") {
             closeProjectToolWindow()
