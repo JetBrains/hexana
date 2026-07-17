@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Action to show a diff between two native binary files with size changes per section
 
 ### Changed
 - Hexana's IntelliJ MCP toolset now uses schema version 2 and advertises/enforces bounded list inputs such as `indices.maxItems`, allowing MCP clients to validate oversized requests before invoking tools.
@@ -12,6 +13,8 @@
 ### Removed
 
 ### Fixed
+- Fixed a UX problem with vertical splitter – now it's draggable when the pointer is over its upper half too
+- WASM Diff action now properly works when two files are selected in the project view (previously it was always asking for the second file)
 
 ### Security
 
