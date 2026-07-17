@@ -326,6 +326,10 @@
                     class="org.jetbrains.hexana.actions.CompareWasmAction"
                     text="Compare WASM With…"
                     description="Compare two .wasm modules by size impact"/>
+            <action id="hexana.compareBinary"
+                    class="org.jetbrains.hexana.actions.CompareBinaryAction"
+                    text="Compare Binary With…"
+                    description="Compare two native binaries by section size impact"/>
             <action id="hexana.openAsProtobufMessage"
                     class="org.jetbrains.hexana.actions.OpenAsProtobufMessageAction"
                     text="Open As Protobuf Message"

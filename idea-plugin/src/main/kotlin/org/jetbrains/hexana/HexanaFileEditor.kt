@@ -62,8 +62,12 @@ import org.jetbrains.hexana.ui.panel.SizeReady
 import org.jetbrains.hexana.ui.panel.decompiledContentPanel
 import org.jetbrains.hexana.ui.panel.decompiledEditorComposable
 import org.jetbrains.hexana.ui.panel.WasmComponentDiffEditorView
+import org.jetbrains.hexana.ui.panel.NativeDiffEditorView
+import org.jetbrains.hexana.ui.panel.NativeSizeReady
 import org.jetbrains.hexana.ui.panel.WasmDiffEditorView
+import org.jetbrains.hexana.ui.panel.buildNativeRows
 import org.jetbrains.hexana.ui.panel.buildRows
+import org.jetbrains.hexana.wasm.analysis.diff.BinarySizeDiff
 import org.jetbrains.hexana.ui.setupSearchActions
 import org.jetbrains.hexana.wasm.analysis.diff.summarize
 import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
@@ -167,6 +171,7 @@ class HexanaFileEditor(
     private val wasmSizeDiffFlow = MutableStateFlow<DiffLoadable<SizeReady>>(DiffLoadable.Loading)
     private val wasmEntityDiffFlow = MutableStateFlow<DiffLoadable<WasmEntityDiffResult>>(DiffLoadable.Loading)
     private val wasmComponentDiffFlow = MutableStateFlow<DiffLoadable<ComponentDiffResult>>(DiffLoadable.Loading)
+    private val nativeSizeDiffFlow = MutableStateFlow<DiffLoadable<NativeSizeReady>>(DiffLoadable.Loading)
 
     init {
         panel = UiDataProvider.wrapComponent(JPanel(BorderLayout())) { sink ->
@@ -193,6 +198,13 @@ class HexanaFileEditor(
         val componentDiffFile = myFile as? HexanaComponentDiffVirtualFile
         if (componentDiffFile != null) {
             initComponentDiffPanel(componentDiffFile)
+            return
+        }
+
+        // A native binary diff compares two ELF/Mach-O/PE/etc. files by section sizes.
+        val nativeDiffFile = myFile as? HexanaNativeDiffVirtualFile
+        if (nativeDiffFile != null) {
+            initNativeDiffPanel(nativeDiffFile)
             return
         }
 
@@ -680,6 +692,39 @@ class HexanaFileEditor(
                 rightName = file.rightName,
                 modelFlow = wasmComponentDiffFlow,
                 onOpenSubmodule = { pairing -> openSubmoduleDiff(file, pairing) },
+            )
+        }
+        panel.add(view)
+    }
+
+    private fun initNativeDiffPanel(file: HexanaNativeDiffVirtualFile) {
+        wasmDiffScope.launch {
+            val leftProvider = nativeOrGenericBinaryProvider(file.leftBuffer.duplicate())
+            val rightProvider = nativeOrGenericBinaryProvider(file.rightBuffer.duplicate())
+            val leftSize = leftProvider.sizeAnalysis
+            val rightSize = rightProvider.sizeAnalysis
+            if (leftSize == null || rightSize == null) {
+                nativeSizeDiffFlow.value = DiffLoadable.Error(
+                    "Size analysis is not available for one or both binaries.",
+                )
+                return@launch
+            }
+            val diff = BinarySizeDiff.diff(leftSize, rightSize)
+            nativeSizeDiffFlow.value = DiffLoadable.Ready(
+                NativeSizeReady(
+                    baseTotal = diff.sizeA,
+                    headTotal = diff.sizeB,
+                    totalDelta = diff.delta,
+                    rows = buildNativeRows(diff),
+                ),
+            )
+        }
+
+        val view = createComposePanel {
+            NativeDiffEditorView(
+                leftName = file.leftName,
+                rightName = file.rightName,
+                sizeModelFlow = nativeSizeDiffFlow,
             )
         }
         panel.add(view)
