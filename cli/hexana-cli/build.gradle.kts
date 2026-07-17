@@ -1,3 +1,8 @@
+import org.gradle.api.artifacts.ExternalModuleDependency
+import org.gradle.api.artifacts.ProjectDependency
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+
 plugins {
     application
     alias(libs.plugins.graalvm.native)
@@ -45,7 +50,9 @@ val generateHexanaCliVersion by tasks.registering {
 }
 
 dependencies {
+    implementation(project(":cli:core"))
     implementation(project(":cli:product"))
+    implementation(project(":mcp:core"))
 
     testImplementation(libs.junit4)
     testImplementation(libs.kotlin.test)
@@ -94,9 +101,155 @@ tasks.register<Test>("integrationTest") {
     systemProperty("hexana.cli.integration.installDir", layout.buildDirectory.dir("install/hexana-cli").get().asFile.absolutePath)
 }
 
+val verifyHexanaCliBoundary = tasks.register("verifyHexanaCliBoundary") {
+    description = "Fails if hexana-cli carries script, server transport, Ktor, MCP SDK, Clikt, or GraalJS runtime."
+    group = "verification"
+    dependsOn(tasks.named("installDist"))
+
+    doLast {
+        val forbiddenProjectPaths = setOf(
+            ":cli:scripting",
+            ":mcp:packaging",
+            ":mcp:server",
+            ":mcp:scripting",
+            ":mcp:tools-generator",
+            ":mcp:vscode-server",
+        )
+        val forbiddenGroupPrefixes = listOf(
+            "com.github.ajalt.clikt",
+            "io.ktor",
+            "io.modelcontextprotocol",
+            "org.graalvm.js",
+        )
+        val forbiddenPackagePrefixes = listOf(
+            "com.github.ajalt.clikt",
+            "io.ktor",
+            "io.modelcontextprotocol",
+            "org.jetbrains.hexana.cli.scripting",
+            "org.jetbrains.hexana.mcp.server",
+            "org.jetbrains.hexana.mcp.scripting",
+        )
+        val forbiddenLibPrefixes = listOf(
+            "cli-scripting",
+            "scripting",
+            "server-",
+            "kotlin-sdk",
+            "ktor-",
+            "clikt",
+            "colormath",
+            "jansi",
+            "kotlin-logging",
+            "logback",
+            "mordant",
+            "icu4j",
+            "js-",
+            "js-language",
+            "regex",
+            "xz",
+        )
+        val checkedConfigurationNames = setOf("implementation", "compileOnly", "runtimeOnly")
+
+        fun hasForbiddenPrefix(value: String, prefixes: List<String>): Boolean =
+            prefixes.any { prefix -> value == prefix || value.startsWith("$prefix.") }
+
+        val declarativeViolations = checkedConfigurationNames.flatMap { configurationName ->
+            configurations.findByName(configurationName)?.dependencies.orEmpty().mapNotNull { dependency ->
+                when (dependency) {
+                    is ProjectDependency -> {
+                        val path = dependency.path
+                        if (path in forbiddenProjectPaths) "$configurationName -> project($path)" else null
+                    }
+
+                    is ExternalModuleDependency -> {
+                        val group = dependency.group
+                        if (hasForbiddenPrefix(group, forbiddenGroupPrefixes)) "$configurationName -> $group:${dependency.name}" else null
+                    }
+
+                    else -> null
+                }
+            }
+        }
+
+        val runtimeClasspath = configurations.named("runtimeClasspath").get()
+        val resolvedViolations = runtimeClasspath.incoming.resolutionResult.allComponents.mapNotNull { component ->
+            when (val id = component.id) {
+                is ProjectComponentIdentifier -> {
+                    val path = id.projectPath
+                    if (path in forbiddenProjectPaths) "runtimeClasspath resolves project($path)" else null
+                }
+
+                is ModuleComponentIdentifier -> {
+                    val group = id.group
+                    if (hasForbiddenPrefix(group, forbiddenGroupPrefixes)) {
+                        "runtimeClasspath resolves $group:${id.module}:${id.version}"
+                    } else {
+                        null
+                    }
+                }
+
+                else -> null
+            }
+        }.distinct()
+
+        val importViolations = layout.projectDirectory.dir("src/main").asFile
+            .walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .flatMap { sourceFile ->
+                sourceFile.readLines().asSequence().mapIndexedNotNull { index, rawLine ->
+                    val line = rawLine.trim()
+                    val referencedPackage = when {
+                        line.startsWith("import ") -> line.removePrefix("import ").substringBefore(" as ").removeSuffix(".*")
+                        line.startsWith("package ") -> line.removePrefix("package ")
+                        else -> return@mapIndexedNotNull null
+                    }
+                    if (hasForbiddenPrefix(referencedPackage, forbiddenPackagePrefixes)) {
+                        "${sourceFile.relativeTo(projectDir)}:${index + 1} -> $line"
+                    } else {
+                        null
+                    }
+                }
+            }
+            .toList()
+
+        val libDir = layout.buildDirectory.dir("install/hexana-cli/lib").get().asFile
+        val layoutViolations = libDir.listFiles().orEmpty()
+            .map { it.name }
+            .filter { jarName -> forbiddenLibPrefixes.any { prefix -> jarName == "$prefix.jar" || jarName.startsWith(prefix) } }
+            .sorted()
+
+        val violations = buildList {
+            if (declarativeViolations.isNotEmpty()) {
+                add("Forbidden declarative dependencies:")
+                declarativeViolations.forEach { add("  - $it") }
+            }
+            if (resolvedViolations.isNotEmpty()) {
+                add("Forbidden resolved dependencies:")
+                resolvedViolations.forEach { add("  - $it") }
+            }
+            if (importViolations.isNotEmpty()) {
+                add("Forbidden package imports:")
+                importViolations.forEach { add("  - $it") }
+            }
+            if (layoutViolations.isNotEmpty()) {
+                add("Forbidden installed jars:")
+                layoutViolations.forEach { add("  - $it") }
+            }
+        }
+
+        check(violations.isEmpty()) {
+            "hexana-cli must stay free of script, server transport, Ktor, MCP SDK, Clikt, and GraalJS runtime.\n" +
+                violations.joinToString(separator = "\n")
+        }
+    }
+}
+
 kotlin {
     sourceSets.named("main") {
         kotlin.srcDir(generateHexanaCliVersion)
     }
     jvmToolchain(21)
+}
+
+tasks.named("check") {
+    dependsOn(verifyHexanaCliBoundary)
 }

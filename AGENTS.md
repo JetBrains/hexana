@@ -66,11 +66,12 @@ All agents — the main session and every subagent it dispatches — MUST treat 
   `cli:runtime`, but stays free of standard command composition, MCP transports, Clikt, Ktor, analytics, IntelliJ APIs,
   and `mcp:server`.
 - `cli/product/`: shared JVM product CLI layer for the split installed apps. It composes generated release-product
-  selections with `cli:core` and `cli:scripting`, and owns `HEXANA_CLI_*` env handling, output writing, exit mapping,
-  and product telemetry.
+  selections with a small executor contract, and owns `HEXANA_CLI_*` env handling, output writing, exit mapping, and
+  product telemetry without depending on standard or script command runtimes.
 - `cli/hexana-cli/`: JVM application distribution for `summarize-binary`, `summarize-module`, and `wasm-to-wat`, plus
-  product `tools`, `version`, and `help`.
+  product `tools`, `version`, and `help`. It provides the standard product executor.
 - `cli/hexana-cli-script/`: JVM application distribution for `run-script`, plus product `tools`, `version`, and `help`.
+  It provides the script product executor.
 - `encdec/`: shared `CommonByteBuffer` abstraction and platform-specific byte-buffer helpers.
 - `graalwasm/`: JVM wrappers around embedded `.wasm` utilities used for built-in `wasm -> wat` and `wat -> wasm`.
 - `wasm-modules/`: Rust sources and Docker build flow that produce the embedded `.wasm` artifacts consumed by `graalwasm/`.

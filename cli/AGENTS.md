@@ -15,11 +15,12 @@ This folder contains neutral CLI modules shared by current and future command-li
   `cli:runtime`, but must not import standard CLI command composition, MCP transports, Clikt, Ktor, analytics,
   IntelliJ APIs, or `mcp:server`.
 - `product/`: shared JVM product CLI layer for the split installed apps. It composes generated release-product
-  selections with `cli:core` and `cli:scripting`, owns `HEXANA_CLI_*` env handling, output writing, exit mapping, and
-  product telemetry, and must not change legacy `hexana-mcp` behavior.
+  selections with a small executor contract, owns `HEXANA_CLI_*` env handling, output writing, exit mapping, and
+  product telemetry, and must not depend on standard or script command runtimes.
 - `hexana-cli/`: JVM application for standard commands only: `summarize-binary`, `summarize-module`, and `wasm-to-wat`,
-  plus `tools`, `version`, and `help`.
-- `hexana-cli-script/`: JVM application for `run-script` only, plus `tools`, `version`, and `help`.
+  plus `tools`, `version`, and `help`. It provides the standard product executor.
+- `hexana-cli-script/`: JVM application for `run-script` only, plus `tools`, `version`, and `help`. It provides the
+  script product executor.
 
 ## Verification
 

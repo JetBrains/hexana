@@ -47,9 +47,9 @@ converters, executors, renderers, or output models.
 The catalog declares three atomically versioned release products independently from MCP profiles: legacy `hexana-mcp`
 keeps all four executable direct commands, `hexana-cli` selects the three non-scripting commands, and
 `hexana-cli-script` selects only `run-script`. The `:cli:hexana-cli` and `:cli:hexana-cli-script` JVM applications now
-exist as installed distributions, backed by the shared `:cli:product` layer. This branch also wires their R8 release
-ZIPs, native release archives, and GitHub Release/downloads publication into the MCP release flow. Package-manager
-artifacts and any change to MCP wrapper topology remain follow-up work.
+exist as installed distributions, backed by the shared `:cli:product` layer and app-owned product executors. This branch
+also wires their R8 release ZIPs, native release archives, and GitHub Release/downloads publication into the MCP release
+flow. Package-manager artifacts and any change to MCP wrapper topology remain follow-up work.
 
 Future split work should move contracts before moving artifacts. The likely boundary is:
 
@@ -59,7 +59,9 @@ Future split work should move contracts before moving artifacts. The likely boun
 - the isolated script-only `run-script` adapter belongs in `cli:scripting`;
 - generated metadata in `:cli:metadata` describes CLI-visible commands and release-product selections, while the split
   applications consume those selections through `:cli:product`;
-- product command composition, terminal rendering, and installed-process behavior now live under `cli/`;
+- product parsing, help/version/tools output, output-file writing, telemetry, and executor contracts belong in
+  `cli:product`;
+- product executor implementations and installed-process behavior live in the split application modules;
 - `mcp:server` should keep MCP transports, MCP tool registration, server analytics, and server-specific resource
   policies after such a split;
 - `mcp:packaging` should keep wrapper scripts and manifests only, forwarding to the selected binary without duplicating

@@ -7,13 +7,7 @@ import kotlinx.serialization.json.buildJsonObject
 import org.jetbrains.hexana.analytics.AnalyticsConfig
 import org.jetbrains.hexana.analytics.HexanaEvent
 import org.jetbrains.hexana.analytics.UuidDistinctIdProvider
-import org.jetbrains.hexana.cli.core.StandardCliRequest
-import org.jetbrains.hexana.cli.core.SummarizeBinaryCliRequest
-import org.jetbrains.hexana.cli.core.SUMMARIZE_BINARY_TOOL_NAME
-import org.jetbrains.hexana.cli.core.SUMMARIZE_MODULE_TOOL_NAME
-import org.jetbrains.hexana.cli.core.WASM_TO_WAT_TOOL_NAME
-import org.jetbrains.hexana.cli.core.standardCli
-import org.jetbrains.hexana.cli.core.summarizeBinaryCli
+import org.jetbrains.hexana.cli.metadata.HexanaCliToolGroup
 import org.jetbrains.hexana.cli.metadata.HexanaCliInputMode
 import org.jetbrains.hexana.cli.metadata.HexanaCliOutputFormat
 import org.jetbrains.hexana.cli.metadata.HexanaCliProductToolSelection
@@ -21,21 +15,12 @@ import org.jetbrains.hexana.cli.metadata.HexanaCliReleaseProduct
 import org.jetbrains.hexana.cli.metadata.HexanaCliToolSpec
 import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliProducts
 import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliToolRegistry
-import org.jetbrains.hexana.cli.runtime.RenderedToolOutput
-import org.jetbrains.hexana.cli.runtime.ToolExecutionDiagnostic
-import org.jetbrains.hexana.cli.runtime.ToolExecutionDiagnosticSeverity
 import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
 import org.jetbrains.hexana.cli.runtime.ToolOutputFormat
-import org.jetbrains.hexana.cli.scripting.RUN_BINARY_SCRIPT_TOOL_NAME
-import org.jetbrains.hexana.cli.scripting.RunScriptCliRequest
-import org.jetbrains.hexana.cli.scripting.runScriptCli
-import org.jetbrains.hexana.mcp.AllowedFilePolicy
-import org.jetbrains.hexana.mcp.DefaultHexanaAnalysisService
 import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
-import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
@@ -67,8 +52,12 @@ public enum class HexanaCliProduct(
     val executableName: String get() = releaseProduct.executableName
 }
 
-public fun runHexanaProductCli(product: HexanaCliProduct, args: Array<String>): Nothing {
-    val cli = HexanaProductCli(product)
+public fun runHexanaProductCli(
+    product: HexanaCliProduct,
+    args: Array<String>,
+    executor: HexanaProductToolExecutor,
+): Nothing {
+    val cli = HexanaProductCli(product, executor)
     val result = cli.run(args, System.`in`, System.getenv())
     if (result.stdout.isNotEmpty()) {
         System.out.print(result.stdout)
@@ -81,6 +70,7 @@ public fun runHexanaProductCli(product: HexanaCliProduct, args: Array<String>): 
 
 public class HexanaProductCli(
     private val product: HexanaCliProduct,
+    private val executor: HexanaProductToolExecutor,
 ) {
     private val selectedTools = selectedProductTools(product)
 
@@ -275,7 +265,7 @@ public class HexanaProductCli(
     }
 
     private fun executeTool(command: ParsedCommand.Executable): ProductCliResult {
-        val output = renderTool(command)
+        val output = executor.execute(command.toExecutionRequest())
             .normalize(command.format)
             .requireWithinOutputLimit(command)
         command.outputPath?.let { path ->
@@ -284,66 +274,6 @@ public class HexanaProductCli(
             return ProductCliResult(stderr = output.stderr, exitCode = output.exitCode)
         }
         return output
-    }
-
-    private fun renderTool(command: ParsedCommand.Executable): ProductCliResult {
-        val sources = listOf(command.sourceSelection)
-        return when (command.spec.toolName) {
-            SUMMARIZE_BINARY_TOOL_NAME -> {
-                val rendered = summarizeBinaryCli(
-                    SummarizeBinaryCliRequest(
-                        sourceSelections = sources,
-                        params = command.params,
-                        format = command.format,
-                        toolName = command.spec.toolName,
-                    ),
-                    analysisService(command.allowedRoots, command.resourceLimits),
-                )
-                ProductCliResult(stdout = rendered.textOutput(command.spec.commandName))
-            }
-            SUMMARIZE_MODULE_TOOL_NAME, WASM_TO_WAT_TOOL_NAME -> {
-                val standardOutput = standardCli(
-                    StandardCliRequest(
-                        toolName = command.spec.toolName,
-                        sourceSelections = sources,
-                        params = command.params,
-                        format = command.format,
-                        maxInlineWasmBytes = command.resourceLimits.maxInlineWasmBytes,
-                        maxFileWasmBytes = command.resourceLimits.maxFileWasmBytes,
-                        allowedFilePolicy = allowedFilePolicy(command.allowedRoots),
-                    ),
-                    analysisService(command.allowedRoots, command.resourceLimits),
-                )
-                ProductCliResult(
-                    stdout = standardOutput.rendered.textOutput(command.spec.commandName),
-                    stderr = if (command.format == ToolOutputFormat.RAW) {
-                        standardOutput.diagnostics.toStderrWarnings(command.spec.commandName)
-                    } else {
-                        ""
-                    },
-                )
-            }
-            RUN_BINARY_SCRIPT_TOOL_NAME -> {
-                val rendered = runScriptCli(
-                    RunScriptCliRequest(
-                        sourceSelections = sources,
-                        params = command.params,
-                        format = command.format,
-                        limits = HexanaScriptLimits(
-                            maxOutputBytes = command.resourceLimits.maxOutputBytes,
-                            maxInlineScriptBytes = command.resourceLimits.maxTextFileBytes,
-                            maxScriptFileBytes = command.resourceLimits.maxTextFileBytes,
-                            maxInlineBinaryBytes = command.resourceLimits.maxInlineBinaryBytes,
-                            maxFileBinaryBytes = command.resourceLimits.maxFileBinaryBytes,
-                        ),
-                        allowedFilePolicy = allowedFilePolicy(command.allowedRoots),
-                        toolName = command.spec.toolName,
-                    )
-                )
-                ProductCliResult(stdout = rendered.stdout, stderr = rendered.stderr, exitCode = rendered.exitCode)
-            }
-            else -> error("Unsupported selected CLI tool: ${command.spec.toolName}")
-        }
     }
 
     private fun helpText(topic: String?): String {
@@ -403,7 +333,7 @@ public class HexanaProductCli(
                     appendLine("  --telemetry-enabled <true|false>")
                     appendLine("  --telemetry-key <key>")
                     appendLine("  --telemetry-host <url>")
-                    if (spec.toolName == RUN_BINARY_SCRIPT_TOOL_NAME) {
+                    if (spec.requiresScriptSource) {
                         appendLine("  --script <path>")
                         appendLine("  --script-text <text>")
                     }
@@ -449,6 +379,19 @@ public data class ProductCliResult(
     val exitCode: Int = SUCCESS_EXIT_CODE,
 )
 
+public fun interface HexanaProductToolExecutor {
+    public fun execute(request: HexanaProductToolExecutionRequest): ProductCliResult
+}
+
+public data class HexanaProductToolExecutionRequest(
+    val spec: HexanaCliToolSpec,
+    val sourceSelection: ToolInputSourceSelection,
+    val params: Map<String, JsonPrimitive>,
+    val format: HexanaCliOutputFormat,
+    val resourceLimits: HexanaResourceLimits,
+    val allowedRoots: List<String>,
+)
+
 private sealed class ParsedCommand(
     open val commandName: String,
     open val analytics: CliAnalyticsSettings,
@@ -478,6 +421,16 @@ private sealed class ParsedCommand(
         override val analytics: CliAnalyticsSettings,
     ) : ParsedCommand(spec.commandName, analytics)
 }
+
+private fun ParsedCommand.Executable.toExecutionRequest(): HexanaProductToolExecutionRequest =
+    HexanaProductToolExecutionRequest(
+        spec = spec,
+        sourceSelection = sourceSelection,
+        params = params,
+        format = format,
+        resourceLimits = resourceLimits,
+        allowedRoots = allowedRoots,
+    )
 
 private data class CliAnalyticsSettings(
     var enabled: Boolean,
@@ -550,7 +503,7 @@ private class ScriptSourceOptions {
     }
 
     fun validate(spec: HexanaCliToolSpec) {
-        if (spec.toolName != RUN_BINARY_SCRIPT_TOOL_NAME) {
+        if (!spec.requiresScriptSource) {
             return
         }
         when (occurrences) {
@@ -592,7 +545,7 @@ private fun selectSource(
     if (sourceCount > 1) {
         throw ProductUsageException("Provide exactly one ${spec.commandName} source.")
     }
-    val slotName = if (spec.toolName == SUMMARIZE_MODULE_TOOL_NAME || spec.toolName == WASM_TO_WAT_TOOL_NAME) {
+    val slotName = if (HexanaCliInputMode.WASM_PATH in spec.inputModes) {
         "wasm"
     } else {
         "binary"
@@ -768,19 +721,6 @@ private fun sendCliAnalytics(
     }
 }
 
-private fun analysisService(allowedRoots: List<String>, resourceLimits: HexanaResourceLimits): DefaultHexanaAnalysisService =
-    DefaultHexanaAnalysisService(
-        limits = resourceLimits,
-        allowedFilePolicy = allowedFilePolicy(allowedRoots),
-    )
-
-private fun allowedFilePolicy(allowedRoots: List<String>): AllowedFilePolicy =
-    if (allowedRoots.none { it.isNotBlank() }) {
-        AllowedFilePolicy.allowAll
-    } else {
-        AllowedFilePolicy.requiringAllowedRoots(allowedRoots)
-    }
-
 private fun ProductCliResult.normalize(format: ToolOutputFormat): ProductCliResult =
     if (format == ToolOutputFormat.RAW) {
         this
@@ -797,19 +737,6 @@ private fun ProductCliResult.requireWithinOutputLimit(command: ParsedCommand.Exe
         )
     }
     return this
-}
-
-private fun RenderedToolOutput.textOutput(commandName: String): String = when (this) {
-    is RenderedToolOutput.Text -> text
-    is RenderedToolOutput.Binary -> error("$commandName does not support binary output.")
-}
-
-private fun List<ToolExecutionDiagnostic>.toStderrWarnings(commandName: String): String {
-    if (isEmpty()) return ""
-    return filter { it.severity == ToolExecutionDiagnosticSeverity.WARNING }
-        .joinToString(separator = "\n", postfix = "\n") { warning ->
-            "$commandName warning: ${warning.message}"
-        }
 }
 
 private fun parseFormat(spec: HexanaCliToolSpec, value: String): HexanaCliOutputFormat {
@@ -845,10 +772,13 @@ private fun requireBase64SourceOption(spec: HexanaCliToolSpec, optionName: Strin
 }
 
 private fun requireScriptOption(spec: HexanaCliToolSpec, optionName: String) {
-    if (spec.toolName != RUN_BINARY_SCRIPT_TOOL_NAME) {
+    if (!spec.requiresScriptSource) {
         throw ProductUsageException("Unsupported ${spec.commandName} option: $optionName")
     }
 }
+
+private val HexanaCliToolSpec.requiresScriptSource: Boolean
+    get() = HexanaCliToolGroup.SCRIPTING in groups
 
 private fun MutableList<String>.requireValue(optionName: String): String =
     removeFirstOrNull() ?: throw ProductUsageException("Missing value for $optionName")

@@ -2,6 +2,7 @@ package org.jetbrains.hexana.cli.product
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
+import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
@@ -16,6 +17,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -27,7 +29,7 @@ class HexanaProductCliTest {
     @Test
     fun commandHelpDoesNotReadStdinOrRequireSource() {
         listOf("-h", "--help").forEach { helpFlag ->
-            val result = HexanaProductCli(HexanaCliProduct.STANDARD).run(
+            val result = HexanaProductCli(HexanaCliProduct.STANDARD, FailOnExecuteExecutor).run(
                 args = arrayOf("summarize-binary", helpFlag),
                 stdin = FailOnReadInputStream,
                 env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
@@ -42,10 +44,12 @@ class HexanaProductCliTest {
     fun implicitStdinDoesNotRequireAvailableBytes() {
         assumeTrue("Implicit stdin is disabled when a console is attached", System.console() == null)
 
-        val result = runStandardSummary(ZeroAvailableInputStream(MINIMAL_WASM_MODULE))
+        val executor = RecordingProductExecutor()
+        val result = runStandardSummary(ZeroAvailableInputStream(MINIMAL_WASM_MODULE), executor)
 
         assertEquals(SUCCESS_EXIT_CODE, result.exitCode, result.stderr)
         assertTrue(result.stdout.contains("\"format\":\"wasm\""), result.stdout)
+        executor.singleRequest().assertStdinSource(MINIMAL_WASM_MODULE, slotName = "binary")
     }
 
     @Test
@@ -55,7 +59,8 @@ class HexanaProductCliTest {
         val stdin = BlockingFirstReadInputStream(MINIMAL_WASM_MODULE)
         val executor = Executors.newSingleThreadExecutor()
         try {
-            val future = executor.submit(Callable { runStandardSummary(stdin) })
+            val productExecutor = RecordingProductExecutor()
+            val future = executor.submit(Callable { runStandardSummary(stdin, productExecutor) })
 
             assertTrue(stdin.readStarted.await(1, TimeUnit.SECONDS), "Expected CLI to start reading implicit stdin")
             assertFutureStillRunning(future, timeoutMillis = 150)
@@ -64,6 +69,7 @@ class HexanaProductCliTest {
             val result = future.get(1, TimeUnit.SECONDS)
             assertEquals(SUCCESS_EXIT_CODE, result.exitCode, result.stderr)
             assertTrue(result.stdout.contains("\"format\":\"wasm\""), result.stdout)
+            productExecutor.singleRequest().assertStdinSource(MINIMAL_WASM_MODULE, slotName = "binary")
         } finally {
             stdin.release()
             executor.shutdownNow()
@@ -77,7 +83,8 @@ class HexanaProductCliTest {
         val stdin = SlowChunkInputStream(MINIMAL_WASM_MODULE, firstChunkSize = 4)
         val executor = Executors.newSingleThreadExecutor()
         try {
-            val future = executor.submit(Callable { runStandardSummary(stdin) })
+            val productExecutor = RecordingProductExecutor()
+            val future = executor.submit(Callable { runStandardSummary(stdin, productExecutor) })
 
             assertTrue(stdin.firstChunkDelivered.await(1, TimeUnit.SECONDS), "Expected CLI to read the first chunk")
             assertTrue(stdin.nextChunkReadStarted.await(1, TimeUnit.SECONDS), "Expected CLI to keep reading until EOF")
@@ -87,6 +94,7 @@ class HexanaProductCliTest {
             val result = future.get(1, TimeUnit.SECONDS)
             assertEquals(SUCCESS_EXIT_CODE, result.exitCode, result.stderr)
             assertTrue(result.stdout.contains("\"format\":\"wasm\""), result.stdout)
+            productExecutor.singleRequest().assertStdinSource(MINIMAL_WASM_MODULE, slotName = "binary")
         } finally {
             stdin.releaseNextChunks()
             executor.shutdownNow()
@@ -97,7 +105,7 @@ class HexanaProductCliTest {
     fun implicitStdinPreservesInlineByteLimitFailures() {
         assumeTrue("Implicit stdin is disabled when a console is attached", System.console() == null)
 
-        val result = HexanaProductCli(HexanaCliProduct.STANDARD).run(
+        val result = HexanaProductCli(HexanaCliProduct.STANDARD, FailOnExecuteExecutor).run(
             args = arrayOf("summarize-binary", "--max-inline-bytes", "1"),
             stdin = ZeroAvailableInputStream(MINIMAL_WASM_MODULE),
             env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
@@ -109,7 +117,7 @@ class HexanaProductCliTest {
 
     @Test
     fun missingImplicitStdinSourceReportsUsageWhenStdinIsEmpty() {
-        val result = HexanaProductCli(HexanaCliProduct.STANDARD).run(
+        val result = HexanaProductCli(HexanaCliProduct.STANDARD, FailOnExecuteExecutor).run(
             args = arrayOf("summarize-binary"),
             stdin = ByteArrayInputStream(ByteArray(0)),
             env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
@@ -125,7 +133,7 @@ class HexanaProductCliTest {
 
     @Test
     fun missingRunScriptSourceFailsBeforeReadingBinarySource() {
-        val result = HexanaProductCli(HexanaCliProduct.SCRIPT).run(
+        val result = HexanaProductCli(HexanaCliProduct.SCRIPT, FailOnExecuteExecutor).run(
             args = arrayOf("run-script", "--stdin"),
             stdin = FailOnReadInputStream,
             env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
@@ -141,7 +149,7 @@ class HexanaProductCliTest {
         val home = temporaryFolder.newFolder("telemetry-home")
         withUserHome(home.absolutePath) {
             StreamingTelemetryServer.start().use { server ->
-                val result = HexanaProductCli(HexanaCliProduct.SCRIPT).run(
+                val result = HexanaProductCli(HexanaCliProduct.SCRIPT, FailOnExecuteExecutor).run(
                     args = arrayOf("version"),
                     stdin = ByteArrayInputStream(ByteArray(0)),
                     env = mapOf(
@@ -158,12 +166,43 @@ class HexanaProductCliTest {
     }
 }
 
-private fun runStandardSummary(stdin: InputStream): ProductCliResult =
-    HexanaProductCli(HexanaCliProduct.STANDARD).run(
+private fun runStandardSummary(
+    stdin: InputStream,
+    executor: RecordingProductExecutor,
+): ProductCliResult =
+    HexanaProductCli(HexanaCliProduct.STANDARD, executor).run(
         args = arrayOf("summarize-binary", "--format", "json"),
         stdin = stdin,
         env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
     )
+
+private class RecordingProductExecutor(
+    private val result: ProductCliResult = ProductCliResult(stdout = """{"format":"wasm"}"""),
+) : HexanaProductToolExecutor {
+    private val requests = mutableListOf<HexanaProductToolExecutionRequest>()
+
+    override fun execute(request: HexanaProductToolExecutionRequest): ProductCliResult {
+        requests += request
+        return result
+    }
+
+    fun singleRequest(): HexanaProductToolExecutionRequest {
+        assertEquals(1, requests.size, "Expected exactly one product executor request")
+        return requests.single()
+    }
+}
+
+private object FailOnExecuteExecutor : HexanaProductToolExecutor {
+    override fun execute(request: HexanaProductToolExecutionRequest): ProductCliResult =
+        error("CLI product test must not execute ${request.spec.commandName}")
+}
+
+private fun HexanaProductToolExecutionRequest.assertStdinSource(bytes: ByteArray, slotName: String) {
+    val source = sourceSelection as? ToolInputSourceSelection.StdinBytes
+        ?: fail("Expected stdin source, got $sourceSelection")
+    assertEquals(slotName, source.slotName)
+    assertContentEquals(bytes, source.bytes())
+}
 
 private fun assertFutureStillRunning(future: Future<*>, timeoutMillis: Long) {
     try {

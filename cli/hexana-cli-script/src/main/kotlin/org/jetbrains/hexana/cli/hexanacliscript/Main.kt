@@ -7,5 +7,5 @@ fun main(args: Array<String>) {
     if (System.getProperty("hexana.version").isNullOrBlank()) {
         System.setProperty("hexana.version", HEXANA_CLI_SCRIPT_VERSION)
     }
-    runHexanaProductCli(HexanaCliProduct.SCRIPT, args)
+    runHexanaProductCli(HexanaCliProduct.SCRIPT, args, HexanaScriptProductExecutor)
 }

@@ -17,12 +17,9 @@ base {
 dependencies {
     api(project(":cli:metadata"))
     api(project(":cli:runtime"))
+    api(project(":mcp:core"))
+    api(libs.kotlinx.serialization.json)
     implementation(project(":analytics"))
-    implementation(project(":cli:core"))
-    implementation(project(":cli:scripting"))
-    implementation(project(":mcp:core"))
-    implementation(project(":mcp:scripting"))
-    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit4)
     testImplementation(libs.kotlin.test)
@@ -33,23 +30,24 @@ kotlin {
 }
 
 val verifyCliProductBoundary = tasks.register("verifyCliProductBoundary") {
-    description = "Fails if cli:product depends on MCP server transports, Ktor, MCP SDK, or server packages."
+    description = "Fails if cli:product depends on command runtimes, MCP server transports, Ktor, MCP SDK, or server packages."
     group = "verification"
 
     doLast {
         val allowedProjectPaths = setOf(
             ":analytics",
-            ":cli:core",
             ":cli:metadata",
             ":cli:runtime",
-            ":cli:scripting",
             ":mcp:core",
-            ":mcp:scripting",
         )
         val forbiddenProjectPaths = setOf(
+            ":cli:core",
+            ":cli:scripting",
+            ":graalwasm:wasmprinter",
             ":idea-plugin",
             ":mcp:packaging",
             ":mcp:server",
+            ":mcp:scripting",
             ":mcp:tools-generator",
             ":mcp:vscode-server",
         )
@@ -65,7 +63,10 @@ val verifyCliProductBoundary = tasks.register("verifyCliProductBoundary") {
             "com.jetbrains.intellij",
             "io.ktor",
             "io.modelcontextprotocol",
+            "org.jetbrains.hexana.cli.core",
+            "org.jetbrains.hexana.cli.scripting",
             "org.jetbrains.hexana.mcp.server",
+            "org.jetbrains.hexana.mcp.scripting",
             "org.jetbrains.hexana.mcp.tooling",
         )
         val checkedConfigurationNames = setOf(
@@ -168,7 +169,7 @@ val verifyCliProductBoundary = tasks.register("verifyCliProductBoundary") {
         }
 
         check(violations.isEmpty()) {
-            "cli:product must stay free of mcp:server, server packages, Ktor, MCP SDK, and Clikt.\n" +
+            "cli:product must stay free of command runtimes, mcp:server, server packages, Ktor, MCP SDK, and Clikt.\n" +
                 violations.joinToString(separator = "\n")
         }
     }
