@@ -393,6 +393,7 @@ private class RowCallbacks {
 @Composable
 internal fun PanelTableRow(
     isHighlighted: Boolean = false,
+    backgroundColor: String? = null,
     onClick: () -> Unit = {},
     onSelect: (() -> Unit)? = null,
     onActivate: (() -> Unit)? = null,
@@ -411,8 +412,13 @@ internal fun PanelTableRow(
         tabIndex(0)
         style {
             property("cursor", "pointer")
-            if (isHighlighted) {
+            if (isHighlighted && backgroundColor != null) {
+                // Layer the selection highlight over the classification background
+                property("background", "linear-gradient(var(--hexana-selection, rgba(156, 183, 255, 0.2)), var(--hexana-selection, rgba(156, 183, 255, 0.2))), $backgroundColor")
+            } else if (isHighlighted) {
                 property("background", "var(--hexana-selection, rgba(156, 183, 255, 0.2))")
+            } else if (backgroundColor != null) {
+                property("background", backgroundColor)
             }
         }
         onClick { onClick() }

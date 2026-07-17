@@ -3,6 +3,7 @@ package org.jetbrains.hexana.vscode
 import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
+import org.jetbrains.compose.web.dom.Td
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
@@ -293,24 +294,25 @@ private fun SizeDiffContent(
                 return
             }
 
-            DiffTable(
+            SearchableTable(
                 headers = listOf("Section", "Name", "Change", "Base", "Head", "Δ"),
-                rowCount = changed.size,
-                cellValue = { row, col ->
-                    val r = changed[row]
-                    when (col) {
-                        0 -> r.section
-                        1 -> r.name
-                        2 -> r.changeLabel()
-                        3 -> r.sizeA?.let { formatSize(it) } ?: "—"
-                        4 -> r.sizeB?.let { formatSize(it) } ?: "—"
-                        5 -> signedSize(r.delta)
-                        else -> ""
+                defaultSortColumn = -1,
+                alwaysShowSearch = true,
+            ) {
+                for (r in changed) {
+                    PanelTableRow(
+                        backgroundColor = diffColor(r.classification),
+                        onClick = { onSelectFunction(r.toSelection()) },
+                    ) {
+                        Td({ classes("cell") }) { Text(r.section) }
+                        Td({ classes("cell") }) { Text(r.name) }
+                        Td({ classes("cell") }) { Text(r.changeLabel()) }
+                        Td({ classes("cell-right") }) { Text(r.sizeA?.let { formatSize(it) } ?: "—") }
+                        Td({ classes("cell-right") }) { Text(r.sizeB?.let { formatSize(it) } ?: "—") }
+                        Td({ classes("cell-right") }) { Text(signedSize(r.delta)) }
                     }
-                },
-                rowColor = { row -> diffColor(changed[row].classification) },
-                onRowClick = { row -> onSelectFunction(changed[row].toSelection()) },
-            )
+                }
+            }
 
             Div({ style { property("padding", "4px 0"); property("opacity", "0.7") } }) {
                 Text("$hidden identical ${if (hidden == 1) "entity" else "entities"} hidden")
@@ -374,22 +376,23 @@ private fun EntityDiffContent(
                 return
             }
 
-            DiffTable(
+            SearchableTable(
                 headers = listOf("Kind", "Name", "Change", "Detail"),
-                rowCount = changed.size,
-                cellValue = { row, col ->
-                    val e = changed[row]
-                    when (col) {
-                        0 -> e.kind.name
-                        1 -> e.name ?: e.key.value
-                        2 -> e.classification.label()
-                        3 -> entityDetailString(e)
-                        else -> ""
+                defaultSortColumn = -1,
+                alwaysShowSearch = true,
+            ) {
+                for (e in changed) {
+                    PanelTableRow(
+                        backgroundColor = diffColor(e.classification),
+                        onClick = { onSelectFunction(e.toFunctionSelection()) },
+                    ) {
+                        Td({ classes("cell") }) { Text(e.kind.name) }
+                        Td({ classes("cell") }) { Text(e.name ?: e.key.value) }
+                        Td({ classes("cell") }) { Text(e.classification.label()) }
+                        Td({ classes("cell") }) { Text(entityDetailString(e)) }
                     }
-                },
-                rowColor = { row -> diffColor(changed[row].classification) },
-                onRowClick = { row -> onSelectFunction(changed[row].toFunctionSelection()) },
-            )
+                }
+            }
 
             Div({ style { property("padding", "4px 0"); property("opacity", "0.7") } }) {
                 Text("$hidden identical ${if (hidden == 1) "entity" else "entities"} hidden")
@@ -555,79 +558,6 @@ private fun pairRows(ops: List<LineOp>): List<DiffPairRow> {
     }
     flushHunk()
     return out
-}
-
-// ---------------------------------------------------------------------------
-// Shared diff table
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun DiffTable(
-    headers: List<String>,
-    rowCount: Int,
-    cellValue: (row: Int, col: Int) -> String,
-    rowColor: (row: Int) -> String?,
-    onRowClick: (row: Int) -> Unit,
-) {
-    Div({
-        style {
-            width(100.percent)
-            property("overflow-x", "auto")
-        }
-    }) {
-        // Header
-        Div({
-            style {
-                display(DisplayStyle.Flex)
-                property("border-bottom", "1px solid var(--hexana-border, #333)")
-                property("font-weight", "bold")
-                property("padding", "4px 0")
-            }
-        }) {
-            for (header in headers) {
-                Div({
-                    style {
-                        property("flex", "1")
-                        property("padding", "2px 8px")
-                        property("min-width", "80px")
-                    }
-                }) {
-                    Text(header)
-                }
-            }
-        }
-        // Rows
-        for (row in 0 until rowCount) {
-            val bg = rowColor(row)
-            Div({
-                style {
-                    display(DisplayStyle.Flex)
-                    property("padding", "2px 0")
-                    property("cursor", "pointer")
-                    if (bg != null) {
-                        property("background", bg)
-                    }
-                    property("border-bottom", "1px solid var(--hexana-border, rgba(255,255,255,0.05))")
-                }
-                onClick { onRowClick(row) }
-            }) {
-                for (col in headers.indices) {
-                    Div({
-                        style {
-                            property("flex", "1")
-                            property("padding", "2px 8px")
-                            property("min-width", "80px")
-                            property("overflow", "hidden")
-                            property("text-overflow", "ellipsis")
-                            property("white-space", "nowrap")
-                        }
-                    }) {
-                        Text(cellValue(row, col))
-                    }
-                }
-            }
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
