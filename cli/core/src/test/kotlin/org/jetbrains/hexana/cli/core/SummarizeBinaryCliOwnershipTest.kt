@@ -33,16 +33,30 @@ class SummarizeBinaryCliOwnershipTest {
         assertTrue(generatedServerToolset.contains(""""summarize_binary" -> renderSummarizeBinaryCliCommandOutput(command)"""))
         assertTrue(generatedServerToolset.contains(""""summarize_module" -> renderSummarizeModuleCommandOutput(command)"""))
         assertTrue(generatedServerToolset.contains(""""wasm_to_wat" -> renderWasmToWatCommandOutput(command)"""))
-        assertTrue(generatedProducts.contains("renderSummarizeBinaryCliCommandOutput"))
-        assertTrue(generatedProducts.contains("renderSummarizeModuleCommandOutput"))
-        assertTrue(generatedProducts.contains("renderWasmToWatCommandOutput"))
+        assertTrue(generatedProducts.contains("""HexanaCliProductToolSelection("summarize_binary", "summarize-binary""""))
+        assertTrue(generatedProducts.contains("""HexanaCliProductToolSelection("summarize_module", "summarize-module""""))
+        assertTrue(generatedProducts.contains("""HexanaCliProductToolSelection("wasm_to_wat", "wasm-to-wat""""))
         assertTrue(serverAdapter.contains("summarizeBinaryCli("))
         assertTrue(serverAdapter.contains("SummarizeBinaryCliRequest("))
         assertTrue(serverAdapter.contains("standardCli("))
         assertTrue(serverAdapter.contains("StandardCliRequest("))
 
         assertFalse(generatedServerToolset.contains(""""summarize_binary" -> renderSummarizeBinaryCommandOutput(command)"""))
-        assertFalse(generatedProducts.contains("renderSummarizeBinaryCommandOutput"))
+        listOf(
+            "handlerFqn",
+            "standaloneHandlerMethod",
+            "executableRendererMethod",
+            "renderSummarizeBinaryCliCommandOutput",
+            "renderSummarizeModuleCommandOutput",
+            "renderWasmToWatCommandOutput",
+            "renderSummarizeBinaryCommandOutput",
+            "org.jetbrains.hexana.mcp.server",
+        ).forEach { serverDetail ->
+            assertFalse(
+                generatedProducts.contains(serverDetail),
+                "Neutral product metadata must not contain server execution detail: $serverDetail",
+            )
+        }
     }
 
     @Test
