@@ -6,7 +6,6 @@ import org.jetbrains.hexana.cli.runtime.ToolOutputFormat
 import org.jetbrains.hexana.cli.scripting.RunScriptCliRequest
 import org.jetbrains.hexana.cli.scripting.runScriptCli
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
-import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
 
 fun main() {
     val output = runScriptCli(
@@ -16,12 +15,12 @@ fun main() {
             ),
             params = mapOf("script" to JsonPrimitive("print(binary.bytes.size);")),
             format = ToolOutputFormat.RAW,
-            limits = HexanaScriptLimits(timeoutMillis = 1_000),
             allowedFilePolicy = AllowedFilePolicy.allowAll,
         )
     )
 
-    check(output.stdout == "3") { "Expected script stdout '3', got '${output.stdout}'." }
-    check(output.stderr == "") { "Expected empty script stderr, got '${output.stderr}'." }
-    check(output.exitCode == 0) { "Expected exit code 0, got ${output.exitCode}." }
+    check(output.stdout == "3" && output.stderr == "" && output.exitCode == 0) {
+        "Expected stdout '3', empty stderr, and exit code 0; got " +
+            "stdout='${output.stdout}', stderr='${output.stderr}', exitCode=${output.exitCode}."
+    }
 }
