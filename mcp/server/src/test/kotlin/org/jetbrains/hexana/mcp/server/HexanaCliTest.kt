@@ -3,8 +3,9 @@ package org.jetbrains.hexana.mcp.server
 import com.github.ajalt.clikt.core.CliktError
 import com.github.ajalt.clikt.core.NoSuchSubcommand
 import kotlinx.serialization.json.jsonPrimitive
-import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
+import org.jetbrains.hexana.cli.metadata.*
 import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
+import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream

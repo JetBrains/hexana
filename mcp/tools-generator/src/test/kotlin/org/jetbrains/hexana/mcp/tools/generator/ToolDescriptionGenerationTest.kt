@@ -32,7 +32,8 @@ import kotlin.test.assertTrue
 class ToolDescriptionGenerationTest {
     private val standaloneDispatcherPath = "org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt"
     private val standaloneCliToolsetPath = "org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt"
-    private val standaloneCliProductsPath = "org/jetbrains/hexana/mcp/server/HexanaCliProducts.kt"
+    private val cliMetadataToolsetPath = "org/jetbrains/hexana/cli/metadata/HexanaCliToolset.kt"
+    private val cliMetadataProductsPath = "org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt"
 
     private val binarySummaryResult = class_(
         "BinarySummaryResult",
@@ -123,14 +124,15 @@ class ToolDescriptionGenerationTest {
         val standalone = renderStandaloneSources()
         val dispatcher = standalone.sources.getValue(standaloneDispatcherPath)
         val cliToolset = standalone.sources.getValue(standaloneCliToolsetPath)
+        val cliMetadata = standalone.sources.getValue(cliMetadataToolsetPath)
 
         assertFalse(ideaSource.contains("run_binary_script"))
         assertFalse(ideaSource.contains("runBinaryScript"))
         assertTrue(dispatcher.contains("profile.includesTool(\"run_binary_script\")"))
         assertTrue(dispatcher.contains("handlers.runBinaryScript(request.arguments)"))
         assertEquals(setOf("run_binary_script"), generatedProfileNames(dispatcher, "SCRIPTING_TOOL_NAMES"))
-        assertTrue(cliToolset.contains("commandName = \"run-script\""))
-        assertTrue(cliToolset.contains("toolName = \"run_binary_script\""))
+        assertTrue(cliMetadata.contains("commandName = \"run-script\""))
+        assertTrue(cliMetadata.contains("toolName = \"run_binary_script\""))
         assertTrue(cliToolset.contains("optionName = \"--script\""))
         assertTrue(cliToolset.contains("optionName = \"--script-text\""))
         assertTrue(cliToolset.contains("\"run_binary_script\" -> renderRunBinaryScriptCommandOutput(command)"))
@@ -231,7 +233,7 @@ class ToolDescriptionGenerationTest {
         )
 
         val error = assertFailsWith<IllegalArgumentException> {
-            buildCliToolsetFile(listOf(spec))
+            buildCliMetadataToolsetFile(listOf(spec))
         }
 
         assertTrue(error.message.orEmpty().contains("has no supported CLI output format"))
@@ -239,16 +241,25 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
-    fun `standalone generator declares exactly dispatcher and CLI toolset files`() {
-        val files = buildStandaloneServerFiles(HexanaTools)
+    fun `standalone generator declares server and CLI metadata files separately`() {
+        val serverFiles = buildStandaloneServerFiles(HexanaTools)
+        val metadataFiles = buildStandaloneCliMetadataFiles(HexanaTools)
 
         assertEquals(
-            listOf("HexanaToolDispatcher", "HexanaCliToolset", "HexanaCliProducts"),
-            files.map { it.name },
+            listOf("HexanaToolDispatcher", "HexanaCliToolset"),
+            serverFiles.map { it.name },
         )
         assertEquals(
-            List(3) { "org.jetbrains.hexana.mcp.server" },
-            files.map { it.packageName },
+            List(2) { "org.jetbrains.hexana.mcp.server" },
+            serverFiles.map { it.packageName },
+        )
+        assertEquals(
+            listOf("HexanaCliToolset", "HexanaCliProducts"),
+            metadataFiles.map { it.name },
+        )
+        assertEquals(
+            List(2) { "org.jetbrains.hexana.cli.metadata" },
+            metadataFiles.map { it.packageName },
         )
     }
 
@@ -257,16 +268,18 @@ class ToolDescriptionGenerationTest {
         val generated = renderStandaloneSources()
         val dispatcher = generated.sources.getValue(standaloneDispatcherPath)
         val cliToolset = generated.sources.getValue(standaloneCliToolsetPath)
-        val cliProducts = generated.sources.getValue(standaloneCliProductsPath)
+        val cliMetadata = generated.sources.getValue(cliMetadataToolsetPath)
+        val cliProducts = generated.sources.getValue(cliMetadataProductsPath)
 
         assertEquals(
-            listOf(standaloneCliProductsPath, standaloneCliToolsetPath, standaloneDispatcherPath),
+            listOf(cliMetadataProductsPath, cliMetadataToolsetPath, standaloneCliToolsetPath, standaloneDispatcherPath),
             generated.files,
         )
         assertContainsAll(
             cliProducts,
             "HexanaCliProducts.kt",
             listOf(
+                "package org.jetbrains.hexana.cli.metadata",
                 "public enum class HexanaCliReleaseProduct",
                 "HEXANA_CLI_SCRIPT(\"hexana-cli-script\", \"hexana-cli-script\")",
                 "public object HexanaGeneratedCliProducts",
@@ -318,8 +331,7 @@ class ToolDescriptionGenerationTest {
             listOf(
                 "package org.jetbrains.hexana.mcp.server",
                 "import com.github.ajalt.clikt.core.CliktCommand",
-                "public data class HexanaCliToolSpec",
-                "public object HexanaGeneratedCliToolRegistry",
+                "import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliToolRegistry",
                 "private class GeneratedPathOnlyCliToolCommand",
                 "private class GeneratedSourceCliToolCommand",
                 "private class GeneratedTodoCliToolCommand",
@@ -327,17 +339,28 @@ class ToolDescriptionGenerationTest {
                 "internal fun generatedExecutableCliToolCommandOutput",
                 "base64OptionNames = listOf(\"--binary-base64\", \"--bytes-base64\")",
                 "base64OptionNames = listOf(\"--wasm-base64\", \"--bytes-base64\")",
-                "HexanaCliExecutionStatus.EXECUTABLE",
-                "HexanaCliExecutionStatus.TODO",
                 "\"summarize_binary\" -> renderSummarizeBinaryCliCommandOutput(command)",
                 "\"summarize_module\" -> renderSummarizeModuleCommandOutput(command)",
                 "\"wasm_to_wat\" -> renderWasmToWatCommandOutput(command)",
+            ),
+        )
+        assertContainsAll(
+            cliMetadata,
+            "org.jetbrains.hexana.cli.metadata.HexanaCliToolset.kt",
+            listOf(
+                "package org.jetbrains.hexana.cli.metadata",
+                "public data class HexanaCliToolSpec",
+                "public object HexanaGeneratedCliToolRegistry",
+                "HexanaCliExecutionStatus.EXECUTABLE",
+                "HexanaCliExecutionStatus.TODO",
             ),
         )
         assertContainsNone(
             cliToolset,
             "HexanaCliToolset.kt",
             listOf(
+                "public data class HexanaCliToolSpec",
+                "public object HexanaGeneratedCliToolRegistry",
                 "Server.registerHexanaTools",
                 "HexanaMcpToolCompatibility",
                 "HexanaGeneratedMcpToolProfiles",
@@ -381,7 +404,7 @@ class ToolDescriptionGenerationTest {
             ),
         )
 
-        val source = buildCliToolsetFile(listOf(executableBinary, summarizeModuleSpec)).toString()
+        val source = buildCliToolsetAndMetadataSource(listOf(executableBinary, summarizeModuleSpec))
 
         assertContainsAll(
             source,
@@ -439,7 +462,7 @@ class ToolDescriptionGenerationTest {
         )
 
         val dispatcherSource = buildDispatcherFile(listOf(summarizeBinarySpec, converter)).toString()
-        val cliSource = buildCliToolsetFile(listOf(summarizeBinarySpec, converter)).toString()
+        val cliSource = buildCliMetadataToolsetFile(listOf(summarizeBinarySpec, converter)).toString()
 
         assertFalse(dispatcherSource.contains("commandName = \"wasm-to-wat\""))
         assertFalse(dispatcherSource.contains("toolName = \"wasm_to_wat\""))
@@ -484,7 +507,7 @@ class ToolDescriptionGenerationTest {
             surfaces = noMcpCliSurface("future-cli-only", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
         )
 
-        val source = buildCliToolsetFile(listOf(summarizeModuleSpec, cliOnlyTodo)).toString()
+        val source = buildCliMetadataToolsetFile(listOf(summarizeModuleSpec, cliOnlyTodo)).toString()
 
         assertTrue(source.contains("public enum class HexanaCliExecutionStatus"))
         assertTrue(source.contains("executionStatus = HexanaCliExecutionStatus.EXECUTABLE"))
@@ -505,7 +528,7 @@ class ToolDescriptionGenerationTest {
             surfaces = noMcpCliSurface("future-cli-only", ToolGroup.Binary, ToolOutputPolicy.ToolDefined),
         )
 
-        val source = buildCliToolsetFile(listOf(summarizeModuleSpec, cliOnlyTodo)).toString()
+        val source = buildCliToolsetAndMetadataSource(listOf(summarizeModuleSpec, cliOnlyTodo))
 
         assertTrue(source.contains("internal fun generatedCliToolCommands"))
         assertTrue(source.contains("GeneratedSourceCliToolCommand("))
@@ -573,7 +596,7 @@ class ToolDescriptionGenerationTest {
             ),
         )
 
-        val source = buildCliToolsetFile(listOf(executableBinary)).toString()
+        val source = buildCliToolsetAndMetadataSource(listOf(executableBinary))
 
         assertTrue(source.contains("inputModes = setOf(HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN)"))
         assertTrue(source.contains("GeneratedSourceCliToolCommand("))
@@ -586,7 +609,7 @@ class ToolDescriptionGenerationTest {
 
     @Test
     fun `standalone CLI toolset supports executable WasmOnly source tools`() {
-        val source = buildCliToolsetFile(listOf(summarizeModuleSpec)).toString()
+        val source = buildCliToolsetAndMetadataSource(listOf(summarizeModuleSpec))
 
         assertTrue(source.contains("inputModes = setOf(HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.STDIN)"))
         assertTrue(source.contains("GeneratedSourceCliToolCommand("))
@@ -621,7 +644,7 @@ class ToolDescriptionGenerationTest {
     fun `standalone CLI registry can carry TODO explicit multi-source and param metadata`() {
         val futureCompare = futureCompareModulesSpec(twoWasmSourcesWithParamsModel())
 
-        val source = buildCliToolsetFile(listOf(futureCompare)).toString()
+        val source = buildCliToolsetAndMetadataSource(listOf(futureCompare))
 
         assertTrue(source.contains("commandName = \"compare-modules\""))
         assertTrue(source.contains("toolName = \"compare_modules\""))
@@ -644,7 +667,7 @@ class ToolDescriptionGenerationTest {
             ),
         )
 
-        val source = buildCliToolsetFile(listOf(executableScript)).toString()
+        val source = buildCliToolsetAndMetadataSource(listOf(executableScript))
 
         assertContainsAll(
             source,
@@ -857,6 +880,9 @@ class ToolDescriptionGenerationTest {
             outputRoot.toFile().deleteRecursively()
         }
     }
+
+    private fun buildCliToolsetAndMetadataSource(tools: List<ToolSpec>): String =
+        buildCliMetadataToolsetFile(tools).toString() + "\n" + buildCliToolsetFile(tools).toString()
 
     private fun renderGeneratedSource(mainClassName: String, generatedFile: Path): String {
         val outputRoot = Files.createTempDirectory("hexana-tool-generator-test")

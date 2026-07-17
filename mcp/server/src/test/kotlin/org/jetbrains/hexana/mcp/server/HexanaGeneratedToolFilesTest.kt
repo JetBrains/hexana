@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp.server
 
+import org.jetbrains.hexana.cli.metadata.*
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -9,6 +10,7 @@ import kotlin.test.assertTrue
 
 class HexanaGeneratedToolFilesTest {
     private val generatedPackageDir = generatedPackageDir()
+    private val generatedMetadataPackageDir = generatedMetadataPackageDir()
 
     @Test
     fun handWrittenToolHandlersDoNotReintroduceLegacyDefaultConstants() {
@@ -25,13 +27,14 @@ class HexanaGeneratedToolFilesTest {
         val generatedFiles = generatedKotlinFiles()
 
         assertEquals(
-            listOf("HexanaCliProducts.kt", "HexanaCliToolset.kt", "HexanaToolDispatcher.kt"),
+            listOf("HexanaCliToolset.kt", "HexanaToolDispatcher.kt"),
             generatedFiles.map { it.fileName.toString() },
         )
 
-        val cliProducts = Files.readString(generatedPackageDir.resolve("HexanaCliProducts.kt"))
         val dispatcher = Files.readString(generatedPackageDir.resolve("HexanaToolDispatcher.kt"))
         val cliToolset = Files.readString(generatedPackageDir.resolve("HexanaCliToolset.kt"))
+        val cliProducts = Files.readString(generatedMetadataPackageDir.resolve("HexanaCliProducts.kt"))
+        val cliMetadata = Files.readString(generatedMetadataPackageDir.resolve("HexanaCliToolset.kt"))
 
         assertContainsAll(
             dispatcher,
@@ -70,6 +73,7 @@ class HexanaGeneratedToolFilesTest {
             cliProducts,
             "HexanaCliProducts.kt",
             listOf(
+                "package org.jetbrains.hexana.cli.metadata",
                 "public enum class HexanaCliReleaseProduct",
                 "HEXANA_MCP(\"hexana-mcp\", \"hexana-mcp\")",
                 "HEXANA_CLI(\"hexana-cli\", \"hexana-cli\")",
@@ -86,8 +90,10 @@ class HexanaGeneratedToolFilesTest {
             cliToolset,
             "HexanaCliToolset.kt",
             listOf(
-                "public data class HexanaCliToolSpec",
-                "public object HexanaGeneratedCliToolRegistry",
+                "package org.jetbrains.hexana.mcp.server",
+                "import org.jetbrains.hexana.cli.metadata.HexanaCliOutputFormat",
+                "import org.jetbrains.hexana.cli.metadata.HexanaCliToolSpec",
+                "import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliToolRegistry",
                 "private class GeneratedPathOnlyCliToolCommand",
                 "private class GeneratedSourceCliToolCommand",
                 "private class GeneratedTodoCliToolCommand",
@@ -105,10 +111,23 @@ class HexanaGeneratedToolFilesTest {
                 "\"wasm_to_wat\" -> renderWasmToWatCommandOutput(command)",
             ),
         )
+        assertContainsAll(
+            cliMetadata,
+            "HexanaCliToolset.kt",
+            listOf(
+                "package org.jetbrains.hexana.cli.metadata",
+                "public data class HexanaCliToolSpec",
+                "public object HexanaGeneratedCliToolRegistry",
+                "public enum class HexanaCliInputMode",
+                "public enum class HexanaCliExecutionStatus",
+            ),
+        )
         assertContainsNone(
             cliToolset,
             "HexanaCliToolset.kt",
             listOf(
+                "public data class HexanaCliToolSpec",
+                "public object HexanaGeneratedCliToolRegistry",
                 "Server.registerHexanaTools",
                 "HexanaMcpToolCompatibility",
                 "HexanaGeneratedMcpToolProfiles",
@@ -182,6 +201,16 @@ class HexanaGeneratedToolFilesTest {
         )
         return candidates.firstOrNull { Files.isDirectory(it) }
             ?: error("Could not locate generated standalone tool package under $candidates")
+    }
+
+    private fun generatedMetadataPackageDir(): Path {
+        val relative = Path.of("cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata")
+        val candidates = listOf(
+            Path.of("").toAbsolutePath().resolve(relative),
+            Path.of("").toAbsolutePath().resolve("..").resolve("..").resolve(relative),
+        )
+        return candidates.firstOrNull { Files.isDirectory(it) }
+            ?: error("Could not locate generated CLI metadata package under $candidates")
     }
 
     private fun assertContainsAll(source: String, sourceName: String, fragments: List<String>) {

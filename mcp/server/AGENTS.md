@@ -19,9 +19,11 @@ Read these files before making structural changes:
   under `../tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/`; includes standalone MCP tool registration
   plus MCP profile/default metadata)
 - `src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt` (generated — do not hand-edit; includes
-  CLI-visible tool metadata, CLI tool command construction, and executable CLI renderer dispatch)
-- `src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliProducts.kt` (generated — do not hand-edit; includes CLI
-  product identities and selected executable closure metadata)
+  CLI tool command construction and executable CLI renderer dispatch; CLI metadata types are imported from
+  `cli:metadata`)
+- `../../cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliToolset.kt` and
+  `../../cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt` (generated — do not
+  hand-edit; include CLI-visible tool metadata and CLI product selections)
 - `../core/src/main/kotlin/org/jetbrains/hexana/mcp/HexanaAnalysisService.kt`
 
 ## Ownership Boundary
@@ -31,8 +33,9 @@ Read these files before making structural changes:
   commands (`summarize-binary`, `summarize-module`, and `wasm-to-wat`) delegate to `cli/core`, and `run-script`
   delegates to `cli/scripting`; do not reintroduce a server-local converter, executor, renderer, output model, or
   duplicate format model for those commands.
-- Tool registration (`Server.registerHexanaTools`) is generated into `HexanaToolDispatcher.kt`; CLI-visible tool command
-  construction and executable CLI renderer dispatch are generated into `HexanaCliToolset.kt`. To change a tool's name,
+- Tool registration (`Server.registerHexanaTools`) is generated into `HexanaToolDispatcher.kt`; CLI-visible metadata is
+  generated into `cli:metadata`, while server CLI command construction and executable CLI renderer dispatch are
+  generated into `HexanaCliToolset.kt`. To change a tool's name,
   description, input, output shape, or CLI surface, edit the DSL and regenerate with
   `./gradlew :mcp:server:generateHexanaToolDispatcher`; commit the regenerated files under `src/main/gen/`.
 - The generated dispatcher also exposes `HexanaToolInputDefaults`; use those constants in hand-written argument parsing

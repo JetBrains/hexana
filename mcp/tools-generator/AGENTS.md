@@ -8,9 +8,11 @@ DSL and emit checked-in Kotlin files into the two consumers:
   by `plugin.xml`.
 - `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt` — `Server.registerHexanaTools(handlers)`
   extension, generated MCP profile membership, and generated input defaults for the standalone MCP runtime.
-- `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt` — generated CLI-visible tool metadata,
-  generated CLI tool command construction, and executable CLI renderer dispatch for the standalone CLI.
-- `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliProducts.kt` — generated product identities,
+- `cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliToolset.kt` — generated CLI-visible tool
+  metadata shared by split products and the legacy server CLI adapter.
+- `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt` — generated CLI tool command
+  construction and executable CLI renderer dispatch for the standalone legacy server CLI.
+- `cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt` — generated product identities,
   selected executable tools, output policy, and executable closure metadata.
 
 A separate Claude Desktop MCPB manifest generator consumes catalog metadata and refreshes the checked-in packaging
@@ -64,6 +66,7 @@ After editing the DSL, run the affected generators and commit their output along
 
 - `./gradlew :idea-plugin:generateHexanaToolset`
 - `./gradlew :mcp:server:generateHexanaToolDispatcher`
+- `./gradlew :cli:metadata:generateHexanaCliMetadata`
 - `./gradlew :mcp:generateClaudeDesktopMcpbManifestTemplate` when MCPB/public manifest surface metadata or summaries
   change; commit the refreshed `mcp/packaging/claude-desktop-mcpb/manifest.json` template if it changes.
 
@@ -74,7 +77,7 @@ Before sending a catalog change for review, run the generated-artifact drift che
 
 - `./gradlew :idea-plugin:verifyHexanaToolsetUpToDate`
 - `./gradlew :mcp:server:verifyHexanaToolDispatcherUpToDate`
-- `./gradlew :mcp:server:verifyHexanaCliProductsUpToDate`
+- `./gradlew :cli:metadata:verifyHexanaCliMetadataUpToDate`
 - `./gradlew :mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate`
 
 ## Guidance prose conventions

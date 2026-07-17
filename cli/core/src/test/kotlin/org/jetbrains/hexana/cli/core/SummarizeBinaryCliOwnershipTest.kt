@@ -17,11 +17,11 @@ class SummarizeBinaryCliOwnershipTest {
             .readText() +
             root.resolve("mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/ModuleTools.kt").readText() +
             root.resolve("mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/ConverterTools.kt").readText()
-        val generatedToolset = root.resolve(
+        val generatedServerToolset = root.resolve(
             "mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt"
         ).readText()
         val generatedProducts = root.resolve(
-            "mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliProducts.kt"
+            "cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt"
         ).readText()
         val serverAdapter = root.resolve(
             "mcp/server/src/main/kotlin/org/jetbrains/hexana/mcp/server/HexanaCliExecution.kt"
@@ -30,9 +30,9 @@ class SummarizeBinaryCliOwnershipTest {
         assertTrue(dsl.contains("""executableCliRenderer("renderSummarizeBinaryCliCommandOutput")"""))
         assertTrue(dsl.contains("""executableCliRenderer("renderSummarizeModuleCommandOutput")"""))
         assertTrue(dsl.contains("""executableCliRenderer("renderWasmToWatCommandOutput")"""))
-        assertTrue(generatedToolset.contains(""""summarize_binary" -> renderSummarizeBinaryCliCommandOutput(command)"""))
-        assertTrue(generatedToolset.contains(""""summarize_module" -> renderSummarizeModuleCommandOutput(command)"""))
-        assertTrue(generatedToolset.contains(""""wasm_to_wat" -> renderWasmToWatCommandOutput(command)"""))
+        assertTrue(generatedServerToolset.contains(""""summarize_binary" -> renderSummarizeBinaryCliCommandOutput(command)"""))
+        assertTrue(generatedServerToolset.contains(""""summarize_module" -> renderSummarizeModuleCommandOutput(command)"""))
+        assertTrue(generatedServerToolset.contains(""""wasm_to_wat" -> renderWasmToWatCommandOutput(command)"""))
         assertTrue(generatedProducts.contains("renderSummarizeBinaryCliCommandOutput"))
         assertTrue(generatedProducts.contains("renderSummarizeModuleCommandOutput"))
         assertTrue(generatedProducts.contains("renderWasmToWatCommandOutput"))
@@ -41,14 +41,14 @@ class SummarizeBinaryCliOwnershipTest {
         assertTrue(serverAdapter.contains("standardCli("))
         assertTrue(serverAdapter.contains("StandardCliRequest("))
 
-        assertFalse(generatedToolset.contains(""""summarize_binary" -> renderSummarizeBinaryCommandOutput(command)"""))
+        assertFalse(generatedServerToolset.contains(""""summarize_binary" -> renderSummarizeBinaryCommandOutput(command)"""))
         assertFalse(generatedProducts.contains("renderSummarizeBinaryCommandOutput"))
     }
 
     @Test
     fun legacyMcpSelectedStandardExecutablesHaveNeutralRuntimeClosure() {
         val selectedStandardTools = root.resolve(
-            "mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliProducts.kt"
+            "cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt"
         ).readText()
             .productToolNames("HEXANA_MCP")
             .filterTo(sortedSetOf()) { it in STANDARD_ANALYSIS_TOOL_NAMES }
@@ -106,10 +106,10 @@ class SummarizeBinaryCliOwnershipTest {
     @Test
     fun productClosureSelectsExactlyStandardCommandsAndRejectsScriptServiceAndTodoCommands() {
         val generatedProducts = root.resolve(
-            "mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliProducts.kt"
+            "cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt"
         ).readText()
         val generatedToolset = root.resolve(
-            "mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt"
+            "cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliToolset.kt"
         ).readText()
 
         assertTrue(generatedProducts.contains("""HexanaCliReleaseProduct.HEXANA_CLI to listOf("""))

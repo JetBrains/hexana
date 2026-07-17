@@ -57,10 +57,9 @@ Future split work should move contracts before moving artifacts. The likely boun
   working-directory context, and environment access belong in `cli:runtime`;
 - neutral standard command orchestration and already exercised non-scripting adapters belong in `cli:core`;
 - the isolated script-only `run-script` adapter belongs in `cli:scripting`;
-- generated metadata continues to describe CLI-visible commands and release-product selections, while the split
+- generated metadata in `:cli:metadata` describes CLI-visible commands and release-product selections, while the split
   applications consume those selections through `:cli:product`;
-- a future module split may move generated CLI metadata out of `mcp:server`, but product command composition, terminal
-  rendering, and installed-process behavior now live under `cli/`;
+- product command composition, terminal rendering, and installed-process behavior now live under `cli/`;
 - `mcp:server` should keep MCP transports, MCP tool registration, server analytics, and server-specific resource
   policies after such a split;
 - `mcp:packaging` should keep wrapper scripts and manifests only, forwarding to the selected binary without duplicating

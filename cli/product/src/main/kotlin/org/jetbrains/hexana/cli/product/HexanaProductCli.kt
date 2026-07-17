@@ -14,6 +14,13 @@ import org.jetbrains.hexana.cli.core.SUMMARIZE_MODULE_TOOL_NAME
 import org.jetbrains.hexana.cli.core.WASM_TO_WAT_TOOL_NAME
 import org.jetbrains.hexana.cli.core.standardCli
 import org.jetbrains.hexana.cli.core.summarizeBinaryCli
+import org.jetbrains.hexana.cli.metadata.HexanaCliInputMode
+import org.jetbrains.hexana.cli.metadata.HexanaCliOutputFormat
+import org.jetbrains.hexana.cli.metadata.HexanaCliProductToolSelection
+import org.jetbrains.hexana.cli.metadata.HexanaCliReleaseProduct
+import org.jetbrains.hexana.cli.metadata.HexanaCliToolSpec
+import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliProducts
+import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliToolRegistry
 import org.jetbrains.hexana.cli.runtime.RenderedToolOutput
 import org.jetbrains.hexana.cli.runtime.ToolExecutionDiagnostic
 import org.jetbrains.hexana.cli.runtime.ToolExecutionDiagnosticSeverity
@@ -28,13 +35,6 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
-import org.jetbrains.hexana.mcp.server.HexanaCliInputMode
-import org.jetbrains.hexana.mcp.server.HexanaCliOutputFormat
-import org.jetbrains.hexana.mcp.server.HexanaCliProductToolSelection
-import org.jetbrains.hexana.mcp.server.HexanaCliReleaseProduct
-import org.jetbrains.hexana.mcp.server.HexanaCliToolSpec
-import org.jetbrains.hexana.mcp.server.HexanaGeneratedCliProducts
-import org.jetbrains.hexana.mcp.server.HexanaGeneratedCliToolRegistry
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
 import java.io.ByteArrayOutputStream
 import java.io.File

@@ -60,6 +60,7 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - `binaryProvider/`: thin provider layer that wraps parsed Wasm and native binary data for the UI and navigation features. Native providers are a sealed hierarchy (`ElfBinaryProvider`, `MachOBinaryProvider`, `FatMachOBinaryProvider`, `PeBinaryProvider`, `CoffBinaryProvider`, `ArchiveBinaryProvider`) under `NativeBinaryProvider`; format detection is done by `NativeBinaryFormatDetector` and the factory `nativeOrGenericBinaryProvider`.
 - `plugins-shared/`: Kotlin Multiplatform shared logic (no UI framework) used by both `idea-plugin` and `vscode-plugin:webview` — component description formatting, type labels, signature resolution, WAT text generation.
 - `cli/runtime/`: framework-neutral CLI runtime contracts for input conversion, semantic execution, output format selection, rendered payloads, source selections, and runtime context. It must not depend on MCP SDK, Ktor, Clikt, analytics, IntelliJ APIs, or server modules.
+- `cli/metadata/`: neutral generated CLI catalog and release-product metadata consumed by split CLI products and the legacy server CLI adapter. It depends only on `cli:runtime` and generated metadata must stay free of MCP SDK, Ktor, Clikt, analytics, IntelliJ APIs, and `mcp:server`.
 - `cli/core/`: neutral CLI command orchestration and adapters that are already exercised by production behavior. `summarize-binary` lives here and is invoked by the legacy `mcp:server` CLI adapter.
 - `cli/scripting/`: neutral script-only CLI runtime contribution for `run-script`. It reuses `mcp:scripting` and
   `cli:runtime`, but stays free of standard command composition, MCP transports, Clikt, Ktor, analytics, IntelliJ APIs,
@@ -158,12 +159,8 @@ Existing IDE run configurations currently include:
     Regenerate with `./gradlew :idea-plugin:generateHexanaToolset`.
 - `mcp/server/src/main/gen/HexanaToolDispatcher.kt` is generated from the same DSL and contains standalone MCP tool
   registration plus MCP profile/default metadata.
-- `mcp/server/src/main/gen/HexanaCliToolset.kt` is generated from the same DSL and contains generated CLI-visible tool
-  metadata, CLI tool command construction, and executable CLI adapter dispatch. Regenerate all standalone files with
-  `./gradlew :mcp:server:generateHexanaToolDispatcher`. If you change a tool's name, description, input shape, or output
-  shape, edit the DSL and rerun both generators in the same change.
-- `mcp/server/src/main/gen/HexanaCliProducts.kt` is generated from catalog-owned CLI release-product membership. Verify
-  it with `./gradlew :mcp:server:verifyHexanaCliProductsUpToDate`.
+- `cli/metadata/src/main/gen/HexanaCliToolset.kt` and `cli/metadata/src/main/gen/HexanaCliProducts.kt` are generated from the same DSL and contain CLI-visible tool metadata plus catalog-owned CLI release-product membership. Regenerate with `./gradlew :cli:metadata:generateHexanaCliMetadata`; verify with `./gradlew :cli:metadata:verifyHexanaCliMetadataUpToDate`.
+- `mcp/server/src/main/gen/HexanaCliToolset.kt` is generated from the same DSL and contains generated CLI tool command construction plus executable CLI adapter dispatch for the legacy server CLI. Regenerate it with `./gradlew :mcp:server:generateHexanaToolDispatcher`. If you change a tool's name, description, input shape, or output shape, edit the DSL and rerun affected generators in the same change.
 - Embedded converter binaries live here:
   - `graalwasm/wasmprinter/src/main/resources/wasmprinter_wrapper.wasm`
   - `graalwasm/wat2wasm/src/main/resources/wat2wasm_full.wasm`
@@ -192,7 +189,7 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
   tool contracts change.
 - `mcp/scripting/` changes: run `:mcp:scripting:test`; also run the affected `mcp/server` or plugin coverage when a
   caller starts using the runtime.
-- `cli/` changes: run `:cli:runtime:build`, `:cli:core:test`, `:cli:scripting:test`,
+- `cli/` changes: run `:cli:runtime:build`, `:cli:metadata:build`, `:cli:core:test`, `:cli:scripting:test`,
   `:cli:hexana-cli:integrationTest`, or `:cli:hexana-cli-script:integrationTest` as appropriate, plus affected legacy
   adapter coverage when public CLI behavior is involved.
 - `mcp/server/` changes: run `:mcp:server:build` and the narrowest affected `mcp/core`, `cli/core`, or plugin MCP coverage.

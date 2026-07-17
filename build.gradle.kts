@@ -72,6 +72,7 @@ val teamcityCiTestTaskPaths = listOf(
     ":hexanaDocument:allTests",
     ":jvm-jit:allTests",
     ":cli:runtime:build",
+    ":cli:metadata:build",
     ":cli:core:check",
     ":cli:core:test",
     ":cli:scripting:check",

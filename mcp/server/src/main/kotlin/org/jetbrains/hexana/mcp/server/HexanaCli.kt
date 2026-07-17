@@ -5,9 +5,15 @@ import com.github.ajalt.clikt.completion.CompletionCandidates
 import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.int
 import kotlinx.serialization.json.JsonPrimitive
+import org.jetbrains.hexana.cli.metadata.HexanaCliExecutionStatus
+import org.jetbrains.hexana.cli.metadata.HexanaCliInputMode
+import org.jetbrains.hexana.cli.metadata.HexanaCliOutputFormat
+import org.jetbrains.hexana.cli.metadata.HexanaCliToolGroup
+import org.jetbrains.hexana.cli.metadata.HexanaCliToolSpec
+import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliToolRegistry
+import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
-import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream

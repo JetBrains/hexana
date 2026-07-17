@@ -40,6 +40,7 @@ import java.nio.file.Path
 import kotlin.system.exitProcess
 
 private const val SERVER_PACKAGE = "org.jetbrains.hexana.mcp.server"
+private const val CLI_METADATA_PACKAGE = "org.jetbrains.hexana.cli.metadata"
 private val SERVER_CLASS = ClassName("io.modelcontextprotocol.kotlin.sdk.server", "Server")
 private val TOOL_CLASS = ClassName("io.modelcontextprotocol.kotlin.sdk.types", "Tool")
 private val TOOL_ANNOTATIONS = ClassName("io.modelcontextprotocol.kotlin.sdk.types", "ToolAnnotations")
@@ -56,15 +57,15 @@ private val HEXANA_CLI_COMMAND_OUTPUT = ClassName(SERVER_PACKAGE, "HexanaCliComm
 private val HEXANA_CLI_STDIN = ClassName(SERVER_PACKAGE, "HexanaCliStdin")
 private val HEXANA_RESOURCE_LIMITS = ClassName("org.jetbrains.hexana.mcp", "HexanaResourceLimits")
 private val TOOL_PROFILE = ClassName(SERVER_PACKAGE, "HexanaMcpToolProfile")
-private val CLI_TOOL_SPEC = ClassName(SERVER_PACKAGE, "HexanaCliToolSpec")
-private val CLI_INPUT_MODE = ClassName(SERVER_PACKAGE, "HexanaCliInputMode")
-private val CLI_OUTPUT_FORMAT = ClassName(SERVER_PACKAGE, "HexanaCliOutputFormat")
+private val CLI_TOOL_SPEC = ClassName(CLI_METADATA_PACKAGE, "HexanaCliToolSpec")
+private val CLI_INPUT_MODE = ClassName(CLI_METADATA_PACKAGE, "HexanaCliInputMode")
+private val CLI_OUTPUT_FORMAT = ClassName(CLI_METADATA_PACKAGE, "HexanaCliOutputFormat")
 private val TOOL_OUTPUT_FORMAT = ClassName("org.jetbrains.hexana.cli.runtime", "ToolOutputFormat")
-private val CLI_TOOL_GROUP = ClassName(SERVER_PACKAGE, "HexanaCliToolGroup")
-private val CLI_OUTPUT_POLICY = ClassName(SERVER_PACKAGE, "HexanaCliOutputPolicy")
-private val CLI_EXECUTION_STATUS = ClassName(SERVER_PACKAGE, "HexanaCliExecutionStatus")
-private val CLI_RELEASE_PRODUCT = ClassName(SERVER_PACKAGE, "HexanaCliReleaseProduct")
-private val CLI_PRODUCT_TOOL_SELECTION = ClassName(SERVER_PACKAGE, "HexanaCliProductToolSelection")
+private val CLI_TOOL_GROUP = ClassName(CLI_METADATA_PACKAGE, "HexanaCliToolGroup")
+private val CLI_OUTPUT_POLICY = ClassName(CLI_METADATA_PACKAGE, "HexanaCliOutputPolicy")
+private val CLI_EXECUTION_STATUS = ClassName(CLI_METADATA_PACKAGE, "HexanaCliExecutionStatus")
+private val CLI_RELEASE_PRODUCT = ClassName(CLI_METADATA_PACKAGE, "HexanaCliReleaseProduct")
+private val CLI_PRODUCT_TOOL_SELECTION = ClassName(CLI_METADATA_PACKAGE, "HexanaCliProductToolSelection")
 private val GENERATED_CLI_PARAM_KIND = ClassName(SERVER_PACKAGE, "GeneratedCliParamKind")
 private val GENERATED_CLI_PARAM_BINDING = ClassName(SERVER_PACKAGE, "GeneratedCliParamBinding")
 private val GENERATED_CLI_PARAM_OPTION = ClassName(SERVER_PACKAGE, "GeneratedCliParamOption")
@@ -86,27 +87,36 @@ private val INT = MemberName("com.github.ajalt.clikt.parameters.types", "int")
 private val BOOLEAN = MemberName("com.github.ajalt.clikt.parameters.types", "boolean")
 
 fun main(args: Array<String>) {
-    val outputRoot = args.firstOrNull()?.let(Path::of) ?: run {
-        System.err.println("Usage: standalone-toolset-generator <output-root>")
+    val serverOutputRoot = args.firstOrNull()?.let(Path::of) ?: run {
+        System.err.println("Usage: standalone-toolset-generator <server-output-root> [cli-metadata-output-root]")
         exitProcess(1)
     }
+    val metadataOutputRoot = args.getOrNull(1)?.let(Path::of) ?: serverOutputRoot
 
     try {
-        Files.createDirectories(outputRoot)
+        Files.createDirectories(serverOutputRoot)
+        Files.createDirectories(metadataOutputRoot)
     } catch (error: Exception) {
-        System.err.println("Failed to create output directory '$outputRoot': ${error.message}")
+        System.err.println("Failed to create output directories: ${error.message}")
         exitProcess(1)
     }
-    val fileSpecs = buildStandaloneServerFiles(HexanaTools)
-    fileSpecs.forEach { it.writeTo(outputRoot) }
-    val names = fileSpecs.joinToString { "${it.packageName}.${it.name}" }
-    println("Wrote $names to $outputRoot")
+    val serverFiles = buildStandaloneServerFiles(HexanaTools)
+    val metadataFiles = buildStandaloneCliMetadataFiles(HexanaTools)
+    serverFiles.forEach { it.writeTo(serverOutputRoot) }
+    metadataFiles.forEach { it.writeTo(metadataOutputRoot) }
+    val names = (serverFiles + metadataFiles).joinToString { "${it.packageName}.${it.name}" }
+    println("Wrote $names to $serverOutputRoot and $metadataOutputRoot")
 }
 
 internal fun buildStandaloneServerFiles(tools: List<ToolSpec>): List<FileSpec> =
     listOf(
         buildDispatcherFile(tools),
         buildCliToolsetFile(tools),
+    )
+
+internal fun buildStandaloneCliMetadataFiles(tools: List<ToolSpec>): List<FileSpec> =
+    listOf(
+        buildCliMetadataToolsetFile(tools),
         buildCliProductSelectionFile(tools),
     )
 
@@ -148,13 +158,6 @@ internal fun buildCliToolsetFile(tools: List<ToolSpec>): FileSpec {
         .addImport("com.github.ajalt.clikt.parameters.arguments", "multiple", "optional")
         .addImport("com.github.ajalt.clikt.parameters.options", "convert", "default", "flag", "multiple", "required")
         .addImport("com.github.ajalt.clikt.parameters.types", "boolean", "int")
-        .addType(buildCliInputModeEnum())
-        .addTypeAlias(buildCliOutputFormatAlias())
-        .addType(buildCliToolGroupEnum())
-        .addType(buildCliOutputPolicyEnum())
-        .addType(buildCliExecutionStatusEnum())
-        .addType(buildCliToolSpecClass())
-        .addType(buildCliToolRegistryObject(tools))
         .addType(buildGeneratedCliParamKindEnum())
         .addType(buildGeneratedCliParamBindingClass())
         .addType(buildGeneratedCliParamOptionClass())
@@ -168,9 +171,22 @@ internal fun buildCliToolsetFile(tools: List<ToolSpec>): FileSpec {
         .build()
 }
 
+internal fun buildCliMetadataToolsetFile(tools: List<ToolSpec>): FileSpec {
+    return FileSpec.builder(CLI_METADATA_PACKAGE, "HexanaCliToolset")
+        .addFileComment("Generated by :mcp:tools-generator. Do not edit by hand.")
+        .addType(buildCliInputModeEnum())
+        .addTypeAlias(buildCliOutputFormatAlias())
+        .addType(buildCliToolGroupEnum())
+        .addType(buildCliOutputPolicyEnum())
+        .addType(buildCliExecutionStatusEnum())
+        .addType(buildCliToolSpecClass())
+        .addType(buildCliToolRegistryObject(tools))
+        .build()
+}
+
 internal fun buildCliProductSelectionFile(tools: List<ToolSpec>): FileSpec {
     validateCliReleaseProducts(tools, requireCompleteSelection = false)
-    return FileSpec.builder(SERVER_PACKAGE, "HexanaCliProducts")
+    return FileSpec.builder(CLI_METADATA_PACKAGE, "HexanaCliProducts")
         .addFileComment("Generated by :mcp:tools-generator. Do not edit by hand.")
         .addType(buildCliReleaseProductEnum())
         .addType(buildCliProductToolSelectionClass())
@@ -1125,7 +1141,7 @@ private fun constructorProperty(
         .build()
 
 private fun cliToolSpecLookup(spec: ToolSpec): CodeBlock =
-    CodeBlock.of("%T.TOOLS.single { it.toolName == %S }", ClassName(SERVER_PACKAGE, "HexanaGeneratedCliToolRegistry"), spec.name)
+    CodeBlock.of("%T.TOOLS.single { it.toolName == %S }", ClassName(CLI_METADATA_PACKAGE, "HexanaGeneratedCliToolRegistry"), spec.name)
 
 private fun envReaderType(): LambdaTypeName =
     LambdaTypeName.get(

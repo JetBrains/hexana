@@ -51,7 +51,7 @@ class RunScriptCliRuntimeTest {
     @Test
     fun legacyMcpSelectedScriptExecutableHasNeutralRuntimeClosure() {
         val selectedScriptTools = Path.of("..", "..").normalize()
-            .resolve("mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliProducts.kt")
+            .resolve("cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt")
             .readText()
             .productToolNames("HEXANA_MCP")
             .filterTo(sortedSetOf()) { it == RUN_BINARY_SCRIPT_TOOL_NAME }

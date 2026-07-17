@@ -14,6 +14,7 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.jetbrains.hexana.cli.metadata.*
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import kotlin.test.Test
 import kotlin.test.assertEquals

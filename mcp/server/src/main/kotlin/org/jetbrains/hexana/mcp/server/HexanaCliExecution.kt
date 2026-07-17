@@ -8,6 +8,7 @@ import org.jetbrains.hexana.cli.core.StandardCliRequest
 import org.jetbrains.hexana.cli.core.WASM_TO_WAT_TOOL_NAME
 import org.jetbrains.hexana.cli.core.standardCli
 import org.jetbrains.hexana.cli.core.summarizeBinaryCli
+import org.jetbrains.hexana.cli.metadata.HexanaCliOutputFormat
 import org.jetbrains.hexana.cli.runtime.ToolExecutionDiagnostic
 import org.jetbrains.hexana.cli.runtime.ToolExecutionDiagnosticSeverity
 import org.jetbrains.hexana.cli.runtime.RenderedToolOutput
