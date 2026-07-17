@@ -298,7 +298,8 @@ private fun SizeDiffContent(
 
             SearchableTable(
                 headers = listOf("Section", "Name", "Change", "Base", "Head", "Δ"),
-                defaultSortColumn = -1,
+                defaultSortColumn = 5,
+                defaultSortDirection = SortDirection.DESC,
                 alwaysShowSearch = true,
             ) {
                 for (r in changed) {

@@ -278,20 +278,29 @@ private fun parseNumericValue(text: String): Double? {
     if (text.startsWith("0x", ignoreCase = true)) {
         return text.substring(2).toLongOrNull(16)?.toDouble()
     }
+    // Extract optional leading sign and the rest of the text
+    val sign: Double
+    val body: String
+    val trimmed = text.trim()
+    when {
+        trimmed.startsWith("+") -> { sign = 1.0; body = trimmed.substring(1).trimStart() }
+        trimmed.startsWith("-") || trimmed.startsWith("\u2212") -> { sign = -1.0; body = trimmed.substring(1).trimStart() }
+        else -> { sign = 1.0; body = trimmed }
+    }
     // Detect unit suffixes and convert to a common base so that, e.g.,
     // "1 KB" (= 1024) sorts correctly after "900 bytes" (= 900).
-    val mbMatch = Regex("^([\\d,.]+)\\s*MB$", RegexOption.IGNORE_CASE).find(text)
-    if (mbMatch != null) return mbMatch.groupValues[1].replace(",", "").toDoubleOrNull()?.times(1024.0 * 1024)
-    val kbMatch = Regex("^([\\d,.]+)\\s*KB$", RegexOption.IGNORE_CASE).find(text)
-    if (kbMatch != null) return kbMatch.groupValues[1].replace(",", "").toDoubleOrNull()?.times(1024.0)
+    val mbMatch = Regex("^([\\d,.]+)\\s*MB$", RegexOption.IGNORE_CASE).find(body)
+    if (mbMatch != null) return mbMatch.groupValues[1].replace(",", "").toDoubleOrNull()?.times(sign * 1024.0 * 1024)
+    val kbMatch = Regex("^([\\d,.]+)\\s*KB$", RegexOption.IGNORE_CASE).find(body)
+    if (kbMatch != null) return kbMatch.groupValues[1].replace(",", "").toDoubleOrNull()?.times(sign * 1024.0)
     // Strip remaining suffixes: "123 bytes", "45.6%", "12 B"
-    val stripped = text
+    val stripped = body
         .replace(Regex("\\s*bytes$", RegexOption.IGNORE_CASE), "")
         .replace(Regex("\\s*B$", RegexOption.IGNORE_CASE), "")
         .replace(Regex("%$"), "")
         .replace(",", "")
         .trim()
-    return stripped.toDoubleOrNull()
+    return stripped.toDoubleOrNull()?.times(sign)
 }
 
 /**
