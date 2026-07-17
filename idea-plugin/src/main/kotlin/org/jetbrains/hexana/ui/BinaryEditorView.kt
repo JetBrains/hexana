@@ -873,6 +873,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
     is WasmComponentBinaryVirtualFileProvider -> {
         if (canProvideWasmModule()) {
             listOf(
+                Panel("Dependencies") { WasmComponentDependencyGraph(this) },
                 Panel("Wat") { WasmPanelWat(this, state) },
                 Panel("WAT (virtualized)") { WasmComponentPanelWatVirtualized(this, state) },
             )
@@ -902,6 +903,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
     is WasmComponentBinaryProvider -> {
         if (canProvideWasmModule()) {
             listOf(
+                Panel("Dependencies") { WasmComponentDependencyGraph(this) },
                 Panel("WAT (virtualized)") { WasmComponentPanelWatVirtualized(this, state) },
             )
         } else emptyList()
@@ -1184,7 +1186,7 @@ private fun BinaryProvider.discoverHardcodedPanelNames(): List<String> = when (t
         } else listOf("Something is wrong :(", "Wat")
     }
     is WasmComponentBinaryVirtualFileProvider -> {
-        if (canProvideWasmModule()) listOf("Wat", "WAT (virtualized)")
+        if (canProvideWasmModule()) listOf("Dependencies", "Wat", "WAT (virtualized)")
         else listOf("Something is wrong :(", "Wat")
     }
     is WasmBinaryProvider -> {
@@ -1197,7 +1199,7 @@ private fun BinaryProvider.discoverHardcodedPanelNames(): List<String> = when (t
         } else emptyList()
     }
     is WasmComponentBinaryProvider -> {
-        if (canProvideWasmModule()) listOf("WAT (virtualized)")
+        if (canProvideWasmModule()) listOf("Dependencies", "WAT (virtualized)")
         else emptyList()
     }
     else -> emptyList()
