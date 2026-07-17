@@ -75,11 +75,16 @@ val thirdPartyNoticesDir = layout.buildDirectory.dir("generated/third-party-noti
 val thirdPartyNoticesFileName = "THIRD-PARTY-NOTICES.md"
 val r8RulesFile = layout.projectDirectory.file("packaging/r8-rules.pro")
 val cliR8RulesFile = layout.projectDirectory.file("packaging/r8-cli-rules.pro")
+val cliMetadataJarName = "cli-metadata.jar"
+val cliProductJarName = "cli-product.jar"
+val standardCliJarName = "hexana-cli-$mcpServerVersion.jar"
+val scriptCliJarName = "hexana-cli-script-$mcpServerVersion.jar"
 val r8OwnedJarNames = setOf(
     "analytics-jvm.jar",
     "arrow-jvm.jar",
     "binaryProvider-jvm.jar",
     "cli-core.jar",
+    cliMetadataJarName,
     "cli-runtime.jar",
     "cli-scripting.jar",
     "codec-jvm.jar",
@@ -106,9 +111,10 @@ val r8OwnedJarNames = setOf(
     "zip-jvm.jar",
 )
 val cliProductJarNames = setOf(
-    "cli-product.jar",
-    "hexana-cli-$mcpServerVersion.jar",
-    "hexana-cli-script-$mcpServerVersion.jar",
+    cliMetadataJarName,
+    cliProductJarName,
+    standardCliJarName,
+    scriptCliJarName,
 )
 val cliReleaseHexanaJarNames = r8OwnedJarNames + cliProductJarNames
 val mcpSdkJarNamePrefixes = listOf("kotlin-sdk")
@@ -944,9 +950,9 @@ val standardCliR8Product = CliR8Product(
     executableName = "hexana-cli",
     projectPath = ":cli:hexana-cli",
     installDir = project(":cli:hexana-cli").layout.buildDirectory.dir("install/hexana-cli"),
-    programJarNames = (r8OwnedJarNames - "cli-scripting.jar" - "scripting.jar") + setOf(
-        "cli-product.jar",
-        "hexana-cli-$mcpServerVersion.jar",
+    programJarNames = (r8OwnedJarNames - "cli-scripting.jar" - "scripting.jar" - "server-$mcpServerVersion.jar") + setOf(
+        cliProductJarName,
+        standardCliJarName,
     ),
     deniedJarNamePrefixes = cliServerOnlyJarNamePrefixes + graalJsJarNamePrefixes,
     expectedCommands = setOf("summarize-binary", "summarize-module", "wasm-to-wat"),
@@ -962,10 +968,10 @@ val scriptCliR8Product = CliR8Product(
     executableName = "hexana-cli-script",
     projectPath = ":cli:hexana-cli-script",
     installDir = project(":cli:hexana-cli-script").layout.buildDirectory.dir("install/hexana-cli-script"),
-    programJarNames = (r8OwnedJarNames - "cli-core.jar" - "wasmprinter.jar") + setOf(
-        "cli-product.jar",
+    programJarNames = (r8OwnedJarNames - "cli-core.jar" - "common.jar" - "wasmprinter.jar" - "server-$mcpServerVersion.jar") + setOf(
+        cliProductJarName,
         "cli-scripting.jar",
-        "hexana-cli-script-$mcpServerVersion.jar",
+        scriptCliJarName,
     ),
     deniedJarNamePrefixes = cliServerOnlyJarNamePrefixes + graalWasmJarNamePrefixes,
     expectedCommands = setOf("run-script"),
