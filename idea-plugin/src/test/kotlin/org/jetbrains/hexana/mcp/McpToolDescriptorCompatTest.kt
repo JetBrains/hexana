@@ -95,6 +95,42 @@ class McpToolDescriptorCompatTest : UsefulTestCase() {
         assertNull(descriptor.marker)
     }
 
+    fun testDescriptorOptionalFieldsUseTheirDeclaredDefaults() {
+        val category = DescriptorCategory("HexanaToolset")
+        val inputSchema = emptySchema()
+        val outputSchema = emptySchema()
+        val descriptor = instantiateKotlinPrimaryConstructor(
+            type = EvolvingDescriptor::class.java,
+            argumentsByName = mapOf(
+                "name" to "test_tool",
+                "description" to "Test description",
+                "category" to category,
+                "fullyQualifiedName" to "org.jetbrains.hexana.mcp.HexanaToolset.testTool",
+                "inputSchema" to inputSchema,
+                "outputSchema" to outputSchema,
+            ),
+        ) as? EvolvingDescriptor ?: error("Expected descriptor with optional fields")
+
+        assertEquals("test_tool", descriptor.name)
+        assertNull(descriptor.title)
+        assertEquals("Test description", descriptor.description)
+        assertEquals("IDE default", descriptor.sourceName)
+        assertSame(category, descriptor.category)
+        assertEquals("org.jetbrains.hexana.mcp.HexanaToolset.testTool", descriptor.fullyQualifiedName)
+        assertSame(inputSchema, descriptor.inputSchema)
+        assertSame(outputSchema, descriptor.outputSchema)
+        assertNull(descriptor.annotations)
+    }
+
+    fun testConstructorDescriptionIncludesNamesAndOptionality() {
+        val description = describeKotlinPrimaryConstructor(EvolvingDescriptor::class.java)
+            ?: error("Expected Kotlin primary constructor description")
+
+        assertTrue(description.contains("name: kotlin.String"))
+        assertTrue(description.contains("sourceName: kotlin.String = <default>"))
+        assertTrue(description.contains("annotations: kotlin.Any? = <default>"))
+    }
+
     fun testDescriptorFallsBackToCategorylessConstructorShape() {
         val inputSchema = emptySchema()
         val outputSchema = emptySchema()
@@ -160,6 +196,18 @@ class McpToolDescriptorCompatTest : UsefulTestCase() {
         @Suppress("unused") val outputSchema: McpToolSchema,
         val mask: Int,
         val marker: Any?,
+    )
+
+    private class EvolvingDescriptor private constructor(
+        val name: String,
+        val title: String? = null,
+        val description: String,
+        val sourceName: String = "IDE default",
+        val category: DescriptorCategory,
+        val fullyQualifiedName: String,
+        val inputSchema: McpToolSchema,
+        val outputSchema: McpToolSchema,
+        val annotations: Any? = null,
     )
 
     private class CategorylessDescriptor private constructor(

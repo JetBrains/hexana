@@ -4,6 +4,9 @@ import com.intellij.mcpserver.McpToolDescriptor
 import com.intellij.mcpserver.McpToolSchema
 import java.lang.reflect.Constructor
 import java.lang.reflect.InvocationTargetException
+import kotlin.reflect.KParameter
+import kotlin.reflect.full.primaryConstructor
+import kotlin.reflect.jvm.isAccessible
 
 private const val MCP_TOOL_CATEGORY_CLASS_NAME = "com.intellij.mcpserver.McpToolCategory"
 private const val HEXANA_TOOLSET_CATEGORY_NAME = "HexanaToolset"
@@ -20,6 +23,18 @@ internal fun hexanaToolDescriptor(
     val category = categoryClass?.let(::instantiateHexanaToolCategory)
     val constructors = McpToolDescriptor::class.java.declaredConstructors
 
+    instantiateKotlinPrimaryConstructor(
+        type = McpToolDescriptor::class.java,
+        argumentsByName = mapOf(
+            "name" to name,
+            "description" to description,
+            "category" to category,
+            "fullyQualifiedName" to fullyQualifiedName,
+            "inputSchema" to inputSchema,
+            "outputSchema" to outputSchema,
+        ),
+    )?.let { return it as McpToolDescriptor }
+
     descriptorCandidates(
         name = name,
         description = description,
@@ -34,7 +49,9 @@ internal fun hexanaToolDescriptor(
     }
 
     error(
-        "No supported McpToolDescriptor constructor found. Available shapes: " +
+        "No supported McpToolDescriptor constructor found. Kotlin primary constructor: " +
+            (describeKotlinPrimaryConstructor(McpToolDescriptor::class.java) ?: "unavailable") +
+            ". JVM shapes: " +
             constructors.joinToString { constructor ->
                 constructor.parameterTypes.joinToString(prefix = "(", postfix = ")") { it.simpleName }
             }
@@ -52,9 +69,87 @@ private fun findMcpToolCategoryClass(): Class<*>? {
 }
 
 internal fun instantiateHexanaToolCategory(categoryClass: Class<*>): Any? {
+    instantiateKotlinPrimaryConstructor(
+        type = categoryClass,
+        argumentsByName = mapOf(
+            "shortName" to HEXANA_TOOLSET_CATEGORY_NAME,
+            "fullyQualifiedName" to HEXANA_TOOLSET_FQN,
+            "experimental" to false,
+            "alwaysIncluded" to true,
+        ),
+    )?.let { return it }
+
     val constructors = categoryClass.declaredConstructors
     return categoryCandidates(HEXANA_TOOLSET_CATEGORY_NAME, HEXANA_TOOLSET_FQN)
         .firstNotNullOfOrNull { arguments -> instantiateCompatibleConstructor(constructors, arguments) }
+}
+
+internal fun instantiateKotlinPrimaryConstructor(
+    type: Class<*>,
+    argumentsByName: Map<String, Any?>,
+): Any? {
+    val constructor = try {
+        type.kotlin.primaryConstructor
+    } catch (_: LinkageError) {
+        null
+    } catch (_: RuntimeException) {
+        null
+    } ?: return null
+
+    val arguments = mutableMapOf<KParameter, Any?>()
+    for (parameter in constructor.parameters) {
+        if (parameter.kind != KParameter.Kind.VALUE) {
+            continue
+        }
+        val parameterName = parameter.name ?: return null
+        if (!argumentsByName.containsKey(parameterName)) {
+            if (!parameter.isOptional) {
+                return null
+            }
+            continue
+        }
+
+        val argument = argumentsByName.getValue(parameterName)
+        if (argument == null && !parameter.type.isMarkedNullable) {
+            if (!parameter.isOptional) {
+                return null
+            }
+            continue
+        }
+        arguments[parameter] = argument
+    }
+
+    return try {
+        constructor.isAccessible = true
+        constructor.callBy(arguments)
+    } catch (_: LinkageError) {
+        null
+    } catch (_: RuntimeException) {
+        null
+    }
+}
+
+internal fun describeKotlinPrimaryConstructor(type: Class<*>): String? {
+    val constructor = try {
+        type.kotlin.primaryConstructor
+    } catch (_: LinkageError) {
+        null
+    } catch (_: RuntimeException) {
+        null
+    } ?: return null
+
+    return constructor.parameters
+        .filter { parameter -> parameter.kind == KParameter.Kind.VALUE }
+        .joinToString(prefix = "(", postfix = ")") { parameter ->
+            buildString {
+                append(parameter.name ?: "?")
+                append(": ")
+                append(parameter.type)
+                if (parameter.isOptional) {
+                    append(" = <default>")
+                }
+            }
+        }
 }
 
 internal fun instantiateCompatibleConstructor(
