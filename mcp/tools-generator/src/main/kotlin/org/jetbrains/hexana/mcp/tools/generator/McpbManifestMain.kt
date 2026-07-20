@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
-import org.jetbrains.hexana.mcp.tools.HexanaTools
+import org.jetbrains.hexana.mcp.tools.HexanaMcpbTools
 import org.jetbrains.hexana.mcp.tools.ToolSpec
 import java.nio.file.Files
 import java.nio.file.Path
@@ -64,5 +64,4 @@ private fun renderTools(): JsonArray = JsonArray(
     }
 )
 
-internal fun mcpbManifestTools(tools: List<ToolSpec> = HexanaTools): List<ToolSpec> =
-    tools.filter { it.surfaces.publicMcpb.included }
+internal fun mcpbManifestTools(tools: List<ToolSpec> = HexanaMcpbTools): List<ToolSpec> = tools

@@ -98,42 +98,33 @@ val CheckMemoryContractResultClass = class_("CheckMemoryContractResult", kotlinP
 internal val MemoryTools: List<ToolSpec> = tools {
     tool("list_memory") {
         summary = "Low-level list of imported and defined memories from a `.wasm` module."
-        surfaces = publicMcpbProductionCliSurface("list-memory", ToolGroup.Memory, ToolOutputPolicy.ToolDefined)
         guidance = """
             List imported and defined memories declared by a WebAssembly (.wasm) module.
             Returns memory indices together with decoded WebAssembly limits.
             For baseline-plus-policy memory contract audits, use `check_memory_contract`; this low-level view does not compare baseline declarations or policy limits.
         """
         input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmOnly
         output = ListMemoryResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readMemory"
     }
 
     tool("get_memory_for_indices") {
         summary = "Return memories for the requested indices from the unified memory index space."
-        surfaces = advancedHiddenCliSurface()
         guidance = """
             Return only the requested memories from the unified memory index space.
             Useful for multi-memory or wasm64 modules when only a subset matters.
         """
         input = GetMemoryForIndicesInput
-        inputPattern = ToolInputPattern.Indices
         output = ListMemoryResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readMemoryByIndices"
     }
 
     tool("check_memory_contract") {
         summary = "Check a memory contract with current/baseline Wasm and policy JSON; returns report-ready violations."
-        surfaces = publicMcpbProductionCliSurface("check-memory-contract", ToolGroup.Memory, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this as the shortest path for memory contract audits that have a current module, `baselinePath`, and `policyPath`.
             Compares current declarations with baseline declarations, applies policy limits, and returns exact input path echoes.
             The result includes per-memory declared limits, previous limits, exported memory names, policy limits, stable structured violations, and minimal compatible limits.
         """
         input = CheckMemoryContractInput
-        inputPattern = ToolInputPattern.PolicyWithBaselineAndLog
         output = CheckMemoryContractResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.checkMemoryContract"
     }
 }

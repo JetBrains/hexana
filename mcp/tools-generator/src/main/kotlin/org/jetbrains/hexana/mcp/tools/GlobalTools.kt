@@ -190,21 +190,17 @@ val AuditGlobalStatePolicyResultClass = class_("AuditGlobalStatePolicyResult", k
 internal val GlobalTools: List<ToolSpec> = tools {
     tool("list_globals") {
         summary = "Low-level list of imported and defined globals from a `.wasm` module."
-        surfaces = publicMcpbProductionCliSurface("list-globals", ToolGroup.Global, ToolOutputPolicy.ToolDefined)
         guidance = """
             List imported and defined globals declared by a WebAssembly (.wasm) module.
             Returns each global with its value type, mutability, normalized initializer expression, import identity, and export names pointing at the global.
             For baseline-plus-policy global-state audits or release reports, use `audit_global_state_policy` instead; this low-level view is intentionally broad and does not compare baseline public globals or policy rules.
         """
         input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmOnly
         output = ListGlobalsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readGlobals"
     }
 
     tool("audit_global_state_policy") {
         summary = "Audit global-state policy with current/baseline Wasm and policy JSON; returns report-ready violations."
-        surfaces = publicMcpbProductionCliSurface("audit-global-state-policy", ToolGroup.Global, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this as the shortest path for global-state audits that have a current module, `baselinePath`, and `policyPath`.
             Compares current globals with baseline public globals, applies policy rules, and returns exact input path echoes.
@@ -213,21 +209,16 @@ internal val GlobalTools: List<ToolSpec> = tools {
             Use `detail=full` only when full unchanged allowed-global objects are required.
         """
         input = AuditGlobalStatePolicyInput
-        inputPattern = ToolInputPattern.GlobalStatePolicyAudit
         output = AuditGlobalStatePolicyResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.auditGlobalStatePolicy"
     }
 
     tool("get_globals_for_indices") {
         summary = "Return globals for the requested indices from the unified global index space."
-        surfaces = advancedHiddenCliSurface()
         guidance = """
             Return only the requested globals from the unified global index space.
             Use this for targeted analysis when `list_globals` would return more data than needed.
         """
         input = GetGlobalsForIndicesInput
-        inputPattern = ToolInputPattern.Indices
         output = ListGlobalsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readGlobalsByIndices"
     }
 }

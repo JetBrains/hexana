@@ -160,7 +160,6 @@ private val PlanAbiBindingRegenerationResultClass = class_(
 val ArtifactQueryTools = tools {
     tool("plan_abi_binding_regeneration") {
         summary = "Plan report-ready ABI binding regeneration from current Wasm plus a stale binding file."
-        surfaces = publicMcpbProductionCliSurface("plan-abi-binding-regeneration", ToolGroup.ArtifactQuery, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this as the shortest path for regenerating host bindings when a current module and stale `bindingPath` are available.
             Compare the current WebAssembly function import/export ABI against a stale binding file and return a report-ready regeneration plan with exact input path echoes.
@@ -168,14 +167,11 @@ val ArtifactQueryTools = tools {
             Mismatch `expected` values are current WebAssembly signatures, or null when a stale binding should be removed; `actual` values are stale binding signatures, or null when the binding is missing.
         """
         input = PlanAbiBindingRegenerationInput
-        inputPattern = ToolInputPattern.WasmWithBinding
         output = PlanAbiBindingRegenerationResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.planAbiBindingRegeneration"
     }
 
     tool("query_artifacts") {
         summary = "Query WebAssembly artifact entities, diffs, and function relations with bounded output."
-        surfaces = advancedHiddenCliSurface()
         guidance = """
             Use this as the default Hexana MCP entry point for WebAssembly artifact facts.
             `overview` returns module counts; skip it when the request already names a focused production fact.
@@ -189,8 +185,6 @@ val ArtifactQueryTools = tools {
             Keep `limit` and `maxBytes` small; for `abi_surface`, `abi_binding_regeneration`, or `import_surface`, use `limit=1` when summary JSON arrays are sufficient. Use `entityTypes`, `query`, `startName`, or `startFuncidx` to avoid broad scans, and request `detail=evidence` only for the few records that need offsets, locals, element lists, or instruction text.
         """
         input = QueryArtifactsInput
-        inputPattern = ToolInputPattern.ArtifactQuery
         output = QueryArtifactsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readArtifactQuery"
     }
 }

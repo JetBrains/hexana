@@ -1,7 +1,7 @@
 # AGENTS.md for `mcp/tools-generator`
 
-This module is the single source of truth for Hexana MCP tool definitions. Two KotlinPoet generators consume the same
-DSL and emit checked-in Kotlin files into the two consumers:
+This module owns the canonical semantic tool contract catalog and four independent surface authorities. KotlinPoet
+generators resolve contracts through the authority for their consumer and emit checked-in Kotlin files:
 
 - `idea-plugin/src/main/gen/org/jetbrains/hexana/mcp/HexanaToolset.kt` — `McpToolsProvider` with generated Hexana
   `McpTool` descriptors and call bodies, consumed
@@ -15,17 +15,21 @@ DSL and emit checked-in Kotlin files into the two consumers:
 - `cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt` — generated product identities,
   selected executable tools, output policy, and default output metadata.
 
-A separate Claude Desktop MCPB manifest generator consumes catalog metadata and refreshes the checked-in packaging
-template.
+A separate Claude Desktop MCPB manifest generator consumes the independent ordered MCPB authority and refreshes the
+checked-in packaging template. MCP-149 may derive that authority later; do not derive it from standalone production in
+this code.
 
 ## Start Here
 
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/Dsl.kt` — `class_`/`tools` builders, `FieldType` hierarchy,
-  `FieldSpec` schema constraints, `ToolInputModel`/source-slot CLI input metadata, `ToolInputPattern`, and `ToolSpec`.
+  `FieldSpec` schema constraints, typed `ToolId`, semantic-only `ToolSpec`, IDEA `ToolInputPattern`, and CLI input/binding
+  types.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/CommonInputs.kt` — Wasm input and tiny shared input helpers.
-- `src/main/kotlin/org/jetbrains/hexana/mcp/tools/*Tools.kt` — feature-owned specs and definitions. Keep each tool's
-  input specs, input pattern, result schema mirrors, descriptions, and handler FQN in the same feature file when possible.
+- `src/main/kotlin/org/jetbrains/hexana/mcp/tools/*Tools.kt` — feature-owned semantic contracts only: input specs,
+  result schema mirrors, summaries, and guidance.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt` — catalog composition and canonical tool ordering.
+- `src/main/kotlin/org/jetbrains/hexana/mcp/tools/SurfaceAuthorities.kt` — explicit ordered IDEA invocation bindings,
+  standalone handler/profile authority, independent MCPB selection, and CLI bindings/input models/products.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/StandaloneToolsetMain.kt` — standalone server dispatcher
   and CLI command generator.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/IdeaToolsetMain.kt` — idea-plugin toolset generator.
@@ -33,30 +37,32 @@ template.
 
 ## Ownership Boundary
 
-- Tool descriptions, input/output shapes, and handler references live only in this module.
-- Tool surface metadata also lives only in this module. Each tool must explicitly declare its MCP audience/profile intent,
-  public MCPB manifest exposure, and CLI visibility, command name, group/domain, and output policy instead of deriving
-  those facts from production profile membership.
-- CLI release-product membership is catalog metadata independent from MCP profiles. TODO tools stay visible in the global
+- `ToolSpec` is semantic-only: typed ID, summary/guidance, input/output schema/defaults/bounds, and intrinsic conversion
+  capabilities. Consumer invocation and membership policy must not be added back to feature contracts.
+- IDEA owns `ToolInputPattern` plus handler FQN. Standalone owns handler method bindings and explicit effective
+  production/advanced/scripting lists. MCPB owns an independent ordered selection. CLI owns command/group/output,
+  renderer, explicit executable input models, and product selections.
+- All authorities resolve typed IDs through `ToolCatalog`; duplicate/unknown selectors and missing/duplicate bindings
+  fail before generation, and resolved output follows canonical contract order.
+- CLI release-product membership is CLI authority metadata independent from MCP profiles. TODO tools stay visible in the global
   CLI registry but must not belong to `hexana-mcp`, `hexana-cli`, or `hexana-cli-script` release selections.
-- Public MCPB manifest exposure is generated from catalog metadata; do not maintain a separate manifest tool list.
+- Public MCPB manifest exposure is generated from `HexanaMcpbToolIds`; it must not be inferred from a standalone profile.
 - Top-level tool output classes also declare their `mcp/core` model package here with `kotlinPackage = ...`; the
   idea-plugin generator must not carry a separate result-class package map.
-- Input/output conversion capability symbols are generator-local metadata on `ClassSpec`. `SemanticJson`, `McpWrapper`,
+- Input/output conversion capability symbols are intrinsic reusable metadata on `ClassSpec`. `SemanticJson`, `McpWrapper`,
   `Pretty`, and `RawText` are implemented for the current POC paths. `RawBytes` is symbolic/deferred for future
-  binary-safe rendering and is not exposed by current catalog tools. CLI source-slot input behavior belongs in
-  `ToolInputModel` and its source/param specs; keep this as DSL metadata rather than duplicating it in generated or
-  handwritten server code.
+  binary-safe rendering and is not exposed by current catalog tools. CLI source-slot input behavior belongs only in
+  CLI authority `ToolInputModel` bindings; executable CLI models must never be derived from IDEA patterns.
 - Standalone server input and output JSON schemas are generated from `ClassSpec`/`FieldSpec`; add defaults and bounds
   such as `minimum`, `maxItems`, and `maxLength` to the DSL instead of adding per-tool schema helpers in `mcp/server`.
 - Idea-plugin argument defaults also come from `FieldSpec.default`; do not repeat numeric, boolean, or string defaults in
   `IdeaToolsetMain.kt`.
-- Generators must consume the full `handlerFqn`; do not hard-code `org.jetbrains.hexana.mcp.query` in generator code.
+- The IDEA generator consumes the full authority `handlerFqn`; do not hard-code `org.jetbrains.hexana.mcp.query`.
 - `ToolInputPattern` validation must fail fast on field type, nullability, default, and description mismatches that would
   otherwise surface only during generator execution.
 - No IntelliJ Platform APIs. No `mcp/core` model dependency — handlers are string FQNs, resolved at consumer compile time.
-- The two generators share the same DSL but emit different targets; keep any new cross-cutting helpers next to the DSL,
-  not inside a single generator.
+- Generators share semantic contracts but resolve different authorities; do not recreate a combined surface object or
+  compatibility shim.
 - The standalone dispatcher intentionally emits one private registration helper per tool so each JSON schema stays below
   JVM method-size limits as the catalog grows.
 
@@ -98,18 +104,17 @@ Before sending a catalog change for review, run the generated-artifact drift che
 2. Mirror the output class shape with `class_(..., kotlinPackage = "...")` in the feature file that owns the tool, so
    the generators can emit MCP output schemas and structured-content encoding. Add cross-feature reusable input pieces
    to `CommonInputs.kt`.
-3. Set `inputPattern` beside `input`. If the input needs a new IDE method parameter pattern, add it to
-   `ToolInputPattern` and update the pattern handling in `IdeaToolsetMain.kt`. If the CLI needs path/stdin/base64/raw
-   source selection or ordinary/JSON parameter binding, model that through `ToolInputModel` instead of adding ad hoc
-   generated command code. The standalone dispatcher derives its input schema from `input`; update
+3. Add the tool's ordered IDEA binding in `SurfaceAuthorities.kt`. If it needs a new IDE method parameter pattern, add
+   it to `ToolInputPattern` and update `IdeaToolsetMain.kt`. If the CLI needs path/stdin/base64/raw source selection or
+   ordinary/JSON parameter binding, declare an explicit CLI `ToolInputModel`; never derive it from the IDEA binding.
+   The standalone dispatcher derives its input schema from the semantic `input`; update
    `StandaloneToolsetMain.kt` only when the DSL needs a new schema feature, field type, or generated CLI source behavior.
    The existing patterns cover path-only, offset/limit, indices, closed range, and half-open segment range with filters.
-4. Set `surfaces` beside the tool contract. Choose the explicit MCP audience/profile, public MCPB manifest exposure,
-   and CLI surface independently: public MCPB tools should use the public MCPB helper; visible CLI tools need a
-   kebab-case command name, group/domain, and output policy; advanced-only or otherwise hidden CLI tools should use the
-   hidden CLI helper.
-5. Run both generators and both sets of tests: `./gradlew :mcp:tools-generator:test :idea-plugin:test :mcp:server:test
-   :mcp:server:integrationTest`.
+4. Update each applicable independent authority in `SurfaceAuthorities.kt`: IDEA selection/binding, standalone
+   binding and effective profile lists, MCPB ordered IDs, and CLI binding/product selections. Do not infer one from
+   another.
+5. Run the affected generators and verification: `./gradlew :mcp:tools-generator:test :idea-plugin:test :mcp:server:test
+   :mcp:server:integrationTest`, plus the generated-artifact drift checks above.
 
 ## Testing
 

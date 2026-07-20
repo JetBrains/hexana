@@ -22,7 +22,8 @@ For CLI ownership and split-boundary decisions, read `CLI_OWNERSHIP.md`.
   `hexana-mcp` CLI entrypoint but delegates migrated neutral CLI behavior to `cli/core`.
 - `vscode-server/`: thin VS Code-facing MCP server distribution that runs as a separate stdio/http process for the
   VS Code extension while reusing `server/` runtime code.
-- `tools-generator/`: DSL declaring all Hexana MCP tools and KotlinPoet generators that emit the idea-plugin
+- `tools-generator/`: canonical semantic contracts plus independent IDEA, standalone, MCPB, and CLI authorities, with
+  KotlinPoet generators that emit the idea-plugin
   `HexanaToolset.kt`, standalone-server generated files such as `HexanaToolDispatcher.kt` and server CLI command
   construction, and neutral generated CLI metadata under `cli/metadata/src/main/gen`.
 - `packaging/`: thin Claude/Codex wrapper layouts around the standalone runtime in `server/`.

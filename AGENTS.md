@@ -40,7 +40,8 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - `mcp/scripting/`: JVM-only GraalJS scripting runtime for running Hexana scripts over loaded binary providers. It owns
   script source loading, script-output limits, sandboxed `binary`/`print` bindings, and structured script results.
 - `mcp/server/`: standalone Kotlin/JVM MCP runtime that exposes `mcp/core` over `stdio` and HTTP transports.
-- `mcp/tools-generator/`: single source of truth for Hexana MCP tool definitions (DSL + KotlinPoet generators for
+- `mcp/tools-generator/`: source of truth for Hexana semantic tool contracts and independent IDEA, standalone MCP,
+  MCPB, and CLI surface authorities (DSL + KotlinPoet generators for
   `idea-plugin`'s `HexanaToolset.kt` and `mcp/server`'s standalone generated files).
 - `mcp/vscode-server/`: thin VS Code-facing MCP server distribution that launches the standalone runtime as a separate
   process for the VS Code extension.
@@ -155,13 +156,20 @@ Existing IDE run configurations currently include:
 - `idea-plugin/src/main/gen/**` holds generated output that is checked in. Do not hand-edit it as the primary source of truth.
   - WIT PSI/parser: grammar source `idea-plugin/src/main/java/org/jetbrains/hexana/wit/psi/wit.bnf`; no checked-in regen task.
   - `HexanaToolset.kt`: DSL source `mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/`;
-    `HexanaTools.kt` only composes the catalog order, while feature files such as `FunctionTools.kt` and `DataTools.kt`
-    own their related inputs, result schema mirrors, and tool definitions.
+    `HexanaTools.kt` composes canonical semantic contract order, feature files such as `FunctionTools.kt` and
+    `DataTools.kt` own semantic inputs/results/descriptions, and `SurfaceAuthorities.kt` independently owns IDEA
+    invocation bindings, standalone handlers/profiles, MCPB membership, and CLI bindings/products.
     Regenerate with `./gradlew :idea-plugin:generateHexanaToolset`.
-- `mcp/server/src/main/gen/HexanaToolDispatcher.kt` is generated from the same DSL and contains standalone MCP tool
-  registration plus MCP profile/default metadata.
-- `cli/metadata/src/main/gen/HexanaCliToolset.kt` and `cli/metadata/src/main/gen/HexanaCliProducts.kt` are generated from the same DSL and contain CLI-visible tool metadata plus catalog-owned CLI release-product membership. Regenerate with `./gradlew :cli:metadata:generateHexanaCliMetadata`; verify with `./gradlew :cli:metadata:verifyHexanaCliMetadataUpToDate`.
-- `mcp/server/src/main/gen/HexanaCliToolset.kt` is generated from the same DSL and contains generated CLI tool command construction plus executable CLI adapter dispatch for the legacy server CLI. Regenerate it with `./gradlew :mcp:server:generateHexanaToolDispatcher`. If you change a tool's name, description, input shape, or output shape, edit the DSL and rerun affected generators in the same change.
+- `mcp/server/src/main/gen/HexanaToolDispatcher.kt` is generated from resolved semantic contracts plus the standalone
+  authority and contains standalone MCP tool registration plus MCP profile/default metadata.
+- `cli/metadata/src/main/gen/HexanaCliToolset.kt` and `cli/metadata/src/main/gen/HexanaCliProducts.kt` are generated from
+  resolved semantic contracts plus the independent CLI authority and contain CLI-visible metadata and release-product
+  membership. Regenerate with `./gradlew :cli:metadata:generateHexanaCliMetadata`; verify with
+  `./gradlew :cli:metadata:verifyHexanaCliMetadataUpToDate`.
+- `mcp/server/src/main/gen/HexanaCliToolset.kt` is generated from semantic contracts plus the CLI authority and contains
+  CLI command construction and executable adapter dispatch for the legacy server CLI. Regenerate it with
+  `./gradlew :mcp:server:generateHexanaToolDispatcher`. If you change a semantic contract or CLI binding, edit its
+  owning authority and rerun affected generators in the same change.
 - Embedded converter binaries live here:
   - `graalwasm/wasmprinter/src/main/resources/wasmprinter_wrapper.wasm`
   - `graalwasm/wat2wasm/src/main/resources/wat2wasm_full.wasm`

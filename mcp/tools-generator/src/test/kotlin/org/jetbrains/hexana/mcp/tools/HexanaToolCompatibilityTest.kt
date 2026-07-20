@@ -3,156 +3,173 @@ package org.jetbrains.hexana.mcp.tools
 import org.junit.Test
 import java.security.MessageDigest
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import kotlin.test.assertNotEquals
 
 class HexanaToolCompatibilityTest {
+    @Test
+    fun `semantic contract fingerprint is reviewed independently`() {
+        assertFingerprint("semantic", semanticSnapshot(), EXPECTED_SEMANTIC)
+    }
 
     @Test
-    fun `tool schema compatibility marker is explicit`() {
-        assertEquals(2, HexanaToolSchemaCompatibility.schemaVersion)
-        assertEquals(
-            "Tool schemas are append-compatible within a version; breaking changes to names, required inputs, defaults, bounds, output keys, or descriptions require a schema version bump.",
-            HexanaToolSchemaCompatibility.policy,
+    fun `IDEA authority fingerprint is reviewed independently`() {
+        assertFingerprint("IDEA", ideaSnapshot(), EXPECTED_IDEA)
+    }
+
+    @Test
+    fun `standalone authority fingerprint is reviewed independently`() {
+        assertFingerprint("standalone", standaloneSnapshot(), EXPECTED_STANDALONE)
+    }
+
+    @Test
+    fun `MCPB authority fingerprint is reviewed independently`() {
+        assertFingerprint("MCPB", mcpbSnapshot(), EXPECTED_MCPB)
+    }
+
+    @Test
+    fun `CLI registry fingerprint is reviewed independently`() {
+        assertFingerprint("CLI", cliSnapshot(HexanaCliTools), EXPECTED_CLI)
+    }
+
+    @Test
+    fun `per-product fingerprints are reviewed independently`() {
+        assertFingerprint("hexana-mcp", productSnapshot(CliReleaseProduct.HexanaMcp, HexanaCliTools), EXPECTED_HEXANA_MCP)
+        assertFingerprint("hexana-cli", productSnapshot(CliReleaseProduct.HexanaCli, HexanaCliTools), EXPECTED_HEXANA_CLI)
+        assertFingerprint(
+            "hexana-cli-script",
+            productSnapshot(CliReleaseProduct.HexanaCliScript, HexanaCliTools),
+            EXPECTED_HEXANA_CLI_SCRIPT,
         )
     }
 
     @Test
-    fun `tool schema compatibility fingerprint is reviewed intentionally`() {
-        val snapshot = compatibilitySnapshot()
-        val fingerprint = snapshot.sha256()
-
-        assertEquals(
-            EXPECTED_COMPATIBILITY_FINGERPRINT,
-            fingerprint,
-            "Hexana MCP tool schema contract changed. If this is intentional, review the snapshot below, " +
-                "bump HexanaToolSchemaCompatibility.schemaVersion for breaking changes, and update the expected " +
-                "fingerprint to $fingerprint.\n${snapshot.preview()}",
-        )
-    }
-
-    @Test
-    fun `compatibility snapshot includes CLI input model metadata`() {
-        val snapshot = compatibilitySnapshot(listOf(explicitCliInputModelTool()))
-
-        assertTrue(snapshot.contains("tool[0].cliInputModel.origin=explicit"))
-        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].name=current"))
-        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].kind=Wasm"))
-        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].target=field:current"))
-        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].required=true"))
-        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].cli.positionalPathName=current"))
-        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].cli.stdinOption=--stdin"))
-        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].cli.base64Option=--current-base64"))
-        assertTrue(snapshot.contains("tool[0].cliInputModel.source[0].cli.autoStdin=true"))
-        assertTrue(snapshot.contains("tool[0].cliInputModel.param[0].name=limit"))
-        assertTrue(snapshot.contains("tool[0].cliInputModel.param[0].kind=Value"))
-        assertTrue(snapshot.contains("tool[0].cliInputModel.param[0].targetField=limit"))
-        assertTrue(snapshot.contains("tool[0].cliInputModel.param[0].cliOption=--limit"))
-    }
-
-    @Test
-    fun `compatibility snapshot includes CLI product identity and closure metadata`() {
-        val snapshot = compatibilitySnapshot()
-
-        assertTrue(snapshot.contains("product[HexanaCli].productId=hexana-cli"))
-        assertTrue(snapshot.contains("product[HexanaCliScript].executableName=hexana-cli-script"))
-        assertTrue(snapshot.contains("tool[0].cli.releaseProducts=HexanaMcp,HexanaCli"))
-        assertTrue(snapshot.contains("tool[0].cli.outputPolicy=ToolDefined"))
-        assertTrue(snapshot.contains("tool[0].standaloneHandler=summarizeBinary"))
-        assertTrue(snapshot.contains("tool[0].cli.executableRenderer=renderSummarizeBinaryCliCommandOutput"))
-    }
-
-    private fun compatibilitySnapshot(tools: List<ToolSpec> = HexanaTools): String = buildString {
-        appendLine("compatibility.schemaVersion=${HexanaToolSchemaCompatibility.schemaVersion}")
-        appendLine("compatibility.policy=${HexanaToolSchemaCompatibility.policy.compatibilityText()}")
-        CliReleaseProduct.entries.forEach { product ->
-            appendLine("product[${product.name}].productId=${product.productId}")
-            appendLine("product[${product.name}].executableName=${product.executableName}")
+    fun `CLI membership-only mutation affects only CLI and product snapshots`() {
+        val mutated = HexanaCliTools.map { tool ->
+            if (tool.name == "summarize_binary") {
+                tool.copy(
+                    binding = tool.binding.copy(
+                        releaseProducts = tool.binding.releaseProducts + CliReleaseProduct.HexanaCliScript,
+                    )
+                )
+            } else {
+                tool
+            }
         }
-        tools.forEachIndexed { index, tool ->
-            val prefix = "tool[$index]"
-            appendLine("$prefix.name=${tool.name}")
-            appendLine("$prefix.description=${tool.mcpDescription.compatibilityText()}")
-            appendLine("$prefix.inputPattern=${tool.inputPattern.compatibilityText()}")
-            appendCliInputModel("$prefix.cliInputModel", tool)
-            appendLine("$prefix.mcpAudiences=${tool.surfaces.mcp.audiences.joinToString(",")}")
-            appendLine("$prefix.publicMcpb.included=${tool.surfaces.publicMcpb.included}")
-            appendLine("$prefix.cli.visible=${tool.surfaces.cli.visible}")
-            appendLine("$prefix.cli.commandName=${tool.surfaces.cli.commandName.orEmpty()}")
-            appendLine("$prefix.cli.groups=${tool.surfaces.cli.groups.joinToString(",")}")
-            appendLine("$prefix.cli.outputPolicy=${tool.surfaces.cli.outputPolicy?.name.orEmpty()}")
-            appendLine("$prefix.cli.executionStatus=${tool.surfaces.cli.executionStatus?.name.orEmpty()}")
-            appendLine("$prefix.cli.outputOverride=${tool.surfaces.cli.outputOverride?.name.orEmpty()}")
-            appendLine("$prefix.cli.defaultOutput=${tool.surfaces.cli.defaultOutput?.name.orEmpty()}")
-            appendLine("$prefix.cli.executableRenderer=${tool.surfaces.cli.executableRenderer?.methodName.orEmpty()}")
-            appendLine("$prefix.cli.releaseProducts=${tool.surfaces.cli.releaseProducts.joinToString(",")}")
-            appendLine("$prefix.handlerFqn=${tool.handlerFqn}")
-            appendLine("$prefix.standaloneHandler=${tool.standaloneHandler.methodName}")
+
+        assertEquals(semanticSnapshot().sha256(), semanticSnapshot().sha256())
+        assertEquals(ideaSnapshot().sha256(), ideaSnapshot().sha256())
+        assertEquals(standaloneSnapshot().sha256(), standaloneSnapshot().sha256())
+        assertEquals(mcpbSnapshot().sha256(), mcpbSnapshot().sha256())
+        assertNotEquals(cliSnapshot(HexanaCliTools).sha256(), cliSnapshot(mutated).sha256())
+        assertNotEquals(
+            productSnapshot(CliReleaseProduct.HexanaCliScript, HexanaCliTools).sha256(),
+            productSnapshot(CliReleaseProduct.HexanaCliScript, mutated).sha256(),
+        )
+        assertEquals(
+            productSnapshot(CliReleaseProduct.HexanaCli, HexanaCliTools).sha256(),
+            productSnapshot(CliReleaseProduct.HexanaCli, mutated).sha256(),
+        )
+    }
+
+    private fun semanticSnapshot(): String = buildString {
+        appendLine("schemaVersion=${HexanaToolSchemaCompatibility.schemaVersion}")
+        appendLine("policy=${HexanaToolSchemaCompatibility.policy.compatibilityText()}")
+        HexanaTools.forEachIndexed { index, tool ->
+            val prefix = "contract[$index]"
+            appendLine("$prefix.id=${tool.id.value}")
+            appendLine("$prefix.summary=${tool.summary.compatibilityText()}")
+            appendLine("$prefix.guidance=${tool.guidance.orEmpty().compatibilityText()}")
             appendClass("$prefix.input", tool.input)
             appendClass("$prefix.output", tool.output)
         }
     }
 
-    private fun StringBuilder.appendCliInputModel(prefix: String, tool: ToolSpec) {
-        val explicitModel = tool.inputModel
-        val model = when {
-            explicitModel != null -> explicitModel.also {
-                appendLine("$prefix.origin=explicit")
-            }
-            tool.surfaces.cli.executionStatus == CliExecutionStatus.Executable -> {
-                val derivedModel = runCatching { tool.inputModelForCli() }.getOrElse { error ->
-                    appendLine("$prefix.origin=unsupported")
-                    appendLine("$prefix.unsupportedReason=${error.message.orEmpty().compatibilityText()}")
-                    return
-                }
-                appendLine("$prefix.origin=derived")
-                derivedModel
-            }
-            else -> {
-                appendLine("$prefix.origin=not-applicable")
-                return
-            }
+    private fun ideaSnapshot(): String = buildString {
+        HexanaIdeaTools.forEachIndexed { index, tool ->
+            appendLine("idea[$index].id=${tool.id.value}")
+            appendLine("idea[$index].pattern=${tool.inputPattern.compatibilityText()}")
+            appendLine("idea[$index].handler=${tool.handlerFqn}")
         }
+    }
 
-        appendLine("$prefix.sources=${model.sources.size}")
+    private fun standaloneSnapshot(): String = buildString {
+        appendLine("production=${HexanaStandaloneProductionToolIds.joinToString { it.value }}")
+        appendLine("advanced=${HexanaStandaloneAdvancedToolIds.joinToString { it.value }}")
+        appendLine("scripting=${HexanaStandaloneScriptingToolIds.joinToString { it.value }}")
+        HexanaStandaloneTools.forEachIndexed { index, tool ->
+            appendLine("standalone[$index].id=${tool.id.value}")
+            appendLine("standalone[$index].handler=${tool.standaloneHandler.methodName}")
+        }
+    }
+
+    private fun mcpbSnapshot(): String = buildString {
+        HexanaMcpbTools.forEachIndexed { index, tool ->
+            appendLine("mcpb[$index].id=${tool.id.value}")
+            appendLine("mcpb[$index].summary=${tool.summary.compatibilityText()}")
+        }
+    }
+
+    private fun cliSnapshot(tools: List<CliTool>): String = buildString {
+        tools.forEachIndexed { index, tool ->
+            val prefix = "cli[$index]"
+            val binding = tool.binding
+            appendLine("$prefix.id=${tool.id.value}")
+            appendLine("$prefix.command=${binding.commandName}")
+            appendLine("$prefix.groups=${binding.groups.joinToString { it.name }}")
+            appendLine("$prefix.outputPolicy=${binding.outputPolicy.name}")
+            appendLine("$prefix.execution=${binding.executionStatus.name}")
+            appendLine("$prefix.outputOverride=${binding.outputOverride?.name.orEmpty()}")
+            appendLine("$prefix.defaultOutput=${binding.defaultOutput.name}")
+            appendLine("$prefix.renderer=${binding.executableRenderer?.methodName.orEmpty()}")
+            appendLine("$prefix.products=${binding.releaseProducts.joinToString { it.name }}")
+            appendInputModel("$prefix.input", binding.inputModel)
+        }
+    }
+
+    private fun productSnapshot(product: CliReleaseProduct, tools: List<CliTool>): String = buildString {
+        appendLine("product=${product.name}")
+        appendLine("productId=${product.productId}")
+        appendLine("executableName=${product.executableName}")
+        tools.filter { product in it.binding.releaseProducts }.forEachIndexed { index, tool ->
+            appendLine("selection[$index].id=${tool.id.value}")
+            appendLine("selection[$index].command=${tool.binding.commandName}")
+            appendLine("selection[$index].output=${tool.binding.outputPolicy.name}")
+            appendLine("selection[$index].default=${tool.binding.defaultOutput.name}")
+        }
+    }
+
+    private fun StringBuilder.appendInputModel(prefix: String, model: ToolInputModel?) {
+        if (model == null) {
+            appendLine("$prefix=none")
+            return
+        }
         model.sources.forEachIndexed { index, source ->
-            appendSourceSlot("$prefix.source[$index]", source)
+            appendLine("$prefix.source[$index].name=${source.name}")
+            appendLine("$prefix.source[$index].kind=${source.kind.name}")
+            appendLine("$prefix.source[$index].target=${source.target.compatibilityText()}")
+            appendLine("$prefix.source[$index].required=${source.required}")
+            appendLine("$prefix.source[$index].positional=${source.cli.positionalPathName.orEmpty()}")
+            appendLine("$prefix.source[$index].path=${source.cli.pathOption.orEmpty()}")
+            appendLine("$prefix.source[$index].stdin=${source.cli.stdinOption.orEmpty()}")
+            appendLine("$prefix.source[$index].base64=${source.cli.base64Option.orEmpty()}")
+            appendLine("$prefix.source[$index].bytes=${source.cli.bytesOption.orEmpty()}")
+            appendLine("$prefix.source[$index].autoStdin=${source.cli.autoStdin}")
         }
-        appendLine("$prefix.params=${model.params.size}")
         model.params.forEachIndexed { index, param ->
-            appendParamBinding("$prefix.param[$index]", param)
+            appendLine("$prefix.param[$index].name=${param.name}")
+            appendLine("$prefix.param[$index].kind=${param.kind.name}")
+            appendLine("$prefix.param[$index].target=${param.targetField}")
+            appendLine("$prefix.param[$index].option=${param.cliOption.orEmpty()}")
         }
-    }
-
-    private fun StringBuilder.appendSourceSlot(prefix: String, source: SourceSlotSpec) {
-        appendLine("$prefix.name=${source.name}")
-        appendLine("$prefix.kind=${source.kind.name}")
-        appendLine("$prefix.target=${source.target.compatibilityText()}")
-        appendLine("$prefix.required=${source.required}")
-        appendLine("$prefix.cli.positionalPathName=${source.cli.positionalPathName.orEmpty()}")
-        appendLine("$prefix.cli.pathOption=${source.cli.pathOption.orEmpty()}")
-        appendLine("$prefix.cli.stdinOption=${source.cli.stdinOption.orEmpty()}")
-        appendLine("$prefix.cli.base64Option=${source.cli.base64Option.orEmpty()}")
-        appendLine("$prefix.cli.bytesOption=${source.cli.bytesOption.orEmpty()}")
-        appendLine("$prefix.cli.autoStdin=${source.cli.autoStdin}")
-    }
-
-    private fun StringBuilder.appendParamBinding(prefix: String, param: ParamBindingSpec) {
-        appendLine("$prefix.name=${param.name}")
-        appendLine("$prefix.kind=${param.kind.name}")
-        appendLine("$prefix.targetField=${param.targetField}")
-        appendLine("$prefix.cliOption=${param.cliOption.orEmpty()}")
     }
 
     private fun StringBuilder.appendClass(prefix: String, spec: ClassSpec) {
         appendLine("$prefix.name=${spec.name}")
         appendLine("$prefix.kotlinFqn=${spec.kotlinFqn.orEmpty()}")
-        appendLine("$prefix.oneOf=${spec.oneOf.orEmpty().joinToString(",")}")
-        appendLine("$prefix.inputCapabilities=${spec.inputCapabilities.joinToString(",") { it.name }}")
-        appendLine("$prefix.outputCapabilities=${spec.outputCapabilities.joinToString(",") { it.name }}")
-        appendLine("$prefix.required=${spec.requiredSchemaKeys().joinToString(",")}")
-        spec.fields.forEachIndexed { index, field ->
-            appendField("$prefix.field[$index]", field)
-        }
+        appendLine("$prefix.oneOf=${spec.oneOf.orEmpty().joinToString()}")
+        appendLine("$prefix.inputCapabilities=${spec.inputCapabilities.joinToString { it.name }}")
+        appendLine("$prefix.outputCapabilities=${spec.outputCapabilities.joinToString { it.name }}")
+        spec.fields.forEachIndexed { index, field -> appendField("$prefix.field[$index]", field) }
     }
 
     private fun StringBuilder.appendField(prefix: String, field: FieldSpec) {
@@ -162,139 +179,83 @@ class HexanaToolCompatibilityTest {
         appendLine("$prefix.nullable=${field.nullable}")
         appendLine("$prefix.default=${field.default.compatibilityValueText()}")
         appendLine("$prefix.description=${field.describe.orEmpty().compatibilityText()}")
-        appendLine("$prefix.serializerFqn=${field.serializerFqn.orEmpty()}")
+        appendLine("$prefix.serializer=${field.serializerFqn.orEmpty()}")
         appendLine("$prefix.minimum=${field.minimum.compatibilityValueText()}")
         appendLine("$prefix.maximum=${field.maximum.compatibilityValueText()}")
-        appendLine("$prefix.maxItems=${field.maxItems.compatibilityText()}")
-        appendLine("$prefix.maxLength=${field.maxLength.compatibilityText()}")
+        appendLine("$prefix.maxItems=${field.maxItems.compatibilityValueText()}")
+        appendLine("$prefix.maxLength=${field.maxLength.compatibilityValueText()}")
         appendLine("$prefix.itemMinimum=${field.itemMinimum.compatibilityValueText()}")
         appendLine("$prefix.itemMaximum=${field.itemMaximum.compatibilityValueText()}")
-        appendNestedClasses(prefix, field.type)
+        when (val type = field.type) {
+            is FieldType.ClassRef -> appendClass("$prefix.class", type.clazz)
+            is FieldType.ListOf -> appendNestedType("$prefix.items", type.element)
+            is FieldType.MapOf -> appendNestedType("$prefix.values", type.value)
+            else -> Unit
+        }
     }
 
-    private fun StringBuilder.appendNestedClasses(prefix: String, type: FieldType) {
+    private fun StringBuilder.appendNestedType(prefix: String, type: FieldType) {
         when (type) {
             is FieldType.ClassRef -> appendClass("$prefix.class", type.clazz)
-            is FieldType.ListOf -> appendNestedClasses("$prefix.items", type.element)
-            is FieldType.MapOf -> appendNestedClasses("$prefix.values", type.value)
-            FieldType.BooleanT,
-            FieldType.ByteArrayT,
-            FieldType.ByteT,
-            FieldType.Float64,
-            FieldType.Int32,
-            FieldType.Int64,
-            FieldType.JsonObjectT,
-            FieldType.StringT,
-            FieldType.UInt32 -> Unit
+            is FieldType.ListOf -> appendNestedType("$prefix.items", type.element)
+            is FieldType.MapOf -> appendNestedType("$prefix.values", type.value)
+            else -> Unit
         }
     }
 
-    private fun ClassSpec.requiredSchemaKeys(): List<String> =
-        fields.filter { !it.nullable && it.default == null }.map { it.schemaKey }
+    private fun ToolInputPattern.compatibilityText(): String =
+        if (this is ToolInputPattern.ClosedRange) "ClosedRange($parameterName)" else requireNotNull(this::class.simpleName)
 
-    private fun ToolInputPattern.compatibilityText(): String {
-        return when (this) {
-            is ToolInputPattern.ClosedRange -> "ClosedRange($parameterName)"
-            else -> requireNotNull(this::class.simpleName)
-        }
+    private fun SourceTargetSpec.compatibilityText(): String = when (this) {
+        SourceTargetSpec.RootInput -> "root"
+        is SourceTargetSpec.Field -> "field:$name"
     }
 
-    private fun SourceTargetSpec.compatibilityText(): String {
-        return when (this) {
-            SourceTargetSpec.RootInput -> "root"
-            is SourceTargetSpec.Field -> "field:$name"
-        }
+    private fun FieldType.compatibilityText(): String = when (this) {
+        FieldType.Int32 -> "Int32"
+        FieldType.Int64 -> "Int64"
+        FieldType.Float64 -> "Float64"
+        FieldType.UInt32 -> "UInt32"
+        FieldType.ByteT -> "Byte"
+        FieldType.BooleanT -> "Boolean"
+        FieldType.StringT -> "String"
+        FieldType.ByteArrayT -> "ByteArray"
+        FieldType.JsonObjectT -> "JsonObject"
+        is FieldType.ListOf -> "List<${element.compatibilityText()}>"
+        is FieldType.MapOf -> "Map<${value.compatibilityText()}>"
+        is FieldType.ClassRef -> "Class<${clazz.name}>"
     }
 
-    private fun FieldType.compatibilityText(): String {
-        return when (this) {
-            FieldType.Int32 -> "Int32"
-            FieldType.Int64 -> "Int64"
-            FieldType.Float64 -> "Float64"
-            FieldType.UInt32 -> "UInt32"
-            FieldType.ByteT -> "Byte"
-            FieldType.BooleanT -> "Boolean"
-            FieldType.StringT -> "String"
-            FieldType.ByteArrayT -> "ByteArray"
-            FieldType.JsonObjectT -> "JsonObject"
-            is FieldType.ListOf -> "List<${element.compatibilityText()}>"
-            is FieldType.MapOf -> "Map<${value.compatibilityText()}>"
-            is FieldType.ClassRef -> "Class<${clazz.name}>"
-        }
+    private fun Any?.compatibilityValueText(): String = when (this) {
+        null -> ""
+        is ByteArray -> contentToString()
+        is SchemaIntValue.Literal -> "Literal($value)"
+        SchemaIntValue.MaxInlineBinaryBase64Length -> "MaxInlineBinaryBase64Length"
+        SchemaIntValue.MaxInlineBinaryBytes -> "MaxInlineBinaryBytes"
+        SchemaIntValue.MaxInlineWasmBase64Length -> "MaxInlineWasmBase64Length"
+        SchemaIntValue.MaxInlineWasmBytes -> "MaxInlineWasmBytes"
+        else -> toString().compatibilityText()
     }
 
-    private fun explicitCliInputModelTool(): ToolSpec =
-        tools {
-            tool("snapshot_input_model") {
-                summary = "Snapshot CLI input model."
-                input = WasmInputClass.with("SnapshotInputModelInput") {
-                    embed("current", WasmInputClass).describe("Current WebAssembly module source.")
-                    int("limit", default = 25).describe("Maximum result count.")
-                }
-                inputPattern = ToolInputPattern.WasmOnly
-                inputModel = toolInputModel {
-                    wasmSource("current") {
-                        cli {
-                            positional("current")
-                            stdin("--stdin")
-                            base64("--current-base64")
-                            autoStdin()
-                        }
-                    }
-                    param(name = "limit", cliOption = "--limit")
-                }
-                output = class_("SnapshotInputModelResult") {
-                    string("status").describe("Snapshot status.")
-                }
-                surfaces = productionCliSurface("snapshot-input-model", ToolGroup.Module, ToolOutputPolicy.ToolDefined)
-                handlerFqn = "org.jetbrains.hexana.mcp.query.snapshotInputModel"
-            }
-        }.single()
+    private fun String.compatibilityText(): String = replace("\r\n", "\n").replace("\\", "\\\\").replace("\n", "\\n")
 
-    private fun SchemaIntValue?.compatibilityText(): String {
-        return when (this) {
-            null -> ""
-            is SchemaIntValue.Literal -> "Literal($value)"
-            SchemaIntValue.MaxInlineBinaryBase64Length -> "MaxInlineBinaryBase64Length"
-            SchemaIntValue.MaxInlineBinaryBytes -> "MaxInlineBinaryBytes"
-            SchemaIntValue.MaxInlineWasmBase64Length -> "MaxInlineWasmBase64Length"
-            SchemaIntValue.MaxInlineWasmBytes -> "MaxInlineWasmBytes"
-        }
+    private fun assertFingerprint(name: String, snapshot: String, expected: String) {
+        val actual = snapshot.sha256()
+        assertEquals(expected, actual, "$name compatibility changed; reviewed fingerprint: $actual\n${snapshot.take(12_000)}")
     }
 
-    private fun Any?.compatibilityValueText(): String {
-        return when (this) {
-            null -> ""
-            is ByteArray -> contentToString()
-            is String -> compatibilityText()
-            else -> toString()
-        }
-    }
-
-    private fun String.compatibilityText(): String {
-        return replace("\r\n", "\n")
-            .replace("\\", "\\\\")
-            .replace("\n", "\\n")
-    }
-
-    private fun String.sha256(): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(toByteArray(Charsets.UTF_8))
-        assertTrue(digest.isNotEmpty())
-        return digest.joinToString("") { "%02x".format(it) }
-    }
-
-    private fun String.preview(): String {
-        val lines = lineSequence().toList()
-        val previewLineCount = 240
-        val preview = lines.take(previewLineCount).joinToString("\n")
-        return if (lines.size <= previewLineCount) {
-            preview
-        } else {
-            "$preview\n... truncated ${lines.size - previewLineCount} compatibility lines ..."
-        }
-    }
+    private fun String.sha256(): String = MessageDigest.getInstance("SHA-256")
+        .digest(toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
 
     private companion object {
-        const val EXPECTED_COMPATIBILITY_FINGERPRINT = "ced4777bf63e25e91b142f466227384f7c4449683b6d6b9d62297b1342c835e5"
+        const val EXPECTED_SEMANTIC = "ebf885f898d01b05b137c8c0a4a3d1116229cba5d19f60fc39a0383d794839ab"
+        const val EXPECTED_IDEA = "c561c5ea33362212bd107bfc5382b04b906ae32eaabdd1bfb7f31545ba528533"
+        const val EXPECTED_STANDALONE = "6dfcfb04941f56fb08312687532dac8aca8c428c1cb265ff65b18ef60a4797c5"
+        const val EXPECTED_MCPB = "7d14692682ac3cc1f05a54faf93c7ec096a24755603cc92b3581714f2ce01e06"
+        const val EXPECTED_CLI = "4df9852934148e1ff5ef3ad0d5c7c61a499403b0bc44a28eafcc0d6facbdfbd9"
+        const val EXPECTED_HEXANA_MCP = "2b657021868d2be51d8ba9d0ca6e678f74638a7eb90fc1d66a131d2c7879e796"
+        const val EXPECTED_HEXANA_CLI = "35ec773de2d485a7b285a37240d517bbc9c789a37be2725f66d355c7bb9bc6b7"
+        const val EXPECTED_HEXANA_CLI_SCRIPT = "3b97abef096e419f500f3113464664719f08b9554efe50685f7605f785cdb7f1"
     }
 }

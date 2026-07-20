@@ -563,7 +563,6 @@ val AuditLocalStackBudgetResultClass = class_("AuditLocalStackBudgetResult", kot
 internal val FunctionTools: List<ToolSpec> = tools {
     tool("list_functions") {
         summary = "List imported and defined functions with offset/limit pagination."
-        surfaces = publicMcpbProductionCliSurface("list-functions", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             List imported and defined functions from a WebAssembly (.wasm) module using offset/limit pagination.
             The offset is in the unified function index space, so imports appear before defined bodies.
@@ -572,68 +571,53 @@ internal val FunctionTools: List<ToolSpec> = tools {
             Use this to map or inspect `funcidx` ranges before targeted body lookup with `get_instructions_for_functions`.
         """
         input = ListFunctionsInput
-        inputPattern = ToolInputPattern.FunctionPage
         output = FunctionsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctions"
     }
 
     tool("list_code_section_offsets") {
         summary = "List byte offsets and sizes for defined function bodies."
-        surfaces = advancedHiddenCliSurface()
         guidance = """
             List code-section byte ranges for all defined WebAssembly function bodies.
             The returned `funcidx` values are in the unified function index space, so imported functions are skipped and defined functions keep their import-offset-adjusted indices.
             Use this to connect disassembly, binary offsets, source locations, and body-level triage.
         """
         input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmOnly
         output = ListCodeSectionOffsetsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readCodeSectionOffsets"
     }
 
     tool("functions_for_indices") {
         summary = "Resolve function entries for the given unified function indices."
-        surfaces = advancedHiddenCliSurface()
         guidance = """
             Resolve imported and defined function entries for the requested unified function indices.
             Use this as a targeted follow-up when you already know the exact `funcidx` values you need.
         """
         input = FunctionsForIndicesInput
-        inputPattern = ToolInputPattern.Indices
         output = FunctionsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionsByIndices"
     }
 
     tool("resolve_function_signature") {
         summary = "Resolve the type index and signature for one function index."
-        surfaces = publicMcpbProductionCliSurface("resolve-function-signature", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Resolve the type index and signature for one unified WebAssembly function index.
             Use this as a targeted lookup when logs, stack traces, exports, or other tools already identify the `funcidx`.
         """
         input = ResolveFunctionSignatureInput
-        inputPattern = ToolInputPattern.Funcidx
         output = ResolveFunctionSignatureResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionSignature"
     }
 
     tool("disassemble_function") {
         summary = "Disassemble one function by unified function index."
-        surfaces = publicMcpbProductionCliSurface("disassemble-function", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Disassemble one WebAssembly function by `funcidx`, returning signature, import/export metadata, locals, decoded instruction records, WAT-style text, and raw code bytes when the function has a body.
             Imported functions return metadata with empty body fields because imports have no code entry.
             Use this when the request has narrowed the search to one function and needs a compact, production-oriented body snapshot.
         """
         input = DisassembleFunctionInput
-        inputPattern = ToolInputPattern.Funcidx
         output = DisassembleFunctionResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionDisassembly"
     }
 
     tool("get_function_call_graph") {
         summary = "Return resolved direct calls and memory write sites for function indices."
-        surfaces = publicMcpbProductionCliSurface("get-function-call-graph", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Return a compact per-function call graph for requested unified WebAssembly `funcidx` values.
             The result resolves direct `call` and `return_call` targets to import/export/signature metadata, separates imported callees, reports `call_indirect` sites, preserves grouped local counts, and lists direct memory-writing instructions.
@@ -641,55 +625,43 @@ internal val FunctionTools: List<ToolSpec> = tools {
             For entrypoint host-call policy repair or audit JSON across all exported local functions, use `get_entrypoint_policy` instead of manually combining export, import, and call-graph results.
         """
         input = GetFunctionCallGraphInput
-        inputPattern = ToolInputPattern.Indices
         output = GetFunctionCallGraphResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionCallGraph"
     }
 
     tool("audit_local_stack_budget") {
         summary = "Audit exported function local counts against a local stack budget policy."
-        surfaces = publicMcpbProductionCliSurface("audit-local-stack-budget", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this as the shortest path for local-variable or stack-budget audits that have a Wasm module and optional `policyPath`.
             It maps exported functions to funcidx values, reads grouped declared locals without full disassembly, applies `max_locals` and `count_params`, and returns violations, clean exports, log evidence, and `recommendedReport`.
             Prefer this production tool over `list_exported_functions`, `get_locals_for_functions`, `disassemble_function`, or per-function traces when the goal is exported-function local budget analysis.
         """
         input = AuditLocalStackBudgetInput
-        inputPattern = ToolInputPattern.LocalStackBudgetAudit
         output = AuditLocalStackBudgetResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.auditLocalStackBudget"
     }
 
     tool("search_functions_by_name") {
         summary = "Search function names across imports, exports, and debug names."
-        surfaces = publicMcpbProductionCliSurface("search-functions-by-name", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Search import names, export names, and WebAssembly name-section function names with a case-insensitive substring query.
             Use this before targeted lookups when you know a symbolic name from logs, host bindings, exports, or source-level debugging.
         """
         input = SearchFunctionsByNameInput
-        inputPattern = ToolInputPattern.FunctionNameSearch
         output = SearchFunctionsByNameResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readFunctionsByName"
     }
 
     tool("resolve_wasm_frames") {
         summary = "Aggregate WebAssembly crash-report and stack-frame triage from function indices, labels, and offsets."
-        surfaces = publicMcpbProductionCliSurface("resolve-wasm-frames", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Resolve crash-report or stack-frame `funcidx` values, raw labels, and optional code offsets into symbols, signatures, exported names, code ranges, source locations, top application frame, skipped-frame reasons, and report-ready summaries.
             Prefer `crashReportPath` with a matching `sourceMapPath` when a crash report JSON is available; for previous/current build regression triage, call this once for each build's module, crash report, and source map, then compare the returned `topApplicationFrame` symbols and exports.
             Use this aggregate workflow for crash triage, frame regression analysis, and source-map-backed incident reports before lower-level symbol/source lookups or full disassembly.
         """
         input = ResolveWasmFramesInput
-        inputPattern = ToolInputPattern.WasmFrames
         output = ResolveWasmFramesResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.resolveWasmFrames"
     }
 
     tool("resolve_function_symbols") {
         summary = "Focused lookup for function indices, symbols, signatures, and metadata."
-        surfaces = publicMcpbProductionCliSurface("resolve-function-symbols", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Batch-resolve unified WebAssembly function indices to compact symbol records.
             Symbol resolution prefers name-section entries, then DWARF names, DWARF linkage names, export names, and finally an explicit `funcidx_fallback`.
@@ -697,14 +669,11 @@ internal val FunctionTools: List<ToolSpec> = tools {
             For crash reports, stack traces, top application frame selection, or previous/current frame regression analysis, call `resolve_wasm_frames` instead.
         """
         input = ResolveFunctionSymbolsInput
-        inputPattern = ToolInputPattern.SourceMappedIndices
         output = ResolveFunctionSymbolsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.resolveFunctionSymbols"
     }
 
     tool("resolve_source_locations") {
         summary = "Focused source lookup for WebAssembly code offsets or function indices."
-        surfaces = publicMcpbProductionCliSurface("resolve-source-locations", ToolGroup.Function, ToolOutputPolicy.ToolDefined)
         guidance = """
             Map absolute WebAssembly code offsets or unified `funcidx` values to source-map or DWARF source locations.
             When only `funcidx` is supplied, the function body start offset is used; when only `codeOffset` is supplied, the containing local function is inferred when possible.
@@ -712,27 +681,21 @@ internal val FunctionTools: List<ToolSpec> = tools {
             For crash reports, stack traces, top application frame selection, or previous/current frame regression analysis, call `resolve_wasm_frames` instead.
         """
         input = ResolveSourceLocationsInput
-        inputPattern = ToolInputPattern.SourceLocations
         output = ResolveSourceLocationsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.resolveSourceLocations"
     }
 
     tool("get_locals_for_functions") {
         summary = "Return grouped local declarations for the requested function indices."
-        surfaces = advancedHiddenCliSurface()
         guidance = """
             Return grouped local declarations for the requested unified function indices.
             Imported functions return empty local lists because they have no body.
         """
         input = GetLocalsForFunctionsInput
-        inputPattern = ToolInputPattern.Indices
         output = GetLocalsForFunctionsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readLocalsForFunctions"
     }
 
     tool("get_instructions_for_functions") {
         summary = "Return decoded instruction text for the requested function indices."
-        surfaces = advancedHiddenCliSurface()
         guidance = """
             Return decoded instruction text for the requested unified function indices.
             Imported functions return empty instruction lists because they have no body.
@@ -741,8 +704,6 @@ internal val FunctionTools: List<ToolSpec> = tools {
             For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy`; it performs that mapping for every exported local function and returns the copy-ready policy/report payload.
         """
         input = GetInstructionsForFunctionsInput
-        inputPattern = ToolInputPattern.Indices
         output = GetInstructionsForFunctionsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readInstructionsForFunctions"
     }
 }

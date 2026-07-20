@@ -95,7 +95,7 @@ class ToolInputModelTest {
     @Test
     fun `explicit CLI input model can describe future two Wasm source tool ergonomically`() {
         val spec = futureCompareModulesSpec(twoWasmSourcesWithParamsModel())
-        val model = spec.inputModelForCli()
+        val model = requireNotNull(spec.inputModel)
 
         assertEquals(spec.inputModel, model)
         assertEquals(listOf("current", "baseline"), model.sources.map { it.name })
@@ -305,7 +305,7 @@ class ToolInputModelTest {
             }
         )
 
-        assertEquals(SourceTargetSpec.Field("binary"), spec.inputModelForCli().sources.single().target)
+        assertEquals(SourceTargetSpec.Field("binary"), requireNotNull(spec.inputModel).sources.single().target)
     }
 
     @Test
@@ -325,7 +325,7 @@ class ToolInputModelTest {
                 param(name = "dryRun", cliOption = "--dry-run")
             }
         )
-        val model = spec.inputModelForCli()
+        val model = requireNotNull(spec.inputModel)
 
         assertEquals(listOf("binary"), model.sources.map { it.name })
         assertEquals(SourceTargetSpec.Field("binary"), model.sources.single().target)
@@ -367,7 +367,7 @@ class ToolInputModelTest {
     }
 
     @Test
-    fun `legacy WasmOnly converts to an equivalent root source model`() {
+    fun `Wasm executable CLI binding declares the root source model explicitly`() {
         val expected = ToolInputModel(
             sources = listOf(
                 SourceSlotSpec(
@@ -380,12 +380,11 @@ class ToolInputModelTest {
             ),
         )
 
-        assertEquals(expected, ToolInputPattern.WasmOnly.inputModelForCli())
-        assertEquals(expected, HexanaTools.single { it.name == "summarize_module" }.inputModelForCli())
+        assertEquals(expected, HexanaCliTools.single { it.name == "summarize_module" }.inputModel)
     }
 
     @Test
-    fun `legacy BinaryOnly converts to an equivalent root source model`() {
+    fun `Binary executable CLI binding declares the root source model explicitly`() {
         val expected = ToolInputModel(
             sources = listOf(
                 SourceSlotSpec(
@@ -398,8 +397,7 @@ class ToolInputModelTest {
             ),
         )
 
-        assertEquals(expected, ToolInputPattern.BinaryOnly.inputModelForCli())
-        assertEquals(expected, HexanaTools.single { it.name == "summarize_binary" }.inputModelForCli())
+        assertEquals(expected, HexanaCliTools.single { it.name == "summarize_binary" }.inputModel)
     }
 
     @Test
@@ -451,35 +449,53 @@ class ToolInputModelTest {
             jsonParam(name = "policy", targetField = "policyJson", cliOption = "--policy-json")
         }
 
-    private fun futureCompareModulesSpec(inputModel: ToolInputModel): ToolSpec =
-        tools {
+    private fun futureCompareModulesSpec(inputModel: ToolInputModel): CliTool {
+        val contract = tools {
             tool("compare_modules") {
                 summary = "Compare two WebAssembly modules."
                 input = futureCompareModulesInput()
-                inputPattern = ToolInputPattern.WasmOnly
-                this.inputModel = inputModel
                 output = class_("CompareModulesResult") {
                     string("status").describe("Comparison status.")
                 }
-                surfaces = productionCliSurface("compare-modules", ToolGroup.Module, ToolOutputPolicy.ToolDefined)
-                handlerFqn = "org.jetbrains.hexana.mcp.query.compareModules"
             }
         }.single()
+        val binding = cliToolBinding(
+            "compare_modules",
+            "compare-modules",
+            ToolGroup.Module,
+            ToolOutputPolicy.ToolDefined,
+            executionStatus = CliExecutionStatus.Executable,
+            executableRenderer = executableCliRenderer("renderCompareModules"),
+            releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCli),
+            inputModel = inputModel,
+        )
+        validateCliBinding(contract, binding)
+        return CliTool(contract, binding)
+    }
 
-    private fun futureCompareBinariesSpec(inputModel: ToolInputModel): ToolSpec =
-        tools {
+    private fun futureCompareBinariesSpec(inputModel: ToolInputModel): CliTool {
+        val contract = tools {
             tool("compare_binaries") {
                 summary = "Compare two binaries."
                 input = futureCompareBinariesInput()
-                inputPattern = ToolInputPattern.BinaryOnly
-                this.inputModel = inputModel
                 output = class_("CompareBinariesResult") {
                     string("status").describe("Comparison status.")
                 }
-                surfaces = productionCliSurface("compare-binaries", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
-                handlerFqn = "org.jetbrains.hexana.mcp.query.compareBinaries"
             }
         }.single()
+        val binding = cliToolBinding(
+            "compare_binaries",
+            "compare-binaries",
+            ToolGroup.Binary,
+            ToolOutputPolicy.ToolDefined,
+            executionStatus = CliExecutionStatus.Executable,
+            executableRenderer = executableCliRenderer("renderCompareBinaries"),
+            releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCli),
+            inputModel = inputModel,
+        )
+        validateCliBinding(contract, binding)
+        return CliTool(contract, binding)
+    }
 
     private fun futureCompareModulesInput(): ClassSpec =
         WasmInputClass.with("CompareModulesInput") {
@@ -497,8 +513,8 @@ class ToolInputModelTest {
             string("query", default = "").describe("Optional query filter.")
         }
 
-    private fun futureRunBinaryScriptSpec(inputModel: ToolInputModel): ToolSpec =
-        tools {
+    private fun futureRunBinaryScriptSpec(inputModel: ToolInputModel): CliTool {
+        val contract = tools {
             tool("run_binary_script") {
                 summary = "Run a script over a binary."
                 input = BinaryInputClass.with("RunBinaryScriptInput") {
@@ -507,15 +523,24 @@ class ToolInputModelTest {
                     int("maxFindings", default = 25).describe("Maximum finding count.")
                     boolean("dryRun", default = false).describe("Validate without running mutations.")
                 }
-                inputPattern = ToolInputPattern.BinaryOnly
-                this.inputModel = inputModel
                 output = class_("RunBinaryScriptResult") {
                     string("status").describe("Script run status.")
                 }
-                surfaces = productionCliSurface("run-script", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
-                handlerFqn = "org.jetbrains.hexana.mcp.query.runBinaryScript"
             }
         }.single()
+        val binding = cliToolBinding(
+            "run_binary_script",
+            "run-script",
+            ToolGroup.Binary,
+            ToolOutputPolicy.ToolDefined,
+            executionStatus = CliExecutionStatus.Executable,
+            executableRenderer = executableCliRenderer("renderRunBinaryScript"),
+            releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCliScript),
+            inputModel = inputModel,
+        )
+        validateCliBinding(contract, binding)
+        return CliTool(contract, binding)
+    }
 
     private fun rootWasmCli(): CliSourceSpec =
         CliSourceSpec(

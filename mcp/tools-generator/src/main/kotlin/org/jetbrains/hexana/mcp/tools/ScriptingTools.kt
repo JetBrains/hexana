@@ -50,35 +50,12 @@ private val RunBinaryScriptResultClass = class_("RunBinaryScriptResult", kotlinP
 internal val ScriptingTools: List<ToolSpec> = tools {
     tool("run_binary_script") {
         summary = "Run a Hexana JavaScript script over a Wasm or native binary."
-        surfaces = scriptingCliSurface(
-            "run-script",
-            ToolGroup.Scripting,
-            ToolOutputPolicy.ToolDefined,
-            executionStatus = CliExecutionStatus.Executable,
-            defaultOutput = OutputConversionCapability.RawText,
-            executableRenderer = executableCliRenderer("renderRunBinaryScriptCommandOutput"),
-            releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCliScript),
-        )
         guidance = """
             Use this only in the dedicated scripting profile or explicit CLI command when a small custom script is needed over the loaded `binary` object.
             The script runtime exposes the existing globals `binary` and `print(text)`; it does not expose host classes, file IO, process creation, or native access.
             Pass exactly one binary source and exactly one script source, either `scriptPath` or inline `script`.
         """
         input = RunBinaryScriptInput
-        inputPattern = ToolInputPattern.BinaryOnly
-        inputModel = toolInputModel {
-            binarySource("binary", target = SourceTargetSpec.RootInput) {
-                cli {
-                    positional("binary")
-                    stdin("--stdin")
-                    base64("--bytes-base64")
-                    autoStdin()
-                }
-            }
-            param(name = "scriptPath", cliOption = "--script")
-            param(name = "script", cliOption = "--script-text")
-        }
         output = RunBinaryScriptResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.server.runBinaryScript"
     }
 }

@@ -372,7 +372,7 @@ class FieldHandle internal constructor(
 @JvmInline
 value class ToolId(val value: String) {
     init {
-        require(Regex("^[a-z][a-z0-9]*(_[a-z0-9]+)*$").matches(value)) {
+        require(TOOL_NAME_REGEX.matches(value)) {
             "Tool id '$value' must be strict snake_case."
         }
     }
@@ -386,11 +386,6 @@ data class StandaloneHandlerSpec(val methodName: String) {
             "Standalone handler method name must be a Kotlin method name, got `$methodName`."
         }
     }
-
-    companion object {
-        fun defaultForToolName(toolName: String): StandaloneHandlerSpec =
-            StandaloneHandlerSpec(toolName.toDefaultStandaloneHandlerMethodName())
-    }
 }
 
 class ToolSpec(
@@ -398,51 +393,22 @@ class ToolSpec(
     val summary: String,
     val guidance: String?,
     val input: ClassSpec,
-    val inputPattern: ToolInputPattern,
-    val inputModel: ToolInputModel? = null,
     val output: ClassSpec,
-    val surfaces: ToolSurfaceSpec,
-    /**
-     * Fully-qualified name of the top-level handler function that backs this tool.
-     * Expressed as a string so the DSL has zero compile-time dependency on the
-     * function's home module. Downstream generators validate FQN resolvability
-     * when they emit the dispatcher code that references it.
-     */
-    val handlerFqn: String,
-    standaloneHandler: StandaloneHandlerSpec? = null,
 ) {
-    init {
-        inputModel?.let { validateExplicitInputModel(id.value, input, it) }
-    }
-
     val name: String get() = id.value
-
-    private val standaloneHandlerOverride: StandaloneHandlerSpec? = standaloneHandler
-    val standaloneHandler: StandaloneHandlerSpec
-        get() = standaloneHandlerOverride ?: StandaloneHandlerSpec.defaultForToolName(name)
 
     fun copy(
         name: String = this.name,
         summary: String = this.summary,
         guidance: String? = this.guidance,
         input: ClassSpec = this.input,
-        inputPattern: ToolInputPattern = this.inputPattern,
-        inputModel: ToolInputModel? = this.inputModel,
         output: ClassSpec = this.output,
-        surfaces: ToolSurfaceSpec = this.surfaces,
-        handlerFqn: String = this.handlerFqn,
-        standaloneHandler: StandaloneHandlerSpec? = this.standaloneHandlerOverride,
     ): ToolSpec = ToolSpec(
         id = ToolId(name),
         summary = summary,
         guidance = guidance,
         input = input,
-        inputPattern = inputPattern,
-        inputModel = inputModel,
         output = output,
-        surfaces = surfaces,
-        handlerFqn = handlerFqn,
-        standaloneHandler = standaloneHandler,
     )
 
     override fun equals(other: Any?): Boolean {
@@ -453,12 +419,7 @@ class ToolSpec(
             summary == other.summary &&
             guidance == other.guidance &&
             input == other.input &&
-            inputPattern == other.inputPattern &&
-            inputModel == other.inputModel &&
-            output == other.output &&
-            surfaces == other.surfaces &&
-            handlerFqn == other.handlerFqn &&
-            standaloneHandler == other.standaloneHandler
+            output == other.output
     }
 
     override fun hashCode(): Int {
@@ -466,53 +427,12 @@ class ToolSpec(
         result = 31 * result + summary.hashCode()
         result = 31 * result + (guidance?.hashCode() ?: 0)
         result = 31 * result + input.hashCode()
-        result = 31 * result + inputPattern.hashCode()
-        result = 31 * result + (inputModel?.hashCode() ?: 0)
         result = 31 * result + output.hashCode()
-        result = 31 * result + surfaces.hashCode()
-        result = 31 * result + handlerFqn.hashCode()
-        result = 31 * result + standaloneHandler.hashCode()
         return result
     }
 
     override fun toString(): String =
-        "ToolSpec(name=$name, summary=$summary, guidance=$guidance, input=$input, " +
-            "inputPattern=$inputPattern, inputModel=$inputModel, output=$output, surfaces=$surfaces, handlerFqn=$handlerFqn, " +
-            "standaloneHandler=$standaloneHandler)"
-}
-
-data class ToolSurfaceSpec(
-    val mcp: McpSurfaceSpec,
-    val cli: CliSurfaceSpec,
-    val publicMcpb: PublicMcpbSurfaceSpec,
-)
-
-data class McpSurfaceSpec(
-    val audiences: Set<McpToolAudience>,
-) {
-    val visible: Boolean get() = audiences.isNotEmpty()
-
-    companion object {
-        fun production(): McpSurfaceSpec = McpSurfaceSpec(setOf(McpToolAudience.Production))
-        fun advanced(): McpSurfaceSpec = McpSurfaceSpec(setOf(McpToolAudience.Advanced))
-        fun scripting(): McpSurfaceSpec = McpSurfaceSpec(setOf(McpToolAudience.Scripting))
-        fun none(): McpSurfaceSpec = McpSurfaceSpec(emptySet())
-    }
-}
-
-enum class McpToolAudience {
-    Advanced,
-    Production,
-    Scripting,
-}
-
-data class PublicMcpbSurfaceSpec(
-    val included: Boolean,
-) {
-    companion object {
-        fun included(): PublicMcpbSurfaceSpec = PublicMcpbSurfaceSpec(included = true)
-        fun excluded(): PublicMcpbSurfaceSpec = PublicMcpbSurfaceSpec(included = false)
-    }
+        "ToolSpec(name=$name, summary=$summary, guidance=$guidance, input=$input, output=$output)"
 }
 
 data class ExecutableCliRendererSpec(val methodName: String) {
@@ -535,86 +455,41 @@ enum class CliReleaseProduct(
     HexanaCliScript(productId = "hexana-cli-script", executableName = "hexana-cli-script"),
 }
 
-data class CliSurfaceSpec(
-    val visible: Boolean,
-    val commandName: String?,
+data class CliToolBinding(
+    val id: ToolId,
+    val commandName: String,
     val groups: Set<ToolGroup>,
-    val outputPolicy: ToolOutputPolicy?,
-    val executionStatus: CliExecutionStatus? = null,
+    val outputPolicy: ToolOutputPolicy,
+    val executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
     val outputOverride: OutputConversionCapability? = null,
-    val defaultOutput: OutputConversionCapability? = null,
+    val defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
     val executableRenderer: ExecutableCliRendererSpec? = null,
     val releaseProducts: Set<CliReleaseProduct> = emptySet(),
+    val inputModel: ToolInputModel? = null,
 ) {
     init {
-        if (visible) {
-            require(!commandName.isNullOrBlank()) { "Visible CLI surface must declare a command name." }
-            require(CLI_COMMAND_NAME_REGEX.matches(commandName)) {
-                "CLI command '$commandName' must be strict kebab-case."
+        require(CLI_COMMAND_NAME_REGEX.matches(commandName)) {
+            "CLI command '$commandName' must be strict kebab-case."
+        }
+        require(groups.isNotEmpty()) { "CLI tool '$commandName' must declare at least one group." }
+        if (executionStatus == CliExecutionStatus.Executable) {
+            require(executableRenderer != null) {
+                "Executable CLI tool '$commandName' must declare an executable renderer."
             }
-            require(groups.isNotEmpty()) { "Visible CLI surface '$commandName' must declare at least one group." }
-            require(outputPolicy != null) { "Visible CLI surface '$commandName' must declare an output policy." }
-            require(executionStatus != null) { "Visible CLI surface '$commandName' must declare an execution status." }
-            require(defaultOutput != null) { "Visible CLI surface '$commandName' must declare a default output." }
-            if (executionStatus == CliExecutionStatus.Executable) {
-                require(executableRenderer != null) {
-                    "Executable CLI surface '$commandName' must declare an executable renderer."
-                }
-            }
-            if (executionStatus == CliExecutionStatus.Todo) {
-                require(executableRenderer == null) {
-                    "TODO CLI surface '$commandName' must not declare an executable renderer."
-                }
-                require(releaseProducts.isEmpty()) {
-                    "TODO CLI surface '$commandName' must not belong to a release product."
-                }
+            require(inputModel != null) {
+                "Executable CLI tool '$commandName' must declare an explicit input model."
             }
         } else {
-            require(commandName == null) { "Hidden CLI surface must not declare a command name." }
-            require(groups.isEmpty()) { "Hidden CLI surface must not declare groups." }
-            require(outputPolicy == null) { "Hidden CLI surface must not declare an output policy." }
-            require(executionStatus == null) { "Hidden CLI surface must not declare an execution status." }
-            require(outputOverride == null) { "Hidden CLI surface must not declare an output override." }
-            require(defaultOutput == null) { "Hidden CLI surface must not declare a default output." }
-            require(executableRenderer == null) { "Hidden CLI surface must not declare an executable renderer." }
-            require(releaseProducts.isEmpty()) { "Hidden CLI surface must not belong to a release product." }
+            require(executableRenderer == null) {
+                "TODO CLI tool '$commandName' must not declare an executable renderer."
+            }
+            require(releaseProducts.isEmpty()) {
+                "TODO CLI tool '$commandName' must not belong to a release product."
+            }
+            require(inputModel == null) {
+                "TODO CLI tool '$commandName' must not declare an executable input model."
+            }
         }
-    }
-
-    companion object {
-        fun visible(
-            commandName: String,
-            group: ToolGroup,
-            outputPolicy: ToolOutputPolicy,
-            vararg additionalGroups: ToolGroup,
-            executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
-            outputOverride: OutputConversionCapability? = null,
-            defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
-            executableRenderer: ExecutableCliRendererSpec? = null,
-            releaseProducts: Set<CliReleaseProduct> = emptySet(),
-        ): CliSurfaceSpec = CliSurfaceSpec(
-            visible = true,
-            commandName = commandName,
-            groups = setOf(group, *additionalGroups),
-            outputPolicy = outputPolicy,
-            executionStatus = executionStatus,
-            outputOverride = outputOverride,
-            defaultOutput = defaultOutput,
-            executableRenderer = executableRenderer,
-            releaseProducts = releaseProducts,
-        )
-
-        fun hidden(): CliSurfaceSpec = CliSurfaceSpec(
-            visible = false,
-            commandName = null,
-            groups = emptySet(),
-            outputPolicy = null,
-            executionStatus = null,
-            outputOverride = null,
-            defaultOutput = null,
-            executableRenderer = null,
-            releaseProducts = emptySet(),
-        )
     }
 }
 
@@ -646,7 +521,8 @@ enum class ToolOutputPolicy {
     ToolDefined,
 }
 
-fun productionCliSurface(
+fun cliToolBinding(
+    id: String,
     commandName: String,
     group: ToolGroup,
     outputPolicy: ToolOutputPolicy,
@@ -656,110 +532,18 @@ fun productionCliSurface(
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
     executableRenderer: ExecutableCliRendererSpec? = null,
     releaseProducts: Set<CliReleaseProduct> = emptySet(),
-): ToolSurfaceSpec = ToolSurfaceSpec(
-    mcp = McpSurfaceSpec.production(),
-    cli = CliSurfaceSpec.visible(
-        commandName,
-        group,
-        outputPolicy,
-        *additionalGroups,
-        executionStatus = executionStatus,
-        outputOverride = outputOverride,
-        defaultOutput = defaultOutput,
-        executableRenderer = executableRenderer,
-        releaseProducts = releaseProducts,
-    ),
-    publicMcpb = PublicMcpbSurfaceSpec.excluded(),
-)
-
-fun publicMcpbProductionCliSurface(
-    commandName: String,
-    group: ToolGroup,
-    outputPolicy: ToolOutputPolicy,
-    vararg additionalGroups: ToolGroup,
-    executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
-    outputOverride: OutputConversionCapability? = null,
-    defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
-    executableRenderer: ExecutableCliRendererSpec? = null,
-    releaseProducts: Set<CliReleaseProduct> = emptySet(),
-): ToolSurfaceSpec = ToolSurfaceSpec(
-    mcp = McpSurfaceSpec.production(),
-    cli = CliSurfaceSpec.visible(
-        commandName,
-        group,
-        outputPolicy,
-        *additionalGroups,
-        executionStatus = executionStatus,
-        outputOverride = outputOverride,
-        defaultOutput = defaultOutput,
-        executableRenderer = executableRenderer,
-        releaseProducts = releaseProducts,
-    ),
-    publicMcpb = PublicMcpbSurfaceSpec.included(),
-)
-
-fun advancedHiddenCliSurface(): ToolSurfaceSpec = ToolSurfaceSpec(
-    mcp = McpSurfaceSpec.advanced(),
-    cli = CliSurfaceSpec.hidden(),
-    publicMcpb = PublicMcpbSurfaceSpec.excluded(),
-)
-
-fun scriptingHiddenCliSurface(): ToolSurfaceSpec = ToolSurfaceSpec(
-    mcp = McpSurfaceSpec.scripting(),
-    cli = CliSurfaceSpec.hidden(),
-    publicMcpb = PublicMcpbSurfaceSpec.excluded(),
-)
-
-fun scriptingCliSurface(
-    commandName: String,
-    group: ToolGroup,
-    outputPolicy: ToolOutputPolicy,
-    vararg additionalGroups: ToolGroup,
-    executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
-    outputOverride: OutputConversionCapability? = null,
-    defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
-    executableRenderer: ExecutableCliRendererSpec? = null,
-    releaseProducts: Set<CliReleaseProduct> = emptySet(),
-): ToolSurfaceSpec = ToolSurfaceSpec(
-    mcp = McpSurfaceSpec.scripting(),
-    cli = CliSurfaceSpec.visible(
-        commandName,
-        group,
-        outputPolicy,
-        *additionalGroups,
-        executionStatus = executionStatus,
-        outputOverride = outputOverride,
-        defaultOutput = defaultOutput,
-        executableRenderer = executableRenderer,
-        releaseProducts = releaseProducts,
-    ),
-    publicMcpb = PublicMcpbSurfaceSpec.excluded(),
-)
-
-fun noMcpCliSurface(
-    commandName: String,
-    group: ToolGroup,
-    outputPolicy: ToolOutputPolicy,
-    vararg additionalGroups: ToolGroup,
-    executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
-    outputOverride: OutputConversionCapability? = null,
-    defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
-    executableRenderer: ExecutableCliRendererSpec? = null,
-    releaseProducts: Set<CliReleaseProduct> = emptySet(),
-): ToolSurfaceSpec = ToolSurfaceSpec(
-    mcp = McpSurfaceSpec.none(),
-    cli = CliSurfaceSpec.visible(
-        commandName,
-        group,
-        outputPolicy,
-        *additionalGroups,
-        executionStatus = executionStatus,
-        outputOverride = outputOverride,
-        defaultOutput = defaultOutput,
-        executableRenderer = executableRenderer,
-        releaseProducts = releaseProducts,
-    ),
-    publicMcpb = PublicMcpbSurfaceSpec.excluded(),
+    inputModel: ToolInputModel? = null,
+): CliToolBinding = CliToolBinding(
+    id = ToolId(id),
+    commandName = commandName,
+    groups = setOf(group, *additionalGroups),
+    outputPolicy = outputPolicy,
+    executionStatus = executionStatus,
+    outputOverride = outputOverride,
+    defaultOutput = defaultOutput,
+    executableRenderer = executableRenderer,
+    releaseProducts = releaseProducts,
+    inputModel = inputModel,
 )
 
 val ToolSpec.mcpDescription: String
@@ -1109,28 +893,19 @@ class ToolInputModelBuilder internal constructor() {
 fun toolInputModel(block: ToolInputModelBuilder.() -> Unit): ToolInputModel =
     ToolInputModelBuilder().apply(block).build()
 
-fun ToolSpec.inputModelForCli(): ToolInputModel =
-    inputModel ?: inputPattern.inputModelForCli(name)
+fun wasmCliInputModel(): ToolInputModel = rootSourceCliInputModel(
+    sourceName = "wasm",
+    kind = SourceKind.Wasm,
+    positionalPathName = "wasm",
+)
 
-fun ToolInputPattern.inputModelForCli(toolName: String? = null): ToolInputModel =
-    when (this) {
-        ToolInputPattern.WasmOnly -> legacyRootSourceInputModel(
-            sourceName = "wasm",
-            kind = SourceKind.Wasm,
-            positionalPathName = "wasm",
-        )
-        ToolInputPattern.BinaryOnly -> legacyRootSourceInputModel(
-            sourceName = "binary",
-            kind = SourceKind.Binary,
-            positionalPathName = "binary",
-        )
-        else -> {
-            val prefix = toolName?.let { "Tool '$it' input pattern" } ?: "Input pattern"
-            throw IllegalArgumentException("$prefix ${this::class.simpleName} does not have a CLI input model yet.")
-        }
-    }
+fun binaryCliInputModel(): ToolInputModel = rootSourceCliInputModel(
+    sourceName = "binary",
+    kind = SourceKind.Binary,
+    positionalPathName = "binary",
+)
 
-private fun legacyRootSourceInputModel(
+private fun rootSourceCliInputModel(
     sourceName: String,
     kind: SourceKind,
     positionalPathName: String,
@@ -1228,16 +1003,7 @@ class ToolBuilder internal constructor(private val name: String) {
     var summary: String? = null
     var guidance: String? = null
     var input: ClassSpec? = null
-    var inputPattern: ToolInputPattern? = null
-    var inputModel: ToolInputModel? = null
     var output: ClassSpec? = null
-    var surfaces: ToolSurfaceSpec? = null
-    var handlerFqn: String? = null
-    private var standaloneHandlerSpec: StandaloneHandlerSpec? = null
-
-    fun standaloneHandler(methodName: String) {
-        standaloneHandlerSpec = StandaloneHandlerSpec(methodName.trim())
-    }
 
     internal fun build(): ToolSpec {
         require(TOOL_NAME_REGEX.matches(name)) {
@@ -1246,44 +1012,24 @@ class ToolBuilder internal constructor(private val name: String) {
         val resolvedSummary = requireNotNull(summary) { "Tool '$name' is missing `summary`." }
         require(resolvedSummary.isNotBlank()) { "Tool '$name' summary must not be blank." }
         val resolvedInput = requireNotNull(input) { "Tool '$name' is missing `input = `." }
-        val resolvedInputPattern = requireNotNull(inputPattern) { "Tool '$name' is missing `inputPattern = `." }
         val resolvedOutput = requireNotNull(output) { "Tool '$name' is missing `output = `." }
-        val resolvedSurfaces = requireNotNull(surfaces) { "Tool '$name' is missing `surfaces = `." }
-        val resolvedHandler = requireNotNull(handlerFqn) { "Tool '$name' is missing `handlerFqn = `." }
-        require(FQN_REGEX.matches(resolvedHandler)) {
-            "Tool '$name' handlerFqn must be a fully-qualified function name (`pkg.subpkg.fn`), got `$resolvedHandler`."
-        }
-        validateInputPattern(name, resolvedInput, resolvedInputPattern)
-        validateCliOutputSelection(name, resolvedOutput, resolvedSurfaces.cli)
         return ToolSpec(
             id = ToolId(name),
             summary = resolvedSummary.trim(),
             guidance = guidance?.trimIndent()?.trim()?.takeIf { it.isNotEmpty() },
             input = resolvedInput,
-            inputPattern = resolvedInputPattern,
-            inputModel = inputModel,
             output = resolvedOutput,
-            surfaces = resolvedSurfaces,
-            handlerFqn = resolvedHandler,
-            standaloneHandler = standaloneHandlerSpec,
         )
     }
 }
 
-private fun String.toDefaultStandaloneHandlerMethodName(): String {
-    require(TOOL_NAME_REGEX.matches(this)) {
-        "Cannot derive standalone handler method name from non-snake-case tool name `$this`."
-    }
-    val parts = split('_')
-    return parts.first() + parts.drop(1).joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
-}
-
-private fun validateCliOutputSelection(toolName: String, output: ClassSpec, cli: CliSurfaceSpec) {
-    val selectedOutputs = listOfNotNull(cli.outputOverride, cli.defaultOutput)
+internal fun validateCliBinding(contract: ToolSpec, binding: CliToolBinding) {
+    binding.inputModel?.let { validateExplicitInputModel(contract.name, contract.input, it) }
+    val selectedOutputs = listOfNotNull(binding.outputOverride, binding.defaultOutput)
     selectedOutputs.forEach { selectedOutput ->
-        require(selectedOutput in output.outputCapabilities) {
-            "Tool '$toolName' CLI output $selectedOutput is not declared by output class " +
-                "`${output.name}`. Declared output capabilities: ${output.outputCapabilities}."
+        require(selectedOutput in contract.output.outputCapabilities) {
+            "Tool '${contract.name}' CLI output $selectedOutput is not declared by output class " +
+                "`${contract.output.name}`. Declared output capabilities: ${contract.output.outputCapabilities}."
         }
     }
 }
@@ -1354,56 +1100,44 @@ private fun FieldType.describeForValidation(): String =
 internal fun validateToolCollection(specs: List<ToolSpec>) {
     val duplicateToolNames = specs.groupBy { it.id }.filterValues { it.size > 1 }.keys
     require(duplicateToolNames.isEmpty()) { "Duplicate tool names: $duplicateToolNames" }
-
-    val duplicateCliCommandNames = specs
-        .mapNotNull { spec -> spec.surfaces.cli.commandName?.let { it to spec.name } }
-        .groupBy({ it.first }, { it.second })
-        .filterValues { it.size > 1 }
-    require(duplicateCliCommandNames.isEmpty()) {
-        "Duplicate CLI command names: " +
-            duplicateCliCommandNames.entries.joinToString { (command, tools) -> "$command used by $tools" }
-    }
 }
 
 internal fun validateCliReleaseProducts(
-    specs: List<ToolSpec>,
+    tools: List<CliTool>,
     requireCompleteSelection: Boolean = true,
 ) {
-    val selectedTools = specs.filter { it.surfaces.cli.releaseProducts.isNotEmpty() }
-    selectedTools.forEach { spec ->
-        val cli = spec.surfaces.cli
-        require(cli.visible && cli.executionStatus == CliExecutionStatus.Executable) {
-            "Release product tool '${spec.name}' must be an executable CLI tool."
+    val selectedTools = tools.filter { it.binding.releaseProducts.isNotEmpty() }
+    selectedTools.forEach { tool ->
+        val cli = tool.binding
+        require(cli.executionStatus == CliExecutionStatus.Executable) {
+            "Release product tool '${tool.name}' must be an executable CLI tool."
         }
         requireNotNull(cli.executableRenderer) {
-            "Release product tool '${spec.name}' is missing an executable renderer."
-        }
-        require(FQN_REGEX.matches(spec.handlerFqn)) {
-            "Release product tool '${spec.name}' is missing a valid handler FQN."
+            "Release product tool '${tool.name}' is missing an executable renderer."
         }
     }
 
     val toolsToCheck = if (requireCompleteSelection) {
-        specs.filter { it.surfaces.cli.executionStatus == CliExecutionStatus.Executable }
+        tools.filter { it.binding.executionStatus == CliExecutionStatus.Executable }
     } else {
         selectedTools
     }
-    toolsToCheck.forEach { spec ->
-        val products = spec.surfaces.cli.releaseProducts
+    toolsToCheck.forEach { tool ->
+        val products = tool.binding.releaseProducts
         val standaloneProducts = products intersect setOf(
             CliReleaseProduct.HexanaCli,
             CliReleaseProduct.HexanaCliScript,
         )
         require(CliReleaseProduct.HexanaMcp in products && standaloneProducts.size == 1 && products.size == 2) {
-            "Executable CLI tool '${spec.name}' must select hexana-mcp and exactly one standalone CLI product, " +
+            "Executable CLI tool '${tool.name}' must select hexana-mcp and exactly one standalone CLI product, " +
                 "got $products."
         }
     }
 
     CliReleaseProduct.entries.forEach { product ->
         val duplicateCommands = selectedTools
-            .filter { product in it.surfaces.cli.releaseProducts }
-            .groupBy { it.surfaces.cli.commandName }
+            .filter { product in it.binding.releaseProducts }
+            .groupBy { it.binding.commandName }
             .filterValues { it.size > 1 }
         require(duplicateCommands.isEmpty()) {
             "Duplicate command names in ${product.productId}: " +
@@ -1414,7 +1148,7 @@ internal fun validateCliReleaseProducts(
     }
 }
 
-private fun validateInputPattern(toolName: String, input: ClassSpec, pattern: ToolInputPattern) {
+internal fun validateInputPattern(toolName: String, input: ClassSpec, pattern: ToolInputPattern) {
     fun requireField(fieldName: String, owner: ClassSpec = input): FieldSpec {
         return owner.fields.singleOrNull { it.name == fieldName } ?: throw IllegalArgumentException(
             "Tool '$toolName' input pattern ${pattern::class.simpleName} requires field `$fieldName` on `${input.name}`."

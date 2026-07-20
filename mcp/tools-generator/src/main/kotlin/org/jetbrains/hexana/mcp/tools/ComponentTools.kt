@@ -268,7 +268,6 @@ val ComponentCompatibilityInputClass = WasmInputClass.with("ComponentCompatibili
 internal val ComponentTools: List<ToolSpec> = tools {
     tool("list_component_surface") {
         summary = "Low-level component import/export listing; not for dependency/provider resolution."
-        surfaces = advancedHiddenCliSurface()
         guidance = """
             Use this only for compact component-model surface inspection when provider selection is not needed.
             For component run/link failures, project-root scans, or dependency resolution across candidate component files, call `resolve_component_dependencies` instead.
@@ -276,14 +275,11 @@ internal val ComponentTools: List<ToolSpec> = tools {
             This low-level surface view does not select providers, follow transitive imports, reject candidates, ignore runtime imports for dependency decisions, or compute compatibility verdicts.
         """
         input = WasmInputClass
-        inputPattern = ToolInputPattern.ComponentSurface
         output = ListComponentSurfaceResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readComponentSurface"
     }
 
     tool("resolve_component_dependencies") {
         summary = "Resolve component run/link dependencies from a main component and candidate roots into report-ready fields."
-        surfaces = advancedHiddenCliSurface()
         guidance = """
             Search `scanRoots`, `projectRoot`, and the input component directory for component providers of non-runtime imports.
             Use this aggregate dependency-resolution workflow first when a component run/build/link step has a main component plus project root or candidate directories.
@@ -292,22 +288,17 @@ internal val ComponentTools: List<ToolSpec> = tools {
             Returns report-ready `required_non_runtime_imports`, `ignored_runtime_imports`, `resolved_dependency_paths`, `rejected_candidates`, and `minimal_run_build_fix` fields.
         """
         input = ComponentDependencyInputClass
-        inputPattern = ToolInputPattern.ComponentDependencies
         output = ResolveComponentDependenciesResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.resolveComponentDependencies"
     }
 
     tool("check_component_compatibility") {
         summary = "Compare current/previous component imports against provider candidates and lock/config files."
-        surfaces = publicMcpbProductionCliSurface("check-component-compatibility", ToolGroup.Component, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this first for component compatibility drift, compose failure logs, provider candidate triage, and dependency lock/config repair.
             Compare current non-runtime imports with `dependencyPaths` or providers discovered from `projectRoot`, then use `previousPath` to explain import drift and `dependencyLockPath` to identify the configured provider to replace.
             Returns report-ready `failing_import`, `candidate_providers_inspected`, `provider_paths_involved`, `minimal_dependency_lock_fix`, `evidence`, and `recommendation` fields.
         """
         input = ComponentCompatibilityInputClass
-        inputPattern = ToolInputPattern.ComponentCompatibility
         output = CheckComponentCompatibilityResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.checkComponentCompatibility"
     }
 }

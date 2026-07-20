@@ -116,54 +116,42 @@ val ListReferenceTypesResultClass = class_("ListReferenceTypesResult", kotlinPac
 internal val TypeTools: List<ToolSpec> = tools {
     tool("list_types") {
         summary = "List type entries declared by a `.wasm` module."
-        surfaces = advancedHiddenCliSurface()
         guidance = """
             List type entries declared by a WebAssembly (.wasm) module.
             Includes function types and GC-related composite types when present.
             Function types include `importLocations` for imported functions that use the type, including a stable `locationDisplay` string.
         """
         input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmOnly
         output = TypesResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readTypes"
     }
 
     tool("list_value_types") {
         summary = "List value types used by a `.wasm` module with counts and feature flags."
-        surfaces = advancedHiddenCliSurface()
         guidance = """
             List scalar, vector, packed, and reference value types observed across declarations, globals, tables, locals, and typed instructions.
             Use this before deeper type or body inspection when you need the module's type vocabulary and a quick signal for GC, SIMD, packed storage, or reference-type usage.
         """
         input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmOnly
         output = ListValueTypesResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readValueTypes"
     }
 
     tool("list_reference_types") {
         summary = "List reference value types used by a `.wasm` module."
-        surfaces = advancedHiddenCliSurface()
         guidance = """
             List reference value types grouped by function, external, GC, primitive, top-like, and bottom/null families.
             Use this when the agent needs exact reference syntax and feature signals before writing WAT, diagnosing host interop, or deciding whether GC/reference-type semantics matter.
         """
         input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmOnly
         output = ListReferenceTypesResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readReferenceTypes"
     }
 
     tool("get_types_for_indices") {
         summary = "Return type entries for the requested indices from the type index space."
-        surfaces = advancedHiddenCliSurface()
         guidance = """
             Return only the requested type entries from the type index space.
             Use this when you need the types referenced by specific functions, globals, or tables.
         """
         input = GetTypesForIndicesInput
-        inputPattern = ToolInputPattern.Indices
         output = TypesResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readTypesByIndices"
     }
 }

@@ -88,7 +88,6 @@ val ListExportedFunctionsResultClass = class_("ListExportedFunctionsResult", kot
 internal val ExportTools: List<ToolSpec> = tools {
     tool("list_exports") {
         summary = "List exports declared by a `.wasm` module."
-        surfaces = publicMcpbProductionCliSurface("list-exports", ToolGroup.Export, ToolOutputPolicy.ToolDefined)
         guidance = """
             Includes exported functions, tables, memories, and globals; `kind` uses the standard tags 0=function, 1=table, 2=memory, 3=global.
             This is the light name-and-kind view of exports.
@@ -100,28 +99,22 @@ internal val ExportTools: List<ToolSpec> = tools {
             For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy`; this low-level view does not distinguish direct imported calls from transitive local helper calls.
         """
         input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmOnly
         output = ListExportsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readExports"
     }
 
     tool("search_exports") {
         summary = "Search exports by name and resolve common export metadata."
-        surfaces = publicMcpbProductionCliSurface("search-exports", ToolGroup.Export, ToolOutputPolicy.ToolDefined)
         guidance = """
             Search exported functions, tables, memories, globals, and tags by case-insensitive export-name substrings.
             Function matches include resolved signatures, and memory matches include decoded page limits.
             Use this when logs, host code, or expected API names identify exports symbolically and you need the exact exported index.
         """
         input = SearchExportsInput
-        inputPattern = ToolInputPattern.ExportNameSearch
         output = SearchExportsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readExportsByName"
     }
 
     tool("list_exported_functions") {
         summary = "List exported functions within a closed range of the export section."
-        surfaces = publicMcpbProductionCliSurface("list-exported-functions", ToolGroup.Export, ToolOutputPolicy.ToolDefined)
         guidance = """
             List exported functions from a WebAssembly (.wasm) module using a closed export-range slice.
             Pass `entriesRange = { from, to }` with inclusive export-list positions; do not use `offset/limit` or `start/end`.
@@ -132,10 +125,6 @@ internal val ExportTools: List<ToolSpec> = tools {
             For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy`; it already filters exported local functions to direct imported-call entrypoints and returns the copy-ready payload.
         """
         input = ListExportedFunctionsInput
-        inputPattern = ToolInputPattern.ClosedRange(
-            parameterName = "entriesRange",
-        )
         output = ListExportedFunctionsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readExportedFunctions"
     }
 }

@@ -90,40 +90,31 @@ val ProposalDiffInputClass = WasmInputClass.with("ProposalDiffInput") {
 internal val RuntimeTools: List<ToolSpec> = tools {
     tool("list_required_proposals") {
         summary = "List required WebAssembly proposals inferred from detected module features."
-        surfaces = publicMcpbProductionCliSurface("list-required-proposals", ToolGroup.Runtime, ToolOutputPolicy.ToolDefined)
         guidance = """
             Derive compact required WebAssembly proposals from the same detector used by `list_enabled_features`.
             Includes conservative evidence when available.
         """
         input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmOnly
         output = ListRequiredProposalsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readRequiredProposals"
     }
 
     tool("diff_required_proposals") {
         summary = "Diff required WebAssembly proposals between a current and baseline module."
-        surfaces = publicMcpbProductionCliSurface("diff-required-proposals", ToolGroup.Runtime, ToolOutputPolicy.ToolDefined)
         guidance = """
             Compare the current module against `baselinePath` and return full plus newly/no-longer-required proposal lists.
             Prefer this over calling `list_required_proposals` twice when the request needs current-versus-baseline proposal changes.
         """
         input = ProposalDiffInputClass
-        inputPattern = ToolInputPattern.WasmWithBaseline
         output = DiffRequiredProposalsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.diffRequiredProposals"
     }
 
     tool("check_runtime_compatibility") {
         summary = "Check a WebAssembly module's required proposals against a conservative runtime support profile."
-        surfaces = publicMcpbProductionCliSurface("check-runtime-compatibility", ToolGroup.Runtime, ToolOutputPolicy.ToolDefined)
         guidance = """
             Compare required proposals with conservative `graalwasm`, `wasmtime`, `v8`, `node`, or `browser` support.
             `unknown` is not confirmed compatible; no external support lookup is performed.
         """
         input = RuntimeCompatibilityInputClass
-        inputPattern = ToolInputPattern.RuntimeCompatibility
         output = CheckRuntimeCompatibilityResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readRuntimeCompatibility"
     }
 }

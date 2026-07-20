@@ -41,7 +41,6 @@ private val EntrypointPolicyResultClass = class_("EntrypointPolicyResult", kotli
 internal val EntrypointPolicyTools: List<ToolSpec> = tools {
     tool("get_entrypoint_policy") {
         summary = "Return policy-ready direct host-call facts for exported WebAssembly entrypoints."
-        surfaces = publicMcpbProductionCliSurface("get-entrypoint-policy", ToolGroup.EntrypointPolicy, ToolOutputPolicy.ToolDefined)
         guidance = """
             Use this when repairing or validating entrypoint host-call policy JSON.
             It scans exported local functions and returns only imports called directly by each entrypoint body; exports that only reach host imports through local helper calls are listed separately in `excluded_transitive_exports`.
@@ -49,8 +48,6 @@ internal val EntrypointPolicyTools: List<ToolSpec> = tools {
             Do not wrap, rename, summarize, or split the returned fields when the target file expects `policy_id`, `module`, `direct_host_entrypoints`, and `excluded_transitive_exports`.
         """
         input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmPathLabel
         output = EntrypointPolicyResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readEntrypointPolicy"
     }
 }

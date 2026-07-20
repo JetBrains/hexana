@@ -44,7 +44,9 @@ converters, executors, renderers, or output models.
 
 ## Future Split Boundary
 
-The catalog declares three atomically versioned release products independently from MCP profiles: legacy `hexana-mcp`
+The explicit CLI authority in `mcp/tools-generator/.../SurfaceAuthorities.kt` declares three atomically versioned
+release products independently from semantic contracts, standalone MCP profiles, IDEA registration, and MCPB exposure:
+legacy `hexana-mcp`
 keeps all four executable direct commands, `hexana-cli` selects the three non-scripting commands, and
 `hexana-cli-script` selects only `run-script`. The `:cli:hexana-cli` and `:cli:hexana-cli-script` JVM applications now
 exist as installed distributions, backed by the shared `:cli:product` layer and app-owned product executors. This branch
@@ -57,7 +59,8 @@ Future split work should move contracts before moving artifacts. The likely boun
   working-directory context, and environment access belong in `cli:runtime`;
 - neutral standard command orchestration and already exercised non-scripting adapters belong in `cli:core`;
 - the isolated script-only `run-script` adapter belongs in `cli:scripting`;
-- generated metadata in `:cli:metadata` describes CLI-visible commands and release-product selections, while the split
+- generated metadata in `:cli:metadata` resolves semantic contracts with the independent CLI authority to describe
+  CLI-visible commands and release-product selections, while the split
   applications consume those selections through `:cli:product`;
 - product parsing, help/version/tools output, output-file writing, telemetry, and executor contracts belong in
   `cli:product`;
@@ -80,7 +83,7 @@ Keep implementation tickets small enough for review:
 2. Add focused compatibility tests that prove `hexana-mcp stdio`, `hexana-mcp version`, and implemented executable CLI
    tools still work through the packaged launcher.
 3. Decide when generated CLI command construction should move behind a generated contract consumed by both `mcp:server`
-   and a future `mcp:cli`.
+   and a future `mcp:cli`; keep executable CLI input models explicit and independent from IDEA invocation patterns.
 4. Only after the contract layer is exercised, evaluate a separate `mcp:cli` module or artifact split and update
    package launcher smoke gates in the same implementation ticket.
 

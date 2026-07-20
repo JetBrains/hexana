@@ -26,7 +26,6 @@ val ListImportsResultClass = class_("ListImportsResult", kotlinPackage = MODEL_P
 internal val ImportTools: List<ToolSpec> = tools {
     tool("list_imports") {
         summary = "List imported functions declared by a `.wasm` module."
-        surfaces = publicMcpbProductionCliSurface("list-imports", ToolGroup.Import, ToolOutputPolicy.ToolDefined)
         guidance = """
             List imported functions declared by a WebAssembly (.wasm) module.
             This is the primary MCP tool for import inventories, link-mismatch analysis, and mapping direct host calls to imported functions.
@@ -38,8 +37,6 @@ internal val ImportTools: List<ToolSpec> = tools {
             For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy` instead; it returns the complete copy-ready policy/report payload directly.
         """
         input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmOnly
         output = ListImportsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readImportFunctions"
     }
 }

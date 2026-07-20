@@ -13,17 +13,6 @@ val ConverterTools = tools {
     tool("wasm_to_wat") {
         summary = "Convert a `.wasm` module to WebAssembly text format."
         input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmOnly
         output = WasmToWatResultClass
-        surfaces = noMcpCliSurface(
-            "wasm-to-wat",
-            ToolGroup.Converters,
-            ToolOutputPolicy.ToolDefined,
-            executionStatus = CliExecutionStatus.Executable,
-            defaultOutput = OutputConversionCapability.RawText,
-            executableRenderer = executableCliRenderer("renderWasmToWatCommandOutput"),
-            releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCli),
-        )
-        handlerFqn = "org.jetbrains.hexana.mcp.server.wasmToWat"
     }
 }

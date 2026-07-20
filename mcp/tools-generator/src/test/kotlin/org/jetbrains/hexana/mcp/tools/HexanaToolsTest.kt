@@ -174,208 +174,31 @@ class HexanaToolsTest {
     }
 
     @Test
-    fun `catalog declares valid standalone handler metadata`() {
-        val methodName = Regex("^[A-Za-z_][A-Za-z0-9_]*$")
+    fun `surface authorities preserve approved inventories and bindings`() {
+        assertEquals(47, HexanaIdeaTools.size)
+        assertEquals(48, HexanaStandaloneTools.size)
+        assertEquals(CURRENT_PRODUCTION_MCP_TOOL_NAMES, HexanaStandaloneProductionToolIds.mapTo(linkedSetOf()) { it.value })
+        assertEquals(47, HexanaStandaloneAdvancedToolIds.size)
+        assertEquals(listOf("run_binary_script"), HexanaStandaloneScriptingToolIds.map { it.value })
+        assertEquals(29, HexanaMcpbTools.size)
+        assertEquals(31, HexanaCliTools.size)
+        assertTrue(HexanaStandaloneTools.all {
+            it.standaloneHandler.methodName.matches(Regex("^[A-Za-z_][A-Za-z0-9_]*$"))
+        })
+    }
 
-        HexanaTools.forEach { spec ->
-            assertTrue(spec.standaloneHandler.methodName.isNotBlank(), "standalone handler blank for ${spec.name}")
-            assertTrue(
-                methodName.matches(spec.standaloneHandler.methodName),
-                "standalone handler `${spec.standaloneHandler.methodName}` is not a Kotlin method name",
-            )
+    @Test
+    fun `CLI release products and executable models preserve approved inventories`() {
+        val products = CliReleaseProduct.entries.associateWith { product ->
+            HexanaCliTools.filter { product in it.binding.releaseProducts }.map { it.name }
         }
-        assertEquals("summarizeModule", HexanaTools.single { it.name == "summarize_module" }.standaloneHandler.methodName)
-    }
-
-    @Test
-    fun `MCP production metadata matches current production profile`() {
-        assertEquals(
-            CURRENT_PRODUCTION_MCP_TOOL_NAMES,
-            HexanaTools
-                .filter { McpToolAudience.Production in it.surfaces.mcp.audiences }
-                .map { it.name }
-                .toSet(),
-        )
-    }
-
-    @Test
-    fun `MCP scripting metadata is first class and dedicated`() {
-        assertEquals(setOf(McpToolAudience.Scripting), McpSurfaceSpec.scripting().audiences)
-        assertEquals(
-            setOf("run_binary_script"),
-            HexanaTools
-                .filter { McpToolAudience.Scripting in it.surfaces.mcp.audiences }
-                .map { it.name }
-                .toSet(),
-        )
-    }
-
-    @Test
-    fun `production MCP tools declare visible CLI metadata except documented divergence`() {
-        val productionToolNames = HexanaTools
-            .filter { McpToolAudience.Production in it.surfaces.mcp.audiences }
-            .map { it.name }
-            .toSet()
-        val cliVisibleToolNames = HexanaTools
-            .filter { it.surfaces.cli.visible }
-            .map { it.name }
-            .toSet()
-
-        assertEquals(
-            emptySet(),
-            productionToolNames - cliVisibleToolNames,
-            "Production MCP tools missing visible CLI metadata",
-        )
-        assertTrue("wasm_to_wat" in cliVisibleToolNames, "wasm_to_wat should stay CLI-visible")
-        assertFalse("wasm_to_wat" in productionToolNames, "wasm_to_wat should stay outside production MCP")
-        assertTrue("run_binary_script" in cliVisibleToolNames, "run_binary_script should stay CLI-visible")
-        assertFalse("run_binary_script" in productionToolNames, "run_binary_script should stay outside production MCP")
-        assertFalse("query_artifacts" in cliVisibleToolNames, "query_artifacts should stay hidden from CLI")
-    }
-
-    @Test
-    fun `tools declare explicit MCP and CLI surface metadata`() {
-        val kebabCase = Regex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
-        HexanaTools.forEach { spec ->
-            assertTrue(
-                spec.surfaces.mcp.visible || spec.surfaces.cli.visible,
-                "missing MCP audience or CLI visibility for ${spec.name}",
-            )
-            val cli = spec.surfaces.cli
-            if (cli.visible) {
-                val commandName = requireNotNull(cli.commandName) { "missing CLI command for ${spec.name}" }
-                assertTrue(kebabCase.matches(commandName), "CLI command `$commandName` is not kebab-case")
-                assertTrue(cli.groups.isNotEmpty(), "missing CLI group for ${spec.name}")
-                assertEquals(ToolOutputPolicy.ToolDefined, cli.outputPolicy, "bad output policy for ${spec.name}")
-                assertNotNull(cli.executionStatus, "missing CLI execution status for ${spec.name}")
-                assertEquals(null, cli.outputOverride, "unexpected output override for ${spec.name}")
-                assertNotNull(cli.defaultOutput, "missing default output for ${spec.name}")
-                if (cli.executionStatus == CliExecutionStatus.Executable) {
-                    assertNotNull(cli.executableRenderer, "missing executable renderer for ${spec.name}")
-                } else {
-                    assertEquals(null, cli.executableRenderer, "unexpected executable renderer for ${spec.name}")
-                }
-            } else {
-                assertEquals(null, cli.commandName, "hidden CLI surface has command for ${spec.name}")
-                assertTrue(cli.groups.isEmpty(), "hidden CLI surface has groups for ${spec.name}")
-                assertEquals(null, cli.outputPolicy, "hidden CLI surface has output policy for ${spec.name}")
-                assertEquals(null, cli.executionStatus, "hidden CLI surface has execution status for ${spec.name}")
-                assertEquals(null, cli.outputOverride, "hidden CLI surface has output override for ${spec.name}")
-                assertEquals(null, cli.defaultOutput, "hidden CLI surface has default output for ${spec.name}")
-                assertEquals(null, cli.executableRenderer, "hidden CLI surface has executable renderer for ${spec.name}")
-            }
-        }
-    }
-
-    @Test
-    fun `summarize_module declares pretty CLI output default`() {
-        val summarize = HexanaTools.single { it.name == "summarize_module" }
-
-        assertEquals(
-            setOf(
-                OutputConversionCapability.SemanticJson,
-                OutputConversionCapability.McpWrapper,
-                OutputConversionCapability.Pretty,
-            ),
-            summarize.output.outputCapabilities,
-        )
-        assertEquals(OutputConversionCapability.Pretty, summarize.surfaces.cli.defaultOutput)
-    }
-
-    @Test
-    fun `implemented CLI commands are marked executable`() {
-        val summarizeModule = HexanaTools.single { it.name == "summarize_module" }
-        val wasmToWat = HexanaTools.single { it.name == "wasm_to_wat" }
-        val runBinaryScript = HexanaTools.single { it.name == "run_binary_script" }
-
-        assertEquals(CliExecutionStatus.Executable, summarizeModule.surfaces.cli.executionStatus)
-        assertEquals(CliExecutionStatus.Executable, wasmToWat.surfaces.cli.executionStatus)
-        assertEquals(CliExecutionStatus.Executable, runBinaryScript.surfaces.cli.executionStatus)
-        assertEquals("renderSummarizeModuleCommandOutput", summarizeModule.surfaces.cli.executableRenderer?.methodName)
-        assertEquals("renderWasmToWatCommandOutput", wasmToWat.surfaces.cli.executableRenderer?.methodName)
-        assertEquals("renderRunBinaryScriptCommandOutput", runBinaryScript.surfaces.cli.executableRenderer?.methodName)
-        assertEquals(setOf(McpToolAudience.Scripting), runBinaryScript.surfaces.mcp.audiences)
-        assertEquals("run-script", runBinaryScript.surfaces.cli.commandName)
-    }
-
-    @Test
-    fun `CLI release products select the approved executable inventories`() {
-        fun commands(product: CliReleaseProduct): Set<String> = HexanaTools
-            .filter { product in it.surfaces.cli.releaseProducts }
-            .map { requireNotNull(it.surfaces.cli.commandName) }
-            .toSet()
-
-        assertEquals(
-            setOf("summarize-binary", "summarize-module", "wasm-to-wat", "run-script"),
-            commands(CliReleaseProduct.HexanaMcp),
-        )
-        assertEquals(
-            setOf("summarize-binary", "summarize-module", "wasm-to-wat"),
-            commands(CliReleaseProduct.HexanaCli),
-        )
-        assertEquals(setOf("run-script"), commands(CliReleaseProduct.HexanaCliScript))
-    }
-
-    @Test
-    fun `TODO CLI tools remain visible metadata but are excluded from release products`() {
-        val todoTools = HexanaTools.filter { it.surfaces.cli.executionStatus == CliExecutionStatus.Todo }
-
-        assertEquals(27, todoTools.size)
-        assertTrue(todoTools.all { it.surfaces.cli.visible })
-        assertTrue(todoTools.all { it.surfaces.cli.releaseProducts.isEmpty() })
-    }
-
-    @Test
-    fun `release product validation rejects cross-product selection`() {
-        val summarize = HexanaTools.single { it.name == "summarize_binary" }
-        val mutated = summarize.copy(
-            surfaces = summarize.surfaces.copy(
-                cli = summarize.surfaces.cli.copy(
-                    releaseProducts = summarize.surfaces.cli.releaseProducts + CliReleaseProduct.HexanaCliScript,
-                ),
-            ),
-        )
-
-        val error = assertFailsWith<IllegalArgumentException> {
-            validateCliReleaseProducts(HexanaTools.map { if (it.name == mutated.name) mutated else it })
-        }
-        assertTrue(error.message.orEmpty().contains("summarize_binary"))
-        assertTrue(error.message.orEmpty().contains("HexanaCliScript"))
-    }
-
-    @Test
-    fun `release product validation rejects TODO selection and incomplete handler closure`() {
-        val todo = HexanaTools.first { it.surfaces.cli.executionStatus == CliExecutionStatus.Todo }
-        val todoError = assertFailsWith<IllegalArgumentException> {
-            todo.copy(
-                surfaces = todo.surfaces.copy(
-                    cli = todo.surfaces.cli.copy(releaseProducts = setOf(CliReleaseProduct.HexanaMcp)),
-                ),
-            )
-        }
-        assertTrue(todoError.message.orEmpty().contains("must not belong to a release product"))
-
-        val summarize = HexanaTools.single { it.name == "summarize_binary" }.copy(handlerFqn = "")
-        val handlerError = assertFailsWith<IllegalArgumentException> {
-            validateCliReleaseProducts(HexanaTools.map { if (it.name == summarize.name) summarize else it })
-        }
-        assertTrue(handlerError.message.orEmpty().contains("valid handler FQN"))
-    }
-
-    @Test
-    fun `release product validation rejects command collisions`() {
-        val summarizeBinary = HexanaTools.single { it.name == "summarize_binary" }
-        val summarizeModule = HexanaTools.single { it.name == "summarize_module" }
-        val collidedModule = summarizeModule.copy(
-            surfaces = summarizeModule.surfaces.copy(
-                cli = summarizeModule.surfaces.cli.copy(commandName = summarizeBinary.surfaces.cli.commandName),
-            ),
-        )
-
-        val error = assertFailsWith<IllegalArgumentException> {
-            validateCliReleaseProducts(listOf(summarizeBinary, collidedModule))
-        }
-        assertTrue(error.message.orEmpty().contains("Duplicate command names in hexana-mcp"))
+        assertEquals(listOf("summarize_binary", "run_binary_script", "wasm_to_wat", "summarize_module"), products.getValue(CliReleaseProduct.HexanaMcp))
+        assertEquals(listOf("summarize_binary", "wasm_to_wat", "summarize_module"), products.getValue(CliReleaseProduct.HexanaCli))
+        assertEquals(listOf("run_binary_script"), products.getValue(CliReleaseProduct.HexanaCliScript))
+        val executable = HexanaCliTools.filter { it.binding.executionStatus == CliExecutionStatus.Executable }
+        assertEquals(4, executable.size)
+        assertTrue(executable.all { it.inputModel != null })
+        assertEquals(OutputConversionCapability.Pretty, HexanaCliTools.single { it.name == "summarize_module" }.binding.defaultOutput)
     }
 
     @Test
@@ -403,168 +226,30 @@ class HexanaToolsTest {
     }
 
     @Test
-    fun `production and advanced MCP audiences do not imply CLI visibility`() {
-        val production = HexanaTools.single { it.name == "summarize_binary" }
-        assertEquals(setOf(McpToolAudience.Production), production.surfaces.mcp.audiences)
-        assertTrue(production.surfaces.cli.visible)
-        assertEquals("summarize-binary", production.surfaces.cli.commandName)
-        assertEquals(CliExecutionStatus.Executable, production.surfaces.cli.executionStatus)
-        assertEquals("renderSummarizeBinaryCliCommandOutput", production.surfaces.cli.executableRenderer?.methodName)
-
-        val advanced = HexanaTools.single { it.name == "query_artifacts" }
-        assertEquals(setOf(McpToolAudience.Advanced), advanced.surfaces.mcp.audiences)
-        assertFalse(advanced.surfaces.cli.visible)
-        assertEquals(null, advanced.surfaces.cli.commandName)
-        assertEquals(null, advanced.surfaces.cli.executionStatus)
+    fun `surface binding selectors reject duplicate missing and unknown bindings`() {
+        data class Binding(val id: ToolId)
+        val selected = HexanaTools.take(2).map { it.id }
+        val bindings = selected.map(::Binding)
+        assertFailsWith<IllegalArgumentException> {
+            HexanaToolCatalog.resolveBindings(selected, bindings + bindings.first(), "test", Binding::id) { contract, _ -> contract }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            HexanaToolCatalog.resolveBindings(selected, bindings.take(1), "test", Binding::id) { contract, _ -> contract }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            HexanaToolCatalog.resolveBindings(selected, bindings + Binding(ToolId("unknown_tool")), "test", Binding::id) { contract, _ -> contract }
+        }
     }
 
     @Test
-    fun `MCP visibility CLI visibility and CLI execution status are independent metadata`() {
-        val cliOnlyTodo = tools {
-            tool("future_cli_only") {
-                summary = "Future CLI-only metadata."
-                input = BinaryInputClass
-                inputPattern = ToolInputPattern.BinaryOnly
-                output = binarySummaryResult
-                surfaces = noMcpCliSurface("future-cli-only", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
-                handlerFqn = queryArtifacts.handlerFqn
-            }
-        }.single()
-
-        assertFalse(cliOnlyTodo.surfaces.mcp.visible)
-        assertEquals(emptySet(), cliOnlyTodo.surfaces.mcp.audiences)
-        assertTrue(cliOnlyTodo.surfaces.cli.visible)
-        assertEquals(CliExecutionStatus.Todo, cliOnlyTodo.surfaces.cli.executionStatus)
-
-        val advancedHidden = HexanaTools.single { it.name == "query_artifacts" }
-        assertEquals(setOf(McpToolAudience.Advanced), advancedHidden.surfaces.mcp.audiences)
-        assertFalse(advancedHidden.surfaces.cli.visible)
-        assertEquals(null, advancedHidden.surfaces.cli.executionStatus)
-    }
-
-    @Test
-    fun `public MCPB exposure is declared separately from production MCP audience`() {
-        val productionOnly = productionCliSurface("summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
-        assertEquals(setOf(McpToolAudience.Production), productionOnly.mcp.audiences)
-        assertFalse(productionOnly.publicMcpb.included)
-
-        val publicMcpb = publicMcpbProductionCliSurface("summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
-        assertEquals(setOf(McpToolAudience.Production), publicMcpb.mcp.audiences)
-        assertTrue(publicMcpb.publicMcpb.included)
-    }
-
-    @Test
-    fun `CLI visible output override is validated against output capabilities`() {
-        val semanticOnlyOutput = class_("SemanticOnlyResult", kotlinPackage = "org.jetbrains.hexana.mcp.model.test") {
-            outputCapabilities(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper)
-            string("value").describe("Result value.")
-        }
-
-        val specs = tools {
-            tool("supported_output_override") {
-                summary = "Supported output override."
-                input = BinaryInputClass
-                inputPattern = ToolInputPattern.BinaryOnly
-                output = semanticOnlyOutput
-                surfaces = productionCliSurface(
-                    "supported-output-override",
-                    ToolGroup.Binary,
-                    ToolOutputPolicy.ToolDefined,
-                    outputOverride = OutputConversionCapability.SemanticJson,
-                )
-                handlerFqn = queryArtifacts.handlerFqn
-            }
-        }
-
-        assertEquals(OutputConversionCapability.SemanticJson, specs.single().surfaces.cli.outputOverride)
-
-        val error = assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("unsupported_output_override") {
-                    summary = "Unsupported output override."
-                    input = BinaryInputClass
-                    inputPattern = ToolInputPattern.BinaryOnly
-                    output = semanticOnlyOutput
-                    surfaces = productionCliSurface(
-                        "unsupported-output-override",
-                        ToolGroup.Binary,
-                        ToolOutputPolicy.ToolDefined,
-                        outputOverride = OutputConversionCapability.RawBytes,
-                    )
-                    handlerFqn = queryArtifacts.handlerFqn
-                }
-            }
-        }
-
+    fun `CLI output selections are validated against semantic capabilities`() {
+        val contract = HexanaTools.single { it.name == "summarize_binary" }
+        val unsupported = cliToolBinding(
+            "summarize_binary", "summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined,
+            outputOverride = OutputConversionCapability.RawBytes,
+        )
+        val error = assertFailsWith<IllegalArgumentException> { validateCliBinding(contract, unsupported) }
         assertTrue(error.message.orEmpty().contains("CLI output RawBytes is not declared"))
-    }
-
-    @Test
-    fun `hidden CLI surface rejects output override`() {
-        val error = assertFailsWith<IllegalArgumentException> {
-            CliSurfaceSpec(
-                visible = false,
-                commandName = null,
-                groups = emptySet(),
-                outputPolicy = null,
-                outputOverride = OutputConversionCapability.SemanticJson,
-            )
-        }
-
-        assertTrue(error.message.orEmpty().contains("Hidden CLI surface must not declare an output override"))
-    }
-
-    @Test
-    fun `CLI execution status follows CLI visibility`() {
-        val visibleError = assertFailsWith<IllegalArgumentException> {
-            CliSurfaceSpec(
-                visible = true,
-                commandName = "future-command",
-                groups = setOf(ToolGroup.Binary),
-                outputPolicy = ToolOutputPolicy.ToolDefined,
-                defaultOutput = OutputConversionCapability.SemanticJson,
-            )
-        }
-        assertTrue(visibleError.message.orEmpty().contains("must declare an execution status"))
-
-        val hiddenError = assertFailsWith<IllegalArgumentException> {
-            CliSurfaceSpec(
-                visible = false,
-                commandName = null,
-                groups = emptySet(),
-                outputPolicy = null,
-                executionStatus = CliExecutionStatus.Todo,
-            )
-        }
-        assertTrue(hiddenError.message.orEmpty().contains("Hidden CLI surface must not declare an execution status"))
-    }
-
-    @Test
-    fun `visible CLI surface default output is validated against output capabilities`() {
-        val semanticOnlyOutput = class_("SemanticOnlyResult", kotlinPackage = "org.jetbrains.hexana.mcp.model.test") {
-            outputCapabilities(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper)
-            string("value").describe("Result value.")
-        }
-
-        val error = assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("unsupported_default_output") {
-                    summary = "Unsupported default output."
-                    input = BinaryInputClass
-                    inputPattern = ToolInputPattern.BinaryOnly
-                    output = semanticOnlyOutput
-                    surfaces = productionCliSurface(
-                        "unsupported-default-output",
-                        ToolGroup.Binary,
-                        ToolOutputPolicy.ToolDefined,
-                        defaultOutput = OutputConversionCapability.Pretty,
-                    )
-                    handlerFqn = queryArtifacts.handlerFqn
-                }
-            }
-        }
-
-        assertTrue(error.message.orEmpty().contains("CLI output Pretty is not declared"))
     }
 
     @Test
@@ -574,9 +259,7 @@ class HexanaToolsTest {
                 tool("queryArtifacts") {
                     summary = "s"
                     input = WasmInputClass
-                    inputPattern = ToolInputPattern.WasmOnly
                     output = WasmInputClass
-                    handlerFqn = queryArtifacts.handlerFqn
                 }
             }
         }
@@ -585,106 +268,28 @@ class HexanaToolsTest {
                 tool("query__artifacts") {
                     summary = "s"
                     input = WasmInputClass
-                    inputPattern = ToolInputPattern.WasmOnly
                     output = WasmInputClass
-                    handlerFqn = queryArtifacts.handlerFqn
                 }
             }
         }
     }
 
     @Test
-    fun `tool builder rejects invalid standalone handler names`() {
-        val error = assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("invalid_standalone_handler") {
-                    standaloneHandler("org.jetbrains.hexana.BadHandler")
-                }
-            }
-        }
-
-        assertTrue(error.message.orEmpty().contains("Standalone handler method name"))
-    }
-
-    @Test
-    fun `tool builder requires explicit surface metadata`() {
-        val error = assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("missing_surfaces") {
-                    summary = "s"
-                    input = BinaryInputClass
-                    inputPattern = ToolInputPattern.BinaryOnly
-                    output = binarySummaryResult
-                    handlerFqn = queryArtifacts.handlerFqn
-                }
-            }
-        }
-
-        assertTrue(error.message.orEmpty().contains("missing `surfaces = `"))
-    }
-
-    @Test
-    fun `no MCP CLI surface is explicitly distinct from advanced MCP`() {
-        val converter = HexanaTools.single { it.name == "wasm_to_wat" }
-
-        assertFalse(converter.surfaces.mcp.visible)
-        assertEquals(emptySet(), converter.surfaces.mcp.audiences)
-        assertTrue(converter.surfaces.cli.visible)
-        assertEquals("wasm-to-wat", converter.surfaces.cli.commandName)
-        assertEquals(setOf(ToolGroup.Converters), converter.surfaces.cli.groups)
-        assertFalse(converter.surfaces.publicMcpb.included)
-    }
-
-    @Test
-    fun `CLI visible surface requires kebab-case command metadata`() {
+    fun `standalone handler and CLI command names validate independently`() {
+        assertFailsWith<IllegalArgumentException> { StandaloneHandlerSpec("org.jetbrains.hexana.BadHandler") }
         assertFailsWith<IllegalArgumentException> {
-            productionCliSurface("query_artifacts", ToolGroup.ArtifactQuery, ToolOutputPolicy.ToolDefined)
+            cliToolBinding("query_artifacts", "query_artifacts", ToolGroup.ArtifactQuery, ToolOutputPolicy.ToolDefined)
         }
-
-        val error = assertFailsWith<IllegalArgumentException> {
-            CliSurfaceSpec(
-                visible = true,
-                commandName = null,
-                groups = setOf(ToolGroup.ArtifactQuery),
-                outputPolicy = ToolOutputPolicy.ToolDefined,
-            )
-        }
-
-        assertTrue(error.message.orEmpty().contains("must declare a command name"))
+        val commands = HexanaCliTools.map { it.binding.commandName }
+        assertEquals(commands.toSet().size, commands.size)
+        assertFalse(HexanaCliTools.any { it.name == "query_artifacts" })
+        assertTrue(HexanaCliTools.any { it.name == "wasm_to_wat" })
     }
 
     @Test
-    fun `tool collection rejects duplicate CLI command names`() {
-        val error = assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("first_tool") {
-                    summary = "s"
-                    input = BinaryInputClass
-                    inputPattern = ToolInputPattern.BinaryOnly
-                    output = binarySummaryResult
-                    surfaces = productionCliSurface("same-command", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
-                    handlerFqn = queryArtifacts.handlerFqn
-                }
-                tool("second_tool") {
-                    summary = "s"
-                    input = BinaryInputClass
-                    inputPattern = ToolInputPattern.BinaryOnly
-                    output = binarySummaryResult
-                    surfaces = productionCliSurface("same-command", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
-                    handlerFqn = queryArtifacts.handlerFqn
-                }
-            }
-        }
-
-        assertTrue(error.message.orEmpty().contains("Duplicate CLI command names"))
-        assertTrue(error.message.orEmpty().contains("same-command"))
-    }
-
-    @Test
-    fun `every tool declares summary, input, output, handler`() {
+    fun `every semantic contract declares summary input and output`() {
         for (spec in HexanaTools) {
             assertTrue(spec.summary.isNotBlank(), "summary blank for ${spec.name}")
-            assertTrue(spec.handlerFqn.isNotBlank(), "handlerFqn blank for ${spec.name}")
             assertTrue(spec.input.fields.isNotEmpty(), "empty input class for ${spec.name}")
             assertTrue(
                 spec.output.kotlinFqn != null,
@@ -708,14 +313,14 @@ class HexanaToolsTest {
 
     @Test
     fun `query_artifacts uses the artifact query invocation pattern`() {
-        assertEquals(ToolInputPattern.ArtifactQuery, queryArtifacts.inputPattern)
+        assertEquals(ToolInputPattern.ArtifactQuery, HexanaIdeaTools.single { it.name == "query_artifacts" }.inputPattern)
     }
 
     @Test
     fun `plan_abi_binding_regeneration uses the binding file invocation pattern`() {
         val planner = HexanaTools.single { it.name == "plan_abi_binding_regeneration" }
 
-        assertEquals(ToolInputPattern.WasmWithBinding, planner.inputPattern)
+        assertEquals(ToolInputPattern.WasmWithBinding, HexanaIdeaTools.single { it.name == "plan_abi_binding_regeneration" }.inputPattern)
         assertTrue(planner.guidance.orEmpty().contains("current WebAssembly"))
         assertFalse(planner.guidance.orEmpty().contains("task"))
     }
@@ -724,7 +329,7 @@ class HexanaToolsTest {
     fun `get_entrypoint_policy uses the path label invocation pattern`() {
         assertEquals(
             ToolInputPattern.WasmPathLabel,
-            HexanaTools.single { it.name == "get_entrypoint_policy" }.inputPattern
+            HexanaIdeaTools.single { it.name == "get_entrypoint_policy" }.inputPattern
         )
     }
 
@@ -732,7 +337,7 @@ class HexanaToolsTest {
     fun `audit_local_stack_budget uses the local stack budget invocation pattern`() {
         val audit = HexanaTools.single { it.name == "audit_local_stack_budget" }
 
-        assertEquals(ToolInputPattern.LocalStackBudgetAudit, audit.inputPattern)
+        assertEquals(ToolInputPattern.LocalStackBudgetAudit, HexanaIdeaTools.single { it.name == "audit_local_stack_budget" }.inputPattern)
         assertTrue(audit.guidance.orEmpty().contains("without full disassembly"))
         assertTrue(audit.guidance.orEmpty().contains("recommendedReport"))
     }
@@ -741,7 +346,7 @@ class HexanaToolsTest {
     fun `get_entrypoint_policy describes entrypoint policy analysis`() {
         val get = HexanaTools.single { it.name == "get_entrypoint_policy" }
 
-        assertEquals(ToolInputPattern.WasmPathLabel, get.inputPattern)
+        assertEquals(ToolInputPattern.WasmPathLabel, HexanaIdeaTools.single { it.name == "get_entrypoint_policy" }.inputPattern)
         assertTrue(get.summary.contains("policy-ready"))
         val guidance = assertNotNull(get.guidance)
         assertTrue(guidance.contains("repairing or validating entrypoint host-call policy JSON"))
@@ -755,7 +360,7 @@ class HexanaToolsTest {
     fun `check_runtime_compatibility uses the runtime compatibility invocation pattern`() {
         assertEquals(
             ToolInputPattern.RuntimeCompatibility,
-            HexanaTools.single { it.name == "check_runtime_compatibility" }.inputPattern
+            HexanaIdeaTools.single { it.name == "check_runtime_compatibility" }.inputPattern
         )
     }
 
@@ -763,7 +368,7 @@ class HexanaToolsTest {
     fun `diff_required_proposals uses the wasm with baseline invocation pattern`() {
         assertEquals(
             ToolInputPattern.WasmWithBaseline,
-            HexanaTools.single { it.name == "diff_required_proposals" }.inputPattern
+            HexanaIdeaTools.single { it.name == "diff_required_proposals" }.inputPattern
         )
     }
 
@@ -771,15 +376,15 @@ class HexanaToolsTest {
     fun `component tools use component invocation patterns`() {
         assertEquals(
             ToolInputPattern.ComponentSurface,
-            HexanaTools.single { it.name == "list_component_surface" }.inputPattern
+            HexanaIdeaTools.single { it.name == "list_component_surface" }.inputPattern
         )
         assertEquals(
             ToolInputPattern.ComponentDependencies,
-            HexanaTools.single { it.name == "resolve_component_dependencies" }.inputPattern
+            HexanaIdeaTools.single { it.name == "resolve_component_dependencies" }.inputPattern
         )
         assertEquals(
             ToolInputPattern.ComponentCompatibility,
-            HexanaTools.single { it.name == "check_component_compatibility" }.inputPattern
+            HexanaIdeaTools.single { it.name == "check_component_compatibility" }.inputPattern
         )
     }
 
@@ -787,11 +392,11 @@ class HexanaToolsTest {
     fun `policy audit tools use the baseline policy invocation pattern`() {
         assertEquals(
             ToolInputPattern.PolicyWithBaselineAndLog,
-            HexanaTools.single { it.name == "check_memory_contract" }.inputPattern
+            HexanaIdeaTools.single { it.name == "check_memory_contract" }.inputPattern
         )
         assertEquals(
             ToolInputPattern.GlobalStatePolicyAudit,
-            HexanaTools.single { it.name == "audit_global_state_policy" }.inputPattern
+            HexanaIdeaTools.single { it.name == "audit_global_state_policy" }.inputPattern
         )
     }
 
@@ -890,44 +495,16 @@ class HexanaToolsTest {
 
     @Test
     fun `binary invocation patterns can be declared from binary input classes`() {
-        val specs = tools {
-            tool("summarize_binary") {
-                summary = "Summarize a binary."
-                input = BinaryInputClass
-                inputPattern = ToolInputPattern.BinaryOnly
-                output = binarySummaryResult
-                surfaces = productionCliSurface("summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
-                handlerFqn = "org.jetbrains.hexana.mcp.query.summarizeBinary"
-            }
-            tool("query_binary") {
-                summary = "Query a binary."
-                input = queryBinaryInput
-                inputPattern = ToolInputPattern.BoundedBinaryQuery
-                output = binarySummaryResult
-                surfaces = productionCliSurface("query-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
-                handlerFqn = "org.jetbrains.hexana.mcp.query.queryBinary"
-            }
-        }
-
-        assertEquals(
-            listOf(ToolInputPattern.BinaryOnly, ToolInputPattern.BoundedBinaryQuery),
-            specs.map { it.inputPattern },
-        )
+        validateInputPattern("summarize_binary", BinaryInputClass, ToolInputPattern.BinaryOnly)
+        validateInputPattern("query_binary", queryBinaryInput, ToolInputPattern.BoundedBinaryQuery)
+        assertEquals(ToolInputPattern.BinaryOnly, HexanaIdeaTools.single { it.name == "summarize_binary" }.inputPattern)
+        assertEquals(ToolInputPattern.BoundedBinaryQuery, HexanaIdeaTools.single { it.name == "query_binary" }.inputPattern)
     }
 
     @Test
     fun `binary invocation patterns reject wasm input classes`() {
         assertFailsWith<IllegalArgumentException> {
-            tools {
-                tool("summarize_binary") {
-                    summary = "Summarize a binary."
-                    input = WasmInputClass
-                    inputPattern = ToolInputPattern.BinaryOnly
-                    output = binarySummaryResult
-                    surfaces = productionCliSurface("summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined)
-                    handlerFqn = "org.jetbrains.hexana.mcp.query.summarizeBinary"
-                }
-            }
+            validateInputPattern("summarize_binary", WasmInputClass, ToolInputPattern.BinaryOnly)
         }
     }
 

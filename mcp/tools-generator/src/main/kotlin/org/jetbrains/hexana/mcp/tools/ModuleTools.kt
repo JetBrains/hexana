@@ -68,15 +68,6 @@ val ListCustomSectionsResultClass = class_("ListCustomSectionsResult", kotlinPac
 internal val ModuleTools: List<ToolSpec> = tools {
     tool("summarize_module") {
         summary = "Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types."
-        surfaces = publicMcpbProductionCliSurface(
-            "summarize-module",
-            ToolGroup.Module,
-            ToolOutputPolicy.ToolDefined,
-            executionStatus = CliExecutionStatus.Executable,
-            defaultOutput = OutputConversionCapability.Pretty,
-            executableRenderer = executableCliRenderer("renderSummarizeModuleCommandOutput"),
-            releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCli),
-        )
         guidance = """
             Summarize a WebAssembly (.wasm) module with high-level counts for its major sections and declarations.
             Includes the nested import breakdown and total module size, making it a low-cost overview before calling heavier tools.
@@ -84,35 +75,27 @@ internal val ModuleTools: List<ToolSpec> = tools {
             After this overview, prefer `list_imports` for import/link analysis, `list_exported_functions` for export analysis, and `get_instructions_for_functions` for body analysis.
         """
         input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmOnly
         output = SummarizeModuleResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readModuleSummary"
     }
 
     tool("list_enabled_features") {
         summary = "List enabled or inferred WebAssembly feature flags for a `.wasm` module."
-        surfaces = publicMcpbProductionCliSurface("list-enabled-features", ToolGroup.Module, ToolOutputPolicy.ToolDefined)
         guidance = """
             Infer WebAssembly feature usage from type declarations, section presence, instructions, and feature-related custom sections.
             Use this before choosing specialized tools when syntax or semantics depend on proposals such as reference types, bulk memory, SIMD, threads, memory64, GC, or function references.
         """
         input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmOnly
         output = ListEnabledFeaturesResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readEnabledFeatures"
     }
 
     tool("list_custom_sections") {
         summary = "List WebAssembly custom sections with offsets, sizes, and small content previews."
-        surfaces = advancedHiddenCliSurface()
         guidance = """
             List custom sections from a WebAssembly module, including names, full-section byte ranges, and a capped content preview.
             The preview excludes the encoded section name; `encoding` is `utf8` for printable UTF-8 content prefixes and `binary` for hex-rendered byte prefixes.
             Use this before deeper debug, producer, source-map, or CTF-style metadata investigation.
         """
         input = WasmInputClass
-        inputPattern = ToolInputPattern.WasmOnly
         output = ListCustomSectionsResultClass
-        handlerFqn = "org.jetbrains.hexana.mcp.query.readCustomSections"
     }
 }
