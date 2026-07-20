@@ -14,6 +14,7 @@ import org.jetbrains.hexana.mcp.tools.HexanaStandaloneTools
 import org.jetbrains.hexana.mcp.tools.ParamBindingKind
 import org.jetbrains.hexana.mcp.tools.ParamBindingSpec
 import org.jetbrains.hexana.mcp.tools.SourceTargetSpec
+import org.jetbrains.hexana.mcp.tools.HexanaTools
 import org.jetbrains.hexana.mcp.tools.StandaloneHandlerSpec
 import org.jetbrains.hexana.mcp.tools.StandaloneToolAuthority
 import org.jetbrains.hexana.mcp.tools.ToolGroup
@@ -52,14 +53,39 @@ class ToolDescriptionGenerationTest {
     fun `resolved IDEA and standalone generators preserve descriptions and surface isolation`() {
         val idea = ideaSource()
         val standalone = dispatcherSource()
-        val representative = HexanaIdeaTools.single { it.name == "query_artifacts" }
+        val representative = HexanaStandaloneTools.single { it.name == "query_artifacts" }
 
-        assertTrue(idea.contains(representative.mcpDescription.lines().first()))
+        assertFalse(idea.contains(representative.mcpDescription.lines().first()))
         assertTrue(standalone.contains(representative.mcpDescription.lines().first()))
+        HexanaStandaloneDefaultToolIds.forEach { defaultTool ->
+            assertTrue(idea.contains("name = \"${defaultTool.value}\""))
+        }
+        assertEquals(29, Regex("fullyQualifiedName =").findAll(idea).count())
+        assertFalse(idea.contains("name = \"query_binary\""))
+        assertFalse(idea.contains("name = \"list_binary_functions\""))
+        assertFalse(idea.contains("name = \"query_artifacts\""))
         assertFalse(idea.contains("run_binary_script"))
         assertFalse(idea.contains("wasm_to_wat"))
         assertTrue(standalone.contains("handlers.runBinaryScript(request.arguments)"))
         assertFalse(standalone.contains("wasm_to_wat"))
+    }
+
+    @Test
+    fun `IDEA descriptions reference only registered IDEA tools`() {
+        val knownToolNames = HexanaTools.mapTo(mutableSetOf()) { it.name }
+        val ideaToolNames = HexanaIdeaTools.mapTo(mutableSetOf()) { it.name }
+        val toolReference = Regex("`([a-z][a-z0-9_]*)`")
+
+        HexanaIdeaTools.forEach { tool ->
+            val unavailableReferences = toolReference.findAll(tool.mcpDescription)
+                .map { it.groupValues[1] }
+                .filter { it in knownToolNames && it !in ideaToolNames }
+                .toSet()
+            assertTrue(
+                unavailableReferences.isEmpty(),
+                "IDEA tool '${tool.name}' references unavailable tools: $unavailableReferences",
+            )
+        }
     }
 
     @Test

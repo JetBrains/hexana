@@ -19,7 +19,7 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
  * Generated MCP tool schema compatibility marker.
  */
 public object HexanaMcpToolCompatibility {
-  public const val SCHEMA_VERSION: Int = 2
+  public const val SCHEMA_VERSION: Int = 3
 
   public const val POLICY: String =
       "Tool schemas are append-compatible within a version; breaking changes to names, required inputs, defaults, bounds, output keys, or descriptions require a schema version bump."
@@ -762,7 +762,7 @@ private fun Server.registerSummarizeModuleTool(handlers: HexanaToolHandlers) {
   |Summarize a WebAssembly (.wasm) module with high-level counts for its major sections and declarations.
   |Includes the nested import breakdown and total module size, making it a low-cost overview before calling heavier tools.
   |For broad Wasm analysis requests, this is usually the best first MCP call before choosing more specific import, export, or instruction tools.
-  |After this overview, prefer `list_imports` for import/link analysis, `list_exported_functions` for export analysis, and `get_instructions_for_functions` for body analysis.
+  |After this overview, prefer `list_imports` for import/link analysis, `list_exported_functions` for export analysis, and `disassemble_function` for targeted body analysis.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -2032,7 +2032,7 @@ private fun Server.registerAuditLocalStackBudgetTool(handlers: HexanaToolHandler
   |Audit exported function local counts against a local stack budget policy.
   |Use this as the shortest path for local-variable or stack-budget audits that have a Wasm module and optional `policyPath`.
   |It maps exported functions to funcidx values, reads grouped declared locals without full disassembly, applies `max_locals` and `count_params`, and returns violations, clean exports, log evidence, and `recommendedReport`.
-  |Prefer this production tool over `list_exported_functions`, `get_locals_for_functions`, `disassemble_function`, or per-function traces when the goal is exported-function local budget analysis.
+  |Prefer this production tool over lower-level function inventory, disassembly, or per-function traces when the goal is exported-function local budget analysis.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -2247,7 +2247,7 @@ private fun Server.registerListImportsTool(handlers: HexanaToolHandlers) {
   |Do not use this low-level function-import inventory as the main workflow for selecting component dependency files.
   |Returns only function imports from the unified function index space, including the `funcidx` values needed to map direct `call` targets back to imports.
   |Each import includes structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
-  |For direct host-call analysis, pair these `funcidx` values with `get_instructions_for_functions` to resolve `call N` back to `module.name` imports.
+  |For direct host-call analysis, use these `funcidx` values to distinguish imported functions from defined function indices in other results.
   |For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy` instead; it returns the complete copy-ready policy/report payload directly.
   """.trimMargin(),
     inputSchema = ToolSchema(
@@ -2460,7 +2460,7 @@ private fun Server.registerListExportedFunctionsTool(handlers: HexanaToolHandler
   |The range applies to export-list order, not to `funcidx`, and each result resolves to either an imported or a defined function entry.
   |This is the primary MCP tool for export inventories, export diffs, function-signature extraction, and import-vs-local origin checks.
   |Prefer this over `list_exports` for export diffs or signature extraction, because each result already includes the resolved function entry, signature, and origin.
-  |The signature strings are usually ready to use as-is, so `list_types` is often unnecessary unless you need raw type definitions.
+  |The resolved signature strings are ready to use directly for most export analysis.
   |For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy`; it already filters exported local functions to direct imported-call entrypoints and returns the copy-ready payload.
   """.trimMargin(),
     inputSchema = ToolSchema(
@@ -2564,7 +2564,7 @@ private fun Server.registerListFunctionsTool(handlers: HexanaToolHandlers) {
   |The offset is in the unified function index space, so imports appear before defined bodies.
   |Use this when you need one mixed index space over both imports and defined bodies; for import-only analysis, prefer `list_imports`.
   |Imported entries include structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
-  |Use this to map or inspect `funcidx` ranges before targeted body lookup with `get_instructions_for_functions`.
+  |Use this to map or inspect `funcidx` ranges before targeted body lookup with `disassemble_function`.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {
@@ -4341,7 +4341,7 @@ private fun Server.registerListDataSegmentsTool(handlers: HexanaToolHandlers) {
     description = """
   |Return data-segment metadata with range slicing and optional export/global context.
   |Range `segmentRange` is half-open: `from` is inclusive, `to` is exclusive (omit `to` to read to the end).
-  |Prefer this over `list_data` when previews, sizes, and offset context are enough.
+  |Use this when previews, sizes, and offset context are enough for the analysis.
   """.trimMargin(),
     inputSchema = ToolSchema(
     properties = buildJsonObject {

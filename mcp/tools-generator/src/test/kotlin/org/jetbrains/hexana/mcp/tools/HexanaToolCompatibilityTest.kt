@@ -316,8 +316,8 @@ class HexanaToolCompatibilityTest {
         .joinToString("") { "%02x".format(it) }
 
     private companion object {
-        const val EXPECTED_SEMANTIC = "ebf885f898d01b05b137c8c0a4a3d1116229cba5d19f60fc39a0383d794839ab"
-        const val EXPECTED_IDEA = "c561c5ea33362212bd107bfc5382b04b906ae32eaabdd1bfb7f31545ba528533"
+        const val EXPECTED_SEMANTIC = "87cb5062722f1199843e8e6ebcaad4bb140e5cf1b8c35bfc65f7516b77724282"
+        const val EXPECTED_IDEA = "b3d01605c58323500af1b4e1eeabfa8b6ff2e4fb659bfccac35c9869c379d378"
         const val EXPECTED_STANDALONE = "0395327fb451b08908345ce4e59bd1cf97bb05dd4bb1cb2165679a2744dd8b44"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"
         const val EXPECTED_CLI = "4df9852934148e1ff5ef3ad0d5c7c61a499403b0bc44a28eafcc0d6facbdfbd9"

@@ -107,7 +107,7 @@ This module compiles sources from three locations:
 
 ### MCP Tooling
 
-- `HexanaToolset.kt` is the `McpToolsProvider` registration surface for all plugin MCP tools. It is generated from the DSL in
+- `HexanaToolset.kt` is the `McpToolsProvider` registration surface for the 29-tool standalone default MCP profile. It is generated from the DSL in
   `mcp/tools-generator/` — do not hand-edit it; regenerate with `./gradlew :idea-plugin:generateHexanaToolset`.
 - `ToolsetHelpers.kt` is hand-written and holds the IntelliJ-side helpers the generated toolset calls
   (`requireWasmFile`, `requireCoreWasmBinaryProvider`, range helpers).

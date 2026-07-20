@@ -72,7 +72,7 @@ internal val ModuleTools: List<ToolSpec> = tools {
             Summarize a WebAssembly (.wasm) module with high-level counts for its major sections and declarations.
             Includes the nested import breakdown and total module size, making it a low-cost overview before calling heavier tools.
             For broad Wasm analysis requests, this is usually the best first MCP call before choosing more specific import, export, or instruction tools.
-            After this overview, prefer `list_imports` for import/link analysis, `list_exported_functions` for export analysis, and `get_instructions_for_functions` for body analysis.
+            After this overview, prefer `list_imports` for import/link analysis, `list_exported_functions` for export analysis, and `disassemble_function` for targeted body analysis.
         """
         input = WasmInputClass
         output = SummarizeModuleResultClass

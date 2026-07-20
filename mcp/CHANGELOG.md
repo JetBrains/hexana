@@ -8,7 +8,7 @@
 
 ### Changed
 - Standalone MCP profile names are now `default`, `advanced`, and `scripting`. The 29-tool default profile is the runtime and generated-registration default; the 18 advanced-only tools and the single scripting tool are disjoint. Legacy `production`, `full`, and `debug` aliases are rejected.
-- MCP tool schemas now use schema version 2 and advertise bounded list inputs such as `indices.maxItems` for clients that validate requests before calling tools.
+- MCP tool schemas now use schema version 3 and advertise bounded list inputs such as `indices.maxItems` for clients that validate requests before calling tools.
 
 ## 0.4.0 - 2026-07-06
 

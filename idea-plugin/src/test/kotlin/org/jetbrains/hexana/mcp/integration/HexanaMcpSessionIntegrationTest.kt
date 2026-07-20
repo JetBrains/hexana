@@ -22,7 +22,6 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
             client.listTools(ListToolsRequest()).tools.map { it.name }.toSet()
         }
 
-        assertTrue("query_artifacts missing from authorized session tools: $toolNames", "query_artifacts" in toolNames)
         val requiredGranularTools = setOf(
             "summarize_module",
             "list_imports",
@@ -30,7 +29,6 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
             "list_functions",
             "list_memory",
             "list_globals",
-            "list_types",
             "list_element_segments",
             "list_data_segments",
             "audit_data_payload_policy",
@@ -39,9 +37,12 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
             "Authorized session tools missing expected granular tools. tools=$toolNames",
             toolNames.containsAll(requiredGranularTools),
         )
+        assertFalse("query_artifacts should not be exposed by IDEA: $toolNames", "query_artifacts" in toolNames)
+        assertFalse("query_binary should not be exposed by IDEA: $toolNames", "query_binary" in toolNames)
+        assertFalse("list_binary_functions should not be exposed by IDEA: $toolNames", "list_binary_functions" in toolNames)
     }
 
-    fun testQueryArtifactsWorksOverAuthorizedSession() {
+    fun testSummarizeModuleWorksOverAuthorizedSession() {
         val fixture = createWasmFixture(
             "fixtures/integration/session/summary.wasm",
             """
@@ -52,53 +53,17 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
             """.trimIndent()
         )
 
-        val result = callToolViaSession("query_artifacts", jsonPath(fixture.projectRelativePath))
+        val result = callToolViaSession("summarize_module", jsonPath(fixture.projectRelativePath))
 
-        assertFalse("query_artifacts returned MCP error over session: $result", result.isError == true)
+        assertFalse("summarize_module returned MCP error over session: $result", result.isError == true)
         val textJson = json.parseToJsonElement(result.requireSingleText()) as JsonObject
         val structuredContent = result.requireStructuredObject()
 
         assertEquals(textJson, structuredContent)
-        val module = structuredContent.array("modules").obj(0)
+        val module = structuredContent
         assertEquals(1, module.int("functions"))
         assertEquals(1, module.int("exports"))
         assertTrue(module.int("moduleSize") > 0)
-    }
-
-    fun testQueryArtifactsFindsExportsOverAuthorizedSession() {
-        val fixture = createWasmFixture(
-            "fixtures/integration/session/exports.wasm",
-            """
-                (module
-                  (func (export "a") (result i32)
-                    i32.const 1)
-                  (func (export "b") (result i32)
-                    i32.const 2))
-            """.trimIndent()
-        )
-
-        val result = callToolViaSession(
-            "query_artifacts",
-            buildJsonObject {
-                put("path", JsonPrimitive(fixture.projectRelativePath))
-                put("operation", JsonPrimitive("find"))
-                put("entityTypes", kotlinx.serialization.json.buildJsonArray {
-                    add(JsonPrimitive("export"))
-                })
-                put("query", kotlinx.serialization.json.buildJsonArray {
-                    add(JsonPrimitive("a"))
-                })
-            }
-        )
-
-        assertFalse("query_artifacts returned MCP error over session: $result", result.isError == true)
-        val textJson = json.parseToJsonElement(result.requireSingleText()) as JsonObject
-        val structuredContent = result.requireStructuredObject()
-
-        assertEquals(textJson, structuredContent)
-        val record = structuredContent.array("records").obj(0)
-        assertEquals("export", record.text("entityType"))
-        assertEquals("a", record.text("name"))
     }
 
     private fun callToolViaSession(toolName: String, input: JsonObject): CallToolResult {

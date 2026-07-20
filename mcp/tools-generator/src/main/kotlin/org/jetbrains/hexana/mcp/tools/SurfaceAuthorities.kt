@@ -106,24 +106,7 @@ private fun idea(value: String, pattern: ToolInputPattern, handlerFqn: String) =
 private fun standalone(value: String, handler: String) =
     StandaloneToolBinding(id(value), StandaloneHandlerSpec(handler))
 
-private val IDEA_TOOL_IDS = listOf(
-    id("summarize_binary"), id("list_binary_functions"), id("search_binary_functions"), id("query_binary"),
-    id("summarize_module"), id("list_enabled_features"), id("get_entrypoint_policy"),
-    id("list_required_proposals"), id("diff_required_proposals"), id("check_runtime_compatibility"),
-    id("check_component_compatibility"), id("resolve_component_dependencies"), id("list_component_surface"),
-    id("plan_abi_binding_regeneration"), id("check_memory_contract"), id("audit_global_state_policy"),
-    id("audit_local_stack_budget"), id("list_custom_sections"), id("list_imports"), id("list_exports"),
-    id("search_exports"), id("list_exported_functions"), id("list_functions"), id("list_code_section_offsets"),
-    id("functions_for_indices"), id("resolve_function_signature"), id("disassemble_function"),
-    id("get_function_call_graph"), id("search_functions_by_name"), id("resolve_wasm_frames"),
-    id("resolve_function_symbols"), id("resolve_source_locations"), id("get_locals_for_functions"),
-    id("get_instructions_for_functions"), id("list_memory"), id("get_memory_for_indices"), id("list_globals"),
-    id("get_globals_for_indices"), id("list_types"), id("list_value_types"), id("list_reference_types"),
-    id("get_types_for_indices"), id("list_element_segments"), id("list_data"), id("list_data_segments"),
-    id("audit_data_payload_policy"), id("query_artifacts"),
-)
-
-private val IDEA_TOOL_BINDINGS = listOf(
+internal val HexanaIdeaToolBindings = listOf(
     idea("summarize_binary", ToolInputPattern.BinaryOnly, "org.jetbrains.hexana.mcp.query.readBinarySummary"),
     idea("list_binary_functions", ToolInputPattern.BinaryFunctionPage, "org.jetbrains.hexana.mcp.query.readBinaryFunctions"),
     idea("search_binary_functions", ToolInputPattern.BinaryFunctionSearch, "org.jetbrains.hexana.mcp.query.searchBinaryFunctions"),
@@ -173,14 +156,23 @@ private val IDEA_TOOL_BINDINGS = listOf(
     idea("query_artifacts", ToolInputPattern.ArtifactQuery, "org.jetbrains.hexana.mcp.query.readArtifactQuery"),
 )
 
-val HexanaIdeaTools: List<IdeaTool> = HexanaToolCatalog.resolveBindings(
-    IDEA_TOOL_IDS,
-    IDEA_TOOL_BINDINGS,
+private val validatedHexanaIdeaToolBindings = HexanaToolCatalog.resolveBindings(
+    HexanaIdeaToolBindings.map(IdeaToolBinding::id),
+    HexanaIdeaToolBindings,
     "IDEA tool authority",
     IdeaToolBinding::id,
-) { contract, binding ->
-    validateInputPattern(contract.name, contract.input, binding.inputPattern)
-    IdeaTool(contract, binding)
+) { _, binding -> binding }
+
+val HexanaIdeaTools: List<IdeaTool> by lazy {
+    HexanaToolCatalog.resolveBindings(
+        HexanaStandaloneDefaultToolIds,
+        validatedHexanaIdeaToolBindings.filter { it.id in HexanaStandaloneDefaultToolIds.toSet() },
+        "IDEA default tool authority",
+        IdeaToolBinding::id,
+    ) { contract, binding ->
+        validateInputPattern(contract.name, contract.input, binding.inputPattern)
+        IdeaTool(contract, binding)
+    }
 }
 
 private val STANDALONE_TOOL_IDS = listOf(

@@ -568,7 +568,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
             The offset is in the unified function index space, so imports appear before defined bodies.
             Use this when you need one mixed index space over both imports and defined bodies; for import-only analysis, prefer `list_imports`.
             Imported entries include structured location fields plus `locationDisplay`, a stable string suitable for report fields such as `where`.
-            Use this to map or inspect `funcidx` ranges before targeted body lookup with `get_instructions_for_functions`.
+            Use this to map or inspect `funcidx` ranges before targeted body lookup with `disassemble_function`.
         """
         input = ListFunctionsInput
         output = FunctionsResultClass
@@ -633,7 +633,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
         guidance = """
             Use this as the shortest path for local-variable or stack-budget audits that have a Wasm module and optional `policyPath`.
             It maps exported functions to funcidx values, reads grouped declared locals without full disassembly, applies `max_locals` and `count_params`, and returns violations, clean exports, log evidence, and `recommendedReport`.
-            Prefer this production tool over `list_exported_functions`, `get_locals_for_functions`, `disassemble_function`, or per-function traces when the goal is exported-function local budget analysis.
+            Prefer this production tool over lower-level function inventory, disassembly, or per-function traces when the goal is exported-function local budget analysis.
         """
         input = AuditLocalStackBudgetInput
         output = AuditLocalStackBudgetResultClass

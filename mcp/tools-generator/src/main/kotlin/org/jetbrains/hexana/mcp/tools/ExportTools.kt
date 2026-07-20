@@ -121,7 +121,7 @@ internal val ExportTools: List<ToolSpec> = tools {
             The range applies to export-list order, not to `funcidx`, and each result resolves to either an imported or a defined function entry.
             This is the primary MCP tool for export inventories, export diffs, function-signature extraction, and import-vs-local origin checks.
             Prefer this over `list_exports` for export diffs or signature extraction, because each result already includes the resolved function entry, signature, and origin.
-            The signature strings are usually ready to use as-is, so `list_types` is often unnecessary unless you need raw type definitions.
+            The resolved signature strings are ready to use directly for most export analysis.
             For entrypoint host-call policy repair or audit JSON, use `get_entrypoint_policy`; it already filters exported local functions to direct imported-call entrypoints and returns the copy-ready payload.
         """
         input = ListExportedFunctionsInput

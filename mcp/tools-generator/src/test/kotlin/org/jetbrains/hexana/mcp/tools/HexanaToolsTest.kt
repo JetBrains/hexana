@@ -196,7 +196,8 @@ class HexanaToolsTest {
 
     @Test
     fun `surface authorities preserve approved inventories and bindings`() {
-        assertEquals(47, HexanaIdeaTools.size)
+        assertEquals(CURRENT_DEFAULT_MCP_TOOL_NAMES, HexanaIdeaTools.map { it.name })
+        assertEquals(29, HexanaIdeaTools.size)
         assertEquals(48, HexanaStandaloneTools.size)
         assertEquals(CURRENT_DEFAULT_MCP_TOOL_NAMES, HexanaStandaloneDefaultToolIds.map { it.value })
         assertEquals(CURRENT_ADVANCED_MCP_TOOL_NAMES, HexanaStandaloneAdvancedToolIds.map { it.value })
@@ -356,7 +357,10 @@ class HexanaToolsTest {
 
     @Test
     fun `query_artifacts uses the artifact query invocation pattern`() {
-        assertEquals(ToolInputPattern.ArtifactQuery, HexanaIdeaTools.single { it.name == "query_artifacts" }.inputPattern)
+        assertEquals(
+            ToolInputPattern.ArtifactQuery,
+            HexanaIdeaToolBindings.single { it.id.value == "query_artifacts" }.inputPattern,
+        )
     }
 
     @Test
@@ -419,11 +423,11 @@ class HexanaToolsTest {
     fun `component tools use component invocation patterns`() {
         assertEquals(
             ToolInputPattern.ComponentSurface,
-            HexanaIdeaTools.single { it.name == "list_component_surface" }.inputPattern
+            HexanaIdeaToolBindings.single { it.id.value == "list_component_surface" }.inputPattern
         )
         assertEquals(
             ToolInputPattern.ComponentDependencies,
-            HexanaIdeaTools.single { it.name == "resolve_component_dependencies" }.inputPattern
+            HexanaIdeaToolBindings.single { it.id.value == "resolve_component_dependencies" }.inputPattern
         )
         assertEquals(
             ToolInputPattern.ComponentCompatibility,
@@ -541,7 +545,10 @@ class HexanaToolsTest {
         validateInputPattern("summarize_binary", BinaryInputClass, ToolInputPattern.BinaryOnly)
         validateInputPattern("query_binary", queryBinaryInput, ToolInputPattern.BoundedBinaryQuery)
         assertEquals(ToolInputPattern.BinaryOnly, HexanaIdeaTools.single { it.name == "summarize_binary" }.inputPattern)
-        assertEquals(ToolInputPattern.BoundedBinaryQuery, HexanaIdeaTools.single { it.name == "query_binary" }.inputPattern)
+        assertEquals(
+            ToolInputPattern.BoundedBinaryQuery,
+            HexanaIdeaToolBindings.single { it.id.value == "query_binary" }.inputPattern,
+        )
     }
 
     @Test

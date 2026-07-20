@@ -45,51 +45,6 @@ class HexanaMcpMemoryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(1, memories.obj(1).int("memoryIdx"))
     }
 
-    fun testGetMemoryForIndicesReturnsOnlyRequestedMemories() {
-        val fixture = createMemoryFixture("fixtures/direct/memory/get_memory.wasm")
-
-        val result = callToolJsonObject(
-            "get_memory_for_indices",
-            buildJsonObject {
-                put("path", JsonPrimitive(fixture.projectRelativePath))
-                put("indices", kotlinx.serialization.json.buildJsonArray {
-                    add(JsonPrimitive(1))
-                })
-            }
-        )
-        val memories = result.array("memories")
-
-        assertEquals(1, memories.size)
-        assertEquals(1, memories.obj(0).int("memoryIdx"))
-        assertEquals(2, memories.obj(0).obj("limit").int("min"))
-        assertEquals(4, memories.obj(0).obj("limit").int("max"))
-        assertEquals(listOf("mem"), memories.obj(0).stringArray("exportedAs"))
-    }
-
-    fun testGetMemoryForIndicesProvidesStructuredContentForTypedResult() {
-        val fixture = createMemoryFixture("fixtures/direct/memory/structured_get_memory.wasm")
-
-        val result = callTool(
-            "get_memory_for_indices",
-            buildJsonObject {
-                put("path", JsonPrimitive(fixture.projectRelativePath))
-                put("indices", kotlinx.serialization.json.buildJsonArray {
-                    add(JsonPrimitive(1))
-                })
-            }
-        )
-
-        assertFalse(result.isError)
-        assertEquals(1, result.textPayloads.size)
-        val textJson = json.parseToJsonElement(result.textPayloads.single()) as JsonObject
-        val structuredContent = result.requireStructuredObject()
-        assertEquals(textJson, structuredContent)
-        val memories = structuredContent.array("memories")
-        assertEquals(1, memories.size)
-        assertEquals(1, memories.obj(0).int("memoryIdx"))
-        assertFalse("import" in memories.obj(0))
-    }
-
     fun testCheckMemoryContractReportsExportedMemoryLimitIncreases() {
         val baseline = createWasmFixture(
             "fixtures/direct/memory/contract-increase-baseline.wasm",

@@ -181,7 +181,7 @@ internal val DataTools: List<ToolSpec> = tools {
         summary = "Return data-segment metadata with range slicing and optional export/global context."
         guidance = """
             Range `segmentRange` is half-open: `from` is inclusive, `to` is exclusive (omit `to` to read to the end).
-            Prefer this over `list_data` when previews, sizes, and offset context are enough.
+            Use this when previews, sizes, and offset context are enough for the analysis.
         """
         input = ListDataSegmentsInput
         output = ListDataSegmentsResultClass

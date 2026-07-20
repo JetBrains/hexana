@@ -6,7 +6,8 @@
 - Action to show a diff between two native binary files with size changes per section
 
 ### Changed
-- Hexana's IntelliJ MCP toolset now uses schema version 2 and advertises/enforces bounded list inputs such as `indices.maxItems`, allowing MCP clients to validate oversized requests before invoking tools.
+- Hexana's IntelliJ MCP toolset now uses schema version 3 and advertises/enforces bounded list inputs such as `indices.maxItems`, allowing MCP clients to validate oversized requests before invoking tools.
+- The embedded IntelliJ MCP provider now exposes the 29-tool default profile. Advanced inventory and raw-detail tools such as `list_binary_functions`, `search_binary_functions`, `query_binary`, `resolve_component_dependencies`, `list_component_surface`, `list_custom_sections`, `list_code_section_offsets`, `functions_for_indices`, `get_locals_for_functions`, `get_instructions_for_functions`, `get_memory_for_indices`, `get_globals_for_indices`, `list_types`, `list_value_types`, `list_reference_types`, `get_types_for_indices`, `list_data`, and `query_artifacts` remain available from the standalone MCP server's `advanced` profile.
 - The call graph models indirect calls through a single synthetic `<indirect calls>` node: each function containing a `call_indirect` gets one edge to it, and it fans out to the function table. In the **Dominators** view, functions reachable only through indirect calls now group under that node instead of scattering across the tree. On indirect-call-heavy C++/Emscripten modules this also replaces a callers-times-table product of edges (hundreds of millions on real modules) with a linear count, which is what made such modules impossible to analyze before (see Fixed).
 
 ### Deprecated

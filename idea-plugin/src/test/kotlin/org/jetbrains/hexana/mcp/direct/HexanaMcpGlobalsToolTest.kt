@@ -42,49 +42,6 @@ class HexanaMcpGlobalsToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(1, globals.obj(1).int("globalIdx"))
     }
 
-    fun testGetGlobalsForIndicesReturnsOnlySelectedGlobals() {
-        val fixture = createGlobalsFixture("fixtures/direct/globals/get_globals.wasm")
-
-        val result = callToolJsonObject(
-            "get_globals_for_indices",
-            buildJsonObject {
-                put("path", JsonPrimitive(fixture.projectRelativePath))
-                put("indices", kotlinx.serialization.json.buildJsonArray {
-                    add(JsonPrimitive(1))
-                })
-            }
-        )
-        val globals = result.array("globals")
-
-        assertEquals(1, globals.size)
-        assertEquals(1, globals.obj(0).int("globalIdx"))
-        assertEquals("i64", globals.obj(0).text("type"))
-        assertTrue(globals.obj(0).text("expression").contains("i64.const"))
-    }
-
-    fun testGetGlobalsForIndicesProvidesStructuredContentForTypedResult() {
-        val fixture = createGlobalsFixture("fixtures/direct/globals/structured_get_globals.wasm")
-
-        val result = callTool(
-            "get_globals_for_indices",
-            buildJsonObject {
-                put("path", JsonPrimitive(fixture.projectRelativePath))
-                put("indices", kotlinx.serialization.json.buildJsonArray {
-                    add(JsonPrimitive(1))
-                })
-            }
-        )
-
-        assertFalse(result.isError)
-        assertEquals(1, result.textPayloads.size)
-        val textJson = json.parseToJsonElement(result.textPayloads.single()) as JsonObject
-        val structuredContent = result.requireStructuredObject()
-        assertEquals(textJson, structuredContent)
-        val globals = structuredContent.array("globals")
-        assertEquals(1, globals.size)
-        assertEquals(1, globals.obj(0).int("globalIdx"))
-    }
-
     fun testAuditGlobalStatePolicyReturnsReportReadyFacts() {
         val baseline = createWasmFixture(
             "fixtures/direct/globals/audit-baseline.wasm",

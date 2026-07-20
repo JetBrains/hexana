@@ -39,7 +39,7 @@ this code.
 
 - `ToolSpec` is semantic-only: typed ID, summary/guidance, input/output schema/defaults/bounds, and intrinsic conversion
   capabilities. Consumer invocation and membership policy must not be added back to feature contracts.
-- IDEA owns `ToolInputPattern` plus handler FQN. Standalone owns handler method bindings and explicit effective
+- IDEA owns invocation bindings (`ToolInputPattern` plus handler FQN) and selects the canonical standalone default profile. Standalone owns handler method bindings and explicit effective
   default/advanced/scripting lists. MCPB owns an independent ordered selection. CLI owns command/group/output,
   renderer, explicit executable input models, and product selections.
 - All authorities resolve typed IDs through `ToolCatalog`; duplicate/unknown selectors and missing/duplicate bindings
