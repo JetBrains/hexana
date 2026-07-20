@@ -23,8 +23,8 @@ class HexanaToolCompatibilityTest {
     }
 
     @Test
-    fun `MCPB authority fingerprint is reviewed independently`() {
-        assertFingerprint("MCPB", mcpbSnapshot(baseline.mcpbToolIds), EXPECTED_MCPB)
+    fun `MCPB fingerprint follows standalone default membership`() {
+        assertFingerprint("MCPB", mcpbSnapshot(baseline.standaloneAuthority.defaultToolIds), EXPECTED_MCPB)
     }
 
     @Test
@@ -73,7 +73,7 @@ class HexanaToolCompatibilityTest {
     }
 
     @Test
-    fun `standalone membership-only mutation affects only standalone snapshot`() {
+    fun `standalone default membership mutation also affects MCPB snapshot`() {
         val mutated = baseline.standaloneAuthority.copy(
             defaultToolIds = baseline.standaloneAuthority.defaultToolIds.dropLast(1),
         )
@@ -81,13 +81,6 @@ class HexanaToolCompatibilityTest {
         assertOnlySnapshotsChanged(
             baseline.copy(standaloneAuthority = mutated),
             "standalone",
-        )
-    }
-
-    @Test
-    fun `MCPB membership-only mutation affects only MCPB snapshot`() {
-        assertOnlySnapshotsChanged(
-            baseline.copy(mcpbToolIds = baseline.mcpbToolIds.dropLast(1)),
             "MCPB",
         )
     }
@@ -112,7 +105,6 @@ class HexanaToolCompatibilityTest {
         val semanticContracts: List<ToolSpec> = HexanaTools,
         val ideaTools: List<IdeaTool> = HexanaIdeaTools,
         val standaloneAuthority: StandaloneToolAuthority = HexanaStandaloneAuthority,
-        val mcpbToolIds: List<ToolId> = HexanaMcpbToolIds,
         val cliTools: List<CliTool> = HexanaCliTools,
     )
 
@@ -132,7 +124,7 @@ class HexanaToolCompatibilityTest {
         put("semantic", semanticSnapshot(authorities.semanticContracts).sha256())
         put("IDEA", ideaSnapshot(authorities.ideaTools).sha256())
         put("standalone", standaloneSnapshot(authorities.standaloneAuthority).sha256())
-        put("MCPB", mcpbSnapshot(authorities.mcpbToolIds).sha256())
+        put("MCPB", mcpbSnapshot(authorities.standaloneAuthority.defaultToolIds).sha256())
         put("CLI", cliSnapshot(authorities.cliTools).sha256())
         CliReleaseProduct.entries.forEach { product ->
             put(product.productId, productSnapshot(product, authorities.cliTools).sha256())

@@ -207,11 +207,17 @@ class HexanaToolsTest {
         assertTrue(HexanaStandaloneDefaultToolIds.intersect(HexanaStandaloneAdvancedToolIds.toSet()).isEmpty())
         assertTrue(HexanaStandaloneDefaultToolIds.intersect(HexanaStandaloneScriptingToolIds.toSet()).isEmpty())
         assertTrue(HexanaStandaloneAdvancedToolIds.intersect(HexanaStandaloneScriptingToolIds.toSet()).isEmpty())
-        assertEquals(29, HexanaMcpbTools.size)
         assertEquals(31, HexanaCliTools.size)
         assertTrue(HexanaStandaloneTools.all {
             it.standaloneHandler.methodName.matches(Regex("^[A-Za-z_][A-Za-z0-9_]*$"))
         })
+    }
+
+    @Test
+    fun `MCPB inventory is exactly closed over standalone default membership`() {
+        assertEquals(HexanaStandaloneDefaultToolIds, HexanaMcpbTools.map { it.id })
+        assertEquals(CURRENT_DEFAULT_MCP_TOOL_NAMES, HexanaMcpbTools.map { it.name })
+        assertEquals(29, HexanaMcpbTools.size)
     }
 
     @Test

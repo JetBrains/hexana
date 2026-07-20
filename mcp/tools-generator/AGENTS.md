@@ -1,6 +1,7 @@
 # AGENTS.md for `mcp/tools-generator`
 
-This module owns the canonical semantic tool contract catalog and four independent surface authorities. KotlinPoet
+This module owns the canonical semantic tool contract catalog and independent IDEA, standalone, and CLI surface
+authorities. MCPB inventory is derived exactly from the standalone default profile. KotlinPoet
 generators resolve contracts through the authority for their consumer and emit checked-in Kotlin files:
 
 - `idea-plugin/src/main/gen/org/jetbrains/hexana/mcp/HexanaToolset.kt` — `McpToolsProvider` with generated Hexana
@@ -15,9 +16,8 @@ generators resolve contracts through the authority for their consumer and emit c
 - `cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt` — generated product identities,
   selected executable tools, output policy, and default output metadata.
 
-A separate Claude Desktop MCPB manifest generator consumes the independent ordered MCPB authority and refreshes the
-checked-in packaging template. MCP-149 may derive that authority later; do not derive it from standalone production in
-this code.
+A separate Claude Desktop MCPB manifest generator consumes the standalone default profile in canonical contract order
+and refreshes the checked-in packaging template.
 
 ## Start Here
 
@@ -29,7 +29,7 @@ this code.
   result schema mirrors, summaries, and guidance.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/HexanaTools.kt` — catalog composition and canonical tool ordering.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/SurfaceAuthorities.kt` — explicit ordered IDEA invocation bindings,
-  standalone handler/profile authority, independent MCPB selection, and CLI bindings/input models/products.
+  standalone handler/profile authority, MCPB derivation, and CLI bindings/input models/products.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/StandaloneToolsetMain.kt` — standalone server dispatcher
   and CLI command generator.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/IdeaToolsetMain.kt` — idea-plugin toolset generator.
@@ -40,13 +40,13 @@ this code.
 - `ToolSpec` is semantic-only: typed ID, summary/guidance, input/output schema/defaults/bounds, and intrinsic conversion
   capabilities. Consumer invocation and membership policy must not be added back to feature contracts.
 - IDEA owns invocation bindings (`ToolInputPattern` plus handler FQN) and selects the canonical standalone default profile. Standalone owns handler method bindings and explicit effective
-  default/advanced/scripting lists. MCPB owns an independent ordered selection. CLI owns command/group/output,
+  default/advanced/scripting lists. MCPB exactly reuses the standalone default selection. CLI owns command/group/output,
   renderer, explicit executable input models, and product selections.
 - All authorities resolve typed IDs through `ToolCatalog`; duplicate/unknown selectors and missing/duplicate bindings
   fail before generation, and resolved output follows canonical contract order.
 - CLI release-product membership is CLI authority metadata independent from MCP profiles. TODO tools stay visible in the global
   CLI registry but must not belong to `hexana-mcp`, `hexana-cli`, or `hexana-cli-script` release selections.
-- Public MCPB manifest exposure is generated from `HexanaMcpbToolIds`; it must not be inferred from a standalone profile.
+- Public MCPB manifest exposure is generated from `HexanaStandaloneDefaultToolIds`; it has no independent membership policy.
 - Top-level tool output classes also declare their `mcp/core` model package here with `kotlinPackage = ...`; the
   idea-plugin generator must not carry a separate result-class package map.
 - Input/output conversion capability symbols are intrinsic reusable metadata on `ClassSpec`. `SemanticJson`, `McpWrapper`,
@@ -111,8 +111,8 @@ Before sending a catalog change for review, run the generated-artifact drift che
    `StandaloneToolsetMain.kt` only when the DSL needs a new schema feature, field type, or generated CLI source behavior.
    The existing patterns cover path-only, offset/limit, indices, closed range, and half-open segment range with filters.
 4. Update each applicable independent authority in `SurfaceAuthorities.kt`: IDEA selection/binding, standalone
-   binding and effective profile lists, MCPB ordered IDs, and CLI binding/product selections. Do not infer one from
-   another.
+   binding and effective profile lists, and CLI binding/product selections. MCPB follows standalone default membership
+   automatically.
 5. Run the affected generators and verification: `./gradlew :mcp:tools-generator:test :idea-plugin:test :mcp:server:test
    :mcp:server:integrationTest`, plus the generated-artifact drift checks above.
 

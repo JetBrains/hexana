@@ -5,6 +5,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.hexana.mcp.tools.HexanaMcpbTools
+import org.jetbrains.hexana.mcp.tools.HexanaStandaloneDefaultToolIds
 import org.junit.Test
 import java.nio.file.Files
 import java.nio.file.Path
@@ -14,7 +15,7 @@ import kotlin.test.assertTrue
 
 class McpbManifestGenerationTest {
     @Test
-    fun `MCPB manifest uses its independent ordered authority`() {
+    fun `MCPB manifest exactly follows standalone default order and metadata`() {
         val dir = Files.createTempDirectory("hexana-mcpb-manifest-test")
         val template = dir.resolve("manifest.json")
         val output = dir.resolve("manifest.generated.json")
@@ -55,9 +56,10 @@ class McpbManifestGenerationTest {
             manifest.getValue("preserved_extension").jsonObject.getValue("enabled").jsonPrimitive.content,
         )
         assertEquals(
-            HexanaMcpbTools.map { it.name },
+            HexanaStandaloneDefaultToolIds.map { it.value },
             tools.map { it.jsonObject.getValue("name").jsonPrimitive.content },
         )
+        assertEquals(HexanaStandaloneDefaultToolIds, mcpbManifestTools().map { it.id })
         assertEquals(
             HexanaMcpbTools.map { it.summary.trim() },
             tools.map { it.jsonObject.getValue("description").jsonPrimitive.content },
@@ -72,7 +74,7 @@ class McpbManifestGenerationTest {
         val tools = manifest.getValue("tools").jsonArray
         assertEquals("true", manifest.getValue("tools_generated").jsonPrimitive.content)
         assertEquals(
-            HexanaMcpbTools.map { it.name },
+            HexanaStandaloneDefaultToolIds.map { it.value },
             tools.map { it.jsonObject.getValue("name").jsonPrimitive.content },
         )
         assertEquals(

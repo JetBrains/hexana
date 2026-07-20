@@ -40,9 +40,9 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - `mcp/scripting/`: JVM-only GraalJS scripting runtime for running Hexana scripts over loaded binary providers. It owns
   script source loading, script-output limits, sandboxed `binary`/`print` bindings, and structured script results.
 - `mcp/server/`: standalone Kotlin/JVM MCP runtime that exposes `mcp/core` over `stdio` and HTTP transports.
-- `mcp/tools-generator/`: source of truth for Hexana semantic tool contracts and independent IDEA, standalone MCP,
-  MCPB, and CLI surface authorities (DSL + KotlinPoet generators for
-  `idea-plugin`'s `HexanaToolset.kt` and `mcp/server`'s standalone generated files).
+- `mcp/tools-generator/`: source of truth for Hexana semantic tool contracts, independent IDEA, standalone MCP, and
+  CLI surface authorities, plus MCPB inventory derived from the standalone default profile (DSL + KotlinPoet generators
+  for `idea-plugin`'s `HexanaToolset.kt` and `mcp/server`'s standalone generated files).
 - `mcp/vscode-server/`: thin VS Code-facing MCP server distribution that launches the standalone runtime as a separate
   process for the VS Code extension.
 - `mcp/packaging/`: thin Claude/Codex wrapper layouts that point at the standalone runtime from `mcp/server/`.
@@ -158,7 +158,7 @@ Existing IDE run configurations currently include:
   - `HexanaToolset.kt`: DSL source `mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/`;
     `HexanaTools.kt` composes canonical semantic contract order, feature files such as `FunctionTools.kt` and
     `DataTools.kt` own semantic inputs/results/descriptions, and `SurfaceAuthorities.kt` independently owns IDEA
-    invocation bindings, standalone handlers/profiles, MCPB membership, and CLI bindings/products.
+    invocation bindings, standalone handlers/profiles, derived MCPB membership, and CLI bindings/products.
     Regenerate with `./gradlew :idea-plugin:generateHexanaToolset`.
 - `mcp/server/src/main/gen/HexanaToolDispatcher.kt` is generated from resolved semantic contracts plus the standalone
   authority and contains standalone MCP tool registration plus MCP profile/default metadata.

@@ -268,18 +268,10 @@ val HexanaStandaloneAuthority = StandaloneToolAuthority(
     scriptingToolIds = HexanaStandaloneScriptingToolIds,
 )
 
-val HexanaMcpbToolIds: List<ToolId> = listOf(
-    id("summarize_binary"), id("summarize_module"), id("list_enabled_features"), id("get_entrypoint_policy"),
-    id("list_required_proposals"), id("diff_required_proposals"), id("check_runtime_compatibility"),
-    id("check_component_compatibility"), id("plan_abi_binding_regeneration"), id("check_memory_contract"),
-    id("audit_global_state_policy"), id("audit_local_stack_budget"), id("list_imports"), id("list_exports"),
-    id("search_exports"), id("list_exported_functions"), id("list_functions"), id("resolve_function_signature"),
-    id("disassemble_function"), id("get_function_call_graph"), id("search_functions_by_name"),
-    id("resolve_wasm_frames"), id("resolve_function_symbols"), id("resolve_source_locations"), id("list_memory"),
-    id("list_globals"), id("list_element_segments"), id("list_data_segments"), id("audit_data_payload_policy"),
+val HexanaMcpbTools: List<ToolSpec> = HexanaToolCatalog.resolve(
+    HexanaStandaloneDefaultToolIds,
+    "MCPB tools derived from standalone default profile",
 )
-
-val HexanaMcpbTools: List<ToolSpec> = HexanaToolCatalog.resolve(HexanaMcpbToolIds, "MCPB tool authority")
 
 private val CLI_TOOL_IDS = listOf(
     id("summarize_binary"), id("run_binary_script"), id("wasm_to_wat"), id("summarize_module"),

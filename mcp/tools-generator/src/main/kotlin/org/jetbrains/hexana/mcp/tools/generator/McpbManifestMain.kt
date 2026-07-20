@@ -64,4 +64,4 @@ private fun renderTools(): JsonArray = JsonArray(
     }
 )
 
-internal fun mcpbManifestTools(tools: List<ToolSpec> = HexanaMcpbTools): List<ToolSpec> = tools
+internal fun mcpbManifestTools(): List<ToolSpec> = HexanaMcpbTools

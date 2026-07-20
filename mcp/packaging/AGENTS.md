@@ -6,6 +6,8 @@ This folder contains client-specific wrapper layouts for the standalone MCP runt
 
 - Keep this folder packaging-only: manifests, `.mcp.json`, launcher scripts, README files, and distribution license
   files.
+- The checked-in Claude Desktop MCPB manifest tool inventory is generated from the standalone default MCP profile;
+  packaging must not add or remove tools independently.
 - Do not duplicate MCP runtime logic here. The executable source of truth stays in `mcp/server`.
 - Wrapper scripts should prefer a bundled `server/bin/server` runtime inside the assembled package.
 - `HEXANA_SERVER_BIN` may override the bundled runtime for local testing.
