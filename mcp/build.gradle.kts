@@ -110,6 +110,15 @@ val r8OwnedJarNames = setOf(
     "wasmParser-jvm.jar",
     "zip-jvm.jar",
 )
+val mcpServerDeniedOwnedJarNames = setOf(
+    "cli-core.jar",
+    cliMetadataJarName,
+    "cli-runtime.jar",
+    "cli-scripting.jar",
+    "common.jar",
+    "wasmprinter.jar",
+)
+val mcpServerR8OwnedJarNames = r8OwnedJarNames - mcpServerDeniedOwnedJarNames
 val cliProductJarNames = setOf(
     cliMetadataJarName,
     cliProductJarName,
@@ -845,13 +854,19 @@ val copyMcpServerRuntimeForR8 = tasks.register<Sync>("copyMcpServerRuntimeForR8"
     dependsOn(":mcp:server:installDist")
     from(standaloneInstallDir)
     into(obfuscatedInstallDir)
+    doLast {
+        val leakedArchives = mcpServerDeniedOwnedJarNames.filter { obfuscatedInstallDir.get().file("lib/$it").asFile.exists() }
+        check(leakedArchives.isEmpty()) {
+            "hexana-mcp R8 input must not contain split CLI or converter archives: $leakedArchives"
+        }
+    }
 }
 
-val r8ProgramJarFiles = r8OwnedJarNames.map { obfuscatedInstallDir.map { dir -> dir.file("lib/$it") } }
+val r8ProgramJarFiles = mcpServerR8OwnedJarNames.map { obfuscatedInstallDir.map { dir -> dir.file("lib/$it") } }
 val r8LibraryJarFiles = obfuscatedInstallDir.map { dir ->
     dir.dir("lib").asFileTree.matching {
         include("*.jar")
-        exclude(r8OwnedJarNames.map { name -> name })
+        exclude(mcpServerR8OwnedJarNames.map { name -> name })
     }
 }
 val r8OutputDir = layout.buildDirectory.dir("r8/output")
@@ -916,12 +931,12 @@ val installObfuscatedMcpServerRuntime = tasks.register("installObfuscatedMcpServ
     description = "Installs the standalone MCP server runtime with obfuscated Hexana-owned classes."
     dependsOn(copyMcpServerRuntimeForR8, jarObfuscatedMcpRuntime)
     inputs.file(jarObfuscatedMcpRuntime.flatMap { it.archiveFile })
-    inputs.files(obfuscatedInstallDir.map { dir -> r8OwnedJarNames.map { dir.file("lib/$it") } })
+    inputs.files(obfuscatedInstallDir.map { dir -> mcpServerR8OwnedJarNames.map { dir.file("lib/$it") } })
     outputs.dir(obfuscatedInstallDir)
 
     doLast {
         val installDir = obfuscatedInstallDir.get().asFile
-        r8OwnedJarNames.forEach { jarName ->
+        mcpServerR8OwnedJarNames.forEach { jarName ->
             installDir.resolve("lib/$jarName").delete()
         }
         jarObfuscatedMcpRuntime.get().archiveFile.get().asFile.copyTo(
@@ -2576,38 +2591,16 @@ fun validateMcpbNativeCliSurface(nativeRuntime: File, allowedRoot: File, working
         """.trimIndent()
     }
 
-    val wasmFixture = allowedRoot.resolve("mcpb-native-summary.wasm")
-    wasmFixture.writeBytes(minimalWasmModuleBytes())
-    val summary = runProcess(
-        listOf(
-            nativeRuntime.absolutePath,
-            "summarize-binary",
-            wasmFixture.absolutePath,
-            "--format",
-            "json",
-        ),
-        workingDir,
-    )
-    val summaryJson = runCatching {
-        JsonSlurper().parseText(summary.output) as? Map<*, *>
-    }.getOrNull()
-    val module = summaryJson?.mapField("module")
-    val counts = summaryJson?.mapField("counts")
-    check(
-        summary.exitCode == 0 &&
-            module?.get("format") == "wasm" &&
-            module?.get("path") == wasmFixture.absolutePath &&
-            (module?.get("byteLength") as? Number)?.toInt() == wasmFixture.length().toInt() &&
-            (counts?.get("functions") as? Number)?.toInt() == 1 &&
-            (counts?.get("memories") as? Number)?.toInt() == 1 &&
-            (counts?.get("exports") as? Number)?.toInt() == 1
-    ) {
-        """
-        MCPB native executable lacks the required executable CLI surface.
-        Expected direct native `summarize-binary ${wasmFixture.absolutePath} --format json` to summarize a Wasm fixture, got exit ${summary.exitCode}:
-        ${summary.output}
-        Build the MCPB native override from the current branch/foundation, or omit the override so `:mcp:server:nativeCompile` is used.
-        """.trimIndent()
+    listOf("summarize-binary", "summarize-module", "wasm-to-wat", "run-script", "tools").forEach { command ->
+        val rejected = runProcess(listOf(nativeRuntime.absolutePath, command), workingDir)
+        check(rejected.exitCode != 0 && rejected.output.contains("no such subcommand")) {
+            """
+            MCPB native executable exposes removed direct command `$command`.
+            Expected a no-such-subcommand failure, got exit ${rejected.exitCode}:
+            ${rejected.output}
+            Build the MCPB native override from the current branch/foundation, or omit the override so `:mcp:server:nativeCompile` is used.
+            """.trimIndent()
+        }
     }
 }
 

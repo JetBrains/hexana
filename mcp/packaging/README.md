@@ -130,6 +130,10 @@ The public runtime layout intentionally remains a Gradle `installDist` style dir
 first marketplace release path. A fat JAR would need separate validation for merged service descriptors, license and
 notice handling, native/JNA resources, Kotlin serialization metadata, classpath-sensitive libraries, and R8 behavior.
 
+The packaged `hexana-mcp` runtime is MCP-only. Its CLI surface is `stdio`, `http`, `doctor`, `version`, and `help`;
+direct analysis commands and the split-product `tools` command are deliberately rejected. Protocol `tools/list` and
+`tools/call` remain available, including `run_binary_script` under the scripting profile.
+
 The `.mcp.json` files checked into `mcp/packaging/*` are the source templates for distributable wrappers. Repo-local
 Codex install is the exception: `./gradlew :mcp:installRepoLocalCodexPlugin` rewrites the installed `plugins/hexana/.mcp.json`
 to an absolute launcher path for local testing.

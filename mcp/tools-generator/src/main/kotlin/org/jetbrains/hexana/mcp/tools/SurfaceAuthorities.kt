@@ -293,7 +293,7 @@ private val CLI_TOOL_BINDINGS = listOf(
         "summarize_binary", "summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined,
         executionStatus = CliExecutionStatus.Executable,
         executableRenderer = executableCliRenderer("renderSummarizeBinaryCliCommandOutput"),
-        releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCli),
+        releaseProducts = setOf(CliReleaseProduct.HexanaCli),
         inputModel = binaryCliInputModel(),
     ),
     cliToolBinding(
@@ -301,7 +301,7 @@ private val CLI_TOOL_BINDINGS = listOf(
         executionStatus = CliExecutionStatus.Executable,
         defaultOutput = OutputConversionCapability.RawText,
         executableRenderer = executableCliRenderer("renderRunBinaryScriptCommandOutput"),
-        releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCliScript),
+        releaseProducts = setOf(CliReleaseProduct.HexanaCliScript),
         inputModel = toolInputModel {
             binarySource("binary", target = SourceTargetSpec.RootInput) {
                 cli {
@@ -320,7 +320,7 @@ private val CLI_TOOL_BINDINGS = listOf(
         executionStatus = CliExecutionStatus.Executable,
         defaultOutput = OutputConversionCapability.RawText,
         executableRenderer = executableCliRenderer("renderWasmToWatCommandOutput"),
-        releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCli),
+        releaseProducts = setOf(CliReleaseProduct.HexanaCli),
         inputModel = wasmCliInputModel(),
     ),
     cliToolBinding(
@@ -328,7 +328,7 @@ private val CLI_TOOL_BINDINGS = listOf(
         executionStatus = CliExecutionStatus.Executable,
         defaultOutput = OutputConversionCapability.Pretty,
         executableRenderer = executableCliRenderer("renderSummarizeModuleCommandOutput"),
-        releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCli),
+        releaseProducts = setOf(CliReleaseProduct.HexanaCli),
         inputModel = wasmCliInputModel(),
     ),
     todoCli("list_enabled_features", "list-enabled-features", ToolGroup.Module),

@@ -6,9 +6,8 @@ This module owns neutral CLI command orchestration and adapters that have a prod
 
 - Keep command implementation independent from `mcp:server`, Clikt, Ktor, MCP SDK, analytics, and IntelliJ Platform APIs.
 - It may depend on `cli:runtime`, `graalwasm:wasmprinter`, and the extracted analysis/model layer in `mcp:core`.
-- Standard analysis commands live here: `summarize-binary`, `summarize-module`, and `wasm-to-wat`. The legacy
-  `hexana-mcp` server module may adapt parsed CLI state into this module, but must not own duplicate converters,
-  executors, renderers, or output models for migrated standard commands.
+- Standard `hexana-cli` analysis commands live here: `summarize-binary`, `summarize-module`, and `wasm-to-wat`.
+  `mcp:server` must not depend on this module or own duplicate direct-command adapters.
 
 ## Verification
 

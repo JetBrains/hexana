@@ -10,7 +10,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.int
-import kotlinx.serialization.json.long
 import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
 import org.junit.Rule
 import org.junit.Test
@@ -36,13 +35,8 @@ class HexanaClaudePluginWrapperIntegrationTest {
     }
 
     @Test
-    fun assembledClaudePluginRunsExecutableCliCommand() = runBlocking {
-        assertExecutableCliCommandRunsThroughWrapper(StdioLauncher.ClaudePluginWrapper)
-    }
-
-    @Test
-    fun assembledClaudePluginRunsRunScriptCliCommand() = runBlocking {
-        assertRunScriptCliCommandRunsThroughWrapper(StdioLauncher.ClaudePluginWrapper)
+    fun assembledClaudePluginRejectsRemovedDirectCommands() = runBlocking {
+        assertRemovedDirectCommandsAreRejected(StdioLauncher.ClaudePluginWrapper)
     }
 
     @Test
@@ -51,13 +45,8 @@ class HexanaClaudePluginWrapperIntegrationTest {
     }
 
     @Test
-    fun assembledCodexPluginRunsExecutableCliCommand() = runBlocking {
-        assertExecutableCliCommandRunsThroughWrapper(StdioLauncher.CodexPluginWrapper)
-    }
-
-    @Test
-    fun assembledCodexPluginRunsRunScriptCliCommand() = runBlocking {
-        assertRunScriptCliCommandRunsThroughWrapper(StdioLauncher.CodexPluginWrapper)
+    fun assembledCodexPluginRejectsRemovedDirectCommands() = runBlocking {
+        assertRemovedDirectCommandsAreRejected(StdioLauncher.CodexPluginWrapper)
     }
 
     @Test
@@ -178,65 +167,14 @@ class HexanaClaudePluginWrapperIntegrationTest {
         )
     }
 
-    private suspend fun assertExecutableCliCommandRunsThroughWrapper(launcher: StdioLauncher) {
-        val wasm = temporaryFolder.newFile("${launcher.clientName}-summary.wasm").toPath().also {
-            Files.write(
-                it,
-                wat2wasm(
-                    """
-                    (module
-                      (memory 1)
-                      (func (export "main")))
-                    """.trimIndent()
-                )
-            )
+    private suspend fun assertRemovedDirectCommandsAreRejected(launcher: StdioLauncher) {
+        listOf("summarize-binary", "summarize-module", "wasm-to-wat", "run-script", "tools").forEach { command ->
+            val result = HexanaInstalledStdioClient.runCommand(launcher, command)
+            assertFalse(result.timedOut, "$command timed out through ${launcher.clientName}: ${result.stderr}")
+            assertTrue(result.exitCode != 0, "$command unexpectedly succeeded through ${launcher.clientName}")
+            assertTrue(result.stdout.isBlank(), "$command wrote protocol-unsafe stdout: ${result.stdout}")
+            assertTrue(result.stderr.contains("no such subcommand"), result.stderr)
         }
-
-        val result = HexanaInstalledStdioClient.runCommand(
-            launcher,
-            "summarize-binary",
-            wasm.toString(),
-            "--format",
-            "json",
-        )
-        assertFalse(
-            result.timedOut,
-            "summarize-binary command timed out. stdout=${result.stdout}, stderr=${result.stderr}, command=${result.command}"
-        )
-        assertEquals(0, result.exitCode, "stderr=${result.stderr}, command=${result.command}")
-        assertEquals("", result.unexpectedStderr, "Executable CLI command should not log to stderr.")
-
-        val json = Json.parseToJsonElement(result.stdout).jsonObject
-        val module = json.getValue("module").jsonObject
-        val counts = json.getValue("counts").jsonObject
-        assertEquals("wasm", module.getValue("format").jsonPrimitive.content)
-        assertEquals(wasm.toString(), module.getValue("path").jsonPrimitive.content)
-        assertTrue(module.getValue("byteLength").jsonPrimitive.long > 0)
-        assertEquals(1, counts.getValue("functions").jsonPrimitive.int)
-        assertEquals(1, counts.getValue("memories").jsonPrimitive.int)
-        assertEquals(1, counts.getValue("exports").jsonPrimitive.int)
-    }
-
-    private suspend fun assertRunScriptCliCommandRunsThroughWrapper(launcher: StdioLauncher) {
-        val binary = temporaryFolder.newFile("${launcher.clientName}-run-script.bin").toPath()
-        Files.write(binary, byteArrayOf(5, 6, 7))
-
-        val result = HexanaInstalledStdioClient.runCommand(
-            launcher,
-            "run-script",
-            binary.toString(),
-            "--script-text",
-            "print(binary.bytes.size); print(binary.bytes.get(2));",
-            "--format",
-            "raw",
-        )
-        assertFalse(
-            result.timedOut,
-            "run-script command timed out. stdout=${result.stdout}, stderr=${result.stderr}, command=${result.command}"
-        )
-        assertEquals(0, result.exitCode, "stderr=${result.stderr}, command=${result.command}")
-        assertEquals("", result.unexpectedStderr, "Executable CLI command should not log to stderr.")
-        assertEquals("3\n7", result.stdout)
     }
 
     private suspend fun assertWrapperExposesToolsOverStdio(

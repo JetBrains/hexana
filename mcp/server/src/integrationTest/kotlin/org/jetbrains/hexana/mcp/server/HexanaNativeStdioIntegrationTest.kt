@@ -6,9 +6,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.slf4j.LoggerFactory
-import java.nio.file.Files
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class HexanaNativeStdioIntegrationTest {
     private val logger = LoggerFactory.getLogger(HexanaNativeStdioIntegrationTest::class.java)
@@ -34,26 +34,14 @@ class HexanaNativeStdioIntegrationTest {
     }
 
     @Test
-    fun nativeExecutableRunsRunScriptCliCommand() = runBlocking {
-        val binary = temporaryFolder.newFile("native-run-script.bin").toPath()
-        Files.write(binary, byteArrayOf(8, 9, 10))
+    fun nativeExecutableRejectsRemovedDirectCommands() = runBlocking {
+        listOf("summarize-binary", "summarize-module", "wasm-to-wat", "run-script", "tools").forEach { command ->
+            val result = HexanaInstalledStdioClient.runCommand(StdioLauncher.NativeExecutable, command)
 
-        val result = HexanaInstalledStdioClient.runCommand(
-            StdioLauncher.NativeExecutable,
-            "run-script",
-            binary.toString(),
-            "--script-text",
-            "print(binary.bytes.size); print(binary.bytes.get(2));",
-            "--format",
-            "raw",
-        )
-
-        assertFalse(
-            result.timedOut,
-            "run-script command timed out. stdout=${result.stdout}, stderr=${result.stderr}, command=${result.command}"
-        )
-        assertEquals(0, result.exitCode, "stdout=${result.stdout}, stderr=${result.stderr}")
-        assertEquals("", result.unexpectedStderr, "Native run-script should not log to stderr.")
-        assertEquals("3\n10", result.stdout)
+            assertFalse(result.timedOut, "$command timed out: stdout=${result.stdout}, stderr=${result.stderr}")
+            assertTrue(result.exitCode != 0, "$command unexpectedly succeeded")
+            assertEquals("", result.stdout, "$command must not write protocol-unsafe stdout")
+            assertTrue(result.stderr.contains("no such subcommand"), result.stderr)
+        }
     }
 }

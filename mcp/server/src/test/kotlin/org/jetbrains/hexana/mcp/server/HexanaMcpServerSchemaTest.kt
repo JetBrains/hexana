@@ -14,7 +14,6 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.jetbrains.hexana.cli.metadata.*
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -91,108 +90,6 @@ class HexanaMcpServerSchemaTest {
             server.tools.keys.toSet(),
         )
         assertFalse(server.tools.containsKey("query_artifacts"))
-    }
-
-    @Test
-    fun generatedCliRegistryExposesVisibleCatalogMetadataOnly() {
-        val tools = HexanaGeneratedCliToolRegistry.TOOLS
-        val summarizeModule = tools.single { it.commandName == "summarize-module" }
-
-        assertEquals("summarize_module", summarizeModule.toolName)
-        assertEquals(
-            "Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types.",
-            summarizeModule.summary,
-        )
-        assertEquals(setOf(HexanaCliToolGroup.MODULE), summarizeModule.groups)
-        assertEquals(
-            setOf(HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.STDIN),
-            summarizeModule.inputModes,
-        )
-        assertFalse(HexanaCliInputMode.JSON_OBJECT in summarizeModule.inputModes)
-        assertFalse(HexanaCliInputMode.WASM_FROM_STRING in summarizeModule.inputModes)
-        assertEquals(setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.PRETTY), summarizeModule.outputFormats)
-        assertEquals(HexanaCliOutputFormat.PRETTY, summarizeModule.defaultOutputFormat)
-        assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, summarizeModule.defaultOutputPolicy)
-        assertEquals(HexanaCliExecutionStatus.EXECUTABLE, summarizeModule.executionStatus)
-
-        val summarizeBinary = tools.single { it.commandName == "summarize-binary" }
-        assertEquals("summarize_binary", summarizeBinary.toolName)
-        assertEquals(setOf(HexanaCliToolGroup.BINARY), summarizeBinary.groups)
-        assertEquals(
-            setOf(HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN),
-            summarizeBinary.inputModes,
-        )
-        assertFalse(HexanaCliInputMode.JSON_OBJECT in summarizeBinary.inputModes)
-        assertFalse(HexanaCliInputMode.WASM_PATH in summarizeBinary.inputModes)
-        assertEquals(setOf(HexanaCliOutputFormat.JSON), summarizeBinary.outputFormats)
-        assertEquals(HexanaCliOutputFormat.JSON, summarizeBinary.defaultOutputFormat)
-        assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, summarizeBinary.defaultOutputPolicy)
-        assertEquals(HexanaCliExecutionStatus.EXECUTABLE, summarizeBinary.executionStatus)
-
-        val wasmToWat = tools.single { it.commandName == "wasm-to-wat" }
-        assertEquals("wasm_to_wat", wasmToWat.toolName)
-        assertEquals(setOf(HexanaCliToolGroup.CONVERTERS), wasmToWat.groups)
-        assertEquals(
-            setOf(HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.STDIN),
-            wasmToWat.inputModes,
-        )
-        assertFalse(HexanaCliInputMode.JSON_OBJECT in wasmToWat.inputModes)
-        assertFalse(HexanaCliInputMode.WASM_FROM_STRING in wasmToWat.inputModes)
-        assertEquals(setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.RAW), wasmToWat.outputFormats)
-        assertEquals(HexanaCliOutputFormat.RAW, wasmToWat.defaultOutputFormat)
-        assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, wasmToWat.defaultOutputPolicy)
-        assertEquals(HexanaCliExecutionStatus.EXECUTABLE, wasmToWat.executionStatus)
-
-        val runScript = tools.single { it.commandName == "run-script" }
-        assertEquals("run_binary_script", runScript.toolName)
-        assertEquals(setOf(HexanaCliToolGroup.SCRIPTING), runScript.groups)
-        assertEquals(
-            setOf(HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN),
-            runScript.inputModes,
-        )
-        assertEquals(setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.RAW), runScript.outputFormats)
-        assertEquals(HexanaCliOutputFormat.RAW, runScript.defaultOutputFormat)
-        assertEquals(HexanaCliOutputPolicy.TOOL_DEFINED, runScript.defaultOutputPolicy)
-        assertEquals(HexanaCliExecutionStatus.EXECUTABLE, runScript.executionStatus)
-
-        val futureModuleTool = tools.single { it.commandName == "list-enabled-features" }
-        assertTrue(futureModuleTool.groups.contains(HexanaCliToolGroup.MODULE))
-        assertEquals(emptySet(), futureModuleTool.inputModes)
-        assertEquals(HexanaCliExecutionStatus.TODO, futureModuleTool.executionStatus)
-
-        val defaultNames = HexanaGeneratedMcpToolProfiles.DEFAULT_TOOL_NAMES
-        val advancedNames = HexanaGeneratedMcpToolProfiles.ADVANCED_TOOL_NAMES
-        val scriptingNames = HexanaGeneratedMcpToolProfiles.SCRIPTING_TOOL_NAMES
-        assertFalse("wasm_to_wat" in defaultNames)
-        assertFalse("wasm_to_wat" in advancedNames)
-        assertFalse("wasm_to_wat" in scriptingNames)
-        assertFalse("run_binary_script" in defaultNames)
-        assertFalse("run_binary_script" in advancedNames)
-        assertTrue("run_binary_script" in scriptingNames)
-        assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.DEFAULT).tools.containsKey("wasm_to_wat"))
-        assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.ADVANCED).tools.containsKey("wasm_to_wat"))
-        assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.SCRIPTING).tools.containsKey("wasm_to_wat"))
-        assertTrue(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.SCRIPTING).tools.containsKey("run_binary_script"))
-
-        assertFalse(tools.any { it.commandName == "query-artifacts" })
-        assertFalse(tools.any { it.toolName == "query_artifacts" })
-    }
-
-    @Test
-    fun generatedCliRegistryPreservesDefaultParityAndCliOnlyDivergence() {
-        val defaultNames = HexanaGeneratedMcpToolProfiles.DEFAULT_TOOL_NAMES
-        val cliNames = HexanaGeneratedCliToolRegistry.TOOLS.map { it.toolName }.toSet()
-
-        assertEquals(
-            emptySet(),
-            defaultNames - cliNames,
-            "Default MCP tools missing from generated CLI registry",
-        )
-        assertEquals(
-            setOf("wasm_to_wat", "run_binary_script"),
-            cliNames - defaultNames,
-            "Generated CLI registry should only contain documented CLI-only tools outside default MCP",
-        )
     }
 
     @Test

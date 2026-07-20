@@ -41,12 +41,8 @@ val verifiedToolDispatcherDir = layout.buildDirectory.dir("generator-verify/disp
 val discardedCliMetadataDir = layout.buildDirectory.dir("generator-discard/cli-metadata")
 val verifiedDiscardedCliMetadataDir = layout.buildDirectory.dir("generator-verify-discard/cli-metadata")
 val generatedToolDispatcherFile = generatedToolDispatcherDir.file("org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt")
-val generatedCliToolsetFile = generatedToolDispatcherDir.file("org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt")
 val verifiedToolDispatcherFile = verifiedToolDispatcherDir.map {
     it.file("org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt").asFile
-}
-val verifiedCliToolsetFile = verifiedToolDispatcherDir.map {
-    it.file("org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt").asFile
 }
 val generatedBuildInfoDir = layout.buildDirectory.dir("generated/sources/hexanaBuildInfo/main/kotlin")
 val generatedBuildInfoFile = generatedBuildInfoDir.map {
@@ -95,7 +91,7 @@ tasks.register<JavaExec>("generateHexanaToolDispatcher") {
     })
 
     inputs.files(project(":mcp:tools-generator").tasks.named("classes"))
-    outputs.files(generatedToolDispatcherFile, generatedCliToolsetFile)
+    outputs.file(generatedToolDispatcherFile)
 
     dependsOn(":mcp:tools-generator:classes")
 }
@@ -117,7 +113,7 @@ val regenerateHexanaToolDispatcherForVerification = tasks.register<JavaExec>("re
     }
 
     inputs.files(project(":mcp:tools-generator").tasks.named("classes"))
-    outputs.files(verifiedToolDispatcherFile, verifiedCliToolsetFile)
+    outputs.file(verifiedToolDispatcherFile)
 
     dependsOn(":mcp:tools-generator:classes")
 }
@@ -138,7 +134,6 @@ tasks.register("verifyHexanaToolDispatcherUpToDate") {
 
     val generatedFiles = listOf(
         "HexanaToolDispatcher.kt" to (generatedToolDispatcherFile.asFile to verifiedToolDispatcherFile),
-        "HexanaCliToolset.kt" to (generatedCliToolsetFile.asFile to verifiedCliToolsetFile),
     )
 
     inputs.files(generatedFiles.map { it.second.first })
@@ -165,10 +160,6 @@ tasks.register("verifyHexanaToolDispatcherUpToDate") {
 
 dependencies {
     implementation(project(":analytics"))
-    implementation(project(":cli:metadata"))
-    implementation(project(":cli:core"))
-    implementation(project(":cli:scripting"))
-    implementation(project(":graalwasm:wasmprinter"))
     implementation(project(":mcp:core"))
     implementation(project(":mcp:scripting"))
     implementation(libs.clikt)
@@ -323,6 +314,42 @@ tasks.register("verifyMcpRuntimeClassFileVersions") {
     }
 }
 
+tasks.register("verifyMcpServerOwnershipBoundary") {
+    description = "Fails if the MCP server source or installed runtime regains split CLI implementation dependencies."
+    group = "verification"
+    dependsOn(tasks.named("installDist"))
+
+    val productionSources = fileTree("src/main") { include("**/*.kt") }
+    val runtimeLibDir = layout.buildDirectory.dir("install/${application.applicationName}/lib")
+    inputs.files(productionSources)
+    inputs.dir(runtimeLibDir)
+
+    doLast {
+        val forbiddenImports = productionSources.files.sortedBy { it.path }.flatMap { source ->
+            source.readLines().mapIndexedNotNull { index, line ->
+                if (line.trimStart().startsWith("import org.jetbrains.hexana.cli")) {
+                    "${source.relativeTo(projectDir)}:${index + 1}: ${line.trim()}"
+                } else {
+                    null
+                }
+            }
+        }
+        check(forbiddenImports.isEmpty()) {
+            "hexana-mcp production sources must not import split CLI packages:\n" +
+                forbiddenImports.joinToString("\n")
+        }
+
+        val forbiddenArchiveNames = listOf("cli-core", "cli-metadata", "cli-runtime", "cli-scripting", "wasmprinter")
+        val forbiddenArchives = runtimeLibDir.get().asFile.listFiles().orEmpty()
+            .filter { archive -> forbiddenArchiveNames.any { marker -> marker in archive.name } }
+            .map { it.name }
+            .sorted()
+        check(forbiddenArchives.isEmpty()) {
+            "hexana-mcp installed runtime must not contain split CLI or converter archives: $forbiddenArchives"
+        }
+    }
+}
+
 tasks.register<Test>("integrationTest") {
     description = "Runs black-box HTTP and stdio integration tests against the installed standalone MCP server."
     group = "verification"
@@ -377,6 +404,7 @@ tasks.register("verifyNativeMcpVersionSmokeAssertion") {
 
 tasks.named("check") {
     dependsOn(tasks.named("verifyMcpRuntimeClassFileVersions"))
+    dependsOn(tasks.named("verifyMcpServerOwnershipBoundary"))
     dependsOn(tasks.named("verifyNativeMcpVersionSmokeAssertion"))
     dependsOn(tasks.named("verifyHexanaToolDispatcherUpToDate"))
 }

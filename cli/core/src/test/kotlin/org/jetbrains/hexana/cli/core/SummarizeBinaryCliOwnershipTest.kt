@@ -12,36 +12,21 @@ class SummarizeBinaryCliOwnershipTest {
     private val root = Path.of("..", "..").normalize()
 
     @Test
-    fun generatedMetadataAndLegacyServerResolveStandardCommandsToNeutralAdapter() {
-        val dsl = root.resolve("mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/BinaryTools.kt")
-            .readText() +
-            root.resolve("mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/ModuleTools.kt").readText() +
-            root.resolve("mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/ConverterTools.kt").readText()
-        val generatedServerToolset = root.resolve(
-            "mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt"
+    fun generatedMetadataKeepsStandardCommandsInTheSplitCliProductOnly() {
+        val dsl = root.resolve(
+            "mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/SurfaceAuthorities.kt"
         ).readText()
         val generatedProducts = root.resolve(
             "cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt"
-        ).readText()
-        val serverAdapter = root.resolve(
-            "mcp/server/src/main/kotlin/org/jetbrains/hexana/mcp/server/HexanaCliExecution.kt"
         ).readText()
 
         assertTrue(dsl.contains("""executableCliRenderer("renderSummarizeBinaryCliCommandOutput")"""))
         assertTrue(dsl.contains("""executableCliRenderer("renderSummarizeModuleCommandOutput")"""))
         assertTrue(dsl.contains("""executableCliRenderer("renderWasmToWatCommandOutput")"""))
-        assertTrue(generatedServerToolset.contains(""""summarize_binary" -> renderSummarizeBinaryCliCommandOutput(command)"""))
-        assertTrue(generatedServerToolset.contains(""""summarize_module" -> renderSummarizeModuleCommandOutput(command)"""))
-        assertTrue(generatedServerToolset.contains(""""wasm_to_wat" -> renderWasmToWatCommandOutput(command)"""))
         assertTrue(generatedProducts.contains("""HexanaCliProductToolSelection("summarize_binary", "summarize-binary""""))
         assertTrue(generatedProducts.contains("""HexanaCliProductToolSelection("summarize_module", "summarize-module""""))
         assertTrue(generatedProducts.contains("""HexanaCliProductToolSelection("wasm_to_wat", "wasm-to-wat""""))
-        assertTrue(serverAdapter.contains("summarizeBinaryCli("))
-        assertTrue(serverAdapter.contains("SummarizeBinaryCliRequest("))
-        assertTrue(serverAdapter.contains("standardCli("))
-        assertTrue(serverAdapter.contains("StandardCliRequest("))
-
-        assertFalse(generatedServerToolset.contains(""""summarize_binary" -> renderSummarizeBinaryCommandOutput(command)"""))
+        assertFalse(generatedProducts.contains("HEXANA_MCP"))
         listOf(
             "handlerFqn",
             "standaloneHandlerMethod",
@@ -60,11 +45,11 @@ class SummarizeBinaryCliOwnershipTest {
     }
 
     @Test
-    fun legacyMcpSelectedStandardExecutablesHaveNeutralRuntimeClosure() {
+    fun splitCliSelectedStandardExecutablesHaveNeutralRuntimeClosure() {
         val selectedStandardTools = root.resolve(
             "cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt"
         ).readText()
-            .productToolNames("HEXANA_MCP")
+            .productToolNames("HEXANA_CLI")
             .filterTo(sortedSetOf()) { it in STANDARD_ANALYSIS_TOOL_NAMES }
 
         assertEquals(STANDARD_ANALYSIS_TOOL_NAMES.toSortedSet(), selectedStandardTools)
@@ -89,9 +74,12 @@ class SummarizeBinaryCliOwnershipTest {
 
     @Test
     fun migratedStandardRuntimeImplementationDoesNotExistInServerSources() {
-        val serverSources = listOf(
-            root.resolve("mcp/server/src/main/kotlin/org/jetbrains/hexana/mcp/server/HexanaCliExecution.kt"),
-        ).joinToString(separator = "\n") { it.readText() }
+        val serverRoot = root.resolve("mcp/server/src/main")
+        val serverSources = java.nio.file.Files.walk(serverRoot).use { paths ->
+            paths.filter { java.nio.file.Files.isRegularFile(it) && it.fileName.toString().endsWith(".kt") }
+                .toList()
+                .joinToString(separator = "\n") { it.readText() }
+        }
 
         listOf(
             "class SummarizeBinaryInputConverter",

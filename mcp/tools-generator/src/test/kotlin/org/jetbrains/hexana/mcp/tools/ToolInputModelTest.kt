@@ -466,7 +466,7 @@ class ToolInputModelTest {
             ToolOutputPolicy.ToolDefined,
             executionStatus = CliExecutionStatus.Executable,
             executableRenderer = executableCliRenderer("renderCompareModules"),
-            releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCli),
+            releaseProducts = setOf(CliReleaseProduct.HexanaCli),
             inputModel = inputModel,
         )
         validateCliBinding(contract, binding)
@@ -490,7 +490,7 @@ class ToolInputModelTest {
             ToolOutputPolicy.ToolDefined,
             executionStatus = CliExecutionStatus.Executable,
             executableRenderer = executableCliRenderer("renderCompareBinaries"),
-            releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCli),
+            releaseProducts = setOf(CliReleaseProduct.HexanaCli),
             inputModel = inputModel,
         )
         validateCliBinding(contract, binding)
@@ -535,7 +535,7 @@ class ToolInputModelTest {
             ToolOutputPolicy.ToolDefined,
             executionStatus = CliExecutionStatus.Executable,
             executableRenderer = executableCliRenderer("renderRunBinaryScript"),
-            releaseProducts = setOf(CliReleaseProduct.HexanaMcp, CliReleaseProduct.HexanaCliScript),
+            releaseProducts = setOf(CliReleaseProduct.HexanaCliScript),
             inputModel = inputModel,
         )
         validateCliBinding(contract, binding)

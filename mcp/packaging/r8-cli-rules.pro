@@ -10,15 +10,15 @@
 -repackageclasses obf
 
 -keep class org.jetbrains.hexana.cli.runtime.** { *; }
--keep class org.jetbrains.hexana.mcp.server.HexanaCliInputMode { *; }
--keep class org.jetbrains.hexana.mcp.server.HexanaCliToolGroup { *; }
--keep class org.jetbrains.hexana.mcp.server.HexanaCliOutputPolicy { *; }
--keep class org.jetbrains.hexana.mcp.server.HexanaCliExecutionStatus { *; }
--keep class org.jetbrains.hexana.mcp.server.HexanaCliToolSpec { *; }
--keep class org.jetbrains.hexana.mcp.server.HexanaGeneratedCliToolRegistry { *; }
--keep class org.jetbrains.hexana.mcp.server.HexanaCliReleaseProduct { *; }
--keep class org.jetbrains.hexana.mcp.server.HexanaCliProductToolSelection { *; }
--keep class org.jetbrains.hexana.mcp.server.HexanaGeneratedCliProducts { *; }
+-keep class org.jetbrains.hexana.cli.metadata.HexanaCliInputMode { *; }
+-keep class org.jetbrains.hexana.cli.metadata.HexanaCliToolGroup { *; }
+-keep class org.jetbrains.hexana.cli.metadata.HexanaCliOutputPolicy { *; }
+-keep class org.jetbrains.hexana.cli.metadata.HexanaCliExecutionStatus { *; }
+-keep class org.jetbrains.hexana.cli.metadata.HexanaCliToolSpec { *; }
+-keep class org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliToolRegistry { *; }
+-keep class org.jetbrains.hexana.cli.metadata.HexanaCliReleaseProduct { *; }
+-keep class org.jetbrains.hexana.cli.metadata.HexanaCliProductToolSelection { *; }
+-keep class org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliProducts { *; }
 
 -keep class org.jetbrains.hexana.mcp.* { *; }
 

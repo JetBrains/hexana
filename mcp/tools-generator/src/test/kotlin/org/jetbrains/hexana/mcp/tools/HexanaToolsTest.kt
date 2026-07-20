@@ -242,7 +242,6 @@ class HexanaToolsTest {
         val products = CliReleaseProduct.entries.associateWith { product ->
             HexanaCliTools.filter { product in it.binding.releaseProducts }.map { it.name }
         }
-        assertEquals(listOf("summarize_binary", "run_binary_script", "wasm_to_wat", "summarize_module"), products.getValue(CliReleaseProduct.HexanaMcp))
         assertEquals(listOf("summarize_binary", "wasm_to_wat", "summarize_module"), products.getValue(CliReleaseProduct.HexanaCli))
         assertEquals(listOf("run_binary_script"), products.getValue(CliReleaseProduct.HexanaCliScript))
         val executable = HexanaCliTools.filter { it.binding.executionStatus == CliExecutionStatus.Executable }

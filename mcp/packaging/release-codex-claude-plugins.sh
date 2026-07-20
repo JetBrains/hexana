@@ -1080,7 +1080,7 @@ check_obfuscated_runtime_hardening() {
 
   case "$zip_name" in
     hexana-cli-script-*.zip|hexana-cli-*.zip)
-      allowed_hexana_class_regex='^org/jetbrains/hexana/cli/(hexanacli|hexanacliscript)/MainKt\.class$|^org/jetbrains/hexana/cli/runtime/|^org/jetbrains/hexana/mcp/[^/]+\.class$|^org/jetbrains/hexana/mcp/model/|^org/jetbrains/hexana/mcp/server/(HexanaCliInputMode|HexanaCliToolGroup|HexanaCliOutputPolicy|HexanaCliExecutionStatus|HexanaCliToolSpec|HexanaGeneratedCliToolRegistry|HexanaCliReleaseProduct|HexanaCliProductToolSelection|HexanaGeneratedCliProducts)\.class$|^org/jetbrains/hexana/providers/a\.class$'
+      allowed_hexana_class_regex='^org/jetbrains/hexana/cli/(hexanacli|hexanacliscript)/MainKt\.class$|^org/jetbrains/hexana/cli/metadata/(HexanaCliInputMode|HexanaCliToolGroup|HexanaCliOutputPolicy|HexanaCliExecutionStatus|HexanaCliToolSpec|HexanaGeneratedCliToolRegistry|HexanaCliReleaseProduct|HexanaCliProductToolSelection|HexanaGeneratedCliProducts)\.class$|^org/jetbrains/hexana/cli/runtime/|^org/jetbrains/hexana/mcp/[^/]+\.class$|^org/jetbrains/hexana/mcp/model/|^org/jetbrains/hexana/providers/a\.class$'
       ;;
     *)
       allowed_hexana_class_regex='^org/jetbrains/hexana/mcp/model/|^org/jetbrains/hexana/mcp/server/(MainKt|HexanaLogLevel)\.class$|^org/jetbrains/hexana/providers/a\.class$'

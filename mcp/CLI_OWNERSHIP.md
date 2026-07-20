@@ -1,106 +1,57 @@
-# Hexana MCP CLI Ownership
+# Hexana Command-Line Product Ownership
 
 ## Decision
 
-`hexana-mcp` is a real public CLI, not only a hidden MCP server executable. For now, one binary owns both public CLI
-commands and MCP server launch commands.
+`hexana-mcp` is an MCP-only product. Its public command surface is exactly:
 
-Do not split the CLI into a new Gradle module or publish a separate artifact in MCP-69. The current package launchers
-continue to invoke the same runtime binary, and the existing public launcher shape remains compatible:
+- `stdio`
+- `http`
+- `doctor`
+- `version`
+- `help`
 
-```bash
-hexana-mcp stdio
-```
+It does not expose direct analysis commands or a `tools` catalog command. In particular, `summarize-binary`,
+`summarize-module`, `wasm-to-wat`, `run-script`, and `tools` must fail as unknown `hexana-mcp` subcommands.
 
-The `stdio` subcommand is the compatibility baseline for Claude, Codex, and other package launchers. Adding CLI
-subcommands must not change the behavior of existing launcher templates that call `hexana-mcp stdio` unless a later
-ticket intentionally updates the launcher contract and its smoke coverage.
+This product split does not remove MCP protocol tools. All configured `tools/list` and `tools/call` behavior remains in
+the server, including the scripting-profile `run_binary_script` tool.
 
-## Current `mcp:server` Ownership
+## Product Boundaries
 
-`mcp:server` remains the implementation owner for the current combined binary. It contains:
+`mcp:server` owns MCP transports, protocol tool registration and handlers, server profiles, diagnostics, versioning,
+analytics, resource limits, and the five service commands above. Its production runtime must not import
+`org.jetbrains.hexana.cli` or ship split CLI implementation archives.
 
-- process transport startup for `stdio`, including stdout reserved for MCP protocol traffic and human-readable logs on
-  stderr;
-- HTTP transport startup and local-first bind validation;
-- the Clikt root command and service subcommand parsing for `hexana-mcp`;
-- generated CLI command adapters from `HexanaCliToolset.kt`;
-- direct executable CLI command dispatch for legacy commands that have not moved yet;
-- generated MCP tool registration through `HexanaToolDispatcher.kt`;
-- standalone analysis-service wiring to `mcp:core`;
-- version, doctor, logging, analytics, and resource-limit command plumbing;
-- the packaging entrypoint consumed by Claude, Codex, native-image, and JVM fallback package layouts.
+The split applications own direct command execution:
 
-This keeps the public CLI, server launcher, and packaging entrypoint in one reviewable runtime while the command surface
-is still stabilizing.
+- `hexana-cli` owns exactly `summarize-binary`, `summarize-module`, and `wasm-to-wat`, plus product-level `tools`,
+  `version`, and `help` commands.
+- `hexana-cli-script` owns exactly `run-script`, plus product-level `tools`, `version`, and `help` commands.
 
-`:cli:runtime` now owns the framework-neutral runtime contracts for input conversion, semantic execution diagnostics,
-source selection, output format selection, rendered payloads, render options, and runtime context. `:cli:core` owns the
-standard analysis command converters, executors, renderers, and neutral command adapter for `summarize-binary`,
-`summarize-module`, and `wasm-to-wat`. `:cli:scripting` owns the isolated script-only `run-script` contribution and
-delegates script execution to `mcp:scripting` without standard command composition or MCP transports. `mcp:server` keeps
-only the legacy CLI parsing and final output-budget enforcement for these migrated commands; it must not duplicate their
-converters, executors, renderers, or output models.
+Shared CLI ownership remains layered:
 
-## Future Split Boundary
+- `cli:runtime` owns framework-neutral runtime contracts.
+- `cli:metadata` owns generated CLI catalog metadata and the two split release-product selections.
+- `cli:core` owns the three standard command converters, executors, and renderers.
+- `cli:scripting` owns the isolated `run-script` contribution.
+- `cli:product` owns shared split-product parsing, help, version, tools output, telemetry, and exit mapping.
 
-The explicit CLI authority in `mcp/tools-generator/.../SurfaceAuthorities.kt` declares three atomically versioned
-release products independently from semantic contracts, standalone MCP profiles, IDEA registration, and MCPB exposure:
-legacy `hexana-mcp`
-keeps all four executable direct commands, `hexana-cli` selects the three non-scripting commands, and
-`hexana-cli-script` selects only `run-script`. The `:cli:hexana-cli` and `:cli:hexana-cli-script` JVM applications now
-exist as installed distributions, backed by the shared `:cli:product` layer and app-owned product executors. This branch
-also wires their R8 release ZIPs, native release archives, and GitHub Release/downloads publication into the MCP release
-flow. Package-manager artifacts and any change to MCP wrapper topology remain follow-up work.
+## Generated Authorities
 
-Future split work should move contracts before moving artifacts. The likely boundary is:
+`mcp/tools-generator/.../SurfaceAuthorities.kt` keeps semantic MCP contracts independent from CLI release products.
+Each executable CLI binding belongs to exactly one release product: `hexana-cli` or `hexana-cli-script`.
 
-- CLI runtime contracts for input conversion, output rendering, output format selection, rendered text/binary payloads,
-  working-directory context, and environment access belong in `cli:runtime`;
-- neutral standard command orchestration and already exercised non-scripting adapters belong in `cli:core`;
-- the isolated script-only `run-script` adapter belongs in `cli:scripting`;
-- generated metadata in `:cli:metadata` resolves semantic contracts with the independent CLI authority to describe
-  CLI-visible commands and release-product selections, while the split
-  applications consume those selections through `:cli:product`;
-- product parsing, help/version/tools output, output-file writing, telemetry, and executor contracts belong in
-  `cli:product`;
-- product executor implementations and installed-process behavior live in the split application modules;
-- `mcp:server` should keep MCP transports, MCP tool registration, server analytics, and server-specific resource
-  policies after such a split;
-- `mcp:packaging` should keep wrapper scripts and manifests only, forwarding to the selected binary without duplicating
-  CLI or MCP runtime logic.
+The standalone generator emits only `HexanaToolDispatcher.kt` into `mcp:server`. Neutral CLI generation emits
+`HexanaCliToolset.kt` and `HexanaCliProducts.kt` into `cli:metadata`; it must not emit a server CLI adapter.
 
-A future split must preserve package-launcher compatibility or provide a deliberate migration path. In particular,
-existing packaged invocations of `hexana-mcp stdio` must keep working through the first split unless the launcher
-contract is explicitly versioned and smoke-tested.
+## Packaging and Verification
 
-## Follow-up Tickets
+Claude, Codex, MCPB, JVM, R8, and native `hexana-mcp` packages must preserve the MCP-only command surface. Package
+smokes verify the five removed commands fail without writing protocol-unsafe stdout, while protocol tests continue to
+exercise `tools/list`, `tools/call`, and the scripting MCP profile.
 
-Keep implementation tickets small enough for review:
+The installed MCP runtime and MCP R8 input must exclude `cli-core`, `cli-metadata`, `cli-runtime`, `cli-scripting`, and
+`wasmprinter`. Split CLI R8/native archives retain the dependencies required by their own commands.
 
-1. Define the remaining CLI runtime contract gaps between current generated CLI adapters and `cli:runtime`, including
-   terminal color behavior and any future binary-safe rendering.
-2. Add focused compatibility tests that prove `hexana-mcp stdio`, `hexana-mcp version`, and implemented executable CLI
-   tools still work through the packaged launcher.
-3. Decide when generated CLI command construction should move behind a generated contract consumed by both `mcp:server`
-   and a future `mcp:cli`; keep executable CLI input models explicit and independent from IDEA invocation patterns.
-4. Only after the contract layer is exercised, evaluate a separate `mcp:cli` module or artifact split and update
-   package launcher smoke gates in the same implementation ticket.
-
-## Breaking Proof
-
-The MCP-69 ownership decision itself is documentation-only, but this branch now has executable impact through later
-CLI work: generated CLI metadata marks `summarize-binary` executable, standalone runtime dispatch renders its JSON
-output, Gradle drift checks cover generated tool files, and installed-runtime tests exercise the packaged launcher.
-
-Breaking-proof coverage for this branch is:
-
-- server and generator unit coverage for CLI metadata, generated files, schema compatibility, and runtime argument
-  handling;
-- generated artifact drift checks for both standalone MCP and IDEA toolset outputs;
-- `cli/core` ownership coverage proving generated standard analysis metadata and the legacy server adapters resolve to
-  the neutral adapter instead of server-local implementations;
-- installed-runtime smokes for `hexana-mcp stdio`, `hexana-mcp version`, and executable public CLI commands including
-  `hexana-mcp summarize-binary <file> --format json`, `hexana-mcp summarize-module <file> --format pretty`, and
-  `hexana-mcp wasm-to-wat <file> --format raw`;
-- package-level smoke gates when release packaging layouts or launcher scripts change.
+Breaking-proof coverage is the exact root-help inventory plus negative parsing and installed-package tests for all five
+removed commands. Temporarily registering any removed command must make that coverage fail.

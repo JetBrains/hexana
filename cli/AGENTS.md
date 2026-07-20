@@ -8,9 +8,8 @@ This folder contains neutral CLI modules shared by current and future command-li
   SDK, Ktor, Clikt, analytics, IntelliJ APIs, or `mcp:server`.
 - `metadata/`: neutral generated CLI catalog and release-product metadata. It must depend only on `cli:runtime` at
   runtime and must not import MCP SDK, Ktor, Clikt, analytics, IntelliJ APIs, or `mcp:server`.
-- `core/`: neutral command orchestration and adapters that are already exercised by production behavior. The standard
-  analysis commands `summarize-binary`, `summarize-module`, and `wasm-to-wat` live here; `mcp:server` is only a legacy
-  adapter for them.
+- `core/`: neutral command orchestration and adapters for the standard `hexana-cli` analysis commands
+  `summarize-binary`, `summarize-module`, and `wasm-to-wat`.
 - `scripting/`: neutral script-only runtime contribution for `run-script`; it reuses `mcp:scripting` and
   `cli:runtime`, but must not import standard CLI command composition, MCP transports, Clikt, Ktor, analytics,
   IntelliJ APIs, or `mcp:server`.

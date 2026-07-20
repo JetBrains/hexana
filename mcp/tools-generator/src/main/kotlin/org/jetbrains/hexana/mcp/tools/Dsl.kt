@@ -450,7 +450,6 @@ enum class CliReleaseProduct(
     val productId: String,
     val executableName: String,
 ) {
-    HexanaMcp(productId = "hexana-mcp", executableName = "hexana-mcp"),
     HexanaCli(productId = "hexana-cli", executableName = "hexana-cli"),
     HexanaCliScript(productId = "hexana-cli-script", executableName = "hexana-cli-script"),
 }
@@ -1124,13 +1123,8 @@ internal fun validateCliReleaseProducts(
     }
     toolsToCheck.forEach { tool ->
         val products = tool.binding.releaseProducts
-        val standaloneProducts = products intersect setOf(
-            CliReleaseProduct.HexanaCli,
-            CliReleaseProduct.HexanaCliScript,
-        )
-        require(CliReleaseProduct.HexanaMcp in products && standaloneProducts.size == 1 && products.size == 2) {
-            "Executable CLI tool '${tool.name}' must select hexana-mcp and exactly one standalone CLI product, " +
-                "got $products."
+        require(products.size == 1) {
+            "Executable CLI tool '${tool.name}' must select exactly one CLI release product, got $products."
         }
     }
 

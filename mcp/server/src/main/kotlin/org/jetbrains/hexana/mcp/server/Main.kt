@@ -15,8 +15,6 @@ import kotlinx.io.asSink
 import kotlinx.io.asSource
 import kotlinx.io.buffered
 import org.jetbrains.hexana.analytics.*
-import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
-import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.slf4j.LoggerFactory
 import kotlin.system.exitProcess
 
@@ -54,22 +52,10 @@ fun main(args: Array<String>) {
                         exitProcess(report.exitCode)
                     }
                 }
-                is HexanaCommand.ExecutableTool -> printCommandOutput(generatedExecutableCliToolCommandOutput(command))
-                is HexanaCommand.Tools -> println(renderCliToolsListing(command))
-                is HexanaCommand.TodoTool -> {
-                    System.err.println(renderTodoToolNotImplementedMessage(command))
-                    exitProcess(1)
-                }
                 is HexanaCommand.Stdio -> runBlocking { runStdio(command) }
                 is HexanaCommand.Http -> runBlocking { runHttp(command) }
             }
         }
-    } catch (error: HexanaAnalysisException) {
-        if (command is HexanaCommand.ExecutableTool && error.code != HexanaAnalysisErrorCode.INTERNAL_ERROR) {
-            System.err.println(renderExecutableToolDomainError(command, error))
-            exitProcess(1)
-        }
-        handleFatalCommandFailure(command, error)
     } catch (error: Throwable) {
         handleFatalCommandFailure(command, error)
     }
@@ -85,12 +71,6 @@ private fun handleFatalCommandFailure(command: HexanaCommand, error: Throwable):
         is HexanaCommand.Stdio -> "Hexana MCP server failed while running stdio transport. See server logs for details."
         is HexanaCommand.Http -> "Hexana MCP server failed while running HTTP transport. See server logs for details."
         is HexanaCommand.Doctor -> "Hexana MCP doctor failed. See server logs for details."
-        is HexanaCommand.ExecutableTool ->
-            "Hexana MCP ${command.spec.commandName} command failed. See server logs for details."
-        is HexanaCommand.Tools ->
-            "Hexana MCP tools command failed. See server logs for details."
-        is HexanaCommand.TodoTool ->
-            "Hexana MCP ${command.spec.commandName} command failed. See server logs for details."
         is HexanaCommand.Version,
         is HexanaCommand.Help -> "Hexana MCP server failed. See server logs for details."
     }
@@ -98,23 +78,6 @@ private fun handleFatalCommandFailure(command: HexanaCommand, error: Throwable):
     System.err.println(userMessage)
     exitProcess(1)
 }
-
-private fun printCommandOutput(output: HexanaCliCommandOutput) {
-    if (output.stderr.isNotEmpty()) {
-        System.err.print(output.stderr)
-    }
-    if (output.stdout.isNotEmpty()) {
-        System.out.print(output.stdout)
-    }
-    if (output.exitCode != 0) {
-        exitProcess(output.exitCode)
-    }
-}
-
-private fun renderExecutableToolDomainError(
-    command: HexanaCommand.ExecutableTool,
-    error: HexanaAnalysisException,
-): String = "Hexana MCP ${command.spec.commandName} failed: ${error.message}"
 
 internal data class CommandAnalytics(
     val analyticsKey: String?,
@@ -160,9 +123,6 @@ internal fun HexanaCommand.analytics(): CommandAnalytics? = when (this) {
 
     is HexanaCommand.Help,
     is HexanaCommand.Doctor,
-    is HexanaCommand.ExecutableTool,
-    is HexanaCommand.Tools,
-    is HexanaCommand.TodoTool,
     is HexanaCommand.Version -> null
 }
 
@@ -173,9 +133,6 @@ internal fun developmentVersionWarning(command: HexanaCommand, version: String):
     return when (command) {
         is HexanaCommand.Help,
         is HexanaCommand.Doctor,
-        is HexanaCommand.ExecutableTool,
-        is HexanaCommand.Tools,
-        is HexanaCommand.TodoTool,
         is HexanaCommand.Version -> null
 
         is HexanaCommand.Stdio,

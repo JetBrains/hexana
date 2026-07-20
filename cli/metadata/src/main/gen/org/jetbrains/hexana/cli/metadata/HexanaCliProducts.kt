@@ -12,7 +12,6 @@ public enum class HexanaCliReleaseProduct(
   public val productId: String,
   public val executableName: String,
 ) {
-  HEXANA_MCP("hexana-mcp", "hexana-mcp"),
   HEXANA_CLI("hexana-cli", "hexana-cli"),
   HEXANA_CLI_SCRIPT("hexana-cli-script", "hexana-cli-script"),
   ;
@@ -33,12 +32,6 @@ public data class HexanaCliProductToolSelection(
  */
 public object HexanaGeneratedCliProducts {
   public val PRODUCTS: Map<HexanaCliReleaseProduct, List<HexanaCliProductToolSelection>> = mapOf(
-        HexanaCliReleaseProduct.HEXANA_MCP to listOf(
-          HexanaCliProductToolSelection("summarize_binary", "summarize-binary", "ToolDefined", "SemanticJson"),
-          HexanaCliProductToolSelection("run_binary_script", "run-script", "ToolDefined", "RawText"),
-          HexanaCliProductToolSelection("wasm_to_wat", "wasm-to-wat", "ToolDefined", "RawText"),
-          HexanaCliProductToolSelection("summarize_module", "summarize-module", "ToolDefined", "Pretty"),
-        ),
         HexanaCliReleaseProduct.HEXANA_CLI to listOf(
           HexanaCliProductToolSelection("summarize_binary", "summarize-binary", "ToolDefined", "SemanticJson"),
           HexanaCliProductToolSelection("wasm_to_wat", "wasm-to-wat", "ToolDefined", "RawText"),

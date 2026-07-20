@@ -1,25 +1,12 @@
 package org.jetbrains.hexana.mcp.server
 
 import com.github.ajalt.clikt.core.*
-import com.github.ajalt.clikt.completion.CompletionCandidates
 import com.github.ajalt.clikt.parameters.options.*
 import com.github.ajalt.clikt.parameters.types.int
-import kotlinx.serialization.json.JsonPrimitive
-import org.jetbrains.hexana.cli.metadata.HexanaCliExecutionStatus
-import org.jetbrains.hexana.cli.metadata.HexanaCliInputMode
-import org.jetbrains.hexana.cli.metadata.HexanaCliOutputFormat
-import org.jetbrains.hexana.cli.metadata.HexanaCliToolGroup
-import org.jetbrains.hexana.cli.metadata.HexanaCliToolSpec
-import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliToolRegistry
-import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
-import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.InputStream
 import java.net.InetAddress
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 sealed interface HexanaCommand {
     data class Stdio(
@@ -48,138 +35,15 @@ sealed interface HexanaCommand {
         val allowedRoots: List<String>,
     ) : HexanaCommand
 
-    data class ExecutableTool(
-        val spec: HexanaCliToolSpec,
-        val sourceSelections: List<ToolInputSourceSelection>,
-        val params: Map<String, JsonPrimitive> = emptyMap(),
-        val format: HexanaCliOutputFormat,
-        val allowedRoots: List<String>,
-        val resourceLimits: HexanaResourceLimits,
-    ) : HexanaCommand {
-        constructor(
-            spec: HexanaCliToolSpec,
-            sourceSelection: ToolInputSourceSelection,
-            format: HexanaCliOutputFormat,
-            allowedRoots: List<String>,
-            resourceLimits: HexanaResourceLimits,
-            params: Map<String, JsonPrimitive> = emptyMap(),
-        ) : this(
-            spec = spec,
-            sourceSelections = listOf(sourceSelection),
-            params = params,
-            format = format,
-            allowedRoots = allowedRoots,
-            resourceLimits = resourceLimits,
-        )
-
-        init {
-            require(sourceSelections.isNotEmpty()) {
-                "Executable CLI tool '${spec.commandName}' must carry at least one source selection."
-            }
-            val duplicateSourceNames = sourceSelections
-                .map { it.slotName }
-                .groupingBy { it }
-                .eachCount()
-                .filterValues { it > 1 }
-                .keys
-            require(duplicateSourceNames.isEmpty()) {
-                "Executable CLI tool '${spec.commandName}' has duplicate source selections: $duplicateSourceNames."
-            }
-            val blankParamNames = params.keys.filter { it.isBlank() }
-            require(blankParamNames.isEmpty()) {
-                "Executable CLI tool '${spec.commandName}' has blank parameter names."
-            }
-        }
-
-        val sourceSelection: ToolInputSourceSelection
-            get() = sourceSelections.singleOrNull()
-                ?: error(
-                    "Executable CLI tool '${spec.commandName}' has ${sourceSelections.size} source selections; " +
-                        "use named sourceSelections instead of the single-source accessor."
-                )
-    }
-
-    data class Tools(
-        val group: HexanaCliToolGroup?,
-    ) : HexanaCommand
-
-    data class TodoTool(
-        val spec: HexanaCliToolSpec,
-    ) : HexanaCommand
-
     data object Version : HexanaCommand
     data object Help : HexanaCommand
 }
 
-interface HexanaCliStdin {
-    fun readExplicitBytes(maxBytes: Int): ByteArray
-    fun readAutoBytesOrNull(maxBytes: Int): ByteArray?
-}
-
-object SystemHexanaCliStdin : HexanaCliStdin {
-    private const val AUTO_STDIN_READ_TIMEOUT_MILLIS = 2_000L
-    private const val BUFFER_SIZE = 8 * 1024
-
-    override fun readExplicitBytes(maxBytes: Int): ByteArray =
-        System.`in`.readAtMost(maxBytes)
-
-    override fun readAutoBytesOrNull(maxBytes: Int): ByteArray? {
-        if (System.console() != null) {
-            return null
-        }
-        val input = System.`in`
-        if (input.available() > 0) {
-            return input.readAtMost(maxBytes).takeIf { it.isNotEmpty() }
-        }
-
-        return input.readAtMostAsync(maxBytes)
-            ?.takeIf { it.isNotEmpty() }
-    }
-
-    private fun InputStream.readAtMost(maxBytes: Int): ByteArray {
-        require(maxBytes > 0) { "Maximum stdin byte count must be positive." }
-        val output = ByteArrayOutputStream()
-        val limit = maxBytes.toLong() + 1L
-        val bufferSize = if (limit < BUFFER_SIZE) limit.toInt() else BUFFER_SIZE
-        val buffer = ByteArray(bufferSize)
-        var total = 0L
-        while (total < limit) {
-            val bytesToRead = (limit - total).coerceAtMost(buffer.size.toLong()).toInt()
-            val bytesRead = read(buffer, 0, bytesToRead)
-            if (bytesRead < 0) {
-                break
-            }
-            output.write(buffer, 0, bytesRead)
-            total += bytesRead
-        }
-        return output.toByteArray()
-    }
-
-    private fun InputStream.readAtMostAsync(maxBytes: Int): ByteArray? {
-        val latch = CountDownLatch(1)
-        var result: Result<ByteArray>? = null
-        val reader = Thread(
-            {
-                result = runCatching { readAtMost(maxBytes) }
-                latch.countDown()
-            },
-            "hexana-cli-auto-stdin-reader"
-        )
-        reader.isDaemon = true
-        reader.start()
-        if (!latch.await(AUTO_STDIN_READ_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
-            return null
-        }
-        return requireNotNull(result).getOrThrow()
-    }
-}
-
 class HexanaCli(
     private val envReader: (String) -> String? = System::getenv,
-    private val stdin: HexanaCliStdin = SystemHexanaCliStdin,
 ) {
     private var parsedCommand: HexanaCommand? = null
-    private val rootCommand = RootCommand(envReader, stdin) { parsedCommand = it }
+    private val rootCommand = RootCommand(envReader) { parsedCommand = it }
 
     fun parse(args: Array<String>): HexanaCommand {
         parsedCommand = null
@@ -204,7 +68,6 @@ class HexanaCli(
 
     private class RootCommand(
         private val envReader: (String) -> String?,
-        private val stdin: HexanaCliStdin,
         private val sink: (HexanaCommand) -> Unit
     ) : CliktCommand(name = "hexana-mcp") {
         override fun help(context: Context): String = "Standalone Hexana MCP server for WebAssembly inspection."
@@ -214,12 +77,7 @@ class HexanaCli(
 
         init {
             val manualCommands = manualServiceCommands(envReader, sink)
-            val generatedCommands = generatedCliToolCommands(envReader, stdin, sink)
-            validateRootCliCommandNames(
-                manualCommandNames = manualCommands.map { it.commandName },
-                generatedCommandNames = generatedCommands.map { it.commandName },
-            )
-            subcommands(manualCommands + generatedCommands)
+            subcommands(manualCommands)
         }
 
         override fun run() = Unit
@@ -377,22 +235,6 @@ class HexanaCli(
         }
     }
 
-    private class ToolsCommand(
-        private val sink: (HexanaCommand) -> Unit
-    ) : CliktCommand(name = "tools") {
-        override fun help(context: Context): String =
-            "List generated CLI-visible tools. Groups are metadata, not MCP profiles."
-
-        private val group by option(
-            "--group",
-            help = "Filter by generated CLI metadata group. Supported: ${supportedCliToolGroupNames()}."
-        ).convert(supportedCliToolGroupNames()) { parseCliToolGroup(it) }
-
-        override fun run() {
-            sink(HexanaCommand.Tools(group = group))
-        }
-    }
-
     private class VersionCommand(
         private val sink: (HexanaCommand) -> Unit
     ) : CliktCommand(name = "version") {
@@ -420,102 +262,11 @@ class HexanaCli(
         ): List<CliktCommand> = listOf(
             StdioCommand(envReader, sink),
             HttpCommand(envReader, sink),
-            ToolsCommand(sink),
             DoctorCommand(envReader, sink),
             VersionCommand(sink),
             HelpCommand(sink),
         )
     }
-}
-
-internal fun validateRootCliCommandNames(
-    manualCommandNames: List<String>,
-    generatedCommandNames: List<String>,
-) {
-    val duplicateManualNames = duplicateRootCliCommandNames(manualCommandNames)
-    require(duplicateManualNames.isEmpty()) {
-        "Manual service CLI command names must be unique: ${duplicateManualNames.joinToString()}."
-    }
-
-    val manualCollisions = generatedCommandNames.toSet().intersect(manualCommandNames)
-    require(manualCollisions.isEmpty()) {
-        "Generated CLI command names must not duplicate manual service command names: ${manualCollisions.sorted().joinToString()}."
-    }
-
-    val duplicateGeneratedNames = duplicateRootCliCommandNames(generatedCommandNames)
-    require(duplicateGeneratedNames.isEmpty()) {
-        "Generated CLI command names must be unique: ${duplicateGeneratedNames.joinToString()}."
-    }
-}
-
-private fun duplicateRootCliCommandNames(commandNames: List<String>): List<String> =
-    commandNames
-        .groupingBy { it }
-        .eachCount()
-        .filterValues { it > 1 }
-        .keys
-        .sorted()
-
-internal fun renderCliToolsListing(command: HexanaCommand.Tools): String {
-    val tools = HexanaGeneratedCliToolRegistry.TOOLS
-        .filter { spec -> spec.executionStatus == HexanaCliExecutionStatus.EXECUTABLE }
-        .filter { spec -> command.group == null || command.group in spec.groups }
-        .sortedBy { it.commandName }
-
-    return buildString {
-        appendLine("Hexana MCP CLI tools")
-        appendLine("Groups are generated CLI metadata, not MCP tool profiles.")
-        tools.forEachIndexed { index, spec ->
-            if (index > 0) {
-                appendLine()
-            }
-            appendLine(spec.commandName)
-            appendLine("  groups: ${spec.sortedGroupNames()}")
-            appendLine("  status: ${spec.executionStatus.cliName()}")
-            appendLine("  formats: ${spec.sortedFormatNames()}")
-            appendLine("  default: ${spec.defaultOutputFormat.cliName()}")
-            appendLine("  summary: ${spec.summary}")
-        }
-    }.trimEnd()
-}
-
-internal fun parseCliOutputFormat(spec: HexanaCliToolSpec, value: String): HexanaCliOutputFormat {
-    val format = HexanaCliOutputFormat.entries.firstOrNull { it.cliName() == value.trim().lowercase() }
-    if (format != null && format in spec.outputFormats) {
-        return format
-    }
-    throw UsageError(
-        "Unsupported ${spec.commandName} format: $value. Supported formats: ${spec.supportedFormatNames()}."
-    )
-}
-
-internal fun HexanaCliToolSpec.supportedFormatNames(): String =
-    outputFormats.joinToString { it.cliName() }
-
-internal fun HexanaCliToolSpec.supportedFormatCompletionCandidates(): CompletionCandidates =
-    CompletionCandidates.Fixed(outputFormats.map { it.cliName() }.toSet())
-
-private fun HexanaCliToolSpec.sortedGroupNames(): String =
-    groups.map { it.cliName() }.sorted().joinToString()
-
-private fun HexanaCliToolSpec.sortedFormatNames(): String =
-    outputFormats.map { it.cliName() }.sorted().joinToString()
-
-internal fun HexanaCliOutputFormat.cliName(): String = name.lowercase()
-
-private fun HexanaCliExecutionStatus.cliName(): String = name.lowercase()
-
-private fun HexanaCliToolGroup.cliName(): String = name.lowercase().replace('_', '-')
-
-private fun supportedCliToolGroupNames(): String =
-    HexanaCliToolGroup.entries.map { it.cliName() }.sorted().joinToString()
-
-private fun parseCliToolGroup(value: String): HexanaCliToolGroup {
-    val normalized = value.trim().lowercase()
-    return HexanaCliToolGroup.entries.firstOrNull { it.cliName() == normalized }
-        ?: throw UsageError(
-            "Unsupported CLI tool metadata group: $value. Supported groups: ${supportedCliToolGroupNames()}."
-        )
 }
 
 private fun parseLogLevel(value: String): HexanaLogLevel {

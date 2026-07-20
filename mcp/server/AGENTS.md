@@ -3,8 +3,8 @@
 This module contains the standalone Hexana MCP runtime. It exposes `mcp/core` through process and HTTP transports and
 must remain free of IntelliJ Platform APIs.
 
-For the current CLI ownership decision, read `../CLI_OWNERSHIP.md`: `hexana-mcp` is a real public CLI and remains in
-this module together with the MCP server launcher until a later split ticket changes the artifact layout.
+For the current product ownership decision, read `../CLI_OWNERSHIP.md`: `hexana-mcp` is MCP-only and exposes exactly
+`stdio`, `http`, `doctor`, `version`, and `help`.
 
 ## Start Here
 
@@ -18,31 +18,22 @@ Read these files before making structural changes:
 - `src/main/gen/org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt` (generated — do not hand-edit; DSL sources live
   under `../tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/`; includes standalone MCP tool registration
   plus MCP profile/default metadata)
-- `src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt` (generated — do not hand-edit; includes
-  CLI tool command construction and executable CLI renderer dispatch; CLI metadata types are imported from
-  `cli:metadata`)
-- `../../cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliToolset.kt` and
-  `../../cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt` (generated — do not
-  hand-edit; include CLI-visible tool metadata and CLI product selections)
 - `../core/src/main/kotlin/org/jetbrains/hexana/mcp/HexanaAnalysisService.kt`
 
 ## Ownership Boundary
 
-- Keep MCP transport wiring and CLI parsing here.
-- Keep only legacy CLI parsing and server-specific output limits here for migrated CLI commands. Standard analysis
-  commands (`summarize-binary`, `summarize-module`, and `wasm-to-wat`) delegate to `cli/core`, and `run-script`
-  delegates to `cli/scripting`; do not reintroduce a server-local converter, executor, renderer, output model, or
-  duplicate format model for those commands.
-- Tool registration (`Server.registerHexanaTools`) is generated into `HexanaToolDispatcher.kt`; CLI-visible metadata is
-  generated into `cli:metadata`, while server CLI command construction and executable CLI renderer dispatch are
-  generated into `HexanaCliToolset.kt`. To change a tool's name,
-  description, input, output shape, or CLI surface, edit the DSL and regenerate with
+- Keep MCP transport wiring and parsing for the five MCP service commands here.
+- Do not add direct analysis commands, a `tools` CLI command, split CLI dependencies, or imports from
+  `org.jetbrains.hexana.cli` to production server code.
+- Tool registration (`Server.registerHexanaTools`) is generated into `HexanaToolDispatcher.kt`; CLI-visible metadata
+  is generated only into `cli:metadata`. To change a tool's name, description, input, output shape, or CLI surface,
+  edit the DSL and regenerate with
   `./gradlew :mcp:server:generateHexanaToolDispatcher`; commit the regenerated files under `src/main/gen/`.
 - The generated dispatcher also exposes `HexanaToolInputDefaults`; use those constants in hand-written argument parsing
   instead of repeating defaults from the DSL.
 - Do not add hand-written per-tool input schema helpers here. Standalone input schemas are generated from
   `ClassSpec`/`FieldSpec` in `mcp/tools-generator`.
-- Use the shared JVM CLI/logging stack here rather than ad hoc parsing or `System.err.println` wrappers.
+- Use the library-backed service CLI and shared logging stack rather than ad hoc parsing.
 - Keep Wasm parsing, query semantics, and result DTOs in `mcp/core`.
 - Do not add IntelliJ APIs, `VirtualFile`, or plugin.xml-style registration here.
 - The shared tools version is owned by root `gradle.properties:hexanaToolsVersion`. The
@@ -66,6 +57,10 @@ Read these files before making structural changes:
 ## Testing
 
 - Add focused server tests in this module for tool argument handling and runtime behavior.
+- Keep the root-help inventory exact and reject `summarize-binary`, `summarize-module`, `wasm-to-wat`, `run-script`,
+  and `tools` as unknown subcommands in unit and installed-package coverage.
+- Keep `verifyMcpServerOwnershipBoundary` wired into `check` so CLI imports and split CLI/converter archives cannot
+  return to the MCP runtime.
 - Use `src/integrationTest/kotlin` plus `./gradlew :mcp:server:integrationTest` for black-box process tests against the
   installed standalone distribution.
 - Release packaging keeps two JVM fallback compatibility smoke gates:

@@ -6,11 +6,8 @@
 hexana-cli-script run-script <binary> --script-text <javascript> --format raw
 ```
 
-The combined MCP launcher exposes the same command alongside MCP server commands:
-
-```bash
-hexana-mcp run-script <binary> --script-text <javascript> --format raw
-```
+`hexana-mcp` does not expose this direct command. MCP clients can instead select the `scripting` tool profile and call
+the protocol tool `run_binary_script`.
 
 ## Local Fixture
 
@@ -69,9 +66,8 @@ hexana-cli-script run-script fixture-root/sample.bin \
   --format raw
 ```
 
-`--allowed-root` entries are additive with `HEXANA_CLI_ALLOWED_ROOTS`. The server-side MCP launcher uses the same
-`--allowed-root` flag and reads `HEXANA_MCP_ALLOWED_ROOTS`; other MCP request limits use separate `HEXANA_MCP_*`
-variables.
+`--allowed-root` entries are additive with `HEXANA_CLI_ALLOWED_ROOTS`. MCP transports configure their independent
+allowed-root policy with `hexana-mcp stdio|http --allowed-root` and `HEXANA_MCP_ALLOWED_ROOTS`.
 
 ## MCP Profile
 

@@ -10,9 +10,7 @@ generators resolve contracts through the authority for their consumer and emit c
 - `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaToolDispatcher.kt` — `Server.registerHexanaTools(handlers)`
   extension, generated MCP profile membership, and generated input defaults for the standalone MCP runtime.
 - `cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliToolset.kt` — generated CLI-visible tool
-  metadata shared by split products and the legacy server CLI adapter.
-- `mcp/server/src/main/gen/org/jetbrains/hexana/mcp/server/HexanaCliToolset.kt` — generated CLI tool command
-  construction and executable CLI renderer dispatch for the standalone legacy server CLI.
+  metadata shared by split products.
 - `cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt` — generated product identities,
   selected executable tools, output policy, and default output metadata.
 
@@ -31,7 +29,7 @@ and refreshes the checked-in packaging template.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/SurfaceAuthorities.kt` — explicit ordered IDEA invocation bindings,
   standalone handler/profile authority, MCPB derivation, and CLI bindings/input models/products.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/StandaloneToolsetMain.kt` — standalone server dispatcher
-  and CLI command generator.
+  and neutral split-CLI metadata generator.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/IdeaToolsetMain.kt` — idea-plugin toolset generator.
 - `src/main/kotlin/org/jetbrains/hexana/mcp/tools/generator/McpbManifestMain.kt` — Claude Desktop MCPB manifest generator.
 
@@ -44,8 +42,9 @@ and refreshes the checked-in packaging template.
   renderer, explicit executable input models, and product selections.
 - All authorities resolve typed IDs through `ToolCatalog`; duplicate/unknown selectors and missing/duplicate bindings
   fail before generation, and resolved output follows canonical contract order.
-- CLI release-product membership is CLI authority metadata independent from MCP profiles. TODO tools stay visible in the global
-  CLI registry but must not belong to `hexana-mcp`, `hexana-cli`, or `hexana-cli-script` release selections.
+- CLI release-product membership is CLI authority metadata independent from MCP profiles. Every executable binding
+  belongs to exactly one of `hexana-cli` or `hexana-cli-script`; TODO tools stay visible in the global CLI registry but
+  belong to neither product. `hexana-mcp` is not a CLI release product.
 - Public MCPB manifest exposure is generated from `HexanaStandaloneDefaultToolIds`; it has no independent membership policy.
 - Top-level tool output classes also declare their `mcp/core` model package here with `kotlinPackage = ...`; the
   idea-plugin generator must not carry a separate result-class package map.
@@ -108,7 +107,7 @@ Before sending a catalog change for review, run the generated-artifact drift che
    it to `ToolInputPattern` and update `IdeaToolsetMain.kt`. If the CLI needs path/stdin/base64/raw source selection or
    ordinary/JSON parameter binding, declare an explicit CLI `ToolInputModel`; never derive it from the IDEA binding.
    The standalone dispatcher derives its input schema from the semantic `input`; update
-   `StandaloneToolsetMain.kt` only when the DSL needs a new schema feature, field type, or generated CLI source behavior.
+   `StandaloneToolsetMain.kt` only when the DSL needs a new schema feature, field type, or neutral CLI metadata behavior.
    The existing patterns cover path-only, offset/limit, indices, closed range, and half-open segment range with filters.
 4. Update each applicable independent authority in `SurfaceAuthorities.kt`: IDEA selection/binding, standalone
    binding and effective profile lists, and CLI binding/product selections. MCPB follows standalone default membership

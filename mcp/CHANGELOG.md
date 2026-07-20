@@ -2,11 +2,11 @@
 
 ## Unreleased
 
-### Added
-- `hexana-mcp summarize-binary <binary> --format json` can now summarize Wasm and native binaries as a public CLI command, returning JSON-only compact identity, counts, and warnings without raw bytes.
-- Executable public CLI commands can now read input from a file path, `-`, `--stdin`, auto-detected piped stdin, or explicit base64 options such as `--binary-base64`, `--wasm-base64`, and `--bytes-base64`.
-
 ### Changed
+- `hexana-mcp` is now MCP-only and exposes exactly `stdio`, `http`, `doctor`, `version`, and `help`. Direct
+  `summarize-binary`, `summarize-module`, `wasm-to-wat`, `run-script`, and `tools` commands remain available only from
+  their split CLI products where applicable; MCP protocol tools, including `run_binary_script`, are unchanged.
+- The standalone MCP runtime and R8 package no longer include split CLI implementation or Wasm-printer dependencies.
 - Standalone MCP profile names are now `default`, `advanced`, and `scripting`. The 29-tool default profile is the runtime and generated-registration default; the 18 advanced-only tools and the single scripting tool are disjoint. Legacy `production`, `full`, and `debug` aliases are rejected.
 - MCP tool schemas now use schema version 3 and advertise bounded list inputs such as `indices.maxItems` for clients that validate requests before calling tools.
 
