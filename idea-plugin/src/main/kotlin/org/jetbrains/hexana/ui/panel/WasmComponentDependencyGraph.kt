@@ -211,6 +211,44 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
             }
         }
 
+        // Zoom controls
+        val controlBg = if (isDark) Color(0xCC1E1E1E.toInt()) else Color(0xCCF5F5F5.toInt())
+        val controlBorder = if (isDark) Color(0xFF555555.toInt()) else Color(0xFFBBBBBB.toInt())
+        val controlText = if (isDark) Color(0xFFCCCCCC.toInt()) else Color(0xFF333333.toInt())
+        val controlMuted = if (isDark) Color(0xFF888888.toInt()) else Color(0xFF999999.toInt())
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(12.dp)
+                .background(controlBg)
+                .padding(4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                modifier = Modifier.size(28.dp).clickable {
+                    scale = (scale * 1.2f).coerceIn(0.2f, 3f)
+                },
+                contentAlignment = Alignment.Center,
+            ) { Text("+", color = controlText) }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text("${(scale * 100).toInt()}%", color = controlMuted, fontSize = 9.sp)
+            Spacer(modifier = Modifier.height(2.dp))
+            Box(
+                modifier = Modifier.size(28.dp).clickable {
+                    scale = (scale / 1.2f).coerceIn(0.2f, 3f)
+                },
+                contentAlignment = Alignment.Center,
+            ) { Text("−", color = controlText) }
+            Spacer(modifier = Modifier.height(4.dp))
+            Box(
+                modifier = Modifier.size(28.dp).clickable {
+                    scale = 1f
+                    panOffset = Offset.Zero
+                },
+                contentAlignment = Alignment.Center,
+            ) { Text("⌂", color = controlText, fontSize = 14.sp) }
+        }
+
         // Legend
         val legendBg = if (isDark) Color(0xCC1E1E1E.toInt()) else Color(0xCCF5F5F5.toInt())
         val legendMutedColor = if (isDark) Color(0xFFAAAAAA.toInt()) else Color(0xFF6E7177.toInt())
