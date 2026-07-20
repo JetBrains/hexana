@@ -76,4 +76,4 @@ variables.
 ## MCP Profile
 
 The MCP tool backing this command is `run_binary_script`. It belongs to the dedicated `scripting` MCP tool profile. It is
-not part of the `production` or `advanced` MCP profiles.
+not part of the `default` or `advanced` MCP profiles.
