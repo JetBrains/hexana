@@ -98,9 +98,9 @@ class HexanaClaudePluginWrapperIntegrationTest {
     }
 
     @Test
-    fun assembledPluginSkillsReferenceOnlyProductionTools() {
-        val productionToolNames = EXPECTED_PRODUCTION_HEXANA_TOOL_NAMES.toSet()
-        val knownToolNames = EXPECTED_ADVANCED_HEXANA_TOOL_NAMES.toSet()
+    fun assembledPluginSkillsReferenceOnlyDefaultTools() {
+        val defaultToolNames = EXPECTED_DEFAULT_HEXANA_TOOL_NAMES.toSet()
+        val knownToolNames = defaultToolNames + EXPECTED_ADVANCED_HEXANA_TOOL_NAMES
 
         for (launcher in listOf(StdioLauncher.ClaudePluginWrapper, StdioLauncher.CodexPluginWrapper)) {
             val installDir = Path.of(
@@ -112,39 +112,39 @@ class HexanaClaudePluginWrapperIntegrationTest {
                 .map { it.groupValues[1] }
                 .filter { it in knownToolNames }
                 .toSet()
-            val advancedOnlyTools = referencedKnownTools - productionToolNames
+            val advancedOnlyTools = referencedKnownTools - defaultToolNames
 
             assertTrue(
                 "summarize_binary" in referencedKnownTools,
-                "${launcher.clientName} wasm-inspector skill should reference production tool names"
+                "${launcher.clientName} wasm-inspector skill should reference default tool names"
             )
             assertTrue(
                 advancedOnlyTools.isEmpty(),
-                "${launcher.clientName} wasm-inspector skill references tools not available in the default production profile: $advancedOnlyTools"
+                "${launcher.clientName} wasm-inspector skill references tools not available in the default profile: $advancedOnlyTools"
             )
         }
     }
 
     @Test
-    fun assembledClaudePluginExposesProductionToolsByDefaultOverStdio() = runBlocking {
+    fun assembledClaudePluginExposesDefaultToolsByDefaultOverStdio() = runBlocking {
         assertWrapperExposesToolsOverStdio(
             clientLabel = "Claude",
             launcher = StdioLauncher.ClaudePluginWrapper,
-            expectedToolNames = EXPECTED_PRODUCTION_HEXANA_TOOL_NAMES,
+            expectedToolNames = EXPECTED_DEFAULT_HEXANA_TOOL_NAMES,
         )
     }
 
     @Test
-    fun assembledCodexPluginExposesProductionToolsByDefaultOverStdio() = runBlocking {
+    fun assembledCodexPluginExposesDefaultToolsByDefaultOverStdio() = runBlocking {
         assertWrapperExposesToolsOverStdio(
             clientLabel = "Codex",
             launcher = StdioLauncher.CodexPluginWrapper,
-            expectedToolNames = EXPECTED_PRODUCTION_HEXANA_TOOL_NAMES,
+            expectedToolNames = EXPECTED_DEFAULT_HEXANA_TOOL_NAMES,
         )
     }
 
     @Test
-    fun assembledClaudePluginAdvancedProfileExposesAllToolsOverStdio() = runBlocking {
+    fun assembledClaudePluginAdvancedProfileExposesAdvancedOnlyToolsOverStdio() = runBlocking {
         assertWrapperExposesToolsOverStdio(
             clientLabel = "Claude",
             launcher = StdioLauncher.ClaudePluginWrapper,
@@ -155,7 +155,7 @@ class HexanaClaudePluginWrapperIntegrationTest {
     }
 
     @Test
-    fun assembledCodexPluginAdvancedProfileExposesAllToolsOverStdio() = runBlocking {
+    fun assembledCodexPluginAdvancedProfileExposesAdvancedOnlyToolsOverStdio() = runBlocking {
         assertWrapperExposesToolsOverStdio(
             clientLabel = "Codex",
             launcher = StdioLauncher.CodexPluginWrapper,

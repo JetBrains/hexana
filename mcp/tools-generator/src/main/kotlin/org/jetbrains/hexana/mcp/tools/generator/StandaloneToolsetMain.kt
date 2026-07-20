@@ -136,7 +136,7 @@ internal fun buildDispatcherFile(authority: StandaloneToolAuthority): FileSpec {
         .addParameter(ParameterSpec.builder("handlers", TOOL_HANDLERS).build())
         .addParameter(
             ParameterSpec.builder("profile", TOOL_PROFILE)
-                .defaultValue("%T.PRODUCTION", TOOL_PROFILE)
+                .defaultValue("%T.DEFAULT", TOOL_PROFILE)
                 .build()
         )
         .addKdoc(
@@ -155,7 +155,7 @@ internal fun buildDispatcherFile(authority: StandaloneToolAuthority): FileSpec {
         .addType(buildCompatibilityObject())
         .addType(
             buildToolProfilesObject(
-                authority.productionToolIds,
+                authority.defaultToolIds,
                 authority.advancedToolIds,
                 authority.scriptingToolIds,
             )
@@ -299,7 +299,7 @@ private fun buildCompatibilityObject(): TypeSpec {
 }
 
 private fun buildToolProfilesObject(
-    production: List<ToolId>,
+    default: List<ToolId>,
     advanced: List<ToolId>,
     scripting: List<ToolId>,
 ): TypeSpec {
@@ -308,8 +308,8 @@ private fun buildToolProfilesObject(
         .addModifiers(KModifier.INTERNAL)
         .addKdoc("Generated MCP profile membership derived from catalog surface metadata.\n")
         .addProperty(
-            PropertySpec.builder("PRODUCTION_TOOL_NAMES", setOfString, KModifier.INTERNAL)
-                .initializer(toolNameSetInitializer(production.map(ToolId::value)))
+            PropertySpec.builder("DEFAULT_TOOL_NAMES", setOfString, KModifier.INTERNAL)
+                .initializer(toolNameSetInitializer(default.map(ToolId::value)))
                 .build()
         )
         .addProperty(

@@ -358,7 +358,7 @@ class HexanaStdioIntegrationTest {
         KotlinLoggingConfiguration.logStartupMessage = false
         val fixtureDirectory = temporaryFolder.root.toPath()
         withInstalledStdioClient(allowedRoots = listOf(fixtureDirectory)) { server ->
-            assertProductionStdioSmoke(
+            assertDefaultStdioSmoke(
                 server = server,
                 fixtureDirectory = fixtureDirectory,
                 logger = logger,
@@ -494,7 +494,7 @@ class HexanaStdioIntegrationTest {
             when (id) {
                 "1" -> assertTrue("protocolVersion" in result, "Missing initialize result: $response")
                 "2" -> assertEquals(
-                    EXPECTED_PRODUCTION_HEXANA_TOOL_NAMES,
+                    EXPECTED_DEFAULT_HEXANA_TOOL_NAMES,
                     result.getValue("tools")
                         .jsonArray
                         .map { tool -> tool.jsonObject.getValue("name").jsonPrimitive.content }

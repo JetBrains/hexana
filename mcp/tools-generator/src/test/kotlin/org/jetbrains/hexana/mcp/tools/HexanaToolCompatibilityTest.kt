@@ -75,7 +75,7 @@ class HexanaToolCompatibilityTest {
     @Test
     fun `standalone membership-only mutation affects only standalone snapshot`() {
         val mutated = baseline.standaloneAuthority.copy(
-            productionToolIds = baseline.standaloneAuthority.productionToolIds.dropLast(1),
+            defaultToolIds = baseline.standaloneAuthority.defaultToolIds.dropLast(1),
         )
 
         assertOnlySnapshotsChanged(
@@ -161,7 +161,7 @@ class HexanaToolCompatibilityTest {
     }
 
     private fun standaloneSnapshot(authority: StandaloneToolAuthority): String = buildString {
-        appendLine("production=${authority.productionToolIds.joinToString { it.value }}")
+        appendLine("default=${authority.defaultToolIds.joinToString { it.value }}")
         appendLine("advanced=${authority.advancedToolIds.joinToString { it.value }}")
         appendLine("scripting=${authority.scriptingToolIds.joinToString { it.value }}")
         authority.registrations.forEachIndexed { index, tool ->
@@ -318,7 +318,7 @@ class HexanaToolCompatibilityTest {
     private companion object {
         const val EXPECTED_SEMANTIC = "ebf885f898d01b05b137c8c0a4a3d1116229cba5d19f60fc39a0383d794839ab"
         const val EXPECTED_IDEA = "c561c5ea33362212bd107bfc5382b04b906ae32eaabdd1bfb7f31545ba528533"
-        const val EXPECTED_STANDALONE = "6dfcfb04941f56fb08312687532dac8aca8c428c1cb265ff65b18ef60a4797c5"
+        const val EXPECTED_STANDALONE = "0395327fb451b08908345ce4e59bd1cf97bb05dd4bb1cb2165679a2744dd8b44"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"
         const val EXPECTED_CLI = "4df9852934148e1ff5ef3ad0d5c7c61a499403b0bc44a28eafcc0d6facbdfbd9"
         const val EXPECTED_HEXANA_MCP = "2b657021868d2be51d8ba9d0ca6e678f74638a7eb90fc1d66a131d2c7879e796"

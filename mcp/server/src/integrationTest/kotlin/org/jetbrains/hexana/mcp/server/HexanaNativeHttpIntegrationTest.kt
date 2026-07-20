@@ -12,7 +12,7 @@ class HexanaNativeHttpIntegrationTest {
     fun nativeExecutableSupportsHealthAndListToolsOverHttp() = runBlocking {
         KotlinLoggingConfiguration.logStartupMessage = false
         withInstalledServer(launcher = HttpLauncher.NativeExecutable) { server ->
-            assertProductionHttpSmoke(
+            assertDefaultHttpSmoke(
                 server = server,
                 logger = logger,
                 label = "native"

@@ -16,7 +16,7 @@ fact about a WebAssembly module or component, and keep answers grounded in what 
 
 ## Tools
 
-The bundled release server exposes focused production tools. Start with the narrowest matching
+The bundled release server exposes focused default-profile tools. Start with the narrowest matching
 tool instead of looking for a generic catch-all tool.
 
 Common inputs:

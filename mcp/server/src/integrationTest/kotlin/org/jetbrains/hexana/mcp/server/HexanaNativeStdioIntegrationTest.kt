@@ -24,7 +24,7 @@ class HexanaNativeStdioIntegrationTest {
             launcher = StdioLauncher.NativeExecutable,
             allowedRoots = listOf(fixtureDirectory)
         ) { server ->
-            assertProductionStdioSmoke(
+            assertDefaultStdioSmoke(
                 server = server,
                 fixtureDirectory = fixtureDirectory,
                 logger = logger,

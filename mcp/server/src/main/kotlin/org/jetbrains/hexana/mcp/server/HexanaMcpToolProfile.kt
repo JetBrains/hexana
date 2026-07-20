@@ -1,7 +1,7 @@
 package org.jetbrains.hexana.mcp.server
 
 enum class HexanaMcpToolProfile {
-    PRODUCTION,
+    DEFAULT,
     ADVANCED,
     SCRIPTING;
 
@@ -9,7 +9,7 @@ enum class HexanaMcpToolProfile {
 
     internal fun includesTool(toolName: String): Boolean {
         return when (this) {
-            PRODUCTION -> toolName in HexanaGeneratedMcpToolProfiles.PRODUCTION_TOOL_NAMES
+            DEFAULT -> toolName in HexanaGeneratedMcpToolProfiles.DEFAULT_TOOL_NAMES
             ADVANCED -> toolName in HexanaGeneratedMcpToolProfiles.ADVANCED_TOOL_NAMES
             SCRIPTING -> toolName in HexanaGeneratedMcpToolProfiles.SCRIPTING_TOOL_NAMES
         }
@@ -17,17 +17,14 @@ enum class HexanaMcpToolProfile {
 
     companion object {
         private val ALIASES = mapOf(
-            "default" to PRODUCTION,
-            "production" to PRODUCTION,
+            "default" to DEFAULT,
             "advanced" to ADVANCED,
-            "debug" to ADVANCED,
-            "full" to ADVANCED,
             "scripting" to SCRIPTING,
         )
 
         fun parseCliValue(value: String): HexanaMcpToolProfile {
             return ALIASES[value.lowercase()]
-                ?: throw IllegalArgumentException("Unsupported MCP tool profile: $value")
+                ?: throw IllegalArgumentException("Unsupported MCP tool profile: $value. Expected default, advanced, or scripting.")
         }
     }
 }

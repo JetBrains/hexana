@@ -7,36 +7,57 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-private val CURRENT_PRODUCTION_MCP_TOOL_NAMES = setOf(
-    "audit_data_payload_policy",
-    "audit_global_state_policy",
-    "audit_local_stack_budget",
-    "check_memory_contract",
-    "check_component_compatibility",
-    "check_runtime_compatibility",
-    "diff_required_proposals",
-    "disassemble_function",
-    "get_entrypoint_policy",
-    "get_function_call_graph",
-    "list_data_segments",
-    "list_element_segments",
-    "list_enabled_features",
-    "list_exported_functions",
-    "list_exports",
-    "list_functions",
-    "list_globals",
-    "list_imports",
-    "list_memory",
-    "list_required_proposals",
-    "plan_abi_binding_regeneration",
-    "resolve_function_symbols",
-    "resolve_function_signature",
-    "resolve_source_locations",
-    "resolve_wasm_frames",
-    "search_exports",
-    "search_functions_by_name",
+private val CURRENT_DEFAULT_MCP_TOOL_NAMES = listOf(
     "summarize_binary",
     "summarize_module",
+    "list_enabled_features",
+    "get_entrypoint_policy",
+    "list_required_proposals",
+    "diff_required_proposals",
+    "check_runtime_compatibility",
+    "check_component_compatibility",
+    "plan_abi_binding_regeneration",
+    "check_memory_contract",
+    "audit_global_state_policy",
+    "audit_local_stack_budget",
+    "list_imports",
+    "list_exports",
+    "search_exports",
+    "list_exported_functions",
+    "list_functions",
+    "resolve_function_signature",
+    "disassemble_function",
+    "get_function_call_graph",
+    "search_functions_by_name",
+    "resolve_wasm_frames",
+    "resolve_function_symbols",
+    "resolve_source_locations",
+    "list_memory",
+    "list_globals",
+    "list_element_segments",
+    "list_data_segments",
+    "audit_data_payload_policy",
+)
+
+private val CURRENT_ADVANCED_MCP_TOOL_NAMES = listOf(
+    "list_binary_functions",
+    "search_binary_functions",
+    "query_binary",
+    "resolve_component_dependencies",
+    "list_component_surface",
+    "list_custom_sections",
+    "list_code_section_offsets",
+    "functions_for_indices",
+    "get_locals_for_functions",
+    "get_instructions_for_functions",
+    "get_memory_for_indices",
+    "get_globals_for_indices",
+    "list_types",
+    "list_value_types",
+    "list_reference_types",
+    "get_types_for_indices",
+    "list_data",
+    "query_artifacts",
 )
 
 class HexanaToolsTest {
@@ -177,14 +198,36 @@ class HexanaToolsTest {
     fun `surface authorities preserve approved inventories and bindings`() {
         assertEquals(47, HexanaIdeaTools.size)
         assertEquals(48, HexanaStandaloneTools.size)
-        assertEquals(CURRENT_PRODUCTION_MCP_TOOL_NAMES, HexanaStandaloneProductionToolIds.mapTo(linkedSetOf()) { it.value })
-        assertEquals(47, HexanaStandaloneAdvancedToolIds.size)
+        assertEquals(CURRENT_DEFAULT_MCP_TOOL_NAMES, HexanaStandaloneDefaultToolIds.map { it.value })
+        assertEquals(CURRENT_ADVANCED_MCP_TOOL_NAMES, HexanaStandaloneAdvancedToolIds.map { it.value })
         assertEquals(listOf("run_binary_script"), HexanaStandaloneScriptingToolIds.map { it.value })
+        assertEquals(29, HexanaStandaloneDefaultToolIds.size)
+        assertEquals(18, HexanaStandaloneAdvancedToolIds.size)
+        assertTrue(HexanaStandaloneDefaultToolIds.intersect(HexanaStandaloneAdvancedToolIds.toSet()).isEmpty())
+        assertTrue(HexanaStandaloneDefaultToolIds.intersect(HexanaStandaloneScriptingToolIds.toSet()).isEmpty())
+        assertTrue(HexanaStandaloneAdvancedToolIds.intersect(HexanaStandaloneScriptingToolIds.toSet()).isEmpty())
         assertEquals(29, HexanaMcpbTools.size)
         assertEquals(31, HexanaCliTools.size)
         assertTrue(HexanaStandaloneTools.all {
             it.standaloneHandler.methodName.matches(Regex("^[A-Za-z_][A-Za-z0-9_]*$"))
         })
+    }
+
+    @Test
+    fun `standalone authority rejects overlapping profile memberships`() {
+        val registered = HexanaStandaloneTools.first()
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            StandaloneToolAuthority(
+                registrations = listOf(registered),
+                defaultToolIds = listOf(registered.id),
+                advancedToolIds = listOf(registered.id),
+                scriptingToolIds = emptyList(),
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("default and advanced profiles must be disjoint"))
+        assertTrue(error.message.orEmpty().contains(registered.name))
     }
 
     @Test

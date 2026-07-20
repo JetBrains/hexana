@@ -546,9 +546,9 @@ internal fun isRunningInGraalVmNativeImage(
 
 private fun CliktCommand.toolProfileOption() = option(
     "--tool-profile",
-    help = "MCP tool inventory: production is compact, advanced exposes investigation tools, scripting exposes dedicated scripting tools when available.",
+    help = "MCP tool inventory: default is compact, advanced exposes investigation tools, scripting exposes dedicated scripting tools when available.",
     envvar = "HEXANA_MCP_TOOL_PROFILE"
-).convert("production|advanced|scripting") { parseToolProfile(it) }.default(HexanaMcpToolProfile.PRODUCTION)
+).convert("default|advanced|scripting") { parseToolProfile(it) }.default(HexanaMcpToolProfile.DEFAULT)
 
 internal fun CliktCommand.allowedRootOption() = option(
     "--allowed-root",
@@ -630,7 +630,7 @@ private fun parseToolProfile(value: String): HexanaMcpToolProfile {
     return try {
         HexanaMcpToolProfile.parseCliValue(value)
     } catch (_: IllegalArgumentException) {
-        throw UsageError("Unsupported MCP tool profile: $value. Expected production, advanced, or scripting.")
+        throw UsageError("Unsupported MCP tool profile: $value. Expected default, advanced, or scripting.")
     }
 }
 

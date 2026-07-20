@@ -31,7 +31,7 @@ class HexanaCliTest {
         assertIs<HexanaCommand.Stdio>(command)
         assertEquals(HexanaLogLevel.INFO, command.logLevel)
         assertTrue(command.analyticsEnabled)
-        assertEquals(HexanaMcpToolProfile.PRODUCTION, command.toolProfile)
+        assertEquals(HexanaMcpToolProfile.DEFAULT, command.toolProfile)
         assertEquals(emptyList(), command.allowedRoots)
         assertEquals(HexanaAnalysisLimits.MAX_FILE_WASM_BYTES, command.resourceLimits.maxFileWasmBytes)
         assertEquals(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES, command.resourceLimits.maxInlineWasmBytes)
@@ -98,6 +98,14 @@ class HexanaCliTest {
 
         assertIs<HexanaCommand.Stdio>(command)
         assertEquals(HexanaMcpToolProfile.ADVANCED, command.toolProfile)
+    }
+
+    @Test
+    fun parseAcceptsCaseInsensitiveDefaultToolProfileForStdio() {
+        val command = cli().parse(arrayOf("stdio", "--tool-profile", "DeFaUlT"))
+
+        assertIs<HexanaCommand.Stdio>(command)
+        assertEquals(HexanaMcpToolProfile.DEFAULT, command.toolProfile)
     }
 
     @Test
@@ -802,7 +810,7 @@ class HexanaCliTest {
                 "--telemetry-enabled",
                 "false",
                 "--tool-profile",
-                "full",
+                "advanced",
             )
         )
 
@@ -949,9 +957,28 @@ class HexanaCliTest {
             cli().parse(arrayOf("stdio", "--tool-profile", "minimal"))
         }
 
-        assertTrue(error.message.orEmpty().contains("production"))
+        assertTrue(error.message.orEmpty().contains("default"))
         assertTrue(error.message.orEmpty().contains("advanced"))
         assertTrue(error.message.orEmpty().contains("scripting"))
+    }
+
+    @Test
+    fun parseRejectsLegacyToolProfileAliases() {
+        listOf("production", "full", "debug").forEach { alias ->
+            val error = assertFailsWith<CliktError> {
+                cli().parse(arrayOf("stdio", "--tool-profile", alias))
+            }
+
+            assertTrue(error.message.orEmpty().contains("Expected default, advanced, or scripting"))
+        }
+    }
+
+    @Test
+    fun toolProfileHelpAndCompletionExposeOnlyCanonicalValues() {
+        val help = cli().helpText(arrayOf("stdio", "--help"))
+
+        assertTrue(help.contains("default|advanced|scripting"))
+        assertFalse(help.contains("production|advanced|scripting"))
     }
 
     @Test

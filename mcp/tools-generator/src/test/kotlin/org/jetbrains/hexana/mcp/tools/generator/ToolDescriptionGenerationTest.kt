@@ -8,7 +8,7 @@ import org.jetbrains.hexana.mcp.tools.HexanaCliTools
 import org.jetbrains.hexana.mcp.tools.HexanaIdeaTools
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneAuthority
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneAdvancedToolIds
-import org.jetbrains.hexana.mcp.tools.HexanaStandaloneProductionToolIds
+import org.jetbrains.hexana.mcp.tools.HexanaStandaloneDefaultToolIds
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneScriptingToolIds
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneTools
 import org.jetbrains.hexana.mcp.tools.ParamBindingKind
@@ -82,12 +82,12 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
-    fun `standalone profiles preserve explicit cumulative membership`() {
+    fun `standalone profiles preserve explicit disjoint membership`() {
         val source = dispatcherSource()
-        assertTrue(source.contains("PRODUCTION_TOOL_NAMES"))
+        assertTrue(source.contains("DEFAULT_TOOL_NAMES"))
         assertTrue(source.contains("ADVANCED_TOOL_NAMES"))
         assertTrue(source.contains("SCRIPTING_TOOL_NAMES"))
-        HexanaStandaloneProductionToolIds.forEach { assertTrue(source.contains("\"${it.value}\"")) }
+        HexanaStandaloneDefaultToolIds.forEach { assertTrue(source.contains("\"${it.value}\"")) }
         HexanaStandaloneAdvancedToolIds.forEach { assertTrue(source.contains("\"${it.value}\"")) }
         HexanaStandaloneScriptingToolIds.forEach { assertTrue(source.contains("\"${it.value}\"")) }
     }
@@ -117,8 +117,8 @@ class ToolDescriptionGenerationTest {
         val source = buildDispatcherFile(
             StandaloneToolAuthority(
                 registrations = listOf(rebound),
-                productionToolIds = listOf(rebound.contract.id),
-                advancedToolIds = listOf(rebound.contract.id),
+                defaultToolIds = listOf(rebound.contract.id),
+                advancedToolIds = emptyList(),
                 scriptingToolIds = emptyList(),
             ),
         ).toString()
@@ -133,7 +133,7 @@ class ToolDescriptionGenerationTest {
         val unregistered = HexanaStandaloneTools.last()
         val minimal = StandaloneToolAuthority(
             registrations = listOf(registered),
-            productionToolIds = listOf(registered.contract.id),
+            defaultToolIds = listOf(registered.contract.id),
             advancedToolIds = emptyList(),
             scriptingToolIds = emptyList(),
         )
@@ -145,11 +145,11 @@ class ToolDescriptionGenerationTest {
 
         val error = assertFailsWith<IllegalArgumentException> {
             minimal.copy(
-                productionToolIds = listOf(unregistered.contract.id),
+                defaultToolIds = listOf(unregistered.contract.id),
             )
         }
 
-        assertTrue(error.message.orEmpty().contains("production profile references unregistered tool IDs"))
+        assertTrue(error.message.orEmpty().contains("default profile references unregistered tool IDs"))
         assertTrue(error.message.orEmpty().contains(unregistered.name))
     }
 

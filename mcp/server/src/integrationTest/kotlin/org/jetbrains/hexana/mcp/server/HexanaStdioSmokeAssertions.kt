@@ -16,7 +16,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-internal suspend fun assertProductionStdioSmoke(
+internal suspend fun assertDefaultStdioSmoke(
     server: HexanaInstalledStdioClient,
     fixtureDirectory: Path,
     logger: Logger,
@@ -27,7 +27,7 @@ internal suspend fun assertProductionStdioSmoke(
     logger.info("Requesting tools/list over {} stdio", label)
     val tools = server.client.listTools(ListToolsRequest())
     logger.info("Received tools over {} stdio: {}", label, tools.tools.map { it.name }.sorted())
-    assertEquals(EXPECTED_PRODUCTION_HEXANA_TOOL_NAMES, tools.tools.map { it.name }.sorted())
+    assertEquals(EXPECTED_DEFAULT_HEXANA_TOOL_NAMES, tools.tools.map { it.name }.sorted())
 
     val wasm = createSmokeWasmFile(
         fixtureDirectory = fixtureDirectory,

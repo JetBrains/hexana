@@ -46,26 +46,28 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
-    fun generatedProfileMetadataDrivesDefaultProductionAdvancedAndScriptingRegistries() {
-        val productionNames = HexanaGeneratedMcpToolProfiles.PRODUCTION_TOOL_NAMES
-        assertEquals(29, productionNames.size)
+    fun generatedProfileMetadataDrivesDisjointDefaultAdvancedAndScriptingRegistries() {
+        val defaultNames = HexanaGeneratedMcpToolProfiles.DEFAULT_TOOL_NAMES
+        assertEquals(29, defaultNames.size)
         assertEquals(
-            productionNames,
-            createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.PRODUCTION).tools.keys.toSet(),
+            defaultNames,
+            createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.DEFAULT).tools.keys.toSet(),
         )
         assertEquals(
-            productionNames,
+            defaultNames,
             createHexanaMcpServer().tools.keys.toSet(),
         )
 
         val advancedNames = HexanaGeneratedMcpToolProfiles.ADVANCED_TOOL_NAMES
+        assertEquals(18, advancedNames.size)
         assertEquals(
             advancedNames,
             createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.ADVANCED).tools.keys.toSet(),
         )
         assertTrue(advancedNames.all { HexanaMcpToolProfile.ADVANCED.includesTool(it) })
-        assertTrue(productionNames.all { HexanaMcpToolProfile.PRODUCTION.includesTool(it) })
-        assertFalse(HexanaMcpToolProfile.PRODUCTION.includesTool("query_artifacts"))
+        assertTrue(defaultNames.all { HexanaMcpToolProfile.DEFAULT.includesTool(it) })
+        assertFalse(HexanaMcpToolProfile.DEFAULT.includesTool("query_artifacts"))
+        assertTrue(defaultNames.intersect(advancedNames).isEmpty())
 
         val scriptingNames = HexanaGeneratedMcpToolProfiles.SCRIPTING_TOOL_NAMES
         assertEquals(setOf("run_binary_script"), scriptingNames)
@@ -73,7 +75,7 @@ class HexanaMcpServerSchemaTest {
             scriptingNames,
             createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.SCRIPTING).tools.keys.toSet(),
         )
-        assertTrue(scriptingNames.intersect(productionNames).isEmpty())
+        assertTrue(scriptingNames.intersect(defaultNames).isEmpty())
         assertTrue(scriptingNames.intersect(advancedNames).isEmpty())
         assertFalse(HexanaMcpToolProfile.SCRIPTING.includesTool("summarize_module"))
         assertFalse(HexanaMcpToolProfile.SCRIPTING.includesTool("query_artifacts"))
@@ -81,11 +83,11 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
-    fun directGeneratedRegistrationDefaultsToProductionProfile() {
+    fun directGeneratedRegistrationDefaultsToDefaultProfile() {
         val server = createServerWithDirectGeneratedRegistration()
 
         assertEquals(
-            HexanaGeneratedMcpToolProfiles.PRODUCTION_TOOL_NAMES,
+            HexanaGeneratedMcpToolProfiles.DEFAULT_TOOL_NAMES,
             server.tools.keys.toSet(),
         )
         assertFalse(server.tools.containsKey("query_artifacts"))
@@ -158,16 +160,16 @@ class HexanaMcpServerSchemaTest {
         assertEquals(emptySet(), futureModuleTool.inputModes)
         assertEquals(HexanaCliExecutionStatus.TODO, futureModuleTool.executionStatus)
 
-        val productionNames = HexanaGeneratedMcpToolProfiles.PRODUCTION_TOOL_NAMES
+        val defaultNames = HexanaGeneratedMcpToolProfiles.DEFAULT_TOOL_NAMES
         val advancedNames = HexanaGeneratedMcpToolProfiles.ADVANCED_TOOL_NAMES
         val scriptingNames = HexanaGeneratedMcpToolProfiles.SCRIPTING_TOOL_NAMES
-        assertFalse("wasm_to_wat" in productionNames)
+        assertFalse("wasm_to_wat" in defaultNames)
         assertFalse("wasm_to_wat" in advancedNames)
         assertFalse("wasm_to_wat" in scriptingNames)
-        assertFalse("run_binary_script" in productionNames)
+        assertFalse("run_binary_script" in defaultNames)
         assertFalse("run_binary_script" in advancedNames)
         assertTrue("run_binary_script" in scriptingNames)
-        assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.PRODUCTION).tools.containsKey("wasm_to_wat"))
+        assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.DEFAULT).tools.containsKey("wasm_to_wat"))
         assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.ADVANCED).tools.containsKey("wasm_to_wat"))
         assertFalse(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.SCRIPTING).tools.containsKey("wasm_to_wat"))
         assertTrue(createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.SCRIPTING).tools.containsKey("run_binary_script"))
@@ -177,24 +179,24 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
-    fun generatedCliRegistryPreservesProductionParityAndCliOnlyDivergence() {
-        val productionNames = HexanaGeneratedMcpToolProfiles.PRODUCTION_TOOL_NAMES
+    fun generatedCliRegistryPreservesDefaultParityAndCliOnlyDivergence() {
+        val defaultNames = HexanaGeneratedMcpToolProfiles.DEFAULT_TOOL_NAMES
         val cliNames = HexanaGeneratedCliToolRegistry.TOOLS.map { it.toolName }.toSet()
 
         assertEquals(
             emptySet(),
-            productionNames - cliNames,
-            "Production MCP tools missing from generated CLI registry",
+            defaultNames - cliNames,
+            "Default MCP tools missing from generated CLI registry",
         )
         assertEquals(
             setOf("wasm_to_wat", "run_binary_script"),
-            cliNames - productionNames,
-            "Generated CLI registry should only contain documented CLI-only tools outside production MCP",
+            cliNames - defaultNames,
+            "Generated CLI registry should only contain documented CLI-only tools outside default MCP",
         )
     }
 
     @Test
-    fun productionRegistryPresentsFocusedAuditToolsBeforeGenericViews() {
+    fun defaultRegistryPresentsFocusedAuditToolsBeforeGenericViews() {
         val names = createHexanaMcpServer().tools.keys.toList()
 
         assertBefore(names, "plan_abi_binding_regeneration", "list_exports")
@@ -240,8 +242,8 @@ class HexanaMcpServerSchemaTest {
     }
 
     @Test
-    fun productionRegistryStaysWithinSchemaBudget() {
-        val tools = createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.PRODUCTION)
+    fun defaultRegistryStaysWithinSchemaBudget() {
+        val tools = createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.DEFAULT)
             .tools
             .values
             .map { it.tool }
@@ -252,7 +254,7 @@ class HexanaMcpServerSchemaTest {
 
         assertTrue(
             estimatedTokens <= 13_885,
-            "Production MCP schema estimate is $estimatedTokens tokens ($schemaBytes bytes), expected <= 13885",
+            "Default MCP schema estimate is $estimatedTokens tokens ($schemaBytes bytes), expected <= 13885",
         )
     }
 

@@ -163,7 +163,7 @@ class HexanaMcpAnalyticsTest {
             logLevel = HexanaLogLevel.QUIET,
             analyticsKey = testApiKey(),
             analyticsEnabled = analyticsEnabled,
-            toolProfile = HexanaMcpToolProfile.PRODUCTION,
+            toolProfile = HexanaMcpToolProfile.DEFAULT,
             allowedRoots = emptyList(),
             resourceLimits = HexanaResourceLimits(),
         )
@@ -178,7 +178,7 @@ class HexanaMcpAnalyticsTest {
             logLevel = HexanaLogLevel.QUIET,
             analyticsKey = testApiKey(),
             analyticsEnabled = analyticsEnabled,
-            toolProfile = HexanaMcpToolProfile.PRODUCTION,
+            toolProfile = HexanaMcpToolProfile.DEFAULT,
             allowedRoots = emptyList(),
             resourceLimits = HexanaResourceLimits(),
         )

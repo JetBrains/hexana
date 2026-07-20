@@ -7,7 +7,7 @@
 - Executable public CLI commands can now read input from a file path, `-`, `--stdin`, auto-detected piped stdin, or explicit base64 options such as `--binary-base64`, `--wasm-base64`, and `--bytes-base64`.
 
 ### Changed
-- Standalone MCP now defaults generated tool registration to the production profile; callers that need hidden or advanced tools must request `HexanaMcpToolProfile.ADVANCED`.
+- Standalone MCP profile names are now `default`, `advanced`, and `scripting`. The 29-tool default profile is the runtime and generated-registration default; the 18 advanced-only tools and the single scripting tool are disjoint. Legacy `production`, `full`, and `debug` aliases are rejected.
 - MCP tool schemas now use schema version 2 and advertise bounded list inputs such as `indices.maxItems` for clients that validate requests before calling tools.
 
 ## 0.4.0 - 2026-07-06

@@ -48,7 +48,7 @@ data class StandaloneTool(
 
 data class StandaloneToolAuthority(
     val registrations: List<StandaloneTool>,
-    val productionToolIds: List<ToolId>,
+    val defaultToolIds: List<ToolId>,
     val advancedToolIds: List<ToolId>,
     val scriptingToolIds: List<ToolId>,
 ) {
@@ -70,9 +70,23 @@ data class StandaloneToolAuthority(
             }
         }
 
-        validateProfile("production", productionToolIds)
+        validateProfile("default", defaultToolIds)
         validateProfile("advanced", advancedToolIds)
         validateProfile("scripting", scriptingToolIds)
+
+        val profiles = listOf(
+            "default" to defaultToolIds,
+            "advanced" to advancedToolIds,
+            "scripting" to scriptingToolIds,
+        )
+        profiles.forEachIndexed { index, (profileName, profileIds) ->
+            profiles.drop(index + 1).forEach { (otherProfileName, otherProfileIds) ->
+                val overlap = profileIds.intersect(otherProfileIds.toSet())
+                require(overlap.isEmpty()) {
+                    "Standalone $profileName and $otherProfileName profiles must be disjoint; overlapping tool IDs: ${overlap.joinToString()}"
+                }
+            }
+        }
     }
 }
 
@@ -230,7 +244,7 @@ private fun standaloneProfile(ids: List<ToolId>, owner: String): List<ToolId> {
     ) { contract, _ -> contract.id }
 }
 
-val HexanaStandaloneProductionToolIds: List<ToolId> = standaloneProfile(listOf(
+val HexanaStandaloneDefaultToolIds: List<ToolId> = standaloneProfile(listOf(
     id("summarize_binary"), id("summarize_module"), id("list_enabled_features"), id("get_entrypoint_policy"),
     id("list_required_proposals"), id("diff_required_proposals"), id("check_runtime_compatibility"),
     id("check_component_compatibility"), id("plan_abi_binding_regeneration"), id("check_memory_contract"),
@@ -239,23 +253,15 @@ val HexanaStandaloneProductionToolIds: List<ToolId> = standaloneProfile(listOf(
     id("disassemble_function"), id("get_function_call_graph"), id("search_functions_by_name"),
     id("resolve_wasm_frames"), id("resolve_function_symbols"), id("resolve_source_locations"), id("list_memory"),
     id("list_globals"), id("list_element_segments"), id("list_data_segments"), id("audit_data_payload_policy"),
-), "standalone production profile")
+), "standalone default profile")
 
 val HexanaStandaloneAdvancedToolIds: List<ToolId> = standaloneProfile(listOf(
-    id("summarize_binary"), id("list_binary_functions"), id("search_binary_functions"), id("query_binary"),
-    id("summarize_module"), id("list_enabled_features"), id("get_entrypoint_policy"),
-    id("list_required_proposals"), id("diff_required_proposals"), id("check_runtime_compatibility"),
-    id("check_component_compatibility"), id("resolve_component_dependencies"), id("list_component_surface"),
-    id("plan_abi_binding_regeneration"), id("check_memory_contract"), id("audit_global_state_policy"),
-    id("audit_local_stack_budget"), id("list_custom_sections"), id("list_imports"), id("list_exports"),
-    id("search_exports"), id("list_exported_functions"), id("list_functions"), id("list_code_section_offsets"),
-    id("functions_for_indices"), id("resolve_function_signature"), id("disassemble_function"),
-    id("get_function_call_graph"), id("search_functions_by_name"), id("resolve_wasm_frames"),
-    id("resolve_function_symbols"), id("resolve_source_locations"), id("get_locals_for_functions"),
-    id("get_instructions_for_functions"), id("list_memory"), id("get_memory_for_indices"), id("list_globals"),
-    id("get_globals_for_indices"), id("list_types"), id("list_value_types"), id("list_reference_types"),
-    id("get_types_for_indices"), id("list_element_segments"), id("list_data"), id("list_data_segments"),
-    id("audit_data_payload_policy"), id("query_artifacts"),
+    id("list_binary_functions"), id("search_binary_functions"), id("query_binary"),
+    id("resolve_component_dependencies"), id("list_component_surface"), id("list_custom_sections"),
+    id("list_code_section_offsets"), id("functions_for_indices"), id("get_locals_for_functions"),
+    id("get_instructions_for_functions"), id("get_memory_for_indices"), id("get_globals_for_indices"),
+    id("list_types"), id("list_value_types"), id("list_reference_types"), id("get_types_for_indices"),
+    id("list_data"), id("query_artifacts"),
 ), "standalone advanced profile")
 
 val HexanaStandaloneScriptingToolIds: List<ToolId> = standaloneProfile(
@@ -265,7 +271,7 @@ val HexanaStandaloneScriptingToolIds: List<ToolId> = standaloneProfile(
 
 val HexanaStandaloneAuthority = StandaloneToolAuthority(
     registrations = HexanaStandaloneTools,
-    productionToolIds = HexanaStandaloneProductionToolIds,
+    defaultToolIds = HexanaStandaloneDefaultToolIds,
     advancedToolIds = HexanaStandaloneAdvancedToolIds,
     scriptingToolIds = HexanaStandaloneScriptingToolIds,
 )

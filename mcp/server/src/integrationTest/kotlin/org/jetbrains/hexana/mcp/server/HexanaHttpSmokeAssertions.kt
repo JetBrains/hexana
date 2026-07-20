@@ -15,7 +15,7 @@ import java.nio.charset.StandardCharsets
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-internal suspend fun assertProductionHttpSmoke(
+internal suspend fun assertDefaultHttpSmoke(
     server: HexanaInstalledServer,
     logger: Logger,
     label: String,
@@ -34,7 +34,7 @@ internal suspend fun assertProductionHttpSmoke(
             logger.info("Requesting {} tools/list", label)
             val tools = client.listTools(ListToolsRequest())
             logger.info("Received {} tools: {}", label, tools.tools.map { it.name }.sorted())
-            assertEquals(EXPECTED_PRODUCTION_HEXANA_TOOL_NAMES, tools.tools.map { it.name }.sorted())
+            assertEquals(EXPECTED_DEFAULT_HEXANA_TOOL_NAMES, tools.tools.map { it.name }.sorted())
         } finally {
             logger.info("Closing {} MCP client", label)
             client.close()

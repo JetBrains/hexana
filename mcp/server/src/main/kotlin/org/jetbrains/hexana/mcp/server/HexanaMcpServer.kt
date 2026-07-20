@@ -13,7 +13,7 @@ fun createHexanaMcpServer(
     resourceLimits: HexanaResourceLimits = HexanaResourceLimits(),
     analysisService: HexanaAnalysisService = DefaultHexanaAnalysisService(resourceLimits),
     transport: HexanaEvent.McpTransport = HexanaEvent.McpTransport.STDIO,
-    toolProfile: HexanaMcpToolProfile = HexanaMcpToolProfile.PRODUCTION,
+    toolProfile: HexanaMcpToolProfile = HexanaMcpToolProfile.DEFAULT,
     allowedRoots: List<String> = emptyList(),
 ): Server {
     val toolHandlers = HexanaToolHandlers(
