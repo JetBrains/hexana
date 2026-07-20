@@ -14,6 +14,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import org.jetbrains.hexana.mcp.HexanaToolset
 import org.jetbrains.hexana.mcp.direct.HexanaMcpToolsetDirectTestBase
 
 class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
@@ -22,24 +23,11 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
             client.listTools(ListToolsRequest()).tools.map { it.name }.toSet()
         }
 
-        val requiredGranularTools = setOf(
-            "summarize_module",
-            "list_imports",
-            "list_exports",
-            "list_functions",
-            "list_memory",
-            "list_globals",
-            "list_element_segments",
-            "list_data_segments",
-            "audit_data_payload_policy",
-        )
-        assertTrue(
-            "Authorized session tools missing expected granular tools. tools=$toolNames",
-            toolNames.containsAll(requiredGranularTools),
-        )
-        assertFalse("query_artifacts should not be exposed by IDEA: $toolNames", "query_artifacts" in toolNames)
-        assertFalse("query_binary should not be exposed by IDEA: $toolNames", "query_binary" in toolNames)
-        assertFalse("list_binary_functions should not be exposed by IDEA: $toolNames", "list_binary_functions" in toolNames)
+        val expectedHexanaTools = HexanaToolset().getTools().mapTo(linkedSetOf()) { it.descriptor.name }
+        val sessionHexanaTools = toolNames.intersect(knownHexanaToolNames)
+
+        assertEquals(expectedHexanaTools, sessionHexanaTools)
+        assertEquals(29, sessionHexanaTools.size)
     }
 
     fun testSummarizeModuleWorksOverAuthorizedSession() {
@@ -113,5 +101,24 @@ class HexanaMcpSessionIntegrationTest : HexanaMcpToolsetDirectTestBase() {
 
     private fun CallToolResult.requireStructuredObject(): JsonObject {
         return structuredContent ?: error("Expected structuredContent to be present but it was null. Result: $this")
+    }
+
+    private companion object {
+        val knownHexanaToolNames = setOf(
+            "summarize_binary", "list_binary_functions", "search_binary_functions", "query_binary",
+            "run_binary_script", "wasm_to_wat", "summarize_module", "list_enabled_features",
+            "get_entrypoint_policy", "list_required_proposals", "diff_required_proposals",
+            "check_runtime_compatibility", "check_component_compatibility", "resolve_component_dependencies",
+            "list_component_surface", "plan_abi_binding_regeneration", "check_memory_contract",
+            "audit_global_state_policy", "audit_local_stack_budget", "list_custom_sections", "list_imports",
+            "list_exports", "search_exports", "list_exported_functions", "list_functions",
+            "list_code_section_offsets", "functions_for_indices", "resolve_function_signature",
+            "disassemble_function", "get_function_call_graph", "search_functions_by_name", "resolve_wasm_frames",
+            "resolve_function_symbols", "resolve_source_locations", "get_locals_for_functions",
+            "get_instructions_for_functions", "list_memory", "get_memory_for_indices", "list_globals",
+            "get_globals_for_indices", "list_types", "list_value_types", "list_reference_types",
+            "get_types_for_indices", "list_element_segments", "list_data", "list_data_segments",
+            "audit_data_payload_policy", "query_artifacts",
+        )
     }
 }
