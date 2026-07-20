@@ -160,6 +160,7 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
                     val startX: Float, val startY: Float,
                     val endX: Float, val endY: Float,
                     val label: String?, val isHighlighted: Boolean,
+                    val sourceNodeWidth: Float,
                     var labelT: Float = 0.65f,
                 )
                 val edgeInfos = layout.edges.mapNotNull { edge ->
@@ -170,13 +171,14 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
                         to.x + to.width / 2f, to.y,
                         edge.label,
                         hoveredNodeId == edge.fromId || hoveredNodeId == edge.toId,
+                        from.width,
                     )
                 }
-                // Resolve label overlaps: group labeled edges by target endpoint,
+                // Resolve label overlaps: group labeled edges by source endpoint,
                 // then spread their t values so labels don't stack on top of each other.
-                val labeledByTarget = edgeInfos.filter { it.label != null }
-                    .groupBy { Pair(it.endX, it.endY) }
-                for ((_, group) in labeledByTarget) {
+                val labeledBySource = edgeInfos.filter { it.label != null }
+                    .groupBy { Pair(it.startX, it.startY) }
+                for ((_, group) in labeledBySource) {
                     if (group.size <= 1) continue
                     // Spread t values evenly between 0.35 and 0.85
                     val step = 0.5f / (group.size - 1).coerceAtLeast(1)
@@ -188,7 +190,7 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
                 // Draw edges
                 for (info in edgeInfos) {
                     drawEdge(info.startX, info.startY, info.endX, info.endY,
-                        info.label, textMeasurer, info.isHighlighted, info.labelT, isDark)
+                        info.label, textMeasurer, info.isHighlighted, info.labelT, isDark, info.sourceNodeWidth)
                 }
 
                 // Compute leaf nodes (no outgoing edges)
@@ -601,7 +603,7 @@ private const val COMPONENT_GAP = 80f
 /** Maximum width (in graph coordinates) before a layer row wraps. */
 private const val MAX_ROW_WIDTH = 1800f
 /** Extra vertical gap between wrapped sub-rows within the same layer. */
-private const val WRAP_ROW_GAP = 32f
+private const val WRAP_ROW_GAP = 60f
 
 /**
  * Finds connected components in the graph using union-find on edges.
@@ -958,6 +960,7 @@ private fun DrawScope.drawEdge(
     isHighlighted: Boolean,
     labelT: Float = 0.65f,
     isDark: Boolean = true,
+    sourceNodeWidth: Float = Float.MAX_VALUE,
 ) {
     val edgeColor = if (isDark) {
         if (isHighlighted) Color(0xFFCCCCCC.toInt()) else Color(0xFF666666.toInt())
@@ -986,7 +989,7 @@ private fun DrawScope.drawEdge(
         color = edgeColor,
     )
 
-    // Edge label
+    // Edge label — placed directly under the source node
     if (label != null) {
         val labelStyle = TextStyle(
             color = if (isDark) {
@@ -997,33 +1000,54 @@ private fun DrawScope.drawEdge(
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
         )
-        val labelResult = textMeasurer.measure(label, style = labelStyle)
-        // Evaluate cubic bezier at t=labelT for position along the curve
-        val cMidY = (startY + endY) / 2f
-        val oneMinusT = 1f - labelT
-        val bezierX = oneMinusT * oneMinusT * oneMinusT * startX +
-            3f * oneMinusT * oneMinusT * labelT * startX +
-            3f * oneMinusT * labelT * labelT * endX +
-            labelT * labelT * labelT * endX
-        val bezierY = oneMinusT * oneMinusT * oneMinusT * startY +
-            3f * oneMinusT * oneMinusT * labelT * cMidY +
-            3f * oneMinusT * labelT * labelT * cMidY +
-            labelT * labelT * labelT * endY
-        val midX = bezierX
-        val midY = bezierY
+        // Wrap label text to fit within source node width
+        val maxLabelWidth = (sourceNodeWidth - 8f).coerceAtLeast(40f)
+        val singleResult = textMeasurer.measure(label, style = labelStyle)
+        val labelY = startY + 4f + (labelT - 0.65f) * 40f
 
-        // Draw a small background behind the label for readability
-        drawRoundRect(
-            color = if (isDark) Color(0xCC1A1A1A.toInt()) else Color(0xCCF0F0F0.toInt()),
-            topLeft = Offset(midX - labelResult.size.width / 2f - 4f, midY - labelResult.size.height / 2f - 2f),
-            size = Size(labelResult.size.width + 8f, labelResult.size.height + 4f),
-            cornerRadius = CornerRadius(3f),
-        )
+        if (singleResult.size.width > maxLabelWidth) {
+            // Split label into lines that fit within maxLabelWidth
+            val words = label.split(Regex("(?<=[/:\\-])|(?=[/:\\-])| "))
+            val lines = mutableListOf<String>()
+            var currentLine = StringBuilder()
+            for (word in words) {
+                val candidate = if (currentLine.isEmpty()) word else currentLine.toString() + word
+                val candidateWidth = textMeasurer.measure(candidate, style = labelStyle).size.width
+                if (currentLine.isNotEmpty() && candidateWidth > maxLabelWidth) {
+                    lines.add(currentLine.toString())
+                    currentLine = StringBuilder(word)
+                } else {
+                    currentLine.append(word)
+                }
+            }
+            if (currentLine.isNotEmpty()) lines.add(currentLine.toString())
 
-        drawText(
-            labelResult,
-            topLeft = Offset(midX - labelResult.size.width / 2f, midY - labelResult.size.height / 2f),
-        )
+            val lineResults = lines.map { textMeasurer.measure(it, style = labelStyle) }
+            val totalHeight = lineResults.sumOf { it.size.height }
+            val maxWidth = lineResults.maxOf { it.size.width }
+
+            drawRoundRect(
+                color = if (isDark) Color(0xCC1A1A1A.toInt()) else Color(0xCCF0F0F0.toInt()),
+                topLeft = Offset(startX - maxWidth / 2f - 4f, labelY - 2f),
+                size = Size(maxWidth.toFloat() + 8f, totalHeight.toFloat() + 4f),
+                cornerRadius = CornerRadius(3f),
+            )
+            var yOff = labelY
+            for (lr in lineResults) {
+                drawText(lr, topLeft = Offset(startX - lr.size.width / 2f, yOff))
+                yOff += lr.size.height
+            }
+        } else {
+            val labelX = startX - singleResult.size.width / 2f
+
+            drawRoundRect(
+                color = if (isDark) Color(0xCC1A1A1A.toInt()) else Color(0xCCF0F0F0.toInt()),
+                topLeft = Offset(labelX - 4f, labelY - 2f),
+                size = Size(singleResult.size.width + 8f, singleResult.size.height + 4f),
+                cornerRadius = CornerRadius(3f),
+            )
+            drawText(singleResult, topLeft = Offset(labelX, labelY))
+        }
     }
 }
 
