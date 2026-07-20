@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.wasm.components.*
+import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 
 /**
@@ -83,6 +84,7 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
     var scale by remember { mutableStateOf(1f) }
     var hoveredNodeId by remember { mutableStateOf<String?>(null) }
     var legendExpanded by remember { mutableStateOf(false) }
+    val isDark = JewelTheme.isDark
 
     Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
         Canvas(
@@ -186,7 +188,7 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
                 // Draw edges
                 for (info in edgeInfos) {
                     drawEdge(info.startX, info.startY, info.endX, info.endY,
-                        info.label, textMeasurer, info.isHighlighted, info.labelT)
+                        info.label, textMeasurer, info.isHighlighted, info.labelT, isDark)
                 }
 
                 // Compute leaf nodes (no outgoing edges)
@@ -197,47 +199,50 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
                     val node = graph.nodes[id] ?: continue
                     val isHovered = hoveredNodeId == id
                     val isLeaf = id !in nodesWithOutgoing
-                    drawNode(rect.x, rect.y, rect.width, rect.height, node, textMeasurer, isHovered, isLeaf)
+                    drawNode(rect.x, rect.y, rect.width, rect.height, node, textMeasurer, isHovered, isLeaf, isDark)
                 }
 
                 // Draw collapse buttons for expanded groups
                 for ((_, btnRect) in collapseButtons) {
-                    drawCollapseButton(btnRect.x, btnRect.y, btnRect.width)
+                    drawCollapseButton(btnRect.x, btnRect.y, btnRect.width, isDark)
                 }
             }
         }
 
         // Legend
+        val legendBg = if (isDark) Color(0xCC1E1E1E.toInt()) else Color(0xCCF5F5F5.toInt())
+        val legendMutedColor = if (isDark) Color(0xFFAAAAAA.toInt()) else Color(0xFF6E7177.toInt())
+        val leafBorderColor = if (isDark) Color.White else Color.Black
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(8.dp)
-                .background(Color(0xCC1E1E1E.toInt()))
+                .background(legendBg)
                 .clickable { legendExpanded = !legendExpanded }
                 .padding(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (legendExpanded) "▼" else "▶", color = Color(0xFFAAAAAA.toInt()))
+                Text(if (legendExpanded) "▼" else "▶", color = legendMutedColor)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Legend")
             }
             if (legendExpanded) {
                 Spacer(modifier = Modifier.height(4.dp))
-                LegendItem(NodeColors.IMPORT, "Import")
-                LegendItem(NodeColors.MODULE, "Core Module")
-                LegendItem(NodeColors.COMPONENT, "Nested Component")
-                LegendItem(NodeColors.CORE_INSTANCE, "Core Instance")
-                LegendItem(NodeColors.INSTANCE, "Component Instance")
-                LegendItem(NodeColors.EXPORT, "Export")
+                LegendItem(if (isDark) NodeColors.IMPORT else NodeColors.IMPORT_LIGHT, "Import")
+                LegendItem(if (isDark) NodeColors.MODULE else NodeColors.MODULE_LIGHT, "Core Module")
+                LegendItem(if (isDark) NodeColors.COMPONENT else NodeColors.COMPONENT_LIGHT, "Nested Component")
+                LegendItem(if (isDark) NodeColors.CORE_INSTANCE else NodeColors.CORE_INSTANCE_LIGHT, "Core Instance")
+                LegendItem(if (isDark) NodeColors.INSTANCE else NodeColors.INSTANCE_LIGHT, "Component Instance")
+                LegendItem(if (isDark) NodeColors.EXPORT else NodeColors.EXPORT_LIGHT, "Export")
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                    Box(modifier = Modifier.size(12.dp).border(2.dp, Color.White).padding(2.dp).border(1.dp, Color.White))
+                    Box(modifier = Modifier.size(12.dp).border(2.dp, leafBorderColor).padding(2.dp).border(1.dp, leafBorderColor))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Leaf node (terminal)")
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Click group to expand/collapse", color = Color(0xFFAAAAAA.toInt()))
-                Text("Scroll to zoom, drag to pan", color = Color(0xFFAAAAAA.toInt()))
+                Text("Click group to expand/collapse", color = legendMutedColor)
+                Text("Scroll to zoom, drag to pan", color = legendMutedColor)
             }
         }
     }
@@ -828,29 +833,37 @@ private fun wrapLayerRows(
 // --- Drawing ---
 
 private object NodeColors {
+    // Dark theme colors
     val IMPORT = Color(0xFF5BA3CF.toInt())
     val MODULE = Color(0xFF8CB369.toInt())
     val COMPONENT = Color(0xFFA882DD.toInt())
     val CORE_INSTANCE = Color(0xFFD4A054.toInt())
     val INSTANCE = Color(0xFFE07A96.toInt())
     val EXPORT = Color(0xFF3CC0B8.toInt())
+    // Light theme colors (higher contrast / darker)
+    val IMPORT_LIGHT = Color(0xFF2470B3.toInt())
+    val MODULE_LIGHT = Color(0xFF4A7A2E.toInt())
+    val COMPONENT_LIGHT = Color(0xFF7B4FBF.toInt())
+    val CORE_INSTANCE_LIGHT = Color(0xFFB07D2A.toInt())
+    val INSTANCE_LIGHT = Color(0xFFC24466.toInt())
+    val EXPORT_LIGHT = Color(0xFF1A8F87.toInt())
 }
 
-private fun nodeColor(kind: NodeKind): Color = when (kind) {
-    NodeKind.IMPORT -> NodeColors.IMPORT
-    NodeKind.MODULE -> NodeColors.MODULE
-    NodeKind.NESTED_COMPONENT -> NodeColors.COMPONENT
-    NodeKind.CORE_INSTANCE -> NodeColors.CORE_INSTANCE
-    NodeKind.INSTANCE -> NodeColors.INSTANCE
-    NodeKind.EXPORT -> NodeColors.EXPORT
+private fun nodeColor(kind: NodeKind, isDark: Boolean): Color = when (kind) {
+    NodeKind.IMPORT -> if (isDark) NodeColors.IMPORT else NodeColors.IMPORT_LIGHT
+    NodeKind.MODULE -> if (isDark) NodeColors.MODULE else NodeColors.MODULE_LIGHT
+    NodeKind.NESTED_COMPONENT -> if (isDark) NodeColors.COMPONENT else NodeColors.COMPONENT_LIGHT
+    NodeKind.CORE_INSTANCE -> if (isDark) NodeColors.CORE_INSTANCE else NodeColors.CORE_INSTANCE_LIGHT
+    NodeKind.INSTANCE -> if (isDark) NodeColors.INSTANCE else NodeColors.INSTANCE_LIGHT
+    NodeKind.EXPORT -> if (isDark) NodeColors.EXPORT else NodeColors.EXPORT_LIGHT
 }
 
 private fun DrawScope.drawNode(
     x: Float, y: Float, width: Float, height: Float,
     node: GraphNode, textMeasurer: TextMeasurer, isHovered: Boolean,
-    isLeaf: Boolean = false,
+    isLeaf: Boolean = false, isDark: Boolean = true,
 ) {
-    val color = nodeColor(node.kind)
+    val color = nodeColor(node.kind, isDark)
     val isGroup = node.groupMembers != null
     val bgAlpha = if (isHovered) 0.35f else if (isGroup) 0.22f else 0.15f
     val borderWidth = if (isHovered) 3f else 2f
@@ -944,8 +957,13 @@ private fun DrawScope.drawEdge(
     textMeasurer: TextMeasurer,
     isHighlighted: Boolean,
     labelT: Float = 0.65f,
+    isDark: Boolean = true,
 ) {
-    val edgeColor = if (isHighlighted) Color(0xFFCCCCCC.toInt()) else Color(0xFF666666.toInt())
+    val edgeColor = if (isDark) {
+        if (isHighlighted) Color(0xFFCCCCCC.toInt()) else Color(0xFF666666.toInt())
+    } else {
+        if (isHighlighted) Color(0xFF333333.toInt()) else Color(0xFF999999.toInt())
+    }
     val strokeWidth = if (isHighlighted) 2.5f else 1.5f
 
     // Bezier curve
@@ -971,7 +989,11 @@ private fun DrawScope.drawEdge(
     // Edge label
     if (label != null) {
         val labelStyle = TextStyle(
-            color = if (isHighlighted) Color(0xFFDDDDDD.toInt()) else Color(0xFF999999.toInt()),
+            color = if (isDark) {
+                if (isHighlighted) Color(0xFFDDDDDD.toInt()) else Color(0xFF999999.toInt())
+            } else {
+                if (isHighlighted) Color(0xFF222222.toInt()) else Color(0xFF555555.toInt())
+            },
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
         )
@@ -992,7 +1014,7 @@ private fun DrawScope.drawEdge(
 
         // Draw a small background behind the label for readability
         drawRoundRect(
-            color = Color(0xCC1A1A1A.toInt()),
+            color = if (isDark) Color(0xCC1A1A1A.toInt()) else Color(0xCCF0F0F0.toInt()),
             topLeft = Offset(midX - labelResult.size.width / 2f - 4f, midY - labelResult.size.height / 2f - 2f),
             size = Size(labelResult.size.width + 8f, labelResult.size.height + 4f),
             cornerRadius = CornerRadius(3f),
@@ -1005,10 +1027,10 @@ private fun DrawScope.drawEdge(
     }
 }
 
-private fun DrawScope.drawCollapseButton(x: Float, y: Float, size: Float) {
-    val borderColor = Color(0xFFAAAAAA.toInt())
-    val bgColor = Color(0xCC1E1E1E.toInt())
-    val iconColor = Color(0xFFCCCCCC.toInt())
+private fun DrawScope.drawCollapseButton(x: Float, y: Float, size: Float, isDark: Boolean = true) {
+    val borderColor = if (isDark) Color(0xFFAAAAAA.toInt()) else Color(0xFF888888.toInt())
+    val bgColor = if (isDark) Color(0xCC1E1E1E.toInt()) else Color(0xCCF0F0F0.toInt())
+    val iconColor = if (isDark) Color(0xFFCCCCCC.toInt()) else Color(0xFF333333.toInt())
 
     // Background
     drawRoundRect(
