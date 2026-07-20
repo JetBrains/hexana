@@ -798,6 +798,11 @@ private fun NativeBinaryProvider.commonNativePanels(state: HexViewStateHolder): 
  * resolved panels by matching on [Panel.description]. Placeholders whose
  * name matches a resolved panel are swapped in-place; resolved panels
  * with no matching placeholder are appended before script panels.
+ *
+ * Grouped tabs may be discovered under a short name (e.g. "Garbage") but
+ * resolve to "Garbage: Data" when only one inner tab is present. To handle
+ * this, when no exact match is found we also look for a placeholder whose
+ * description is a prefix of the resolved panel's description followed by ": ".
  */
 private fun replacePlaceholders(panels: MutableList<Panel>, resolved: List<Panel>) {
     for (panel in resolved) {
@@ -805,9 +810,17 @@ private fun replacePlaceholders(panels: MutableList<Panel>, resolved: List<Panel
         if (idx >= 0) {
             panels[idx] = panel
         } else {
-            // Insert before script panels
-            val scriptStart = panels.indexOfFirst { it is ScriptPanel }.takeIf { it >= 0 } ?: panels.size
-            panels.add(scriptStart, panel)
+            // Grouped-tab promotion: placeholder "X" should match resolved "X: Y"
+            val prefixIdx = panels.indexOfFirst {
+                it !is ScriptPanel && panel.description.startsWith("${it.description}: ")
+            }
+            if (prefixIdx >= 0) {
+                panels[prefixIdx] = panel
+            } else {
+                // Insert before script panels
+                val scriptStart = panels.indexOfFirst { it is ScriptPanel }.takeIf { it >= 0 } ?: panels.size
+                panels.add(scriptStart, panel)
+            }
         }
     }
 }
