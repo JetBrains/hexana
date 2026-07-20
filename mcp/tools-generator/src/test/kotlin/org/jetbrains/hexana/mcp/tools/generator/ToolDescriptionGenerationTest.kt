@@ -8,6 +8,7 @@ import org.jetbrains.hexana.mcp.tools.StandaloneHandlerSpec
 import org.jetbrains.hexana.mcp.tools.ToolInputModel
 import org.jetbrains.hexana.mcp.tools.ToolInputPattern
 import org.jetbrains.hexana.mcp.tools.ToolGroup
+import org.jetbrains.hexana.mcp.tools.ToolId
 import org.jetbrains.hexana.mcp.tools.ToolOutputPolicy
 import org.jetbrains.hexana.mcp.tools.ToolSpec
 import org.jetbrains.hexana.mcp.tools.WasmInputClass
@@ -64,7 +65,7 @@ class ToolDescriptionGenerationTest {
             .maximum(60_000)
     }
     private val summarizeBinarySpec = ToolSpec(
-        name = "summarize_binary",
+        id = ToolId("summarize_binary"),
         summary = "Summarize a binary.",
         guidance = null,
         input = BinaryInputClass,

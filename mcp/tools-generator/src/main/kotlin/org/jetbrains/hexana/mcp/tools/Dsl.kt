@@ -369,6 +369,17 @@ class FieldHandle internal constructor(
 
 // ---------- Tool spec ----------
 
+@JvmInline
+value class ToolId(val value: String) {
+    init {
+        require(Regex("^[a-z][a-z0-9]*(_[a-z0-9]+)*$").matches(value)) {
+            "Tool id '$value' must be strict snake_case."
+        }
+    }
+
+    override fun toString(): String = value
+}
+
 data class StandaloneHandlerSpec(val methodName: String) {
     init {
         require(STANDALONE_HANDLER_METHOD_NAME_REGEX.matches(methodName)) {
@@ -383,7 +394,7 @@ data class StandaloneHandlerSpec(val methodName: String) {
 }
 
 class ToolSpec(
-    val name: String,
+    val id: ToolId,
     val summary: String,
     val guidance: String?,
     val input: ClassSpec,
@@ -401,8 +412,10 @@ class ToolSpec(
     standaloneHandler: StandaloneHandlerSpec? = null,
 ) {
     init {
-        inputModel?.let { validateExplicitInputModel(name, input, it) }
+        inputModel?.let { validateExplicitInputModel(id.value, input, it) }
     }
+
+    val name: String get() = id.value
 
     private val standaloneHandlerOverride: StandaloneHandlerSpec? = standaloneHandler
     val standaloneHandler: StandaloneHandlerSpec
@@ -420,7 +433,7 @@ class ToolSpec(
         handlerFqn: String = this.handlerFqn,
         standaloneHandler: StandaloneHandlerSpec? = this.standaloneHandlerOverride,
     ): ToolSpec = ToolSpec(
-        name = name,
+        id = ToolId(name),
         summary = summary,
         guidance = guidance,
         input = input,
@@ -1243,7 +1256,7 @@ class ToolBuilder internal constructor(private val name: String) {
         validateInputPattern(name, resolvedInput, resolvedInputPattern)
         validateCliOutputSelection(name, resolvedOutput, resolvedSurfaces.cli)
         return ToolSpec(
-            name = name,
+            id = ToolId(name),
             summary = resolvedSummary.trim(),
             guidance = guidance?.trimIndent()?.trim()?.takeIf { it.isNotEmpty() },
             input = resolvedInput,
@@ -1339,7 +1352,7 @@ private fun FieldType.describeForValidation(): String =
     }
 
 internal fun validateToolCollection(specs: List<ToolSpec>) {
-    val duplicateToolNames = specs.groupBy { it.name }.filterValues { it.size > 1 }.keys
+    val duplicateToolNames = specs.groupBy { it.id }.filterValues { it.size > 1 }.keys
     require(duplicateToolNames.isEmpty()) { "Duplicate tool names: $duplicateToolNames" }
 
     val duplicateCliCommandNames = specs

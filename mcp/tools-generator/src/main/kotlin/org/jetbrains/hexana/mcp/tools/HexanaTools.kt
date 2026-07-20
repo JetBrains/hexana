@@ -76,6 +76,8 @@ val HexanaTools: List<ToolSpec> = orderedTools(
     ArtifactQueryTools,
 )
 
+val HexanaToolCatalog: ToolCatalog = ToolCatalog(HexanaTools)
+
 private fun orderedTools(vararg groups: List<ToolSpec>): List<ToolSpec> {
     val tools = groups.flatMap { it }
     validateToolCollection(tools)

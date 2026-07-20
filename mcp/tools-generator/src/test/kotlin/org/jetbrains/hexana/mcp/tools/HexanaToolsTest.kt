@@ -41,6 +41,29 @@ private val CURRENT_PRODUCTION_MCP_TOOL_NAMES = setOf(
 
 class HexanaToolsTest {
 
+    @Test
+    fun `catalog rejects unknown and duplicate typed IDs before resolution`() {
+        val known = HexanaTools.first().id
+
+        val duplicate = assertFailsWith<IllegalArgumentException> {
+            HexanaToolCatalog.resolve(listOf(known, known), "test selection")
+        }
+        assertTrue(duplicate.message.orEmpty().contains("duplicate tool IDs"))
+
+        val unknown = assertFailsWith<IllegalArgumentException> {
+            HexanaToolCatalog.resolve(listOf(ToolId("missing_tool")), "test selection")
+        }
+        assertTrue(unknown.message.orEmpty().contains("unknown tool IDs"))
+    }
+
+    @Test
+    fun `catalog rejects duplicate contract IDs`() {
+        val duplicate = HexanaTools.first().copy()
+        val error = assertFailsWith<IllegalArgumentException> { ToolCatalog(listOf(HexanaTools.first(), duplicate)) }
+
+        assertTrue(error.message.orEmpty().contains("Duplicate tool contract IDs"))
+    }
+
     private val queryArtifacts = HexanaTools.single { it.name == "query_artifacts" }
     private val binarySummaryResult = class_(
         "BinarySummaryResult",
