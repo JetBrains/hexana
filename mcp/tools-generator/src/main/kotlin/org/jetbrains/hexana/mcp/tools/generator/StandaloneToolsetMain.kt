@@ -21,10 +21,7 @@ import org.jetbrains.hexana.mcp.tools.FieldSpec
 import org.jetbrains.hexana.mcp.tools.FieldType
 import org.jetbrains.hexana.mcp.tools.HexanaToolSchemaCompatibility
 import org.jetbrains.hexana.mcp.tools.HexanaCliTools
-import org.jetbrains.hexana.mcp.tools.HexanaStandaloneAdvancedToolIds
-import org.jetbrains.hexana.mcp.tools.HexanaStandaloneProductionToolIds
-import org.jetbrains.hexana.mcp.tools.HexanaStandaloneScriptingToolIds
-import org.jetbrains.hexana.mcp.tools.HexanaStandaloneTools
+import org.jetbrains.hexana.mcp.tools.HexanaStandaloneAuthority
 import org.jetbrains.hexana.mcp.tools.InputConversionCapability
 import org.jetbrains.hexana.mcp.tools.OutputConversionCapability
 import org.jetbrains.hexana.mcp.tools.ParamBindingKind
@@ -34,6 +31,7 @@ import org.jetbrains.hexana.mcp.tools.SourceKind
 import org.jetbrains.hexana.mcp.tools.SourceSlotSpec
 import org.jetbrains.hexana.mcp.tools.SourceTargetSpec
 import org.jetbrains.hexana.mcp.tools.StandaloneTool
+import org.jetbrains.hexana.mcp.tools.StandaloneToolAuthority
 import org.jetbrains.hexana.mcp.tools.ToolId
 import org.jetbrains.hexana.mcp.tools.ToolGroup
 import org.jetbrains.hexana.mcp.tools.ToolOutputPolicy
@@ -108,7 +106,7 @@ fun main(args: Array<String>) {
         System.err.println("Failed to create output directories: ${error.message}")
         exitProcess(1)
     }
-    val serverFiles = buildStandaloneServerFiles(HexanaStandaloneTools, HexanaCliTools)
+    val serverFiles = buildStandaloneServerFiles(HexanaStandaloneAuthority, HexanaCliTools)
     val metadataFiles = buildStandaloneCliMetadataFiles(HexanaCliTools)
     serverFiles.forEach { it.writeTo(serverOutputRoot) }
     metadataFiles.forEach { it.writeTo(metadataOutputRoot) }
@@ -117,11 +115,11 @@ fun main(args: Array<String>) {
 }
 
 internal fun buildStandaloneServerFiles(
-    standaloneTools: List<StandaloneTool>,
+    standaloneAuthority: StandaloneToolAuthority,
     cliTools: List<CliTool>,
 ): List<FileSpec> =
     listOf(
-        buildDispatcherFile(standaloneTools),
+        buildDispatcherFile(standaloneAuthority),
         buildCliToolsetFile(cliTools),
     )
 
@@ -131,8 +129,8 @@ internal fun buildStandaloneCliMetadataFiles(tools: List<CliTool>): List<FileSpe
         buildCliProductSelectionFile(tools),
     )
 
-internal fun buildDispatcherFile(tools: List<StandaloneTool>): FileSpec {
-    val mcpTools = tools
+internal fun buildDispatcherFile(authority: StandaloneToolAuthority): FileSpec {
+    val mcpTools = authority.registrations
     val registerFun = FunSpec.builder("registerHexanaTools")
         .receiver(SERVER_CLASS)
         .addParameter(ParameterSpec.builder("handlers", TOOL_HANDLERS).build())
@@ -157,12 +155,12 @@ internal fun buildDispatcherFile(tools: List<StandaloneTool>): FileSpec {
         .addType(buildCompatibilityObject())
         .addType(
             buildToolProfilesObject(
-                HexanaStandaloneProductionToolIds,
-                HexanaStandaloneAdvancedToolIds,
-                HexanaStandaloneScriptingToolIds,
+                authority.productionToolIds,
+                authority.advancedToolIds,
+                authority.scriptingToolIds,
             )
         )
-    buildInputDefaultsObject(tools)?.let { fileBuilder.addType(it) }
+    buildInputDefaultsObject(mcpTools)?.let { fileBuilder.addType(it) }
     return fileBuilder
         .addFunction(registerFun)
         .apply { mcpTools.forEach { addFunction(buildRegisterToolFunction(it)) } }

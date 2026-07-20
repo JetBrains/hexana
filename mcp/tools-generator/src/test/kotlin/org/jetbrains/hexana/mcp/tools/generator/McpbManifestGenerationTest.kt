@@ -20,17 +20,47 @@ class McpbManifestGenerationTest {
         val output = dir.resolve("manifest.generated.json")
         Files.writeString(
             template,
-            """{"version":"placeholder","compatibility":{"platforms":[]},"tools_generated":false,"tools":[]}""",
+            """
+            {
+              "manifest_version": "0.3",
+              "version": "placeholder",
+              "display_name": "Hexana preserved",
+              "compatibility": {
+                "platforms": ["placeholder-platform"],
+                "runtime": {"java": ">=21"}
+              },
+              "tools_generated": false,
+              "tools": [],
+              "preserved_extension": {"enabled": true}
+            }
+            """.trimIndent(),
         )
 
         generateMcpbManifest(template, output, "9.8.7", "darwin")
 
         val manifest = Json.parseToJsonElement(Files.readString(output)).jsonObject
         val tools = manifest.getValue("tools").jsonArray
+        val compatibility = manifest.getValue("compatibility").jsonObject
+        assertEquals("0.3", manifest.getValue("manifest_version").jsonPrimitive.content)
         assertEquals("9.8.7", manifest.getValue("version").jsonPrimitive.content)
+        assertEquals(
+            listOf("darwin"),
+            compatibility.getValue("platforms").jsonArray.map { it.jsonPrimitive.content },
+        )
+        assertEquals(">=21", compatibility.getValue("runtime").jsonObject.getValue("java").jsonPrimitive.content)
+        assertEquals("Hexana preserved", manifest.getValue("display_name").jsonPrimitive.content)
+        assertEquals("true", manifest.getValue("tools_generated").jsonPrimitive.content)
+        assertEquals(
+            "true",
+            manifest.getValue("preserved_extension").jsonObject.getValue("enabled").jsonPrimitive.content,
+        )
         assertEquals(
             HexanaMcpbTools.map { it.name },
             tools.map { it.jsonObject.getValue("name").jsonPrimitive.content },
+        )
+        assertEquals(
+            HexanaMcpbTools.map { it.summary.trim() },
+            tools.map { it.jsonObject.getValue("description").jsonPrimitive.content },
         )
         assertEquals(29, tools.size)
         assertFalse(tools.any { it.jsonObject.getValue("name").jsonPrimitive.content == "query_binary" })
@@ -40,6 +70,7 @@ class McpbManifestGenerationTest {
     fun `checked in MCPB manifest tool metadata is current`() {
         val manifest = Json.parseToJsonElement(Files.readString(checkedInManifest())).jsonObject
         val tools = manifest.getValue("tools").jsonArray
+        assertEquals("true", manifest.getValue("tools_generated").jsonPrimitive.content)
         assertEquals(
             HexanaMcpbTools.map { it.name },
             tools.map { it.jsonObject.getValue("name").jsonPrimitive.content },

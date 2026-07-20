@@ -6,6 +6,7 @@ import org.jetbrains.hexana.mcp.tools.CliReleaseProduct
 import org.jetbrains.hexana.mcp.tools.CliTool
 import org.jetbrains.hexana.mcp.tools.HexanaCliTools
 import org.jetbrains.hexana.mcp.tools.HexanaIdeaTools
+import org.jetbrains.hexana.mcp.tools.HexanaStandaloneAuthority
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneAdvancedToolIds
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneProductionToolIds
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneScriptingToolIds
@@ -14,6 +15,7 @@ import org.jetbrains.hexana.mcp.tools.ParamBindingKind
 import org.jetbrains.hexana.mcp.tools.ParamBindingSpec
 import org.jetbrains.hexana.mcp.tools.SourceTargetSpec
 import org.jetbrains.hexana.mcp.tools.StandaloneHandlerSpec
+import org.jetbrains.hexana.mcp.tools.StandaloneToolAuthority
 import org.jetbrains.hexana.mcp.tools.ToolGroup
 import org.jetbrains.hexana.mcp.tools.ToolInputModel
 import org.jetbrains.hexana.mcp.tools.ToolOutputPolicy
@@ -42,7 +44,7 @@ class ToolDescriptionGenerationTest {
         return Files.readString(output.resolve("org/jetbrains/hexana/mcp/HexanaToolset.kt"))
     }
 
-    private fun dispatcherSource(): String = buildDispatcherFile(HexanaStandaloneTools).toString()
+    private fun dispatcherSource(): String = buildDispatcherFile(HexanaStandaloneAuthority).toString()
     private fun cliSource(): String = buildCliToolsetFile(HexanaCliTools).toString()
     private fun metadataSource(): String = buildCliMetadataToolsetFile(HexanaCliTools).toString()
 
@@ -112,10 +114,43 @@ class ToolDescriptionGenerationTest {
             binding = original.binding.copy(handler = StandaloneHandlerSpec("customSummaryHandler")),
         )
 
-        val source = buildDispatcherFile(listOf(rebound)).toString()
+        val source = buildDispatcherFile(
+            StandaloneToolAuthority(
+                registrations = listOf(rebound),
+                productionToolIds = listOf(rebound.contract.id),
+                advancedToolIds = listOf(rebound.contract.id),
+                scriptingToolIds = emptyList(),
+            ),
+        ).toString()
 
         assertTrue(source.contains("handlers.customSummaryHandler(request.arguments)"))
         assertFalse(source.contains("handlers.summarizeModule(request.arguments)"))
+    }
+
+    @Test
+    fun `standalone generator uses only validated authority profile registrations`() {
+        val registered = HexanaStandaloneTools.first()
+        val unregistered = HexanaStandaloneTools.last()
+        val minimal = StandaloneToolAuthority(
+            registrations = listOf(registered),
+            productionToolIds = listOf(registered.contract.id),
+            advancedToolIds = emptyList(),
+            scriptingToolIds = emptyList(),
+        )
+
+        val source = buildDispatcherFile(minimal).toString()
+
+        assertTrue(source.contains("\"${registered.name}\""))
+        assertFalse(source.contains("\"${unregistered.name}\""))
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            minimal.copy(
+                productionToolIds = listOf(unregistered.contract.id),
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("production profile references unregistered tool IDs"))
+        assertTrue(error.message.orEmpty().contains(unregistered.name))
     }
 
     @Test
@@ -205,7 +240,7 @@ class ToolDescriptionGenerationTest {
 
     @Test
     fun `standalone generator emits server and metadata artifacts separately`() {
-        val serverFiles = buildStandaloneServerFiles(HexanaStandaloneTools, HexanaCliTools)
+        val serverFiles = buildStandaloneServerFiles(HexanaStandaloneAuthority, HexanaCliTools)
         val metadataFiles = buildStandaloneCliMetadataFiles(HexanaCliTools)
         assertEquals(setOf("HexanaToolDispatcher", "HexanaCliToolset"), serverFiles.map { it.name }.toSet())
         assertEquals(setOf("HexanaCliToolset", "HexanaCliProducts"), metadataFiles.map { it.name }.toSet())

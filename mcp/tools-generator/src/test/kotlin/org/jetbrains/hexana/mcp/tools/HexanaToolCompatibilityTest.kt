@@ -3,48 +3,49 @@ package org.jetbrains.hexana.mcp.tools
 import org.junit.Test
 import java.security.MessageDigest
 import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
 
 class HexanaToolCompatibilityTest {
+    private val baseline = CompatibilityAuthorities()
+
     @Test
     fun `semantic contract fingerprint is reviewed independently`() {
-        assertFingerprint("semantic", semanticSnapshot(), EXPECTED_SEMANTIC)
+        assertFingerprint("semantic", semanticSnapshot(baseline.semanticContracts), EXPECTED_SEMANTIC)
     }
 
     @Test
     fun `IDEA authority fingerprint is reviewed independently`() {
-        assertFingerprint("IDEA", ideaSnapshot(), EXPECTED_IDEA)
+        assertFingerprint("IDEA", ideaSnapshot(baseline.ideaTools), EXPECTED_IDEA)
     }
 
     @Test
     fun `standalone authority fingerprint is reviewed independently`() {
-        assertFingerprint("standalone", standaloneSnapshot(), EXPECTED_STANDALONE)
+        assertFingerprint("standalone", standaloneSnapshot(baseline.standaloneAuthority), EXPECTED_STANDALONE)
     }
 
     @Test
     fun `MCPB authority fingerprint is reviewed independently`() {
-        assertFingerprint("MCPB", mcpbSnapshot(), EXPECTED_MCPB)
+        assertFingerprint("MCPB", mcpbSnapshot(baseline.mcpbToolIds), EXPECTED_MCPB)
     }
 
     @Test
     fun `CLI registry fingerprint is reviewed independently`() {
-        assertFingerprint("CLI", cliSnapshot(HexanaCliTools), EXPECTED_CLI)
+        assertFingerprint("CLI", cliSnapshot(baseline.cliTools), EXPECTED_CLI)
     }
 
     @Test
     fun `per-product fingerprints are reviewed independently`() {
-        assertFingerprint("hexana-mcp", productSnapshot(CliReleaseProduct.HexanaMcp, HexanaCliTools), EXPECTED_HEXANA_MCP)
-        assertFingerprint("hexana-cli", productSnapshot(CliReleaseProduct.HexanaCli, HexanaCliTools), EXPECTED_HEXANA_CLI)
+        assertFingerprint("hexana-mcp", productSnapshot(CliReleaseProduct.HexanaMcp, baseline.cliTools), EXPECTED_HEXANA_MCP)
+        assertFingerprint("hexana-cli", productSnapshot(CliReleaseProduct.HexanaCli, baseline.cliTools), EXPECTED_HEXANA_CLI)
         assertFingerprint(
             "hexana-cli-script",
-            productSnapshot(CliReleaseProduct.HexanaCliScript, HexanaCliTools),
+            productSnapshot(CliReleaseProduct.HexanaCliScript, baseline.cliTools),
             EXPECTED_HEXANA_CLI_SCRIPT,
         )
     }
 
     @Test
     fun `CLI membership-only mutation affects only CLI and product snapshots`() {
-        val mutated = HexanaCliTools.map { tool ->
+        val mutated = baseline.cliTools.map { tool ->
             if (tool.name == "summarize_binary") {
                 tool.copy(
                     binding = tool.binding.copy(
@@ -56,25 +57,92 @@ class HexanaToolCompatibilityTest {
             }
         }
 
-        assertEquals(semanticSnapshot().sha256(), semanticSnapshot().sha256())
-        assertEquals(ideaSnapshot().sha256(), ideaSnapshot().sha256())
-        assertEquals(standaloneSnapshot().sha256(), standaloneSnapshot().sha256())
-        assertEquals(mcpbSnapshot().sha256(), mcpbSnapshot().sha256())
-        assertNotEquals(cliSnapshot(HexanaCliTools).sha256(), cliSnapshot(mutated).sha256())
-        assertNotEquals(
-            productSnapshot(CliReleaseProduct.HexanaCliScript, HexanaCliTools).sha256(),
-            productSnapshot(CliReleaseProduct.HexanaCliScript, mutated).sha256(),
-        )
-        assertEquals(
-            productSnapshot(CliReleaseProduct.HexanaCli, HexanaCliTools).sha256(),
-            productSnapshot(CliReleaseProduct.HexanaCli, mutated).sha256(),
+        assertOnlySnapshotsChanged(
+            baseline.copy(cliTools = mutated),
+            "CLI",
+            CliReleaseProduct.HexanaCliScript.productId,
         )
     }
 
-    private fun semanticSnapshot(): String = buildString {
+    @Test
+    fun `IDEA membership-only mutation affects only IDEA snapshot`() {
+        assertOnlySnapshotsChanged(
+            baseline.copy(ideaTools = baseline.ideaTools.dropLast(1)),
+            "IDEA",
+        )
+    }
+
+    @Test
+    fun `standalone membership-only mutation affects only standalone snapshot`() {
+        val mutated = baseline.standaloneAuthority.copy(
+            productionToolIds = baseline.standaloneAuthority.productionToolIds.dropLast(1),
+        )
+
+        assertOnlySnapshotsChanged(
+            baseline.copy(standaloneAuthority = mutated),
+            "standalone",
+        )
+    }
+
+    @Test
+    fun `MCPB membership-only mutation affects only MCPB snapshot`() {
+        assertOnlySnapshotsChanged(
+            baseline.copy(mcpbToolIds = baseline.mcpbToolIds.dropLast(1)),
+            "MCPB",
+        )
+    }
+
+    @Test
+    fun `semantic summary mutation affects only semantic snapshot`() {
+        val mutated = baseline.semanticContracts.map { contract ->
+            if (contract.name == "summarize_binary") {
+                contract.copy(summary = contract.summary + " Reviewed semantic change.")
+            } else {
+                contract
+            }
+        }
+
+        assertOnlySnapshotsChanged(
+            baseline.copy(semanticContracts = mutated),
+            "semantic",
+        )
+    }
+
+    private data class CompatibilityAuthorities(
+        val semanticContracts: List<ToolSpec> = HexanaTools,
+        val ideaTools: List<IdeaTool> = HexanaIdeaTools,
+        val standaloneAuthority: StandaloneToolAuthority = HexanaStandaloneAuthority,
+        val mcpbToolIds: List<ToolId> = HexanaMcpbToolIds,
+        val cliTools: List<CliTool> = HexanaCliTools,
+    )
+
+    private fun assertOnlySnapshotsChanged(
+        mutated: CompatibilityAuthorities,
+        vararg expectedChangedSnapshots: String,
+    ) {
+        val baselineHashes = snapshotHashes(baseline)
+        val mutatedHashes = snapshotHashes(mutated)
+        val changedSnapshots = baselineHashes.keys.filterTo(linkedSetOf()) { key ->
+            baselineHashes.getValue(key) != mutatedHashes.getValue(key)
+        }
+        assertEquals(expectedChangedSnapshots.toSet(), changedSnapshots)
+    }
+
+    private fun snapshotHashes(authorities: CompatibilityAuthorities): Map<String, String> = buildMap {
+        put("semantic", semanticSnapshot(authorities.semanticContracts).sha256())
+        put("IDEA", ideaSnapshot(authorities.ideaTools).sha256())
+        put("standalone", standaloneSnapshot(authorities.standaloneAuthority).sha256())
+        put("MCPB", mcpbSnapshot(authorities.mcpbToolIds).sha256())
+        put("CLI", cliSnapshot(authorities.cliTools).sha256())
+        CliReleaseProduct.entries.forEach { product ->
+            put(product.productId, productSnapshot(product, authorities.cliTools).sha256())
+        }
+    }
+
+    private fun semanticSnapshot(contracts: List<ToolSpec>): String = buildString {
         appendLine("schemaVersion=${HexanaToolSchemaCompatibility.schemaVersion}")
         appendLine("policy=${HexanaToolSchemaCompatibility.policy.compatibilityText()}")
-        HexanaTools.forEachIndexed { index, tool ->
+        contracts.forEachIndexed { index, tool ->
             val prefix = "contract[$index]"
             appendLine("$prefix.id=${tool.id.value}")
             appendLine("$prefix.summary=${tool.summary.compatibilityText()}")
@@ -84,28 +152,27 @@ class HexanaToolCompatibilityTest {
         }
     }
 
-    private fun ideaSnapshot(): String = buildString {
-        HexanaIdeaTools.forEachIndexed { index, tool ->
+    private fun ideaSnapshot(tools: List<IdeaTool>): String = buildString {
+        tools.forEachIndexed { index, tool ->
             appendLine("idea[$index].id=${tool.id.value}")
             appendLine("idea[$index].pattern=${tool.inputPattern.compatibilityText()}")
             appendLine("idea[$index].handler=${tool.handlerFqn}")
         }
     }
 
-    private fun standaloneSnapshot(): String = buildString {
-        appendLine("production=${HexanaStandaloneProductionToolIds.joinToString { it.value }}")
-        appendLine("advanced=${HexanaStandaloneAdvancedToolIds.joinToString { it.value }}")
-        appendLine("scripting=${HexanaStandaloneScriptingToolIds.joinToString { it.value }}")
-        HexanaStandaloneTools.forEachIndexed { index, tool ->
+    private fun standaloneSnapshot(authority: StandaloneToolAuthority): String = buildString {
+        appendLine("production=${authority.productionToolIds.joinToString { it.value }}")
+        appendLine("advanced=${authority.advancedToolIds.joinToString { it.value }}")
+        appendLine("scripting=${authority.scriptingToolIds.joinToString { it.value }}")
+        authority.registrations.forEachIndexed { index, tool ->
             appendLine("standalone[$index].id=${tool.id.value}")
             appendLine("standalone[$index].handler=${tool.standaloneHandler.methodName}")
         }
     }
 
-    private fun mcpbSnapshot(): String = buildString {
-        HexanaMcpbTools.forEachIndexed { index, tool ->
-            appendLine("mcpb[$index].id=${tool.id.value}")
-            appendLine("mcpb[$index].summary=${tool.summary.compatibilityText()}")
+    private fun mcpbSnapshot(ids: List<ToolId>): String = buildString {
+        ids.forEachIndexed { index, id ->
+            appendLine("mcpb[$index].id=${id.value}")
         }
     }
 
@@ -252,7 +319,7 @@ class HexanaToolCompatibilityTest {
         const val EXPECTED_SEMANTIC = "ebf885f898d01b05b137c8c0a4a3d1116229cba5d19f60fc39a0383d794839ab"
         const val EXPECTED_IDEA = "c561c5ea33362212bd107bfc5382b04b906ae32eaabdd1bfb7f31545ba528533"
         const val EXPECTED_STANDALONE = "6dfcfb04941f56fb08312687532dac8aca8c428c1cb265ff65b18ef60a4797c5"
-        const val EXPECTED_MCPB = "7d14692682ac3cc1f05a54faf93c7ec096a24755603cc92b3581714f2ce01e06"
+        const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"
         const val EXPECTED_CLI = "4df9852934148e1ff5ef3ad0d5c7c61a499403b0bc44a28eafcc0d6facbdfbd9"
         const val EXPECTED_HEXANA_MCP = "2b657021868d2be51d8ba9d0ca6e678f74638a7eb90fc1d66a131d2c7879e796"
         const val EXPECTED_HEXANA_CLI = "35ec773de2d485a7b285a37240d517bbc9c789a37be2725f66d355c7bb9bc6b7"

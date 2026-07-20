@@ -46,6 +46,36 @@ data class StandaloneTool(
     val standaloneHandler: StandaloneHandlerSpec get() = binding.handler
 }
 
+data class StandaloneToolAuthority(
+    val registrations: List<StandaloneTool>,
+    val productionToolIds: List<ToolId>,
+    val advancedToolIds: List<ToolId>,
+    val scriptingToolIds: List<ToolId>,
+) {
+    init {
+        val duplicateRegistrations = registrations.groupBy { it.id }.filterValues { it.size > 1 }.keys
+        require(duplicateRegistrations.isEmpty()) {
+            "Standalone authority contains duplicate registrations: ${duplicateRegistrations.joinToString()}"
+        }
+        val registeredIds = registrations.mapTo(mutableSetOf()) { it.id }
+
+        fun validateProfile(profileName: String, ids: List<ToolId>) {
+            val duplicates = ids.groupBy { it }.filterValues { it.size > 1 }.keys
+            require(duplicates.isEmpty()) {
+                "Standalone $profileName profile contains duplicate tool IDs: ${duplicates.joinToString()}"
+            }
+            val unregistered = ids.filterNot(registeredIds::contains)
+            require(unregistered.isEmpty()) {
+                "Standalone $profileName profile references unregistered tool IDs: ${unregistered.joinToString()}"
+            }
+        }
+
+        validateProfile("production", productionToolIds)
+        validateProfile("advanced", advancedToolIds)
+        validateProfile("scripting", scriptingToolIds)
+    }
+}
+
 data class CliTool(
     override val contract: ToolSpec,
     val binding: CliToolBinding,
@@ -231,6 +261,13 @@ val HexanaStandaloneAdvancedToolIds: List<ToolId> = standaloneProfile(listOf(
 val HexanaStandaloneScriptingToolIds: List<ToolId> = standaloneProfile(
     listOf(id("run_binary_script")),
     "standalone scripting profile",
+)
+
+val HexanaStandaloneAuthority = StandaloneToolAuthority(
+    registrations = HexanaStandaloneTools,
+    productionToolIds = HexanaStandaloneProductionToolIds,
+    advancedToolIds = HexanaStandaloneAdvancedToolIds,
+    scriptingToolIds = HexanaStandaloneScriptingToolIds,
 )
 
 val HexanaMcpbToolIds: List<ToolId> = listOf(
