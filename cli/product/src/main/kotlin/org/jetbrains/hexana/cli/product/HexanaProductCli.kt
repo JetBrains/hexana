@@ -12,6 +12,7 @@ import org.jetbrains.hexana.cli.metadata.HexanaCliInputMode
 import org.jetbrains.hexana.cli.metadata.HexanaCliOutputFormat
 import org.jetbrains.hexana.cli.metadata.HexanaCliProductToolSelection
 import org.jetbrains.hexana.cli.metadata.HexanaCliReleaseProduct
+import org.jetbrains.hexana.cli.metadata.HexanaCliExecutionStatus
 import org.jetbrains.hexana.cli.metadata.HexanaCliToolSpec
 import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliProducts
 import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliToolRegistry
@@ -35,17 +36,14 @@ import kotlin.system.exitProcess
 public enum class HexanaCliProduct(
     val releaseProduct: HexanaCliReleaseProduct,
     val description: String,
-    val expectedToolCommands: Set<String>,
 ) {
     STANDARD(
         releaseProduct = HexanaCliReleaseProduct.HEXANA_CLI,
         description = "Hexana command-line tools for binary and WebAssembly inspection.",
-        expectedToolCommands = setOf("summarize-binary", "summarize-module", "wasm-to-wat"),
     ),
     SCRIPT(
         releaseProduct = HexanaCliReleaseProduct.HEXANA_CLI_SCRIPT,
         description = "Hexana command-line scripting runtime.",
-        expectedToolCommands = setOf("run-script"),
     );
 
     val productId: String get() = releaseProduct.productId
@@ -72,7 +70,7 @@ public class HexanaProductCli(
     private val product: HexanaCliProduct,
     private val executor: HexanaProductToolExecutor,
 ) {
-    private val selectedTools = selectedProductTools(product)
+    private val selectedTools = selectedProductTools(product, executor.bindings)
 
     public fun run(
         args: Array<String>,
@@ -379,9 +377,17 @@ public data class ProductCliResult(
     val exitCode: Int = SUCCESS_EXIT_CODE,
 )
 
-public fun interface HexanaProductToolExecutor {
-    public fun execute(request: HexanaProductToolExecutionRequest): ProductCliResult
+public interface HexanaProductToolExecutor {
+    public val bindings: List<HexanaProductToolExecutorBinding>
+
+    public fun execute(request: HexanaProductToolExecutionRequest): ProductCliResult =
+        bindings.single { it.toolName == request.spec.toolName }.execute(request)
 }
+
+public data class HexanaProductToolExecutorBinding(
+    val toolName: String,
+    val execute: (HexanaProductToolExecutionRequest) -> ProductCliResult,
+)
 
 public data class HexanaProductToolExecutionRequest(
     val spec: HexanaCliToolSpec,
@@ -519,16 +525,48 @@ private class ScriptSourceOptions {
     }
 }
 
-private fun selectedProductTools(product: HexanaCliProduct): Map<String, HexanaCliToolSpec> {
-    val selections = HexanaGeneratedCliProducts.PRODUCTS[product.releaseProduct].orEmpty()
-    val specsByToolName = HexanaGeneratedCliToolRegistry.TOOLS.associateBy { it.toolName }
-    val specs = selections.associate { selection: HexanaCliProductToolSelection ->
-        selection.commandName to requireNotNull(specsByToolName[selection.toolName]) {
-            "Generated CLI product selection references unknown tool '${selection.toolName}'."
+internal fun selectedProductTools(
+    product: HexanaCliProduct,
+    executorBindings: List<HexanaProductToolExecutorBinding>,
+    selections: List<HexanaCliProductToolSelection> = HexanaGeneratedCliProducts.PRODUCTS[product.releaseProduct].orEmpty(),
+    registry: List<HexanaCliToolSpec> = HexanaGeneratedCliToolRegistry.TOOLS,
+): Map<String, HexanaCliToolSpec> {
+    val duplicateSelections = selections.groupBy { it.toolName }.filterValues { it.size > 1 }.keys
+    require(duplicateSelections.isEmpty()) {
+        "Generated ${product.productId} selection contains duplicate tools: ${duplicateSelections.sorted()}."
+    }
+    val duplicateCommands = selections.groupBy { it.commandName }.filterValues { it.size > 1 }.keys
+    require(duplicateCommands.isEmpty()) {
+        "Generated ${product.productId} selection contains duplicate commands: ${duplicateCommands.sorted()}."
+    }
+
+    val specs = selections.associate { selection ->
+        val matches = registry.filter { it.toolName == selection.toolName }
+        require(matches.size == 1) {
+            "Generated ${product.productId} selection '${selection.toolName}' must resolve exactly one metadata contract; " +
+                "found ${matches.size}."
+        }
+        val spec = matches.single()
+        require(spec.commandName == selection.commandName) {
+            "Generated ${product.productId} selection command '${selection.commandName}' does not match metadata " +
+                "command '${spec.commandName}' for '${selection.toolName}'."
+        }
+        require(spec.executionStatus == HexanaCliExecutionStatus.EXECUTABLE) {
+            "Generated ${product.productId} selection '${selection.toolName}' is ${spec.executionStatus}."
+        }
+        selection.commandName to spec
+    }
+
+    val bindingCounts = executorBindings.groupingBy { it.toolName }.eachCount()
+    selections.forEach { selection ->
+        require(bindingCounts[selection.toolName] == 1) {
+            "Selected ${product.productId} tool '${selection.toolName}' must have exactly one executor binding; " +
+                "found ${bindingCounts[selection.toolName] ?: 0}."
         }
     }
-    require(specs.keys == product.expectedToolCommands) {
-        "${product.executableName} must expose exactly ${product.expectedToolCommands.sorted()}, got ${specs.keys.sorted()}."
+    val crossProductBindings = bindingCounts.keys - selections.mapTo(mutableSetOf()) { it.toolName }
+    require(crossProductBindings.isEmpty()) {
+        "${product.productId} executor contains bindings outside its generated selection: ${crossProductBindings.sorted()}."
     }
     return specs
 }

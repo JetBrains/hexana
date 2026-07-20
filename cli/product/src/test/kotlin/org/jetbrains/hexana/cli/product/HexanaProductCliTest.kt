@@ -3,6 +3,10 @@ package org.jetbrains.hexana.cli.product
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
+import org.jetbrains.hexana.cli.metadata.HexanaCliExecutionStatus
+import org.jetbrains.hexana.cli.metadata.HexanaCliProductToolSelection
+import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliProducts
+import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliToolRegistry
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
@@ -20,11 +24,77 @@ import java.util.concurrent.TimeoutException
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 import kotlin.test.fail
 
 class HexanaProductCliTest {
     @get:Rule
     val temporaryFolder = TemporaryFolder()
+
+    @Test
+    fun generatedProductSelectionsMatchApprovedCommandInventory() {
+        val commands = HexanaCliProduct.entries.associate { product ->
+            product.productId to HexanaGeneratedCliProducts.PRODUCTS.getValue(product.releaseProduct).map { it.commandName }.sorted()
+        }
+        assertEquals(
+            mapOf(
+                "hexana-cli" to listOf("summarize-binary", "summarize-module", "wasm-to-wat"),
+                "hexana-cli-script" to listOf("run-script"),
+            ),
+            commands,
+        )
+    }
+
+    @Test
+    fun selectedProductToolsRejectInvalidMetadataAndExecutorBindings() {
+        val selections = HexanaGeneratedCliProducts.PRODUCTS.getValue(HexanaCliProduct.STANDARD.releaseProduct)
+        val registry = HexanaGeneratedCliToolRegistry.TOOLS
+        val bindings = selections.map { testBinding(it.toolName) }
+
+        assertFailsWith<IllegalArgumentException> {
+            selectedProductTools(HexanaCliProduct.STANDARD, bindings, selections + selections.first(), registry)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            selectedProductTools(
+                HexanaCliProduct.STANDARD,
+                bindings,
+                selections + HexanaCliProductToolSelection("unknown", "unknown", "ToolDefined", "SemanticJson"),
+                registry,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            selectedProductTools(HexanaCliProduct.STANDARD, bindings, selections, registry + registry.first())
+        }
+        val todo = registry.first { it.executionStatus == HexanaCliExecutionStatus.TODO }
+        assertFailsWith<IllegalArgumentException> {
+            selectedProductTools(
+                HexanaCliProduct.STANDARD,
+                bindings + testBinding(todo.toolName),
+                selections + HexanaCliProductToolSelection(todo.toolName, todo.commandName, "ToolDefined", "SemanticJson"),
+                registry,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            selectedProductTools(HexanaCliProduct.STANDARD, bindings.dropLast(1), selections, registry)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            selectedProductTools(HexanaCliProduct.STANDARD, bindings + bindings.first(), selections, registry)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            selectedProductTools(HexanaCliProduct.STANDARD, bindings + testBinding("run_binary_script"), selections, registry)
+        }
+    }
+
+    @Test
+    fun selectedToolWithoutExecutorBindingFailsAtConstruction() {
+        val incompleteExecutor = object : HexanaProductToolExecutor {
+            override val bindings = STANDARD_TOOL_NAMES.dropLast(1).map(::testBinding)
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            HexanaProductCli(HexanaCliProduct.STANDARD, incompleteExecutor)
+        }
+    }
 
     @Test
     fun commandHelpDoesNotReadStdinOrRequireSource() {
@@ -133,7 +203,7 @@ class HexanaProductCliTest {
 
     @Test
     fun missingRunScriptSourceFailsBeforeReadingBinarySource() {
-        val result = HexanaProductCli(HexanaCliProduct.SCRIPT, FailOnExecuteExecutor).run(
+        val result = HexanaProductCli(HexanaCliProduct.SCRIPT, FailOnScriptExecuteExecutor).run(
             args = arrayOf("run-script", "--stdin"),
             stdin = FailOnReadInputStream,
             env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
@@ -149,7 +219,7 @@ class HexanaProductCliTest {
         val home = temporaryFolder.newFolder("telemetry-home")
         withUserHome(home.absolutePath) {
             StreamingTelemetryServer.start().use { server ->
-                val result = HexanaProductCli(HexanaCliProduct.SCRIPT, FailOnExecuteExecutor).run(
+                val result = HexanaProductCli(HexanaCliProduct.SCRIPT, FailOnScriptExecuteExecutor).run(
                     args = arrayOf("version"),
                     stdin = ByteArrayInputStream(ByteArray(0)),
                     env = mapOf(
@@ -179,9 +249,12 @@ private fun runStandardSummary(
 private class RecordingProductExecutor(
     private val result: ProductCliResult = ProductCliResult(stdout = """{"format":"wasm"}"""),
 ) : HexanaProductToolExecutor {
+    override val bindings: List<HexanaProductToolExecutorBinding> = STANDARD_TOOL_NAMES.map { toolName ->
+        HexanaProductToolExecutorBinding(toolName, ::record)
+    }
     private val requests = mutableListOf<HexanaProductToolExecutionRequest>()
 
-    override fun execute(request: HexanaProductToolExecutionRequest): ProductCliResult {
+    private fun record(request: HexanaProductToolExecutionRequest): ProductCliResult {
         requests += request
         return result
     }
@@ -193,9 +266,19 @@ private class RecordingProductExecutor(
 }
 
 private object FailOnExecuteExecutor : HexanaProductToolExecutor {
-    override fun execute(request: HexanaProductToolExecutionRequest): ProductCliResult =
-        error("CLI product test must not execute ${request.spec.commandName}")
+    override val bindings: List<HexanaProductToolExecutorBinding> = STANDARD_TOOL_NAMES.map(::testBinding)
 }
+
+private object FailOnScriptExecuteExecutor : HexanaProductToolExecutor {
+    override val bindings: List<HexanaProductToolExecutorBinding> = listOf(testBinding("run_binary_script"))
+}
+
+private val STANDARD_TOOL_NAMES = listOf("summarize_binary", "summarize_module", "wasm_to_wat")
+
+private fun testBinding(toolName: String): HexanaProductToolExecutorBinding =
+    HexanaProductToolExecutorBinding(toolName) { request ->
+        error("CLI product test must not execute ${request.spec.commandName}")
+    }
 
 private fun HexanaProductToolExecutionRequest.assertStdinSource(bytes: ByteArray, slotName: String) {
     val source = sourceSelection as? ToolInputSourceSelection.StdinBytes

@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.cli.hexanacliscript
 
 import org.jetbrains.hexana.cli.product.HexanaProductToolExecutionRequest
+import org.jetbrains.hexana.cli.product.HexanaProductToolExecutorBinding
 import org.jetbrains.hexana.cli.product.HexanaProductToolExecutor
 import org.jetbrains.hexana.cli.product.ProductCliResult
 import org.jetbrains.hexana.cli.scripting.RUN_BINARY_SCRIPT_TOOL_NAME
@@ -10,29 +11,28 @@ import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
 
 internal object HexanaScriptProductExecutor : HexanaProductToolExecutor {
-    override fun execute(request: HexanaProductToolExecutionRequest): ProductCliResult {
-        return when (request.spec.toolName) {
-            RUN_BINARY_SCRIPT_TOOL_NAME -> {
-                val rendered = runScriptCli(
-                    RunScriptCliRequest(
-                        sourceSelections = listOf(request.sourceSelection),
-                        params = request.params,
-                        format = request.format,
-                        limits = HexanaScriptLimits(
-                            maxOutputBytes = request.resourceLimits.maxOutputBytes,
-                            maxInlineScriptBytes = request.resourceLimits.maxTextFileBytes,
-                            maxScriptFileBytes = request.resourceLimits.maxTextFileBytes,
-                            maxInlineBinaryBytes = request.resourceLimits.maxInlineBinaryBytes,
-                            maxFileBinaryBytes = request.resourceLimits.maxFileBinaryBytes,
-                        ),
-                        allowedFilePolicy = allowedFilePolicy(request.allowedRoots),
-                        toolName = request.spec.toolName,
-                    )
-                )
-                ProductCliResult(stdout = rendered.stdout, stderr = rendered.stderr, exitCode = rendered.exitCode)
-            }
-            else -> error("Unsupported selected script CLI tool: ${request.spec.toolName}")
-        }
+    override val bindings: List<HexanaProductToolExecutorBinding> = listOf(
+        HexanaProductToolExecutorBinding(RUN_BINARY_SCRIPT_TOOL_NAME, ::executeRunScript),
+    )
+
+    private fun executeRunScript(request: HexanaProductToolExecutionRequest): ProductCliResult {
+        val rendered = runScriptCli(
+            RunScriptCliRequest(
+                sourceSelections = listOf(request.sourceSelection),
+                params = request.params,
+                format = request.format,
+                limits = HexanaScriptLimits(
+                    maxOutputBytes = request.resourceLimits.maxOutputBytes,
+                    maxInlineScriptBytes = request.resourceLimits.maxTextFileBytes,
+                    maxScriptFileBytes = request.resourceLimits.maxTextFileBytes,
+                    maxInlineBinaryBytes = request.resourceLimits.maxInlineBinaryBytes,
+                    maxFileBinaryBytes = request.resourceLimits.maxFileBinaryBytes,
+                ),
+                allowedFilePolicy = allowedFilePolicy(request.allowedRoots),
+                toolName = request.spec.toolName,
+            )
+        )
+        return ProductCliResult(stdout = rendered.stdout, stderr = rendered.stderr, exitCode = rendered.exitCode)
     }
 }
 
