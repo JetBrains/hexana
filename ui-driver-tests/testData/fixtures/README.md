@@ -4,7 +4,7 @@
 
 A 50 MB memory64 + threads WebAssembly build of Pixar/Autodesk OpenUSD's
 `usdviewweb`, used by `HexanaLargeWasmResponsivenessTest` as a real-world
-large-module fixture (~74k call-graph nodes, huge element table, Emscripten
+large-module fixture (42k defined functions, huge element table, Emscripten
 C++ conventions). The test decompresses it to `build/fixtures/` on first use;
 override with the `HEXANA_LARGE_WASM` environment variable to test another
 module without touching this file.
