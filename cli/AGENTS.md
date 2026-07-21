@@ -20,6 +20,8 @@ This folder contains neutral CLI modules shared by current and future command-li
   plus `tools`, `version`, and `help`. It provides the standard product executor.
 - `hexana-cli-script/`: JVM application for `run-script` only, plus `tools`, `version`, and `help`. It provides the
   script product executor.
+- `integration-tests/`: JUnit 5 external-process contracts shared by the JVM and native product executables. Keep
+  production metadata out of its expectations and keep process cleanup behind its focused runner.
 
 ## Verification
 
@@ -29,3 +31,5 @@ This folder contains neutral CLI modules shared by current and future command-li
 - Run `./gradlew :cli:scripting:test` after changing the script-only contribution.
 - Run `./gradlew :cli:hexana-cli:integrationTest` after changing installed standard CLI behavior.
 - Run `./gradlew :cli:hexana-cli-script:integrationTest` after changing installed script CLI behavior.
+- Run `./gradlew :cli:integration-tests:jvmCliIntegrationTest` for shared installed-product contracts.
+- Run `./gradlew :cli:integration-tests:nativeCliIntegrationTest` with GraalVM 25+ for native contracts.

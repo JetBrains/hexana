@@ -178,7 +178,8 @@ HEXANA_MCP_MAX_FILE_BYTES=10485760 mcp/build/packaging/claude-plugin/bin/hexana-
 ## Native support policy
 
 Native MCP releases are stdio-first and HTTP-verified. The release artifact task runs `hexana-mcp version`, native stdio
-MCP smoke, native HTTP MCP smoke, and native archive checks before writing current-host artifacts.
+MCP smoke, native HTTP MCP smoke, both split native CLI Kotlin/JUnit contracts, and the retained native archive checks
+before writing current-host artifacts. The supported native matrix remains `macos-arm64` and `linux-x64`.
 
 Standalone MCP analytics are enabled by default for JVM and GraalVM Native Image `stdio` and `http`; explicit opt-out
 works everywhere with `--telemetry-enabled false` or `HEXANA_MCP_TELEMETRY_ENABLED=false`. PostHog networking and
