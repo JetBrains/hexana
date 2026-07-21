@@ -67,6 +67,19 @@ class HexanaLargeWasmResponsivenessTest {
       assertEquals(HexanaEditorTab.FUNCTIONS.tabName, finalSnapshot.selectedTabName)
       assertTrue(maxStallMs < 5_000, "EDT stalled for ${maxStallMs}ms during Functions tab resolution")
       assertTrue(finalMs < 5_000, "EDT stalled for ${finalMs}ms after Functions tab resolution")
+
+      // The Garbage analysis of this fixture yields only the Data subtab, so the
+      // group is promoted to a "Garbage: <subtab>" panel. The advertised
+      // "Garbage" placeholder must be replaced by it, not left spinning forever.
+      val tabs = editor.snapshot().panelNames
+      assertTrue(
+        tabs.any { it.startsWith("Garbage: ") },
+        "Expected a resolved promoted Garbage tab; tabs: $tabs",
+      )
+      assertTrue(
+        tabs.none { it == "Garbage" },
+        "Bare Garbage placeholder still present; tabs: $tabs",
+      )
     }
   }
 }
