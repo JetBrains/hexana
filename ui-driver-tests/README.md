@@ -174,6 +174,9 @@ HEXANA_DOWNLOAD_PLUGIN=true HEXANA_PLUGIN_BUILD_NUMBER=123 \
 - `-PtestIdeVersion=<version>` or `HEXANA_IDE_VERSION`: public IDE version to download.
 - `HEXANA_IDE_BUILD_NUMBER`: public IDE build number to download. Set only one of `HEXANA_IDE_VERSION` or
   `HEXANA_IDE_BUILD_NUMBER`.
+- `HEXANA_LARGE_WASM`: path to a large `.wasm` module for `HexanaLargeWasmResponsivenessTest`. Defaults to the
+  bundled USD wasm64 fixture (`testData/fixtures/usdviewweb.wasm.gz`, decompressed to `build/fixtures/` on
+  first use; see `testData/fixtures/README.md` for provenance).
 - `HEXANA_IDE_BUILD_TYPE`: TeamCity IDE installer build type used when neither public IDE version nor public build
   number is set. Defaults by selected IDE product:
   `IdeInstallers_Idea_Installers`, `IdeInstallers_WebStorm_Installers`,

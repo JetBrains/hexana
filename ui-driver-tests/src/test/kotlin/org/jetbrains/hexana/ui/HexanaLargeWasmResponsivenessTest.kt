@@ -7,8 +7,6 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import java.nio.file.Files
-import java.nio.file.Path
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.TimeSource
 
@@ -19,20 +17,18 @@ import kotlin.time.TimeSource
  * EDT and froze the whole IDE; they now materialize during background tab
  * resolution in the enricher.
  *
- * Requires a large real-world module and is skipped when none is present.
- * Point HEXANA_LARGE_WASM at a big .wasm to run (default: the local USD
- * wasm64 build).
+ * Uses the bundled USD wasm64 fixture (testData/fixtures/usdviewweb.wasm.gz,
+ * decompressed on first use); point HEXANA_LARGE_WASM at another .wasm to
+ * exercise a different module.
  */
 @Tag("hexana")
 class HexanaLargeWasmResponsivenessTest {
 
   @Test
   fun functionsTabOfLargeModuleDoesNotBlockEdt() {
-    val largeWasm = Path.of(
-      System.getenv("HEXANA_LARGE_WASM")
-        ?: (System.getProperty("user.home") + "/IdeaProjects/USD/build-wasm64/bin/usdviewweb.wasm"),
-    )
-    assumeTrue(Files.exists(largeWasm)) { "Large wasm fixture not found: $largeWasm" }
+    val largeWasm = HexanaUiDriverTestSupport.largeWasmFixture()
+    assumeTrue(largeWasm != null) { "HEXANA_LARGE_WASM points to a missing file" }
+    checkNotNull(largeWasm)
 
     hexanaIde(testName = "hexana-large-wasm-responsiveness") {
       val editor = openAbsoluteFile(largeWasm)

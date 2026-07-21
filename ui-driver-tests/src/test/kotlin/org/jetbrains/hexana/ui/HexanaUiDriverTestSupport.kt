@@ -10,7 +10,10 @@ import com.intellij.ide.starter.models.IdeInfo
 import com.intellij.ide.starter.project.LocalProjectInfo
 import com.intellij.ide.starter.runner.Starter
 import com.intellij.tools.ide.util.common.logOutput
+import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.util.zip.GZIPInputStream
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.writeText
@@ -20,6 +23,7 @@ internal object HexanaUiDriverTestSupport {
     const val wasmFileName = "hello.wasm"
     const val defaultMcpPort = 64342
 
+    private const val largeWasmEnv = "HEXANA_LARGE_WASM"
     private const val localPluginZipEnv = "HEXANA_LOCAL_PLUGIN_ZIP"
     private const val useLocalPluginEnv = "HEXANA_USE_LOCAL_PLUGIN"
     private const val downloadPluginEnv = "HEXANA_DOWNLOAD_PLUGIN"
@@ -101,6 +105,32 @@ internal object HexanaUiDriverTestSupport {
     private fun resolveProjectDir(): Path =
         Path.of("testData", "projects", projectName)
             .toAbsolutePath().normalize()
+
+    /**
+     * Large real-world module for scale tests: the `HEXANA_LARGE_WASM` environment
+     * variable when set (null if it points to a missing file), otherwise the bundled
+     * USD wasm64 `usdviewweb.wasm` fixture, decompressed to `build/fixtures/` on
+     * first use. See `testData/fixtures/README.md` for provenance.
+     */
+    fun largeWasmFixture(): Path? {
+        val override = System.getenv(largeWasmEnv)?.trim()?.ifBlank { null }
+        if (override != null) {
+            val path = Path.of(override).toAbsolutePath().normalize()
+            return if (path.exists()) path else null
+        }
+        val bundled = Path.of("testData", "fixtures", "usdviewweb.wasm.gz")
+            .toAbsolutePath().normalize()
+        val target = Path.of("build", "fixtures", "usdviewweb.wasm")
+            .toAbsolutePath().normalize()
+        if (!target.exists() || Files.size(target) == 0L) {
+            target.parent.createDirectories()
+            GZIPInputStream(Files.newInputStream(bundled)).use { input ->
+                Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING)
+            }
+            logOutput("Decompressed large wasm fixture to $target")
+        }
+        return target
+    }
 
     private fun resolvePluginZip(): Path {
         val useLocal = isTruthy(System.getenv(useLocalPluginEnv))
