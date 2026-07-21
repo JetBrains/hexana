@@ -192,13 +192,14 @@ class DominatorTreeTest {
             .build(root = 0)
 
         val result = DominatorTree.compute(graph)
+        val frontier = DominatorTree.dominanceFrontier(graph, result)
 
         // D is the join point — B and C both have D in their dominance frontier
-        assertEquals(setOf(3), result.dominanceFrontier[1])
-        assertEquals(setOf(3), result.dominanceFrontier[2])
+        assertEquals(setOf(3), frontier[1])
+        assertEquals(setOf(3), frontier[2])
         // A and D have empty frontiers
-        assertTrue(result.dominanceFrontier[0].isNullOrEmpty())
-        assertTrue(result.dominanceFrontier[3].isNullOrEmpty())
+        assertTrue(frontier[0].isNullOrEmpty())
+        assertTrue(frontier[3].isNullOrEmpty())
     }
 
     @Test
@@ -210,11 +211,12 @@ class DominatorTreeTest {
             .build(root = 0)
 
         val result = DominatorTree.compute(graph)
+        val frontier = DominatorTree.dominanceFrontier(graph, result)
 
         // B is the loop header — C has B in its frontier (back edge target)
-        assertEquals(setOf(1), result.dominanceFrontier[2])
+        assertEquals(setOf(1), frontier[2])
         // B has itself in its frontier (it's a loop header with a back edge)
-        assertEquals(setOf(1), result.dominanceFrontier[1])
+        assertEquals(setOf(1), frontier[1])
     }
 
     @Test

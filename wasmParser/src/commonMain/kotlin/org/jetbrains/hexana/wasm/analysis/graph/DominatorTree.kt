@@ -1,13 +1,13 @@
 package org.jetbrains.hexana.wasm.analysis.graph
 
+import org.jetbrains.hexana.io.allocateCommonByteBuffer
+
 object DominatorTree {
 
     fun compute(graph: DirectedGraph): DominatorResult {
         val nodeIds = graph.nodes.map { it.id }
         if (nodeIds.size <= 1) {
-            val idom = mutableMapOf<Int, Int?>()
-            if (nodeIds.isNotEmpty()) idom[nodeIds[0]] = null
-            return DominatorResult(idom, emptyMap(), emptyMap(), emptySet())
+            return pack(graph, emptyMap(), IntArray(0))
         }
 
         val nodeCount = nodeIds.size
@@ -41,7 +41,8 @@ object DominatorTree {
         }
 
         val n = dfsOrder.size
-        val unreachable = nodeIds.filter { it !in visited }.toSet()
+        val unreachable = nodeIds.filter { it !in visited }.toIntArray()
+        unreachable.sort()
 
         // Lengauer-Tarjan data structures
         val semi = IntArray(n) { it }
@@ -106,34 +107,104 @@ object DominatorTree {
         }
 
         // Convert to nodeId-indexed
-        val idomMap = HashMap<Int, Int?>(n * 2)
-        idomMap[graph.root] = null
+        val idomByNode = HashMap<Int, Int>(n * 2)
         for (i in 1 until n) {
-            idomMap[dfsOrder[i]] = dfsOrder[idom[i]]
+            idomByNode[dfsOrder[i]] = dfsOrder[idom[i]]
         }
 
-        val childrenMap = HashMap<Int, MutableList<Int>>(n * 2)
-        for ((node, parent) in idomMap) {
-            if (parent != null) {
-                childrenMap.getOrPut(parent) { ArrayList(4) }.add(node)
-            }
-        }
+        return pack(graph, idomByNode, unreachable)
+    }
 
-        // Dominance frontier
-        val df = HashMap<Int, MutableSet<Int>>(n)
-        for (nodeId in dfsOrder) {
+    /**
+     * Dominance frontier of each reachable node. Near-quadratic on join-heavy
+     * graphs (e.g. whole-module call graphs) — compute on demand for small CFGs
+     * only, never eagerly for module-level analysis.
+     */
+    fun dominanceFrontier(graph: DirectedGraph, result: DominatorResult): Map<Int, Set<Int>> {
+        val df = HashMap<Int, MutableSet<Int>>()
+        for (node in graph.nodes) {
+            val nodeId = node.id
+            if (nodeId !in result.idom) continue
             val preds = graph.predecessors[nodeId] ?: continue
             if (preds.size < 2) continue
             for (p in preds) {
-                if (p !in dfNum) continue
+                if (p !in result.idom) continue
                 var runner = p
-                while (runner != idomMap[nodeId]) {
+                while (runner != result.idom[nodeId]) {
                     df.getOrPut(runner) { mutableSetOf() }.add(nodeId)
-                    runner = idomMap[runner] ?: break
+                    runner = result.idom[runner] ?: break
                 }
             }
         }
+        return df
+    }
 
-        return DominatorResult(idomMap, childrenMap, df, unreachable)
+    /** Pack idom + children (CSR) + unreachable into one buffer; see [DominatorResult] layout. */
+    private fun pack(
+        graph: DirectedGraph,
+        idomByNode: Map<Int, Int>,
+        unreachableSorted: IntArray
+    ): DominatorResult {
+        val nodes = graph.nodes
+        val n = nodes.size
+
+        var minId = 0
+        var idRange = 0
+        if (n > 0) {
+            minId = Int.MAX_VALUE
+            var maxId = Int.MIN_VALUE
+            for (node in nodes) {
+                if (node.id < minId) minId = node.id
+                if (node.id > maxId) maxId = node.id
+            }
+            idRange = maxId - minId + 1
+        }
+
+        val idToIndex = IntArray(idRange) { -1 }
+        for (i in 0 until n) idToIndex[nodes[i].id - minId] = i
+
+        // idom slot per dense node index: parent node id, -1 = root or unreachable
+        val idomSlots = IntArray(n) { -1 }
+        for ((node, parent) in idomByNode) {
+            idomSlots[idToIndex[node - minId]] = parent
+        }
+
+        // Children CSR (inverse of idom), deterministic in node-list order
+        val childCounts = IntArray(n)
+        for (i in 0 until n) {
+            val parent = idomSlots[i]
+            if (parent != -1) childCounts[idToIndex[parent - minId]]++
+        }
+        val childOffset = IntArray(n + 1)
+        for (i in 0 until n) childOffset[i + 1] = childOffset[i] + childCounts[i]
+        val childData = IntArray(childOffset[n])
+        val fill = IntArray(n)
+        for (i in 0 until n) {
+            val parent = idomSlots[i]
+            if (parent != -1) {
+                val p = idToIndex[parent - minId]
+                childData[childOffset[p] + fill[p]] = nodes[i].id
+                fill[p]++
+            }
+        }
+
+        val totalInts = idRange + n + (n + 1) + childData.size + unreachableSorted.size
+        val buf = allocateCommonByteBuffer(totalInts * 4)
+        for (v in idToIndex) buf.putIntLE(v)
+        val idomPos = buf.position()
+        for (v in idomSlots) buf.putIntLE(v)
+        val childOffsetPos = buf.position()
+        for (v in childOffset) buf.putIntLE(v)
+        val childDataPos = buf.position()
+        for (v in childData) buf.putIntLE(v)
+        val unreachablePos = buf.position()
+        for (v in unreachableSorted) buf.putIntLE(v)
+
+        return DominatorResult(
+            buf, minId, idRange,
+            idomPos, childOffsetPos, childDataPos,
+            unreachablePos, unreachableSorted.size,
+            graph.root
+        )
     }
 }

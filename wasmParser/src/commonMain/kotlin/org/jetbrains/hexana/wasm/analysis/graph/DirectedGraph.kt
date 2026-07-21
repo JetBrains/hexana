@@ -70,7 +70,7 @@ private class BufferIntList(
 }
 
 /** Read a little-endian int at absolute byte position (stateless — does not move cursor). */
-private fun CommonByteBuffer.readInt(pos: Int): Int {
+internal fun CommonByteBuffer.readInt(pos: Int): Int {
     val saved = position()
     position(pos)
     val v = getIntLE()
