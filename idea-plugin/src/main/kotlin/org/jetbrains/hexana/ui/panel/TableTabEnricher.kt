@@ -347,6 +347,15 @@ private fun enrichWasmFunctionsTab(
     // function index (imports first), so shift by importFuncCount when crossing into that space.
     val importFuncCount = provider.importFuncCount
 
+    // Materialize the module-wide inputs HERE: the enricher runs on a background
+    // dispatcher during tab resolution (the tab shows its placeholder until done),
+    // while cell providers run during composition on the EDT. Reading these per cell
+    // froze the whole UI on large modules (Signature -> provider.functions parses all
+    // types; unreachable badges -> call graph + dominator computation).
+    provider.functions
+    val unreachableFuncIndices =
+        if (functionNamesMap != null) unreachableFuncIndicesProvider() else emptySet()
+
     // Wrap the Name column's cell provider to prefix "●" for unreachable functions.
     val enrichedColumns = if (functionNamesMap != null) {
         tab.columns.map { col ->
@@ -356,7 +365,7 @@ private fun enrichWasmFunctionsTab(
                     widthBehavior = col.widthBehavior,
                 ) { index ->
                     val original = col.cellProvider(index)
-                    val unreachable = (importFuncCount + index) in unreachableFuncIndicesProvider()
+                    val unreachable = (importFuncCount + index) in unreachableFuncIndices
                     if (unreachable) {
                         val displayName = "\u25CF ${original.representation}"
                         CellValue(
