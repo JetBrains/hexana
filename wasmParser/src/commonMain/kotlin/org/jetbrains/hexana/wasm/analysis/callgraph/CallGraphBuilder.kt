@@ -104,10 +104,27 @@ class CallGraphBuilder(
         }
 
         // 5. Parse each function one at a time, extract call edges, let GC reclaim parsed data
+        val indirectCallers = ArrayList<Int>()
         for (i in codeOffsets.indices) {
             val callerIdx = importFuncCount + i
             val record = buffer.parseCodeEntry(codeOffsets[i].offset)
-            addEdgesForFunction(callerIdx, record.opCodes, elementFunctions, graphBuilder)
+            if (addEdgesForFunction(callerIdx, record.opCodes, graphBuilder)) {
+                indirectCallers.add(callerIdx)
+            }
+        }
+
+        // 6. Route indirect calls through a single hub node instead of a full
+        // callers × element-table product of edges.
+        if (indirectCallers.isNotEmpty() && elementFunctions.isNotEmpty()) {
+            val hub = CallGraphNode.IndirectCallHub()
+            graphBuilder.addNode(hub.id, hub.name)
+            nodeMap[hub.id] = hub
+            for (callerIdx in indirectCallers) {
+                graphBuilder.addEdge(callerIdx, hub.id)
+            }
+            for (elemFuncIdx in elementFunctions) {
+                graphBuilder.addEdge(hub.id, elemFuncIdx)
+            }
         }
 
         val graph = graphBuilder.build(CallGraphNode.VIRTUAL_ROOT_ID)
@@ -116,17 +133,18 @@ class CallGraphBuilder(
 
     /**
      * Walks the opcode tree of a single function, collects unique direct call targets
-     * (call, return_call, ref.func) and whether any indirect call exists, then adds
-     * edges once. Recurses into all block-like containers (block, loop, if, else,
-     * legacy try, try_table). call_ref / return_call_ref add no edges — their targets
-     * are reached via ref.func roots (matches twiggy semantics).
+     * (call, return_call, ref.func), adds their edges once, and returns whether the
+     * function contains any indirect call (the caller routes those through the
+     * [CallGraphNode.IndirectCallHub]). Recurses into all block-like containers
+     * (block, loop, if, else, legacy try, try_table). call_ref / return_call_ref add
+     * no edges — their targets are reached via ref.func roots (matches twiggy
+     * semantics).
      */
     private fun addEdgesForFunction(
         callerIdx: Int,
         opcodes: List<OpCode>,
-        elementFunctions: Set<Int>,
         graphBuilder: DirectedGraphBuilder
-    ) {
+    ): Boolean {
         val directTargets = HashSet<Int>(8)
         var hasIndirectCall = false
 
@@ -149,11 +167,7 @@ class CallGraphBuilder(
         for (target in directTargets) {
             graphBuilder.addEdge(callerIdx, target)
         }
-        if (hasIndirectCall) {
-            for (elemFuncIdx in elementFunctions) {
-                graphBuilder.addEdge(callerIdx, elemFuncIdx)
-            }
-        }
+        return hasIndirectCall
     }
 
     private fun collectElementFunctions(): Set<Int> {

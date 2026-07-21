@@ -105,6 +105,7 @@ class GarbageAnalyzer(
                 }
                 is CallGraphNode.VirtualRoot -> return@mapNotNull null
                 is CallGraphNode.ComponentFunction -> return@mapNotNull null
+                is CallGraphNode.IndirectCallHub -> return@mapNotNull null
             }
 
             val preds = graph.predecessors[nodeId]

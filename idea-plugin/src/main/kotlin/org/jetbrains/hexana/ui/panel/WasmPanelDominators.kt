@@ -348,6 +348,7 @@ private data class CfgBlockEntry(
 private fun domEntryLabel(entry: DomEntry): String {
     val name = when (val node = entry.node) {
         is CallGraphNode.VirtualRoot -> "<root>"
+        is CallGraphNode.IndirectCallHub -> "<indirect calls>"
         is CallGraphNode.ImportedFunction -> "[${entry.nodeId}] ${node.module}.${node.name}"
         is CallGraphNode.DefinedFunction -> "[${entry.nodeId}] ${node.name}"
         is CallGraphNode.ComponentFunction -> "[${entry.nodeId}] ${node.name}"
