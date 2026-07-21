@@ -143,7 +143,7 @@ class WasmOpenI64Limits(min: Long): WasmLimits<Long>(4, min, null)
 /**
  * [min, max]
  */
-class WasmFixedI64Limits(min: Long, max: Long): WasmLimits<Long>(5, min, max)
+class WasmFixedI64Limits(min: Long, max: Long,val shared: Boolean = false): WasmLimits<Long>(5, min, max)
 
 /**
  * spec 5.3.12

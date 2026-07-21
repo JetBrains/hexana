@@ -170,6 +170,7 @@ object StandardTypesParser {
             0x03.toByte() -> WasmFixedI32Limits(uint32().toInt(), uint32().toInt(), true)
             0x04.toByte() -> WasmOpenI64Limits(getULEB128())
             0x05.toByte() -> WasmFixedI64Limits(getULEB128(), getULEB128())
+            0x07.toByte() -> WasmFixedI64Limits(getULEB128(), getULEB128(), true)
             else -> error("unknown limits type")
         }
     }
