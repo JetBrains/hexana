@@ -21,6 +21,14 @@
 
 ### Security
 
+## 0.13.1 - 2026-07-15
+
+### Added
+- added a "Decompiled" tab for .class files showing the decompiled Java source code
+
+### Changed
+- improved performance of information tabs and file structure
+
 ## 0.13 - 2026-07-08
 
 ### Added
