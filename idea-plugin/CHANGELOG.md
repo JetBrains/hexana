@@ -7,6 +7,7 @@
 
 ### Changed
 - Hexana's IntelliJ MCP toolset now uses schema version 2 and advertises/enforces bounded list inputs such as `indices.maxItems`, allowing MCP clients to validate oversized requests before invoking tools.
+- The call graph models indirect calls through a single synthetic `<indirect calls>` node: each function containing a `call_indirect` gets one edge to it, and it fans out to the function table. In the **Dominators** view, functions reachable only through indirect calls now group under that node instead of scattering across the tree. On indirect-call-heavy C++/Emscripten modules this also replaces a callers-times-table product of edges (hundreds of millions on real modules) with a linear count, which is what made such modules impossible to analyze before (see Fixed).
 
 ### Deprecated
 
@@ -15,6 +16,8 @@
 ### Fixed
 - Fixed a UX problem with vertical splitter – now it's draggable when the pointer is over its upper half too
 - WASM Diff action now properly works when two files are selected in the project view (previously it was always asking for the second file)
+- Opening the **Functions** tab of a large module no longer freezes the whole IDE. Its module-wide inputs (function signatures, and the call-graph plus dominator analysis behind the unreachable-function badges) were computed at first cell render on the UI thread; they now run during background tab loading while the tab shows its placeholder, so the editor stays responsive and the tab appears fully rendered.
+- Large modules, including 64-bit memory (memory64 / wasm64) builds, no longer exhaust the IDE heap when analyzed. Dominator results are stored in one compact int buffer instead of boxed hash maps, the dominance frontier (a near-quadratic structure nothing in the product consumed) is no longer computed, and indirect-call edges are linear instead of multiplicative (see Changed). A 50 MB memory64 module with ~74k functions, OpenUSD's Emscripten-built `usdviewweb.wasm`, previously drove the IDE past 10 GB of heap into OutOfMemoryError; it now opens, renders the Functions tab, and completes garbage/dominator analysis within a default 2 GB heap, with UI stalls kept near one second (guarded by an EDT-responsiveness driver test that ships with a bundled memory64 fixture).
 
 ### Security
 
