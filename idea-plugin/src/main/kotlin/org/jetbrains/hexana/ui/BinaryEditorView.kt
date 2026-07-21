@@ -270,6 +270,12 @@ internal fun BinaryEditorView(
             val decompiled = if (decompiledContentPanel != null) listOf(decompiledContentPanel) else emptyList()
             mutableStateListOf(*(placeholders + decompiled + scriptPanels).toTypedArray())
         }
+        // Publish the live tab names so non-composition observers (the UI-test
+        // probe) see what is actually rendered, including placeholder swaps.
+        LaunchedEffect(panels) {
+            snapshotFlow { panels.map { it.description } }
+                .collect { state.setPanelNames(it) }
+        }
         LaunchedEffect(binaryProvider, hexEditedSinceOpen) {
             if (hexEditedSinceOpen) return@LaunchedEffect
             if (panelsResolved.value) return@LaunchedEffect
@@ -315,10 +321,17 @@ internal fun BinaryEditorView(
                         val (ordinaryNames, groupedNames) = availableNames
                         val tabJobs = ordinaryNames.map { tabName ->
                             launch {
+                                // Cheap discovery is optimistic: a tab it advertised can
+                                // resolve to nothing (e.g. Monos with no groups). Remove
+                                // the placeholder then, or its spinner never ends.
                                 val tab = p.singleTab(tabName, binaryProvider, tableTabsContext)
-                                    ?: return@launch
-                                val enriched = enricher(listOf(tab), state, pathsNav).firstOrNull()
-                                    ?: return@launch
+                                val enriched = tab?.let { enricher(listOf(it), state, pathsNav).firstOrNull() }
+                                if (enriched == null) {
+                                    withContext(Dispatchers.Main) {
+                                        replacePlaceholder(panels, tabName, panel = null)
+                                    }
+                                    return@launch
+                                }
                                 val panel = binaryProvider.resolveOrdinaryTabPanel(
                                     tab = enriched,
                                     state = state,
@@ -332,15 +345,27 @@ internal fun BinaryEditorView(
                         }
                         // Grouped tabs are typically fewer; resolve each independently too.
                         val grouped = p.groupedTabs(binaryProvider, tableTabsContext)
+                        // Advertised grouped names whose descriptor resolved to nothing
+                        // (e.g. Garbage with no findings) leave dangling placeholders.
+                        val resolvedGroupNames = grouped.map { it.name }.toSet()
+                        val danglingGroupNames = groupedNames.filterNot { it in resolvedGroupNames }
+                        if (danglingGroupNames.isNotEmpty()) {
+                            withContext(Dispatchers.Main) {
+                                for (name in danglingGroupNames) {
+                                    replacePlaceholder(panels, name, panel = null)
+                                }
+                            }
+                        }
                         val groupedJobs = grouped.map { g ->
                             launch {
                                 val panel = binaryProvider.resolveGroupedTabPanel(
                                     g = g, state = state, pathsNav = pathsNav,
                                 )
-                                if (panel != null) {
-                                    withContext(Dispatchers.Main) {
-                                        replacePlaceholders(panels, listOf(panel))
-                                    }
+                                // Match by the group name, not the panel name: a single-subtab
+                                // group is promoted to a "Group: Sub" panel name that would
+                                // never match its "Group" placeholder.
+                                withContext(Dispatchers.Main) {
+                                    replacePlaceholder(panels, g.name, panel)
                                 }
                             }
                         }
@@ -804,6 +829,27 @@ private fun NativeBinaryProvider.commonNativePanels(state: HexViewStateHolder): 
  * this, when no exact match is found we also look for a placeholder whose
  * description is a prefix of the resolved panel's description followed by ": ".
  */
+/**
+ * Replaces the placeholder named [placeholderName] with [panel], or removes it
+ * when [panel] is null (the advertised tab resolved to no content). Unlike
+ * [replacePlaceholders] the match key is the placeholder's name, so a resolved
+ * panel whose name differs (a promoted "Group: Sub" grouped tab) still lands
+ * in its placeholder's slot. Script panels are never touched.
+ */
+private fun replacePlaceholder(panels: MutableList<Panel>, placeholderName: String, panel: Panel?) {
+    val idx = panels.indexOfFirst {
+        (it.description == placeholderName || (panel != null && it.description == panel.description)) && it !is ScriptPanel
+    }
+    when {
+        panel == null -> if (idx >= 0) panels.removeAt(idx)
+        idx >= 0 -> panels[idx] = panel
+        else -> {
+            val scriptStart = panels.indexOfFirst { it is ScriptPanel }.takeIf { it >= 0 } ?: panels.size
+            panels.add(scriptStart, panel)
+        }
+    }
+}
+
 private fun replacePlaceholders(panels: MutableList<Panel>, resolved: List<Panel>) {
     for (panel in resolved) {
         val idx = panels.indexOfFirst { it.description == panel.description && it !is ScriptPanel }

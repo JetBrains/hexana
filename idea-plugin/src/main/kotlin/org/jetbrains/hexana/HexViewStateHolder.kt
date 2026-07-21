@@ -96,6 +96,16 @@ class HexViewStateHolder(
         _pendingTabSelection.tryEmit(description)
     }
 
+    // Live tab names as rendered by BinaryEditorView, in display order. Empty
+    // until the editor composes its panel list. Read by the UI-test probe so
+    // it reports the tabs a user actually sees (placeholders included).
+    private val _panelNames = mutableStateOf<List<String>>(emptyList())
+    val panelNames: List<String> get() = _panelNames.value
+
+    fun setPanelNames(names: List<String>) {
+        _panelNames.value = names
+    }
+
     private val _cursorPosition = mutableStateOf(HexPosition(-1, -1))
     val cursorPosition: HexPosition get() = _cursorPosition.value
 

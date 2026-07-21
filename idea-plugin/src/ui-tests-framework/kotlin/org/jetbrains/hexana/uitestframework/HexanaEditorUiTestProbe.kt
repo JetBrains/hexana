@@ -485,6 +485,12 @@ object HexanaEditorUiTestProbe {
             .take(240)
 
     private fun HexanaFileEditor.panelNames(): List<String> {
+        // Prefer the live tab names published by BinaryEditorView: they reflect
+        // what is actually rendered (placeholder removals, promoted "Group: Sub"
+        // grouped tabs). The synthetic reconstruction below remains only as a
+        // fallback for editors probed before their panel list composes.
+        val livePanelNames = stateHolder.panelNames
+        if (livePanelNames.isNotEmpty()) return livePanelNames
         val provider = binaryProvider ?: return emptyList()
         val tablePanelNames = TableTabsProviderRegistry.providers.flatMap { tabsProvider ->
             tabsProvider.tableTabs(provider).map { it.name }
