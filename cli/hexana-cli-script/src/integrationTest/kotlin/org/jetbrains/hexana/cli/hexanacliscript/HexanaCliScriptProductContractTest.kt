@@ -9,6 +9,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.nio.file.Files
+import java.nio.file.Path
 import java.util.Base64
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -20,6 +21,11 @@ class HexanaCliScriptProductContractTest {
     val temporaryFolder = TemporaryFolder()
 
     private val target = CliTestTarget.fromSystemProperties()
+    private val standardTarget = CliTestTarget(
+        kind = target.kind,
+        version = target.version,
+        launcher = Path.of(requireNotNull(System.getProperty("hexana.cli.integration.standardLauncher"))),
+    )
 
     @Test
     fun productExposesExactInventoryVersionAndForeignCommandDiagnostics() {
@@ -166,6 +172,28 @@ class HexanaCliScriptProductContractTest {
         FakeCliTelemetryServer().use { server ->
             assertSuccess(target.run(listOf("version"), telemetryEnvironment(false, server.url, Files.createDirectories(temporaryFolder.root.toPath().resolve("telemetry-disabled-home")))))
             server.assertNoRequests()
+        }
+    }
+
+    @Test
+    fun productSharesTelemetryIdentityWithStandardCli() {
+        val home = Files.createDirectories(temporaryFolder.root.toPath().resolve("shared-telemetry-home"))
+        FakeCliTelemetryServer().use { server ->
+            val environment = telemetryEnvironment(true, server.url, home)
+            assertSuccess(target.run(listOf("version"), environment))
+            assertSuccess(standardTarget.run(listOf("version"), environment))
+
+            val events = server.awaitEvents(2)
+            val scriptEvent = events.single { it.productId == "hexana-cli-script" && it.commandName == "version" }
+            val standardEvent = events.single { it.productId == "hexana-cli" && it.commandName == "version" }
+            assertEquals("hexana-cli-script", scriptEvent.productId)
+            assertEquals("version", scriptEvent.commandName)
+            assertEquals("hexana-cli", standardEvent.productId)
+            assertEquals("version", standardEvent.commandName)
+            assertNotEquals("", scriptEvent.distinctId)
+            assertNotEquals("", standardEvent.distinctId)
+            assertEquals(scriptEvent.distinctId, standardEvent.distinctId)
+            assertTrue(Files.isRegularFile(home.resolve(".hexana/analytics-id")))
         }
     }
 

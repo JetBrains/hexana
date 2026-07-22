@@ -12,6 +12,10 @@ plugins {
 group = "org.jetbrains.hexana.cli"
 version = providers.gradleProperty("hexanaToolsVersion").get()
 
+val isWindowsHost = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
+val jvmLauncherSuffix = if (isWindowsHost) ".bat" else ""
+val nativeLauncherSuffix = if (isWindowsHost) ".exe" else ""
+
 val sourceSets = extensions.getByType<SourceSetContainer>()
 val mainSourceSet = sourceSets.named("main").get()
 val testSourceSet = sourceSets.named("test").get()
@@ -100,7 +104,7 @@ tasks.register<Test>("integrationTest") {
         events("failed", "passed", "skipped")
     }
     systemProperty("hexana.cli.integration.installDir", layout.buildDirectory.dir("install/hexana-cli").get().asFile.absolutePath)
-    systemProperty("hexana.cli.integration.launcher", layout.buildDirectory.file("install/hexana-cli/bin/hexana-cli").get().asFile.absolutePath)
+    systemProperty("hexana.cli.integration.launcher", layout.buildDirectory.file("install/hexana-cli/bin/hexana-cli$jvmLauncherSuffix").get().asFile.absolutePath)
     systemProperty("hexana.cli.integration.target", "jvm")
     systemProperty("hexana.cli.integration.version", version)
 }
@@ -113,7 +117,7 @@ tasks.register<Test>("nativeIntegrationTest") {
     classpath = integrationTestSourceSet.runtimeClasspath
     include("**/HexanaCliProductContractTest.class")
     testLogging { events("failed", "passed", "skipped") }
-    systemProperty("hexana.cli.integration.launcher", layout.buildDirectory.file("native/nativeCompile/hexana-cli").get().asFile.absolutePath)
+    systemProperty("hexana.cli.integration.launcher", layout.buildDirectory.file("native/nativeCompile/hexana-cli$nativeLauncherSuffix").get().asFile.absolutePath)
     systemProperty("hexana.cli.integration.target", "native")
     systemProperty("hexana.cli.integration.version", version)
 }

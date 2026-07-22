@@ -12,6 +12,10 @@ plugins {
 group = "org.jetbrains.hexana.cli"
 version = providers.gradleProperty("hexanaToolsVersion").get()
 
+val isWindowsHost = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
+val jvmLauncherSuffix = if (isWindowsHost) ".bat" else ""
+val nativeLauncherSuffix = if (isWindowsHost) ".exe" else ""
+
 val sourceSets = extensions.getByType<SourceSetContainer>()
 val mainSourceSet = sourceSets.named("main").get()
 val testSourceSet = sourceSets.named("test").get()
@@ -102,7 +106,8 @@ tasks.register<Test>("integrationTest") {
     }
     systemProperty("hexana.cli.script.integration.installDir", layout.buildDirectory.dir("install/hexana-cli-script").get().asFile.absolutePath)
     systemProperty("hexana.cli.integration.installDir", project(":cli:hexana-cli").layout.buildDirectory.dir("install/hexana-cli").get().asFile.absolutePath)
-    systemProperty("hexana.cli.integration.launcher", layout.buildDirectory.file("install/hexana-cli-script/bin/hexana-cli-script").get().asFile.absolutePath)
+    systemProperty("hexana.cli.integration.launcher", layout.buildDirectory.file("install/hexana-cli-script/bin/hexana-cli-script$jvmLauncherSuffix").get().asFile.absolutePath)
+    systemProperty("hexana.cli.integration.standardLauncher", project(":cli:hexana-cli").layout.buildDirectory.file("install/hexana-cli/bin/hexana-cli$jvmLauncherSuffix").get().asFile.absolutePath)
     systemProperty("hexana.cli.integration.target", "jvm")
     systemProperty("hexana.cli.integration.version", version)
 }
@@ -111,11 +116,13 @@ tasks.register<Test>("nativeIntegrationTest") {
     description = "Runs native-compatible black-box contracts against the hexana-cli-script GraalVM executable."
     group = "verification"
     dependsOn(tasks.named("nativeCompile"))
+    dependsOn(":cli:hexana-cli:nativeCompile")
     testClassesDirs = integrationTestSourceSet.output.classesDirs
     classpath = integrationTestSourceSet.runtimeClasspath
     include("**/HexanaCliScriptProductContractTest.class")
     testLogging { events("failed", "passed", "skipped") }
-    systemProperty("hexana.cli.integration.launcher", layout.buildDirectory.file("native/nativeCompile/hexana-cli-script").get().asFile.absolutePath)
+    systemProperty("hexana.cli.integration.launcher", layout.buildDirectory.file("native/nativeCompile/hexana-cli-script$nativeLauncherSuffix").get().asFile.absolutePath)
+    systemProperty("hexana.cli.integration.standardLauncher", project(":cli:hexana-cli").layout.buildDirectory.file("native/nativeCompile/hexana-cli$nativeLauncherSuffix").get().asFile.absolutePath)
     systemProperty("hexana.cli.integration.target", "native")
     systemProperty("hexana.cli.integration.version", version)
 }
