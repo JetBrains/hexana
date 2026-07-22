@@ -333,7 +333,12 @@ fun BinaryEditorContent(
                 property("min-height", "0")
             }
         }) {
-            HexViewerPanel(bytes = buffer, selection = selection, editState = editState)
+            HexViewerPanel(
+                bytes = buffer,
+                selection = selection,
+                editState = editState,
+                structureRanges = remember(provider) { provider.structureRanges.sortedBy { it.offset } },
+            )
             if (showDataInspector) {
                 DataInspectorPanel(bytes = buffer, selection = selection)
             }

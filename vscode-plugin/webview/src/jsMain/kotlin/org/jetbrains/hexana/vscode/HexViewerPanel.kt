@@ -7,6 +7,7 @@ import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.providers.StructureRange
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLInputElement
 import org.w3c.dom.events.Event
@@ -190,6 +191,48 @@ private fun hexDigitValue(key: String): Int? = when (key.lowercase()) {
 }
 
 /**
+ * CSS rgba color strings for structure region backgrounds, cycling across
+ * adjacent regions. Matches the IntelliJ dark-theme palette.
+ */
+private val STRUCTURE_COLORS = listOf(
+    "rgba(100, 149, 237, 0.15)",  // cornflower blue
+    "rgba(144, 238, 144, 0.15)",  // light green
+    "rgba(255, 182, 108, 0.15)",  // peach
+    "rgba(186, 147, 214, 0.15)",  // lavender
+    "rgba(255, 218, 120, 0.15)",  // pale gold
+    "rgba(120, 210, 210, 0.15)",  // teal
+)
+
+/** Slightly stronger alpha for label badge backgrounds. */
+private val STRUCTURE_LABEL_COLORS = listOf(
+    "rgba(100, 149, 237, 0.35)",
+    "rgba(144, 238, 144, 0.35)",
+    "rgba(255, 182, 108, 0.35)",
+    "rgba(186, 147, 214, 0.35)",
+    "rgba(255, 218, 120, 0.35)",
+    "rgba(120, 210, 210, 0.35)",
+)
+
+/**
+ * Returns the index into [structureRanges] that contains [byteOffset],
+ * or -1 if no range covers it.
+ */
+private fun structureIndexForOffset(structureRanges: List<StructureRange>, byteOffset: Long): Int {
+    var lo = 0
+    var hi = structureRanges.size - 1
+    while (lo <= hi) {
+        val mid = (lo + hi) ushr 1
+        val r = structureRanges[mid]
+        when {
+            byteOffset < r.offset -> hi = mid - 1
+            byteOffset >= r.offset + r.size -> lo = mid + 1
+            else -> return mid
+        }
+    }
+    return -1
+}
+
+/**
  * Compose for Web hex viewer panel with virtual scrolling and byte selection.
  *
  * Renders the raw binary content in a classic hex-dump layout:
@@ -205,6 +248,7 @@ fun HexViewerPanel(
     bytes: CommonByteBuffer,
     selection: HexSelectionState = remember { HexSelectionState() },
     editState: HexEditState? = null,
+    structureRanges: List<StructureRange> = emptyList(),
 ) {
     val totalRows = (bytes.size + BYTES_PER_ROW - 1) / BYTES_PER_ROW
     val totalHeight = totalRows * ROW_HEIGHT_PX
@@ -577,7 +621,7 @@ fun HexViewerPanel(
         }
     }) {
         // Column header
-        HexColumnHeader()
+        HexColumnHeader(structureRanges = structureRanges, scrollTop = scrollTop, totalRows = totalRows, bytesPerRow = BYTES_PER_ROW)
 
         // Virtual scroll container — uses a fixed-height outer div with
         // position:relative and an absolutely-positioned inner div for the
@@ -602,7 +646,7 @@ fun HexViewerPanel(
             }) {
                 key(editStamp) {
                     for (row in firstVisibleRow..lastVisibleRow) {
-                        HexRow(bytes, row, selection, hexSearchState, editState, editStamp, pendingDigit) { ox, oy ->
+                        HexRow(bytes, row, selection, hexSearchState, editState, editStamp, pendingDigit, structureRanges) { ox, oy ->
                             dragState.pendingOriginX = ox
                             dragState.pendingOriginY = oy
                         }
@@ -617,7 +661,12 @@ fun HexViewerPanel(
  * Column header showing byte indices 00–0F.
  */
 @Composable
-private fun HexColumnHeader() {
+private fun HexColumnHeader(
+    structureRanges: List<StructureRange>,
+    scrollTop: Int,
+    totalRows: Int,
+    bytesPerRow: Int,
+) {
     Div({
         classes("hex-row", "hex-header")
         style {
@@ -630,6 +679,7 @@ private fun HexColumnHeader() {
             property("background", "var(--hexana-bg, #1e1e1e)")
             property("border-bottom", "1px solid var(--hexana-border, #333)")
             property("padding-bottom", "2px")
+            property("align-items", "center")
         }
     }) {
         // Offset column placeholder
@@ -670,9 +720,64 @@ private fun HexColumnHeader() {
             classes("hex-ascii-header")
             style {
                 property("padding-left", "12px")
+                // Fixed width matching the ASCII content column
+                property("width", "${bytesPerRow * 8.5}px")
             }
         }) {
             Text("ASCII")
+        }
+
+        // Section navigation arrows
+        if (structureRanges.isNotEmpty()) {
+            Span({
+                style {
+                    display(DisplayStyle.Flex)
+                    property("gap", "2px")
+                    property("padding-left", "16px")
+                    property("align-items", "center")
+                }
+            }) {
+                // Previous section
+                Span({
+                    classes("hexana-section-nav")
+                    attr("title", "Previous section")
+                    onClick {
+                        val currentRow = scrollTop / ROW_HEIGHT_PX
+                        val prevIdx = structureRanges.indexOfLast {
+                            (it.offset / bytesPerRow).toInt() < currentRow
+                        }
+                        if (prevIdx >= 0) {
+                            val targetRow = (structureRanges[prevIdx].offset / bytesPerRow).toInt()
+                            val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement
+                            if (container != null) {
+                                container.scrollTop = (targetRow * ROW_HEIGHT_PX).toDouble()
+                            }
+                        }
+                    }
+                }) {
+                    Text("\u25B2") // ▲
+                }
+                // Next section
+                Span({
+                    classes("hexana-section-nav")
+                    attr("title", "Next section")
+                    onClick {
+                        val currentRow = scrollTop / ROW_HEIGHT_PX
+                        val nextIdx = structureRanges.indexOfFirst {
+                            (it.offset / bytesPerRow).toInt() > currentRow
+                        }
+                        if (nextIdx >= 0) {
+                            val targetRow = (structureRanges[nextIdx].offset / bytesPerRow).toInt()
+                            val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement
+                            if (container != null) {
+                                container.scrollTop = (targetRow * ROW_HEIGHT_PX).toDouble()
+                            }
+                        }
+                    }
+                }) {
+                    Text("\u25BC") // ▼
+                }
+            }
         }
     }
 }
@@ -788,10 +893,25 @@ private fun HexRow(
     editState: HexEditState?,
     editStamp: Long,
     pendingDigit: Int?,
+    structureRanges: List<StructureRange>,
     onPendingDrag: (Double, Double) -> Unit,
 ) {
     val offset = row * BYTES_PER_ROW
     val end = minOf(offset + BYTES_PER_ROW, bytes.size)
+
+    // Determine structure color for the offset column (use the first byte's range)
+    val offsetStructureIdx = if (structureRanges.isNotEmpty()) {
+        structureIndexForOffset(structureRanges, offset.toLong())
+    } else -1
+    val offsetStructureBg = if (offsetStructureIdx >= 0) {
+        STRUCTURE_COLORS[offsetStructureIdx % STRUCTURE_COLORS.size]
+    } else null
+
+    // Check if this row is the start of a structure range.
+    val labelRange = if (structureRanges.isNotEmpty()) {
+        structureRanges.firstOrNull { (it.offset / BYTES_PER_ROW).toInt() == row }
+    } else null
+    val labelIdx = if (labelRange != null) structureRanges.indexOf(labelRange) else -1
 
     Div({
         classes("hex-row")
@@ -799,6 +919,7 @@ private fun HexRow(
             display(DisplayStyle.Flex)
             property("gap", "0")
             height(ROW_HEIGHT_PX.px)
+            property("align-items", "center")
         }
     }) {
         // Offset column
@@ -809,6 +930,9 @@ private fun HexRow(
                 property("padding-right", "12px")
                 property("text-align", "right")
                 color(Color("#6A9955"))
+                if (offsetStructureBg != null) {
+                    property("background", offsetStructureBg)
+                }
             }
         }) {
             Text(offset.toString(16).padStart(8, '0'))
@@ -832,6 +956,13 @@ private fun HexRow(
                 val isEdited = editState?.modifiedOffsets?.contains(byteIndex) == true
                 val hasPendingDigit = isCursor && pendingDigit != null
 
+                val byteStructureIdx = if (structureRanges.isNotEmpty()) {
+                    structureIndexForOffset(structureRanges, byteIndex.toLong())
+                } else -1
+                val byteStructureBg = if (byteStructureIdx >= 0) {
+                    STRUCTURE_COLORS[byteStructureIdx % STRUCTURE_COLORS.size]
+                } else null
+
                 Span({
                     classes("hex-byte")
                     if (isCurrentMatch) classes("hex-search-current")
@@ -840,11 +971,13 @@ private fun HexRow(
                     style {
                         property("width", "28px")
                         property("text-align", "center")
-                        if (!isSelected && !isSearchMatch) {
+                        if (!isSelected && !isSearchMatch && byteStructureBg == null) {
                             property("border-radius", "2px")
                         }
                         if (isSelected && !isSearchMatch && !isEdited) {
                             property("background", "var(--hexana-selection, rgba(156, 183, 255, 0.4))")
+                        } else if (!isSearchMatch && !isEdited && byteStructureBg != null) {
+                            property("background", byteStructureBg)
                         }
                         if (isCursor) {
                             property("outline", "1px solid var(--vscode-editor-foreground, #ccc)")
@@ -913,6 +1046,13 @@ private fun HexRow(
                 val isCurrentMatch = isSearchMatch && searchState.isInCurrentMatch(byteIndex)
                 val isEdited = editState?.modifiedOffsets?.contains(byteIndex) == true
 
+                val asciiStructureIdx = if (structureRanges.isNotEmpty()) {
+                    structureIndexForOffset(structureRanges, byteIndex.toLong())
+                } else -1
+                val asciiStructureBg = if (asciiStructureIdx >= 0) {
+                    STRUCTURE_COLORS[asciiStructureIdx % STRUCTURE_COLORS.size]
+                } else null
+
                 Span({
                     classes("hex-ascii-char")
                     if (isCurrentMatch) classes("hex-search-current")
@@ -922,11 +1062,13 @@ private fun HexRow(
                         property("width", "8.5px")
                         property("text-align", "center")
                         color(Color("#CE9178"))
-                        if (!isSelected && !isSearchMatch) {
+                        if (!isSelected && !isSearchMatch && asciiStructureBg == null) {
                             property("border-radius", "1px")
                         }
                         if (isSelected && !isSearchMatch && !isEdited) {
                             property("background", "var(--hexana-selection, rgba(156, 183, 255, 0.4))")
+                        } else if (!isSearchMatch && !isEdited && asciiStructureBg != null) {
+                            property("background", asciiStructureBg)
                         }
                         if (isCursor) {
                             property("outline", "1px solid var(--vscode-editor-foreground, #ccc)")
@@ -954,6 +1096,27 @@ private fun HexRow(
                 }) {
                     Text(display)
                 }
+            }
+        }
+
+        // Section label (shown on the row where a structure range begins)
+        if (labelRange != null && labelIdx >= 0) {
+            Span({
+                classes("hexana-section-label")
+                style {
+                    property("margin-left", "16px")
+                    property("padding", "0px 4px")
+                    property("border-radius", "3px")
+                    property("font-size", "9px")
+                    property("align-self", "flex-start")
+                    property("line-height", "normal")
+                    property("white-space", "nowrap")
+                    property("opacity", "0.85")
+                    property("background", STRUCTURE_LABEL_COLORS[labelIdx % STRUCTURE_LABEL_COLORS.size])
+                    color(Color("var(--vscode-editor-foreground, #ccc)"))
+                }
+            }) {
+                Text(labelRange.label)
             }
         }
     }
