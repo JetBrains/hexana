@@ -6,6 +6,7 @@
 - Action to show a diff between two native binary files with size changes per section
 - WASM Component dependency diagram showing dependencies within a WASM Component ("Dependencies" tab, components only)
 - Data inspector panel showing different representations of the selected byte
+- Semantic highlighting of sections and navigation between sections for WASM and Native binary files
 
 ### Changed
 - Hexana's IntelliJ MCP toolset now uses schema version 3 and advertises/enforces bounded list inputs such as `indices.maxItems`, allowing MCP clients to validate oversized requests before invoking tools.
