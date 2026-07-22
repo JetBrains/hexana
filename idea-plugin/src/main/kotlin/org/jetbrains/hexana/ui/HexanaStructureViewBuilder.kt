@@ -359,10 +359,8 @@ private fun buildWasmComponentElements(provider: WasmComponentBinaryProvider, ed
                                 )
                             }
                         }
-                        else -> {
-                            @Suppress("UNCHECKED_CAST")
-                            val wasmSection = section as org.jetbrains.hexana.wasm.components.WasmComponentSection
-                            val records = try { wasmSection.getRecordRanges(provider.bytes) } catch (_: Throwable) { emptyList() }
+                        section is org.jetbrains.hexana.wasm.components.WasmComponentSection -> {
+                            val records = try { section.getRecordRanges(provider.bytes) } catch (_: Throwable) { emptyList() }
                             val recordChildren = records.mapIndexed { i, record ->
                                 HexanaStructureElement(
                                     name = "${record.name}",
@@ -378,6 +376,16 @@ private fun buildWasmComponentElements(provider: WasmComponentBinaryProvider, ed
                                     icon = AllIcons.Nodes.Property,
                                     editor = editor,
                                     children = recordChildren,
+                                )
+                            )
+                        }
+                        else -> {
+                            result.add(
+                                HexanaStructureElement(
+                                    name = "${name} $idx",
+                                    range = info.sectionRange,
+                                    icon = AllIcons.Nodes.Property,
+                                    editor = editor,
                                 )
                             )
                         }
