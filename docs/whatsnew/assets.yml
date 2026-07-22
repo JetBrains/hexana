@@ -229,6 +229,91 @@
       ],
       "doc_candidates": [],
       "image_candidates": []
+    },
+    "native-binary-size-diff": {
+      "release": "0.14",
+      "eyebrow": "Native binaries",
+      "title": "Compare native binary size changes",
+      "summary": "Compare two native binaries directly in Hexana and see how every section’s size changed.",
+      "recipe": "native-binary-section-size-diff",
+      "keywords": [
+        "diff between two native binary files",
+        "size changes per section",
+        "native binary files"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.14/native-binary-diff.png"
+      ]
+    },
+    "large-wasm-analysis": {
+      "release": "0.14",
+      "eyebrow": "WASM",
+      "title": "Analyze large WASM modules without freezing the IDE",
+      "summary": "Functions and dominator analysis now load in the background, while compact call-graph data keeps very large modules within the IDE’s normal memory budget.",
+      "recipe": "large-wasm-background-analysis",
+      "keywords": [
+        "single synthetic",
+        "Functions tab",
+        "large module",
+        "memory64",
+        "Dominator",
+        "indirect calls"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.14/large-wasm-functions.png"
+      ]
+    },
+    "component-dependencies": {
+      "release": "0.14",
+      "eyebrow": "Component Model",
+      "title": "See how Component Model dependencies connect",
+      "summary": "Explore a visual graph of imports, embedded modules and components, instances, and exports wired through instantiation arguments.",
+      "recipe": "component-model-dependencies-graph",
+      "keywords": [
+        "Component Model binaries",
+        "visualizes",
+        "embedded core modules",
+        "nested components",
+        "instantiation arguments"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.14/component-dependencies.png"
+      ]
+    },
+    "workflow-reliability": {
+      "release": "0.14",
+      "presentation": "text",
+      "eyebrow": "Workflow",
+      "title": "Smoother binary-inspection workflows",
+      "summary": "Empty analysis tabs now finish cleanly, the vertical splitter is easier to grab, and WASM Diff respects two files selected in the project view.",
+      "recipe": "analysis-tab-and-diff-workflow-polish",
+      "keywords": [
+        "vertical splitter",
+        "WASM Diff action",
+        "endless loading spinner",
+        "placeholder"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "semantic-highlighting": {
+      "release": "0.14",
+      "eyebrow": "Inspection",
+      "title": "Read binary structure at a glance",
+      "summary": "Hexana now highlights binary sections and lets you move between them in WASM and native files.",
+      "recipe": "semantic-section-highlighting",
+      "keywords": [
+        "Semantic highlighting of sections",
+        "navigation between sections",
+        "WASM and Native binary files"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.14/semantic-highlighting.png"
+      ]
     }
   }
 }

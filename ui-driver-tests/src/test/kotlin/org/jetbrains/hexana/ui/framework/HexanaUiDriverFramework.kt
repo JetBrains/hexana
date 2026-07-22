@@ -132,6 +132,14 @@ internal class HexanaIde internal constructor(
         return HexanaEditor(driver, fileName, fileName)
     }
 
+    fun openNativeDiff(leftPath: Path, rightPath: Path): HexanaEditor {
+        val payload = probe.openNativeDiff(leftPath.toAbsolutePath().normalize().toString(), rightPath.toAbsolutePath().normalize().toString())
+        val fileName = payload.firstOrNull { it.startsWith("fileName=") }
+            ?.removePrefix("fileName=")
+            ?: "${leftPath.fileName} ↔ ${rightPath.fileName}"
+        return HexanaEditor(driver, fileName, fileName)
+    }
+
     fun hexanaEditor(
         fileName: String = HexanaUiDriverTestSupport.wasmFileName,
         action: HexanaEditor.() -> Unit = {},
@@ -168,6 +176,13 @@ internal class HexanaEditor internal constructor(
 
     fun archiveState(): HexanaArchiveState =
         HexanaProbePayload.archiveState(probe.archiveState(fileIdentifier))
+
+    fun nativeDiffState(): HexanaNativeDiffState =
+        HexanaProbePayload.nativeDiffState(probe.nativeDiffState(fileIdentifier))
+
+    fun setTopFraction(topFraction: Float) {
+        probe.setEditorTopFraction(fileIdentifier, topFraction)
+    }
 
     fun selectTab(tabName: String) {
         probe.selectTab(fileIdentifier, tabName)
@@ -250,6 +265,7 @@ internal enum class HexanaProviderKind(val id: String) {
 }
 
 internal enum class HexanaEditorTab(val tabName: String) {
+    DEPENDENCIES("Dependencies"),
     FUNCTIONS("Functions"),
     EXPORTS("Exports"),
     IMPORTS("Imports"),
@@ -341,6 +357,13 @@ internal data class HexanaArchiveState(
     val members: List<HexanaArchiveMemberState>,
 )
 
+internal data class HexanaNativeDiffState(
+    val status: String,
+    val changedRowCount: Int,
+    val sections: List<String>,
+    val error: String?,
+)
+
 internal data class HexanaArchiveMemberState(
     val index: Int,
     val name: String,
@@ -360,9 +383,12 @@ internal interface HexanaEditorUiTestProbeRef {
     fun openAbsoluteFileWithScriptTab(path: String, scriptPath: String): List<String>
     fun activateStructureToolWindow(fileName: String): List<String>
     fun openComponentDiff(leftPath: String, rightPath: String): List<String>
+    fun openNativeDiff(leftPath: String, rightPath: String): List<String>
     fun selectTab(fileName: String, tabName: String): List<String>
+    fun setEditorTopFraction(fileName: String, topFraction: Float): List<String>
     fun componentDiffState(fileName: String): List<String>
     fun archiveState(fileName: String): List<String>
+    fun nativeDiffState(fileName: String): List<String>
     fun editorSnapshot(fileName: String): List<String>
     fun searchState(fileName: String): List<String>
     fun watState(fileName: String): List<String>

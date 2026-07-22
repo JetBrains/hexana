@@ -6,6 +6,7 @@ private const val SEARCH_STATE_SCHEMA = "hexana-editor-search-state"
 private const val WAT_STATE_SCHEMA = "hexana-editor-wat-state"
 private const val COMPONENT_DIFF_STATE_SCHEMA = "hexana-component-diff-state"
 private const val ARCHIVE_STATE_SCHEMA = "hexana-archive-state"
+private const val NATIVE_DIFF_STATE_SCHEMA = "hexana-native-diff-state"
 
 internal object HexanaProbePayload {
     fun snapshot(payload: List<String>): HexanaEditorSnapshot =
@@ -84,6 +85,16 @@ internal object HexanaProbePayload {
                         openable = parts[4].removePrefix("openable=").toBooleanStrict(),
                     )
                 },
+            )
+        }
+
+    fun nativeDiffState(payload: List<String>): HexanaNativeDiffState =
+        parse(payload, NATIVE_DIFF_STATE_SCHEMA) { fields ->
+            HexanaNativeDiffState(
+                status = fields.value("status"),
+                changedRowCount = fields.int("changedRowCount"),
+                sections = fields.values("section"),
+                error = fields.value("error").takeIf { it.isNotEmpty() },
             )
         }
 

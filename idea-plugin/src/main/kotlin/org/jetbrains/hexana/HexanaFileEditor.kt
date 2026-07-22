@@ -730,6 +730,17 @@ class HexanaFileEditor(
         panel.add(view)
     }
 
+    internal fun nativeDiffStateForUiTest(): NativeDiffUiTestState =
+        when (val model = nativeSizeDiffFlow.value) {
+            DiffLoadable.Loading -> NativeDiffUiTestState(status = "loading")
+            is DiffLoadable.Error -> NativeDiffUiTestState(status = "error", error = model.message)
+            is DiffLoadable.Ready -> NativeDiffUiTestState(
+                status = "ready",
+                changedRowCount = model.value.rows.count { it.classification != org.jetbrains.hexana.wasm.analysis.diff.DiffClass.IDENTICAL },
+                sections = model.value.rows.map { "${it.classification}:${it.name}" },
+            )
+        }
+
     /**
      * Opens the clicked submodule pair in its own tab. The two submodule byte ranges are
      * sliced from the parent component buffers and *materialized* (so the child tab's
@@ -1005,6 +1016,13 @@ class HexanaFileEditor(
         )
     }
 }
+
+internal data class NativeDiffUiTestState(
+    val status: String,
+    val changedRowCount: Int = 0,
+    val sections: List<String> = emptyList(),
+    val error: String? = null,
+)
 
 /**
  * Attempts to decompile [file] using `ClassFileDecompilers.Light` (e.g. Fernflower

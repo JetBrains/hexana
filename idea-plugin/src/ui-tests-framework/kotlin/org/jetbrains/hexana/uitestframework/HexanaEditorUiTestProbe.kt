@@ -11,6 +11,7 @@ import com.intellij.openapi.wm.ToolWindowId
 import com.intellij.openapi.wm.ToolWindowManager
 import org.jetbrains.hexana.HexanaComponentDiffVirtualFile
 import org.jetbrains.hexana.HexanaFileEditor
+import org.jetbrains.hexana.HexanaNativeDiffVirtualFile
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
@@ -32,6 +33,7 @@ private const val WIRE_VERSION = "1"
 private const val SNAPSHOT_SCHEMA = "hexana-editor-snapshot"
 private const val SEARCH_STATE_SCHEMA = "hexana-editor-search-state"
 private const val WAT_STATE_SCHEMA = "hexana-editor-wat-state"
+private const val NATIVE_DIFF_STATE_SCHEMA = "hexana-native-diff-state"
 private const val PROJECT_RELATIVE_FILE_IDENTIFIER_PREFIX = "project-relative:"
 private const val ABSOLUTE_FILE_IDENTIFIER_PREFIX = "absolute:"
 
@@ -135,6 +137,30 @@ object HexanaEditorUiTestProbe {
     }
 
     @JvmStatic
+    fun openNativeDiff(leftPath: String, rightPath: String): List<String> {
+        val left = resolveAbsoluteFile(leftPath)
+        val right = resolveAbsoluteFile(rightPath)
+        val diffFile = HexanaNativeDiffVirtualFile(
+            name = "${left.name} ↔ ${right.name}",
+            leftBuffer = left.contentsToByteArray().toCommonByteBuffer(),
+            rightBuffer = right.contentsToByteArray().toCommonByteBuffer(),
+            leftName = left.name,
+            rightName = right.name,
+        )
+        return runOnEdt {
+            FileEditorManager.getInstance(singleOpenProject()).openFile(diffFile, true)
+            payload(
+                "hexana-open-native-diff",
+                listOf(
+                    "fileName=${diffFile.name}",
+                    "leftName=${left.name}",
+                    "rightName=${right.name}",
+                ),
+            )
+        }
+    }
+
+    @JvmStatic
     fun selectTab(fileIdentifier: String, tabName: String): List<String> = runOnEdt {
         val editor = requireHexanaEditor(fileIdentifier)
         val panels = editor.panelNames()
@@ -145,6 +171,13 @@ object HexanaEditorUiTestProbe {
             )
         }
         editor.stateHolder.setSelectedTab(index)
+        editor.snapshot()
+    }
+
+    @JvmStatic
+    fun setEditorTopFraction(fileIdentifier: String, topFraction: Float): List<String> = runOnEdt {
+        val editor = requireHexanaEditor(fileIdentifier)
+        editor.stateHolder.setTopFraction(topFraction)
         editor.snapshot()
     }
 
@@ -169,6 +202,24 @@ object HexanaEditorUiTestProbe {
                     val label = pairing.left?.label ?: pairing.right?.label.orEmpty()
                     add("pairing=$index|${pairing.kind}|${pairing.status}|$label")
                 }
+            },
+        )
+    }
+
+    @JvmStatic
+    fun nativeDiffState(fileName: String): List<String> = runOnEdt {
+        val editor = requireHexanaEditor(fileName)
+        require(editor.myFile is HexanaNativeDiffVirtualFile) {
+            "Expected native diff virtual file for '$fileName', got ${editor.myFile::class.java.name}"
+        }
+        val state = editor.nativeDiffStateForUiTest()
+        payload(
+            NATIVE_DIFF_STATE_SCHEMA,
+            buildList {
+                add("status=${state.status}")
+                add("changedRowCount=${state.changedRowCount}")
+                add("error=${state.error.orEmpty()}")
+                state.sections.forEach { add("section=$it") }
             },
         )
     }
@@ -319,6 +370,12 @@ object HexanaEditorUiTestProbe {
             ?: throw IllegalStateException("Open project has no base path")
         val file = VfsUtil.findFile(Path.of(basePath).resolve(normalized).normalize(), true)
         return file ?: throw IllegalStateException("Could not find project file: $path")
+    }
+
+    private fun resolveAbsoluteFile(path: String): VirtualFile {
+        val normalized = Path.of(path).toAbsolutePath().normalize()
+        return VfsUtil.findFile(normalized, true)
+            ?: throw IllegalStateException("Could not find file for native diff screenshot capture: $normalized")
     }
 
     private fun FileEditor?.asHexanaEditor(): HexanaFileEditor? =
@@ -507,7 +564,7 @@ object HexanaEditorUiTestProbe {
             }
             is WasmComponentBinaryVirtualFileProvider -> {
                 if (provider.canProvideWasmModule()) {
-                    listOf("Top", "Wat", "WAT (virtualized)")
+                    listOf("Dependencies", "Wat", "WAT (virtualized)")
                 } else {
                     listOf("Something is wrong :(", "Wat")
                 }
@@ -521,7 +578,7 @@ object HexanaEditorUiTestProbe {
                 }
             }
             is WasmComponentBinaryProvider -> {
-                if (provider.canProvideWasmModule()) listOf("Top", "WAT (virtualized)") else emptyList()
+                if (provider.canProvideWasmModule()) listOf("Dependencies", "WAT (virtualized)") else emptyList()
             }
             is ArchiveBinaryProvider -> listOf("Members")
             is NativeBinaryProvider -> listOf("Top", "Disassembly", "Disassembly (virtualized)")
