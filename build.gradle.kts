@@ -77,6 +77,7 @@ val teamcityCiTestTaskPaths = listOf(
     ":cli:core:test",
     ":cli:scripting:check",
     ":cli:product:check",
+    ":cli:integration-tests:test",
     ":cli:hexana-cli:check",
     ":cli:hexana-cli:integrationTest",
     ":cli:hexana-cli-script:check",
@@ -114,12 +115,13 @@ val teamcityCiTestTaskPaths = listOf(
 
 tasks.register("verifyTeamcityCiTestsCliReleaseGateCoverage") {
     group = "verification"
-    description = "Verify TeamCity CI aggregate includes the MCP-155 product-owned CLI integration gates."
+    description = "Verify TeamCity CI aggregate includes the MCP-155 product-owned CLI integration and runner-safety gates."
     doLast {
         val requiredTaskPaths = listOf(
             ":cli:core:check",
             ":cli:scripting:check",
             ":cli:product:check",
+            ":cli:integration-tests:test",
             ":cli:hexana-cli:check",
             ":cli:hexana-cli:integrationTest",
             ":cli:hexana-cli-script:check",

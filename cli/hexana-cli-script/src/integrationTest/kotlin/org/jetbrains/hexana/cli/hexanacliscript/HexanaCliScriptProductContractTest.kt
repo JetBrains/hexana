@@ -37,12 +37,15 @@ class HexanaCliScriptProductContractTest {
     }
 
     @Test
-    fun productAcceptsPathBase64AndStdinSources() {
+    fun productAcceptsPathSourceWithRawOutput() {
         val binary = binaryFile("script.bin")
         val path = target.run(listOf("run-script", binary.toString(), "--script-text", "print(binary.bytes.size); print(binary.bytes.get(1));", "--format", "raw"))
         assertSuccess(path)
         assertEquals("3\n2", path.stdout)
+    }
 
+    @Test
+    fun productAcceptsBase64AndLegacyBase64Sources() {
         val base64 = target.run(listOf("run-script", "--binary-base64", Base64.getEncoder().encodeToString(byteArrayOf(4, 5, 6)), "--script-text", "print(binary.bytes.get(2));", "--format", "raw"))
         assertSuccess(base64)
         assertEquals("6", base64.stdout)
@@ -50,7 +53,10 @@ class HexanaCliScriptProductContractTest {
         val legacy = target.run(listOf("run-script", "--bytes-base64", Base64.getEncoder().encodeToString(byteArrayOf(7, 8, 9)), "--script-text", "print(binary.bytes.get(2));", "--format", "raw"))
         assertSuccess(legacy)
         assertEquals("9", legacy.stdout)
+    }
 
+    @Test
+    fun productAcceptsStdinSourceWithJsonOutput() {
         val stdin = target.run(listOf("run-script", "--stdin", "--script-text", "print(binary.bytes.size);", "--format", "json"), stdin = byteArrayOf(7, 8, 9))
         assertSuccess(stdin)
         val json = JsonParser.parseString(stdin.stdout).asJsonObject
@@ -64,39 +70,75 @@ class HexanaCliScriptProductContractTest {
     }
 
     @Test
-    fun productReadsScriptFilesWritesOutputAndEnforcesPathPolicies() {
+    fun productReadsScriptFiles() {
         val binary = binaryFile("script-file.bin")
         val script = temporaryFolder.root.toPath().resolve("script.js").also { Files.writeString(it, "print('from-file');") }
         val fromFile = target.run(listOf("run-script", binary.toString(), "--script", script.toString(), "--format", "raw"))
         assertSuccess(fromFile)
         assertEquals("from-file", fromFile.stdout)
+    }
 
+    @Test
+    fun productWritesOutputFile() {
+        val binary = binaryFile("script-output.bin")
         val output = temporaryFolder.root.toPath().resolve("script-output.txt")
         val written = target.run(listOf("run-script", binary.toString(), "--script-text", "print('to-file');", "--format", "raw", "--output", output.toString()))
         assertSuccess(written)
         assertEquals("", written.stdout)
         assertEquals("to-file", Files.readString(output))
+    }
 
+    @Test
+    fun productEnforcesAllowedRootForBinaryInput() {
+        val binary = binaryFile("binary-root-input.bin")
         val deniedRoot = Files.createDirectories(temporaryFolder.root.toPath().resolve("binary-root"))
         assertFailure(target.run(listOf("run-script", binary.toString(), "--script-text", "print(1);", "--allowed-root", deniedRoot.toString())), 1, "outside allowed roots")
+    }
 
+    @Test
+    fun productEnforcesAllowedRootForScriptInput() {
+        val script = temporaryFolder.root.toPath().resolve("outside-script.js").also { Files.writeString(it, "print('from-file');") }
         val allowedRoot = Files.createDirectories(temporaryFolder.root.toPath().resolve("allowed"))
         val allowedBinary = allowedRoot.resolve("input.bin").also { Files.write(it, byteArrayOf(1, 2, 3)) }
         assertFailure(target.run(listOf("run-script", allowedBinary.toString(), "--script", script.toString(), "--allowed-root", allowedRoot.toString())), 1, "outside allowed roots")
     }
 
     @Test
-    fun productRejectsInvalidScriptSourcesAndMapsFailures() {
+    fun productRejectsMissingScriptSource() {
         val binary = binaryFile("validation.bin")
-        val script = temporaryFolder.root.toPath().resolve("validation.js").also { Files.writeString(it, "print('executed');") }
+        assertScriptSourceFailure(binary, listOf("run-script", binary.toString()), "Exactly one of --script or --script-text is required.")
+    }
+
+    @Test
+    fun productRejectsDuplicateScriptSource() {
+        val binary = binaryFile("duplicate-script.bin")
         val first = temporaryFolder.root.toPath().resolve("first.js").also { Files.writeString(it, "print('first');") }
         val second = temporaryFolder.root.toPath().resolve("second.js").also { Files.writeString(it, "print('second');") }
-
-        assertScriptSourceFailure(binary, listOf("run-script", binary.toString()), "Exactly one of --script or --script-text is required.")
         assertScriptSourceFailure(binary, listOf("run-script", binary.toString(), "--script", first.toString(), "--script", second.toString()), "Provide exactly one of --script or --script-text.")
+    }
+
+    @Test
+    fun productRejectsDuplicateInlineScriptSource() {
+        val binary = binaryFile("duplicate-inline.bin")
         assertScriptSourceFailure(binary, listOf("run-script", binary.toString(), "--script-text", "print(1);", "--script-text", "print(2);"), "Provide exactly one of --script or --script-text.")
+    }
+
+    @Test
+    fun productRejectsConflictingScriptSources() {
+        val binary = binaryFile("conflicting-sources.bin")
+        val script = temporaryFolder.root.toPath().resolve("validation.js").also { Files.writeString(it, "print('executed');") }
         assertScriptSourceFailure(binary, listOf("run-script", binary.toString(), "--script", script.toString(), "--script-text", "print(1);"), "Provide exactly one of --script or --script-text.")
+    }
+
+    @Test
+    fun productMapsRuntimeErrors() {
+        val binary = binaryFile("runtime-error.bin")
         assertFailure(target.run(listOf("run-script", binary.toString(), "--script-text", "throw new Error('contract-failure');", "--format", "raw")), 1, "RUNTIME_ERROR")
+    }
+
+    @Test
+    fun productDeniesSandboxEscapes() {
+        val binary = binaryFile("sandbox-denial.bin")
         assertFailure(target.run(listOf("run-script", binary.toString(), "--script-text", "Java.type('java.lang.System');", "--format", "raw")), 1, "SANDBOX_DENIED")
     }
 

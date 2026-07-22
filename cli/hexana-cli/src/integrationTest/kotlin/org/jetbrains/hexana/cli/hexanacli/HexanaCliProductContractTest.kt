@@ -58,24 +58,32 @@ class HexanaCliProductContractTest {
     }
 
     @Test
-    fun productWritesOutputAndEnforcesPathPolicy() {
+    fun productWritesOutputFile() {
         val wasm = wasmFile("summary.wasm")
         val output = temporaryFolder.root.toPath().resolve("summary.json")
         val written = target.run(listOf("summarize-binary", wasm.toString(), "--output", output.toString()))
         assertSuccess(written)
         assertEquals("", written.stdout)
         assertTrue(Files.readString(output).contains("\"format\":\"wasm\""))
+    }
 
+    @Test
+    fun productEnforcesAllowedRootForPathInput() {
+        val wasm = wasmFile("denied.wasm")
         val deniedRoot = Files.createDirectories(temporaryFolder.root.toPath().resolve("other"))
         assertFailure(target.run(listOf("summarize-binary", wasm.toString(), "--allowed-root", deniedRoot.toString())), 1, "outside allowed roots")
     }
 
     @Test
-    fun productMapsUsageAndOperationalFailuresWithoutStackTraces() {
+    fun productMapsUsageAndSourceValidationFailuresWithoutStackTraces() {
         val base64 = Base64.getEncoder().encodeToString(MINIMAL_WASM_MODULE)
         assertFailure(target.run(listOf("summarize-module", "--format", "raw")), 2, "Unsupported summarize-module format")
         assertFailure(target.run(listOf("summarize-binary", "")), 2, "Blank source value is not allowed")
         assertFailure(target.run(listOf("summarize-binary", "--binary-base64", base64, "--bytes-base64", base64)), 2, "Repeated summarize-binary base64 source option")
+    }
+
+    @Test
+    fun productMapsMissingFilesToOperationalFailuresWithoutStackTraces() {
         assertFailure(target.run(listOf("wasm-to-wat", temporaryFolder.root.toPath().resolve("missing.wasm").toString(), "--format", "raw")), 1, "hexana-cli wasm-to-wat failed")
     }
 

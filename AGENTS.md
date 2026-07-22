@@ -129,7 +129,7 @@ Run the narrowest command that proves your change.
 - Run neutral CLI core tests: `./gradlew :cli:core:test`
 - Run installed standard CLI tests: `./gradlew :cli:hexana-cli:integrationTest`
 - Run installed script CLI tests: `./gradlew :cli:hexana-cli-script:integrationTest`
-- Run shared CLI process support tests: `./gradlew :cli:integration-tests:test`
+- Run shared CLI process support tests (also a TeamCity CI gate): `./gradlew :cli:integration-tests:test`
 - Run native standard CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli:nativeIntegrationTest`
 - Run native script CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli-script:nativeIntegrationTest`
 - Run buffer abstraction tests: `./gradlew :encdec:test`
