@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -519,8 +520,13 @@ internal fun HexViewer(
                             }
                         }
                     }
+                    val density = LocalDensity.current
+                    val asciiColumnWidth = remember(monoCharWidthPx, bytesPerRow, density) {
+                        with(density) { (monoCharWidthPx * bytesPerRow).toDp() + 16.dp }
+                    }
                     Box(
                         modifier = Modifier
+                            .width(asciiColumnWidth)
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                             .background(HexanaTheme.backgroundColor)
                             .borderBottom(Color.Gray, 1.dp, verticalPadding = 4.dp)
@@ -542,6 +548,70 @@ internal fun HexViewer(
                                 state.setShowAscii(!showAscii)
                             }
                         )
+                    }
+                    // Section navigation arrows next to the labels column header
+                    if (structureRanges.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            val navTextStyle = TextStyle(
+                                color = HexanaTheme.textColor.copy(alpha = 0.55f),
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                            )
+                            val hoverAlpha = 0.12f
+                            // Previous section
+                            var prevHover by remember { mutableStateOf(false) }
+                            Box(
+                                modifier = Modifier
+                                    .size(22.dp)
+                                    .background(
+                                        if (prevHover) HexanaTheme.textColor.copy(alpha = hoverAlpha) else Color.Transparent,
+                                        CircleShape,
+                                    )
+                                    .onHover { prevHover = it }
+                                    .onClick {
+                                        val currentRow = hexDataListState.firstVisibleItemIndex
+                                        val currentOffset = currentRow.toLong() * bytesPerRow
+                                        val prevIdx = structureRanges.indexOfLast { it.offset < currentOffset }
+                                        if (prevIdx >= 0) {
+                                            val targetRow = (structureRanges[prevIdx].offset / bytesPerRow).toInt()
+                                            coroutineScope.launch { hexDataListState.animateScrollToItem(targetRow) }
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text("▲", style = navTextStyle, softWrap = false, maxLines = 1)
+                            }
+                            // Next section
+                            var nextHover by remember { mutableStateOf(false) }
+                            Box(
+                                modifier = Modifier
+                                    .size(22.dp)
+                                    .background(
+                                        if (nextHover) HexanaTheme.textColor.copy(alpha = hoverAlpha) else Color.Transparent,
+                                        CircleShape,
+                                    )
+                                    .onHover { nextHover = it }
+                                    .onClick {
+                                        val currentRow = hexDataListState.firstVisibleItemIndex
+                                        // Find the first range whose start row is strictly after currentRow
+                                        val nextIdx = structureRanges.indexOfFirst {
+                                            (it.offset / bytesPerRow).toInt() > currentRow
+                                        }
+                                        if (nextIdx >= 0) {
+                                            val targetRow = (structureRanges[nextIdx].offset / bytesPerRow).toInt()
+                                            coroutineScope.launch { hexDataListState.animateScrollToItem(targetRow) }
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text("▼", style = navTextStyle, softWrap = false, maxLines = 1)
+                            }
+                        }
                     }
                 }
 
