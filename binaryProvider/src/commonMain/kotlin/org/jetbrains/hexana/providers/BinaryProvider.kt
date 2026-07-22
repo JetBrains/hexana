@@ -677,6 +677,17 @@ open class WasmComponentBinaryProvider(private val sharedBytes: CommonByteBuffer
         wasmModule?.let { SizeAnalysisBuilder(bytes, it).buildTree() }
     }
 
+    override val structureRanges: List<StructureRange> by lazy {
+        val module = wasmModule ?: return@lazy emptyList()
+        module.sections.map { section ->
+            StructureRange(
+                offset = section.sectionOffset.toLong(),
+                size = section.sectionSize.toLong(),
+                label = section.name,
+            )
+        }
+    }
+
     val instances: List<InstanceExpression> by lazy {
         val instanceSections = wasmModule?.instanceSection ?: return@lazy emptyList()
         instanceSections.flatMap {
