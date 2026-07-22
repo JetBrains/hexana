@@ -10,7 +10,12 @@ import org.jetbrains.compose.web.dom.Text
  * Thin status bar below the hex viewer showing cursor position and selection info.
  */
 @Composable
-fun SelectionStatusBar(selection: HexSelectionState, totalBytes: Int) {
+fun SelectionStatusBar(
+    selection: HexSelectionState,
+    totalBytes: Int,
+    showDataInspector: Boolean = false,
+    onToggleDataInspector: () -> Unit = {},
+) {
     Div({
         classes("hexana-status-bar")
         style {
@@ -49,6 +54,19 @@ fun SelectionStatusBar(selection: HexSelectionState, totalBytes: Int) {
             Span {
                 Text("Click a byte to begin")
             }
+        }
+
+        // Spacer to push toggle to the right
+        Span({ style { property("flex", "1") } }) {}
+
+        Span({
+            style {
+                property("cursor", "pointer")
+                property("text-decoration", "underline")
+            }
+            onClick { onToggleDataInspector() }
+        }) {
+            Text(if (showDataInspector) "Hide Inspector" else "Data Inspector")
         }
     }
 }

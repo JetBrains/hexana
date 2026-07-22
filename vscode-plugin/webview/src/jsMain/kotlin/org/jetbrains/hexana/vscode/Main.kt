@@ -273,6 +273,7 @@ fun BinaryEditorContent(
     val buffer = remember(provider) { provider.bytes }
     var panelHeight by remember { mutableStateOf(DEFAULT_PANEL_HEIGHT) }
     var activeTab by remember { mutableStateOf("Sections") }
+    var showDataInspector by remember { mutableStateOf(false) }
 
     val hasTopTab = remember(provider) {
         provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider
@@ -324,8 +325,25 @@ fun BinaryEditorContent(
             onOverwriteShadowChanged = { overwriteShadow = it },
             onReparseAfterOverwrite = { reparseCounter++ },
         )
-        HexViewerPanel(bytes = buffer, selection = selection, editState = editState)
-        SelectionStatusBar(selection = selection, totalBytes = buffer.size)
+        Div({
+            style {
+                display(DisplayStyle.Flex)
+                property("flex", "1 1 0")
+                property("overflow", "hidden")
+                property("min-height", "0")
+            }
+        }) {
+            HexViewerPanel(bytes = buffer, selection = selection, editState = editState)
+            if (showDataInspector) {
+                DataInspectorPanel(bytes = buffer, selection = selection)
+            }
+        }
+        SelectionStatusBar(
+            selection = selection,
+            totalBytes = buffer.size,
+            showDataInspector = showDataInspector,
+            onToggleDataInspector = { showDataInspector = !showDataInspector },
+        )
         ResizeDivider { deltaY ->
             // Dragging down → shrink the panel (panel is below the divider)
             panelHeight = (panelHeight - deltaY).coerceAtLeast(MIN_PANEL_HEIGHT)
