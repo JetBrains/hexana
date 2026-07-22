@@ -2178,7 +2178,8 @@ tasks.register("assembleNativeMcpReleaseArtifacts") {
     group = "distribution"
     description = "Build and smoke-test mandatory current-host GraalVM Native Image MCP release artifacts for the platform CI matrix."
     dependsOn(
-        ":cli:integration-tests:nativeCliIntegrationTest",
+        ":cli:hexana-cli:nativeIntegrationTest",
+        ":cli:hexana-cli-script:nativeIntegrationTest",
         ":mcp:server:nativeMcpVersionSmoke",
         ":mcp:server:nativeMcpStdioSmoke",
         ":mcp:server:nativeMcpHttpSmoke",

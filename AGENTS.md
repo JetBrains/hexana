@@ -73,8 +73,9 @@ All agents — the main session and every subagent it dispatches — MUST treat 
   product `tools`, `version`, and `help`. It provides the standard product executor.
 - `cli/hexana-cli-script/`: JVM application distribution for `run-script`, plus product `tools`, `version`, and `help`.
   It provides the script product executor.
-- `cli/integration-tests/`: JUnit 5 black-box contracts shared by the JVM `installDist` and GraalVM Native Image
-  split CLI products. It owns external-process handling, not product behavior.
+- `cli/integration-tests/`: test-only black-box support for installed CLI products: process execution, deterministic
+  environment setup, local telemetry fixtures, and focused runner tests. Product behavior contracts live with their
+  respective `hexana-cli` and `hexana-cli-script` distributions.
 - `encdec/`: shared `CommonByteBuffer` abstraction and platform-specific byte-buffer helpers.
 - `graalwasm/`: JVM wrappers around embedded `.wasm` utilities used for built-in `wasm -> wat` and `wat -> wasm`.
 - `wasm-modules/`: Rust sources and Docker build flow that produce the embedded `.wasm` artifacts consumed by `graalwasm/`.
@@ -128,8 +129,9 @@ Run the narrowest command that proves your change.
 - Run neutral CLI core tests: `./gradlew :cli:core:test`
 - Run installed standard CLI tests: `./gradlew :cli:hexana-cli:integrationTest`
 - Run installed script CLI tests: `./gradlew :cli:hexana-cli-script:integrationTest`
-- Run shared JVM CLI contracts: `./gradlew :cli:integration-tests:jvmCliIntegrationTest`
-- Run shared native CLI contracts (GraalVM 25+): `./gradlew :cli:integration-tests:nativeCliIntegrationTest`
+- Run shared CLI process support tests: `./gradlew :cli:integration-tests:test`
+- Run native standard CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli:nativeIntegrationTest`
+- Run native script CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli-script:nativeIntegrationTest`
 - Run buffer abstraction tests: `./gradlew :encdec:test`
 - Compile UI-driver tests: `./gradlew :ui-driver-tests:compileTestKotlin`
 - Run UI-driver test module through the TeamCity aggregator:

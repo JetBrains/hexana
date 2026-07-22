@@ -50,6 +50,7 @@ val generateHexanaCliScriptVersion by tasks.registering {
 }
 
 dependencies {
+    add(integrationTestSourceSet.implementationConfigurationName, project(":cli:integration-tests"))
     implementation(project(":cli:product"))
     implementation(project(":cli:scripting"))
     implementation(project(":mcp:core"))
@@ -101,6 +102,22 @@ tasks.register<Test>("integrationTest") {
     }
     systemProperty("hexana.cli.script.integration.installDir", layout.buildDirectory.dir("install/hexana-cli-script").get().asFile.absolutePath)
     systemProperty("hexana.cli.integration.installDir", project(":cli:hexana-cli").layout.buildDirectory.dir("install/hexana-cli").get().asFile.absolutePath)
+    systemProperty("hexana.cli.integration.launcher", layout.buildDirectory.file("install/hexana-cli-script/bin/hexana-cli-script").get().asFile.absolutePath)
+    systemProperty("hexana.cli.integration.target", "jvm")
+    systemProperty("hexana.cli.integration.version", version)
+}
+
+tasks.register<Test>("nativeIntegrationTest") {
+    description = "Runs native-compatible black-box contracts against the hexana-cli-script GraalVM executable."
+    group = "verification"
+    dependsOn(tasks.named("nativeCompile"))
+    testClassesDirs = integrationTestSourceSet.output.classesDirs
+    classpath = integrationTestSourceSet.runtimeClasspath
+    include("**/HexanaCliScriptProductContractTest.class")
+    testLogging { events("failed", "passed", "skipped") }
+    systemProperty("hexana.cli.integration.launcher", layout.buildDirectory.file("native/nativeCompile/hexana-cli-script").get().asFile.absolutePath)
+    systemProperty("hexana.cli.integration.target", "native")
+    systemProperty("hexana.cli.integration.version", version)
 }
 
 val verifyHexanaCliScriptBoundary = tasks.register("verifyHexanaCliScriptBoundary") {

@@ -58,6 +58,7 @@ dependencies {
     testImplementation(libs.kotlin.test)
 
     add(integrationTestSourceSet.implementationConfigurationName, project(":graalwasm:wat2wasm"))
+    add(integrationTestSourceSet.implementationConfigurationName, project(":cli:integration-tests"))
     add(integrationTestSourceSet.implementationConfigurationName, libs.gson)
     add(integrationTestSourceSet.implementationConfigurationName, libs.junit4)
     add(integrationTestSourceSet.implementationConfigurationName, libs.kotlin.test)
@@ -99,6 +100,22 @@ tasks.register<Test>("integrationTest") {
         events("failed", "passed", "skipped")
     }
     systemProperty("hexana.cli.integration.installDir", layout.buildDirectory.dir("install/hexana-cli").get().asFile.absolutePath)
+    systemProperty("hexana.cli.integration.launcher", layout.buildDirectory.file("install/hexana-cli/bin/hexana-cli").get().asFile.absolutePath)
+    systemProperty("hexana.cli.integration.target", "jvm")
+    systemProperty("hexana.cli.integration.version", version)
+}
+
+tasks.register<Test>("nativeIntegrationTest") {
+    description = "Runs native-compatible black-box contracts against the hexana-cli GraalVM executable."
+    group = "verification"
+    dependsOn(tasks.named("nativeCompile"))
+    testClassesDirs = integrationTestSourceSet.output.classesDirs
+    classpath = integrationTestSourceSet.runtimeClasspath
+    include("**/HexanaCliProductContractTest.class")
+    testLogging { events("failed", "passed", "skipped") }
+    systemProperty("hexana.cli.integration.launcher", layout.buildDirectory.file("native/nativeCompile/hexana-cli").get().asFile.absolutePath)
+    systemProperty("hexana.cli.integration.target", "native")
+    systemProperty("hexana.cli.integration.version", version)
 }
 
 val verifyHexanaCliBoundary = tasks.register("verifyHexanaCliBoundary") {
