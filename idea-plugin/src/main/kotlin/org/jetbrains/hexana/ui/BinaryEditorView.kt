@@ -465,15 +465,28 @@ internal fun BinaryEditorView(
                         } catch (_: Throwable) { /* keep current */ }
                     },
                 )
-                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                    HexViewer(
-                        binaryProvider = liveProvider,
-                        state = state,
-                        focusRequester = hexFocusRequester,
-                        editableDoc = editableDoc,
-                        onHexCommit = { hexEditedSinceOpen = true },
-                        suppressEditHighlight = overwriteShadowRanges != null,
-                    )
+                Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                        HexViewer(
+                            binaryProvider = liveProvider,
+                            state = state,
+                            focusRequester = hexFocusRequester,
+                            editableDoc = editableDoc,
+                            onHexCommit = { hexEditedSinceOpen = true },
+                            suppressEditHighlight = overwriteShadowRanges != null,
+                        )
+                    }
+                    if (state.showDataInspector) {
+                        Divider(
+                            orientation = org.jetbrains.jewel.ui.Orientation.Vertical,
+                            thickness = 1.dp,
+                            modifier = Modifier.fillMaxHeight(),
+                        )
+                        DataInspectorPanel(
+                            state = state,
+                            bytes = liveProvider.bytes,
+                        )
+                    }
                 }
                 HexViewStatusBar(state = state, totalBytes = liveProvider.bytes.limit())
             }

@@ -137,6 +137,9 @@ class HexViewStateHolder(
     private val _showAscii = mutableStateOf(true)
     val showAscii: Boolean get() = _showAscii.value
 
+    private val _showDataInspector = mutableStateOf(false)
+    val showDataInspector: Boolean get() = _showDataInspector.value
+
     val topFraction: Float
         get() = currentState.value.topFraction
 
@@ -217,6 +220,10 @@ class HexViewStateHolder(
 
     fun setShowAscii(showAscii: Boolean) {
         _showAscii.value = showAscii
+    }
+
+    fun setShowDataInspector(show: Boolean) {
+        _showDataInspector.value = show
     }
 
     fun setEditor(editor: Editor?) {
