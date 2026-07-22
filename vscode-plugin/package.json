@@ -279,6 +279,11 @@
           "default": "",
           "description": "Custom path to the lldb executable, used for WAMR remote debugging. When empty, the extension searches the system PATH."
         },
+        "hexana.showSemanticHighlighting": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show semantic highlighting in the hex viewer, coloring bytes by their structural section with labels and navigation arrows."
+        },
         "hexana.mcp.enabled": {
           "type": "boolean",
           "default": true,

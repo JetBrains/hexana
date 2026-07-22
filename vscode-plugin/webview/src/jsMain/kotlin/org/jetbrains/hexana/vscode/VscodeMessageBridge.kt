@@ -28,6 +28,9 @@ data class VscodeMessage(
     val message: String = "",
     val parentData: ByteArray? = null,
     val moduleIndex: Int = -1,
+    val showSemanticHighlighting: Boolean? = null,
+    val settingKey: String = "",
+    val settingValue: Boolean = false,
 )
 
 /**
@@ -336,6 +339,14 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                             filePath = (data.filePath as? String) ?: "",
                             data = byteArray,
                             wasmRuntime = (data.wasmRuntime as? String),
+                            showSemanticHighlighting = (data.showSemanticHighlighting as? Boolean),
+                        )
+                    }
+                    "update-setting" -> {
+                        VscodeMessage(
+                            type = type,
+                            settingKey = (data.key as? String) ?: "",
+                            settingValue = (data.value as? Boolean) ?: false,
                         )
                     }
                     "load-diff" -> {

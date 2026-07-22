@@ -102,6 +102,7 @@ fun BinaryEditorApp() {
     val scriptTabs = remember { mutableStateListOf<ScriptTabState>() }
     var dialogPickedPath by remember { mutableStateOf("") }
     var dialogPickedContent by remember { mutableStateOf("") }
+    var showSemanticHighlighting by remember { mutableStateOf(true) }
 
     VscodeMessageListener { message ->
         when (message.type) {
@@ -110,6 +111,12 @@ fun BinaryEditorApp() {
                 filePath = message.filePath
                 wasmBytes = message.data
                 configuredRuntimeId = message.wasmRuntime
+                message.showSemanticHighlighting?.let { showSemanticHighlighting = it }
+            }
+            "update-setting" -> {
+                if (message.settingKey == "showSemanticHighlighting") {
+                    showSemanticHighlighting = message.settingValue
+                }
             }
             "load-diff" -> {
                 val left = message.leftData
@@ -223,6 +230,7 @@ fun BinaryEditorApp() {
             provider = provider,
             extraTabs = extraTabs,
             scriptTabs = scriptTabs,
+            showSemanticHighlighting = showSemanticHighlighting,
             dialogPickedPath = dialogPickedPath,
             dialogPickedContent = dialogPickedContent,
             onDialogPickedPathConsumed = {
@@ -268,6 +276,7 @@ fun BinaryEditorContent(
     onDialogPickedPathConsumed: () -> Unit = {},
     onScriptTabConfirmed: (path: String, content: String) -> Unit = { _, _ -> },
     onScriptTabRemoved: (path: String) -> Unit = {},
+    showSemanticHighlighting: Boolean = true,
 ) {
     val selection = remember { HexSelectionState() }
     val buffer = remember(provider) { provider.bytes }
@@ -337,7 +346,9 @@ fun BinaryEditorContent(
                 bytes = buffer,
                 selection = selection,
                 editState = editState,
-                structureRanges = remember(provider) { provider.structureRanges.sortedBy { it.offset } },
+                structureRanges = remember(provider, showSemanticHighlighting) {
+                    if (showSemanticHighlighting) provider.structureRanges.sortedBy { it.offset } else emptyList()
+                },
             )
             if (showDataInspector) {
                 DataInspectorPanel(bytes = buffer, selection = selection)

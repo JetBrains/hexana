@@ -473,6 +473,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                             filePath: document.uri.fsPath,
                             data: toPayload(reloaded),
                             wasmRuntime: getSelectedRuntime(),
+                            showSemanticHighlighting: vscode.workspace.getConfiguration("hexana").get<boolean>("showSemanticHighlighting", true),
                         });
                         return;
                     }
@@ -501,6 +502,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     filePath: document.uri.fsPath,
                     data: payload,
                     wasmRuntime: getSelectedRuntime(),
+                    showSemanticHighlighting: vscode.workspace.getConfiguration("hexana").get<boolean>("showSemanticHighlighting", true),
                 });
                 this.restoreScriptTabs(document, webviewPanel);
             } else if (message.type === "open-module") {
@@ -543,6 +545,18 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 this.addScriptTabToState(document, message.scriptPath as string);
             } else if (message.type === "script-tab-removed") {
                 this.removeScriptTabFromState(document, message.scriptPath as string);
+            }
+        });
+
+        // Push semantic highlighting setting changes to the webview in real time.
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration("hexana.showSemanticHighlighting")) {
+                const enabled = vscode.workspace.getConfiguration("hexana").get<boolean>("showSemanticHighlighting", true);
+                webviewPanel.webview.postMessage({
+                    type: "update-setting",
+                    key: "showSemanticHighlighting",
+                    value: enabled,
+                });
             }
         });
     }
