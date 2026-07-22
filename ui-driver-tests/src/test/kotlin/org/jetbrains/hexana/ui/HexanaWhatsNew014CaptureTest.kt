@@ -143,7 +143,8 @@ class HexanaWhatsNew014CaptureTest {
             lastTabs = snapshot.panelNames
             if (
                 snapshot.selectedTabName == HexanaEditorTab.FUNCTIONS.tabName &&
-                snapshot.panelNames.any { it.startsWith("Garbage: ") }
+                HexanaEditorTab.GARBAGE.presentIn(snapshot.panelNames) &&
+                snapshot.panelNames.none { it == HexanaEditorTab.GARBAGE.tabName }
             ) {
                 return
             }

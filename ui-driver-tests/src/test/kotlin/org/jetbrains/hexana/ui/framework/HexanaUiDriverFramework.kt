@@ -217,7 +217,13 @@ internal class HexanaEditorExpectations internal constructor(
     }
 
     fun tabsContain(vararg expectedTabs: HexanaEditorTab) {
-        tabsContain(*expectedTabs.tabNames())
+        val snapshot = editor.snapshot()
+        expectedTabs.forEach { tab ->
+            assertTrue(
+                tab.presentIn(snapshot.panelNames),
+                "Expected tab '${tab.tabName}' for ${snapshot.fileName}; available tabs: ${snapshot.panelNames}",
+            )
+        }
     }
 
     fun tabsContain(vararg expectedTabs: String) {
@@ -231,7 +237,13 @@ internal class HexanaEditorExpectations internal constructor(
     }
 
     fun tabsDoNotContain(vararg unexpectedTabs: HexanaEditorTab) {
-        tabsDoNotContain(*unexpectedTabs.tabNames())
+        val snapshot = editor.snapshot()
+        unexpectedTabs.forEach { tab ->
+            assertFalse(
+                tab.presentIn(snapshot.panelNames),
+                "Unexpected tab '${tab.tabName}' for ${snapshot.fileName}; available tabs: ${snapshot.panelNames}",
+            )
+        }
     }
 
     fun tabsDoNotContain(vararg unexpectedTabs: String) {
@@ -264,22 +276,29 @@ internal enum class HexanaProviderKind(val id: String) {
     GENERIC("generic"),
 }
 
-internal enum class HexanaEditorTab(val tabName: String) {
+internal enum class HexanaEditorTab(val tabName: String, val prefixMatch: Boolean = false) {
     DEPENDENCIES("Dependencies"),
     FUNCTIONS("Functions"),
     EXPORTS("Exports"),
     IMPORTS("Imports"),
     MODULES("Modules"),
     MONOS("Monos"),
-    GARBAGE("Garbage"),
+    GARBAGE("Garbage", prefixMatch = true),
     DOMINATORS("Dominators"),
     TOP("Top"),
     WAT("Wat"),
     WAT_VIRTUALIZED("WAT (virtualized)"),
-}
+    ;
 
-private fun Array<out HexanaEditorTab>.tabNames(): Array<String> =
-    map { it.tabName }.toTypedArray()
+    /** Returns `true` when [panelName] matches this tab, respecting [prefixMatch]. */
+    fun matches(panelName: String): Boolean =
+        if (prefixMatch) panelName == tabName || panelName.startsWith("$tabName: ")
+        else panelName == tabName
+
+    /** Returns `true` when any element of [panelNames] matches this tab. */
+    fun presentIn(panelNames: List<String>): Boolean =
+        panelNames.any { matches(it) }
+}
 
 private const val PROJECT_RELATIVE_FILE_IDENTIFIER_PREFIX = "project-relative:"
 private const val ABSOLUTE_FILE_IDENTIFIER_PREFIX = "absolute:"

@@ -73,11 +73,11 @@ class HexanaLargeWasmResponsivenessTest {
       // "Garbage" placeholder must be replaced by it, not left spinning forever.
       val tabs = editor.snapshot().panelNames
       assertTrue(
-        tabs.any { it.startsWith("Garbage: ") },
-        "Expected a resolved promoted Garbage tab; tabs: $tabs",
+        HexanaEditorTab.GARBAGE.presentIn(tabs),
+        "Expected a Garbage tab (exact or promoted); tabs: $tabs",
       )
       assertTrue(
-        tabs.none { it == "Garbage" },
+        tabs.none { it == HexanaEditorTab.GARBAGE.tabName },
         "Bare Garbage placeholder still present; tabs: $tabs",
       )
     }
