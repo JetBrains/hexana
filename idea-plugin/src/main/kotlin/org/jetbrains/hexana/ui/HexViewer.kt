@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -22,6 +23,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
@@ -139,6 +142,22 @@ internal fun HexViewer(
     val modifiedRanges = remember(binaryProvider, suppressEditHighlight) {
         if (suppressEditHighlight) emptyList()
         else editableDoc?.modifiedRanges() ?: emptyList()
+    }
+
+    // Pre-sorted structure ranges for binary-search lookup of per-byte
+    // structure color. Sorted by offset so we can use binarySearch.
+    val structureRanges = remember(binaryProvider) {
+        binaryProvider.structureRanges.sortedBy { it.offset }
+    }
+    val structureColors = HexanaTheme.structureColors
+
+    // Map from row index to the index in structureRanges for ranges that
+    // start on that row — used to render section name labels.
+    val structureLabelRows: Map<Int, Int> = remember(structureRanges, state.bytesPerRow) {
+        val bpr = state.bytesPerRow.value
+        structureRanges.withIndex().associate { (idx, range) ->
+            (range.offset / bpr).toInt() to idx
+        }
     }
 
     val coroutineScope = rememberCoroutineScope()
@@ -635,6 +654,10 @@ internal fun HexViewer(
                                             if (rowFlashAlpha > 0f) {
                                                 drawRect(flashColor.copy(alpha = rowFlashAlpha))
                                             }
+                                            drawStructureRowBackground(
+                                                rowIndex, bytesPerRow, buf.limit(),
+                                                structureRanges, structureColors,
+                                            )
                                         }
                                         .padding(horizontal = 8.dp)
                                 ) {
@@ -760,15 +783,21 @@ internal fun HexViewer(
                         LazyColumn(state = textDataListState) {
                             items(count = rowCount) { rowIndex ->
                                 val rowFlashAlpha = if (rowIndex == flashLineIndex) flashAlpha.value else 0f
+                                Box(modifier = Modifier.fillMaxWidth().background(HexanaTheme.backgroundColor)) {
+                                Row(
+                                    modifier = Modifier.align(Alignment.CenterStart),
+                                ) {
                                 Row(
                                     modifier = Modifier
-                                        .background(HexanaTheme.backgroundColor)
                                         .drawBehind {
                                             if (rowFlashAlpha > 0f) {
                                                 drawRect(flashColor.copy(alpha = rowFlashAlpha))
                                             }
+                                            drawStructureRowBackground(
+                                                rowIndex, bytesPerRow, buf.limit(),
+                                                structureRanges, structureColors,
+                                            )
                                         }
-                                        .fillMaxWidth()
                                         .padding(horizontal = 8.dp),
                                     horizontalArrangement = Arrangement.Start
                                 ) {
@@ -839,6 +868,31 @@ internal fun HexViewer(
                                             )
                                         )
                                     }
+                                }
+
+                                // Section label on the row where a structure range begins
+                                val labelIdx = structureLabelRows[rowIndex]
+                                if (labelIdx != null) {
+                                    Spacer(Modifier.width(16.dp))
+                                    val labelColor = structureColors[labelIdx % structureColors.size]
+                                    Text(
+                                        structureRanges[labelIdx].label,
+                                        modifier = Modifier
+                                            .background(
+                                                color = labelColor.copy(alpha = labelColor.alpha * 3f),
+                                                shape = RoundedCornerShape(4.dp),
+                                            )
+                                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                                        softWrap = false,
+                                        maxLines = 1,
+                                        style = TextStyle(
+                                            color = HexanaTheme.textColor.copy(alpha = 0.7f),
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 10.sp,
+                                        ),
+                                    )
+                                }
+                                }
                                 }
                             }
                         }
@@ -1159,6 +1213,83 @@ fun Modifier.borderBottom(color: Color, width: Dp, verticalPadding: Dp): Modifie
         end = Offset(size.width, y),
         strokeWidth = strokeWidthPx
     )
+}
+
+/**
+ * Returns the structure-region background color for [offset], or [Color.Unspecified]
+ * when the byte does not belong to any known region. Uses binary search on the
+ * pre-sorted [ranges] list for O(log n) lookup.
+ */
+private fun structureColorForOffset(
+    offset: Long,
+    ranges: List<StructureRange>,
+    palette: List<Color>,
+): Color {
+    if (ranges.isEmpty() || palette.isEmpty()) return Color.Unspecified
+    // Binary search: find the last range whose start <= offset.
+    var lo = 0
+    var hi = ranges.size - 1
+    var found = -1
+    while (lo <= hi) {
+        val mid = (lo + hi) ushr 1
+        if (ranges[mid].offset <= offset) {
+            found = mid
+            lo = mid + 1
+        } else {
+            hi = mid - 1
+        }
+    }
+    if (found < 0) return Color.Unspecified
+    val range = ranges[found]
+    return if (offset < range.offset + range.size) {
+        palette[found % palette.size]
+    } else {
+        Color.Unspecified
+    }
+}
+
+/**
+ * Draws continuous structure-region background bands across the full width
+ * of a row. When a row spans a boundary between two structure regions the
+ * band is split proportionally so the color transition aligns with the
+ * byte boundary rather than leaving per-cell gaps.
+ */
+private fun DrawScope.drawStructureRowBackground(
+    rowIndex: Int,
+    bytesPerRow: Int,
+    totalBytes: Int,
+    ranges: List<StructureRange>,
+    palette: List<Color>,
+) {
+    if (ranges.isEmpty() || palette.isEmpty()) return
+    val rowStart = rowIndex.toLong() * bytesPerRow
+    val rowEnd = min(rowStart + bytesPerRow, totalBytes.toLong())
+    if (rowStart >= rowEnd) return
+
+    // Collect contiguous color spans within this row.
+    var spanStart = rowStart
+    var currentColor = structureColorForOffset(spanStart, ranges, palette)
+
+    for (byteOffset in (rowStart + 1)..rowEnd) {
+        val color = if (byteOffset < rowEnd) {
+            structureColorForOffset(byteOffset, ranges, palette)
+        } else {
+            Color.Unspecified // sentinel to flush last span
+        }
+        if (color != currentColor) {
+            if (currentColor != Color.Unspecified) {
+                val x1 = ((spanStart - rowStart).toFloat() / (rowEnd - rowStart)) * size.width
+                val x2 = ((byteOffset - rowStart).toFloat() / (rowEnd - rowStart)) * size.width
+                drawRect(
+                    color = currentColor,
+                    topLeft = Offset(x1, 0f),
+                    size = Size(x2 - x1, size.height),
+                )
+            }
+            spanStart = byteOffset
+            currentColor = color
+        }
+    }
 }
 
 private fun selectedAsASCII(buf: CommonByteBuffer, state: HexViewStateHolder): String? {

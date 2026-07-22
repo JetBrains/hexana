@@ -60,4 +60,32 @@ object HexanaTheme {
     val editedByteForegroundColor: Color
         @Composable
         get() = if (JewelTheme.isDark) Color(255, 165, 0) else Color(200, 90, 0)
+
+    /**
+     * Very subtle, alternating background tints used to distinguish top-level
+     * structural regions (sections/segments) in the hex view. The palette
+     * cycles so adjacent regions always differ. Alpha is kept extremely low
+     * to avoid visual distraction.
+     */
+    val structureColors: List<Color>
+        @Composable
+        get() = if (JewelTheme.isDark) darkStructureColors else lightStructureColors
+
+    private val darkStructureColors = listOf(
+        Color(100, 149, 237, 38),  // cornflower blue
+        Color(144, 238, 144, 38),  // light green
+        Color(255, 182, 108, 38),  // peach
+        Color(186, 147, 214, 38),  // lavender
+        Color(255, 218, 120, 38),  // pale gold
+        Color(120, 210, 210, 38),  // teal
+    )
+
+    private val lightStructureColors = listOf(
+        Color(70, 130, 220, 40),   // cornflower blue
+        Color(60, 179, 113, 40),   // medium sea green
+        Color(230, 140, 60, 40),   // sandy orange
+        Color(148, 103, 189, 40),  // muted purple
+        Color(200, 170, 50, 40),   // dark gold
+        Color(60, 180, 180, 40),   // teal
+    )
 }

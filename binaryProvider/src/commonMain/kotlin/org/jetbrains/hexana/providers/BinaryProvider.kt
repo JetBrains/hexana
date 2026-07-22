@@ -91,7 +91,28 @@ sealed interface BinaryProvider {
     val sizeAnalysis: BinarySizeNode? get() = null
 
     val strings: List<BinaryStringRecord> get() = emptyList()
+
+    /**
+     * Top-level structural regions of the binary (e.g. sections, segments),
+     * each with a byte offset, size, and human-readable label. Used by the
+     * hex viewer to apply very subtle background tinting so the user can
+     * visually distinguish structural boundaries without distraction.
+     *
+     * Returns an empty list when the format is unknown or has no meaningful
+     * structure to expose.
+     */
+    val structureRanges: List<StructureRange> get() = emptyList()
 }
+
+/**
+ * A named byte range representing a top-level structural region of a binary
+ * (e.g. a Wasm section, an ELF section, a Mach-O segment).
+ */
+data class StructureRange(
+    val offset: Long,
+    val size: Long,
+    val label: String,
+)
 
 object WasmBinaryProviderSelector {
     fun select(bytes: CommonByteBuffer): BinaryProviderType {
@@ -253,6 +274,17 @@ class ElfBinaryProvider(
         }
         BinarySizeNode(name = "ELF", size = totalSize, offset = 0, children = children)
     }
+
+    override val structureRanges: List<StructureRange> by lazy {
+        val secs = sections?.takeIf { it.isNotEmpty() } ?: return@lazy emptyList()
+        secs.filter { it.size > 0uL }.map { sec ->
+            StructureRange(
+                offset = sec.fileOffset.toLong(),
+                size = sec.size.toLong(),
+                label = sec.name.ifEmpty { "<unnamed>" },
+            )
+        }
+    }
 }
 
 class MachOBinaryProvider(
@@ -348,6 +380,17 @@ class MachOBinaryProvider(
         }
         BinarySizeNode(name = "Mach-O", size = totalSize, offset = 0, children = children)
     }
+
+    override val structureRanges: List<StructureRange> by lazy {
+        val segs = segments?.takeIf { it.isNotEmpty() } ?: return@lazy emptyList()
+        segs.filter { it.fileSize > 0uL }.map { seg ->
+            StructureRange(
+                offset = seg.fileOffset.toLong(),
+                size = seg.fileSize.toLong(),
+                label = seg.name.ifBlank { "<unnamed>" },
+            )
+        }
+    }
 }
 
 class FatMachOBinaryProvider(
@@ -373,6 +416,17 @@ class FatMachOBinaryProvider(
             )
         }
         BinarySizeNode(name = "Universal", size = totalSize, offset = 0, children = children)
+    }
+
+    override val structureRanges: List<StructureRange> by lazy {
+        val archs = architectures?.takeIf { it.isNotEmpty() } ?: return@lazy emptyList()
+        archs.map { arch ->
+            StructureRange(
+                offset = arch.offset.toLong(),
+                size = arch.size.toLong(),
+                label = "Slice ${arch.index}",
+            )
+        }
     }
 }
 
@@ -445,6 +499,17 @@ class PeBinaryProvider(
             )
         }
         BinarySizeNode(name = "PE", size = totalSize, offset = 0, children = children)
+    }
+
+    override val structureRanges: List<StructureRange> by lazy {
+        val secs = sections?.takeIf { it.isNotEmpty() } ?: return@lazy emptyList()
+        secs.filter { it.rawDataSize > 0u }.map { sec ->
+            StructureRange(
+                offset = sec.rawDataPointer.toLong(),
+                size = sec.rawDataSize.toLong(),
+                label = sec.name.ifBlank { "<unnamed>" },
+            )
+        }
     }
 }
 
@@ -823,6 +888,17 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
 
     override val sizeAnalysis: SizeNode.Module? by lazy {
         parsedModule?.let { SizeAnalysisBuilder(bytes, it).buildTree() }
+    }
+
+    override val structureRanges: List<StructureRange> by lazy {
+        val module = parsedModule ?: return@lazy emptyList()
+        module.sections.map { section ->
+            StructureRange(
+                offset = section.sectionOffset.toLong(),
+                size = section.sectionSize.toLong(),
+                label = section.name,
+            )
+        }
     }
 
     val sizeAnalysisBuilder: SizeAnalysisBuilder? by lazy {
