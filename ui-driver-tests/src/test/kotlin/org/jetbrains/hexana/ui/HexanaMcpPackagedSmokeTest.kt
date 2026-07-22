@@ -26,35 +26,27 @@ class HexanaMcpPackagedSmokeTest {
                     "Missing expected packaged MCP tools ${EXPECTED_TOOL_NAMES - toolNames}; got $toolNames"
                 )
 
-                val artifactOverview = mcp.callStructuredTool(
-                    name = "query_artifacts",
-                    arguments = wasmPath(HexanaUiDriverTestSupport.wasmFileName) {
-                        put("operation", JsonPrimitive("overview"))
-                    },
-                )
-                val module = artifactOverview.array("modules").single().jsonObject
-                assertTrue(
-                    module.fieldAsInt("moduleSize") > 0,
-                    "Expected query_artifacts moduleSize > 0, got $artifactOverview"
+                val moduleSummary = mcp.callStructuredTool(
+                    name = "summarize_module",
+                    arguments = wasmPath(HexanaUiDriverTestSupport.wasmFileName),
                 )
                 assertTrue(
-                    module.fieldAsInt("functions") > 0,
-                    "Expected query_artifacts functions > 0, got $artifactOverview"
+                    moduleSummary.fieldAsInt("moduleSize") > 0,
+                    "Expected summarize_module moduleSize > 0, got $moduleSummary"
+                )
+                assertTrue(
+                    moduleSummary.fieldAsInt("functions") > 0,
+                    "Expected summarize_module functions > 0, got $moduleSummary"
                 )
 
             }
         }
     }
 
-    private fun wasmPath(path: String, configure: JsonObjectBuilder.() -> Unit = {}): JsonObject =
+    private fun wasmPath(path: String): JsonObject =
         buildJsonObject {
             put("path", JsonPrimitive(path))
-            configure()
         }
-
-    private fun JsonObject.array(name: String): JsonArray {
-        return getValue(name).jsonArray
-    }
 
     private fun JsonObject.fieldAsInt(name: String): Int {
         return getValue(name).jsonPrimitive.int
@@ -62,7 +54,7 @@ class HexanaMcpPackagedSmokeTest {
 
     private companion object {
         val EXPECTED_TOOL_NAMES = setOf(
-            "query_artifacts",
+            "summarize_module",
         )
     }
 }
