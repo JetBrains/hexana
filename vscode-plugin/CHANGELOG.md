@@ -1,4 +1,4 @@
-# 0.7.0
+# 0.7.0 - 22.07.2026
 - added an action to compare two WASM files showing details about size changes, and for functions - a diff in their WAT bodies
 - added an action to compare two navite binary files showing details about size changes per section
 - fixed behavior with archive files and nested WASM modules after reopening/restarting - now their content is properly restored
