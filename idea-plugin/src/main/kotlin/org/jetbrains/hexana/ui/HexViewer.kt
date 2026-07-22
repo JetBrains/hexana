@@ -147,8 +147,19 @@ internal fun HexViewer(
 
     // Pre-sorted structure ranges for binary-search lookup of per-byte
     // structure color. Sorted by offset so we can use binarySearch.
-    val structureRanges = remember(binaryProvider) {
-        binaryProvider.structureRanges.sortedBy { it.offset }
+    var semanticHighlighting by remember { mutableStateOf(HexanaSettings.getInstance().showSemanticHighlighting) }
+    DisposableEffect(Unit) {
+        val connection = ApplicationManager.getApplication().messageBus.connect()
+        connection.subscribe(HexanaSettings.TOPIC, object : HexanaSettingsListener {
+            override fun semanticHighlightingChanged(enabled: Boolean) {
+                semanticHighlighting = enabled
+            }
+        })
+        onDispose { connection.disconnect() }
+    }
+    val structureRanges = remember(binaryProvider, semanticHighlighting) {
+        if (semanticHighlighting) binaryProvider.structureRanges.sortedBy { it.offset }
+        else emptyList()
     }
     val structureColors = HexanaTheme.structureColors
 
@@ -170,8 +181,10 @@ internal fun HexViewer(
     }
     DisposableEffect(Unit) {
         val connection = ApplicationManager.getApplication().messageBus.connect()
-        connection.subscribe(HexanaSettings.TOPIC, HexanaSettingsListener { enabled ->
-            feedbackPromptDisabled = !enabled
+        connection.subscribe(HexanaSettings.TOPIC, object : HexanaSettingsListener {
+            override fun feedbackPromptVisibilityChanged(enabled: Boolean) {
+                feedbackPromptDisabled = !enabled
+            }
         })
         onDispose {
             connection.disconnect()

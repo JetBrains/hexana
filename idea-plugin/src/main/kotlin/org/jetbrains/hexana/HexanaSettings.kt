@@ -59,6 +59,15 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
             state.showOffsets = value?:false
         }
 
+    var showSemanticHighlighting: Boolean
+        get() = state.showSemanticHighlighting
+        set(value) {
+            state.showSemanticHighlighting = value
+            ApplicationManager.getApplication().messageBus
+                .syncPublisher(TOPIC)
+                .semanticHighlightingChanged(value)
+        }
+
     var sendAnalytics: Boolean
         get() = state.sendAnalytics
         set(value) {
@@ -114,8 +123,9 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
 
 }
 
-fun interface HexanaSettingsListener {
-    fun feedbackPromptVisibilityChanged(enabled: Boolean)
+interface HexanaSettingsListener {
+    fun feedbackPromptVisibilityChanged(enabled: Boolean) {}
+    fun semanticHighlightingChanged(enabled: Boolean) {}
 }
 
 class HexanaSettingsState : BaseState() {
@@ -123,6 +133,7 @@ class HexanaSettingsState : BaseState() {
     var llvmObjdumpPath: String? by string()
     var useBuiltInWasmTools: Boolean by property(false)
     var showOffsets: Boolean by property(false)
+    var showSemanticHighlighting: Boolean by property(true)
     var sendAnalytics: Boolean by property(true)
     var lookupVulnerabilities: Boolean by property(false)
     var vulnerabilitiesOnline: Boolean by property(false)
@@ -180,6 +191,13 @@ class HexanaConfigurable : DslConfigurableBase(), SearchableConfigurable {
                     .align(AlignX.FILL)
                     .comment(HexanaBundle.message("hexana.settings.showOffsetsComment"))
                     .bindSelected(settings::showOffsets.toNonNullableProperty(false))
+            }
+            row {
+                checkBox(HexanaBundle.message("hexana.settings.showSemanticHighlighting"))
+                    .align(AlignY.TOP)
+                    .align(AlignX.FILL)
+                    .comment(HexanaBundle.message("hexana.settings.showSemanticHighlightingComment"))
+                    .bindSelected(settings::showSemanticHighlighting)
             }
             separator()
             row {
