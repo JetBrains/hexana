@@ -212,32 +212,55 @@ replace ZIP assets on an existing release. Delete or retag the release deliberat
 
 Downloads publication is handled by `publish-downloads-release-bundle.sh` after the same release chain has passed. It
 does not rebuild anything: TeamCity downloads the already verified native matrix ZIPs into `mcp/build/distributions-native`,
-then the script prepares `mcp/out/teamcity/downloads-release` with:
+then the script prepares two independent public products.
+
+The backward-compatible MCP bundle remains in `mcp/out/teamcity/downloads-release` and contains only:
 
 - `hexana-mcp-native-<platform>-<version>.zip`
-- `hexana-cli-native-<platform>-<version>.zip`
-- `hexana-cli-script-native-<platform>-<version>.zip`
 - `hexana-claude-plugin-<platform>-<version>.zip`
 - `hexana-codex-plugin-<platform>-<version>.zip`
 - `<artifact>.sha256` for every ZIP, generated from the copied file
 - `hexana-mcp-release-<version>.json`
 
-The manifest records the MCP version, git revision, TeamCity build id and URL, and for each artifact its name,
-platform, kind, size, SHA-256, GitHub Release asset URL when configured, and downloads.jetbrains.com URL. Uploads go to
-`s3://downloads-bucket.example.invalid/resources/hexana/mcp/<version>/`, which is served as
-`https://download.jetbrains.com/resources/hexana/mcp/<version>/`.
+The CLI bundle is prepared in `mcp/out/teamcity/cli-downloads-release` and contains only:
 
-The script also prepares `mcp/out/teamcity/downloads-index/releases.json` for
-`https://download.jetbrains.com/resources/hexana/mcp/releases.json`. This root index records the newest release plus
-known versioned manifest URLs so clients can discover the latest MCP version without querying GitHub. During real
-publication, the script reads the existing root index from S3 when available, replaces the current version entry, sorts
-known releases by version, and uploads the updated root index after the versioned bundle.
+- `hexana-cli-native-<platform>-<version>.zip`
+- `hexana-cli-script-native-<platform>-<version>.zip`
+- `<artifact>.sha256` for every ZIP, generated from the copied file
+- the rendered, version-dependent `README.md`
+- `hexana-cli-release-<version>.json`
 
-The downloads build uploads the generated versioned directory in one recursive S3 publication action, so ZIPs,
-checksums, and the versioned manifest are published together. It then uploads the root `releases.json` index as a
-separate S3 object. Re-running the same TeamCity build is safe: the versioned prefix is overwritten with metadata
-generated from the same downloaded artifact files, and the root index keeps one entry per version. Do not run the
-downloads publication from a directory that was assembled locally or from expected filenames only.
+`CLI_DOWNLOADS_README.md.template` stays in the source repository; only the rendered README is published, inside the
+CLI version directory. No README is written at the CLI downloads root.
+
+Both manifests record the shared version, git revision, TeamCity build id and URL, and for each product-owned artifact
+its name, platform, kind, size, SHA-256, downloads.jetbrains.com URL, and GitHub Release asset URL when
+`PUBLIC_REPO_SLUG` or `GITHUB_RELEASE_ASSET_BASE_URL` configures one. GitHub release behavior is unchanged: the release
+script continues to publish all CLI ZIP assets alongside the MCP assets.
+
+The versioned upload targets are:
+
+- `s3://downloads-bucket.example.invalid/resources/hexana/mcp/<version>/`, served as
+  `https://download.jetbrains.com/resources/hexana/mcp/<version>/`
+- `s3://downloads-bucket.example.invalid/resources/hexana/cli/<version>/`, served as
+  `https://download.jetbrains.com/resources/hexana/cli/<version>/`
+
+The script prepares independent root indexes at `mcp/out/teamcity/downloads-index/releases.json` and
+`mcp/out/teamcity/cli-downloads-index/releases.json`. They are published as the MCP and CLI root `releases.json`
+objects respectively. During publication, each index reads only its own existing S3 object, replaces its current
+version entry, orders known releases by semantic version, and uploads after its versioned bundle.
+
+Each versioned directory is uploaded recursively, then its root index is uploaded separately. Re-running the same
+TeamCity build is safe: both versioned prefixes are overwritten from the same downloaded artifacts, and each root
+index keeps one entry per version. Do not run downloads publication from a directory assembled locally or from
+expected filenames only.
+
+TeamCity may override the CLI output paths with `CLI_DOWNLOADS_BUNDLE_DIR` and `CLI_DOWNLOADS_INDEX_DIR`, and the CLI
+public/S3 locations with `CLI_DOWNLOADS_ROOT_PUBLIC_PREFIX`, `CLI_DOWNLOADS_PUBLIC_PREFIX`,
+`CLI_DOWNLOADS_ROOT_S3_PREFIX`, `CLI_DOWNLOADS_S3_PREFIX`, and `CLI_DOWNLOADS_RELEASES_INDEX_S3_URI`. Tests may provide
+`CLI_EXISTING_RELEASES_INDEX_FILE` to merge a local CLI index independently from
+`MCP_EXISTING_RELEASES_INDEX_FILE`. `CLI_DOWNLOADS_README_TEMPLATE` overrides the source template path. Existing MCP
+variables and defaults remain compatible.
 
 TeamCity stays responsible for branch policy, secure parameters, build-chain dependencies, and notifications. The
 packaging repository stays responsible for the release mechanics and public-file safety rules.

@@ -1,0 +1,28 @@
+# Hexana CLI @VERSION@
+
+This directory contains the native Hexana command-line products for the supported release platforms.
+
+Choose the standard CLI for `summarize-binary`, `summarize-module`, and `wasm-to-wat`. Choose the script CLI for
+`run-script`. Both products also provide `tools`, `version`, and `help`.
+
+## Downloads
+
+| Product | macOS Apple silicon | Linux x86-64 |
+|---|---|---|
+| `hexana-cli` | [hexana-cli-native-macos-arm64-@VERSION@.zip](@DOWNLOADS_PREFIX@/hexana-cli-native-macos-arm64-@VERSION@.zip) | [hexana-cli-native-linux-x64-@VERSION@.zip](@DOWNLOADS_PREFIX@/hexana-cli-native-linux-x64-@VERSION@.zip) |
+| `hexana-cli-script` | [hexana-cli-script-native-macos-arm64-@VERSION@.zip](@DOWNLOADS_PREFIX@/hexana-cli-script-native-macos-arm64-@VERSION@.zip) | [hexana-cli-script-native-linux-x64-@VERSION@.zip](@DOWNLOADS_PREFIX@/hexana-cli-script-native-linux-x64-@VERSION@.zip) |
+
+Every ZIP has a sibling `.sha256` file. Download both files and verify the checksum before extracting the archive:
+
+```bash
+shasum -a 256 -c hexana-cli-native-macos-arm64-@VERSION@.zip.sha256
+unzip hexana-cli-native-macos-arm64-@VERSION@.zip
+./bin/hexana-cli version
+```
+
+On Linux, use `sha256sum -c` instead. The extracted executable is under `bin/`. The archive also includes
+`LICENSE.txt`, the product README, and `THIRD-PARTY-NOTICES.md`.
+
+Machine-readable release metadata is available in
+[`hexana-cli-release-@VERSION@.json`](@DOWNLOADS_PREFIX@/hexana-cli-release-@VERSION@.json). When the release was also
+published on GitHub, each artifact's `githubReleaseAssetUrl` field contains the corresponding alternative URL.

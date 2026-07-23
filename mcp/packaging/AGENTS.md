@@ -21,10 +21,13 @@ This folder contains client-specific wrapper layouts for the standalone MCP runt
   upload, public bundle validation, marketplace PR publishing, and public-file safety checks. TeamCity should
   orchestrate branches, credentials, and gates, then call this script instead of duplicating release shell logic in
   Kotlin DSL.
-- `publish-downloads-release-bundle.sh` owns downloads.jetbrains.com bundle metadata: it copies already verified native
-  release ZIPs, writes one `.sha256` file per ZIP, writes the versioned release manifest, writes the root
-  `releases.json` index, and optionally uploads the complete bundle to the versioned S3 prefix plus the index to the
-  root MCP downloads prefix. It must not rebuild artifacts.
+- `publish-downloads-release-bundle.sh` owns the independent downloads.jetbrains.com MCP and CLI products. The MCP
+  version directory contains only native MCP plus Claude/Codex wrapper ZIPs, checksums, and its manifest. The CLI
+  version directory contains only the two split native CLI ZIP families, checksums, a rendered version-local README,
+  and its manifest. Each product has its own merged root `releases.json` and guarded S3 prefix. The script must not
+  rebuild artifacts.
+- `CLI_DOWNLOADS_README.md.template` is internal release input. Only its rendered `README.md` belongs in the versioned
+  CLI downloads directory; do not publish it at the CLI downloads root.
 - Public Claude/Codex release packages run R8 at build time and ship `server/lib/hexana-runtime-obfuscated.jar`.
   Do not ship R8 itself, `mcp/build/r8/mapping.txt`, or the pre-obfuscation Hexana-owned runtime jars.
 

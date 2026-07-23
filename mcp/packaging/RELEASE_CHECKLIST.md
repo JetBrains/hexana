@@ -139,18 +139,24 @@ release:
   the public marketplace pull request.
 - Confirm downloads.jetbrains.com publication consumes the already verified
   native matrix ZIPs, not a local rebuild.
-- Confirm `publish-downloads-release-bundle.sh` generated one `.sha256` file per
-  public ZIP and `hexana-mcp-release-<version>.json` from the copied files.
-- Confirm `publish-downloads-release-bundle.sh` generated
-  `mcp/out/teamcity/downloads-index/releases.json` and that it includes the
-  current version's manifest URL.
-- Confirm the downloads upload target is the versioned prefix
-  `s3://downloads-bucket.example.invalid/resources/hexana/mcp/<version>/`.
-- Confirm the root downloads index upload target is
-  `s3://downloads-bucket.example.invalid/resources/hexana/mcp/releases.json`.
+- Confirm the MCP bundle contains only native MCP, Claude, and Codex ZIPs, one
+  `.sha256` per ZIP, and `hexana-mcp-release-<version>.json`.
+- Confirm the CLI bundle contains only `hexana-cli-native-*` and
+  `hexana-cli-script-native-*` ZIPs, one `.sha256` per ZIP,
+  `hexana-cli-release-<version>.json`, and the rendered `README.md` inside the
+  version directory.
+- Confirm the independent root indexes were generated at
+  `mcp/out/teamcity/downloads-index/releases.json` and
+  `mcp/out/teamcity/cli-downloads-index/releases.json`, and each current entry
+  points to its own product manifest.
+- Confirm the versioned bundle upload targets are
+  `s3://downloads-bucket.example.invalid/resources/hexana/mcp/<version>/` and
+  `s3://downloads-bucket.example.invalid/resources/hexana/cli/<version>/`.
+- Confirm the root index upload targets are
+  `s3://downloads-bucket.example.invalid/resources/hexana/mcp/releases.json` and
+  `s3://downloads-bucket.example.invalid/resources/hexana/cli/releases.json`.
 
-If downloads publication fails after the bundle directory was generated, rerun
-the same TeamCity publication build. The script regenerates checksums and the
-manifest/index metadata from the same downloaded ZIPs, overwrites the same
-versioned prefix in one recursive upload action, and uploads the root releases
-index separately.
+If downloads publication fails after bundle generation, rerun the same
+TeamCity publication build. The script regenerates both products from the same
+downloaded ZIPs, independently merges both existing indexes, overwrites the
+same versioned prefixes, and uploads each root index separately.
