@@ -129,9 +129,12 @@ Run the narrowest command that proves your change.
 - Run neutral CLI core tests: `./gradlew :cli:core:test`
 - Run installed standard CLI tests: `./gradlew :cli:hexana-cli:integrationTest`
 - Run installed script CLI tests: `./gradlew :cli:hexana-cli-script:integrationTest`
-- Run shared CLI process support tests (also a TeamCity CI gate): `./gradlew :cli:integration-tests:test`
+- Run shared CLI process support tests (part of the TeamCity CLI JVM gate): `./gradlew :cli:integration-tests:test`
+- Run the dedicated TeamCity CLI JVM gate: `./gradlew teamcityCliTests`
+- Run general TeamCity verification without CLI JVM gates: `./gradlew teamcityCiTests`
 - Run native standard CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli:nativeIntegrationTest`
 - Run native script CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli-script:nativeIntegrationTest`
+- Run TeamCity native integration surfaces: `./gradlew :mcp:assembleNativeMcpReleaseArtifacts`
 - Run buffer abstraction tests: `./gradlew :encdec:test`
 - Compile UI-driver tests: `./gradlew :ui-driver-tests:compileTestKotlin`
 - Run UI-driver test module through the TeamCity aggregator:

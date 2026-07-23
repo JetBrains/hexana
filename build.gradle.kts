@@ -59,8 +59,8 @@ plugins.withType<WasmNodeJsRootPlugin> {
     }
 }
 
-// Aggregator task driven by ci-configuration's `Tests` build configuration.
-// The list travels with the code branch so release branches stay self-contained.
+// Aggregator lists driven by ci-configuration's build configurations.
+// The lists travel with the code branch so release branches stay self-contained.
 val teamcityCiTestTaskPaths = listOf(
     ":analytics:allTests",
     ":binaryProvider:allTests",
@@ -71,17 +71,6 @@ val teamcityCiTestTaskPaths = listOf(
     ":encdec:allTests",
     ":hexanaDocument:allTests",
     ":jvm-jit:allTests",
-    ":cli:runtime:build",
-    ":cli:metadata:build",
-    ":cli:core:check",
-    ":cli:core:test",
-    ":cli:scripting:check",
-    ":cli:product:check",
-    ":cli:integration-tests:test",
-    ":cli:hexana-cli:check",
-    ":cli:hexana-cli:integrationTest",
-    ":cli:hexana-cli-script:check",
-    ":cli:hexana-cli-script:integrationTest",
     ":mcp:tools-generator:test",
     ":parsing:arrow:allTests",
     ":parsing:codec:allTests",
@@ -108,16 +97,31 @@ val teamcityCiTestTaskPaths = listOf(
     ":mcp:server:verifyHexanaToolDispatcherUpToDate",
     ":idea-plugin:verifyHexanaToolsetUpToDate",
     ":mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate",
-    ":mcp:verifyCliR8ReleaseArchives",
     ":mcp:server:integrationTest",
     ":mcp:vscode-server:test",
 )
 
-tasks.register("verifyTeamcityCiTestsCliReleaseGateCoverage") {
+val teamcityCliTestTaskPaths = listOf(
+    ":cli:runtime:build",
+    ":cli:metadata:build",
+    ":cli:core:check",
+    ":cli:scripting:check",
+    ":cli:product:check",
+    ":cli:integration-tests:test",
+    ":cli:hexana-cli:check",
+    ":cli:hexana-cli:integrationTest",
+    ":cli:hexana-cli-script:check",
+    ":cli:hexana-cli-script:integrationTest",
+    ":mcp:verifyCliR8ReleaseArchives",
+)
+
+tasks.register("verifyTeamcityCliTestsReleaseGateCoverage") {
     group = "verification"
-    description = "Verify TeamCity CI aggregate includes the MCP-155 product-owned CLI integration and runner-safety gates."
+    description = "Verify the TeamCity CLI aggregate includes all product-owned JVM release gates."
     doLast {
         val requiredTaskPaths = listOf(
+            ":cli:runtime:build",
+            ":cli:metadata:build",
             ":cli:core:check",
             ":cli:scripting:check",
             ":cli:product:check",
@@ -126,21 +130,26 @@ tasks.register("verifyTeamcityCiTestsCliReleaseGateCoverage") {
             ":cli:hexana-cli:integrationTest",
             ":cli:hexana-cli-script:check",
             ":cli:hexana-cli-script:integrationTest",
-            ":mcp:scripting:test",
             ":mcp:verifyCliR8ReleaseArchives",
         )
-        val missingTaskPaths = requiredTaskPaths.filterNot(teamcityCiTestTaskPaths::contains)
+        val missingTaskPaths = requiredTaskPaths.filterNot(teamcityCliTestTaskPaths::contains)
         check(missingTaskPaths.isEmpty()) {
-            "teamcityCiTests is missing required CLI release gate tasks: ${missingTaskPaths.joinToString()}"
+            "teamcityCliTests is missing required CLI release gate tasks: ${missingTaskPaths.joinToString()}"
         }
     }
 }
 
 tasks.register("teamcityCiTests") {
     group = "verification"
-    description = "Aggregate every subproject's test surface for the TeamCity Tests build."
-    dependsOn("verifyTeamcityCiTestsCliReleaseGateCoverage")
+    description = "Aggregate general verification surfaces for the TeamCity Tests build."
     teamcityCiTestTaskPaths.forEach { dependsOn(it) }
+}
+
+tasks.register("teamcityCliTests") {
+    group = "verification"
+    description = "Aggregate CLI-owned JVM release gates for the TeamCity CLI Tests build."
+    dependsOn("verifyTeamcityCliTestsReleaseGateCoverage")
+    teamcityCliTestTaskPaths.forEach { dependsOn(it) }
 }
 
 subprojects {

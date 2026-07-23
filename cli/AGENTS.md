@@ -31,6 +31,9 @@ This folder contains neutral CLI modules shared by current and future command-li
 - Run `./gradlew :cli:scripting:test` after changing the script-only contribution.
 - Run `./gradlew :cli:hexana-cli:integrationTest` after changing installed standard CLI behavior.
 - Run `./gradlew :cli:hexana-cli-script:integrationTest` after changing installed script CLI behavior.
-- Run `./gradlew :cli:integration-tests:test` for shared process-support tests; TeamCity runs it as a release gate.
+- Run `./gradlew :cli:integration-tests:test` for shared process-support tests.
+- Run `./gradlew teamcityCliTests` for the dedicated TeamCity CLI JVM gate; general verification remains under
+  `./gradlew teamcityCiTests`.
 - Run `./gradlew :cli:hexana-cli:nativeIntegrationTest` and
   `./gradlew :cli:hexana-cli-script:nativeIntegrationTest` with GraalVM 25+ for native product contracts.
+- TeamCity keeps native integration tasks under `./gradlew :mcp:assembleNativeMcpReleaseArtifacts`.
