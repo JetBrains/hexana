@@ -112,6 +112,12 @@ data class StructureRange(
     val offset: Long,
     val size: Long,
     val label: String,
+    /**
+     * Optional tab description that this structure range corresponds to in the
+     * bottom panel. When non-null, section navigation arrows can switch to the
+     * matching tab automatically.
+     */
+    val tabName: String? = null,
 )
 
 object WasmBinaryProviderSelector {
@@ -908,6 +914,7 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
                 offset = section.sectionOffset.toLong(),
                 size = section.sectionSize.toLong(),
                 label = section.name,
+                tabName = wasmSectionTabName(section.name),
             )
         }
     }
@@ -999,6 +1006,18 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
             bytes.readContent(section, size)
         }
     }
+}
+
+/**
+ * Maps a Wasm section name to the corresponding bottom-panel tab description,
+ * or `null` when no direct tab correspondence exists.
+ */
+private fun wasmSectionTabName(sectionName: String): String? = when (sectionName) {
+    "Code", "Functions" -> "Functions"
+    "Data" -> "Data"
+    "Exports" -> "Exports"
+    "Imports" -> "Imports"
+    else -> if (sectionName.startsWith(".debug_")) sectionName else null
 }
 
 

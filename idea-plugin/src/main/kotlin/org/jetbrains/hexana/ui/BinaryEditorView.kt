@@ -481,6 +481,10 @@ internal fun BinaryEditorView(
                             editableDoc = editableDoc,
                             onHexCommit = { hexEditedSinceOpen = true },
                             suppressEditHighlight = overwriteShadowRanges != null,
+                            onSectionLabelClick = { tabName ->
+                                val idx = panels.indexOfFirst { it.description == tabName }
+                                if (idx >= 0) state.setSelectedTab(idx)
+                            },
                         )
                     }
                     if (state.showDataInspector) {

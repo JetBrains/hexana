@@ -28,6 +28,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -133,6 +135,7 @@ internal fun HexViewer(
      */
     onHexCommit: (() -> Unit)? = null,
     suppressEditHighlight: Boolean = false,
+    onSectionLabelClick: ((tabName: String) -> Unit)? = null,
 ) {
     val buf = binaryProvider.bytes
 
@@ -958,14 +961,21 @@ internal fun HexViewer(
                                 if (labelIdx != null) {
                                     Spacer(Modifier.width(16.dp))
                                     val labelColor = structureColors[labelIdx % structureColors.size]
+                                    val range = structureRanges[labelIdx]
+                                    val isClickable = onSectionLabelClick != null && range.tabName != null
                                     Text(
-                                        structureRanges[labelIdx].label,
+                                        range.label,
                                         modifier = Modifier
                                             .background(
                                                 color = labelColor.copy(alpha = labelColor.alpha * 3f),
                                                 shape = RoundedCornerShape(4.dp),
                                             )
-                                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                                            .padding(horizontal = 6.dp, vertical = 1.dp)
+                                            .then(
+                                                if (isClickable) Modifier.pointerHoverIcon(PointerIcon.Hand).onClick {
+                                                    onSectionLabelClick!!(range.tabName!!)
+                                                } else Modifier
+                                            ),
                                         softWrap = false,
                                         maxLines = 1,
                                         style = TextStyle(

@@ -249,6 +249,7 @@ fun HexViewerPanel(
     selection: HexSelectionState = remember { HexSelectionState() },
     editState: HexEditState? = null,
     structureRanges: List<StructureRange> = emptyList(),
+    onTabChangeRequest: ((String) -> Unit)? = null,
 ) {
     val totalRows = (bytes.size + BYTES_PER_ROW - 1) / BYTES_PER_ROW
     val totalHeight = totalRows * ROW_HEIGHT_PX
@@ -621,7 +622,7 @@ fun HexViewerPanel(
         }
     }) {
         // Column header
-        HexColumnHeader(structureRanges = structureRanges, scrollTop = scrollTop, totalRows = totalRows, bytesPerRow = BYTES_PER_ROW)
+        HexColumnHeader(structureRanges = structureRanges, scrollTop = scrollTop, totalRows = totalRows, bytesPerRow = BYTES_PER_ROW, onTabChangeRequest = onTabChangeRequest)
 
         // Virtual scroll container — uses a fixed-height outer div with
         // position:relative and an absolutely-positioned inner div for the
@@ -666,6 +667,7 @@ private fun HexColumnHeader(
     scrollTop: Int,
     totalRows: Int,
     bytesPerRow: Int,
+    onTabChangeRequest: ((String) -> Unit)? = null,
 ) {
     Div({
         classes("hex-row", "hex-header")

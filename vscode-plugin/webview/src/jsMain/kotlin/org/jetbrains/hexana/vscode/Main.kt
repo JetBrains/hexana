@@ -349,6 +349,7 @@ fun BinaryEditorContent(
                 structureRanges = remember(provider, showSemanticHighlighting) {
                     if (showSemanticHighlighting) provider.structureRanges.sortedBy { it.offset } else emptyList()
                 },
+                onTabChangeRequest = { tabName -> activeTab = tabName },
             )
             if (showDataInspector) {
                 DataInspectorPanel(bytes = buffer, selection = selection)
