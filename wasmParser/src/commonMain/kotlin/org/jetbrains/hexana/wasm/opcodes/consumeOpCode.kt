@@ -20,27 +20,11 @@ import org.jetbrains.hexana.wasm.sections.StandardTypesParser.heapType
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.valueType
 import org.jetbrains.hexana.wasm.sections.WasmValueType
 
-fun CommonByteBuffer.consumeOpCode(bcode: UByte, limit: Int = limit()): OpCode {
+fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
     val offset = position() - 1
     return when (val code = bcode.toUInt()) {
         0x00u -> OpCodes.ParametricInstructions.Unreachable
         0x01u -> OpCodes.ParametricInstructions.Nop
-        0x02u -> {
-            Flow.Block(blockType(), consumeBlock(limit), offset)
-        }
-        0x03u -> {
-            Flow.Loop(blockType(), consumeBlock(limit), offset)
-        }
-        0x04u -> {
-            Flow.If(blockType(), consumeBlock(limit), offset)
-        }
-        0x05u -> {
-            val opCodes = parseOpCodes(limit)
-            // If and Else sections share terminal OpCode - that said, we just (sort of) give it back to parent If declaration
-            position(position() - 1)
-            Flow.Else(opCodes, offset)
-        }
-        LegacyEH.Try.code.toUInt() -> LegacyEH.Try(blockType(), consumeBlock(limit), offset)
         LegacyEH.Catch.code.toUInt() -> LegacyEH.Catch(getSLEB128().toInt(), offset)
         0x08u -> Flow.Trow(consumeInt(), offset)
         LegacyEH.Rethrow.code.toUInt() -> LegacyEH.Rethrow(getSLEB128().toUInt(), offset)
@@ -79,21 +63,6 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte, limit: Int = limit()): OpCode {
             OpCodes.ParametricInstructions.SelectWithType(list.toList(), offset)
         }
         0x1Du, 0x1Eu -> ReservedOpCode(code, offset)
-        0x1Fu -> {
-            val blockType = blockType()
-            val catches = mutableListOf<Flow.CatchType>()
-            consumeArray {
-                when (val catchType = get()) {
-                    0x0.toByte() -> catches.add(Flow.CatchType.Catch(getULEB128().toUInt(), getULEB128().toUInt()))
-                    0x1.toByte() -> catches.add(Flow.CatchType.CatchRef(getULEB128().toUInt(), getULEB128().toUInt()))
-                    0x2.toByte() -> catches.add(Flow.CatchType.CatchAll(getULEB128().toUInt()))
-                    0x3.toByte() -> catches.add(Flow.CatchType.CatchAllRef(getULEB128().toUInt()))
-                    else -> throw UnsupportedOpsException(code, offset)
-                }
-            }
-            val opcodes = parseOpCodes(limit)
-            Flow.TryTable(blockType, catches.toList(), opcodes, offset)
-        }
         0x20u -> Local.Get(consumeInt(), offset)
         0x21u -> Local.Set(consumeInt(), offset)
         0x22u -> Local.Tee(consumeInt(), offset)
@@ -287,11 +256,6 @@ fun CommonByteBuffer.consumeOpCode(bcode: UByte, limit: Int = limit()): OpCode {
     }
 }
 
-private fun CommonByteBuffer.consumeBlock(limit: Int = limit()): List<OpCode> {
-    val blockOpCodes = parseOpCodes(limit)
-    return blockOpCodes
-}
-
 /**
  * Parses a sequence of opcodes from the current buffer position.
  *
@@ -309,17 +273,66 @@ private fun CommonByteBuffer.consumeBlock(limit: Int = limit()): List<OpCode> {
  * previous unbounded-within-buffer behavior for callers that don't need a
  * tighter constraint (top-level module scan, nested `block`/`loop`/`if`
  * bodies whose only terminator is `0x0B`).
+ *
+ * Recursion into nested block bodies runs on [parseOpCodesDeep], a
+ * [DeepRecursiveFunction] whose call frames live on the heap, so nesting
+ * depth is bounded by memory rather than by the platform call stack.
  */
-fun CommonByteBuffer.parseOpCodes(limit: Int = limit()): List<OpCode> {
+fun CommonByteBuffer.parseOpCodes(limit: Int = limit()): List<OpCode> = parseOpCodesDeep(OpCodeParseState(this, limit))
+
+/** One opcode-sequence parse; [limit] propagates unchanged into nested block bodies. */
+private class OpCodeParseState(val buffer: CommonByteBuffer, val limit: Int)
+
+/**
+ * Heap-recursive opcode-sequence parser. The structured opcodes that contain a
+ * nested opcode sequence (`block`, `loop`, `if`, `else`, legacy `try`,
+ * `try_table`) recurse via `callRecursive`; every other opcode takes the plain
+ * non-recursive [consumeOpCode] path, so the common case pays no continuation
+ * overhead.
+ */
+private val parseOpCodesDeep = DeepRecursiveFunction<OpCodeParseState, List<OpCode>> { state ->
+    val buffer = state.buffer
     val opCodes = mutableListOf<OpCode>()
-    while (remaining() != 0 && position() < limit) {
-        val byte = get().toUByte()
+    while (buffer.remaining() != 0 && buffer.position() < state.limit) {
+        val byte = buffer.get().toUByte()
         if (byte == Flow.Terminal.code) {
             break
         }
 
-        val op = consumeOpCode(byte, limit)
+        val offset = buffer.position() - 1
+        val op = when (val code = byte.toUInt()) {
+            0x02u -> Flow.Block(buffer.blockType(), callRecursive(state), offset)
+            0x03u -> Flow.Loop(buffer.blockType(), callRecursive(state), offset)
+            0x04u -> Flow.If(buffer.blockType(), callRecursive(state), offset)
+            0x05u -> {
+                val body = callRecursive(state)
+                // If and Else sections share terminal OpCode - that said, we just (sort of) give it back to parent If declaration
+                buffer.position(buffer.position() - 1)
+                Flow.Else(body, offset)
+            }
+            LegacyEH.Try.code.toUInt() -> LegacyEH.Try(buffer.blockType(), callRecursive(state), offset)
+            0x1Fu -> {
+                val blockType = buffer.blockType()
+                val catches = buffer.consumeCatchList(code, offset)
+                Flow.TryTable(blockType, catches, callRecursive(state), offset)
+            }
+            else -> buffer.consumeOpCode(byte)
+        }
         opCodes.add(op)
     }
-    return opCodes
+    opCodes
+}
+
+private fun CommonByteBuffer.consumeCatchList(code: UInt, offset: Int): List<Flow.CatchType> {
+    val catches = mutableListOf<Flow.CatchType>()
+    consumeArray {
+        when (val catchType = get()) {
+            0x0.toByte() -> catches.add(Flow.CatchType.Catch(getULEB128().toUInt(), getULEB128().toUInt()))
+            0x1.toByte() -> catches.add(Flow.CatchType.CatchRef(getULEB128().toUInt(), getULEB128().toUInt()))
+            0x2.toByte() -> catches.add(Flow.CatchType.CatchAll(getULEB128().toUInt()))
+            0x3.toByte() -> catches.add(Flow.CatchType.CatchAllRef(getULEB128().toUInt()))
+            else -> throw UnsupportedOpsException(code, offset)
+        }
+    }
+    return catches.toList()
 }
