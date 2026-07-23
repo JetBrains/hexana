@@ -2,8 +2,6 @@
 
 ## Unreleased
 
-## 0.5.0 - 2026-07-23
-
 ### Added
 - The first published split CLI artifacts establish `hexana-cli` for `summarize-binary`, `summarize-module`, and
   `wasm-to-wat`, plus `hexana-cli-script` for `run-script`; both retain product `tools`, `version`, and `help`.

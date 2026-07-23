@@ -5,12 +5,12 @@ binary. It intentionally contains only `run-script`; use `hexana-cli` for summar
 
 ## Install and run
 
-The JDK 21 fallback archive is `hexana-cli-script-0.5.0.zip`. Extract it and run
+The JDK 21 fallback archive is `hexana-cli-script-0.4.0.zip`. Extract it and run
 `hexana-cli-script/bin/hexana-cli-script`; the product root contains `bin/`, `lib/`, `LICENSE.txt`, `README.md`, and
 `THIRD-PARTY-NOTICES.md`. This JVM fallback requires JDK 21.
 
-Native archives are `hexana-cli-script-native-macos-arm64-0.5.0.zip` and
-`hexana-cli-script-native-linux-x64-0.5.0.zip`. They contain `bin/hexana-cli-script`, the license, this README, and
+Native archives are `hexana-cli-script-native-macos-arm64-0.4.0.zip` and
+`hexana-cli-script-native-linux-x64-0.4.0.zip`. They contain `bin/hexana-cli-script`, the license, this README, and
 the notices, without a JDK requirement. Use the JDK 21 archive on other platforms.
 
 ```sh

@@ -6,11 +6,11 @@ contains only `summarize-binary`, `summarize-module`, and `wasm-to-wat`; use `he
 ## Install and run
 
 Release ZIPs contain one product only. The JDK 21 fallback archive is
-`hexana-cli-0.5.0.zip`; extract it and run `hexana-cli/bin/hexana-cli`. It contains `bin/`, `lib/`, `LICENSE.txt`,
+`hexana-cli-0.4.0.zip`; extract it and run `hexana-cli/bin/hexana-cli`. It contains `bin/`, `lib/`, `LICENSE.txt`,
 `README.md`, and `THIRD-PARTY-NOTICES.md`. The JVM launcher requires JDK 21.
 
-Native archives are available as `hexana-cli-native-macos-arm64-0.5.0.zip` and
-`hexana-cli-native-linux-x64-0.5.0.zip`. They contain `bin/hexana-cli`, the license, this README, and the notices;
+Native archives are available as `hexana-cli-native-macos-arm64-0.4.0.zip` and
+`hexana-cli-native-linux-x64-0.4.0.zip`. They contain `bin/hexana-cli`, the license, this README, and the notices;
 they do not need a JDK. On another platform, or when a native build is unsuitable, use the JDK 21 archive.
 
 ```sh
