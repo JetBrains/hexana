@@ -647,7 +647,7 @@ fun HexViewerPanel(
             }) {
                 key(editStamp) {
                     for (row in firstVisibleRow..lastVisibleRow) {
-                        HexRow(bytes, row, selection, hexSearchState, editState, editStamp, pendingDigit, structureRanges) { ox, oy ->
+                        HexRow(bytes, row, selection, hexSearchState, editState, editStamp, pendingDigit, structureRanges, onTabChangeRequest) { ox, oy ->
                             dragState.pendingOriginX = ox
                             dragState.pendingOriginY = oy
                         }
@@ -896,6 +896,7 @@ private fun HexRow(
     editStamp: Long,
     pendingDigit: Int?,
     structureRanges: List<StructureRange>,
+    onTabChangeRequest: ((String) -> Unit)? = null,
     onPendingDrag: (Double, Double) -> Unit,
 ) {
     val offset = row * BYTES_PER_ROW
@@ -1103,6 +1104,7 @@ private fun HexRow(
 
         // Section label (shown on the row where a structure range begins)
         if (labelRange != null && labelIdx >= 0) {
+            val isClickable = onTabChangeRequest != null && labelRange.tabName != null
             Span({
                 classes("hexana-section-label")
                 style {
@@ -1116,6 +1118,12 @@ private fun HexRow(
                     property("opacity", "0.85")
                     property("background", STRUCTURE_LABEL_COLORS[labelIdx % STRUCTURE_LABEL_COLORS.size])
                     color(Color("var(--vscode-editor-foreground, #ccc)"))
+                    if (isClickable) {
+                        cursor("pointer")
+                    }
+                }
+                if (isClickable) {
+                    onClick { onTabChangeRequest!!(labelRange.tabName!!) }
                 }
             }) {
                 Text(labelRange.label)
