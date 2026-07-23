@@ -165,7 +165,8 @@ class HexanaCliScriptProductContractTest {
             val event = server.awaitEvents(1).single()
             assertEquals("hexana-cli-script", event.productId)
             assertEquals("version", event.commandName)
-            assertEquals(setOf("product_id", "command_name"), event.customPropertyKeys)
+            assertEquals("cli", event.surface)
+            assertEquals(setOf("product_id", "command_name", "surface"), event.customPropertyKeys)
             assertNotEquals("", event.distinctId)
             assertTrue(Files.isRegularFile(home.resolve(".hexana/analytics-id")))
         }

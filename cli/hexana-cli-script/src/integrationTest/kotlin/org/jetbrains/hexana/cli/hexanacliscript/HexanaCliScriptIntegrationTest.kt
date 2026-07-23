@@ -199,10 +199,12 @@ class HexanaCliScriptIntegrationTest {
             }
             assertEquals("version", standardEvent.property("command_name"))
             assertEquals("version", scriptEvent.property("command_name"))
-            assertEquals(setOf("product_id", "command_name"), standardEvent.customPropertyKeys())
-            assertEquals(setOf("product_id", "command_name"), scriptEvent.customPropertyKeys())
-            assertEquals(setOf("product_id", "command_name"), standardHelpEvent.customPropertyKeys())
-            assertEquals(setOf("product_id", "command_name"), scriptHelpEvent.customPropertyKeys())
+            assertEquals("cli", standardEvent.property("surface"))
+            assertEquals("cli", scriptEvent.property("surface"))
+            assertEquals(setOf("product_id", "command_name", "surface"), standardEvent.customPropertyKeys())
+            assertEquals(setOf("product_id", "command_name", "surface"), scriptEvent.customPropertyKeys())
+            assertEquals(setOf("product_id", "command_name", "surface"), standardHelpEvent.customPropertyKeys())
+            assertEquals(setOf("product_id", "command_name", "surface"), scriptHelpEvent.customPropertyKeys())
             assertEquals(standardEvent.distinctId, scriptEvent.distinctId)
             assertTrue(Files.exists(home.resolve(".hexana/analytics-id")))
         }

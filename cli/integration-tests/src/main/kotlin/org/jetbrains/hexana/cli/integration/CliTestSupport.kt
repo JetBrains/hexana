@@ -86,6 +86,7 @@ class FakeCliTelemetryServer : AutoCloseable {
 data class CliTelemetryEvent(
     val productId: String,
     val commandName: String,
+    val surface: String,
     val distinctId: String,
     val customPropertyKeys: Set<String>,
 )
@@ -96,6 +97,7 @@ private fun JsonObject.toTelemetryEvent(): CliTelemetryEvent? {
     return CliTelemetryEvent(
         productId = properties["product_id"]?.asString ?: return null,
         commandName = properties["command_name"]?.asString ?: return null,
+        surface = properties["surface"]?.asString ?: return null,
         distinctId = get("distinct_id")?.asString ?: get("distinctId")?.asString ?: return null,
         customPropertyKeys = properties.keySet().filterNot { it.startsWith("$") || it == "token" }.toSet(),
     )

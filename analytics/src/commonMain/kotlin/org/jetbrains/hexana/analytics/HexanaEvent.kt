@@ -136,6 +136,7 @@ sealed class HexanaEvent {
         override val properties = mapOf(
             "product_id" to productId,
             "command_name" to commandName,
+            "surface" to "cli",
         )
     }
 
