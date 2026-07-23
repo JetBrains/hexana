@@ -59,6 +59,7 @@ class HexanaMcpAnalyticsTest {
 
             server.awaitEvents(1).singleEvent("mcp_server_started")
                 .requireDistinctId()
+                .assertProperty("surface", "standalone_mcp")
                 .assertProperty("transport", "stdio")
                 .assertProperty("embedded_in_ide", false)
         }
@@ -89,7 +90,9 @@ class HexanaMcpAnalyticsTest {
     @Test
     fun dSuccessfulToolInvocationSendsToolEventWithConfiguredTransport() {
         FakePostHogServer.start().use { server ->
-            initializeTestAnalytics(server)
+            initializeMcpAnalytics(
+                startupAnalytics(HexanaEvent.McpTransport.HTTP, server, analyticsEnabled = true)
+            )
 
             val result = HexanaToolHandlers(
                 analysisService = SummarizeOnlyAnalysisService,
@@ -98,8 +101,9 @@ class HexanaMcpAnalyticsTest {
             assertFalse(result.isError == true)
             HexanaAnalytics.client.flush()
 
-            server.awaitEvents(1).singleEvent("mcp_tool_invoked")
+            server.awaitEvents(2).singleEvent("mcp_tool_invoked")
                 .requireDistinctId()
+                .assertProperty("surface", "standalone_mcp")
                 .assertProperty("tool_name", "summarize_module")
                 .assertProperty("transport", "http")
                 .assertProperty("success", true)

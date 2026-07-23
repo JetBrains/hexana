@@ -150,7 +150,8 @@ internal fun initializeMcpAnalytics(analytics: CommandAnalytics) {
             host = analytics.analyticsHost ?: AnalyticsConfig.DEFAULT_HOST
         ),
         consentProvider = ConsentProvider { true },
-        distinctIdProvider = UuidDistinctIdProvider()
+        distinctIdProvider = UuidDistinctIdProvider(),
+        globalProperties = mapOf("surface" to "standalone_mcp"),
     )
 
     HexanaAnalytics.client.capture(
