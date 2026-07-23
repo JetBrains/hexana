@@ -250,8 +250,14 @@ private fun NormalModeContent(
 
     if (parentFileName != null) {
         val linkColor = if (JewelTheme.isDark) Color(0xFF589DF6) else Color(0xFF2470B3)
+        val parentExt = parentFileName.substringAfterLast('.', "").lowercase()
+        val parentLabel = if (parentExt in setOf("jar", "zip", "war", "ear", "apk", "aar")) {
+            "Entry in $parentFileName"
+        } else {
+            "Submodule of $parentFileName"
+        }
         Text(
-            text = "Submodule of $parentFileName",
+            text = parentLabel,
             modifier = Modifier
                 .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
                 .clickable { onNavigateToParent?.invoke() },

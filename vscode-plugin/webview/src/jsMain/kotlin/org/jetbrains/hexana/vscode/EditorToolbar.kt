@@ -264,7 +264,13 @@ fun EditorToolbar(
                     }
                     onClick { postNavigateToParent() }
                 }) {
-                    Text("Submodule of $parentName")
+                    val parentExt = parentName.substringAfterLast('.', "").lowercase()
+                    val parentLabel = if (parentExt in setOf("jar", "zip", "war", "ear", "apk", "aar")) {
+                        "Entry in $parentName"
+                    } else {
+                        "Submodule of $parentName"
+                    }
+                    Text(parentLabel)
                 }
             }
 
