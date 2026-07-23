@@ -68,6 +68,7 @@ internal fun FileDescriptionBar(
     onSizeClick: (() -> Unit)? = null,
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
+    onSaveAs: (() -> Unit)? = null,
     editableDoc: EditableBinaryDocument? = null,
     originalBinaryProvider: BinaryProvider? = null,
     overwriteShadowRanges: OverwriteShadowRanges? = null,
@@ -133,6 +134,7 @@ internal fun FileDescriptionBar(
                     parentFileName = parentFileName,
                     fileName = fileName,
                     onNavigateToParent = onNavigateToParent,
+                    onSaveAs = onSaveAs,
                 )
             }
         } else {
@@ -142,6 +144,7 @@ internal fun FileDescriptionBar(
                 parentFileName = parentFileName,
                 fileName = fileName,
                 onNavigateToParent = onNavigateToParent,
+                onSaveAs = onSaveAs,
             )
         }
     }
@@ -217,6 +220,7 @@ private fun NormalModeContent(
     parentFileName: String?,
     fileName: String?,
     onNavigateToParent: (() -> Unit)?,
+    onSaveAs: (() -> Unit)? = null,
 ) {
     val moduleType = fileTypeDescription(binaryProvider, fileName)
 
@@ -253,6 +257,17 @@ private fun NormalModeContent(
                 .clickable { onNavigateToParent?.invoke() },
             style = TextStyle(fontSize = 11.sp, color = linkColor),
         )
+        if (onSaveAs != null) {
+            OutlinedButton(
+                onClick = onSaveAs,
+                modifier = Modifier.height(24.dp),
+            ) {
+                Text(
+                    text = "Save As\u2026",
+                    style = TextStyle(fontSize = 11.sp),
+                )
+            }
+        }
     }
 
     val isSubmodule = parentFileName != null

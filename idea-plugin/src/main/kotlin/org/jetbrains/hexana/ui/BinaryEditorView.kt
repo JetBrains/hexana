@@ -459,6 +459,25 @@ internal fun BinaryEditorView(
                     }},
                     parentFileName = parentFileName,
                     onNavigateToParent = onNavigateToParent,
+                    onSaveAs = if (parentFileName != null) {
+                        {
+                            val descriptor = com.intellij.openapi.fileChooser.FileSaverDescriptor(
+                                "Save As", "Save the embedded content to a file",
+                            )
+                            val dialog = com.intellij.openapi.fileChooser.FileChooserFactory.getInstance()
+                                .createSaveFileDialog(descriptor, state.project)
+                            val wrapper = dialog.save(fileName)
+                            if (wrapper != null) {
+                                com.intellij.openapi.application.runWriteAction {
+                                    val buf = liveProvider.bytes
+                                    val data = ByteArray(buf.limit())
+                                    buf.position(0)
+                                    buf.get(data, 0, data.size)
+                                    wrapper.getVirtualFile(true)?.setBinaryContent(data)
+                                }
+                            }
+                        }
+                    } else null,
                     editableDoc = editableDoc,
                     originalBinaryProvider = binaryProvider,
                     overwriteShadowRanges = overwriteShadowRanges,
