@@ -175,6 +175,16 @@ fun postNavigateToParent() {
 }
 
 /**
+ * Asks the extension host to show a Save As dialog for the current
+ * submodule / archive entry content.
+ */
+fun postSaveAsToHost() {
+    val msg = js("{}")
+    msg.type = "save-as"
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to open a ZIP entry in a new editor tab.
  *
  * The extension host reads the compressed bytes from the archive document,

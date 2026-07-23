@@ -526,6 +526,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                         vscode.ConfigurationTarget.Global,
                     );
                 }
+            } else if (message.type === "save-as") {
+                this.saveAs(document);
             } else if (message.type === "overwrite-file") {
                 this.overwriteFile(document, message);
             } else if (message.type === "save-copy") {
@@ -898,6 +900,27 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             vscode.window.showInformationMessage(`Saved copy to ${message.outputName}`);
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to save copy: ${err}`);
+        }
+    }
+
+    /**
+     * Shows a Save As dialog and writes the current document bytes to the
+     * user-chosen location. Used for submodules and archive entries.
+     */
+    private async saveAs(document: WasmDocument): Promise<void> {
+        const defaultName = document.displayName ?? path.basename(document.uri.fsPath);
+        const uri = await vscode.window.showSaveDialog({
+            defaultUri: vscode.Uri.file(defaultName),
+            saveLabel: "Save As",
+        });
+        if (!uri) return;
+        try {
+            const bytes = document.data instanceof Buffer
+                ? new Uint8Array(document.data.buffer, document.data.byteOffset, document.data.byteLength)
+                : document.data;
+            await vscode.workspace.fs.writeFile(uri, bytes);
+        } catch (err) {
+            vscode.window.showErrorMessage(`Failed to save file: ${err}`);
         }
     }
 

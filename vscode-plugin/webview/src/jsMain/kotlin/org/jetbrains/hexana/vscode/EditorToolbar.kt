@@ -272,6 +272,30 @@ fun EditorToolbar(
                     }
                     Text(parentLabel)
                 }
+
+                // "Save As…" button for submodule / archive entry content
+                Span({
+                    attr("title", "Save embedded content to a new file")
+                    style {
+                        property("cursor", "pointer")
+                        property("display", "inline-flex")
+                        property("align-items", "center")
+                        property("padding", "2px 8px")
+                        property("border-radius", "4px")
+                        property("border", "1px solid var(--vscode-button-secondaryBorder, var(--vscode-contrastBorder, transparent))")
+                        property("background", "var(--vscode-button-secondaryBackground, #3A3D41)")
+                        property("color", "var(--vscode-button-secondaryForeground, #fff)")
+                        property("font-size", "11px")
+                        property("line-height", "1")
+                        property("user-select", "none")
+                    }
+                    onClick { event ->
+                        event.stopPropagation()
+                        postSaveAsToHost()
+                    }
+                }) {
+                    Text("Save As\u2026")
+                }
             }
 
             if (isRunnable) {
