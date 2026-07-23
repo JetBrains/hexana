@@ -106,6 +106,18 @@ class HexViewStateHolder(
         _panelNames.value = names
     }
 
+    // True once BinaryEditorView has finished resolving every advertised
+    // placeholder tab for the current provider (background tab resolution
+    // complete). Reset when a new resolution pass starts. Read by the UI-test
+    // probe so tests can wait on product state instead of inferring
+    // completion from tab-name changes.
+    private val _panelsResolved = mutableStateOf(false)
+    val panelsResolved: Boolean get() = _panelsResolved.value
+
+    fun setPanelsResolved(resolved: Boolean) {
+        _panelsResolved.value = resolved
+    }
+
     private val _cursorPosition = mutableStateOf(HexPosition(-1, -1))
     val cursorPosition: HexPosition get() = _cursorPosition.value
 

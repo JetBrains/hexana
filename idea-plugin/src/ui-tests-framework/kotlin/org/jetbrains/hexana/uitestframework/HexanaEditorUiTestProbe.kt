@@ -298,6 +298,7 @@ object HexanaEditorUiTestProbe {
                 add("providerKind=${provider.kindId()}")
                 add("selectedTabName=${selectedTabName.orEmpty()}")
                 add("cursorOffset=${cursorOffset?.toString().orEmpty()}")
+                add("panelsResolved=${stateHolder.panelsResolved}")
                 panelNames.forEach { add("panel=$it") }
             },
         )

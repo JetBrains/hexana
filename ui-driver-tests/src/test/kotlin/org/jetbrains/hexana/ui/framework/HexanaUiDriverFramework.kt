@@ -331,6 +331,8 @@ internal data class HexanaEditorSnapshot(
     val panelNames: List<String>,
     val selectedTabName: String?,
     val cursorOffset: Int?,
+    /** True once background tab resolution finished for the current provider (all placeholders replaced or removed). */
+    val panelsResolved: Boolean,
 )
 
 internal data class HexanaEditorSearchState(

@@ -277,8 +277,14 @@ internal fun BinaryEditorView(
                 .collect { state.setPanelNames(it) }
         }
         LaunchedEffect(binaryProvider, hexEditedSinceOpen) {
-            if (hexEditedSinceOpen) return@LaunchedEffect
+            if (hexEditedSinceOpen) {
+                // No placeholders were advertised, so there is nothing to
+                // resolve: report completion to probe observers immediately.
+                state.setPanelsResolved(true)
+                return@LaunchedEffect
+            }
             if (panelsResolved.value) return@LaunchedEffect
+            state.setPanelsResolved(false)
             // Resolve hardcoded panels (Dominators, WAT, DWARF, etc.) and
             // table-tab panels independently so whichever finishes first
             // replaces its placeholders immediately — the user doesn't wait
@@ -398,6 +404,7 @@ internal fun BinaryEditorView(
             hardcodedJob.join()
             tableTabJobs.forEach { it.join() }
             panelsResolved.value = true
+            state.setPanelsResolved(true)
         }
 
         // Track which panels are script tabs so we know which are closable.

@@ -17,6 +17,7 @@ internal object HexanaProbePayload {
                 panelNames = fields.values("panel"),
                 selectedTabName = fields.value("selectedTabName").takeIf { it.isNotEmpty() },
                 cursorOffset = fields.optionalInt("cursorOffset"),
+                panelsResolved = fields.boolean("panelsResolved"),
             )
         }
 

@@ -36,28 +36,42 @@ class HexanaLargeWasmResponsivenessTest {
 
       // Sample EDT round-trips while background tab resolution runs. Each
       // snapshot() call hops through the EDT inside the probe, so a blocked
-      // EDT shows up as a long call.
+      // EDT shows up as a long call. The window is condition-driven, not a
+      // fixed duration: it ends when the probe reports background tab
+      // resolution complete; the deadline is only the backstop that turns a
+      // hung resolution into a failure. Garbage-promotion correctness is
+      // covered by HexanaGarbageTabPromotionTest on a small module; this test
+      // measures EDT stalls while the large module resolves.
       val clock = TimeSource.Monotonic
-      val samplingWindow = 2.minutes
+      val resolutionDeadline = 10.minutes
       val start = clock.markNow()
       var maxStallMs = 0L
       var samples = 0
-      while (start.elapsedNow() < samplingWindow) {
+      var resolved = false
+      var tabs: List<String> = emptyList()
+      while (start.elapsedNow() < resolutionDeadline) {
         val callStart = clock.markNow()
         val snapshot = editor.snapshot()
         val elapsedMs = callStart.elapsedNow().inWholeMilliseconds
         if (elapsedMs > maxStallMs) maxStallMs = elapsedMs
         samples++
+        tabs = snapshot.panelNames
         assertTrue(
-          HexanaEditorTab.FUNCTIONS.tabName in snapshot.panelNames,
-          "Functions tab disappeared; tabs: ${snapshot.panelNames}",
+          HexanaEditorTab.FUNCTIONS.tabName in tabs,
+          "Functions tab disappeared; tabs: $tabs",
         )
+        resolved = snapshot.panelsResolved
+        if (resolved) break
         Thread.sleep(250)
       }
-      println("EDT responsiveness during resolution: $samples snapshots, max stall ${maxStallMs}ms")
+      println(
+        "EDT responsiveness during resolution: $samples snapshots over ${start.elapsedNow().inWholeSeconds}s, " +
+          "max stall ${maxStallMs}ms, resolved=$resolved",
+      )
+      assertTrue(resolved, "Background tab resolution did not finish within $resolutionDeadline; tabs: $tabs")
 
-      // Re-select and snapshot after the resolution window: the rendered
-      // table's cell providers must stay cheap too.
+      // Re-select and snapshot after resolution: the rendered table's cell
+      // providers must stay cheap too.
       editor.selectTab(HexanaEditorTab.FUNCTIONS.tabName)
       val finalCall = clock.markNow()
       val finalSnapshot = editor.snapshot()
@@ -67,19 +81,6 @@ class HexanaLargeWasmResponsivenessTest {
       assertEquals(HexanaEditorTab.FUNCTIONS.tabName, finalSnapshot.selectedTabName)
       assertTrue(maxStallMs < 5_000, "EDT stalled for ${maxStallMs}ms during Functions tab resolution")
       assertTrue(finalMs < 5_000, "EDT stalled for ${finalMs}ms after Functions tab resolution")
-
-      // The Garbage analysis of this fixture yields only the Data subtab, so the
-      // group is promoted to a "Garbage: <subtab>" panel. The advertised
-      // "Garbage" placeholder must be replaced by it, not left spinning forever.
-      val tabs = editor.snapshot().panelNames
-      assertTrue(
-        HexanaEditorTab.GARBAGE.presentIn(tabs),
-        "Expected a Garbage tab (exact or promoted); tabs: $tabs",
-      )
-      assertTrue(
-        tabs.none { it == HexanaEditorTab.GARBAGE.tabName },
-        "Bare Garbage placeholder still present; tabs: $tabs",
-      )
     }
   }
 }
