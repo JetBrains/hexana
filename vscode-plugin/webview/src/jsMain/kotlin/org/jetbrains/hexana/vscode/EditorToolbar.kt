@@ -25,6 +25,7 @@ import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 @Composable
 fun EditorToolbar(
     fileName: String,
+    parentFileName: String? = null,
     size: Int,
     provider: BinaryProvider,
     onSizeClick: (() -> Unit)? = null,
@@ -33,7 +34,7 @@ fun EditorToolbar(
     onOverwriteShadowChanged: ((OverwriteShadow?) -> Unit)? = null,
     onReparseAfterOverwrite: () -> Unit = {},
 ) {
-    val isSubmodule = isSubmoduleFileName(fileName)
+    val isSubmodule = parentFileName != null || isSubmoduleFileName(fileName)
 
     val sizeTooltip = remember(provider) {
         buildSizeTooltip(provider)
@@ -255,7 +256,7 @@ fun EditorToolbar(
             }
 
             if (isSubmodule) {
-                val parentName = parentFileNameOf(fileName) ?: "component"
+                val parentName = parentFileName ?: parentFileNameOf(fileName) ?: "component"
                 Span({
                     style {
                         property("cursor", "pointer")

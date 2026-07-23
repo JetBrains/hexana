@@ -467,14 +467,19 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                             d instanceof Buffer
                                 ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength)
                                 : d;
-                        webviewPanel.webview.postMessage({
+                        const reloadMsg: Record<string, unknown> = {
                             type: "load-wasm",
                             fileName: displayName,
                             filePath: document.uri.fsPath,
                             data: toPayload(reloaded),
                             wasmRuntime: getSelectedRuntime(),
                             showSemanticHighlighting: vscode.workspace.getConfiguration("hexana").get<boolean>("showSemanticHighlighting", true),
-                        });
+                        };
+                        const reloadParent = this.resolveParentFileName(document.uri);
+                        if (reloadParent) {
+                            reloadMsg.parentFileName = reloadParent;
+                        }
+                        webviewPanel.webview.postMessage(reloadMsg);
                         return;
                     }
 
@@ -496,14 +501,19 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 const payload = document.data instanceof Buffer
                     ? new Uint8Array(document.data.buffer, document.data.byteOffset, document.data.byteLength)
                     : document.data;
-                webviewPanel.webview.postMessage({
+                const loadMsg: Record<string, unknown> = {
                     type: "load-wasm",
                     fileName: document.displayName ?? document.uri.fsPath,
                     filePath: document.uri.fsPath,
                     data: payload,
                     wasmRuntime: getSelectedRuntime(),
                     showSemanticHighlighting: vscode.workspace.getConfiguration("hexana").get<boolean>("showSemanticHighlighting", true),
-                });
+                };
+                const parentFileName = this.resolveParentFileName(document.uri);
+                if (parentFileName) {
+                    loadMsg.parentFileName = parentFileName;
+                }
+                webviewPanel.webview.postMessage(loadMsg);
                 this.restoreScriptTabs(document, webviewPanel);
             } else if (message.type === "open-module") {
                 this.openNestedModule(document, message);
@@ -900,6 +910,26 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             vscode.window.showInformationMessage(`Saved copy to ${message.outputName}`);
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to save copy: ${err}`);
+        }
+    }
+
+    /**
+     * Resolves the display name of the parent file from a `hexana-module:` URI's
+     * `?parent=` query parameter. Returns `undefined` for non-nested documents.
+     */
+    private resolveParentFileName(uri: vscode.Uri): string | undefined {
+        if (uri.scheme !== "hexana-module") return undefined;
+        const params = new URLSearchParams(uri.query);
+        const parentKey = params.get("parent");
+        if (!parentKey) return undefined;
+        try {
+            const parentUri = vscode.Uri.parse(decodeURIComponent(parentKey));
+            // Check if the parent is also in-memory (has its own display name).
+            const parentEntry = inMemoryModules.get(parentUri.toString());
+            if (parentEntry?.fileName) return parentEntry.fileName;
+            return path.basename(parentUri.fsPath);
+        } catch {
+            return undefined;
         }
     }
 

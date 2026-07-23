@@ -96,6 +96,7 @@ fun BinaryEditorApp() {
     var wasmBytes by remember { mutableStateOf<ByteArray?>(null) }
     var fileName by remember { mutableStateOf("") }
     var filePath by remember { mutableStateOf("") }
+    var parentFileName by remember { mutableStateOf<String?>(null) }
     var diffPayload by remember { mutableStateOf<DiffPayload?>(null) }
     var nativeDiffPayload by remember { mutableStateOf<NativeDiffPayload?>(null) }
     var expiredMessage by remember { mutableStateOf<String?>(null) }
@@ -110,6 +111,7 @@ fun BinaryEditorApp() {
                 fileName = message.fileName
                 filePath = message.filePath
                 wasmBytes = message.data
+                parentFileName = message.parentFileName
                 configuredRuntimeId = message.wasmRuntime
                 message.showSemanticHighlighting?.let { showSemanticHighlighting = it }
             }
@@ -227,6 +229,7 @@ fun BinaryEditorApp() {
 
         BinaryEditorContent(
             fileName = fileName,
+            parentFileName = parentFileName,
             provider = provider,
             extraTabs = extraTabs,
             scriptTabs = scriptTabs,
@@ -268,6 +271,7 @@ private const val DEFAULT_PANEL_HEIGHT = 250.0
 @Composable
 fun BinaryEditorContent(
     fileName: String,
+    parentFileName: String? = null,
     provider: BinaryProvider,
     extraTabs: List<PanelTab> = emptyList(),
     scriptTabs: List<ScriptTabState> = emptyList(),
@@ -326,6 +330,7 @@ fun BinaryEditorContent(
     }) {
         EditorToolbar(
             fileName = fileName,
+            parentFileName = parentFileName,
             size = buffer.size,
             provider = provider,
             onSizeClick = if (hasTopTab) {{ activeTab = "Top" }} else null,

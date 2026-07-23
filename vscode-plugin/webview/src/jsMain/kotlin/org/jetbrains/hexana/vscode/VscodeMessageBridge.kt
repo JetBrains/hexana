@@ -31,6 +31,7 @@ data class VscodeMessage(
     val showSemanticHighlighting: Boolean? = null,
     val settingKey: String = "",
     val settingValue: Boolean = false,
+    val parentFileName: String? = null,
 )
 
 /**
@@ -350,6 +351,7 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                             data = byteArray,
                             wasmRuntime = (data.wasmRuntime as? String),
                             showSemanticHighlighting = (data.showSemanticHighlighting as? Boolean),
+                            parentFileName = (data.parentFileName as? String),
                         )
                     }
                     "update-setting" -> {
