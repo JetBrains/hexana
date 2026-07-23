@@ -452,7 +452,7 @@ private fun flattenTree(
         depth: Int,
         parentPath: List<Int>,
     ) {
-        val order = if (depth == 0) sortedIndices(rowCount, columns) else (0 until rowCount).toList()
+        val order = sortedIndices(rowCount, columns)
         for (i in order) {
             if (depth == 0 && activeFilter != null && !activeFilter.predicate(i)) continue
             if (isSearching && !subtreeMatches(i, columns, childrenProvider)) continue
