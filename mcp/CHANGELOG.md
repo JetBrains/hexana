@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-07-23
+
+### Added
+- The first published split CLI artifacts establish `hexana-cli` for `summarize-binary`, `summarize-module`, and
+  `wasm-to-wat`, plus `hexana-cli-script` for `run-script`; both retain product `tools`, `version`, and `help`.
+- Both CLI products are published as native `macos-arm64` and `linux-x64` packages with R8-obfuscated JDK 21 JVM
+  fallback archives. A separate CLI downloads manifest and index describes these artifacts independently from MCP
+  release artifacts.
+- Each public CLI product now ships its own README and a generated third-party notice covering the combined runtime
+  dependencies of the public MCP server, `hexana-cli`, and `hexana-cli-script` distributions.
+
 ### Changed
 - `hexana-mcp` is now MCP-only and exposes exactly `stdio`, `http`, `doctor`, `version`, and `help`. Direct
   `summarize-binary`, `summarize-module`, `wasm-to-wat`, `run-script`, and `tools` commands remain available only from
