@@ -6,18 +6,28 @@ object TimeoutFixture {
     @JvmStatic
     fun main(args: Array<String>) {
         if (args.singleOrNull() == "early-exit") return
-        if (args.singleOrNull() == "child") {
-            Runtime.getRuntime().addShutdownHook(Thread { Thread.sleep(Long.MAX_VALUE) })
+        if (args.singleOrNull() == "non-reader") {
+            Thread.sleep(Long.MAX_VALUE)
+            return
+        }
+        if (args.firstOrNull() == "stubborn-child") {
+            Runtime.getRuntime().addShutdownHook(Thread {
+                Thread.sleep(Long.MAX_VALUE)
+            })
             println("ready")
             System.out.flush()
             Thread.sleep(Long.MAX_VALUE)
             return
         }
-        if (args.singleOrNull() == "non-reader") {
-            Thread.sleep(Long.MAX_VALUE)
-            return
-        }
-        val child = ProcessBuilder(javaLauncher(), "-cp", System.getProperty("java.class.path"), TimeoutFixture::class.java.name, "child").start()
+
+        check(args.singleOrNull() == "tree")
+        val child = ProcessBuilder(
+            javaLauncher(),
+            "-cp",
+            System.getProperty("java.class.path"),
+            TimeoutFixture::class.java.name,
+            "stubborn-child",
+        ).start()
         check(child.inputStream.bufferedReader().readLine() == "ready")
         println(child.pid())
         System.out.flush()

@@ -3,6 +3,7 @@ package org.jetbrains.hexana.cli.integration
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
 import java.time.Duration
+import java.util.concurrent.CompletableFuture
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -12,7 +13,13 @@ class CliRunnerTest {
     @Test
     fun `kills a non-terminating process tree on timeout`() {
         val result = CliRunner.run(
-            command = listOf(javaLauncher(), "-cp", System.getProperty("java.class.path"), TimeoutFixture::class.java.name),
+            command = listOf(
+                javaLauncher(),
+                "-cp",
+                System.getProperty("java.class.path"),
+                TimeoutFixture::class.java.name,
+                "tree",
+            ),
             timeout = Duration.ofSeconds(3),
             disableTelemetry = false,
         )
@@ -20,6 +27,17 @@ class CliRunnerTest {
         val childPid = result.stdout.trim().toLongOrNull() ?: fail("Fixture did not report its child pid: ${result.describe()}")
         assertTrue(childPid in result.destroyedProcessIds, result.describe())
         assertFalse(ProcessHandle.of(childPid).map { it.isAlive }.orElse(false), "child $childPid survived timeout teardown")
+    }
+
+    @Test
+    fun `preserves interruption while collecting the stdin writer`() {
+        Thread.currentThread().interrupt()
+        try {
+            CliRunner.awaitStdinWriter(CompletableFuture<Unit>())
+            assertTrue(Thread.currentThread().isInterrupted)
+        } finally {
+            Thread.interrupted()
+        }
     }
 
     @Test
