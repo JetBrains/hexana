@@ -3,7 +3,6 @@ package org.jetbrains.hexana.cli.hexanacli
 import com.google.gson.JsonParser
 import org.jetbrains.hexana.cli.integration.CliProcessResult
 import org.jetbrains.hexana.cli.integration.CliTestTarget
-import org.jetbrains.hexana.cli.integration.FakeCliTelemetryServer
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
@@ -12,7 +11,6 @@ import java.nio.file.Files
 import java.util.Base64
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class HexanaCliProductContractTest {
@@ -88,26 +86,6 @@ class HexanaCliProductContractTest {
     }
 
     @Test
-    fun productReportsTelemetryAndHonorsExplicitOptOut() {
-        val home = Files.createDirectories(temporaryFolder.root.toPath().resolve("telemetry-home"))
-        FakeCliTelemetryServer().use { server ->
-            val result = target.run(listOf("version"), telemetryEnvironment(true, server.url, home))
-            assertSuccess(result)
-            val event = server.awaitEvents(1).single()
-            assertEquals("hexana-cli", event.productId)
-            assertEquals("version", event.commandName)
-            assertEquals("cli", event.surface)
-            assertEquals(setOf("product_id", "command_name", "surface"), event.customPropertyKeys)
-            assertNotEquals("", event.distinctId)
-            assertTrue(Files.isRegularFile(home.resolve(".hexana/analytics-id")))
-        }
-        FakeCliTelemetryServer().use { server ->
-            assertSuccess(target.run(listOf("version"), telemetryEnvironment(false, server.url, Files.createDirectories(temporaryFolder.root.toPath().resolve("telemetry-disabled-home")))))
-            server.assertNoRequests()
-        }
-    }
-
-    @Test
     fun nativeProductDoesNotRelyOnJavaHome() {
         assumeTrue("native-only contract", target.kind == "native")
         assertSuccess(target.run(listOf("version")))
@@ -119,12 +97,6 @@ class HexanaCliProductContractTest {
 
     private fun wasmFile(name: String) = temporaryFolder.root.toPath().resolve(name).also { Files.write(it, MINIMAL_WASM_MODULE) }
 
-    private fun telemetryEnvironment(enabled: Boolean, host: String, home: java.nio.file.Path) = mapOf(
-        "HEXANA_CLI_TELEMETRY_ENABLED" to enabled.toString(),
-        "HEXANA_CLI_POSTHOG_HOST" to host,
-        "HEXANA_CLI_POSTHOG_KEY" to "contract-key",
-        "HOME" to home.toString(),
-    ) + target.jvmUserHome(home)
 }
 
 private fun toolNames(output: String): List<String> = output.lineSequence().drop(1).filter { it.isNotBlank() && !it.first().isWhitespace() }.toList()

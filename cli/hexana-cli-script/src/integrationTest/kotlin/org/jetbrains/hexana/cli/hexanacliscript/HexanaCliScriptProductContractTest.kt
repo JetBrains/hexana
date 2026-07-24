@@ -13,7 +13,6 @@ import java.nio.file.Path
 import java.util.Base64
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class HexanaCliScriptProductContractTest {
@@ -158,43 +157,35 @@ class HexanaCliScriptProductContractTest {
     }
 
     @Test
-    fun productReportsTelemetryAndHonorsExplicitOptOut() {
-        val home = Files.createDirectories(temporaryFolder.root.toPath().resolve("telemetry-home"))
-        FakeCliTelemetryServer().use { server ->
-            assertSuccess(target.run(listOf("version"), telemetryEnvironment(true, server.url, home)))
-            val event = server.awaitEvents(1).single()
-            assertEquals("hexana-cli-script", event.productId)
-            assertEquals("version", event.commandName)
-            assertEquals("cli", event.surface)
-            assertEquals(setOf("product_id", "command_name", "surface"), event.customPropertyKeys)
-            assertNotEquals("", event.distinctId)
-            assertTrue(Files.isRegularFile(home.resolve(".hexana/analytics-id")))
-        }
-        FakeCliTelemetryServer().use { server ->
-            assertSuccess(target.run(listOf("version"), telemetryEnvironment(false, server.url, Files.createDirectories(temporaryFolder.root.toPath().resolve("telemetry-disabled-home")))))
-            server.assertNoRequests()
-        }
-    }
-
-    @Test
-    fun productSharesTelemetryIdentityWithStandardCli() {
+    fun productsReportSharedTelemetryIdentityAndHonorExplicitOptOut() {
         val home = Files.createDirectories(temporaryFolder.root.toPath().resolve("shared-telemetry-home"))
         FakeCliTelemetryServer().use { server ->
-            val environment = telemetryEnvironment(true, server.url, home)
-            assertSuccess(target.run(listOf("version"), environment))
-            assertSuccess(standardTarget.run(listOf("version"), environment))
+            val environment = telemetryEnvironment(true, server.url)
+            assertSuccess(target.run(listOf("version"), environment, userHome = home))
+            assertSuccess(standardTarget.run(listOf("version"), environment, userHome = home))
 
             val events = server.awaitEvents(2)
+            assertEquals(2, events.size)
             val scriptEvent = events.single { it.productId == "hexana-cli-script" && it.commandName == "version" }
             val standardEvent = events.single { it.productId == "hexana-cli" && it.commandName == "version" }
             assertEquals("hexana-cli-script", scriptEvent.productId)
-            assertEquals("version", scriptEvent.commandName)
             assertEquals("hexana-cli", standardEvent.productId)
-            assertEquals("version", standardEvent.commandName)
-            assertNotEquals("", scriptEvent.distinctId)
-            assertNotEquals("", standardEvent.distinctId)
+            events.forEach { event ->
+                assertEquals("version", event.commandName)
+                assertEquals("cli", event.surface)
+                assertEquals(setOf("product_id", "command_name", "surface"), event.customPropertyKeys)
+                assertTrue(event.distinctId.isNotBlank())
+            }
             assertEquals(scriptEvent.distinctId, standardEvent.distinctId)
             assertTrue(Files.isRegularFile(home.resolve(".hexana/analytics-id")))
+        }
+
+        val disabledHome = Files.createDirectories(temporaryFolder.root.toPath().resolve("telemetry-disabled-home"))
+        FakeCliTelemetryServer().use { server ->
+            val environment = telemetryEnvironment(false, server.url)
+            assertSuccess(target.run(listOf("version"), environment, userHome = disabledHome))
+            assertSuccess(standardTarget.run(listOf("version"), environment, userHome = disabledHome))
+            server.assertNoRequests()
         }
     }
 
@@ -216,12 +207,11 @@ class HexanaCliScriptProductContractTest {
         assertFalse(Files.exists(output), "invalid script source must not write output")
     }
 
-    private fun telemetryEnvironment(enabled: Boolean, host: String, home: java.nio.file.Path) = mapOf(
+    private fun telemetryEnvironment(enabled: Boolean, host: String) = mapOf(
         "HEXANA_CLI_TELEMETRY_ENABLED" to enabled.toString(),
         "HEXANA_CLI_POSTHOG_HOST" to host,
         "HEXANA_CLI_POSTHOG_KEY" to "contract-key",
-        "HOME" to home.toString(),
-    ) + target.jvmUserHome(home)
+    )
 }
 
 private fun toolNames(output: String): List<String> = output.lineSequence().drop(1).filter { it.isNotBlank() && !it.first().isWhitespace() }.toList()

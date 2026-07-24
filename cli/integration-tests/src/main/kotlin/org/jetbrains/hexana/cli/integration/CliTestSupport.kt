@@ -18,15 +18,16 @@ class CliTestTarget(
         args: List<String>,
         environment: Map<String, String> = emptyMap(),
         stdin: ByteArray? = null,
+        userHome: Path? = null,
     ): CliProcessResult = CliRunner.run(
-        command = listOf(launcher.toString()) + args,
+        command = listOf(launcher.toString()) +
+            if (kind == "native" && userHome != null) listOf("-Duser.home=$userHome") + args else args,
         stdin = stdin,
-        environment = environment,
+        environment = environment +
+            if (userHome == null) emptyMap() else mapOf("HOME" to userHome.toString()) +
+                if (kind == "jvm") mapOf("JAVA_OPTS" to "-Duser.home=$userHome") else emptyMap(),
         unsetJavaHome = kind == "native",
     )
-
-    fun jvmUserHome(home: Path): Map<String, String> =
-        if (kind == "jvm") mapOf("JAVA_OPTS" to "-Duser.home=$home") else emptyMap()
 
     companion object {
         fun fromSystemProperties(): CliTestTarget {

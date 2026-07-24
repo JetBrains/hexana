@@ -1,7 +1,7 @@
 package org.jetbrains.hexana.cli.product
 
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import org.jetbrains.hexana.analytics.AnalyticsConfig
@@ -750,7 +750,7 @@ private fun sendCliAnalytics(
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")
             connection.outputStream.use { output ->
-                output.write(analyticsJson.encodeToString(body).toByteArray(StandardCharsets.UTF_8))
+                output.write(analyticsJson.encodeToString(JsonObject.serializer(), body).toByteArray(StandardCharsets.UTF_8))
             }
             connection.responseCode
         } finally {

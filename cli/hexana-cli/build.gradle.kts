@@ -87,6 +87,7 @@ graalvmNative {
                 "-Dhexana.version=$version",
                 "-H:+ReportExceptionStackTraces",
                 "--initialize-at-build-time=kotlin.DeprecationLevel",
+                "--enable-url-protocols=http,https",
             )
         }
     }
