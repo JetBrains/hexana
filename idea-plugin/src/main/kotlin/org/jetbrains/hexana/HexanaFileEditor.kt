@@ -51,6 +51,7 @@ import org.jetbrains.hexana.providers.format.WasmDispatchSurfaceDiffResult
 import org.jetbrains.hexana.providers.format.WasmEntityDiffResult
 import org.jetbrains.hexana.providers.format.WasmSizeDiffOrchestrator
 import org.jetbrains.hexana.sourcemap.parseSourceMap
+import org.jetbrains.hexana.sourcemap.sourceMapTextFromDataUrl
 import org.jetbrains.hexana.ui.BinaryEditorView
 import org.jetbrains.hexana.ui.CLASS_FILE_NAV_TARGET_KEY
 import org.jetbrains.hexana.ui.ClassFileNavTarget
@@ -570,7 +571,6 @@ class HexanaFileEditor(
         }
 
         val ref = AtomicReference(HexanaSourceLocationProvider.EMPTY)
-        initSourceLocationProvider(ref)
 
         return when (WasmBinaryProviderSelector.select(commonBuffer)) {
             BinaryProviderType.Wasm -> {
@@ -615,7 +615,7 @@ class HexanaFileEditor(
                                 dwarfSourceLocations?.getFirstSourceLocationInRange(startOffset, endOffset)
                                     ?: ref.get().getFirstSourceLocationInRange(startOffset, endOffset)
                         }
-                }
+                }.also { initSourceLocationProvider(ref, it) }
             }
 
             BinaryProviderType.WasmComponent -> {
@@ -637,7 +637,7 @@ class HexanaFileEditor(
 
                     override val sourceLocationProvider: HexanaSourceLocationProvider
                         get() = ref.get()
-                }
+                }.also { initSourceLocationProvider(ref, null) }
             }
 
             BinaryProviderType.Generic -> GenericBinaryVirtualFileProvider(myFile)
@@ -1208,14 +1208,13 @@ data class HexViewState(
 }
 
 
-private fun HexanaFileEditor.initSourceLocationProvider(ref: AtomicReference<HexanaSourceLocationProvider>) {
+private fun HexanaFileEditor.initSourceLocationProvider(
+    ref: AtomicReference<HexanaSourceLocationProvider>,
+    provider: WasmBinaryProvider?,
+) {
     HexanaService.getInstance().coroutineScope.launch(Dispatchers.IO) {
-        val sourceMap = myFile.parent?.findChild("${myFile.name}.map")
-        if (sourceMap?.exists() != true) {
-            return@launch
-        }
-        val sourceMapPath = sourceMap.toNioPathOrNull()
-        val sourceLocationProvider = parseSourceMap(sourceMapPath, VfsUtil.loadText(sourceMap))
+        val (sourceMapPath, sourceMapText) = loadSourceMapText(provider) ?: return@launch
+        val sourceLocationProvider = parseSourceMap(sourceMapPath, sourceMapText)
         val resolvedPaths = hashSetOf<String>()
         for (path in sourceLocationProvider.sources) {
             try {
@@ -1245,6 +1244,40 @@ private fun HexanaFileEditor.initSourceLocationProvider(ref: AtomicReference<Hex
         }
         ref.set(filteringLocationProvider)
     }
+}
+
+/**
+ * Resolves the module's source-map text, in priority order:
+ *
+ * 1. The `sourceMappingURL` custom section, when [provider] carries one —
+ *    either a `data:` URL with the inline map (Kotlin/Wasm dev builds) or a
+ *    path resolved against the wasm file's directory (absolute paths
+ *    accepted). Remote http(s) URLs are not fetched.
+ * 2. The `<wasmfile>.map` sidecar convention, also the fallback when the
+ *    section's target cannot be loaded.
+ *
+ * Returns the nio path used to resolve relative `sources` entries (the wasm
+ * file itself for inline maps) plus the JSON text, or null when no map loads.
+ */
+private fun HexanaFileEditor.loadSourceMapText(provider: WasmBinaryProvider?): Pair<Path?, String>? {
+    val url = provider?.sourceMappingUrl
+    if (url != null) {
+        sourceMapTextFromDataUrl(url)?.let { text ->
+            return myFile.toNioPathOrNull() to text
+        }
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            val mapFile = myFile.parent?.findFileByRelativePath(url)
+                ?: runCatching { Path.of(url) }.getOrNull()
+                    ?.takeIf { it.isAbsolute }
+                    ?.let { VfsUtil.findFile(it, true) }
+            if (mapFile?.exists() == true) {
+                return mapFile.toNioPathOrNull() to VfsUtil.loadText(mapFile)
+            }
+        }
+    }
+    val sidecar = myFile.parent?.findChild("${myFile.name}.map") ?: return null
+    if (!sidecar.exists()) return null
+    return sidecar.toNioPathOrNull() to VfsUtil.loadText(sidecar)
 }
 
 /**

@@ -43,6 +43,7 @@ import org.jetbrains.hexana.zip.ZipParser
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.WasmParseSuccess
+import org.jetbrains.hexana.wasm.customSectionByName
 import org.jetbrains.hexana.wasm.analysis.GraalJavaSymbol
 import org.jetbrains.hexana.wasm.analysis.GraalSymbolDemangler
 import org.jetbrains.hexana.wasm.analysis.GraalWebImageDetector
@@ -791,6 +792,20 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
     val wasmModule = parsedModule as? WasmModule
 
     fun canProvideWasmModule() = wasmModule != null
+
+    /**
+     * Payload of the `sourceMappingURL` custom section — a single string
+     * holding the source map's URL or path (Kotlin/Wasm and Emscripten emit
+     * it) — or null when the section is absent or unreadable.
+     */
+    val sourceMappingUrl: String? by lazy {
+        val section = wasmModule?.customSectionByName("sourceMappingURL") ?: return@lazy null
+        runCatching {
+            val buf = bytes
+            buf.position(section.contentOffset)
+            buf.consumeString()
+        }.getOrNull()
+    }
 
     // Cached (not a fresh instance per access): the provider builds its merged
     // line-row table lazily on first query, and per-access construction would

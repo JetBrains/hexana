@@ -31,4 +31,21 @@ class SourceMapParserTest : UsefulTestCase() {
         val map = parseSourceMap(Path.of("/tmp/app.wasm.map"), mapJson)
         assertNull(map.getSourceLocationForOffset(3))
     }
+
+    fun testRangeQueryFindsFirstMappingAtOrAfterStart() {
+        val map = parseSourceMap(Path.of("/tmp/app.wasm.map"), mapJson)
+        // Entries sit at offsets 8 and 16; [10, 20) must find the one at 16.
+        assertEquals(3, map.getFirstSourceLocationInRange(10, 20)?.line)
+        // [17, 20) holds no entry.
+        assertNull(map.getFirstSourceLocationInRange(17, 20))
+    }
+
+    fun testDataUrlBase64RoundTrip() {
+        val encoded = java.util.Base64.getEncoder().encodeToString(mapJson.toByteArray())
+        val text = sourceMapTextFromDataUrl("data:application/json;base64,$encoded")
+        assertEquals(mapJson, text)
+        // Non-data URLs and truncated payloads decode to null.
+        assertNull(sourceMapTextFromDataUrl("app.wasm.map"))
+        assertNull(sourceMapTextFromDataUrl("data:application/json;base64"))
+    }
 }

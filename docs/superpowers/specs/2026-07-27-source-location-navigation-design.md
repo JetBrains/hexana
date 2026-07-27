@@ -110,12 +110,26 @@ fresh on every access, which would have rebuilt the row table per query).
 - `SourceMapParserTest`: hand-written 2-segment VLQ map pins the 0-based ->
   1-based normalization and the before-first-mapping miss.
 
+## Phase B (implemented): sourceMappingURL-driven loading
+
+- `WasmBinaryProvider.sourceMappingUrl`: lazy read of the custom section's
+  string payload.
+- The editor's map loader now resolves, in order: a `data:` URL with the
+  inline map (base64 or percent-encoded; `sourceMapTextFromDataUrl`), a path
+  relative to the wasm file's directory (absolute paths accepted), and the
+  pre-existing `<file>.map` sidecar as the fallback (also when the section's
+  target cannot be loaded). Remote http(s) URLs are not fetched.
+- Relative `sources` entries of an inline map resolve against the wasm
+  file's directory.
+- Tests: section payload reading on a hand-built module (present/absent);
+  data-URL round-trip and rejection cases; source-map range query.
+- Verification artifact: `~/ws/wasm-playground/srcmap-demo/demo.wasm` — a
+  section pointing at `demo.map` (a non-sidecar name only the section path
+  can discover) whose mappings target the module's own `.wat` source in the
+  same directory.
+
 ## Remaining phases
 
-- **Phase B — sourceMappingURL-driven loading**: read the URL from the
-  custom section (path relative to the wasm file; `data:` URLs with inline
-  base64 JSON; no http(s) fetching), falling back to the existing `<file>.map`
-  sidecar convention. The parser itself already exists.
 - **Phase C (deferred)**: VS Code parity; inline `sourcesContent` virtual
   files; opt-in remote map fetching; binary-searched lookups if profiling
   warrants.

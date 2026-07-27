@@ -70,6 +70,28 @@ data class MappingEntry(
 }
 
 
+/**
+ * Decodes a `data:` URL carrying an inline source map, the form Kotlin/Wasm
+ * dev builds and some bundlers embed in the `sourceMappingURL` custom
+ * section: `data:application/json[;charset=utf-8];base64,<payload>`.
+ * Non-base64 payloads are treated as percent-encoded text. Returns null for
+ * non-data URLs and undecodable payloads.
+ */
+fun sourceMapTextFromDataUrl(url: String): String? {
+    if (!url.startsWith("data:")) return null
+    val comma = url.indexOf(',')
+    if (comma < 0) return null
+    val meta = url.substring(5, comma)
+    val payload = url.substring(comma + 1)
+    return runCatching {
+        if (meta.endsWith(";base64")) {
+            java.util.Base64.getDecoder().decode(payload).decodeToString()
+        } else {
+            java.net.URLDecoder.decode(payload, Charsets.UTF_8)
+        }
+    }.getOrNull()
+}
+
 fun parseSourceMap(sourceMapPath: Path?, sourceMapText: CharSequence): SourceMap {
     var sources = emptyList<String>()
     var mappings = emptyList<MappingEntry>()
