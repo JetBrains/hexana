@@ -193,6 +193,81 @@ commonMain changes.
 - Native binaries. Indirect-call visibility for machine code is a different
   problem (jump tables, relocations) and out of scope.
 
+## Dispatch tab: user-facing description (docs source material)
+
+Shipped as phase 3. This section is written to be lifted into user
+documentation (docs site, marketplace changelog, release notes) with light
+editing; keep the claims as stated, they are verified.
+
+### What it answers
+
+The Dispatch tab compares two builds of a module and answers: did the set of
+functions reachable through `call_indirect` change, and how. Every
+`call_indirect` dispatches through a table; which functions it can reach is
+determined statically by the element segments (which functions sit in the
+table) and the call site's type (only entries with a structurally matching
+signature pass the runtime check). That set, grouped by signature, is the
+module's dispatch surface. It matters for size: a function in the table is
+pinned, wasm-opt cannot prove it dead, so it survives every optimization
+pass. When a rebuild grows the surface, the module quietly got harder to
+shrink, and nothing in a plain size report says why.
+
+### Reading the table
+
+One row per candidate that changed state, grouped by signature:
+
+- **Signature**: the canonical type, e.g. `(i32, i32) -> i32`. Structural,
+  not type-index-based; two type-section entries with the same shape count
+  as one signature.
+- **Candidates** (`768 -> 593`): distinct functions dispatchable through
+  this signature, baseline vs current build.
+- **Change**: Entered (became reachable through the table, green) or Left
+  (stopped being reachable, red).
+- **Function**: `new` means the function did not exist in the baseline;
+  `removed` means it is gone from the current build; `existing` means the
+  function is present in both builds and only its table membership changed.
+  "Existing + Entered" is the silent-pinning event: a dependency bump or
+  codegen change put an already-present function into the table, and from
+  then on wasm-opt must keep it.
+- **Candidate**: the function name. Clicking a row opens the side-by-side
+  WAT detail, with both versions when the function exists in both builds.
+
+The footer ("N signatures changed, M unchanged") says how much of the
+surface is stable.
+
+### Why identity is the hard part
+
+Function indices renumber completely on any rebuild, and wasm-bindgen's
+closure shims change their names every build (`...::h<hash>`). Comparing by
+index or name would report total churn every time. The tab instead reuses
+the diff engine's content-hash function matcher (the same machinery behind
+the Entities tab): functions pair by normalized body content, name anchors,
+call-graph propagation, and a fuzzy fallback. Only what the matcher cannot
+pair shows as new/removed. Per-signature caller counts come from the
+call graph's per-signature indirect-call hubs.
+
+### A verified example
+
+Between a workers-rs build and its `wasm-opt -Oz` output, the element
+segments are identical in size (1,415 entries), yet candidate counts drop
+sharply (768 to 593 on the hottest signature). Duplicate-function
+elimination merged ~360 identical functions, leaving many table slots
+pointing at one shared body: the table did not shrink, the dispatch surface
+did. Neither a size treemap nor an entity list expresses that effect.
+
+### Limits to state honestly in docs
+
+- Candidates are statically known: runtime `table.set` writes are invisible.
+- Typed-funcref (WasmGC) signatures join by rendered heap-type index, so
+  their cross-build identity is only as stable as the type index.
+- An optimized plus name-stripped comparison is the matcher's hardest
+  regime and lists long entered/left tails; a same-flags release-to-release
+  diff reads much quieter.
+
+One-sentence summary: the diff now tells you when a rebuild silently changed
+what your `call_indirect`s can reach, and which of those functions became
+unremovable in the process.
+
 ## Risks
 
 - **Sealed-node consumers.** Splitting the hub changes a shared sealed hierarchy;
