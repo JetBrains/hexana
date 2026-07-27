@@ -2,6 +2,9 @@ package org.jetbrains.hexana.wasm.analysis.callgraph
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
+import org.jetbrains.hexana.wasm.analysis.dispatch.DispatchCandidates
+import org.jetbrains.hexana.wasm.analysis.dispatch.DispatchCandidatesBuilder
+import org.jetbrains.hexana.wasm.analysis.dispatch.DispatchSignature
 import org.jetbrains.hexana.wasm.analysis.graph.DirectedGraph
 import org.jetbrains.hexana.wasm.analysis.graph.DirectedGraphBuilder
 import org.jetbrains.hexana.wasm.opcodes.OpCode
@@ -30,6 +33,9 @@ class CallGraphBuilder(
     private val buffer: CommonByteBuffer,
     private val module: WasmModule
 ) {
+
+    /** Resolves call_indirect type immediates to canonical signatures and candidate sets. */
+    private val dispatch: DispatchCandidates by lazy { DispatchCandidatesBuilder(buffer, module).build() }
 
     fun build(): CallGraphResult {
         // Lightweight offset index — no opcode parsing
@@ -104,26 +110,32 @@ class CallGraphBuilder(
         }
 
         // 5. Parse each function one at a time, extract call edges, let GC reclaim parsed data
-        val indirectCallers = ArrayList<Int>()
+        val indirectCallersBySignature = LinkedHashMap<DispatchSignature, MutableList<Int>>()
         for (i in codeOffsets.indices) {
             val callerIdx = importFuncCount + i
             val record = buffer.parseCodeEntry(codeOffsets[i].offset)
-            if (addEdgesForFunction(callerIdx, record.opCodes, graphBuilder)) {
-                indirectCallers.add(callerIdx)
+            for (signature in addEdgesForFunction(callerIdx, record.opCodes, graphBuilder)) {
+                indirectCallersBySignature.getOrPut(signature) { ArrayList() }.add(callerIdx)
             }
         }
 
-        // 6. Route indirect calls through a single hub node instead of a full
-        // callers × element-table product of edges.
-        if (indirectCallers.isNotEmpty() && elementFunctions.isNotEmpty()) {
-            val hub = CallGraphNode.IndirectCallHub()
+        // 6. Route indirect calls through one hub node per canonical signature
+        // instead of a full callers × element-table product of edges. Total
+        // hub edges stay linear: one caller→hub edge per (function, signature)
+        // pair, and the table entries partitioned by signature on the way out.
+        // A signature with no candidates still gets its (empty) hub — that
+        // call site can only trap, which is worth surfacing. LinkedHashMap
+        // keeps hub id assignment deterministic (first-use order).
+        var nextHubId = CallGraphNode.INDIRECT_CALL_HUB_ID_BASE
+        for ((signature, callers) in indirectCallersBySignature) {
+            val hub = CallGraphNode.IndirectCallHub(nextHubId--, signature.text())
             graphBuilder.addNode(hub.id, hub.name)
             nodeMap[hub.id] = hub
-            for (callerIdx in indirectCallers) {
+            for (callerIdx in callers) {
                 graphBuilder.addEdge(callerIdx, hub.id)
             }
-            for (elemFuncIdx in elementFunctions) {
-                graphBuilder.addEdge(hub.id, elemFuncIdx)
+            for (candidateIdx in dispatch.candidatesFor(signature)) {
+                graphBuilder.addEdge(hub.id, candidateIdx)
             }
         }
 
@@ -133,28 +145,36 @@ class CallGraphBuilder(
 
     /**
      * Walks the opcode tree of a single function, collects unique direct call targets
-     * (call, return_call, ref.func), adds their edges once, and returns whether the
-     * function contains any indirect call (the caller routes those through the
-     * [CallGraphNode.IndirectCallHub]). Recurses into all block-like containers
-     * (block, loop, if, else, legacy try, try_table). call_ref / return_call_ref add
-     * no edges — their targets are reached via ref.func roots (matches twiggy
-     * semantics).
+     * (call, return_call, ref.func), adds their edges once, and returns the canonical
+     * signatures of the function's indirect call sites (the caller routes each through
+     * its per-signature [CallGraphNode.IndirectCallHub]). A type immediate that does
+     * not resolve to a function type is skipped. Recurses into all block-like
+     * containers (block, loop, if, else, legacy try, try_table). call_ref /
+     * return_call_ref add no edges — their targets are reached via ref.func roots
+     * (matches twiggy semantics).
      */
     private fun addEdgesForFunction(
         callerIdx: Int,
         opcodes: List<OpCode>,
         graphBuilder: DirectedGraphBuilder
-    ): Boolean {
+    ): Set<DispatchSignature> {
         val directTargets = HashSet<Int>(8)
-        var hasIndirectCall = false
+        var indirectSignatures: MutableSet<DispatchSignature>? = null
+
+        fun addIndirect(typeIdx: Int) {
+            val signature = dispatch.signatureOfType(typeIdx) ?: return
+            val sink = indirectSignatures
+                ?: LinkedHashSet<DispatchSignature>().also { indirectSignatures = it }
+            sink.add(signature)
+        }
 
         fun walk(ops: List<OpCode>) {
             for (op in ops) {
                 when (op) {
                     is OpCodes.Flow.Call -> directTargets.add(op.value.toInt())
                     is OpCodes.Flow.ReturnCall -> directTargets.add(op.value.toInt())
-                    is OpCodes.Flow.CallIndirect -> hasIndirectCall = true
-                    is OpCodes.Flow.ReturnCallIndirect -> hasIndirectCall = true
+                    is OpCodes.Flow.CallIndirect -> addIndirect(op.value0)
+                    is OpCodes.Flow.ReturnCallIndirect -> addIndirect(op.value0.toInt())
                     is OpCodes.Ref.Func -> directTargets.add(op.value.toInt())
                     is OpCodes.Flow.Block -> walk(op.value)
                     is OpCodes.Flow.TryTable -> walk(op.code)
@@ -167,7 +187,7 @@ class CallGraphBuilder(
         for (target in directTargets) {
             graphBuilder.addEdge(callerIdx, target)
         }
-        return hasIndirectCall
+        return indirectSignatures ?: emptySet()
     }
 
     private fun collectElementFunctions(): Set<Int> {

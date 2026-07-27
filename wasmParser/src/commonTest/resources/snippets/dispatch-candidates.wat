@@ -5,7 +5,9 @@
 ;;  - active elem: $ext $add1 $mul2 $sum are statically known candidates.
 ;;  - passive elem: $passive can enter a table via table.init — included.
 ;;  - declare elem: $orphan never populates a table — excluded.
-;;  - $t2: func type with no table entries — empty candidate set.
+;;  - $t2: func type with no table entries — empty candidate set; $caller2
+;;    call_indirect's through it, so its per-signature call-graph hub exists
+;;    but has zero candidate successors (trap-only site).
 (module
   (type $t0 (func (param i32) (result i32)))
   (type $t0dup (func (param i32) (result i32)))
@@ -22,6 +24,10 @@
     local.get 0
     i32.const 0
     call_indirect (type $t0dup))
+  (func $caller2 (param f64) (result f64)
+    local.get 0
+    i32.const 0
+    call_indirect (type $t2))
   (elem (i32.const 0) $ext $add1 $mul2 $sum)
   (elem func $passive)
   (elem declare func $orphan)

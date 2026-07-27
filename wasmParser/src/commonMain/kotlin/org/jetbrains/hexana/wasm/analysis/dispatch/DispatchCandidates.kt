@@ -88,6 +88,9 @@ class DispatchCandidates internal constructor(
         return bySignature[sig] ?: EMPTY
     }
 
+    /** Same lookup keyed directly by canonical signature. */
+    fun candidatesFor(signature: DispatchSignature): IntArray = bySignature[signature] ?: EMPTY
+
     private companion object {
         val EMPTY = IntArray(0)
     }
