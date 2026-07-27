@@ -1,6 +1,5 @@
 package org.jetbrains.hexana.ui.panel
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -10,17 +9,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import com.intellij.icons.AllIcons
 import com.intellij.ide.ui.UISettingsUtils
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.editor.impl.EditorComponentImpl
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.ui.HyperlinkLabel
+import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import java.awt.BorderLayout
+import java.awt.FlowLayout
 import javax.swing.JPanel
 
 /**
@@ -32,8 +36,9 @@ import javax.swing.JPanel
 internal fun decompiledContentPanel(
     project: Project,
     decompiledFile: VirtualFile,
+    originalFile: VirtualFile? = null,
 ): Panel = Panel("Decompiled") {
-    decompiledEditorComposable(project, decompiledFile)
+    decompiledEditorComposable(project, decompiledFile, originalFile)
 }
 
 /**
@@ -45,6 +50,7 @@ internal fun decompiledContentPanel(
 internal fun decompiledEditorComposable(
     project: Project,
     decompiledFile: VirtualFile,
+    originalFile: VirtualFile? = null,
 ) {
     val textEditor = remember {
         val te = TextEditorProvider.getInstance().createEditor(project, decompiledFile) as TextEditor
@@ -88,21 +94,31 @@ internal fun decompiledEditorComposable(
     } else {
         currentDensity
     }
-    Box(Modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalDensity provides unscaledDensity) {
-            SwingPanel(
-                modifier = Modifier.fillMaxSize(),
-                update = {
-                    ApplicationManager.getApplication().invokeLater {
-                        UIUtil.findComponentOfType(it, EditorComponentImpl::class.java)?.requestFocusInWindow()
+    CompositionLocalProvider(LocalDensity provides unscaledDensity) {
+        SwingPanel(
+            modifier = Modifier.fillMaxSize(),
+            update = {
+                ApplicationManager.getApplication().invokeLater {
+                    UIUtil.findComponentOfType(it, EditorComponentImpl::class.java)?.requestFocusInWindow()
+                }
+            },
+            factory = {
+                val linkPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0)).apply {
+                    border = JBUI.Borders.empty(2, 4)
+                    val link = HyperlinkLabel("Open in editor").apply {
+                        icon = AllIcons.Ide.External_link_arrow
+                        addHyperlinkListener {
+                            FileEditorManager.getInstance(project).openFile(originalFile ?: decompiledFile, true)
+                        }
                     }
-                },
-                factory = {
-                    val panel = JPanel(BorderLayout())
-                    panel.add(editorComponent, BorderLayout.CENTER)
-                    panel
-                },
-            )
-        }
+                    add(link)
+                }
+
+                val panel = JPanel(BorderLayout())
+                panel.add(linkPanel, BorderLayout.NORTH)
+                panel.add(editorComponent, BorderLayout.CENTER)
+                panel
+            },
+        )
     }
 }

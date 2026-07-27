@@ -399,7 +399,7 @@ class HexanaFileEditor(
                                 }
                             }
                         }
-                        decompiledEditorComposable(myProject, lightFile)
+                        decompiledEditorComposable(myProject, lightFile, decompilerFile)
                     }
                 }
 
@@ -415,7 +415,7 @@ class HexanaFileEditor(
                             LightVirtualFile(lightFileName, current.stubText)
                         }
                     }
-                    decompiledEditorComposable(myProject, lightFile)
+                    decompiledEditorComposable(myProject, lightFile, decompilerFile)
                 }
 
                 is LazyDecompileState.Decompiled -> {
@@ -430,7 +430,7 @@ class HexanaFileEditor(
                             LightVirtualFile(lightFileName, current.text)
                         }
                     }
-                    decompiledEditorComposable(myProject, lightFile)
+                    decompiledEditorComposable(myProject, lightFile, decompilerFile)
                 }
 
                 LazyDecompileState.Failed -> {
