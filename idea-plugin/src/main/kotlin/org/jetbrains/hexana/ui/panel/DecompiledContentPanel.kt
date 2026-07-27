@@ -57,20 +57,24 @@ internal fun decompiledEditorComposable(
         editorEx?.highlighter = com.intellij.openapi.editor.highlighter.EditorHighlighterFactory
             .getInstance().createEditorHighlighter(project, decompiledFile)
         te.editor.document.setReadOnly(true)
-        // Keep syntax highlighting but disable inspections.
-        val psiFile = com.intellij.psi.PsiManager.getInstance(project).findFile(decompiledFile)
-        if (psiFile != null) {
-            com.intellij.codeInsight.daemon.impl.analysis.HighlightingSettingsPerFile
-                .getInstance(project)
-                .setHighlightingSettingForRoot(
-                    psiFile,
-                    com.intellij.codeInsight.daemon.impl.analysis.FileHighlightingSetting.SKIP_HIGHLIGHTING,
-                )
-        }
         te
     }
 
+    // Disable inspections outside the Compose recomposition/paint path.
+    // setHighlightingSettingForRoot triggers a write action (via DaemonListeners),
+    // which would deadlock if executed during the Skia render pass.
     DisposableEffect(Unit) {
+        ApplicationManager.getApplication().invokeLater {
+            val psiFile = com.intellij.psi.PsiManager.getInstance(project).findFile(decompiledFile)
+            if (psiFile != null) {
+                com.intellij.codeInsight.daemon.impl.analysis.HighlightingSettingsPerFile
+                    .getInstance(project)
+                    .setHighlightingSettingForRoot(
+                        psiFile,
+                        com.intellij.codeInsight.daemon.impl.analysis.FileHighlightingSetting.SKIP_HIGHLIGHTING,
+                    )
+            }
+        }
         onDispose {
             Disposer.dispose(textEditor)
         }
