@@ -118,6 +118,18 @@ public class WasmHexanaWatRenderer(
      */
     public var symbolicOperands: Boolean = false
 
+    /**
+     * When true, every `call_indirect` / `return_call_indirect` row is
+     * followed by an [RowKind.IndirectCandidatesExpander] row plus one
+     * clickable comment row per statically known dispatch candidate
+     * ([RowKind.IndirectCandidate], each carrying a [FollowTarget]). Off by
+     * default: other renderRows consumers (the VS Code WAT tab, the WAT-diff
+     * path, tests) have no expander handling and would render every
+     * candidate row ungated. The IDE's virtualized WAT panel enables it on
+     * its renderer instance.
+     */
+    public var inlineIndirectCandidates: Boolean = false
+
     private val watSymbols = WatSymbolNames { funcIdx -> resolver.resolve(SymbolKind.FUNCTION, funcIdx) }
 
     private val memoryRecords: List<WasmMemoryRecord> by lazy {
@@ -244,7 +256,7 @@ public class WasmHexanaWatRenderer(
         } else {
             emptyList()
         }
-        val bodyRows = rawRows.map { rowTokens ->
+        val bodyRows = rawRows.flatMap { rowTokens ->
             val rowOpStart = rowTokens
                 .firstOrNull { it.kind == RenderTokenKind.OFFSET_ANNOTATION }
                 ?.sourceOffset
@@ -283,7 +295,24 @@ public class WasmHexanaWatRenderer(
                     null
                 }
             }
-            RenderedRow(tokens = rowTokens, editable = editable, followTarget = followTarget)
+            // call_indirect rows are read-only (no `editable`), so the type
+            // immediate rides on the row for the candidates popup.
+            val indirectCallTypeIdx = when (val op = opInfo?.op) {
+                is OpCodes.Flow.CallIndirect -> op.value0
+                is OpCodes.Flow.ReturnCallIndirect -> op.value0.toInt()
+                else -> null
+            }
+            val siteRow = RenderedRow(
+                tokens = rowTokens,
+                editable = editable,
+                followTarget = followTarget,
+                indirectCallTypeIdx = indirectCallTypeIdx,
+            )
+            if (inlineIndirectCandidates && indirectCallTypeIdx != null && rowOpStart != null) {
+                listOf(siteRow) + indirectCandidateRows(indirectCallTypeIdx, siteKey = rowOpStart)
+            } else {
+                listOf(siteRow)
+            }
         }
         return redirectAnnotation + bodyRows
     }
@@ -358,6 +387,36 @@ public class WasmHexanaWatRenderer(
         RenderToken("    ", RenderTokenKind.WHITESPACE),
         RenderToken("(; redirected to func $targetFuncIdx ;)", RenderTokenKind.COMMENT),
     )
+
+    /**
+     * Expander row + one clickable comment row per statically known dispatch
+     * candidate for a `call_indirect` site (see [inlineIndirectCandidates]).
+     * Candidate rows carry a [FollowTarget], so the panel's existing
+     * follow-row rendering makes each one click-navigable. Static
+     * under-approximation: runtime `table.set` writes are invisible.
+     */
+    private fun indirectCandidateRows(typeIdx: Int, siteKey: Long): List<RenderedRow> {
+        val candidates = provider.dispatchCandidates?.candidatesForType(typeIdx) ?: return emptyList()
+        if (candidates.isEmpty()) return emptyList()
+        val rows = ArrayList<RenderedRow>(candidates.size + 1)
+        rows += RenderedRow(
+            tokens = emptyList(),
+            kind = RowKind.IndirectCandidatesExpander(siteKey = siteKey, count = candidates.size),
+        )
+        for (funcIdx in candidates) {
+            val name = watSymbols.function(funcIdx)
+            val label = if (name != null) "(; -> $funcIdx: $name ;)" else "(; -> func $funcIdx ;)"
+            rows += RenderedRow(
+                tokens = listOf(
+                    RenderToken("        ", RenderTokenKind.WHITESPACE),
+                    RenderToken(label, RenderTokenKind.COMMENT),
+                ),
+                followTarget = FollowTarget(funcIdx = funcIdx, section = WasmSectionKinds.FUNCTION),
+                kind = RowKind.IndirectCandidate(siteKey = siteKey),
+            )
+        }
+        return rows
+    }
 
     /**
      * Locates the `(local …)` declaration row in a code chunk and returns

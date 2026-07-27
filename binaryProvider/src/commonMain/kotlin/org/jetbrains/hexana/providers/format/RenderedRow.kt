@@ -33,6 +33,14 @@ public data class RenderedRow(
      */
     public val followTarget: FollowTarget? = null,
     /**
+     * The type immediate of a `call_indirect` / `return_call_indirect` row,
+     * `null` for every other row. Powers the statically-known dispatch
+     * candidates popup. Carried on the row (not on [editable]) because
+     * indirect calls are outside the inline-editable subset, so these rows
+     * render read-only and [editable] is always `null` for them.
+     */
+    public val indirectCallTypeIdx: Int? = null,
+    /**
      * Role discriminator the panel uses to give specific rows special
      * behaviour (the Data section's expander row click, body-row hiding
      * when the entry is collapsed, …). Defaults to [RowKind.Generic] for
@@ -131,6 +139,22 @@ public sealed interface RowKind {
      * the user can navigate to the function's declaration row.
      */
     public data object ExportDescriptor : RowKind
+
+    /**
+     * Clickable `▶ show N candidates` / `▼ hide N candidates` row directly
+     * below a `call_indirect` row (emitted only when the renderer's
+     * `inlineIndirectCandidates` flag is on). The panel toggles the site's
+     * membership in its expanded-sites set on click. [siteKey] is the call
+     * instruction's start offset — unique per site within the chunk.
+     */
+    public data class IndirectCandidatesExpander(val siteKey: Long, val count: Int) : RowKind
+
+    /**
+     * One statically known dispatch candidate below a `call_indirect` site's
+     * expander. Hidden unless the site is expanded. Carries a [FollowTarget]
+     * so clicking (or Cmd+B) navigates to the candidate function.
+     */
+    public data class IndirectCandidate(val siteKey: Long) : RowKind
 }
 
 /**

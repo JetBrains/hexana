@@ -64,6 +64,8 @@ import org.jetbrains.hexana.wasm.analysis.SizeAnalysisBuilder
 import org.jetbrains.hexana.wasm.analysis.SizeNode
 import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphBuilder
 import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphResult
+import org.jetbrains.hexana.wasm.analysis.dispatch.DispatchCandidates
+import org.jetbrains.hexana.wasm.analysis.dispatch.DispatchCandidatesBuilder
 import org.jetbrains.hexana.wasm.analysis.graph.DominatorResult
 import org.jetbrains.hexana.wasm.analysis.graph.DominatorTree
 import org.jetbrains.hexana.wasm.WasmParser
@@ -929,6 +931,15 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
 
     val callGraphDominators: DominatorResult? by lazy {
         callGraphResult?.let { DominatorTree.compute(it.graph) }
+    }
+
+    /**
+     * Statically known `call_indirect` candidates grouped by canonical
+     * signature. Lazy and cheap (one pass over type/import/function/element
+     * sections, no code decoding) but still built off the EDT by UI callers.
+     */
+    val dispatchCandidates: DispatchCandidates? by lazy {
+        wasmModule?.let { DispatchCandidatesBuilder(bytes, it).build() }
     }
 
     val importFuncCount: Int by lazy {

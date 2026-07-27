@@ -254,6 +254,12 @@ private fun WasmPanelWatVirtualizedContent(
     val expandedExportChunksState: MutableState<Set<ChunkId>> =
         remember { mutableStateOf(emptySet<ChunkId>()) }
 
+    // Per-call-site expand state for inline call_indirect candidate rows,
+    // keyed by (chunk, site byte offset) since one chunk can hold several
+    // indirect call sites. Same lifecycle rationale as the states above.
+    val expandedIndirectSitesState: MutableState<Set<Pair<ChunkId, Long>>> =
+        remember { mutableStateOf(emptySet<Pair<ChunkId, Long>>()) }
+
     // After an append+redirect commit, the user's actual edit lives in the
     // newly-appended last code chunk — not in the redirect stub that took
     // the original body's place. Track the code-chunk count across panel
@@ -425,20 +431,28 @@ private fun WasmPanelWatVirtualizedContent(
         byteOffsetNavFlow.value = null
     }
 
-    // Lowercase function name → global funcidx, built from the chunk tree's
-    // already-resolved displayName field. Excludes imports (they have no
-    // body chunk in the code section). Powers the goto-by-name popup.
-    val funcNamesIndex: Map<String, Int> = remember(chunkTree, provider) {
-        val out = HashMap<String, Int>(chunkTree.totalChunks)
+    // Lowercase function name → global funcidx and the reverse view, built
+    // from the chunk tree's already-resolved displayName field. Excludes
+    // imports (they have no body chunk in the code section). The forward map
+    // powers the goto-by-name popup; the reverse map labels indirect-call
+    // candidates. Names are display-only in the reverse map — they can repeat
+    // across funcidxs, so it must never be used as a lookup key.
+    val funcNameMaps: Pair<Map<String, Int>, Map<Int, String>> = remember(chunkTree, provider) {
+        val byName = HashMap<String, Int>(chunkTree.totalChunks)
+        val byIdx = HashMap<Int, String>(chunkTree.totalChunks)
         for (i in 0 until chunkTree.totalChunks) {
             val c = chunkTree.chunkAt(i)
             if (c is BinaryChunk.Element && c.kind == WasmSectionKinds.CODE) {
                 val name = c.displayName ?: continue
-                out[name.lowercase()] = provider.importFuncCount + c.indexInSection
+                val funcIdx = provider.importFuncCount + c.indexInSection
+                byName[name.lowercase()] = funcIdx
+                byIdx[funcIdx] = name
             }
         }
-        out
+        byName to byIdx
     }
+    val funcNamesIndex: Map<String, Int> = funcNameMaps.first
+    val funcDisplayNames: Map<Int, String> = funcNameMaps.second
     var gotoPopupOpen by remember { mutableStateOf(false) }
 
     // Shared per-row callbacks used by both the small-chunk ChunkRow path
@@ -448,6 +462,33 @@ private fun WasmPanelWatVirtualizedContent(
         if (editingRow == cid to ridx) editingRow = null
     }
     val onFollowTarget: (FollowTarget) -> Unit = { tgt -> navigator.gotoFunc(tgt.funcIdx, tgt.section) }
+
+    // call_indirect candidates popup: GotoDeclaration on an indirect-call row
+    // requests candidates for the row's type immediate. Resolution runs off
+    // the EDT because the provider's DispatchCandidates is a lazy build
+    // (one pass over type/import/function/element sections on first use).
+    var indirectCandidatesData by remember { mutableStateOf<IndirectCandidatesData?>(null) }
+    var indirectCandidatesRequest by remember { mutableStateOf<Int?>(null) }
+    androidx.compose.runtime.LaunchedEffect(indirectCandidatesRequest) {
+        val typeIdx = indirectCandidatesRequest ?: return@LaunchedEffect
+        indirectCandidatesData = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val dispatch = provider.dispatchCandidates
+            val signature = dispatch?.signatureOfType(typeIdx)
+            val funcs = dispatch?.candidatesForType(typeIdx) ?: IntArray(0)
+            IndirectCandidatesData(
+                signatureText = signature?.text() ?: "(type $typeIdx)",
+                entries = funcs.map { funcIdx ->
+                    val isImport = funcIdx < provider.importFuncCount
+                    IndirectCandidateEntry(
+                        funcIdx = funcIdx,
+                        label = funcDisplayNames[funcIdx] ?: if (isImport) "(imported)" else "\$func$funcIdx",
+                        navigable = !isImport,
+                    )
+                },
+            )
+        }
+    }
+    val onIndirectCandidates: (Int) -> Unit = { typeIdx -> indirectCandidatesRequest = typeIdx }
 
     // Build the search results adapter: WAT search produces funcIdx-based
     // results; we adapt them to ChunkSearchResult for the common panel.
@@ -607,6 +648,7 @@ private fun WasmPanelWatVirtualizedContent(
                             dataChunkViewModes = null,
                             expandedImportChunks = null,
                             expandedExportChunks = null,
+                            expandedIndirectSites = expandedIndirectSitesState,
                             focusMap = focusMap,
                             editingRow = editingRow,
                             onSetEditingRow = onSetEditing,
@@ -614,6 +656,7 @@ private fun WasmPanelWatVirtualizedContent(
                             onCrossChunkUp = navUp,
                             onCrossChunkDown = navDown,
                             onFollow = onFollowTarget,
+                            onIndirectCandidates = onIndirectCandidates,
                             onOffsetClicked = onOffsetClicked,
                         )
                     }
@@ -637,7 +680,9 @@ private fun WasmPanelWatVirtualizedContent(
                             dataChunkViewModes = dataChunkViewModesState,
                             expandedImportChunks = expandedImportChunksState,
                             expandedExportChunks = expandedExportChunksState,
+                            expandedIndirectSites = expandedIndirectSitesState,
                             onFollow = onFollowTarget,
+                            onIndirectCandidates = onIndirectCandidates,
                             onOffsetClicked = onOffsetClicked,
                         )
                     }
@@ -653,6 +698,21 @@ private fun WasmPanelWatVirtualizedContent(
                 navigator.gotoFunc(funcIdx, WasmSectionKinds.FUNCTION)
             },
             onDismiss = { gotoPopupOpen = false },
+        )
+    }
+    val indirectData = indirectCandidatesData
+    if (indirectData != null) {
+        WasmIndirectCandidatesPopup(
+            data = indirectData,
+            onSelect = { funcIdx ->
+                indirectCandidatesData = null
+                indirectCandidatesRequest = null
+                navigator.gotoFunc(funcIdx, WasmSectionKinds.FUNCTION)
+            },
+            onDismiss = {
+                indirectCandidatesData = null
+                indirectCandidatesRequest = null
+            },
         )
     }
 }
@@ -673,7 +733,9 @@ private fun buildPanelState(provider: WasmBinaryProvider): PanelState {
     return PanelState(
         provider = provider,
         chunkTree = buildWasmChunkTree(parsed),
-        renderer = WasmHexanaWatRenderer(parsed),
+        // The IDE panel gates candidate rows behind per-site expanders, so it
+        // is the one renderRows consumer that can afford the inline rows.
+        renderer = WasmHexanaWatRenderer(parsed).apply { inlineIndirectCandidates = true },
         snapshot = snapshot,
     )
 }
@@ -840,6 +902,12 @@ private fun ChunkRow(
      */
     expandedExportChunks: MutableState<Set<ChunkId>>? = null,
     /**
+     * Per-call-site expand state for inline `call_indirect` candidate rows,
+     * keyed by (chunk, site byte offset). Candidate rows are hidden unless
+     * their site key is in the set; the expander row toggles membership.
+     */
+    expandedIndirectSites: MutableState<Set<Pair<ChunkId, Long>>>? = null,
+    /**
      * The (chunkId, rowIndex) currently being edited, lifted to the panel so
      * cross-chunk arrow nav and click-to-edit share one source of truth. A row
      * inflates to a [BasicTextField] only when it matches; otherwise it stays a
@@ -859,6 +927,8 @@ private fun ChunkRow(
      * navigator is available.
      */
     onFollow: ((FollowTarget) -> Unit)? = null,
+    /** See [RenderedRowView.onIndirectCandidates]. */
+    onIndirectCandidates: ((Int) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     // Re-render whenever the renderer or snapshot changes (i.e. after a
@@ -934,6 +1004,7 @@ private fun ChunkRow(
                 dataChunkViewModes = dataChunkViewModes,
                 expandedImportChunks = expandedImportChunks,
                 expandedExportChunks = expandedExportChunks,
+                expandedIndirectSites = expandedIndirectSites,
                 focusMap = focusMap,
                 editingRow = editingRow,
                 onSetEditingRow = onSetEditingRow,
@@ -941,6 +1012,7 @@ private fun ChunkRow(
                 onCrossChunkUp = onCrossChunkUp,
                 onCrossChunkDown = onCrossChunkDown,
                 onFollow = onFollow,
+                onIndirectCandidates = onIndirectCandidates,
                 onOffsetClicked = onOffsetClicked,
             )
         }
@@ -976,6 +1048,8 @@ private fun WatRowItem(
     dataChunkViewModes: MutableState<Map<ChunkId, DataViewMode>>?,
     expandedImportChunks: MutableState<Set<ChunkId>>?,
     expandedExportChunks: MutableState<Set<ChunkId>>?,
+    /** See [ChunkRow.expandedIndirectSites]. */
+    expandedIndirectSites: MutableState<Set<Pair<ChunkId, Long>>>? = null,
     focusMap: androidx.compose.runtime.snapshots.SnapshotStateMap<Pair<ChunkId, Int>, FocusRequester>?,
     editingRow: Pair<ChunkId, Int>?,
     onSetEditingRow: (ChunkId, Int) -> Unit,
@@ -983,6 +1057,8 @@ private fun WatRowItem(
     onCrossChunkUp: ((ChunkId) -> Unit)?,
     onCrossChunkDown: ((ChunkId) -> Unit)?,
     onFollow: ((FollowTarget) -> Unit)?,
+    /** See [RenderedRowView.onIndirectCandidates]. */
+    onIndirectCandidates: ((Int) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     // Skip Data body/descriptor rows when collapsed; the header + expander
@@ -990,6 +1066,29 @@ private fun WatRowItem(
     if ((row.kind is RowKind.DataBody || row.kind is RowKind.DataDescriptor) && !isDataExpanded) return
     if (row.kind is RowKind.ImportDescriptor && !isImportExpanded) return
     if (row.kind is RowKind.ExportDescriptor && !isExportExpanded) return
+    // Inline call_indirect candidate rows: hidden unless their site is
+    // expanded. The expander row toggles the (chunk, site) membership.
+    val rowKind = row.kind
+    if (rowKind is RowKind.IndirectCandidate &&
+        expandedIndirectSites?.value?.contains(chunk.id to rowKind.siteKey) != true
+    ) {
+        return
+    }
+    if (rowKind is RowKind.IndirectCandidatesExpander) {
+        val sites = expandedIndirectSites ?: return
+        val key = chunk.id to rowKind.siteKey
+        val isOpen = key in sites.value
+        Text(
+            text = if (isOpen) "▼ hide ${rowKind.count} candidates" else "▶ show ${rowKind.count} candidates",
+            style = CHUNK_PANEL_ROW_TEXT_STYLE.copy(color = defaultColorFor(RenderTokenKind.KEYWORD)),
+            modifier = Modifier
+                .padding(start = 90.dp)
+                .clickable {
+                    sites.value = if (isOpen) sites.value - key else sites.value + key
+                },
+        )
+        return
+    }
     // Import / Export / Data expander rows: clickable show/hide toggles.
     if (row.kind is RowKind.ImportExpander && expandedImportChunks != null) {
         Text(
@@ -1103,6 +1202,7 @@ private fun WatRowItem(
             onRequestEdit = { onSetEditingRow(chunk.id, rowIndex) },
             onClearEdit = { onClearEditingRow(chunk.id, rowIndex) },
             onFollow = onFollow,
+            onIndirectCandidates = onIndirectCandidates,
             onOffsetClicked = onOffsetClicked,
         )
     }
@@ -1297,6 +1397,13 @@ private fun RenderedRowView(
     onClearEdit: () -> Unit = {},
     /** See [ChunkRow.onFollow]. */
     onFollow: ((FollowTarget) -> Unit)? = null,
+    /**
+     * Invoked with the type immediate when the user presses GotoDeclaration
+     * on a `call_indirect` / `return_call_indirect` row. The panel resolves
+     * the statically known dispatch candidates for that signature off the
+     * EDT and opens [WasmIndirectCandidatesPopup].
+     */
+    onIndirectCandidates: ((Int) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     val info = row.editable
@@ -1327,6 +1434,36 @@ private fun RenderedRowView(
                             onFollow.invoke(target)
                             true
                         } else false
+                    },
+            )
+            return
+        }
+        val indirectTypeIdx = row.indirectCallTypeIdx
+        if (indirectTypeIdx != null && onIndirectCandidates != null) {
+            // call_indirect rows are outside the inline-editable subset, so
+            // they always render read-only. Click or Cmd+B opens the
+            // statically-known dispatch candidates popup for the row's type
+            // immediate (there is no single declaration to follow).
+            val rowFocus = remember(chunkId, rowIndex) { FocusRequester() }
+            SelectableTokenRow(
+                tokens = row.tokens,
+                color = color,
+                onOffsetClicked = onOffsetClicked,
+                modifier = Modifier
+                    .focusRequester(rowFocus)
+                    .focusable()
+                    .clickable {
+                        onIndirectCandidates(indirectTypeIdx)
+                    }
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        if (KeymapShortcuts.isModifierOnly(event)) return@onPreviewKeyEvent false
+                        if (KeymapShortcuts.matches(event, IdeActions.ACTION_GOTO_DECLARATION)) {
+                            onIndirectCandidates(indirectTypeIdx)
+                            true
+                        } else {
+                            false
+                        }
                     },
             )
             return
