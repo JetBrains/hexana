@@ -19,6 +19,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.HexanaBinaryVirtualFile
 import org.jetbrains.hexana.navigation.SymbolNavigator
 import org.jetbrains.hexana.providers.FatMachOBinaryProvider
+import org.jetbrains.hexana.providers.HexanaSourceLocation
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.macho.MachOParser
@@ -164,6 +165,10 @@ private fun enrichWasmExportsTab(
                     navigateToFunctionInWat(file, project, export.index.toInt())
                 },
             ),
+            sourceLocationMenuItem(provider, project) { index ->
+                val export = exports.getOrNull(index) as? WasmFunctionExportRecordEntry ?: return@sourceLocationMenuItem null
+                (export.index.toInt() - provider.importFuncCount).takeIf { it >= 0 }
+            },
         ),
     )
 }
@@ -421,14 +426,46 @@ private fun enrichWasmFunctionsTab(
         defaultSortAscending = tab.defaultSortAscending,
         rowSelectionProvider = tab.rowSelectionProvider,
         rowAction = graalAction ?: kotlinAction,
-        contextMenuItems = if (onShowPaths != null) {
-            listOf(
-                RowContextMenuItemDescriptor(
-                    labelProvider = { "Show Paths from Roots" },
-                    action = { index -> onShowPaths(index) },
-                ),
-            )
-        } else emptyList(),
+        contextMenuItems = buildList {
+            if (onShowPaths != null) {
+                add(
+                    RowContextMenuItemDescriptor(
+                        labelProvider = { "Show Paths from Roots" },
+                        action = { index -> onShowPaths(index) },
+                    ),
+                )
+            }
+            add(sourceLocationMenuItem(provider, project) { index -> index })
+        },
+    )
+}
+
+/**
+ * "Go to Source (dir/file.rs:123)" context-menu item for a table row that maps
+ * to a defined function. [codeIdxFor] converts the row index to the
+ * defined-function index (Functions tab: identity; Exports tab: exported
+ * funcidx minus the import count), or null when the row has no body.
+ *
+ * Resolution goes through the provider's source-location chain (DWARF, else a
+ * loaded `.map` sidecar) at right-click time. The per-row memo keeps the
+ * visibility/label/action triple to one resolution per row per tab instance;
+ * rows without debug info resolve to null once and stay hidden.
+ */
+private fun sourceLocationMenuItem(
+    provider: WasmBinaryProvider,
+    project: Project,
+    codeIdxFor: (index: Int) -> Int?,
+): RowContextMenuItemDescriptor {
+    val memo = HashMap<Int, HexanaSourceLocation?>()
+    fun locationFor(index: Int): HexanaSourceLocation? = memo.getOrPut(index) {
+        codeIdxFor(index)?.let { wasmFunctionSourceLocation(provider, it) }
+    }
+    return RowContextMenuItemDescriptor(
+        labelProvider = { index ->
+            locationFor(index)?.let { "Go to Source (${sourceLocationLabel(it)})" } ?: ""
+        },
+        isVisible = { index -> locationFor(index) != null },
+        action = { index -> locationFor(index)?.let { openWasmSourceLocation(project, it) } },
     )
 }
 

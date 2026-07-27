@@ -23,31 +23,41 @@ data class SourceMap(
                 r = mid - 1
             }
         }
-        return if (l > 0) {
-            val entry = mappings[l - 1]
-            sources.getOrNull(entry.fileIndex)?.let { path ->
-                try {
-                    val mappingPath = Path.of(path)
-                    val ioPath = if (mappingPath.isAbsolute) {
-                        mappingPath
-                    } else {
-                        sourceMapPath?.resolveSibling(path)
-                    }
-                    if (ioPath != null) {
-                        HexanaSourceLocation(ioPath.toString(), entry.line, entry.column)
-                    } else {
-                        null
-                    }
-                } catch (_: InvalidPathException) {
-                    null
-                }
-
-            }
-        } else {
-            null
-        }
+        return if (l > 0) locationOf(mappings[l - 1]) else null
     }
 
+    override fun getFirstSourceLocationInRange(startOffset: Int, endOffset: Int): HexanaSourceLocation? {
+        // First entry with byteOffset >= startOffset.
+        var l = 0
+        var r = mappings.size
+        while (l < r) {
+            val mid = l + (r - l) / 2
+            if (mappings[mid].byteOffset < startOffset) l = mid + 1 else r = mid
+        }
+        val entry = mappings.getOrNull(l)?.takeIf { it.byteOffset < endOffset } ?: return null
+        return locationOf(entry)
+    }
+
+    private fun locationOf(entry: MappingEntry): HexanaSourceLocation? =
+        sources.getOrNull(entry.fileIndex)?.let { path ->
+            try {
+                val mappingPath = Path.of(path)
+                val ioPath = if (mappingPath.isAbsolute) {
+                    mappingPath
+                } else {
+                    sourceMapPath?.resolveSibling(path)
+                }
+                if (ioPath != null) {
+                    // Source-map VLQ fields are 0-based; HexanaSourceLocation is
+                    // 1-based (matching the DWARF backend), so shift here.
+                    HexanaSourceLocation(ioPath.toString(), entry.line + 1, entry.column + 1)
+                } else {
+                    null
+                }
+            } catch (_: InvalidPathException) {
+                null
+            }
+        }
 }
 
 data class MappingEntry(

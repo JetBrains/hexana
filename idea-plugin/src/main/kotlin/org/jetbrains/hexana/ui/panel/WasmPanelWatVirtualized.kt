@@ -1181,7 +1181,7 @@ private fun WatRowItem(
         }
         else -> null
     }
-    val rowView = @Composable {
+    val renderedRow = @Composable {
         RenderedRowView(
             row = row,
             chunkId = chunk.id,
@@ -1206,6 +1206,47 @@ private fun WatRowItem(
             onOffsetClicked = onOffsetClicked,
         )
     }
+    // Right-click context menu on rows that carry a byte offset: "Go to
+    // Source (file:line)" resolved through the provider's source-location
+    // chain (DWARF, else a loaded `.map` sidecar), plus the dispatch
+    // candidates entry on call_indirect rows. Items are built lazily at
+    // popup time — no per-row resolution while scrolling.
+    val rowSourceOffset = row.editable?.opStart
+        ?: row.tokens.firstOrNull { it.kind == RenderTokenKind.OFFSET_ANNOTATION }?.sourceOffset
+    val rowView: @Composable () -> Unit =
+        if (project != null && (rowSourceOffset != null || row.indirectCallTypeIdx != null)) {
+            {
+                androidx.compose.foundation.ContextMenuArea(items = {
+                    buildList {
+                        val typeIdx = row.indirectCallTypeIdx
+                        if (typeIdx != null && onIndirectCandidates != null) {
+                            add(
+                                androidx.compose.foundation.ContextMenuItem("Show Dispatch Candidates") {
+                                    onIndirectCandidates(typeIdx)
+                                },
+                            )
+                        }
+                        if (rowSourceOffset != null) {
+                            val location = provider.sourceLocationProvider
+                                .getSourceLocationForOffset(rowSourceOffset.toInt())
+                            if (location != null) {
+                                add(
+                                    androidx.compose.foundation.ContextMenuItem(
+                                        "Go to Source (${sourceLocationLabel(location)})",
+                                    ) {
+                                        openWasmSourceLocation(project, location)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }) {
+                    renderedRow()
+                }
+            }
+        } else {
+            renderedRow
+        }
     // The "Java" / "Kotlin/Wasm" badge sits inline on the function's header row.
     if (graalSymbol != null && project != null && rowIndex == 0) {
         Row(verticalAlignment = Alignment.CenterVertically) {

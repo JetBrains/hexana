@@ -590,14 +590,30 @@ class HexanaFileEditor(
                         }
                     }
 
+                    // DWARF first (cached — the provider builds its line-row
+                    // table lazily), then the async-loaded `.map` sidecar in
+                    // [ref]. Falling back per QUERY (not per null-module)
+                    // matters: Kotlin/Wasm modules parse fine but carry no
+                    // DWARF, and previously never reached the source map.
+                    private val dwarfSourceLocations: HexanaSourceLocationProvider? by lazy {
+                        wasmModule?.let {
+                            DwarfSourceLocationProvider(
+                                bytes,
+                                WasmDwarfAccessor(it),
+                                addressBase = it.codeSection?.contentOffset?.toLong() ?: 0L,
+                            )
+                        }
+                    }
+
                     override val sourceLocationProvider: HexanaSourceLocationProvider
-                        get() {
-                            return wasmModule?.let {
-                                DwarfSourceLocationProvider(
-                                    bytes,
-                                    WasmDwarfAccessor(it)
-                                )
-                            } ?: ref.get()
+                        get() = object : HexanaSourceLocationProvider {
+                            override fun getSourceLocationForOffset(byteOffset: Int): HexanaSourceLocation? =
+                                dwarfSourceLocations?.getSourceLocationForOffset(byteOffset)
+                                    ?: ref.get().getSourceLocationForOffset(byteOffset)
+
+                            override fun getFirstSourceLocationInRange(startOffset: Int, endOffset: Int): HexanaSourceLocation? =
+                                dwarfSourceLocations?.getFirstSourceLocationInRange(startOffset, endOffset)
+                                    ?: ref.get().getFirstSourceLocationInRange(startOffset, endOffset)
                         }
                 }
             }
@@ -1222,6 +1238,10 @@ private fun HexanaFileEditor.initSourceLocationProvider(ref: AtomicReference<Hex
                 return result?.takeIf { it.filePath in resolvedPaths }
             }
 
+            override fun getFirstSourceLocationInRange(startOffset: Int, endOffset: Int): HexanaSourceLocation? {
+                val result = sourceLocationProvider.getFirstSourceLocationInRange(startOffset, endOffset)
+                return result?.takeIf { it.filePath in resolvedPaths }
+            }
         }
         ref.set(filteringLocationProvider)
     }

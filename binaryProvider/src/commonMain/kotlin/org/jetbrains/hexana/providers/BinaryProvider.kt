@@ -792,9 +792,19 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
 
     fun canProvideWasmModule() = wasmModule != null
 
-    open val sourceLocationProvider: HexanaSourceLocationProvider
-        get() = wasmModule?.let { DwarfSourceLocationProvider(bytes, WasmDwarfAccessor(it)) }
-            ?: HexanaSourceLocationProvider.EMPTY
+    // Cached (not a fresh instance per access): the provider builds its merged
+    // line-row table lazily on first query, and per-access construction would
+    // rebuild it for every lookup. Queries take module-absolute offsets; wasm
+    // DWARF addresses are code-section-content-relative, hence the base.
+    open val sourceLocationProvider: HexanaSourceLocationProvider by lazy {
+        wasmModule?.let {
+            DwarfSourceLocationProvider(
+                bytes,
+                WasmDwarfAccessor(it),
+                addressBase = it.codeSection?.contentOffset?.toLong() ?: 0L,
+            )
+        } ?: HexanaSourceLocationProvider.EMPTY
+    }
 
     val imports: List<WasmImportRecord> by lazy {
         val importSection = wasmModule?.importSection ?: return@lazy emptyList()
@@ -1041,8 +1051,23 @@ interface HexanaSourceLocationProvider {
     }
 
     fun getSourceLocationForOffset(byteOffset: Int): HexanaSourceLocation?
+
+    /**
+     * First mapped location in `[startOffset, endOffset)` (module-absolute),
+     * for function-level lookups: a function body's first bytes (size field,
+     * locals) usually precede its first line-program row, so a point query at
+     * the body start misses. Default: no result.
+     */
+    fun getFirstSourceLocationInRange(startOffset: Int, endOffset: Int): HexanaSourceLocation? = null
 }
 
+/**
+ * A resolved source position. [line] and [column] are 1-BASED across all
+ * backends: DWARF line programs are natively 1-based, and the source-map
+ * backend shifts its 0-based VLQ fields on construction. Consumers
+ * navigating via editor APIs that count from 0 (OpenFileDescriptor)
+ * subtract 1.
+ */
 data class HexanaSourceLocation(
     val filePath: String,
     val line: Int,

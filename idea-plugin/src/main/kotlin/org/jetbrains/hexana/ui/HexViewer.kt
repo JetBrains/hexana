@@ -40,17 +40,13 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.intellij.notification.Notification
-import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
-import com.intellij.openapi.application.readAction
 import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.editor.impl.EditorComponentImpl
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.ide.CopyPasteManager
-import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
@@ -76,6 +72,8 @@ import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.ui.components.ShareFeedbackButton
 import org.jetbrains.hexana.ui.components.ShareFeedbackButtonLabel
 import org.jetbrains.hexana.ui.components.ShareFeedbackPopup
+import org.jetbrains.hexana.ui.panel.openWasmSourceLocation
+import org.jetbrains.hexana.ui.panel.sourceLocationLabel
 import org.jetbrains.hexana.wat.psi.getDataByIndex
 import org.jetbrains.hexana.wat.psi.getDefinedFunctionByIndex
 import org.jetbrains.jewel.foundation.modifier.onHover
@@ -85,7 +83,6 @@ import java.awt.datatransfer.StringSelection
 import java.nio.CharBuffer
 import java.nio.charset.CharsetDecoder
 import java.nio.charset.StandardCharsets
-import java.nio.file.Path
 import kotlin.math.max
 import kotlin.math.min
 
@@ -1183,35 +1180,10 @@ private fun getContextActions(
     if (byteOffset in codeSectionRange) {
         val sourceLocation = locationProvider.getSourceLocationForOffset(byteOffset)
         if (sourceLocation != null) {
-            result.add(ContextMenuItem("Open in sources") {
-                HexanaService.getInstance().coroutineScope.launch(Dispatchers.IO) {
-                    val virtualFile = readAction {
-                        try {
-                            VfsUtil.findFile(Path.of(sourceLocation.filePath), true)
-                        } catch (_: Exception) {
-                            null
-                        }
-                    }
-
-                    if (virtualFile != null) {
-                        withContext(Dispatchers.EDT) {
-                            val descriptor = OpenFileDescriptor(
-                                state.project,
-                                virtualFile,
-                                sourceLocation.line,
-                                sourceLocation.column
-                            )
-                            descriptor.navigate(true)
-                        }
-                    } else {
-                        val message = HexanaBundle.message("notifications.fileNotFound", sourceLocation.filePath)
-                        Notification(
-                            HexanaService.NOTIFICATION_GROUP,
-                            message,
-                            NotificationType.WARNING
-                        ).notify(state.project)
-                    }
-                }
+            // Shared helper handles the 1-based -> 0-based shift for
+            // OpenFileDescriptor plus the not-found notification.
+            result.add(ContextMenuItem("Open in sources (${sourceLocationLabel(sourceLocation)})") {
+                openWasmSourceLocation(state.project, sourceLocation)
             })
         }
     }
