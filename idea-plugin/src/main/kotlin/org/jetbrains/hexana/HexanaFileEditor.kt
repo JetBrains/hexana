@@ -46,6 +46,8 @@ import org.jetbrains.hexana.providers.format.SubmodulePairing
 import org.jetbrains.hexana.providers.format.SubmoduleRef
 import org.jetbrains.hexana.providers.format.WasmComponentDiffOrchestrator
 import org.jetbrains.hexana.providers.format.WasmEntityDiffOrchestrator
+import org.jetbrains.hexana.providers.format.WasmDispatchSurfaceDiffOrchestrator
+import org.jetbrains.hexana.providers.format.WasmDispatchSurfaceDiffResult
 import org.jetbrains.hexana.providers.format.WasmEntityDiffResult
 import org.jetbrains.hexana.providers.format.WasmSizeDiffOrchestrator
 import org.jetbrains.hexana.sourcemap.parseSourceMap
@@ -170,6 +172,7 @@ class HexanaFileEditor(
     private val wasmDiffScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val wasmSizeDiffFlow = MutableStateFlow<DiffLoadable<SizeReady>>(DiffLoadable.Loading)
     private val wasmEntityDiffFlow = MutableStateFlow<DiffLoadable<WasmEntityDiffResult>>(DiffLoadable.Loading)
+    private val wasmDispatchDiffFlow = MutableStateFlow<DiffLoadable<WasmDispatchSurfaceDiffResult>>(DiffLoadable.Loading)
     private val wasmComponentDiffFlow = MutableStateFlow<DiffLoadable<ComponentDiffResult>>(DiffLoadable.Loading)
     private val nativeSizeDiffFlow = MutableStateFlow<DiffLoadable<NativeSizeReady>>(DiffLoadable.Loading)
 
@@ -655,6 +658,19 @@ class HexanaFileEditor(
                 DiffLoadable.Ready(result)
             }
         }
+        wasmDiffScope.launch {
+            val result = WasmDispatchSurfaceDiffOrchestrator.diff(
+                WasmBinaryProvider(file.leftBuffer.duplicate()),
+                WasmBinaryProvider(file.rightBuffer.duplicate()),
+                file.leftSymbolMap,
+                file.rightSymbolMap,
+            )
+            wasmDispatchDiffFlow.value = if (result == null) {
+                DiffLoadable.Error(WASM_DIFF_PARSE_ERROR)
+            } else {
+                DiffLoadable.Ready(result)
+            }
+        }
 
         val view = createComposePanel {
             WasmDiffEditorView(
@@ -664,6 +680,7 @@ class HexanaFileEditor(
                 rightName = file.rightName,
                 sizeModelFlow = wasmSizeDiffFlow,
                 entityModelFlow = wasmEntityDiffFlow,
+                dispatchModelFlow = wasmDispatchDiffFlow,
                 leftSymbolMap = file.leftSymbolMap,
                 rightSymbolMap = file.rightSymbolMap,
             )

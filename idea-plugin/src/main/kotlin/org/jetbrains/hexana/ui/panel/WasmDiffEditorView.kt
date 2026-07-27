@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.format.WasmDispatchSurfaceDiffResult
 import org.jetbrains.hexana.providers.format.WasmEntityDiffResult
 import org.jetbrains.hexana.providers.format.WasmSymbolMap
 import org.jetbrains.hexana.ui.VerticalSplitPanel
@@ -60,6 +61,7 @@ internal fun WasmDiffEditorView(
     rightName: String,
     sizeModelFlow: StateFlow<DiffLoadable<SizeReady>>,
     entityModelFlow: StateFlow<DiffLoadable<WasmEntityDiffResult>>,
+    dispatchModelFlow: StateFlow<DiffLoadable<WasmDispatchSurfaceDiffResult>>,
     leftSymbolMap: WasmSymbolMap? = null,
     rightSymbolMap: WasmSymbolMap? = null,
 ) {
@@ -73,6 +75,7 @@ internal fun WasmDiffEditorView(
     // every recomposition / composition teardown for as long as the editor tab is open.
     val sizeModel by sizeModelFlow.collectAsState()
     val entityModel by entityModelFlow.collectAsState()
+    val dispatchModel by dispatchModelFlow.collectAsState()
 
     // Detection is cheap (import/export sections only) but off the EDT for safety.
     LaunchedEffect(leftBuffer, rightBuffer) {
@@ -87,7 +90,7 @@ internal fun WasmDiffEditorView(
         }
     }
 
-    val titles = listOf("Size Impact", "Entities")
+    val titles = listOf("Size Impact", "Entities", "Dispatch")
     val tabs = titles.mapIndexed { index, title ->
         TabData.Default(
             selected = index == selectedTab,
@@ -111,7 +114,8 @@ internal fun WasmDiffEditorView(
                 Box(modifier = Modifier.weight(1f)) {
                     when (selectedTab) {
                         0 -> WasmSizeDiffPanel(sizeModel, leftName, rightName) { selectedFunction = it }
-                        else -> WasmEntityDiffPanel(entityModel) { selectedFunction = it }
+                        1 -> WasmEntityDiffPanel(entityModel) { selectedFunction = it }
+                        else -> WasmDispatchDiffPanel(dispatchModel) { selectedFunction = it }
                     }
                 }
             }

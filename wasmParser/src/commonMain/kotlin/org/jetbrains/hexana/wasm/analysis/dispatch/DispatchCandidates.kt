@@ -91,6 +91,13 @@ class DispatchCandidates internal constructor(
     /** Same lookup keyed directly by canonical signature. */
     fun candidatesFor(signature: DispatchSignature): IntArray = bySignature[signature] ?: EMPTY
 
+    /**
+     * Every signature with at least one statically known candidate, mapped to
+     * its sorted candidate funcidx array. Powers whole-surface consumers (the
+     * dispatch-surface diff); per-site consumers use [candidatesForType].
+     */
+    fun allCandidates(): Map<DispatchSignature, IntArray> = bySignature
+
     private companion object {
         val EMPTY = IntArray(0)
     }
