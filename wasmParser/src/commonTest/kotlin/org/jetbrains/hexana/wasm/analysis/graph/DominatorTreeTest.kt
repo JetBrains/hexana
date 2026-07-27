@@ -24,6 +24,32 @@ class DominatorTreeTest {
     }
 
     @Test
+    fun `negative root id keeps its children in the dominator tree`() {
+        // Call graphs root at VIRTUAL_ROOT_ID = -1 with hub nodes below it
+        // (-2, -3, …). The children-CSR sentinel used to be -1, colliding
+        // with the root's id: every node whose idom IS the root was dropped,
+        // so children[-1] came back empty and the dominators tab rendered an
+        // empty tree. The existing tests all rooted at 0 and never caught it.
+        val graph = DirectedGraphBuilder()
+            .addNode(-1, "<root>").addNode(-2, "<hub>")
+            .addNode(0, "A").addNode(1, "B")
+            .addEdge(-1, 0).addEdge(-1, 1)
+            .addEdge(0, -2).addEdge(-2, 1)
+            .build(root = -1)
+
+        val result = DominatorTree.compute(graph)
+
+        assertEquals(setOf(0, 1), result.children[-1]?.toSet(), "root children must survive packing")
+        assertEquals(setOf(-2), result.children[0]?.toSet(), "hub hangs under its only caller")
+        assertEquals(null, result.idom[-1], "the root has no idom")
+        assertEquals(-1, result.idom[0], "a root child's idom is the root id")
+        assertEquals(-1, result.idom[1])
+        assertEquals(0, result.idom[-2], "hub dominated by its only caller")
+        assertTrue(result.dominates(-1, 1), "root dominates everything reachable")
+        assertTrue(-1 in result.idom && 0 in result.idom)
+    }
+
+    @Test
     fun `linear chain dominators`() {
         // A -> B -> C -> D
         val graph = DirectedGraphBuilder()

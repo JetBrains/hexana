@@ -163,8 +163,11 @@ object DominatorTree {
         val idToIndex = IntArray(idRange) { -1 }
         for (i in 0 until n) idToIndex[nodes[i].id - minId] = i
 
-        // idom slot per dense node index: parent node id, -1 = root or unreachable
-        val idomSlots = IntArray(n) { -1 }
+        // idom slot per dense node index: parent node id, NO_IDOM = root or
+        // unreachable. The sentinel must not be -1: that is the virtual
+        // root's node id, and treating it as "no parent" dropped every
+        // direct child of the root from the children CSR.
+        val idomSlots = IntArray(n) { NO_IDOM }
         for ((node, parent) in idomByNode) {
             idomSlots[idToIndex[node - minId]] = parent
         }
@@ -173,7 +176,7 @@ object DominatorTree {
         val childCounts = IntArray(n)
         for (i in 0 until n) {
             val parent = idomSlots[i]
-            if (parent != -1) childCounts[idToIndex[parent - minId]]++
+            if (parent != NO_IDOM) childCounts[idToIndex[parent - minId]]++
         }
         val childOffset = IntArray(n + 1)
         for (i in 0 until n) childOffset[i + 1] = childOffset[i] + childCounts[i]
@@ -181,7 +184,7 @@ object DominatorTree {
         val fill = IntArray(n)
         for (i in 0 until n) {
             val parent = idomSlots[i]
-            if (parent != -1) {
+            if (parent != NO_IDOM) {
                 val p = idToIndex[parent - minId]
                 childData[childOffset[p] + fill[p]] = nodes[i].id
                 fill[p]++

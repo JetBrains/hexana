@@ -3,6 +3,15 @@ package org.jetbrains.hexana.wasm.analysis.graph
 import org.jetbrains.hexana.io.CommonByteBuffer
 
 /**
+ * Sentinel for "this node has no immediate dominator" (the root itself and
+ * unreachable nodes). Must never collide with a real node id: the call
+ * graph's virtual root is id -1 and indirect-call hubs use ids below it, so
+ * -1 as the sentinel silently dropped every direct child of the root from
+ * the children CSR (the whole dominator tree rendered empty).
+ */
+internal const val NO_IDOM: Int = Int.MIN_VALUE
+
+/**
  * Dominator tree stored in a single [CommonByteBuffer], mirroring the CSR layout
  * of [DirectedGraph] so results for large call graphs stay off the object heap.
  *
@@ -12,9 +21,10 @@ import org.jetbrains.hexana.io.CommonByteBuffer
  * [childOffset: n+1 ints] [childData: E ints]
  * [unreachable: u ints, sorted ascending]
  * ```
- * An `idom` slot holds the immediate dominator's node id, or -1 for the root and
- * for unreachable nodes. On JVM the buffer can be swapped to a memory-mapped
- * file for large graphs, same as [DirectedGraph].
+ * An `idom` slot holds the immediate dominator's node id (which can be the
+ * root's -1), or [NO_IDOM] for the root itself and for unreachable nodes. On
+ * JVM the buffer can be swapped to a memory-mapped file for large graphs,
+ * same as [DirectedGraph].
  */
 class DominatorResult internal constructor(
     buffer: CommonByteBuffer,
@@ -73,15 +83,15 @@ class IdomAccessor internal constructor(
 ) {
     private fun slot(nodeId: Int): Int {
         val i = nodeId - idOffset
-        if (i < 0 || i >= idRange) return -1
+        if (i < 0 || i >= idRange) return NO_IDOM
         val idx = buffer.readInt(i * 4)
-        if (idx < 0) return -1
+        if (idx < 0) return NO_IDOM
         return buffer.readInt(idomPos + idx * 4)
     }
 
-    operator fun get(nodeId: Int): Int? = slot(nodeId).takeIf { it != -1 }
+    operator fun get(nodeId: Int): Int? = slot(nodeId).takeIf { it != NO_IDOM }
 
-    operator fun contains(nodeId: Int): Boolean = nodeId == rootId || slot(nodeId) != -1
+    operator fun contains(nodeId: Int): Boolean = nodeId == rootId || slot(nodeId) != NO_IDOM
 }
 
 /** Read-only sorted Set<Int> view over ints in a [CommonByteBuffer]. */
