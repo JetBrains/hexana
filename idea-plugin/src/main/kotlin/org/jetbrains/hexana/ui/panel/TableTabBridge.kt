@@ -18,14 +18,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -60,6 +67,7 @@ import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.Tooltip
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import org.jetbrains.jewel.ui.theme.defaultTabStyle
+import java.awt.Cursor
 
 /**
  * Converts a [TableTabDescriptor] into a [Panel] by bridging the UI-free
@@ -480,7 +488,9 @@ private fun flattenTree(
     return result
 }
 
-private val TREEMAP_WIDTH = 400.dp
+private const val DEFAULT_TREEMAP_FRACTION = 0.35f
+private const val MIN_TREEMAP_FRACTION = 0.15f
+private const val MAX_TREEMAP_FRACTION = 0.6f
 private const val INDENT_CHARS = 4
 private const val CHEVRON_RIGHT = "\u25B6 "
 private const val CHEVRON_DOWN = "\u25BC "
@@ -573,8 +583,10 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
 
     val treemapData = descriptor.treemapData
     if (treemapData != null) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+        var treemapFraction by remember { mutableFloatStateOf(DEFAULT_TREEMAP_FRACTION) }
+        var containerWidthPx by remember { mutableFloatStateOf(0f) }
+        Row(modifier = Modifier.fillMaxSize().onSizeChanged { containerWidthPx = it.width.toFloat() }) {
+            Box(modifier = Modifier.weight(1f - treemapFraction).fillMaxHeight()) {
                 Table(
                     columns = columns,
                     dataCount = flatRows.size,
@@ -594,7 +606,15 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
                     externalSelectedIndex = externalSelectedIndex,
                 )
             }
-            Box(modifier = Modifier.width(TREEMAP_WIDTH).fillMaxHeight().padding(start = 4.dp)) {
+            VerticalDraggableDivider(
+                onDrag = { deltaX ->
+                    if (containerWidthPx > 0) {
+                        treemapFraction = (treemapFraction - deltaX / containerWidthPx)
+                            .coerceIn(MIN_TREEMAP_FRACTION, MAX_TREEMAP_FRACTION)
+                    }
+                }
+            )
+            Box(modifier = Modifier.weight(treemapFraction).fillMaxHeight().padding(start = 4.dp)) {
                 SizeTreemap(
                     treemapData = treemapData,
                     onNodeClicked = { treePath ->
@@ -708,6 +728,31 @@ private fun colorFor(role: HexRangeRole): Color = when (role) {
  * drives the hex view: highlights all spans and scrolls to the first, or
  * clears the highlight when the list is empty.
  */
+@Composable
+private fun VerticalDraggableDivider(onDrag: (deltaX: Float) -> Unit) {
+    val dragHitAreaWidth = 8.dp
+    Box(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(dragHitAreaWidth)
+            .pointerHoverIcon(PointerIcon(Cursor(Cursor.E_RESIZE_CURSOR)))
+            .draggable(
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { delta -> onDrag(delta) },
+                startDragImmediately = true,
+            )
+            .background(Color.Transparent),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(1.dp)
+                .background(JewelTheme.globalColors.borders.normal),
+        )
+    }
+}
+
 private fun applyHighlightRanges(ranges: List<HexRange>, state: HexViewStateHolder) {
     if (ranges.isEmpty()) {
         state.clearHighlightRanges()
