@@ -38,6 +38,23 @@ data class FileEntry(
 private val WORKSPACE_MARKERS = listOf("Cargo.toml", "package.json", ".git")
 
 /**
+ * Directory names never descended into during dependency scanning: build
+ * outputs and VCS/tooling metadata that hold no publishable `.wasm`
+ * dependencies but can contain tens of thousands of files. Without this,
+ * a scan rooted next to a Rust `target/` or a `node_modules/` walks the
+ * whole tree on a background thread and can stall the IDE behind a
+ * contended read lock (observed as an EDT freeze in the Run toolbar's
+ * action-update). Matched case-sensitively against the entry name.
+ */
+private val SCAN_SKIP_DIRS = setOf(
+    "target", "node_modules", ".git", ".gradle", ".idea", "build", "dist", "out", ".cache", ".svn", ".hg",
+)
+
+/** Hard bounds on a single [WasmDependencyResolver.resolveViaFilesystem] scan. */
+private const val MAX_SCAN_DEPTH = 8
+private const val MAX_SCAN_ENTRIES = 20_000
+
+/**
  * Resolves Wasm component dependencies by scanning the filesystem for
  * `.wasm` files whose component exports match the requested import names.
  *
@@ -111,11 +128,17 @@ object WasmDependencyResolver {
         val visited = mutableSetOf<String>()
         excludePath?.let { visited.add(it) }
 
+        val budget = ScanBudget()
         for (root in scanRoots) {
-            if (resolved.size == needed.size) break
-            scanDirectory(root, needed, resolved, visited, fs)
+            if (resolved.size == needed.size || budget.exhausted) break
+            scanDirectory(root, needed, resolved, visited, fs, depth = 0, budget = budget)
         }
         return resolved
+    }
+
+    /** Mutable entry counter shared across a scan's roots; caps total work. */
+    private class ScanBudget(var remaining: Int = MAX_SCAN_ENTRIES) {
+        val exhausted: Boolean get() = remaining <= 0
     }
 
     /**
@@ -181,17 +204,24 @@ object WasmDependencyResolver {
         resolved: MutableMap<String, String>,
         visited: MutableSet<String>,
         fs: FileSystem,
+        depth: Int,
+        budget: ScanBudget,
     ) {
+        if (depth > MAX_SCAN_DEPTH || budget.exhausted) return
         if (!visited.add(dir)) return
 
         val entries = fs.listEntries(dir)
 
         for (entry in entries) {
-            if (resolved.size >= needed.size) return
+            if (resolved.size >= needed.size || budget.exhausted) return
+            budget.remaining--
             val fullPath = fs.joinPath(dir, entry.name)
 
             if (entry.isDirectory) {
-                scanDirectory(fullPath, needed, resolved, visited, fs)
+                // Never descend into build-output / VCS trees: they hold no
+                // publishable dependencies but can be enormous (see SCAN_SKIP_DIRS).
+                if (entry.name in SCAN_SKIP_DIRS) continue
+                scanDirectory(fullPath, needed, resolved, visited, fs, depth + 1, budget)
             } else if (entry.isFile && entry.name.endsWith(".wasm")) {
                 matchComponentExports(fullPath, needed, resolved, fs)
             }
