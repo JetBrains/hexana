@@ -95,6 +95,8 @@ private fun sizeTab(provider: BinaryProvider): TableTabDescriptor? {
 
     val topColumns = columnsForChildren(topChildren, moduleSize)
 
+    val treemap = buildTreemapData(root, moduleSize, builder, wasmProvider, dataRecords, cache)
+
     return TableTabDescriptor(
         name = "Top",
         columns = topColumns,
@@ -106,6 +108,45 @@ private fun sizeTab(provider: BinaryProvider): TableTabDescriptor? {
             if (node.size > 0) RowSelectionData(node.offset, node.size) else null
         },
         childrenProvider = { index -> childRowsForNode(topChildren[index]) },
+        treemapData = treemap,
+    )
+}
+
+/**
+ * Builds [TreemapData] from the size analysis tree, recursively converting
+ * [BinarySizeNode]s into [TreemapNode]s with tree paths that correspond to
+ * row indices in the table.
+ */
+private fun buildTreemapData(
+    root: BinarySizeNode,
+    moduleSize: Int,
+    builder: SizeAnalysisBuilder?,
+    provider: WasmBinaryProvider?,
+    dataRecords: List<WasmDataRecord>,
+    cache: MutableMap<Any, List<BinarySizeNode>>,
+): TreemapData {
+    fun buildNode(node: BinarySizeNode, parentPath: List<Int>, index: Int, depth: Int): TreemapNode {
+        val path = parentPath + index
+        val resolvedChildren = if (depth < 2) {
+            resolveNodeChildren(node, builder, provider, dataRecords, cache)
+        } else emptyList()
+        val childNodes = resolvedChildren.mapIndexed { childIndex, child ->
+            buildNode(child, path, childIndex, depth + 1)
+        }
+        return TreemapNode(
+            name = node.name,
+            size = node.size.toLong(),
+            children = childNodes,
+            treePath = path,
+        )
+    }
+
+    val topNodes = root.children.mapIndexed { index, child ->
+        buildNode(child, emptyList(), index, 0)
+    }
+    return TreemapData(
+        root = TreemapNode(name = root.name, size = root.size.toLong(), children = topNodes),
+        totalSize = moduleSize.toLong(),
     )
 }
 

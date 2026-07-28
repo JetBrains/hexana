@@ -9,6 +9,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -478,6 +480,7 @@ private fun flattenTree(
     return result
 }
 
+private val TREEMAP_WIDTH = 300.dp
 private const val INDENT_CHARS = 4
 private const val CHEVRON_RIGHT = "\u25B6 "
 private const val CHEVRON_DOWN = "\u25BC "
@@ -490,6 +493,7 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
     var sortColumnIndex by remember { mutableStateOf(descriptor.defaultSortColumn ?: -1) }
     var sortAscending by remember { mutableStateOf(descriptor.defaultSortAscending) }
     var searchQuery by remember(descriptor) { mutableStateOf("") }
+    var externalSelectedIndex by remember { mutableStateOf<Int?>(null) }
     val flatRows = remember(descriptor, expandedPaths.toList(), sortColumnIndex, sortAscending, searchQuery, activeFilter) {
         flattenTree(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending, searchQuery, activeFilter)
     }
@@ -533,22 +537,28 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
 
     val actionColumnWidth = textMeasurer.measureWidthMonospace("__")
 
-    Table(
-        columns = columns,
-        dataCount = flatRows.size,
-        defaultSortColumn = sortColumnIndex,
-        defaultSortAscending = sortAscending,
-        showIdColumn = false,
-        alwaysShowSearch = descriptor.alwaysShowSearch,
-        searchPlaceholder = descriptor.searchPlaceholder,
-        onTableFocusChanged = { focused -> state.isTableFocused = focused },
-        onSearchChanged = { query -> searchQuery = query },
-        onSortChanged = { colIdx, asc ->
-            sortColumnIndex = colIdx
-            sortAscending = asc
-        },
-        onRowSelect = { flatIndex ->
-            val row = flatRows[flatIndex]
+    val onRowSelect: (Int) -> Unit = { flatIndex ->
+        val row = flatRows[flatIndex]
+        val highlightProvider = descriptor.rowHighlightRangesProvider
+        if (highlightProvider != null && row.depth == 0) {
+            applyHighlightRanges(highlightProvider(row.index), state)
+        } else {
+            val selection = row.rowSelectionProvider(row.index)
+            if (selection != null) {
+                state.scrollHexViewTo(selection.offset, selection.size)
+            }
+        }
+    }
+
+    val onRow: (Int) -> Unit = { flatIndex ->
+        val row = flatRows[flatIndex]
+        if (row.hasChildren) {
+            if (row.isExpanded) {
+                expandedPaths.remove(row.treePath)
+            } else {
+                expandedPaths.add(row.treePath)
+            }
+        } else {
             val highlightProvider = descriptor.rowHighlightRangesProvider
             if (highlightProvider != null && row.depth == 0) {
                 applyHighlightRanges(highlightProvider(row.index), state)
@@ -558,26 +568,78 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
                     state.scrollHexViewTo(selection.offset, selection.size)
                 }
             }
-        },
-        onRow = { flatIndex ->
-            val row = flatRows[flatIndex]
-            if (row.hasChildren) {
-                if (row.isExpanded) {
-                    expandedPaths.remove(row.treePath)
-                } else {
-                    expandedPaths.add(row.treePath)
-                }
-            } else {
-                val highlightProvider = descriptor.rowHighlightRangesProvider
-                if (highlightProvider != null && row.depth == 0) {
-                    applyHighlightRanges(highlightProvider(row.index), state)
-                } else {
-                    val selection = row.rowSelectionProvider(row.index) ?: return@Table
-                    state.scrollHexViewTo(selection.offset, selection.size)
-                }
+        }
+    }
+
+    val treemapData = descriptor.treemapData
+    if (treemapData != null) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Table(
+                    columns = columns,
+                    dataCount = flatRows.size,
+                    defaultSortColumn = sortColumnIndex,
+                    defaultSortAscending = sortAscending,
+                    showIdColumn = false,
+                    alwaysShowSearch = descriptor.alwaysShowSearch,
+                    searchPlaceholder = descriptor.searchPlaceholder,
+                    onTableFocusChanged = { focused -> state.isTableFocused = focused },
+                    onSearchChanged = { query -> searchQuery = query },
+                    onSortChanged = { colIdx, asc ->
+                        sortColumnIndex = colIdx
+                        sortAscending = asc
+                    },
+                    onRowSelect = onRowSelect,
+                    onRow = onRow,
+                    externalSelectedIndex = externalSelectedIndex,
+                )
             }
-        },
-    )
+            Box(modifier = Modifier.width(TREEMAP_WIDTH).fillMaxHeight().padding(start = 4.dp)) {
+                SizeTreemap(
+                    treemapData = treemapData,
+                    onNodeClicked = { treePath ->
+                        if (treePath.isEmpty()) return@SizeTreemap
+                        // Expand all ancestor paths so the target row is visible.
+                        for (i in 1..treePath.size) {
+                            val ancestorPath = treePath.subList(0, i)
+                            if (ancestorPath !in expandedPaths) {
+                                expandedPaths.add(ancestorPath)
+                            }
+                        }
+                        // Find and select the row matching the clicked treePath.
+                        val updatedRows = flattenTree(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending, searchQuery, activeFilter)
+                        val targetIndex = updatedRows.indexOfFirst { it.treePath == treePath }
+                        if (targetIndex >= 0) {
+                            val row = updatedRows[targetIndex]
+                            externalSelectedIndex = targetIndex
+                            val selection = row.rowSelectionProvider(row.index)
+                            if (selection != null) {
+                                state.scrollHexViewTo(selection.offset, selection.size)
+                            }
+                        }
+                    },
+                )
+            }
+        }
+    } else {
+        Table(
+            columns = columns,
+            dataCount = flatRows.size,
+            defaultSortColumn = sortColumnIndex,
+            defaultSortAscending = sortAscending,
+            showIdColumn = false,
+            alwaysShowSearch = descriptor.alwaysShowSearch,
+            searchPlaceholder = descriptor.searchPlaceholder,
+            onTableFocusChanged = { focused -> state.isTableFocused = focused },
+            onSearchChanged = { query -> searchQuery = query },
+            onSortChanged = { colIdx, asc ->
+                sortColumnIndex = colIdx
+                sortAscending = asc
+            },
+            onRowSelect = onRowSelect,
+            onRow = onRow,
+        )
+    }
 }
 
 @Composable

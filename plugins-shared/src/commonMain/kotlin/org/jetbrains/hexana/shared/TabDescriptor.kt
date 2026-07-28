@@ -189,6 +189,7 @@ class TableTabDescriptor(
     val priority: TabPriority = TabPriority.High,
     val rowHighlightRangesProvider: ((index: Int) -> List<HexRange>)? = null,
     val predefinedFilters: List<PredefinedFilter> = emptyList(),
+    val treemapData: TreemapData? = null,
 ) {
     companion object {
         /** Sentinel value for [defaultSortColumn] that targets the implicit ID column. */
@@ -289,6 +290,38 @@ interface TableTabsProvider {
         context: TableTabsContext = TableTabsContext(),
     ): TableTabDescriptor? = tableTabs(provider, context).firstOrNull { it.name == name }
 }
+
+/**
+ * A UI-free node for treemap (size visualization) rendering.
+ *
+ * Each node represents a named region with a byte [size], optionally
+ * containing [children] that break the region down further.
+ *
+ * @param name display label for this region
+ * @param size byte size of this region
+ * @param children sub-regions; empty for leaf nodes
+ * @param treePath path of row indices from the root to this node in the
+ *   tree table, used by the UI layer to expand and select the corresponding
+ *   table row when the treemap area is clicked
+ */
+class TreemapNode(
+    val name: String,
+    val size: Long,
+    val children: List<TreemapNode> = emptyList(),
+    val treePath: List<Int> = emptyList(),
+)
+
+/**
+ * Data for rendering a treemap visualization alongside a table tab.
+ *
+ * @param root the root node of the treemap tree; its [TreemapNode.children]
+ *   are the top-level rectangles
+ * @param totalSize total size of the binary, used for percentage calculations
+ */
+class TreemapData(
+    val root: TreemapNode,
+    val totalSize: Long,
+)
 
 class TableTabsContext(
     val nativeDebugData: NativeDebugTabData? = null,

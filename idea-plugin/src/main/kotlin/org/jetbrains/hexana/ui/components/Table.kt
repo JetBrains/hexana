@@ -65,6 +65,7 @@ fun Table(
     searchBarLeading: (@Composable () -> Unit)? = null,
     onTableFocusChanged: ((Boolean) -> Unit)? = null,
     onSearchChanged: ((String) -> Unit)? = null,
+    externalSelectedIndex: Int? = null,
 ) {
     // Cache cell values lazily per row to avoid computing all cells upfront.
     // Only rows that are actually displayed, filtered, or sorted will be evaluated.
@@ -143,6 +144,16 @@ fun Table(
         }
 
         indices
+    }
+
+    LaunchedEffect(externalSelectedIndex) {
+        if (externalSelectedIndex != null && externalSelectedIndex != selectedOriginalIndex) {
+            selectedOriginalIndex = externalSelectedIndex
+            val viewIndex = viewData.indexOf(externalSelectedIndex)
+            if (viewIndex >= 0) {
+                lazyListState.animateScrollToItem(viewIndex)
+            }
+        }
     }
 
     val textMeasurer = rememberTextMeasurer()
