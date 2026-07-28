@@ -127,7 +127,7 @@ private fun buildTreemapData(
 ): TreemapData {
     fun buildNode(node: BinarySizeNode, parentPath: List<Int>, index: Int, depth: Int): TreemapNode {
         val path = parentPath + index
-        val resolvedChildren = if (depth < 2) {
+        val resolvedChildren = if (depth < 2 && node !is SizeNode.Function && node !is SizeNode.DataSegment) {
             resolveNodeChildren(node, builder, provider, dataRecords, cache)
         } else emptyList()
         val childNodes = resolvedChildren.mapIndexed { childIndex, child ->
