@@ -98,6 +98,7 @@ private class LayoutRect(
     val colorIndex: Int,
 )
 
+private const val MIN_CLICKABLE_SIZE = 4f
 private const val MIN_LABEL_WIDTH = 24f
 private const val MIN_LABEL_HEIGHT = 14f
 private const val LABEL_PADDING = 3f
@@ -166,9 +167,18 @@ private fun layoutSquarified(
     val area = bounds.width * bounds.height
     data class Item(val node: TreemapNode, val scaledArea: Float, val originalIndex: Int)
 
-    val items = nodes.mapIndexed { i, n ->
-        Item(n, (n.size.coerceAtLeast(0).toFloat() / totalSize) * area, i)
-    }.sortedByDescending { it.scaledArea }
+    // Pre-filter negligible items before layout so their space is redistributed
+    // to larger elements instead of leaving empty gaps.
+    val minFraction = 0.002f // items smaller than 0.2% of total are negligible
+    val significantNodes = nodes.mapIndexed { i, n -> Pair(i, n) }
+        .filter { it.second.size.coerceAtLeast(0).toFloat() / totalSize >= minFraction }
+    val significantTotal = significantNodes.sumOf { it.second.size.coerceAtLeast(0) }.toFloat()
+    if (significantTotal <= 0f) return
+
+    val minArea = MIN_CLICKABLE_SIZE * MIN_CLICKABLE_SIZE
+    val items = significantNodes.map { (i, n) ->
+        Item(n, (n.size.coerceAtLeast(0).toFloat() / significantTotal) * area, i)
+    }.filter { it.scaledArea >= minArea }.sortedByDescending { it.scaledArea }
 
     var remaining = items.toList()
     var currentBounds = bounds
@@ -233,10 +243,16 @@ private fun layoutSquarified(
                 )
             }
 
+            // Skip elements too small to be reasonably clickable.
+            if (rect.width < MIN_CLICKABLE_SIZE || rect.height < MIN_CLICKABLE_SIZE) {
+                offset += itemLength
+                continue
+            }
+
             out.add(LayoutRect(item.node, rect, depth, colorIdx))
 
             // Recurse into children.
-            if (item.node.children.isNotEmpty() && rect.width > 4f && rect.height > 4f) {
+            if (item.node.children.isNotEmpty() && rect.width > MIN_CLICKABLE_SIZE && rect.height > MIN_CLICKABLE_SIZE) {
                 val innerRect = Rect(
                     left = rect.left + 1f,
                     top = rect.top + 1f,
