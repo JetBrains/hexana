@@ -96,7 +96,9 @@ import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.SearchField
 import org.jetbrains.hexana.wasm.analysis.GraalJavaSymbol
 import org.jetbrains.hexana.wasm.analysis.KotlinWasmSymbol
+import org.jetbrains.hexana.wasm.analysis.dispatch.resolveConstantIndirectIndex
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
+import org.jetbrains.hexana.wasm.sections.parseCodeEntry
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.Orientation
 import org.jetbrains.jewel.ui.component.Divider
@@ -468,27 +470,58 @@ private fun WasmPanelWatVirtualizedContent(
     // the EDT because the provider's DispatchCandidates is a lazy build
     // (one pass over type/import/function/element sections on first use).
     var indirectCandidatesData by remember { mutableStateOf<IndirectCandidatesData?>(null) }
-    var indirectCandidatesRequest by remember { mutableStateOf<Int?>(null) }
+    var indirectCandidatesRequest by remember { mutableStateOf<IndirectSiteRequest?>(null) }
     androidx.compose.runtime.LaunchedEffect(indirectCandidatesRequest) {
-        val typeIdx = indirectCandidatesRequest ?: return@LaunchedEffect
+        val request = indirectCandidatesRequest ?: return@LaunchedEffect
         indirectCandidatesData = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val typeIdx = request.typeIdx
             val dispatch = provider.dispatchCandidates
             val signature = dispatch?.signatureOfType(typeIdx)
             val funcs = dispatch?.candidatesForType(typeIdx) ?: IntArray(0)
+            fun entryFor(funcIdx: Int): IndirectCandidateEntry {
+                val isImport = funcIdx < provider.importFuncCount
+                return IndirectCandidateEntry(
+                    funcIdx = funcIdx,
+                    label = funcDisplayNames[funcIdx] ?: if (isImport) "(imported)" else "\$func$funcIdx",
+                    navigable = !isImport,
+                )
+            }
+
+            // N1 narrowing: when the site's index operand is a compile-time
+            // constant, replace the signature set with the exact table target
+            // (or a trap warning). Anything unresolvable falls back silently.
+            var note: String? = null
+            var entries = funcs.map(::entryFor)
+            val codeEntry = request.codeIdx?.let { provider.codeOffsets.getOrNull(it) }
+            if (dispatch != null && codeEntry != null && request.siteOffset != null) {
+                val record = runCatching { provider.bytes.parseCodeEntry(codeEntry.offset) }.getOrNull()
+                val slot = record?.let {
+                    resolveConstantIndirectIndex(it.opCodes, request.siteOffset.toInt())
+                }
+                if (slot != null) {
+                    val target = dispatch.functionAtSlot(slot)
+                    when {
+                        target == null ->
+                            note = "constant table index $slot is not statically initialized"
+                        funcs.any { it == target } -> {
+                            entries = listOf(entryFor(target))
+                            note = "exact target: constant table index $slot"
+                        }
+                        else -> {
+                            entries = listOf(entryFor(target))
+                            note = "constant index $slot targets a mismatched signature — this call traps"
+                        }
+                    }
+                }
+            }
             IndirectCandidatesData(
                 signatureText = signature?.text() ?: "(type $typeIdx)",
-                entries = funcs.map { funcIdx ->
-                    val isImport = funcIdx < provider.importFuncCount
-                    IndirectCandidateEntry(
-                        funcIdx = funcIdx,
-                        label = funcDisplayNames[funcIdx] ?: if (isImport) "(imported)" else "\$func$funcIdx",
-                        navigable = !isImport,
-                    )
-                },
+                entries = entries,
+                note = note,
             )
         }
     }
-    val onIndirectCandidates: (Int) -> Unit = { typeIdx -> indirectCandidatesRequest = typeIdx }
+    val onIndirectCandidates: (IndirectSiteRequest) -> Unit = { request -> indirectCandidatesRequest = request }
 
     // Build the search results adapter: WAT search produces funcIdx-based
     // results; we adapt them to ChunkSearchResult for the common panel.
@@ -928,7 +961,7 @@ private fun ChunkRow(
      */
     onFollow: ((FollowTarget) -> Unit)? = null,
     /** See [RenderedRowView.onIndirectCandidates]. */
-    onIndirectCandidates: ((Int) -> Unit)? = null,
+    onIndirectCandidates: ((IndirectSiteRequest) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     // Re-render whenever the renderer or snapshot changes (i.e. after a
@@ -1058,7 +1091,7 @@ private fun WatRowItem(
     onCrossChunkDown: ((ChunkId) -> Unit)?,
     onFollow: ((FollowTarget) -> Unit)?,
     /** See [RenderedRowView.onIndirectCandidates]. */
-    onIndirectCandidates: ((Int) -> Unit)? = null,
+    onIndirectCandidates: ((IndirectSiteRequest) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     // Skip Data body/descriptor rows when collapsed; the header + expander
@@ -1220,9 +1253,14 @@ private fun WatRowItem(
                     buildList {
                         val typeIdx = row.indirectCallTypeIdx
                         if (typeIdx != null && onIndirectCandidates != null) {
+                            val request = IndirectSiteRequest(
+                                typeIdx = typeIdx,
+                                codeIdx = chunk.takeIf { it.kind == WasmSectionKinds.CODE }?.indexInSection,
+                                siteOffset = rowSourceOffset,
+                            )
                             add(
                                 androidx.compose.foundation.ContextMenuItem("Show Dispatch Candidates") {
-                                    onIndirectCandidates(typeIdx)
+                                    onIndirectCandidates(request)
                                 },
                             )
                         }
@@ -1444,7 +1482,7 @@ private fun RenderedRowView(
      * the statically known dispatch candidates for that signature off the
      * EDT and opens [WasmIndirectCandidatesPopup].
      */
-    onIndirectCandidates: ((Int) -> Unit)? = null,
+    onIndirectCandidates: ((IndirectSiteRequest) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     val info = row.editable
@@ -1484,7 +1522,14 @@ private fun RenderedRowView(
             // call_indirect rows are outside the inline-editable subset, so
             // they always render read-only. Click or Cmd+B opens the
             // statically-known dispatch candidates popup for the row's type
-            // immediate (there is no single declaration to follow).
+            // immediate (there is no single declaration to follow). The site
+            // coordinates ride along so the popup can attempt exact-target
+            // (constant-index) narrowing.
+            val request = IndirectSiteRequest(
+                typeIdx = indirectTypeIdx,
+                codeIdx = chunk?.takeIf { it.kind == WasmSectionKinds.CODE }?.indexInSection,
+                siteOffset = row.tokens.firstOrNull { it.kind == RenderTokenKind.OFFSET_ANNOTATION }?.sourceOffset,
+            )
             val rowFocus = remember(chunkId, rowIndex) { FocusRequester() }
             SelectableTokenRow(
                 tokens = row.tokens,
@@ -1494,13 +1539,13 @@ private fun RenderedRowView(
                     .focusRequester(rowFocus)
                     .focusable()
                     .clickable {
-                        onIndirectCandidates(indirectTypeIdx)
+                        onIndirectCandidates(request)
                     }
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         if (KeymapShortcuts.isModifierOnly(event)) return@onPreviewKeyEvent false
                         if (KeymapShortcuts.matches(event, IdeActions.ACTION_GOTO_DECLARATION)) {
-                            onIndirectCandidates(indirectTypeIdx)
+                            onIndirectCandidates(request)
                             true
                         } else {
                             false

@@ -169,6 +169,38 @@ A new section in the WASM build diff answering "did any candidate list change".
 - `trace` with `indirect_call` relation gains per-signature fan-out instead of the
   undifferentiated hub.
 
+## Candidate narrowing ladder (added 2026-07-28)
+
+The signature-matched set is an over-approximation; "which functions can this
+site REALLY reach" narrows it per site. Table-wide narrowing is unsound for
+most real modules: wasm-bindgen exports `__indirect_function_table`, so every
+entry escapes to the host (JS can `table.get`/`table.set` anything). Per-site
+narrowing remains sound where the index operand is statically evident.
+
+- **N1 (implemented, sound): constant-index resolution.** A backwards
+  straight-line check at the call site: when the immediately preceding
+  instruction within the same block level is `i32.const K`, the index is K,
+  and the target is the function statically installed at table-0 slot K by an
+  active element segment with a constant offset
+  (`DispatchCandidates.functionAtSlot`; segments offset by an imported
+  `__table_base` are skipped). The candidates popup then shows the single
+  exact target, or a trap warning when slot K's function has a mismatched
+  signature, or an "uninitialized slot" note; anything unresolvable falls
+  back silently to the signature set. wasm-opt's Directize devirtualizes
+  exactly these sites, so optimized builds have few left — unoptimized
+  builds, the ones people debug, have plenty. The inline expander rows keep
+  the signature set (popup-only narrowing in v1).
+- **N2 (future, heuristic): vtable mining.** Rust `dyn` / C++ virtual sites
+  load the index from vtables in linear memory (`i32.load offset=O` off a
+  base). Sound analysis stops at memory (Binaryen's GUFA deliberately gives
+  up on linear-memory loads), but vtables are recognizable: runs of valid
+  table indices in data segments with signature-consistent columns.
+  Intersecting column O of harvested vtables with the site's signature set
+  can cut hundreds of candidates to the actual override set. Must be labeled
+  "heuristic narrowing" with one-click fallback to the full set.
+- **N3 (rejected): whole-program points-to over linear memory.** Research
+  territory; GUFA's refusal is the tell.
+
 ## Build order
 
 1. **CandidateIndex + WAT popup.** Smallest demonstrable slice, and the direct

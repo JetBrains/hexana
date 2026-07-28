@@ -4,6 +4,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
+import org.jetbrains.hexana.wasm.opcodes.numeric.I32
 import org.jetbrains.hexana.wasm.sections.ExprWasmElementSegment
 import org.jetbrains.hexana.wasm.sections.FuncIdxWasmElementSegment
 import org.jetbrains.hexana.wasm.sections.WasmAnyRefHeapType
@@ -71,7 +72,17 @@ data class DispatchSignature(
 class DispatchCandidates internal constructor(
     private val functionSignatures: Map<Int, DispatchSignature>,
     private val bySignature: Map<DispatchSignature, IntArray>,
+    private val slotImage: Map<Int, Int>,
 ) {
+    /**
+     * The function statically installed at table-0 slot [slot] by an active
+     * element segment with a constant offset, or null when the slot is not
+     * statically initialized (runtime `table.set`/`table.init`, non-constant
+     * segment offsets such as an imported `__table_base`, or out of range).
+     * Powers exact-target resolution for constant-index `call_indirect`.
+     */
+    fun functionAtSlot(slot: Int): Int? = slotImage[slot]
+
     /**
      * The canonical signature of type-section entry [typeIdx], or null when
      * the entry is not a function type (or out of range).
@@ -168,7 +179,52 @@ class DispatchCandidatesBuilder(
         for ((sig, funcs) in grouped) {
             bySignature[sig] = funcs.toIntArray().also { it.sort() }
         }
-        return DispatchCandidates(functionSignatures, bySignature)
+        return DispatchCandidates(functionSignatures, bySignature, collectSlotImage())
+    }
+
+    /**
+     * Table-0 slot -> funcidx for active element segments whose offset is a
+     * single `i32.const` (segments offset by an imported global such as
+     * `__table_base` are skipped — the base is a link-time unknown).
+     */
+    private fun collectSlotImage(): Map<Int, Int> {
+        val elementSection = module.elementSection ?: return emptyMap()
+        val segments = with(elementSection) { buffer.scanElements() }
+        val image = HashMap<Int, Int>()
+
+        fun constOffset(offsetExpr: List<OpCode>): Int? {
+            if (offsetExpr.any { it is OpCodes.Global.Get }) return null
+            return offsetExpr.filterIsInstance<I32.Const>().singleOrNull()?.value
+        }
+
+        for (segment in segments) {
+            when (segment) {
+                is FuncIdxWasmElementSegment.ActiveDefault -> {
+                    val base = constOffset(segment.offsetExpr) ?: continue
+                    segment.funcs.forEachIndexed { i, func -> image[base + i] = func.toInt() }
+                }
+                is FuncIdxWasmElementSegment.ActiveExplicit -> {
+                    if (segment.tableIndex != 0u) continue
+                    val base = constOffset(segment.offsetExpr) ?: continue
+                    segment.funcs.forEachIndexed { i, func -> image[base + i] = func.toInt() }
+                }
+                is ExprWasmElementSegment.ActiveDefault -> {
+                    val base = constOffset(segment.offsetExpr) ?: continue
+                    segment.exprs.forEachIndexed { i, expr ->
+                        expr.filterIsInstance<OpCodes.Ref.Func>().singleOrNull()?.let { image[base + i] = it.value.toInt() }
+                    }
+                }
+                is ExprWasmElementSegment.ActiveExplicit -> {
+                    if (segment.tableIndex != 0u) continue
+                    val base = constOffset(segment.offsetExpr) ?: continue
+                    segment.exprs.forEachIndexed { i, expr ->
+                        expr.filterIsInstance<OpCodes.Ref.Func>().singleOrNull()?.let { image[base + i] = it.value.toInt() }
+                    }
+                }
+                else -> {}
+            }
+        }
+        return image
     }
 
     /**

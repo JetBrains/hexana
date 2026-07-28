@@ -36,10 +36,24 @@ internal data class IndirectCandidateEntry(
     val navigable: Boolean,
 )
 
+/**
+ * A `call_indirect` site whose candidates were requested: the type immediate
+ * plus, when the row could supply them, the site's defined-function index and
+ * byte offset — the inputs of exact-target narrowing (constant-index
+ * analysis). Without them the popup falls back to the signature set.
+ */
+internal data class IndirectSiteRequest(
+    val typeIdx: Int,
+    val codeIdx: Int? = null,
+    val siteOffset: Long? = null,
+)
+
 /** Resolved popup payload for one `call_indirect` site's type immediate. */
 internal data class IndirectCandidatesData(
     val signatureText: String,
     val entries: List<IndirectCandidateEntry>,
+    /** Narrowing outcome ("exact target: constant table index 3"), or null. */
+    val note: String? = null,
 )
 
 /**
@@ -87,6 +101,13 @@ internal fun WasmIndirectCandidatesPopup(
                 text = "call_indirect ${data.signatureText}: ${data.entries.size} statically known candidates",
                 style = textStyle,
             )
+            data.note?.let { note ->
+                Text(
+                    text = "(; $note ;)",
+                    style = textStyle,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             if (data.entries.isEmpty()) {
                 Text(
                     text = "(; no table entries match — this call site can only trap ;)",
