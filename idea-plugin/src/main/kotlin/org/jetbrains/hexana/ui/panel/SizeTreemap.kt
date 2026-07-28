@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -117,9 +118,27 @@ private fun DrawScope.drawNodeLabel(
         maxLines = 1,
         constraints = Constraints(maxWidth = maxWidth, maxHeight = maxHeight),
     )
-    if (result.size.width > maxWidth || result.size.height > maxHeight) return
+    // If the full name doesn't fit without ellipsis, try showing just the numeric
+    // suffix (e.g. "453" instead of "func 453") for repeated elements.
+    val measured = if (result.hasVisualOverflow) {
+        val numberSuffix = lr.node.name.trimEnd().let { name ->
+            val lastSpace = name.lastIndexOf(' ')
+            if (lastSpace >= 0) name.substring(lastSpace + 1) else null
+        }
+        if (numberSuffix != null) {
+            val shortResult = textMeasurer.measure(
+                text = lr.node.name.substring(0, 1) + "#" + numberSuffix,
+                style = style,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1,
+                constraints = Constraints(maxWidth = maxWidth, maxHeight = maxHeight),
+            )
+            if (!shortResult.hasVisualOverflow && shortResult.size.width <= maxWidth) shortResult else return
+        } else result
+    } else result
+    if (measured.size.width > maxWidth || measured.size.height > maxHeight) return
     drawText(
-        result,
+        measured,
         topLeft = Offset(lr.rect.left + LABEL_PADDING, lr.rect.top + LABEL_PADDING),
     )
 }

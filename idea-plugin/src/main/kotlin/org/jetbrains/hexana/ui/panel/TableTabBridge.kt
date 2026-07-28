@@ -480,7 +480,7 @@ private fun flattenTree(
     return result
 }
 
-private val TREEMAP_WIDTH = 300.dp
+private val TREEMAP_WIDTH = 400.dp
 private const val INDENT_CHARS = 4
 private const val CHEVRON_RIGHT = "\u25B6 "
 private const val CHEVRON_DOWN = "\u25BC "
