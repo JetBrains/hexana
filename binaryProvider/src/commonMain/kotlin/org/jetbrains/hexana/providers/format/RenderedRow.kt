@@ -41,6 +41,13 @@ public data class RenderedRow(
      */
     public val indirectCallTypeIdx: Int? = null,
     /**
+     * The tag index of a `throw` row, `null` for every other row. Powers the
+     * exception-flow handler-resolution popup. Carried on the row (not on
+     * [editable]) because `throw` is outside the inline-editable subset, so
+     * these rows render read-only and [editable] is always `null`.
+     */
+    public val throwTagIdx: Int? = null,
+    /**
      * Role discriminator the panel uses to give specific rows special
      * behaviour (the Data section's expander row click, body-row hiding
      * when the entry is collapsed, …). Defaults to [RowKind.Generic] for

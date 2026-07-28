@@ -100,6 +100,8 @@ import org.jetbrains.hexana.wasm.analysis.GraalJavaSymbol
 import org.jetbrains.hexana.wasm.analysis.KotlinWasmSymbol
 import org.jetbrains.hexana.wasm.analysis.dispatch.IndirectIndexProvenance
 import org.jetbrains.hexana.wasm.analysis.dispatch.resolveIndirectIndexProvenance
+import org.jetbrains.hexana.wasm.analysis.exceptions.ExceptionFlow
+import org.jetbrains.hexana.wasm.analysis.exceptions.ThrowResolution
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.parseCodeEntry
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -538,6 +540,55 @@ private fun WasmPanelWatVirtualizedContent(
     }
     val onIndirectCandidates: (IndirectSiteRequest) -> Unit = { request -> indirectCandidatesRequest = request }
 
+    // Exception-flow popup on `throw` rows: resolve, off the EDT, where the
+    // exception is handled within its function (or that it escapes).
+    var throwHandlerData by remember { mutableStateOf<ThrowHandlerData?>(null) }
+    var throwHandlerRequest by remember { mutableStateOf<ThrowSiteRequest?>(null) }
+    androidx.compose.runtime.LaunchedEffect(throwHandlerRequest) {
+        val request = throwHandlerRequest ?: return@LaunchedEffect
+        throwHandlerData = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val codeEntry = provider.codeOffsets.getOrNull(request.codeIdx)
+                ?: return@withContext null
+            val record = runCatching { provider.bytes.parseCodeEntry(codeEntry.offset) }.getOrNull()
+                ?: return@withContext null
+            val site = ExceptionFlow.analyze(record.opCodes)
+                .firstOrNull { it.offset.toLong() == request.siteOffset }
+                ?: return@withContext null
+            val tagText = site.tagIdx?.let { t ->
+                val payload = provider.exceptionTags?.payloadText(t)
+                if (payload != null) "throw tag $t $payload" else "throw tag $t"
+            } ?: "throw_ref (dynamic)"
+            when (val r = site.resolution) {
+                is ThrowResolution.CaughtHere -> ThrowHandlerData(
+                    header = tagText,
+                    outcome = if (r.byCatchAll) {
+                        "caught by catch_all at try_table @0x${r.handlerOffset.toString(16)}"
+                    } else {
+                        "caught by catch at try_table @0x${r.handlerOffset.toString(16)}"
+                    },
+                    handlerOffset = r.handlerOffset.toLong(),
+                )
+                ThrowResolution.Escapes -> ThrowHandlerData(
+                    header = tagText,
+                    outcome = "escapes this function — propagates to callers",
+                )
+                is ThrowResolution.Dynamic -> {
+                    val handler = r.handlerOffset
+                    ThrowHandlerData(
+                        header = tagText,
+                        outcome = if (handler != null) {
+                            "caught only by catch_all at try_table @0x${handler.toString(16)} (dynamic)"
+                        } else {
+                            "escapes this function (dynamic throw_ref)"
+                        },
+                        handlerOffset = handler?.toLong(),
+                    )
+                }
+            }
+        }
+    }
+    val onThrowHandler: (ThrowSiteRequest) -> Unit = { request -> throwHandlerRequest = request }
+
     // Build the search results adapter: WAT search produces funcIdx-based
     // results; we adapt them to ChunkSearchResult for the common panel.
     val watSearchConfig = remember(chunkTree, funcNamesIndex, provider) {
@@ -705,6 +756,7 @@ private fun WasmPanelWatVirtualizedContent(
                             onCrossChunkDown = navDown,
                             onFollow = onFollowTarget,
                             onIndirectCandidates = onIndirectCandidates,
+                            onThrowHandler = onThrowHandler,
                             onOffsetClicked = onOffsetClicked,
                         )
                     }
@@ -731,6 +783,7 @@ private fun WasmPanelWatVirtualizedContent(
                             expandedIndirectSites = expandedIndirectSitesState,
                             onFollow = onFollowTarget,
                             onIndirectCandidates = onIndirectCandidates,
+                            onThrowHandler = onThrowHandler,
                             onOffsetClicked = onOffsetClicked,
                         )
                     }
@@ -760,6 +813,22 @@ private fun WasmPanelWatVirtualizedContent(
             onDismiss = {
                 indirectCandidatesData = null
                 indirectCandidatesRequest = null
+            },
+        )
+    }
+    val throwData = throwHandlerData
+    if (throwData != null) {
+        WasmThrowHandlerPopup(
+            data = throwData,
+            onGotoHandler = { off ->
+                throwHandlerData = null
+                throwHandlerRequest = null
+                val chunkIdx = chunkTree.chunkContainingByte(off)
+                if (chunkIdx != null) navigator.gotoChunk(chunkTree.chunkAt(chunkIdx).id)
+            },
+            onDismiss = {
+                throwHandlerData = null
+                throwHandlerRequest = null
             },
         )
     }
@@ -977,6 +1046,7 @@ private fun ChunkRow(
     onFollow: ((FollowTarget) -> Unit)? = null,
     /** See [RenderedRowView.onIndirectCandidates]. */
     onIndirectCandidates: ((IndirectSiteRequest) -> Unit)? = null,
+    onThrowHandler: ((ThrowSiteRequest) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     // Re-render whenever the renderer or snapshot changes (i.e. after a
@@ -1061,6 +1131,7 @@ private fun ChunkRow(
                 onCrossChunkDown = onCrossChunkDown,
                 onFollow = onFollow,
                 onIndirectCandidates = onIndirectCandidates,
+                onThrowHandler = onThrowHandler,
                 onOffsetClicked = onOffsetClicked,
             )
         }
@@ -1107,6 +1178,7 @@ private fun WatRowItem(
     onFollow: ((FollowTarget) -> Unit)?,
     /** See [RenderedRowView.onIndirectCandidates]. */
     onIndirectCandidates: ((IndirectSiteRequest) -> Unit)? = null,
+    onThrowHandler: ((ThrowSiteRequest) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     // Skip Data body/descriptor rows when collapsed; the header + expander
@@ -1251,6 +1323,7 @@ private fun WatRowItem(
             onClearEdit = { onClearEditingRow(chunk.id, rowIndex) },
             onFollow = onFollow,
             onIndirectCandidates = onIndirectCandidates,
+            onThrowHandler = onThrowHandler,
             onOffsetClicked = onOffsetClicked,
         )
     }
@@ -1499,6 +1572,7 @@ private fun RenderedRowView(
      * EDT and opens [WasmIndirectCandidatesPopup].
      */
     onIndirectCandidates: ((IndirectSiteRequest) -> Unit)? = null,
+    onThrowHandler: ((ThrowSiteRequest) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     val info = row.editable
@@ -1571,6 +1645,39 @@ private fun RenderedRowView(
                         if (KeymapShortcuts.isModifierOnly(event)) return@onPreviewKeyEvent false
                         if (KeymapShortcuts.matches(event, IdeActions.ACTION_GOTO_DECLARATION)) {
                             onIndirectCandidates(request)
+                            true
+                        } else {
+                            false
+                        }
+                    },
+            )
+            return
+        }
+        val throwTagIdx = row.throwTagIdx
+        val throwOffset = row.tokens.firstOrNull { it.kind == RenderTokenKind.OFFSET_ANNOTATION }?.sourceOffset
+        if (throwTagIdx != null && throwOffset != null && onThrowHandler != null &&
+            chunk?.kind == WasmSectionKinds.CODE
+        ) {
+            // `throw` rows render read-only; clicking (or Cmd+B) opens the
+            // exception-flow popup that resolves the handler within this
+            // function. Hand cursor signals it, no Tooltip wrapper (see the
+            // selection-hierarchy crash lesson in the dispatch popup).
+            val request = ThrowSiteRequest(codeIdx = chunk.indexInSection, siteOffset = throwOffset)
+            val rowFocus = remember(chunkId, rowIndex) { FocusRequester() }
+            SelectableTokenRow(
+                tokens = row.tokens,
+                color = color,
+                onOffsetClicked = onOffsetClicked,
+                modifier = Modifier
+                    .focusRequester(rowFocus)
+                    .focusable()
+                    .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
+                    .clickable { onThrowHandler(request) }
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        if (KeymapShortcuts.isModifierOnly(event)) return@onPreviewKeyEvent false
+                        if (KeymapShortcuts.matches(event, IdeActions.ACTION_GOTO_DECLARATION)) {
+                            onThrowHandler(request)
                             true
                         } else {
                             false

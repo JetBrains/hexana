@@ -302,11 +302,15 @@ public class WasmHexanaWatRenderer(
                 is OpCodes.Flow.ReturnCallIndirect -> op.value0.toInt()
                 else -> null
             }
+            // `throw $tag` rows are read-only too; the tag index rides on the
+            // row for the exception-flow (handler resolution) popup.
+            val throwTagIdx = (opInfo?.op as? OpCodes.Flow.Trow)?.value?.toInt()
             val siteRow = RenderedRow(
                 tokens = rowTokens,
                 editable = editable,
                 followTarget = followTarget,
                 indirectCallTypeIdx = indirectCallTypeIdx,
+                throwTagIdx = throwTagIdx,
             )
             if (inlineIndirectCandidates && indirectCallTypeIdx != null && rowOpStart != null) {
                 listOf(siteRow) + indirectCandidateRows(indirectCallTypeIdx, siteKey = rowOpStart)

@@ -67,6 +67,8 @@ import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphBuilder
 import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphResult
 import org.jetbrains.hexana.wasm.analysis.dispatch.DispatchCandidates
 import org.jetbrains.hexana.wasm.analysis.dispatch.DispatchCandidatesBuilder
+import org.jetbrains.hexana.wasm.analysis.exceptions.WasmExceptionTags
+import org.jetbrains.hexana.wasm.analysis.exceptions.WasmExceptionTagsBuilder
 import org.jetbrains.hexana.wasm.analysis.graph.DominatorResult
 import org.jetbrains.hexana.wasm.analysis.graph.DominatorTree
 import org.jetbrains.hexana.wasm.WasmParser
@@ -965,6 +967,15 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
      */
     val dispatchCandidates: DispatchCandidates? by lazy {
         wasmModule?.let { DispatchCandidatesBuilder(bytes, it).build() }
+    }
+
+    /**
+     * Exception tags resolved to display signatures, for the exception-flow
+     * (handler-resolution) popup. Lazy; one pass over the type/import/tag
+     * sections, no code decoding.
+     */
+    val exceptionTags: WasmExceptionTags? by lazy {
+        wasmModule?.let { WasmExceptionTagsBuilder.build(bytes, it) }
     }
 
     val importFuncCount: Int by lazy {
