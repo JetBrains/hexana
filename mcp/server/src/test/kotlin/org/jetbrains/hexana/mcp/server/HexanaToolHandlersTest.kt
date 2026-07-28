@@ -644,6 +644,30 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun disassembleFunctionReturnsObservableTruncationWithinGlobalBudget() {
+        val wasm = createWasmFile(
+            "disassemble_function_truncated.wasm",
+            "(module (func ${List(100) { "nop" }.joinToString(" ")}))"
+        )
+        val handlers = HexanaToolHandlers(
+            resourceLimits = HexanaResourceLimits(maxOutputBytes = 8_000)
+        )
+
+        val result = handlers.disassembleFunction(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("funcidx", JsonPrimitive(0))
+            }
+        )
+
+        assertFalse(result.isError == true)
+        val structured = result.structuredContent ?: error("Expected structured content")
+        assertTrue(structured["wat"]!!.jsonPrimitive.content.contains("[truncated:"))
+        assertTrue(structured["hex"]!!.jsonPrimitive.content.contains("[truncated:"))
+        assertTrue((result.content.single() as TextContent).text.encodeToByteArray().size <= 8_000)
+    }
+
+    @Test
     fun getFunctionCallGraphReturnsResolvedCallSummary() {
         val wasm = createWasmFile(
             "get_function_call_graph.wasm",

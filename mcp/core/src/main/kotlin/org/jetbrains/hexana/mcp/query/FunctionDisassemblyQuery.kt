@@ -3,7 +3,6 @@ package org.jetbrains.hexana.mcp.query
 import org.jetbrains.hexana.mcp.GeneralFunctionEntry
 import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
-import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.Local
 import org.jetbrains.hexana.mcp.ParameterSignature
 import org.jetbrains.hexana.mcp.model.functions.DisassembledLocalGroupResult
@@ -20,9 +19,15 @@ import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodeWithOffset
 import org.jetbrains.hexana.wasm.sections.WasmCodeRecord
 
-fun WasmBinaryProvider.readFunctionDisassembly(
+fun WasmBinaryProvider.readFunctionDisassembly(funcidx: Int): DisassembleFunctionResult =
+    readFunctionDisassemblyInternal(funcidx, maxOutputBytes = null)
+
+fun WasmBinaryProvider.readFunctionDisassembly(funcidx: Int, maxOutputBytes: Int): DisassembleFunctionResult =
+    readFunctionDisassemblyInternal(funcidx, maxOutputBytes)
+
+private fun WasmBinaryProvider.readFunctionDisassemblyInternal(
     funcidx: Int,
-    maxOutputBytes: Int = HexanaAnalysisLimits.MAX_OUTPUT_BYTES
+    maxOutputBytes: Int?
 ): DisassembleFunctionResult {
     val entry = listFunctionEntries().singleOrNull { it.funcidx == funcidx }
         ?: throw HexanaAnalysisException(
@@ -32,7 +37,7 @@ fun WasmBinaryProvider.readFunctionDisassembly(
 
     val codeRecord = if (entry.import == null) getCodeRecordByIndex(funcidx - importFuncCount) else null
     val localGroups = codeRecord?.locals.serializeLocals()
-    requireSafeLocalExpansion(funcidx, localGroups, maxOutputBytes)
+    maxOutputBytes?.let { requireSafeLocalExpansion(funcidx, localGroups, it) }
     val locals = localGroups.map { it.renderedMcpType() }
     val instructions = codeRecord?.opCodes.orEmpty().map { it.toDisassembledInstructionResult() }
 
@@ -49,8 +54,8 @@ fun WasmBinaryProvider.readFunctionDisassembly(
         codeOffset = codeRecord?.offset?.toLong(),
         codeSize = codeRecord?.size?.toLong(),
         instructions = instructions,
-        wat = entry.renderWat(localGroups, instructions, maxOutputBytes),
-        hex = codeRecord?.renderHex(this, maxOutputBytes)
+        wat = entry.renderWat(localGroups, instructions, maxOutputBytes?.disassemblyPreviewBytes()),
+        hex = codeRecord?.renderHex(this, maxOutputBytes?.disassemblyPreviewBytes())
     )
 }
 
@@ -89,11 +94,26 @@ private fun OpCode.toDisassembledInstructionResult(): DisassembledInstructionRes
 private fun GeneralFunctionEntry.renderWat(
     localGroups: List<Local>,
     instructions: List<DisassembledInstructionResult>,
-    maxOutputBytes: Int
+    maxPreviewBytes: Int?
 ): String? {
     if (import != null) return null
+    if (maxPreviewBytes == null) {
+        return buildString {
+            append("(func")
+            signature?.params.orEmpty().forEach { append(" (param $it)") }
+            signature?.ret.orEmpty().forEach { append(" (result $it)") }
+            localGroups.forEach { local ->
+                append("\n  (local")
+                val type = " ${local.renderedType().toWatLocalType()}"
+                repeat(local.count) { append(type) }
+                append(")")
+            }
+            instructions.forEach { append("\n${it.text.prependIndent("  ")}") }
+            append("\n)")
+        }
+    }
 
-    val output = BoundedTextBuilder(maxOutputBytes, WAT_TRUNCATION_MARKER)
+    val output = BoundedTextBuilder(maxPreviewBytes, WAT_TRUNCATION_MARKER, "WAT preview")
     if (!output.append("(func")) return output.truncatedText()
     signature?.params.orEmpty().forEach { param ->
         if (!output.append(" (param $param)")) return output.truncatedText()
@@ -130,9 +150,10 @@ private fun requireSafeLocalExpansion(funcidx: Int, localGroups: List<Local>, ma
     }
 }
 
-private class BoundedTextBuilder(
+internal class BoundedTextBuilder(
     private val maxBytes: Int,
-    private val truncationMarker: String
+    private val truncationMarker: String,
+    private val description: String
 ) {
     private val pieces = mutableListOf<EncodedPiece>()
     private val markerBytes = truncationMarker.encodeToByteArray().size
@@ -149,7 +170,13 @@ private class BoundedTextBuilder(
     fun completeText(): String = pieces.joinToString(separator = "") { it.value }
 
     fun truncatedText(): String {
-        if (maxBytes < markerBytes) return truncationMarker.take(maxBytes)
+        if (maxBytes < markerBytes) {
+            throw HexanaAnalysisException(
+                HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+                "Configured $description budget of $maxBytes bytes cannot fit the explicit " +
+                    "truncation marker, which requires $markerBytes bytes."
+            )
+        }
         while (contentBytes + markerBytes > maxBytes) {
             val removed = pieces.removeLast()
             contentBytes -= removed.encodedBytes
@@ -168,9 +195,12 @@ private fun String.toWatLocalType(): String {
     }
 }
 
-private fun WasmCodeRecord.renderHex(provider: WasmBinaryProvider, maxOutputBytes: Int): String {
+private fun WasmCodeRecord.renderHex(provider: WasmBinaryProvider, maxPreviewBytes: Int?): String {
     val buffer = provider.bytes
-    val output = BoundedTextBuilder(maxOutputBytes, HEX_TRUNCATION_MARKER)
+    if (maxPreviewBytes == null) {
+        return (offset until offset + size).joinToString(" ") { index -> buffer[index].hexByte() }
+    }
+    val output = BoundedTextBuilder(maxPreviewBytes, HEX_TRUNCATION_MARKER, "hex preview")
     for (index in offset until offset + size) {
         val separator = if (index == offset) "" else " "
         if (!output.append(separator + buffer[index].hexByte())) {
@@ -186,5 +216,8 @@ private fun Byte.hexByte(): String {
 }
 
 private const val HEX_CHARS = "0123456789abcdef"
+private const val DISASSEMBLY_PREVIEW_BUDGET_DIVISOR = 32
 private const val WAT_TRUNCATION_MARKER = "\n  ;; [truncated: remaining WAT omitted by output limit]\n)"
 private const val HEX_TRUNCATION_MARKER = " [truncated: remaining code bytes omitted by output limit]"
+
+private fun Int.disassemblyPreviewBytes(): Int = (this / DISASSEMBLY_PREVIEW_BUDGET_DIVISOR).coerceAtLeast(1)
