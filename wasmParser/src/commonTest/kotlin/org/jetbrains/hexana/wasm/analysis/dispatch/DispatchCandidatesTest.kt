@@ -5,6 +5,7 @@ import org.jetbrains.hexana.tests.resourceAsByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
+import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCodeWithOffset
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.opcodes.numeric.I32
@@ -112,6 +113,41 @@ class DispatchCandidatesTest {
         // Canonical shape still resolves in a synthetic list.
         val site3 = OpCodes.Flow.CallIndirect(0, 0, offset = 30)
         assertEquals(7, resolveConstantIndirectIndex(listOf(I32.Const(7, 25), site3), 30))
+    }
+
+    @Test
+    fun `provenance describes load and local shapes`() {
+        // Vtable-shaped dispatch: local.get 1; i32.load offset=12; call_indirect.
+        val loadSite = OpCodes.Flow.CallIndirect(0, 0, offset = 40)
+        val loadOps = listOf(
+            OpCodes.Local.Get(1u, 30),
+            OpCodes.Memory.i32.Load(MemArg(align = 2, offset = 12), 35),
+            loadSite,
+        )
+        assertEquals(
+            IndirectIndexProvenance.Load(byteOffset = 12, base = "local 1"),
+            resolveIndirectIndexProvenance(loadOps, 40),
+        )
+
+        // Index straight from a local: flows in from callers.
+        val localSite = OpCodes.Flow.CallIndirect(0, 0, offset = 50)
+        assertEquals(
+            IndirectIndexProvenance.Local(2),
+            resolveIndirectIndexProvenance(listOf(OpCodes.Local.Get(2u, 45), localSite), 50),
+        )
+
+        // A load whose address is computed: base described as <expr>.
+        val exprSite = OpCodes.Flow.CallIndirect(0, 0, offset = 60)
+        val exprOps = listOf(
+            OpCodes.Local.Get(0u, 51),
+            I32.Add,
+            OpCodes.Memory.i32.Load(MemArg(align = 2, offset = 0), 55),
+            exprSite,
+        )
+        assertEquals(
+            IndirectIndexProvenance.Load(byteOffset = 0, base = "<expr>"),
+            resolveIndirectIndexProvenance(exprOps, 60),
+        )
     }
 
     @Test

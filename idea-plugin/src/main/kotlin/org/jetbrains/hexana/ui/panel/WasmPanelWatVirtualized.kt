@@ -53,6 +53,8 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -96,7 +98,8 @@ import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.SearchField
 import org.jetbrains.hexana.wasm.analysis.GraalJavaSymbol
 import org.jetbrains.hexana.wasm.analysis.KotlinWasmSymbol
-import org.jetbrains.hexana.wasm.analysis.dispatch.resolveConstantIndirectIndex
+import org.jetbrains.hexana.wasm.analysis.dispatch.IndirectIndexProvenance
+import org.jetbrains.hexana.wasm.analysis.dispatch.resolveIndirectIndexProvenance
 import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.parseCodeEntry
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -484,40 +487,52 @@ private fun WasmPanelWatVirtualizedContent(
                     funcIdx = funcIdx,
                     label = funcDisplayNames[funcIdx] ?: if (isImport) "(imported)" else "\$func$funcIdx",
                     navigable = !isImport,
+                    size = if (isImport) null else provider.codeOffsets.getOrNull(funcIdx - provider.importFuncCount)?.size,
                 )
             }
 
-            // N1 narrowing: when the site's index operand is a compile-time
-            // constant, replace the signature set with the exact table target
-            // (or a trap warning). Anything unresolvable falls back silently.
+            // Index-operand provenance: N1 narrowing when the operand is a
+            // compile-time constant (exact target / trap warning /
+            // uninitialized slot), a shape description otherwise. Anything
+            // unresolvable falls back silently to the signature set.
             var note: String? = null
+            var provenanceText: String? = null
             var entries = funcs.map(::entryFor)
             val codeEntry = request.codeIdx?.let { provider.codeOffsets.getOrNull(it) }
             if (dispatch != null && codeEntry != null && request.siteOffset != null) {
                 val record = runCatching { provider.bytes.parseCodeEntry(codeEntry.offset) }.getOrNull()
-                val slot = record?.let {
-                    resolveConstantIndirectIndex(it.opCodes, request.siteOffset.toInt())
-                }
-                if (slot != null) {
-                    val target = dispatch.functionAtSlot(slot)
-                    when {
-                        target == null ->
-                            note = "constant table index $slot is not statically initialized"
-                        funcs.any { it == target } -> {
-                            entries = listOf(entryFor(target))
-                            note = "exact target: constant table index $slot"
-                        }
-                        else -> {
-                            entries = listOf(entryFor(target))
-                            note = "constant index $slot targets a mismatched signature — this call traps"
+                val provenance = record?.let {
+                    resolveIndirectIndexProvenance(it.opCodes, request.siteOffset.toInt())
+                } ?: IndirectIndexProvenance.Unknown
+                when (provenance) {
+                    is IndirectIndexProvenance.Const -> {
+                        val slot = provenance.slot
+                        val target = dispatch.functionAtSlot(slot)
+                        when {
+                            target == null ->
+                                note = "constant table index $slot is not statically initialized"
+                            funcs.any { it == target } -> {
+                                entries = listOf(entryFor(target))
+                                note = "exact target: constant table index $slot"
+                            }
+                            else -> {
+                                entries = listOf(entryFor(target))
+                                note = "constant index $slot targets a mismatched signature — this call traps"
+                            }
                         }
                     }
+                    is IndirectIndexProvenance.Load ->
+                        provenanceText = "index: i32.load(+${provenance.byteOffset}) of ${provenance.base}"
+                    is IndirectIndexProvenance.Local ->
+                        provenanceText = "index: local ${provenance.localIdx} — flows in from callers"
+                    IndirectIndexProvenance.Unknown -> {}
                 }
             }
             IndirectCandidatesData(
                 signatureText = signature?.text() ?: "(type $typeIdx)",
                 entries = entries,
                 note = note,
+                provenance = provenanceText,
             )
         }
     }
@@ -1431,6 +1446,7 @@ private fun KotlinWasmBadge(symbol: KotlinWasmSymbol, project: Project) {
  * Error UX (red border, tooltip, Esc-revert) is Phase C.4 — for now an
  * encoder failure just keeps the field's text live without committing.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RenderedRowView(
     row: RenderedRow,
@@ -1531,6 +1547,14 @@ private fun RenderedRowView(
                 siteOffset = row.tokens.firstOrNull { it.kind == RenderTokenKind.OFFSET_ANNOTATION }?.sourceOffset,
             )
             val rowFocus = remember(chunkId, rowIndex) { FocusRequester() }
+            // Clickability affordance is the hand cursor only. A Jewel Tooltip
+            // wrapper was tried here but it hosts its anchor in a separate
+            // popup layer, so the row's selectable Text lands in a different
+            // layout hierarchy than the rest of the WAT SelectionContainer; a
+            // mouse selection gesture starting on it then crashes in
+            // SelectionManager.findCommonAncestor ("layouts are not part of
+            // the same hierarchy") and kills the tab's composition. The hand
+            // cursor signals clickability without adding a popup layer.
             SelectableTokenRow(
                 tokens = row.tokens,
                 color = color,
@@ -1538,6 +1562,7 @@ private fun RenderedRowView(
                 modifier = Modifier
                     .focusRequester(rowFocus)
                     .focusable()
+                    .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
                     .clickable {
                         onIndirectCandidates(request)
                     }
