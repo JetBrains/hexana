@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -22,8 +23,10 @@ import org.jetbrains.compose.web.dom.Thead
 import org.jetbrains.compose.web.dom.Th
 import org.jetbrains.compose.web.dom.Tr
 import org.w3c.dom.HTMLElement
+import org.w3c.dom.events.Event
 import org.w3c.dom.events.EventListener
 import org.w3c.dom.events.KeyboardEvent
+import org.w3c.dom.events.MouseEvent
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.ColumnDescriptor
 import org.jetbrains.hexana.shared.ColumnWidth
@@ -816,6 +819,233 @@ private fun TreeTableTabContent(
         else -> resultsLeading
     }
 
+    val treemapData = descriptor.treemapData
+
+    // When treemapData is present, wrap the table and treemap in a horizontal flex row.
+    val tableContent: @Composable () -> Unit = {
+        TreeTableBody(
+            descriptor = descriptor,
+            selection = selection,
+            expandedPaths = expandedPaths,
+            flatRows = flatRows,
+            headers = headers,
+            aligns = aligns,
+            columnWidthsCh = columnWidthsCh,
+            sortState = sortState,
+            sortColumnIndex = sortColumnIndex,
+            onSortColumnChange = { sortColumnIndex = it },
+            sortAscending = sortAscending,
+            onSortAscendingChange = { sortAscending = it },
+            focusedFlatIndex = focusedFlatIndex,
+            onFocusedFlatIndexChange = { focusedFlatIndex = it },
+            isSearchVisible = isSearchVisible,
+            onSearchVisibleChange = { isSearchVisible = it },
+            searchQuery = searchQuery,
+            onSearchQueryChange = { searchQuery = it },
+            searchBarLeading = searchBarLeading,
+        )
+    }
+
+    if (treemapData != null) {
+        var treemapFraction by remember { mutableStateOf(DEFAULT_TREEMAP_FRACTION) }
+        Div({
+            style {
+                display(DisplayStyle.Flex)
+                property("flex-direction", "row")
+                property("flex", "1")
+                property("min-height", "0")
+            }
+        }) {
+            Div({
+                style {
+                    property("flex", "${1f - treemapFraction}")
+                    property("min-width", "0")
+                    property("min-height", "0")
+                    display(DisplayStyle.Flex)
+                    property("flex-direction", "column")
+                }
+            }) {
+                tableContent()
+            }
+            VerticalResizeDivider(
+                onDrag = { deltaFraction ->
+                    treemapFraction = (treemapFraction - deltaFraction)
+                        .coerceIn(MIN_TREEMAP_FRACTION, MAX_TREEMAP_FRACTION)
+                },
+            )
+            Div({
+                style {
+                    property("flex", "$treemapFraction")
+                    property("min-width", "0")
+                    property("min-height", "0")
+                    property("padding-left", "4px")
+                }
+            }) {
+                SizeTreemapCanvas(
+                    treemapData = treemapData,
+                    onNodeClicked = { treePath ->
+                        // Expand ancestor paths so the target row is visible.
+                        for (i in 1 until treePath.size) {
+                            val ancestorPath = treePath.subList(0, i)
+                            if (ancestorPath !in expandedPaths) {
+                                expandedPaths.add(ancestorPath)
+                            }
+                        }
+                        // Find and select the target row after expansion.
+                        val updatedRows = flattenTreeVsc(
+                            descriptor, expandedPaths.toSet(),
+                            sortColumnIndex, sortAscending,
+                        )
+                        val targetIndex = updatedRows.indexOfFirst { it.treePath == treePath }
+                        if (targetIndex >= 0) {
+                            focusedFlatIndex = targetIndex
+                            val row = updatedRows[targetIndex]
+                            val selData = row.rowSelectionProvider(row.index)
+                            if (selData != null) {
+                                selection.anchorIndex = selData.offset
+                                selection.activeIndex = selData.offset + selData.size - 1
+                                selection.cursorIndex = selData.offset
+                                scrollHexViewerTo(selData.offset)
+                            }
+                        }
+                    },
+                )
+            }
+        }
+    } else {
+        tableContent()
+    }
+}
+
+private const val DEFAULT_TREEMAP_FRACTION = 0.35f
+private const val MIN_TREEMAP_FRACTION = 0.15f
+private const val MAX_TREEMAP_FRACTION = 0.6f
+
+/**
+ * A thin vertical divider that can be dragged horizontally to resize
+ * the panels to its left and right.
+ */
+@Composable
+private fun VerticalResizeDivider(onDrag: (deltaFraction: Float) -> Unit) {
+    var dragging by remember { mutableStateOf(false) }
+    var startX by remember { mutableStateOf(0.0) }
+    var containerWidth by remember { mutableStateOf(1.0) }
+
+    DisposableEffect(dragging) {
+        if (!dragging) return@DisposableEffect onDispose {}
+
+        val moveHandler: (Event) -> Unit = { event ->
+            val me = event as? MouseEvent
+            if (me != null) {
+                me.preventDefault()
+                val delta = me.clientX.toDouble() - startX
+                startX = me.clientX.toDouble()
+                if (containerWidth > 0) {
+                    onDrag((delta / containerWidth).toFloat())
+                }
+            }
+        }
+
+        val upHandler: (Event) -> Unit = {
+            dragging = false
+        }
+
+        kotlinx.browser.window.addEventListener("mousemove", moveHandler)
+        kotlinx.browser.window.addEventListener("mouseup", upHandler)
+        onDispose {
+            kotlinx.browser.window.removeEventListener("mousemove", moveHandler)
+            kotlinx.browser.window.removeEventListener("mouseup", upHandler)
+        }
+    }
+
+    Div({
+        style {
+            property("flex-shrink", "0")
+            property("width", "8px")
+            property("cursor", "col-resize")
+            property("background", "transparent")
+            property("position", "relative")
+            property("z-index", "2")
+            property("margin", "0 -3px")
+            property("padding", "0 3px")
+            display(DisplayStyle.Flex)
+            property("align-items", "stretch")
+            property("justify-content", "center")
+        }
+        onMouseDown { event ->
+            if (event.nativeEvent.asDynamic().button as Int != 0) return@onMouseDown
+            event.preventDefault()
+            startX = (event.nativeEvent as MouseEvent).clientX.toDouble()
+            val parent = (event.nativeEvent.target as? HTMLElement)?.parentElement
+            containerWidth = parent?.getBoundingClientRect()?.width?.toDouble() ?: 1.0
+            dragging = true
+        }
+    }) {
+        Div({
+            style {
+                property("width", "1px")
+                property("background", "var(--hexana-border, #333)")
+                property("align-self", "stretch")
+            }
+        })
+    }
+}
+
+/**
+ * The inner tree table body extracted so it can be used both standalone
+ * and inside a treemap split layout.
+ */
+@Composable
+private fun TreeTableBody(
+    descriptor: TableTabDescriptor,
+    selection: HexSelectionState,
+    expandedPaths: MutableList<List<Int>>,
+    flatRows: List<VscFlatRow>,
+    headers: List<String>,
+    aligns: List<String>,
+    columnWidthsCh: List<Int?>,
+    sortState: TableSortState,
+    sortColumnIndex: Int,
+    onSortColumnChange: (Int) -> Unit,
+    sortAscending: Boolean,
+    onSortAscendingChange: (Boolean) -> Unit,
+    focusedFlatIndex: Int,
+    onFocusedFlatIndexChange: (Int) -> Unit,
+    isSearchVisible: Boolean,
+    onSearchVisibleChange: (Boolean) -> Unit,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    searchBarLeading: (@Composable () -> Unit)?,
+) {
+    // --- Virtual scroll state ---
+    val rowHeight = 24
+    val bufferRows = 20
+    var scrollTop by remember { mutableStateOf(0.0) }
+    var viewportHeight by remember { mutableStateOf(600.0) }
+    var tableWrapperElement by remember { mutableStateOf<org.w3c.dom.Element?>(null) }
+
+    // Scroll the table to make the focused row visible when it changes.
+    LaunchedEffect(focusedFlatIndex) {
+        val wrapper = tableWrapperElement ?: return@LaunchedEffect
+        if (focusedFlatIndex < 0) return@LaunchedEffect
+        val thead = wrapper.querySelector("thead")
+        val headerHeight = thead?.getBoundingClientRect()?.height ?: 0.0
+        val rowTop = headerHeight + focusedFlatIndex * rowHeight
+        val rowBottom = rowTop + rowHeight
+        val currentScrollTop = wrapper.scrollTop
+        val visibleTop = currentScrollTop + headerHeight
+        val visibleBottom = currentScrollTop + wrapper.clientHeight.toDouble()
+        if (rowTop < visibleTop) {
+            wrapper.scrollTop = rowTop - headerHeight
+        } else if (rowBottom > visibleBottom) {
+            wrapper.scrollTop = rowBottom - wrapper.clientHeight.toDouble()
+        }
+    }
+
+    val totalRows = flatRows.size
+    val firstVisible = maxOf(0, (scrollTop / rowHeight).toInt() - bufferRows)
+    val lastVisible = minOf(totalRows - 1, ((scrollTop + viewportHeight) / rowHeight).toInt() + bufferRows)
+
     Div({
         classes("hexana-searchable-table")
         tabIndex(-1)
@@ -837,15 +1067,15 @@ private fun TreeTableTabContent(
                 if (ke.key == "f" && (ke.metaKey || ke.ctrlKey)) {
                     ke.preventDefault()
                     ke.stopPropagation()
-                    isSearchVisible = true
+                    onSearchVisibleChange(true)
                     kotlinx.browser.window.requestAnimationFrame {
                         container.querySelector(".hexana-search-input")
                             ?.let { (it as? org.w3c.dom.HTMLInputElement)?.focus() }
                     }
                 }
                 if (ke.key == "Escape" && isSearchVisible && !descriptor.alwaysShowSearch) {
-                    isSearchVisible = false
-                    searchQuery = ""
+                    onSearchVisibleChange(false)
+                    onSearchQueryChange("")
                 }
             }
             kotlinx.browser.window.addEventListener("keydown", keyListener, true)
@@ -858,17 +1088,16 @@ private fun TreeTableTabContent(
         if (isSearchVisible || searchQuery.isNotEmpty()) {
             SearchBar(
                 query = searchQuery,
-                onQueryChange = { searchQuery = it },
+                onQueryChange = { onSearchQueryChange(it) },
                 onClose = {
-                    searchQuery = ""
-                    if (!descriptor.alwaysShowSearch) isSearchVisible = false
+                    onSearchQueryChange("")
+                    if (!descriptor.alwaysShowSearch) onSearchVisibleChange(false)
                 },
                 leading = searchBarLeading,
             )
         }
 
-        // Table with virtual scrolling — the table wrapper itself is the
-        // scrollable container, keeping the search bar fixed above.
+        // Table with virtual scrolling
         Div({
             style {
                 property("flex", "1")
@@ -876,6 +1105,7 @@ private fun TreeTableTabContent(
                 property("min-height", "0")
             }
             ref { tableWrapper ->
+                tableWrapperElement = tableWrapper
                 viewportHeight = tableWrapper.clientHeight.toDouble()
                 scrollTop = tableWrapper.scrollTop
 
@@ -884,7 +1114,10 @@ private fun TreeTableTabContent(
                     scrollTop = tableWrapper.scrollTop
                 }
                 tableWrapper.addEventListener("scroll", listener)
-                onDispose { tableWrapper.removeEventListener("scroll", listener) }
+                onDispose {
+                    tableWrapper.removeEventListener("scroll", listener)
+                    tableWrapperElement = null
+                }
             }
         }) {
             Table({
@@ -926,10 +1159,10 @@ private fun TreeTableTabContent(
                                         val dataColIndex = index - 1
                                         if (dataColIndex >= 0) {
                                             if (sortColumnIndex == dataColIndex) {
-                                                sortAscending = !sortAscending
+                                                onSortAscendingChange(!sortAscending)
                                             } else {
-                                                sortColumnIndex = dataColIndex
-                                                sortAscending = true
+                                                onSortColumnChange(dataColIndex)
+                                                onSortAscendingChange(true)
                                             }
                                         }
                                     }
@@ -963,7 +1196,7 @@ private fun TreeTableTabContent(
                         PanelTableRow(
                             isHighlighted = isHighlighted,
                             onClick = {
-                                focusedFlatIndex = flatIndex
+                                onFocusedFlatIndexChange(flatIndex)
                                 if (row.hasChildren) {
                                     if (row.isExpanded) {
                                         expandedPaths.remove(row.treePath)
@@ -983,7 +1216,7 @@ private fun TreeTableTabContent(
                                 }
                             },
                             onSelect = {
-                                focusedFlatIndex = flatIndex
+                                onFocusedFlatIndexChange(flatIndex)
                                 val highlightProvider = descriptor.rowHighlightRangesProvider
                                 if (highlightProvider != null && row.depth == 0) {
                                     applyHighlightRangesVsc(highlightProvider(row.index), selection)
