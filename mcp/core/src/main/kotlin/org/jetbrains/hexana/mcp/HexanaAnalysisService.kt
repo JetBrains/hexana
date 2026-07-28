@@ -534,7 +534,7 @@ class DefaultHexanaAnalysisService(
     override fun disassembleFunction(input: WasmInput, funcidx: Int): DisassembleFunctionResult {
         requireIndices(listOf(funcidx))
         val wasm = load(input)
-        return wasm.provider.readFunctionDisassembly(funcidx)
+        return wasm.provider.readFunctionDisassembly(funcidx, limits.maxOutputBytes)
     }
 
     override fun getFunctionCallGraph(input: WasmInput, indices: List<Int>): GetFunctionCallGraphResult {

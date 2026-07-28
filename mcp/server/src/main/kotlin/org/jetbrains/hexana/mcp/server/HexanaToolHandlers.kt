@@ -565,8 +565,17 @@ class HexanaToolHandlers(
         val startTime = System.currentTimeMillis()
         return try {
             val result = block()
-            val jsonResult = HexanaJson.compact.encodeToString(serializer, result)
-            val structuredContent = HexanaJson.compact.encodeToJsonElement(serializer, result) as? JsonObject
+            val encodedResult = HexanaJson.compact.encodeToJsonElement(serializer, result)
+            val jsonResult = encodedResult.toString()
+            val encodedBytes = jsonResult.encodeToByteArray().size
+            if (encodedBytes > resourceLimits.maxOutputBytes) {
+                throw HexanaAnalysisException(
+                    HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+                    "Encoded result for `$toolName` is $encodedBytes bytes, exceeding the configured " +
+                        "maximum of ${resourceLimits.maxOutputBytes} bytes."
+                )
+            }
+            val structuredContent = encodedResult as? JsonObject
             captureToolEvent(toolName, startTime, success = true)
             CallToolResult(
                 content = listOf(TextContent(jsonResult)),

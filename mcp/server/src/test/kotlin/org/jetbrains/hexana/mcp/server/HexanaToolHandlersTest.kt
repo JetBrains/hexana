@@ -54,6 +54,25 @@ class HexanaToolHandlersTest {
     private val handlers = HexanaToolHandlers()
 
     @Test
+    fun rejectsSuccessResultAboveGlobalEncodedByteBudget() {
+        val handlers = HexanaToolHandlers(
+            resourceLimits = HexanaResourceLimits(maxOutputBytes = 100)
+        )
+
+        val result = handlers.summarizeModule(
+            buildJsonObject {
+                put("bytes", buildJsonArray {
+                    listOf(0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00).forEach { add(JsonPrimitive(it)) }
+                })
+            }
+        )
+
+        assertEquals(true, result.isError)
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", result.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertTrue((result.content.single() as TextContent).text.contains("maximum of 100 bytes"))
+    }
+
+    @Test
     fun summarizeBinaryAcceptsRawByteArrayInput() {
         val result = handlers.summarizeBinary(
             buildJsonObject {

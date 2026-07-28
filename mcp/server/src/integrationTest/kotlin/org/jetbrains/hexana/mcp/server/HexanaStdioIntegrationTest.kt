@@ -119,6 +119,31 @@ class HexanaStdioIntegrationTest {
     }
 
     @Test
+    fun installedServerEnforcesGlobalEncodedResultBudget() = runBlocking {
+        val fixtureDirectory = temporaryFolder.root.toPath()
+        val wasm = fixtureDirectory.resolve("encoded-result-budget.wasm")
+        Files.write(wasm, byteArrayOf(0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00))
+
+        withInstalledStdioClient(
+            allowedRoots = listOf(fixtureDirectory),
+            maxOutputBytes = 100,
+        ) { server ->
+            val result = server.client.callTool(
+                name = "summarize_module",
+                arguments = mapOf("path" to wasm.toString()),
+                meta = emptyMap<String, Any?>(),
+            )
+
+            assertEquals(true, result.isError)
+            assertEquals(
+                "RESOURCE_LIMIT_EXCEEDED",
+                result.structuredContent?.get("code")?.jsonPrimitive?.content,
+            )
+            assertTrue((result.content.single() as TextContent).text.contains("maximum of 100 bytes"))
+        }
+    }
+
+    @Test
     fun installedServerDrainsSingleResponseAfterFiniteStdinEof() = runBlocking {
         val result = HexanaInstalledStdioClient.runCommand(
             launcher = StdioLauncher.Server,

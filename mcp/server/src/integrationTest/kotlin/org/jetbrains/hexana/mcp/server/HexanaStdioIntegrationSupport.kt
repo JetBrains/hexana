@@ -98,6 +98,7 @@ internal class HexanaInstalledStdioClient private constructor(
             launcher: StdioLauncher = StdioLauncher.Server,
             toolProfile: HexanaMcpToolProfile? = null,
             allowedRoots: List<Path> = emptyList(),
+            maxOutputBytes: Int? = null,
         ): HexanaInstalledStdioClient {
             val processSpec = processSpec(launcher)
             val command = buildCommand(
@@ -110,6 +111,10 @@ internal class HexanaInstalledStdioClient private constructor(
                     if (toolProfile != null) {
                         add("--tool-profile")
                         add(toolProfile.cliValue())
+                    }
+                    if (maxOutputBytes != null) {
+                        add("--max-output-bytes")
+                        add(maxOutputBytes.toString())
                     }
                     allowedRoots.forEach { allowedRoot ->
                         add("--allowed-root")
@@ -397,6 +402,7 @@ internal suspend inline fun <T> withInstalledStdioClient(
     launcher: StdioLauncher = StdioLauncher.Server,
     toolProfile: HexanaMcpToolProfile? = null,
     allowedRoots: List<Path> = emptyList(),
+    maxOutputBytes: Int? = null,
     crossinline block: suspend (HexanaInstalledStdioClient) -> T
 ): T {
     val server = HexanaInstalledStdioClient.start(
@@ -404,6 +410,7 @@ internal suspend inline fun <T> withInstalledStdioClient(
         launcher = launcher,
         toolProfile = toolProfile,
         allowedRoots = allowedRoots,
+        maxOutputBytes = maxOutputBytes,
     )
     return try {
         block(server)

@@ -326,7 +326,7 @@ internal fun CliktCommand.maxTextFileBytesOption() = positiveIntOption(
 
 internal fun CliktCommand.maxOutputBytesOption() = positiveIntOption(
     "--max-output-bytes",
-    "Maximum bounded query output budget accepted for one MCP tool call.",
+    "Maximum encoded logical JSON result accepted for every MCP tool call.",
     "HEXANA_MCP_MAX_OUTPUT_BYTES",
 )
 
