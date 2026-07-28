@@ -105,6 +105,61 @@ object ExceptionFlow {
     }
 
     /**
+     * The exception behaviour of one function, all E2's call-graph
+     * propagation needs from a single function body:
+     *  - [localTags]/[localDynamic]: exceptions thrown directly and not caught
+     *    locally (the E1 escape set);
+     *  - [calls]: each direct call site with the catch coverage of the
+     *    try_tables enclosing it, so propagation knows which of a callee's
+     *    escaping tags this function re-catches vs lets through;
+     *  - [hasUnguardedIndirectOrImportRisk] is set when a `call_indirect` /
+     *    `return_call_indirect` sits under no `catch_all` — the callee is
+     *    unknown, so it may throw an unknown exception that escapes here.
+     */
+    fun functionEffect(opcodes: List<OpCode>): FunctionEffect {
+        val escape = escapeSet(opcodes)
+        val calls = ArrayList<GuardedCall>()
+        var indirectRisk = false
+
+        data class Frame(val caughtTags: Set<Int>, val hasCatchAll: Boolean)
+
+        fun walk(ops: List<OpCode>, stack: List<Frame>) {
+            // Coverage visible at this depth: union of caught tags + any catch_all.
+            val coveredTags = HashSet<Int>()
+            var catchAll = false
+            for (f in stack) {
+                coveredTags.addAll(f.caughtTags)
+                if (f.hasCatchAll) catchAll = true
+            }
+            for (op in ops) {
+                when (op) {
+                    is OpCodes.Flow.Call -> calls.add(GuardedCall(op.value.toInt(), coveredTags.toSet(), catchAll))
+                    is OpCodes.Flow.ReturnCall -> calls.add(GuardedCall(op.value.toInt(), coveredTags.toSet(), catchAll))
+                    is OpCodes.Flow.CallIndirect -> if (!catchAll) indirectRisk = true
+                    is OpCodes.Flow.ReturnCallIndirect -> if (!catchAll) indirectRisk = true
+                    is OpCodes.Flow.TryTable -> {
+                        val caught = HashSet<Int>()
+                        var ca = false
+                        for (c in op.catches) {
+                            when (c) {
+                                is OpCodes.Flow.CatchType.Catch -> caught.add(c.tagIdx.toInt())
+                                is OpCodes.Flow.CatchType.CatchRef -> caught.add(c.tagIdx.toInt())
+                                is OpCodes.Flow.CatchType.CatchAll -> ca = true
+                                is OpCodes.Flow.CatchType.CatchAllRef -> ca = true
+                            }
+                        }
+                        walk(op.code, stack + Frame(caught, ca))
+                    }
+                    is OpCodes.Flow.Block -> walk(op.value, stack)
+                    else -> {}
+                }
+            }
+        }
+        walk(opcodes, emptyList())
+        return FunctionEffect(escape.tags, escape.dynamicThrow, calls, indirectRisk)
+    }
+
+    /**
      * The function's escape set: the static tags it can throw without catching
      * locally, and whether an uncaught `throw_ref` (dynamic) can escape. This
      * is the per-function input the E2 call-graph propagation consumes.
@@ -125,3 +180,14 @@ object ExceptionFlow {
 
 /** Tags a function throws uncaught locally, plus whether a dynamic throw_ref escapes. */
 data class EscapeSet(val tags: Set<Int>, val dynamicThrow: Boolean)
+
+/** A direct call site and the catch coverage of the try_tables enclosing it. */
+data class GuardedCall(val calleeFuncIdx: Int, val caughtTags: Set<Int>, val underCatchAll: Boolean)
+
+/** One function's exception behaviour, the per-function input to E2 propagation. */
+data class FunctionEffect(
+    val localTags: Set<Int>,
+    val localDynamic: Boolean,
+    val calls: List<GuardedCall>,
+    val hasUnguardedIndirectOrImportRisk: Boolean,
+)
