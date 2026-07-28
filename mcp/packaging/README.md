@@ -163,7 +163,7 @@ the standalone runtime. Use these options to tune per-request resource limits:
 | `--max-file-bytes` | `HEXANA_MCP_MAX_FILE_BYTES` | Maximum input file size accepted by MCP tools. |
 | `--max-inline-bytes` | `HEXANA_MCP_MAX_INLINE_BYTES` | Maximum inline payload size accepted in tool arguments. |
 | `--max-text-file-bytes` | `HEXANA_MCP_MAX_TEXT_FILE_BYTES` | Maximum text file size read for text-oriented tool inputs. |
-| `--max-output-bytes` | `HEXANA_MCP_MAX_OUTPUT_BYTES` | Maximum encoded logical JSON result for every tool call. The duplicated MCP wire envelope is not counted. |
+| `--max-output-bytes` | `HEXANA_MCP_MAX_OUTPUT_BYTES` | Maximum encoded logical JSON result for successful tool calls. The duplicated MCP wire envelope is not counted; structured error responses are exempt so stable diagnostics can always be returned. |
 | `--max-candidate-count` | `HEXANA_MCP_MAX_CANDIDATE_COUNT` | Maximum number of candidate files or records kept during discovery. |
 | `--max-scan-roots` | `HEXANA_MCP_MAX_SCAN_ROOTS` | Maximum number of scan root directories accepted for discovery tools. |
 | `--max-scan-depth` | `HEXANA_MCP_MAX_SCAN_DEPTH` | Maximum directory depth traversed while scanning roots. |

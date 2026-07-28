@@ -54,7 +54,7 @@ class HexanaToolHandlersTest {
     private val handlers = HexanaToolHandlers()
 
     @Test
-    fun rejectsSuccessResultAboveGlobalEncodedByteBudget() {
+    fun rejectsSuccessAboveGlobalBudgetWithoutBudgetingStableErrorResponse() {
         val handlers = HexanaToolHandlers(
             resourceLimits = HexanaResourceLimits(maxOutputBytes = 100)
         )
@@ -68,8 +68,11 @@ class HexanaToolHandlersTest {
         )
 
         assertEquals(true, result.isError)
-        assertEquals("RESOURCE_LIMIT_EXCEEDED", result.structuredContent?.get("code")?.jsonPrimitive?.content)
-        assertTrue((result.content.single() as TextContent).text.contains("maximum of 100 bytes"))
+        val structured = result.structuredContent ?: error("Expected structured error")
+        assertEquals(setOf("code", "message"), structured.keys)
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", structured["code"]?.jsonPrimitive?.content)
+        assertTrue(structured["message"]!!.jsonPrimitive.content.contains("maximum of 100 bytes"))
+        assertTrue(structured.toString().encodeToByteArray().size > 100)
     }
 
     @Test
