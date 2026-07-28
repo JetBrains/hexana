@@ -24,6 +24,7 @@ import org.w3c.dom.events.Event
 private enum class FixedTab(val label: String) {
     Summary("Sections"),
     Wat("WAT"),
+    Dependencies("Dependencies"),
 }
 
 /**
@@ -116,6 +117,13 @@ fun HexanaPanel(
             if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
                 add(PanelTab(FixedTab.Wat.label, padding = false) { _ ->
                     WatTabContent(provider)
+                })
+            }
+
+            // Dependencies tab (component-model only)
+            if (provider is WasmComponentBinaryProvider) {
+                add(PanelTab(FixedTab.Dependencies.label, padding = false) { _ ->
+                    DependencyGraphTabContent(provider)
                 })
             }
 
