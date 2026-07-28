@@ -54,8 +54,8 @@ private fun WasmBinaryProvider.readFunctionDisassemblyInternal(
         codeOffset = codeRecord?.offset?.toLong(),
         codeSize = codeRecord?.size?.toLong(),
         instructions = instructions,
-        wat = entry.renderWat(localGroups, instructions, maxOutputBytes?.disassemblyPreviewBytes()),
-        hex = codeRecord?.renderHex(this, maxOutputBytes?.disassemblyPreviewBytes())
+        wat = entry.renderWat(localGroups, instructions, maxOutputBytes?.disassemblyPreviewBytes(WAT_TRUNCATION_MARKER)),
+        hex = codeRecord?.renderHex(this, maxOutputBytes?.disassemblyPreviewBytes(HEX_TRUNCATION_MARKER))
     )
 }
 
@@ -220,4 +220,5 @@ private const val DISASSEMBLY_PREVIEW_BUDGET_DIVISOR = 32
 private const val WAT_TRUNCATION_MARKER = "\n  ;; [truncated: remaining WAT omitted by output limit]\n)"
 private const val HEX_TRUNCATION_MARKER = " [truncated: remaining code bytes omitted by output limit]"
 
-private fun Int.disassemblyPreviewBytes(): Int = (this / DISASSEMBLY_PREVIEW_BUDGET_DIVISOR).coerceAtLeast(1)
+private fun Int.disassemblyPreviewBytes(truncationMarker: String): Int =
+    (this / DISASSEMBLY_PREVIEW_BUDGET_DIVISOR).coerceAtLeast(truncationMarker.encodeToByteArray().size)

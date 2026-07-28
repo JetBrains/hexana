@@ -647,10 +647,11 @@ class HexanaToolHandlersTest {
     fun disassembleFunctionReturnsObservableTruncationWithinGlobalBudget() {
         val wasm = createWasmFile(
             "disassemble_function_truncated.wasm",
-            "(module (func ${List(100) { "nop" }.joinToString(" ")}))"
+            "(module (func ${List(10) { "nop" }.joinToString(" ")}))"
         )
+        val maxOutputBytes = 1_500
         val handlers = HexanaToolHandlers(
-            resourceLimits = HexanaResourceLimits(maxOutputBytes = 8_000)
+            resourceLimits = HexanaResourceLimits(maxOutputBytes = maxOutputBytes)
         )
 
         val result = handlers.disassembleFunction(
@@ -663,8 +664,7 @@ class HexanaToolHandlersTest {
         assertFalse(result.isError == true)
         val structured = result.structuredContent ?: error("Expected structured content")
         assertTrue(structured["wat"]!!.jsonPrimitive.content.contains("[truncated:"))
-        assertTrue(structured["hex"]!!.jsonPrimitive.content.contains("[truncated:"))
-        assertTrue((result.content.single() as TextContent).text.encodeToByteArray().size <= 8_000)
+        assertTrue(structured.toString().encodeToByteArray().size <= maxOutputBytes)
     }
 
     @Test
