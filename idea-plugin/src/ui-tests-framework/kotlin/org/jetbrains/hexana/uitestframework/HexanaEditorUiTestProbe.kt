@@ -26,6 +26,7 @@ import org.jetbrains.hexana.providers.format.WasmComponentDiffOrchestrator
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.ui.ScriptTabSettings
+import org.jetbrains.hexana.ui.WasmFunctionNavTarget
 import org.jetbrains.hexana.ui.panel.WatConversionState
 import java.nio.file.Path
 
@@ -179,6 +180,32 @@ object HexanaEditorUiTestProbe {
         val editor = requireHexanaEditor(fileIdentifier)
         editor.stateHolder.setTopFraction(topFraction)
         editor.snapshot()
+    }
+
+    @JvmStatic
+    fun navigateToWasmFunction(fileIdentifier: String, funcIdx: Int): List<String> = runOnEdt {
+        val editor = requireHexanaEditor(fileIdentifier)
+        editor.requestWasmFunctionNav(WasmFunctionNavTarget(funcIdx))
+        payload(
+            "hexana-navigate-wasm-function",
+            listOf(
+                "fileName=${editor.myFile.name}",
+                "funcIdx=$funcIdx",
+            ),
+        )
+    }
+
+    @JvmStatic
+    fun topSizeState(fileIdentifier: String): List<String> {
+        val editor = requireHexanaEditor(fileIdentifier)
+        val sizeAnalysis = editor.binaryProvider?.sizeAnalysis
+        return payload(
+            "hexana-top-size-state",
+            listOf(
+                "totalSize=${sizeAnalysis?.size ?: 0}",
+                "topLevelCount=${sizeAnalysis?.children?.size ?: 0}",
+            ),
+        )
     }
 
     @JvmStatic

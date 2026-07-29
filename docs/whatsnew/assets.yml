@@ -1,12 +1,12 @@
 {
   "schema": 1,
-  "default_release": "0.13",
+  "default_release": "0.15",
   "asset_root": ".",
   "capture_policy": {
     "preferred_source": "ui-driver",
     "fallback_source": "none",
     "normal_tests": "exclude screenshots; use the screenshot tag or captureWhatsNewScreenshots task",
-    "rule": "Every big visible feature should have a UI-driver capture recipe before page generation. For 0.12, do not use checked-in documentation images as fallback assets."
+    "rule": "Every big visible feature should have a UI-driver capture recipe before page generation. Do not use checked-in documentation images as fallback assets."
   },
   "clusters": {
     "wasm-component-model": {
@@ -314,6 +314,104 @@
       "image_candidates": [
         "docs/whatsnew/captures/0.14/semantic-highlighting.png"
       ]
+    },
+    "top-size-visualization": {
+      "release": "0.15",
+      "eyebrow": "Size analysis",
+      "title": "See where every byte goes",
+      "summary": "The Top tab pairs a sortable size breakdown with a treemap, making the largest sections and functions immediately visible across WASM and native binaries.",
+      "recipe": "top-size-table-and-treemap",
+      "keywords": [
+        "Top",
+        "size diagram",
+        "treemap",
+        "largest entities",
+        "native binaries"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.15/top-size-visualization.png"
+      ]
+    },
+    "inline-dispatch-candidates": {
+      "release": "0.15",
+      "eyebrow": "Dynamic dispatch",
+      "title": "Expand indirect-call candidates inline",
+      "summary": "WAT call_indirect rows now reveal their statically known dispatch candidates inline, with click-through navigation to each matching function.",
+      "recipe": "call-indirect-inline-candidates",
+      "keywords": [
+        "call_indirect",
+        "return_call_indirect",
+        "indirect calls",
+        "canonical signature",
+        "dispatch candidates",
+        "statically known dispatch candidates",
+        "structural signature",
+        "inline candidates",
+        "WAT (virtualized)"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.15/call-indirect-candidates.png"
+      ]
+    },
+    "exception-surface": {
+      "release": "0.15",
+      "eyebrow": "Exception handling",
+      "title": "Understand what can escape to the host",
+      "summary": "The Exceptions tab distinguishes precise statically propagated tags from dynamic host-import and throw_ref categories, without claiming exhaustive runtime prediction.",
+      "recipe": "exported-exception-surface",
+      "keywords": [
+        "Exceptions",
+        "Tags",
+        "try_table",
+        "throw",
+        "throw_ref",
+        "precise static tags",
+        "dynamic category",
+        "may throw"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.15/exceptions-surface.png"
+      ]
+    },
+    "source-navigation": {
+      "release": "0.15",
+      "presentation": "text",
+      "eyebrow": "Source navigation",
+      "title": "Go from WASM rows back to source",
+      "summary": "Go to Source connects Functions, Exports, and WAT instructions to DWARF or source-map locations, including sourceMappingURL discovery.",
+      "recipe": "go-to-source-and-source-map-discovery",
+      "keywords": [
+        "Go to Source",
+        "DWARF",
+        "source map",
+        "sourceMappingURL"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "inspection-workflow-015": {
+      "release": "0.15",
+      "presentation": "text",
+      "eyebrow": "Workflow",
+      "title": "Move through binary structure with less friction",
+      "summary": "Clickable section labels, Save As for nested content, restored nested-table sorting, a repaired Dominators tree, and smoother tab switching keep inspection workflows reliable.",
+      "recipe": "section-navigation-save-as-and-reliability",
+      "keywords": [
+        "semantic section labels",
+        "Save as",
+        "nested wasm modules",
+        "jar entries",
+        "nested tables",
+        "Rows of nested tables",
+        "sorting rules",
+        "Dominators",
+        "Decompiled"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
     }
   }
 }

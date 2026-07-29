@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What's New in Hexana 0.15</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+  <section class="hero">
+    <p class="eyebrow">Hexana update</p>
+    <h1>What's New in Hexana 0.15</h1>
+    <p class="lead">Hexana 0.15 focuses on Size analysis, Dynamic dispatch, and Exception handling while refining binary inspection inside JetBrains IDEs.</p>
+    <div class="actions">
+      <a class="button primary" href="https://plugins.jetbrains.com/plugin/29090-hexana--webassembly--binary-inspector">Open release notes</a>
+      <a class="button" href="https://github.com/JetBrains/hexana">Open GitHub</a>
+    </div>
+  </section>
+
+  <section class="feature">
+    <div>
+      <p class="eyebrow">Size analysis</p>
+      <h2>See where every byte goes</h2>
+      <p>The Top tab pairs a sortable size breakdown with a treemap, making the largest sections and functions immediately visible across WASM and native binaries.</p>
+        <ul class="note-list">
+          <li>Size diagram (&quot;Top&quot; tab) for wasm and native binaries that shows largest by size entities.</li>
+        </ul>
+    </div>
+      <img src="screenshots/top-size-visualization.png" alt="See where every byte goes screenshot">
+  </section>
+  <section class="feature reversed">
+    <div>
+      <p class="eyebrow">Dynamic dispatch</p>
+      <h2>Expand indirect-call candidates inline</h2>
+      <p>WAT call_indirect rows now reveal their statically known dispatch candidates inline, with click-through navigation to each matching function.</p>
+        <input class="more-toggle" type="checkbox" id="inline-dispatch-candidates-more">
+        <ul class="note-list">
+          <li><code>call_indirect</code> dispatch candidates in the WAT view. <span class="more-continuation">Every <code>call_indirect</code> / <code>return_call_indirect</code> row now shows its statically known dispatch candidates.</span></li>
+          <li><strong>Dispatch</strong> tab in the WASM module diff, next to <strong>Size Impact</strong> and <strong>Entities</strong>: per canonical signature, which dispatch candidates entered or left the function table between the two builds. <span class="more-continuation">Cross-build candidate identity uses the same content-hash function matcher as the <strong>Entities</strong> tab (names are not trusted: wasm-bindgen closure shims rename every build).</span></li>
+          <li>The call graph now models indirect calls through one hub node per canonical signature (<code>&lt;indirect: (i32, i32) -&gt; i32&gt;</code>) instead of the single <code>&lt;indirect calls&gt;</code> node introduced in 0.14. <span class="more-continuation">Each indirect-calling function connects to the hubs of the signatures it actually dispatches through, and each hub fans out only to the table functions matching that signature.</span></li>
+        </ul>
+        <label class="show-more-link" for="inline-dispatch-candidates-more">Show more</label>
+        <label class="show-less-link" for="inline-dispatch-candidates-more">Show less</label>
+    </div>
+      <img src="screenshots/inline-dispatch-candidates.png" alt="Expand indirect-call candidates inline screenshot">
+  </section>
+  <section class="feature">
+    <div>
+      <p class="eyebrow">Exception handling</p>
+      <h2>Understand what can escape to the host</h2>
+      <p>The Exceptions tab distinguishes precise statically propagated tags from dynamic host-import and throw_ref categories, without claiming exhaustive runtime prediction.</p>
+        <input class="more-toggle" type="checkbox" id="exception-surface-more">
+        <ul class="note-list">
+          <li>Exception-handling visibility for the exception-handling proposal (<code>try_table</code> / <code>throw</code> / <code>throw_ref</code>). <span class="more-continuation">Exception instructions now render with their real WAT text (<code>throw 0</code>, <code>try_table (catch 0 1) (catch_all 2)</code>, <code>throw_ref</code>) plus a trailing comment decoding each index.</span></li>
+        </ul>
+        <label class="show-more-link" for="exception-surface-more">Show more</label>
+        <label class="show-less-link" for="exception-surface-more">Show less</label>
+    </div>
+      <img src="screenshots/exception-surface.png" alt="Understand what can escape to the host screenshot">
+  </section>
+
+  <section class="notes">
+    <h2>Also in 0.15</h2>
+    <ul class="improvements">
+      <li>
+        <strong>Go from WASM rows back to source</strong>
+        <span>Go to Source connects Functions, Exports, and WAT instructions to DWARF or source-map locations, including sourceMappingURL discovery.</span>
+      </li>
+      <li>
+        <strong>Move through binary structure with less friction</strong>
+        <span>Clickable section labels, Save As for nested content, restored nested-table sorting, a repaired Dominators tree, and smoother tab switching keep inspection workflows reliable.</span>
+      </li>
+    </ul>
+  </section>
+
+</main>
+</body>
+</html>

@@ -41,6 +41,7 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         assertEquals("0.11", resolveWhatsNewResourceVersion("0.11"))
         assertEquals("0.12", resolveWhatsNewResourceVersion("0.12"))
         assertEquals("0.13", resolveWhatsNewResourceVersion("0.13"))
+        assertEquals("0.15", resolveWhatsNewResourceVersion("0.15"))
         assertNull(resolveWhatsNewResourceVersion("0.12.1"))
     }
 
@@ -108,6 +109,58 @@ class HexanaWhatsNewTest : UsefulTestCase() {
             val root = content.rootDirectory
             content.dispose()
             assertFalse(root.exists())
+        }
+    }
+
+    fun testCreatesGeneratedBundledHtmlContentFor015() {
+        val content = HexanaWhatsNewContentService.createContent("0.15")
+        assertNotNull(content)
+        content!!
+
+        try {
+            assertEquals("0.15", content.resourceVersion)
+            assertTrue(content.indexFile.exists())
+            assertTrue(content.rootDirectory.resolve("style.css").exists())
+            assertTrue(content.rootDirectory.resolve("source.json").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/top-size-visualization.png").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/inline-dispatch-candidates.png").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/exception-surface.png").exists())
+        } finally {
+            val root = content.rootDirectory
+            content.dispose()
+            assertFalse(root.exists())
+        }
+    }
+
+    fun testGeneratedWhatsNew015StaticResourceContract() {
+        val root = "whatsnew/0.15"
+        val html = resourceText("$root/index.html")
+        val manifestEntries = resourceText("$root/manifest.txt")
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .toSet()
+
+        val expectedScreenshots = setOf(
+            "screenshots/top-size-visualization.png",
+            "screenshots/inline-dispatch-candidates.png",
+            "screenshots/exception-surface.png",
+        )
+        assertTrue(manifestEntries.containsAll(expectedScreenshots))
+        expectedScreenshots.forEach { assertResourceExists("$root/$it") }
+
+        assertTrue(html.contains("<h1>What's New in Hexana 0.15</h1>"))
+        assertTrue(html.contains("<h2>See where every byte goes</h2>"))
+        assertTrue(html.contains("<h2>Expand indirect-call candidates inline</h2>"))
+        assertTrue(html.contains("<h2>Understand what can escape to the host</h2>"))
+        assertTrue(html.contains("<h2>Also in 0.15</h2>"))
+        assertTrue(html.contains("<strong>Go from WASM rows back to source</strong>"))
+        assertFalse(html.contains("sound static under-approximation"))
+
+        val imageTags = Regex("""<img\b[^>]*>""").findAll(html).map { it.value }.toList()
+        assertEquals(3, imageTags.size)
+        imageTags.forEach { imageTag ->
+            assertTrue("Missing image alt text: $imageTag", Regex("""\balt="[^"]*\S[^"]*"""").containsMatchIn(imageTag))
         }
     }
 

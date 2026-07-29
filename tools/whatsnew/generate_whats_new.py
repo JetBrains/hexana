@@ -311,7 +311,7 @@ def note_continuation(excerpt: NoteExcerpt, limit: int = 180) -> str:
 
 def compact_clause(text: str, limit: int) -> str:
     candidates = []
-    for separator in ("; ", ", because ", ", so ", ", and ", " — "):
+    for separator in ("; ", ": ", ", because ", ", so ", ", and ", " — "):
         index = text.rfind(separator, 0, limit)
         if index >= 40:
             candidates.append(text[:index].strip())

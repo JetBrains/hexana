@@ -84,6 +84,12 @@ internal class HexanaIde internal constructor(
     private val probe: HexanaEditorUiTestProbeRef
         get() = driver.utility(HexanaEditorUiTestProbeRef::class)
 
+    fun maximizeWindow() {
+        driver.ideFrame {
+            maximize()
+        }
+    }
+
     fun closeProjectToolWindow() {
         driver.closeToolWindow("Project")
     }
@@ -183,6 +189,12 @@ internal class HexanaEditor internal constructor(
     fun setTopFraction(topFraction: Float) {
         probe.setEditorTopFraction(fileIdentifier, topFraction)
     }
+
+    fun navigateToWasmFunction(funcIdx: Int) {
+        probe.navigateToWasmFunction(fileIdentifier, funcIdx)
+    }
+
+    fun topSizeState(): List<String> = probe.topSizeState(fileIdentifier)
 
     fun selectTab(tabName: String) {
         probe.selectTab(fileIdentifier, tabName)
@@ -407,6 +419,8 @@ internal interface HexanaEditorUiTestProbeRef {
     fun openNativeDiff(leftPath: String, rightPath: String): List<String>
     fun selectTab(fileName: String, tabName: String): List<String>
     fun setEditorTopFraction(fileName: String, topFraction: Float): List<String>
+    fun navigateToWasmFunction(fileName: String, funcIdx: Int): List<String>
+    fun topSizeState(fileName: String): List<String>
     fun componentDiffState(fileName: String): List<String>
     fun archiveState(fileName: String): List<String>
     fun nativeDiffState(fileName: String): List<String>

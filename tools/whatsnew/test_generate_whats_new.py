@@ -283,6 +283,23 @@ class GenerateWhatsNewTest(unittest.TestCase):
 
         self.assertEqual("The archive opens to a Members list showing each object file's name, its detected format.", continuation)
 
+    def test_note_continuation_prefers_colon_boundary(self):
+        excerpt = gen.NoteExcerpt(
+            preview="Preview.",
+            full=(
+                "Preview. Exception instructions render with their real WAT text plus a trailing comment "
+                "decoding each index: the tag a throw raises with its payload signature and catch target."
+            ),
+            has_more=True,
+        )
+
+        continuation = gen.note_continuation(excerpt, limit=105)
+
+        self.assertEqual(
+            "Exception instructions render with their real WAT text plus a trailing comment decoding each index.",
+            continuation,
+        )
+
     def test_render_expandable_notes_adds_single_show_more_control_for_cluster(self):
         cluster = gen.FeatureCluster(
             cluster_id="test-cluster",
