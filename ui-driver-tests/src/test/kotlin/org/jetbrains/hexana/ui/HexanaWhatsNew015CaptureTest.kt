@@ -6,7 +6,6 @@ import com.intellij.driver.sdk.ui.components.common.editorTabs
 import com.intellij.driver.sdk.ui.components.common.ideFrame
 import com.intellij.driver.sdk.ui.ui
 import com.intellij.tools.ide.util.common.logOutput
-import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
 import org.jetbrains.hexana.ui.framework.HexanaEditor
 import org.jetbrains.hexana.ui.framework.HexanaEditorTab
 import org.jetbrains.hexana.ui.framework.HexanaProviderKind
@@ -18,8 +17,6 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
-import kotlin.io.path.readText
-import kotlin.io.path.writeBytes
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -48,7 +45,8 @@ class HexanaWhatsNew015CaptureTest {
 
     @Test
     fun captureExceptionsSurface() {
-        val fixture = writeWasmFixture("exceptions-surface.wasm", exceptionsSurfaceWat)
+        val fixture = repoRoot().resolve("ui-driver-tests/testData/projects/hexana_wasm_project/exceptions-surface.wasm")
+        require(fixture.exists()) { "Missing Exceptions capture fixture: $fixture" }
         hexanaIde(
             testName = "hexana-whats-new-015-exceptions-capture",
             configure = { showWhatsNewOnNewVersion(false) },
@@ -67,9 +65,8 @@ class HexanaWhatsNew015CaptureTest {
 
     @Test
     fun captureInlineDispatchCandidates() {
-        val wat = repoRoot().resolve("wasmParser/src/commonTest/resources/snippets/dispatch-candidates.wat")
-        require(wat.exists()) { "Missing dispatch capture fixture: $wat" }
-        val fixture = writeWasmFixture("dispatch-candidates-named.wasm", wat.readText())
+        val fixture = repoRoot().resolve("ui-driver-tests/testData/projects/hexana_wasm_project/dispatch-candidates-named.wasm")
+        require(fixture.exists()) { "Missing dispatch capture fixture: $fixture" }
         hexanaIde(
             testName = "hexana-whats-new-015-inline-dispatch-capture",
             configure = { showWhatsNewOnNewVersion(false) },
@@ -148,11 +145,6 @@ class HexanaWhatsNew015CaptureTest {
         error("Timed out waiting for Top size data; last state: $lastState")
     }
 
-    private fun writeWasmFixture(fileName: String, wat: String): Path {
-        val directory = Files.createTempDirectory("hexana-whatsnew-015-")
-        return directory.resolve(fileName).also { it.writeBytes(wat2wasm(wat)) }
-    }
-
     private fun copyScreenshot(driver: Driver, screenshotName: String, outputFileName: String) {
         val screenshot = driver.takeScreenshot(screenshotName)
             ?: error("Driver did not return a screenshot path for $screenshotName")
@@ -174,21 +166,4 @@ class HexanaWhatsNew015CaptureTest {
         }
         return path
     }
-
-    private val exceptionsSurfaceWat =
-        """
-        (module
-          (type ${'$'}tag_payload (func (param i32)))
-          (type ${'$'}host_call (func))
-          (import "host" "load_data" (func ${'$'}host_load_data (type ${'$'}host_call)))
-          (tag ${'$'}parse_error (type ${'$'}tag_payload))
-          (func ${'$'}throw_parse_error
-            i32.const 7
-            throw ${'$'}parse_error)
-          (func ${'$'}parse_request (export "parse_request")
-            call ${'$'}throw_parse_error)
-          (func ${'$'}load_host_data (export "load_host_data")
-            call ${'$'}host_load_data)
-        )
-        """.trimIndent()
 }

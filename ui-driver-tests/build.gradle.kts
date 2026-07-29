@@ -33,8 +33,6 @@ dependencies {
     testImplementation(libs.mcp.kotlin.sdk.jvm)
     testImplementation(libs.ktor.client.cio.jvm)
     testImplementation(libs.kotlinx.serialization.json)
-    testImplementation(project(":graalwasm:wat2wasm"))
-
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
