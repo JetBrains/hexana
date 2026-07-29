@@ -22,6 +22,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.slf4j.LoggerFactory
 import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -163,13 +164,16 @@ class HexanaHttpIntegrationTest {
 
     @Test
     fun installedServerRejectsInvalidLocalHttpOriginAndHost() = runBlocking {
+        lateinit var diagnosticDirectory: Path
         withInstalledServer { server ->
+            diagnosticDirectory = server.diagnosticDirectory
             assertLocalHttpProtectionSmoke(
                 server = server,
                 logger = logger,
                 label = "installed"
             )
         }
+        assertFalse(Files.exists(diagnosticDirectory))
     }
 
     private fun createWasmFile(name: String, wat: String) = temporaryFolder.newFile(name).toPath().also {

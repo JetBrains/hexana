@@ -14,6 +14,8 @@ import org.slf4j.LoggerFactory
 import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Comparator
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipFile
 import kotlin.test.assertTrue
@@ -59,32 +61,42 @@ internal class HexanaInstalledStdioClient private constructor(
     private val command: List<String>,
     private val process: Process,
     val client: Client,
-    private val stderrBuffer: StringBuffer
+    private val stderrBuffer: StringBuffer,
+    internal val diagnosticDirectory: Path,
+    private val diagnosticDirectoryOwner: DiagnosticDirectoryOwner,
 ) {
     private val logger = LoggerFactory.getLogger(HexanaInstalledStdioClient::class.java)
+    private val closed = AtomicBoolean()
 
     val stderr: String
         get() = stderrBuffer.toString()
 
     suspend fun close() {
-        logger.info("Closing installed stdio server (pid={}, command={})", process.pid(), command.joinToString(" "))
-        val clientClosed = withTimeoutOrNull(5_000.milliseconds) {
-            runCatching { client.close() }
-                .onFailure { logger.warn("Failed to close MCP stdio client cleanly", it) }
-            true
-        } == true
-        if (!clientClosed) {
-            logger.warn("MCP stdio client close timed out after 5s; destroying server process tree")
-        }
+        if (!closed.compareAndSet(false, true)) return
+        try {
+            logger.info("Closing installed stdio server (pid={}, command={})", process.pid(), command.joinToString(" "))
+            val clientClosed = withTimeoutOrNull(5_000.milliseconds) {
+                runCatching { client.close() }
+                    .onFailure { logger.warn("Failed to close MCP stdio client cleanly", it) }
+                true
+            } == true
+            if (!clientClosed) {
+                logger.warn("MCP stdio client close timed out after 5s; destroying server process tree")
+            }
 
-        stopInstalledProcessTree(process, logger, "stdio server")
-        closeInstalledProcessStreams(process, logger, "stdio server")
-        logger.info(
-            "Installed stdio server stopped with exitCode={}, alive={}, stderrBytes={}",
-            process.exitCodeOrNull(),
-            process.isAlive,
-            stderr.length
-        )
+            stopInstalledProcessTree(process, logger, "stdio server")
+            closeInstalledProcessStreams(process, logger, "stdio server")
+            diagnosticDirectoryOwner.close()
+            logger.info(
+                "Installed stdio server stopped with exitCode={}, alive={}, stderrBytes={}",
+                process.exitCodeOrNull(),
+                process.isAlive,
+                stderr.length
+            )
+        } catch (error: Throwable) {
+            closed.set(false)
+            throw error
+        }
     }
 
     companion object {
@@ -129,11 +141,15 @@ internal class HexanaInstalledStdioClient private constructor(
                 command.joinToString(" ")
             )
 
-            val process = withContext(Dispatchers.IO) {
-                ProcessBuilder(command)
-                    .directory(processSpec.workingDirectory.toFile())
-                    .useCurrentJvm(logger)
-                    .start()
+            val processBuilder = ProcessBuilder(command)
+                .directory(processSpec.workingDirectory.toFile())
+                .useCurrentJvm(logger)
+            val diagnosticDirectoryOwner = processBuilder.useIsolatedDiagnosticDirectory()
+            val process = try {
+                withContext(Dispatchers.IO) { processBuilder.start() }
+            } catch (error: Throwable) {
+                diagnosticDirectoryOwner.closeSuppressing(error)
+                throw error
             }
             logger.info("STDIO process started with pid={}", process.pid())
 
@@ -159,11 +175,14 @@ internal class HexanaInstalledStdioClient private constructor(
                     command = command,
                     process = process,
                     client = client,
-                    stderrBuffer = stderrBuffer
+                    stderrBuffer = stderrBuffer,
+                    diagnosticDirectory = diagnosticDirectoryOwner.path,
+                    diagnosticDirectoryOwner = diagnosticDirectoryOwner,
                 )
             } catch (error: Throwable) {
-                runCatching { client.close() }
-                stopFailedProcess(process)
+                runCatching { client.close() }.onFailure(error::addSuppressed)
+                runCatching { stopFailedProcess(process) }.onFailure(error::addSuppressed)
+                diagnosticDirectoryOwner.closeSuppressing(error)
                 throw IllegalStateException(
                     buildString {
                         append("Failed to start installed stdio MCP server.")
@@ -202,46 +221,45 @@ internal class HexanaInstalledStdioClient private constructor(
             )
             logger.info("Starting command from {} command={}", processSpec.workingDirectory, command.joinToString(" "))
 
-            val process = withContext(Dispatchers.IO) {
-                ProcessBuilder(command).apply {
-                    directory(processSpec.workingDirectory.toFile())
-                    useCurrentJvm(logger)
-                    environment().putAll(environment)
-                }.start()
+            val processBuilder = ProcessBuilder(command).apply {
+                directory(processSpec.workingDirectory.toFile())
+                useCurrentJvm(logger)
             }
-            if (closeStdin || stdinBytes != null) {
-                withContext(Dispatchers.IO) {
-                    process.outputStream.use { stdin ->
-                        if (stdinBytes != null) {
-                            stdin.write(stdinBytes)
+            val diagnosticDirectoryOwner = processBuilder.useIsolatedDiagnosticDirectory(environment)
+            var process: Process? = null
+            var primaryFailure: Throwable? = null
+            try {
+                process = withContext(Dispatchers.IO) { processBuilder.start() }
+                if (closeStdin || stdinBytes != null) {
+                    withContext(Dispatchers.IO) {
+                        process.outputStream.use { stdin ->
+                            if (stdinBytes != null) stdin.write(stdinBytes)
                         }
                     }
                 }
+                val completed = withContext(Dispatchers.IO) {
+                    process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                }
+                if (!closeStdin) runCatching { process.outputStream.close() }
+                if (!completed) {
+                    logger.warn("Installed command did not exit within {}s, forcing pid={}", COMMAND_TIMEOUT_SECONDS, process.pid())
+                    stopInstalledProcessTree(process, logger, "installed command")
+                }
+                val stdout = process.inputStream.readTextSafely(logger, "installed command stdout")
+                val stderr = process.errorStream.readTextSafely(logger, "installed command stderr")
+                return InstalledCommandResult(command, process.exitCodeOrNull() ?: -1, stdout, stderr, !completed,
+                    diagnosticDirectoryOwner.path)
+            } catch (error: Throwable) {
+                primaryFailure = error
+                throw error
+            } finally {
+                process?.let {
+                    if (it.isAlive) runCatching { stopInstalledProcessTree(it, logger, "installed command") }
+                        .onFailure { cleanup -> primaryFailure?.addSuppressed(cleanup) ?: throw cleanup }
+                    closeInstalledProcessStreams(it, logger, "installed command")
+                }
+                diagnosticDirectoryOwner.closeSuppressing(primaryFailure)
             }
-            val completed = withContext(Dispatchers.IO) {
-                process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            }
-            if (!closeStdin) {
-                runCatching { process.outputStream.close() }
-            }
-            if (!completed) {
-                logger.warn(
-                    "Installed command did not exit within {}s, forcing pid={}",
-                    COMMAND_TIMEOUT_SECONDS,
-                    process.pid()
-                )
-                stopInstalledProcessTree(process, logger, "installed command")
-                closeInstalledProcessStreams(process, logger, "installed command")
-            }
-            val stdout = process.inputStream.readTextSafely(logger, "installed command stdout")
-            val stderr = process.errorStream.readTextSafely(logger, "installed command stderr")
-            return InstalledCommandResult(
-                command = command,
-                exitCode = process.exitCodeOrNull() ?: -1,
-                stdout = stdout,
-                stderr = stderr,
-                timedOut = !completed,
-            )
         }
 
         private fun processSpec(launcher: StdioLauncher): StdioProcessSpec {
@@ -313,6 +331,43 @@ internal class HexanaInstalledStdioClient private constructor(
     }
 }
 
+internal fun ProcessBuilder.useIsolatedDiagnosticDirectory(
+    explicitEnvironment: Map<String, String> = emptyMap(),
+): DiagnosticDirectoryOwner {
+    environment().putAll(explicitEnvironment)
+    if (INTEGRATION_DIAGNOSTIC_ENV in explicitEnvironment) {
+        return DiagnosticDirectoryOwner(Path.of(environment().getValue(INTEGRATION_DIAGNOSTIC_ENV)), owned = false)
+    }
+    val path = Files.createTempDirectory("hexana-mcp-integration-logs")
+    environment()[INTEGRATION_DIAGNOSTIC_ENV] = path.toString()
+    return DiagnosticDirectoryOwner(path, owned = true)
+}
+
+private const val INTEGRATION_DIAGNOSTIC_ENV = "HEXANA_MCP_LOG_DIR"
+
+internal class DiagnosticDirectoryOwner internal constructor(val path: Path, private val owned: Boolean) {
+    private val closed = AtomicBoolean()
+
+    fun close() {
+        if (!owned || !closed.compareAndSet(false, true)) return
+        try {
+            if (!Files.exists(path)) return
+            Files.walk(path).use { entries ->
+                entries.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists)
+            }
+        } catch (error: Throwable) {
+            closed.set(false)
+            throw error
+        }
+    }
+
+    fun closeSuppressing(primaryFailure: Throwable?) {
+        runCatching(::close).onFailure { cleanup ->
+            if (primaryFailure != null) primaryFailure.addSuppressed(cleanup) else throw cleanup
+        }
+    }
+}
+
 private suspend fun InputStream.readTextSafely(logger: org.slf4j.Logger, label: String): String {
     return withContext(Dispatchers.IO) {
         runCatching { bufferedReader().readText() }
@@ -332,6 +387,7 @@ internal data class InstalledCommandResult(
     val stdout: String,
     val stderr: String,
     val timedOut: Boolean,
+    val diagnosticDirectory: Path,
 ) {
     val unexpectedStderr: String
         get() = stderr.withoutJvmLauncherDiagnostics()

@@ -2,10 +2,10 @@ package org.jetbrains.hexana.mcp.server
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.modelcontextprotocol.kotlin.sdk.shared.AbstractTransport
-import io.modelcontextprotocol.kotlin.sdk.shared.ReadBuffer
 import io.modelcontextprotocol.kotlin.sdk.shared.TransportSendOptions
 import io.modelcontextprotocol.kotlin.sdk.shared.serializeMessage
 import io.modelcontextprotocol.kotlin.sdk.types.JSONRPCMessage
+import io.modelcontextprotocol.kotlin.sdk.types.McpJson
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +21,9 @@ import kotlinx.io.Buffer
 import kotlinx.io.RawSink
 import kotlinx.io.Source
 import kotlinx.io.buffered
+import kotlinx.io.indexOf
 import kotlinx.io.readByteArray
+import kotlinx.io.readString
 import kotlinx.io.writeString
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -45,10 +47,13 @@ internal const val HEXANA_STDIO_MESSAGE_LIMIT_ERROR_MESSAGE =
 internal class HexanaStdioServerTransport(
     private val inputStream: Source,
     private val outputStream: RawSink,
+    private val decodeMessage: (String) -> JSONRPCMessage = {
+        McpJson.decodeFromString<JSONRPCMessage>(it)
+    },
 ) : AbstractTransport() {
 
     private val logger = KotlinLogging.logger {}
-    private val readBuffer = ReadBuffer()
+    private val readBuffer = Buffer()
     private val fatalErrorReported = AtomicBoolean(false)
     private val lifecycleLock = Any()
     private var lifecycleState = StdioTransportLifecycleState.NEW
@@ -150,7 +155,6 @@ internal class HexanaStdioServerTransport(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                logger.error(error) { "Error reading from stdin" }
                 failTransport(error)
             }
         }
@@ -188,7 +192,7 @@ internal class HexanaStdioServerTransport(
         val job = scope.launch {
             try {
                 for (chunk in readChannel) {
-                    readBuffer.append(chunk.bytes)
+                    readBuffer.write(chunk.bytes)
                     if (chunk.containsLineBreak) {
                         processBufferedMessages()
                     }
@@ -196,7 +200,7 @@ internal class HexanaStdioServerTransport(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                _onError.invoke(error)
+                failTransport(error)
             }
         }
         job.invokeOnCompletion { cause ->
@@ -216,8 +220,7 @@ internal class HexanaStdioServerTransport(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                logger.error(error) { "Error writing to stdout" }
-                _onError.invoke(error)
+                failTransport(error)
             }
         }
         job.invokeOnCompletion { cause ->
@@ -275,11 +278,25 @@ internal class HexanaStdioServerTransport(
     }
 
     private fun readNextMessageOrReportError(): JSONRPCMessage? {
-        return try {
-            readBuffer.readMessage()
-        } catch (error: Throwable) {
-            _onError.invoke(error)
-            null
+        while (true) {
+            val lfIndex = if (readBuffer.exhausted()) -1L else readBuffer.indexOf('\n'.code.toByte())
+            if (lfIndex == -1L) return null
+            var messageLength = lfIndex
+            var terminatorBytes = 1L
+            if (messageLength > 0 && readBuffer[messageLength - 1] == '\r'.code.toByte()) {
+                messageLength -= 1
+                terminatorBytes += 1
+            }
+            val line = readBuffer.readString(messageLength)
+            readBuffer.skip(terminatorBytes)
+            if (line.isBlank()) continue
+            return try {
+                decodeMessage(line)
+            } catch (error: Throwable) {
+                if (error is VirtualMachineError || error is LinkageError) throw error
+                failTransport(HexanaMalformedStdioMessageException(error))
+                null
+            }
         }
     }
 
@@ -289,8 +306,7 @@ internal class HexanaStdioServerTransport(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
-            logger.error(error) { "Error processing message" }
-            _onError.invoke(error)
+            failTransport(error)
         }
     }
 
@@ -373,6 +389,9 @@ internal class HexanaStdioServerTransport(
 private class HexanaStdioTransportMessageLimitException : IllegalStateException(HEXANA_STDIO_MESSAGE_LIMIT_ERROR_MESSAGE)
 
 private class HexanaStdioTransportQueueOverflowException(message: String) : IllegalStateException(message)
+
+private class HexanaMalformedStdioMessageException(cause: Throwable) :
+    IllegalArgumentException("Malformed JSON-RPC message received on stdio.", cause)
 
 private enum class StdioTransportLifecycleState {
     NEW,

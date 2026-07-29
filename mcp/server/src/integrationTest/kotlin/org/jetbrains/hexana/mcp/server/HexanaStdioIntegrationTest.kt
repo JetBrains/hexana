@@ -14,8 +14,10 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.slf4j.LoggerFactory
 import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class HexanaStdioIntegrationTest {
@@ -37,6 +39,36 @@ class HexanaStdioIntegrationTest {
             result.stdout.trim().matches(Regex("""hexana-mcp \S+""")),
             "Unexpected version output: ${result.stdout}"
         )
+        assertFalse(Files.exists(result.diagnosticDirectory))
+    }
+
+    @Test
+    fun ownedDiagnosticDirectoryReplacesInheritedStateAndDeletesRecursivelyOnce() {
+        val inherited = Path.of("inherited-diagnostics")
+        val process = ProcessBuilder().apply {
+            environment()["HEXANA_MCP_LOG_DIR"] = inherited.toString()
+        }
+        val owner = process.useIsolatedDiagnosticDirectory()
+        val actual = Path.of(process.environment().getValue("HEXANA_MCP_LOG_DIR"))
+        Files.createDirectories(actual.resolve("nested"))
+        Files.writeString(actual.resolve("nested/session.jsonl"), "{}\n")
+
+        assertNotEquals(inherited, actual)
+        owner.close()
+        owner.close()
+        assertFalse(Files.exists(actual))
+    }
+
+    @Test
+    fun explicitDiagnosticDirectoryAndSentinelAreNeverOwned() {
+        val explicit = temporaryFolder.newFolder("explicit-command-diagnostics").toPath()
+        val sentinel = Files.writeString(explicit.resolve("sentinel.txt"), "keep")
+        val process = ProcessBuilder()
+        val owner = process.useIsolatedDiagnosticDirectory(mapOf("HEXANA_MCP_LOG_DIR" to explicit.toString()))
+
+        owner.close()
+        assertEquals(explicit, Path.of(process.environment().getValue("HEXANA_MCP_LOG_DIR")))
+        assertTrue(Files.exists(sentinel))
     }
 
     @Test
@@ -58,6 +90,31 @@ class HexanaStdioIntegrationTest {
         val diagnosticText = Files.readString(diagnosticFiles.single())
         assertTrue(diagnosticText.lineSequence().all { it.isBlank() || runCatching { Json.parseToJsonElement(it) }.isSuccess })
         assertTrue(diagnosticText.contains("\"category\":\"CONFIGURATION\""), diagnosticText)
+    }
+
+    @Test
+    fun malformedStdioExitsNonzeroWithOneCompactStructuredFailure() = runBlocking {
+        val logDirectory = temporaryFolder.newFolder("transport-diagnostics").toPath()
+        val result = HexanaInstalledStdioClient.runCommand(
+            launcher = StdioLauncher.Server,
+            arguments = listOf("stdio", "--log-level", "quiet", "--telemetry-enabled", "false"),
+            stdinBytes = "not-json\n".encodeToByteArray(),
+            environment = mapOf("HEXANA_MCP_LOG_DIR" to logDirectory.toString()),
+        )
+
+        assertFalse(result.timedOut, result.toString())
+        assertTrue(result.exitCode != 0, result.toString())
+        assertTrue(result.stdout.isBlank(), "stdio stdout must stay protocol-only: ${result.stdout}")
+        val stderr = result.unexpectedStderr
+        assertEquals(1, stderr.lineSequence().count { it.isNotBlank() }, stderr)
+        assertTrue(stderr.contains("[STDIO_TRANSPORT; id="), stderr)
+        assertNoStackTrace(stderr)
+        val diagnosticFiles = Files.list(logDirectory).use { it.toList() }
+        assertEquals(1, diagnosticFiles.size)
+        val diagnosticText = Files.readString(diagnosticFiles.single())
+        assertEquals(1, Regex("\"event\":\"failure\"").findAll(diagnosticText).count(), diagnosticText)
+        assertTrue(diagnosticText.contains("\"category\":\"STDIO_TRANSPORT\""), diagnosticText)
+        assertTrue(diagnosticText.contains("\"stack_trace\""), diagnosticText)
     }
 
     @Test
@@ -131,7 +188,9 @@ class HexanaStdioIntegrationTest {
     fun installedServerSupportsListToolsAndToolCallsOverStdio() = runBlocking {
         KotlinLoggingConfiguration.logStartupMessage = false
         val fixtureDirectory = temporaryFolder.root.toPath()
+        lateinit var diagnosticDirectory: Path
         withInstalledStdioClient(allowedRoots = listOf(fixtureDirectory)) { server ->
+            diagnosticDirectory = server.diagnosticDirectory
             assertDefaultStdioSmoke(
                 server = server,
                 fixtureDirectory = fixtureDirectory,
@@ -139,6 +198,7 @@ class HexanaStdioIntegrationTest {
                 label = "installed"
             )
         }
+        assertFalse(Files.exists(diagnosticDirectory))
     }
 
     @Test
@@ -192,6 +252,27 @@ class HexanaStdioIntegrationTest {
 
         assertFiniteStdinStdioSucceeded(result)
         assertSuccessfulStdoutResponses(result.stdout, listOf("1", "2"))
+    }
+
+    @Test
+    fun installedServerAcceptsLeadingBlankLineAndCrLfFrames() = runBlocking {
+        val stdin = listOf(
+            "",
+            initializeRequest(id = 1),
+            """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""",
+        ).joinToString(separator = "\r\n", postfix = "\r\n").encodeToByteArray()
+        val result = HexanaInstalledStdioClient.runCommand(
+            launcher = StdioLauncher.Server,
+            arguments = listOf("stdio", "--telemetry-enabled", "false"),
+            stdinBytes = stdin,
+        )
+
+        assertFiniteStdinStdioSucceeded(result)
+        assertSuccessfulStdoutResponses(result.stdout, listOf("1", "2"))
+        assertFalse(result.stdout.lineSequence().filter { it.isNotBlank() }.any { line ->
+            runCatching { Json.parseToJsonElement(line) }.isFailure
+        }, "stdio stdout must contain protocol JSON only: ${result.stdout}")
+        assertFalse(result.unexpectedStderr.contains("hexana-mcp error ["), result.stderr)
     }
 
     @Test

@@ -80,15 +80,16 @@ fun main(args: Array<String>) {
 
 private fun handleFatalCommandFailure(command: HexanaCommand, error: Throwable): Nothing {
     val category = when (command) {
-        is HexanaCommand.Stdio -> HexanaFailureCategory.STARTUP
+        is HexanaCommand.Stdio -> HexanaFailureCategory.STDIO_TRANSPORT
         is HexanaCommand.Http -> HexanaFailureCategory.HTTP_TRANSPORT
         is HexanaCommand.Doctor,
         is HexanaCommand.Version,
         is HexanaCommand.Help -> HexanaFailureCategory.CLI_INTERNAL
     }
     if (error is VirtualMachineError || error is LinkageError) {
-        emitDiagnosticFailure(category, "Fatal runtime failure.", error)
-        throw error
+        rethrowFatalRuntimeFailure(error) {
+            emitDiagnosticFailure(category, "Fatal runtime failure.", error)
+        }
     }
 
     val userMessage = when (command) {
@@ -100,6 +101,15 @@ private fun handleFatalCommandFailure(command: HexanaCommand, error: Throwable):
     }
     emitDiagnosticFailure(category, userMessage, error)
     exitProcess(1)
+}
+
+internal fun rethrowFatalRuntimeFailure(error: Throwable, emitFailure: () -> Unit): Nothing {
+    try {
+        emitFailure()
+    } catch (_: Throwable) {
+        // The original fatal JVM error must retain precedence over best-effort diagnostics.
+    }
+    throw error
 }
 
 private fun HexanaCommand.configuredLogLevel(): HexanaLogLevel = when (this) {
@@ -212,8 +222,7 @@ private suspend fun runStdio(command: HexanaCommand.Stdio) {
         finished.complete(Unit)
     }
     transport.onError { error ->
-        emitDiagnosticFailure(HexanaFailureCategory.STDIO_TRANSPORT, "STDIO transport failed.", error)
-        finished.complete(Unit)
+        finished.completeExceptionally(error)
     }
 
     logger.info("Starting stdio MCP transport with {} tool profile", command.toolProfile.cliValue())

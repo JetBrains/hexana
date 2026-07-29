@@ -582,8 +582,11 @@ class HexanaToolHandlers(
             throw error
         } catch (error: HexanaAnalysisException) {
             captureToolEvent(toolName, startTime, success = false)
-            logAnalysisFailure(toolName, error)
-            errorResult(error.code, error.message)
+            val diagnostic = reportAnalysisFailure(toolName, error)
+            errorResult(
+                error.code,
+                error.message + (diagnostic?.let { " Diagnostic id ${it.id}." } ?: "")
+            )
         } catch (error: ToolInputException) {
             captureToolEvent(toolName, startTime, success = false)
             errorResult(error.code, error.message ?: "Invalid input")
@@ -596,12 +599,8 @@ class HexanaToolHandlers(
             )
             errorResult(
                 HexanaAnalysisErrorCode.INTERNAL_ERROR,
-                "Internal error while executing `$toolName`. Diagnostic id ${diagnostic.id}; " +
-                    if (diagnostic.available) {
-                        "diagnostics: ${diagnostic.location}."
-                    } else {
-                        "diagnostics unavailable at ${diagnostic.location}."
-                    }
+                "Internal error while executing `$toolName`." +
+                    (diagnostic.takeIf { it.available }?.let { " Diagnostic id ${it.id}." } ?: "")
             )
         }
     }
@@ -628,13 +627,18 @@ class HexanaToolHandlers(
         )
     }
 
-    private fun logAnalysisFailure(toolName: String, error: HexanaAnalysisException) {
-        if (error.code == HexanaAnalysisErrorCode.INTERNAL_ERROR || error.cause != null) {
+    private fun reportAnalysisFailure(
+        toolName: String,
+        error: HexanaAnalysisException,
+    ): HexanaDiagnosticReference? {
+        return if (error.code == HexanaAnalysisErrorCode.INTERNAL_ERROR || error.cause != null) {
             emitDiagnosticFailure(
                 HexanaFailureCategory.TOOL_INTERNAL,
                 "MCP tool `$toolName` failed with ${error.code.name}.",
                 error,
-            )
+            ).takeIf { it.available }
+        } else {
+            null
         }
     }
 

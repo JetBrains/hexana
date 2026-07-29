@@ -1918,6 +1918,42 @@ class HexanaToolHandlersTest {
         assertFalse(message.contains(temporaryFolder.root.absolutePath), message)
     }
 
+    @Test
+    fun unavailableDiagnosticsOmitIdsFromInternalErrorResponses() {
+        isolateUnavailableDiagnostics()
+        val handlers = HexanaToolHandlers(
+            analysisService = Proxy.newProxyInstance(
+                HexanaAnalysisService::class.java.classLoader,
+                arrayOf(HexanaAnalysisService::class.java)
+            ) { _, method, _ ->
+                when (method.name) {
+                    "summarizeModule" -> throw HexanaAnalysisException(
+                        HexanaAnalysisErrorCode.INTERNAL_ERROR,
+                        "Failed to read .wasm file",
+                        IllegalStateException("disk unavailable")
+                    )
+
+                    "listImports" -> error("boom")
+                    "toString" -> "UnavailableDiagnosticsAnalysisService"
+                    else -> error("Unexpected service call: ${method.name}")
+                }
+            } as HexanaAnalysisService,
+        )
+
+        val analysisResult = handlers.summarizeModule(jsonPath("/tmp/module.wasm"))
+        val genericResult = handlers.listImports(jsonPath("/tmp/module.wasm"))
+        val analysisMessage = (analysisResult.content.single() as TextContent).text
+        val genericMessage = (genericResult.content.single() as TextContent).text
+
+        assertEquals("Failed to read .wasm file", analysisMessage)
+        assertEquals("Internal error while executing `list_imports`.", genericMessage)
+        assertEquals(analysisMessage, analysisResult.structuredContent?.get("message")?.jsonPrimitive?.content)
+        assertEquals(genericMessage, genericResult.structuredContent?.get("message")?.jsonPrimitive?.content)
+        listOf(analysisMessage, genericMessage).forEach { message ->
+            assertFalse(Regex("[0-9a-f]{8}").containsMatchIn(message), message)
+        }
+    }
+
     private fun isolateDiagnostics(name: String): Path {
         val directory = temporaryFolder.newFolder("diagnostics-$name").toPath()
         HexanaDiagnostics.start(
@@ -1925,6 +1961,15 @@ class HexanaToolHandlersTest {
             envReader = { if (it == HEXANA_MCP_LOG_DIR_ENV) directory.toString() else null },
         )
         return directory
+    }
+
+    private fun isolateUnavailableDiagnostics() {
+        val file = temporaryFolder.newFile("diagnostics-unavailable")
+        HexanaDiagnostics.start(
+            HexanaCommand.Help.diagnosticContext("test"),
+            envReader = { if (it == HEXANA_MCP_LOG_DIR_ENV) file.absolutePath else null },
+        )
+        assertFalse(HexanaDiagnostics.status.available)
     }
 
     private fun assertPersistedToolFailure(

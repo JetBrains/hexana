@@ -283,6 +283,6 @@ private fun exceptionJson(error: Throwable): JsonObject = buildJsonObject {
 
 private fun stackTraceJson(frames: Array<StackTraceElement>): JsonArray = buildJsonArray {
     frames.take(80).forEach { frame ->
-        add(JsonPrimitive("${frame.className}.${frame.methodName}(${frame.fileName ?: "Unknown"}:${frame.lineNumber})"))
+        add(JsonPrimitive("${frame.className}.${frame.methodName}:${frame.lineNumber}"))
     }
 }

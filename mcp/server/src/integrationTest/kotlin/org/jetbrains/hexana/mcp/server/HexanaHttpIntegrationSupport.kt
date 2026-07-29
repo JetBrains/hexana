@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.util.concurrent.atomic.AtomicBoolean
 
 internal class HexanaInstalledServer private constructor(
     val port: Int,
@@ -18,9 +19,12 @@ internal class HexanaInstalledServer private constructor(
     private val stdoutPump: Job,
     private val stderrPump: Job,
     private val stdoutBuffer: StringBuffer,
-    private val stderrBuffer: StringBuffer
+    private val stderrBuffer: StringBuffer,
+    internal val diagnosticDirectory: Path,
+    private val diagnosticDirectoryOwner: DiagnosticDirectoryOwner,
 ) {
     private val logger = LoggerFactory.getLogger(HexanaInstalledServer::class.java)
+    private val closed = AtomicBoolean()
 
     val origin: String = "http://127.0.0.1:$port"
     val baseUrl: String = "http://127.0.0.1:$port$endpoint"
@@ -32,21 +36,28 @@ internal class HexanaInstalledServer private constructor(
         get() = stderrBuffer.toString()
 
     suspend fun close() {
-        logger.info("Stopping installed server (pid={}, baseUrl={})", process.pid(), baseUrl)
-        withContext(NonCancellable) {
-            stopInstalledProcessTree(process, logger, "HTTP server")
-            closeInstalledProcessStreams(process, logger, "HTTP server")
-            stdoutPump.cancelAndJoinWithin("HTTP stdout pump")
-            stderrPump.cancelAndJoinWithin("HTTP stderr pump")
-            pumpScope.coroutineContext[Job]?.cancel()
+        if (!closed.compareAndSet(false, true)) return
+        try {
+            logger.info("Stopping installed server (pid={}, baseUrl={})", process.pid(), baseUrl)
+            withContext(NonCancellable) {
+                stopInstalledProcessTree(process, logger, "HTTP server")
+                closeInstalledProcessStreams(process, logger, "HTTP server")
+                stdoutPump.cancelAndJoinWithin("HTTP stdout pump")
+                stderrPump.cancelAndJoinWithin("HTTP stderr pump")
+                pumpScope.coroutineContext[Job]?.cancel()
+                diagnosticDirectoryOwner.close()
+            }
+            logger.info(
+                "Installed server stopped with exitCode={}, alive={}, stdoutBytes={}, stderrBytes={}",
+                process.exitCodeOrNull(),
+                process.isAlive,
+                stdout.length,
+                stderr.length
+            )
+        } catch (error: Throwable) {
+            closed.set(false)
+            throw error
         }
-        logger.info(
-            "Installed server stopped with exitCode={}, alive={}, stdoutBytes={}, stderrBytes={}",
-            process.exitCodeOrNull(),
-            process.isAlive,
-            stdout.length,
-            stderr.length
-        )
     }
 
     companion object {
@@ -75,11 +86,15 @@ internal class HexanaInstalledServer private constructor(
                 logLevel.cliValue(),
                 command.joinToString(" ")
             )
-            val process = withContext(Dispatchers.IO) {
-                ProcessBuilder(command)
-                    .directory(processSpec.workingDirectory.toFile())
-                    .useCurrentJvm(logger)
-                    .start()
+            val processBuilder = ProcessBuilder(command)
+                .directory(processSpec.workingDirectory.toFile())
+                .useCurrentJvm(logger)
+            val diagnosticDirectoryOwner = processBuilder.useIsolatedDiagnosticDirectory()
+            val process = try {
+                withContext(Dispatchers.IO) { processBuilder.start() }
+            } catch (error: Throwable) {
+                diagnosticDirectoryOwner.closeSuppressing(error)
+                throw error
             }
             logger.info("Process started with pid={}", process.pid())
 
@@ -91,7 +106,20 @@ internal class HexanaInstalledServer private constructor(
                 process.errorStream.pumpTo(stderrBuffer, "stderr")
             }
 
-            waitUntilReady(process, port, stderrBuffer)
+            try {
+                waitUntilReady(process, port, stderrBuffer)
+            } catch (error: Throwable) {
+                withContext(NonCancellable) {
+                    runCatching { stopInstalledProcessTree(process, logger, "failed HTTP server") }
+                        .onFailure(error::addSuppressed)
+                    closeInstalledProcessStreams(process, logger, "failed HTTP server")
+                    stdoutPump.cancelAndJoinWithin("failed HTTP stdout pump")
+                    stderrPump.cancelAndJoinWithin("failed HTTP stderr pump")
+                    pumpScope.coroutineContext[Job]?.cancel()
+                    diagnosticDirectoryOwner.closeSuppressing(error)
+                }
+                throw error
+            }
             logger.info("Installed server is ready on http://127.0.0.1:{}{}", port, endpoint)
 
             return HexanaInstalledServer(
@@ -103,7 +131,9 @@ internal class HexanaInstalledServer private constructor(
                 stdoutPump = stdoutPump,
                 stderrPump = stderrPump,
                 stdoutBuffer = stdoutBuffer,
-                stderrBuffer = stderrBuffer
+                stderrBuffer = stderrBuffer,
+                diagnosticDirectory = diagnosticDirectoryOwner.path,
+                diagnosticDirectoryOwner = diagnosticDirectoryOwner,
             )
         }
 

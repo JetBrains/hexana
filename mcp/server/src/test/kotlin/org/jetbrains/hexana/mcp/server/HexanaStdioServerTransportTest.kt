@@ -19,6 +19,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -41,6 +43,41 @@ class HexanaStdioServerTransportTest {
         val notification = assertIs<JSONRPCNotification>(message)
         assertEquals("notifications/initialized", notification.method)
 
+        transport.close()
+    }
+
+    @Test
+    fun propagatesFatalJsonDecodingErrorsByIdentity() = runBlocking {
+        listOf(SyntheticVirtualMachineError(), SyntheticLinkageError()).forEach { original ->
+            val transport = HexanaStdioServerTransport(
+                inputStream = ChunkedRawSource(listOf("{}\n")).buffered(),
+                outputStream = Buffer(),
+                decodeMessage = { throw original },
+            )
+            val reportedError = CompletableDeferred<Throwable>()
+
+            transport.onError { reportedError.complete(it) }
+            transport.start()
+
+            assertSame(original, withTimeout(5.seconds) { reportedError.await() })
+            transport.close()
+        }
+    }
+
+    @Test
+    fun wrapsOrdinaryMalformedJsonWithCompactTransportFailure() = runBlocking {
+        val transport = HexanaStdioServerTransport(
+            inputStream = ChunkedRawSource(listOf("not-json\n")).buffered(),
+            outputStream = Buffer(),
+        )
+        val reportedError = CompletableDeferred<Throwable>()
+
+        transport.onError { reportedError.complete(it) }
+        transport.start()
+
+        val error = withTimeout(5.seconds) { reportedError.await() }
+        assertEquals("Malformed JSON-RPC message received on stdio.", error.message)
+        assertNotNull(error.cause)
         transport.close()
     }
 
@@ -371,4 +408,8 @@ class HexanaStdioServerTransportTest {
             closed = true
         }
     }
+
+    private class SyntheticVirtualMachineError : VirtualMachineError()
+
+    private class SyntheticLinkageError : LinkageError()
 }
