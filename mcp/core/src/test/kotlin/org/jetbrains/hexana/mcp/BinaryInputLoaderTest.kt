@@ -189,6 +189,20 @@ class BinaryInputLoaderTest {
     }
 
     @Test
+    fun readsSmallFileWithMaximumIntLimit() {
+        val file = Files.createTempFile("hexana-binary-input-max-limit", ".bin")
+        try {
+            Files.write(file, byteArrayOf(1, 2, 3))
+
+            val loaded = BinaryInput.FilePath(file.toString()).loadBinary(maxFileInputBytes = Int.MAX_VALUE)
+
+            assertEquals(3, loaded.identity.byteLength)
+        } finally {
+            Files.deleteIfExists(file)
+        }
+    }
+
+    @Test
     fun rejectsFileThatExceedsLimitAfterRead() {
         val file = Files.createTempFile("hexana-binary-input-growing", ".bin")
         try {

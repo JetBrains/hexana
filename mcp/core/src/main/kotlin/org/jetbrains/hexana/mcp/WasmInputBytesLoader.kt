@@ -18,7 +18,7 @@ class WasmInputBytesLoader(
     private val allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
 ) {
     private var fileSizeReader: (Path) -> Long = Files::size
-    private var fileBytesReader: (Path) -> ByteArray = { readFileBytesBounded(it, maxFileInputBytes) }
+    private var fileBytesReader: (Path) -> BoundedFileReadResult = { readFileBytesBounded(it, maxFileInputBytes) }
 
     internal constructor(
         maxInlineInputBytes: Int,
@@ -28,7 +28,7 @@ class WasmInputBytesLoader(
         fileBytesReader: (Path) -> ByteArray,
     ) : this(maxInlineInputBytes, maxFileInputBytes, allowedFilePolicy) {
         this.fileSizeReader = fileSizeReader
-        this.fileBytesReader = fileBytesReader
+        this.fileBytesReader = { path -> fileBytesReader(path).toBoundedFileReadResult(maxFileInputBytes) }
     }
 
     fun load(input: WasmInput): LoadedWasmBytes {
@@ -50,7 +50,7 @@ class WasmInputBytesLoader(
         }
         requireFileByteCount(path)
 
-        val bytes = try {
+        val readResult = try {
             fileBytesReader(path)
         } catch (error: Exception) {
             throw HexanaAnalysisException(
@@ -59,7 +59,10 @@ class WasmInputBytesLoader(
                 error
             )
         }
-        requireFileByteCount(bytes.size)
+        val bytes = when (readResult) {
+            is BoundedFileReadResult.Bytes -> readResult.bytes
+            is BoundedFileReadResult.TooLarge -> throw fileTooLarge()
+        }
         return LoadedWasmBytes(bytes)
     }
 
@@ -106,12 +109,6 @@ class WasmInputBytesLoader(
             )
         }
         if (size > maxFileInputBytes.toLong()) {
-            throw fileTooLarge()
-        }
-    }
-
-    private fun requireFileByteCount(size: Int) {
-        if (size > maxFileInputBytes) {
             throw fileTooLarge()
         }
     }

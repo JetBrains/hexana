@@ -100,6 +100,19 @@ class HexanaScriptRunnerTest {
     }
 
     @Test
+    fun smallScriptFileRunsWithMaximumIntLimit() {
+        val script = Files.createTempFile("hexana-script-max-limit-", ".js")
+        Files.writeString(script, "print('ok');")
+
+        val result = HexanaScriptRunner(
+            limits = HexanaScriptLimits(maxScriptFileBytes = Int.MAX_VALUE)
+        ).run(HexanaScriptSource.FilePath(script.toString()), testProvider())
+
+        assertEquals(HexanaScriptStatus.SUCCESS, result.status)
+        assertEquals(listOf("ok"), result.output.lines)
+    }
+
+    @Test
     fun syntaxErrorReturnsDiagnosticLocation() {
         val result = HexanaScriptRunner().run(HexanaScriptSource.Inline("if ("), testProvider())
 

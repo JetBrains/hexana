@@ -1473,6 +1473,17 @@ class DefaultHexanaAnalysisServiceTest {
     }
 
     @Test
+    fun readsSmallWasmFileWithMaximumIntLimit() {
+        val wasm = temporaryFolder.newFile("maximum-limit.wasm").toPath()
+        Files.write(wasm, byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00))
+
+        val result = DefaultHexanaAnalysisService(maxFileInputBytes = Int.MAX_VALUE)
+            .summarizeModule(WasmInput.FilePath(wasm.toString()))
+
+        assertEquals(8, result.moduleSize)
+    }
+
+    @Test
     fun rejectsOversizedFileInputBeforeReadingBytes() {
         val oversizedFile = temporaryFolder.newFile("oversized.wasm").toPath()
         Files.write(oversizedFile, byteArrayOf(0, 1, 2, 3))

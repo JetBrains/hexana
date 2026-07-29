@@ -6,7 +6,6 @@ import java.io.InputStream
 import java.nio.file.Path
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 
 class BoundedFileReaderTest {
     private val unusedPath = Path.of("unused")
@@ -17,7 +16,7 @@ class BoundedFileReaderTest {
 
         val result = readFileBytesBounded(unusedPath, bytes.size) { ByteArrayInputStream(bytes) }
 
-        assertContentEquals(bytes, result)
+        assertContentEquals(bytes, result.requireBytes())
     }
 
     @Test
@@ -26,7 +25,7 @@ class BoundedFileReaderTest {
 
         val result = readFileBytesBounded(unusedPath, 3) { source }
 
-        assertContentEquals(byteArrayOf(0, 1, 2, 3), result)
+        assertEquals(BoundedFileReadResult.TooLarge(4), result)
         assertEquals(4, source.consumedBytes)
     }
 
@@ -37,23 +36,21 @@ class BoundedFileReaderTest {
 
         val result = readFileBytesBounded(unusedPath, bytes.size) { source }
 
-        assertContentEquals(bytes, result)
+        assertContentEquals(bytes, result.requireBytes())
         assertEquals(bytes.size, source.consumedBytes)
     }
 
     @Test
-    fun rejectsLimitThatCannotRepresentSentinelWithoutOpeningFile() {
-        var opened = false
+    fun readsSmallFileWithMaximumIntLimit() {
+        val bytes = byteArrayOf(7, 8, 9)
 
-        assertFailsWith<IllegalArgumentException> {
-            readFileBytesBounded(unusedPath, Int.MAX_VALUE) {
-                opened = true
-                ByteArrayInputStream(byteArrayOf())
-            }
-        }
+        val result = readFileBytesBounded(unusedPath, Int.MAX_VALUE) { ByteArrayInputStream(bytes) }
 
-        assertEquals(false, opened)
+        assertContentEquals(bytes, result.requireBytes())
     }
+
+    private fun BoundedFileReadResult.requireBytes(): ByteArray =
+        (this as BoundedFileReadResult.Bytes).bytes
 
     private class CountingInputStream(bytes: ByteArray) : ByteArrayInputStream(bytes) {
         var consumedBytes: Int = 0

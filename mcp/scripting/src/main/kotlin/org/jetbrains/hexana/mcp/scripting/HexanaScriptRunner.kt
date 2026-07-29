@@ -290,10 +290,8 @@ class HexanaScriptRunner private constructor(
 
     private fun loadFileScript(source: HexanaScriptSource.FilePath): ScriptLoadResult {
         val path = allowedFilePolicy.resolveAllowedRegularFile(source.path, "Script file")
-        val bytes = try {
-            Files.newInputStream(path).use { input ->
-                input.readNBytes(limits.maxScriptFileBytes + 1)
-            }
+        val readResult = try {
+            readScriptFileBounded(path, limits.maxScriptFileBytes)
         } catch (error: Exception) {
             throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.INTERNAL_ERROR,
@@ -301,8 +299,9 @@ class HexanaScriptRunner private constructor(
                 error,
             )
         }
-        if (bytes.size > limits.maxScriptFileBytes) {
-            throw HexanaAnalysisException(
+        val bytes = when (readResult) {
+            is ScriptFileReadResult.Bytes -> readResult.bytes
+            is ScriptFileReadResult.TooLarge -> throw HexanaAnalysisException(
                 HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
                 "Script file exceeds maximum size of ${limits.maxScriptFileBytes} bytes",
             )
@@ -436,6 +435,48 @@ class HexanaScriptRunner private constructor(
             }
         }
     }
+}
+
+private fun readScriptFileBounded(path: java.nio.file.Path, maxBytes: Int): ScriptFileReadResult {
+    val sentinelSize = maxBytes.toLong() + 1L
+    var bytes = ByteArray(minOf(sentinelSize, 8L * 1024L).toInt())
+    var offset = 0
+    Files.newInputStream(path).use { input ->
+        while (offset.toLong() < sentinelSize) {
+            if (offset == bytes.size) {
+                if (bytes.size == Int.MAX_VALUE) {
+                    return if (input.read() < 0) {
+                        ScriptFileReadResult.Bytes(bytes)
+                    } else {
+                        ScriptFileReadResult.TooLarge
+                    }
+                }
+                bytes = bytes.copyOf(
+                    minOf(sentinelSize, bytes.size.toLong() * 2L, Int.MAX_VALUE.toLong()).toInt()
+                )
+            }
+            val count = input.read(bytes, offset, bytes.size - offset)
+            when {
+                count < 0 -> break
+                count > 0 -> offset += count
+                else -> {
+                    val singleByte = input.read()
+                    if (singleByte < 0) break
+                    bytes[offset++] = singleByte.toByte()
+                }
+            }
+        }
+    }
+    return if (offset.toLong() == sentinelSize) {
+        ScriptFileReadResult.TooLarge
+    } else {
+        ScriptFileReadResult.Bytes(if (offset == bytes.size) bytes else bytes.copyOf(offset))
+    }
+}
+
+private sealed interface ScriptFileReadResult {
+    data class Bytes(val bytes: ByteArray) : ScriptFileReadResult
+    data object TooLarge : ScriptFileReadResult
 }
 
 private class ScriptOutputCollector(

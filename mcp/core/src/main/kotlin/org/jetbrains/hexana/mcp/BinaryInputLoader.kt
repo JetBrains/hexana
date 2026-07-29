@@ -29,7 +29,7 @@ class BinaryInputLoader(
     private val allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
 ) {
     private var fileSizeReader: (Path) -> Long = Files::size
-    private var fileBytesReader: (Path) -> ByteArray = { readFileBytesBounded(it, maxFileInputBytes) }
+    private var fileBytesReader: (Path) -> BoundedFileReadResult = { readFileBytesBounded(it, maxFileInputBytes) }
 
     internal constructor(
         maxInlineInputBytes: Int,
@@ -39,7 +39,7 @@ class BinaryInputLoader(
         fileBytesReader: (Path) -> ByteArray,
     ) : this(maxInlineInputBytes, maxFileInputBytes, allowedFilePolicy) {
         this.fileSizeReader = fileSizeReader
-        this.fileBytesReader = fileBytesReader
+        this.fileBytesReader = { path -> fileBytesReader(path).toBoundedFileReadResult(maxFileInputBytes) }
     }
 
     fun load(input: BinaryInput): LoadedBinary {
@@ -54,7 +54,7 @@ class BinaryInputLoader(
         val path = allowedFilePolicy.resolveAllowedRegularFile(rawPath, "Binary file")
         requireFileByteCount(path)
 
-        val bytes = try {
+        val readResult = try {
             fileBytesReader(path)
         } catch (error: Exception) {
             throw HexanaAnalysisException(
@@ -63,8 +63,10 @@ class BinaryInputLoader(
                 error
             )
         }
-
-        requireFileByteCount(bytes.size)
+        val bytes = when (readResult) {
+            is BoundedFileReadResult.Bytes -> readResult.bytes
+            is BoundedFileReadResult.TooLarge -> throw fileTooLarge()
+        }
         return loadFromBytes(bytes, pathLabel = rawPath)
     }
 
@@ -119,12 +121,6 @@ class BinaryInputLoader(
             )
         }
         if (size > maxFileInputBytes.toLong()) {
-            throw fileTooLarge()
-        }
-    }
-
-    private fun requireFileByteCount(size: Int) {
-        if (size > maxFileInputBytes) {
             throw fileTooLarge()
         }
     }

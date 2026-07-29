@@ -8,18 +8,24 @@ internal fun readFileBytesBounded(
     path: Path,
     maxBytes: Int,
     inputStreamOpener: (Path) -> InputStream = Files::newInputStream,
-): ByteArray {
+): BoundedFileReadResult {
     require(maxBytes >= 0) { "maxBytes must not be negative" }
-    require(maxBytes < Int.MAX_VALUE) { "maxBytes must leave room for an oversize sentinel byte" }
 
-    val sentinelSize = maxBytes + 1
-    var bytes = ByteArray(minOf(sentinelSize, 8 * 1024))
+    val sentinelSize = maxBytes.toLong() + 1L
+    var bytes = ByteArray(minOf(sentinelSize, 8L * 1024L).toInt())
     var offset = 0
     inputStreamOpener(path).use { input ->
-        while (offset < sentinelSize) {
+        while (offset.toLong() < sentinelSize) {
             if (offset == bytes.size) {
+                if (bytes.size == Int.MAX_VALUE) {
+                    return if (input.read() < 0) {
+                        BoundedFileReadResult.Bytes(bytes)
+                    } else {
+                        BoundedFileReadResult.TooLarge(sentinelSize)
+                    }
+                }
                 val doubledSize = bytes.size.toLong() * 2L
-                bytes = bytes.copyOf(minOf(sentinelSize.toLong(), doubledSize).toInt())
+                bytes = bytes.copyOf(minOf(sentinelSize, doubledSize, Int.MAX_VALUE.toLong()).toInt())
             }
             val count = input.read(bytes, offset, bytes.size - offset)
             when {
@@ -33,5 +39,21 @@ internal fun readFileBytesBounded(
             }
         }
     }
-    return if (offset == bytes.size) bytes else bytes.copyOf(offset)
+    return if (offset.toLong() == sentinelSize) {
+        BoundedFileReadResult.TooLarge(sentinelSize)
+    } else {
+        BoundedFileReadResult.Bytes(if (offset == bytes.size) bytes else bytes.copyOf(offset))
+    }
 }
+
+internal sealed interface BoundedFileReadResult {
+    data class Bytes(val bytes: ByteArray) : BoundedFileReadResult
+    data class TooLarge(val atLeastBytes: Long) : BoundedFileReadResult
+}
+
+internal fun ByteArray.toBoundedFileReadResult(maxBytes: Int): BoundedFileReadResult =
+    if (size.toLong() > maxBytes.toLong()) {
+        BoundedFileReadResult.TooLarge(maxBytes.toLong() + 1L)
+    } else {
+        BoundedFileReadResult.Bytes(this)
+    }
