@@ -59,7 +59,7 @@ class WasmExportIndex : FileBasedIndexExtension<String, Collection<WasmExportSym
 
     override fun getIndexer() = DataIndexer<String, Collection<WasmExportSymbolEntry>, FileContent> { content ->
         val buffer = content.content.toCommonByteBuffer()
-        val module = (WasmParser().parse(buffer) as? WasmParseSuccess)?.wasmModule as? WasmModule
+        val module = (tryParse(buffer) as? WasmParseSuccess)?.wasmModule as? WasmModule
             ?: return@DataIndexer emptyMap()
         val exportSection = module.exportSection ?: return@DataIndexer emptyMap()
         val entries = with(exportSection) { buffer.scan() }

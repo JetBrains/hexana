@@ -1,9 +1,13 @@
 package org.jetbrains.hexana
 
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.util.indexing.*
 import com.intellij.util.indexing.impl.CollectionDataExternalizer
 import com.intellij.util.io.EnumeratorStringDescriptor
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.wasm.WasmParseFailure
+import org.jetbrains.hexana.wasm.WasmParseResult
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.components.WasmComponent
@@ -30,7 +34,7 @@ class WasmIndex : FileBasedIndexExtension<String, Collection<WitDeclaration>>() 
     override fun getIndexer() = DataIndexer<String, Collection<WitDeclaration>, FileContent> { content ->
         buildMap<String, MutableCollection<WitDeclaration>> {
             val buffer = content.content.toCommonByteBuffer()
-            (WasmParser().parse(buffer)
+            (tryParse(buffer)
                     as? WasmParseSuccess)?.let {
                 it.wasmModule as? WasmComponent
             }?.exportSection?.forEach {
@@ -48,4 +52,11 @@ class WasmIndex : FileBasedIndexExtension<String, Collection<WitDeclaration>>() 
             }
         }
     }
+}
+
+internal fun tryParse(buffer: CommonByteBuffer): WasmParseResult = try {
+    WasmParser().parse(buffer)
+} catch (e: Throwable) {
+    logger<WasmIndex>().error("Failed to parse Wasm file", e)
+    WasmParseFailure()
 }
