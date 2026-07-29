@@ -392,6 +392,9 @@ fun TableTabContent(
                 property("flex", "1")
                 property("overflow-y", "auto")
                 property("min-height", "0")
+                // Account for the sticky <thead> so that scrollIntoView
+                // positions rows below the header, not behind it.
+                property("scroll-padding-top", "${rowHeight}px")
             }
             ref { tableWrapper ->
                 viewportHeight = tableWrapper.clientHeight.toDouble()
@@ -1111,6 +1114,32 @@ private fun TreeTableBody(
         }, 500)
     }
 
+    // Re-focus the [data-focused] row after recomposition so that keyboard
+    // navigation continues to work.  Expand/collapse (ArrowLeft/Right) and
+    // ArrowUp/Down in tree tables trigger recomposition that may destroy the
+    // previously focused <tr>; without this effect, focus falls to <body>
+    // and subsequent arrow keys are intercepted by the hex viewer.
+    LaunchedEffect(focusedFlatIndex, flatRows) {
+        if (focusedFlatIndex < 0) return@LaunchedEffect
+        // Yield a frame so Compose settles the DOM.
+        delay(1)
+        val wrapper = tableWrapperElement ?: return@LaunchedEffect
+        val focusedRow = wrapper.querySelector("tr[data-focused]") as? HTMLElement
+        if (focusedRow != null && focusedRow != kotlinx.browser.document.activeElement) {
+            focusedRow.asDynamic().focus(js("({preventScroll: true})"))
+            focusedRow.asDynamic().scrollIntoView(js("({block: 'nearest', inline: 'nearest'})"))
+            // Adjust for sticky header that may overlap the row
+            val thead = wrapper.querySelector("thead")
+            if (thead != null) {
+                val headerBottom = thead.getBoundingClientRect().bottom
+                val rowTop = focusedRow.getBoundingClientRect().top
+                if (rowTop < headerBottom) {
+                    wrapper.scrollTop -= (headerBottom - rowTop)
+                }
+            }
+        }
+    }
+
     val totalRows = flatRows.size
     val firstVisible = maxOf(0, (scrollTop / rowHeight).toInt() - bufferRows)
     val lastVisible = minOf(totalRows - 1, ((scrollTop + viewportHeight) / rowHeight).toInt() + bufferRows)
@@ -1172,6 +1201,9 @@ private fun TreeTableBody(
                 property("flex", "1")
                 property("overflow-y", "auto")
                 property("min-height", "0")
+                // Account for the sticky <thead> so that scrollIntoView
+                // positions rows below the header, not behind it.
+                property("scroll-padding-top", "${rowHeight}px")
             }
             ref { tableWrapper ->
                 tableWrapperElement = tableWrapper

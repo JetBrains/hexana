@@ -387,10 +387,18 @@ fun HexViewerPanel(
 
             if (key !in listOf("ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight")) return@handler
 
-            // Skip ArrowUp/Down when focus is inside a panel table so that row navigation
-            // works; ArrowLeft/Right still reach the hex viewer.
+            // Only handle arrow keys when focus is actually on the hex
+            // viewer or its scroll container.  After tree-table
+            // recomposition the focused <tr> may be destroyed and focus
+            // falls to <body>; without this positive check the hex viewer
+            // would steal the arrow key before the table can re-focus.
             val target = ke.target as? HTMLElement
-            if (target?.closest(".hexana-panel-table") != null && (key == "ArrowUp" || key == "ArrowDown")) return@handler
+            val hexViewer = document.querySelector(".hex-viewer-scroll") as? HTMLElement
+            if (target != null && hexViewer != null) {
+                if (target != hexViewer && !hexViewer.contains(target)) return@handler
+            } else if (target?.closest(".hexana-panel-table") != null) {
+                return@handler
+            }
 
             ke.preventDefault()
             pendingDigit = null

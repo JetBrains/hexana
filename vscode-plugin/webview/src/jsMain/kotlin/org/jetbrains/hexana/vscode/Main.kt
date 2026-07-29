@@ -105,6 +105,13 @@ fun BinaryEditorApp() {
     var dialogPickedContent by remember { mutableStateOf("") }
     var showSemanticHighlighting by remember { mutableStateOf(true) }
 
+    // Global arrow-key handler for panel-table rows.  VSCode webviews
+    // intercept keydown events before they reach focused DOM elements, so
+    // per-row addEventListener("keydown") never fires.  A single window-
+    // level listener (the same pattern HexViewerPanel uses) checks whether
+    // the active element is a panel-table row and performs navigation.
+    PanelTableRowKeyboardHandler()
+
     VscodeMessageListener { message ->
         when (message.type) {
             "load-wasm" -> {

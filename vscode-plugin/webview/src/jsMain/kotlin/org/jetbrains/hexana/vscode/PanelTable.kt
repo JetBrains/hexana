@@ -5,6 +5,8 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
+import kotlinx.browser.document
+import kotlinx.browser.window
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLInputElement
 import org.w3c.dom.HTMLTableElement
@@ -423,7 +425,6 @@ internal fun PanelTableRow(
     callbacks.onClick = onClick
     callbacks.onSelect = onSelect
     callbacks.onActivate = onActivate
-
     Tr({
         classes("hexana-panel-row")
         for ((k, v) in attrs) attr(k, v)
@@ -439,84 +440,157 @@ internal fun PanelTableRow(
                 property("background", backgroundColor)
             }
         }
-        onClick { onClick() }
+        onClick { event ->
+            // Run the selection/navigation callback first, then focus the
+            // <tr> in the next animation frame.  The onClick callback may
+            // trigger scrollHexViewerTo() which moves focus to the hex
+            // viewer; re-focusing the row afterwards ensures subsequent
+            // ArrowUp/Down events are received by the global handler.
+            onClick()
+            var el = event.target as? HTMLElement
+            while (el != null && el.tagName != "TR") el = el.parentElement as? HTMLElement
+            el?.let { tr -> window.requestAnimationFrame { tr.asDynamic().focus(js("({preventScroll: true})")) } }
+        }
         // Store the stable callbacks holder on the DOM element so that
-        // arrow-key navigation to a sibling row can read the *target*
-        // row's current callbacks.
+        // the window-level arrow-key handler can read the row's current
+        // callbacks.
         ref { element ->
             element.asDynamic().__callbacks = callbacks
-            val keyListener = EventListener { event ->
-                val ke = event as? KeyboardEvent ?: return@EventListener
-                val row = ke.currentTarget as? HTMLElement ?: return@EventListener
-                val cb = row.asDynamic().__callbacks as? RowCallbacks ?: return@EventListener
-                when (ke.key) {
-                    "ArrowDown" -> {
-                        ke.preventDefault()
-                        ke.stopPropagation()
-                        nextVisibleRow(row)?.let { target ->
-                            target.focus()
-                            val targetCb = target.asDynamic().__callbacks as? RowCallbacks
-                            if (targetCb?.onSelect != null) {
-                                targetCb.onSelect!!()
-                            } else {
-                                target.click()
-                            }
-                        }
-                    }
-                    "ArrowUp" -> {
-                        ke.preventDefault()
-                        ke.stopPropagation()
-                        previousVisibleRow(row)?.let { target ->
-                            target.focus()
-                            val targetCb = target.asDynamic().__callbacks as? RowCallbacks
-                            if (targetCb?.onSelect != null) {
-                                targetCb.onSelect!!()
-                            } else {
-                                target.click()
-                            }
-                        }
-                    }
-                    "ArrowLeft", "ArrowRight" -> {
-                        ke.preventDefault()
-                        ke.stopPropagation()
-                        if (cb.onActivate != null) {
-                            cb.onActivate!!()
-                        } else {
-                            cb.onClick?.invoke()
-                        }
-                    }
-                    "Enter", " " -> {
-                        ke.preventDefault()
-                        ke.stopPropagation()
-                        cb.onClick?.invoke()
-                    }
-                }
-            }
-            element.addEventListener("keydown", keyListener)
-            onDispose {
-                element.removeEventListener("keydown", keyListener)
-            }
+            onDispose { }
         }
     }) {
         content()
     }
 }
 
-/** Returns the next visible sibling row, skipping hidden ones. */
+/**
+ * Global window-level keydown handler for [PanelTableRow] arrow-key navigation.
+ *
+ * VSCode webviews intercept keydown events before they reach focused DOM
+ * elements, so per-row `addEventListener("keydown")` never fires.  This
+ * composable installs a single `window`-level listener (the same pattern
+ * [HexViewerPanel] uses) that checks whether `document.activeElement` is a
+ * `.hexana-panel-row` and performs row navigation from there.
+ *
+ * Must be composed once near the app root (e.g. in [BinaryEditorApp]).
+ */
+@Composable
+internal fun PanelTableRowKeyboardHandler() {
+    DisposableEffect(Unit) {
+        val handler = EventListener { event ->
+            val ke = event as? KeyboardEvent ?: return@EventListener
+            val row = document.activeElement as? HTMLElement ?: return@EventListener
+            if (!row.classList.contains("hexana-panel-row")) return@EventListener
+            val cb = row.asDynamic().__callbacks as? RowCallbacks ?: return@EventListener
+            when (ke.key) {
+                "ArrowDown" -> {
+                    ke.preventDefault()
+                    ke.stopPropagation()
+                    nextVisibleRow(row)?.let { target ->
+                        val targetCb = target.asDynamic().__callbacks as? RowCallbacks
+                        if (targetCb?.onSelect != null) {
+                            targetCb.onSelect!!()
+                        } else {
+                            target.click()
+                        }
+                        // Re-focus after the callback — it may trigger
+                        // scrollHexViewerTo() which steals focus.
+                        window.requestAnimationFrame {
+                            target.asDynamic().focus(js("({preventScroll: true})"))
+                            target.asDynamic().scrollIntoView(js("({block: 'nearest', inline: 'nearest'})"))
+                            // Adjust for sticky header that may overlap the row
+                            val thead = target.closest("table")?.querySelector("thead")
+                            if (thead != null) {
+                                val headerBottom = thead.getBoundingClientRect().bottom
+                                val rowTop = target.getBoundingClientRect().top
+                                if (rowTop < headerBottom) {
+                                    val wrapper = target.closest(".hexana-panel-table")?.parentElement
+                                    if (wrapper != null) {
+                                        wrapper.scrollTop -= (headerBottom - rowTop)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                "ArrowUp" -> {
+                    ke.preventDefault()
+                    ke.stopPropagation()
+                    previousVisibleRow(row)?.let { target ->
+                        val targetCb = target.asDynamic().__callbacks as? RowCallbacks
+                        if (targetCb?.onSelect != null) {
+                            targetCb.onSelect!!()
+                        } else {
+                            target.click()
+                        }
+                        // Re-focus after the callback — it may trigger
+                        // scrollHexViewerTo() which steals focus.
+                        window.requestAnimationFrame {
+                            target.asDynamic().focus(js("({preventScroll: true})"))
+                            target.asDynamic().scrollIntoView(js("({block: 'nearest', inline: 'nearest'})"))
+                            // Adjust for sticky header that may overlap the row
+                            val thead = target.closest("table")?.querySelector("thead")
+                            if (thead != null) {
+                                val headerBottom = thead.getBoundingClientRect().bottom
+                                val rowTop = target.getBoundingClientRect().top
+                                if (rowTop < headerBottom) {
+                                    val wrapper = target.closest(".hexana-panel-table")?.parentElement
+                                    if (wrapper != null) {
+                                        wrapper.scrollTop -= (headerBottom - rowTop)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                "ArrowLeft", "ArrowRight" -> {
+                    ke.preventDefault()
+                    ke.stopPropagation()
+                    if (cb.onActivate != null) {
+                        cb.onActivate!!()
+                        // Re-focus after onActivate — expand/collapse may
+                        // trigger recomposition that destroys the current
+                        // <tr>.  Locate the [data-focused] row in the next
+                        // animation frame (after Compose settles) and focus it.
+                        val table = row.closest(".hexana-panel-table")
+                        window.requestAnimationFrame {
+                            val target = table?.querySelector("tr[data-focused]")
+                                ?: table?.querySelector(".hexana-panel-row")
+                            target?.asDynamic()?.focus(js("({preventScroll: true})"))
+                        }
+                    } else {
+                        cb.onClick?.invoke()
+                    }
+                }
+                "Enter", " " -> {
+                    ke.preventDefault()
+                    ke.stopPropagation()
+                    cb.onClick?.invoke()
+                }
+            }
+        }
+        // Use capture phase — VSCode webviews may swallow keydown events
+        // during the bubble phase for arrow keys.
+        window.addEventListener("keydown", handler, true)
+        onDispose { window.removeEventListener("keydown", handler, true) }
+    }
+}
+
+/** Returns the next visible sibling row, skipping hidden and spacer ones. */
 private fun nextVisibleRow(row: HTMLElement): HTMLElement? {
     var sibling = row.nextElementSibling as? HTMLElement
     while (sibling != null) {
-        if (sibling.style.display != "none") return sibling
+        if (sibling.style.display != "none" && sibling.classList.contains("hexana-panel-row")) return sibling
         sibling = sibling.nextElementSibling as? HTMLElement
     }
     return null
 }
 
-/** Returns the previous visible sibling row, skipping hidden ones. */
+/** Returns the previous visible sibling row, skipping hidden and spacer ones. */
 private fun previousVisibleRow(row: HTMLElement): HTMLElement? {
     var sibling = row.previousElementSibling as? HTMLElement
     while (sibling != null) {
-        if (sibling.style.display != "none") return sibling
+        if (sibling.style.display != "none" && sibling.classList.contains("hexana-panel-row")) return sibling
         sibling = sibling.previousElementSibling as? HTMLElement
     }
     return null
