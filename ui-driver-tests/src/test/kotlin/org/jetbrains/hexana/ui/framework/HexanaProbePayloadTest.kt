@@ -19,6 +19,7 @@ class HexanaProbePayloadTest {
                 "cursorOffset=42",
                 "panel=Functions",
                 "panel=Exports",
+                "panelsResolved=true",
             ),
         )
 
@@ -27,6 +28,7 @@ class HexanaProbePayloadTest {
         assertEquals(listOf("Functions", "Exports"), snapshot.panelNames)
         assertEquals("Functions", snapshot.selectedTabName)
         assertEquals(42, snapshot.cursorOffset)
+        assertTrue(snapshot.panelsResolved)
     }
 
     @Test
@@ -39,6 +41,7 @@ class HexanaProbePayloadTest {
                 "providerKind=core-wasm",
                 "selectedTabName=",
                 "cursorOffset=",
+                "panelsResolved=false",
             ),
         )
 
