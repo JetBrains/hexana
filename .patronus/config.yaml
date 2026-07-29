@@ -5,3 +5,7 @@ checks:
     executeOnChanges:
       - "*"
       - "!/README.md"
+  - configurationId: "InnoHub_HexFlow_UiTestsPatronus"
+    executeOnChanges:
+      - "/ui-driver-tests/**"
+      - "/idea-plugin/src/ui-tests-framework/**"
