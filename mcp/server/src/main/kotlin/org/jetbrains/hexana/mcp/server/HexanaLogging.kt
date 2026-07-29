@@ -17,7 +17,7 @@ fun configureLogging(configuredLevel: HexanaLogLevel) {
 
     val encoder = PatternLayoutEncoder().apply {
         this.context = context
-        pattern = "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+        pattern = "%-5level hexana-mcp - %msg%n"
         start()
     }
 

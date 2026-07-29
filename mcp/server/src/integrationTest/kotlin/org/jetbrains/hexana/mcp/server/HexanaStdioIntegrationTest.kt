@@ -40,6 +40,27 @@ class HexanaStdioIntegrationTest {
     }
 
     @Test
+    fun invalidConfigurationKeepsStdoutCleanAndWritesStructuredDiagnostic() = runBlocking {
+        val logDirectory = temporaryFolder.newFolder("configuration-diagnostics").toPath()
+        val result = HexanaInstalledStdioClient.runCommand(
+            launcher = StdioLauncher.Server,
+            arguments = listOf("stdio", "--log-level", "invalid"),
+            stdinBytes = null,
+            environment = mapOf("HEXANA_MCP_LOG_DIR" to logDirectory.toString()),
+        )
+
+        assertFalse(result.timedOut, result.toString())
+        assertTrue(result.exitCode != 0, result.toString())
+        assertTrue(result.stdout.isBlank(), "stdio stdout must stay protocol-only: ${result.stdout}")
+        assertTrue(result.stderr.contains("[CONFIGURATION; id="), result.stderr)
+        val diagnosticFiles = Files.list(logDirectory).use { it.toList() }
+        assertEquals(1, diagnosticFiles.size)
+        val diagnosticText = Files.readString(diagnosticFiles.single())
+        assertTrue(diagnosticText.lineSequence().all { it.isBlank() || runCatching { Json.parseToJsonElement(it) }.isSuccess })
+        assertTrue(diagnosticText.contains("\"category\":\"CONFIGURATION\""), diagnosticText)
+    }
+
+    @Test
     fun installedServerDoctorCommandReportsRuntimeAndLayout() = runBlocking {
         val result = HexanaInstalledStdioClient.runCommand(StdioLauncher.Server, "doctor")
 
@@ -52,6 +73,8 @@ class HexanaStdioIntegrationTest {
         assertTrue(result.stdout.contains("version:"), result.stdout)
         assertTrue(result.stdout.contains("runtime:"), result.stdout)
         assertTrue(result.stdout.contains("logs:"), result.stdout)
+        assertTrue(result.stdout.contains("diagnostics:"), result.stdout)
+        assertTrue(result.stdout.contains("structured JSONL diagnostics available"), result.stdout)
         assertTrue(result.stdout.contains("allowed roots:"), result.stdout)
         assertTrue(result.stdout.contains("installed layout:"), result.stdout)
         assertTrue(result.stdout.contains("JVM distribution detected"), result.stdout)

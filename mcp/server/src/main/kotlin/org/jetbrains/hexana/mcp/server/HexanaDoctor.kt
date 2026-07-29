@@ -15,6 +15,7 @@ internal object HexanaDoctor {
             versionCheck(environment.version),
             runtimeCheck(environment),
             logDestinationCheck(environment.consoleLogTargets),
+            diagnosticLocationCheck(environment.diagnostics),
             allowedRootsCheck(environment.allowedRoots),
             installedLayoutCheck(environment)
         )
@@ -105,6 +106,23 @@ internal object HexanaDoctor {
             name = "logs",
             message = "no console log appender detected; transport logs must remain off stdout"
         )
+    }
+
+    private fun diagnosticLocationCheck(status: HexanaDiagnosticStatus): DoctorCheck {
+        return if (status.available) {
+            DoctorCheck(
+                severity = DoctorSeverity.OK,
+                name = "diagnostics",
+                message = "structured JSONL diagnostics available at ${status.displayLocation}"
+            )
+        } else {
+            DoctorCheck(
+                severity = DoctorSeverity.WARNING,
+                name = "diagnostics",
+                message = "structured diagnostics unavailable at ${status.displayLocation}" +
+                    (status.problem?.let { " ($it)" } ?: "") + "; errors still use stderr"
+            )
+        }
     }
 
     private fun allowedRootsCheck(allowedRoots: List<String>): DoctorCheck {
@@ -212,6 +230,7 @@ internal data class DoctorEnvironment(
     val javaSpecificationVersion: String,
     val classPath: String,
     val consoleLogTargets: Set<ConsoleLogTarget>?,
+    val diagnostics: HexanaDiagnosticStatus,
 ) {
     companion object {
         fun current(version: String, allowedRoots: List<String>): DoctorEnvironment {
@@ -224,7 +243,8 @@ internal data class DoctorEnvironment(
                 javaHome = System.getProperty("java.home").orEmpty(),
                 javaSpecificationVersion = System.getProperty("java.specification.version").orEmpty(),
                 classPath = System.getProperty("java.class.path").orEmpty(),
-                consoleLogTargets = currentConsoleLogTargets()
+                consoleLogTargets = currentConsoleLogTargets(),
+                diagnostics = HexanaDiagnostics.status,
             )
         }
     }

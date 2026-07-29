@@ -31,8 +31,6 @@ import org.jetbrains.hexana.mcp.scripting.HexanaScriptOutput
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptResult
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptRunner
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptSource
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 
 private const val QUERY_FILTER_MAX_ITEMS = 20
 private const val INDICES_MAX_ITEMS = 10_000
@@ -56,7 +54,6 @@ class HexanaToolHandlers(
     ),
     private val transport: HexanaEvent.McpTransport = HexanaEvent.McpTransport.STDIO,
     private val allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
-    private val logger: Logger = LoggerFactory.getLogger(HexanaToolHandlers::class.java)
 ) {
     private val resourceLimits = maxInlineInputBytes?.let {
         resourceLimits.copy(
@@ -592,10 +589,19 @@ class HexanaToolHandlers(
             errorResult(error.code, error.message ?: "Invalid input")
         } catch (error: Exception) {
             captureToolEvent(toolName, startTime, success = false)
-            logger.error("Unexpected failure while executing MCP tool `{}`", toolName, error)
+            val diagnostic = emitDiagnosticFailure(
+                HexanaFailureCategory.TOOL_INTERNAL,
+                "Unexpected internal failure while executing MCP tool `$toolName`.",
+                error,
+            )
             errorResult(
                 HexanaAnalysisErrorCode.INTERNAL_ERROR,
-                "Internal error while executing `$toolName`. See server logs for details."
+                "Internal error while executing `$toolName`. Diagnostic id ${diagnostic.id}; " +
+                    if (diagnostic.available) {
+                        "diagnostics: ${diagnostic.location}."
+                    } else {
+                        "diagnostics unavailable at ${diagnostic.location}."
+                    }
             )
         }
     }
@@ -624,12 +630,10 @@ class HexanaToolHandlers(
 
     private fun logAnalysisFailure(toolName: String, error: HexanaAnalysisException) {
         if (error.code == HexanaAnalysisErrorCode.INTERNAL_ERROR || error.cause != null) {
-            logger.error(
-                "MCP tool `{}` failed with {}: {}",
-                toolName,
-                error.code.name,
-                error.message,
-                error
+            emitDiagnosticFailure(
+                HexanaFailureCategory.TOOL_INTERNAL,
+                "MCP tool `$toolName` failed with ${error.code.name}.",
+                error,
             )
         }
     }

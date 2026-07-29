@@ -153,6 +153,11 @@ class HexanaDoctorTest {
             javaSpecificationVersion = javaSpecificationVersion,
             classPath = classPath,
             consoleLogTargets = consoleLogTargets,
+            diagnostics = HexanaDiagnosticStatus(
+                directory = temporaryFolder.root.toPath().resolve("logs"),
+                file = temporaryFolder.root.toPath().resolve("logs/test.jsonl"),
+                available = true,
+            ),
         )
     }
 }

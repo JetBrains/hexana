@@ -35,16 +35,18 @@ import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.mcp.model.types.ListReferenceTypesResult
 import org.jetbrains.hexana.mcp.model.types.ListValueTypesResult
 import org.jetbrains.hexana.mcp.model.types.TypesResult
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import org.slf4j.Logger
 import java.lang.reflect.Proxy
 import java.nio.file.Files
+import java.nio.file.Path
 import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class HexanaToolHandlersTest {
@@ -52,6 +54,11 @@ class HexanaToolHandlersTest {
     val temporaryFolder = TemporaryFolder()
 
     private val handlers = HexanaToolHandlers()
+
+    @After
+    fun closeDiagnostics() {
+        HexanaDiagnostics.close()
+    }
 
     @Test
     fun rejectsSuccessAboveGlobalBudgetWithoutBudgetingStableErrorResponse() {
@@ -1651,7 +1658,6 @@ class HexanaToolHandlersTest {
         val handlers = HexanaToolHandlers(
             resourceLimits = HexanaResourceLimits(maxScanRoots = 10),
             analysisService = resolveComponentDependenciesRecordingService(calls),
-            logger = RecordingLogger()
         )
 
         val result = handlers.resolveComponentDependencies(wasmPathWith("scanRoots", jsonStringArray(9)))
@@ -1719,7 +1725,7 @@ class HexanaToolHandlersTest {
 
     @Test
     fun unexpectedExceptionReturnsClearInternalErrorMessage() {
-        val logger = RecordingLogger()
+        val diagnosticDirectory = isolateDiagnostics("unexpected")
         val handlers = HexanaToolHandlers(
             analysisService = object : HexanaAnalysisService {
                 override fun summarizeModule(input: WasmInput): SummarizeModuleResult = error("boom")
@@ -1785,27 +1791,26 @@ class HexanaToolHandlersTest {
 
                 override fun listElementSegments(input: WasmInput): ListElementSegmentsResult = error("boom")
             },
-            logger = logger
         )
 
         val result = handlers.listImports(jsonPath("/tmp/module.wasm"))
 
         assertEquals(true, result.isError)
         assertEquals("INTERNAL_ERROR", result.structuredContent?.get("code")?.jsonPrimitive?.content)
-        assertEquals(
-            "Internal error while executing `list_imports`. See server logs for details.",
-            (result.content.single() as TextContent).text
+        val message = (result.content.single() as TextContent).text
+        assertPersistedToolFailure(
+            message = message,
+            messagePrefix = "Internal error while executing `list_imports`. Diagnostic id ",
+            diagnosticDirectory = diagnosticDirectory,
+            exceptionType = IllegalStateException::class.java.name,
         )
-        assertEquals(1, logger.errorEvents.size)
-        assertTrue(logger.errorEvents.single().message.contains("list_imports"))
-        assertEquals("boom", logger.errorEvents.single().throwable?.message)
+        assertFalse(message.contains(temporaryFolder.root.absolutePath), message)
     }
 
     @Test
     fun cancellationIsPropagatedInsteadOfReturnedAsToolError() {
         val handlers = HexanaToolHandlers(
             analysisService = cancellationThrowingAnalysisService(),
-            logger = RecordingLogger()
         )
 
         val error = assertFailsWith<CancellationException> {
@@ -1817,7 +1822,7 @@ class HexanaToolHandlersTest {
 
     @Test
     fun internalAnalysisExceptionKeepsUserMessageAndLogsCause() {
-        val logger = RecordingLogger()
+        val diagnosticDirectory = isolateDiagnostics("analysis")
         val handlers = HexanaToolHandlers(
             analysisService = object : HexanaAnalysisService {
                 override fun summarizeModule(input: WasmInput): SummarizeModuleResult {
@@ -1896,19 +1901,63 @@ class HexanaToolHandlersTest {
 
                 override fun listElementSegments(input: WasmInput): ListElementSegmentsResult = error("unused")
             },
-            logger = logger
         )
 
         val result = handlers.summarizeModule(jsonPath("/tmp/module.wasm"))
 
         assertEquals(true, result.isError)
         assertEquals("INTERNAL_ERROR", result.structuredContent?.get("code")?.jsonPrimitive?.content)
-        assertEquals("Failed to read .wasm file", (result.content.single() as TextContent).text)
-        assertEquals(1, logger.errorEvents.size)
-        assertEquals(
-            "disk unavailable",
-            logger.errorEvents.single().throwable?.cause?.message ?: logger.errorEvents.single().throwable?.message
+        val message = (result.content.single() as TextContent).text
+        assertPersistedToolFailure(
+            message = message,
+            messagePrefix = "Failed to read .wasm file Diagnostic id ",
+            diagnosticDirectory = diagnosticDirectory,
+            exceptionType = HexanaAnalysisException::class.java.name,
+            causeType = IllegalStateException::class.java.name,
         )
+        assertFalse(message.contains(temporaryFolder.root.absolutePath), message)
+    }
+
+    private fun isolateDiagnostics(name: String): Path {
+        val directory = temporaryFolder.newFolder("diagnostics-$name").toPath()
+        HexanaDiagnostics.start(
+            HexanaCommand.Help.diagnosticContext("test"),
+            envReader = { if (it == HEXANA_MCP_LOG_DIR_ENV) directory.toString() else null },
+        )
+        return directory
+    }
+
+    private fun assertPersistedToolFailure(
+        message: String,
+        messagePrefix: String,
+        diagnosticDirectory: Path,
+        exceptionType: String,
+        causeType: String? = null,
+    ) {
+        assertTrue(message.startsWith(messagePrefix), message)
+        assertTrue(message.endsWith('.'), message)
+        val diagnosticId = message.removePrefix(messagePrefix).removeSuffix(".")
+        assertTrue(Regex("[0-9a-f]{8}").matches(diagnosticId), message)
+
+        val diagnosticFile = Files.list(diagnosticDirectory).use { files ->
+            files.filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".jsonl") }
+                .toList()
+                .single()
+        }
+        val failure = Files.readAllLines(diagnosticFile).asSequence()
+            .filter { it.isNotBlank() }
+            .map(Json::parseToJsonElement)
+            .map { it.jsonObject }
+            .single { it["diagnostic_id"]?.jsonPrimitive?.content == diagnosticId }
+        assertEquals("failure", failure.getValue("event").jsonPrimitive.content)
+        assertEquals("TOOL_INTERNAL", failure.getValue("category").jsonPrimitive.content)
+        val exception = failure.getValue("exception").jsonObject
+        assertEquals(exceptionType, exception.getValue("type").jsonPrimitive.content)
+        if (causeType == null) {
+            assertNull(exception["cause"])
+        } else {
+            assertEquals(causeType, exception.getValue("cause").jsonObject.getValue("type").jsonPrimitive.content)
+        }
     }
 
     private fun jsonPath(path: String): JsonObject = buildJsonObject {
@@ -2028,7 +2077,6 @@ class HexanaToolHandlersTest {
         val calls = mutableListOf<String>()
         val handlers = HexanaToolHandlers(
             analysisService = unexpectedCallAnalysisService(calls),
-            logger = RecordingLogger()
         )
 
         val result = case.invoke(handlers)
@@ -2062,36 +2110,4 @@ class HexanaToolHandlersTest {
         val invoke: (HexanaToolHandlers) -> CallToolResult,
     )
 
-    private class RecordingLogger : Logger by LoggerStub() {
-        val errorEvents = mutableListOf<ErrorEvent>()
-
-        override fun error(format: String?, arg: Any?, arg2: Any?) {
-            errorEvents += ErrorEvent(
-                message = listOf(format, arg?.toString(), arg2?.toString()).joinToString(" "),
-                throwable = when {
-                    arg is Throwable -> arg
-                    arg2 is Throwable -> arg2
-                    else -> null
-                }
-            )
-        }
-
-        override fun error(format: String?, vararg arguments: Any?) {
-            errorEvents += ErrorEvent(
-                message = buildList {
-                    add(format)
-                    arguments.forEach { add(it?.toString()) }
-                }.joinToString(" "),
-                throwable = when {
-                    arguments.lastOrNull() is Throwable -> arguments.last() as Throwable
-                    else -> null
-                }
-            )
-        }
-    }
-
-    private data class ErrorEvent(
-        val message: String,
-        val throwable: Throwable?
-    )
 }

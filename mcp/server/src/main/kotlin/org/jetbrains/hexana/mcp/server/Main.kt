@@ -25,13 +25,30 @@ fun main(args: Array<String>) {
     configureLogging(HexanaLogLevel.INFO)
     retainMcpSerializersForNativeImage()
     val cli = HexanaCli()
+    val version = hexanaServerVersion()
     val command = try {
         cli.parse(args)
     } catch (error: CliktError) {
+        if (error.statusCode != 0) {
+            HexanaDiagnostics.start(
+                HexanaDiagnosticContext(
+                    version, "cli", null, null, HexanaLogLevel.INFO.cliValue(), null, 0, null
+                )
+            )
+            emitDiagnosticFailure(HexanaFailureCategory.CONFIGURATION, "Invalid command-line configuration.", error)
+        }
         cli.echoFormattedHelp(error)
         exitProcess(error.statusCode)
     }
-    val version = hexanaServerVersion()
+    configureLogging(command.configuredLogLevel())
+    HexanaDiagnostics.start(command.diagnosticContext(version))
+    HexanaDiagnostics.status.takeUnless { it.available }?.let { status ->
+        logger.warn(
+            "Structured diagnostics are unavailable at {} ({}); errors will still use stderr",
+            status.displayLocation,
+            status.problem ?: "destination is not writable",
+        )
+    }
 
     developmentVersionWarning(command, version)?.let(logger::warn)
 
@@ -62,21 +79,35 @@ fun main(args: Array<String>) {
 }
 
 private fun handleFatalCommandFailure(command: HexanaCommand, error: Throwable): Nothing {
+    val category = when (command) {
+        is HexanaCommand.Stdio -> HexanaFailureCategory.STARTUP
+        is HexanaCommand.Http -> HexanaFailureCategory.HTTP_TRANSPORT
+        is HexanaCommand.Doctor,
+        is HexanaCommand.Version,
+        is HexanaCommand.Help -> HexanaFailureCategory.CLI_INTERNAL
+    }
     if (error is VirtualMachineError || error is LinkageError) {
-        logger.error("Fatal JVM error while running Hexana MCP server", error)
+        emitDiagnosticFailure(category, "Fatal runtime failure.", error)
         throw error
     }
 
     val userMessage = when (command) {
-        is HexanaCommand.Stdio -> "Hexana MCP server failed while running stdio transport. See server logs for details."
-        is HexanaCommand.Http -> "Hexana MCP server failed while running HTTP transport. See server logs for details."
-        is HexanaCommand.Doctor -> "Hexana MCP doctor failed. See server logs for details."
+        is HexanaCommand.Stdio -> "Hexana MCP server failed while running stdio transport."
+        is HexanaCommand.Http -> "Hexana MCP server failed while running HTTP transport."
+        is HexanaCommand.Doctor -> "Hexana MCP doctor failed."
         is HexanaCommand.Version,
-        is HexanaCommand.Help -> "Hexana MCP server failed. See server logs for details."
+        is HexanaCommand.Help -> "Hexana MCP server failed."
     }
-    logger.error(userMessage, error)
-    System.err.println(userMessage)
+    emitDiagnosticFailure(category, userMessage, error)
     exitProcess(1)
+}
+
+private fun HexanaCommand.configuredLogLevel(): HexanaLogLevel = when (this) {
+    is HexanaCommand.Stdio -> logLevel
+    is HexanaCommand.Http -> logLevel
+    is HexanaCommand.Doctor,
+    is HexanaCommand.Version,
+    is HexanaCommand.Help -> HexanaLogLevel.INFO
 }
 
 internal data class CommandAnalytics(
@@ -164,7 +195,6 @@ internal fun initializeMcpAnalytics(analytics: CommandAnalytics) {
 }
 
 private suspend fun runStdio(command: HexanaCommand.Stdio) {
-    configureLogging(command.logLevel)
     val server = createHexanaMcpServer(
         analysisService = createStandaloneHexanaAnalysisService(command.allowedRoots, command.resourceLimits),
         transport = HexanaEvent.McpTransport.STDIO,
@@ -182,7 +212,7 @@ private suspend fun runStdio(command: HexanaCommand.Stdio) {
         finished.complete(Unit)
     }
     transport.onError { error ->
-        logger.error("STDIO transport failed", error)
+        emitDiagnosticFailure(HexanaFailureCategory.STDIO_TRANSPORT, "STDIO transport failed.", error)
         finished.complete(Unit)
     }
 
@@ -196,7 +226,6 @@ private suspend fun runStdio(command: HexanaCommand.Stdio) {
 }
 
 private suspend fun runHttp(command: HexanaCommand.Http) {
-    configureLogging(command.logLevel)
     logger.info(
         "Starting HTTP MCP transport on http://{}:{}{} with {} tool profile",
         command.host,
