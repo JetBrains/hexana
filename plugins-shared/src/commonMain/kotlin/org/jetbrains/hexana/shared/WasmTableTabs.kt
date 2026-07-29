@@ -3,6 +3,7 @@ package org.jetbrains.hexana.shared
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.analysis.MonosResult
+import org.jetbrains.hexana.wasm.analysis.exceptions.ThrowingFunction
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageReason
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageResult
 
@@ -20,6 +21,8 @@ class WasmTableTabsProvider : TableTabsProvider {
             exportsTab(provider)?.let { add(it) }
             importsTab(provider)?.let { add(it) }
             functionsTab(provider)?.let { add(it) }
+            tagsTab(provider)?.let { add(it) }
+            exceptionSurfaceTab(provider)?.let { add(it) }
             customTab(provider)?.let { add(it) }
         }
     }
@@ -32,6 +35,13 @@ class WasmTableTabsProvider : TableTabsProvider {
             if (module.exportSection != null) add("Exports")
             if (module.importSection != null) add("Imports")
             if (module.codeSection != null) add("Functions")
+            // Tag-based EH present: Tags decodes the tag section; Exceptions is
+            // the panic-surface analysis (singleTab returns null and the
+            // placeholder is removed when the surface is empty).
+            if (module.exceptionSection != null) {
+                add("Tags")
+                add("Exceptions")
+            }
             if (module.customSections.isNotEmpty()) add("Custom")
         }
         return Pair(names, emptyList())
@@ -45,6 +55,8 @@ class WasmTableTabsProvider : TableTabsProvider {
             "Exports" -> exportsTab(provider)
             "Imports" -> importsTab(provider)
             "Functions" -> functionsTab(provider)
+            "Tags" -> tagsTab(provider)
+            "Exceptions" -> exceptionSurfaceTab(provider)
             "Custom" -> customTab(provider)
             else -> null
         }
@@ -196,6 +208,80 @@ private fun functionsTab(provider: WasmBinaryProvider): TableTabDescriptor? {
         rowSelectionProvider = { index ->
             val entry = codeOffsets.getOrNull(index)
             entry?.let { RowSelectionData(it.offset, it.size) }
+        },
+    )
+}
+
+private fun tagsTab(provider: WasmBinaryProvider): TableTabDescriptor? {
+    // Decoded exception tags, like the Types tab decodes type records: one row
+    // per tag (imported first) with its origin, attribute, and payload signature.
+    val tags = provider.exceptionTags?.entries.orEmpty()
+    if (tags.isEmpty()) return null
+
+    return TableTabDescriptor(
+        name = "Tags",
+        columns = listOf(
+            ColumnDescriptor(name = "Tag", widthBehavior = ColumnWidth.Measured("tag 000")) { index ->
+                CellValue(tags[index].globalIndex, "tag ${tags[index].globalIndex}")
+            },
+            ColumnDescriptor(name = "Origin", widthBehavior = ColumnWidth.Measured("imported")) { index ->
+                CellValue(if (tags[index].imported) "imported" else "defined")
+            },
+            ColumnDescriptor(name = "Attribute", widthBehavior = ColumnWidth.Measured("exception")) { index ->
+                CellValue(if (tags[index].attribute == 0) "exception" else "attr ${tags[index].attribute}")
+            },
+            ColumnDescriptor(name = "Payload", widthBehavior = ColumnWidth.Fill()) { index ->
+                val p = "${tags[index].payloadText}  (type ${tags[index].typeIdx})"
+                CellValue(p, tooltip = p)
+            },
+        ),
+        rowCount = tags.size,
+        defaultSortColumn = TableTabDescriptor.ID_COLUMN,
+    )
+}
+
+private fun exceptionSurfaceTab(provider: WasmBinaryProvider): TableTabDescriptor? {
+    // The module's panic surface: exported entry points whose exceptions escape
+    // to the host. Empty (all recovered) = no tab. v1 shows for tag-based EH
+    // modules; throw_ref-only host-rethrow modules typically recover panics.
+    val surface = provider.exceptionPropagation?.uncaughtAtEntry().orEmpty()
+    if (surface.isEmpty()) return null
+    val tags = provider.exceptionTags
+    val importFuncCount = provider.importFuncCount
+    val codeOffsets = provider.codeOffsets
+
+    fun uncaughtText(entry: ThrowingFunction): String {
+        val parts = entry.thrown.tags.sorted().map { t ->
+            tags?.payloadText(t)?.let { "tag $t $it" } ?: "tag $t"
+        }
+        val all = if (entry.thrown.dynamic) parts + "dynamic (host/throw_ref)" else parts
+        return all.joinToString(", ")
+    }
+
+    return TableTabDescriptor(
+        name = "Exceptions",
+        columns = listOf(
+            ColumnDescriptor(
+                name = "Exported entry",
+                widthBehavior = ColumnWidth.Fill(0.4f),
+            ) { index ->
+                val e = surface[index]
+                val label = e.name ?: "func ${e.funcIdx}"
+                CellValue(label, tooltip = label)
+            },
+            ColumnDescriptor(
+                name = "Escapes uncaught",
+                widthBehavior = ColumnWidth.Fill(),
+            ) { index ->
+                val text = uncaughtText(surface[index])
+                CellValue(text, tooltip = text)
+            },
+        ),
+        rowCount = surface.size,
+        rowSelectionProvider = { index ->
+            val e = surface.getOrNull(index) ?: return@TableTabDescriptor null
+            val codeIdx = e.funcIdx - importFuncCount
+            codeOffsets.getOrNull(codeIdx)?.let { RowSelectionData(it.offset, it.size) }
         },
     )
 }

@@ -5,6 +5,7 @@ import org.jetbrains.hexana.wasm.opcodes.numeric.F32
 import org.jetbrains.hexana.wasm.opcodes.numeric.F64
 import org.jetbrains.hexana.wasm.opcodes.numeric.I32
 import org.jetbrains.hexana.wasm.opcodes.numeric.I64
+import org.jetbrains.hexana.wasm.sections.WasmI32Type
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -71,4 +72,25 @@ class WatMnemonicsTest {
 
     @Test
     fun f64Copysign() = assertEquals("f64.copysign", watFor(F64.Copysign))
+
+    // -- Exception handling (try_table proposal) ----------------------------
+
+    @Test
+    fun throwRendersTagIndex() = assertEquals("throw 3", watFor(OpCodes.Flow.Trow(3u)))
+
+    @Test
+    fun throwRefRenders() = assertEquals("throw_ref", watFor(OpCodes.Flow.ThrowRef))
+
+    @Test
+    fun tryTableRendersCatchClauses() {
+        val op = OpCodes.Flow.TryTable(
+            blockType = WasmI32Type,
+            catches = listOf(
+                OpCodes.Flow.CatchType.Catch(tagIdx = 0u, labelIdx = 1u),
+                OpCodes.Flow.CatchType.CatchAll(labelIdx = 2u),
+            ),
+            code = emptyList(),
+        )
+        assertEquals("try_table (catch 0 1) (catch_all 2)", watFor(op))
+    }
 }

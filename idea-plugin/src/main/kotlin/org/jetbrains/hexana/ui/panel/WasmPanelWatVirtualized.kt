@@ -558,6 +558,20 @@ private fun WasmPanelWatVirtualizedContent(
                 val payload = provider.exceptionTags?.payloadText(t)
                 if (payload != null) "throw tag $t $payload" else "throw tag $t"
             } ?: "throw_ref (dynamic)"
+
+            // E2 interprocedural note: when the tag escapes locally, does it
+            // reach an exported entry uncaught? Names the entries it surfaces at.
+            fun entryReachability(tag: Int?): String? {
+                val prop = provider.exceptionPropagation ?: return null
+                val entries = prop.uncaughtAtEntry().filter { e ->
+                    if (tag != null) tag in e.thrown.tags else e.thrown.dynamic
+                }
+                if (entries.isEmpty()) return null
+                val names = entries.take(3).joinToString(", ") { it.name ?: "func ${it.funcIdx}" }
+                val more = if (entries.size > 3) ", +${entries.size - 3} more" else ""
+                return "escapes the module at ${entries.size} exported entr${if (entries.size == 1) "y" else "ies"}: $names$more"
+            }
+
             when (val r = site.resolution) {
                 is ThrowResolution.CaughtHere -> ThrowHandlerData(
                     header = tagText,
@@ -571,6 +585,7 @@ private fun WasmPanelWatVirtualizedContent(
                 ThrowResolution.Escapes -> ThrowHandlerData(
                     header = tagText,
                     outcome = "escapes this function — propagates to callers",
+                    analysis = entryReachability(site.tagIdx),
                 )
                 is ThrowResolution.Dynamic -> {
                     val handler = r.handlerOffset
@@ -582,6 +597,7 @@ private fun WasmPanelWatVirtualizedContent(
                             "escapes this function (dynamic throw_ref)"
                         },
                         handlerOffset = handler?.toLong(),
+                        analysis = if (handler == null) entryReachability(null) else null,
                     )
                 }
             }

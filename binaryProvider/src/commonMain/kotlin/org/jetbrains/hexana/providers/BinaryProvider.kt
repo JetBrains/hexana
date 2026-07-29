@@ -67,6 +67,8 @@ import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphBuilder
 import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphResult
 import org.jetbrains.hexana.wasm.analysis.dispatch.DispatchCandidates
 import org.jetbrains.hexana.wasm.analysis.dispatch.DispatchCandidatesBuilder
+import org.jetbrains.hexana.wasm.analysis.exceptions.ExceptionPropagation
+import org.jetbrains.hexana.wasm.analysis.exceptions.ExceptionPropagationBuilder
 import org.jetbrains.hexana.wasm.analysis.exceptions.WasmExceptionTags
 import org.jetbrains.hexana.wasm.analysis.exceptions.WasmExceptionTagsBuilder
 import org.jetbrains.hexana.wasm.analysis.graph.DominatorResult
@@ -976,6 +978,19 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
      */
     val exceptionTags: WasmExceptionTags? by lazy {
         wasmModule?.let { WasmExceptionTagsBuilder.build(bytes, it) }
+    }
+
+    /**
+     * Interprocedural exception propagation: per-function effective
+     * uncaught-throw sets and the module's panic surface (exported entries
+     * whose exceptions escape to the host). One opcode walk per function plus
+     * a call-graph fixed point — heavier than [exceptionTags], so lazy and
+     * built off the EDT by UI callers, like [callGraphResult].
+     */
+    val exceptionPropagation: ExceptionPropagation? by lazy {
+        val module = wasmModule ?: return@lazy null
+        val names = nameSection?.functionSubsection?.namemap ?: emptyMap()
+        ExceptionPropagationBuilder.build(bytes, module, names)
     }
 
     val importFuncCount: Int by lazy {

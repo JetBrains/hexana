@@ -59,6 +59,11 @@ internal fun watFor(op: OpCode, symbols: WatSymbolNames? = null): String {
         is OpCodes.Flow.BrOnNull -> "br_on_null ${op.value}"
         is OpCodes.Flow.BrOnNonNull -> "br_on_non_null ${op.value}"
 
+        // -- Exception handling (try_table proposal) ------------------------
+        is OpCodes.Flow.Trow -> "throw ${op.value}"
+        is OpCodes.Flow.ThrowRef -> "throw_ref"
+        is OpCodes.Flow.TryTable -> "try_table" + op.catches.joinToString("") { " ${catchClauseText(it)}" }
+
         // -- Local / Global -------------------------------------------------
         is OpCodes.Local.Get -> "local.get ${op.value}"
         is OpCodes.Local.Set -> "local.set ${op.value}"
@@ -290,6 +295,14 @@ private fun formatDouble(value: Double): String = when {
         val s = value.toString()
         if ('.' in s || 'e' in s || 'E' in s) s else "$s.0"
     }
+}
+
+/** WAT text for one `try_table` catch clause, matching wasm-tools spelling. */
+private fun catchClauseText(catch: OpCodes.Flow.CatchType): String = when (catch) {
+    is OpCodes.Flow.CatchType.Catch -> "(catch ${catch.tagIdx} ${catch.labelIdx})"
+    is OpCodes.Flow.CatchType.CatchRef -> "(catch_ref ${catch.tagIdx} ${catch.labelIdx})"
+    is OpCodes.Flow.CatchType.CatchAll -> "(catch_all ${catch.labelIdx})"
+    is OpCodes.Flow.CatchType.CatchAllRef -> "(catch_all_ref ${catch.labelIdx})"
 }
 
 /** Last-resort placeholder for opcodes not yet covered by [watFor]. */

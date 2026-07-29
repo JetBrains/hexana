@@ -40,6 +40,8 @@ internal data class ThrowHandlerData(
     val header: String,
     val outcome: String,
     val handlerOffset: Long? = null,
+    /** Interprocedural note (E2), e.g. "escapes the module at 2 exported entries: fetch, init". */
+    val analysis: String? = null,
 )
 
 /**
@@ -99,6 +101,9 @@ internal fun WasmThrowHandlerPopup(
                         style = textStyle,
                         modifier = Modifier.padding(top = 4.dp),
                     )
+                }
+                data.analysis?.let { analysis ->
+                    Text(text = "(; $analysis ;)", style = textStyle, modifier = Modifier.padding(top = 4.dp))
                 }
                 Text(
                     text = if (handler != null) "click: go to handler  ·  Esc: close" else "Esc: close",

@@ -7,6 +7,15 @@ import org.jetbrains.hexana.wasm.sections.WasmRecursiveTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmTagType
 
+/** One decoded exception tag: its global index, origin, attribute, and payload. */
+data class TagInfo(
+    val globalIndex: Int,
+    val imported: Boolean,
+    val attribute: Int,
+    val typeIdx: Int,
+    val payloadText: String,
+)
+
 /**
  * Resolves a module's exception tags to display signatures. Tag index space is
  * imported tags (import section, external kind tag) first, then the tags
@@ -15,19 +24,14 @@ import org.jetbrains.hexana.wasm.sections.WasmTagType
  * label reuses [DispatchSignature] rendering.
  */
 class WasmExceptionTags internal constructor(
-    private val tagTypeIndices: List<Int>,
-    private val typeSignatures: Map<Int, DispatchSignature>,
+    val entries: List<TagInfo>,
 ) {
 
     /** Number of tags in the whole module (imported + defined). */
-    val count: Int get() = tagTypeIndices.size
+    val count: Int get() = entries.size
 
     /** `(i32)` payload rendering for [globalTagIdx], or null when unknown. */
-    fun payloadText(globalTagIdx: Int): String? {
-        val typeIdx = tagTypeIndices.getOrNull(globalTagIdx) ?: return null
-        val sig = typeSignatures[typeIdx] ?: return null
-        return "(" + sig.params.joinToString(", ") { it.toString().substringAfterLast('.').removeSuffix("Type").lowercase() } + ")"
-    }
+    fun payloadText(globalTagIdx: Int): String? = entries.getOrNull(globalTagIdx)?.payloadText
 }
 
 object WasmExceptionTagsBuilder {
@@ -40,7 +44,9 @@ object WasmExceptionTagsBuilder {
         for (record in typeRecords) {
             when (record) {
                 is WasmRecursiveTypeRecord -> for (entry in record.entries) {
-                    if (entry is WasmSectionFunctionTypeRecord) typeSignatures[typeIdx] = DispatchSignature(entry.params, entry.retTypes)
+                    if (entry is WasmSectionFunctionTypeRecord) {
+                        typeSignatures[typeIdx] = DispatchSignature(entry.params, entry.retTypes)
+                    }
                     typeIdx++
                 }
                 is WasmSectionFunctionTypeRecord -> {
@@ -51,16 +57,38 @@ object WasmExceptionTagsBuilder {
             }
         }
 
-        val tagTypeIndices = ArrayList<Int>()
+        fun payload(ti: Int): String {
+            val sig = typeSignatures[ti] ?: return "(?)"
+            return "(" + sig.params.joinToString(", ") { valueTypeName(it) } + ")"
+        }
+
+        val entries = ArrayList<TagInfo>()
+        var idx = 0
         module.importSection?.let { section ->
             for (record in with(section) { buffer.getImportRecords() }) {
                 val type = record.type
-                if (type is WasmTagType) tagTypeIndices.add(type.index.index.toInt())
+                if (type is WasmTagType) {
+                    val ti = type.index.index.toInt()
+                    entries.add(TagInfo(idx++, imported = true, attribute = 0, typeIdx = ti, payloadText = payload(ti)))
+                }
             }
         }
         module.exceptionSection?.let { section ->
-            for (tag in with(section) { buffer.scanTags() }) tagTypeIndices.add(tag.typeIdx)
+            for (tag in with(section) { buffer.scanTags() }) {
+                entries.add(
+                    TagInfo(
+                        globalIndex = idx++,
+                        imported = false,
+                        attribute = tag.attribute,
+                        typeIdx = tag.typeIdx,
+                        payloadText = payload(tag.typeIdx),
+                    ),
+                )
+            }
         }
-        return WasmExceptionTags(tagTypeIndices, typeSignatures)
+        return WasmExceptionTags(entries)
     }
 }
+
+private fun valueTypeName(type: Any): String =
+    type.toString().substringAfterLast('.').removeSuffix("Type").lowercase()
