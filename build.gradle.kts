@@ -6,7 +6,6 @@ import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsEnvSpec
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsPlugin
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsRootPlugin
 import org.jetbrains.kotlin.gradle.testing.internal.KotlinTestReport
-import java.util.concurrent.TimeUnit
 
 plugins {
     alias(libs.plugins.graalvm.native) apply(false)
@@ -93,6 +92,7 @@ val teamcityCiTestTaskPaths = listOf(
     ":mcp:scripting:test",
     ":mcp:server:test",
     ":mcp:server:verifyMcpRuntimeClassFileVersions",
+    ":mcp:server:verifyMcpServerOwnershipBoundary",
     ":mcp:server:verifyNativeMcpVersionSmokeAssertion",
     ":mcp:server:verifyHexanaToolDispatcherUpToDate",
     ":idea-plugin:verifyHexanaToolsetUpToDate",
