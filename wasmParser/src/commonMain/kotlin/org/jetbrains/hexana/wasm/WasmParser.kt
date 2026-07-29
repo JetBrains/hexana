@@ -49,12 +49,13 @@ class WasmParser {
 
         val isWasmHeader = header.contentEquals(WASM_MAGIC)
 
+        if (!isWasmHeader) return WasmParseFailure()
+        if (buffer.remaining() < 4) return WasmParseFailure()
+
         val versionBytes = ByteArray(4)
         buffer.get(versionBytes, 0, 4)
         val versionRaw = versionBytes[3].toUInt().shl(24) or (versionBytes[2].toUInt().shl(16)) or (versionBytes[1].toUInt().shl( 8)) or versionBytes[0].toUInt()
         val (version, layer) = versionRaw.and(0xffffu).toUShort() to versionRaw.shr(16).and(0xfffffu).toUShort()
-
-        if (!isWasmHeader) return WasmParseFailure()
 
         val sections = mutableListOf<WasmSection>()
         while (buffer.hasRemaining()) {

@@ -2177,6 +2177,18 @@ class WasmParserTests {
         val unparsedOpCodes = ops.filterIsInstance<UnparsedOpCode>()
         assertTrue(unparsedOpCodes.isEmpty())
     }
+
+    @Test
+    fun `incomplete version after valid wasm header`() = runTest {
+        // Valid wasm magic header followed by only 3 bytes of version instead of 4
+        val bytes = byteArrayOf(
+            0x00, 0x61, 0x73, 0x6D, // wasm magic
+            0x01, 0x00, 0x00         // incomplete version (3 bytes instead of 4)
+        )
+        val buffer = bytes.toCommonByteBuffer()
+        val result = WasmParser().parse(buffer)
+        assertIs<WasmParseFailure>(result)
+    }
 }
 
 
