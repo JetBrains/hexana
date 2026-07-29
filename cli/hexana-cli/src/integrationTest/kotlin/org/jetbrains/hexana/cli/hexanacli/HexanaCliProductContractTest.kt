@@ -73,6 +73,11 @@ class HexanaCliProductContractTest {
     }
 
     @Test
+    fun productRejectsMissingBinarySource() {
+        assertFailure(target.run(listOf("summarize-binary")), 2, "Missing summarize-binary source. Provide a path, --stdin, or a base64 source option.")
+    }
+
+    @Test
     fun productMapsUsageAndSourceValidationFailuresWithoutStackTraces() {
         val base64 = Base64.getEncoder().encodeToString(MINIMAL_WASM_MODULE)
         assertFailure(target.run(listOf("summarize-module", "--format", "raw")), 2, "Unsupported summarize-module format")
