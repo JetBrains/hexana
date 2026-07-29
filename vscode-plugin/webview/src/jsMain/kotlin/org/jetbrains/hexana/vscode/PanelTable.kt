@@ -410,6 +410,7 @@ private class RowCallbacks {
 internal fun PanelTableRow(
     isHighlighted: Boolean = false,
     backgroundColor: String? = null,
+    attrs: Map<String, String> = emptyMap(),
     onClick: () -> Unit = {},
     onSelect: (() -> Unit)? = null,
     onActivate: (() -> Unit)? = null,
@@ -425,6 +426,7 @@ internal fun PanelTableRow(
 
     Tr({
         classes("hexana-panel-row")
+        for ((k, v) in attrs) attr(k, v)
         tabIndex(0)
         style {
             property("cursor", "pointer")

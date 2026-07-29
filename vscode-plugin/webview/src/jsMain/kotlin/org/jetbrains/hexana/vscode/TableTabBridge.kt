@@ -741,6 +741,8 @@ private fun TreeTableTabContent(
 
     // Track which flattened row is currently focused (keyboard-navigated or clicked).
     var focusedFlatIndex by remember(descriptor) { mutableStateOf(-1) }
+    // Revision counter to force scroll even when focusedFlatIndex doesn't change.
+    var scrollRevision by remember(descriptor) { mutableStateOf(0) }
 
     val headers = buildList {
         add("")
@@ -838,6 +840,7 @@ private fun TreeTableTabContent(
             onSortAscendingChange = { sortAscending = it },
             focusedFlatIndex = focusedFlatIndex,
             onFocusedFlatIndexChange = { focusedFlatIndex = it },
+            scrollRevision = scrollRevision,
             isSearchVisible = isSearchVisible,
             onSearchVisibleChange = { isSearchVisible = it },
             searchQuery = searchQuery,
@@ -884,21 +887,28 @@ private fun TreeTableTabContent(
                 SizeTreemapCanvas(
                     treemapData = treemapData,
                     onNodeClicked = { treePath ->
-                        // Expand ancestor paths so the target row is visible.
+                        if (treePath.isEmpty()) return@SizeTreemapCanvas
+                        // Expand only the ancestor paths (not the target
+                        // itself) so the target row becomes visible without
+                        // expanding it.  This avoids the recomposition-
+                        // driven scroll drift that occurred when the
+                        // clicked node was also expanded.
                         for (i in 1 until treePath.size) {
                             val ancestorPath = treePath.subList(0, i)
                             if (ancestorPath !in expandedPaths) {
                                 expandedPaths.add(ancestorPath)
                             }
                         }
-                        // Find and select the target row after expansion.
+                        // Find and select the target row.
                         val updatedRows = flattenTreeVsc(
                             descriptor, expandedPaths.toSet(),
                             sortColumnIndex, sortAscending,
+                            debouncedQuery, activeFilter,
                         )
                         val targetIndex = updatedRows.indexOfFirst { it.treePath == treePath }
                         if (targetIndex >= 0) {
                             focusedFlatIndex = targetIndex
+                            scrollRevision++
                             val row = updatedRows[targetIndex]
                             val selData = row.rowSelectionProvider(row.index)
                             if (selData != null) {
@@ -1011,6 +1021,7 @@ private fun TreeTableBody(
     onSortAscendingChange: (Boolean) -> Unit,
     focusedFlatIndex: Int,
     onFocusedFlatIndexChange: (Int) -> Unit,
+    scrollRevision: Int,
     isSearchVisible: Boolean,
     onSearchVisibleChange: (Boolean) -> Unit,
     searchQuery: String,
@@ -1023,23 +1034,81 @@ private fun TreeTableBody(
     var scrollTop by remember { mutableStateOf(0.0) }
     var viewportHeight by remember { mutableStateOf(600.0) }
     var tableWrapperElement by remember { mutableStateOf<org.w3c.dom.Element?>(null) }
+    // Programmatic-scroll lock.  While active, the scroll-event listener
+    // does not update the Compose `scrollTop` state — instead it re-pins
+    // the DOM scroll position to `pinnedScrollTop` so that recomposition-
+    // driven spacer changes cannot drift the view away from the target row.
+    // Using a plain array (not Compose state) so toggling won't recompose.
+    val suppressScroll = remember { booleanArrayOf(false) }
+    val pinnedScrollTop = remember { doubleArrayOf(0.0) }
+    // Timer handle for the deferred unlock; stored so we can cancel it on
+    // re-entry (rapid successive treemap clicks).
+    val unlockTimerHandle = remember { intArrayOf(0) }
 
     // Scroll the table to make the focused row visible when it changes.
-    LaunchedEffect(focusedFlatIndex) {
+    // For treemap clicks (scrollRevision > 0) we use a multi-phase scroll:
+    //   1. Set scrollTop so the virtual-scroll window renders the target row's
+    //      region (spacers update on recomposition).
+    //   2. After the DOM stabilises, locate the actual focused row element
+    //      (marked with data-focused) and use scrollIntoView, then adjust
+    //      for the sticky header.
+    LaunchedEffect(focusedFlatIndex, scrollRevision) {
+        val idx = focusedFlatIndex
         val wrapper = tableWrapperElement ?: return@LaunchedEffect
-        if (focusedFlatIndex < 0) return@LaunchedEffect
-        val thead = wrapper.querySelector("thead")
-        val headerHeight = thead?.getBoundingClientRect()?.height ?: 0.0
-        val rowTop = headerHeight + focusedFlatIndex * rowHeight
-        val rowBottom = rowTop + rowHeight
-        val currentScrollTop = wrapper.scrollTop
-        val visibleTop = currentScrollTop + headerHeight
-        val visibleBottom = currentScrollTop + wrapper.clientHeight.toDouble()
-        if (rowTop < visibleTop) {
-            wrapper.scrollTop = rowTop - headerHeight
-        } else if (rowBottom > visibleBottom) {
-            wrapper.scrollTop = rowBottom - wrapper.clientHeight.toDouble()
+        if (idx < 0 || scrollRevision == 0) return@LaunchedEffect
+
+        // Cancel any pending unlock from a previous programmatic scroll.
+        if (unlockTimerHandle[0] != 0) {
+            kotlinx.browser.window.clearTimeout(unlockTimerHandle[0])
+            unlockTimerHandle[0] = 0
         }
+
+        // Suppress the scroll listener and pin to the target position.
+        suppressScroll[0] = true
+
+        // Phase 1: set scrollTop so the virtual-scroll window renders the
+        // region around the target row.  Use the raw row offset (without
+        // header adjustment) — the sticky header is a viewport concern
+        // handled in Phase 2 via scrollIntoView.
+        val targetScrollTop = (idx * rowHeight).toDouble()
+        pinnedScrollTop[0] = targetScrollTop
+        scrollTop = targetScrollTop
+        wrapper.scrollTop = targetScrollTop
+        // Yield so Compose recomposes with the updated scrollTop and the
+        // DOM (spacers) reflects the new virtual-scroll window.
+        delay(50)
+
+        // Phase 2: locate the actual focused row element and use
+        // scrollIntoView to position it correctly, then adjust for the
+        // sticky header that overlaps the top of the scroll viewport.
+        val focusedRow = wrapper.querySelector("tr[data-focused]")
+        if (focusedRow != null) {
+            focusedRow.asDynamic().scrollIntoView(
+                js("({block: 'nearest', inline: 'nearest'})")
+            )
+            val headerHeight = wrapper.querySelector("thead")
+                ?.getBoundingClientRect()?.height ?: 0.0
+            val rowRect = focusedRow.getBoundingClientRect()
+            val wrapperRect = wrapper.getBoundingClientRect()
+            val visibleTop = wrapperRect.top + 3 * headerHeight
+            if (rowRect.top < visibleTop) {
+                wrapper.scrollTop -= (visibleTop - rowRect.top)
+            }
+        }
+
+        // Pin to the final position so the re-pin listener keeps the
+        // scroll stable during recomposition settle.
+        pinnedScrollTop[0] = wrapper.scrollTop
+        scrollTop = wrapper.scrollTop
+
+        // Schedule unlock after a generous delay.  Recomposition on large
+        // tables can take many frames; a fixed timeout is more reliable
+        // than counting animation frames.
+        unlockTimerHandle[0] = kotlinx.browser.window.setTimeout({
+            scrollTop = wrapper.scrollTop
+            suppressScroll[0] = false
+            unlockTimerHandle[0] = 0
+        }, 500)
     }
 
     val totalRows = flatRows.size
@@ -1110,8 +1179,17 @@ private fun TreeTableBody(
                 scrollTop = tableWrapper.scrollTop
 
                 val listener = EventListener {
-                    viewportHeight = tableWrapper.clientHeight.toDouble()
-                    scrollTop = tableWrapper.scrollTop
+                    if (suppressScroll[0]) {
+                        // Re-pin: recomposition may have changed spacer
+                        // heights causing the browser to adjust scrollTop.
+                        // Force it back to the pinned position.
+                        if (kotlin.math.abs(tableWrapper.scrollTop - pinnedScrollTop[0]) > 1.0) {
+                            tableWrapper.scrollTop = pinnedScrollTop[0]
+                        }
+                    } else {
+                        viewportHeight = tableWrapper.clientHeight.toDouble()
+                        scrollTop = tableWrapper.scrollTop
+                    }
                 }
                 tableWrapper.addEventListener("scroll", listener)
                 onDispose {
@@ -1195,6 +1273,7 @@ private fun TreeTableBody(
 
                         PanelTableRow(
                             isHighlighted = isHighlighted,
+                            attrs = if (isHighlighted) mapOf("data-focused" to "") else emptyMap(),
                             onClick = {
                                 onFocusedFlatIndexChange(flatIndex)
                                 if (row.hasChildren) {
