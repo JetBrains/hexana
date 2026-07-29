@@ -20,6 +20,23 @@ class BoundedFileReaderTest {
     }
 
     @Test
+    fun acceptsEmptyFileAtZeroLimit() {
+        val result = readFileBytesBounded(unusedPath, 0) { ByteArrayInputStream(byteArrayOf()) }
+
+        assertContentEquals(byteArrayOf(), result.requireBytes())
+    }
+
+    @Test
+    fun detectsOversizedFileAtZeroLimitWithOneByteProbe() {
+        val source = CountingInputStream(byteArrayOf(42, 43))
+
+        val result = readFileBytesBounded(unusedPath, 0) { source }
+
+        assertEquals(BoundedFileReadResult.TooLarge(1), result)
+        assertEquals(1, source.consumedBytes)
+    }
+
+    @Test
     fun returnsOnlyOneSentinelByteForOversizedFile() {
         val source = CountingInputStream(ByteArray(32) { it.toByte() })
 

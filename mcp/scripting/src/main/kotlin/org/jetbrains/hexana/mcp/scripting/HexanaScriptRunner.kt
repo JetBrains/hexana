@@ -438,41 +438,35 @@ class HexanaScriptRunner private constructor(
 }
 
 private fun readScriptFileBounded(path: java.nio.file.Path, maxBytes: Int): ScriptFileReadResult {
-    val sentinelSize = maxBytes.toLong() + 1L
-    var bytes = ByteArray(minOf(sentinelSize, 8L * 1024L).toInt())
+    var bytes = ByteArray(minOf(maxBytes, 8 * 1024))
     var offset = 0
     Files.newInputStream(path).use { input ->
-        while (offset.toLong() < sentinelSize) {
+        while (offset < maxBytes) {
             if (offset == bytes.size) {
-                if (bytes.size == Int.MAX_VALUE) {
-                    return if (input.read() < 0) {
-                        ScriptFileReadResult.Bytes(bytes)
-                    } else {
-                        ScriptFileReadResult.TooLarge
-                    }
-                }
                 bytes = bytes.copyOf(
-                    minOf(sentinelSize, bytes.size.toLong() * 2L, Int.MAX_VALUE.toLong()).toInt()
+                    minOf(maxBytes.toLong(), bytes.size.toLong() * 2L).toInt()
                 )
             }
             val count = input.read(bytes, offset, bytes.size - offset)
             when {
-                count < 0 -> break
+                count < 0 -> return ScriptFileReadResult.Bytes(bytes.trimToScriptSize(offset))
                 count > 0 -> offset += count
                 else -> {
                     val singleByte = input.read()
-                    if (singleByte < 0) break
+                    if (singleByte < 0) return ScriptFileReadResult.Bytes(bytes.trimToScriptSize(offset))
                     bytes[offset++] = singleByte.toByte()
                 }
             }
         }
-    }
-    return if (offset.toLong() == sentinelSize) {
-        ScriptFileReadResult.TooLarge
-    } else {
-        ScriptFileReadResult.Bytes(if (offset == bytes.size) bytes else bytes.copyOf(offset))
+        return if (input.read() < 0) {
+            ScriptFileReadResult.Bytes(bytes)
+        } else {
+            ScriptFileReadResult.TooLarge
+        }
     }
 }
+
+private fun ByteArray.trimToScriptSize(size: Int): ByteArray = if (size == this.size) this else copyOf(size)
 
 private sealed interface ScriptFileReadResult {
     data class Bytes(val bytes: ByteArray) : ScriptFileReadResult
