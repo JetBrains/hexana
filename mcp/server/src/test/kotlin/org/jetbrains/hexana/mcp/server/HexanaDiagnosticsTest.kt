@@ -11,9 +11,11 @@ import org.junit.rules.TemporaryFolder
 import java.time.Instant
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import org.slf4j.LoggerFactory
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
@@ -164,12 +166,109 @@ class HexanaDiagnosticsTest {
         assertTrue(status.available)
     }
 
+    @Test
+    fun retainsNewestTwentyDiagnosticFilesAndLeavesOtherEntriesUntouched() {
+        val logDirectory = temporaryFolder.newFolder("retention-logs").toPath()
+        val unrelatedFile = Files.writeString(logDirectory.resolve("notes.txt"), "keep")
+        val matchingDirectory = Files.createDirectory(logDirectory.resolve("hexana-mcp-directory.jsonl"))
+        repeat(MAX_STRUCTURED_DIAGNOSTIC_SESSION_FILES + 5) { index ->
+            val file = Files.writeString(
+                logDirectory.resolve(oldDiagnosticFileName(index)),
+                "old",
+            )
+            Files.setLastModifiedTime(file, FileTime.fromMillis(index.toLong()))
+        }
+
+        HexanaDiagnosticSession.open(
+            context = minimalContext(),
+            envReader = { if (it == HEXANA_MCP_LOG_DIR_ENV) logDirectory.toString() else null },
+            now = { Instant.parse("2026-07-29T12:00:00Z") },
+        ).use { session ->
+            val matchingFiles = Files.list(logDirectory).use { entries ->
+                entries.filter { Files.isRegularFile(it) }
+                    .filter { it.fileName.toString().startsWith("hexana-mcp-") }
+                    .filter { it.fileName.toString().endsWith(".jsonl") }
+                    .toList()
+            }
+            assertEquals(MAX_STRUCTURED_DIAGNOSTIC_SESSION_FILES, matchingFiles.size)
+            assertTrue(session.status.file in matchingFiles)
+            repeat(6) { index ->
+                assertFalse(Files.exists(logDirectory.resolve(oldDiagnosticFileName(index))))
+            }
+            repeat(19) { offset ->
+                assertTrue(Files.exists(logDirectory.resolve(oldDiagnosticFileName(offset + 6))))
+            }
+            assertTrue(Files.exists(unrelatedFile))
+            assertTrue(Files.isDirectory(matchingDirectory))
+        }
+    }
+
+    @Test
+    fun prunesOnlyAfterRolloverAndRetainsValidNewestRecords() {
+        val logDirectory = temporaryFolder.newFolder("rolling-logs").toPath()
+        val unrelatedFile = Files.writeString(logDirectory.resolve("notes.txt"), "keep")
+        val matchingDirectory = Files.createDirectory(logDirectory.resolve("hexana-mcp-directory.jsonl"))
+        val session = HexanaDiagnosticSession.open(
+            context = minimalContext(),
+            envReader = { if (it == HEXANA_MCP_LOG_DIR_ENV) logDirectory.toString() else null },
+            now = { Instant.parse("2026-07-29T12:00:00Z") },
+            maxFileSizeBytes = 1_024,
+            retainedFileLimit = 3,
+        )
+
+        try {
+            LoggerFactory.getLogger("diagnostic-isolation-test").error("human root message")
+            val oldFiles = (0..3).map { index ->
+                Files.writeString(logDirectory.resolve(oldDiagnosticFileName(index)), "{\"old\":$index}\n")
+                    .also { Files.setLastModifiedTime(it, FileTime.fromMillis(index.toLong())) }
+            }
+            session.report(
+                HexanaFailureCategory.TOOL_INTERNAL,
+                "before-rollover",
+                IllegalStateException("not serialized"),
+            )
+
+            assertEquals(5, diagnosticFiles(logDirectory).size)
+            assertFalse(diagnosticFiles(logDirectory).any { it.fileName.toString().contains(".1.jsonl") })
+
+            var index = 0
+            while (diagnosticFiles(logDirectory).none { it.fileName.toString().contains(".1.jsonl") }) {
+                session.report(
+                    HexanaFailureCategory.TOOL_INTERNAL,
+                    "record-${index++}-${"x".repeat(300)}",
+                    IllegalStateException("not serialized"),
+                )
+                assertTrue(index < 20, "Expected diagnostic rollover")
+            }
+
+            val diagnosticFiles = diagnosticFiles(logDirectory)
+            assertEquals(3, diagnosticFiles.size)
+            assertTrue(oldFiles.dropLast(1).none(Files::exists))
+            val records = diagnosticFiles.flatMap { file ->
+                Files.readAllLines(file)
+                    .filter(String::isNotBlank)
+                    .map { Json.parseToJsonElement(it).jsonObject }
+            }
+            val serialized = records.joinToString("\n")
+            assertFalse("human root message" in serialized)
+            assertTrue("before-rollover" in serialized)
+            assertTrue("record-${index - 1}-" in serialized)
+            assertTrue(Files.exists(unrelatedFile))
+            assertTrue(Files.isDirectory(matchingDirectory))
+        } finally {
+            session.close()
+        }
+    }
+
     private fun diagnosticFiles(directory: Path): List<Path> = Files.list(directory).use { entries ->
         entries.filter { Files.isRegularFile(it) }
             .filter { it.fileName.toString().startsWith("hexana-mcp-") }
             .filter { it.fileName.toString().endsWith(".jsonl") }
             .toList()
     }
+
+    private fun oldDiagnosticFileName(index: Int) =
+        "hexana-mcp-20260728-1200${index.toString().padStart(2, '0')}-old.jsonl"
 
     private fun minimalContext() = HexanaDiagnosticContext(
         version = "test",

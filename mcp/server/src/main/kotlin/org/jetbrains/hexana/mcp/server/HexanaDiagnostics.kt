@@ -1,5 +1,12 @@
 package org.jetbrains.hexana.mcp.server
 
+import ch.qos.logback.classic.LoggerContext
+import ch.qos.logback.core.encoder.EncoderBase
+import ch.qos.logback.core.rolling.FixedWindowRollingPolicy
+import ch.qos.logback.core.rolling.RollingFileAppender
+import ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy
+import ch.qos.logback.core.util.Duration
+import ch.qos.logback.core.util.FileSize
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -8,14 +15,17 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.Path
-import java.nio.file.StandardOpenOption
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 internal const val HEXANA_MCP_LOG_DIR_ENV = "HEXANA_MCP_LOG_DIR"
+internal const val MAX_STRUCTURED_DIAGNOSTIC_SESSION_FILES = 20
+internal const val MAX_STRUCTURED_DIAGNOSTIC_FILE_BYTES = 10L * 1024 * 1024
 private val DIAGNOSTIC_FILE_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
     .withZone(ZoneOffset.UTC)
 
@@ -59,6 +69,8 @@ internal class HexanaDiagnosticSession private constructor(
     private val context: HexanaDiagnosticContext,
     private val sessionId: String,
     private val now: () -> Instant,
+    private val appender: DiagnosticRollingFileAppender?,
+    private val retainedFileLimit: Int,
     initialStatus: HexanaDiagnosticStatus,
 ) : AutoCloseable {
     @Volatile
@@ -100,7 +112,7 @@ internal class HexanaDiagnosticSession private constructor(
     }
 
     private fun append(event: JsonObject) {
-        val file = currentStatus.file ?: return
+        val fileAppender = appender ?: return
         val record = buildJsonObject {
             put("schema_version", 1)
             put("timestamp", now().toString())
@@ -109,7 +121,10 @@ internal class HexanaDiagnosticSession private constructor(
         }
         try {
             synchronized(this) {
-                Files.writeString(file, record.toString() + "\n", StandardOpenOption.APPEND)
+                fileAppender.doAppend(record.toString())
+                if (fileAppender.consumeRollover()) {
+                    pruneDiagnosticFiles(currentStatus.directory, currentStatus.file ?: return, retainedFileLimit)
+                }
             }
         } catch (error: Exception) {
             markUnavailable(error)
@@ -117,6 +132,7 @@ internal class HexanaDiagnosticSession private constructor(
     }
 
     private fun markUnavailable(error: Throwable) {
+        close()
         currentStatus = HexanaDiagnosticStatus(
             directory = currentStatus.directory,
             file = null,
@@ -125,7 +141,10 @@ internal class HexanaDiagnosticSession private constructor(
         )
     }
 
-    override fun close() = Unit
+    override fun close() {
+        appender?.stop()
+        (appender?.context as? LoggerContext)?.stop()
+    }
 
     private fun contextJson(): JsonObject = buildJsonObject {
         put("version", context.version)
@@ -146,21 +165,118 @@ internal class HexanaDiagnosticSession private constructor(
             envReader: (String) -> String? = System::getenv,
             userHome: String? = null,
             now: () -> Instant = Instant::now,
+            maxFileSizeBytes: Long = MAX_STRUCTURED_DIAGNOSTIC_FILE_BYTES,
+            retainedFileLimit: Int = MAX_STRUCTURED_DIAGNOSTIC_SESSION_FILES,
         ): HexanaDiagnosticSession {
+            require(maxFileSizeBytes > 0)
+            require(retainedFileLimit > 1)
             val directory = resolveDiagnosticDirectory(envReader, userHome)
             val sessionId = UUID.randomUUID().toString().substring(0, 12)
             val file = directory.resolve(
                 "hexana-mcp-${DIAGNOSTIC_FILE_TIMESTAMP.format(now())}-$sessionId.jsonl"
             )
+            var appender: DiagnosticRollingFileAppender? = null
             val status = try {
                 Files.createDirectories(directory)
-                Files.createFile(file)
+                appender = diagnosticAppender(file, maxFileSizeBytes, retainedFileLimit)
+                pruneDiagnosticFiles(directory, file, retainedFileLimit)
                 HexanaDiagnosticStatus(directory, file, available = true)
             } catch (error: Exception) {
+                appender?.stop()
                 HexanaDiagnosticStatus(directory, file = null, available = false, problem = error.javaClass.simpleName)
             }
-            return HexanaDiagnosticSession(context, sessionId, now, status).also { it.recordStart() }
+            return HexanaDiagnosticSession(context, sessionId, now, appender, retainedFileLimit, status)
+                .also { it.recordStart() }
         }
+    }
+}
+
+private fun diagnosticAppender(
+    file: Path,
+    maxFileSizeBytes: Long,
+    retainedFileLimit: Int,
+): DiagnosticRollingFileAppender {
+    val loggerContext = LoggerContext().apply { name = "hexana-structured-diagnostics-${UUID.randomUUID()}" }
+    val encoder = object : EncoderBase<String>() {
+        override fun encode(event: String): ByteArray = "$event\n".toByteArray(StandardCharsets.UTF_8)
+        override fun headerBytes(): ByteArray? = null
+        override fun footerBytes(): ByteArray? = null
+    }.apply {
+        context = loggerContext
+        start()
+    }
+    val appender = DiagnosticRollingFileAppender().apply {
+        context = loggerContext
+        name = "hexana-structured-diagnostics"
+        setFile(file.toString())
+        setEncoder(encoder)
+    }
+    val rollingPolicy = object : FixedWindowRollingPolicy() {
+        override fun rollover() {
+            super.rollover()
+            appender.markRolloverCompleted()
+        }
+    }.apply {
+        context = loggerContext
+        setParent(appender)
+        fileNamePattern = file.toString().removeSuffix(".jsonl") + ".%i.jsonl"
+        minIndex = 1
+        maxIndex = retainedFileLimit - 1
+        start()
+    }
+    val triggeringPolicy = SizeBasedTriggeringPolicy<String>().apply {
+        context = loggerContext
+        maxFileSize = FileSize(maxFileSizeBytes)
+        checkIncrement = Duration.buildByMilliseconds(0.0)
+        start()
+    }
+    appender.rollingPolicy = rollingPolicy
+    appender.triggeringPolicy = triggeringPolicy
+    appender.start()
+    check(appender.isStarted) { "Structured diagnostic appender did not start" }
+    return appender
+}
+
+private class DiagnosticRollingFileAppender : RollingFileAppender<String>() {
+    private var rolloverPending = false
+
+    fun markRolloverCompleted() {
+        rolloverPending = true
+    }
+
+    fun consumeRollover(): Boolean = rolloverPending.also { rolloverPending = false }
+}
+
+private fun pruneDiagnosticFiles(directory: Path, currentFile: Path, retainedFileLimit: Int) {
+    try {
+        val files = Files.newDirectoryStream(directory, "hexana-mcp-*.jsonl").use { entries ->
+            entries.filter { path ->
+                try {
+                    Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+                } catch (_: Exception) {
+                    false
+                }
+            }.mapNotNull { path ->
+                try {
+                    path to Files.getLastModifiedTime(path)
+                } catch (_: Exception) {
+                    null
+                }
+            }.toList()
+        }
+        files.sortedWith(
+            compareByDescending<Pair<Path, java.nio.file.attribute.FileTime>> { it.first == currentFile }
+                .thenByDescending { it.second.toMillis() }
+                .thenByDescending { it.first.fileName.toString() }
+        ).drop(retainedFileLimit).forEach { (path, _) ->
+            try {
+                Files.deleteIfExists(path)
+            } catch (_: Exception) {
+                // Diagnostics retention must not prevent server startup.
+            }
+        }
+    } catch (_: Exception) {
+        // Diagnostics retention must not prevent server startup.
     }
 }
 
