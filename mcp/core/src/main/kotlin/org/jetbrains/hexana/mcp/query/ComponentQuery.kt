@@ -4,7 +4,9 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
+import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
+import org.jetbrains.hexana.mcp.readFileBytesBounded
 import org.jetbrains.hexana.mcp.model.components.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -494,8 +496,10 @@ internal object ComponentProviderFileAccessOverride {
         return if (fileAccess != null) fileAccess.fileSizeOrNull(path) else fileSizeOrNullDefault(path)
     }
 
-    internal fun readAllBytes(path: Path): ByteArray =
-        accessOverride.get()?.fileBytesReader?.invoke(path) ?: Files.readAllBytes(path)
+    internal fun readAllBytes(path: Path, maxBytes: Int): ByteArray =
+        accessOverride.get()?.fileBytesReader?.invoke(path)?.let { bytes ->
+            if (maxBytes == Int.MAX_VALUE || bytes.size <= maxBytes + 1L) bytes else bytes.copyOf(maxBytes + 1)
+        } ?: readFileBytesBounded(path, maxBytes)
 
     private data class ComponentProviderFileAccess(
         val fileSizeOrNull: (Path) -> Long?,
@@ -529,8 +533,10 @@ internal object ComponentDependencyLockFileAccessOverride {
         return if (fileAccess != null) fileAccess.fileSizeOrNull(path) else fileSizeOrNullDefault(path)
     }
 
-    internal fun readAllBytes(path: Path): ByteArray =
-        accessOverride.get()?.fileBytesReader?.invoke(path) ?: Files.readAllBytes(path)
+    internal fun readAllBytes(path: Path, maxBytes: Int): ByteArray =
+        accessOverride.get()?.fileBytesReader?.invoke(path)?.let { bytes ->
+            if (maxBytes == Int.MAX_VALUE || bytes.size <= maxBytes + 1L) bytes else bytes.copyOf(maxBytes + 1)
+        } ?: readFileBytesBounded(path, maxBytes)
 
     private data class ComponentDependencyLockFileAccess(
         val fileSizeOrNull: (Path) -> Long?,
@@ -943,7 +949,7 @@ private fun readDependencyLock(
         throw dependencyLockTooLarge(fileSize, limits)
     }
     val bytes = try {
-        ComponentDependencyLockFileAccessOverride.readAllBytes(allowedPath)
+        ComponentDependencyLockFileAccessOverride.readAllBytes(allowedPath, limits.maxTextFileBytes)
     } catch (_: Exception) {
         return DependencyLock(rawPath, emptyList())
     }
@@ -1281,8 +1287,9 @@ private fun readComponentProvider(
             return null
         }
     }
+    val maxFileBytes = limits?.maxFileWasmBytes ?: HexanaAnalysisLimits.MAX_FILE_WASM_BYTES
     val bytes = try {
-        ComponentProviderFileAccessOverride.readAllBytes(allowedPath)
+        ComponentProviderFileAccessOverride.readAllBytes(allowedPath, maxFileBytes)
     } catch (_: Exception) {
         return null
     }

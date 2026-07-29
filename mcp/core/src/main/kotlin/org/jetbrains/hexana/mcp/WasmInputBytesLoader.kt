@@ -18,7 +18,7 @@ class WasmInputBytesLoader(
     private val allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
 ) {
     private var fileSizeReader: (Path) -> Long = Files::size
-    private var fileBytesReader: (Path) -> ByteArray = Files::readAllBytes
+    private var fileBytesReader: (Path) -> ByteArray = { readFileBytesBounded(it, maxFileInputBytes) }
 
     internal constructor(
         maxInlineInputBytes: Int,

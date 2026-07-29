@@ -161,6 +161,34 @@ class BinaryInputLoaderTest {
     }
 
     @Test
+    fun rejectsPreStatOversizedFileWithoutOpeningIt() {
+        val file = Files.createTempFile("hexana-binary-input-pre-stat", ".bin")
+        try {
+            Files.write(file, byteArrayOf(1, 2, 3, 4))
+            var opened = false
+            val loader = BinaryInputLoader(
+                maxInlineInputBytes = 1024,
+                maxFileInputBytes = 3,
+                allowedFilePolicy = AllowedFilePolicy.allowAll,
+                fileSizeReader = { 4L },
+                fileBytesReader = {
+                    opened = true
+                    byteArrayOf()
+                },
+            )
+
+            val error = assertFailsWith<HexanaAnalysisException> {
+                loader.load(BinaryInput.FilePath(file.toString()))
+            }
+
+            assertEquals(HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED, error.code)
+            assertEquals(false, opened)
+        } finally {
+            Files.deleteIfExists(file)
+        }
+    }
+
+    @Test
     fun rejectsFileThatExceedsLimitAfterRead() {
         val file = Files.createTempFile("hexana-binary-input-growing", ".bin")
         try {

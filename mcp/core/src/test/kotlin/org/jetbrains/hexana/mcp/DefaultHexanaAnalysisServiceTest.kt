@@ -1497,7 +1497,7 @@ class DefaultHexanaAnalysisServiceTest {
         val service = DefaultHexanaAnalysisService(
             limits = HexanaResourceLimits(maxTextFileBytes = 3),
             fileSizeReader = { 3L },
-            fileBytesReader = { "abcd".encodeToByteArray() },
+            fileBytesReader = { _, _ -> "abcd".encodeToByteArray() },
         )
 
         val error = assertFailsWith<HexanaAnalysisException> {
