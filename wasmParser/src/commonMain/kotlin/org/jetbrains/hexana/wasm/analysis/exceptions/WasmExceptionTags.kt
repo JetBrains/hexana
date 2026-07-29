@@ -57,10 +57,7 @@ object WasmExceptionTagsBuilder {
             }
         }
 
-        fun payload(ti: Int): String {
-            val sig = typeSignatures[ti] ?: return "(?)"
-            return "(" + sig.params.joinToString(", ") { valueTypeName(it) } + ")"
-        }
+        fun payload(ti: Int): String = typeSignatures[ti]?.paramsText() ?: "(?)"
 
         val entries = ArrayList<TagInfo>()
         var idx = 0
@@ -89,6 +86,3 @@ object WasmExceptionTagsBuilder {
         return WasmExceptionTags(entries)
     }
 }
-
-private fun valueTypeName(type: Any): String =
-    type.toString().substringAfterLast('.').removeSuffix("Type").lowercase()

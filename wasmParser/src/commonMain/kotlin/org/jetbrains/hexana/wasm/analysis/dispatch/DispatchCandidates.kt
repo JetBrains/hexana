@@ -48,14 +48,16 @@ data class DispatchSignature(
 ) {
     /** WAT-flavored rendering for popup headers, e.g. `(i32, i64) -> i32`. */
     fun text(): String {
-        val p = params.joinToString(", ") { valueTypeText(it) }
         val r = when (results.size) {
             0 -> "()"
             1 -> valueTypeText(results[0])
             else -> results.joinToString(", ", prefix = "(", postfix = ")") { valueTypeText(it) }
         }
-        return "($p) -> $r"
+        return "${paramsText()} -> $r"
     }
+
+    /** Just the parameter list, e.g. `(i32, i64)` — used for exception-tag payloads. */
+    fun paramsText(): String = "(" + params.joinToString(", ") { valueTypeText(it) } + ")"
 }
 
 /**

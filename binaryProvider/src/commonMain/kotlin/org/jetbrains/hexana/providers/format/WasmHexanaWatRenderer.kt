@@ -1938,7 +1938,46 @@ public class WasmHexanaWatRenderer(
         }
         // Dual-rep annotation for ULEB/SLEB immediates with >1 encoded byte.
         emitLebAnnotation(op, opStart, opEnd, source, tokens)
+        // Decode exception-handling operands: what tag an index refers to and
+        // where a catch clause branches.
+        emitExceptionAnnotation(op, tokens)
         tokens += linebreak()
+    }
+
+    private val exceptionTagsForAnnotation by lazy { provider.exceptionTags }
+
+    /**
+     * Trailing `(; … ;)` comment clarifying the tag/label indices of an
+     * exception instruction: `throw N` gets the tag's payload signature, a
+     * `try_table` decodes each catch clause (tag + payload, or catch_all, and
+     * the branch label it targets), and `throw_ref` is marked dynamic.
+     */
+    private fun emitExceptionAnnotation(op: OpCode, tokens: MutableList<RenderToken>) {
+        fun tagSuffix(tag: Int): String = exceptionTagsForAnnotation?.payloadText(tag)?.let { " $it" } ?: ""
+        val text = when (op) {
+            is OpCodes.Flow.Trow -> {
+                val t = op.value.toInt()
+                "(; tag $t${tagSuffix(t)} ;)"
+            }
+            is OpCodes.Flow.ThrowRef -> "(; rethrows a caught exception (dynamic) ;)"
+            is OpCodes.Flow.TryTable -> {
+                if (op.catches.isEmpty()) {
+                    "(; no catch clauses — body exceptions propagate ;)"
+                } else {
+                    "(; " + op.catches.joinToString("  ") { catchAnnotation(it, ::tagSuffix) } + " ;)"
+                }
+            }
+            else -> return
+        }
+        tokens += space()
+        tokens += RenderToken(text, RenderTokenKind.COMMENT)
+    }
+
+    private fun catchAnnotation(c: OpCodes.Flow.CatchType, tagSuffix: (Int) -> String): String = when (c) {
+        is OpCodes.Flow.CatchType.Catch -> "catch tag ${c.tagIdx}${tagSuffix(c.tagIdx.toInt())} -> label ${c.labelIdx}"
+        is OpCodes.Flow.CatchType.CatchRef -> "catch_ref tag ${c.tagIdx}${tagSuffix(c.tagIdx.toInt())} -> label ${c.labelIdx}"
+        is OpCodes.Flow.CatchType.CatchAll -> "catch_all -> label ${c.labelIdx}"
+        is OpCodes.Flow.CatchType.CatchAllRef -> "catch_all_ref -> label ${c.labelIdx}"
     }
 
     private fun splitMnemonic(op: OpCode): Pair<String, String> {
