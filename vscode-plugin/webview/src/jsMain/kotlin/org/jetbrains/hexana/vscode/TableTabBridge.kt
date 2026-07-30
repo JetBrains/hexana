@@ -652,6 +652,178 @@ private fun flattenTreeVsc(
     return result
 }
 
+/**
+ * Incrementally expands a single node in the flat row list by computing
+ * only its direct/nested children and splicing them in after the parent row.
+ * Returns the updated list with the parent row's [VscFlatRow.isExpanded]
+ * flag set to true.
+ */
+private fun expandNodeIncremental(
+    flatRows: List<VscFlatRow>,
+    parentFlatIndex: Int,
+    expandedPaths: Set<List<Int>>,
+    descriptor: TableTabDescriptor,
+): List<VscFlatRow> {
+    if (parentFlatIndex < 0 || parentFlatIndex >= flatRows.size) return flatRows
+    val parentRow = flatRows[parentFlatIndex]
+    if (!parentRow.hasChildren || parentRow.isExpanded) return flatRows
+
+    val children = resolveChildrenProvider(parentRow, descriptor)?.invoke(parentRow.index) ?: return flatRows
+    if (children.rowCount == 0) return flatRows
+
+    // Build the child rows.  For the direct children of the expanded node
+    // we resolve hasChildren accurately (one childrenProvider call per child)
+    // so that leaf nodes don't show a misleading expand arrow.  For deeper
+    // levels (grandchildren) the fast path in addLevelIncremental is used.
+    val childRows = mutableListOf<VscFlatRow>()
+    val childDepth = parentRow.depth + 1
+    val childProvider = children.childrenProvider
+    for (i in 0 until children.rowCount) {
+        val path = parentRow.treePath + i
+        val grandchildren = childProvider?.invoke(i)
+        val hasChildren = grandchildren != null && grandchildren.rowCount > 0
+        val isExpanded = hasChildren && path in expandedPaths
+        childRows += VscFlatRow(
+            childDepth, i, children.columns, hasChildren, isExpanded,
+            children.rowSelectionProvider, path,
+        )
+        if (isExpanded && grandchildren != null) {
+            addLevelIncremental(
+                childRows, grandchildren.rowCount, grandchildren.columns,
+                grandchildren.childrenProvider, grandchildren.rowSelectionProvider,
+                childDepth + 1, path, expandedPaths, descriptor,
+            )
+        }
+    }
+
+    // Splice: replace parent with expanded version, insert children after it.
+    val result = ArrayList<VscFlatRow>(flatRows.size + childRows.size)
+    // Copy rows before parent.
+    for (i in 0 until parentFlatIndex) result.add(flatRows[i])
+    // Expanded parent.
+    result.add(VscFlatRow(
+        parentRow.depth, parentRow.index, parentRow.columns,
+        parentRow.hasChildren, isExpanded = true,
+        parentRow.rowSelectionProvider, parentRow.treePath,
+    ))
+    // Spliced children.
+    result.addAll(childRows)
+    // Copy rows after parent.
+    for (i in (parentFlatIndex + 1) until flatRows.size) result.add(flatRows[i])
+    return result
+}
+
+/**
+ * Incrementally collapses a single node by removing all descendant rows
+ * (rows whose [VscFlatRow.treePath] starts with the parent's path).
+ * Returns the updated list with the parent row's [VscFlatRow.isExpanded]
+ * flag set to false.
+ */
+private fun collapseNodeIncremental(
+    flatRows: List<VscFlatRow>,
+    parentFlatIndex: Int,
+): List<VscFlatRow> {
+    if (parentFlatIndex < 0 || parentFlatIndex >= flatRows.size) return flatRows
+    val parentRow = flatRows[parentFlatIndex]
+    if (!parentRow.isExpanded) return flatRows
+
+    val parentPath = parentRow.treePath
+    val parentDepth = parentRow.depth
+
+    // Find the range of descendant rows (all rows immediately after parent
+    // that have depth > parentDepth).
+    var endExclusive = parentFlatIndex + 1
+    while (endExclusive < flatRows.size && flatRows[endExclusive].depth > parentDepth) {
+        endExclusive++
+    }
+
+    val result = ArrayList<VscFlatRow>(flatRows.size - (endExclusive - parentFlatIndex - 1))
+    for (i in flatRows.indices) {
+        if (i == parentFlatIndex) {
+            result.add(VscFlatRow(
+                parentRow.depth, parentRow.index, parentRow.columns,
+                parentRow.hasChildren, isExpanded = false,
+                parentRow.rowSelectionProvider, parentRow.treePath,
+            ))
+        } else if (i > parentFlatIndex && i < endExclusive) {
+            // skip descendants
+        } else {
+            result.add(flatRows[i])
+        }
+    }
+    return result
+}
+
+/** Recursively adds rows for one level of the tree (used by incremental expand). */
+private fun addLevelIncremental(
+    result: MutableList<VscFlatRow>,
+    rowCount: Int,
+    columns: List<ColumnDescriptor>,
+    childrenProvider: ((Int) -> TableTabChildRows?)?,
+    rowSelectionProvider: (Int) -> RowSelectionData?,
+    depth: Int,
+    parentPath: List<Int>,
+    expandedPaths: Set<List<Int>>,
+    descriptor: TableTabDescriptor,
+) {
+    // Fast path: when no child paths are expanded, skip expensive
+    // childrenProvider calls entirely.  We mark hasChildren = false
+    // (no arrow) to avoid showing expand chevrons on leaf nodes.
+    // The hasChildren flag is resolved lazily when the user expands
+    // the parent via expandNodeIncremental (which calls the real
+    // childrenProvider for the toggled node only).
+    val anyChildExpanded = childrenProvider != null &&
+        expandedPaths.any { it.size > parentPath.size && it.subList(0, parentPath.size) == parentPath }
+
+    for (i in 0 until rowCount) {
+        val path = parentPath + i
+        if (anyChildExpanded && path in expandedPaths) {
+            // This child is expanded — resolve its children.
+            val children = childrenProvider?.invoke(i)
+            val hasChildren = children != null && children.rowCount > 0
+            result += VscFlatRow(depth, i, columns, hasChildren, isExpanded = hasChildren, rowSelectionProvider, path)
+            if (hasChildren && children != null) {
+                addLevelIncremental(
+                    result, children.rowCount, children.columns, children.childrenProvider,
+                    children.rowSelectionProvider, depth + 1, path, expandedPaths, descriptor,
+                )
+            }
+        } else {
+            // Not expanded — resolve hasChildren accurately so leaf
+            // nodes don't show a misleading expand arrow.  This path
+            // is only reached for children of already-expanded nodes
+            // (small subtrees), not for the 42k+ top-level case which
+            // goes through expandNodeIncremental directly.
+            val children = childrenProvider?.invoke(i)
+            val hasChildren = children != null && children.rowCount > 0
+            result += VscFlatRow(depth, i, columns, hasChildren, isExpanded = false, rowSelectionProvider, path)
+        }
+    }
+}
+
+/**
+ * Resolves the [TableTabChildRows] provider for a given flat row by walking
+ * up the tree path through the descriptor's childrenProvider chain.
+ */
+private fun resolveChildrenProvider(
+    row: VscFlatRow,
+    descriptor: TableTabDescriptor,
+): ((Int) -> TableTabChildRows?)? {
+    if (row.depth == 0) return descriptor.childrenProvider
+    // Walk the tree path to find the childrenProvider at the parent level.
+    var currentProvider = descriptor.childrenProvider ?: return null
+    for (i in 0 until row.depth) {
+        val idx = row.treePath[i]
+        val children = currentProvider(idx) ?: return null
+        if (i < row.depth - 1) {
+            currentProvider = children.childrenProvider ?: return null
+        } else {
+            return children.childrenProvider
+        }
+    }
+    return null
+}
+
 private const val CHEVRON_RIGHT = "\u25B6"
 private const val CHEVRON_DOWN = "\u25BC"
 
@@ -741,8 +913,54 @@ private fun TreeTableTabContent(
         debouncedQuery = searchQuery
     }
 
-    val flatRows = remember(descriptor, expandedPaths.toList(), sortColumnIndex, sortAscending, debouncedQuery, activeFilter) {
-        flattenTreeVsc(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending, debouncedQuery, activeFilter)
+    // Flat rows are computed incrementally for expand/collapse (fast path)
+    // and fully recomputed only when sort, search, or filter changes.
+    var flatRows by remember(descriptor) {
+        mutableStateOf(flattenTreeVsc(descriptor, emptySet(), sortColumnIndex, sortAscending, debouncedQuery, activeFilter))
+    }
+    // Full recomputation when sort/search/filter changes.
+    LaunchedEffect(descriptor, sortColumnIndex, sortAscending, debouncedQuery, activeFilter) {
+        delay(1)
+        flatRows = flattenTreeVsc(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending, debouncedQuery, activeFilter)
+    }
+
+    // Helper to expand a node incrementally (called from click/keyboard handlers).
+    val expandNode = { path: List<Int> ->
+        if (path !in expandedPaths) {
+            expandedPaths.add(path)
+            val idx = flatRows.indexOfFirst { it.treePath == path }
+            if (idx >= 0) {
+                val updated = expandNodeIncremental(flatRows, idx, expandedPaths.toSet(), descriptor)
+                if (updated !== flatRows) {
+                    flatRows = updated
+                } else {
+                    // Expansion produced no children (leaf node with optimistic
+                    // hasChildren flag).  Remove the path so the node isn't stuck
+                    // and correct the hasChildren flag in the flat row.
+                    expandedPaths.remove(path)
+                    flatRows = flatRows.toMutableList().also { list ->
+                        val row = list[idx]
+                        list[idx] = VscFlatRow(
+                            row.depth, row.index, row.columns,
+                            hasChildren = false, row.isExpanded,
+                            row.rowSelectionProvider, row.treePath,
+                        )
+                    }
+                }
+            }
+        }
+    }
+    val collapseNode = { path: List<Int> ->
+        if (path in expandedPaths) {
+            val idx = flatRows.indexOfFirst { it.treePath == path }
+            if (idx >= 0) {
+                flatRows = collapseNodeIncremental(flatRows, idx)
+            }
+            expandedPaths.remove(path)
+        }
+    }
+    val toggleNode = { path: List<Int>, isCurrentlyExpanded: Boolean ->
+        if (isCurrentlyExpanded) collapseNode(path) else expandNode(path)
     }
 
     // Track which flattened row is currently focused (keyboard-navigated or clicked).
@@ -836,6 +1054,7 @@ private fun TreeTableTabContent(
             selection = selection,
             expandedPaths = expandedPaths,
             flatRows = flatRows,
+            toggleNode = toggleNode,
             headers = headers,
             aligns = aligns,
             columnWidthsCh = columnWidthsCh,
@@ -847,6 +1066,7 @@ private fun TreeTableTabContent(
             focusedFlatIndex = focusedFlatIndex,
             onFocusedFlatIndexChange = { focusedFlatIndex = it },
             scrollRevision = scrollRevision,
+            onScrollRevisionReset = { scrollRevision = 0 },
             isSearchVisible = isSearchVisible,
             onSearchVisibleChange = { isSearchVisible = it },
             searchQuery = searchQuery,
@@ -905,12 +1125,14 @@ private fun TreeTableTabContent(
                                 expandedPaths.add(ancestorPath)
                             }
                         }
-                        // Find and select the target row.
+                        // Recompute flat rows so the incremental state
+                        // reflects the newly expanded ancestors.
                         val updatedRows = flattenTreeVsc(
                             descriptor, expandedPaths.toSet(),
                             sortColumnIndex, sortAscending,
                             debouncedQuery, activeFilter,
                         )
+                        flatRows = updatedRows
                         val targetIndex = updatedRows.indexOfFirst { it.treePath == treePath }
                         if (targetIndex >= 0) {
                             focusedFlatIndex = targetIndex
@@ -1017,6 +1239,7 @@ private fun TreeTableBody(
     selection: HexSelectionState,
     expandedPaths: MutableList<List<Int>>,
     flatRows: List<VscFlatRow>,
+    toggleNode: (path: List<Int>, isCurrentlyExpanded: Boolean) -> Unit,
     headers: List<String>,
     aligns: List<String>,
     columnWidthsCh: List<Int?>,
@@ -1028,6 +1251,7 @@ private fun TreeTableBody(
     focusedFlatIndex: Int,
     onFocusedFlatIndexChange: (Int) -> Unit,
     scrollRevision: Int,
+    onScrollRevisionReset: () -> Unit,
     isSearchVisible: Boolean,
     onSearchVisibleChange: (Boolean) -> Unit,
     searchQuery: String,
@@ -1114,6 +1338,10 @@ private fun TreeTableBody(
             scrollTop = wrapper.scrollTop
             suppressScroll[0] = false
             unlockTimerHandle[0] = 0
+            // Reset scrollRevision so that subsequent focusedFlatIndex
+            // changes (from regular row clicks) don't re-trigger this
+            // heavy programmatic scroll effect.
+            onScrollRevisionReset()
         }, 500)
     }
 
@@ -1306,24 +1534,21 @@ private fun TreeTableBody(
                             attrs = if (isHighlighted) mapOf("data-focused" to "") else emptyMap(),
                             onClick = {
                                 onFocusedFlatIndexChange(flatIndex)
-                                if (row.hasChildren) {
-                                    if (row.isExpanded) {
-                                        expandedPaths.remove(row.treePath)
-                                    } else {
-                                        expandedPaths.add(row.treePath)
-                                    }
-                                } else {
-                                    val highlightProvider = descriptor.rowHighlightRangesProvider
-                                    if (highlightProvider != null && row.depth == 0) {
-                                        applyHighlightRangesVsc(highlightProvider(row.index), selection)
-                                    } else if (selData != null) {
-                                        selection.anchorIndex = selData.offset
-                                        selection.activeIndex = selData.offset + selData.size - 1
-                                        selection.cursorIndex = selData.offset
-                                        scrollHexViewerTo(selData.offset)
-                                    }
+                                // Single click only selects/highlights; expansion
+                                // is triggered by double-click or keyboard (onActivate).
+                                val highlightProvider = descriptor.rowHighlightRangesProvider
+                                if (highlightProvider != null && row.depth == 0) {
+                                    applyHighlightRangesVsc(highlightProvider(row.index), selection)
+                                } else if (selData != null) {
+                                    selection.anchorIndex = selData.offset
+                                    selection.activeIndex = selData.offset + selData.size - 1
+                                    selection.cursorIndex = selData.offset
+                                    scrollHexViewerTo(selData.offset)
                                 }
                             },
+                            onDoubleClick = if (row.hasChildren) {
+                                { toggleNode(row.treePath, row.isExpanded) }
+                            } else null,
                             onSelect = {
                                 onFocusedFlatIndexChange(flatIndex)
                                 val highlightProvider = descriptor.rowHighlightRangesProvider
@@ -1338,11 +1563,7 @@ private fun TreeTableBody(
                             },
                             onActivate = {
                                 if (row.hasChildren) {
-                                    if (row.isExpanded) {
-                                        expandedPaths.remove(row.treePath)
-                                    } else {
-                                        expandedPaths.add(row.treePath)
-                                    }
+                                    toggleNode(row.treePath, row.isExpanded)
                                 }
                             },
                         ) {
@@ -1379,11 +1600,7 @@ private fun TreeTableBody(
                                                 }
                                                 onClick { event ->
                                                     event.stopPropagation()
-                                                    if (row.isExpanded) {
-                                                        expandedPaths.remove(row.treePath)
-                                                    } else {
-                                                        expandedPaths.add(row.treePath)
-                                                    }
+                                                    toggleNode(row.treePath, row.isExpanded)
                                                 }
                                             }) {
                                                 Text(if (row.isExpanded) CHEVRON_DOWN else CHEVRON_RIGHT)

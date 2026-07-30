@@ -399,6 +399,7 @@ internal fun PanelTable(
  */
 private class RowCallbacks {
     var onClick: (() -> Unit)? = null
+    var onDoubleClick: (() -> Unit)? = null
     var onSelect: (() -> Unit)? = null
     var onActivate: (() -> Unit)? = null
 }
@@ -414,6 +415,7 @@ internal fun PanelTableRow(
     backgroundColor: String? = null,
     attrs: Map<String, String> = emptyMap(),
     onClick: () -> Unit = {},
+    onDoubleClick: (() -> Unit)? = null,
     onSelect: (() -> Unit)? = null,
     onActivate: (() -> Unit)? = null,
     content: @Composable () -> Unit,
@@ -423,6 +425,7 @@ internal fun PanelTableRow(
     // once in ref{}) always sees the current lambdas.
     val callbacks = remember { RowCallbacks() }
     callbacks.onClick = onClick
+    callbacks.onDoubleClick = onDoubleClick
     callbacks.onSelect = onSelect
     callbacks.onActivate = onActivate
     Tr({
@@ -447,6 +450,12 @@ internal fun PanelTableRow(
             // viewer; re-focusing the row afterwards ensures subsequent
             // ArrowUp/Down events are received by the global handler.
             onClick()
+            var el = event.target as? HTMLElement
+            while (el != null && el.tagName != "TR") el = el.parentElement as? HTMLElement
+            el?.let { tr -> window.requestAnimationFrame { tr.asDynamic().focus(js("({preventScroll: true})")) } }
+        }
+        onDoubleClick { event ->
+            onDoubleClick?.invoke()
             var el = event.target as? HTMLElement
             while (el != null && el.tagName != "TR") el = el.parentElement as? HTMLElement
             el?.let { tr -> window.requestAnimationFrame { tr.asDynamic().focus(js("({preventScroll: true})")) } }
