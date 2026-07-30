@@ -37,6 +37,9 @@ import org.jetbrains.hexana.shared.RowSelectionData
 import org.jetbrains.hexana.shared.TableTabChildRows
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsProvider
+import kotlin.time.Duration
+import kotlin.time.DurationUnit
+import kotlin.time.toDuration
 
 /**
  * Small play-arrow button used as a run indicator in table rows.
@@ -1079,7 +1082,7 @@ private fun TreeTableBody(
         wrapper.scrollTop = targetScrollTop
         // Yield so Compose recomposes with the updated scrollTop and the
         // DOM (spacers) reflects the new virtual-scroll window.
-        delay(50)
+        delay(1.toDuration(DurationUnit.MILLISECONDS))
 
         // Phase 2: locate the actual focused row element and use
         // scrollIntoView to position it correctly, then adjust for the
