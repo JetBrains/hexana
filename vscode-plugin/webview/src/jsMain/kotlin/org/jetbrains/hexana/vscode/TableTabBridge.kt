@@ -1274,6 +1274,27 @@ private fun TreeTableBody(
     // Timer handle for the deferred unlock; stored so we can cancel it on
     // re-entry (rapid successive treemap clicks).
     val unlockTimerHandle = remember { intArrayOf(0) }
+    // RAF handle for debouncing scroll-event state updates.  Multiple
+    // scroll events within the same animation frame are coalesced into
+    // a single Compose state update, preventing the feedback loop where
+    // scrollTop change → spacer recomposition → browser scroll adjust →
+    // another scrollTop change → infinite loop.
+    val scrollRafHandle = remember { intArrayOf(0) }
+    // When true, scroll events are silently ignored (no state update,
+    // no re-pin) while spacer recomposition settles after a Compose
+    // state commit.  Unlike `suppressScroll` (which re-pins), this
+    // flag simply skips processing so the browser's natural scroll
+    // adjustment is accepted without triggering another state cycle.
+    val settlingAfterCommit = remember { booleanArrayOf(false) }
+    // The last scrollTop value that was committed to Compose state.
+    // Used by the scroll listener to compare against the value it last
+    // wrote rather than the (potentially stale) Compose `scrollTop`
+    // captured in the listener closure.  This breaks the feedback loop
+    // where recomposition-driven spacer changes cause the browser to
+    // adjust scrollTop by a small amount that exceeds the threshold
+    // when compared to the old Compose state but not when compared to
+    // the value we actually committed.
+    val committedScrollTop = remember { doubleArrayOf(0.0) }
 
     // Scroll the table to make the focused row visible when it changes.
     // For treemap clicks (scrollRevision > 0) we use a multi-phase scroll:
@@ -1329,12 +1350,14 @@ private fun TreeTableBody(
         // Pin to the final position so the re-pin listener keeps the
         // scroll stable during recomposition settle.
         pinnedScrollTop[0] = wrapper.scrollTop
+        committedScrollTop[0] = wrapper.scrollTop
         scrollTop = wrapper.scrollTop
 
         // Schedule unlock after a generous delay.  Recomposition on large
         // tables can take many frames; a fixed timeout is more reliable
         // than counting animation frames.
         unlockTimerHandle[0] = kotlinx.browser.window.setTimeout({
+            committedScrollTop[0] = wrapper.scrollTop
             scrollTop = wrapper.scrollTop
             suppressScroll[0] = false
             unlockTimerHandle[0] = 0
@@ -1434,6 +1457,7 @@ private fun TreeTableBody(
             ref { tableWrapper ->
                 tableWrapperElement = tableWrapper
                 viewportHeight = tableWrapper.clientHeight.toDouble()
+                committedScrollTop[0] = tableWrapper.scrollTop
                 scrollTop = tableWrapper.scrollTop
 
                 val listener = EventListener {
@@ -1444,9 +1468,53 @@ private fun TreeTableBody(
                         if (kotlin.math.abs(tableWrapper.scrollTop - pinnedScrollTop[0]) > 1.0) {
                             tableWrapper.scrollTop = pinnedScrollTop[0]
                         }
+                    } else if (settlingAfterCommit[0]) {
+                        // Recomposition is settling after a state commit;
+                        // ignore this scroll event entirely so the
+                        // browser's spacer-driven adjustment doesn't
+                        // cascade into another state update.
                     } else {
-                        viewportHeight = tableWrapper.clientHeight.toDouble()
-                        scrollTop = tableWrapper.scrollTop
+                        // Debounce via requestAnimationFrame: coalesce
+                        // multiple scroll events within the same frame
+                        // into a single Compose state update.  This
+                        // prevents the feedback loop where a scrollTop
+                        // change triggers spacer recomposition which
+                        // adjusts scroll which fires another event.
+                        if (scrollRafHandle[0] != 0) {
+                            kotlinx.browser.window.cancelAnimationFrame(scrollRafHandle[0])
+                        }
+                        scrollRafHandle[0] = kotlinx.browser.window.requestAnimationFrame {
+                            scrollRafHandle[0] = 0
+                            val newScrollTop = tableWrapper.scrollTop
+                            val newViewportHeight = tableWrapper.clientHeight.toDouble()
+                            // Only update Compose state when the scroll
+                            // position changed enough to affect which
+                            // rows are visible.  Compare against the
+                            // last value we committed (not the Compose
+                            // state snapshot) so that recomposition-
+                            // driven spacer adjustments don't
+                            // accumulate into a threshold breach.
+                            if (kotlin.math.abs(newScrollTop - committedScrollTop[0]) >= rowHeight ||
+                                kotlin.math.abs(newViewportHeight - viewportHeight) >= 1.0) {
+                                committedScrollTop[0] = newScrollTop
+                                viewportHeight = newViewportHeight
+                                scrollTop = newScrollTop
+                                // Spacer recomposition after this state
+                                // update may cause the browser to silently
+                                // adjust scrollTop.  Ignore scroll events
+                                // for two frames so the adjustment doesn't
+                                // trigger another state cycle — this breaks
+                                // the cascading feedback loop on large
+                                // tables (~2000+ nested rows).
+                                settlingAfterCommit[0] = true
+                                kotlinx.browser.window.requestAnimationFrame {
+                                    kotlinx.browser.window.requestAnimationFrame {
+                                        committedScrollTop[0] = tableWrapper.scrollTop
+                                        settlingAfterCommit[0] = false
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 tableWrapper.addEventListener("scroll", listener)

@@ -506,19 +506,7 @@ internal fun PanelTableRowKeyboardHandler() {
                         // scrollHexViewerTo() which steals focus.
                         window.requestAnimationFrame {
                             target.asDynamic().focus(js("({preventScroll: true})"))
-                            target.asDynamic().scrollIntoView(js("({block: 'nearest', inline: 'nearest'})"))
-                            // Adjust for sticky header that may overlap the row
-                            val thead = target.closest("table")?.querySelector("thead")
-                            if (thead != null) {
-                                val headerBottom = thead.getBoundingClientRect().bottom
-                                val rowTop = target.getBoundingClientRect().top
-                                if (rowTop < headerBottom) {
-                                    val wrapper = target.closest(".hexana-panel-table")?.parentElement
-                                    if (wrapper != null) {
-                                        wrapper.scrollTop -= (headerBottom - rowTop)
-                                    }
-                                }
-                            }
+                            scrollRowIntoView(target)
                         }
                     }
                 }
@@ -536,19 +524,7 @@ internal fun PanelTableRowKeyboardHandler() {
                         // scrollHexViewerTo() which steals focus.
                         window.requestAnimationFrame {
                             target.asDynamic().focus(js("({preventScroll: true})"))
-                            target.asDynamic().scrollIntoView(js("({block: 'nearest', inline: 'nearest'})"))
-                            // Adjust for sticky header that may overlap the row
-                            val thead = target.closest("table")?.querySelector("thead")
-                            if (thead != null) {
-                                val headerBottom = thead.getBoundingClientRect().bottom
-                                val rowTop = target.getBoundingClientRect().top
-                                if (rowTop < headerBottom) {
-                                    val wrapper = target.closest(".hexana-panel-table")?.parentElement
-                                    if (wrapper != null) {
-                                        wrapper.scrollTop -= (headerBottom - rowTop)
-                                    }
-                                }
-                            }
+                            scrollRowIntoView(target)
                         }
                     }
                 }
@@ -582,6 +558,29 @@ internal fun PanelTableRowKeyboardHandler() {
         // during the bubble phase for arrow keys.
         window.addEventListener("keydown", handler, true)
         onDispose { window.removeEventListener("keydown", handler, true) }
+    }
+}
+
+/**
+ * Scrolls a table row into view within its scroll container, adjusting for
+ * the sticky `<thead>` header.  Uses direct `scrollTop` manipulation instead
+ * of `Element.scrollIntoView()` to avoid triggering a scroll-event feedback
+ * loop with virtual-scroll recomposition on large tables.
+ */
+private fun scrollRowIntoView(row: HTMLElement) {
+    val wrapper = row.closest(".hexana-panel-table")?.parentElement ?: return
+    val wrapperRect = wrapper.getBoundingClientRect()
+    val rowRect = row.getBoundingClientRect()
+    val headerHeight = row.closest("table")?.querySelector("thead")
+        ?.getBoundingClientRect()?.height ?: 0.0
+    val visibleTop = wrapperRect.top + headerHeight
+    val visibleBottom = wrapperRect.bottom
+    if (rowRect.top < visibleTop) {
+        // Row is above the visible area (behind the sticky header).
+        wrapper.scrollTop -= (visibleTop - rowRect.top)
+    } else if (rowRect.bottom > visibleBottom) {
+        // Row is below the visible area.
+        wrapper.scrollTop += (rowRect.bottom - visibleBottom)
     }
 }
 
