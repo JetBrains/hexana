@@ -158,6 +158,8 @@ internal object RunScriptOutputRenderer : FormatAwareToolOutputRenderer {
     }
 }
 
+public fun runScriptSupportedOutputFormats(): Set<ToolOutputFormat> = RunScriptOutputRenderer.supportedFormats
+
 public fun runScriptCli(request: RunScriptCliRequest): RunScriptCliOutput {
     val context = ToolRuntimeContext(toolName = request.toolName)
     val contribution = runScriptRuntimeContribution(request.limits, request.allowedFilePolicy)

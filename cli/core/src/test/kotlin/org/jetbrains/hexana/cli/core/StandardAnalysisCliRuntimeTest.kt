@@ -2,6 +2,8 @@ package org.jetbrains.hexana.cli.core
 
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.builtins.serializer
+import org.jetbrains.hexana.cli.runtime.CliTable
 import org.jetbrains.hexana.cli.runtime.RenderedToolOutput
 import org.jetbrains.hexana.cli.runtime.ToolExecutionDiagnosticSeverity
 import org.jetbrains.hexana.cli.runtime.ToolExecutionRequest
@@ -16,6 +18,9 @@ import org.jetbrains.hexana.cli.runtime.ToolOutputRenderRequest
 import org.jetbrains.hexana.cli.runtime.ToolOutputRenderer
 import org.jetbrains.hexana.cli.runtime.ToolRenderOptions
 import org.jetbrains.hexana.cli.runtime.ToolRuntimeContext
+import org.jetbrains.hexana.cli.runtime.TypedToolOutput
+import org.jetbrains.hexana.cli.runtime.TypedToolOutputPlan
+import org.jetbrains.hexana.cli.runtime.TypedToolOutputProjection
 import org.jetbrains.hexana.graalwasm.wasmprinter.WatWithWarnings
 import org.jetbrains.hexana.mcp.DefaultHexanaAnalysisService
 import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
@@ -42,6 +47,45 @@ import kotlin.test.assertTrue
 class StandardAnalysisCliRuntimeTest {
     @get:Rule
     val temporaryFolder = TemporaryFolder()
+
+    @Test
+    fun typedTableAdapterPassesExactRenderOptionsToLayout() {
+        var receivedOptions: ToolRenderOptions? = null
+        val renderer = JsonBackedTypedToolOutputRenderer(
+            toolName = "sample",
+            plan = TypedToolOutputPlan(
+                serializer = String.serializer(),
+                projections = listOf(
+                    TypedToolOutputProjection(ToolOutputFormat.TABLE) { _, _ ->
+                        TypedToolOutput.Table(CliTable(listOf("Value"), listOf(listOf("7"))))
+                    },
+                ),
+            ),
+            renderJson = { RenderedToolOutput.Text(it.toString()) },
+            renderTable = { _, options ->
+                receivedOptions = options
+                "table"
+            },
+        )
+        val options = ToolRenderOptions(
+            format = ToolOutputFormat.TABLE,
+            colorMode = org.jetbrains.hexana.cli.runtime.TerminalColorMode.Never,
+            terminalWidth = 19,
+            includeDiagnostics = true,
+        )
+
+        val rendered = renderer.render(
+            ToolOutputRenderRequest(
+                context = ToolRuntimeContext("sample"),
+                arguments = JsonObject(emptyMap()),
+                result = JsonPrimitive("7"),
+                options = options,
+            )
+        )
+
+        assertEquals("table", assertIs<RenderedToolOutput.Text>(rendered).text)
+        assertEquals(options, receivedOptions)
+    }
 
     @Test
     fun summarizeModuleConverterAcceptsPathBase64StdinAndRejectsWrongShape() {
