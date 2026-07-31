@@ -113,6 +113,7 @@ internal object CliTableRenderer {
         var current = mutableListOf<String>()
         var currentWidth = 0
         var lastSpace = -1
+        var discardingBoundaryWhitespace = false
         fun flush(count: Int) {
             lines += current.take(count).joinToString("")
             current = current.drop(count).toMutableList()
@@ -121,14 +122,19 @@ internal object CliTableRenderer {
             lastSpace = current.indexOfLast { it.isWhitespaceCluster() }
         }
         clusters.forEach { cluster ->
+            if (discardingBoundaryWhitespace && cluster.isWhitespaceCluster()) return@forEach
+            discardingBoundaryWhitespace = false
             val clusterWidth = clusterDisplayWidth(cluster)
             if (currentWidth + clusterWidth > width && current.isNotEmpty()) {
                 if (lastSpace >= 0) flush(lastSpace) else flush(current.size)
+                if (cluster.isWhitespaceCluster()) {
+                    discardingBoundaryWhitespace = true
+                    return@forEach
+                }
             }
             current += cluster
             currentWidth += clusterWidth
             if (cluster.isWhitespaceCluster()) lastSpace = current.lastIndex
-            if (currentWidth >= width) flush(current.size)
         }
         if (current.isNotEmpty()) lines += current.joinToString("")
         return lines

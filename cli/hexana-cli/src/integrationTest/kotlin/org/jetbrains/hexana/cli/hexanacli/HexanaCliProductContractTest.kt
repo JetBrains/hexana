@@ -86,7 +86,7 @@ class HexanaCliProductContractTest {
         assertSuccess(narrow)
         assertTrue(narrow.stdout.lineSequence().all { it.length <= 20 }, narrow.describe())
         fun line(metric: String, value: String) = metric.padEnd(12) + " | " + value
-        val expectedNarrow = listOf("Metric".padEnd(12) + " | Value", "-".repeat(12) + "-+-" + "-".repeat(5), line("Functions", "0"), line("Exports", "0"), line("Memories", "0"), line("Globals", "0"), line("Tables", "0"), line("Types", "0"), line("Imported fun", "0"), line("ctions", ""), line("Imported mem", "0"), line("ories", ""), line("Imported tab", "0"), line("les", ""), line("Imported glo", "0"), line("bals", ""), line("Module size", "8"), line("(bytes)", "")).joinToString("\n") + "\n"
+        val expectedNarrow = listOf("Metric".padEnd(12) + " | Value", "-".repeat(12) + "-+-" + "-".repeat(5), line("Functions", "0"), line("Exports", "0"), line("Memories", "0"), line("Globals", "0"), line("Tables", "0"), line("Types", "0"), line("Imported", "0"), line("functions", ""), line("Imported", "0"), line("memories", ""), line("Imported", "0"), line("tables", ""), line("Imported", "0"), line("globals", ""), line("Module size", "8"), line("(bytes)", "")).joinToString("\n") + "\n"
         assertEquals(expectedNarrow, narrow.stdout)
 
         val optionOverridesEnvironment = target.run(
