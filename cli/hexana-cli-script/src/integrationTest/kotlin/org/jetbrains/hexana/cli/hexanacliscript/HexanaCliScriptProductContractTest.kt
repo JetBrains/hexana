@@ -50,6 +50,25 @@ class HexanaCliScriptProductContractTest {
     }
 
     @Test
+    fun scriptProductDoesNotExposeOrInterpretTerminalWidth() {
+        val binary = binaryFile("terminal-width.bin")
+        assertFailure(
+            target.run(listOf("run-script", binary.toString(), "--script-text", "print(1);", "--terminal-width", "20")),
+            2,
+            "Unsupported run-script option: --terminal-width",
+        )
+        val ignoredEnvironment = target.run(
+            listOf("run-script", binary.toString(), "--script-text", "print(1);", "--format", "raw"),
+            environment = mapOf("HEXANA_CLI_TERMINAL_WIDTH" to "0"),
+        )
+        assertSuccess(ignoredEnvironment)
+        assertEquals("1", ignoredEnvironment.stdout)
+        val help = target.run(listOf("run-script", "--help"))
+        assertSuccess(help)
+        assertFalse(help.stdout.contains("TERMINAL_WIDTH"), help.describe())
+    }
+
+    @Test
     fun productAcceptsBase64AndLegacyBase64Sources() {
         val base64 = target.run(listOf("run-script", "--binary-base64", Base64.getEncoder().encodeToString(byteArrayOf(4, 5, 6)), "--script-text", "print(binary.bytes.get(2));", "--format", "raw"))
         assertSuccess(base64)

@@ -74,6 +74,64 @@ class HexanaCliProductContractTest {
     }
 
     @Test
+    fun summarizeModuleTableHonorsTerminalWidthEnvironmentOutputAndLimits() {
+        val wasm = wasmFile("summary-table-width.wasm")
+        val unbounded = target.run(listOf("summarize-module", wasm.toString(), "--format", "table"))
+        assertSuccess(unbounded)
+
+        val narrow = target.run(
+            listOf("summarize-module", wasm.toString(), "--format", "table"),
+            environment = mapOf("HEXANA_CLI_TERMINAL_WIDTH" to "20"),
+        )
+        assertSuccess(narrow)
+        assertTrue(narrow.stdout.lineSequence().all { it.length <= 20 }, narrow.describe())
+        fun line(metric: String, value: String) = metric.padEnd(12) + " | " + value
+        val expectedNarrow = listOf("Metric".padEnd(12) + " | Value", "-".repeat(12) + "-+-" + "-".repeat(5), line("Functions", "0"), line("Exports", "0"), line("Memories", "0"), line("Globals", "0"), line("Tables", "0"), line("Types", "0"), line("Imported fun", "0"), line("ctions", ""), line("Imported mem", "0"), line("ories", ""), line("Imported tab", "0"), line("les", ""), line("Imported glo", "0"), line("bals", ""), line("Module size", "8"), line("(bytes)", "")).joinToString("\n") + "\n"
+        assertEquals(expectedNarrow, narrow.stdout)
+
+        val optionOverridesEnvironment = target.run(
+            listOf("summarize-module", wasm.toString(), "--format", "table", "--terminal-width", "100"),
+            environment = mapOf("HEXANA_CLI_TERMINAL_WIDTH" to "20"),
+        )
+        assertSuccess(optionOverridesEnvironment)
+        assertEquals(unbounded.stdout, optionOverridesEnvironment.stdout)
+
+        val output = temporaryFolder.root.toPath().resolve("summary-table.txt")
+        val written = target.run(
+            listOf("summarize-module", wasm.toString(), "--format", "table", "--terminal-width", "20", "--output", output.toString()),
+        )
+        assertSuccess(written)
+        assertEquals("", written.stdout)
+        assertEquals(narrow.stdout, Files.readString(output))
+        assertEquals(narrow.stdout.toByteArray().toList(), Files.readAllBytes(output).toList())
+
+        assertSuccess(target.run(listOf("summarize-module", wasm.toString(), "--format", "table", "--terminal-width", "20", "--max-output-bytes", narrow.stdout.toByteArray().size.toString())))
+
+        assertFailure(
+            target.run(
+                listOf("summarize-module", wasm.toString(), "--format", "table", "--terminal-width", "20", "--max-output-bytes", (narrow.stdout.toByteArray().size - 1).toString()),
+            ),
+            1,
+            "maxOutputBytes=${narrow.stdout.toByteArray().size - 1}",
+        )
+
+        val help = target.run(listOf("summarize-module", "--help"))
+        assertSuccess(help)
+        assertTrue(help.stdout.contains("--terminal-width <positive-int>"), help.describe())
+        assertTrue(help.stdout.contains("HEXANA_CLI_TERMINAL_WIDTH"), help.describe())
+    }
+
+    @Test
+    fun summarizeModuleRejectsImpossibleTerminalWidthAsUsage() {
+        val wasm = wasmFile("summary-table-too-narrow.wasm")
+        assertFailure(
+            target.run(listOf("summarize-module", wasm.toString(), "--format", "table", "--terminal-width", "1")),
+            2,
+            "Requested terminal width 1 is below this table's minimum width",
+        )
+    }
+
+    @Test
     fun productWritesOutputFile() {
         val wasm = wasmFile("summary.wasm")
         val output = temporaryFolder.root.toPath().resolve("summary.json")

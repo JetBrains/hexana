@@ -48,6 +48,7 @@ internal object HexanaStandardProductExecutor : HexanaProductToolExecutor {
                 sourceSelections = listOf(request.sourceSelection),
                 params = request.params,
                 format = request.format,
+                terminalWidth = request.terminalWidth,
                 maxInlineWasmBytes = request.resourceLimits.maxInlineWasmBytes,
                 maxFileWasmBytes = request.resourceLimits.maxFileWasmBytes,
                 allowedFilePolicy = allowedFilePolicy(request.allowedRoots),

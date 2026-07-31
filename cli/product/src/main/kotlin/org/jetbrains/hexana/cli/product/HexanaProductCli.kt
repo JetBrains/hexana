@@ -17,6 +17,7 @@ import org.jetbrains.hexana.cli.metadata.HexanaCliToolSpec
 import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliProducts
 import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliToolRegistry
 import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
+import org.jetbrains.hexana.cli.runtime.CliTerminalWidthException
 import org.jetbrains.hexana.cli.runtime.ToolOutputFormat
 import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
@@ -86,6 +87,8 @@ public class HexanaProductCli(
         return withCliAnalytics(product, parsed.analytics, parsed.commandName) {
             try {
                 execute(parsed)
+            } catch (error: CliTerminalWidthException) {
+                ProductCliResult(stderr = "${error.message}\n", exitCode = USAGE_EXIT_CODE)
             } catch (error: HexanaAnalysisException) {
                 if (error.code != HexanaAnalysisErrorCode.INTERNAL_ERROR) {
                     ProductCliResult(
@@ -214,6 +217,11 @@ public class HexanaProductCli(
                 "--max-candidate-count" -> options.maxCandidateCount = args.requirePositiveInt(arg)
                 "--max-scan-roots" -> options.maxScanRoots = args.requirePositiveInt(arg)
                 "--max-scan-depth" -> options.maxScanDepth = args.requirePositiveInt(arg)
+                "--terminal-width" -> {
+                    requireTerminalWidthOption(spec, arg)
+                    options.terminalWidth = args.requireValue(arg)
+                    options.terminalWidthOptionName = arg
+                }
                 "--output" -> outputPath = Path.of(args.requireValue(arg))
                 "--telemetry-enabled" -> analytics.enabled = parseBoolean("--telemetry-enabled", args.requireValue(arg))
                 "--telemetry-key" -> analytics.key = args.requireValue(arg)
@@ -251,6 +259,7 @@ public class HexanaProductCli(
             outputPath = outputPath,
             resourceLimits = resourceLimits,
             allowedRoots = options.effectiveAllowedRoots,
+            terminalWidth = options.terminalWidthFor(format),
             analytics = analytics,
         )
     }
@@ -327,6 +336,9 @@ public class HexanaProductCli(
                     appendLine("  --max-candidate-count <n>")
                     appendLine("  --max-scan-roots <n>")
                     appendLine("  --max-scan-depth <n>")
+                    if (ToolOutputFormat.TABLE in spec.outputFormats) {
+                        appendLine("  --terminal-width <positive-int>")
+                    }
                     appendLine("  --output <path>")
                     appendLine("  --telemetry-enabled <true|false>")
                     appendLine("  --telemetry-key <key>")
@@ -345,6 +357,9 @@ public class HexanaProductCli(
                     appendLine("  HEXANA_CLI_MAX_CANDIDATE_COUNT")
                     appendLine("  HEXANA_CLI_MAX_SCAN_ROOTS")
                     appendLine("  HEXANA_CLI_MAX_SCAN_DEPTH")
+                    if (ToolOutputFormat.TABLE in spec.outputFormats) {
+                        appendLine("  HEXANA_CLI_TERMINAL_WIDTH")
+                    }
                     appendLine("  HEXANA_CLI_TELEMETRY_ENABLED")
                     appendLine("  HEXANA_CLI_POSTHOG_KEY")
                     appendLine("  HEXANA_CLI_POSTHOG_HOST")
@@ -397,6 +412,7 @@ public data class HexanaProductToolExecutionRequest(
     val format: HexanaCliOutputFormat,
     val resourceLimits: HexanaResourceLimits,
     val allowedRoots: List<String>,
+    val terminalWidth: Int? = null,
 )
 
 private sealed class ParsedCommand(
@@ -425,6 +441,7 @@ private sealed class ParsedCommand(
         val outputPath: Path?,
         val resourceLimits: HexanaResourceLimits,
         val allowedRoots: List<String>,
+        val terminalWidth: Int?,
         override val analytics: CliAnalyticsSettings,
     ) : ParsedCommand(spec.commandName, analytics)
 }
@@ -437,6 +454,7 @@ private fun ParsedCommand.Executable.toExecutionRequest(): HexanaProductToolExec
         format = format,
         resourceLimits = resourceLimits,
         allowedRoots = allowedRoots,
+        terminalWidth = terminalWidth,
     )
 
 private data class CliAnalyticsSettings(
@@ -455,6 +473,9 @@ private class CommandOptions private constructor(
     var maxCandidateCount: Int?,
     var maxScanRoots: Int?,
     var maxScanDepth: Int?,
+    var terminalWidth: String?,
+    var terminalWidthOptionName: String?,
+    private val envTerminalWidth: String?,
 ) {
     val effectiveAllowedRoots: List<String>
         get() = (envAllowedRoots + allowedRoots)
@@ -477,6 +498,12 @@ private class CommandOptions private constructor(
         )
     }
 
+    fun terminalWidthFor(format: HexanaCliOutputFormat): Int? =
+        if (format != ToolOutputFormat.TABLE) null else (terminalWidth ?: envTerminalWidth)?.let { value ->
+            value.trim().toIntOrNull()?.takeIf { it > 0 }
+                ?: throw ProductUsageException("${terminalWidthOptionName ?: "HEXANA_CLI_TERMINAL_WIDTH"} must be a positive integer")
+        }
+
     companion object {
         fun fromEnv(env: Map<String, String>): CommandOptions = CommandOptions(
             envAllowedRoots = parseAllowedRoots(env["HEXANA_CLI_ALLOWED_ROOTS"]),
@@ -488,6 +515,9 @@ private class CommandOptions private constructor(
             maxCandidateCount = env.positiveIntEnv("HEXANA_CLI_MAX_CANDIDATE_COUNT"),
             maxScanRoots = env.positiveIntEnv("HEXANA_CLI_MAX_SCAN_ROOTS"),
             maxScanDepth = env.positiveIntEnv("HEXANA_CLI_MAX_SCAN_DEPTH"),
+            terminalWidth = null,
+            terminalWidthOptionName = null,
+            envTerminalWidth = env["HEXANA_CLI_TERMINAL_WIDTH"],
         )
     }
 }
@@ -818,6 +848,12 @@ private fun requireBase64SourceOption(spec: HexanaCliToolSpec, optionName: Strin
 
 private fun requireScriptOption(spec: HexanaCliToolSpec, optionName: String) {
     if (!spec.requiresScriptSource) {
+        throw ProductUsageException("Unsupported ${spec.commandName} option: $optionName")
+    }
+}
+
+private fun requireTerminalWidthOption(spec: HexanaCliToolSpec, optionName: String) {
+    if (ToolOutputFormat.TABLE !in spec.outputFormats) {
         throw ProductUsageException("Unsupported ${spec.commandName} option: $optionName")
     }
 }

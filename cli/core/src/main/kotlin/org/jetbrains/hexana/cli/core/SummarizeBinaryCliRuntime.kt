@@ -55,6 +55,7 @@ public data class StandardCliRequest(
     val sourceSelections: List<ToolInputSourceSelection>,
     val params: Map<String, JsonElement> = emptyMap(),
     val format: ToolOutputFormat,
+    val terminalWidth: Int? = null,
     val maxInlineWasmBytes: Int = HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES,
     val maxFileWasmBytes: Int = HexanaAnalysisLimits.MAX_FILE_WASM_BYTES,
     val allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
@@ -346,7 +347,7 @@ public fun standardCli(
             context = context,
             arguments = arguments,
             result = execution.semanticResult,
-            options = ToolRenderOptions(format = request.format),
+            options = ToolRenderOptions(format = request.format, terminalWidth = request.terminalWidth),
         )
     )
     return RenderedStandardCliOutput(rendered = rendered, diagnostics = execution.diagnostics)

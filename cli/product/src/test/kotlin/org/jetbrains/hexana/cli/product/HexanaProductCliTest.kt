@@ -15,6 +15,7 @@ import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.net.InetSocketAddress
+import java.util.Base64
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -124,6 +125,65 @@ class HexanaProductCliTest {
             assertEquals(SUCCESS_EXIT_CODE, result.exitCode, result.stderr)
             assertTrue(result.stdout.startsWith("Usage: hexana-cli summarize-binary"), result.stdout)
         }
+    }
+
+    @Test
+    fun terminalWidthUsesEnvironmentUnlessTheCommandOptionOverridesIt() {
+        val encodedModule = Base64.getEncoder().encodeToString(MINIMAL_WASM_MODULE)
+        fun request(args: Array<String>, env: Map<String, String>): HexanaProductToolExecutionRequest {
+            val executor = RecordingProductExecutor()
+            val result = HexanaProductCli(HexanaCliProduct.STANDARD, executor).run(args, ByteArrayInputStream(ByteArray(0)), env)
+            assertEquals(SUCCESS_EXIT_CODE, result.exitCode, result.stderr)
+            return executor.singleRequest()
+        }
+
+        val fromEnvironment = request(
+            arrayOf("summarize-module", "--wasm-base64", encodedModule, "--format", "table"),
+            mapOf("HEXANA_CLI_TERMINAL_WIDTH" to "29"),
+        )
+        assertEquals(29, fromEnvironment.terminalWidth)
+
+        val fromOption = request(
+            arrayOf("summarize-module", "--wasm-base64", encodedModule, "--format", "table", "--terminal-width", "17"),
+            mapOf("HEXANA_CLI_TERMINAL_WIDTH" to "29"),
+        )
+        assertEquals(17, fromOption.terminalWidth)
+
+        val jsonWithInvalidEnvironment = request(
+            arrayOf("summarize-module", "--wasm-base64", encodedModule, "--format", "json"),
+            mapOf("HEXANA_CLI_TERMINAL_WIDTH" to "invalid"),
+        )
+        assertEquals(null, jsonWithInvalidEnvironment.terminalWidth)
+        val jsonWithOption = request(
+            arrayOf("summarize-module", "--wasm-base64", encodedModule, "--format", "pretty", "--terminal-width", "17"),
+            emptyMap(),
+        )
+        assertEquals(null, jsonWithOption.terminalWidth)
+
+        listOf("json", "pretty").forEach { format ->
+            val ignoredInvalidOption = request(
+                arrayOf("summarize-module", "--wasm-base64", encodedModule, "--format", format, "--terminal-width", "invalid"),
+                emptyMap(),
+            )
+            assertEquals(null, ignoredInvalidOption.terminalWidth)
+            val ignoredInvalidEnvironment = request(
+                arrayOf("summarize-module", "--wasm-base64", encodedModule, "--format", format),
+                mapOf("HEXANA_CLI_TERMINAL_WIDTH" to "invalid"),
+            )
+            assertEquals(null, ignoredInvalidEnvironment.terminalWidth)
+        }
+        fun invalidTable(args: Array<String>, env: Map<String, String>): ProductCliResult =
+            HexanaProductCli(HexanaCliProduct.STANDARD, RecordingProductExecutor()).run(args, ByteArrayInputStream(ByteArray(0)), env)
+        val invalidOption = invalidTable(
+            arrayOf("summarize-module", "--wasm-base64", encodedModule, "--format", "table", "--terminal-width", "invalid"), emptyMap(),
+        )
+        assertEquals(USAGE_EXIT_CODE, invalidOption.exitCode)
+        assertEquals("--terminal-width must be a positive integer\n", invalidOption.stderr)
+        val invalidEnvironment = invalidTable(
+            arrayOf("summarize-module", "--wasm-base64", encodedModule, "--format", "table"), mapOf("HEXANA_CLI_TERMINAL_WIDTH" to "invalid"),
+        )
+        assertEquals(USAGE_EXIT_CODE, invalidEnvironment.exitCode)
+        assertEquals("HEXANA_CLI_TERMINAL_WIDTH must be a positive integer\n", invalidEnvironment.stderr)
     }
 
     @Test
