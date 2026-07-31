@@ -436,17 +436,6 @@ class ToolSpec(
         "ToolSpec(name=$name, summary=$summary, guidance=$guidance, input=$input, output=$output)"
 }
 
-data class ExecutableCliRendererSpec(val methodName: String) {
-    init {
-        require(STANDALONE_HANDLER_METHOD_NAME_REGEX.matches(methodName)) {
-            "Executable CLI renderer method name must be a Kotlin method name, got `$methodName`."
-        }
-    }
-}
-
-fun executableCliRenderer(methodName: String): ExecutableCliRendererSpec =
-    ExecutableCliRendererSpec(methodName.trim())
-
 enum class CliReleaseProduct(
     val productId: String,
     val executableName: String,
@@ -463,7 +452,6 @@ data class CliToolBinding(
     val executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
     val outputOverride: OutputConversionCapability? = null,
     val defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
-    val executableRenderer: ExecutableCliRendererSpec? = null,
     val releaseProducts: Set<CliReleaseProduct> = emptySet(),
     val inputModel: ToolInputModel? = null,
 ) {
@@ -473,16 +461,10 @@ data class CliToolBinding(
         }
         require(groups.isNotEmpty()) { "CLI tool '$commandName' must declare at least one group." }
         if (executionStatus == CliExecutionStatus.Executable) {
-            require(executableRenderer != null) {
-                "Executable CLI tool '$commandName' must declare an executable renderer."
-            }
             require(inputModel != null) {
                 "Executable CLI tool '$commandName' must declare an explicit input model."
             }
         } else {
-            require(executableRenderer == null) {
-                "TODO CLI tool '$commandName' must not declare an executable renderer."
-            }
             require(releaseProducts.isEmpty()) {
                 "TODO CLI tool '$commandName' must not belong to a release product."
             }
@@ -530,7 +512,6 @@ fun cliToolBinding(
     executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
     outputOverride: OutputConversionCapability? = null,
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
-    executableRenderer: ExecutableCliRendererSpec? = null,
     releaseProducts: Set<CliReleaseProduct> = emptySet(),
     inputModel: ToolInputModel? = null,
 ): CliToolBinding = CliToolBinding(
@@ -541,7 +522,6 @@ fun cliToolBinding(
     executionStatus = executionStatus,
     outputOverride = outputOverride,
     defaultOutput = defaultOutput,
-    executableRenderer = executableRenderer,
     releaseProducts = releaseProducts,
     inputModel = inputModel,
 )
@@ -1111,9 +1091,6 @@ internal fun validateCliReleaseProducts(
         val cli = tool.binding
         require(cli.executionStatus == CliExecutionStatus.Executable) {
             "Release product tool '${tool.name}' must be an executable CLI tool."
-        }
-        requireNotNull(cli.executableRenderer) {
-            "Release product tool '${tool.name}' is missing an executable renderer."
         }
     }
 

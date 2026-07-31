@@ -292,7 +292,6 @@ private val CLI_TOOL_BINDINGS = listOf(
     cliToolBinding(
         "summarize_binary", "summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined,
         executionStatus = CliExecutionStatus.Executable,
-        executableRenderer = executableCliRenderer("renderSummarizeBinaryCliCommandOutput"),
         releaseProducts = setOf(CliReleaseProduct.HexanaCli),
         inputModel = binaryCliInputModel(),
     ),
@@ -300,7 +299,6 @@ private val CLI_TOOL_BINDINGS = listOf(
         "run_binary_script", "run-script", ToolGroup.Scripting, ToolOutputPolicy.ToolDefined,
         executionStatus = CliExecutionStatus.Executable,
         defaultOutput = OutputConversionCapability.RawText,
-        executableRenderer = executableCliRenderer("renderRunBinaryScriptCommandOutput"),
         releaseProducts = setOf(CliReleaseProduct.HexanaCliScript),
         inputModel = toolInputModel {
             binarySource("binary", target = SourceTargetSpec.RootInput) {
@@ -319,7 +317,6 @@ private val CLI_TOOL_BINDINGS = listOf(
         "wasm_to_wat", "wasm-to-wat", ToolGroup.Converters, ToolOutputPolicy.ToolDefined,
         executionStatus = CliExecutionStatus.Executable,
         defaultOutput = OutputConversionCapability.RawText,
-        executableRenderer = executableCliRenderer("renderWasmToWatCommandOutput"),
         releaseProducts = setOf(CliReleaseProduct.HexanaCli),
         inputModel = wasmCliInputModel(),
     ),
@@ -327,7 +324,6 @@ private val CLI_TOOL_BINDINGS = listOf(
         "summarize_module", "summarize-module", ToolGroup.Module, ToolOutputPolicy.ToolDefined,
         executionStatus = CliExecutionStatus.Executable,
         defaultOutput = OutputConversionCapability.Pretty,
-        executableRenderer = executableCliRenderer("renderSummarizeModuleCommandOutput"),
         releaseProducts = setOf(CliReleaseProduct.HexanaCli),
         inputModel = wasmCliInputModel(),
     ),

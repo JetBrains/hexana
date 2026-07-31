@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import org.jetbrains.hexana.cli.runtime.RenderedToolOutput
+import org.jetbrains.hexana.cli.runtime.FormatAwareToolOutputRenderer
 import org.jetbrains.hexana.cli.runtime.ToolExecutionRequest
 import org.jetbrains.hexana.cli.runtime.ToolExecutionResult
 import org.jetbrains.hexana.cli.runtime.ToolExecutor
@@ -132,7 +133,7 @@ internal class RunScriptExecutor(
     }
 }
 
-internal object RunScriptOutputRenderer : ToolOutputRenderer {
+internal object RunScriptOutputRenderer : FormatAwareToolOutputRenderer {
     const val JSON_CONTENT_TYPE = "application/json; charset=utf-8"
     const val RAW_CONTENT_TYPE = "text/plain; charset=utf-8"
 

@@ -1,41 +1,45 @@
 package org.jetbrains.hexana.cli.runtime
 
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.builtins.serializer
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertIs
 
 class TypedToolOutputTest {
     @Test
-    fun jsonBackedPlanDecodesWithSerializerAndRendersEachTypedProjection() {
+    fun planOwnsSerializerAndPassesRenderOptionsToTypedProjection() {
+        var receivedOptions: ToolRenderOptions? = null
         val plan = TypedToolOutputPlan(
             serializer = String.serializer(),
             projections = listOf(
-                JsonToolOutputProjection(String.serializer(), Json::encodeToString),
-                PrettyToolOutputProjection { "value=$it" },
-                TableToolOutputProjection { CliTable(listOf("Value"), listOf(listOf(it))) },
+                TypedToolOutputProjection(ToolOutputFormat.PRETTY) { value, options ->
+                    receivedOptions = options
+                    TypedToolOutput.Text("value=$value")
+                },
             ),
         )
-        val renderer = JsonBackedTypedToolOutputRenderer("sample", Json::decodeFromJsonElement, plan)
-        val request = ToolOutputRenderRequest(
-            context = ToolRuntimeContext("sample"),
-            arguments = kotlinx.serialization.json.JsonObject(emptyMap()),
-            result = Json.encodeToJsonElement("7"),
-        )
+        val options = ToolRenderOptions(ToolOutputFormat.PRETTY, TerminalColorMode.Never, terminalWidth = 17, includeDiagnostics = true)
 
-        assertEquals(setOf(ToolOutputFormat.JSON, ToolOutputFormat.PRETTY, ToolOutputFormat.TABLE), renderer.supportedFormats)
-        assertEquals("\"7\"", assertIs<RenderedToolOutput.Text>(renderer.render(request)).text)
-        assertEquals("value=7", assertIs<RenderedToolOutput.Text>(renderer.render(request.copy(options = ToolRenderOptions(ToolOutputFormat.PRETTY)))).text)
-        assertEquals("Value\n-----\n7", assertIs<RenderedToolOutput.Text>(renderer.render(request.copy(options = ToolRenderOptions(ToolOutputFormat.TABLE)))).text)
-        assertFailsWith<IllegalArgumentException> { renderer.render(request.copy(options = ToolRenderOptions(ToolOutputFormat.RAW))) }
+        assertEquals(setOf(ToolOutputFormat.JSON, ToolOutputFormat.PRETTY), plan.supportedFormats)
+        assertEquals(TypedToolOutput.Text("value=7"), plan.projection(ToolOutputFormat.PRETTY).project("7", options))
+        assertEquals(options, receivedOptions)
+        assertFailsWith<IllegalArgumentException> { plan.projection(ToolOutputFormat.RAW) }
     }
 
     @Test
-    fun tableRendererAlignsPlainTextCellsAndRejectsMultilineCells() {
-        assertEquals("Name | Count\n-----+------\nwasm | 2", CliTableRenderer.render(CliTable(listOf("Name", "Count"), listOf(listOf("wasm", "2")))))
+    fun tableSnapshotIsCallerImmutableAndRejectsInvalidCells() {
+        val headers = mutableListOf("Name", "Count")
+        val row = mutableListOf("wasm", "2")
+        val table = CliTable(headers, listOf(row))
+        headers[0] = "Mutated"
+        row[0] = "changed"
+
+        assertEquals(listOf("Name", "Count"), table.headers)
+        assertEquals(listOf(listOf("wasm", "2")), table.rows)
+        assertFailsWith<UnsupportedOperationException> {
+            @Suppress("UNCHECKED_CAST")
+            (table.headers as MutableList<String>).add("Unexpected")
+        }
         assertFailsWith<IllegalArgumentException> { CliTable(listOf("Name"), listOf(listOf("line\nbreak"))) }
     }
 }

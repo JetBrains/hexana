@@ -39,7 +39,7 @@ and refreshes the checked-in packaging template.
   capabilities. Consumer invocation and membership policy must not be added back to feature contracts.
 - IDEA owns invocation bindings (`ToolInputPattern` plus handler FQN) and selects the canonical standalone default profile. Standalone owns handler method bindings and explicit effective
   default/advanced/scripting lists. MCPB exactly reuses the standalone default selection. CLI owns command/group/output,
-  renderer, explicit executable input models, and product selections.
+  explicit executable input models, and product selections; product runtime validates advertised formats against concrete projections.
 - All authorities resolve typed IDs through `ToolCatalog`; duplicate/unknown selectors and missing/duplicate bindings
   fail before generation, and resolved output follows canonical contract order.
 - CLI release-product membership is CLI authority metadata independent from MCP profiles. Every executable binding

@@ -156,17 +156,13 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
-    fun `executable CLI bindings require a renderer and explicit input model`() {
+    fun `executable CLI bindings require an explicit input model`() {
         val binding = HexanaCliTools.single { it.name == "summarize_binary" }.binding
 
-        val rendererError = assertFailsWith<IllegalArgumentException> {
-            binding.copy(executableRenderer = null)
-        }
         val inputError = assertFailsWith<IllegalArgumentException> {
             binding.copy(inputModel = null)
         }
 
-        assertTrue(rendererError.message.orEmpty().contains("must declare an executable renderer"))
         assertTrue(inputError.message.orEmpty().contains("must declare an explicit input model"))
     }
 

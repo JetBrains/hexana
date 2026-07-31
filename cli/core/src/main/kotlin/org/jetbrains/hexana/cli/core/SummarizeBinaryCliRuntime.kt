@@ -19,10 +19,9 @@ import org.jetbrains.hexana.mcp.model.converters.WasmToWatResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.cli.runtime.RenderedToolOutput
 import org.jetbrains.hexana.cli.runtime.CliTable
-import org.jetbrains.hexana.cli.runtime.JsonBackedTypedToolOutputRenderer
-import org.jetbrains.hexana.cli.runtime.JsonToolOutputProjection
-import org.jetbrains.hexana.cli.runtime.PrettyToolOutputProjection
-import org.jetbrains.hexana.cli.runtime.TableToolOutputProjection
+import org.jetbrains.hexana.cli.runtime.FormatAwareToolOutputRenderer
+import org.jetbrains.hexana.cli.runtime.TypedToolOutput
+import org.jetbrains.hexana.cli.runtime.TypedToolOutputProjection
 import org.jetbrains.hexana.cli.runtime.TypedToolOutputPlan
 import org.jetbrains.hexana.cli.runtime.ToolExecutionDiagnostic
 import org.jetbrains.hexana.cli.runtime.ToolExecutionDiagnosticSeverity
@@ -172,7 +171,7 @@ internal class WasmToWatExecutor(
     }
 }
 
-internal object SummarizeBinaryJsonRenderer : ToolOutputRenderer {
+internal object SummarizeBinaryJsonRenderer : FormatAwareToolOutputRenderer {
     const val CONTENT_TYPE = "application/json; charset=utf-8"
 
     override val supportedFormats: Set<ToolOutputFormat> = setOf(ToolOutputFormat.JSON)
@@ -189,19 +188,28 @@ internal object SummarizeBinaryJsonRenderer : ToolOutputRenderer {
     }
 }
 
-internal object SummarizeModuleRenderer : ToolOutputRenderer {
+internal object SummarizeModuleRenderer : FormatAwareToolOutputRenderer {
     const val JSON_CONTENT_TYPE = SummarizeBinaryJsonRenderer.CONTENT_TYPE
     private val delegate = JsonBackedTypedToolOutputRenderer(
         toolName = SUMMARIZE_MODULE_TOOL_NAME,
-        decode = HexanaJson.compact::decodeFromJsonElement,
         plan = TypedToolOutputPlan(
             serializer = SummarizeModuleResult.serializer(),
             projections = listOf(
-                JsonToolOutputProjection(SummarizeModuleResult.serializer(), HexanaJson.compact::encodeToString),
-                PrettyToolOutputProjection(::renderSummarizeModulePretty),
-                TableToolOutputProjection(::summarizeModuleTable),
+                TypedToolOutputProjection(ToolOutputFormat.PRETTY) { result, _ ->
+                    TypedToolOutput.Text(renderSummarizeModulePretty(result))
+                },
+                TypedToolOutputProjection(ToolOutputFormat.TABLE) { result, _ ->
+                    TypedToolOutput.Table(summarizeModuleTable(result))
+                },
             ),
         ),
+        renderJson = { result ->
+            RenderedToolOutput.Text(
+                text = HexanaJson.compact.encodeToString(JsonElement.serializer(), result),
+                contentType = JSON_CONTENT_TYPE,
+            )
+        },
+        renderTable = CliTableRenderer::render,
     )
 
     override val supportedFormats: Set<ToolOutputFormat> = delegate.supportedFormats
@@ -209,7 +217,7 @@ internal object SummarizeModuleRenderer : ToolOutputRenderer {
     override fun render(request: ToolOutputRenderRequest): RenderedToolOutput = delegate.render(request)
 }
 
-internal object WasmToWatRenderer : ToolOutputRenderer {
+internal object WasmToWatRenderer : FormatAwareToolOutputRenderer {
     const val JSON_CONTENT_TYPE = SummarizeBinaryJsonRenderer.CONTENT_TYPE
 
     override val supportedFormats: Set<ToolOutputFormat> = setOf(ToolOutputFormat.JSON, ToolOutputFormat.RAW)

@@ -178,7 +178,6 @@ class HexanaToolCompatibilityTest {
             appendLine("$prefix.execution=${binding.executionStatus.name}")
             appendLine("$prefix.outputOverride=${binding.outputOverride?.name.orEmpty()}")
             appendLine("$prefix.defaultOutput=${binding.defaultOutput.name}")
-            appendLine("$prefix.renderer=${binding.executableRenderer?.methodName.orEmpty()}")
             appendLine("$prefix.products=${binding.releaseProducts.joinToString { it.name }}")
             appendInputModel("$prefix.input", binding.inputModel)
         }
@@ -311,7 +310,7 @@ class HexanaToolCompatibilityTest {
         const val EXPECTED_IDEA = "b3d01605c58323500af1b4e1eeabfa8b6ff2e4fb659bfccac35c9869c379d378"
         const val EXPECTED_STANDALONE = "0395327fb451b08908345ce4e59bd1cf97bb05dd4bb1cb2165679a2744dd8b44"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"
-        const val EXPECTED_CLI = "72db7200aabe1b00a00b2fc4493d4728ca2520f024170eecfe3668866d052051"
+        const val EXPECTED_CLI = "0855459ff37cb4c4df85220c5a9c6c461af1154b13e32ae4d6f3f98c94714e9a"
         const val EXPECTED_HEXANA_CLI = "35ec773de2d485a7b285a37240d517bbc9c789a37be2725f66d355c7bb9bc6b7"
         const val EXPECTED_HEXANA_CLI_SCRIPT = "3b97abef096e419f500f3113464664719f08b9554efe50685f7605f785cdb7f1"
     }

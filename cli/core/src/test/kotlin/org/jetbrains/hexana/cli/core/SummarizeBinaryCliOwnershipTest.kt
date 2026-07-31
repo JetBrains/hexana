@@ -13,16 +13,10 @@ class SummarizeBinaryCliOwnershipTest {
 
     @Test
     fun generatedMetadataKeepsStandardCommandsInTheSplitCliProductOnly() {
-        val dsl = root.resolve(
-            "mcp/tools-generator/src/main/kotlin/org/jetbrains/hexana/mcp/tools/SurfaceAuthorities.kt"
-        ).readText()
         val generatedProducts = root.resolve(
             "cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt"
         ).readText()
 
-        assertTrue(dsl.contains("""executableCliRenderer("renderSummarizeBinaryCliCommandOutput")"""))
-        assertTrue(dsl.contains("""executableCliRenderer("renderSummarizeModuleCommandOutput")"""))
-        assertTrue(dsl.contains("""executableCliRenderer("renderWasmToWatCommandOutput")"""))
         assertTrue(generatedProducts.contains("""HexanaCliProductToolSelection("summarize_binary", "summarize-binary""""))
         assertTrue(generatedProducts.contains("""HexanaCliProductToolSelection("summarize_module", "summarize-module""""))
         assertTrue(generatedProducts.contains("""HexanaCliProductToolSelection("wasm_to_wat", "wasm-to-wat""""))
@@ -30,10 +24,6 @@ class SummarizeBinaryCliOwnershipTest {
         listOf(
             "handlerFqn",
             "standaloneHandlerMethod",
-            "executableRendererMethod",
-            "renderSummarizeBinaryCliCommandOutput",
-            "renderSummarizeModuleCommandOutput",
-            "renderWasmToWatCommandOutput",
             "renderSummarizeBinaryCommandOutput",
             "org.jetbrains.hexana.mcp.server",
         ).forEach { serverDetail ->

@@ -324,8 +324,6 @@ class StandardAnalysisCliRuntimeTest {
         }
         val executor = ToolExecutor { ToolExecutionResult(JsonObject(emptyMap())) }
         val renderer = object : ToolOutputRenderer {
-            override val supportedFormats: Set<ToolOutputFormat> = setOf(ToolOutputFormat.JSON)
-
             override fun render(request: ToolOutputRenderRequest): RenderedToolOutput =
                 RenderedToolOutput.Text("{}")
         }

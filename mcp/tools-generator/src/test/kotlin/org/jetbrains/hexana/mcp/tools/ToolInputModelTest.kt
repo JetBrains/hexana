@@ -465,7 +465,6 @@ class ToolInputModelTest {
             ToolGroup.Module,
             ToolOutputPolicy.ToolDefined,
             executionStatus = CliExecutionStatus.Executable,
-            executableRenderer = executableCliRenderer("renderCompareModules"),
             releaseProducts = setOf(CliReleaseProduct.HexanaCli),
             inputModel = inputModel,
         )
@@ -489,7 +488,6 @@ class ToolInputModelTest {
             ToolGroup.Binary,
             ToolOutputPolicy.ToolDefined,
             executionStatus = CliExecutionStatus.Executable,
-            executableRenderer = executableCliRenderer("renderCompareBinaries"),
             releaseProducts = setOf(CliReleaseProduct.HexanaCli),
             inputModel = inputModel,
         )
@@ -534,7 +532,6 @@ class ToolInputModelTest {
             ToolGroup.Binary,
             ToolOutputPolicy.ToolDefined,
             executionStatus = CliExecutionStatus.Executable,
-            executableRenderer = executableCliRenderer("renderRunBinaryScript"),
             releaseProducts = setOf(CliReleaseProduct.HexanaCliScript),
             inputModel = inputModel,
         )

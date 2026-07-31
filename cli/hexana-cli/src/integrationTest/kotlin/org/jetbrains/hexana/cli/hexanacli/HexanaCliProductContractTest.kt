@@ -67,6 +67,9 @@ class HexanaCliProductContractTest {
         val tools = target.run(listOf("tools"))
         assertSuccess(tools)
         assertTrue(tools.stdout.contains("formats: json, pretty, table"), tools.describe())
+        val help = target.run(listOf("summarize-module", "--help"))
+        assertSuccess(help)
+        assertTrue(help.stdout.contains("--format <json|pretty|table>"), help.describe())
         assertFailure(target.run(listOf("summarize-binary", wasm.toString(), "--format", "table")), 2, "Unsupported summarize-binary format")
     }
 

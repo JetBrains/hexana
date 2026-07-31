@@ -20,6 +20,6 @@ class ToolOutputFormatTest {
             ToolOutputFormat.parse("yaml")
         }
 
-        assertEquals("Unknown tool output format 'yaml'. Supported formats: json, pretty, table, raw.", error.message)
+        assertEquals("Unknown tool output format 'yaml'. Supported formats: json, pretty, raw, table.", error.message)
     }
 }
