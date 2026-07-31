@@ -119,7 +119,7 @@ internal object CliTableRenderer {
             current = current.drop(count).toMutableList()
             while (current.firstOrNull()?.isWhitespaceCluster() == true) current.removeFirst()
             currentWidth = displayClustersWidth(current)
-            lastSpace = current.indexOfLast { it.isWhitespaceCluster() }
+            lastSpace = current.lastWhitespaceRunStart()
         }
         clusters.forEach { cluster ->
             if (discardingBoundaryWhitespace && cluster.isWhitespaceCluster()) return@forEach
@@ -134,13 +134,18 @@ internal object CliTableRenderer {
             }
             current += cluster
             currentWidth += clusterWidth
-            if (cluster.isWhitespaceCluster()) lastSpace = current.lastIndex
+            if (cluster.isWhitespaceCluster()) lastSpace = current.lastWhitespaceRunStart()
         }
         if (current.isNotEmpty()) lines += current.joinToString("")
         return lines
     }
 
     private fun String.isWhitespaceCluster(): Boolean = all(Char::isWhitespace)
+    private fun List<String>.lastWhitespaceRunStart(): Int {
+        var index = indexOfLast { it.isWhitespaceCluster() }
+        while (index > 0 && this[index - 1].isWhitespaceCluster()) index--
+        return index
+    }
 
     internal fun displayWidth(text: String): Int = displayClustersWidth(graphemes(text))
     private fun displayClustersWidth(clusters: List<String>): Int = clusters.sumOf(::clusterDisplayWidth)

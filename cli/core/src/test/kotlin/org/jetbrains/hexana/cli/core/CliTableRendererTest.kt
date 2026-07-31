@@ -82,9 +82,9 @@ class CliTableRendererTest {
     }
 
     @Test
-    fun wrappingConsumesOneOrMoreBoundarySpacesWithoutAblankLine() {
-        val output = render(CliTable(listOf("Value"), listOf(listOf("alpha   beta"), listOf("alpha beta"), listOf("abcdefgh"))), 5)
-        assertEquals("Value\n-----\nalpha\nbeta\nalpha\nbeta\nabcde\nfgh", output)
+    fun wrappingConsumesOneOrMoreBoundarySpacesWithoutABlankLine() {
+        val output = render(CliTable(listOf("Value"), listOf(listOf("alpha   beta"), listOf("alpha beta"), listOf("a   beta"), listOf("abcdefgh"))), 5)
+        assertEquals("Value\n-----\nalpha\nbeta\nalpha\nbeta\na\nbeta\nabcde\nfgh", output)
         assertTrue(output.lineSequence().none { it.startsWith(' ') || it.endsWith(' ') })
     }
 
