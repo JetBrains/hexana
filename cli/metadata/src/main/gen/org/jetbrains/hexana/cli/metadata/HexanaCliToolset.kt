@@ -118,7 +118,7 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types.",
           groups = setOf(HexanaCliToolGroup.MODULE),
           inputModes = setOf(HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.STDIN),
-          outputFormats = setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.PRETTY),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.PRETTY, HexanaCliOutputFormat.TABLE),
           defaultOutputFormat = HexanaCliOutputFormat.PRETTY,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
           executionStatus = HexanaCliExecutionStatus.EXECUTABLE,

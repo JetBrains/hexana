@@ -3,6 +3,7 @@ package org.jetbrains.hexana.cli.runtime
 enum class ToolOutputFormat(val cliName: String) {
     JSON("json"),
     PRETTY("pretty"),
+    TABLE("table"),
     RAW("raw"),
     ;
 

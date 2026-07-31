@@ -9,6 +9,7 @@ class ToolOutputFormatTest {
     fun parsesStableCliNames() {
         assertEquals(ToolOutputFormat.JSON, ToolOutputFormat.parse("json"))
         assertEquals(ToolOutputFormat.PRETTY, ToolOutputFormat.parse("pretty"))
+        assertEquals(ToolOutputFormat.TABLE, ToolOutputFormat.parse("table"))
         assertEquals(ToolOutputFormat.RAW, ToolOutputFormat.parse("raw"))
         assertEquals(ToolOutputFormat.JSON, ToolOutputFormat.parse(" JSON "))
     }
@@ -19,6 +20,6 @@ class ToolOutputFormatTest {
             ToolOutputFormat.parse("yaml")
         }
 
-        assertEquals("Unknown tool output format 'yaml'. Supported formats: json, pretty, raw.", error.message)
+        assertEquals("Unknown tool output format 'yaml'. Supported formats: json, pretty, table, raw.", error.message)
     }
 }

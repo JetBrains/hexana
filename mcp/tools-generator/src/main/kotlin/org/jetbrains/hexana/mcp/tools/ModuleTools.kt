@@ -16,6 +16,7 @@ val SummarizeModuleResultClass = class_("SummarizeModuleResult", kotlinPackage =
         OutputConversionCapability.SemanticJson,
         OutputConversionCapability.McpWrapper,
         OutputConversionCapability.Pretty,
+        OutputConversionCapability.Table,
     )
     int("functions").describe("Total function count (imports + defined).")
     int("exports").describe("Number of exports declared by the module.")

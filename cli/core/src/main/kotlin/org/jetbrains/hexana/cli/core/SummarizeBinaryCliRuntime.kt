@@ -18,6 +18,12 @@ import org.jetbrains.hexana.mcp.model.binaries.BinarySummaryResult
 import org.jetbrains.hexana.mcp.model.converters.WasmToWatResult
 import org.jetbrains.hexana.mcp.model.summary.SummarizeModuleResult
 import org.jetbrains.hexana.cli.runtime.RenderedToolOutput
+import org.jetbrains.hexana.cli.runtime.CliTable
+import org.jetbrains.hexana.cli.runtime.JsonBackedTypedToolOutputRenderer
+import org.jetbrains.hexana.cli.runtime.JsonToolOutputProjection
+import org.jetbrains.hexana.cli.runtime.PrettyToolOutputProjection
+import org.jetbrains.hexana.cli.runtime.TableToolOutputProjection
+import org.jetbrains.hexana.cli.runtime.TypedToolOutputPlan
 import org.jetbrains.hexana.cli.runtime.ToolExecutionDiagnostic
 import org.jetbrains.hexana.cli.runtime.ToolExecutionDiagnosticSeverity
 import org.jetbrains.hexana.cli.runtime.ToolExecutionRequest
@@ -169,6 +175,8 @@ internal class WasmToWatExecutor(
 internal object SummarizeBinaryJsonRenderer : ToolOutputRenderer {
     const val CONTENT_TYPE = "application/json; charset=utf-8"
 
+    override val supportedFormats: Set<ToolOutputFormat> = setOf(ToolOutputFormat.JSON)
+
     override fun render(request: ToolOutputRenderRequest): RenderedToolOutput {
         require(request.context.toolName == SUMMARIZE_BINARY_TOOL_NAME)
         require(request.options.format == ToolOutputFormat.JSON) {
@@ -183,23 +191,28 @@ internal object SummarizeBinaryJsonRenderer : ToolOutputRenderer {
 
 internal object SummarizeModuleRenderer : ToolOutputRenderer {
     const val JSON_CONTENT_TYPE = SummarizeBinaryJsonRenderer.CONTENT_TYPE
+    private val delegate = JsonBackedTypedToolOutputRenderer(
+        toolName = SUMMARIZE_MODULE_TOOL_NAME,
+        decode = HexanaJson.compact::decodeFromJsonElement,
+        plan = TypedToolOutputPlan(
+            serializer = SummarizeModuleResult.serializer(),
+            projections = listOf(
+                JsonToolOutputProjection(SummarizeModuleResult.serializer(), HexanaJson.compact::encodeToString),
+                PrettyToolOutputProjection(::renderSummarizeModulePretty),
+                TableToolOutputProjection(::summarizeModuleTable),
+            ),
+        ),
+    )
 
-    override fun render(request: ToolOutputRenderRequest): RenderedToolOutput {
-        require(request.context.toolName == SUMMARIZE_MODULE_TOOL_NAME)
-        val result = HexanaJson.compact.decodeFromJsonElement(SummarizeModuleResult.serializer(), request.result)
-        return when (request.options.format) {
-            ToolOutputFormat.JSON -> RenderedToolOutput.Text(
-                text = HexanaJson.compact.encodeToString(SummarizeModuleResult.serializer(), result),
-                contentType = JSON_CONTENT_TYPE,
-            )
-            ToolOutputFormat.PRETTY -> RenderedToolOutput.Text(renderSummarizeModulePretty(result))
-            ToolOutputFormat.RAW -> error("summarize-module does not support raw output")
-        }
-    }
+    override val supportedFormats: Set<ToolOutputFormat> = delegate.supportedFormats
+
+    override fun render(request: ToolOutputRenderRequest): RenderedToolOutput = delegate.render(request)
 }
 
 internal object WasmToWatRenderer : ToolOutputRenderer {
     const val JSON_CONTENT_TYPE = SummarizeBinaryJsonRenderer.CONTENT_TYPE
+
+    override val supportedFormats: Set<ToolOutputFormat> = setOf(ToolOutputFormat.JSON, ToolOutputFormat.RAW)
 
     override fun render(request: ToolOutputRenderRequest): RenderedToolOutput {
         require(request.context.toolName == WASM_TO_WAT_TOOL_NAME)
@@ -211,6 +224,7 @@ internal object WasmToWatRenderer : ToolOutputRenderer {
             )
             ToolOutputFormat.RAW -> RenderedToolOutput.Text(result.wat)
             ToolOutputFormat.PRETTY -> error("wasm-to-wat does not support pretty output")
+            ToolOutputFormat.TABLE -> error("wasm-to-wat does not support table output")
         }
     }
 }
@@ -230,6 +244,31 @@ public fun renderSummarizeModulePretty(result: SummarizeModuleResult): String =
         appendLine("  Tables: ${result.imports.tables}")
         appendLine("  Globals: ${result.imports.globals}")
         append("Module size: ${result.moduleSize} bytes")
+    }
+
+public fun summarizeModuleTable(result: SummarizeModuleResult): CliTable = CliTable(
+    headers = listOf("Metric", "Value"),
+    rows = listOf(
+        listOf("Functions", result.functions.toString()),
+        listOf("Exports", result.exports.toString()),
+        listOf("Memories", result.memories.toString()),
+        listOf("Globals", result.globals.toString()),
+        listOf("Tables", result.tables.toString()),
+        listOf("Types", result.types.toString()),
+        listOf("Imported functions", result.imports.functions.toString()),
+        listOf("Imported memories", result.imports.memories.toString()),
+        listOf("Imported tables", result.imports.tables.toString()),
+        listOf("Imported globals", result.imports.globals.toString()),
+        listOf("Module size (bytes)", result.moduleSize.toString()),
+    ),
+)
+
+public fun standardCliSupportedOutputFormats(toolName: String): Set<ToolOutputFormat> =
+    when (toolName) {
+        SUMMARIZE_BINARY_TOOL_NAME -> SummarizeBinaryJsonRenderer.supportedFormats
+        SUMMARIZE_MODULE_TOOL_NAME -> SummarizeModuleRenderer.supportedFormats
+        WASM_TO_WAT_TOOL_NAME -> WasmToWatRenderer.supportedFormats
+        else -> error("Standard CLI tool '$toolName' is not registered.")
     }
 
 internal data class CliToolRuntimeBinding(

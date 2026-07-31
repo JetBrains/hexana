@@ -116,6 +116,27 @@ class StandardAnalysisCliRuntimeTest {
         val pretty = assertIs<RenderedToolOutput.Text>(
             SummarizeModuleRenderer.render(renderRequest(SUMMARIZE_MODULE_TOOL_NAME, result, ToolOutputFormat.PRETTY))
         )
+        val table = assertIs<RenderedToolOutput.Text>(
+            SummarizeModuleRenderer.render(renderRequest(SUMMARIZE_MODULE_TOOL_NAME, result, ToolOutputFormat.TABLE))
+        )
+        assertEquals(
+            """
+            Metric              | Value
+            --------------------+------
+            Functions           | 2
+            Exports             | 1
+            Memories            | 1
+            Globals             | 3
+            Tables              | 4
+            Types               | 5
+            Imported functions  | 6
+            Imported memories   | 7
+            Imported tables     | 8
+            Imported globals    | 9
+            Module size (bytes) | 10
+            """.trimIndent(),
+            table.text,
+        )
         assertEquals(
             """
             WebAssembly module summary
@@ -134,7 +155,7 @@ class StandardAnalysisCliRuntimeTest {
             """.trimIndent(),
             pretty.text,
         )
-        assertFailsWith<IllegalStateException> {
+        assertFailsWith<IllegalArgumentException> {
             SummarizeModuleRenderer.render(renderRequest(SUMMARIZE_MODULE_TOOL_NAME, result, ToolOutputFormat.RAW))
         }
     }
@@ -303,6 +324,8 @@ class StandardAnalysisCliRuntimeTest {
         }
         val executor = ToolExecutor { ToolExecutionResult(JsonObject(emptyMap())) }
         val renderer = object : ToolOutputRenderer {
+            override val supportedFormats: Set<ToolOutputFormat> = setOf(ToolOutputFormat.JSON)
+
             override fun render(request: ToolOutputRenderRequest): RenderedToolOutput =
                 RenderedToolOutput.Text("{}")
         }

@@ -49,7 +49,7 @@ and refreshes the checked-in packaging template.
 - Top-level tool output classes also declare their `mcp/core` model package here with `kotlinPackage = ...`; the
   idea-plugin generator must not carry a separate result-class package map.
 - Input/output conversion capability symbols are intrinsic reusable metadata on `ClassSpec`. `SemanticJson`, `McpWrapper`,
-  `Pretty`, and `RawText` are implemented for the current POC paths. `RawBytes` is symbolic/deferred for future
+  `Pretty`, `Table`, and `RawText` are implemented for current CLI paths. `RawBytes` is symbolic/deferred for future
   binary-safe rendering and is not exposed by current catalog tools. CLI source-slot input behavior belongs only in
   CLI authority `ToolInputModel` bindings; executable CLI models must never be derived from IDEA patterns.
 - Standalone server input and output JSON schemas are generated from `ClassSpec`/`FieldSpec`; add defaults and bounds

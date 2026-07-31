@@ -6,6 +6,7 @@ import org.jetbrains.hexana.cli.core.StandardCliRequest
 import org.jetbrains.hexana.cli.core.SummarizeBinaryCliRequest
 import org.jetbrains.hexana.cli.core.WASM_TO_WAT_TOOL_NAME
 import org.jetbrains.hexana.cli.core.standardCli
+import org.jetbrains.hexana.cli.core.standardCliSupportedOutputFormats
 import org.jetbrains.hexana.cli.core.summarizeBinaryCli
 import org.jetbrains.hexana.cli.product.HexanaProductToolExecutionRequest
 import org.jetbrains.hexana.cli.product.HexanaProductToolExecutorBinding
@@ -21,9 +22,9 @@ import org.jetbrains.hexana.mcp.HexanaResourceLimits
 
 internal object HexanaStandardProductExecutor : HexanaProductToolExecutor {
     override val bindings: List<HexanaProductToolExecutorBinding> = listOf(
-        HexanaProductToolExecutorBinding(SUMMARIZE_BINARY_TOOL_NAME, ::executeSummarizeBinary),
-        HexanaProductToolExecutorBinding(SUMMARIZE_MODULE_TOOL_NAME, ::executeStandard),
-        HexanaProductToolExecutorBinding(WASM_TO_WAT_TOOL_NAME, ::executeStandard),
+        HexanaProductToolExecutorBinding(SUMMARIZE_BINARY_TOOL_NAME, standardCliSupportedOutputFormats(SUMMARIZE_BINARY_TOOL_NAME), ::executeSummarizeBinary),
+        HexanaProductToolExecutorBinding(SUMMARIZE_MODULE_TOOL_NAME, standardCliSupportedOutputFormats(SUMMARIZE_MODULE_TOOL_NAME), ::executeStandard),
+        HexanaProductToolExecutorBinding(WASM_TO_WAT_TOOL_NAME, standardCliSupportedOutputFormats(WASM_TO_WAT_TOOL_NAME), ::executeStandard),
     )
 
     private fun executeSummarizeBinary(request: HexanaProductToolExecutionRequest): ProductCliResult {

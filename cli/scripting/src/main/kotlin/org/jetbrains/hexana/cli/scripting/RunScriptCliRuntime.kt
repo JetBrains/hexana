@@ -136,6 +136,8 @@ internal object RunScriptOutputRenderer : ToolOutputRenderer {
     const val JSON_CONTENT_TYPE = "application/json; charset=utf-8"
     const val RAW_CONTENT_TYPE = "text/plain; charset=utf-8"
 
+    override val supportedFormats: Set<ToolOutputFormat> = setOf(ToolOutputFormat.JSON, ToolOutputFormat.RAW)
+
     override fun render(request: ToolOutputRenderRequest): RenderedToolOutput {
         require(request.context.toolName == RUN_BINARY_SCRIPT_TOOL_NAME)
         val result = HexanaJson.compact.decodeFromJsonElement(RunBinaryScriptResult.serializer(), request.result)
@@ -150,6 +152,7 @@ internal object RunScriptOutputRenderer : ToolOutputRenderer {
                 contentType = RAW_CONTENT_TYPE,
             )
             ToolOutputFormat.PRETTY -> error("run-script does not support pretty output")
+            ToolOutputFormat.TABLE -> error("run-script does not support table output")
         }
     }
 }

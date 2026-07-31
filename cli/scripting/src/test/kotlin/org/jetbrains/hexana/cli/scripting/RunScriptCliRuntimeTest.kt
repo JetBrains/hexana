@@ -78,6 +78,8 @@ class RunScriptCliRuntimeTest {
         val converter = RunScriptInputConverter()
         val executor = ToolExecutor { ToolExecutionResult(JsonNull) }
         val renderer = object : ToolOutputRenderer {
+            override val supportedFormats: Set<ToolOutputFormat> = setOf(ToolOutputFormat.JSON)
+
             override fun render(request: ToolOutputRenderRequest): RenderedToolOutput =
                 RenderedToolOutput.Text("null")
         }

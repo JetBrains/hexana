@@ -4,6 +4,7 @@ import org.jetbrains.hexana.cli.product.HexanaProductToolExecutionRequest
 import org.jetbrains.hexana.cli.product.HexanaProductToolExecutorBinding
 import org.jetbrains.hexana.cli.product.HexanaProductToolExecutor
 import org.jetbrains.hexana.cli.product.ProductCliResult
+import org.jetbrains.hexana.cli.runtime.ToolOutputFormat
 import org.jetbrains.hexana.cli.scripting.RUN_BINARY_SCRIPT_TOOL_NAME
 import org.jetbrains.hexana.cli.scripting.RunScriptCliRequest
 import org.jetbrains.hexana.cli.scripting.runScriptCli
@@ -12,7 +13,7 @@ import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
 
 internal object HexanaScriptProductExecutor : HexanaProductToolExecutor {
     override val bindings: List<HexanaProductToolExecutorBinding> = listOf(
-        HexanaProductToolExecutorBinding(RUN_BINARY_SCRIPT_TOOL_NAME, ::executeRunScript),
+        HexanaProductToolExecutorBinding(RUN_BINARY_SCRIPT_TOOL_NAME, setOf(ToolOutputFormat.JSON, ToolOutputFormat.RAW), ::executeRunScript),
     )
 
     private fun executeRunScript(request: HexanaProductToolExecutionRequest): ProductCliResult {

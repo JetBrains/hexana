@@ -386,6 +386,7 @@ public interface HexanaProductToolExecutor {
 
 public data class HexanaProductToolExecutorBinding(
     val toolName: String,
+    val supportedOutputFormats: Set<HexanaCliOutputFormat>,
     val execute: (HexanaProductToolExecutionRequest) -> ProductCliResult,
 )
 
@@ -562,6 +563,12 @@ internal fun selectedProductTools(
         require(bindingCounts[selection.toolName] == 1) {
             "Selected ${product.productId} tool '${selection.toolName}' must have exactly one executor binding; " +
                 "found ${bindingCounts[selection.toolName] ?: 0}."
+        }
+        val binding = executorBindings.single { it.toolName == selection.toolName }
+        val spec = specs.getValue(selection.commandName)
+        require(binding.supportedOutputFormats == spec.outputFormats) {
+            "Selected ${product.productId} tool '${selection.toolName}' output projections ${binding.supportedOutputFormats} " +
+                "do not match generated formats ${spec.outputFormats}."
         }
     }
     val crossProductBindings = bindingCounts.keys - selections.mapTo(mutableSetOf()) { it.toolName }

@@ -97,6 +97,22 @@ class HexanaProductCliTest {
     }
 
     @Test
+    fun advertisedFormatWithoutConcreteProjectionFailsAtConstruction() {
+        val bindings = HexanaGeneratedCliProducts.PRODUCTS.getValue(HexanaCliProduct.STANDARD.releaseProduct).map { selection ->
+            val formats = formatsFor(selection.toolName)
+            HexanaProductToolExecutorBinding(
+                selection.toolName,
+                if (selection.toolName == "summarize_module") formats - org.jetbrains.hexana.cli.runtime.ToolOutputFormat.TABLE else formats,
+            ) { error("must not execute") }
+        }
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            selectedProductTools(HexanaCliProduct.STANDARD, bindings)
+        }
+        assertTrue(error.message.orEmpty().contains("summarize_module' output projections"), error.message)
+    }
+
+    @Test
     fun commandHelpDoesNotReadStdinOrRequireSource() {
         listOf("-h", "--help").forEach { helpFlag ->
             val result = HexanaProductCli(HexanaCliProduct.STANDARD, FailOnExecuteExecutor).run(
@@ -250,7 +266,7 @@ private class RecordingProductExecutor(
     private val result: ProductCliResult = ProductCliResult(stdout = """{"format":"wasm"}"""),
 ) : HexanaProductToolExecutor {
     override val bindings: List<HexanaProductToolExecutorBinding> = STANDARD_TOOL_NAMES.map { toolName ->
-        HexanaProductToolExecutorBinding(toolName, ::record)
+        HexanaProductToolExecutorBinding(toolName, formatsFor(toolName), ::record)
     }
     private val requests = mutableListOf<HexanaProductToolExecutionRequest>()
 
@@ -276,9 +292,11 @@ private object FailOnScriptExecuteExecutor : HexanaProductToolExecutor {
 private val STANDARD_TOOL_NAMES = listOf("summarize_binary", "summarize_module", "wasm_to_wat")
 
 private fun testBinding(toolName: String): HexanaProductToolExecutorBinding =
-    HexanaProductToolExecutorBinding(toolName) { request ->
+    HexanaProductToolExecutorBinding(toolName, formatsFor(toolName)) { request ->
         error("CLI product test must not execute ${request.spec.commandName}")
     }
+
+private fun formatsFor(toolName: String) = HexanaGeneratedCliToolRegistry.TOOLS.single { it.toolName == toolName }.outputFormats
 
 private fun HexanaProductToolExecutionRequest.assertStdinSource(bytes: ByteArray, slotName: String) {
     val source = sourceSelection as? ToolInputSourceSelection.StdinBytes

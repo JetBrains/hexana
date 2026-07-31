@@ -56,6 +56,21 @@ class HexanaCliProductContractTest {
     }
 
     @Test
+    fun summarizeModuleSupportsTableOnlyForItsAdvertisedFormat() {
+        val wasm = wasmFile("summary-table.wasm")
+        val table = target.run(listOf("summarize-module", wasm.toString(), "--format", "table"))
+        assertSuccess(table)
+        assertTrue(table.stdout.contains("Metric"), table.describe())
+        assertTrue(table.stdout.contains("Imported functions"), table.describe())
+        assertTrue(table.stdout.contains("Module size (bytes)"), table.describe())
+
+        val tools = target.run(listOf("tools"))
+        assertSuccess(tools)
+        assertTrue(tools.stdout.contains("formats: json, pretty, table"), tools.describe())
+        assertFailure(target.run(listOf("summarize-binary", wasm.toString(), "--format", "table")), 2, "Unsupported summarize-binary format")
+    }
+
+    @Test
     fun productWritesOutputFile() {
         val wasm = wasmFile("summary.wasm")
         val output = temporaryFolder.root.toPath().resolve("summary.json")

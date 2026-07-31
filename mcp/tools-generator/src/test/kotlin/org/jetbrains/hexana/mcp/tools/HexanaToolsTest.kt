@@ -503,6 +503,7 @@ class HexanaToolsTest {
                     OutputConversionCapability.SemanticJson,
                     OutputConversionCapability.McpWrapper,
                     OutputConversionCapability.Pretty,
+                    OutputConversionCapability.Table,
                 )
                 "wasm_to_wat" -> setOf(
                     OutputConversionCapability.SemanticJson,

@@ -4,6 +4,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 interface ToolOutputRenderer {
+    val supportedFormats: Set<ToolOutputFormat>
+
     fun render(request: ToolOutputRenderRequest): RenderedToolOutput
 }
 
