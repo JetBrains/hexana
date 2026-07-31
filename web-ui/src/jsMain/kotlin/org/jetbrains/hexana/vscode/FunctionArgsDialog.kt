@@ -90,6 +90,7 @@ fun FunctionArgsDialog(
     onConfirm: (DialogRunResult) -> Unit,
     onCancel: () -> Unit,
 ) {
+    val host = LocalHost.current
     val allRuntimeOptions = if (isComponent) componentRuntimeOptions else coreRuntimeOptions
     val runtimeOptions = allRuntimeOptions
         .filter { it.supportsExportInvocation }
@@ -213,7 +214,7 @@ fun FunctionArgsDialog(
                         onClick {
                             if (validateAll()) {
                                 configuredRuntimeId = selectedRuntime
-                                postUpdateRuntimeSettingToHost(selectedRuntime)
+                                host.updateRuntimeSetting(selectedRuntime)
                                 onConfirm(DialogRunResult(values.toList(), selectedRuntime, "debug"))
                             }
                         }
@@ -230,7 +231,7 @@ fun FunctionArgsDialog(
                         onClick {
                             if (validateAll()) {
                                 configuredRuntimeId = selectedRuntime
-                                postUpdateRuntimeSettingToHost(selectedRuntime)
+                                host.updateRuntimeSetting(selectedRuntime)
                                 onConfirm(DialogRunResult(values.toList(), selectedRuntime, "run"))
                             }
                         }
@@ -272,6 +273,7 @@ fun ProgramArgsDialog(
     onConfirm: (ProgramArgsRunResult) -> Unit,
     onCancel: () -> Unit,
 ) {
+    val host = LocalHost.current
     val allRuntimeOptions = if (isComponent) componentRuntimeOptions else coreRuntimeOptions
     val runtimeOptions = if (forcedAction == "debug") allRuntimeOptions.filter { it.supportsDebug } else allRuntimeOptions
     if (runtimeOptions.isEmpty()) {
@@ -344,7 +346,7 @@ fun ProgramArgsDialog(
                         if (!debugSupported) attr("disabled", "")
                         onClick {
                             configuredRuntimeId = selectedRuntime
-                            postUpdateRuntimeSettingToHost(selectedRuntime)
+                            host.updateRuntimeSetting(selectedRuntime)
                             onConfirm(ProgramArgsRunResult(text, selectedRuntime, "debug"))
                         }
                     }) {
@@ -358,7 +360,7 @@ fun ProgramArgsDialog(
                         classes("hexana-dialog-btn", "hexana-dialog-btn-ok")
                         onClick {
                             configuredRuntimeId = selectedRuntime
-                            postUpdateRuntimeSettingToHost(selectedRuntime)
+                            host.updateRuntimeSetting(selectedRuntime)
                             onConfirm(ProgramArgsRunResult(text, selectedRuntime, "run"))
                         }
                     }) { Text("\u25B6 Run") }

@@ -1,0 +1,1 @@
+window.__wasmPrinterUri = "./wasmprinter_wrapper.wasm";

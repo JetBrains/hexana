@@ -344,6 +344,36 @@ fun postScriptTabRemovedToHost(scriptPath: String) {
 }
 
 /**
+ * [Host] implementation that delegates all calls to the VS Code extension host
+ * via [vscodeApi.postMessage].
+ */
+class VscodeHost : Host {
+    override fun showWat(watText: String, warning: String?) = postShowWatToHost(watText, warning)
+    override fun runExport(
+        exportName: String, invokeArgs: String, programArgs: String,
+        isComponent: Boolean, wasmBytes: ByteArray?, runtime: String?, action: String?,
+    ) = postRunExportToHost(exportName, invokeArgs, programArgs, isComponent, wasmBytes, runtime, action)
+    override fun tabSelected(tabName: String) = postTabSelectedToHost(tabName)
+    override fun updateRuntimeSetting(runtime: String) = postUpdateRuntimeSettingToHost(runtime)
+    override fun navigateToParent() = postNavigateToParent()
+    override fun saveAs() = postSaveAsToHost()
+    override fun openZipEntry(
+        name: String, dataOffset: Long, compressedSize: Long, uncompressedSize: Long, compressionMethod: Int,
+    ) = postOpenZipEntryToHost(name, dataOffset, compressedSize, uncompressedSize, compressionMethod)
+    override fun overwriteFile(bytes: ByteArray) = postOverwriteFileToHost(bytes)
+    override fun saveCopy(outputName: String, bytes: ByteArray) = postSaveCopyToHost(outputName, bytes)
+    override fun openUrl(url: String) = postOpenUrlToHost(url)
+    override fun openModule(moduleIndex: Int, fileName: String, data: ByteArray) =
+        postOpenModuleToHost(moduleIndex, fileName, data)
+    override fun openDts() = postOpenDtsToHost()
+    override fun pickScriptFile() = postPickScriptFileToHost()
+    override fun readScriptFile(scriptPath: String) = postReadScriptFileToHost(scriptPath)
+    override fun scriptTabAdded(scriptPath: String) = postScriptTabAddedToHost(scriptPath)
+    override fun scriptTabRemoved(scriptPath: String) = postScriptTabRemovedToHost(scriptPath)
+    override fun ready() = postMessageToHost("ready")
+}
+
+/**
  * Composable side-effect that listens for messages from the VS Code extension
  * host and converts them to [VscodeMessage] instances.
  *

@@ -59,7 +59,8 @@ fun EditorToolbar(
         }
     }
 
-    val isRunnable = runnableExportName != null
+    val host = LocalHost.current
+    val isRunnable = runnableExportName != null && host.canRunExport
     val isComponent = provider is WasmComponentBinaryProvider
 
     // Which action the toolbar button triggered: null = hidden, "run" / "debug" = show only that button
@@ -71,8 +72,9 @@ fun EditorToolbar(
             isComponent = isComponent,
             forcedAction = toolbarAction,
             onConfirm = { result ->
-                postRunExportToHost(
+                host.runExport(
                     exportName = "",
+                    invokeArgs = "",
                     isComponent = isComponent,
                     programArgs = result.programArgs,
                     wasmBytes = provider.bytes.toByteArray(),
@@ -200,7 +202,7 @@ fun EditorToolbar(
                             primary = false,
                         ) {
                             val restoredBytes = overwriteShadow!!.applyTo(editState.getEditedBytes())
-                            postOverwriteFileToHost(restoredBytes)
+                            host.overwriteFile(restoredBytes)
                             editState.discardAll()
                             onOverwriteShadowChanged(null)
                             onReparseAfterOverwrite()
@@ -221,7 +223,7 @@ fun EditorToolbar(
                         ) {
                             val shadow = editState.captureOverwriteShadow()
                             val editedBytes = editState.getEditedBytes()
-                            postOverwriteFileToHost(editedBytes)
+                            host.overwriteFile(editedBytes)
                             onOverwriteShadowChanged(shadow)
                             editState.markSaved()
                             onReparseAfterOverwrite()
@@ -235,7 +237,7 @@ fun EditorToolbar(
                             primary = false,
                         ) {
                             val editedBytes = editState.getEditedBytes()
-                            postSaveCopyToHost(finalizedName, editedBytes)
+                            host.saveCopy(finalizedName, editedBytes)
                         }
                     }
                 }
@@ -263,7 +265,7 @@ fun EditorToolbar(
                         property("font-size", "11px")
                         color(Color("var(--vscode-textLink-foreground, #3794FF)"))
                     }
-                    onClick { postNavigateToParent() }
+                    onClick { host.navigateToParent() }
                 }) {
                     val parentExt = parentName.substringAfterLast('.', "").lowercase()
                     val parentLabel = if (parentExt in setOf("jar", "zip", "war", "ear", "apk", "aar")) {
@@ -292,7 +294,7 @@ fun EditorToolbar(
                     }
                     onClick { event ->
                         event.stopPropagation()
-                        postSaveAsToHost()
+                        host.saveAs()
                     }
                 }) {
                     Text("Save As\u2026")
@@ -501,6 +503,7 @@ private const val OPENVSX_REVIEW_URL =
  */
 @Composable
 private fun ShareFeedbackButton() {
+    val host = LocalHost.current
     var dropdownVisible by remember { mutableStateOf(false) }
 
     Div({
@@ -541,21 +544,21 @@ private fun ShareFeedbackButton() {
                     title = "Report a bug",
                     subtitle = "Open a GitHub issue with reproduction details",
                 ) {
-                    postOpenUrlToHost(GITHUB_ISSUES_URL)
+                    host.openUrl(GITHUB_ISSUES_URL)
                     dropdownVisible = false
                 }
                 ShareFeedbackDropdownItem(
                     title = "Rate on VS Code Marketplace",
                     subtitle = "Leave a review on the VS Code Marketplace",
                 ) {
-                    postOpenUrlToHost(VSCODE_MARKETPLACE_REVIEW_URL)
+                    host.openUrl(VSCODE_MARKETPLACE_REVIEW_URL)
                     dropdownVisible = false
                 }
                 ShareFeedbackDropdownItem(
                     title = "Rate on Open VSX",
                     subtitle = "Leave a review on the Open VSX Registry",
                 ) {
-                    postOpenUrlToHost(OPENVSX_REVIEW_URL)
+                    host.openUrl(OPENVSX_REVIEW_URL)
                     dropdownVisible = false
                 }
             }

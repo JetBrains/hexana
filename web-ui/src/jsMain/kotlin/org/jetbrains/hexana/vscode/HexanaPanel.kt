@@ -58,6 +58,7 @@ fun HexanaPanel(
     onScriptTabConfirmed: (path: String, content: String) -> Unit = { _, _ -> },
     onScriptTabRemoved: (path: String) -> Unit = {},
 ) {
+    val host = LocalHost.current
     val pendingRun = rememberPendingRunState()
 
     // "Scroll WAT to function" channel from the Problems tab into WatTabContent;
@@ -79,7 +80,7 @@ fun HexanaPanel(
             // Collect ordinary and grouped tabs per provider, then sort by
             // priority (High first) while preserving provider order within
             // the same priority level.
-            val enricher = provider.getTabsEnricher()
+            val enricher = provider.getTabsEnricher(host)
             val zipProvider = provider as? ZipBinaryProvider
             data class TabEntry(val tab: PanelTab, val priority: TabPriority, val providerIndex: Int)
             val tabEntries = mutableListOf<TabEntry>()
@@ -87,9 +88,9 @@ fun HexanaPanel(
                 val enriched = enricher(p.tableTabs(provider, TableTabsContext(fileName = fileName)), fileName, pendingRun)
                 for (d in enriched) {
                     val desc = if (d.name == "Entries" && zipProvider != null) {
-                        enrichZipEntriesTab(d, zipProvider.displayEntries)
+                        enrichZipEntriesTab(d, zipProvider.displayEntries, host)
                     } else if (d.name == "Members" && provider is ArchiveBinaryProvider) {
-                        enrichArchiveMembersTab(d, provider)
+                        enrichArchiveMembersTab(d, provider, host)
                     } else if (d.name == "Packets" && provider is PcapBinaryProvider) {
                         enrichPcapPacketsTab(d, provider)
                     } else if (d.name == "Problems" && provider is WasmBinaryProvider) {
@@ -158,7 +159,7 @@ fun HexanaPanel(
                         scriptPath = st.path,
                         scriptContent = st.content,
                         provider = provider,
-                        onRequestRefresh = { postReadScriptFileToHost(st.path) },
+                        onRequestRefresh = { host.readScriptFile(st.path) },
                     )
                 })
             }
@@ -195,10 +196,11 @@ fun HexanaPanel(
             isComponent = false,
             onConfirm = { result ->
                 val programArgs = result.args.joinToString(" ")
-                postRunExportToHost(
+                host.runExport(
                     exportName = wasmPending.name,
                     invokeArgs = "--invoke ${wasmPending.name}",
                     programArgs = programArgs,
+                    isComponent = false,
                     wasmBytes = provider.bytes.toByteArray(),
                     runtime = result.runtime,
                     action = result.action,
@@ -220,8 +222,9 @@ fun HexanaPanel(
             exportName = programArgsPending.exportName,
             isComponent = true,
             onConfirm = { result ->
-                postRunExportToHost(
+                host.runExport(
                     exportName = programArgsPending.exportName,
+                    invokeArgs = "",
                     isComponent = true,
                     programArgs = result.programArgs,
                     wasmBytes = provider.bytes.toByteArray(),
@@ -245,10 +248,11 @@ fun HexanaPanel(
             isComponent = true,
             onConfirm = { result ->
                 val argsString = result.args.joinToString(", ")
-                postRunExportToHost(
+                host.runExport(
                     exportName = funcPending.exportName,
-                    isComponent = true,
                     invokeArgs = "--invoke \"${pendingRun.funcInvokeName}($argsString)\"",
+                    isComponent = true,
+                    programArgs = "",
                     wasmBytes = provider.bytes.toByteArray(),
                     runtime = result.runtime,
                     action = result.action,
@@ -289,7 +293,7 @@ fun HexanaPanel(
                     }
                     if (st != null) {
                         onScriptTabRemoved(st.path)
-                        postScriptTabRemovedToHost(st.path)
+                        host.scriptTabRemoved(st.path)
                     }
                 },
                 onAddTab = { showAddScriptDialog = true },
@@ -301,10 +305,10 @@ fun HexanaPanel(
                 scriptPath = dialogPickedPath,
                 existingScriptPaths = scriptTabs.map { it.path }.toSet(),
                 onBrowse = {
-                    postPickScriptFileToHost()
+                    host.pickScriptFile()
                 },
                 onOpenDts = {
-                    postOpenDtsToHost()
+                    host.openDts()
                 },
                 onConfirm = { path ->
                     showAddScriptDialog = false
@@ -379,6 +383,7 @@ private fun ScrollableTabBar(
     onCloseTab: (String) -> Unit = {},
     onAddTab: () -> Unit = {},
 ) {
+    val host = LocalHost.current
     var tabListRef by remember { mutableStateOf<HTMLElement?>(null) }
     var canScrollStart by remember { mutableStateOf(false) }
     var canScrollEnd by remember { mutableStateOf(false) }
@@ -498,7 +503,7 @@ private fun ScrollableTabBar(
                     }
                     onClick {
                         onActiveTabChange(tab.label)
-                        postTabSelectedToHost(tab.label)
+                        host.tabSelected(tab.label)
                     }
                 }) {
                     Text(tab.label)
@@ -580,6 +585,7 @@ private fun TabScrollButton(
 private fun enrichArchiveMembersTab(
     tab: TableTabDescriptor,
     provider: ArchiveBinaryProvider,
+    host: Host,
 ): TableTabDescriptor {
     val members = provider.members.filterNot { it.isBookkeeping }
     val classifications = members.map {
@@ -602,7 +608,7 @@ private fun enrichArchiveMembersTab(
                     .slice(member.contentRange.offset, member.contentRange.size)
                     .toByteArray()
                 val baseName = member.name.substringAfterLast('/').substringAfterLast('\\').ifEmpty { member.name }
-                postOpenModuleToHost(member.index, baseName, bytes)
+                host.openModule(member.index, baseName, bytes)
             }
         },
         dynamicContextMenuProvider = tab.dynamicContextMenuProvider,
@@ -625,6 +631,7 @@ private fun enrichArchiveMembersTab(
 private fun enrichZipEntriesTab(
     tab: TableTabDescriptor,
     entries: List<org.jetbrains.hexana.zip.ZipEntry>,
+    host: Host,
 ): TableTabDescriptor = TableTabDescriptor(
     name = tab.name,
     columns = tab.columns,
@@ -636,7 +643,7 @@ private fun enrichZipEntriesTab(
     contextMenuItems = tab.contextMenuItems,
     rowClickAction = { index ->
         val entry = entries[index]
-        postOpenZipEntryToHost(
+        host.openZipEntry(
             name = entry.name,
             dataOffset = entry.dataOffset,
             compressedSize = entry.compressedSize,

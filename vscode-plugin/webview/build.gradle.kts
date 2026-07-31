@@ -17,19 +17,7 @@ kotlin {
     sourceSets {
         jsMain {
             dependencies {
-                implementation(project(":wasmParser"))
-                implementation(project(":binaryProvider"))
-                implementation(project(":encdec"))
-                implementation(project(":parsing:zip"))
-                implementation(project(":parsing:javaBytecode"))
-                implementation(project(":parsing:dex"))
-                implementation(project(":plugins-shared"))
-
-                implementation(compose.html.core)
-                implementation(compose.runtime)
-
-                implementation(libs.kotlinx.browser)
-                implementation(libs.kotlinx.coroutines.core)
+                implementation(project(":web-ui"))
             }
         }
 

@@ -287,6 +287,8 @@ private fun VirtualizedWatContent(state: WatPanelState, navFuncIdx: MutableState
     // Ref to the content div.
     val contentElRef = remember { mutableStateOf<HTMLElement?>(null) }
 
+    val host = LocalHost.current
+
     // Iterative scroll to an arbitrary chunk index. Shared by the section
     // shortcut bar and external navigation requests (Problems tab row click).
     val scrollToChunkIndex: (Int) -> Unit = scrollToChunk@{ chunkIndex ->
@@ -509,7 +511,7 @@ private fun VirtualizedWatContent(state: WatPanelState, navFuncIdx: MutableState
                 val bytes = state.provider.bytes.duplicate()
                 bytes.position(0)
                 val result = WasmPrinterJs.printWat(bytes.toByteArray(), foldInstructions = false)
-                postShowWatToHost(result.wat, result.warnings)
+                host.showWat(result.wat, result.warnings)
             } catch (e: Throwable) {
                 console.error("Failed to convert WAT for editor: ${e.message}")
             }
@@ -1202,13 +1204,14 @@ private fun appendChunkRowsHtml(
 @Composable
 private fun WasmPrinterWat(bytes: ByteArray) {
     var status by remember { mutableStateOf<WatConversionStatus>(WatConversionStatus.Converting) }
+    val host = LocalHost.current
 
     LaunchedEffect(bytes) {
         status = WatConversionStatus.Converting
         try {
             WasmPrinterJs.ensureInitialized()
             val result = WasmPrinterJs.printWat(bytes, foldInstructions = false)
-            postShowWatToHost(result.wat, result.warnings)
+            host.showWat(result.wat, result.warnings)
             status = WatConversionStatus.Opened(result.warnings)
         } catch (e: Throwable) {
             status = WatConversionStatus.Error(e.message ?: "Failed to convert WASM to WAT")
