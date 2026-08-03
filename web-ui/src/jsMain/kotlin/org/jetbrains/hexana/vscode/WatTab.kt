@@ -47,6 +47,122 @@ fun WatTabContent(
 }
 
 // ---------------------------------------------------------------------------
+// Classic (non-virtualized) WAT tab — mirrors the IntelliJ plugin's "Wat" panel
+// ---------------------------------------------------------------------------
+
+/** Longest WAT text rendered inline; longer outputs are truncated in the preview. */
+private const val CLASSIC_WAT_RENDER_LIMIT = 2_000_000
+
+/**
+ * Classic WAT tab content — converts the whole binary to WAT text via the
+ * embedded wasmprinter and renders it inline as plain text. Very large
+ * outputs are truncated; the full text is available through the host
+ * (editor tab in VS Code, `.wat` download in the browser).
+ */
+@Composable
+fun ClassicWatTabContent(provider: BinaryProvider) {
+    var status by remember(provider) { mutableStateOf<WatConversionStatus>(WatConversionStatus.Converting) }
+    var watText by remember(provider) { mutableStateOf("") }
+    val host = LocalHost.current
+
+    LaunchedEffect(provider) {
+        status = WatConversionStatus.Converting
+        try {
+            WasmPrinterJs.ensureInitialized()
+            val bytes = provider.bytes.duplicate()
+            bytes.position(0)
+            val result = WasmPrinterJs.printWat(bytes.toByteArray(), foldInstructions = false)
+            watText = result.wat
+            status = WatConversionStatus.Opened(result.warnings)
+        } catch (e: Throwable) {
+            status = WatConversionStatus.Error(e.message ?: "Failed to convert WASM to WAT")
+        }
+    }
+
+    when (val s = status) {
+        is WatConversionStatus.Converting -> Div({
+            style {
+                property("padding", "8px")
+                property("opacity", "0.7")
+            }
+        }) {
+            Text("Converting to WAT…")
+        }
+        is WatConversionStatus.Error -> Div({
+            style { property("padding", "8px") }
+        }) {
+            Text("Error: ${s.message}")
+        }
+        is WatConversionStatus.Opened -> Div({
+            style {
+                display(DisplayStyle.Flex)
+                property("flex-direction", "column")
+                width(100.percent)
+                height(100.percent)
+                property("min-height", "0")
+            }
+        }) {
+            Div({
+                style {
+                    display(DisplayStyle.Flex)
+                    property("align-items", "center")
+                    property("gap", "8px")
+                    property("padding", "4px 8px")
+                    property("flex", "0 0 auto")
+                }
+            }) {
+                org.jetbrains.compose.web.dom.Button({
+                    style {
+                        property("padding", "2px 10px")
+                        property("font-size", "12px")
+                        property("border-radius", "3px")
+                        property("border", "none")
+                        property("cursor", "pointer")
+                        property("background", "var(--vscode-button-background, #0e639c)")
+                        property("color", "var(--vscode-button-foreground, #fff)")
+                    }
+                    onClick { host.showWat(watText, s.warning) }
+                }) { Text("Open in editor") }
+                if (s.warning != null) {
+                    Div({
+                        style {
+                            property("color", "var(--vscode-editorWarning-foreground, #cca700)")
+                            property("font-size", "12px")
+                        }
+                    }) {
+                        Text("Warning: ${s.warning}")
+                    }
+                }
+                if (watText.length > CLASSIC_WAT_RENDER_LIMIT) {
+                    Div({
+                        style {
+                            property("opacity", "0.6")
+                            property("font-size", "12px")
+                        }
+                    }) {
+                        Text("Preview truncated (${formatBytes(watText.length.toLong())} total) — use Open in editor for the full text.")
+                    }
+                }
+            }
+            Div({
+                style {
+                    property("flex", "1 1 0")
+                    property("min-height", "0")
+                    property("overflow", "auto")
+                    property("padding", "0 8px 8px 8px")
+                    property("white-space", "pre")
+                    property("font-family", "var(--vscode-editor-font-family, monospace)")
+                    property("font-size", "12px")
+                    property("line-height", "1.4")
+                }
+            }) {
+                Text(watText.take(CLASSIC_WAT_RENDER_LIMIT))
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Virtualized WAT view for component-model binaries (embedded core modules)
 // ---------------------------------------------------------------------------
 

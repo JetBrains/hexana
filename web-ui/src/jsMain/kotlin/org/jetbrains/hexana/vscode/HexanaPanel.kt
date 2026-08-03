@@ -28,7 +28,8 @@ import org.w3c.dom.events.Event
  */
 private enum class FixedTab(val label: String) {
     Summary("Sections"),
-    Wat("WAT"),
+    WatClassic("Wat"),
+    Wat("WAT (virtualized)"),
     Dependencies("Dependencies"),
 }
 
@@ -130,8 +131,13 @@ fun HexanaPanel(
             val (lowEntries, normalEntries) = tabEntries.partition { it.priority == TabPriority.Low }
             addAll(normalEntries.map { it.tab })
 
-            // WAT tab (always present for Wasm and component)
+            // WAT tabs (always present for Wasm and component): the classic
+            // wasmprinter text view and the virtualized view, like the
+            // IntelliJ plugin's "Wat" / "WAT (virtualized)" pair.
             if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
+                add(PanelTab(FixedTab.WatClassic.label, padding = false) { _ ->
+                    ClassicWatTabContent(provider)
+                })
                 add(PanelTab(FixedTab.Wat.label, padding = false) { _ ->
                     WatTabContent(provider, watNavFuncIdx)
                 })
