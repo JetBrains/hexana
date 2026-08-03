@@ -495,7 +495,7 @@ internal fun PanelTableRow(
  * Must be composed once near the app root (e.g. in [BinaryEditorApp]).
  */
 @Composable
-internal fun PanelTableRowKeyboardHandler() {
+fun PanelTableRowKeyboardHandler() {
     DisposableEffect(Unit) {
         val handler = EventListener { event ->
             val ke = event as? KeyboardEvent ?: return@EventListener
