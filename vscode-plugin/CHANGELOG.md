@@ -1,3 +1,7 @@
+# Next version
+- size diagram ("Top" tab) for wasm and native binaries that shows largest by size entities
+- optimized performance of large table views
+
 # 0.8.0 - 29.07.2026
 - semantic highlighting of sections and navigation between sections for WASM and Native binary files
 - WASM Component dependency diagram showing dependencies within a WASM Component ("Dependencies" tab, components only)
