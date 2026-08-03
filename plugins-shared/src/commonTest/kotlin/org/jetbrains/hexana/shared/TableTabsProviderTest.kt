@@ -356,6 +356,22 @@ class TableTabsProviderTest {
         assertTrue(tabs.isEmpty(), "Component provider should ignore core Wasm modules")
     }
 
+    @Test
+    fun componentProviderReturnsComponentsTabForNestedComponent() {
+        // Component header (\0asm, version=0x0D, layer=1) + an id-4 component section
+        // whose content is itself a minimal component preamble.
+        val componentHeader = byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x0D, 0x00, 0x01, 0x00)
+        val bytes = componentHeader +
+            byteArrayOf(0x04, componentHeader.size.toByte()) + componentHeader
+        val provider = WasmComponentBinaryProvider(bytes.toCommonByteBuffer())
+
+        val tab = WasmComponentTableTabsProvider().tableTabs(provider).find { it.name == "Components" }
+        assertNotNull(tab, "Expected a Components tab for a component with a nested component")
+        assertEquals(1, tab.rowCount)
+        // Section content starts after the 8-byte header + 2 bytes of section framing.
+        assertEquals("component:@0000000a", tab.columns.single().cellProvider(0).representation)
+    }
+
     // -----------------------------------------------------------------------
     // NativeTableTabsProvider tests
     // -----------------------------------------------------------------------

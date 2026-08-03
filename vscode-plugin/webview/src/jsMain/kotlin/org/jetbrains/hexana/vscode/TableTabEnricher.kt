@@ -47,7 +47,7 @@ internal fun List<TableTabDescriptor>.enrichWasmTabs(
 /**
  * Enriches [TableTabDescriptor]s produced by [WasmComponentTableTabsProvider]
  * with VS Code-specific actions: run buttons on exports, and open-in-editor
- * click on modules.
+ * click on modules and nested components.
  *
  * @param onPendingProgramArgs callback when a wasi:cli/run export is clicked
  * @param onPendingComponentArgs callback when a component function export with
@@ -64,6 +64,7 @@ internal fun List<TableTabDescriptor>.enrichComponentTabs(
         when (tab.name) {
             "Exports" -> enrichComponentExportsTab(tab, provider, showRunButtons, onPendingProgramArgs, onPendingComponentArgs)
             "Modules" -> enrichComponentModulesTab(tab, provider, fileName)
+            "Components" -> enrichComponentNestedComponentsTab(tab, provider, fileName)
             else -> tab
         }
     }
@@ -286,6 +287,41 @@ private fun enrichComponentModulesTab(
             buffer.get(moduleBytes, 0, moduleRecord.contentSize)
             buffer.position(0)
             postOpenModuleToHost(rowIndex, moduleFileName, moduleBytes)
+        },
+    )
+}
+
+private fun enrichComponentNestedComponentsTab(
+    tab: TableTabDescriptor,
+    provider: WasmComponentBinaryProvider,
+    fileName: String,
+): TableTabDescriptor {
+    val section = provider.wasmModule?.componentSection ?: return tab
+    val baseName = fileName
+        .substringAfterLast('/')
+        .substringAfterLast('\\')
+        .substringBeforeLast('.')
+    val extension = fileName
+        .substringAfterLast('/')
+        .substringAfterLast('\\')
+        .let { name ->
+            val dot = name.lastIndexOf('.')
+            if (dot >= 0) name.substring(dot + 1) else "wasm"
+        }
+
+    return TableTabDescriptor(
+        name = tab.name,
+        columns = tab.columns,
+        rowCount = tab.rowCount,
+        rowClickAction = { rowIndex ->
+            val hexOffset = section.contentOffset.toString(16)
+            val componentFileName = "${baseName}_component_${rowIndex}@${hexOffset}.$extension"
+            val componentBytes = ByteArray(section.contentSize)
+            val buffer = provider.bytes
+            buffer.position(section.contentOffset)
+            buffer.get(componentBytes, 0, section.contentSize)
+            buffer.position(0)
+            postOpenModuleToHost(rowIndex, componentFileName, componentBytes)
         },
     )
 }

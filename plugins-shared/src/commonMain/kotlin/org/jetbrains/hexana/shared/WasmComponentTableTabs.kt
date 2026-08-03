@@ -6,7 +6,7 @@ import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 /**
  * [TableTabsProvider] for component-model Wasm binaries.
  *
- * Produces table-based tabs: Exports, Imports, Modules.
+ * Produces table-based tabs: Exports, Imports, Modules, Components.
  */
 class WasmComponentTableTabsProvider : TableTabsProvider {
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> {
@@ -16,6 +16,7 @@ class WasmComponentTableTabsProvider : TableTabsProvider {
             componentExportsTab(provider)?.let { add(it) }
             componentImportsTab(provider)?.let { add(it) }
             componentModulesTab(provider)?.let { add(it) }
+            componentNestedComponentsTab(provider)?.let { add(it) }
         }
     }
 }
@@ -101,6 +102,27 @@ private fun componentModulesTab(provider: WasmComponentBinaryProvider): TableTab
             },
         ),
         rowCount = modules.size,
+        defaultSortColumn = TableTabDescriptor.ID_COLUMN,
+    )
+}
+
+private fun componentNestedComponentsTab(provider: WasmComponentBinaryProvider): TableTabDescriptor? {
+    if (provider.nestedComponents.isEmpty()) return null
+    // The parser tracks a single nested-component section; its content offset
+    // labels the one row this tab currently has.
+    val section = provider.wasmModule?.componentSection ?: return null
+
+    return TableTabDescriptor(
+        name = "Components",
+        columns = listOf(
+            ColumnDescriptor(
+                name = "Data",
+                widthBehavior = ColumnWidth.Fill(),
+            ) {
+                CellValue("component:@${section.contentOffset.toHexString()}")
+            },
+        ),
+        rowCount = provider.nestedComponents.size,
         defaultSortColumn = TableTabDescriptor.ID_COLUMN,
     )
 }

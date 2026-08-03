@@ -100,7 +100,7 @@ internal fun List<TableTabDescriptor>.enrichWasmTabs(
 /**
  * Enriches [TableTabDescriptor]s produced by [WasmComponentTableTabsProvider]
  * with IDE-specific actions: run buttons on exports, navigation menus on
- * imports, and open-in-editor click on modules.
+ * imports, and open-in-editor click on modules and nested components.
  */
 internal fun List<TableTabDescriptor>.enrichComponentTabs(
     provider: WasmComponentBinaryProvider,
@@ -111,6 +111,7 @@ internal fun List<TableTabDescriptor>.enrichComponentTabs(
         "Exports" -> enrichComponentExportsTab(tab, provider, file, project)
         "Imports" -> enrichComponentImportsTab(tab, provider, project)
         "Modules" -> enrichComponentModulesTab(tab, provider, file, project)
+        "Components" -> enrichComponentNestedComponentsTab(tab, provider, file, project)
         else -> tab
     }
 }
@@ -661,6 +662,27 @@ private fun enrichComponentModulesTab(
             val hexedOffset = moduleRecord.contentOffset.toHexString()
             val fileName = "${file.nameWithoutExtension}_${rowIndex}@$hexedOffset.${file.extension}"
             val virtualFile = HexanaBinaryVirtualFile(fileName, buffer, baseOffset = moduleRecord.contentOffset, parentFile = file)
+            FileEditorManager.getInstance(project).openFile(virtualFile, true)
+        },
+    )
+}
+
+private fun enrichComponentNestedComponentsTab(
+    tab: TableTabDescriptor,
+    provider: WasmComponentBinaryProvider,
+    file: VirtualFile,
+    project: Project,
+): TableTabDescriptor {
+    val section = provider.wasmModule?.componentSection ?: return tab
+    return TableTabDescriptor(
+        name = tab.name,
+        columns = tab.columns,
+        rowCount = tab.rowCount,
+        rowClickAction = { rowIndex ->
+            val buffer = provider.bytes.slice(section.contentOffset, section.contentSize)
+            val hexedOffset = section.contentOffset.toHexString()
+            val fileName = "${file.nameWithoutExtension}_component_$rowIndex@$hexedOffset.${file.extension}"
+            val virtualFile = HexanaBinaryVirtualFile(fileName, buffer, baseOffset = section.contentOffset, parentFile = file)
             FileEditorManager.getInstance(project).openFile(virtualFile, true)
         },
     )
