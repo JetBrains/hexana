@@ -107,7 +107,20 @@ private fun buildDependencyGraph(provider: WasmComponentBinaryProvider): Depende
                 nodes[id] = GraphNode(id, NodeKind.INSTANCE, "instance $i", "instantiates component ${inst.index}")
                 edges.add(GraphEdge("component:${inst.index}", id))
                 for (arg in inst.args) {
-                    edges.add(GraphEdge("instance:${arg.instanceIndex}", id, arg.name))
+                    val sort = arg.sortIndex.sort
+                    val sourceId = when (sort) {
+                        is ComponentSortWithCoreSort -> when (sort.cs) {
+                            ComponentCoreSort.Module -> "module:${arg.sortIndex.index}"
+                            ComponentCoreSort.Instance -> "core-instance:${arg.sortIndex.index}"
+                            else -> null
+                        }
+                        ComponentSort.Instance -> "instance:${arg.sortIndex.index}"
+                        ComponentSort.Component -> "component:${arg.sortIndex.index}"
+                        else -> null
+                    }
+                    if (sourceId != null) {
+                        edges.add(GraphEdge(sourceId, id, arg.name))
+                    }
                 }
             }
             is InlineInstanceExpression -> {

@@ -58,6 +58,7 @@ class ModuleInlineCoreExpression(val name: String, val index: UInt): InlineInsta
 class InstanceInlineCoreExpression(val name: String, val index: UInt): InlineInstanceCoreInlineExpression()
 
 data class InstantiateArg(val name: String, val instanceIndex: UInt)
+data class ComponentInstantiateArg(val name: String, val sortIndex: ComponentSortIndex)
 
 object ComponentCoreInstance {
 
@@ -122,6 +123,16 @@ object ComponentCoreInstance {
             instantiateArgs.add(InstantiateArg(name, instanceIndex))
         }
         return instantiateArgs
+    }
+
+    fun CommonByteBuffer.consumeComponentInstantiateArgs(): MutableList<ComponentInstantiateArg> {
+        val args = mutableListOf<ComponentInstantiateArg>()
+        consumeArray {
+            val name = consumeString()
+            val sortIndex = componentSortWithIndex()
+            args.add(ComponentInstantiateArg(name, sortIndex))
+        }
+        return args
     }
 
     fun CommonByteBuffer.componentCoreSort(): ComponentCoreSort {

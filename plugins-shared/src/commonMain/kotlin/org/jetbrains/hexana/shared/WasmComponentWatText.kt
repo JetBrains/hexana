@@ -262,7 +262,7 @@ fun coreTypeWat(type: WasmComponentCoreType): String = when (type) {
 fun instanceExpressionWat(expression: InstanceExpression): String = when (expression) {
     is ComponentInstanceExpression ->
         "(instantiate (component ${expression.index})${
-            expression.args.joinToString("") { " (with \"${it.name}\" (instance ${it.instanceIndex}))" }
+            expression.args.joinToString("") { " (with \"${it.name}\" ${componentSortIndexWat(it.sortIndex)})" }
         })"
     is InlineInstanceExpression -> "(instance ${expression.e.joinBounded(::inlineExportWat)})"
 }

@@ -1,7 +1,7 @@
 package org.jetbrains.hexana.wasm.components
 
 import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.wasm.components.ComponentCoreInstance.consumeInstantiateArgs
+import org.jetbrains.hexana.wasm.components.ComponentCoreInstance.consumeComponentInstantiateArgs
 import org.jetbrains.hexana.wasm.components.ComponentCoreInstance.instanceInlineExport
 import org.jetbrains.hexana.wasm.sections.WasmSection
 import org.jetbrains.hexana.wasm.sections.WasmSectionUnresolved
@@ -25,7 +25,7 @@ class WasmInstanceSection(sectionSize: Int, sectionOffset: Int, contentSize: Int
         consumeArray {
             when (get()) {
                 0x00.toByte() -> {
-                    instanceExpressions.add(ComponentInstanceExpression(uint32(), consumeInstantiateArgs()))
+                    instanceExpressions.add(ComponentInstanceExpression(uint32(), consumeComponentInstantiateArgs()))
                 }
 
                 0x01.toByte() -> {
@@ -70,7 +70,7 @@ class WasmInstanceSection(sectionSize: Int, sectionOffset: Int, contentSize: Int
 
 
 sealed class InstanceExpression
-class ComponentInstanceExpression(val index: UInt, val args: List<InstantiateArg>) : InstanceExpression()
+class ComponentInstanceExpression(val index: UInt, val args: List<ComponentInstantiateArg>) : InstanceExpression()
 class InlineInstanceExpression(val e: List<InstanceInlineExport>) : InstanceExpression()
 
 sealed class InstanceInlineExport

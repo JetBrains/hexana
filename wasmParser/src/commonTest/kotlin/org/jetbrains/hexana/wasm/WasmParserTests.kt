@@ -1277,7 +1277,7 @@ class WasmParserTests {
         assertEquals(1, componentInstanceExpression.args.size)
         val arg = componentInstanceExpression.args[0]
         assertEquals("import-func-add", arg.name)
-        assertEquals(0u, arg.instanceIndex)
+        assertEquals(0u, arg.sortIndex.index)
 
         val typeSection = wasmModule.typesSection
         assertNotNull(typeSection)
