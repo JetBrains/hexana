@@ -43,6 +43,8 @@ Right-clicking a row in the **Functions** or **Exports** tab, or an instruction 
 
 **Resolution order.** Function rows resolve to the function's first mapped line (the signature). WAT instruction rows resolve per instruction. Locations come from DWARF when present, falling back to a source map otherwise.
 
+![WAT (virtualized) view of utf8-c.dwarf5.wasm — a module carrying .debug_info and other DWARF 5 custom sections — with Go to Source resolving an instruction row to c/utf8.c:10 via DWARF](../images/idea/33-goto-source-dwarf.jpg)
+
 **Source map discovery.** Source maps are now discovered through the module's `sourceMappingURL` custom section — the form Kotlin/Wasm and Emscripten emit. A path is resolved relative to the wasm file (absolute paths are accepted), and `data:` URLs with an inline map are decoded. The existing `<file>.map` sidecar convention is the fallback. Remote `http(s)` URLs are not fetched.
 
 The WAT row context menu also carries the dispatch-candidates action on `call_indirect` rows.
