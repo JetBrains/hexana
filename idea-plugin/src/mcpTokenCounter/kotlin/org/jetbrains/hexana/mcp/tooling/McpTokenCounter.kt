@@ -1,7 +1,6 @@
 package org.jetbrains.hexana.mcp.tooling
 
 import com.intellij.mcpserver.McpToolSchema
-import com.intellij.mcpserver.impl.util.asTools
 import kotlinx.serialization.json.*
 import org.jetbrains.hexana.mcp.HexanaToolset
 import java.nio.file.Files
@@ -38,7 +37,7 @@ fun main(args: Array<String>) {
         ?: Path.of("build/reports/mcp-tokens")
 
     val toolDescriptors = HexanaToolset()
-        .asTools()
+        .getTools()
         .map { it.descriptor }
         .sortedBy { it.name }
 
