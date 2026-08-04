@@ -63,6 +63,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.HexanaBinaryVirtualFile
 import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.HexanaSettings
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
@@ -892,12 +893,19 @@ internal class WasmViewModel(
         val wasmFile = wasmBinaryProvider.file
         if (state.startConversion()) {
             viewModelScope.launch(Dispatchers.IO + CoroutineName("Wasm to Wat conversion")) {
-                val virtualFile = VfsUtil.virtualToIoFile(wasmFile)
+                // In-memory files (nested modules/components opened from a
+                // table tab) have no path on disk: convert their buffer
+                // directly. Disk files keep the io-file path so the external
+                // wasm-tools setting still applies to them.
+                val inMemoryBuffer = (wasmFile as? HexanaBinaryVirtualFile)?.buffer?.duplicate()
+                val contentLength = inMemoryBuffer?.limit()?.toLong()
+                    ?: VfsUtil.virtualToIoFile(wasmFile).length()
                 runCatching {
-                    val conversionResult =
-                        HexanaService.getInstance().convertWasmToWat(
-                            virtualFile
-                        )
+                    val conversionResult = if (inMemoryBuffer != null) {
+                        HexanaService.getInstance().convertWasmToWat(inMemoryBuffer.toByteArray())
+                    } else {
+                        HexanaService.getInstance().convertWasmToWat(VfsUtil.virtualToIoFile(wasmFile))
+                    }
                     if (conversionResult is HexanaService.WatConversionResult.Error) {
                         throw ConversionException(conversionResult)
                     }
@@ -909,7 +917,7 @@ internal class WasmViewModel(
                             state.setConversionState(WatConversionState.ShowMultifileEditor(fileset))
                         }
                         WatConversionState.ShowMultifileEditor(fileset)
-                    } else if (virtualFile.length() > HexanaService.WAT_EDITOR_MAX_FILE_SIZE) {
+                    } else if (contentLength > HexanaService.WAT_EDITOR_MAX_FILE_SIZE) {
                         WatConversionState.ShowLiteEditor(fileText, lineOffsets)
                     } else {
                         val name = wasmFile.name.removeSuffix(".wasm") + ".wat"

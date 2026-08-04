@@ -47,7 +47,9 @@ import org.jetbrains.jewel.ui.theme.defaultTabStyle
  * off the EDT ([ComponentCoreModuleCollector] descends nested components, parsing only section
  * tables); only the selected module's bodies are parsed (lazily, inside the reused panel). The
  * component-level glue (imports/exports/types/instances/aliases/canon) has no per-instruction byte
- * model and is surfaced elsewhere (the table tabs and the plain "Wat" tab).
+ * model and is surfaced elsewhere (the table tabs and the plain "Wat" tab). The exception is a
+ * component that embeds no core modules at all: this panel then renders the component-level
+ * constructs themselves via [WasmComponentPanelWatVirtualizedGlue].
  */
 @Composable
 internal fun WasmComponentPanelWatVirtualized(
@@ -61,7 +63,10 @@ internal fun WasmComponentPanelWatVirtualized(
     when (val modules = modulesState.value) {
         null -> Centered("Scanning embedded core modules…")
         else -> if (modules.isEmpty()) {
-            Centered("No embedded core modules to show.")
+            // No embedded core modules anywhere, i.e. a glue-only component
+            // (types, imports, exports, instances). Render the component-level
+            // constructs in the virtualized panel instead of going empty.
+            WasmComponentPanelWatVirtualizedGlue(provider, state)
         } else {
             ModuleSelector(modules, state)
         }

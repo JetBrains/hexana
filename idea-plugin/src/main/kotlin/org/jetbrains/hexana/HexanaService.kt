@@ -89,6 +89,21 @@ class HexanaService(
         }
     }
 
+    /**
+     * Converts in-memory wasm bytes (nested modules/components opened from a
+     * table tab, which have no path on disk) using the built-in printer. The
+     * external wasm-tools setting only applies to file-backed conversions.
+     */
+    @RequiresBackgroundThread
+    fun convertWasmToWat(wasmBytes: ByteArray, showOffsets: Boolean = HexanaSettings.getInstance().showOffsets == true): WatConversionResult {
+        return try {
+            val textWithStatus = printWat(wasmBytes, foldInstructions = false, printOffsets = showOffsets)
+            WatConversionResult.Success(textWithStatus.wat, textWithStatus.warnings)
+        } catch (e: Exception) {
+            WatConversionResult.Error(e.message ?: "Failed to convert WASM to WAT")
+        }
+    }
+
     private fun convertToWasm(file: File, showOffsets: Boolean): WatConversionResult {
         val settings = HexanaSettings.getInstance()
         return if (settings.useBuiltInWasmTools == true || file.path.isHttpUrl()) {
