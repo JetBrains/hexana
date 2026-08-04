@@ -14,6 +14,8 @@ Open any `.wasm`, `.elf`, `.exe`, `.so`, `.o`, `.dll`, `.dylib`, `.jar`, `.zip`,
 - **Data inspector** panel showing different representations (integers, floats, strings) of the selected byte.
 - Text search across hex content.
 
+![Hex Viewer](https://jetbrains.github.io/hexana/images/vscode/01-hex-viewer.png)
+
 ### Supported Binary Formats
 
 | Format | File types |
@@ -46,6 +48,10 @@ A tabbed analysis panel with views depending on the binary type. All tables supp
 
 **Native binary tabs** vary by format and include section tables, symbols, and size analysis with a size diagram.
 
+![Exports Tab](https://jetbrains.github.io/hexana/images/vscode/02-exports-tab.png)
+
+![Native Binary](https://jetbrains.github.io/hexana/images/vscode/06-native-binary.png)
+
 ### Scriptable Info Tabs
 
 Write custom JavaScript analysis scripts that use `binary` to access binary data and `print` to display results. Add a script tab via the "+" button — a dialog with instructions and an API reference is shown. CSV and TSV output is rendered as tables.
@@ -57,9 +63,13 @@ Write custom JavaScript analysis scripts that use `binary` to access binary data
 
 Both commands are available from the Explorer context menu and the Command Palette.
 
+![Wasm Diff](https://jetbrains.github.io/hexana/images/vscode/10-wasm-diff.png)
+
 ### Run Support (WASM)
 
 Run Wasm modules directly from the editor toolbar, with a dialog for choosing exports and program arguments. Supports both core modules (with automatic import stub generation) and component model binaries (with dependency resolution and composition).
+
+![Run Config Dialog](https://jetbrains.github.io/hexana/images/vscode/03-run-config-dialog.png)
 
 **Supported runtimes:**
 - [wasmtime](https://wasmtime.dev/) — full-featured runtime with Component Model support
@@ -73,6 +83,8 @@ Run Wasm modules directly from the editor toolbar, with a dialog for choosing ex
 
 Debug WebAssembly modules with breakpoints in source languages (C, C++, Rust, Go, Zig, WAT).
 
+![Debug Breakpoint Hit](https://jetbrains.github.io/hexana/images/vscode/05-debug-breakpoint-hit.png)
+
 **Supported debug runtimes:**
 - **wasmtime** — via LLDB (requires lldb-dap / LLVM 22.1+)
 - **WAMR** — via LLDB remote debugging
@@ -84,6 +96,10 @@ Debug WebAssembly modules with breakpoints in source languages (C, C++, Rust, Go
 - Automatic component dependency resolution by scanning workspace directories for matching `.wasm` files, including transitive dependencies.
 - Navigate nested modules inside a component binary by opening them in separate editor tabs.
 - **Save as** for nested WASM modules and JAR/ZIP entries — save content to a separate file.
+
+![Component Exports](https://jetbrains.github.io/hexana/images/vscode/07-component-exports.png)
+
+![Component Dependencies](https://jetbrains.github.io/hexana/images/vscode/11-component-dependencies.png)
 
 ### MCP Server
 
