@@ -63,6 +63,8 @@ Three independent fixes combine to make large modules — including 64-bit memor
 
 **Linear indirect-call edges.** See the synthetic node description above: the edge-count change is also the fix that eliminates the `OutOfMemoryError` on large Emscripten modules.
 
+![WAT (virtualized) tab of usdviewweb.wasm rendering the module's import section, with the information-bar popup listing the detected proposals — sign-extension operators, non-trapping float-to-int conversions, bulk memory operations, Memory64, and Threads](../images/idea/35-mem64-virtualized-wat.png)
+
 Together these changes bring a real-world benchmark to heel: OpenUSD's Emscripten-built `usdviewweb.wasm` (50 MB, 42k functions, memory64) previously drove the IDE past 10 GB of heap into an `OutOfMemoryError`. It now opens, renders the Functions tab, and completes garbage and dominator analysis within a default 2 GB heap, with UI stalls kept near one second. A bundled memory64 fixture and EDT-responsiveness driver test ship with this release to guard the regression.
 
 ## Fixed

@@ -21,6 +21,8 @@ Every `call_indirect` and `return_call_indirect` row in the WAT (virtualized) vi
 
 **Navigation.** Click the instruction row (or press Go to Declaration) to open a candidates popup. Each entry navigates to that candidate's body in the WAT view. Alternatively, expand the inline `show N candidates` row beneath the instruction for the full list as click-navigable rows.
 
+![WAT (virtualized) view of a workers-rs module with a call_indirect row expanded inline — 68 statically known candidates listed as navigable rows beneath the instruction](../images/idea/36-indirect-call-candidates-inline.jpg)
+
 **Explicit callout for trapping call sites.** When a signature has no matching table entries at all, the row says so explicitly: that call site can only trap. The lists are labelled "statically known", not "all possible targets", to make the approximation clear.
 
 ## Dispatch tab in WASM diff
