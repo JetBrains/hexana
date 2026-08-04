@@ -98,9 +98,12 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
                 val lldbExe = resolveLldbPath(configuration)
                 val commandLine = GeneralCommandLine().apply {
                     exePath = lldbExe
-                    addParameter("--")
-                    addParameter(wasmtimePath)
-                    addParameters(buildResult.arguments)
+                    addParameters(
+                        buildWasmtimeLldbParameters(
+                            wasmtimePath = wasmtimePath,
+                            wasmtimeArguments = buildResult.arguments,
+                        ),
+                    )
 
                     val workDir = configuration.workingDirectory.ifBlank { null }
                     if (workDir != null) {
@@ -384,6 +387,27 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
 
         /** Default LLDB executable name, resolved via PATH. */
         internal val DEFAULT_LLDB_PATH = if (SystemInfo.isWindows) "lldb.exe" else "lldb"
+
+        private const val DISABLE_EXTERNAL_SYMBOL_LOOKUP_COMMAND =
+            "settings set symbols.enable-external-lookup false"
+
+        internal fun buildWasmtimeLldbParameters(
+            wasmtimePath: String,
+            wasmtimeArguments: List<String>,
+            disableExternalSymbolLookup: Boolean = SystemInfo.isLinux,
+        ): List<String> = buildList {
+            if (disableExternalSymbolLookup) {
+                // This must run before LLDB creates the Wasmtime target. Some Linux
+                // LLDB distributions can block indefinitely in external symbol
+                // locators during target creation. Wasmtime's JIT symbols are loaded
+                // later through the GDB JIT interface and are unaffected.
+                add("-O")
+                add(DISABLE_EXTERNAL_SYMBOL_LOOKUP_COMMAND)
+            }
+            add("--")
+            add(wasmtimePath)
+            addAll(wasmtimeArguments)
+        }
 
         /**
          * Resolves the default LLDB executable path by checking
