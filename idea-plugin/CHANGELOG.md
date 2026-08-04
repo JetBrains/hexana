@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Nested components of a Component Model binary now open in their own editor view. A **Components** tab lists the embedded component the way **Modules** lists embedded core modules, and clicking the row opens it. Opening is recursive: modules and components inside an already-opened nested view open the same way, and byte offsets accumulate across levels so every nested view is labelled with its absolute offset in the root file. Nested in-memory views don't offer Run actions (there is no file on disk a run configuration could execute) and gain the full tab set of a disk-opened file, including the plain Wat tab and, for core modules, DWARF panels.
 
 ### Changed
 

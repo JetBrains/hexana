@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.ui.Messages
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.HexanaBinaryVirtualFile
 import org.jetbrains.hexana.document.EditableBinaryDocument
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
@@ -539,7 +540,10 @@ private fun editModeToolbarContent(
     onReparseAfterOverwrite: () -> Unit = {},
 ): (@Composable () -> Unit)? {
     @Suppress("UNUSED_PARAMETER") val unused = stampKey
+    // In-memory nested views have no disk file to overwrite or finalize next
+    // to — treat them as file-less so those actions stay disabled.
     val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
+        ?.takeUnless { it is HexanaBinaryVirtualFile }
     val finalizedName = sourceFile?.name?.let { computeFinalizedName(it) }
     val hasEdits = doc.canUndo()
     val canOverwrite = hasEdits && sourceFile != null

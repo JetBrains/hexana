@@ -372,6 +372,30 @@ class TableTabsProviderTest {
         assertEquals("component:@0000000a", tab.columns.single().cellProvider(0).representation)
     }
 
+    @Test
+    fun componentTabsRecurseIntoNestedComponent() {
+        // Real artifact (wasm-tools parse): a component with one core module plus a
+        // nested component that itself contains a core module exporting "inner".
+        val bytes = (
+            "0061736d0d00010001260061736d010000000105016000017f03020100070901056f7574657200000a0601040041010b" +
+                "04300061736d0d00010001260061736d010000000105016000017f0302010007090105696e6e657200000a06010400412a0b"
+            ).hexToByteArray()
+        val provider = WasmComponentBinaryProvider(bytes.toCommonByteBuffer())
+
+        val tabs = WasmComponentTableTabsProvider().tableTabs(provider)
+        assertNotNull(tabs.find { it.name == "Modules" })
+        assertNotNull(tabs.find { it.name == "Components" })
+
+        // Slice the nested component the way the enricher's click handler does and
+        // verify the nested view again offers its own openable Modules tab.
+        val section = provider.wasmModule?.componentSection
+        assertNotNull(section)
+        val nested = WasmComponentBinaryProvider(provider.bytes.slice(section.contentOffset, section.contentSize))
+        val nestedTabs = WasmComponentTableTabsProvider().tableTabs(nested)
+        assertNotNull(nestedTabs.find { it.name == "Modules" }, "Nested component should expose its own Modules tab")
+        assertNull(nestedTabs.find { it.name == "Components" }, "Nested component has no further nesting")
+    }
+
     // -----------------------------------------------------------------------
     // NativeTableTabsProvider tests
     // -----------------------------------------------------------------------

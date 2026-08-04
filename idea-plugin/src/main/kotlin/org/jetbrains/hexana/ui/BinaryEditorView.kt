@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.actionSystem.IdeActions
+import org.jetbrains.hexana.HexanaBinaryVirtualFile
 import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.HexViewState
 import org.jetbrains.hexana.HexViewStateHolder
@@ -98,7 +99,10 @@ internal fun BinaryEditorView(
         // sidecar load + journal replay happen in the LaunchedEffect below
         // so that VFS I/O (findChild → FSRecordsImpl.update) doesn't run
         // on the EDT inside `remember { ... }`.
+        // In-memory nested views (HexanaBinaryVirtualFile) have no disk
+        // location for a sidecar — they keep the NoOp persister.
         val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
+            ?.takeUnless { it is HexanaBinaryVirtualFile }
         val persister: JournalPersister = if (sourceFile != null) {
             IdeaJournalPersister(sourceFile)
         } else {

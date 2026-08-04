@@ -562,12 +562,13 @@ class HexanaFileEditor(
             return nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
         }
 
-        if (inMemoryBuffer != null) {
-            return when (WasmBinaryProviderSelector.select(commonBuffer)) {
-                BinaryProviderType.Wasm -> WasmBinaryProvider(commonBuffer)
-                BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(commonBuffer)
-                BinaryProviderType.Generic -> nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
-            }
+        // In-memory files (nested modules/components opened from a table tab)
+        // take the same virtual-file-provider path as disk files below —
+        // toCommonByteBuffer() serves their BUFFER_KEY bytes — so their own
+        // tabs get enriched too and nesting opens recursively. Only the
+        // unparseable case keeps the plain-provider fallback.
+        if (inMemoryBuffer != null && WasmBinaryProviderSelector.select(commonBuffer) == BinaryProviderType.Generic) {
+            return nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
         }
 
         val ref = AtomicReference(HexanaSourceLocationProvider.EMPTY)

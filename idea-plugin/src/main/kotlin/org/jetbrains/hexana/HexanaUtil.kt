@@ -118,6 +118,9 @@ fun VirtualFile.toMappedBuffer(): MappedByteBuffer? {
 }
 
 fun VirtualFile.toCommonByteBuffer(): CommonByteBuffer? {
+    // In-memory files (nested modules/components opened from a table tab)
+    // carry their bytes in user data — there is no disk content to map.
+    getUserData(HexanaBinaryVirtualFile.BUFFER_KEY)?.let { return it.duplicate() }
     if (this.path.isHttpUrl()) {
         val response = readRemoteResponseBlocking(this.path)
         return ByteBuffer.wrap(response).toCommonByteBuffer()
