@@ -59,6 +59,8 @@ Three independent fixes combine to make large modules — including 64-bit memor
 
 **Compact dominator storage.** Dominator results are now stored in a single flat `int` buffer instead of boxed hash maps. The dominance frontier — a near-quadratic structure that nothing in the product consumed — is no longer computed at all.
 
+![Dominators tab of usdviewweb.wasm showing the call-graph dominator tree — functions grouped under the root with their caller counts, computed for a 42k-function memory64 module](../images/idea/31-mem64-dominators.png)
+
 **Linear indirect-call edges.** See the synthetic node description above: the edge-count change is also the fix that eliminates the `OutOfMemoryError` on large Emscripten modules.
 
 Together these changes bring a real-world benchmark to heel: OpenUSD's Emscripten-built `usdviewweb.wasm` (50 MB, 42k functions, memory64) previously drove the IDE past 10 GB of heap into an `OutOfMemoryError`. It now opens, renders the Functions tab, and completes garbage and dominator analysis within a default 2 GB heap, with UI stalls kept near one second. A bundled memory64 fixture and EDT-responsiveness driver test ship with this release to guard the regression.

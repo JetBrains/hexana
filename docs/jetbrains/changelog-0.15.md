@@ -99,6 +99,8 @@ The call graph now models indirect calls through one hub node **per canonical si
 
 **Dominators tree empty in 0.14.** The compact dominator storage introduced in 0.14 used −1 as its "no parent" marker, which is also the virtual root's node id, so every function dominated directly by the root was dropped from the tree. Function-level CFG dominators were unaffected, which is how it slipped through testing. The tree now renders fully.
 
+![Dominators tab of a 15.9 MB memory64 module (emHdBindings.wasm) — the CFG Dominators subtab shows the selected function's basic-block dominator tree with immediate-dominator and dominates counts per block](../images/idea/32-wasm64-cfg-dominators.jpg)
+
 **Source locations resolve on Rust-produced modules.** The DWARF lookup previously found compilation units by their `low_pc` / `high_pc` attributes, which rustc does not emit (it uses range lists instead), so the hex view's "Open in sources" never appeared for Rust artifacts. The lookup now also consults the line tables directly. Two further mismatches are fixed: callers pass module-absolute offsets while WASM DWARF addresses are code-section-relative (queries are now converted, and DWARF-based navigation was one line off as a result), and a module that parses but has no DWARF — the Kotlin/Wasm case — no longer skips the source-map fallback.
 
 **Nested table row sorting restored.** Rows of nested tables are sorted again according to the parent sorting rules. This also fixes the sort order in the **Top** tab.
