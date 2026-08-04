@@ -23,7 +23,7 @@ The diff lists every section found in either build: **Name**, **Change** classif
 
 ![WASM Component dependency diagram for hello_component.wasm — the Dependencies tab shows a graph of core modules and component instances arranged by their dependency relationships, with a colour-coded legend](../images/idea/22-component-dependencies.png)
 
-Component Model binaries gain a **Dependencies** tab that visualises the relationships among the component's internals: interface imports such as `wasi:cli/run@0.2.0`, core modules with their byte sizes, nested components, and the core and component instances created from them. Runs of similar instances collapse into a single group node (for example "9 core instances"), and a **Legend** identifies node kinds by colour.
+Component Model binaries gain a **Dependencies** tab that visualises the relationships among the component's internals: interface imports such as `wasi:cli/run@0.2.0`, core modules with their byte sizes, nested components, and the core and component instances created from them. Runs of similar instances collapse into a single group node (for example "9 core instances"). A **Legend** identifies node kinds by colour — Import, Core Module, Nested Component, Core Instance, Component Instance, Export, and terminal leaf nodes. Click a group to expand or collapse it; scroll zooms and drag pans the diagram.
 
 ## Data inspector
 

@@ -161,9 +161,9 @@ Select two native binary files (ELF, Mach-O, PE) in the project view and invoke 
 
 ## Component Model dependency diagram (0.14)
 
-![WASM Component dependency diagram for hello_component.wasm showing the Dependencies tab with a graph of core modules and component instances, colour-coded by kind with a legend on the right](../images/idea/22-component-dependencies.png)
+![Dependencies tab of http-gateway.wasm showing core modules with byte sizes, collapsed core-instance groups, a nested component, and wasi interface imports, with the expanded legend identifying node kinds by colour](../images/idea/34-component-dependencies-legend.png)
 
-Component Model binaries gain a **Dependencies** tab that visualises the relationships among the component's internals: interface imports such as `wasi:cli/run@0.2.0`, core modules with their byte sizes, nested components, and the core and component instances created from them. Runs of similar instances collapse into a single group node (for example "9 core instances"), and a **Legend** identifies node kinds by colour.
+Component Model binaries gain a **Dependencies** tab that visualises the relationships among the component's internals: interface imports such as `wasi:cli/run@0.2.0`, core modules with their byte sizes, nested components, and the core and component instances created from them. Runs of similar instances collapse into a single group node (for example "9 core instances"). A **Legend** identifies node kinds by colour — Import, Core Module, Nested Component, Core Instance, Component Instance, Export, and terminal leaf nodes. Click a group to expand or collapse it; scroll zooms and drag pans the diagram.
 
 ## Data inspector (0.14)
 
