@@ -1,7 +1,7 @@
 ---
 title: Getting Started with Hexana for VS Code
 description: How to install the Hexana VS Code extension, open a WebAssembly file, and find the main views.
-version: "0.6.0"
+version: "0.8.0"
 ---
 
 # Getting Started with Hexana for VS Code
@@ -83,7 +83,7 @@ The vertical divider between the hex viewer and the analysis panel is **resizabl
 
 ### Analysis tabs
 
-Up to 11 tabs, surfaced depending on binary type. See [`analysis-tabs.md`](analysis-tabs.md) for the per-tab reference.
+Up to 12 tabs, surfaced depending on binary type. See [`analysis-tabs.md`](analysis-tabs.md) for the per-tab reference.
 
 ### Selection status bar
 

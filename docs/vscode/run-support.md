@@ -1,7 +1,7 @@
 ---
 title: Running and Debugging WebAssembly from Hexana for VS Code
 description: How to run and debug .wasm modules through Wasmtime, WAMR, GraalVM, wazero, Node.js, or the browser — core modules with auto-generated import stubs and Component Model binaries with dependency composition.
-version: "0.6.0"
+version: "0.8.0"
 ---
 
 # Running and Debugging WebAssembly from Hexana for VS Code

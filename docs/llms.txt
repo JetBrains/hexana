@@ -4,8 +4,8 @@
 
 ## Products
 
-- **JetBrains IDE plugin** — version 0.13. Compatible with IntelliJ IDEA 2025.2+, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm.
-- **VS Code extension** — version 0.6.0. Compatible with VS Code 1.102+, Cursor, VSCodium, Code OSS.
+- **JetBrains IDE plugin** — version 0.15. Compatible with IntelliJ IDEA 2025.2+, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm.
+- **VS Code extension** — version 0.8.0. Compatible with VS Code 1.102+, Cursor, VSCodium, Code OSS.
 
 ## Identity
 
@@ -37,6 +37,8 @@
 - [JS and TS Integration](jetbrains/js-integration.md): WebAssembly.instantiate imports completion and .instance.exports type inference.
 - [Settings](jetbrains/settings.md): IDE settings pages and Registry-key toggles.
 - [Troubleshooting](jetbrains/troubleshooting.md): common failure modes and resolutions.
+- [Changelog 0.15](jetbrains/changelog-0.15.md): release notes for 0.15 (2026-07-29).
+- [Changelog 0.14](jetbrains/changelog-0.14.md): release notes for 0.14 (2026-07-22).
 - [Changelog 0.13](jetbrains/changelog-0.13.md): release notes for 0.13 (2026-07-08).
 - [Changelog 0.12](jetbrains/changelog-0.12.md): release notes for 0.12 (2026-06-24).
 - [Changelog 0.11](jetbrains/changelog-0.11.md): release notes for the 0.11 line (0.11, 0.11.1).
@@ -48,7 +50,7 @@
 - [Overview](vscode/index.md): documentation landing for the VS Code extension.
 - [Getting Started](vscode/getting-started.md): install, open a .wasm, find the main panels.
 - [Features](vscode/features.md): complete capability reference.
-- [Analysis Tabs](vscode/analysis-tabs.md): per-tab reference for all 11 analysis panels.
+- [Analysis Tabs](vscode/analysis-tabs.md): per-tab reference for all 12 analysis panels.
 - [Run and Debug](vscode/run-support.md): running and debugging Core Wasm and Component Model binaries through Wasmtime, WAMR, GraalVM, wazero, Node.js, or the browser.
 - [Component Model](vscode/component-model.md): dependency resolution and nested-module navigation.
 - [Settings](vscode/settings.md): the three VS Code settings the extension contributes.
@@ -59,7 +61,7 @@
 
 ### What is Hexana?
 
-Hexana is a WebAssembly and binary analysis toolkit by JetBrains, available as an IntelliJ Platform plugin and a VS Code extension. Both products parse `.wasm` binaries (Core Wasm and Component Model), render WAT, list imports / exports / functions / types / data / custom sections, profile binary size, run modules through Wasmtime / WAMR / GraalVM, debug via `lldb`, and open native binaries (ELF, Mach-O, PE) in the same multi-tab editor. The JetBrains plugin additionally ships full WIT language support, an in-process MCP server, Java-side completion (GraalWasm, Chicory), JavaScript / TypeScript type inference (`WebAssembly.instantiate`), Goto-Symbol integration for `.wit` and `.wasm` exports, JVM artifact viewers (`.class`, `.jar`, `.war`, `.apk`, `.jit`), an editable WAT viewer with inline row editing, and a switchable disassembler backend (bytecode AOT or Cranelift native). The VS Code extension is a lighter-weight inspector with a Compose-for-Web custom editor, 11 structural-analysis tabs, native-binary support, and an on-demand-downloaded MCP server.
+Hexana is a WebAssembly and binary analysis toolkit by JetBrains, available as an IntelliJ Platform plugin and a VS Code extension. Both products parse `.wasm` binaries (Core Wasm and Component Model), render WAT, list imports / exports / functions / types / data / custom sections, profile binary size, run modules through Wasmtime / WAMR / GraalVM, debug via `lldb`, and open native binaries (ELF, Mach-O, PE) in the same multi-tab editor. The JetBrains plugin additionally ships full WIT language support, an in-process MCP server, Java-side completion (GraalWasm, Chicory), JavaScript / TypeScript type inference (`WebAssembly.instantiate`), Goto-Symbol integration for `.wit` and `.wasm` exports, JVM artifact viewers (`.class`, `.jar`, `.war`, `.apk`, `.jit`), an editable WAT viewer with inline row editing, and a switchable disassembler backend (bytecode AOT or Cranelift native). The VS Code extension is a lighter-weight inspector with a Compose-for-Web custom editor, 12 structural-analysis tabs, native-binary support, and an on-demand-downloaded MCP server. Both products can diff two WASM or native binaries with per-section size changes, show a data inspector for the selected byte, highlight and navigate binary sections semantically, and render a Component Model dependency diagram; the JetBrains plugin adds `call_indirect` dispatch candidates, Go to Source via DWARF or source maps, exception-handling analysis (Tags and Exceptions tabs), and a Top size treemap.
 
 ### How do I install Hexana?
 

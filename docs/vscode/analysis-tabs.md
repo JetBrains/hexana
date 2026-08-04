@@ -1,12 +1,12 @@
 ---
 title: Hexana for VS Code — Analysis Tab Reference
-description: Per-tab reference for all 11 analysis panels inside the Hexana VS Code editor.
-version: "0.6.0"
+description: Per-tab reference for all 12 analysis panels inside the Hexana VS Code editor.
+version: "0.8.0"
 ---
 
 # Analysis Tab Reference
 
-The Hexana custom editor shows up to **11 built-in tabs** in its analysis panel, surfaced based on the loaded binary's kind (core Wasm, Component Model, or generic), plus any number of scriptable tabs you add with **"+"** (see [`features.md`](features.md#scriptable-info-tabs-060)). All tables on every tab are **sortable** (click a header) and **searchable** (type in the built-in search field — unified across all tabs since 0.6.0). Protocol Buffers descriptor sets open with their own five-tab set, documented at the end of this page.
+The Hexana custom editor shows up to **12 built-in tabs** in its analysis panel, surfaced based on the loaded binary's kind (core Wasm, Component Model, or generic), plus any number of scriptable tabs you add with **"+"** (see [`features.md`](features.md#scriptable-info-tabs-060)). All tables on every tab are **sortable** (click a header) and **searchable** (type in the built-in search field — unified across all tabs since 0.6.0). Protocol Buffers descriptor sets open with their own five-tab set, documented at the end of this page.
 
 This page documents each tab in the order Hexana renders them.
 
@@ -165,7 +165,21 @@ The conversion runs in the webview via a WASM-based wat printer (`WasmPrinterJs`
 
 Since **0.5.0** the WAT view uses **virtual scrolling** — only the visible portion of the text is rendered at any given time. For large modules with thousands of functions (e.g. a multi-MB Emscripten or Kotlin/Wasm binary), this keeps initial render and section navigation fast.
 
+Since **0.6.1**, Component Model binaries also use the virtualized WAT renderer for their embedded core modules. A **module selector** at the top of the WAT panel lets you switch between modules when the component contains more than one embedded core module. Each module's WAT is rendered independently with the same virtual scrolling.
+
+![Virtualized WAT for a component binary with module selector](../images/vscode/09-wasm-component-virtualized-wat.png)
+
 The WAT view is read-only and is regenerated on each open. Inline WAT editing — present in the JetBrains plugin — is not yet in the VS Code extension.
+
+## Dependencies (0.8.0+)
+
+**Available for**: Component Model only.
+
+![Component dependency diagram](../images/vscode/11-component-dependencies.png)
+
+A graph view of the internal dependency structure of the open component. Each node represents an entity in the component — a core module, a nested component, a core or component instance, or an interface import / export such as `docs:adder/add@0.1.0` — and edges show how they are wired together.
+
+The diagram is generated from the component's binary structure and requires no external tool. A **Legend** identifies node kinds by colour.
 
 ## Protocol Buffers descriptor set tabs (0.6.0+)
 

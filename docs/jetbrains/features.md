@@ -1,12 +1,12 @@
 ---
 title: Hexana Feature Reference
 description: Complete capability reference for the Hexana IntelliJ plugin, grouped by surface.
-version: "0.13"
+version: "0.15"
 ---
 
 # Hexana Feature Reference
 
-This page enumerates every user-visible capability Hexana ships. Capabilities are grouped by *surface* (file type or interaction point), not by chronological release. For per-release changes, see [`changelog-0.13.md`](changelog-0.13.md), [`changelog-0.12.md`](changelog-0.12.md), [`changelog-0.11.md`](changelog-0.11.md), [`changelog-0.10.md`](changelog-0.10.md), and the prior [`changelog-0.9.md`](changelog-0.9.md).
+This page enumerates every user-visible capability Hexana ships. Capabilities are grouped by *surface* (file type or interaction point), not by chronological release. For per-release changes, see [`changelog-0.15.md`](changelog-0.15.md), [`changelog-0.14.md`](changelog-0.14.md), [`changelog-0.13.md`](changelog-0.13.md), [`changelog-0.12.md`](changelog-0.12.md), [`changelog-0.11.md`](changelog-0.11.md), [`changelog-0.10.md`](changelog-0.10.md), and the prior [`changelog-0.9.md`](changelog-0.9.md).
 
 ![Hexana opens a `.wasm` file with the structure tabs visible](../images/idea/01-wasm-overview.png)
 
@@ -37,20 +37,23 @@ When Hexana opens a `.wasm` file, it presents a structured editor with the follo
 - **(0.12)** Each row shows a tooltip with the full export name (for names truncated by the column width).
 - **(0.12)** **Copy Name** context-menu action.
 - **(0.12)** **Navigate to Function in WAT** context-menu action (shown only for function exports) switches to the WAT (virtualized) tab and scrolls to that function's body.
+- **(0.15)** Right-click a row to invoke **Go to Source** — opens the source file at the function's first mapped line when DWARF or a source map is present. See [Go to Source](#go-to-source-015).
 
 ### Functions tab
 - One row per defined function with index, type signature, local count, and code-section offset.
 - Searchable, sortable, keyboard-navigable.
 - For Kotlin/Wasm modules, a **Kotlin/Wasm** badge per function; clicking it jumps to the Kotlin source declaration — see [Kotlin/Wasm source navigation](#kotlinwasm-source-navigation-0111).
+- **(0.15)** Right-click a row to invoke **Go to Source** — opens the source file at the function's first mapped line when DWARF or a source map is present. See [Go to Source](#go-to-source-015).
 
 ### Top tab — size profiler
 
-![Size profiler with sortable columns](../images/idea/02-top-tab.png)
+![Size profiler treemap view of javac.js.wasm showing Code, Data, and Custom sections as proportional areas, with a sortable table on the left](../images/idea/28-top-treemap.jpg)
 
-- Sortable table of the largest functions, data segments, and sections by byte size.
+- Sortable breakdown of the largest functions, data segments, and sections by byte size.
 - Click a row to navigate to the corresponding hex range.
 - Useful first stop when "the binary got bigger" — the top of the list is where the bytes went.
-- **(0.12)** For Component Model binaries, the tree now attributes every nested sub-component and embedded core module with its correct byte count, expanding on demand to internal sections and then to functions, recursively. Previously, a composed component reported most of its bytes as a single opaque block.
+- **(0.12)** For Component Model binaries, the tree attributes every nested sub-component and embedded core module with its correct byte count, expanding on demand to internal sections and then to functions, recursively.
+- **(0.15)** A size treemap renders the largest entities as proportional areas alongside the table, for WASM and native binaries.
 
 ### Hex tab
 - Byte-level view with section annotations.
@@ -60,6 +63,9 @@ When Hexana opens a `.wasm` file, it presents a structured editor with the follo
 - `hexana.goToOffset` (shares `Cmd/Ctrl+L`) jumps to a byte offset.
 - `hexana.showStructurePopup` (shares `Cmd/Ctrl+F12`) opens a structure outline.
 - Clickable hex offsets in the WAT tab navigate here.
+- **(0.14)** Semantic section highlighting marks sections by kind (code, data, types, imports, exports, and so on), with navigation between sections from the editor.
+- **(0.15)** Semantic section labels are clickable where a corresponding information tab exists: clicking a label opens that tab.
+- **(0.14)** **Data Inspector** panel — appears to the right of the hex view when bytes are selected, decoding them as signed/unsigned 8/16/32/64-bit integers (little- and big-endian), IEEE 754 floats, UTF-8 text, and other common representations. Click the **Data Inspector** label in the bottom bar to toggle the panel. See [Data inspector](#data-inspector-014).
 
 ### WAT tab — virtualised, editable
 
@@ -72,6 +78,7 @@ When Hexana opens a `.wasm` file, it presents a structured editor with the follo
 - Reference-types and bulk-memory instructions rendered.
 - Legacy Exception Handling (`try`, `catch`, `throw`, `rethrow`, `delegate`, `catch_all`) supported alongside the finalised `try_table` proposal.
 - **(0.12)** Component Model binaries: the WAT tab discovers every embedded core module recursively through nested sub-components and renders the selected one with the same three-column offset / bytes / mnemonic layout. A selector switches between modules when a component contains more than one. In-memory component views (such as a submodule opened from a diff) also gain a WAT tab this way.
+- **(0.15)** Every `call_indirect` and `return_call_indirect` row shows its statically known dispatch candidates — see [call_indirect candidates](#callindirect-dispatch-candidates-015). Right-clicking a WAT instruction row offers **Go to Source** when debug information is present — see [Go to Source](#go-to-source-015). Exception-handling instructions (`throw`, `try_table`, `throw_ref`) render with decoded index comments; clicking a `throw` row resolves where it is caught — see [Exception-handling visibility](#exception-handling-visibility-015).
 
 #### Inline row editing
 
@@ -135,6 +142,74 @@ For the full release notes on the core-module diff, see [`changelog-0.11.md`](ch
 - A **nested-component pair** recurses into the same submodule view.
 
 Submodules are paired by content hash, with positional fallback when hashes do not match.
+
+### Dispatch tab in WASM diff (0.15)
+
+![WASM module diff Dispatch tab — per-signature table of functions that entered or left the function table between two builds, with Entered rows in green and Left rows in red, and a side-by-side WAT diff at the bottom](../images/idea/26-wasm-diff-dispatch.jpg)
+
+The WASM diff gains a **Dispatch** tab alongside Size Impact and Entities. It shows, per canonical signature, which dispatch candidates entered or left the function table between two builds.
+
+- Cross-build identity uses the same content-hash matcher as the Entities tab — names are not trusted because tools such as wasm-bindgen rename closure shims on every build.
+- Each row distinguishes a brand-new or removed function from an existing function that merely entered or left the table.
+- Clicking a row opens the side-by-side WAT comparison for that candidate.
+
+## Native binary diff (0.14)
+
+![Native binary diff comparing two versions of libjitview.so, with per-section size changes — .text grew by +1.2 KB, .eh_frame by −52 B, .symtab and .strtab by −48 B each](../images/idea/21-native-binary-diff.png)
+
+Select two native binary files (ELF, Mach-O, PE) in the project view and invoke **Compare With…** from the context menu. The diff lists every section found in either build with its Name, Change classification (Modified, Added, Removed), Base size, Head size, and byte delta Δ. Sections that are bit-for-bit identical collapse behind a "N identical sections hidden" line.
+
+## Component Model dependency diagram (0.14)
+
+![WASM Component dependency diagram for hello_component.wasm showing the Dependencies tab with a graph of core modules and component instances, colour-coded by kind with a legend on the right](../images/idea/22-component-dependencies.png)
+
+Component Model binaries gain a **Dependencies** tab that visualises the relationships among the component's internals: interface imports such as `wasi:cli/run@0.2.0`, core modules with their byte sizes, nested components, and the core and component instances created from them. Runs of similar instances collapse into a single group node (for example "9 core instances"), and a **Legend** identifies node kinds by colour.
+
+## Data inspector (0.14)
+
+![Data Inspector panel open alongside the hex view of usdviewweb.wasm, showing the selected bytes decoded as little-endian integers, floats, and other scalar types in a panel on the right](../images/idea/23-data-inspector.png)
+
+Selecting bytes in the hex view populates the **Data Inspector** panel: the selected bytes are decoded simultaneously as signed and unsigned 8/16/32/64-bit integers (little- and big-endian), 32-bit and 64-bit IEEE 754 floats, UTF-8 text, and other common representations. Click the **Data Inspector** label in the hex view's bottom bar to toggle the panel.
+
+## call_indirect dispatch candidates (0.15)
+
+![WAT (virtualized) tab showing a call_indirect row with its candidates popup open, listing the statically known target functions with their signatures](../images/idea/25-indirect-call-candidates.jpg)
+
+Every `call_indirect` and `return_call_indirect` row in the WAT (virtualized) view now shows its statically known dispatch candidates.
+
+- **Candidates** are element-segment entries whose type signature matches the call site's type. Matching is structural, so functions declared under different but identical type entries are merged.
+- **Navigation**: click the instruction row (or press Go to Declaration) for a popup; expand the inline `show N candidates` row for the full list as click-navigable rows.
+- **Trapping call sites** are called out explicitly: when a signature has no matching table entries, the row reports that the call site can only trap.
+- Lists say "statically known", not "all possible targets". Functions written into the table at runtime via `table.set` are not reflected.
+
+## Go to Source (0.15)
+
+![WAT (virtualized) view with a Go to Source context menu offering dispatch-candidates.wat:18, resolved via a source map discovered through sourceMappingURL](../images/idea/27-goto-source.jpg)
+
+Right-clicking a row in the **Functions** or **Exports** tab, or an instruction row in the WAT view, offers `Go to Source (dir/file.rs:123)` when debug information is present. Clicking opens the source file at the resolved line in the IDE editor.
+
+- **Function rows** resolve to the function's first mapped line (the signature).
+- **WAT instruction rows** resolve per instruction.
+- **Resolution order**: DWARF when present, source map otherwise.
+- **Source map discovery**: the module's `sourceMappingURL` custom section (the form Kotlin/Wasm and Emscripten emit). A path resolves relative to the wasm file; absolute paths and inline `data:` maps are accepted. The existing `<file>.map` sidecar is the fallback. Remote `http(s)` URLs are not fetched.
+
+## Exception-handling visibility (0.15)
+
+![WAT (virtualized) view showing a throw 0 instruction with decoded tag and signature in a trailing comment, and a popup reporting that the throw escapes the function and reaches an exported entry point uncaught](../images/idea/29-exception-throw.jpg)
+
+Exception-handling proposal instructions render with full decoded annotations, and two new tabs expose the module's panic surface.
+
+- `throw 0` renders with a trailing comment naming the tag and its payload signature.
+- `try_table (catch 0 1) (catch_all 2)` renders each clause with its tag and target label decoded.
+- Clicking a `throw` row resolves where it is caught — the enclosing `try_table` and clause, or a report that the throw escapes and names the exported entry points it reaches.
+- **Tags tab** — decodes the module's exception tags (index, origin, attribute, payload type signature), the exception-handling equivalent of the Types tab.
+- **Exceptions tab** — lists exported entry points whose exceptions escape to the host, with the tags that can get out. `throw_ref` and imported-function throws appear as a dynamic category. A `catch_all` on the path correctly marks a throw as caught. Analysis is a sound static under-approximation.
+
+![Exceptions tab showing one exported entry point (func 2) with tag 0 in the Escapes uncaught column](../images/idea/30-exception-tab.jpg)
+
+## Save As for nested content (0.15)
+
+**Save As** is available from the editor context menu for nested WASM modules (opened from a Component Model component or a diff submodule view) and for entries inside JAR and ZIP archives. The action writes the content to a file of your choice on disk.
 
 ## WIT language support
 
@@ -308,16 +383,9 @@ The debugger is registered via `WasmDebugRunner` and `WasmLineBreakpointType`; b
 
 ## MCP server
 
-Hexana registers `HexanaToolset` against the platform MCP server (`com.intellij.mcpServer`). 17 tools at 0.9, in canonical order:
+Hexana registers `HexanaToolset` against the platform MCP server (`com.intellij.mcpServer`). The embedded IntelliJ provider exposes a **29-tool default profile** as of 0.14. Advanced inventory and raw-detail tools remain available from the standalone MCP server's `advanced` profile.
 
-```
-summarize_module, list_imports, list_exports, list_globals,
-list_types, list_memory, list_element_segments, list_functions,
-functions_for_indices, get_globals_for_indices,
-get_memory_for_indices, get_types_for_indices,
-get_locals_for_functions, get_instructions_for_functions,
-list_exported_functions, list_data, list_data_segments
-```
+Schema version 3 (0.14) adds bounded list inputs — for example `indices.maxItems` — so MCP clients can validate oversized requests before sending them.
 
 Each tool is documented per-section in [`mcp-tools.md`](mcp-tools.md).
 

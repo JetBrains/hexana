@@ -1,7 +1,7 @@
 ---
 title: Hexana for VS Code — Feature Reference
 description: Complete capability reference for the Hexana VS Code extension.
-version: "0.6.0"
+version: "0.8.0"
 ---
 
 # Hexana for VS Code — Feature Reference
@@ -80,9 +80,30 @@ Compiled Protocol Buffers descriptor sets — `.desc` and `.protoset` files, as 
 
 This is useful for inspecting what a compiled API surface actually contains — particularly when the source `.proto` files are not available. Schema-less wire messages (bare `.pb` files) are not auto-detected; that decoder currently ships in the JetBrains plugin only.
 
+## Binary diff (0.7.0+)
+
+![WASM diff — Size Impact tab](../images/vscode/10-wasm-diff.png)
+
+Hexana can compare two binary files of the same kind:
+
+- **WASM diff** — compares two `.wasm` files. The **Size Impact** view shows the overall size delta and a per-entity breakdown (functions, data segments, imports, exports, tables, globals, memories) with columns for the base size, head size, and the delta. Select any function row to see a WAT body diff for that pair of functions in the lower pane.
+- **Native binary diff** — compares two ELF, Mach-O, or PE binaries, reporting size changes per section.
+
+## Data inspector (0.7.0+)
+
+Selecting a byte in the hex viewer populates a **data inspector** panel showing different representations of the selected byte. The panel updates as you move the selection.
+
+## Section highlighting and navigation (0.8.0+)
+
+Sections in WASM and native binary files are **semantically highlighted by kind** — code, data, imports, custom, and so on — so you can spot the structure at a glance, and you can jump between sections directly from the editor.
+
+## Save as (0.8.0+)
+
+Nested WASM modules (embedded inside Component Model binaries) and individual entries inside JAR / ZIP archives can be saved to a separate file on disk with the **Save as** action. This is useful for extracting a core module from a component for standalone analysis, or for unpacking a specific file from a large archive.
+
 ## Analysis tabs
 
-Up to 11 built-in tabs inside the same editor, surfaced by binary kind, plus any number of **scriptable tabs** you add yourself (see below). All tables are **sortable** and **searchable** through the same built-in table control (unified in 0.6.0, with faster rendering). See [`analysis-tabs.md`](analysis-tabs.md) for the per-tab reference.
+Up to 12 built-in tabs inside the same editor, surfaced by binary kind, plus any number of **scriptable tabs** you add yourself (see below). All tables are **sortable** and **searchable** through the same built-in table control (unified in 0.6.0, with faster rendering). See [`analysis-tabs.md`](analysis-tabs.md) for the per-tab reference.
 
 | Tab | Core Wasm | Component | Generic |
 |---|---|---|---|
@@ -97,8 +118,9 @@ Up to 11 built-in tabs inside the same editor, surfaced by binary kind, plus any
 | Garbage | ✓ | — | — |
 | Modules | — | ✓ | — |
 | WAT | ✓ | ✓ | — |
+| Dependencies | — | ✓ | — |
 
-The WAT tab uses **virtual scrolling** since 0.5.0 — only the visible portion of the text is rendered, which keeps navigation fast in large modules. See [`analysis-tabs.md#wat`](analysis-tabs.md#wat) for details.
+The WAT tab uses **virtual scrolling** since 0.5.0 — only the visible portion of the text is rendered, which keeps navigation fast in large modules. For Component Model binaries, the WAT panel shows the embedded core modules with a selector when there are multiple (0.6.1). See [`analysis-tabs.md#wat`](analysis-tabs.md#wat) for details.
 
 ## Scriptable info tabs (0.6.0+)
 
@@ -152,6 +174,8 @@ Hexana integrates with VS Code's **Model Context Protocol server registration AP
 - **Automatic dependency resolution** — when a component imports interfaces from other components, Hexana searches the workspace for matching `.wasm` files and resolves the dependency graph transitively. No manual wiring.
 - **Nested-module navigation** — components carry nested modules; Hexana exposes them through a virtual filesystem provider, so each nested module opens in its own editor tab via a deterministic URL.
 - **Submodule → parent backreference** — when you open a nested module, the editor toolbar shows a link back to the containing component.
+- **Virtualized WAT for embedded modules (0.6.1)** — the WAT panel on a component binary renders each embedded core module using virtual scrolling. A selector at the top lets you switch between modules when a component contains more than one.
+- **Dependencies diagram (0.8.0)** — the **Dependencies** tab shows the internal dependency graph of the component — core modules, nested components, instances, and interface imports / exports — as a node diagram. See [`component-model.md`](component-model.md) and [`analysis-tabs.md`](analysis-tabs.md).
 
 See [`component-model.md`](component-model.md).
 

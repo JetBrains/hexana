@@ -1,12 +1,49 @@
 ---
 title: Hexana for VS Code — Release Notes
 description: Release notes for the Hexana VS Code extension.
-version: "0.6.0"
+version: "0.8.0"
 ---
 
 # Release Notes — Hexana for VS Code
 
 This page tracks releases of the VS Code extension.
+
+## 0.8.0
+
+Released **2026-07-29**.
+
+### Added
+
+- **Semantic section highlighting and navigation.** Sections in WASM and native binary files are now highlighted by kind, and you can jump between them directly from the editor.
+- **WASM Component dependency diagram.** Component Model binaries gain a **Dependencies** tab — a graph view showing the dependency relationships among the modules and linkages inside a component. The tab is available for component binaries only.
+- **"Save as" for nested modules and archive entries.** Nested WASM modules and entries inside JAR / ZIP archives can now be saved out to a separate file with the **Save as** action.
+
+## 0.7.0
+
+Released **2026-07-22**.
+
+### Added
+
+- **WASM file diff.** A new action compares two WASM files — a **Size Impact** view with the total size delta and per-section, per-entity byte changes, an **Entities** view, and, for functions, a WAT body diff for the selected function.
+- **Native binary diff.** A separate action compares two native binary files (ELF, Mach-O, PE), reporting size changes per section.
+- **Data inspector panel.** Selecting a byte in the hex viewer now populates a **data inspector** panel showing different representations of the selected byte.
+
+### Fixed
+
+- **Archive and nested-module content restored after reopen / restart.** Archive files and nested WASM modules now properly restore their content when an editor tab is reopened or VS Code is restarted.
+
+## 0.6.1
+
+Released **2026-07-15**.
+
+### Added
+
+- **Virtualized WAT for Component Model binaries.** Component-model binaries now use the inline virtualized WAT view for their embedded core modules — the same virtual-scrolling renderer introduced for core modules in 0.5.0. When a component contains multiple core modules, a selector at the top of the WAT panel lets you switch between them.
+
+### Changed
+
+- **Faster WASM table tabs.** Improved performance of the table-based analysis tabs, especially the Functions tab on large modules.
+- **MCP server packaging update.** The bundled MCP server packaging now uses the split CLI release-product layout.
 
 ## 0.6.0
 

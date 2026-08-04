@@ -1,7 +1,7 @@
 ---
 title: Component Model Support in Hexana for VS Code
 description: How Hexana detects Component Model binaries, resolves their dependencies, composes them for execution, and navigates nested modules.
-version: "0.2.0"
+version: "0.8.0"
 ---
 
 # Component Model Support
@@ -15,6 +15,7 @@ A `.wasm` file is identified as a component when its header carries the Componen
 Tab availability adapts:
 
 - **Modules** tab appears (component-only).
+- **Dependencies** tab appears (component-only, since 0.8.0).
 - **Functions**, **Data**, **Custom**, **Monos**, **Garbage** tabs are hidden — these are core-Wasm-only.
 - **Exports**, **Imports**, **Top**, **WAT**, and **Summary** continue to apply, surfacing component-level entities (interface exports, resources, etc.) rather than core-Wasm function indices.
 
@@ -43,6 +44,26 @@ This URI is what VS Code routes back to Hexana when the user re-opens, splits, o
 ### Submodule → parent backreference
 
 When you open a nested module, the editor toolbar shows a backreference: a clickable link labelled with the parent's filename that returns you to the containing component's editor tab. This makes deep drill-down navigable without keeping a mental stack of open tabs.
+
+### Virtualized WAT for embedded core modules (0.6.1+)
+
+![Virtualized WAT panel for a component binary, with module selector](../images/vscode/09-wasm-component-virtualized-wat.png)
+
+The WAT tab on a component binary renders its embedded core modules using the same virtual-scrolling WAT renderer as standalone core modules (introduced in 0.5.0). When the component contains more than one embedded core module, a **module selector** at the top of the WAT panel lets you switch between them. Each module's text is generated and rendered independently — you are not looking at a merged WAT dump.
+
+### Save as (0.8.0+)
+
+Any nested module visible in the Modules tab can be saved to a standalone file on disk with the **Save as** action. Use this to extract a core module from a component for analysis in isolation (for example, running it through an external optimizer or disassembler).
+
+## The Dependencies tab (0.8.0+)
+
+![Component dependency diagram](../images/vscode/11-component-dependencies.png)
+
+Component Model binaries gain a **Dependencies** tab — a node graph showing the internal structure of the component: its core modules, nested components, the core and component instances created from them, and the interface imports and exports (such as `docs:adder/add@0.1.0`) that connect them to the outside.
+
+The layout is computed from the component's binary structure; no external tool or network access is required. A **Legend** identifies node kinds by colour.
+
+This tab is available for Component Model binaries only.
 
 ## Dependency resolution
 

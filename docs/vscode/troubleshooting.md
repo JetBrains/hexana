@@ -1,7 +1,7 @@
 ---
 title: Hexana for VS Code — Troubleshooting
 description: Common issues users hit with the Hexana VS Code extension and how to resolve them.
-version: "0.2.0"
+version: "0.8.0"
 ---
 
 # Troubleshooting

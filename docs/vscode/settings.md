@@ -1,7 +1,7 @@
 ---
 title: Hexana for VS Code — Settings
 description: The VS Code settings the Hexana extension contributes, plus the telemetry consent model.
-version: "0.6.0"
+version: "0.8.0"
 ---
 
 # Settings
