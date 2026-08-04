@@ -65,6 +65,8 @@ You can install only one — Hexana adapts. If neither is installed and your bin
 
 ## Run dialog
 
+![Run dialog with argument fields and the runtime picker](../images/vscode/03-run-config-dialog.png)
+
 The dialog has four sections:
 
 - **Runtime** — dropdown of detected runtimes (Wasmtime / WAMR / GraalVM / wazero / Node.js / browser). Unavailable runtimes are greyed out with a tooltip explaining why. All runtimes except GraalVM and wazero can also be debugged (see [Debugging](#debugging-experimental)).
@@ -79,6 +81,8 @@ Click **Run** (or **Debug** to launch under the debugger — see below) to start
 Click **Debug** instead of **Run** to launch the module under a debugger. Hexana has two debug backends, selected by the runtime you pick; **GraalVM is run-only**.
 
 ### `lldb`-backed — Wasmtime and WAMR
+
+![Breakpoint hit in Rust source with local variables and the call stack](../images/vscode/04-debug-breakpoint-variables.png)
 
 - **Requirements** — LLVM 22.1 or newer must be on `PATH`, and the WASM binary must be compiled with debug info that `lldb` can interpret.
 - **Breakpoints** — set them in source files associated with the module (Hexana maps PCs to source via DWARF). Breakpoints inside nested modules of a Component Model binary are supported on Wasmtime only.

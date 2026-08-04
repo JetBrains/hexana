@@ -46,6 +46,8 @@ When Hexana opens a `.wasm`, the extension host reads the binary, detects whethe
 
 ## What do I see when I open a file?
 
+![A core WASM module open in the Hexana editor](../images/vscode/01-hex-viewer.png)
+
 Hexana replaces the default editor with a single panel split into three regions:
 
 ```

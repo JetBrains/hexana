@@ -23,6 +23,8 @@ Use this tab as the first stop on any new binary — it tells you whether you ar
 
 ## Exports
 
+![Exports tab of a core module with resolved function signatures](../images/vscode/02-exports-tab.png)
+
 **Available for**: core Wasm and Component Model.
 
 Lists everything the module exposes:

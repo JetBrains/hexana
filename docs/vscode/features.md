@@ -30,6 +30,8 @@ Tab availability adapts per kind — Component Model files surface a **Modules**
 
 ## Hex viewer
 
+![Hex viewer with semantically highlighted sections and the Sections tab](../images/vscode/01-hex-viewer.png)
+
 A virtual-scrolling hex dump with:
 
 - **Byte selection**: click, `Shift+Click`, drag.
@@ -41,6 +43,8 @@ A virtual-scrolling hex dump with:
 The viewer renders through Compose-for-Web inside a VS Code webview — it scales smoothly to large files without DOM-node-per-byte overhead.
 
 ## Native binaries (experimental, 0.2.0+)
+
+![ELF binary with highlighted sections and the Sections tab](../images/vscode/06-native-binary.png)
 
 Hexana detects **ELF**, **Mach-O**, and **PE** files by magic bytes and opens them in the same custom editor as `.wasm` files. The hex viewer behaves identically; the structure tab surfaces format-specific information:
 
@@ -170,6 +174,8 @@ Hexana integrates with VS Code's **Model Context Protocol server registration AP
 - **Java requirement.** On macOS arm64 and Linux x64, the MCP server uses a bundled native executable — no JDK needed. On other platforms (e.g. Windows), the server falls back to a JVM package; Java 21+ is required there. Hexana looks at `JAVA_HOME`, `PATH`, and the `hexana.mcp.javaHome` setting; if no suitable JDK is found on a JVM-fallback platform, MCP fails to start with an actionable error and Run / Debug are unaffected.
 
 ## Component Model support
+
+![Component Model binary with the Exports tab showing an exported instance](../images/vscode/07-component-exports.png)
 
 - **Automatic dependency resolution** — when a component imports interfaces from other components, Hexana searches the workspace for matching `.wasm` files and resolves the dependency graph transitively. No manual wiring.
 - **Nested-module navigation** — components carry nested modules; Hexana exposes them through a virtual filesystem provider, so each nested module opens in its own editor tab via a deterministic URL.
