@@ -324,21 +324,21 @@
     "obfuscate": "javascript-obfuscator out/ --output out/ --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false && javascript-obfuscator extension-lib/build/kotlin-webpack/js/productionExecutable/extension-lib.js --output extension-lib/build/kotlin-webpack/js/productionExecutable/extension-lib.js --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false && javascript-obfuscator webview/build/kotlin-webpack/js/productionExecutable/webview.js --output webview/build/kotlin-webpack/js/productionExecutable/webview.js --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false"
   },
   "dependencies": {
-    "adm-zip": "^0.5.17",
-    "semver": "^7.8.1"
+    "adm-zip": "^0.6.0",
+    "semver": "^7.8.5"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
     "@types/semver": "^7.7.1",
     "@types/vscode": "^1.102.0",
-    "@vscode/vsce": "^3.0.0",
+    "@vscode/vsce": "^3.9.2",
     "ovsx": "^0.10.0",
     "javascript-obfuscator": "^4.1.1",
     "typescript": "^5.3.0"
   },
   "overrides": {
     "form-data": "4.0.6",
-    "js-yaml": "4.2.0",
+    "js-yaml": "5.2.3",
     "markdown-it": "14.2.0"
   }
 }
