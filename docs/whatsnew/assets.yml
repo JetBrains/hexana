@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "default_release": "0.15",
+  "default_release": "0.16",
   "asset_root": ".",
   "capture_policy": {
     "preferred_source": "ui-driver",
@@ -412,6 +412,43 @@
       ],
       "doc_candidates": [],
       "image_candidates": []
+    },
+    "glue-component-virtualized-wat": {
+      "release": "0.16",
+      "eyebrow": "Component Model",
+      "title": "Read glue-only components in WAT (virtualized)",
+      "summary": "Component-level imports, exports, types, aliases, and instances now render as foldable WAT sections with byte-accurate links back to Hex.",
+      "recipe": "glue-component-virtualized-wat",
+      "keywords": [
+        "Glue-only components",
+        "WAT (virtualized)",
+        "component-level constructs",
+        "foldable per-section headers",
+        "not decoded"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.16/glue-component-virtualized-wat.png"
+      ]
+    },
+    "nested-component-editor": {
+      "release": "0.16",
+      "eyebrow": "Component Model",
+      "title": "Open nested components as editor views",
+      "summary": "Open embedded components and modules recursively from the Components and Modules tabs, with every nested view retaining its location in the original binary.",
+      "recipe": "nested-component-editor",
+      "keywords": [
+        "Nested components",
+        "Components tab",
+        "nested view",
+        "Opening is recursive",
+        "absolute offset",
+        "Nested in-memory views"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.16/nested-component-editor.png"
+      ]
     }
   }
 }

@@ -146,6 +146,14 @@ internal class HexanaIde internal constructor(
         return HexanaEditor(driver, fileName, fileName)
     }
 
+    fun openNestedComponent(parent: HexanaEditor, componentIndex: Int): HexanaEditor {
+        val payload = probe.openNestedComponent(parent.fileIdentifier, componentIndex)
+        val fileName = payload.firstOrNull { it.startsWith("fileName=") }
+            ?.removePrefix("fileName=")
+            ?: error("Nested component probe did not return a file name: $payload")
+        return HexanaEditor(driver, fileName, fileName)
+    }
+
     fun hexanaEditor(
         fileName: String = HexanaUiDriverTestSupport.wasmFileName,
         action: HexanaEditor.() -> Unit = {},
@@ -192,6 +200,10 @@ internal class HexanaEditor internal constructor(
 
     fun navigateToWasmFunction(funcIdx: Int) {
         probe.navigateToWasmFunction(fileIdentifier, funcIdx)
+    }
+
+    fun activate() {
+        probe.activateEditor(fileIdentifier)
     }
 
     fun topSizeState(): List<String> = probe.topSizeState(fileIdentifier)
@@ -414,9 +426,11 @@ internal interface HexanaEditorUiTestProbeRef {
     fun ping(): String
     fun openAbsoluteFile(path: String): List<String>
     fun openAbsoluteFileWithScriptTab(path: String, scriptPath: String): List<String>
+    fun activateEditor(fileName: String): List<String>
     fun activateStructureToolWindow(fileName: String): List<String>
     fun openComponentDiff(leftPath: String, rightPath: String): List<String>
     fun openNativeDiff(leftPath: String, rightPath: String): List<String>
+    fun openNestedComponent(fileName: String, componentIndex: Int): List<String>
     fun selectTab(fileName: String, tabName: String): List<String>
     fun setEditorTopFraction(fileName: String, topFraction: Float): List<String>
     fun navigateToWasmFunction(fileName: String, funcIdx: Int): List<String>

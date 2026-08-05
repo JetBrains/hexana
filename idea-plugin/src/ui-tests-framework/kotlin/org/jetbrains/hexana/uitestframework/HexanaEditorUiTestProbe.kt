@@ -25,8 +25,10 @@ import org.jetbrains.hexana.providers.classifyArchiveMember
 import org.jetbrains.hexana.providers.format.WasmComponentDiffOrchestrator
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
+import org.jetbrains.hexana.shared.WasmComponentTableTabsProvider
 import org.jetbrains.hexana.ui.ScriptTabSettings
 import org.jetbrains.hexana.ui.WasmFunctionNavTarget
+import org.jetbrains.hexana.ui.panel.enrichComponentTabs
 import org.jetbrains.hexana.ui.panel.WatConversionState
 import java.nio.file.Path
 
@@ -88,6 +90,16 @@ object HexanaEditorUiTestProbe {
                 ),
             )
         }
+    }
+
+    @JvmStatic
+    fun activateEditor(fileIdentifier: String): List<String> = runOnEdt {
+        val candidate = requireHexanaEditorCandidate(fileIdentifier)
+        FileEditorManager.getInstance(candidate.project).openFile(candidate.editor.myFile, true)
+        payload(
+            "hexana-activate-editor",
+            listOf("fileName=${candidate.editor.myFile.name}"),
+        )
     }
 
     @JvmStatic
@@ -159,6 +171,38 @@ object HexanaEditorUiTestProbe {
                 ),
             )
         }
+    }
+
+    @JvmStatic
+    fun openNestedComponent(fileIdentifier: String, componentIndex: Int): List<String> = runOnEdt {
+        val parentEditor = requireHexanaEditor(fileIdentifier)
+        val provider = parentEditor.binaryProvider as? WasmComponentBinaryVirtualFileProvider
+            ?: throw IllegalStateException(
+                "Expected a Component Model editor for '$fileIdentifier', got ${parentEditor.binaryProvider.kindId()}",
+            )
+        val componentsTab = WasmComponentTableTabsProvider()
+            .tableTabs(provider)
+            .enrichComponentTabs(provider, parentEditor.myFile, parentEditor.myProject)
+            .singleOrNull { it.name == "Components" }
+            ?: throw IllegalStateException("Expected a Components tab for '$fileIdentifier'")
+        require(componentIndex in 0 until componentsTab.rowCount) {
+            "Nested component index $componentIndex is outside the Components tab row range 0 until ${componentsTab.rowCount}"
+        }
+        val openAction = componentsTab.rowClickAction
+            ?: throw IllegalStateException("Components tab for '$fileIdentifier' has no open-in-editor action")
+
+        openAction(componentIndex)
+        val childEditor = FileEditorManager.getInstance(parentEditor.myProject).selectedEditor as? HexanaFileEditor
+            ?: throw IllegalStateException("Opening nested component $componentIndex did not select a Hexana editor")
+        check(childEditor !== parentEditor) { "Opening nested component $componentIndex kept the parent editor selected" }
+        payload(
+            "hexana-open-nested-component",
+            listOf(
+                "parentFileName=${parentEditor.myFile.name}",
+                "fileName=${childEditor.myFile.name}",
+                "baseOffset=${childEditor.myFile.getUserData(org.jetbrains.hexana.HexanaBinaryVirtualFile.BASE_OFFSET_KEY) ?: 0}",
+            ),
+        )
     }
 
     @JvmStatic

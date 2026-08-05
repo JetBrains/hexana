@@ -132,6 +132,25 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         }
     }
 
+    fun testCreatesGeneratedBundledHtmlContentFor016() {
+        val content = HexanaWhatsNewContentService.createContent("0.16")
+        assertNotNull(content)
+        content!!
+
+        try {
+            assertEquals("0.16", content.resourceVersion)
+            assertTrue(content.indexFile.exists())
+            assertTrue(content.rootDirectory.resolve("style.css").exists())
+            assertTrue(content.rootDirectory.resolve("source.json").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/glue-component-virtualized-wat.png").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/nested-component-editor.png").exists())
+        } finally {
+            val root = content.rootDirectory
+            content.dispose()
+            assertFalse(root.exists())
+        }
+    }
+
     fun testGeneratedWhatsNew015StaticResourceContract() {
         val root = "whatsnew/0.15"
         val html = resourceText("$root/index.html")
@@ -161,6 +180,48 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         assertEquals(3, imageTags.size)
         imageTags.forEach { imageTag ->
             assertTrue("Missing image alt text: $imageTag", Regex("""\balt="[^"]*\S[^"]*"""").containsMatchIn(imageTag))
+        }
+    }
+
+    fun testGeneratedWhatsNew016StaticResourceContract() {
+        val root = "whatsnew/0.16"
+        val html = resourceText("$root/index.html")
+        val css = resourceText("$root/style.css")
+        val sourceJson = resourceText("$root/source.json")
+        val manifestLines = resourceText("$root/manifest.txt")
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .toList()
+        val manifestEntries = manifestLines.toSet()
+
+        assertEquals(manifestLines.size, manifestEntries.size)
+        for (entry in manifestEntries) {
+            assertResourceExists("$root/$entry")
+        }
+
+        val htmlLocalReferences = htmlAttributeReferences(html).filter(::isLocalReference).toSortedSet()
+        val cssLocalReferences = cssUrlReferences(css).filter(::isLocalReference).toSortedSet()
+        val sourceAssetReferences = sourceAssetReferences(sourceJson)
+        val expectedLocalReferences = sortedSetOf(
+            "style.css",
+            "screenshots/glue-component-virtualized-wat.png",
+            "screenshots/nested-component-editor.png",
+        )
+
+        assertEquals(expectedLocalReferences, htmlLocalReferences)
+        assertTrue(cssLocalReferences.isEmpty())
+        assertTrue(manifestEntries.containsAll(htmlLocalReferences + cssLocalReferences + sourceAssetReferences))
+        assertTrue(html.contains("<h1>What's New in Hexana 0.16</h1>"))
+        assertTrue(html.contains("<h2>Read glue-only components in WAT (virtualized)</h2>"))
+        assertTrue(html.contains("<h2>Open nested components as editor views</h2>"))
+        assertTrue(sourceJson.contains("\"version\": \"0.16\""))
+        assertTrue(sourceJson.contains("search by name or offset"))
+
+        val imageTags = Regex("""<img\b[^>]*>""").findAll(html).map { it.value }.toList()
+        assertEquals(2, imageTags.size)
+        imageTags.forEach { imageTag ->
+            assertTrue("Missing image alt text: $imageTag", Regex("""\balt="[^"]*\S[^"]*""").containsMatchIn(imageTag))
         }
     }
 
