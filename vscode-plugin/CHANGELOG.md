@@ -1,4 +1,4 @@
-# Next version
+# 0.9.0 - 05.08.2026
 - size diagram ("Top" tab) for wasm and native binaries that shows largest by size entities
 - optimized performance of large table views
 - nested components of a WASM Component open in their own view from the new "Components" tab, like embedded core modules; opening works recursively for components inside components
