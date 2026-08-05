@@ -159,11 +159,35 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
                 data class EdgeDrawInfo(
                     val startX: Float, val startY: Float,
                     val endX: Float, val endY: Float,
-                    val label: String?, val isHighlighted: Boolean,
+                    val label: String?, val highlightKind: HighlightKind,
                     val sourceNodeWidth: Float,
                     var labelT: Float = 0.65f,
                     val edgeKind: EdgeKind = EdgeKind.NORMAL,
+                    val isBidirectional: Boolean = false,
+                    val reverseLabel: String? = null,
                 )
+                // Detect bidirectional edge pairs (A→B and B→A both exist)
+                val edgePairs = layout.edges.map { it.fromId to it.toId }.toSet()
+                val bidirectionalPairs = mutableSetOf<Pair<String, String>>()
+                for (pair in edgePairs) {
+                    val reverse = pair.second to pair.first
+                    if (reverse in edgePairs) {
+                        // Add the canonical form (smaller first) to avoid duplicates
+                        val canonical = if (pair.first < pair.second) pair else reverse
+                        bidirectionalPairs.add(canonical)
+                    }
+                }
+                // Track which reverse edges to skip
+                val skippedReverseEdges = mutableSetOf<Pair<String, String>>()
+
+                // Build a lookup for reverse edge labels (for bidirectional edges)
+                val edgeLabelLookup = mutableMapOf<Pair<String, String>, String?>()
+                for (edge in layout.edges) {
+                    if (edge.label != null) {
+                        edgeLabelLookup[edge.fromId to edge.toId] = edge.label
+                    }
+                }
+
                 val edgeInfos = layout.edges.mapNotNull { edge ->
                     val from = layout.nodePositions[edge.fromId] ?: return@mapNotNull null
                     val to = layout.nodePositions[edge.toId] ?: return@mapNotNull null
@@ -174,29 +198,51 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
                         isBackEdge -> EdgeKind.BACK_EDGE
                         else -> EdgeKind.NORMAL
                     }
+                    // Check if this edge is part of a bidirectional pair
+                    val canonical = if (edge.fromId < edge.toId) edge.fromId to edge.toId else edge.toId to edge.fromId
+                    val isBidi = canonical in bidirectionalPairs
+                    if (isBidi) {
+                        val edgeKey = edge.fromId to edge.toId
+                        val reverseKey = edge.toId to edge.fromId
+                        if (reverseKey in skippedReverseEdges) {
+                            // This is the reverse of an already-drawn bidirectional edge; skip it
+                            return@mapNotNull null
+                        }
+                        skippedReverseEdges.add(edgeKey)
+                    }
+                    val highlightKind = if (isBidi) {
+                        if (hoveredNodeId == edge.fromId || hoveredNodeId == edge.toId) HighlightKind.BIDIRECTIONAL else HighlightKind.NONE
+                    } else highlightKindFor(hoveredNodeId, edge.fromId, edge.toId)
+                    val revLabel = if (isBidi) edgeLabelLookup[edge.toId to edge.fromId] else null
                     when (kind) {
                         EdgeKind.SAME_LAYER -> EdgeDrawInfo(
                             from.x + from.width / 2f, from.y + from.height,
                             to.x + to.width / 2f, to.y + to.height,
                             edge.label,
-                            hoveredNodeId == edge.fromId || hoveredNodeId == edge.toId,
+                            highlightKind,
                             from.width,
                             edgeKind = EdgeKind.SAME_LAYER,
+                            isBidirectional = isBidi,
+                            reverseLabel = revLabel,
                         )
                         EdgeKind.BACK_EDGE -> EdgeDrawInfo(
                             from.x + from.width / 2f, from.y,
                             to.x + to.width / 2f, to.y + to.height,
                             edge.label,
-                            hoveredNodeId == edge.fromId || hoveredNodeId == edge.toId,
+                            highlightKind,
                             from.width,
                             edgeKind = EdgeKind.BACK_EDGE,
+                            isBidirectional = isBidi,
+                            reverseLabel = revLabel,
                         )
                         EdgeKind.NORMAL -> EdgeDrawInfo(
                             from.x + from.width / 2f, from.y + from.height,
                             to.x + to.width / 2f, to.y,
                             edge.label,
-                            hoveredNodeId == edge.fromId || hoveredNodeId == edge.toId,
+                            highlightKind,
                             from.width,
+                            isBidirectional = isBidi,
+                            reverseLabel = revLabel,
                         )
                     }
                 }
@@ -215,7 +261,19 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
 
                 // Deduplicate edge labels: if multiple edges from the same source
                 // share the same label text, show it only on the first occurrence.
+                // Also compute the best highlight kind for each deduplicated label,
+                // so the label reflects all edges it represents (not just the first).
                 val drawnLabels = mutableSetOf<Pair<Pair<Float, Float>, String>>()
+                val labelHighlightOverrides = mutableMapOf<Pair<Pair<Float, Float>, String>, HighlightKind>()
+                for (info in edgeInfos) {
+                    if (info.label != null) {
+                        val key = Pair(info.startX, info.startY) to info.label
+                        val current = labelHighlightOverrides[key]
+                        if (current == null || (current == HighlightKind.NONE && info.highlightKind != HighlightKind.NONE)) {
+                            labelHighlightOverrides[key] = info.highlightKind
+                        }
+                    }
+                }
 
                 // Draw edges
                 for (info in edgeInfos) {
@@ -223,8 +281,11 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
                         val key = Pair(info.startX, info.startY) to info.label
                         if (drawnLabels.add(key)) info.label else null
                     } else null
+                    val labelHl = if (effectiveLabel != null) {
+                        labelHighlightOverrides[Pair(info.startX, info.startY) to info.label] ?: info.highlightKind
+                    } else info.highlightKind
                     drawEdge(info.startX, info.startY, info.endX, info.endY,
-                        effectiveLabel, textMeasurer, info.isHighlighted, info.labelT, isDark, info.sourceNodeWidth, info.edgeKind)
+                        effectiveLabel, textMeasurer, info.highlightKind, info.labelT, isDark, info.sourceNodeWidth, info.edgeKind, info.isBidirectional, info.reverseLabel, labelHl)
                 }
 
                 // Compute leaf nodes (no outgoing edges)
@@ -674,6 +735,14 @@ private data class LayoutEdge(val fromId: String, val toId: String, val label: S
 
 private enum class EdgeKind { NORMAL, SAME_LAYER, BACK_EDGE }
 
+private enum class HighlightKind { NONE, OUTGOING, INCOMING, BIDIRECTIONAL }
+
+private fun highlightKindFor(hoveredNodeId: String?, fromId: String, toId: String): HighlightKind = when (hoveredNodeId) {
+    fromId -> HighlightKind.OUTGOING
+    toId -> HighlightKind.INCOMING
+    else -> HighlightKind.NONE
+}
+
 private data class GraphLayout(
     val nodePositions: Map<String, NodeRect>,
     val edges: List<LayoutEdge>,
@@ -1104,18 +1173,25 @@ private fun DrawScope.drawEdge(
     endX: Float, endY: Float,
     label: String?,
     textMeasurer: TextMeasurer,
-    isHighlighted: Boolean,
+    highlightKind: HighlightKind = HighlightKind.NONE,
     labelT: Float = 0.65f,
     isDark: Boolean = true,
     sourceNodeWidth: Float = Float.MAX_VALUE,
     edgeKind: EdgeKind = EdgeKind.NORMAL,
+    isBidirectional: Boolean = false,
+    reverseLabel: String? = null,
+    labelHighlightKind: HighlightKind = highlightKind,
 ) {
-    val edgeColor = if (isDark) {
-        if (isHighlighted) Color(0xFFCCCCCC.toInt()) else Color(0xFF666666.toInt())
-    } else {
-        if (isHighlighted) Color(0xFF333333.toInt()) else Color(0xFF999999.toInt())
+    val isHighlighted = highlightKind != HighlightKind.NONE
+    val edgeColor = when (highlightKind) {
+        HighlightKind.OUTGOING -> if (isDark) Color(0xFF6CB4EE.toInt()) else Color(0xFF2B7ACC.toInt())
+        HighlightKind.INCOMING -> if (isDark) Color(0xFF7BC67E.toInt()) else Color(0xFF2E8B32.toInt())
+        HighlightKind.BIDIRECTIONAL -> if (isDark) Color(0xFF8FB8C9.toInt()) else Color(0xFF5A8FA3.toInt())
+        HighlightKind.NONE -> if (isDark) Color(0xFF666666.toInt()) else Color(0xFF999999.toInt())
     }
     val strokeWidth = if (isHighlighted) 2.5f else 1.5f
+    val arrowSize = 10f
+    val arrowLength = arrowSize * 1.5f
 
     when (edgeKind) {
         EdgeKind.SAME_LAYER -> {
@@ -1125,21 +1201,32 @@ private fun DrawScope.drawEdge(
             val midX = (startX + endX) / 2f
             val arcY = startY + arcDrop
             val path = Path().apply {
-                moveTo(startX, startY)
-                cubicTo(startX, arcY, endX, arcY, endX, endY)
+                moveTo(startX, if (isBidirectional) startY + arrowLength else startY)
+                cubicTo(startX, arcY, endX, arcY, endX, endY + arrowLength)
             }
             drawPath(path, edgeColor, style = Stroke(width = strokeWidth))
             // Arrowhead pointing up into the target node bottom
-            val arrowSize = 6f
             drawPath(
                 Path().apply {
                     moveTo(endX, endY)
-                    lineTo(endX - arrowSize, endY + arrowSize * 1.5f)
-                    lineTo(endX + arrowSize, endY + arrowSize * 1.5f)
+                    lineTo(endX - arrowSize, endY + arrowLength)
+                    lineTo(endX + arrowSize, endY + arrowLength)
                     close()
                 },
                 color = edgeColor,
             )
+            // Arrowhead at source for bidirectional edges
+            if (isBidirectional) {
+                drawPath(
+                    Path().apply {
+                        moveTo(startX, startY)
+                        lineTo(startX - arrowSize, startY + arrowLength)
+                        lineTo(startX + arrowSize, startY + arrowLength)
+                        close()
+                    },
+                    color = edgeColor,
+                )
+            }
         }
         EdgeKind.BACK_EDGE -> {
             // Draw as a curve going upward with the arc looping to the side
@@ -1148,51 +1235,74 @@ private fun DrawScope.drawEdge(
             val sideDir = if (startX <= endX) -1f else 1f
             val sideX = minOf(startX, endX) + sideDir * loopOffset
             val path = Path().apply {
-                moveTo(startX, startY)
-                cubicTo(sideX, startY, sideX, endY, endX, endY)
+                moveTo(startX, if (isBidirectional) startY - arrowLength else startY)
+                cubicTo(sideX, startY, sideX, endY, endX, endY + arrowLength)
             }
             drawPath(path, edgeColor, style = Stroke(width = strokeWidth))
-            // Arrowhead pointing down into the target node bottom
-            val arrowSize = 6f
+            // Arrowhead pointing up into the target node bottom
             drawPath(
                 Path().apply {
                     moveTo(endX, endY)
-                    lineTo(endX - arrowSize, endY + arrowSize * 1.5f)
-                    lineTo(endX + arrowSize, endY + arrowSize * 1.5f)
+                    lineTo(endX - arrowSize, endY + arrowLength)
+                    lineTo(endX + arrowSize, endY + arrowLength)
                     close()
                 },
                 color = edgeColor,
             )
+            // Arrowhead at source for bidirectional edges (pointing down into source top)
+            if (isBidirectional) {
+                drawPath(
+                    Path().apply {
+                        moveTo(startX, startY)
+                        lineTo(startX - arrowSize, startY - arrowLength)
+                        lineTo(startX + arrowSize, startY - arrowLength)
+                        close()
+                    },
+                    color = edgeColor,
+                )
+            }
         }
         EdgeKind.NORMAL -> {
             // Standard top-to-bottom bezier
             val path = Path().apply {
-                moveTo(startX, startY)
+                moveTo(startX, if (isBidirectional) startY + arrowLength else startY)
                 val midY = (startY + endY) / 2f
-                cubicTo(startX, midY, endX, midY, endX, endY)
+                cubicTo(startX, midY, endX, midY, endX, endY - arrowLength)
             }
             drawPath(path, edgeColor, style = Stroke(width = strokeWidth))
-            // Arrowhead pointing down
-            val arrowSize = 6f
+            // Arrowhead pointing down into the target node top
             drawPath(
                 Path().apply {
                     moveTo(endX, endY)
-                    lineTo(endX - arrowSize, endY - arrowSize * 1.5f)
-                    lineTo(endX + arrowSize, endY - arrowSize * 1.5f)
+                    lineTo(endX - arrowSize, endY - arrowLength)
+                    lineTo(endX + arrowSize, endY - arrowLength)
                     close()
                 },
                 color = edgeColor,
             )
+            // Arrowhead at source for bidirectional edges (pointing up into source bottom)
+            if (isBidirectional) {
+                drawPath(
+                    Path().apply {
+                        moveTo(startX, startY)
+                        lineTo(startX - arrowSize, startY + arrowLength)
+                        lineTo(startX + arrowSize, startY + arrowLength)
+                        close()
+                    },
+                    color = edgeColor,
+                )
+            }
         }
     }
 
     // Edge label — placed directly under the source node
     if (label != null) {
         val labelStyle = TextStyle(
-            color = if (isDark) {
-                if (isHighlighted) Color(0xFFDDDDDD.toInt()) else Color(0xFF999999.toInt())
-            } else {
-                if (isHighlighted) Color(0xFF222222.toInt()) else Color(0xFF555555.toInt())
+            color = when (labelHighlightKind) {
+                HighlightKind.OUTGOING -> if (isDark) Color(0xFF8ECAF0.toInt()) else Color(0xFF1A5FA0.toInt())
+                HighlightKind.INCOMING -> if (isDark) Color(0xFF9AD89D.toInt()) else Color(0xFF1E7522.toInt())
+                HighlightKind.BIDIRECTIONAL -> if (isDark) Color(0xFFA8D0E0.toInt()) else Color(0xFF4A7A8C.toInt())
+                HighlightKind.NONE -> if (isDark) Color(0xFF999999.toInt()) else Color(0xFF555555.toInt())
             },
             fontSize = 10.sp,
             fontFamily = FontFamily.Monospace,
@@ -1245,6 +1355,31 @@ private fun DrawScope.drawEdge(
             )
             drawText(singleResult, topLeft = Offset(labelX, labelY))
         }
+    }
+
+    // Reverse label for bidirectional edges (drawn near the target end)
+    if (reverseLabel != null && isBidirectional) {
+        val revLabelStyle = TextStyle(
+            color = when (labelHighlightKind) {
+                HighlightKind.OUTGOING -> if (isDark) Color(0xFF8ECAF0.toInt()) else Color(0xFF1A5FA0.toInt())
+                HighlightKind.INCOMING -> if (isDark) Color(0xFF9AD89D.toInt()) else Color(0xFF1E7522.toInt())
+                HighlightKind.BIDIRECTIONAL -> if (isDark) Color(0xFFA8D0E0.toInt()) else Color(0xFF4A7A8C.toInt())
+                HighlightKind.NONE -> if (isDark) Color(0xFF999999.toInt()) else Color(0xFF555555.toInt())
+            },
+            fontSize = 10.sp,
+            fontFamily = FontFamily.Monospace,
+        )
+        val revResult = textMeasurer.measure(reverseLabel, style = revLabelStyle)
+        val revLabelY = endY + 14f
+        val revLabelX = endX - revResult.size.width / 2f
+
+        drawRoundRect(
+            color = if (isDark) Color(0xCC1A1A1A.toInt()) else Color(0xCCF0F0F0.toInt()),
+            topLeft = Offset(revLabelX - 4f, revLabelY - 2f),
+            size = Size(revResult.size.width + 8f, revResult.size.height + 4f),
+            cornerRadius = CornerRadius(3f),
+        )
+        drawText(revResult, topLeft = Offset(revLabelX, revLabelY))
     }
 }
 

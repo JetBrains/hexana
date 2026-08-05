@@ -309,6 +309,14 @@ private fun groupSharedDependencies(
 private data class NodeRect(val x: Double, val y: Double, val width: Double, val height: Double)
 private data class LayoutEdge(val fromId: String, val toId: String, val label: String?)
 private enum class EdgeKind { NORMAL, SAME_LAYER, BACK_EDGE }
+
+private enum class HighlightKind { NONE, OUTGOING, INCOMING, BIDIRECTIONAL }
+
+private fun highlightKindFor(hoveredNodeId: String?, fromId: String, toId: String): HighlightKind = when (hoveredNodeId) {
+    fromId -> HighlightKind.OUTGOING
+    toId -> HighlightKind.INCOMING
+    else -> HighlightKind.NONE
+}
 private data class GraphLayout(
     val nodePositions: Map<String, NodeRect>,
     val edges: List<LayoutEdge>,
@@ -654,17 +662,71 @@ private fun drawGraph(
 
     val nodesWithOutgoing = layout.edges.map { it.fromId }.toSet()
 
+    // Detect bidirectional edge pairs (A→B and B→A both exist)
+    val edgePairs = layout.edges.map { it.fromId to it.toId }.toSet()
+    val bidirectionalPairs = mutableSetOf<Pair<String, String>>()
+    for (pair in edgePairs) {
+        val reverse = pair.second to pair.first
+        if (reverse in edgePairs) {
+            val canonical = if (pair.first < pair.second) pair else reverse
+            bidirectionalPairs.add(canonical)
+        }
+    }
+    val skippedReverseEdges = mutableSetOf<Pair<String, String>>()
+
+    // Build a lookup for reverse edge labels (for bidirectional edges)
+    val edgeLabelLookup = mutableMapOf<Pair<String, String>, String?>()
+    for (edge in layout.edges) {
+        if (edge.label != null) {
+            edgeLabelLookup[edge.fromId to edge.toId] = edge.label
+        }
+    }
+
+    // Pre-compute the best highlight kind for each deduplicated label,
+    // so the label reflects all edges it represents (not just the first).
+    val labelHighlightOverrides = mutableMapOf<Pair<String, String>, HighlightKind>()
+    for (edge in layout.edges) {
+        if (edge.label != null) {
+            val from = layout.nodePositions[edge.fromId] ?: continue
+            val to = layout.nodePositions[edge.toId] ?: continue
+            val canonical = if (edge.fromId < edge.toId) edge.fromId to edge.toId else edge.toId to edge.fromId
+            val isBidi = canonical in bidirectionalPairs
+            val hl = if (isBidi) {
+                if (hoveredNodeId == edge.fromId || hoveredNodeId == edge.toId) HighlightKind.BIDIRECTIONAL else HighlightKind.NONE
+            } else highlightKindFor(hoveredNodeId, edge.fromId, edge.toId)
+            val key = edge.fromId to edge.label
+            val current = labelHighlightOverrides[key]
+            if (current == null || (current == HighlightKind.NONE && hl != HighlightKind.NONE)) {
+                labelHighlightOverrides[key] = hl
+            }
+        }
+    }
+
     // Draw edges (deduplicate labels: show each label only once per source node)
     val drawnLabels = mutableSetOf<Pair<String, String>>() // (fromId, label)
     for (edge in layout.edges) {
         val from = layout.nodePositions[edge.fromId] ?: continue
         val to = layout.nodePositions[edge.toId] ?: continue
-        val isHighlighted = hoveredNodeId == edge.fromId || hoveredNodeId == edge.toId
+        val canonical = if (edge.fromId < edge.toId) edge.fromId to edge.toId else edge.toId to edge.fromId
+        val isBidi = canonical in bidirectionalPairs
+        if (isBidi) {
+            val edgeKey = edge.fromId to edge.toId
+            val reverseKey = edge.toId to edge.fromId
+            if (reverseKey in skippedReverseEdges) continue
+            skippedReverseEdges.add(edgeKey)
+        }
+        val highlightKind = if (isBidi) {
+            if (hoveredNodeId == edge.fromId || hoveredNodeId == edge.toId) HighlightKind.BIDIRECTIONAL else HighlightKind.NONE
+        } else highlightKindFor(hoveredNodeId, edge.fromId, edge.toId)
         val effectiveLabel = if (edge.label != null) {
             val key = edge.fromId to edge.label
             if (drawnLabels.add(key)) edge.label else null
         } else null
-        drawEdge(ctx, from, to, effectiveLabel, isHighlighted, isDark, from.width)
+        val labelHl = if (effectiveLabel != null) {
+            labelHighlightOverrides[edge.fromId to edge.label] ?: highlightKind
+        } else highlightKind
+        val reverseLabel = if (isBidi) edgeLabelLookup[edge.toId to edge.fromId] else null
+        drawEdge(ctx, from, to, effectiveLabel, highlightKind, isDark, from.width, isBidi, reverseLabel, labelHl)
     }
 
     // Draw nodes
@@ -756,9 +818,12 @@ private fun drawEdge(
     from: NodeRect,
     to: NodeRect,
     label: String?,
-    isHighlighted: Boolean,
+    highlightKind: HighlightKind,
     isDark: Boolean,
     sourceNodeWidth: Double,
+    isBidirectional: Boolean = false,
+    reverseLabel: String? = null,
+    labelHighlightKind: HighlightKind = highlightKind,
 ) {
     val edgeKind = when {
         abs(from.y - to.y) < 1.0 -> EdgeKind.SAME_LAYER
@@ -771,13 +836,16 @@ private fun drawEdge(
     val endX = to.x + to.width / 2.0
     val endY = if (edgeKind == EdgeKind.NORMAL) to.y else to.y + to.height
 
-    val edgeColor = if (isDark) {
-        if (isHighlighted) "#CCCCCC" else "#666666"
-    } else {
-        if (isHighlighted) "#333333" else "#999999"
+    val isHighlighted = highlightKind != HighlightKind.NONE
+    val edgeColor = when (highlightKind) {
+        HighlightKind.OUTGOING -> if (isDark) "#6CB4EE" else "#2B7ACC"
+        HighlightKind.INCOMING -> if (isDark) "#7BC67E" else "#2E8B32"
+        HighlightKind.BIDIRECTIONAL -> if (isDark) "#8FB8C9" else "#5A8FA3"
+        HighlightKind.NONE -> if (isDark) "#666666" else "#999999"
     }
     val strokeWidth = if (isHighlighted) 2.5 else 1.5
-    val arrowSize = 6.0
+    val arrowSize = 10.0
+    val arrowLength = arrowSize * 1.5
 
     when (edgeKind) {
         EdgeKind.SAME_LAYER -> {
@@ -785,20 +853,30 @@ private fun drawEdge(
             val arcDrop = (dist * 0.4).coerceIn(30.0, 120.0)
             val arcY = startY + arcDrop
             ctx.beginPath()
-            ctx.moveTo(startX, startY)
-            ctx.bezierCurveTo(startX, arcY, endX, arcY, endX, endY)
+            ctx.moveTo(startX, if (isBidirectional) startY + arrowLength else startY)
+            ctx.bezierCurveTo(startX, arcY, endX, arcY, endX, endY + arrowLength)
             ctx.strokeStyle = edgeColor
             ctx.lineWidth = strokeWidth
             ctx.stroke()
 
-            // Arrowhead pointing up
+            // Arrowhead pointing up at target
             ctx.beginPath()
             ctx.moveTo(endX, endY)
-            ctx.lineTo(endX - arrowSize, endY + arrowSize * 1.5)
-            ctx.lineTo(endX + arrowSize, endY + arrowSize * 1.5)
+            ctx.lineTo(endX - arrowSize, endY + arrowLength)
+            ctx.lineTo(endX + arrowSize, endY + arrowLength)
             ctx.closePath()
             ctx.fillStyle = edgeColor
             ctx.fill()
+            // Arrowhead at source for bidirectional edges
+            if (isBidirectional) {
+                ctx.beginPath()
+                ctx.moveTo(startX, startY)
+                ctx.lineTo(startX - arrowSize, startY + arrowLength)
+                ctx.lineTo(startX + arrowSize, startY + arrowLength)
+                ctx.closePath()
+                ctx.fillStyle = edgeColor
+                ctx.fill()
+            }
         }
         EdgeKind.BACK_EDGE -> {
             val dist = abs(endX - startX).coerceAtLeast(60.0)
@@ -806,53 +884,74 @@ private fun drawEdge(
             val sideDir = if (startX <= endX) -1.0 else 1.0
             val sideX = min(startX, endX) + sideDir * loopOffset
             ctx.beginPath()
-            ctx.moveTo(startX, startY)
-            ctx.bezierCurveTo(sideX, startY, sideX, endY, endX, endY)
+            ctx.moveTo(startX, if (isBidirectional) startY - arrowLength else startY)
+            ctx.bezierCurveTo(sideX, startY, sideX, endY, endX, endY + arrowLength)
             ctx.strokeStyle = edgeColor
             ctx.lineWidth = strokeWidth
             ctx.stroke()
 
-            // Arrowhead pointing up
+            // Arrowhead pointing up at target
             ctx.beginPath()
             ctx.moveTo(endX, endY)
-            ctx.lineTo(endX - arrowSize, endY + arrowSize * 1.5)
-            ctx.lineTo(endX + arrowSize, endY + arrowSize * 1.5)
+            ctx.lineTo(endX - arrowSize, endY + arrowLength)
+            ctx.lineTo(endX + arrowSize, endY + arrowLength)
             ctx.closePath()
             ctx.fillStyle = edgeColor
             ctx.fill()
+            // Arrowhead at source for bidirectional edges
+            if (isBidirectional) {
+                ctx.beginPath()
+                ctx.moveTo(startX, startY)
+                ctx.lineTo(startX - arrowSize, startY - arrowLength)
+                ctx.lineTo(startX + arrowSize, startY - arrowLength)
+                ctx.closePath()
+                ctx.fillStyle = edgeColor
+                ctx.fill()
+            }
         }
         EdgeKind.NORMAL -> {
             ctx.beginPath()
-            ctx.moveTo(startX, startY)
+            ctx.moveTo(startX, if (isBidirectional) startY + arrowLength else startY)
             val midY = (startY + endY) / 2.0
-            ctx.bezierCurveTo(startX, midY, endX, midY, endX, endY)
+            ctx.bezierCurveTo(startX, midY, endX, midY, endX, endY - arrowLength)
             ctx.strokeStyle = edgeColor
             ctx.lineWidth = strokeWidth
             ctx.stroke()
 
-            // Arrowhead pointing down
+            // Arrowhead pointing down at target
             ctx.beginPath()
             ctx.moveTo(endX, endY)
-            ctx.lineTo(endX - arrowSize, endY - arrowSize * 1.5)
-            ctx.lineTo(endX + arrowSize, endY - arrowSize * 1.5)
+            ctx.lineTo(endX - arrowSize, endY - arrowLength)
+            ctx.lineTo(endX + arrowSize, endY - arrowLength)
             ctx.closePath()
             ctx.fillStyle = edgeColor
             ctx.fill()
+            // Arrowhead at source for bidirectional edges
+            if (isBidirectional) {
+                ctx.beginPath()
+                ctx.moveTo(startX, startY)
+                ctx.lineTo(startX - arrowSize, startY + arrowLength)
+                ctx.lineTo(startX + arrowSize, startY + arrowLength)
+                ctx.closePath()
+                ctx.fillStyle = edgeColor
+                ctx.fill()
+            }
         }
     }
 
     // Edge label
+    val labelFont = "10px monospace"
+    val labelColor = when (labelHighlightKind) {
+        HighlightKind.OUTGOING -> if (isDark) "#8ECAF0" else "#1A5FA0"
+        HighlightKind.INCOMING -> if (isDark) "#9AD89D" else "#1E7522"
+        HighlightKind.BIDIRECTIONAL -> if (isDark) "#A8D0E0" else "#4A7A8C"
+        HighlightKind.NONE -> if (isDark) "#999999" else "#555555"
+    }
+    val bgColor = if (isDark) "rgba(26,26,26,0.8)" else "rgba(240,240,240,0.8)"
     if (label != null) {
-        val labelFont = "10px monospace"
         ctx.font = labelFont
-        val labelColor = if (isDark) {
-            if (isHighlighted) "#DDDDDD" else "#999999"
-        } else {
-            if (isHighlighted) "#222222" else "#555555"
-        }
         val labelY = startY + 14.0
         val textWidth = ctx.measureText(label).width
-        val bgColor = if (isDark) "rgba(26,26,26,0.8)" else "rgba(240,240,240,0.8)"
 
         ctx.fillStyle = bgColor
         roundRect(ctx, startX - textWidth / 2.0 - 4.0, labelY - 2.0, textWidth + 8.0, 14.0, 3.0)
@@ -862,6 +961,21 @@ private fun drawEdge(
         ctx.textAlign = "center".asDynamic().unsafeCast<CanvasTextAlign>()
         ctx.textBaseline = "top".asDynamic().unsafeCast<CanvasTextBaseline>()
         ctx.fillText(label, startX, labelY)
+    }
+    // Reverse label for bidirectional edges (drawn near the target end)
+    if (reverseLabel != null && isBidirectional) {
+        ctx.font = labelFont
+        val revLabelY = endY + 14.0
+        val revTextWidth = ctx.measureText(reverseLabel).width
+
+        ctx.fillStyle = bgColor
+        roundRect(ctx, endX - revTextWidth / 2.0 - 4.0, revLabelY - 2.0, revTextWidth + 8.0, 14.0, 3.0)
+        ctx.fill()
+
+        ctx.fillStyle = labelColor
+        ctx.textAlign = "center".asDynamic().unsafeCast<CanvasTextAlign>()
+        ctx.textBaseline = "top".asDynamic().unsafeCast<CanvasTextBaseline>()
+        ctx.fillText(reverseLabel, endX, revLabelY)
     }
 }
 
