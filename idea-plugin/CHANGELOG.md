@@ -41,6 +41,16 @@
 - Rows of nested tables are sorted again according to the parent sorting rules (it was broken recently). This, for instance fixes the sorting of the "Top" tab.
 - Fixed a UI freeze that had rarely been happening when switching between "Decompiled" and other tabs multiple times.
 
+## 0.14.1 - 2026-07-29
+
+### Added
+- Semantic section labels are now clickable when there is a corresponding information tab below, and clicking on a label opens the corresponding tab.
+- "Save as" for nested wasm modules and jar/zip entries, allowing to save the content to a separate file.
+
+### Fixed
+- Rows of nested tables are sorted again according to the parent sorting rules (it was broken recently). This, for instance fixes the sorting of the "Top" tab.
+- Fixed a UI freeze that had rarely been happening when switching between "Decompiled" and other tabs multiple times.
+
 ## 0.14 - 2026-07-22
 
 ### Added
