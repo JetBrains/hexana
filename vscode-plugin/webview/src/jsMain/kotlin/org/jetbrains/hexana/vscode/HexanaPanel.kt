@@ -12,6 +12,7 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.shared.TableTabDescriptor
+import org.jetbrains.hexana.shared.TableTabsContext
 import org.jetbrains.hexana.shared.TabPriority
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.w3c.dom.HTMLElement
@@ -75,7 +76,7 @@ fun HexanaPanel(
             data class TabEntry(val tab: PanelTab, val priority: TabPriority, val providerIndex: Int)
             val tabEntries = mutableListOf<TabEntry>()
             for ((providerIndex, p) in TableTabsProviderRegistry.providers.withIndex()) {
-                val enriched = enricher(p.tableTabs(provider), fileName, pendingRun)
+                val enriched = enricher(p.tableTabs(provider, TableTabsContext(fileName = fileName)), fileName, pendingRun)
                 for (d in enriched) {
                     val desc = if (d.name == "Entries" && zipProvider != null) {
                         enrichZipEntriesTab(d, zipProvider.displayEntries)

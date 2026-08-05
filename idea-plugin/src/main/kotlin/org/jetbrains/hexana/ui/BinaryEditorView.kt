@@ -322,6 +322,7 @@ internal fun BinaryEditorView(
                     val tableTabsContext = TableTabsContext(
                         nativeDebugData = (binaryProvider as? NativeBinaryProvider)
                             ?.let { NativeDebugTabData.scan(it, JVM_FILE_SYSTEM, state.project.basePath) },
+                        fileName = fileName,
                     )
                     val availableNames = p.availableTabNames(binaryProvider, tableTabsContext)
                     if (availableNames != null) {

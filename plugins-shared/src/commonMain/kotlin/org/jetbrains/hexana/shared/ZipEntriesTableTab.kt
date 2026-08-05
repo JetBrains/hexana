@@ -31,6 +31,10 @@ fun zipEntriesDescriptor(
     searchPlaceholder: String = "Search entries\u2026",
     emptyMessage: String = "(no entries)",
     predefinedFilters: List<PredefinedFilter> = emptyList(),
+    extraColumns: List<ColumnDescriptor> = emptyList(),
+    defaultSortColumn: Int = 0,
+    defaultSortAscending: Boolean = true,
+    defaultFilterShowAll: Boolean = false,
 ): TableTabDescriptor = TableTabDescriptor(
     name = "Entries",
     columns = listOf(
@@ -53,16 +57,17 @@ fun zipEntriesDescriptor(
         ) { index ->
             CellValue(entries[index].uncompressedSize, formatSizeLong(entries[index].uncompressedSize))
         },
-    ),
+    ) + extraColumns,
     rowCount = entries.size,
-    defaultSortColumn = 0,
-    defaultSortAscending = true,
+    defaultSortColumn = defaultSortColumn,
+    defaultSortAscending = defaultSortAscending,
     rowClickAction = onRowClick,
     alwaysShowSearch = true,
     searchPlaceholder = searchPlaceholder,
     emptyMessage = emptyMessage,
     showIdColumn = false,
     predefinedFilters = predefinedFilters,
+    defaultFilterShowAll = defaultFilterShowAll,
 )
 
 /**
@@ -75,12 +80,44 @@ fun zipEntriesDescriptor(
  */
 class ZipTableTabsProvider : TableTabsProvider {
 
-    override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> {
+    override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> =
+        tableTabs(provider, TableTabsContext())
+
+    override fun tableTabs(provider: BinaryProvider, context: TableTabsContext): List<TableTabDescriptor> {
         if (provider !is ZipBinaryProvider) return emptyList()
         val displayEntries = provider.displayEntries
         if (displayEntries.isEmpty()) return emptyList()
 
         val rows = displayEntries.map { ZipEntryRow(it.name, it.compressedSize, it.uncompressedSize) }
+        val isApk = context.fileName?.endsWith(".apk", ignoreCase = true) == true
+
+        if (isApk) {
+            val kindColumn = ColumnDescriptor(
+                name = "Kind",
+                widthBehavior = ColumnWidth.Measured("Resource"),
+            ) { index ->
+                val name = rows[index].name
+                val (sortOrder, label) = apkEntryKind(name)
+                CellValue(sortOrder, label)
+            }
+            val filters = listOf(
+                PredefinedFilter("Classes") { index -> apkEntryKind(rows[index].name).second == "Classes" },
+                PredefinedFilter("Native") { index -> apkEntryKind(rows[index].name).second == "Native" },
+                PredefinedFilter("Resource") { index -> apkEntryKind(rows[index].name).second == "Resource" },
+                PredefinedFilter("Other") { index -> apkEntryKind(rows[index].name).second == "Other" },
+            )
+            return listOf(
+                zipEntriesDescriptor(
+                    entries = rows,
+                    extraColumns = listOf(kindColumn),
+                    defaultSortColumn = 3,
+                    defaultSortAscending = true,
+                    predefinedFilters = filters,
+                    defaultFilterShowAll = true,
+                )
+            )
+        }
+
         val hasClassFiles = rows.any { it.name.endsWith(".class") }
         val filters = if (hasClassFiles) {
             listOf(PredefinedFilter("Classes") { index -> rows[index].name.endsWith(".class") })
@@ -93,4 +130,14 @@ class ZipTableTabsProvider : TableTabsProvider {
             )
         )
     }
+}
+
+/**
+ * Returns the APK kind sort order and label for the given entry name.
+ */
+private fun apkEntryKind(name: String): Pair<Int, String> = when {
+    name.startsWith("res/") -> 2 to "Resource"
+    name.startsWith("lib/") -> 1 to "Native"
+    name.endsWith(".dex") -> 0 to "Classes"
+    else -> 3 to "Other"
 }

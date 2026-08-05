@@ -189,6 +189,7 @@ class TableTabDescriptor(
     val priority: TabPriority = TabPriority.High,
     val rowHighlightRangesProvider: ((index: Int) -> List<HexRange>)? = null,
     val predefinedFilters: List<PredefinedFilter> = emptyList(),
+    val defaultFilterShowAll: Boolean = false,
     val treemapData: TreemapData? = null,
 ) {
     companion object {
@@ -325,6 +326,7 @@ class TreemapData(
 
 class TableTabsContext(
     val nativeDebugData: NativeDebugTabData? = null,
+    val fileName: String? = null,
 )
 
 object TableTabsProviderRegistry {

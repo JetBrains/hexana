@@ -148,7 +148,7 @@ private fun TableTabContent(
     val filters = descriptor.predefinedFilters
     // null means "Show all", 0..n-1 selects a predefined filter
     var selectedFilterIndex: Int? by remember(descriptor) {
-        mutableStateOf(if (filters.isNotEmpty()) 0 else null)
+        mutableStateOf(if (filters.isNotEmpty() && !descriptor.defaultFilterShowAll) 0 else null)
     }
     val activeFilter: PredefinedFilter? = selectedFilterIndex?.let { filters.getOrNull(it) }
 

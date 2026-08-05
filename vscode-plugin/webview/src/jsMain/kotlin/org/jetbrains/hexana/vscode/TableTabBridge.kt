@@ -174,7 +174,7 @@ fun TableTabContent(
     // --- Predefined filter state ---
     val filters = descriptor.predefinedFilters
     var selectedFilterIndex: Int? by remember(descriptor) {
-        mutableStateOf(if (filters.isNotEmpty()) 0 else null)
+        mutableStateOf(if (filters.isNotEmpty() && !descriptor.defaultFilterShowAll) 0 else null)
     }
     val activeFilter: PredefinedFilter? = selectedFilterIndex?.let { filters.getOrNull(it) }
 
@@ -900,7 +900,7 @@ private fun TreeTableTabContent(
     // --- Predefined filter state ---
     val filters = descriptor.predefinedFilters
     var selectedFilterIndex: Int? by remember(descriptor) {
-        mutableStateOf(if (filters.isNotEmpty()) 0 else null)
+        mutableStateOf(if (filters.isNotEmpty() && !descriptor.defaultFilterShowAll) 0 else null)
     }
     val activeFilter: PredefinedFilter? = selectedFilterIndex?.let { filters.getOrNull(it) }
 
