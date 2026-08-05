@@ -162,17 +162,43 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
                     val label: String?, val isHighlighted: Boolean,
                     val sourceNodeWidth: Float,
                     var labelT: Float = 0.65f,
+                    val edgeKind: EdgeKind = EdgeKind.NORMAL,
                 )
                 val edgeInfos = layout.edges.mapNotNull { edge ->
                     val from = layout.nodePositions[edge.fromId] ?: return@mapNotNull null
                     val to = layout.nodePositions[edge.toId] ?: return@mapNotNull null
-                    EdgeDrawInfo(
-                        from.x + from.width / 2f, from.y + from.height,
-                        to.x + to.width / 2f, to.y,
-                        edge.label,
-                        hoveredNodeId == edge.fromId || hoveredNodeId == edge.toId,
-                        from.width,
-                    )
+                    val sameLayer = kotlin.math.abs(from.y - to.y) < 1f
+                    val isBackEdge = !sameLayer && from.y + from.height > to.y + to.height
+                    val kind = when {
+                        sameLayer -> EdgeKind.SAME_LAYER
+                        isBackEdge -> EdgeKind.BACK_EDGE
+                        else -> EdgeKind.NORMAL
+                    }
+                    when (kind) {
+                        EdgeKind.SAME_LAYER -> EdgeDrawInfo(
+                            from.x + from.width / 2f, from.y + from.height,
+                            to.x + to.width / 2f, to.y + to.height,
+                            edge.label,
+                            hoveredNodeId == edge.fromId || hoveredNodeId == edge.toId,
+                            from.width,
+                            edgeKind = EdgeKind.SAME_LAYER,
+                        )
+                        EdgeKind.BACK_EDGE -> EdgeDrawInfo(
+                            from.x + from.width / 2f, from.y,
+                            to.x + to.width / 2f, to.y + to.height,
+                            edge.label,
+                            hoveredNodeId == edge.fromId || hoveredNodeId == edge.toId,
+                            from.width,
+                            edgeKind = EdgeKind.BACK_EDGE,
+                        )
+                        EdgeKind.NORMAL -> EdgeDrawInfo(
+                            from.x + from.width / 2f, from.y + from.height,
+                            to.x + to.width / 2f, to.y,
+                            edge.label,
+                            hoveredNodeId == edge.fromId || hoveredNodeId == edge.toId,
+                            from.width,
+                        )
+                    }
                 }
                 // Resolve label overlaps: group labeled edges by source endpoint,
                 // then spread their t values so labels don't stack on top of each other.
@@ -187,10 +213,18 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
                     }
                 }
 
+                // Deduplicate edge labels: if multiple edges from the same source
+                // share the same label text, show it only on the first occurrence.
+                val drawnLabels = mutableSetOf<Pair<Pair<Float, Float>, String>>()
+
                 // Draw edges
                 for (info in edgeInfos) {
+                    val effectiveLabel = if (info.label != null) {
+                        val key = Pair(info.startX, info.startY) to info.label
+                        if (drawnLabels.add(key)) info.label else null
+                    } else null
                     drawEdge(info.startX, info.startY, info.endX, info.endY,
-                        info.label, textMeasurer, info.isHighlighted, info.labelT, isDark, info.sourceNodeWidth)
+                        effectiveLabel, textMeasurer, info.isHighlighted, info.labelT, isDark, info.sourceNodeWidth, info.edgeKind)
                 }
 
                 // Compute leaf nodes (no outgoing edges)
@@ -638,6 +672,8 @@ private data class NodeRect(val x: Float, val y: Float, val width: Float, val he
 
 private data class LayoutEdge(val fromId: String, val toId: String, val label: String?)
 
+private enum class EdgeKind { NORMAL, SAME_LAYER, BACK_EDGE }
+
 private data class GraphLayout(
     val nodePositions: Map<String, NodeRect>,
     val edges: List<LayoutEdge>,
@@ -815,11 +851,15 @@ private fun layoutComponent(
     val leafLayer = graph.nodes.values.filter { it.id in leafIds }
     val layers = if (leafLayer.isNotEmpty()) mainLayers + listOf(leafLayer) else mainLayers
 
+    // Reorder nodes within each layer using barycenter heuristic to reduce edge crossings.
+    // We do a forward pass (top-down) then a backward pass (bottom-up).
+    val reorderedLayers = reorderLayersToReduceCrossings(layers, graph, nodeIds)
+
     val positions = mutableMapOf<String, NodeRect>()
     var currentY = 0f
     var maxWidth = 0f
 
-    for (layer in layers) {
+    for (layer in reorderedLayers) {
         // Split layer into wrapped sub-rows
         val rows = wrapLayerRows(layer, nodeSizes)
         for (row in rows) {
@@ -855,6 +895,62 @@ private fun layoutComponent(
     }
 
     return Triple(positions, maxWidth, currentY)
+}
+
+/**
+ * Reorders nodes within each layer using the barycenter heuristic to reduce
+ * edge crossings. Performs two sweeps: top-down then bottom-up.
+ */
+private fun reorderLayersToReduceCrossings(
+    layers: List<List<GraphNode>>,
+    graph: DependencyGraph,
+    nodeIds: Set<String>,
+): List<List<GraphNode>> {
+    if (layers.size <= 1) return layers
+
+    // Build adjacency: for each node, which nodes in other layers is it connected to?
+    val relevantEdges = graph.edges.filter { it.fromId in nodeIds && it.toId in nodeIds && it.fromId != it.toId }
+
+    // Map each node to its layer index
+    val nodeToLayer = mutableMapOf<String, Int>()
+    for ((li, layer) in layers.withIndex()) {
+        for (node in layer) nodeToLayer[node.id] = li
+    }
+
+    // Start with current order; track position within layer
+    val result = layers.map { it.toMutableList() }
+
+    fun positionOf(nodeId: String, layerNodes: List<GraphNode>): Int {
+        return layerNodes.indexOfFirst { it.id == nodeId }
+    }
+
+    // Forward pass: for each layer (top to bottom), reorder by barycenter of neighbors in previous layers
+    for (li in 1 until result.size) {
+        val prevPositions = result[li - 1].mapIndexed { idx, n -> n.id to idx }.toMap()
+        val barycenters = result[li].associateWith { node ->
+            val neighbors = relevantEdges
+                .filter { (it.fromId == node.id && it.toId in prevPositions) || (it.toId == node.id && it.fromId in prevPositions) }
+                .map { if (it.fromId == node.id) prevPositions[it.toId]!! else prevPositions[it.fromId]!! }
+            if (neighbors.isEmpty()) positionOf(node.id, result[li]).toDouble()
+            else neighbors.average()
+        }
+        result[li].sortBy { barycenters[it] }
+    }
+
+    // Backward pass: for each layer (bottom to top), reorder by barycenter of neighbors in next layers
+    for (li in (result.size - 2) downTo 0) {
+        val nextPositions = result[li + 1].mapIndexed { idx, n -> n.id to idx }.toMap()
+        val barycenters = result[li].associateWith { node ->
+            val neighbors = relevantEdges
+                .filter { (it.fromId == node.id && it.toId in nextPositions) || (it.toId == node.id && it.fromId in nextPositions) }
+                .map { if (it.fromId == node.id) nextPositions[it.toId]!! else nextPositions[it.fromId]!! }
+            if (neighbors.isEmpty()) positionOf(node.id, result[li]).toDouble()
+            else neighbors.average()
+        }
+        result[li].sortBy { barycenters[it] }
+    }
+
+    return result
 }
 
 /**
@@ -1012,6 +1108,7 @@ private fun DrawScope.drawEdge(
     labelT: Float = 0.65f,
     isDark: Boolean = true,
     sourceNodeWidth: Float = Float.MAX_VALUE,
+    edgeKind: EdgeKind = EdgeKind.NORMAL,
 ) {
     val edgeColor = if (isDark) {
         if (isHighlighted) Color(0xFFCCCCCC.toInt()) else Color(0xFF666666.toInt())
@@ -1020,25 +1117,74 @@ private fun DrawScope.drawEdge(
     }
     val strokeWidth = if (isHighlighted) 2.5f else 1.5f
 
-    // Bezier curve
-    val path = Path().apply {
-        moveTo(startX, startY)
-        val midY = (startY + endY) / 2f
-        cubicTo(startX, midY, endX, midY, endX, endY)
+    when (edgeKind) {
+        EdgeKind.SAME_LAYER -> {
+            // Draw as an arc below the nodes
+            val dist = kotlin.math.abs(endX - startX)
+            val arcDrop = (dist * 0.4f).coerceIn(30f, 120f)
+            val midX = (startX + endX) / 2f
+            val arcY = startY + arcDrop
+            val path = Path().apply {
+                moveTo(startX, startY)
+                cubicTo(startX, arcY, endX, arcY, endX, endY)
+            }
+            drawPath(path, edgeColor, style = Stroke(width = strokeWidth))
+            // Arrowhead pointing up into the target node bottom
+            val arrowSize = 6f
+            drawPath(
+                Path().apply {
+                    moveTo(endX, endY)
+                    lineTo(endX - arrowSize, endY + arrowSize * 1.5f)
+                    lineTo(endX + arrowSize, endY + arrowSize * 1.5f)
+                    close()
+                },
+                color = edgeColor,
+            )
+        }
+        EdgeKind.BACK_EDGE -> {
+            // Draw as a curve going upward with the arc looping to the side
+            val dist = kotlin.math.abs(endX - startX).coerceAtLeast(60f)
+            val loopOffset = dist * 0.3f + 40f
+            val sideDir = if (startX <= endX) -1f else 1f
+            val sideX = minOf(startX, endX) + sideDir * loopOffset
+            val path = Path().apply {
+                moveTo(startX, startY)
+                cubicTo(sideX, startY, sideX, endY, endX, endY)
+            }
+            drawPath(path, edgeColor, style = Stroke(width = strokeWidth))
+            // Arrowhead pointing down into the target node bottom
+            val arrowSize = 6f
+            drawPath(
+                Path().apply {
+                    moveTo(endX, endY)
+                    lineTo(endX - arrowSize, endY + arrowSize * 1.5f)
+                    lineTo(endX + arrowSize, endY + arrowSize * 1.5f)
+                    close()
+                },
+                color = edgeColor,
+            )
+        }
+        EdgeKind.NORMAL -> {
+            // Standard top-to-bottom bezier
+            val path = Path().apply {
+                moveTo(startX, startY)
+                val midY = (startY + endY) / 2f
+                cubicTo(startX, midY, endX, midY, endX, endY)
+            }
+            drawPath(path, edgeColor, style = Stroke(width = strokeWidth))
+            // Arrowhead pointing down
+            val arrowSize = 6f
+            drawPath(
+                Path().apply {
+                    moveTo(endX, endY)
+                    lineTo(endX - arrowSize, endY - arrowSize * 1.5f)
+                    lineTo(endX + arrowSize, endY - arrowSize * 1.5f)
+                    close()
+                },
+                color = edgeColor,
+            )
+        }
     }
-    drawPath(path, edgeColor, style = Stroke(width = strokeWidth))
-
-    // Arrowhead
-    val arrowSize = 6f
-    drawPath(
-        Path().apply {
-            moveTo(endX, endY)
-            lineTo(endX - arrowSize, endY - arrowSize * 1.5f)
-            lineTo(endX + arrowSize, endY - arrowSize * 1.5f)
-            close()
-        },
-        color = edgeColor,
-    )
 
     // Edge label — placed directly under the source node
     if (label != null) {
@@ -1054,7 +1200,7 @@ private fun DrawScope.drawEdge(
         // Wrap label text to fit within source node width
         val maxLabelWidth = (sourceNodeWidth - 8f).coerceAtLeast(40f)
         val singleResult = textMeasurer.measure(label, style = labelStyle)
-        val labelY = startY + 4f + (labelT - 0.65f) * 40f
+        val labelY = startY + 14f + (labelT - 0.65f) * 40f
 
         if (singleResult.size.width > maxLabelWidth) {
             // Split label into lines that fit within maxLabelWidth

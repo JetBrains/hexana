@@ -29,6 +29,7 @@ import org.w3c.dom.events.MouseEvent
 import org.w3c.dom.events.WheelEvent
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 
 // --- Graph model ---
 
@@ -307,6 +308,7 @@ private fun groupSharedDependencies(
 
 private data class NodeRect(val x: Double, val y: Double, val width: Double, val height: Double)
 private data class LayoutEdge(val fromId: String, val toId: String, val label: String?)
+private enum class EdgeKind { NORMAL, SAME_LAYER, BACK_EDGE }
 private data class GraphLayout(
     val nodePositions: Map<String, NodeRect>,
     val edges: List<LayoutEdge>,
@@ -447,12 +449,13 @@ private fun layoutComponent(
     }.filter { it.isNotEmpty() }
     val leafLayer = graph.nodes.values.filter { it.id in leafIds }
     val layers = if (leafLayer.isNotEmpty()) mainLayers + listOf(leafLayer) else mainLayers
+    val reorderedLayers = reorderLayersToReduceCrossings(layers, graph, nodeIds)
 
     val positions = mutableMapOf<String, NodeRect>()
     var currentY = 0.0
     var maxWidth = 0.0
 
-    for (layer in layers) {
+    for (layer in reorderedLayers) {
         val rows = wrapLayerRows(layer, nodeSizes)
         for (row in rows) {
             val rowWidth = row.sumOf { nodeSizes[it.id]?.first ?: 0.0 } + (row.size - 1) * HORIZONTAL_GAP
@@ -483,6 +486,46 @@ private fun layoutComponent(
     }
 
     return Triple(positions, maxWidth, currentY)
+}
+
+private fun reorderLayersToReduceCrossings(
+    layers: List<List<GraphNode>>,
+    graph: DependencyGraph,
+    nodeIds: Set<String>,
+): List<List<GraphNode>> {
+    if (layers.size <= 1) return layers
+    val relevantEdges = graph.edges.filter { it.fromId in nodeIds && it.toId in nodeIds && it.fromId != it.toId }
+    val nodeToLayer = mutableMapOf<String, Int>()
+    for ((li, layer) in layers.withIndex()) {
+        for (node in layer) nodeToLayer[node.id] = li
+    }
+    val result = layers.map { it.toMutableList() }
+    fun positionOf(nodeId: String, layerNodes: List<GraphNode>): Int {
+        return layerNodes.indexOfFirst { it.id == nodeId }
+    }
+    for (li in 1 until result.size) {
+        val prevPositions = result[li - 1].mapIndexed { idx, n -> n.id to idx }.toMap()
+        val barycenters = result[li].associateWith { node ->
+            val neighbors = relevantEdges
+                .filter { (it.fromId == node.id && it.toId in prevPositions) || (it.toId == node.id && it.fromId in prevPositions) }
+                .map { if (it.fromId == node.id) prevPositions[it.toId]!! else prevPositions[it.fromId]!! }
+            if (neighbors.isEmpty()) positionOf(node.id, result[li]).toDouble()
+            else neighbors.average()
+        }
+        result[li].sortBy { barycenters[it] }
+    }
+    for (li in (result.size - 2) downTo 0) {
+        val nextPositions = result[li + 1].mapIndexed { idx, n -> n.id to idx }.toMap()
+        val barycenters = result[li].associateWith { node ->
+            val neighbors = relevantEdges
+                .filter { (it.fromId == node.id && it.toId in nextPositions) || (it.toId == node.id && it.fromId in nextPositions) }
+                .map { if (it.fromId == node.id) nextPositions[it.toId]!! else nextPositions[it.fromId]!! }
+            if (neighbors.isEmpty()) positionOf(node.id, result[li]).toDouble()
+            else neighbors.average()
+        }
+        result[li].sortBy { barycenters[it] }
+    }
+    return result
 }
 
 private fun wrapLayerRows(
@@ -611,12 +654,17 @@ private fun drawGraph(
 
     val nodesWithOutgoing = layout.edges.map { it.fromId }.toSet()
 
-    // Draw edges
+    // Draw edges (deduplicate labels: show each label only once per source node)
+    val drawnLabels = mutableSetOf<Pair<String, String>>() // (fromId, label)
     for (edge in layout.edges) {
         val from = layout.nodePositions[edge.fromId] ?: continue
         val to = layout.nodePositions[edge.toId] ?: continue
         val isHighlighted = hoveredNodeId == edge.fromId || hoveredNodeId == edge.toId
-        drawEdge(ctx, from, to, edge.label, isHighlighted, isDark, from.width)
+        val effectiveLabel = if (edge.label != null) {
+            val key = edge.fromId to edge.label
+            if (drawnLabels.add(key)) edge.label else null
+        } else null
+        drawEdge(ctx, from, to, effectiveLabel, isHighlighted, isDark, from.width)
     }
 
     // Draw nodes
@@ -712,10 +760,16 @@ private fun drawEdge(
     isDark: Boolean,
     sourceNodeWidth: Double,
 ) {
+    val edgeKind = when {
+        abs(from.y - to.y) < 1.0 -> EdgeKind.SAME_LAYER
+        from.y + from.height > to.y + to.height -> EdgeKind.BACK_EDGE
+        else -> EdgeKind.NORMAL
+    }
+
     val startX = from.x + from.width / 2.0
-    val startY = from.y + from.height
+    val startY = if (edgeKind == EdgeKind.BACK_EDGE) from.y else from.y + from.height
     val endX = to.x + to.width / 2.0
-    val endY = to.y
+    val endY = if (edgeKind == EdgeKind.NORMAL) to.y else to.y + to.height
 
     val edgeColor = if (isDark) {
         if (isHighlighted) "#CCCCCC" else "#666666"
@@ -723,25 +777,69 @@ private fun drawEdge(
         if (isHighlighted) "#333333" else "#999999"
     }
     val strokeWidth = if (isHighlighted) 2.5 else 1.5
-
-    // Bezier curve
-    ctx.beginPath()
-    ctx.moveTo(startX, startY)
-    val midY = (startY + endY) / 2.0
-    ctx.bezierCurveTo(startX, midY, endX, midY, endX, endY)
-    ctx.strokeStyle = edgeColor
-    ctx.lineWidth = strokeWidth
-    ctx.stroke()
-
-    // Arrowhead
     val arrowSize = 6.0
-    ctx.beginPath()
-    ctx.moveTo(endX, endY)
-    ctx.lineTo(endX - arrowSize, endY - arrowSize * 1.5)
-    ctx.lineTo(endX + arrowSize, endY - arrowSize * 1.5)
-    ctx.closePath()
-    ctx.fillStyle = edgeColor
-    ctx.fill()
+
+    when (edgeKind) {
+        EdgeKind.SAME_LAYER -> {
+            val dist = abs(endX - startX)
+            val arcDrop = (dist * 0.4).coerceIn(30.0, 120.0)
+            val arcY = startY + arcDrop
+            ctx.beginPath()
+            ctx.moveTo(startX, startY)
+            ctx.bezierCurveTo(startX, arcY, endX, arcY, endX, endY)
+            ctx.strokeStyle = edgeColor
+            ctx.lineWidth = strokeWidth
+            ctx.stroke()
+
+            // Arrowhead pointing up
+            ctx.beginPath()
+            ctx.moveTo(endX, endY)
+            ctx.lineTo(endX - arrowSize, endY + arrowSize * 1.5)
+            ctx.lineTo(endX + arrowSize, endY + arrowSize * 1.5)
+            ctx.closePath()
+            ctx.fillStyle = edgeColor
+            ctx.fill()
+        }
+        EdgeKind.BACK_EDGE -> {
+            val dist = abs(endX - startX).coerceAtLeast(60.0)
+            val loopOffset = dist * 0.3 + 40.0
+            val sideDir = if (startX <= endX) -1.0 else 1.0
+            val sideX = min(startX, endX) + sideDir * loopOffset
+            ctx.beginPath()
+            ctx.moveTo(startX, startY)
+            ctx.bezierCurveTo(sideX, startY, sideX, endY, endX, endY)
+            ctx.strokeStyle = edgeColor
+            ctx.lineWidth = strokeWidth
+            ctx.stroke()
+
+            // Arrowhead pointing up
+            ctx.beginPath()
+            ctx.moveTo(endX, endY)
+            ctx.lineTo(endX - arrowSize, endY + arrowSize * 1.5)
+            ctx.lineTo(endX + arrowSize, endY + arrowSize * 1.5)
+            ctx.closePath()
+            ctx.fillStyle = edgeColor
+            ctx.fill()
+        }
+        EdgeKind.NORMAL -> {
+            ctx.beginPath()
+            ctx.moveTo(startX, startY)
+            val midY = (startY + endY) / 2.0
+            ctx.bezierCurveTo(startX, midY, endX, midY, endX, endY)
+            ctx.strokeStyle = edgeColor
+            ctx.lineWidth = strokeWidth
+            ctx.stroke()
+
+            // Arrowhead pointing down
+            ctx.beginPath()
+            ctx.moveTo(endX, endY)
+            ctx.lineTo(endX - arrowSize, endY - arrowSize * 1.5)
+            ctx.lineTo(endX + arrowSize, endY - arrowSize * 1.5)
+            ctx.closePath()
+            ctx.fillStyle = edgeColor
+            ctx.fill()
+        }
+    }
 
     // Edge label
     if (label != null) {
@@ -752,7 +850,7 @@ private fun drawEdge(
         } else {
             if (isHighlighted) "#222222" else "#555555"
         }
-        val labelY = startY + 4.0
+        val labelY = startY + 14.0
         val textWidth = ctx.measureText(label).width
         val bgColor = if (isDark) "rgba(26,26,26,0.8)" else "rgba(240,240,240,0.8)"
 
