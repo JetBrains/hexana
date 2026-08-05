@@ -3,8 +3,6 @@
 ## Unreleased
 
 ### Added
-- The **WAT (virtualized)** tab of a Component Model binary no longer goes empty when the component embeds no core modules. Glue-only components (types, imports, exports, instances, aliases) now render their component-level constructs in the same virtualized panel core modules get: foldable per-section headers, search by name or offset, and a clickable offset gutter that jumps to the byte in the hex view. Imports and exports are anchored to their exact byte ranges; sections the parser cannot decode per record (for example canon) show an explicit "not decoded" row instead of failing the view. Rendering works from the in-memory buffer, so it also covers nested components opened from the Components tab, and the plain **Wat** tab now converts in-memory nested views directly from their bytes instead of failing with "No such file or directory".
-- Nested components of a Component Model binary now open in their own editor view. A **Components** tab lists the embedded component the way **Modules** lists embedded core modules, and clicking the row opens it. Opening is recursive: modules and components inside an already-opened nested view open the same way, and byte offsets accumulate across levels so every nested view is labelled with its absolute offset in the root file. Nested in-memory views don't offer Run actions (there is no file on disk a run configuration could execute) and gain the full tab set of a disk-opened file, including the plain Wat tab and, for core modules, DWARF panels.
 
 ### Changed
 
@@ -15,6 +13,12 @@
 ### Fixed
 
 ### Security
+
+## 0.16 - 2026-08-05
+
+### Added
+- The **WAT (virtualized)** tab of a Component Model binary no longer goes empty when the component embeds no core modules. Glue-only components (types, imports, exports, instances, aliases) now render their component-level constructs in the same virtualized panel core modules get: foldable per-section headers, search by name or offset, and a clickable offset gutter that jumps to the byte in the hex view. Imports and exports are anchored to their exact byte ranges; sections the parser cannot decode per record (for example canon) show an explicit "not decoded" row instead of failing the view. Rendering works from the in-memory buffer, so it also covers nested components opened from the Components tab, and the plain **Wat** tab now converts in-memory nested views directly from their bytes instead of failing with "No such file or directory".
+- Nested components of a Component Model binary now open in their own editor view. A **Components** tab lists the embedded component the way **Modules** lists embedded core modules, and clicking the row opens it. Opening is recursive: modules and components inside an already-opened nested view open the same way, and byte offsets accumulate across levels so every nested view is labelled with its absolute offset in the root file. Nested in-memory views don't offer Run actions (there is no file on disk a run configuration could execute) and gain the full tab set of a disk-opened file, including the plain Wat tab and, for core modules, DWARF panels.
 
 ## 0.15 - 2026-07-29
 
