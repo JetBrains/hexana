@@ -56,6 +56,19 @@ class NativeBinaryFileTypeDetector : FileTypeRegistry.FileTypeDetector {
             return PcapFileType.INSTANCE
         }
 
+        // PCAP-NG: Section Header Block type 0x0A0D0D0A, then BOM 0x1A2B3C4D or 0x4D3C2B1A
+        if (b0 == 0x0A && b1 == 0x0D && b2 == 0x0D && b3 == 0x0A && len >= 12) {
+            val bom0 = firstBytes.byteAt(8).toInt() and 0xFF
+            val bom1 = firstBytes.byteAt(9).toInt() and 0xFF
+            val bom2 = firstBytes.byteAt(10).toInt() and 0xFF
+            val bom3 = firstBytes.byteAt(11).toInt() and 0xFF
+            if ((bom0 == 0x1A && bom1 == 0x2B && bom2 == 0x3C && bom3 == 0x4D) ||
+                (bom0 == 0x4D && bom1 == 0x3C && bom2 == 0x2B && bom3 == 0x1A)
+            ) {
+                return PcapFileType.INSTANCE
+            }
+        }
+
         // ELF: 7F 45 4C 46
         if (b0 == 0x7F && b1 == 0x45 && b2 == 0x4C && b3 == 0x46) {
             return ElfFileType.INSTANCE

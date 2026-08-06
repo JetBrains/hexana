@@ -16,7 +16,7 @@ object PcapDissector {
      * whatever information could be extracted from the captured bytes.
      */
     fun dissect(buffer: CommonByteBuffer, packet: PcapPacketRecord, linkType: Long): PcapDissectedPacket {
-        val dataOffset = (packet.fileOffset + 16).toInt() // skip 16-byte pcap record header
+        val dataOffset = packet.dataOffset.toInt()
         val dataLen = packet.inclLen.toInt()
         if (dataLen <= 0 || dataOffset + dataLen > buffer.size) {
             return PcapDissectedPacket("", "", "Unknown", "")

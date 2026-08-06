@@ -52,6 +52,12 @@ data class PcapPacketRecord(
     val origLen: Long,
     /** Byte offset of this packet record in the file. */
     val fileOffset: Long,
+    /**
+     * Byte offset where the captured packet data starts.
+     * For classic PCAP this is `fileOffset + 16` (after the 16-byte record header).
+     * For PCAP-NG this points into the block body (after the EPB/SPB header fields).
+     */
+    val dataOffset: Long = fileOffset + 16,
 )
 
 /** PCAP magic for native (little-endian) byte order. */

@@ -12,21 +12,32 @@ class PcapTableTabsProvider : TableTabsProvider {
         if (provider !is PcapBinaryProvider) return emptyList()
         val pcap = provider.parsedPcapFile ?: return emptyList()
         return listOfNotNull(
-            pcapHeaderTab(pcap),
+            pcapHeaderTab(pcap, provider),
             pcapPacketsTab(pcap, provider),
         )
     }
 }
 
-private fun pcapHeaderTab(pcap: PcapFile): TableTabDescriptor {
+private fun pcapHeaderTab(pcap: PcapFile, provider: PcapBinaryProvider): TableTabDescriptor {
     val h = pcap.header
-    val rows = listOf(
-        "Version" to h.version,
-        "Byte order" to if (h.bigEndian) "Big-endian" else "Little-endian",
-        "Snap length" to "${h.snapLen}",
-        "Link-layer type" to h.networkName,
-        "Packets" to "${pcap.packets.size}",
-    )
+    val isPcapNg = provider.isPcapNg
+    val ngFile = provider.parsedPcapNgFile
+
+    val rows = mutableListOf<Pair<String, String>>()
+    rows += "Format" to if (isPcapNg) "PCAP-NG" else "PCAP"
+    rows += "Version" to h.version
+    if (!isPcapNg) {
+        rows += "Byte order" to if (h.bigEndian) "Big-endian" else "Little-endian"
+    }
+    if (h.snapLen > 0) {
+        rows += "Snap length" to "${h.snapLen}"
+    }
+    rows += "Link-layer type" to h.networkName
+    if (ngFile != null && ngFile.interfaces.size > 1) {
+        rows += "Interfaces" to "${ngFile.interfaces.size}"
+    }
+    rows += "Packets" to "${pcap.packets.size}"
+
     return TableTabDescriptor(
         name = "Header",
         columns = listOf(
@@ -36,7 +47,7 @@ private fun pcapHeaderTab(pcap: PcapFile): TableTabDescriptor {
         rowCount = rows.size,
         showIdColumn = false,
         priority = TabPriority.High,
-        prologueText = "PCAP Capture File",
+        prologueText = if (isPcapNg) "PCAP-NG Capture File" else "PCAP Capture File",
     )
 }
 
