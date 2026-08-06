@@ -176,6 +176,49 @@ val teamcityCliTestTaskPaths = listOf(
     ":mcp:verifyCliR8ReleaseArchives",
 )
 
+fun verifyExactTaskPaths(
+    subject: String,
+    requiredTaskPaths: List<String>,
+    actualTaskPaths: List<String>,
+) {
+    val missingTaskPaths = requiredTaskPaths.filterNot(actualTaskPaths::contains)
+    val unexpectedTaskPaths = actualTaskPaths.filterNot(requiredTaskPaths::contains)
+    val duplicateTaskPaths =
+        actualTaskPaths
+            .groupingBy { it }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
+    check(missingTaskPaths.isEmpty() && unexpectedTaskPaths.isEmpty() && duplicateTaskPaths.isEmpty()) {
+        "$subject must exactly match required task paths; " +
+            "missing: ${missingTaskPaths.joinToString()}, " +
+            "unexpected: ${unexpectedTaskPaths.joinToString()}, " +
+            "duplicates: ${duplicateTaskPaths.joinToString()}"
+    }
+}
+
+fun verifyAggregateDirectDependencies(
+    aggregateTaskName: String,
+    requiredTaskPaths: List<String>,
+) {
+    val aggregateTask = tasks.getByName(aggregateTaskName)
+
+    fun normalizeDependency(dependency: Any?): List<String> =
+        when (dependency) {
+            is String -> listOf(if (dependency.startsWith(":")) dependency else ":$dependency")
+            is Task -> listOf(dependency.path)
+            is TaskProvider<*> -> listOf(dependency.get().path)
+            is Provider<*> -> normalizeDependency(dependency.orNull)
+            is Iterable<*> -> dependency.flatMap(::normalizeDependency)
+            is Array<*> -> dependency.flatMap(::normalizeDependency)
+            else -> error("$aggregateTaskName has unsupported direct dependency notation: $dependency")
+        }
+
+    val actualTaskPaths =
+        aggregateTask.dependsOn.flatMap(::normalizeDependency)
+    verifyExactTaskPaths("$aggregateTaskName direct dependencies", requiredTaskPaths, actualTaskPaths)
+}
+
 tasks.register("verifyTeamcityCoreTestsCoverage") {
     group = "verification"
     description = "Verify the TeamCity core aggregate includes all required shared test tasks."
@@ -206,10 +249,11 @@ tasks.register("verifyTeamcityCoreTestsCoverage") {
             ":plugins-shared:allTests",
             ":wasmParser:allTests",
         )
-        val missingTaskPaths = requiredTaskPaths.filterNot(teamcityCoreTestTaskPaths::contains)
-        check(missingTaskPaths.isEmpty()) {
-            "teamcityCoreTests is missing required core test tasks: ${missingTaskPaths.joinToString()}"
-        }
+        verifyExactTaskPaths("teamcityCoreTests inventory", requiredTaskPaths, teamcityCoreTestTaskPaths)
+        verifyAggregateDirectDependencies(
+            "teamcityCoreTests",
+            teamcityCoreTestTaskPaths + ":verifyTeamcityCoreTestsCoverage",
+        )
     }
 }
 
@@ -220,10 +264,15 @@ tasks.register("verifyTeamcityVscodePluginTestsCoverage") {
         val requiredTaskPaths = listOf(
             ":vscode-plugin:extension-lib:allTests",
         )
-        val missingTaskPaths = requiredTaskPaths.filterNot(teamcityVscodePluginTestTaskPaths::contains)
-        check(missingTaskPaths.isEmpty()) {
-            "teamcityVscodePluginTests is missing required VS Code plugin test tasks: ${missingTaskPaths.joinToString()}"
-        }
+        verifyExactTaskPaths(
+            "teamcityVscodePluginTests inventory",
+            requiredTaskPaths,
+            teamcityVscodePluginTestTaskPaths,
+        )
+        verifyAggregateDirectDependencies(
+            "teamcityVscodePluginTests",
+            teamcityVscodePluginTestTaskPaths + ":verifyTeamcityVscodePluginTestsCoverage",
+        )
     }
 }
 
@@ -235,10 +284,15 @@ tasks.register("verifyTeamcityIntellijPluginTestsCoverage") {
             ":idea-plugin:test",
             ":idea-plugin:verifyHexanaToolsetUpToDate",
         )
-        val missingTaskPaths = requiredTaskPaths.filterNot(teamcityIntellijPluginTestTaskPaths::contains)
-        check(missingTaskPaths.isEmpty()) {
-            "teamcityIntellijPluginTests is missing required IntelliJ plugin test tasks: ${missingTaskPaths.joinToString()}"
-        }
+        verifyExactTaskPaths(
+            "teamcityIntellijPluginTests inventory",
+            requiredTaskPaths,
+            teamcityIntellijPluginTestTaskPaths,
+        )
+        verifyAggregateDirectDependencies(
+            "teamcityIntellijPluginTests",
+            teamcityIntellijPluginTestTaskPaths + ":verifyTeamcityIntellijPluginTestsCoverage",
+        )
     }
 }
 
@@ -259,31 +313,36 @@ tasks.register("verifyTeamcityServerCliTestsCoverage") {
             ":mcp:server:integrationTest",
             ":mcp:vscode-server:test",
         )
-        val missingTaskPaths = requiredTaskPaths.filterNot(teamcityServerCliTestTaskPaths::contains)
-        check(missingTaskPaths.isEmpty()) {
-            "teamcityServerCliTests is missing required MCP server test tasks: ${missingTaskPaths.joinToString()}"
-        }
+        verifyExactTaskPaths(
+            "teamcityServerCliTests inventory",
+            requiredTaskPaths,
+            teamcityServerCliTestTaskPaths,
+        )
+        verifyAggregateDirectDependencies(
+            "teamcityServerCliTests",
+            teamcityServerCliTestTaskPaths +
+                listOf(":verifyTeamcityServerCliTestsCoverage", ":teamcityCliTests"),
+        )
     }
 }
 
 tasks.register("verifyTeamcityCiTestsPartition") {
     group = "verification"
     description = "Verify dedicated TeamCity lanes exactly partition the broad CI test aggregate."
+    val requiredLaneGuardTaskPaths = listOf(
+        ":verifyTeamcityCoreTestsCoverage",
+        ":verifyTeamcityVscodePluginTestsCoverage",
+        ":verifyTeamcityIntellijPluginTestsCoverage",
+        ":verifyTeamcityServerCliTestsCoverage",
+    )
+    requiredLaneGuardTaskPaths.forEach { dependsOn(it) }
     doLast {
-        val duplicateTaskPaths =
-            teamcityCiOwnedTestTaskPaths
-                .groupingBy { it }
-                .eachCount()
-                .filterValues { it > 1 }
-                .keys
-        val missingTaskPaths = teamcityCiTestTaskOrder.filterNot(teamcityCiOwnedTestTaskPaths::contains)
-        val unexpectedTaskPaths = teamcityCiOwnedTestTaskPaths.filterNot(teamcityCiTestTaskOrder::contains)
-        check(duplicateTaskPaths.isEmpty() && missingTaskPaths.isEmpty() && unexpectedTaskPaths.isEmpty()) {
-            "TeamCity test ownership must exactly partition teamcityCiTests; " +
-                "duplicates: ${duplicateTaskPaths.joinToString()}, " +
-                "missing: ${missingTaskPaths.joinToString()}, " +
-                "unexpected: ${unexpectedTaskPaths.joinToString()}"
-        }
+        verifyExactTaskPaths("TeamCity test ownership", teamcityCiTestTaskOrder, teamcityCiOwnedTestTaskPaths)
+        verifyAggregateDirectDependencies("verifyTeamcityCiTestsPartition", requiredLaneGuardTaskPaths)
+        verifyAggregateDirectDependencies(
+            "teamcityCiTests",
+            teamcityCiTestTaskPaths + ":verifyTeamcityCiTestsPartition",
+        )
     }
 }
 
@@ -304,10 +363,11 @@ tasks.register("verifyTeamcityCliTestsReleaseGateCoverage") {
             ":cli:hexana-cli-script:integrationTest",
             ":mcp:verifyCliR8ReleaseArchives",
         )
-        val missingTaskPaths = requiredTaskPaths.filterNot(teamcityCliTestTaskPaths::contains)
-        check(missingTaskPaths.isEmpty()) {
-            "teamcityCliTests is missing required CLI release gate tasks: ${missingTaskPaths.joinToString()}"
-        }
+        verifyExactTaskPaths("teamcityCliTests inventory", requiredTaskPaths, teamcityCliTestTaskPaths)
+        verifyAggregateDirectDependencies(
+            "teamcityCliTests",
+            teamcityCliTestTaskPaths + ":verifyTeamcityCliTestsReleaseGateCoverage",
+        )
     }
 }
 

@@ -132,13 +132,13 @@ Run the narrowest command that proves your change.
 - Run installed script CLI tests: `./gradlew :cli:hexana-cli-script:integrationTest`
 - Run shared CLI process support tests (part of the TeamCity CLI JVM gate): `./gradlew :cli:integration-tests:test`
 - Run the dedicated TeamCity CLI JVM gate: `./gradlew teamcityCliTests`
-- Run the dedicated TeamCity shared/core test lane: `./gradlew teamcityCoreTests`
-- Run the dedicated TeamCity VS Code plugin test lane: `./gradlew teamcityVscodePluginTests`
+- Run the TeamCity-ready shared/core aggregate intended for the next rollout step: `./gradlew teamcityCoreTests`
+- Run the TeamCity-ready VS Code plugin aggregate intended for the next rollout step: `./gradlew teamcityVscodePluginTests`
 - Run the dedicated TeamCity IntelliJ plugin test lane: `./gradlew teamcityIntellijPluginTests`
-- Run the dedicated TeamCity server and CLI lane: `./gradlew teamcityServerCliTests`; it includes
-  `teamcityCliTests` transitively plus the standalone MCP/server gates.
+- Run the TeamCity-ready server and CLI aggregate intended for the next rollout step: `./gradlew teamcityServerCliTests`;
+  it includes `teamcityCliTests` transitively plus the standalone MCP/server gates.
 - Run general TeamCity verification without CLI JVM gates: `./gradlew teamcityCiTests`. Its non-CLI task set remains
-  unchanged during rollout and temporarily overlaps with the new core, VS Code, IntelliJ, and server lanes.
+  unchanged during rollout and temporarily overlaps with the new core, VS Code, IntelliJ, and server aggregates.
 - Direct `idea-plugin/**` changes select the composite Patronus entrypoint, which delegates to the regular IntelliJ
   Plugin Tests leaf. Broad Safe Merge still overlaps during rollout; shared/core fan-out remains deferred.
 - Run native standard CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli:nativeIntegrationTest`
