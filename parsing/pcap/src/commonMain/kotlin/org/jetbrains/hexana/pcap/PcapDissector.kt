@@ -148,6 +148,23 @@ object PcapDissector {
         val dstPort = readBigU16(buffer, offset + 2)
         val seqNum = readBigU32(buffer, offset + 4)
         val flags = readU8(buffer, offset + 13)
+        val dataOff = ((readU8(buffer, offset + 12) shr 4) and 0x0F) * 4
+
+        val payloadOffset = offset + dataOff
+        val payloadLen = len - dataOff
+
+        // Try HTTP detection on TCP payload
+        if (payloadLen > 0) {
+            val http = detectHttp(buffer, payloadOffset, payloadLen)
+            if (http != null) {
+                return PcapDissectedPacket(
+                    src, dst, http.protocol, http.info,
+                    httpBodyFileOffset = http.bodyFileOffset,
+                    httpBodySize = http.bodySize,
+                    httpContentType = http.contentType,
+                )
+            }
+        }
 
         val flagStr = buildString {
             if (flags and 0x02 != 0) append("SYN ")
@@ -314,6 +331,101 @@ object PcapDissector {
         }
     }
 
+    // ---- HTTP detection ----
+
+    private class HttpInfo(
+        val protocol: String,
+        val info: String,
+        val bodyFileOffset: Long,
+        val bodySize: Int,
+        val contentType: String?,
+    )
+
+    private val HTTP_METHODS = listOf("GET ", "POST ", "PUT ", "DELETE ", "HEAD ", "OPTIONS ", "PATCH ", "CONNECT ", "TRACE ")
+
+    private fun detectHttp(buffer: CommonByteBuffer, offset: Int, len: Int): HttpInfo? {
+        if (len < 16) return null
+
+        // Read first line to check for HTTP request or response
+        val previewLen = minOf(len, 4096)
+        val preview = readAscii(buffer, offset, previewLen)
+
+        val firstLineEnd = preview.indexOf('\n')
+        if (firstLineEnd < 0) return null
+        val firstLine = preview.substring(0, firstLineEnd).trimEnd('\r')
+
+        val isResponse = firstLine.startsWith("HTTP/")
+        val isRequest = !isResponse && HTTP_METHODS.any { firstLine.startsWith(it) }
+
+        if (!isRequest && !isResponse) return null
+
+        // Find headers end (\r\n\r\n or \n\n)
+        val headersEnd = findHeadersEnd(preview)
+        val bodyStart = if (headersEnd >= 0) headersEnd else -1
+
+        // Parse Content-Type from headers
+        val contentType = parseHeaderValue(preview, "content-type")
+
+        val bodyFileOffset: Long
+        val bodySize: Int
+        if (bodyStart >= 0 && bodyStart < len) {
+            bodyFileOffset = (offset + bodyStart).toLong()
+            bodySize = len - bodyStart
+        } else {
+            bodyFileOffset = -1
+            bodySize = 0
+        }
+
+        return if (isResponse) {
+            // e.g. "HTTP/1.1 200 OK"
+            val statusInfo = buildString {
+                append(firstLine)
+                if (contentType != null) append("  ($contentType)")
+            }
+            HttpInfo("HTTP", statusInfo, bodyFileOffset, bodySize, contentType)
+        } else {
+            // e.g. "GET /index.html HTTP/1.1"
+            HttpInfo("HTTP", firstLine, -1, 0, null)
+        }
+    }
+
+    private fun findHeadersEnd(text: String): Int {
+        val crlf = text.indexOf("\r\n\r\n")
+        if (crlf >= 0) return crlf + 4
+        val lf = text.indexOf("\n\n")
+        if (lf >= 0) return lf + 2
+        return -1
+    }
+
+    private fun parseHeaderValue(headers: String, headerName: String): String? {
+        var i = 0
+        while (i < headers.length) {
+            val lineEnd = headers.indexOf('\n', i)
+            if (lineEnd < 0) break
+            val line = headers.substring(i, lineEnd).trimEnd('\r')
+            if (line.isEmpty()) break // end of headers
+            val colon = line.indexOf(':')
+            if (colon > 0) {
+                val name = line.substring(0, colon).trim()
+                if (name.equals(headerName, ignoreCase = true)) {
+                    return line.substring(colon + 1).trim()
+                }
+            }
+            i = lineEnd + 1
+        }
+        return null
+    }
+
+    private fun readAscii(buffer: CommonByteBuffer, offset: Int, len: Int): String {
+        buffer.position(offset)
+        return buildString(len) {
+            for (i in 0 until len) {
+                val b = buffer.get().toInt() and 0xFF
+                append(if (b in 0x20..0x7E || b == 0x0D || b == 0x0A || b == 0x09) b.toChar() else '.')
+            }
+        }
+    }
+
     private fun ipProtocolName(protocol: Int): String = when (protocol) {
         1 -> "ICMP"
         2 -> "IGMP"
@@ -342,4 +454,13 @@ data class PcapDissectedPacket(
     val protocol: String,
     /** Short info string similar to Wireshark's Info column. */
     val info: String,
+    /**
+     * Absolute byte offset of the HTTP body within the PCAP file,
+     * or `-1` when this packet does not carry an HTTP body.
+     */
+    val httpBodyFileOffset: Long = -1,
+    /** Size of the HTTP body in bytes, or `0` when not applicable. */
+    val httpBodySize: Int = 0,
+    /** HTTP Content-Type header value, or `null` when not available. */
+    val httpContentType: String? = null,
 )

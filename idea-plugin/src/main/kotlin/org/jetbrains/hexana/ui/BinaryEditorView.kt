@@ -59,7 +59,11 @@ import org.jetbrains.hexana.shared.TableTabsContext
 import org.jetbrains.hexana.shared.TabPriority
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.ui.panel.*
+import org.jetbrains.hexana.pcap.PcapDissectedPacket
+import org.jetbrains.hexana.pcap.PcapDissector
+import org.jetbrains.hexana.providers.PcapBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
+import org.jetbrains.hexana.shared.RowContextMenuItemDescriptor
 import org.jetbrains.hexana.zip.ZipEntry
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
@@ -1033,6 +1037,8 @@ private fun BinaryProvider.resolveOrdinaryTabPanel(
         enrichZipEntriesTab(tab, onOpenZipEntry).toPanel(state)
     } else if (tab.name == "Members" && this is ArchiveBinaryProvider) {
         enrichArchiveMembersTab(tab, state.project, archiveName).toPanel(state)
+    } else if (tab.name == "Packets" && this is PcapBinaryProvider) {
+        enrichPcapPacketsTab(tab, state.project).toPanel(state)
     } else {
         tab.toPanel(state)
     }
@@ -1179,6 +1185,119 @@ private fun ArchiveBinaryProvider.enrichArchiveMembersTab(
         showIdColumn = tab.showIdColumn,
         priority = tab.priority,
     )
+}
+
+/**
+ * Enriches the PCAP "Packets" tab with a context-menu action that extracts
+ * the HTTP response body from a packet and opens it in a new editor tab.
+ *
+ * Binary content recognised by Hexana (Wasm, ELF, etc.) opens in the hex
+ * editor; text content opens in a plain IntelliJ text editor.
+ */
+private fun PcapBinaryProvider.enrichPcapPacketsTab(
+    tab: TableTabDescriptor,
+    project: Project,
+): TableTabDescriptor {
+    val provider = this
+    val pcap = provider.parsedPcapFile ?: return tab
+    val packets = pcap.packets
+    val linkType = pcap.header.network
+    val scope = HexanaService.getInstance().coroutineScope
+
+    // Lazily dissect packets (same cache pattern as PcapTableTabs)
+    val dissectedCache = HashMap<Int, PcapDissectedPacket>()
+    fun dissected(index: Int): PcapDissectedPacket = dissectedCache.getOrPut(index) {
+        try {
+            PcapDissector.dissect(provider.bytes, packets[index], linkType)
+        } catch (_: Exception) {
+            PcapDissectedPacket("", "", "?", "")
+        }
+    }
+
+    val openBodyItem = RowContextMenuItemDescriptor(
+        labelProvider = { "Open HTTP Body" },
+        action = { index ->
+            val d = dissected(index)
+            if (d.httpBodyFileOffset < 0 || d.httpBodySize <= 0) return@RowContextMenuItemDescriptor
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val bodyBytes = provider.bytes
+                        .slice(d.httpBodyFileOffset.toInt(), d.httpBodySize)
+                        .toByteArray()
+
+                    val ext = httpContentTypeToExtension(d.httpContentType)
+                    val fileName = "http-body-packet-${index + 1}$ext"
+                    val dir = Files.createTempDirectory(
+                        Path.of(PathManager.getTempPath()),
+                        "hexana-pcap-",
+                    ).also { it.toFile().deleteOnExit() }
+                    val path = dir.resolve(fileName)
+                    Files.write(path, bodyBytes)
+                    path.toFile().deleteOnExit()
+
+                    val vf = VfsUtil.findFile(path, true) ?: return@launch
+                    withContext(Dispatchers.EDT) {
+                        if (project.isDisposed) return@withContext
+                        FileEditorManager.getInstance(project).openFile(vf, true)
+                    }
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (t: Throwable) {
+                    HexanaLog.LOG.warn("Failed to extract HTTP body from packet ${index + 1}", t)
+                }
+            }
+        },
+        isVisible = { index ->
+            val d = dissected(index)
+            d.httpBodyFileOffset >= 0 && d.httpBodySize > 0
+        },
+    )
+
+    return TableTabDescriptor(
+        name = tab.name,
+        columns = tab.columns,
+        rowCount = tab.rowCount,
+        defaultSortColumn = tab.defaultSortColumn,
+        defaultSortAscending = tab.defaultSortAscending,
+        rowSelectionProvider = tab.rowSelectionProvider,
+        rowAction = tab.rowAction,
+        contextMenuItems = tab.contextMenuItems + openBodyItem,
+        rowClickAction = tab.rowClickAction,
+        dynamicContextMenuProvider = tab.dynamicContextMenuProvider,
+        prologueText = tab.prologueText,
+        emptyMessage = tab.emptyMessage,
+        childrenProvider = tab.childrenProvider,
+        alwaysShowSearch = tab.alwaysShowSearch,
+        searchPlaceholder = tab.searchPlaceholder,
+        showIdColumn = tab.showIdColumn,
+        priority = tab.priority,
+        predefinedFilters = tab.predefinedFilters,
+    )
+}
+
+/** Maps an HTTP Content-Type to a file extension hint for the temp file. */
+private fun httpContentTypeToExtension(contentType: String?): String {
+    if (contentType == null) return ""
+    val mime = contentType.substringBefore(';').trim().lowercase()
+    return when {
+        mime == "application/json" -> ".json"
+        mime == "application/xml" || mime == "text/xml" -> ".xml"
+        mime == "text/html" -> ".html"
+        mime == "text/css" -> ".css"
+        mime == "text/javascript" || mime == "application/javascript" -> ".js"
+        mime == "text/plain" -> ".txt"
+        mime == "application/octet-stream" -> ".bin"
+        mime == "application/pdf" -> ".pdf"
+        mime == "image/png" -> ".png"
+        mime == "image/jpeg" -> ".jpg"
+        mime == "image/gif" -> ".gif"
+        mime == "image/svg+xml" -> ".svg"
+        mime == "application/wasm" -> ".wasm"
+        mime == "application/zip" -> ".zip"
+        mime == "application/gzip" -> ".gz"
+        mime.startsWith("text/") -> ".txt"
+        else -> ""
+    }
 }
 
 /** The member's file name without any archive-internal directory path. */
