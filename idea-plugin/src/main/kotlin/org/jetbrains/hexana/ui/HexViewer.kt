@@ -91,12 +91,24 @@ private const val HexanaMarketplaceUrl =
 
 @Composable
 fun SyncLazyListStates(vararg states: LazyListState) {
+    // Monotonic counter that prevents re-entrant scroll syncing.  When one
+    // state's snapshotFlow fires and we programmatically scroll the other
+    // states, those scrolls change *their* firstVisibleItemIndex which
+    // fires their own snapshotFlows.  Without a guard the handlers try to
+    // scroll back — creating a ping-pong loop that blocks the EDT for tens
+    // of seconds.  Each sync batch bumps the counter; the launched
+    // coroutines capture the value and bail out if a newer batch has
+    // already started.
+    val syncGeneration = remember { mutableIntStateOf(0) }
+
     states.forEach { source ->
         val currentInfo by remember { derivedStateOf { source.firstVisibleItemIndex to source.firstVisibleItemScrollOffset } }
 
         LaunchedEffect(source) {
             snapshotFlow { currentInfo }
                 .collect { (index, offset) ->
+                    val gen = syncGeneration.intValue + 1
+                    syncGeneration.intValue = gen
                     states.forEach { target ->
                         if (target !== source) {
                             // this is very important for animated scenarios - otherwise "Scroll Data Section into view" stops working
@@ -104,7 +116,9 @@ fun SyncLazyListStates(vararg states: LazyListState) {
                                 if (target.firstVisibleItemIndex != index || target.firstVisibleItemScrollOffset != offset) {
                                     // launch is important so that the vertical scroll bar works properly :)
                                     launch {
-                                        target.scrollToItem(index, offset)
+                                        if (syncGeneration.intValue == gen) {
+                                            target.scrollToItem(index, offset)
+                                        }
                                     }
                                 }
                             }
