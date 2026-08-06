@@ -176,6 +176,11 @@
                   fieldName="INSTANCE"
                   extensions="arrow"/>
 
+        <fileType name="pcap"
+                  implementationClass="org.jetbrains.hexana.PcapFileType"
+                  fieldName="INSTANCE"
+                  extensions="pcap;pcapng;cap"/>
+
         <fileType name="Protobuf Descriptor Set"
                   implementationClass="org.jetbrains.hexana.ProtobufFileType"
                   fieldName="INSTANCE"

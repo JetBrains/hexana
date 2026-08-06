@@ -4,6 +4,7 @@ import org.jetbrains.hexana.providers.ArrowBinaryProvider
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.DexBinaryProvider
+import org.jetbrains.hexana.providers.PcapBinaryProvider
 import org.jetbrains.hexana.providers.ParquetBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
@@ -21,6 +22,7 @@ fun fileTypeDescription(
     is ZipBinaryProvider -> if (fileName.orEmpty().endsWith(".jar", true)) "Jar File" else "Zip File"
     is ClassFileBinaryProvider -> "Class File"
     is DexBinaryProvider -> "Android DEX File"
+    is PcapBinaryProvider -> "PCAP Capture"
     is ParquetBinaryProvider -> "Apache Parquet"
     is ArrowBinaryProvider -> "Apache Arrow IPC"
     is GenericBinaryProvider -> binaryProvider.nativeFormat?.displayName ?: "Binary"

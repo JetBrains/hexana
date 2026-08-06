@@ -46,6 +46,16 @@ class NativeBinaryFileTypeDetector : FileTypeRegistry.FileTypeDetector {
             return ArchiveFileType.INSTANCE
         }
 
+        // PCAP: D4 C3 B2 A1 (little-endian) or A1 B2 C3 D4 (big-endian),
+        //       4D 3C B2 A1 (nsec LE) or A1 B2 3C 4D (nsec BE)
+        if ((b0 == 0xD4 && b1 == 0xC3 && b2 == 0xB2 && b3 == 0xA1) ||
+            (b0 == 0xA1 && b1 == 0xB2 && b2 == 0xC3 && b3 == 0xD4) ||
+            (b0 == 0x4D && b1 == 0x3C && b2 == 0xB2 && b3 == 0xA1) ||
+            (b0 == 0xA1 && b1 == 0xB2 && b2 == 0x3C && b3 == 0x4D)
+        ) {
+            return PcapFileType.INSTANCE
+        }
+
         // ELF: 7F 45 4C 46
         if (b0 == 0x7F && b1 == 0x45 && b2 == 0x4C && b3 == 0x46) {
             return ElfFileType.INSTANCE
