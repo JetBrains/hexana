@@ -100,6 +100,7 @@ val r8OwnedJarNames = setOf(
     "javaBytecode-jvm.jar",
     "macho-jvm.jar",
     "parquet-jvm.jar",
+    "pcap-jvm.jar",
     "pe-jvm.jar",
     "plugins-shared-jvm.jar",
     "protobuf-jvm.jar",
