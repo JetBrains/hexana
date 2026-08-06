@@ -135,6 +135,8 @@ Run the narrowest command that proves your change.
 - Run the dedicated TeamCity IntelliJ plugin test lane: `./gradlew teamcityIntellijPluginTests`
 - Run general TeamCity verification without CLI JVM gates: `./gradlew teamcityCiTests` (temporarily still overlaps
   with the IntelliJ plugin lane during rollout)
+- Direct `idea-plugin/**` changes select the composite Patronus entrypoint, which delegates to the regular IntelliJ
+  Plugin Tests leaf. Broad Safe Merge still overlaps during rollout; shared/core fan-out remains deferred.
 - Run native standard CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli:nativeIntegrationTest`
 - Run native script CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli-script:nativeIntegrationTest`
 - Run TeamCity native integration surfaces: `./gradlew :mcp:assembleNativeMcpReleaseArtifacts`

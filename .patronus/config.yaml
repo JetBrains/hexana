@@ -9,3 +9,6 @@ checks:
     executeOnChanges:
       - "/ui-driver-tests/**"
       - "/idea-plugin/src/ui-tests-framework/**"
+  - configurationId: "InnoHub_HexFlow_IntellijPluginTestsPatronus"
+    executeOnChanges:
+      - "/idea-plugin/**"
