@@ -340,6 +340,7 @@ object TableTabsProviderRegistry {
             ProtobufTableTabsProvider(),
             ProtobufMessageTableTabsProvider(),
             DexTableTabsProvider(),
+            PcapTableTabsProvider(),
             StringsTabProvider(),
             SizeTableTabsProvider(),
             WasmProfilerTabsProvider(),
