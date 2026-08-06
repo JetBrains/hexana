@@ -31,6 +31,7 @@ const COFF_MACHINE_TYPES = new Set([0x014C, 0x01C0, 0x01C4, 0x0200, 0x8664, 0xAA
 const KNOWN_EXTENSIONS = new Set([
     ".wasm", ".bin", ".elf", ".exe", ".so", ".o", ".a", ".dll", ".dylib",
     ".jar", ".zip", ".war", ".apk", ".class", ".dex", ".desc", ".protoset",
+    ".pcap", ".cap", ".pcapng",
 ]);
 
 /**
@@ -110,6 +111,22 @@ function isNativeBinary(bytes: Uint8Array): boolean {
     // WebAssembly: 00 61 73 6D ("\0asm")
     if (b0 === 0x00 && b1 === 0x61 && b2 === 0x73 && b3 === 0x6D) {
         return true;
+    }
+
+    // PCAP: A1 B2 C3 D4 (LE) or D4 C3 B2 A1 (BE), nanosecond variants A1 B2 3C 4D / 4D 3C B2 A1
+    if ((b0 === 0xA1 && b1 === 0xB2 && b2 === 0xC3 && b3 === 0xD4) ||
+        (b0 === 0xD4 && b1 === 0xC3 && b2 === 0xB2 && b3 === 0xA1) ||
+        (b0 === 0xA1 && b1 === 0xB2 && b2 === 0x3C && b3 === 0x4D) ||
+        (b0 === 0x4D && b1 === 0x3C && b2 === 0xB2 && b3 === 0xA1)) {
+        return true;
+    }
+
+    // PCAP-NG: Section Header Block type 0A 0D 0D 0A followed by BOM at offset 8
+    if (b0 === 0x0A && b1 === 0x0D && b2 === 0x0D && b3 === 0x0A && len >= 12) {
+        const bom = readU32LE(bytes, 8);
+        if (bom === 0x1A2B3C4D || bom === 0x4D3C2B1A) {
+            return true;
+        }
     }
 
     return false;
