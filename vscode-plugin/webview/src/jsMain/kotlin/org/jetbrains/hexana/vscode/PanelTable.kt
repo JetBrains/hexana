@@ -418,6 +418,7 @@ internal fun PanelTableRow(
     onDoubleClick: (() -> Unit)? = null,
     onSelect: (() -> Unit)? = null,
     onActivate: (() -> Unit)? = null,
+    onContextMenu: ((x: Int, y: Int) -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     // Keep a stable callbacks holder across recompositions; update its
@@ -459,6 +460,16 @@ internal fun PanelTableRow(
             var el = event.target as? HTMLElement
             while (el != null && el.tagName != "TR") el = el.parentElement as? HTMLElement
             el?.let { tr -> window.requestAnimationFrame { tr.asDynamic().focus(js("({preventScroll: true})")) } }
+        }
+        if (onContextMenu != null) {
+            onContextMenu { event ->
+                event.preventDefault()
+                event.stopPropagation()
+                val me = event.nativeEvent as? org.w3c.dom.events.MouseEvent
+                if (me != null) {
+                    onContextMenu(me.clientX, me.clientY)
+                }
+            }
         }
         // Store the stable callbacks holder on the DOM element so that
         // the window-level arrow-key handler can read the row's current

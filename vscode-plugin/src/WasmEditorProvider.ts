@@ -547,6 +547,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 if (url) {
                     vscode.env.openExternal(vscode.Uri.parse(url));
                 }
+            } else if (message.type === "open-http-body") {
+                this.openHttpBody(document, message);
             } else if (message.type === "open-dts") {
                 this.openDtsReference();
             } else if (message.type === "pick-script-file") {
@@ -988,6 +990,92 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             vscode.window.showErrorMessage(
                 `Failed to open nested module "${moduleName}": ${err}`,
             );
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // HTTP body extraction
+    // -------------------------------------------------------------------
+
+    /**
+     * Opens an HTTP response body extracted from a PCAP packet in a new
+     * editor tab. The body bytes are sent from the webview as a number
+     * array; we decode them and open an untitled document with the
+     * appropriate language mode inferred from the Content-Type.
+     */
+    private async openHttpBody(
+        _document: WasmDocument,
+        message: { fileName: string; data: number[]; contentType: string },
+    ): Promise<void> {
+        try {
+            const bytes = new Uint8Array(message.data);
+
+            if (this.isTextContentType(message.contentType)) {
+                const content = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+                const language = this.contentTypeToLanguageId(message.contentType);
+                const doc = await vscode.workspace.openTextDocument({ content, language });
+                await vscode.window.showTextDocument(doc, {
+                    viewColumn: vscode.ViewColumn.Beside,
+                    preserveFocus: false,
+                    preview: true,
+                });
+            } else {
+                // Unknown or binary content — open in the Hexana custom editor
+                const fileName = message.fileName || "http-body.bin";
+                const moduleUri = vscode.Uri.parse(
+                    `hexana-module:/${fileName}?source=http-body`,
+                );
+                const key = moduleUri.toString();
+                inMemoryModules.set(key, { data: bytes, fileName });
+                await vscode.commands.executeCommand(
+                    "vscode.openWith",
+                    moduleUri,
+                    WasmEditorProvider.viewType,
+                );
+            }
+        } catch (err) {
+            vscode.window.showErrorMessage(`Failed to open HTTP body: ${err}`);
+        }
+    }
+
+    /**
+     * Returns `true` when the Content-Type is a known text format that
+     * should be opened as a regular text document rather than in Hexana.
+     */
+    private isTextContentType(contentType: string): boolean {
+        if (!contentType) return false;
+        const mime = contentType.split(";")[0].trim().toLowerCase();
+        if (mime.startsWith("text/")) return true;
+        switch (mime) {
+            case "application/json":
+            case "application/xml":
+            case "application/javascript":
+            case "application/xhtml+xml":
+            case "application/svg+xml":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Maps an HTTP Content-Type value to a VS Code language identifier.
+     */
+    private contentTypeToLanguageId(contentType: string): string {
+        if (!contentType) return "plaintext";
+        const mime = contentType.split(";")[0].trim().toLowerCase();
+        switch (mime) {
+            case "application/json": return "json";
+            case "application/xml":
+            case "text/xml": return "xml";
+            case "text/html": return "html";
+            case "text/css": return "css";
+            case "text/javascript":
+            case "application/javascript": return "javascript";
+            case "text/plain": return "plaintext";
+            default:
+                if (mime.startsWith("text/")) return "plaintext";
+                return "plaintext";
         }
     }
 

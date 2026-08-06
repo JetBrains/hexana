@@ -269,6 +269,27 @@ fun postOpenModuleToHost(moduleIndex: Int, fileName: String, data: ByteArray) {
 }
 
 /**
+ * Asks the extension host to open an HTTP response body extracted from a
+ * PCAP packet in a new editor tab.
+ *
+ * [fileName] is the suggested tab title (e.g. "http-body-packet-3.json"),
+ * [data] is the raw body bytes, and [contentType] is the HTTP Content-Type
+ * header value (if available) so the host can choose the right language mode.
+ */
+fun postOpenHttpBodyToHost(fileName: String, data: ByteArray, contentType: String?) {
+    val msg = js("{}")
+    msg.type = "open-http-body"
+    msg.fileName = fileName
+    msg.contentType = contentType ?: ""
+    val jsArray = js("[]").unsafeCast<dynamic>()
+    for (i in data.indices) {
+        jsArray.push(data[i].toInt() and 0xFF)
+    }
+    msg.data = jsArray
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to open the pre-built `hexana-scripting.d.ts`
  * API reference in a new VS Code editor tab.
  */

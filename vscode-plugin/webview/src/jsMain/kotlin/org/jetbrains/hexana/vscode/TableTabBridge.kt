@@ -171,6 +171,10 @@ fun TableTabContent(
         return
     }
 
+    // --- Context menu state ---
+    val hasContextMenu = descriptor.contextMenuItems.isNotEmpty() || descriptor.dynamicContextMenuProvider != null
+    var contextMenuState by remember { mutableStateOf<ContextMenuState?>(null) }
+
     // --- Predefined filter state ---
     val filters = descriptor.predefinedFilters
     var selectedFilterIndex: Int? by remember(descriptor) {
@@ -491,6 +495,9 @@ fun TableTabContent(
                                     }
                                 }
                             },
+                            onContextMenu = if (hasContextMenu) { { x, y ->
+                                contextMenuState = ContextMenuState(index, x, y)
+                            } } else null,
                         ) {
                             if (showId) {
                                 Td({ classes("cell-id"); style { property("width", "12px") } }) {
@@ -548,6 +555,104 @@ fun TableTabContent(
                         }) {}
                     }
                 }
+            }
+        }
+        // Context menu overlay
+        contextMenuState?.let { state ->
+            RowContextMenu(
+                rowIndex = state.rowIndex,
+                x = state.x,
+                y = state.y,
+                descriptor = descriptor,
+                onDismiss = { contextMenuState = null },
+            )
+        }
+    }
+}
+
+/**
+ * Tracks the position and row index of an open context menu.
+ */
+private data class ContextMenuState(val rowIndex: Int, val x: Int, val y: Int)
+
+/**
+ * Renders a floating context menu for a table row, showing items from
+ * [TableTabDescriptor.contextMenuItems] and [TableTabDescriptor.dynamicContextMenuProvider].
+ */
+@Composable
+private fun RowContextMenu(
+    rowIndex: Int,
+    x: Int,
+    y: Int,
+    descriptor: TableTabDescriptor,
+    onDismiss: () -> Unit,
+) {
+    val items = descriptor.contextMenuItems.filter { it.isVisible(rowIndex) }
+    val dynamicItems = descriptor.dynamicContextMenuProvider?.invoke(rowIndex) ?: emptyList()
+    if (items.isEmpty() && dynamicItems.isEmpty()) {
+        onDismiss()
+        return
+    }
+
+    // Dismiss on any click outside the menu
+    DisposableEffect(Unit) {
+        val listener: (Event) -> Unit = { onDismiss() }
+        kotlinx.browser.window.addEventListener("mousedown", listener)
+        onDispose { kotlinx.browser.window.removeEventListener("mousedown", listener) }
+    }
+
+    Div({
+        style {
+            property("position", "fixed")
+            property("left", "${x}px")
+            property("top", "${y}px")
+            property("z-index", "10000")
+            property("background", "var(--vscode-menu-background, #252526)")
+            property("color", "var(--vscode-menu-foreground, #ccc)")
+            property("border", "1px solid var(--vscode-menu-border, #454545)")
+            property("border-radius", "4px")
+            property("padding", "4px 0")
+            property("box-shadow", "0 2px 8px rgba(0,0,0,0.4)")
+            property("font-size", "13px")
+            property("min-width", "160px")
+        }
+        // Prevent the mousedown dismiss listener from firing on the menu itself
+        onMouseDown { it.stopPropagation() }
+    }) {
+        for (item in items) {
+            Div({
+                classes("hexana-context-menu-item")
+                style {
+                    property("padding", "4px 16px")
+                    property("cursor", "pointer")
+                    property("white-space", "nowrap")
+                }
+                onClick {
+                    onDismiss()
+                    item.action(rowIndex)
+                }
+                onMouseOver { (it.target as? HTMLElement)?.style?.setProperty("background", "var(--vscode-menu-selectionBackground, #094771)") }
+                onMouseOut { (it.target as? HTMLElement)?.style?.removeProperty("background") }
+            }) {
+                Text(item.labelProvider(rowIndex))
+            }
+        }
+        for (entry in dynamicItems) {
+            Div({
+                classes("hexana-context-menu-item")
+                style {
+                    property("padding", "4px 16px")
+                    property("cursor", "pointer")
+                    property("white-space", "nowrap")
+                }
+                onClick {
+                    onDismiss()
+                    entry.action()
+                }
+                onMouseOver { (it.target as? HTMLElement)?.style?.setProperty("background", "var(--vscode-menu-selectionBackground, #094771)") }
+                onMouseOut { (it.target as? HTMLElement)?.style?.removeProperty("background") }
+            }) {
+                Text(entry.label)
             }
         }
     }

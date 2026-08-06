@@ -6,11 +6,15 @@ import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
+import org.jetbrains.hexana.pcap.PcapDissectedPacket
+import org.jetbrains.hexana.pcap.PcapDissector
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.PcapBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
+import org.jetbrains.hexana.shared.RowContextMenuItemDescriptor
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsContext
 import org.jetbrains.hexana.shared.TabPriority
@@ -82,6 +86,8 @@ fun HexanaPanel(
                         enrichZipEntriesTab(d, zipProvider.displayEntries)
                     } else if (d.name == "Members" && provider is ArchiveBinaryProvider) {
                         enrichArchiveMembersTab(d, provider)
+                    } else if (d.name == "Packets" && provider is PcapBinaryProvider) {
+                        enrichPcapPacketsTab(d, provider)
                     } else d
                     tabEntries += TabEntry(
                         PanelTab(desc.name) { sel -> TableTabContent(desc, sel) },
@@ -639,3 +645,91 @@ private fun enrichZipEntriesTab(
     priority = tab.priority,
     predefinedFilters = tab.predefinedFilters,
 )
+
+/**
+ * Enriches the PCAP "Packets" tab with a context-menu action that extracts
+ * the HTTP response body from a packet and opens it in a new editor tab.
+ */
+private fun enrichPcapPacketsTab(
+    tab: TableTabDescriptor,
+    provider: PcapBinaryProvider,
+): TableTabDescriptor {
+    val pcap = provider.parsedPcapFile ?: return tab
+    val packets = pcap.packets
+    val linkType = pcap.header.network
+
+    val dissectedCache = HashMap<Int, PcapDissectedPacket>()
+    fun dissected(index: Int): PcapDissectedPacket = dissectedCache.getOrPut(index) {
+        try {
+            PcapDissector.dissect(provider.bytes, packets[index], linkType)
+        } catch (_: Exception) {
+            PcapDissectedPacket("", "", "?", "")
+        }
+    }
+
+    val openBodyItem = RowContextMenuItemDescriptor(
+        labelProvider = { "Open HTTP Body" },
+        action = { index ->
+            val d = dissected(index)
+            if (d.httpBodyFileOffset < 0 || d.httpBodySize <= 0) return@RowContextMenuItemDescriptor
+            try {
+                val bodyBytes = provider.bytes
+                    .slice(d.httpBodyFileOffset.toInt(), d.httpBodySize)
+                    .toByteArray()
+                val ext = httpContentTypeToExtension(d.httpContentType)
+                val fileName = "http-body-packet-${index + 1}$ext"
+                postOpenHttpBodyToHost(fileName, bodyBytes, d.httpContentType)
+            } catch (_: Exception) {
+                // Extraction failed — silently ignore
+            }
+        },
+        isVisible = { index ->
+            val d = dissected(index)
+            d.httpBodyFileOffset >= 0 && d.httpBodySize > 0
+        },
+    )
+
+    return TableTabDescriptor(
+        name = tab.name,
+        columns = tab.columns,
+        rowCount = tab.rowCount,
+        defaultSortColumn = tab.defaultSortColumn,
+        defaultSortAscending = tab.defaultSortAscending,
+        rowSelectionProvider = tab.rowSelectionProvider,
+        rowAction = tab.rowAction,
+        contextMenuItems = tab.contextMenuItems + openBodyItem,
+        rowClickAction = tab.rowClickAction,
+        dynamicContextMenuProvider = tab.dynamicContextMenuProvider,
+        prologueText = tab.prologueText,
+        emptyMessage = tab.emptyMessage,
+        childrenProvider = tab.childrenProvider,
+        alwaysShowSearch = tab.alwaysShowSearch,
+        searchPlaceholder = tab.searchPlaceholder,
+        showIdColumn = tab.showIdColumn,
+        priority = tab.priority,
+        predefinedFilters = tab.predefinedFilters,
+    )
+}
+
+/** Maps an HTTP Content-Type to a file extension hint. */
+private fun httpContentTypeToExtension(contentType: String?): String {
+    if (contentType == null) return ""
+    val mime = contentType.substringBefore(';').trim().lowercase()
+    return when {
+        mime == "application/json" -> ".json"
+        mime == "application/xml" || mime == "text/xml" -> ".xml"
+        mime == "text/html" -> ".html"
+        mime == "text/css" -> ".css"
+        mime == "text/javascript" || mime == "application/javascript" -> ".js"
+        mime == "text/plain" -> ".txt"
+        mime == "application/octet-stream" -> ".bin"
+        mime == "application/wasm" -> ".wasm"
+        mime == "application/zip" -> ".zip"
+        mime == "image/png" -> ".png"
+        mime == "image/jpeg" -> ".jpg"
+        mime == "image/gif" -> ".gif"
+        mime == "image/svg+xml" -> ".svg"
+        mime.startsWith("text/") -> ".txt"
+        else -> ""
+    }
+}
