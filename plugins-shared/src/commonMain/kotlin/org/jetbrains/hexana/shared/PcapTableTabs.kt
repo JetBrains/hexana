@@ -42,6 +42,18 @@ private fun pcapHeaderTab(pcap: PcapFile): TableTabDescriptor {
 
 private const val PACKET_HEADER_SIZE = 16
 
+/** Formats a relative timestamp as seconds with 6 or 9 decimal places (matching Wireshark). */
+private fun formatRelativeTime(seconds: Double, nsResolution: Boolean): String {
+    val decimals = if (nsResolution) 9 else 6
+    // Manual formatting to avoid platform-specific locale issues with Double.toString
+    val negative = seconds < 0
+    val abs = if (negative) -seconds else seconds
+    val wholePart = abs.toLong()
+    val fracPart = ((abs - wholePart) * (if (nsResolution) 1_000_000_000L else 1_000_000L) + 0.5).toLong()
+    val prefix = if (negative) "-" else ""
+    return "$prefix$wholePart.${fracPart.toString().padStart(decimals, '0')}"
+}
+
 private fun pcapPacketsTab(pcap: PcapFile, provider: PcapBinaryProvider): TableTabDescriptor? {
     val packets = pcap.packets
     if (packets.isEmpty()) return null
@@ -50,6 +62,12 @@ private fun pcapPacketsTab(pcap: PcapFile, provider: PcapBinaryProvider): TableT
         pcap.header.magic == org.jetbrains.hexana.pcap.PCAP_MAGIC_NSEC_BE
 
     val linkType = pcap.header.network
+
+    // Reference timestamp from the first packet for relative display (like Wireshark)
+    val firstPacket = packets[0]
+    val refSec = firstPacket.tsSec
+    val refUsec = firstPacket.tsUsec
+    val fracDivisor = if (nsResolution) 1_000_000_000.0 else 1_000_000.0
 
     // Lazily dissect packets on first access per row
     val dissectedCache = HashMap<Int, PcapDissectedPacket>()
@@ -65,14 +83,11 @@ private fun pcapPacketsTab(pcap: PcapFile, provider: PcapBinaryProvider): TableT
         name = "Packets",
         columns = listOf(
             col("No.", ColumnWidth.MeasuredMin("99999")) { CellValue(it + 1) },
-            col("Time", ColumnWidth.MeasuredMin("0000000000.000000")) { i ->
+            col("Time", ColumnWidth.MeasuredMin("00000.000000")) { i ->
                 val p = packets[i]
-                val frac = if (nsResolution) {
-                    p.tsUsec.toString().padStart(9, '0')
-                } else {
-                    p.tsUsec.toString().padStart(6, '0')
-                }
-                CellValue("${p.tsSec}.$frac")
+                val deltaSec = (p.tsSec - refSec).toDouble() + (p.tsUsec - refUsec).toDouble() / fracDivisor
+                val formatted = formatRelativeTime(deltaSec, nsResolution)
+                CellValue(formatted)
             },
             col("Source", ColumnWidth.MeasuredMin("000.000.000.000")) { CellValue(dissected(it).source) },
             col("Destination", ColumnWidth.MeasuredMin("000.000.000.000")) { CellValue(dissected(it).destination) },
