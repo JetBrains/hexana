@@ -139,8 +139,14 @@ Run the narrowest command that proves your change.
   it includes `teamcityCliTests` transitively plus the standalone MCP/server gates.
 - Run general TeamCity verification without CLI JVM gates: `./gradlew teamcityCiTests`. Its non-CLI task set remains
   unchanged during rollout and temporarily overlaps with the new core, VS Code, IntelliJ, and server aggregates.
-- Direct `idea-plugin/**` changes select the composite Patronus entrypoint, which delegates to the regular IntelliJ
-  Plugin Tests leaf. Broad Safe Merge still overlaps during rollout; shared/core fan-out remains deferred.
+- Direct `idea-plugin/**` changes select `InnoHub_HexFlow_IntellijPluginTestsPatronus`, which delegates to the regular
+  IntelliJ Plugin Tests leaf.
+- Patronus targeted checks retain broad Safe Merge overlap during rollout:
+  - root Gradle wrapper, catalog, build, and Karma inputs plus shared/core module paths select
+    `InnoHub_HexFlow_CoreTestsPatronus`, which fans out across all product test leaves
+  - `vscode-plugin/**` selects `InnoHub_HexFlow_VscodePluginTestsPatronus`
+  - `cli/**` and non-shared `mcp/**` paths select `InnoHub_HexFlow_ServerCliTestsPatronus`; `mcp/core/**`,
+    `mcp/scripting/**`, and `mcp/tools-generator/**` are excluded there and route through the Core composite
 - Run native standard CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli:nativeIntegrationTest`
 - Run native script CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli-script:nativeIntegrationTest`
 - Run TeamCity native integration surfaces: `./gradlew :mcp:assembleNativeMcpReleaseArtifacts`
