@@ -132,7 +132,9 @@ Run the narrowest command that proves your change.
 - Run installed script CLI tests: `./gradlew :cli:hexana-cli-script:integrationTest`
 - Run shared CLI process support tests (part of the TeamCity CLI JVM gate): `./gradlew :cli:integration-tests:test`
 - Run the dedicated TeamCity CLI JVM gate: `./gradlew teamcityCliTests`
-- Run general TeamCity verification without CLI JVM gates: `./gradlew teamcityCiTests`
+- Run the dedicated TeamCity IntelliJ plugin test lane: `./gradlew teamcityIntellijPluginTests`
+- Run general TeamCity verification without CLI JVM gates: `./gradlew teamcityCiTests` (temporarily still overlaps
+  with the IntelliJ plugin lane during rollout)
 - Run native standard CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli:nativeIntegrationTest`
 - Run native script CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli-script:nativeIntegrationTest`
 - Run TeamCity native integration surfaces: `./gradlew :mcp:assembleNativeMcpReleaseArtifacts`

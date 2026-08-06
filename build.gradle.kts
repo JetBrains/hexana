@@ -101,6 +101,11 @@ val teamcityCiTestTaskPaths = listOf(
     ":mcp:vscode-server:test",
 )
 
+val teamcityIntellijPluginTestTaskPaths = listOf(
+    ":idea-plugin:test",
+    ":idea-plugin:verifyHexanaToolsetUpToDate",
+)
+
 val teamcityCliTestTaskPaths = listOf(
     ":cli:runtime:build",
     ":cli:metadata:build",
@@ -114,6 +119,21 @@ val teamcityCliTestTaskPaths = listOf(
     ":cli:hexana-cli-script:integrationTest",
     ":mcp:verifyCliR8ReleaseArchives",
 )
+
+tasks.register("verifyTeamcityIntellijPluginTestsCoverage") {
+    group = "verification"
+    description = "Verify the TeamCity IntelliJ plugin aggregate includes all required test tasks."
+    doLast {
+        val requiredTaskPaths = listOf(
+            ":idea-plugin:test",
+            ":idea-plugin:verifyHexanaToolsetUpToDate",
+        )
+        val missingTaskPaths = requiredTaskPaths.filterNot(teamcityIntellijPluginTestTaskPaths::contains)
+        check(missingTaskPaths.isEmpty()) {
+            "teamcityIntellijPluginTests is missing required IntelliJ plugin test tasks: ${missingTaskPaths.joinToString()}"
+        }
+    }
+}
 
 tasks.register("verifyTeamcityCliTestsReleaseGateCoverage") {
     group = "verification"
@@ -143,6 +163,13 @@ tasks.register("teamcityCiTests") {
     group = "verification"
     description = "Aggregate general verification surfaces for the TeamCity Tests build."
     teamcityCiTestTaskPaths.forEach { dependsOn(it) }
+}
+
+tasks.register("teamcityIntellijPluginTests") {
+    group = "verification"
+    description = "Aggregate IntelliJ plugin tests for the TeamCity IntelliJ Plugin Tests build."
+    dependsOn("verifyTeamcityIntellijPluginTestsCoverage")
+    teamcityIntellijPluginTestTaskPaths.forEach { dependsOn(it) }
 }
 
 tasks.register("teamcityCliTests") {
