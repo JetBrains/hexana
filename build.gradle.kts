@@ -60,7 +60,64 @@ plugins.withType<WasmNodeJsRootPlugin> {
 
 // Aggregator lists driven by ci-configuration's build configurations.
 // The lists travel with the code branch so release branches stay self-contained.
-val teamcityCiTestTaskPaths = listOf(
+val teamcityCoreTestTaskPaths = listOf(
+    ":analytics:allTests",
+    ":binaryProvider:allTests",
+    ":debugInfo:dwarf:allTests",
+    ":disassembly:capstone-wasm:allTests",
+    ":disassembly:core:allTests",
+    ":disassembly:llvm-objdump:test",
+    ":encdec:allTests",
+    ":hexanaDocument:allTests",
+    ":jvm-jit:allTests",
+    ":parsing:arrow:allTests",
+    ":parsing:codec:allTests",
+    ":parsing:common:allTests",
+    ":parsing:dex:allTests",
+    ":parsing:elf:allTests",
+    ":parsing:flatbuffers:allTests",
+    ":parsing:javaBytecode:allTests",
+    ":parsing:macho:allTests",
+    ":parsing:parquet:allTests",
+    ":parsing:pe:allTests",
+    ":parsing:protobuf:allTests",
+    ":parsing:thrift:allTests",
+    ":parsing:zip:allTests",
+    ":plugins-shared:allTests",
+    ":wasmParser:allTests",
+)
+
+val teamcityVscodePluginTestTaskPaths = listOf(
+    ":vscode-plugin:extension-lib:allTests",
+)
+
+val teamcityIntellijPluginTestTaskPaths = listOf(
+    ":idea-plugin:test",
+    ":idea-plugin:verifyHexanaToolsetUpToDate",
+)
+
+val teamcityServerCliTestTaskPaths = listOf(
+    ":mcp:tools-generator:test",
+    ":mcp:core:build",
+    ":mcp:scripting:test",
+    ":mcp:server:test",
+    ":mcp:server:verifyMcpRuntimeClassFileVersions",
+    ":mcp:server:verifyMcpServerOwnershipBoundary",
+    ":mcp:server:verifyNativeMcpVersionSmokeAssertion",
+    ":mcp:server:verifyHexanaToolDispatcherUpToDate",
+    ":mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate",
+    ":mcp:server:integrationTest",
+    ":mcp:vscode-server:test",
+)
+
+val teamcityCiOwnedTestTaskPaths =
+    teamcityCoreTestTaskPaths +
+        teamcityVscodePluginTestTaskPaths +
+        teamcityIntellijPluginTestTaskPaths +
+        teamcityServerCliTestTaskPaths
+
+// Keep the broad rollout aggregate in its pre-split order while ownership moves to dedicated lanes.
+val teamcityCiTestTaskOrder = listOf(
     ":analytics:allTests",
     ":binaryProvider:allTests",
     ":debugInfo:dwarf:allTests",
@@ -101,10 +158,9 @@ val teamcityCiTestTaskPaths = listOf(
     ":mcp:vscode-server:test",
 )
 
-val teamcityIntellijPluginTestTaskPaths = listOf(
-    ":idea-plugin:test",
-    ":idea-plugin:verifyHexanaToolsetUpToDate",
-)
+val teamcityCiTestTaskPaths =
+    teamcityCiTestTaskOrder.filter(teamcityCiOwnedTestTaskPaths::contains) +
+        teamcityCiOwnedTestTaskPaths.filterNot(teamcityCiTestTaskOrder::contains)
 
 val teamcityCliTestTaskPaths = listOf(
     ":cli:runtime:build",
@@ -120,6 +176,57 @@ val teamcityCliTestTaskPaths = listOf(
     ":mcp:verifyCliR8ReleaseArchives",
 )
 
+tasks.register("verifyTeamcityCoreTestsCoverage") {
+    group = "verification"
+    description = "Verify the TeamCity core aggregate includes all required shared test tasks."
+    doLast {
+        val requiredTaskPaths = listOf(
+            ":analytics:allTests",
+            ":binaryProvider:allTests",
+            ":debugInfo:dwarf:allTests",
+            ":disassembly:capstone-wasm:allTests",
+            ":disassembly:core:allTests",
+            ":disassembly:llvm-objdump:test",
+            ":encdec:allTests",
+            ":hexanaDocument:allTests",
+            ":jvm-jit:allTests",
+            ":parsing:arrow:allTests",
+            ":parsing:codec:allTests",
+            ":parsing:common:allTests",
+            ":parsing:dex:allTests",
+            ":parsing:elf:allTests",
+            ":parsing:flatbuffers:allTests",
+            ":parsing:javaBytecode:allTests",
+            ":parsing:macho:allTests",
+            ":parsing:parquet:allTests",
+            ":parsing:pe:allTests",
+            ":parsing:protobuf:allTests",
+            ":parsing:thrift:allTests",
+            ":parsing:zip:allTests",
+            ":plugins-shared:allTests",
+            ":wasmParser:allTests",
+        )
+        val missingTaskPaths = requiredTaskPaths.filterNot(teamcityCoreTestTaskPaths::contains)
+        check(missingTaskPaths.isEmpty()) {
+            "teamcityCoreTests is missing required core test tasks: ${missingTaskPaths.joinToString()}"
+        }
+    }
+}
+
+tasks.register("verifyTeamcityVscodePluginTestsCoverage") {
+    group = "verification"
+    description = "Verify the TeamCity VS Code plugin aggregate includes all required test tasks."
+    doLast {
+        val requiredTaskPaths = listOf(
+            ":vscode-plugin:extension-lib:allTests",
+        )
+        val missingTaskPaths = requiredTaskPaths.filterNot(teamcityVscodePluginTestTaskPaths::contains)
+        check(missingTaskPaths.isEmpty()) {
+            "teamcityVscodePluginTests is missing required VS Code plugin test tasks: ${missingTaskPaths.joinToString()}"
+        }
+    }
+}
+
 tasks.register("verifyTeamcityIntellijPluginTestsCoverage") {
     group = "verification"
     description = "Verify the TeamCity IntelliJ plugin aggregate includes all required test tasks."
@@ -131,6 +238,51 @@ tasks.register("verifyTeamcityIntellijPluginTestsCoverage") {
         val missingTaskPaths = requiredTaskPaths.filterNot(teamcityIntellijPluginTestTaskPaths::contains)
         check(missingTaskPaths.isEmpty()) {
             "teamcityIntellijPluginTests is missing required IntelliJ plugin test tasks: ${missingTaskPaths.joinToString()}"
+        }
+    }
+}
+
+tasks.register("verifyTeamcityServerCliTestsCoverage") {
+    group = "verification"
+    description = "Verify the TeamCity server and CLI aggregate includes all required MCP server test tasks."
+    doLast {
+        val requiredTaskPaths = listOf(
+            ":mcp:tools-generator:test",
+            ":mcp:core:build",
+            ":mcp:scripting:test",
+            ":mcp:server:test",
+            ":mcp:server:verifyMcpRuntimeClassFileVersions",
+            ":mcp:server:verifyMcpServerOwnershipBoundary",
+            ":mcp:server:verifyNativeMcpVersionSmokeAssertion",
+            ":mcp:server:verifyHexanaToolDispatcherUpToDate",
+            ":mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate",
+            ":mcp:server:integrationTest",
+            ":mcp:vscode-server:test",
+        )
+        val missingTaskPaths = requiredTaskPaths.filterNot(teamcityServerCliTestTaskPaths::contains)
+        check(missingTaskPaths.isEmpty()) {
+            "teamcityServerCliTests is missing required MCP server test tasks: ${missingTaskPaths.joinToString()}"
+        }
+    }
+}
+
+tasks.register("verifyTeamcityCiTestsPartition") {
+    group = "verification"
+    description = "Verify dedicated TeamCity lanes exactly partition the broad CI test aggregate."
+    doLast {
+        val duplicateTaskPaths =
+            teamcityCiOwnedTestTaskPaths
+                .groupingBy { it }
+                .eachCount()
+                .filterValues { it > 1 }
+                .keys
+        val missingTaskPaths = teamcityCiTestTaskOrder.filterNot(teamcityCiOwnedTestTaskPaths::contains)
+        val unexpectedTaskPaths = teamcityCiOwnedTestTaskPaths.filterNot(teamcityCiTestTaskOrder::contains)
+        check(duplicateTaskPaths.isEmpty() && missingTaskPaths.isEmpty() && unexpectedTaskPaths.isEmpty()) {
+            "TeamCity test ownership must exactly partition teamcityCiTests; " +
+                "duplicates: ${duplicateTaskPaths.joinToString()}, " +
+                "missing: ${missingTaskPaths.joinToString()}, " +
+                "unexpected: ${unexpectedTaskPaths.joinToString()}"
         }
     }
 }
@@ -162,7 +314,22 @@ tasks.register("verifyTeamcityCliTestsReleaseGateCoverage") {
 tasks.register("teamcityCiTests") {
     group = "verification"
     description = "Aggregate general verification surfaces for the TeamCity Tests build."
+    dependsOn("verifyTeamcityCiTestsPartition")
     teamcityCiTestTaskPaths.forEach { dependsOn(it) }
+}
+
+tasks.register("teamcityCoreTests") {
+    group = "verification"
+    description = "Aggregate shared core tests for the TeamCity Core Tests build."
+    dependsOn("verifyTeamcityCoreTestsCoverage")
+    teamcityCoreTestTaskPaths.forEach { dependsOn(it) }
+}
+
+tasks.register("teamcityVscodePluginTests") {
+    group = "verification"
+    description = "Aggregate VS Code plugin tests for the TeamCity VS Code Plugin Tests build."
+    dependsOn("verifyTeamcityVscodePluginTestsCoverage")
+    teamcityVscodePluginTestTaskPaths.forEach { dependsOn(it) }
 }
 
 tasks.register("teamcityIntellijPluginTests") {
@@ -177,6 +344,14 @@ tasks.register("teamcityCliTests") {
     description = "Aggregate CLI-owned JVM release gates for the TeamCity CLI Tests build."
     dependsOn("verifyTeamcityCliTestsReleaseGateCoverage")
     teamcityCliTestTaskPaths.forEach { dependsOn(it) }
+}
+
+tasks.register("teamcityServerCliTests") {
+    group = "verification"
+    description = "Aggregate CLI and MCP server tests for the TeamCity Server and CLI Tests build."
+    dependsOn("verifyTeamcityServerCliTestsCoverage")
+    dependsOn("teamcityCliTests")
+    teamcityServerCliTestTaskPaths.forEach { dependsOn(it) }
 }
 
 subprojects {
