@@ -15,6 +15,7 @@ import org.jetbrains.hexana.providers.PcapBinaryProvider
 import org.jetbrains.hexana.providers.SbomLocator
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.shared.RowContextMenuItemDescriptor
 import org.jetbrains.hexana.shared.TableTabDescriptor
@@ -103,6 +104,7 @@ fun HexanaPanel(
             // the same priority level.
             val enricher = provider.getTabsEnricher(host)
             val zipProvider = provider as? ZipBinaryProvider
+            val tarProvider = provider as? TarBinaryProvider
             data class TabEntry(val tab: PanelTab, val priority: TabPriority, val providerIndex: Int)
             val tabEntries = mutableListOf<TabEntry>()
             for ((providerIndex, p) in TableTabsProviderRegistry.providers.withIndex()) {
@@ -110,6 +112,8 @@ fun HexanaPanel(
                 for (d in enriched) {
                     val desc = if (d.name == "Entries" && zipProvider != null) {
                         enrichZipEntriesTab(d, zipProvider.displayEntries, host)
+                    } else if (d.name == "Entries" && tarProvider != null) {
+                        enrichTarEntriesTab(d, tarProvider.displayEntries, host)
                     } else if (d.name == "Members" && provider is ArchiveBinaryProvider) {
                         enrichArchiveMembersTab(d, provider, host)
                     } else if (d.name == "Packets" && provider is PcapBinaryProvider) {
@@ -686,6 +690,42 @@ private fun enrichZipEntriesTab(
             compressedSize = entry.compressedSize,
             uncompressedSize = entry.uncompressedSize,
             compressionMethod = entry.compressionMethod,
+        )
+    },
+    dynamicContextMenuProvider = tab.dynamicContextMenuProvider,
+    prologueText = tab.prologueText,
+    emptyMessage = tab.emptyMessage,
+    childrenProvider = tab.childrenProvider,
+    alwaysShowSearch = tab.alwaysShowSearch,
+    searchPlaceholder = tab.searchPlaceholder,
+    showIdColumn = tab.showIdColumn,
+    priority = tab.priority,
+    predefinedFilters = tab.predefinedFilters,
+)
+
+/**
+ * Enriches the TAR "Entries" tab descriptor with a row-click action that
+ * posts the entry metadata to the extension host for extraction and opening.
+ */
+private fun enrichTarEntriesTab(
+    tab: TableTabDescriptor,
+    entries: List<org.jetbrains.hexana.tar.TarEntry>,
+    host: Host,
+): TableTabDescriptor = TableTabDescriptor(
+    name = tab.name,
+    columns = tab.columns,
+    rowCount = tab.rowCount,
+    defaultSortColumn = tab.defaultSortColumn,
+    defaultSortAscending = tab.defaultSortAscending,
+    rowSelectionProvider = tab.rowSelectionProvider,
+    rowAction = tab.rowAction,
+    contextMenuItems = tab.contextMenuItems,
+    rowClickAction = { index ->
+        val entry = entries[index]
+        postOpenTarEntryToHost(
+            name = entry.name,
+            dataOffset = entry.dataOffset,
+            size = entry.size,
         )
     },
     dynamicContextMenuProvider = tab.dynamicContextMenuProvider,

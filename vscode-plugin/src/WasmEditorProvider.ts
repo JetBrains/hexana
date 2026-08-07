@@ -523,6 +523,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 runExport(document, message);
             } else if (message.type === "open-zip-entry") {
                 this.openZipEntry(document, message);
+            } else if (message.type === "open-tar-entry") {
+                this.openTarEntry(document, message);
             } else if (message.type === "show-wat") {
                 this.showWatEditor(document, message);
             } else if (message.type === "open-text-file") {
@@ -816,6 +818,55 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             }
         }
         return null;
+    }
+
+    /**
+     * Handles an `open-tar-entry` message from the webview by slicing the
+     * raw bytes from the archive and opening the result in a new editor tab.
+     * TAR entries are stored uncompressed, so no decompression is needed.
+     */
+    private async openTarEntry(
+        document: WasmDocument,
+        message: {
+            name: string;
+            dataOffset: number;
+            size: number;
+        },
+    ): Promise<void> {
+        const { name, dataOffset, size } = message;
+        const childName = name.includes("/") ? name.substring(name.lastIndexOf("/") + 1) : name;
+        if (!childName) {
+            return;
+        }
+
+        const bytes = document.data.slice(dataOffset, dataOffset + size);
+
+        const ext = childName.includes(".") ? childName.substring(childName.lastIndexOf(".") + 1).toLowerCase() : "";
+        const binaryExtensions = new Set(["wasm", "class", "dex", "jar", "zip", "war", "apk", "bin", "elf", "exe", "so", "o", "a", "dll", "dylib", "tar", "tgz"]);
+
+        if (binaryExtensions.has(ext)) {
+            const parentKey = document.uri.toString();
+            const moduleUri = vscode.Uri.parse(
+                `hexana-module:/${childName}?parent=${encodeURIComponent(parentKey)}&entry=${encodeURIComponent(name)}`,
+            );
+            const key = moduleUri.toString();
+            inMemoryModules.set(key, { data: bytes, fileName: childName });
+
+            try {
+                await vscode.commands.executeCommand(
+                    "vscode.openWith",
+                    moduleUri,
+                    WasmEditorProvider.viewType,
+                );
+            } catch (err) {
+                console.error("[Hexana] Failed to open tar entry:", err);
+                vscode.window.showErrorMessage(`Failed to open "${childName}": ${err}`);
+            }
+        } else {
+            const content = new TextDecoder("utf-8").decode(bytes);
+            const doc = await vscode.workspace.openTextDocument({ content, language: ext || undefined });
+            await vscode.window.showTextDocument(doc, { preview: true });
+        }
     }
 
     /**

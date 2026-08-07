@@ -308,7 +308,7 @@ fun EditorToolbar(
                     onClick { host.navigateToParent() }
                 }) {
                     val parentExt = parentName.substringAfterLast('.', "").lowercase()
-                    val parentLabel = if (parentExt in setOf("jar", "zip", "war", "ear", "apk", "aar")) {
+                    val parentLabel = if (parentExt in setOf("jar", "zip", "war", "ear", "apk", "aar", "tar", "tgz")) {
                         "Entry in $parentName"
                     } else {
                         "Submodule of $parentName"

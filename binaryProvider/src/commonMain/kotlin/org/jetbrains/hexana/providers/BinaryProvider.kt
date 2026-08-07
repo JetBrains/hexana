@@ -38,6 +38,8 @@ import org.jetbrains.hexana.providers.pe.PeImportLibrary
 import org.jetbrains.hexana.providers.pe.PeOptionalHeader
 import org.jetbrains.hexana.providers.pe.PeParser
 import org.jetbrains.hexana.providers.pe.PeSection
+import org.jetbrains.hexana.tar.TarEntry
+import org.jetbrains.hexana.tar.TarParser
 import org.jetbrains.hexana.zip.ZipEntry
 import org.jetbrains.hexana.zip.ZipParser
 import org.jetbrains.hexana.wasm.WasmModule
@@ -194,6 +196,35 @@ class ZipBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvi
                 buffer[2] == 0x03.toByte() &&
                 buffer[3] == 0x04.toByte()
         }
+    }
+}
+
+/**
+ * Provider for TAR archives (plain `.tar` and decompressed `.tar.gz` / `.tgz`).
+ *
+ * Lazily parses the tar header chain once and caches the entry list so that
+ * table-tab providers and enrichers can reuse it without re-parsing.
+ */
+class TarBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvider {
+    override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
+
+    /** All entries from the TAR archive, or empty on parse failure. */
+    val tarEntries: List<TarEntry> by lazy {
+        try {
+            TarParser.parse(sharedBytes.duplicate().position(0))
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    /** Non-directory entries suitable for display in the entries table. */
+    val displayEntries: List<TarEntry> by lazy {
+        tarEntries.filter { !it.isDirectory }
+    }
+
+    companion object {
+        /** Delegates to [TarParser.isTar]. */
+        fun isTar(buffer: CommonByteBuffer): Boolean = TarParser.isTar(buffer)
     }
 }
 
@@ -653,6 +684,7 @@ fun nativeOrGenericBinaryProvider(
 ): BinaryProvider {
     return when {
         ZipBinaryProvider.isZip(sharedBytes) -> ZipBinaryProvider(sharedBytes)
+        TarBinaryProvider.isTar(sharedBytes) -> TarBinaryProvider(sharedBytes)
         ClassFileBinaryProvider.isClassFile(sharedBytes) -> ClassFileBinaryProvider(sharedBytes.duplicate().position(0))
         DexBinaryProvider.isDexFile(sharedBytes) -> DexBinaryProvider(sharedBytes.duplicate().position(0))
         PcapBinaryProvider.isPcapFile(sharedBytes) -> PcapBinaryProvider(sharedBytes.duplicate().position(0))

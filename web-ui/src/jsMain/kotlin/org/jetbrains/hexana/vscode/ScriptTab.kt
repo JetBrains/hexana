@@ -71,6 +71,7 @@ private fun wrapForJs(value: Any?): dynamic {
         is CoffBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapCoffBinaryProvider(obj, value) }
         is ArchiveBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapArchiveBinaryProvider(obj, value) }
         is ZipBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapZipBinaryProvider(obj, value) }
+        is TarBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapTarBinaryProvider(obj, value) }
         is ClassFileBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapClassFileBinaryProvider(obj, value) }
         is DexBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapDexBinaryProvider(obj, value) }
         is GenericBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapGenericBinaryProvider(obj, value) }
@@ -137,6 +138,11 @@ private fun wrapGenericBinaryProvider(obj: dynamic, p: GenericBinaryProvider) {
 
 private fun wrapZipBinaryProvider(obj: dynamic, p: ZipBinaryProvider) {
     defineLazyProp(obj, "zipEntries") { p.zipEntries }
+    defineLazyProp(obj, "displayEntries") { p.displayEntries }
+}
+
+private fun wrapTarBinaryProvider(obj: dynamic, p: TarBinaryProvider) {
+    defineLazyProp(obj, "tarEntries") { p.tarEntries }
     defineLazyProp(obj, "displayEntries") { p.displayEntries }
 }
 

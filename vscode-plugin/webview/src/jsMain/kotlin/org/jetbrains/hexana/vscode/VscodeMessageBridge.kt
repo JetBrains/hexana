@@ -209,6 +209,25 @@ fun postOpenZipEntryToHost(
 }
 
 /**
+ * Asks the extension host to open a TAR entry in a new editor tab.
+ *
+ * TAR entries are stored uncompressed, so the extension host simply
+ * slices the raw bytes from the archive document.
+ */
+fun postOpenTarEntryToHost(
+    name: String,
+    dataOffset: Long,
+    size: Long,
+) {
+    val msg = js("{}")
+    msg.type = "open-tar-entry"
+    msg.name = name
+    msg.dataOffset = dataOffset.toDouble()
+    msg.size = size.toDouble()
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to overwrite the original file with [bytes].
  */
 fun postOverwriteFileToHost(bytes: ByteArray) {

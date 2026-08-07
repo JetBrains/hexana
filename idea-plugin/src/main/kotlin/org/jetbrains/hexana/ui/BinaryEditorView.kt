@@ -62,8 +62,10 @@ import org.jetbrains.hexana.ui.panel.*
 import org.jetbrains.hexana.pcap.PcapDissectedPacket
 import org.jetbrains.hexana.pcap.PcapDissector
 import org.jetbrains.hexana.providers.PcapBinaryProvider
+import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.shared.RowContextMenuItemDescriptor
+import org.jetbrains.hexana.tar.TarEntry
 import org.jetbrains.hexana.zip.ZipEntry
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
@@ -82,6 +84,7 @@ internal fun BinaryEditorView(
     wasmByteOffsetNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
     classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?> = remember { MutableStateFlow(null) },
     onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
+    onOpenTarEntry: ((TarEntry) -> Unit)? = null,
     decompiledContentPanel: Panel? = null,
 ) {
     // Phase F: every opened file gets one editable BinaryDocument shared by
@@ -352,6 +355,7 @@ internal fun BinaryEditorView(
                                     state = state,
                                     archiveName = fileName,
                                     onOpenZipEntry = onOpenZipEntry,
+                                    onOpenTarEntry = onOpenTarEntry,
                                 )
                                 withContext(Dispatchers.Main) {
                                     replacePlaceholders(panels, listOf(panel))
@@ -396,6 +400,7 @@ internal fun BinaryEditorView(
                             binaryProvider.resolveOrdinaryTabPanel(
                                 tab = tab, state = state,
                                 archiveName = fileName, onOpenZipEntry = onOpenZipEntry,
+                                onOpenTarEntry = onOpenTarEntry,
                             )
                         }
                         val groupedPanels = grouped.mapNotNull { g ->
@@ -1032,9 +1037,12 @@ private fun BinaryProvider.resolveOrdinaryTabPanel(
     state: HexViewStateHolder,
     archiveName: String? = null,
     onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
+    onOpenTarEntry: ((TarEntry) -> Unit)? = null,
 ): Panel {
     return if (tab.name == "Entries" && onOpenZipEntry != null && this is ZipBinaryProvider) {
         enrichZipEntriesTab(tab, onOpenZipEntry).toPanel(state)
+    } else if (tab.name == "Entries" && onOpenTarEntry != null && this is TarBinaryProvider) {
+        enrichTarEntriesTab(tab, onOpenTarEntry).toPanel(state)
     } else if (tab.name == "Members" && this is ArchiveBinaryProvider) {
         enrichArchiveMembersTab(tab, state.project, archiveName).toPanel(state)
     } else if (tab.name == "Packets" && this is PcapBinaryProvider) {
@@ -1083,6 +1091,38 @@ private fun BinaryProvider.resolveGroupedTabPanel(
 private fun ZipBinaryProvider.enrichZipEntriesTab(
     tab: TableTabDescriptor,
     onOpenEntry: (ZipEntry) -> Unit,
+): TableTabDescriptor {
+    val entries = displayEntries
+    return TableTabDescriptor(
+        name = tab.name,
+        columns = tab.columns,
+        rowCount = tab.rowCount,
+        defaultSortColumn = tab.defaultSortColumn,
+        defaultSortAscending = tab.defaultSortAscending,
+        rowSelectionProvider = tab.rowSelectionProvider,
+        rowAction = tab.rowAction,
+        contextMenuItems = tab.contextMenuItems,
+        rowClickAction = { index -> onOpenEntry(entries[index]) },
+        dynamicContextMenuProvider = tab.dynamicContextMenuProvider,
+        prologueText = tab.prologueText,
+        emptyMessage = tab.emptyMessage,
+        childrenProvider = tab.childrenProvider,
+        alwaysShowSearch = tab.alwaysShowSearch,
+        searchPlaceholder = tab.searchPlaceholder,
+        showIdColumn = tab.showIdColumn,
+        priority = tab.priority,
+        predefinedFilters = tab.predefinedFilters,
+    )
+}
+
+/**
+ * Enriches the TAR "Entries" tab descriptor with a row-click action that
+ * opens the clicked entry via [onOpenEntry]. The entry list is obtained
+ * from the [TarBinaryProvider]'s cached [TarBinaryProvider.displayEntries].
+ */
+private fun TarBinaryProvider.enrichTarEntriesTab(
+    tab: TableTabDescriptor,
+    onOpenEntry: (TarEntry) -> Unit,
 ): TableTabDescriptor {
     val entries = displayEntries
     return TableTabDescriptor(

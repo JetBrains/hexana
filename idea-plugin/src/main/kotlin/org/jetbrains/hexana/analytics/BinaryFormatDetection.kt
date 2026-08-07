@@ -16,6 +16,7 @@ import org.jetbrains.hexana.providers.ParquetBinaryProvider
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 
 /**
@@ -50,6 +51,7 @@ internal fun binaryFormatOf(
         is ClassFileBinaryProvider -> return HexanaEvent.BinaryFormat.CLASS
         // ProtobufMessageBinaryProvider (explicit Open-As) intentionally reports as GENERIC — not an auto-detected format.
         is GenericBinaryProvider -> return HexanaEvent.BinaryFormat.GENERIC
+        is TarBinaryProvider -> return HexanaEvent.BinaryFormat.TAR
         // Zip / dex providers are classified by extension below (jar/war/apk/zip).
         is ZipBinaryProvider, is DexBinaryProvider, null -> Unit
     }
@@ -59,7 +61,13 @@ internal fun binaryFormatOf(
         "war" -> HexanaEvent.BinaryFormat.WAR
         "apk" -> HexanaEvent.BinaryFormat.APK
         "zip" -> HexanaEvent.BinaryFormat.ZIP
-        else -> HexanaEvent.BinaryFormat.GENERIC
+        "tar" -> HexanaEvent.BinaryFormat.TAR
+        "tgz" -> HexanaEvent.BinaryFormat.TAR
+        else -> if (file?.name?.endsWith(".tar.gz", ignoreCase = true) == true) {
+            HexanaEvent.BinaryFormat.TAR
+        } else {
+            HexanaEvent.BinaryFormat.GENERIC
+        }
     }
 }
 

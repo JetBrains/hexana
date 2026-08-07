@@ -337,6 +337,7 @@ object TableTabsProviderRegistry {
             NativeTableTabsProvider(),
             ArchiveTableTabsProvider(),
             ZipTableTabsProvider(),
+            TarTableTabsProvider(),
             ProtobufTableTabsProvider(),
             ProtobufMessageTableTabsProvider(),
             DexTableTabsProvider(),

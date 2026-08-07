@@ -10,6 +10,7 @@ import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 
 fun fileTypeDescription(
@@ -20,6 +21,7 @@ fun fileTypeDescription(
     is WasmComponentBinaryProvider -> "Component Model"
     is NativeBinaryProvider -> binaryProvider.nativeFormat.displayName
     is ZipBinaryProvider -> if (fileName.orEmpty().endsWith(".jar", true)) "Jar File" else "Zip File"
+    is TarBinaryProvider -> "Tar Archive"
     is ClassFileBinaryProvider -> "Class File"
     is DexBinaryProvider -> "Android DEX File"
     is PcapBinaryProvider -> if (binaryProvider.isPcapNg) "PCAP-NG Capture" else "PCAP Capture"

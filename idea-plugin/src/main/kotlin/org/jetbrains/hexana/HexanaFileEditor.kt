@@ -254,6 +254,10 @@ class HexanaFileEditor(
                     wasmByteOffsetNavFlow = wasmByteOffsetNavFlow,
                     classFileNavTargetFlow = classFileNavTargetFlow,
                     onOpenZipEntry = { entry -> openZipEntry(entry, commonBuffer) },
+                    onOpenTarEntry = { entry ->
+                        val tarBuffer = (binaryProvider as? TarBinaryProvider)?.bytes ?: commonBuffer
+                        openTarEntry(entry, tarBuffer)
+                    },
                     decompiledContentPanel = decompPanel,
                 )
             }
@@ -556,6 +560,15 @@ class HexanaFileEditor(
 
         if (ext == "arrow" || myFile.fileType is ArrowFileType || (ext == null && isArrowFileMagic(commonBuffer))) {
             return ArrowBinaryProvider(commonBuffer, ArrowFormat.FILE, sourcePath)
+        }
+
+        if (ext == "tgz" || myFile.name.endsWith(".tar.gz", ignoreCase = true)) {
+            val decompressed = decompressGzip(commonBuffer)
+            return if (decompressed != null) {
+                TarBinaryProvider(decompressed)
+            } else {
+                nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
+            }
         }
 
         if (ext != "wasm") {
@@ -1049,6 +1062,30 @@ class HexanaFileEditor(
             true,
         )
     }
+
+    private fun openTarEntry(
+        entry: org.jetbrains.hexana.tar.TarEntry,
+        parentBuffer: CommonByteBuffer,
+    ) {
+        val childName = entry.name.substringAfterLast('/').ifEmpty { entry.name }
+        val bytes = extractTarEntry(entry, parentBuffer) ?: return
+
+        if (isHexanaSupportedExtension(childName) || isUnsupportedByIntelliJ(childName)) {
+            val childFile = HexanaBinaryVirtualFile(
+                name = childName,
+                buffer = bytes.toCommonByteBuffer(),
+                baseOffset = entry.dataOffset.toInt(),
+                parentFile = myFile,
+            )
+            FileEditorManager.getInstance(myProject).openFile(childFile, true)
+            return
+        }
+
+        FileEditorManager.getInstance(myProject).openFile(
+            LightVirtualFile(childName, String(bytes)),
+            true,
+        )
+    }
 }
 
 internal data class NativeDiffUiTestState(
@@ -1163,6 +1200,43 @@ private fun decompressZipEntry(
         }
         else -> null
     }
+}
+
+/**
+ * Extracts a TAR entry's data into a fresh ByteArray. TAR entries are stored
+ * uncompressed, so this is a simple byte slice. Returns `null` on failure.
+ */
+private fun extractTarEntry(
+    entry: org.jetbrains.hexana.tar.TarEntry,
+    parentBuffer: CommonByteBuffer,
+): ByteArray? = try {
+    val dataStart = entry.dataOffset.toInt()
+    val length = entry.size.toInt()
+    ByteArray(length).also { for (i in 0 until length) it[i] = parentBuffer[dataStart + i] }
+} catch (t: Throwable) {
+    HexanaLog.LOG.warn("Failed to extract tar entry ${entry.name}", t)
+    null
+}
+
+/**
+ * Decompresses a gzip-compressed [CommonByteBuffer] into a new buffer.
+ * Returns `null` on failure (not gzip, corrupt data, etc.).
+ */
+private fun decompressGzip(buffer: CommonByteBuffer): CommonByteBuffer? = try {
+    val size = buffer.size
+    val compressed = ByteArray(size).also { for (i in 0 until size) it[i] = buffer[i] }
+    val bais = java.io.ByteArrayInputStream(compressed)
+    val gzis = java.util.zip.GZIPInputStream(bais)
+    val baos = java.io.ByteArrayOutputStream(size * 2)
+    val tmp = ByteArray(8192)
+    var n: Int
+    while (gzis.read(tmp).also { n = it } >= 0) {
+        baos.write(tmp, 0, n)
+    }
+    gzis.close()
+    baos.toByteArray().toCommonByteBuffer()
+} catch (_: Throwable) {
+    null
 }
 
 /**

@@ -214,6 +214,7 @@ sealed class HexanaEvent {
         CLASS("class"),
         PARQUET("parquet"),
         ARROW_IPC("arrow_ipc"),
+        TAR("tar"),
         GENERIC("generic"),
         ;
 

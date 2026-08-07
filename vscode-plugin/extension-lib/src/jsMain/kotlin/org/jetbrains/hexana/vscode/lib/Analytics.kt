@@ -114,7 +114,13 @@ private fun resolveBinaryFormat(fileName: String, bytes: ByteArray): HexanaEvent
         "war" -> HexanaEvent.BinaryFormat.WAR
         "apk" -> HexanaEvent.BinaryFormat.APK
         "zip" -> HexanaEvent.BinaryFormat.ZIP
-        else -> HexanaEvent.BinaryFormat.GENERIC
+        "tar" -> HexanaEvent.BinaryFormat.TAR
+        "tgz" -> HexanaEvent.BinaryFormat.TAR
+        else -> if (fileName.endsWith(".tar.gz", ignoreCase = true)) {
+            HexanaEvent.BinaryFormat.TAR
+        } else {
+            HexanaEvent.BinaryFormat.GENERIC
+        }
     }
 }
 

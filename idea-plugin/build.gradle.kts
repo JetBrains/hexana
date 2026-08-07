@@ -98,6 +98,7 @@ dependencies {
     implementation(project(":parsing:javaBytecode"))
     implementation(project(":parsing:dex"))
     implementation(project(":parsing:zip"))
+    implementation(project(":parsing:tar"))
     implementation(project(":jvm-jit"))
     implementation(project(":jvm-jit-jmh"))
     // Capstone-WASM is the project's default disassembler; the JIT-view

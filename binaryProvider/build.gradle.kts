@@ -28,6 +28,7 @@ kotlin {
                 api(project(":parsing:macho"))
                 api(project(":parsing:pe"))
                 api(project(":parsing:zip"))
+                api(project(":parsing:tar"))
                 api(project(":parsing:javaBytecode"))
                 api(project(":parsing:dex"))
                 api(project(":parsing:pcap"))
