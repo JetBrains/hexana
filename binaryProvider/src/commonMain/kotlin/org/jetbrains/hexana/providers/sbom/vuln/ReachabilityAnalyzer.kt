@@ -1,7 +1,7 @@
-package org.jetbrains.hexana.nativebin.vuln
+package org.jetbrains.hexana.providers.sbom.vuln
 
-import org.jetbrains.hexana.nativebin.CdxComponent
-import org.jetbrains.hexana.nativebin.CycloneDxSbom
+import org.jetbrains.hexana.providers.sbom.CdxComponent
+import org.jetbrains.hexana.providers.sbom.CycloneDxSbom
 
 /**
  * How reachable a vulnerability is, given what the SBOM actually proves about the

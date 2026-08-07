@@ -10,6 +10,10 @@ import io.ktor.client.request.request
 import io.ktor.http.HttpMethod
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.hexana.HexanaLog
+import org.jetbrains.hexana.providers.sbom.vuln.OsvConstants
+import org.jetbrains.hexana.providers.sbom.vuln.OsvParser
+import org.jetbrains.hexana.providers.sbom.vuln.OsvRecord
+import org.jetbrains.hexana.providers.sbom.vuln.VulnerabilityMatcher
 import java.io.BufferedInputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -53,7 +57,7 @@ class OsvDatabase {
         Files.createDirectories(dbDir)
         indicator?.text = "Downloading OSV vulnerability database…"
         val bytes = HttpClient().use { client ->
-            runBlocking { client.request(MAVEN_ALL_ZIP_URL) { method = HttpMethod.Get }.body<ByteArray>() }
+            runBlocking { client.request(OsvConstants.MAVEN_ALL_ZIP_URL) { method = HttpMethod.Get }.body<ByteArray>() }
         }
         val tmp = dbDir.resolve("maven-all.zip.part")
         Files.write(tmp, bytes)
@@ -104,8 +108,6 @@ class OsvDatabase {
     }
 
     companion object {
-        const val MAVEN_ALL_ZIP_URL = "https://osv-vulnerabilities.storage.googleapis.com/Maven/all.zip"
-
         @JvmStatic
         fun getInstance(): OsvDatabase = service()
     }

@@ -1,14 +1,15 @@
-package org.jetbrains.hexana.nativebin
+package org.jetbrains.hexana.providers.sbom
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class CycloneDxParserTest {
 
     @Test
-    fun `parses cyclonedx 1_5 with object-form tools, licenses and vulnerabilities`() {
+    fun parseCycloneDx15WithObjectFormToolsLicensesAndVulnerabilities() {
         val json = """
             {
               "bomFormat": "CycloneDX",
@@ -32,7 +33,7 @@ class CycloneDxParserTest {
             }
         """.trimIndent()
 
-        val sbom = requireNotNull(CycloneDxParser.parse(json))
+        val sbom = assertNotNull(CycloneDxParser.parse(json))
 
         assertEquals("CycloneDX", sbom.bomFormat)
         assertEquals("1.5", sbom.specVersion)
@@ -63,7 +64,7 @@ class CycloneDxParserTest {
     }
 
     @Test
-    fun `parses cyclonedx 1_4 array-form tools`() {
+    fun parseCycloneDx14ArrayFormTools() {
         val json = """
             {
               "bomFormat": "CycloneDX",
@@ -73,31 +74,31 @@ class CycloneDxParserTest {
             }
         """.trimIndent()
 
-        val sbom = requireNotNull(CycloneDxParser.parse(json))
+        val sbom = assertNotNull(CycloneDxParser.parse(json))
         assertEquals(listOf("native-image 21"), sbom.tools)
         assertTrue(sbom.components.isEmpty())
     }
 
     @Test
-    fun `accepts a components array even without an explicit bomFormat`() {
+    fun acceptsComponentsArrayWithoutExplicitBomFormat() {
         val json = """{ "components": [ { "type": "library", "name": "x", "version": "1" } ] }"""
-        val sbom = requireNotNull(CycloneDxParser.parse(json))
+        val sbom = assertNotNull(CycloneDxParser.parse(json))
         assertEquals(1, sbom.components.size)
     }
 
     @Test
-    fun `rejects non-cyclonedx json`() {
+    fun rejectsNonCycloneDxJson() {
         assertNull(CycloneDxParser.parse("""{ "hello": "world" }"""))
     }
 
     @Test
-    fun `rejects malformed json`() {
+    fun rejectsMalformedJson() {
         assertNull(CycloneDxParser.parse("this is not json {"))
         assertNull(CycloneDxParser.parse("[1, 2, 3]"))
     }
 
     @Test
-    fun `parses class-level nested components, properties and dependency graph`() {
+    fun parsesClassLevelNestedComponentsPropertiesAndDependencyGraph() {
         val json = """
             {
               "bomFormat": "CycloneDX",
@@ -138,7 +139,7 @@ class CycloneDxParserTest {
             }
         """.trimIndent()
 
-        val sbom = requireNotNull(CycloneDxParser.parse(json))
+        val sbom = assertNotNull(CycloneDxParser.parse(json))
 
         assertEquals(1, sbom.components.size)
         val lib = sbom.components[0]

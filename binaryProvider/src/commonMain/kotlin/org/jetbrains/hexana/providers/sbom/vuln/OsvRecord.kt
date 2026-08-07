@@ -1,9 +1,12 @@
-package org.jetbrains.hexana.nativebin.vuln
+package org.jetbrains.hexana.providers.sbom.vuln
 
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
-import org.jetbrains.hexana.HexanaLog
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * A single OSV (Open Source Vulnerability) advisory record, reduced to the fields
@@ -32,7 +35,6 @@ data class OsvSeverity(val type: String, val score: String)
 
 data class OsvAffected(
     val ecosystem: String?,
-    /** Maven package as `groupId:artifactId`. */
     val packageName: String?,
     val ranges: List<OsvRange>,
     val versions: List<String>,
@@ -48,7 +50,7 @@ data class OsvEvent(val kind: Kind, val version: String) {
 object OsvParser {
 
     fun parseRecord(json: String): OsvRecord? {
-        val element = runCatching { JsonParser.parseString(json) }.getOrNull() ?: return null
+        val element = runCatching { Json.parseToJsonElement(json) }.getOrNull() ?: return null
         return (element as? JsonObject)?.let(::parseRecord)
     }
 
@@ -56,12 +58,12 @@ object OsvParser {
         val id = o.string("id") ?: return null
         return OsvRecord(
             id = id,
-            aliases = o.array("aliases")?.mapNotNull { it.takeIf { e -> e.isJsonPrimitive }?.asString }.orEmpty(),
+            aliases = o.array("aliases")?.mapNotNull { runCatching { it.jsonPrimitive.contentOrNull }.getOrNull() }.orEmpty(),
             summary = o.string("summary"),
             severities = parseSeverities(o.array("severity")),
             affected = parseAffected(o.array("affected")),
             references = o.array("references")
-                ?.mapNotNull { (it as? JsonObject)?.string("url") }
+                ?.mapNotNull { runCatching { (it as? JsonObject ?: it.jsonObject).string("url") }.getOrNull() }
                 .orEmpty(),
         )
     }
@@ -69,7 +71,7 @@ object OsvParser {
     private fun parseSeverities(arr: JsonArray?): List<OsvSeverity> {
         if (arr == null) return emptyList()
         return arr.mapNotNull { element ->
-            val o = element as? JsonObject ?: return@mapNotNull null
+            val o = runCatching { element.jsonObject }.getOrNull() ?: return@mapNotNull null
             val type = o.string("type") ?: return@mapNotNull null
             OsvSeverity(type, o.string("score") ?: return@mapNotNull null)
         }
@@ -78,14 +80,14 @@ object OsvParser {
     private fun parseAffected(arr: JsonArray?): List<OsvAffected> {
         if (arr == null) return emptyList()
         return arr.mapNotNull { element ->
-            val o = element as? JsonObject ?: return@mapNotNull null
+            val o = runCatching { element.jsonObject }.getOrNull() ?: return@mapNotNull null
             val pkg = o.obj("package")
             OsvAffected(
                 ecosystem = pkg?.string("ecosystem"),
                 packageName = pkg?.string("name"),
                 ranges = parseRanges(o.array("ranges")),
                 versions = o.array("versions")
-                    ?.mapNotNull { it.takeIf { e -> e.isJsonPrimitive }?.asString }
+                    ?.mapNotNull { runCatching { it.jsonPrimitive.contentOrNull }.getOrNull() }
                     .orEmpty(),
             )
         }
@@ -94,25 +96,48 @@ object OsvParser {
     private fun parseRanges(arr: JsonArray?): List<OsvRange> {
         if (arr == null) return emptyList()
         return arr.mapNotNull { element ->
-            val o = element as? JsonObject ?: return@mapNotNull null
-            val events = o.array("events")?.mapNotNull { ev -> (ev as? JsonObject)?.let(::parseEvent) }.orEmpty()
+            val o = runCatching { element.jsonObject }.getOrNull() ?: return@mapNotNull null
+            val events = o.array("events")?.mapNotNull { ev ->
+                runCatching { ev.jsonObject }.getOrNull()?.let(::parseEvent)
+            }.orEmpty()
             OsvRange(type = o.string("type") ?: "ECOSYSTEM", events = events)
         }
     }
 
     private fun parseEvent(o: JsonObject): OsvEvent? = when {
-        o.has("introduced") -> OsvEvent(OsvEvent.Kind.Introduced, o.string("introduced") ?: "0")
-        o.has("fixed") -> o.string("fixed")?.let { OsvEvent(OsvEvent.Kind.Fixed, it) }
-        o.has("last_affected") -> o.string("last_affected")?.let { OsvEvent(OsvEvent.Kind.LastAffected, it) }
+        o.containsKey("introduced") -> OsvEvent(OsvEvent.Kind.Introduced, o.string("introduced") ?: "0")
+        o.containsKey("fixed") -> o.string("fixed")?.let { OsvEvent(OsvEvent.Kind.Fixed, it) }
+        o.containsKey("last_affected") -> o.string("last_affected")?.let { OsvEvent(OsvEvent.Kind.LastAffected, it) }
         else -> null
     }
 
-    fun logSkip(context: String, e: Throwable) {
-        HexanaLog.LOG.warn("OSV parse skipped: $context", e)
+    /**
+     * Parses the querybatch response envelope from `api.osv.dev/v1/querybatch`.
+     * Returns a map from purl (in the original [purls] order) to the list of advisory ids
+     * matching that purl. Purls with no matches map to an empty list.
+     */
+    fun parseQueryBatchResponse(json: String, purls: List<String>): Map<String, List<String>> {
+        val root = runCatching { Json.parseToJsonElement(json).jsonObject }.getOrNull() ?: return emptyMap()
+        val results = root.array("results") ?: return emptyMap()
+        val out = LinkedHashMap<String, List<String>>(purls.size)
+        for ((index, purl) in purls.withIndex()) {
+            val result = runCatching { results[index].jsonObject }.getOrNull()
+            val ids = result?.array("vulns")?.mapNotNull { entry ->
+                runCatching { entry.jsonObject.string("id") }.getOrNull()
+            }.orEmpty()
+            out[purl] = ids
+        }
+        return out
     }
 
-    // --- gson helpers ---
-    private fun JsonObject.string(key: String): String? = get(key)?.takeIf { it.isJsonPrimitive }?.asString
-    private fun JsonObject.array(key: String): JsonArray? = get(key)?.takeIf { it.isJsonArray }?.asJsonArray
-    private fun JsonObject.obj(key: String): JsonObject? = get(key)?.takeIf { it.isJsonObject }?.asJsonObject
+    // --- kotlinx.serialization.json helpers ---------------------------------
+
+    private fun JsonObject.string(key: String): String? =
+        get(key)?.let { e -> runCatching { e.jsonPrimitive.contentOrNull }.getOrNull() }
+
+    private fun JsonObject.array(key: String): JsonArray? =
+        get(key)?.let { e -> runCatching { e.jsonArray }.getOrNull() }
+
+    private fun JsonObject.obj(key: String): JsonObject? =
+        get(key)?.let { e -> runCatching { e.jsonObject }.getOrNull() }
 }

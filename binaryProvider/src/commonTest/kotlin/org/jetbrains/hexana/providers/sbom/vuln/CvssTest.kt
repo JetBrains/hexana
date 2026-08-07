@@ -1,8 +1,8 @@
-package org.jetbrains.hexana.nativebin.vuln
+package org.jetbrains.hexana.providers.sbom.vuln
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class CvssTest {
 

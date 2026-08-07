@@ -1,10 +1,11 @@
-package org.jetbrains.hexana.nativebin.vuln
+package org.jetbrains.hexana.providers.sbom.vuln
 
-import org.jetbrains.hexana.nativebin.CdxComponent
-import org.jetbrains.hexana.nativebin.CycloneDxSbom
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.jetbrains.hexana.providers.sbom.CdxComponent
+import org.jetbrains.hexana.providers.sbom.CdxProperty
+import org.jetbrains.hexana.providers.sbom.CycloneDxSbom
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ReachabilityAnalyzerTest {
 
@@ -96,7 +97,7 @@ class ReachabilityAnalyzerTest {
             purl = null,
             bomRef = null,
             licenses = emptyList(),
-            properties = listOf(org.jetbrains.hexana.nativebin.CdxProperty("Classes", survivingClass)),
+            properties = listOf(CdxProperty("Classes", survivingClass)),
             children = emptyList(),
         )
         val module = CdxComponent("library", null, "netty.codec.http2", null, null, null, emptyList(), emptyList(), listOf(file))

@@ -1,10 +1,10 @@
-package org.jetbrains.hexana.nativebin.vuln
+package org.jetbrains.hexana.providers.sbom.vuln
 
 /**
  * Best-effort Maven version comparison + OSV range containment. This is a pragmatic
  * subset of Maven's `ComparableVersion` semantics — enough for vulnerability range
  * checks on real-world release versions, not a full reimplementation:
- *  - dot/dash/underscore separated, with digit↔letter boundaries also splitting;
+ *  - dot/dash/underscore separated, with digit/letter boundaries also splitting;
  *  - numeric segments compared numerically; a numeric segment outranks a qualifier;
  *  - release synonyms (`final`/`ga`/`release`/empty) are dropped so `1.0.Final` == `1.0`;
  *  - known pre-release qualifiers order alpha < beta < milestone < rc < snapshot < release < sp.

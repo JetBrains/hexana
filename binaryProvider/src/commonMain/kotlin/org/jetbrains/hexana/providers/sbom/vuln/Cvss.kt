@@ -1,4 +1,4 @@
-package org.jetbrains.hexana.nativebin.vuln
+package org.jetbrains.hexana.providers.sbom.vuln
 
 import kotlin.math.floor
 import kotlin.math.min

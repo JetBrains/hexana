@@ -1,13 +1,17 @@
-package org.jetbrains.hexana.nativebin
+package org.jetbrains.hexana.providers.sbom
 
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
-import org.jetbrains.hexana.HexanaLog
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * A parsed CycloneDX SBOM, reduced to the fields the viewer renders. CycloneDX
- * has evolved across 1.4 → 1.6 (notably the `metadata.tools` shape and license
+ * has evolved across 1.4 to 1.6 (notably the `metadata.tools` shape and license
  * encodings), so [CycloneDxParser] reads the JSON tree defensively rather than
  * binding to a strict schema.
  */
@@ -32,7 +36,7 @@ data class CycloneDxSbom(
 /**
  * A CycloneDX component. For a default `--enable-sbom=embed` binary this is a flat
  * library entry. For a `--enable-sbom=class-level` binary the top-level library
- * carries nested [children] — module → source-file leaves whose [properties] list
+ * carries nested [children] — module to source-file leaves whose [properties] list
  * the classes/methods that survived native-image's dead-code elimination.
  */
 data class CdxComponent(
@@ -81,18 +85,17 @@ private fun splitNames(value: String?): List<String> =
 
 /**
  * Parses CycloneDX JSON (the format GraalVM Native Image embeds) into a
- * [CycloneDxSbom]. Uses gson's tree API — gson ships with the plugin, unlike the
- * `compileOnly` kotlinx-serialization — and tolerates missing/optional fields.
+ * [CycloneDxSbom]. Uses kotlinx.serialization's tree API (JsonElement) so it
+ * works on all KMP targets. Does not require the @Serializable annotation or
+ * code-gen — plain tree-walking only.
  */
 object CycloneDxParser {
 
     fun parse(json: String): CycloneDxSbom? {
         val root = try {
-            val element = JsonParser.parseString(json)
-            if (!element.isJsonObject) return null
-            element.asJsonObject
-        } catch (e: Exception) {
-            HexanaLog.LOG.warn("CycloneDX parse failed", e)
+            val element = Json.parseToJsonElement(json)
+            element as? JsonObject ?: return null
+        } catch (_: Exception) {
             return null
         }
 
@@ -142,20 +145,20 @@ object CycloneDxParser {
         }
     }
 
-    /** `dependencies[]` entries: `{ "ref": "<bom-ref>", "dependsOn": ["<bom-ref>", …] }`. */
+    /** `dependencies[]` entries: `{ "ref": "<bom-ref>", "dependsOn": ["<bom-ref>", ...] }`. */
     private fun parseDependencies(arr: JsonArray?): List<CdxDependency> {
         if (arr == null) return emptyList()
         return arr.mapNotNull { element ->
             val o = element as? JsonObject ?: return@mapNotNull null
             val ref = o.string("ref") ?: return@mapNotNull null
             val dependsOn = o.array("dependsOn")
-                ?.mapNotNull { it.takeIf { e -> e.isJsonPrimitive }?.asString }
+                ?.mapNotNull { e -> runCatching { e.jsonPrimitive.contentOrNull }.getOrNull() }
                 .orEmpty()
             CdxDependency(ref, dependsOn)
         }
     }
 
-    /** `licenses` entries are `{license:{id|name}}` or `{expression:"…"}`. */
+    /** `licenses` entries are `{license:{id|name}}` or `{expression:"..."}`. */
     private fun parseLicenses(arr: JsonArray?): List<String> {
         if (arr == null) return emptyList()
         return arr.mapNotNull { element ->
@@ -172,15 +175,15 @@ object CycloneDxParser {
     private fun parseTools(metadata: JsonObject?): List<String> {
         val toolsElement = metadata?.get("tools") ?: return emptyList()
         val out = mutableListOf<String>()
-        when {
-            toolsElement.isJsonArray -> toolsElement.asJsonArray.forEach { e ->
+        when (toolsElement) {
+            is JsonArray -> toolsElement.forEach { e ->
                 (e as? JsonObject)?.let { out.addTool(it) }
             }
-            toolsElement.isJsonObject -> {
-                val obj = toolsElement.asJsonObject
-                obj.array("components")?.forEach { (it as? JsonObject)?.let { c -> out.addTool(c) } }
-                obj.array("services")?.forEach { (it as? JsonObject)?.let { c -> out.addTool(c) } }
+            is JsonObject -> {
+                toolsElement.array("components")?.forEach { (it as? JsonObject)?.let { c -> out.addTool(c) } }
+                toolsElement.array("services")?.forEach { (it as? JsonObject)?.let { c -> out.addTool(c) } }
             }
+            else -> Unit
         }
         return out
     }
@@ -202,17 +205,17 @@ object CycloneDxParser {
         }
     }
 
-    // --- gson tree helpers ---------------------------------------------------
+    // --- kotlinx.serialization.json tree helpers ----------------------------
 
     private fun JsonObject.string(key: String): String? =
-        get(key)?.takeIf { it.isJsonPrimitive }?.asString
+        get(key)?.let { e -> runCatching { e.jsonPrimitive.contentOrNull }.getOrNull() }
 
     private fun JsonObject.intOrNull(key: String): Int? =
-        get(key)?.takeIf { it.isJsonPrimitive }?.let { runCatching { it.asInt }.getOrNull() }
+        get(key)?.let { e -> runCatching { e.jsonPrimitive.intOrNull }.getOrNull() }
 
     private fun JsonObject.array(key: String): JsonArray? =
-        get(key)?.takeIf { it.isJsonArray }?.asJsonArray
+        get(key)?.let { e -> runCatching { e.jsonArray }.getOrNull() }
 
     private fun JsonObject.obj(key: String): JsonObject? =
-        get(key)?.takeIf { it.isJsonObject }?.asJsonObject
+        get(key)?.let { e -> runCatching { e.jsonObject }.getOrNull() }
 }
