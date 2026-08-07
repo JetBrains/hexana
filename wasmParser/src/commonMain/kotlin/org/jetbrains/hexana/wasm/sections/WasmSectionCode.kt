@@ -121,7 +121,7 @@ fun CommonByteBuffer.consumeCodeEntry(): WasmCodeRecord {
 fun CommonByteBuffer.consumeLocals(locals: MutableList<WasmCodeLocalRecord>) {
     consumeArray { localIndex ->
         val local = getULEB128().toInt()
-        val type = valueType()!!
+        val type = valueType() ?: throw WasmParseException("unrecognized local value type at offset ${position() - 1}")
         locals.add(WasmCodeLocalRecord(local, type))
     }
 }

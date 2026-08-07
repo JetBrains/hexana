@@ -1001,6 +1001,68 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
         importRecords.count { it.type is org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType }
     }
 
+    /**
+     * All parse problems found in this module: unparsed opcode tails, corrupt code entries,
+     * type-section failures, etc. Derived without extra parse passes where possible.
+     * Capped at 1000 entries.
+     */
+    val parseProblems: List<ParseProblem> by lazy {
+        val problems = mutableListOf<ParseProblem>()
+        val module = wasmModule
+
+        // Code section: scan codeRecords for UnparsedOpCode occurrences.
+        val codeSection = module?.codeSection
+        if (codeSection != null) {
+            val base = importFuncCount
+            for ((codeIdx, record) in codeRecords.withIndex()) {
+                if (problems.size >= 1000) break
+                val funcIdx = base + codeIdx
+                val unparsed = record.opCodes.filterIsInstance<UnparsedOpCode>()
+                if (unparsed.isEmpty()) continue
+                val hasPrefix = record.opCodes.size > 1
+                for (u in unparsed) {
+                    if (problems.size >= 1000) break
+                    val kind = when {
+                        record.locals.isEmpty() && !hasPrefix -> ParseProblemKind.CODE_ENTRY_CORRUPT
+                        !hasPrefix -> ParseProblemKind.LOCALS_PARSE_FAILURE
+                        else -> ParseProblemKind.UNKNOWN_OPCODE
+                    }
+                    problems.add(ParseProblem(
+                        kind = kind,
+                        sectionId = WasmSectionCode.SECTION_ID.toInt(),
+                        sectionName = codeSection.name,
+                        funcIdx = funcIdx,
+                        typeIdx = null,
+                        byteOffset = u.value.offset,
+                        byteSize = u.value.size,
+                        message = u.e.message ?: "unknown error",
+                    ))
+                }
+            }
+        }
+
+        // Type section: check for partial parse failure.
+        val typesSection = module?.typesSection
+        if (typesSection != null && problems.size < 1000) {
+            val (_, failedOffset) = with(typesSection) { bytes.parseTypesPartial() }
+            if (failedOffset != null) {
+                val failedSize = typesSection.sectionOffset + typesSection.sectionSize - failedOffset
+                problems.add(ParseProblem(
+                    kind = ParseProblemKind.UNKNOWN_TYPE_BYTE,
+                    sectionId = WasmSectionTypes.SECTION_ID.toInt(),
+                    sectionName = typesSection.name,
+                    funcIdx = null,
+                    typeIdx = null,
+                    byteOffset = failedOffset,
+                    byteSize = failedSize.coerceAtLeast(1),
+                    message = "unknown type byte at offset $failedOffset",
+                ))
+            }
+        }
+
+        problems.take(1000)
+    }
+
     val monosAnalysis: MonosResult? by lazy {
         val names = nameSection?.functionSubsection?.namemap ?: return@lazy null
         val sizes = mutableMapOf<Int, Int>()

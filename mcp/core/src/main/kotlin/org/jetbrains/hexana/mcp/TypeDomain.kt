@@ -112,6 +112,7 @@ internal fun WasmHeapType.toNullableSignature(): String =
         is WasmNoFuncHeapType -> "nullfuncref"
         is WasmNoExnHeapType -> "nullexnref"
         is WasmIndexHeapType -> "nullreftype[$type]"
+        is WasmExactHeapType -> "exact[$type]"
     }
 
 // see https://webassembly.github.io/spec/core/text/types.html
@@ -131,6 +132,7 @@ internal fun WasmHeapType.toHeapTypeName(): String =
         is WasmNoFuncHeapType -> "nofunc"
         is WasmNoExnHeapType -> "noexn"
         is WasmIndexHeapType -> "type[$type]"
+        is WasmExactHeapType -> "exact[$type]"
     }
 
 data class ParameterSignature(

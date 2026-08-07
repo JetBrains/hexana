@@ -255,6 +255,7 @@ internal fun List<WasmCodeLocalRecord>?.serializeLocals(): List<Local> = this?.m
                 is WasmNoFuncHeapType -> LocalNoFunc(it.local, it.type.code is WasmNullableReferenceType)
                 is WasmNoExternRefHeapType -> LocalNoExtern(it.local, it.type.code is WasmNullableReferenceType)
                 is WasmIndexHeapType -> LocalIndex(it.local, heapType.type, it.type.code is WasmNullableReferenceType)
+                is WasmExactHeapType -> LocalIndex(it.local, heapType.type, it.type.code is WasmNullableReferenceType)
             }
         }
     }

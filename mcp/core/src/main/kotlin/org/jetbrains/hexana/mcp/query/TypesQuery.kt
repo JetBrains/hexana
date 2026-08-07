@@ -192,4 +192,5 @@ private fun WasmHeapType.toHeapTypeResult(): String = when (this) {
     is WasmIndexHeapType -> "index"
     is WasmNoFuncHeapType -> "nofunc"
     is WasmNoExternRefHeapType -> "noextern"
+    is WasmExactHeapType -> "exact[$type]"
 }

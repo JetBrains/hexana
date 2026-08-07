@@ -23,9 +23,10 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
         // range per leaf type so the chunk tree gets one chunk per type instead
         // of a single multi-MB chunk for the whole rec group (which froze the
         // WAT-virtualized view in Skia paragraph layout on javac-class binaries).
-        return with (buffer) {
+        return with(buffer) {
             var typeIndex = 0
-            parseTypes().flatMap { record ->
+            val (records, _) = parseTypesPartial()
+            records.flatMap { record ->
                 val leaves = if (record is WasmRecursiveTypeRecord) record.entries else listOf(record)
                 leaves.map { leaf -> WasmNamedRange(leaf, "type ${typeIndex++}") }
             }
@@ -54,6 +55,36 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
         return typeRecords
     }
 
+    /**
+     * Parses as many type records as possible. On the first unrecoverable byte,
+     * stops and returns the partial list paired with the byte offset at which
+     * parsing failed (null second means the section parsed fully).
+     */
+    fun CommonByteBuffer.parseTypesPartial(): Pair<List<WasmTypeRecord>, Int?> {
+        position(contentOffset)
+        val typeRecords = mutableListOf<WasmTypeRecord>()
+        var failedOffset: Int? = null
+
+        val count = getULEB128().toInt()
+        for (i in 0 until count) {
+            val offset = position()
+            try {
+                val type = get().toUByte()
+                when (type) {
+                    0x4E.toUByte() -> typeRecords.add(recType())
+                    else -> {
+                        position(position() - 1)
+                        typeRecords.add(subtype(offset))
+                    }
+                }
+            } catch (e: Exception) {
+                failedOffset = offset
+                break
+            }
+        }
+        return typeRecords to failedOffset
+    }
+
 }
 
 object StandardTypesParser {
@@ -67,7 +98,7 @@ object StandardTypesParser {
         return WasmRecursiveTypeRecord(offset, sizeFromOffset(offset), subtype)
     }
 
-    fun CommonByteBuffer.subtype(offset: Int):WasmTypeRecord {
+    fun CommonByteBuffer.subtype(offset: Int): WasmTypeRecord {
         val subType = get()
         return when (subType) {
             0x4f.toByte(),
@@ -77,6 +108,15 @@ object StandardTypesParser {
                     val subType = getULEB128().toUInt()
                     superTypers.add(subType)
                 }
+                // custom-descriptors proposal: optional descriptor clause (0x4D) and/or
+                // describes clause (0x4C) appear between the supertype list and the comptype.
+                // Consume them to maintain alignment.
+                var peeked = get()
+                while (peeked == 0x4D.toByte() || peeked == 0x4C.toByte()) {
+                    getULEB128() // clause type index — consumed for alignment, not modeled
+                    peeked = get()
+                }
+                position(position() - 1) // un-consume the non-clause byte (comptype prefix)
                 compType(offset, superTypers.toList(), subType.toUByte() == 0x4f.toUByte())
             }
 
@@ -232,9 +272,16 @@ object StandardTypesParser {
     }
 
     fun CommonByteBuffer.heapType(): WasmHeapType {
+        val savedPos = position()
         return absHeapType() ?: run {
+            position(savedPos)
+            val byte = get()
+            if (byte == 0x62.toByte()) {
+                WasmExactHeapType(getULEB128())
+            } else {
                 position(position() - 1)
                 WasmIndexHeapType(getULEB128())
+            }
         }
     }
 }
@@ -350,6 +397,16 @@ class WasmIndexHeapType(type: Long): WasmHeapType(type) {
     }
 
     override fun hashCode(): Int = type.hashCode()
+}
+
+/** custom-descriptors proposal: `exact x` heap type, encoded as `0x62 x:u32`. */
+class WasmExactHeapType(type: Long) : WasmHeapType(type) {
+    override fun equals(other: Any?): Boolean {
+        val b = other as? WasmExactHeapType ?: return false
+        return type == b.type
+    }
+
+    override fun hashCode(): Int = type.hashCode() * 31 + 1
 }
 
 /**

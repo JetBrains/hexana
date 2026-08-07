@@ -19,6 +19,8 @@ import org.jetbrains.hexana.wasm.sections.consumeArray
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.heapType
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.valueType
 import org.jetbrains.hexana.wasm.sections.WasmValueType
+import org.jetbrains.hexana.wasm.sections.MemoryRegion
+import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
 
 fun CommonByteBuffer.consumeOpCode(bcode: UByte): OpCode {
     val offset = position() - 1
@@ -289,10 +291,17 @@ private class OpCodeParseState(val buffer: CommonByteBuffer, val limit: Int)
  * `try_table`) recurse via `callRecursive`; every other opcode takes the plain
  * non-recursive [consumeOpCode] path, so the common case pays no continuation
  * overhead.
+ *
+ * On [UnsupportedOpsException] (unknown opcode byte) parsing stops early: all
+ * opcodes decoded so far are preserved and one [UnparsedOpCode] covering from
+ * the failure offset to [OpCodeParseState.limit] is appended as a tail.
+ * Other exceptions (e.g. buffer underflow) propagate normally so callers can
+ * apply their own fallback strategy.
  */
 private val parseOpCodesDeep = DeepRecursiveFunction<OpCodeParseState, List<OpCode>> { state ->
     val buffer = state.buffer
     val opCodes = mutableListOf<OpCode>()
+    var unsupportedTail: UnparsedOpCode? = null
     while (buffer.remaining() != 0 && buffer.position() < state.limit) {
         val byte = buffer.get().toUByte()
         if (byte == Flow.Terminal.code) {
@@ -300,26 +309,35 @@ private val parseOpCodesDeep = DeepRecursiveFunction<OpCodeParseState, List<OpCo
         }
 
         val offset = buffer.position() - 1
-        val op = when (val code = byte.toUInt()) {
-            0x02u -> Flow.Block(buffer.blockType(), callRecursive(state), offset)
-            0x03u -> Flow.Loop(buffer.blockType(), callRecursive(state), offset)
-            0x04u -> Flow.If(buffer.blockType(), callRecursive(state), offset)
-            0x05u -> {
-                val body = callRecursive(state)
-                // If and Else sections share terminal OpCode - that said, we just (sort of) give it back to parent If declaration
-                buffer.position(buffer.position() - 1)
-                Flow.Else(body, offset)
+        val op: OpCode = try {
+            when (val code = byte.toUInt()) {
+                0x02u -> Flow.Block(buffer.blockType(), callRecursive(state), offset)
+                0x03u -> Flow.Loop(buffer.blockType(), callRecursive(state), offset)
+                0x04u -> Flow.If(buffer.blockType(), callRecursive(state), offset)
+                0x05u -> {
+                    val body = callRecursive(state)
+                    // If and Else sections share terminal OpCode - that said, we just (sort of) give it back to parent If declaration
+                    buffer.position(buffer.position() - 1)
+                    Flow.Else(body, offset)
+                }
+                LegacyEH.Try.code.toUInt() -> LegacyEH.Try(buffer.blockType(), callRecursive(state), offset)
+                0x1Fu -> {
+                    val blockType = buffer.blockType()
+                    val catches = buffer.consumeCatchList(code, offset)
+                    Flow.TryTable(blockType, catches, callRecursive(state), offset)
+                }
+                else -> buffer.consumeOpCode(byte)
             }
-            LegacyEH.Try.code.toUInt() -> LegacyEH.Try(buffer.blockType(), callRecursive(state), offset)
-            0x1Fu -> {
-                val blockType = buffer.blockType()
-                val catches = buffer.consumeCatchList(code, offset)
-                Flow.TryTable(blockType, catches, callRecursive(state), offset)
-            }
-            else -> buffer.consumeOpCode(byte)
+        } catch (e: UnsupportedOpsException) {
+            // Unknown opcode: preserve decoded prefix, append a tail covering the rest.
+            val remaining = state.limit - offset
+            unsupportedTail = UnparsedOpCode(e, MemoryRegion(offset, remaining), offset)
+            buffer.position(state.limit.coerceAtMost(buffer.limit()))
+            break
         }
         opCodes.add(op)
     }
+    unsupportedTail?.let { opCodes.add(it) }
     opCodes
 }
 

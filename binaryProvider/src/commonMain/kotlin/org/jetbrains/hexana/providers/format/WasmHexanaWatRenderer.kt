@@ -78,6 +78,8 @@ import org.jetbrains.hexana.wasm.sections.WasmTagType
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 import org.jetbrains.hexana.wasm.sections.WasmValueType
 import org.jetbrains.hexana.wasm.sections.WasmVecType
+import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
+import org.jetbrains.hexana.wasm.sections.WasmExactHeapType
 
 /**
  * Hexana-flavored WAT renderer with three-column layout for code chunks:
@@ -1746,6 +1748,7 @@ public class WasmHexanaWatRenderer(
         is WasmNoExternRefHeapType -> "noextern"
         is WasmNoFuncHeapType -> "nofunc"
         is WasmNoExnHeapType -> "noexn"
+        is WasmExactHeapType -> "exact ${heap.type}"
         is WasmIndexHeapType -> "\$type${heap.type}"
         is WasmAbsHeapType -> "abs?"
     }
@@ -2099,6 +2102,9 @@ public class WasmHexanaWatRenderer(
             // -- Block / Loop / If header -----------------------------------
             is OpCodes.Flow.Block, is OpCodes.Flow.Loop, is OpCodes.Flow.If ->
                 blockHeaderLength(source, atOffset)
+
+            // -- Unparsed tail: covers the full region recorded at parse time
+            is UnparsedOpCode -> op.value.size
 
             // -- 1-byte singletons (parametric, control, all numeric except Const)
             else -> 1
