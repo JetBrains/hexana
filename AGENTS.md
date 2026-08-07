@@ -137,7 +137,10 @@ Run the narrowest command that proves your change.
 - Run the dedicated TeamCity IntelliJ plugin test lane: `./gradlew teamcityIntellijPluginTests`
 - Run the TeamCity-ready server and CLI aggregate intended for the next rollout step: `./gradlew teamcityServerCliTests`;
   it includes `teamcityCliTests` transitively plus the standalone MCP/server gates, including the R8 standalone,
-  Claude, and Codex packaging smoke.
+  Claude, and Codex packaging smoke and extracted-release archive verification.
+- Verify the exact standalone, Claude, and Codex R8 release ZIPs, their safe layouts, executable launchers, Java 21
+  toolchain execution and compatibility, version output, and shared release-script security policy:
+  `./gradlew :mcp:verifyMcpR8ReleaseArchives`.
 - Run general TeamCity verification without CLI JVM gates: `./gradlew teamcityCiTests`. Its non-CLI task set remains
   unchanged during rollout and temporarily overlaps with the new core, VS Code, IntelliJ, and server aggregates.
 - Direct `idea-plugin/**` changes select `InnoHub_HexFlow_IntellijPluginTestsPatronus`, which delegates to the regular

@@ -68,6 +68,10 @@ Read these files before making structural changes:
   `./gradlew :mcp:assembleMcpPackaging :mcp:server:obfuscatedMcpPackagingSmoke` for R8-obfuscated packages.
   Both gates exercise the standalone runtime plus Claude and Codex wrappers, but native matrix artifacts are required
   for release readiness.
+- Run `./gradlew :mcp:verifyMcpR8ReleaseArchives` for the release-facing R8 ZIP gate. It validates central-directory
+  safety and exact roots, extracts all three products, checks runtime/legal/class-version layout, runs each packaged
+  `version` launcher with telemetry disabled under the configured Java 21 toolchain, and applies the release script's
+  artifact security policy.
 - The experimental GraalVM Native Image prototype is intentionally separate from JVM/R8 packaging. Use
   `./gradlew :mcp:server:nativeCompile` to build `build/native/nativeCompile/hexana-mcp`, and
   `./gradlew :mcp:server:nativeMcpVersionSmoke` to verify `hexana-mcp version` reports the exact

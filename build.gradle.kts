@@ -108,6 +108,7 @@ val teamcityServerCliTestTaskPaths = listOf(
     ":mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate",
     ":mcp:server:integrationTest",
     ":mcp:server:obfuscatedMcpPackagingSmoke",
+    ":mcp:verifyMcpR8ReleaseArchives",
     ":mcp:vscode-server:test",
 )
 
@@ -157,6 +158,7 @@ val teamcityCiTestTaskOrder = listOf(
     ":mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate",
     ":mcp:server:integrationTest",
     ":mcp:server:obfuscatedMcpPackagingSmoke",
+    ":mcp:verifyMcpR8ReleaseArchives",
     ":mcp:vscode-server:test",
 )
 
@@ -535,6 +537,7 @@ tasks.register("verifyTeamcityServerCliTestsCoverage") {
             ":mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate",
             ":mcp:server:integrationTest",
             ":mcp:server:obfuscatedMcpPackagingSmoke",
+            ":mcp:verifyMcpR8ReleaseArchives",
             ":mcp:vscode-server:test",
         )
         verifyExactTaskPaths(

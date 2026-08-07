@@ -41,8 +41,12 @@ This folder contains client-specific wrapper layouts for the standalone MCP runt
 - For R8 rule or obfuscated-runtime layout changes, also run
   `./gradlew :mcp:server:obfuscatedMcpPackagingSmoke --rerun-tasks`.
 - Release ZIPs must pass `release-codex-claude-plugins.sh`'s artifact security check before any GitHub Release upload.
-  The check fails on local machine paths, internal repository URLs, token names/patterns, private-key markers, source
-  files, private/build path names, R8 mapping output, and pre-obfuscation Hexana runtime jars.
+  Before extraction, the check rejects unsafe/control-character paths, path collisions, and symlinks. It also fails on
+  local machine paths, internal repository URLs, token names/patterns, private-key markers, source files, private/build
+  path names, R8 mapping output, and pre-obfuscation Hexana runtime jars.
+- To run only that authoritative policy against already-built ZIPs, set
+  `RELEASE_ARTIFACT_SECURITY_CHECK_DIR` to their exact directory. This validation-only mode exits before builds and
+  publication setup, so it needs local scanning tools but no GitHub token, repository, or git-author environment.
 - For changes to `release-codex-claude-plugins.sh`, run `bash -n mcp/packaging/release-codex-claude-plugins.sh`.
   Use `DRY_RUN=true` against a disposable public-repo clone or fixture when credentials are available.
 - For changes to `publish-downloads-release-bundle.sh`, run

@@ -1028,13 +1028,13 @@ check_embedded_jar_entries() {
   local jar_rel
   local suspicious_entry
 
-  while IFS= read -r jar_file; do
+  while IFS= read -r -d '' jar_file; do
     jar_rel="$(artifact_relative_path "$root" "$jar_file")"
     suspicious_entry="$(jar tf "$jar_file" | grep -E '(^|/)(src|build|target|out|\.gradle|\.idea|\.teamcity|private|secret|secrets)(/|$)|(^|/)\.env$|(^|/)mapping\.txt$|\.(java|kt|kts|pem|key|p12|keystore|jks)$' | head -n 1 || true)"
     if [ -n "$suspicious_entry" ]; then
       die "Release artifact $zip_name contains suspicious entry in $jar_rel: $suspicious_entry"
     fi
-  done < <(find "$root" -type f -name '*.jar' -print)
+  done < <(find "$root" -type f -name '*.jar' -print0)
 }
 
 check_obfuscated_runtime_layout() {
@@ -1045,7 +1045,7 @@ check_obfuscated_runtime_layout() {
   local found_obfuscated="false"
   local leaked_hexana_class
 
-  while IFS= read -r jar_file; do
+  while IFS= read -r -d '' jar_file; do
     jar_rel="$(artifact_relative_path "$root" "$jar_file")"
     case "$(basename "$jar_file")" in
       hexana-runtime-obfuscated.jar)
@@ -1061,7 +1061,7 @@ check_obfuscated_runtime_layout() {
         fi
         ;;
     esac
-  done < <(find "$root" -type f -name '*.jar' -print)
+  done < <(find "$root" -type f -name '*.jar' -print0)
 
   if [ "$found_obfuscated" != "true" ]; then
     die "Release artifact $zip_name does not contain hexana-runtime-obfuscated.jar"
@@ -1087,7 +1087,7 @@ check_obfuscated_runtime_hardening() {
       ;;
   esac
 
-  while IFS= read -r jar_file; do
+  while IFS= read -r -d '' jar_file; do
     jar_rel="$(artifact_relative_path "$root" "$jar_file")"
 
     suspicious_class="$(
@@ -1113,35 +1113,151 @@ check_obfuscated_runtime_hardening() {
     if [ -n "$forbidden_debug_string" ]; then
       die "Release artifact $zip_name contains source/debug metadata in $jar_rel"
     fi
-  done < <(find "$root" -type f -name 'hexana-runtime-obfuscated.jar' -print)
+  done < <(find "$root" -type f -name 'hexana-runtime-obfuscated.jar' -print0)
+}
+
+list_zip_metadata() {
+  local mode="$1"
+  local zip="$2"
+  local output_file="$3"
+
+  if command -v zipinfo >/dev/null 2>&1; then
+    LC_ALL=C zipinfo "$mode" "$zip" > "$output_file" || die "Could not inspect release artifact $(basename "$zip")"
+  else
+    LC_ALL=C unzip -Z "$mode" "$zip" > "$output_file" || die "Could not inspect release artifact $(basename "$zip")"
+  fi
+}
+
+validate_zip_entry_name_controls() {
+  local zip="$1"
+  local zip_name="$2"
+  local work_dir="$3"
+  local escaped_entries_file="$4"
+  local raw_entries_file="$work_dir/raw-entries"
+  local raw_entries_without_newlines_file="$work_dir/raw-entries-without-newlines"
+  local summary_file="$work_dir/summary"
+  local expected_entry_count
+  local raw_line_count
+  local escaped_entry
+
+  jar tf "$zip" > "$raw_entries_file" || die "Could not read raw ZIP entries from release artifact $zip_name"
+  list_zip_metadata -t "$zip" "$summary_file"
+  expected_entry_count="$(awk '
+    $1 ~ /^[0-9]+$/ && ($2 == "file," || $2 == "files,") {
+      count = $1
+    }
+    END {
+      print count
+    }
+  ' "$summary_file")"
+  case "$expected_entry_count" in
+    ''|*[!0-9]*) die "Could not determine ZIP entry count for release artifact $zip_name" ;;
+  esac
+
+  raw_line_count="$(wc -l < "$raw_entries_file" | tr -d '[:space:]')"
+  LC_ALL=C tr -d '\n' < "$raw_entries_file" > "$raw_entries_without_newlines_file"
+  if [ "$raw_line_count" -ne "$expected_entry_count" ] ||
+    LC_ALL=C grep -q '[[:cntrl:]]' "$raw_entries_without_newlines_file"; then
+    escaped_entry="$(grep -E '\^.|[?]' "$escaped_entries_file" | head -n 1 || true)"
+    die "Release artifact $zip_name contains control-character ZIP entry: ${escaped_entry:-<unprintable entry>}"
+  fi
+}
+
+validate_zip_entries_before_extraction() {
+  local zip="$1"
+  local zip_name="$2"
+  local work_dir="$3"
+  local entries_file="$work_dir/entries"
+  local listing_file="$work_dir/listing"
+  local seen_entries_file="$work_dir/seen-entries"
+  local entry
+  local collision_key
+  local symlink_entry
+
+  list_zip_metadata -1 "$zip" "$entries_file"
+  [ -s "$entries_file" ] || die "Release artifact $zip_name has no ZIP entries"
+  validate_zip_entry_name_controls "$zip" "$zip_name" "$work_dir" "$entries_file"
+  : > "$seen_entries_file"
+
+  while IFS= read -r entry || [ -n "$entry" ]; do
+    [ -n "$entry" ] || die "Release artifact $zip_name contains an empty ZIP entry"
+    case "$entry" in
+      /*|[A-Za-z]:/*)
+        die "Release artifact $zip_name contains absolute ZIP entry: $entry"
+        ;;
+      *\\*)
+        die "Release artifact $zip_name contains backslash ZIP entry: $entry"
+        ;;
+      ..|../*|*/../*|*/..)
+        die "Release artifact $zip_name contains traversal ZIP entry: $entry"
+        ;;
+      .|./*|*/./*|*/.|*//*)
+        die "Release artifact $zip_name contains ambiguous ZIP entry: $entry"
+        ;;
+    esac
+
+    collision_key="$(lower_ascii "${entry%/}")"
+    if grep -Fqx -e "$collision_key" "$seen_entries_file"; then
+      die "Release artifact $zip_name contains duplicate or case-colliding ZIP entry: $entry"
+    fi
+    printf '%s\n' "$collision_key" >> "$seen_entries_file"
+  done < "$entries_file"
+
+  list_zip_metadata -l "$zip" "$listing_file"
+  symlink_entry="$(awk '
+    substr($1, 1, 1) == "l" && length($1) == 10 && $2 ~ /^[0-9][0-9.]*$/ {
+      entry = $10
+      for (i = 11; i <= NF; i++) {
+        entry = entry " " $i
+      }
+      print entry
+      exit
+    }
+  ' "$listing_file")"
+  if [ -n "$symlink_entry" ]; then
+    die "Release artifact $zip_name contains symlink ZIP entry: $symlink_entry"
+  fi
+}
+
+require_release_artifact_security_tools() {
+  require_tool "jq"
+  require_tool "jar"
+  require_tool "strings"
+  require_tool "unzip"
 }
 
 security_check_release_artifacts() {
+  local artifact_dir="$1"
   local security_dir
   local zip
   local zip_name
+  local metadata_dir
   local extract_dir
   local file
   local rel
+  local artifact_count=0
 
-  log "Running release artifact security check"
+  [ -d "$artifact_dir" ] || die "Release artifact security check directory does not exist: $artifact_dir"
+  log "Running release artifact security check in $artifact_dir"
   security_dir="$(mktemp -d "${TMPDIR:-/tmp}/hexana-release-artifact-security.XXXXXX")"
   register_cleanup_dir "$security_dir"
 
-  for zip in "$release_dir"/*.zip; do
-    [ -f "$zip" ] || die "No release ZIP artifacts found in $release_dir"
+  while IFS= read -r -d '' zip; do
+    artifact_count=$((artifact_count + 1))
     zip_name="$(basename "$zip")"
-    extract_dir="$security_dir/${zip_name%.zip}"
-    mkdir -p "$extract_dir"
+    metadata_dir="$security_dir/metadata-$artifact_count"
+    extract_dir="$security_dir/artifact-$artifact_count"
+    mkdir -p "$metadata_dir" "$extract_dir"
+    validate_zip_entries_before_extraction "$zip" "$zip_name" "$metadata_dir"
     unzip -qq "$zip" -d "$extract_dir"
 
-    while IFS= read -r file; do
+    while IFS= read -r -d '' file; do
       rel="$(artifact_relative_path "$extract_dir" "$file")"
       check_artifact_file_name "$zip_name" "$rel"
       check_artifact_file_content "$zip_name" "$rel" "$file"
       check_mcp_json_command_paths "Release artifact $zip_name" "$rel" "$file"
       check_plugin_manifest_license "Release artifact $zip_name" "$rel" "$file"
-    done < <(find "$extract_dir" -type f -print)
+    done < <(find "$extract_dir" -type f -print0)
 
     check_embedded_jar_entries "$zip_name" "$extract_dir"
     case "$zip_name" in
@@ -1153,7 +1269,8 @@ security_check_release_artifacts() {
         ;;
     esac
     check_release_artifact_legal_files "$zip_name" "$extract_dir"
-  done
+  done < <(find "$artifact_dir" -maxdepth 1 -type f -name '*.zip' -print0)
+  [ "$artifact_count" -gt 0 ] || die "No release ZIP artifacts found in $artifact_dir"
   rm -rf "$security_dir"
 }
 
@@ -1804,6 +1921,11 @@ publish_public_marketplace_pr() {
 }
 
 main() {
+  if [ -n "${RELEASE_ARTIFACT_SECURITY_CHECK_DIR:-}" ]; then
+    require_release_artifact_security_tools
+    security_check_release_artifacts "$RELEASE_ARTIFACT_SECURITY_CHECK_DIR"
+    return
+  fi
   if [ "$(to_bool "${PUBLIC_GITHUB_TEXT_GUARD_SELF_TEST:-false}" "PUBLIC_GITHUB_TEXT_GUARD_SELF_TEST")" = "true" ]; then
     self_test_public_github_text_guard
     return
@@ -1899,7 +2021,7 @@ main() {
   fi
 
   collect_release_artifacts
-  security_check_release_artifacts
+  security_check_release_artifacts "$release_dir"
   validate_public_bundle
   check_release_native_artifact_policy
   write_release_notes

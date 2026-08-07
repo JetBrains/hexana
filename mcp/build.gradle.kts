@@ -1,3 +1,4 @@
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.result.ResolvedArtifactResult
 import org.gradle.jvm.toolchain.JavaLanguageVersion
@@ -139,10 +140,12 @@ val cliR8MappingRootDir = layout.buildDirectory.dir("r8/cli/mapping")
 val cliReleaseDistributionDir = layout.buildDirectory.dir("distributions")
 val cliArchiveVerificationRootDir = layout.buildDirectory.dir("verification/cli-r8-archives")
 val nativeCliArchiveVerificationRootDir = layout.buildDirectory.dir("verification/native-cli-archives")
+val mcpR8ArchiveVerificationRootDir = layout.buildDirectory.dir("verification/mcp-r8-archives")
 val javaToolchains = extensions.getByType<JavaToolchainService>()
-val jvmCliReferenceJavaHome = javaToolchains.launcherFor {
+val java21ReferenceLauncher = javaToolchains.launcherFor {
     languageVersion.set(JavaLanguageVersion.of(21))
-}.map { it.metadata.installationPath.asFile.absolutePath }
+}
+val jvmCliReferenceJavaHome = java21ReferenceLauncher.map { it.metadata.installationPath.asFile.absolutePath }
 
 val r8Tool by configurations.creating {
     isCanBeConsumed = false
@@ -533,6 +536,137 @@ fun assertJava21RuntimeClasses(libDir: File, label: String) {
         }
     }
 }
+
+fun verifiedMcpR8ArchiveEntries(
+    archiveFile: File,
+    expectedArchiveName: String,
+    requiredTopLevels: Set<String>,
+    requiredFiles: Set<String>,
+    executableFiles: Set<String>,
+): List<ZipArchiveEntry> =
+    org.apache.commons.compress.archivers.zip.ZipFile.builder().setFile(archiveFile).get().use { zip ->
+        check(archiveFile.name == expectedArchiveName) {
+            "Expected release archive `$expectedArchiveName`, found `${archiveFile.name}`."
+        }
+        val entries = zip.entries.asSequence().toList()
+        val names = entries.map { it.name }
+        val collisions = names
+            .groupBy { it.removeSuffix("/").lowercase(Locale.ROOT) }
+            .filterValues { it.size > 1 }
+            .values
+            .map { it.sorted() }
+        check(collisions.isEmpty()) {
+            "${archiveFile.name} contains duplicate or case-colliding entries: $collisions"
+        }
+        val unsafeEntries = entries.filter { entry ->
+            val path = entry.name.removeSuffix("/")
+            path.isEmpty() || path.startsWith("/") || Regex("^[A-Za-z]:").containsMatchIn(path) ||
+                path.contains('\\') || path.any { it.code < 32 } ||
+                path.split('/').any { it.isEmpty() || it == "." || it == ".." } ||
+                entry.isUnixSymlink
+        }.map { it.name }
+        check(unsafeEntries.isEmpty()) {
+            "${archiveFile.name} contains unsafe absolute, dot-segment, traversal, backslash, control, or symlink entries: $unsafeEntries"
+        }
+        val topLevels = names.map { it.substringBefore('/') }.toSet()
+        check(topLevels == requiredTopLevels) {
+            "${archiveFile.name} must contain exactly top-level families ${requiredTopLevels.sorted()}. Found: ${topLevels.sorted()}"
+        }
+        requiredFiles.forEach { name ->
+            val entry = entries.singleOrNull { it.name == name }
+            check(entry != null && !entry.isDirectory && entry.size > 0L) {
+                "${archiveFile.name} must contain nonempty file `$name`."
+            }
+        }
+        executableFiles.forEach { name ->
+            val entry = entries.single { it.name == name }
+            val permissionBits = entry.unixMode and 0b111111111
+            check(permissionBits == 0b111101101) {
+                "${archiveFile.name} launcher `$name` must have Unix mode 0755; found 0${permissionBits.toString(8)}."
+            }
+        }
+        entries
+    }
+
+fun extractVerifiedMcpR8Archive(archiveFile: File, entries: List<ZipArchiveEntry>, destinationDir: File) {
+    destinationDir.deleteRecursively()
+    destinationDir.mkdirs()
+    org.apache.commons.compress.archivers.zip.ZipFile.builder().setFile(archiveFile).get().use { zip ->
+        entries.forEach { validatedEntry ->
+            val entry = zip.getEntry(validatedEntry.name)
+                ?: error("${archiveFile.name} entry disappeared before extraction: ${validatedEntry.name}")
+            val destination = destinationDir.resolve(entry.name)
+            if (entry.isDirectory) {
+                destination.mkdirs()
+            } else {
+                destination.parentFile.mkdirs()
+                zip.getInputStream(entry).use { input -> destination.outputStream().use(input::copyTo) }
+                if (entry.unixMode and 0b001000000 != 0) destination.setExecutable(true, true)
+            }
+        }
+    }
+}
+
+fun assertMcpR8RuntimeLayout(runtimeDir: File, label: String) {
+    val runtimeEntries = runtimeDir.listFiles().orEmpty().map { it.name }.sorted()
+    val expectedRuntimeEntries = listOf("LICENSE.txt", thirdPartyNoticesFileName, "bin", "lib").sorted()
+    check(runtimeEntries == expectedRuntimeEntries) {
+        "$label must contain exactly ${expectedRuntimeEntries.joinToString()}. Found: $runtimeEntries"
+    }
+    val launcher = runtimeDir.resolve("bin/server")
+    check(launcher.canExecute()) { "$label must contain executable bin/server." }
+    check(runtimeDir.resolve("bin/server.bat").isFile) { "$label must contain bin/server.bat." }
+    val launchers = runtimeDir.resolve("bin").listFiles().orEmpty().map { it.name }.sorted()
+    check(launchers == listOf("server", "server.bat")) {
+        "$label bin layout must contain only server and server.bat. Found: $launchers"
+    }
+    assertSameFileBytes(runtimeDir.resolve("LICENSE.txt"), pluginLicenseFile.asFile, "$label LICENSE.txt")
+    assertSameFileBytes(
+        runtimeDir.resolve(thirdPartyNoticesFileName),
+        thirdPartyNoticesDir.get().file(thirdPartyNoticesFileName).asFile,
+        "$label $thirdPartyNoticesFileName",
+    )
+    val libDir = runtimeDir.resolve("lib")
+    val jars = libDir.listFiles { file -> file.isFile && file.extension == "jar" }.orEmpty()
+    check(jars.count { it.name == obfuscatedRuntimeJarName } == 1) {
+        "$label must contain exactly one $obfuscatedRuntimeJarName. Found: ${jars.map { it.name }.sorted()}"
+    }
+    val plainOwnedJars = jars.map { it.name }.filter(mcpServerR8OwnedJarNames::contains).sorted()
+    check(plainOwnedJars.isEmpty()) { "$label contains pre-obfuscation Hexana runtime jars: $plainOwnedJars" }
+    val plainClassJars = jars.filter {
+        it.name != obfuscatedRuntimeJarName && jarContainsClassPrefix(it, "org/jetbrains/hexana/")
+    }.map { it.name }.sorted()
+    check(plainClassJars.isEmpty()) { "$label contains pre-obfuscation Hexana classes: $plainClassJars" }
+    assertJava21RuntimeClasses(libDir, label)
+}
+
+fun assertMcpR8Version(executable: File, workingDir: File, java21Home: File, label: String) {
+    check(executable.canExecute()) { "$label launcher is not executable: ${executable.absolutePath}" }
+    check(java21Home.resolve("bin/java").canExecute()) {
+        "Configured Java 21 toolchain is not executable: ${java21Home.absolutePath}"
+    }
+    val result = runProcess(
+        listOf(executable.absolutePath, "version"),
+        workingDir,
+        mapOf(
+            "HEXANA_MCP_TELEMETRY_ENABLED" to "false",
+            "JAVA_HOME" to java21Home.absolutePath,
+        ),
+        environmentKeysToRemove = setOf("HEXANA_SERVER_BIN"),
+    )
+    check(result.exitCode == 0 && result.output.trim() == "hexana-mcp $mcpServerVersion") {
+        "Expected $label `version` to print `hexana-mcp $mcpServerVersion`, got exit ${result.exitCode}:\n${result.output}"
+    }
+}
+
+data class McpR8ArchivePolicy(
+    val id: String,
+    val archive: File,
+    val expectedArchiveName: String,
+    val requiredTopLevels: Set<String>,
+    val requiredFiles: Set<String>,
+    val executableFiles: Set<String>,
+)
 
 fun assertCliReleaseArchive(product: CliR8Product, archiveFile: File) {
     val rootName = cliReleaseProductRootName(product)
@@ -1753,6 +1887,136 @@ val zipCodexPlugin = registerPluginZip(
     archiveBaseNameValue = "hexana-codex-plugin",
 )
 
+tasks.register("verifyMcpR8ReleaseArchives") {
+    group = "verification"
+    description = "Verify the standalone, Claude, and Codex R8 release ZIPs and their extracted launchers."
+    dependsOn(zipObfuscatedMcpServer, zipClaudePlugin, zipCodexPlugin)
+
+    val standaloneArchive = zipObfuscatedMcpServer.flatMap { it.archiveFile }
+    val claudeArchive = zipClaudePlugin.flatMap { it.archiveFile }
+    val codexArchive = zipCodexPlugin.flatMap { it.archiveFile }
+    inputs.files(standaloneArchive, claudeArchive, codexArchive)
+    inputs.property("java21Home", jvmCliReferenceJavaHome)
+    outputs.dir(mcpR8ArchiveVerificationRootDir)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val verificationRoot = mcpR8ArchiveVerificationRootDir.get().asFile
+        verificationRoot.deleteRecursively()
+        verificationRoot.mkdirs()
+        val commonPluginTopLevels = setOf(
+            ".mcp.json",
+            "LICENSE.txt",
+            "README.md",
+            thirdPartyNoticesFileName,
+            "bin",
+            "server",
+            "skills",
+        )
+        val archives = listOf(
+            McpR8ArchivePolicy(
+                id = "standalone",
+                archive = standaloneArchive.get().asFile,
+                expectedArchiveName = "server-$mcpServerVersion.zip",
+                requiredTopLevels = setOf("server"),
+                requiredFiles = setOf(
+                    "server/bin/server",
+                    "server/bin/server.bat",
+                    "server/LICENSE.txt",
+                    "server/$thirdPartyNoticesFileName",
+                ),
+                executableFiles = setOf("server/bin/server"),
+            ),
+            McpR8ArchivePolicy(
+                id = "claude",
+                archive = claudeArchive.get().asFile,
+                expectedArchiveName = "hexana-claude-plugin-$mcpServerVersion.zip",
+                requiredTopLevels = commonPluginTopLevels + ".claude-plugin",
+                requiredFiles = setOf(
+                    "bin/hexana-mcp",
+                    "bin/hexana-mcp.cmd",
+                    ".mcp.json",
+                    ".claude-plugin/plugin.json",
+                    "LICENSE.txt",
+                    "README.md",
+                    thirdPartyNoticesFileName,
+                    "server/bin/server",
+                    "server/bin/server.bat",
+                    "server/LICENSE.txt",
+                    "server/$thirdPartyNoticesFileName",
+                ),
+                executableFiles = setOf("bin/hexana-mcp", "server/bin/server"),
+            ),
+            McpR8ArchivePolicy(
+                id = "codex",
+                archive = codexArchive.get().asFile,
+                expectedArchiveName = "hexana-codex-plugin-$mcpServerVersion.zip",
+                requiredTopLevels = commonPluginTopLevels + ".codex-plugin",
+                requiredFiles = setOf(
+                    "bin/hexana-mcp",
+                    "bin/hexana-mcp.cmd",
+                    ".mcp.json",
+                    ".codex-plugin/plugin.json",
+                    "LICENSE.txt",
+                    "README.md",
+                    thirdPartyNoticesFileName,
+                    "server/bin/server",
+                    "server/bin/server.bat",
+                    "server/LICENSE.txt",
+                    "server/$thirdPartyNoticesFileName",
+                ),
+                executableFiles = setOf("bin/hexana-mcp", "server/bin/server"),
+            ),
+        )
+        archives.forEach { policy ->
+            val entries = verifiedMcpR8ArchiveEntries(
+                policy.archive,
+                policy.expectedArchiveName,
+                policy.requiredTopLevels,
+                policy.requiredFiles,
+                policy.executableFiles,
+            )
+            extractVerifiedMcpR8Archive(policy.archive, entries, verificationRoot.resolve(policy.id))
+        }
+
+        val standaloneRoot = verificationRoot.resolve("standalone/server")
+        val java21Launcher = java21ReferenceLauncher.get()
+        check(java21Launcher.metadata.languageVersion.asInt() == 21) {
+            "Extracted MCP archive checks require a Java 21 toolchain; resolved ${java21Launcher.metadata.languageVersion}."
+        }
+        val java21Home = java21Launcher.metadata.installationPath.asFile
+        logger.lifecycle(
+            "Running extracted MCP archive version checks with Java 21 toolchain at ${java21Home.absolutePath} " +
+                "(Gradle JVM: ${System.getProperty("java.home")})."
+        )
+        assertMcpR8RuntimeLayout(standaloneRoot, "standalone extracted archive")
+        assertMcpR8Version(standaloneRoot.resolve("bin/server"), standaloneRoot, java21Home, "standalone extracted archive")
+        listOf("claude", "codex").forEach { id ->
+            val pluginRoot = verificationRoot.resolve(id)
+            assertMcpR8RuntimeLayout(pluginRoot.resolve("server"), "$id extracted wrapper server")
+            assertSameFileBytes(pluginRoot.resolve("LICENSE.txt"), pluginLicenseFile.asFile, "$id extracted wrapper LICENSE.txt")
+            assertSameFileBytes(pluginRoot.resolve("README.md"), layout.projectDirectory.file("packaging/$id-plugin/README.md").asFile, "$id extracted wrapper README.md")
+            assertSameFileBytes(pluginRoot.resolve(thirdPartyNoticesFileName), thirdPartyNoticesDir.get().file(thirdPartyNoticesFileName).asFile, "$id extracted wrapper $thirdPartyNoticesFileName")
+            assertMcpR8Version(pluginRoot.resolve("bin/hexana-mcp"), pluginRoot, java21Home, "$id extracted wrapper")
+        }
+
+        val securityInputDir = verificationRoot.resolve("security-input").also { it.mkdirs() }
+        archives.forEach { policy -> policy.archive.copyTo(securityInputDir.resolve(policy.archive.name)) }
+        check(securityInputDir.listFiles().orEmpty().map { it.name }.toSet() == archives.map { it.archive.name }.toSet()) {
+            "Release artifact security input must contain exactly the three verified ZIPs."
+        }
+        val securityCheck = runProcess(
+            listOf("bash", layout.projectDirectory.file("packaging/release-codex-claude-plugins.sh").asFile.absolutePath),
+            rootProject.projectDir,
+            mapOf("RELEASE_ARTIFACT_SECURITY_CHECK_DIR" to securityInputDir.absolutePath),
+            environmentKeysToRemove = setOf("GH_TOKEN", "GITHUB_TOKEN"),
+        )
+        check(securityCheck.exitCode == 0) {
+            "Release artifact security policy failed with exit ${securityCheck.exitCode}:\n${securityCheck.output}"
+        }
+    }
+}
+
 val zipNativeClaudePlugin = registerPluginZip(
     taskName = "zipNativeClaudePlugin",
     assembleTaskName = "assembleNativeClaudePluginPackage",
@@ -2722,12 +2986,19 @@ fun Map<*, *>.mapField(name: String): Map<*, *> {
 
 data class ProcessResult(val exitCode: Int, val output: String)
 
-fun runProcess(commandLine: List<String>, workingDir: File, environment: Map<String, String> = emptyMap()): ProcessResult {
+fun runProcess(
+    commandLine: List<String>,
+    workingDir: File,
+    environment: Map<String, String> = emptyMap(),
+    environmentKeysToRemove: Set<String> = emptySet(),
+): ProcessResult {
     val processBuilder = ProcessBuilder(commandLine)
         .directory(workingDir)
         .redirectErrorStream(true)
-    processBuilder.environment().keys.removeAll { it == "JAVA_TOOL_OPTIONS" || it == "JDK_JAVA_OPTIONS" }
     processBuilder.environment().putAll(environment)
+    processBuilder.environment().keys.removeAll {
+        it == "JAVA_TOOL_OPTIONS" || it == "JDK_JAVA_OPTIONS" || it in environmentKeysToRemove
+    }
     val process = processBuilder
         .start()
     val output = process.inputStream.bufferedReader().use { it.readText() }
