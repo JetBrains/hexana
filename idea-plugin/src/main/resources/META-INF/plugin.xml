@@ -181,6 +181,11 @@
                   fieldName="INSTANCE"
                   extensions="tar;tgz"/>
 
+        <fileType name="gz"
+                  implementationClass="org.jetbrains.hexana.GzFileType"
+                  fieldName="INSTANCE"
+                  extensions="gz"/>
+
         <fileType name="pcap"
                   implementationClass="org.jetbrains.hexana.PcapFileType"
                   fieldName="INSTANCE"

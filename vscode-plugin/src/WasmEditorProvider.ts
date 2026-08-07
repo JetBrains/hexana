@@ -371,12 +371,25 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             );
             return new WasmDocument(uri, inMemory.data, inMemory.fileName);
         }
-        const data = await vscode.workspace.fs.readFile(uri);
+
+        let data = await vscode.workspace.fs.readFile(uri);
+        let displayName: string | undefined = undefined;
+
+        const fileName = path.basename(uri.fsPath);
+        if (fileName.toLowerCase().endsWith(".gz") && !fileName.toLowerCase().endsWith(".tar.gz")) {
+            try {
+                data = zlib.gunzipSync(data);
+                displayName = fileName.substring(0, fileName.length - 3);
+            } catch (err) {
+                console.error("[Hexana] Failed to decompress .gz file:", err);
+            }
+        }
+
         extensionLib?.captureBinaryOpened(
-            path.basename(uri.fsPath),
+            displayName ?? path.basename(uri.fsPath),
             new Int8Array(data.buffer, data.byteOffset, data.byteLength),
         );
-        return new WasmDocument(uri, data);
+        return new WasmDocument(uri, data, displayName);
     }
 
     async resolveCustomEditor(

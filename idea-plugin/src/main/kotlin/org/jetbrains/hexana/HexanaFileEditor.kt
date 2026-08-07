@@ -571,6 +571,16 @@ class HexanaFileEditor(
             }
         }
 
+        // Generic gzip: decompress and resolve the inner content by the
+        // stripped extension (e.g. "foo.wasm.gz" → ext "wasm").
+        if (ext == "gz") {
+            val decompressed = decompressGzip(commonBuffer)
+                ?: return nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
+            val innerName = myFile.name.removeSuffix(".gz").removeSuffix(".GZ")
+            val innerExt = innerName.substringAfterLast('.', "").lowercase().ifEmpty { null }
+            return resolveProvider(innerExt, inMemoryBuffer, decompressed, sourcePath)
+        }
+
         if (ext != "wasm") {
             return nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
         }

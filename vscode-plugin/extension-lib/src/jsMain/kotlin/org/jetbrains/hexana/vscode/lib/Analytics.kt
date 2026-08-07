@@ -116,10 +116,13 @@ private fun resolveBinaryFormat(fileName: String, bytes: ByteArray): HexanaEvent
         "zip" -> HexanaEvent.BinaryFormat.ZIP
         "tar" -> HexanaEvent.BinaryFormat.TAR
         "tgz" -> HexanaEvent.BinaryFormat.TAR
-        else -> if (fileName.endsWith(".tar.gz", ignoreCase = true)) {
-            HexanaEvent.BinaryFormat.TAR
-        } else {
-            HexanaEvent.BinaryFormat.GENERIC
+        else -> when {
+            fileName.endsWith(".tar.gz", ignoreCase = true) -> HexanaEvent.BinaryFormat.TAR
+            fileName.endsWith(".gz", ignoreCase = true) -> {
+                val innerName = fileName.substring(0, fileName.length - 3)
+                resolveBinaryFormat(innerName, bytes)
+            }
+            else -> HexanaEvent.BinaryFormat.GENERIC
         }
     }
 }

@@ -49,7 +49,8 @@ class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
             file.extension.equals("jit", ignoreCase = true) ||
             file.extension.equals("dex", ignoreCase = true) ||
             file.extension.equals("parquet", ignoreCase = true) ||
-            file.extension.equals("arrow", ignoreCase = true)
+            file.extension.equals("arrow", ignoreCase = true) ||
+            file.extension.equals("gz", ignoreCase = true)
     }
 
     override fun createEditor(

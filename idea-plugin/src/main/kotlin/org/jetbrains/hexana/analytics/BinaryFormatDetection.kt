@@ -63,12 +63,37 @@ internal fun binaryFormatOf(
         "zip" -> HexanaEvent.BinaryFormat.ZIP
         "tar" -> HexanaEvent.BinaryFormat.TAR
         "tgz" -> HexanaEvent.BinaryFormat.TAR
-        else -> if (file?.name?.endsWith(".tar.gz", ignoreCase = true) == true) {
-            HexanaEvent.BinaryFormat.TAR
-        } else {
-            HexanaEvent.BinaryFormat.GENERIC
+        "gz" -> {
+            val name = file?.name ?: return HexanaEvent.BinaryFormat.GENERIC
+            if (name.endsWith(".tar.gz", ignoreCase = true)) {
+                HexanaEvent.BinaryFormat.TAR
+            } else {
+                // Strip .gz and re-detect based on the inner extension.
+                val inner = name.removeSuffix(".gz").removeSuffix(".GZ")
+                val innerExt = inner.substringAfterLast('.', "").lowercase()
+                binaryFormatByExtension(innerExt)
+            }
         }
+        else -> HexanaEvent.BinaryFormat.GENERIC
     }
+}
+
+/**
+ * Maps a lowercased file extension to a [HexanaEvent.BinaryFormat], returning
+ * [HexanaEvent.BinaryFormat.GENERIC] for unrecognised extensions. Used by the
+ * `.gz` branch to classify the inner content.
+ */
+private fun binaryFormatByExtension(ext: String): HexanaEvent.BinaryFormat = when (ext) {
+    "wasm" -> HexanaEvent.BinaryFormat.WASM
+    "class" -> HexanaEvent.BinaryFormat.CLASS
+    "jar" -> HexanaEvent.BinaryFormat.JAR
+    "war" -> HexanaEvent.BinaryFormat.WAR
+    "apk" -> HexanaEvent.BinaryFormat.APK
+    "zip" -> HexanaEvent.BinaryFormat.ZIP
+    "tar", "tgz" -> HexanaEvent.BinaryFormat.TAR
+    "parquet" -> HexanaEvent.BinaryFormat.PARQUET
+    "arrow" -> HexanaEvent.BinaryFormat.ARROW_IPC
+    else -> HexanaEvent.BinaryFormat.GENERIC
 }
 
 /**
