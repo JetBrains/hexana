@@ -93,7 +93,7 @@ fun HexanaPanel(
                     } else if (d.name == "Members" && provider is ArchiveBinaryProvider) {
                         enrichArchiveMembersTab(d, provider, host)
                     } else if (d.name == "Packets" && provider is PcapBinaryProvider) {
-                        enrichPcapPacketsTab(d, provider)
+                        enrichPcapPacketsTab(d, provider, host)
                     } else if (d.name == "Problems" && provider is WasmBinaryProvider) {
                         enrichProblemsTab(d, provider, selection) { funcIdx ->
                             watNavFuncIdx.value = funcIdx
@@ -675,6 +675,7 @@ private fun enrichZipEntriesTab(
 private fun enrichPcapPacketsTab(
     tab: TableTabDescriptor,
     provider: PcapBinaryProvider,
+    host: Host,
 ): TableTabDescriptor {
     val pcap = provider.parsedPcapFile ?: return tab
     val packets = pcap.packets
@@ -700,7 +701,7 @@ private fun enrichPcapPacketsTab(
                     .toByteArray()
                 val ext = httpContentTypeToExtension(d.httpContentType)
                 val fileName = "http-body-packet-${index + 1}$ext"
-                postOpenHttpBodyToHost(fileName, bodyBytes, d.httpContentType)
+                host.openHttpBody(fileName, bodyBytes, d.httpContentType)
             } catch (_: Exception) {
                 // Extraction failed — silently ignore
             }

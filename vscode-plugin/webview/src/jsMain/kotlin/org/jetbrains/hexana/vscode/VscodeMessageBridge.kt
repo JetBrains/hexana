@@ -366,6 +366,8 @@ class VscodeHost : Host {
     override fun openModule(moduleIndex: Int, fileName: String, data: ByteArray) =
         postOpenModuleToHost(moduleIndex, fileName, data)
     override fun openDts() = postOpenDtsToHost()
+    override fun openHttpBody(fileName: String, bodyBytes: ByteArray, httpContentType: String?) =
+        postOpenHttpBodyToHost(fileName, bodyBytes, httpContentType)
     override fun pickScriptFile() = postPickScriptFileToHost()
     override fun readScriptFile(scriptPath: String) = postReadScriptFileToHost(scriptPath)
     override fun scriptTabAdded(scriptPath: String) = postScriptTabAddedToHost(scriptPath)

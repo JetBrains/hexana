@@ -346,6 +346,7 @@ private fun enrichComponentNestedComponentsTab(
     tab: TableTabDescriptor,
     provider: WasmComponentBinaryProvider,
     fileName: String,
+    host: Host,
 ): TableTabDescriptor {
     val section = provider.wasmModule?.componentSection ?: return tab
     val baseName = fileName
@@ -372,7 +373,7 @@ private fun enrichComponentNestedComponentsTab(
             buffer.position(section.contentOffset)
             buffer.get(componentBytes, 0, section.contentSize)
             buffer.position(0)
-            postOpenModuleToHost(rowIndex, componentFileName, componentBytes)
+            host.openModule(rowIndex, componentFileName, componentBytes)
         },
     )
 }

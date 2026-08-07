@@ -102,6 +102,10 @@ class BrowserHost(
         // VS Code-specific (opens in Monaco editor); no-op in the browser.
     }
 
+    override fun openHttpBody(fileName: String, bodyBytes: ByteArray, httpContentType: String?) {
+        // todo
+    }
+
     override fun pickScriptFile() {
         val input = document.createElement("input").unsafeCast<HTMLInputElement>()
         input.type = "file"
