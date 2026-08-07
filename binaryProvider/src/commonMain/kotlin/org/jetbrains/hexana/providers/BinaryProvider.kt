@@ -367,6 +367,20 @@ class MachOBinaryProvider(
         NativeDwarfSourceLocationProvider(bytes, MachODwarfAccessor(sec))
     }
 
+    // Section-scoped string scan: the VM identity properties live in __DATA,__data (not near
+    // the start of the file), so a full-file scan with maxStrings=5_000 silently misses them
+    // on large binaries. Scanning only the sections that conventionally hold string data avoids
+    // the cap entirely and keeps the scan bounded.
+    override val strings: List<BinaryStringRecord> by lazy {
+        val sec = sections ?: return@lazy NativeStringScanner.scanAscii(bytes)
+        val stringDataSections = sec.filter { it.name in STRING_DATA_SECTIONS && it.contentRange != null }
+        if (stringDataSections.isEmpty()) return@lazy NativeStringScanner.scanAscii(bytes)
+        NativeStringScanner.scanSections(
+            bytes = bytes,
+            sections = stringDataSections.map { it.fileOffset.toInt() to it.size.toInt() },
+        )
+    }
+
     override val nativeImageInfo: NativeImageInfo? by lazy {
         val sec = sections ?: return@lazy null
         val sym = symbols ?: return@lazy null
@@ -403,6 +417,13 @@ class MachOBinaryProvider(
                 label = seg.name.ifBlank { "<unnamed>" },
             )
         }
+    }
+
+    companion object {
+        // Mach-O section names (short name only, without segment prefix) that conventionally
+        // hold string data. These are scanned for NativeImage identity strings instead of the
+        // full file to avoid a fixed maxStrings cap silently truncating the scan on large binaries.
+        private val STRING_DATA_SECTIONS = setOf("__cstring", "__data", "__const")
     }
 }
 

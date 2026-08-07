@@ -206,10 +206,12 @@ object NativeImageDetector {
     )
 
     private fun parseVmIdentity(strings: List<BinaryStringRecord>): VmIdentity? {
-        // The value is "GraalVM 23+37.1 Java 23", "GraalVM CE 21.0.1 Java 21",
-        // or — for the commercial distribution — "Oracle GraalVM 24.0.2+11.1".
+        // Newer GraalVM (22+) emits "GraalVM 23+37.1 Java 23", "GraalVM CE 21.0.1 Java 21",
+        // or "Oracle GraalVM 24.0.2+11.1". GraalVM 21 and earlier emits just the version build
+        // string, e.g. "21+35", with no "GraalVM" prefix. The key is specific enough that any
+        // non-empty value is a valid version.
         val versionValue = strings.firstNotNullOfOrNull { record ->
-            valueAfter(record.value, VM_IDENTITY_KEY)?.takeIf { it.contains("GraalVM") }
+            valueAfter(record.value, VM_IDENTITY_KEY)
         } ?: return null
         val platform = strings.firstNotNullOfOrNull { record ->
             valueAfter(record.value, VM_PLATFORM_KEY)
