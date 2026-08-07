@@ -35,7 +35,7 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
                    style-src ${webview.cspSource} 'unsafe-inline';
                    script-src 'nonce-${nonce}' 'wasm-unsafe-eval' 'unsafe-eval';
                    font-src ${webview.cspSource};
-                   connect-src ${webview.cspSource};
+                   connect-src ${webview.cspSource} https://api.osv.dev;
                    img-src ${webview.cspSource} data:;">
     <link rel="stylesheet" href="${cssUri}">
     <title>Hexana Wasm Editor</title>

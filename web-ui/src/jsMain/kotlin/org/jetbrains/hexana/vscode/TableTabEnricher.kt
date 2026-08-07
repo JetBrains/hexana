@@ -37,9 +37,13 @@ internal fun List<TableTabDescriptor>.enrichWasmTabs(
     onPendingWasmArgs: (WasmFunctionExportRecordEntry, List<WasmValueType<*>>) -> Unit,
 ): List<TableTabDescriptor> {
     val showRunButtons = !isSubmoduleFileName(fileName) && host.canRunExport
+    val graalInfo = provider.graalWebImageInfo
     return map { tab ->
         when (tab.name) {
             "Exports" -> enrichWasmExportsTab(tab, provider, showRunButtons, host, onPendingWasmArgs)
+            "Functions" -> if (graalInfo.canResolveSymbols) {
+                enrichWasmFunctionsTab(tab, provider)
+            } else tab
             else -> tab
         }
     }
@@ -121,6 +125,41 @@ private fun enrichWasmExportsTab(
                     }
                 }
             },
+        ),
+    )
+}
+
+/**
+ * Enriches the Functions tab for GraalVM Web Image modules: adds a "Java" row action
+ * that displays the demangled Java symbol for each function.
+ *
+ * The [RowActionDescriptor] lambdas are called per rendered row (lazy), so no
+ * up-front O(n) demangle pass occurs at enrichment time. [provider.graalSymbolFor]
+ * itself is O(1) per call (name-section lookup + demangler).
+ *
+ * Synthetic symbols (lambdas, compiler-generated stubs) do not get a tooltip or
+ * action, mirroring the IntelliJ enricher's `!symbol.isSynthetic` guard.
+ */
+private fun enrichWasmFunctionsTab(
+    tab: TableTabDescriptor,
+    provider: WasmBinaryProvider,
+): TableTabDescriptor {
+    val importFuncCount = provider.importFuncCount
+
+    return TableTabDescriptor(
+        name = tab.name,
+        columns = tab.columns,
+        rowCount = tab.rowCount,
+        defaultSortColumn = tab.defaultSortColumn,
+        defaultSortAscending = tab.defaultSortAscending,
+        rowSelectionProvider = tab.rowSelectionProvider,
+        rowAction = RowActionDescriptor(
+            label = "Java",
+            tooltipProvider = { index ->
+                val symbol = provider.graalSymbolFor(importFuncCount + index)
+                if (symbol != null && !symbol.isSynthetic) symbol.display() else null
+            },
+            action = { /* no navigation target on the web side */ },
         ),
     )
 }

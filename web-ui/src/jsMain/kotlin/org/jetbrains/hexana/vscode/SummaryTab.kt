@@ -11,6 +11,7 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.wasm.analysis.GraalWebImageInfo
 import org.jetbrains.hexana.wasm.sections.WasmSection
 
 @Composable
@@ -36,6 +37,7 @@ private fun CoreWasmSummary(provider: WasmBinaryProvider, selection: HexSelectio
     val importCount = remember(provider) { provider.imports.size }
     val exportCount = remember(provider) { provider.exports.size }
     val functionCount = remember(provider) { provider.functions.size }
+    val graalInfo = remember(provider) { provider.graalWebImageInfo }
 
     SummaryLayout(
         sections = sections,
@@ -45,8 +47,40 @@ private fun CoreWasmSummary(provider: WasmBinaryProvider, selection: HexSelectio
             Div { Text("Exports: $exportCount") }
             Div { Text("Functions: $functionCount") }
             Div { Text("Sections: ${sections.size}") }
+            if (graalInfo.isWebImage) {
+                GraalWebImageRow(graalInfo)
+            }
         },
     )
+}
+
+/**
+ * Summary card row shown when the module is detected as a GraalVM Web Image binary.
+ * Displays the matched import-module fingerprints that triggered the detection.
+ */
+@Composable
+private fun GraalWebImageRow(graalInfo: GraalWebImageInfo) {
+    val modules = graalInfo.matchedImportModules.sorted().joinToString(", ")
+    Div({
+        style {
+            property("margin-top", "8px")
+            property("padding-top", "6px")
+            property("border-top", "1px solid var(--hexana-border, #333)")
+        }
+    }) {
+        Div({
+            style {
+                property("font-weight", "600")
+                property("margin-bottom", "2px")
+            }
+        }) { Text("Toolchain: GraalVM Web Image") }
+        Div({
+            style {
+                property("color", "var(--vscode-descriptionForeground, #888)")
+                property("font-size", "11px")
+            }
+        }) { Text("via: $modules") }
+    }
 }
 
 @Composable

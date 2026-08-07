@@ -311,6 +311,20 @@ fun postPickScriptFileToHost() {
 }
 
 /**
+ * Asks the extension host to open a text document in a new VS Code editor tab.
+ *
+ * [fileName] is used as the suggested file name (e.g. "foo.cdx.json").
+ * [content] is the raw text content of the document.
+ */
+fun postOpenTextFileToHost(fileName: String, content: String) {
+    val msg = js("{}")
+    msg.type = "open-text-file"
+    msg.fileName = fileName
+    msg.content = content
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to re-read a script file's content.
  * The host will respond with a `script-file-content` message.
  */
@@ -368,6 +382,7 @@ class VscodeHost : Host {
     override fun openDts() = postOpenDtsToHost()
     override fun openHttpBody(fileName: String, bodyBytes: ByteArray, httpContentType: String?) =
         postOpenHttpBodyToHost(fileName, bodyBytes, httpContentType)
+    override fun openTextFile(fileName: String, content: String) = postOpenTextFileToHost(fileName, content)
     override fun pickScriptFile() = postPickScriptFileToHost()
     override fun readScriptFile(scriptPath: String) = postReadScriptFileToHost(scriptPath)
     override fun scriptTabAdded(scriptPath: String) = postScriptTabAddedToHost(scriptPath)

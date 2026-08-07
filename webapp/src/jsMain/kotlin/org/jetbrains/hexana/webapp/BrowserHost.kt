@@ -6,6 +6,8 @@ import org.jetbrains.hexana.vscode.Host
 import org.w3c.dom.HTMLAnchorElement
 import org.w3c.dom.HTMLInputElement
 import org.w3c.dom.url.URL
+import org.khronos.webgl.Int8Array
+import org.khronos.webgl.Uint8Array
 import org.w3c.files.Blob
 import org.w3c.files.BlobPropertyBag
 
@@ -106,6 +108,10 @@ class BrowserHost(
         // todo
     }
 
+    override fun openTextFile(fileName: String, content: String) {
+        downloadText(text = content, name = fileName, mimeType = "application/json")
+    }
+
     override fun pickScriptFile() {
         val input = document.createElement("input").unsafeCast<HTMLInputElement>()
         input.type = "file"
@@ -166,10 +172,9 @@ class BrowserHost(
     }
 
     private fun downloadBytes(bytes: ByteArray, name: String) {
-        val uint8 = js("new Uint8Array(bytes.length)")
-        for (i in bytes.indices) {
-            uint8[i] = bytes[i].toInt() and 0xFF
-        }
+        // Kotlin/JS ByteArray is Int8Array at runtime; reinterpret as Uint8Array without copying.
+        val int8 = bytes.unsafeCast<Int8Array>()
+        val uint8 = Uint8Array(int8.buffer, int8.byteOffset, bytes.size)
         val blob = Blob(arrayOf(uint8), BlobPropertyBag(type = "application/octet-stream"))
         triggerDownload(URL.createObjectURL(blob), name)
     }

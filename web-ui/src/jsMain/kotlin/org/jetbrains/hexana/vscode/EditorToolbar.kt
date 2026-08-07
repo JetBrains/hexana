@@ -7,6 +7,8 @@ import org.jetbrains.compose.web.css.color
 import org.jetbrains.compose.web.css.display
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.providers.NativeImageInfo
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.fileTypeDescription
@@ -33,6 +35,7 @@ fun EditorToolbar(
     overwriteShadow: OverwriteShadow? = null,
     onOverwriteShadowChanged: ((OverwriteShadow?) -> Unit)? = null,
     onReparseAfterOverwrite: () -> Unit = {},
+    onOpenSbomTab: (() -> Unit)? = null,
 ) {
     val isSubmodule = parentFileName != null || isSubmoduleFileName(fileName)
 
@@ -62,6 +65,16 @@ fun EditorToolbar(
     val host = LocalHost.current
     val isRunnable = runnableExportName != null && host.canRunExport
     val isComponent = provider is WasmComponentBinaryProvider
+
+    // Lazy native-image detection: nativeImageInfo is an expensive lazy val.
+    // Mirror the same pattern used in HexanaPanel so the cached value is shared.
+    var nativeImageInfo by remember(provider) { mutableStateOf<NativeImageInfo?>(null) }
+    LaunchedEffect(provider) {
+        nativeImageInfo = null
+        if (provider is NativeBinaryProvider) {
+            nativeImageInfo = provider.nativeImageInfo
+        }
+    }
 
     // Which action the toolbar button triggered: null = hidden, "run" / "debug" = show only that button
     var toolbarAction by remember { mutableStateOf<String?>(null) }
@@ -310,6 +323,11 @@ fun EditorToolbar(
                     tooltip = "Debug Wasm module",
                     onClick = { toolbarAction = "debug" }
                 )
+            }
+
+            val ni = nativeImageInfo
+            if (ni != null && ni.isNativeImage) {
+                NativeImageBadges(ni, onOpenSbomTab = onOpenSbomTab)
             }
 
             val proposals = remember(provider) {
@@ -562,6 +580,72 @@ private fun ShareFeedbackButton() {
                     dropdownVisible = false
                 }
             }
+        }
+    }
+}
+
+/**
+ * Renders "Native Image" and optionally "SBOM" badges for a GraalVM native binary.
+ *
+ * Matches the IntelliJ [FileDescriptionBar.NativeImageBadges] rendering using
+ * VS Code CSS variables in place of Compose Desktop colors.
+ */
+@Composable
+private fun NativeImageBadges(info: NativeImageInfo, onOpenSbomTab: (() -> Unit)?) {
+    val tooltipText = buildString {
+        append("GraalVM Native Image")
+        info.version?.let { append('\n').append(it) }
+        val edition = when (info.edition) {
+            NativeImageInfo.Edition.COMMUNITY -> "Community"
+            NativeImageInfo.Edition.ENTERPRISE -> "Enterprise"
+            NativeImageInfo.Edition.UNKNOWN -> null
+        }
+        edition?.let { append('\n').append(it) }
+        info.platform?.let { append('\n').append(it) }
+    }
+
+    Span({
+        classes("hexana-badge", "hexana-ni-badge")
+        attr("title", tooltipText)
+        style {
+            property("padding", "2px 8px")
+            property("border-radius", "4px")
+            property("font-size", "11px")
+            property("background", "var(--hexana-ni-badge-bg, #3A335740)")
+            property("color", "var(--hexana-ni-badge-fg, #C4B5F0)")
+        }
+    }) {
+        Text("Native Image")
+    }
+
+    if (info.sbom != null) {
+        val hasSbomCallback = onOpenSbomTab != null
+        Span({
+            classes("hexana-badge", "hexana-sbom-badge")
+            attr("title", if (hasSbomCallback) "Open the CycloneDX SBOM viewer" else "CycloneDX SBOM embedded")
+            if (hasSbomCallback) {
+                style {
+                    property("padding", "2px 8px")
+                    property("border-radius", "4px")
+                    property("font-size", "11px")
+                    property("font-weight", "600")
+                    property("background", "var(--hexana-ni-badge-bg, #3A335740)")
+                    property("color", "var(--hexana-ni-badge-fg, #C4B5F0)")
+                    property("cursor", "pointer")
+                }
+                onClick { onOpenSbomTab!!() }
+            } else {
+                style {
+                    property("padding", "2px 8px")
+                    property("border-radius", "4px")
+                    property("font-size", "11px")
+                    property("font-weight", "600")
+                    property("background", "var(--hexana-ni-badge-bg, #3A335740)")
+                    property("color", "var(--hexana-ni-badge-fg, #C4B5F0)")
+                }
+            }
+        }) {
+            Text("SBOM")
         }
     }
 }

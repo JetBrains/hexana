@@ -168,6 +168,7 @@ fun BinaryEditorContent(
             overwriteShadow = overwriteShadow,
             onOverwriteShadowChanged = { overwriteShadow = it },
             onReparseAfterOverwrite = { reparseCounter++ },
+            onOpenSbomTab = { activeTab = "SBOM" },
         )
         Div({
             style {

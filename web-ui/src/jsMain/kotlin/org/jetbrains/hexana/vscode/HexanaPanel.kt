@@ -10,7 +10,9 @@ import org.jetbrains.hexana.pcap.PcapDissectedPacket
 import org.jetbrains.hexana.pcap.PcapDissector
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.PcapBinaryProvider
+import org.jetbrains.hexana.providers.SbomLocator
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
@@ -31,6 +33,7 @@ private enum class FixedTab(val label: String) {
     WatClassic("Wat"),
     Wat("WAT (virtualized)"),
     Dependencies("Dependencies"),
+    Sbom("SBOM"),
 }
 
 /**
@@ -66,10 +69,25 @@ fun HexanaPanel(
     // consumed (reset to null) by the WAT view once handled.
     val watNavFuncIdx = remember { mutableStateOf<Int?>(null) }
 
+    // Lazy SBOM detection: nativeImageInfo is expensive (string scan + symbol resolution).
+    // Populated by a LaunchedEffect so it never runs synchronously in the composition path.
+    // Its presence is a remember key so the SBOM tab appears once detection completes.
+    var sbomLocator by remember(provider) { mutableStateOf<SbomLocator?>(null) }
+    var sbomGraalVersion by remember(provider) { mutableStateOf<String?>(null) }
+    LaunchedEffect(provider) {
+        sbomLocator = null
+        sbomGraalVersion = null
+        if (provider is NativeBinaryProvider) {
+            val info = provider.nativeImageInfo
+            sbomLocator = info?.sbom
+            sbomGraalVersion = info?.version
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Build the tab list: provider-generated table tabs + fixed tabs
     // -----------------------------------------------------------------------
-    val tabs = remember(provider, fileName, extraTabs, scriptTabs.size) {
+    val tabs = remember(provider, fileName, extraTabs, scriptTabs.size, sbomLocator) {
         buildList {
             // Summary is always first
             if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
@@ -147,6 +165,16 @@ fun HexanaPanel(
             if (provider is WasmComponentBinaryProvider) {
                 add(PanelTab(FixedTab.Dependencies.label, padding = false) { _ ->
                     DependencyGraphTabContent(provider)
+                })
+            }
+
+            // SBOM tab: present only when nativeImageInfo detection has completed and
+            // found an embedded SBOM. sbomLocator is null until the LaunchedEffect fires.
+            val locator = sbomLocator
+            val graalVer = sbomGraalVersion
+            if (locator != null && provider is NativeBinaryProvider) {
+                add(PanelTab(FixedTab.Sbom.label) { _ ->
+                    SbomTabContent(provider, locator, graalVer, fileName)
                 })
             }
 

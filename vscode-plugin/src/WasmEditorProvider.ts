@@ -525,6 +525,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 this.openZipEntry(document, message);
             } else if (message.type === "show-wat") {
                 this.showWatEditor(document, message);
+            } else if (message.type === "open-text-file") {
+                this.openTextFile(message.fileName as string, message.content as string);
             } else if (message.type === "tab-selected") {
                 extensionLib?.captureHexTabSelected(message.tabName, "wasm");
             } else if (message.type === "update-runtime-setting") {
@@ -606,6 +608,21 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         if (message.warning) {
             vscode.window.showWarningMessage(`WAT conversion warning: ${message.warning}`);
         }
+    }
+
+    /**
+     * Opens an in-memory text document beside the current editor.
+     * Used by the SBOM "View raw JSON" action to surface the embedded JSON.
+     */
+    private async openTextFile(fileName: string, content: string): Promise<void> {
+        const ext = fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase();
+        const language = ext === "json" ? "json" : ext || undefined;
+        const doc = await vscode.workspace.openTextDocument({ content, language });
+        await vscode.window.showTextDocument(doc, {
+            viewColumn: vscode.ViewColumn.Beside,
+            preserveFocus: false,
+            preview: true,
+        });
     }
 
     /**
