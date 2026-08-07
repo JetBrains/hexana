@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- **Problems** tab for WASM binaries. When the parser hits bytes it cannot decode (for example instructions from a not-yet-supported proposal), it no longer discards the whole function body: decoding keeps everything up to the failure and records the rest as one unparsed region, and every such region shows up as a row in the new tab with its kind, location, byte offset, size and message. Clicking a row jumps to the affected function in the **WAT (virtualized)** tab; the context menu also offers the plain **Wat** tab, which now scrolls to the nearest annotated line. Rows not tied to a function select the failed byte range in the hex view. The tab appears only when the module actually has parse problems.
+- Type-section encodings from the custom-descriptors proposal (Phase 3): exact reference types (`(ref null (exact $t))`) and `descriptor` / `describes` clauses now parse with correct alignment. WasmGC modules emitted with these encodings (recent Kotlin/Wasm and J2CL toolchains) previously failed to parse at all: the type section silently misparsed from the first exact type onward and every later function body degraded to an unparsed blob or a NullPointerException.
 
 ### Changed
 
@@ -11,6 +13,8 @@
 ### Removed
 
 ### Fixed
+- Navigating to a function in the **WAT (virtualized)** tab (from the Problems tab, go-to-function or search) landed on the wrong function in modules whose type section contains collapsed `(rec …)` groups: every collapsed group member before the target shifted the scroll one row further (clicking func 25 landed on func 83 in a 216-type WasmGC module). The scroll index now accounts for group-collapsed rows.
+- The WAT view's hex byte column garbled every line after an unparsed opcode region: the renderer advanced one byte instead of the region's full size.
 
 ### Security
 

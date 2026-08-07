@@ -368,7 +368,7 @@ private fun WasmPanelWatVirtualizedContent(
             focusMap = focusMap,
             scope = navScope,
             history = navHistory,
-            itemCountForChunk = { chunkId -> watItemCount(chunkTree, bigFuncRowCache, chunkId) },
+            itemCountForChunk = { chunkId -> watItemCount(chunkTree, bigFuncRowCache, expandedRecGroups, chunkId) },
             ensureDecoded = { chunkId ->
                 val c = chunkTree.chunkForId(chunkId)?.let { chunkTree.chunkAt(it) } as? BinaryChunk.Element
                 if (c != null && c.kind == WasmSectionKinds.CODE &&
@@ -638,7 +638,7 @@ private fun WasmPanelWatVirtualizedContent(
                     )
                 }
             },
-            itemCountForChunk = { chunkId -> watItemCount(chunkTree, bigFuncRowCache, chunkId) },
+            itemCountForChunk = { chunkId -> watItemCount(chunkTree, bigFuncRowCache, expandedRecGroups, chunkId) },
             statusBarExtra = {
                 val shortcutText = remember {
                     com.intellij.openapi.keymap.KeymapUtil.getFirstKeyboardShortcutText("FileStructurePopup")
@@ -1429,21 +1429,25 @@ private fun WatRowItem(
 private const val BIG_FUNC_THRESHOLD = 200
 
 /**
- * Number of LazyColumn items the chunk [chunkId] currently occupies: the decoded
- * row count for a cached big CODE function (rendered as per-row items), else 1.
- * Shared by the navigator's item-index walk and the StatusBar reverse-map so
- * both agree with what the LazyColumn actually emits.
+ * Number of LazyColumn items the chunk [chunkId] currently occupies: 0 for a
+ * member of a collapsed (rec …) group (the LazyColumn emits nothing for it),
+ * the decoded row count for a cached big CODE function (rendered as per-row
+ * items), else 1. Shared by the navigator's item-index walk and the StatusBar
+ * reverse-map so both agree with what the LazyColumn actually emits.
  */
 private fun watItemCount(
     chunkTree: WasmChunkTree,
     bigFuncRowCache: Map<ChunkId, List<RenderedRow>>,
+    expandedRecGroups: Set<ChunkId>,
     chunkId: ChunkId,
 ): Int {
     val c = chunkTree.chunkForId(chunkId)?.let { chunkTree.chunkAt(it) } as? BinaryChunk.Element ?: return 1
-    return if (c.kind == WasmSectionKinds.CODE && c.estimatedLines > BIG_FUNC_THRESHOLD) {
-        bigFuncRowCache[chunkId]?.size ?: 1
-    } else {
-        1
+    return when {
+        // Member of a collapsed (rec …) group: the LazyColumn emits no item for it.
+        c.groupId != null && c.groupId !in expandedRecGroups -> 0
+        c.kind == WasmSectionKinds.CODE && c.estimatedLines > BIG_FUNC_THRESHOLD ->
+            bigFuncRowCache[chunkId]?.size ?: 1
+        else -> 1
     }
 }
 

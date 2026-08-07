@@ -60,6 +60,10 @@ fun HexanaPanel(
 ) {
     val pendingRun = rememberPendingRunState()
 
+    // "Scroll WAT to function" channel from the Problems tab into WatTabContent;
+    // consumed (reset to null) by the WAT view once handled.
+    val watNavFuncIdx = remember { mutableStateOf<Int?>(null) }
+
     // -----------------------------------------------------------------------
     // Build the tab list: provider-generated table tabs + fixed tabs
     // -----------------------------------------------------------------------
@@ -88,6 +92,11 @@ fun HexanaPanel(
                         enrichArchiveMembersTab(d, provider)
                     } else if (d.name == "Packets" && provider is PcapBinaryProvider) {
                         enrichPcapPacketsTab(d, provider)
+                    } else if (d.name == "Problems" && provider is WasmBinaryProvider) {
+                        enrichProblemsTab(d, provider, selection) { funcIdx ->
+                            watNavFuncIdx.value = funcIdx
+                            onActiveTabChange(FixedTab.Wat.label)
+                        }
                     } else d
                     tabEntries += TabEntry(
                         PanelTab(desc.name) { sel -> TableTabContent(desc, sel) },
@@ -123,7 +132,7 @@ fun HexanaPanel(
             // WAT tab (always present for Wasm and component)
             if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
                 add(PanelTab(FixedTab.Wat.label, padding = false) { _ ->
-                    WatTabContent(provider)
+                    WatTabContent(provider, watNavFuncIdx)
                 })
             }
 

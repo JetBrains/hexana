@@ -32,9 +32,15 @@ import org.w3c.dom.events.Event
 @Composable
 fun WatTabContent(
     provider: BinaryProvider,
+    /**
+     * External "scroll to function" request (global funcIdx, imports first),
+     * e.g. from a Problems-tab row click. Consumed (reset to null) once
+     * handled. Only supported for core Wasm modules.
+     */
+    navFuncIdx: MutableState<Int?>,
 ) {
     when (provider) {
-        is WasmBinaryProvider -> VirtualizedWatView(provider)
+        is WasmBinaryProvider -> VirtualizedWatView(provider, navFuncIdx)
         is WasmComponentBinaryProvider -> VirtualizedComponentWatView(provider)
         else -> Div { Text("Not a recognized WebAssembly binary.") }
     }
@@ -129,7 +135,8 @@ private fun ComponentModuleSelector(modules: List<EmbeddedCoreModule>) {
             }
         }) {
             key(index) {
-                VirtualizedWatView(coreProvider)
+                // Embedded core modules have no external nav source; inert state.
+                VirtualizedWatView(coreProvider, remember { mutableStateOf(null) })
             }
         }
     }
@@ -158,7 +165,7 @@ private fun buildWatPanelState(provider: WasmBinaryProvider): WatPanelState {
 }
 
 @Composable
-private fun VirtualizedWatView(provider: WasmBinaryProvider) {
+private fun VirtualizedWatView(provider: WasmBinaryProvider, navFuncIdx: MutableState<Int?>) {
     var panelState by remember { mutableStateOf<WatPanelState?>(null) }
 
     LaunchedEffect(provider) {
@@ -178,7 +185,7 @@ private fun VirtualizedWatView(provider: WasmBinaryProvider) {
         return
     }
 
-    VirtualizedWatContent(ready)
+    VirtualizedWatContent(ready, navFuncIdx)
 }
 
 /**
@@ -206,7 +213,7 @@ private class VisibleItem(
 )
 
 @Composable
-private fun VirtualizedWatContent(state: WatPanelState) {
+private fun VirtualizedWatContent(state: WatPanelState, navFuncIdx: MutableState<Int?>) {
     val chunkTree = state.chunkTree
     val renderer = state.renderer
     val snapshot = state.snapshot
@@ -280,15 +287,15 @@ private fun VirtualizedWatContent(state: WatPanelState) {
     // Ref to the content div.
     val contentElRef = remember { mutableStateOf<HTMLElement?>(null) }
 
-    // Section shortcut bar + "Open in Editor" button
-    val openInEditorScope = rememberCoroutineScope()
-    SectionShortcutBar(sectionEntries, barRef = shortcutBarRef, onSectionClick = { chunkIndex ->
-        val container = scrollContainerRef.value ?: return@SectionShortcutBar
+    // Iterative scroll to an arbitrary chunk index. Shared by the section
+    // shortcut bar and external navigation requests (Problems tab row click).
+    val scrollToChunkIndex: (Int) -> Unit = scrollToChunk@{ chunkIndex ->
+        val container = scrollContainerRef.value ?: return@scrollToChunk
         val items = visibleItemsRef.value
         val heights = prefixHeightsRef.value
         val wrapper = innerWrapperRef.value
         val listIdx = items.indexOfFirst { it.index == chunkIndex }
-        if (listIdx < 0) return@SectionShortcutBar
+        if (listIdx < 0) return@scrollToChunk
 
         val barHeight = shortcutBarRef.value?.offsetHeight?.toDouble() ?: 0.0
 
@@ -491,7 +498,11 @@ private fun VirtualizedWatContent(state: WatPanelState) {
         kotlinx.browser.window.requestAnimationFrame {
             kotlinx.browser.window.requestAnimationFrame { refineScroll() }
         }
-    }) {
+    }
+
+    // Section shortcut bar + "Open in Editor" button
+    val openInEditorScope = rememberCoroutineScope()
+    SectionShortcutBar(sectionEntries, barRef = shortcutBarRef, onSectionClick = scrollToChunkIndex) {
         openInEditorScope.launch {
             try {
                 WasmPrinterJs.ensureInitialized()
@@ -502,6 +513,45 @@ private fun VirtualizedWatContent(state: WatPanelState) {
             } catch (e: Throwable) {
                 console.error("Failed to convert WAT for editor: ${e.message}")
             }
+        }
+    }
+
+    // External navigation (Problems tab row click): resolve the global funcIdx
+    // to its Code-section chunk, unfold the section if needed, wait for the
+    // virtualizer to include the target, then reuse the shared scroll.
+    val navRequest = navFuncIdx.value
+    LaunchedEffect(navRequest) {
+        val funcIdx = navRequest ?: return@LaunchedEffect
+        try {
+            val indexInSection = funcIdx - state.provider.importFuncCount
+            if (indexInSection < 0) return@LaunchedEffect
+            var chunkIndex = -1
+            for (i in 0 until chunkTree.totalChunks) {
+                val c = chunkTree.chunkAt(i)
+                if (c is BinaryChunk.Element && c.kind == WasmSectionKinds.CODE && c.indexInSection == indexInSection) {
+                    chunkIndex = i
+                    break
+                }
+            }
+            if (chunkIndex < 0) return@LaunchedEffect
+            for (i in 0 until chunkTree.totalChunks) {
+                val c = chunkTree.chunkAt(i)
+                if (c is BinaryChunk.SectionHeader && c.kind == WasmSectionKinds.CODE) {
+                    foldedSections = foldedSections - c.id
+                }
+            }
+            repeat(20) {
+                if (visibleItemsRef.value.any { it.index == chunkIndex }) {
+                    scrollToChunkIndex(chunkIndex)
+                    return@LaunchedEffect
+                }
+                kotlinx.coroutines.delay(50)
+            }
+        } finally {
+            // Consume the request only once handled (or given up): resetting the
+            // value earlier would change this effect's key and cancel the retry
+            // loop mid-flight. Re-clicking the same row re-fires via the reset.
+            navFuncIdx.value = null
         }
     }
 

@@ -118,6 +118,45 @@ private fun enrichWasmExportsTab(
     )
 }
 
+/**
+ * Enriches the Problems tab with VS Code navigation, mirroring the IntelliJ
+ * behavior: a row with a funcIdx switches to the WAT tab and scrolls to the
+ * function; other rows fall back to selecting the failed byte region in the
+ * hex viewer.
+ */
+internal fun enrichProblemsTab(
+    tab: TableTabDescriptor,
+    provider: WasmBinaryProvider,
+    selection: HexSelectionState,
+    onNavigateToWatFunc: (Int) -> Unit,
+): TableTabDescriptor {
+    val problems = provider.parseProblems
+
+    return TableTabDescriptor(
+        name = tab.name,
+        columns = tab.columns,
+        rowCount = tab.rowCount,
+        defaultSortColumn = tab.defaultSortColumn,
+        defaultSortAscending = tab.defaultSortAscending,
+        rowSelectionProvider = tab.rowSelectionProvider,
+        rowClickAction = { index ->
+            val funcIdx = problems.getOrNull(index)?.funcIdx
+            if (funcIdx != null) {
+                onNavigateToWatFunc(funcIdx)
+            } else {
+                // Same behavior as the bridge's default (no rowClickAction) path.
+                val selData = tab.rowSelectionProvider(index)
+                if (selData != null) {
+                    selection.anchorIndex = selData.offset
+                    selection.activeIndex = selData.offset + selData.size - 1
+                    selection.cursorIndex = selData.offset
+                    scrollHexViewerTo(selData.offset)
+                }
+            }
+        },
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Component Exports enrichment
 // ---------------------------------------------------------------------------

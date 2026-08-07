@@ -21,7 +21,6 @@ import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.statistics.HexanaCounterUsagesCollector
-import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
 
 class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
     companion object {
@@ -86,11 +85,13 @@ class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
     private fun reportUnparsedOpcodes(editor: HexanaFileEditor) {
         val provider = editor.binaryProvider as? WasmBinaryProvider ?: return
         ApplicationManager.getApplication().executeOnPooledThread {
-            val codeRecords = provider.codeRecords
-            val totalFunctions = codeRecords.size
-            val unparsedCount = codeRecords.count { record ->
-                record.opCodes.any { it is UnparsedOpCode }
-            }
+            // parseProblems is the single source of truth for parse failures; it
+            // already scans codeRecords for UnparsedOpCode entries (and more).
+            // Count only problems that map to a specific function (code-section
+            // failures) to preserve the original event semantics.
+            val problems = provider.parseProblems
+            val totalFunctions = provider.codeRecords.size
+            val unparsedCount = problems.count { it.funcIdx != null }
             if (unparsedCount > 0) {
                 HexanaService.getInstance().captureAnalytics(
                     HexanaEvent.WasmUnparsedOpcodes(

@@ -60,6 +60,7 @@ import com.intellij.ui.EditorNotificationPanel
 import com.intellij.util.asSafely
 import com.intellij.util.ui.UIUtil
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.hexana.HexViewMode
 import org.jetbrains.hexana.HexViewStateHolder
@@ -87,6 +88,16 @@ import java.awt.Color as AwtColor
 internal fun WasmPanelWat(
     wasmBinaryProvider: BinaryVirtualFileProvider,
     state: HexViewStateHolder,
+    /**
+     * Optional byte-offset navigation request. Non-null value drives the
+     * plain WAT panel to scroll to the line whose WAT offset annotation is
+     * nearest-≤ the target offset. Only effective for the [WatConversionState.ShowLiteEditor]
+     * state; other states receive tab-switch-only navigation.
+     * Consumed values are reset to null (the flow is shared with the WAT
+     * virtualized panel, which does the same) so a handled navigation does
+     * not re-fire when the other panel is composed later.
+     */
+    byteOffsetNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
 ) {
     // Create the view-model once per composition (keyed on its inputs) rather than
     // on every recomposition, and cancel its viewModelScope when this panel leaves
@@ -112,7 +123,7 @@ internal fun WasmPanelWat(
 
         is WatConversionState.ShowLiteEditor -> {
             val editor = wasmViewState as WatConversionState.ShowLiteEditor
-            WatLiteEditor(editor.wat, editor.lineOffsets, state)
+            WatLiteEditor(editor.wat, editor.lineOffsets, state, byteOffsetNavFlow)
         }
 
         is WatConversionState.ShowEditor -> {
@@ -160,7 +171,12 @@ fun TextAttributesKey.toComposeColor(): Color {
 }
 
 @Composable
-internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, state: HexViewStateHolder) {
+internal fun WatLiteEditor(
+    watContent: String,
+    lineOffsets: Map<Int, String>,
+    state: HexViewStateHolder,
+    byteOffsetNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
+) {
     var searchQuery by remember { mutableStateOf(TextFieldValue("")) }
     var isSearchVisible by remember { mutableStateOf(false) }
     var currentMatchIndex by remember { mutableIntStateOf(0) }
@@ -235,6 +251,35 @@ internal fun WatLiteEditor(watContent: String, lineOffsets: Map<Int, String>, st
         if (!isShiftPressed) {
             selectionStartLine = cursorLine
             selectionStartColumn = cursorColumn
+        }
+    }
+
+    // Scroll the lite editor to the line whose WAT offset annotation is nearest-≤ the
+    // requested byte offset. lineOffsets maps line index → hex offset string; we parse
+    // them into a sorted list of (offset, lineIndex) pairs and binary-search for the
+    // largest offset ≤ target. Fires whenever a non-null value arrives on byteOffsetNavFlow.
+    val sortedLineOffsets = remember(lineOffsets) {
+        lineOffsets.entries
+            .mapNotNull { (lineIdx, hexStr) -> hexStr.toLongOrNull(16)?.let { it to lineIdx } }
+            .sortedBy { it.first }
+    }
+    LaunchedEffect(byteOffsetNavFlow) {
+        byteOffsetNavFlow.collect { targetOffset ->
+            if (targetOffset == null) return@collect
+            // Consume the request: the flow is shared with the WAT virtualized
+            // panel (which also resets after handling); leaving the value in
+            // place would re-fire navigation when that panel mounts later.
+            byteOffsetNavFlow.value = null
+            val target = targetOffset.toLong()
+            val lineIdx = if (sortedLineOffsets.isEmpty()) {
+                0
+            } else {
+                // Find the last entry whose offset is ≤ target.
+                val pos = sortedLineOffsets.binarySearch { (off, _) -> off.compareTo(target) }
+                val insertionPoint = if (pos >= 0) pos else -(pos + 1) - 1
+                if (insertionPoint < 0) 0 else sortedLineOffsets[insertionPoint].second
+            }
+            coroutineScope.launch { lazyListState.animateScrollToItem(lineIdx) }
         }
     }
 

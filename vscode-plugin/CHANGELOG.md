@@ -1,3 +1,8 @@
+# Unreleased
+- "Problems" tab for WASM binaries listing regions the parser could not decode (unknown opcodes, unsupported proposal constructs) with location, offset and message; clicking a row jumps to the function in the WAT tab, rows without a function select the bytes in the hex view
+- parsing support for the custom-descriptors proposal type encodings (exact reference types, descriptor/describes clauses); WasmGC modules using them previously failed to parse
+- function bodies with a single undecodable instruction now keep everything decoded up to that point instead of turning into one unparsed blob
+
 # 0.9.0 - 05.08.2026
 - size diagram ("Top" tab) for wasm and native binaries that shows largest by size entities
 - optimized performance of large table views

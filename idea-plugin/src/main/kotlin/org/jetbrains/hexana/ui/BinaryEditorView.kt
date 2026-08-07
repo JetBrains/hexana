@@ -961,7 +961,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
         if (canProvideWasmModule()) {
             listOf(
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
-                Panel("Wat") { WasmPanelWat(this, state) },
+                Panel("Wat") { WasmPanelWat(this, state, wasmByteOffsetNavFlow ?: remember { MutableStateFlow(null) }) },
                 Panel("WAT (virtualized)") {
                     val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
                     WasmPanelWatVirtualized(

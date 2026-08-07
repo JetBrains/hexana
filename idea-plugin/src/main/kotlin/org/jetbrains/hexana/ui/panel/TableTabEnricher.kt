@@ -73,7 +73,8 @@ fun BinaryProvider.getTabEnricher(): List<TableTabDescriptor>.(
 /**
  * Enriches [TableTabDescriptor]s produced by [WasmTableTabsProvider] with
  * IDE-specific actions: run buttons on exported functions, unreachable
- * function badges and cross-panel navigation on the Functions tab.
+ * function badges and cross-panel navigation on the Functions tab, and
+ * WAT/hex navigation on the Problems tab.
  *
  * @param onShowPaths callback invoked when the user selects "Show Paths
  *   from Roots" on a function row; receives the function index
@@ -93,6 +94,7 @@ internal fun List<TableTabDescriptor>.enrichWasmTabs(
             provider.garbageAnalysis?.entries
                 ?.map { it.funcIndex }?.toSet() ?: emptySet()
         })
+        "Problems" -> enrichWasmProblemsTab(tab, provider, provider.file, hexViewState)
         else -> tab
     }
 }
@@ -440,6 +442,72 @@ private fun enrichWasmFunctionsTab(
                 )
             }
             add(sourceLocationMenuItem(provider, project) { index -> index })
+        },
+    )
+}
+
+/**
+ * Enriches the Problems tab with IDE navigation:
+ * - Row click on a code problem (funcIdx != null): switches to WAT (virtualized) and
+ *   scrolls to the function body.
+ * - Row click on a non-code problem (funcIdx == null): scrolls the hex view to the
+ *   failed byte region.
+ * - Context menu "Show in WAT (virtualized)": same as row click for code problems.
+ * - Context menu "Show in Wat": switches to the plain Wat tab and, for ShowLiteEditor
+ *   state, scrolls to the nearest annotated line via [HexanaFileEditor.requestWasmByteOffsetNav].
+ */
+private fun enrichWasmProblemsTab(
+    tab: TableTabDescriptor,
+    provider: WasmBinaryProvider,
+    file: VirtualFile,
+    hexViewState: HexViewStateHolder,
+): TableTabDescriptor {
+    val project = hexViewState.project
+    val problems = provider.parseProblems
+
+    fun navigateRow(index: Int) {
+        val p = problems.getOrNull(index) ?: return
+        val funcIdx = p.funcIdx
+        if (funcIdx != null) {
+            navigateToFunctionInWat(file, project, funcIdx)
+        } else {
+            hexViewState.scrollHexViewTo(p.byteOffset.toLong(), setCursor = true)
+        }
+    }
+
+    fun navigateToPlainWat(index: Int) {
+        val p = problems.getOrNull(index) ?: return
+        // Push the byte offset so WasmPanelWat's WatLiteEditor can scroll to the
+        // nearest annotated line. The editor's requestWasmByteOffsetNav is the same
+        // channel the virtualized panel uses for structural navigation.
+        val editors = FileEditorManager.getInstance(project).openFile(file, false)
+        val editor = editors.filterIsInstance<HexanaFileEditor>().firstOrNull()
+        editor?.requestWasmByteOffsetNav(p.byteOffset)
+        hexViewState.requestSelectTabByDescription("Wat")
+    }
+
+    return TableTabDescriptor(
+        name = tab.name,
+        columns = tab.columns,
+        rowCount = tab.rowCount,
+        defaultSortColumn = tab.defaultSortColumn,
+        defaultSortAscending = tab.defaultSortAscending,
+        rowSelectionProvider = tab.rowSelectionProvider,
+        rowClickAction = { index -> navigateRow(index) },
+        contextMenuItems = buildList {
+            add(RowContextMenuItemDescriptor(
+                labelProvider = { "Show in WAT (virtualized)" },
+                isVisible = { index -> problems.getOrNull(index)?.funcIdx != null },
+                action = { index ->
+                    val p = problems.getOrNull(index) ?: return@RowContextMenuItemDescriptor
+                    val funcIdx = p.funcIdx ?: return@RowContextMenuItemDescriptor
+                    navigateToFunctionInWat(file, project, funcIdx)
+                },
+            ))
+            add(RowContextMenuItemDescriptor(
+                labelProvider = { "Show in Wat" },
+                action = { index -> navigateToPlainWat(index) },
+            ))
         },
     )
 }

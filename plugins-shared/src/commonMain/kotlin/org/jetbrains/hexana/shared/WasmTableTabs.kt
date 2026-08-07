@@ -6,6 +6,7 @@ import org.jetbrains.hexana.wasm.analysis.MonosResult
 import org.jetbrains.hexana.wasm.analysis.exceptions.ThrowingFunction
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageReason
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageResult
+import org.jetbrains.hexana.wasm.sections.ParseProblemKind
 
 /**
  * [TableTabsProvider] for core Wasm binaries.
@@ -24,6 +25,7 @@ class WasmTableTabsProvider : TableTabsProvider {
             tagsTab(provider)?.let { add(it) }
             exceptionSurfaceTab(provider)?.let { add(it) }
             customTab(provider)?.let { add(it) }
+            problemsTab(provider)?.let { add(it) }
         }
     }
 
@@ -43,6 +45,10 @@ class WasmTableTabsProvider : TableTabsProvider {
                 add("Exceptions")
             }
             if (module.customSections.isNotEmpty()) add("Custom")
+            // parseProblems is lazy; avoid forcing it here — advertise the tab
+            // only when there are code-section or type-section anomalies that we
+            // can detect cheaply without iterating all opcode records.
+            if (module.codeSection != null || module.typesSection != null) add("Problems")
         }
         return Pair(names, emptyList())
     }
@@ -58,6 +64,7 @@ class WasmTableTabsProvider : TableTabsProvider {
             "Tags" -> tagsTab(provider)
             "Exceptions" -> exceptionSurfaceTab(provider)
             "Custom" -> customTab(provider)
+            "Problems" -> problemsTab(provider)
             else -> null
         }
     }
@@ -319,6 +326,58 @@ private fun customTab(provider: WasmBinaryProvider): TableTabDescriptor? {
             section?.let { RowSelectionData(it.sectionOffset, it.contentSize) }
         },
     )
+}
+
+private fun problemsTab(provider: WasmBinaryProvider): TableTabDescriptor? {
+    // parseProblems is lazy — this forces it. The work is bounded (capped at 1000)
+    // and runs on a background thread (singleTab is always called off-EDT).
+    val problems = provider.parseProblems
+    if (problems.isEmpty()) return null
+
+    return TableTabDescriptor(
+        name = "Problems",
+        columns = listOf(
+            col("Kind", ColumnWidth.MeasuredMin("Unknown opcode")) { index ->
+                CellValue(problems[index].kind.label())
+            },
+            col("Location", ColumnWidth.MeasuredMin("func 9999")) { index ->
+                val p = problems[index]
+                val loc = when {
+                    p.funcIdx != null -> "func ${p.funcIdx}"
+                    p.typeIdx != null -> "type ${p.typeIdx}"
+                    else -> p.sectionName
+                }
+                CellValue(loc)
+            },
+            col("Offset", ColumnWidth.MeasuredMin("0x00000000")) { index ->
+                val v = hex(problems[index].byteOffset)
+                CellValue(problems[index].byteOffset.toLong(), v)
+            },
+            col("Size", ColumnWidth.MeasuredMin("0x0000")) { index ->
+                val v = hex(problems[index].byteSize)
+                CellValue(problems[index].byteSize.toLong(), v)
+            },
+            col("Message", ColumnWidth.Fill()) { index ->
+                val msg = problems[index].message
+                CellValue(msg, tooltip = msg.takeIf { it.length > 40 })
+            },
+        ),
+        rowCount = problems.size,
+        rowSelectionProvider = { index ->
+            val p = problems.getOrNull(index) ?: return@TableTabDescriptor null
+            RowSelectionData(p.byteOffset, p.byteSize)
+        },
+        // rowClickAction is left null here; the IntelliJ enricher replaces it
+        // for rows with a funcIdx to navigate into the WAT view.
+    )
+}
+
+private fun ParseProblemKind.label(): String = when (this) {
+    ParseProblemKind.LOCALS_PARSE_FAILURE -> "Locals parse failure"
+    ParseProblemKind.UNKNOWN_OPCODE -> "Unknown opcode"
+    ParseProblemKind.CODE_ENTRY_CORRUPT -> "Code entry corrupt"
+    ParseProblemKind.UNKNOWN_TYPE_BYTE -> "Unknown type byte"
+    ParseProblemKind.INIT_EXPR_PARSE_FAILURE -> "Init expr failure"
 }
 
 /**
