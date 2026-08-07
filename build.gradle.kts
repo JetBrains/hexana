@@ -107,6 +107,7 @@ val teamcityServerCliTestTaskPaths = listOf(
     ":mcp:server:verifyHexanaToolDispatcherUpToDate",
     ":mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate",
     ":mcp:server:integrationTest",
+    ":mcp:server:obfuscatedMcpPackagingSmoke",
     ":mcp:vscode-server:test",
 )
 
@@ -155,6 +156,7 @@ val teamcityCiTestTaskOrder = listOf(
     ":idea-plugin:verifyHexanaToolsetUpToDate",
     ":mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate",
     ":mcp:server:integrationTest",
+    ":mcp:server:obfuscatedMcpPackagingSmoke",
     ":mcp:vscode-server:test",
 )
 
@@ -532,6 +534,7 @@ tasks.register("verifyTeamcityServerCliTestsCoverage") {
             ":mcp:server:verifyHexanaToolDispatcherUpToDate",
             ":mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate",
             ":mcp:server:integrationTest",
+            ":mcp:server:obfuscatedMcpPackagingSmoke",
             ":mcp:vscode-server:test",
         )
         verifyExactTaskPaths(
