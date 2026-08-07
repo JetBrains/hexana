@@ -141,12 +141,17 @@ Run the narrowest command that proves your change.
   unchanged during rollout and temporarily overlaps with the new core, VS Code, IntelliJ, and server aggregates.
 - Direct `idea-plugin/**` changes select `InnoHub_HexFlow_IntellijPluginTestsPatronus`, which delegates to the regular
   IntelliJ Plugin Tests leaf.
-- Patronus targeted checks retain broad Safe Merge overlap during rollout:
+- Patronus targeted checks use nested `group.id: hexana-product-tests`, with Core's nested `group.isFallback` as the
+  sole fallback; UI and Safe Merge remain ungrouped during rollout:
   - root Gradle wrapper, catalog, build, and Karma inputs plus shared/core module paths select
     `InnoHub_HexFlow_CoreTestsPatronus`, which fans out across all product test leaves
   - `vscode-plugin/**` selects `InnoHub_HexFlow_VscodePluginTestsPatronus`
   - `cli/**` and non-shared `mcp/**` paths select `InnoHub_HexFlow_ServerCliTestsPatronus`; `mcp/core/**`,
     `mcp/scripting/**`, and `mcp/tools-generator/**` are excluded there and route through the Core composite
+- Keep `.patronus/config.yaml` and the exhaustive Gradle-project routing inventory in the root build synchronized.
+  Run `./gradlew verifyPatronusRoutingCoverage` after changing Patronus paths or `settings.gradle.kts`; the verifier is
+  also a direct dependency of `teamcityCiTests`. `ui-driver-tests` is explicitly UI/daily-only, while `jvm-jit-jmh`
+  is benchmark/Safe-Merge-only. Selected non-Gradle Core roots are checked as part of the same policy.
 - Run native standard CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli:nativeIntegrationTest`
 - Run native script CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli-script:nativeIntegrationTest`
 - Run TeamCity native integration surfaces: `./gradlew :mcp:assembleNativeMcpReleaseArtifacts`

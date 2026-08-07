@@ -10,9 +10,14 @@ checks:
       - "/ui-driver-tests/**"
       - "/idea-plugin/src/ui-tests-framework/**"
   - configurationId: "InnoHub_HexFlow_IntellijPluginTestsPatronus"
+    group:
+      id: "hexana-product-tests"
     executeOnChanges:
       - "/idea-plugin/**"
   - configurationId: "InnoHub_HexFlow_CoreTestsPatronus"
+    group:
+      id: "hexana-product-tests"
+      isFallback: true
     executeOnChanges:
       - "/build.gradle.kts"
       - "/settings.gradle.kts"
@@ -38,9 +43,13 @@ checks:
       - "/mcp/scripting/**"
       - "/mcp/tools-generator/**"
   - configurationId: "InnoHub_HexFlow_VscodePluginTestsPatronus"
+    group:
+      id: "hexana-product-tests"
     executeOnChanges:
       - "/vscode-plugin/**"
   - configurationId: "InnoHub_HexFlow_ServerCliTestsPatronus"
+    group:
+      id: "hexana-product-tests"
     executeOnChanges:
       - "/cli/**"
       - "/mcp/**"
