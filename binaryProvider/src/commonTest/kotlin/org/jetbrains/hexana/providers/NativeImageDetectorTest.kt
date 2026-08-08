@@ -227,8 +227,8 @@ class NativeImageDetectorTest {
     fun `macho NativeStringScanner scanSections finds string past 5000-string cap`() {
         // Build a byte buffer that has >5000 short printable strings before the VM key,
         // to prove scanSections reaches it while scanAscii (maxStrings=5000) would not.
-        val filler = "AAAA ".toByteArray()          // 5-byte "string" (4 printable + NUL separator)
-        val vmKey = "com.oracle.svm.core.VM=GraalVM CE 21 Java 21 ".toByteArray()
+        val filler = "AAAA\u0000".encodeToByteArray()          // 5-byte "string" (4 printable + NUL separator)
+        val vmKey = "com.oracle.svm.core.VM=GraalVM CE 21 Java 21\u0000".encodeToByteArray()
         val fillerCount = 5001
         val fillerBlock = ByteArray(filler.size * fillerCount) { filler[it % filler.size] }
         val full = fillerBlock + vmKey
