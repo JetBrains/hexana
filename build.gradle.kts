@@ -329,7 +329,7 @@ tasks.register("verifyPatronusRoutingCoverage") {
                     "/kotlin-js-store/**", "/mcp/core/**", "/mcp/scripting/**", "/mcp/tools-generator/**",
                 ),
             ),
-            vscodeId to PatronusCheck(vscodeId, productGroupId, false, listOf("/vscode-plugin/**")),
+            vscodeId to PatronusCheck(vscodeId, productGroupId, false, listOf("/vscode-plugin/**", "/web-ui/**")),
             serverCliId to PatronusCheck(
                 serverCliId,
                 productGroupId,
@@ -376,7 +376,7 @@ tasks.register("verifyPatronusRoutingCoverage") {
                 ":plugins-shared", ":wasmParser",
             ),
             intellijId to listOf(":idea-plugin"),
-            vscodeId to listOf(":vscode-plugin", ":vscode-plugin:extension-lib", ":vscode-plugin:webview"),
+            vscodeId to listOf(":vscode-plugin", ":vscode-plugin:extension-lib", ":vscode-plugin:webview", ":web-ui"),
             serverCliId to listOf(
                 ":cli", ":cli:core", ":cli:hexana-cli", ":cli:hexana-cli-script", ":cli:integration-tests",
                 ":cli:metadata", ":cli:product", ":cli:runtime", ":cli:scripting", ":mcp", ":mcp:server",
@@ -386,6 +386,7 @@ tasks.register("verifyPatronusRoutingCoverage") {
         val exemptProjectReasons = mapOf(
             ":ui-driver-tests" to "UI/daily lane",
             ":jvm-jit-jmh" to "benchmark/Safe-Merge-only",
+            ":webapp" to "browser shell without tests/Safe-Merge-only",
         )
         val actualProjects = rootProject.allprojects.filterNot { it == rootProject }.associateBy { it.path }
         val classifications =
