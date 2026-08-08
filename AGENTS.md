@@ -133,6 +133,11 @@ Run the narrowest command that proves your change.
 - Run shared CLI process support tests (part of the TeamCity CLI JVM gate): `./gradlew :cli:integration-tests:test`
 - Run the dedicated TeamCity CLI JVM gate: `./gradlew teamcityCliTests`
 - Run the TeamCity-ready shared/core aggregate intended for the next rollout step: `./gradlew teamcityCoreTests`
+- `teamcityCoreTests` also runs `teamcityFallbackCoreTests`: the source-owned Core fallback for unclassified,
+  non-exempt Kotlin/JVM modules. It includes only each module's standard `:test` task; integration, UI-driver,
+  native, browser-specific, packaging, and custom test tasks are never discovered automatically. Unclassified
+  Kotlin Multiplatform projects remain explicit Core-topology debt until their `allTests` task is proven safe in
+  the Core Docker lane.
 - Run the TeamCity-ready VS Code plugin aggregate intended for the next rollout step: `./gradlew teamcityVscodePluginTests`
 - Run the dedicated TeamCity IntelliJ plugin test lane: `./gradlew teamcityIntellijPluginTests`
 - Run the TeamCity-ready server and CLI aggregate intended for the next rollout step: `./gradlew teamcityServerCliTests`;
@@ -152,10 +157,12 @@ Run the narrowest command that proves your change.
   - `vscode-plugin/**` selects `InnoHub_HexFlow_VscodePluginTestsPatronus`
   - `cli/**` and non-shared `mcp/**` paths select `InnoHub_HexFlow_ServerCliTestsPatronus`; `mcp/core/**`,
     `mcp/scripting/**`, and `mcp/tools-generator/**` are excluded there and route through the Core composite
-- Keep `.patronus/config.yaml` and the exhaustive Gradle-project routing inventory in the root build synchronized.
-  Run `./gradlew verifyPatronusRoutingCoverage` after changing Patronus paths or `settings.gradle.kts`; the verifier is
-  also a direct dependency of `teamcityCiTests`. `ui-driver-tests` is explicitly UI/daily-only, while `jvm-jit-jmh`
-  is benchmark/Safe-Merge-only. Selected non-Gradle Core roots are checked as part of the same policy.
+- Keep `.patronus/config.yaml` and the explicit Gradle-project routing inventory in the root build synchronized.
+  Explicit owners remain exact (no stale, duplicate, or mismatched direct routes); an unlisted non-exempt project
+  resolves through Core's sole Patronus fallback. Run `./gradlew verifyPatronusRoutingCoverage` after changing
+  Patronus paths or `settings.gradle.kts`; the verifier is also a direct dependency of `teamcityCiTests`.
+  `ui-driver-tests` is explicitly UI/daily-only, while `jvm-jit-jmh` is benchmark/Safe-Merge-only. Selected existing
+  non-Gradle Core roots are checked as part of the same policy.
 - Run native standard CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli:nativeIntegrationTest`
 - Run native script CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli-script:nativeIntegrationTest`
 - Run TeamCity native integration surfaces: `./gradlew :mcp:assembleNativeMcpReleaseArtifacts`

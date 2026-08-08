@@ -6,6 +6,7 @@ import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsEnvSpec
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsPlugin
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsRootPlugin
 import org.jetbrains.kotlin.gradle.testing.internal.KotlinTestReport
+import org.gradle.api.tasks.testing.Test
 
 plugins {
     alias(libs.plugins.graalvm.native) apply(false)
@@ -18,6 +19,43 @@ plugins {
 val kotlinNodeVersion = "22.22.0"
 val graalVmVersion = libs.versions.graalvm.get()
 val requiredGraalVmMajorVersion = graalVmVersion.substringBefore('.').toInt()
+
+val corePatronusConfigurationId = "InnoHub_HexFlow_CoreTestsPatronus"
+val intellijPatronusConfigurationId = "InnoHub_HexFlow_IntellijPluginTestsPatronus"
+val vscodePatronusConfigurationId = "InnoHub_HexFlow_VscodePluginTestsPatronus"
+val serverCliPatronusConfigurationId = "InnoHub_HexFlow_ServerCliTestsPatronus"
+
+// Explicit product owners stay strict. Unlisted non-exempt Kotlin/JVM projects use Core as the safe fallback.
+val primaryLaneProjectPaths = linkedMapOf(
+    corePatronusConfigurationId to listOf(
+        ":analytics", ":binaryProvider", ":debugInfo", ":debugInfo:dwarf", ":disassembly",
+        ":disassembly:capstone-wasm", ":disassembly:core", ":disassembly:llvm-objdump", ":encdec",
+        ":graalwasm", ":graalwasm:common", ":graalwasm:wasmprinter", ":graalwasm:wat2wasm",
+        ":hexanaDocument", ":jvm-jit", ":mcp:core", ":mcp:scripting", ":mcp:tools-generator", ":parsing",
+        ":parsing:arrow", ":parsing:codec", ":parsing:common", ":parsing:dex", ":parsing:elf",
+        ":parsing:flatbuffers", ":parsing:javaBytecode", ":parsing:macho", ":parsing:parquet",
+        ":parsing:pcap", ":parsing:pe", ":parsing:protobuf", ":parsing:thrift", ":parsing:zip",
+        ":plugins-shared", ":wasmParser",
+    ),
+    intellijPatronusConfigurationId to listOf(":idea-plugin"),
+    vscodePatronusConfigurationId to listOf(":vscode-plugin", ":vscode-plugin:extension-lib", ":vscode-plugin:webview", ":web-ui"),
+    serverCliPatronusConfigurationId to listOf(
+        ":cli", ":cli:core", ":cli:hexana-cli", ":cli:hexana-cli-script", ":cli:integration-tests",
+        ":cli:metadata", ":cli:product", ":cli:runtime", ":cli:scripting", ":mcp", ":mcp:server",
+        ":mcp:vscode-server",
+    ),
+)
+
+val exemptProjectReasons = mapOf(
+    ":ui-driver-tests" to "UI/daily lane",
+    ":jvm-jit-jmh" to "benchmark/Safe-Merge-only",
+    ":webapp" to "browser shell without tests/Safe-Merge-only",
+)
+
+val explicitlyOwnedProjectPaths = primaryLaneProjectPaths.values.flatten().toSet()
+
+fun Project.isUnclassifiedNonExemptProject(): Boolean =
+    path !in explicitlyOwnedProjectPaths && path !in exemptProjectReasons
 
 repositories {
     maven("https://www.jetbrains.com/intellij-repository/releases")
@@ -85,6 +123,7 @@ val teamcityCoreTestTaskPaths = listOf(
     ":parsing:zip:allTests",
     ":plugins-shared:allTests",
     ":wasmParser:allTests",
+    ":teamcityFallbackCoreTests",
 )
 
 val teamcityVscodePluginTestTaskPaths = listOf(
@@ -160,6 +199,7 @@ val teamcityCiTestTaskOrder = listOf(
     ":mcp:server:obfuscatedMcpPackagingSmoke",
     ":mcp:verifyMcpR8ReleaseArchives",
     ":mcp:vscode-server:test",
+    ":teamcityFallbackCoreTests",
 )
 
 val teamcityCiTestTaskPaths =
@@ -179,6 +219,22 @@ val teamcityCliTestTaskPaths = listOf(
     ":cli:hexana-cli-script:integrationTest",
     ":mcp:verifyCliR8ReleaseArchives",
 )
+
+val teamcityFallbackCoreJvmTestTaskPaths = linkedSetOf<String>()
+
+subprojects {
+    plugins.withId("org.jetbrains.kotlin.jvm") {
+        if (!isUnclassifiedNonExemptProject()) return@withId
+        val standardTest = tasks.named<Test>("test")
+        val standardTestPath = "$path:test"
+        check(teamcityFallbackCoreJvmTestTaskPaths.add(standardTestPath)) {
+            "teamcityFallbackCoreTests discovered duplicate Kotlin/JVM test task $standardTestPath"
+        }
+        rootProject.tasks.named("teamcityFallbackCoreTests").configure {
+            dependsOn(standardTest)
+        }
+    }
+}
 
 fun verifyExactTaskPaths(
     subject: String,
@@ -299,14 +355,14 @@ fun readPatronusChecks(configFile: File): List<PatronusCheck> {
 
 tasks.register("verifyPatronusRoutingCoverage") {
     group = "verification"
-    description = "Verify Patronus check policy and exhaustive product-project routing."
+    description = "Verify Patronus check policy, strict explicit owners, and the Core fallback contract."
     doLast {
         val safeMergeId = "InnoHub_HexFlow_SafeMergeTests"
         val uiId = "InnoHub_HexFlow_UiTestsPatronus"
-        val intellijId = "InnoHub_HexFlow_IntellijPluginTestsPatronus"
-        val coreId = "InnoHub_HexFlow_CoreTestsPatronus"
-        val vscodeId = "InnoHub_HexFlow_VscodePluginTestsPatronus"
-        val serverCliId = "InnoHub_HexFlow_ServerCliTestsPatronus"
+        val intellijId = intellijPatronusConfigurationId
+        val coreId = corePatronusConfigurationId
+        val vscodeId = vscodePatronusConfigurationId
+        val serverCliId = serverCliPatronusConfigurationId
         val productGroupId = "hexana-product-tests"
         val expectedChecks = linkedMapOf(
             safeMergeId to PatronusCheck(safeMergeId, null, false, listOf("*", "!/README.md")),
@@ -326,7 +382,7 @@ tasks.register("verifyPatronusRoutingCoverage") {
                     "/gradlew.bat", "/karma.config.d/**", "/analytics/**", "/binaryProvider/**", "/debugInfo/**",
                     "/disassembly/**", "/encdec/**", "/hexanaDocument/**", "/jvm-jit/**", "/parsing/**",
                     "/plugins-shared/**", "/wasmParser/**", "/graalwasm/**", "/wasm-modules/**",
-                    "/kotlin-js-store/**", "/mcp/core/**", "/mcp/scripting/**", "/mcp/tools-generator/**",
+                    "/mcp/core/**", "/mcp/scripting/**", "/mcp/tools-generator/**",
                 ),
             ),
             vscodeId to PatronusCheck(vscodeId, productGroupId, false, listOf("/vscode-plugin/**", "/web-ui/**")),
@@ -364,46 +420,20 @@ tasks.register("verifyPatronusRoutingCoverage") {
                 checks.filter(PatronusCheck::isFallback).joinToString { it.configurationId }
         }
 
-        val primaryLaneProjectPaths = linkedMapOf(
-            coreId to listOf(
-                ":analytics", ":binaryProvider", ":debugInfo", ":debugInfo:dwarf", ":disassembly",
-                ":disassembly:capstone-wasm", ":disassembly:core", ":disassembly:llvm-objdump", ":encdec",
-                ":graalwasm", ":graalwasm:common", ":graalwasm:wasmprinter", ":graalwasm:wat2wasm",
-                ":hexanaDocument", ":jvm-jit", ":mcp:core", ":mcp:scripting", ":mcp:tools-generator", ":parsing",
-                ":parsing:arrow", ":parsing:codec", ":parsing:common", ":parsing:dex", ":parsing:elf",
-                ":parsing:flatbuffers", ":parsing:javaBytecode", ":parsing:macho", ":parsing:parquet",
-                ":parsing:pcap", ":parsing:pe", ":parsing:protobuf", ":parsing:thrift", ":parsing:zip",
-                ":plugins-shared", ":wasmParser",
-            ),
-            intellijId to listOf(":idea-plugin"),
-            vscodeId to listOf(":vscode-plugin", ":vscode-plugin:extension-lib", ":vscode-plugin:webview", ":web-ui"),
-            serverCliId to listOf(
-                ":cli", ":cli:core", ":cli:hexana-cli", ":cli:hexana-cli-script", ":cli:integration-tests",
-                ":cli:metadata", ":cli:product", ":cli:runtime", ":cli:scripting", ":mcp", ":mcp:server",
-                ":mcp:vscode-server",
-            ),
-        )
-        val exemptProjectReasons = mapOf(
-            ":ui-driver-tests" to "UI/daily lane",
-            ":jvm-jit-jmh" to "benchmark/Safe-Merge-only",
-            ":webapp" to "browser shell without tests/Safe-Merge-only",
-        )
         val actualProjects = rootProject.allprojects.filterNot { it == rootProject }.associateBy { it.path }
         val classifications =
             primaryLaneProjectPaths.flatMap { (lane, paths) -> paths.map { it to lane } } +
                 exemptProjectReasons.map { (path, reason) -> path to "exempt: $reason" }
         val duplicateClassifications = classifications.groupingBy { it.first }.eachCount().filterValues { it > 1 }.keys
         val classifiedPaths = classifications.map { it.first }.toSet()
-        val missingClassifications = actualProjects.keys - classifiedPaths
         val staleClassifications = classifiedPaths - actualProjects.keys
-        check(duplicateClassifications.isEmpty() && missingClassifications.isEmpty() && staleClassifications.isEmpty()) {
-            "Patronus Gradle project inventory must classify every project exactly once; " +
-                "missing classifications: ${missingClassifications.sorted().joinToString()}, " +
+        check(duplicateClassifications.isEmpty() && staleClassifications.isEmpty()) {
+            "Patronus explicit Gradle project inventory must have no duplicate or stale owners; " +
                 "duplicates: ${duplicateClassifications.sorted().joinToString()}, " +
                 "stale classifications: ${staleClassifications.sorted().joinToString()}"
         }
 
-        fun selectedPrimaryLanes(changePath: String): List<String> =
+        fun selectedExplicitLanes(changePath: String): List<String> =
             primaryLaneProjectPaths.keys.filter { laneId ->
                 val patterns = checksById.getValue(laneId).executeOnChanges
                 fun matches(pattern: String): Boolean =
@@ -415,34 +445,86 @@ tasks.register("verifyPatronusRoutingCoverage") {
                 }
             }
 
+        fun effectiveProductLane(changePath: String): List<String> =
+            selectedExplicitLanes(changePath).ifEmpty { listOf(coreId) }
+
         actualProjects.values.forEach { project ->
             val relativeDirectory = project.projectDir.relativeTo(rootProject.projectDir).invariantSeparatorsPath
             val expectedDirectory = project.path.removePrefix(":").replace(':', '/')
             check(relativeDirectory == expectedDirectory) {
                 "${project.path} uses unexpected project directory /$relativeDirectory; expected /$expectedDirectory"
             }
-            val expectedLane = classifications.single { it.first == project.path }.second
-            val actualLanes = selectedPrimaryLanes("/$relativeDirectory/__routing_probe__")
-            val expectedLanes = if (expectedLane.startsWith("exempt:")) emptyList() else listOf(expectedLane)
-            check(actualLanes == expectedLanes) {
-                "${project.path} (/$relativeDirectory/**) must route to ${expectedLanes.ifEmpty { listOf(expectedLane) }}, " +
-                    "but selected ${actualLanes.ifEmpty { listOf("no primary lane") }}"
+            val explicitClassification = classifications.singleOrNull { it.first == project.path }?.second
+            val directLanes = selectedExplicitLanes("/$relativeDirectory/__routing_probe__")
+            when {
+                explicitClassification == null -> check(effectiveProductLane("/$relativeDirectory/__routing_probe__") == listOf(coreId)) {
+                    "Unclassified non-exempt ${project.path} (/$relativeDirectory/**) must resolve to Core fallback"
+                }
+                explicitClassification.startsWith("exempt:") -> check(directLanes.isEmpty()) {
+                    "Exempt ${project.path} (/$relativeDirectory/**) must not have a direct product lane, but selected $directLanes"
+                }
+                else -> check(directLanes == listOf(explicitClassification)) {
+                    "${project.path} (/$relativeDirectory/**) must route directly to $explicitClassification, " +
+                        "but selected ${directLanes.ifEmpty { listOf("no direct product lane") }}"
+                }
             }
         }
         mapOf(
             "wasm-modules" to coreId,
             "karma.config.d" to coreId,
-            "kotlin-js-store" to coreId,
         ).forEach { (relativeDirectory, expectedLane) ->
             check(rootProject.file(relativeDirectory).isDirectory) {
                 "Selected non-Gradle product root /$relativeDirectory is missing"
             }
-            val actualLanes = selectedPrimaryLanes("/$relativeDirectory/__routing_probe__")
+            val actualLanes = selectedExplicitLanes("/$relativeDirectory/__routing_probe__")
             check(actualLanes == listOf(expectedLane)) {
                 "Non-Gradle product root /$relativeDirectory/** must route only to $expectedLane, but selected $actualLanes"
             }
         }
     }
+}
+
+tasks.register("verifyTeamcityFallbackCoreTestsCoverage") {
+    group = "verification"
+    description = "Verify conservative Core fallback coverage for unclassified Kotlin/JVM projects."
+    doLast {
+        val fallbackTaskPaths = teamcityFallbackCoreJvmTestTaskPaths.toList()
+        fallbackTaskPaths.forEach { taskPath ->
+            val task = tasks.getByPath(taskPath)
+            check(task is Test && task.name == "test") {
+                "teamcityFallbackCoreTests may include only standard Kotlin/JVM :test tasks, but found $taskPath"
+            }
+            check(task.project.pluginManager.hasPlugin("org.jetbrains.kotlin.jvm")) {
+                "teamcityFallbackCoreTests task $taskPath must belong to a Kotlin/JVM project"
+            }
+            check(task.project.isUnclassifiedNonExemptProject()) {
+                "teamcityFallbackCoreTests task $taskPath must belong to an unclassified non-exempt project"
+            }
+        }
+        val multiplatformDebt = rootProject.allprojects
+            .filterNot { it == rootProject }
+            .filter(Project::isUnclassifiedNonExemptProject)
+            .filter { it.pluginManager.hasPlugin("org.jetbrains.kotlin.multiplatform") }
+            .map { "${it.path}:allTests" }
+            .sorted()
+        check(multiplatformDebt.none(fallbackTaskPaths::contains)) {
+            "Kotlin Multiplatform fallback tests are not proven safe for the Core Docker lane: $multiplatformDebt"
+        }
+        logger.lifecycle(
+            "teamcityFallbackCoreTests Kotlin Multiplatform debt intentionally excluded from Core until proven safe: " +
+                multiplatformDebt.joinToString().ifEmpty { "none" },
+        )
+        verifyAggregateDirectDependencies(
+            "teamcityFallbackCoreTests",
+            fallbackTaskPaths + ":verifyTeamcityFallbackCoreTestsCoverage",
+        )
+    }
+}
+
+tasks.register("teamcityFallbackCoreTests") {
+    group = "verification"
+    description = "Run standard Kotlin/JVM tests for unclassified non-exempt projects through the Core lane."
+    dependsOn("verifyTeamcityFallbackCoreTestsCoverage")
 }
 
 tasks.register("verifyTeamcityCoreTestsCoverage") {
@@ -474,6 +556,7 @@ tasks.register("verifyTeamcityCoreTestsCoverage") {
             ":parsing:zip:allTests",
             ":plugins-shared:allTests",
             ":wasmParser:allTests",
+            ":teamcityFallbackCoreTests",
         )
         verifyExactTaskPaths("teamcityCoreTests inventory", requiredTaskPaths, teamcityCoreTestTaskPaths)
         verifyAggregateDirectDependencies(
