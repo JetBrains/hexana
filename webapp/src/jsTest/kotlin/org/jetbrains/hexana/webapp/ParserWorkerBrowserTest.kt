@@ -178,6 +178,59 @@ class ParserWorkerBrowserTest {
         }
 
     @Test
+    fun rawRealWorkerBoundsTheErrorForAnOversizedRequestId(): Promise<Unit> =
+        Promise { resolve, reject ->
+            val worker = BrowserParserWorkerPort()
+            val input = ArrayBuffer(1)
+            var finished = false
+            var guard = 0
+
+            fun cleanup() {
+                if (finished) return
+                finished = true
+                window.clearTimeout(guard)
+                worker.clearHandlers()
+                worker.terminate()
+            }
+
+            guard = window.setTimeout({
+                cleanup()
+                reject(Throwable("Raw oversized request-ID worker request did not answer within the browser-test deadline."))
+            }, REAL_WORKER_TEST_TIMEOUT_MS)
+            worker.setHandlers(
+                onMessage = { message ->
+                    cleanup()
+                    try {
+                        assertEquals(PARSER_WORKER_PROTOCOL_VERSION, message.protocolVersion)
+                        assertEquals("error", message.kind)
+                        assertEquals("", message.requestId)
+                        assertEquals("INVALID_REQUEST", message.code)
+                        assertEquals("Parser worker request is invalid.", message.message)
+                        assertTrue(utf8WireBytes(message) <= MAX_PARSER_WORKER_WIRE_BYTES)
+                        resolve(Unit)
+                    } catch (failure: Throwable) {
+                        reject(failure)
+                    }
+                },
+                onError = {
+                    cleanup()
+                    reject(Throwable("Raw oversized request-ID worker request raised a worker error."))
+                },
+                onMessageError = {
+                    cleanup()
+                    reject(Throwable("Raw oversized request-ID worker response could not be decoded."))
+                },
+            )
+
+            val request = js("({})")
+            request.protocolVersion = PARSER_WORKER_PROTOCOL_VERSION
+            request.kind = "parse"
+            request.requestId = "x".repeat(MAX_PARSER_WORKER_REQUEST_ID_CHARS + 1)
+            request.buffer = input
+            worker.postParse(request, input)
+        }
+
+    @Test
     fun nonresponsiveWorkerTimesOutByTerminationAndNextRealWorkerRecovers(): Promise<Unit> =
         Promise { resolve, reject ->
             val blob = js("new Blob(['self.onmessage = function () {}'], { type: 'text/javascript' })")

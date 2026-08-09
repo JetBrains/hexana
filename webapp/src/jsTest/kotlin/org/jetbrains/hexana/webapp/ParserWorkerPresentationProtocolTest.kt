@@ -140,6 +140,16 @@ class ParserWorkerPresentationProtocolTest {
     }
 
     @Test
+    fun producerRejectsAnOversizedRequestId() {
+        assertFailsWith<IllegalArgumentException> {
+            encodeBoundedParserWorkerSuccess(
+                "x".repeat(MAX_PARSER_WORKER_REQUEST_ID_CHARS + 1),
+                representativePresentation(),
+            )
+        }
+    }
+
+    @Test
     fun decoderRejectsCapabilityAndEveryVariableStringOverflow() {
         assertWireRejected { it.presentation.format = "x".repeat(65) }
         assertWireRejected { it.presentation.capabilities = js("Array(33).fill('summary')") }

@@ -68,6 +68,7 @@ internal class ParserWorkerController(
         invalidateAndTerminateActive()
         val requestGeneration = generation
         val requestId = "parser-worker-$requestGeneration"
+        check(isValidParserWorkerRequestId(requestId)) { "Generated parser-worker request ID is invalid." }
         val worker = try {
             workerFactory.create()
         } catch (_: Throwable) {
@@ -174,22 +175,29 @@ internal sealed interface DecodedWorkerResponse {
 }
 
 internal fun decodeParserWorkerResponse(value: dynamic, requestId: String): DecodedWorkerResponse {
-    if (!isPlainWireObject(value) || value.protocolVersion != PARSER_WORKER_PROTOCOL_VERSION || value.requestId != requestId) {
-        return DecodedWorkerResponse.Malformed
-    }
-    return when (value.kind as? String) {
-        "success" -> decodeParserWorkerSuccess(value, requestId)?.let(DecodedWorkerResponse::Success)
-            ?: DecodedWorkerResponse.Malformed
-        "error" -> {
-            val code = value.code as? String ?: return DecodedWorkerResponse.Malformed
-            val message = value.message as? String ?: return DecodedWorkerResponse.Malformed
-            if (code !in setOf("INVALID_SCOPE", "INVALID_REQUEST", "PARSE_FAILED")) {
-                return DecodedWorkerResponse.Malformed
-            }
-            if (message.length !in 1..160) return DecodedWorkerResponse.Malformed
-            DecodedWorkerResponse.Error(code, message)
+    return try {
+        val wireBytes = parserWorkerResponseEnvelopeBytesOrNull(value) ?: return DecodedWorkerResponse.Malformed
+        if (!isValidParserWorkerRequestId(requestId) || value.protocolVersion != PARSER_WORKER_PROTOCOL_VERSION) {
+            return DecodedWorkerResponse.Malformed
         }
-        else -> DecodedWorkerResponse.Malformed
+        val wireRequestId = value.requestId as? String ?: return DecodedWorkerResponse.Malformed
+        if (!isValidParserWorkerRequestId(wireRequestId) || wireRequestId != requestId) return DecodedWorkerResponse.Malformed
+        when (value.kind as? String) {
+            "success" -> decodeParserWorkerSuccess(value, requestId, wireBytes)?.let(DecodedWorkerResponse::Success)
+                ?: DecodedWorkerResponse.Malformed
+            "error" -> {
+                val code = value.code as? String ?: return DecodedWorkerResponse.Malformed
+                val message = value.message as? String ?: return DecodedWorkerResponse.Malformed
+                if (code !in setOf("INVALID_SCOPE", "INVALID_REQUEST", "PARSE_FAILED")) {
+                    return DecodedWorkerResponse.Malformed
+                }
+                if (message.length !in 1..160) return DecodedWorkerResponse.Malformed
+                DecodedWorkerResponse.Error(code, message)
+            }
+            else -> DecodedWorkerResponse.Malformed
+        }
+    } catch (_: Throwable) {
+        DecodedWorkerResponse.Malformed
     }
 }
 

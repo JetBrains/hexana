@@ -7,6 +7,7 @@ import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.webapp.ParserWorkerPresentation
 import org.jetbrains.hexana.webapp.ParserWorkerSummary
 import org.jetbrains.hexana.webapp.encodeBoundedParserWorkerSuccess
+import org.jetbrains.hexana.webapp.isValidParserWorkerRequestId
 import org.jetbrains.hexana.webapp.PARSER_WORKER_PROTOCOL_VERSION
 import org.khronos.webgl.ArrayBuffer
 
@@ -21,17 +22,19 @@ fun main() {
 
     workerScope.onmessage = { event: dynamic ->
         val request = event.data
-        val requestId = if (request == null) null else request.requestId as? String
+        val plainRequest = isPlainObject(request)
+        val rawRequestId = if (plainRequest) request.requestId as? String else null
+        val requestId = rawRequestId?.takeIf(::isValidParserWorkerRequestId).orEmpty()
         if (!isDedicatedWorker || !documentAbsent) {
-            postError(workerScope, requestId ?: "", "INVALID_SCOPE", "Parser worker scope is unavailable.")
+            postError(workerScope, requestId, "INVALID_SCOPE", "Parser worker scope is unavailable.")
         } else if (
-            !isPlainObject(request) ||
+            !plainRequest ||
             request.protocolVersion != PARSER_WORKER_PROTOCOL_VERSION ||
             request.kind != "parse" ||
-            requestId.isNullOrBlank() ||
+            !isValidParserWorkerRequestId(rawRequestId ?: "") ||
             !js("request.buffer instanceof ArrayBuffer").unsafeCast<Boolean>()
         ) {
-            postError(workerScope, requestId ?: "", "INVALID_REQUEST", "Parser worker request is invalid.")
+            postError(workerScope, requestId, "INVALID_REQUEST", "Parser worker request is invalid.")
         } else {
             parse(workerScope, requestId, request.buffer.unsafeCast<ArrayBuffer>())
         }
@@ -71,10 +74,11 @@ private fun postError(
     code: String,
     message: String,
 ) {
+    val safeRequestId = requestId.takeIf(::isValidParserWorkerRequestId).orEmpty()
     val response = js("({})")
     response.protocolVersion = PARSER_WORKER_PROTOCOL_VERSION
     response.kind = "error"
-    response.requestId = requestId
+    response.requestId = safeRequestId
     response.code = code
     response.message = message
     workerScope.postMessage(response)

@@ -163,6 +163,30 @@ class ParserWorkerControllerTest {
         assertEquals(DecodedWorkerResponse.Malformed, decodeParserWorkerResponse(wrongScope, "expected"))
         assertEquals(DecodedWorkerResponse.Malformed, decodeParserWorkerResponse(null, "expected"))
     }
+
+    @Test
+    fun responsesWithOversizedEnvelopesOrCyclesAreRejectedSafely() {
+        val paddedSuccess = success("expected")
+        paddedSuccess.padding = "x".repeat(MAX_PARSER_WORKER_WIRE_BYTES)
+        assertEquals(DecodedWorkerResponse.Malformed, decodeParserWorkerResponse(paddedSuccess, "expected"))
+
+        val paddedError = workerErrorResponse("expected")
+        paddedError.padding = "x".repeat(MAX_PARSER_WORKER_WIRE_BYTES)
+        assertEquals(DecodedWorkerResponse.Malformed, decodeParserWorkerResponse(paddedError, "expected"))
+
+        val cyclic = js("({})")
+        cyclic.self = cyclic
+        assertEquals(DecodedWorkerResponse.Malformed, decodeParserWorkerResponse(cyclic, "expected"))
+    }
+
+    @Test
+    fun generatedRequestIdsSatisfyTheSharedContract() {
+        val fixture = Fixture()
+
+        fixture.controller.parse(ArrayBuffer(8), 100)
+
+        assertTrue(isValidParserWorkerRequestId(fixture.workers.single().postedRequestId ?: ""))
+    }
 }
 
 private class Fixture(failFirstFactory: Boolean = false) {
@@ -187,6 +211,7 @@ private class FakeParserWorker(private val throwOnPost: Boolean) : ParserWorkerP
     private lateinit var messageErrorHandler: () -> Unit
     var terminateCalls = 0
     var clearCalls = 0
+    var postedRequestId: String? = null
 
     override fun setHandlers(
         onMessage: (dynamic) -> Unit,
@@ -203,6 +228,7 @@ private class FakeParserWorker(private val throwOnPost: Boolean) : ParserWorkerP
     }
 
     override fun postParse(request: dynamic, buffer: ArrayBuffer) {
+        postedRequestId = request.requestId as? String
         if (throwOnPost) error("post details")
     }
 

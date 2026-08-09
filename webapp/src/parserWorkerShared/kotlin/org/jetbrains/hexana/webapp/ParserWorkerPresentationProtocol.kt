@@ -3,6 +3,7 @@ package org.jetbrains.hexana.webapp
 /** The serialised JSON representation of a worker success is never larger than this value. */
 internal const val MAX_PARSER_WORKER_WIRE_BYTES = 10 * 1024 * 1024
 internal const val MAX_PARSER_WORKER_RECORDS_PER_COLLECTION = 10_000
+internal const val MAX_PARSER_WORKER_REQUEST_ID_CHARS = 128
 /** Fixed schema collections are rejected on the producer side instead of silently changing their identity. */
 internal const val MAX_PARSER_WORKER_CAPABILITIES = 32
 internal const val MAX_PARSER_WORKER_TABLES = 32
@@ -73,6 +74,7 @@ internal fun boundParserWorkerSuccess(
     maxWireBytes: Int = MAX_PARSER_WORKER_WIRE_BYTES,
 ): BoundedParserWorkerSuccess {
     require(maxWireBytes > 0)
+    require(isValidParserWorkerRequestId(requestId)) { "Invalid parser-worker request ID." }
     requireValidProducerPresentation(presentation)
 
     val recordLimited = presentation.ranges.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION ||
@@ -122,6 +124,7 @@ internal fun boundParserWorkerSuccess(
 }
 
 internal fun encodeBoundedParserWorkerSuccess(requestId: String, presentation: ParserWorkerPresentation): dynamic {
+    require(isValidParserWorkerRequestId(requestId)) { "Invalid parser-worker request ID." }
     val bounded = boundParserWorkerSuccess(requestId, presentation)
     return encodeSuccessWire(requestId, bounded.presentation, bounded.partial)
 }
@@ -175,41 +178,56 @@ private fun ParserWorkerPresentation.takeDeterministicPrefix(count: Int): Parser
 }
 
 internal fun decodeParserWorkerSuccess(value: dynamic, requestId: String): BoundedParserWorkerSuccess? {
-    if (!isPlainWireObject(value)) return null
-    val wireBytes = try {
-        utf8WireBytes(value)
+    val wireBytes = parserWorkerResponseEnvelopeBytesOrNull(value) ?: return null
+    return decodeParserWorkerSuccess(value, requestId, wireBytes)
+}
+
+internal fun decodeParserWorkerSuccess(
+    value: dynamic,
+    requestId: String,
+    wireBytes: Int,
+): BoundedParserWorkerSuccess? {
+    return try {
+        if (
+            wireBytes !in 0..MAX_PARSER_WORKER_WIRE_BYTES ||
+            !isValidParserWorkerRequestId(requestId) ||
+            value.protocolVersion != PARSER_WORKER_PROTOCOL_VERSION ||
+            value.kind != "success"
+        ) {
+            return null
+        }
+        val wireRequestId = value.requestId as? String ?: return null
+        if (!isValidParserWorkerRequestId(wireRequestId) || wireRequestId != requestId) return null
+        val presentation = value.presentation
+        val partial = value.partial
+        if (!isPlainWireObject(presentation) || !isPlainWireObject(partial)) return null
+
+        val format = presentation.format as? String ?: return null
+        if (!isValidFormat(format)) return null
+        val capabilities = decodeStrings(presentation.capabilities, MAX_PARSER_WORKER_CAPABILITIES, MAX_CAPABILITY_CHARS) ?: return null
+        if (!isValidCapabilities(capabilities)) return null
+        val summary = decodeSummary(presentation.summary) ?: return null
+        val ranges = decodeRanges(presentation.ranges, summary.inputBytes) ?: return null
+        val tables = decodeTables(presentation.tables) ?: return null
+        val diagnostics = decodeDiagnostics(presentation.diagnostics) ?: return null
+        if (!hasCoherentContent(capabilities, ranges, tables, diagnostics)) return null
+
+        val reasons = decodeStrings(partial.reasons, MAX_PARTIAL_REASONS, MAX_PARTIAL_REASON_CHARS) ?: return null
+        val isPartial = partial.partial as? Boolean ?: return null
+        val emitted = safeWireInt(partial.emittedCount) ?: return null
+        val total = if (partial.totalCount == null) null else safeWireInt(partial.totalCount) ?: return null
+        val lowerBound = if (partial.totalCountLowerBound == null) null else safeWireInt(partial.totalCountLowerBound) ?: return null
+        val actual = ranges.size + tables.sumOf { it.records.size } + diagnostics.size
+        if (emitted != actual || !isValidPartialMetadata(isPartial, reasons, emitted, total, lowerBound)) return null
+
+        BoundedParserWorkerSuccess(
+            ParserWorkerPresentation(format, capabilities, summary, ranges, tables, diagnostics),
+            ParserWorkerPartial(isPartial, reasons, emitted, total, lowerBound),
+            wireBytes,
+        )
     } catch (_: Throwable) {
-        return null
+        null
     }
-    if (wireBytes > MAX_PARSER_WORKER_WIRE_BYTES) return null
-    if (value.protocolVersion != PARSER_WORKER_PROTOCOL_VERSION || value.kind != "success" || value.requestId != requestId) return null
-    val presentation = value.presentation
-    val partial = value.partial
-    if (!isPlainWireObject(presentation) || !isPlainWireObject(partial)) return null
-
-    val format = presentation.format as? String ?: return null
-    if (!isValidFormat(format)) return null
-    val capabilities = decodeStrings(presentation.capabilities, MAX_PARSER_WORKER_CAPABILITIES, MAX_CAPABILITY_CHARS) ?: return null
-    if (!isValidCapabilities(capabilities)) return null
-    val summary = decodeSummary(presentation.summary) ?: return null
-    val ranges = decodeRanges(presentation.ranges, summary.inputBytes) ?: return null
-    val tables = decodeTables(presentation.tables) ?: return null
-    val diagnostics = decodeDiagnostics(presentation.diagnostics) ?: return null
-    if (!hasCoherentContent(capabilities, ranges, tables, diagnostics)) return null
-
-    val reasons = decodeStrings(partial.reasons, MAX_PARTIAL_REASONS, MAX_PARTIAL_REASON_CHARS) ?: return null
-    val isPartial = partial.partial as? Boolean ?: return null
-    val emitted = safeWireInt(partial.emittedCount) ?: return null
-    val total = if (partial.totalCount == null) null else safeWireInt(partial.totalCount) ?: return null
-    val lowerBound = if (partial.totalCountLowerBound == null) null else safeWireInt(partial.totalCountLowerBound) ?: return null
-    val actual = ranges.size + tables.sumOf { it.records.size } + diagnostics.size
-    if (emitted != actual || !isValidPartialMetadata(isPartial, reasons, emitted, total, lowerBound)) return null
-
-    return BoundedParserWorkerSuccess(
-        ParserWorkerPresentation(format, capabilities, summary, ranges, tables, diagnostics),
-        ParserWorkerPartial(isPartial, reasons, emitted, total, lowerBound),
-        wireBytes,
-    )
 }
 
 internal fun encodeSuccessWire(requestId: String, presentation: ParserWorkerPresentation, partial: ParserWorkerPartial): dynamic {
@@ -257,6 +275,16 @@ internal fun encodeSuccessWire(requestId: String, presentation: ParserWorkerPres
 
 internal fun utf8WireBytes(value: dynamic): Int =
     js("new TextEncoder().encode(JSON.stringify(value)).length").unsafeCast<Int>()
+
+internal fun parserWorkerResponseEnvelopeBytesOrNull(value: dynamic): Int? = try {
+    if (!isPlainWireObject(value)) null
+    else utf8WireBytes(value).takeIf { it <= MAX_PARSER_WORKER_WIRE_BYTES }
+} catch (_: Throwable) {
+    null
+}
+
+internal fun isValidParserWorkerRequestId(value: String): Boolean =
+    value.isNotBlank() && value.length <= MAX_PARSER_WORKER_REQUEST_ID_CHARS
 
 private fun requireValidProducerPresentation(presentation: ParserWorkerPresentation) {
     require(isValidFormat(presentation.format)) { "Unsupported parser-worker format." }
