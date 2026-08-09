@@ -367,8 +367,10 @@ private fun verifyProductionPackage(packageDir: File) {
     }
 }
 
-val webappRevision = providers.exec { commandLine("git", "rev-parse", "HEAD") }
+val suppliedWebappRevision = providers.gradleProperty("hexanaWebappRevision")
+val gitWebappRevision = providers.exec { commandLine("git", "rev-parse", "HEAD") }
     .standardOutput.asText.map(String::trim)
+val webappRevision = suppliedWebappRevision.orElse(gitWebappRevision)
 // Supply -PhexanaWebappVersion=<release-version> when a release assigns one;
 // otherwise the complete source revision is the artifact version.
 val webappArtifactVersion = providers.gradleProperty("hexanaWebappVersion").orElse(webappRevision)
@@ -481,6 +483,12 @@ tasks.register("verifyProductionPackage") {
     description = "Verifies the immutable production webapp package allowlist, integrity, references, and policy."
     dependsOn(packageProductionWebapp)
     doLast { verifyProductionPackage(layout.buildDirectory.dir("production-package").get().asFile) }
+}
+
+tasks.register<Exec>("verifyCloudConsoleDeploymentContract") {
+    group = "verification"
+    description = "Verifies the static Cloud Console Docker, Nginx, Skaffold, and values contract."
+    commandLine("node", project.file("verify-cloud-console-contract.mjs").absolutePath)
 }
 
 tasks.register<Exec>("productionPackageChromeSmoke") {

@@ -1,0 +1,41 @@
+apiVersion: skaffold/v4beta8
+kind: Config
+metadata:
+  name: hexana-webapp
+build:
+  tagPolicy:
+    sha256: {}
+  artifacts:
+    - image: registry.jetbrains.team/p/hx/containers/hexana-webapp
+      context: ..
+      docker:
+        dockerfile: webapp/Dockerfile
+        buildArgs:
+          HEXANA_SOURCE_REVISION: "{{.IMAGE_TAG}}"
+  local:
+    useDockerCLI: false
+    useBuildkit: true
+deploy:
+  helm:
+    releases:
+      - name: hexana-webapp
+        remoteChart: oci://registry.jetbrains.team/p/cb/helm-charts/simple-app
+        version: 0.2.1
+        upgradeOnChange: true
+        setValueTemplates:
+          image: "{{.IMAGE_FULLY_QUALIFIED}}"
+          imagePullSecret: "{{.IMAGE_PULL_SECRET}}"
+          applicationName: "{{.APPLICATION_NAME}}"
+profiles:
+  - name: staging
+    deploy:
+      helm:
+        releases:
+          - name: hexana-webapp
+            valuesFiles: [values_staging.yaml]
+  - name: production
+    deploy:
+      helm:
+        releases:
+          - name: hexana-webapp
+            valuesFiles: [values_production.yaml]

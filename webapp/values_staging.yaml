@@ -1,0 +1,20 @@
+replicaCount: 1
+autoscaling:
+  enabled: false
+runAsUser: 101
+runAsGroup: 101
+containerPort: 8080
+healthCheck:
+  path: /healthz
+deployStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
