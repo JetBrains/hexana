@@ -3,7 +3,26 @@ package org.jetbrains.hexana.webapp
 /** The serialised JSON representation of a worker success is never larger than this value. */
 internal const val MAX_PARSER_WORKER_WIRE_BYTES = 10 * 1024 * 1024
 internal const val MAX_PARSER_WORKER_RECORDS_PER_COLLECTION = 10_000
+/** Fixed schema collections are rejected on the producer side instead of silently changing their identity. */
+internal const val MAX_PARSER_WORKER_CAPABILITIES = 32
+internal const val MAX_PARSER_WORKER_TABLES = 32
 internal const val PARSER_WORKER_PROTOCOL_VERSION = 2
+
+private const val MAX_FORMAT_CHARS = 64
+private const val MAX_CAPABILITY_CHARS = 64
+private const val MAX_RANGE_LABEL_CHARS = 256
+private const val MAX_TABLE_ID_CHARS = 64
+private const val MAX_RECORD_KEY_CHARS = 1_024
+private const val MAX_RECORD_VALUE_CHARS = 16_384
+private const val MAX_DIAGNOSTIC_CODE_CHARS = 64
+private const val MAX_DIAGNOSTIC_MESSAGE_CHARS = 1_024
+private const val MAX_PARTIAL_REASONS = 2
+private const val MAX_PARTIAL_REASON_CHARS = 32
+
+private val supportedFormats = setOf("core_wasm", "wasm_component", "unknown")
+private val supportedCapabilities = setOf("summary", "structural_ranges", "tables", "diagnostics")
+private const val RECORD_LIMIT_REASON = "record_limit"
+private const val BYTE_LIMIT_REASON = "byte_limit"
 
 internal data class ParserWorkerSummary(
     val scopeMarker: String,
@@ -45,7 +64,7 @@ internal data class BoundedParserWorkerSuccess(
 )
 
 /**
- * Produces the deterministic response-record prefix. JSON is measured exactly as UTF-8 before it is posted.
+ * Produces a deterministic response-record prefix. JSON is measured exactly as UTF-8 before it is posted.
  * The binary search probes a monotonic prefix length, avoiding repeated quadratic full-payload serialisation.
  */
 internal fun boundParserWorkerSuccess(
@@ -54,61 +73,93 @@ internal fun boundParserWorkerSuccess(
     maxWireBytes: Int = MAX_PARSER_WORKER_WIRE_BYTES,
 ): BoundedParserWorkerSuccess {
     require(maxWireBytes > 0)
+    requireValidProducerPresentation(presentation)
+
     val recordLimited = presentation.ranges.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION ||
         presentation.tables.any { it.records.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION } ||
         presentation.diagnostics.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION
-    val cappedTables = presentation.tables.map { table ->
-        table.copy(records = table.records.take(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION))
-    }
     val capped = presentation.copy(
         ranges = presentation.ranges.take(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION),
-        tables = cappedTables,
+        tables = presentation.tables.map { table ->
+            table.copy(records = table.records.take(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION))
+        },
         diagnostics = presentation.diagnostics.take(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION),
     )
-    val total = presentation.recordCount()
-    val cappedTotal = capped.recordCount()
-    fun candidate(keep: Int, byteLimited: Boolean): Pair<dynamic, ParserWorkerPartial> {
+    val total = presentation.responseRecordCount()
+    val cappedTotal = capped.responseRecordCount()
+
+    fun candidate(keep: Int, byteLimited: Boolean): Pair<ParserWorkerPresentation, ParserWorkerPartial> {
         val bounded = capped.takeDeterministicPrefix(keep)
-        val partial = ParserWorkerPartial(
-            partial = recordLimited || byteLimited,
-            reasons = buildList {
-                if (recordLimited) add("record_limit")
-                if (byteLimited) add("byte_limit")
-            },
-            emittedCount = bounded.recordCount(),
-            totalCount = if (recordLimited) null else total,
-            totalCountLowerBound = if (recordLimited) total else null,
+        return Pair(
+            bounded,
+            partialMetadata(recordLimited, byteLimited, bounded.responseRecordCount(), total),
         )
-        return Pair(encodeSuccessWire(requestId, bounded, partial), partial)
     }
+
+    fun candidateWireBytes(candidate: Pair<ParserWorkerPresentation, ParserWorkerPartial>): Int =
+        utf8WireBytes(encodeSuccessWire(requestId, candidate.first, candidate.second))
+
     val initial = candidate(cappedTotal, false)
-    if (utf8WireBytes(initial.first) <= maxWireBytes) {
-        return BoundedParserWorkerSuccess(capped, initial.second, utf8WireBytes(initial.first))
+    val initialWireBytes = candidateWireBytes(initial)
+    if (initialWireBytes <= maxWireBytes) {
+        return BoundedParserWorkerSuccess(initial.first, initial.second, initialWireBytes)
     }
+
+    val zero = candidate(0, true)
+    require(candidateWireBytes(zero) <= maxWireBytes) {
+        "The requested wire limit cannot represent a valid zero-record parser-worker response."
+    }
+
     var low = 0
     var high = cappedTotal
     while (low < high) {
         val middle = (low + high + 1) ushr 1
-        if (utf8WireBytes(candidate(middle, true).first) <= maxWireBytes) low = middle else high = middle - 1
+        if (candidateWireBytes(candidate(middle, true)) <= maxWireBytes) low = middle else high = middle - 1
     }
+    check(low < cappedTotal)
     val bounded = candidate(low, true)
-    return BoundedParserWorkerSuccess(
-        capped.takeDeterministicPrefix(low),
-        bounded.second,
-        utf8WireBytes(bounded.first),
-    )
+    return BoundedParserWorkerSuccess(bounded.first, bounded.second, candidateWireBytes(bounded))
 }
 
 internal fun encodeBoundedParserWorkerSuccess(requestId: String, presentation: ParserWorkerPresentation): dynamic {
     val bounded = boundParserWorkerSuccess(requestId, presentation)
-    val wire = encodeSuccessWire(requestId, bounded.presentation, bounded.partial)
-    check(utf8WireBytes(wire) == bounded.wireBytes)
-    check(bounded.wireBytes <= MAX_PARSER_WORKER_WIRE_BYTES)
-    return wire
+    return encodeSuccessWire(requestId, bounded.presentation, bounded.partial)
 }
 
-private fun ParserWorkerPresentation.recordCount(): Int =
-    ranges.size + tables.sumOf { it.records.size } + diagnostics.size
+private fun partialMetadata(
+    recordLimited: Boolean,
+    byteLimited: Boolean,
+    emittedCount: Int,
+    totalCount: Int,
+): ParserWorkerPartial = when {
+    recordLimited -> ParserWorkerPartial(
+        partial = true,
+        reasons = if (byteLimited) listOf(RECORD_LIMIT_REASON, BYTE_LIMIT_REASON) else listOf(RECORD_LIMIT_REASON),
+        emittedCount = emittedCount,
+        totalCount = null,
+        totalCountLowerBound = totalCount,
+    )
+    byteLimited -> ParserWorkerPartial(
+        partial = true,
+        reasons = listOf(BYTE_LIMIT_REASON),
+        emittedCount = emittedCount,
+        totalCount = totalCount,
+        totalCountLowerBound = null,
+    )
+    else -> ParserWorkerPartial(
+        partial = false,
+        reasons = emptyList(),
+        emittedCount = emittedCount,
+        totalCount = emittedCount,
+        totalCountLowerBound = null,
+    )
+}
+
+private fun ParserWorkerPresentation.responseRecordCount(): Int {
+    val count = ranges.size.toLong() + tables.sumOf { it.records.size.toLong() } + diagnostics.size.toLong()
+    require(count <= Int.MAX_VALUE) { "Parser-worker record count exceeds the wire representation." }
+    return count.toInt()
+}
 
 private fun ParserWorkerPresentation.takeDeterministicPrefix(count: Int): ParserWorkerPresentation {
     var remaining = count
@@ -135,26 +186,25 @@ internal fun decodeParserWorkerSuccess(value: dynamic, requestId: String): Bound
     val presentation = value.presentation
     val partial = value.partial
     if (!isPlainWireObject(presentation) || !isPlainWireObject(partial)) return null
+
     val format = presentation.format as? String ?: return null
-    if (format !in setOf("core_wasm", "wasm_component", "unknown") || format.length > 64) return null
-    val capabilities = decodeStrings(presentation.capabilities, 32, 64) ?: return null
-    if (capabilities.any { it !in setOf("summary", "structural_ranges", "tables", "diagnostics") }) return null
+    if (!isValidFormat(format)) return null
+    val capabilities = decodeStrings(presentation.capabilities, MAX_PARSER_WORKER_CAPABILITIES, MAX_CAPABILITY_CHARS) ?: return null
+    if (!isValidCapabilities(capabilities)) return null
     val summary = decodeSummary(presentation.summary) ?: return null
-    val ranges = decodeRanges(presentation.ranges) ?: return null
+    val ranges = decodeRanges(presentation.ranges, summary.inputBytes) ?: return null
     val tables = decodeTables(presentation.tables) ?: return null
     val diagnostics = decodeDiagnostics(presentation.diagnostics) ?: return null
-    val reasons = decodeStrings(partial.reasons, 2, 32) ?: return null
-    if (reasons.any { it !in setOf("record_limit", "byte_limit") } || reasons.distinct().size != reasons.size) return null
+    if (!hasCoherentContent(capabilities, ranges, tables, diagnostics)) return null
+
+    val reasons = decodeStrings(partial.reasons, MAX_PARTIAL_REASONS, MAX_PARTIAL_REASON_CHARS) ?: return null
     val isPartial = partial.partial as? Boolean ?: return null
     val emitted = safeWireInt(partial.emittedCount) ?: return null
     val total = if (partial.totalCount == null) null else safeWireInt(partial.totalCount) ?: return null
     val lowerBound = if (partial.totalCountLowerBound == null) null else safeWireInt(partial.totalCountLowerBound) ?: return null
     val actual = ranges.size + tables.sumOf { it.records.size } + diagnostics.size
-    if (emitted != actual || emitted > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION * (tables.size + 2)) return null
-    if (isPartial != reasons.isNotEmpty()) return null
-    if (!isPartial && (total != actual || lowerBound != null)) return null
-    if (isPartial && total == null && (lowerBound == null || lowerBound < emitted)) return null
-    if (total != null && total < emitted) return null
+    if (emitted != actual || !isValidPartialMetadata(isPartial, reasons, emitted, total, lowerBound)) return null
+
     return BoundedParserWorkerSuccess(
         ParserWorkerPresentation(format, capabilities, summary, ranges, tables, diagnostics),
         ParserWorkerPartial(isPartial, reasons, emitted, total, lowerBound),
@@ -208,39 +258,121 @@ internal fun encodeSuccessWire(requestId: String, presentation: ParserWorkerPres
 internal fun utf8WireBytes(value: dynamic): Int =
     js("new TextEncoder().encode(JSON.stringify(value)).length").unsafeCast<Int>()
 
+private fun requireValidProducerPresentation(presentation: ParserWorkerPresentation) {
+    require(isValidFormat(presentation.format)) { "Unsupported parser-worker format." }
+    require(isValidCapabilities(presentation.capabilities)) { "Invalid parser-worker capability collection." }
+    require(presentation.tables.size <= MAX_PARSER_WORKER_TABLES) { "Too many parser-worker tables." }
+    require(isValidSummary(presentation.summary)) { "Invalid parser-worker summary." }
+    require(hasCoherentContent(presentation.capabilities, presentation.ranges, presentation.tables, presentation.diagnostics)) {
+        "Parser-worker content does not match its capabilities."
+    }
+    presentation.responseRecordCount()
+    presentation.ranges.forEach { range ->
+        require(isValidRange(range, presentation.summary.inputBytes)) { "Invalid parser-worker range." }
+        require(range.label.length <= MAX_RANGE_LABEL_CHARS) { "Parser-worker range label is too long." }
+    }
+    presentation.tables.forEach { table ->
+        require(table.id.length <= MAX_TABLE_ID_CHARS) { "Parser-worker table id is too long." }
+        table.records.forEach { record ->
+            require(record.key.length <= MAX_RECORD_KEY_CHARS) { "Parser-worker record key is too long." }
+            require(record.value.length <= MAX_RECORD_VALUE_CHARS) { "Parser-worker record value is too long." }
+        }
+    }
+    presentation.diagnostics.forEach { diagnostic ->
+        require(diagnostic.code.length <= MAX_DIAGNOSTIC_CODE_CHARS) { "Parser-worker diagnostic code is too long." }
+        require(diagnostic.message.length <= MAX_DIAGNOSTIC_MESSAGE_CHARS) { "Parser-worker diagnostic message is too long." }
+    }
+}
+
+private fun isValidFormat(format: String): Boolean = format.length <= MAX_FORMAT_CHARS && format in supportedFormats
+
+private fun isValidCapabilities(capabilities: List<String>): Boolean =
+    capabilities.size <= MAX_PARSER_WORKER_CAPABILITIES &&
+        capabilities.all { it.length <= MAX_CAPABILITY_CHARS && it in supportedCapabilities } &&
+        capabilities.distinct().size == capabilities.size &&
+        "summary" in capabilities
+
+private fun hasCoherentContent(
+    capabilities: List<String>,
+    ranges: List<ParserWorkerRange>,
+    tables: List<ParserWorkerTable>,
+    diagnostics: List<ParserWorkerDiagnostic>,
+): Boolean =
+    (ranges.isEmpty() || "structural_ranges" in capabilities) &&
+        (tables.isEmpty() || "tables" in capabilities) &&
+        (diagnostics.isEmpty() || "diagnostics" in capabilities)
+
+private fun isValidSummary(summary: ParserWorkerSummary): Boolean =
+    summary.scopeMarker == "DedicatedWorkerGlobalScope" &&
+        summary.documentAbsent &&
+        summary.inputBytes >= 0 &&
+        summary.sectionCount >= 0 &&
+        summary.importCount >= 0 &&
+        summary.definedFunctionCount >= 0 &&
+        summary.codeBodyCount >= 0 &&
+        summary.elapsedMs.isFinite() && summary.elapsedMs >= 0
+
+private fun isValidRange(range: ParserWorkerRange, inputBytes: Int): Boolean =
+    range.offset >= 0 && range.size > 0 && range.size <= inputBytes && range.offset <= inputBytes - range.size
+
+private fun isValidPartialMetadata(
+    partial: Boolean,
+    reasons: List<String>,
+    emitted: Int,
+    total: Int?,
+    lowerBound: Int?,
+): Boolean = when (reasons) {
+    emptyList<String>() -> !partial && total == emitted && lowerBound == null
+    listOf(BYTE_LIMIT_REASON) -> partial && total != null && total > emitted && lowerBound == null
+    listOf(RECORD_LIMIT_REASON), listOf(RECORD_LIMIT_REASON, BYTE_LIMIT_REASON) ->
+        partial && total == null && lowerBound != null && lowerBound > emitted
+    else -> false
+}
+
 private fun wireObject(): dynamic = js("({})")
 
 private fun decodeSummary(value: dynamic): ParserWorkerSummary? {
     if (!isPlainWireObject(value)) return null
-    val marker = value.scopeMarker as? String ?: return null
-    val documentAbsent = value.documentAbsent as? Boolean ?: return null
-    if (marker != "DedicatedWorkerGlobalScope" || !documentAbsent) return null
-    return ParserWorkerSummary(marker, documentAbsent, safeWireInt(value.inputBytes) ?: return null,
-        safeWireInt(value.sectionCount) ?: return null, safeWireInt(value.importCount) ?: return null,
-        safeWireInt(value.definedFunctionCount) ?: return null, safeWireInt(value.codeBodyCount) ?: return null,
-        safeWireDouble(value.elapsedMs) ?: return null)
+    val summary = ParserWorkerSummary(
+        value.scopeMarker as? String ?: return null,
+        value.documentAbsent as? Boolean ?: return null,
+        safeWireInt(value.inputBytes) ?: return null,
+        safeWireInt(value.sectionCount) ?: return null,
+        safeWireInt(value.importCount) ?: return null,
+        safeWireInt(value.definedFunctionCount) ?: return null,
+        safeWireInt(value.codeBodyCount) ?: return null,
+        safeWireDouble(value.elapsedMs) ?: return null,
+    )
+    return summary.takeIf(::isValidSummary)
 }
 
-private fun decodeRanges(value: dynamic): List<ParserWorkerRange>? {
+private fun decodeRanges(value: dynamic, inputBytes: Int): List<ParserWorkerRange>? {
     val array = value as? Array<dynamic> ?: return null
     if (array.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION) return null
     return array.map { item ->
         if (!isPlainWireObject(item)) return null
-        ParserWorkerRange(safeWireInt(item.offset) ?: return null, safeWireInt(item.size) ?: return null,
-            safeString(item.label, 256) ?: return null)
+        val range = ParserWorkerRange(
+            safeWireInt(item.offset) ?: return null,
+            safeWireInt(item.size) ?: return null,
+            safeString(item.label, MAX_RANGE_LABEL_CHARS) ?: return null,
+        )
+        range.takeIf { isValidRange(it, inputBytes) } ?: return null
     }
 }
 
 private fun decodeTables(value: dynamic): List<ParserWorkerTable>? {
     val array = value as? Array<dynamic> ?: return null
-    if (array.size > 32) return null
+    if (array.size > MAX_PARSER_WORKER_TABLES) return null
     return array.map { item ->
         if (!isPlainWireObject(item)) return null
         val records = item.records as? Array<dynamic> ?: return null
         if (records.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION) return null
-        ParserWorkerTable(safeString(item.id, 64) ?: return null, records.map { record ->
+        ParserWorkerTable(safeString(item.id, MAX_TABLE_ID_CHARS) ?: return null, records.map { record ->
             if (!isPlainWireObject(record)) return null
-            ParserWorkerRecord(safeString(record.key, 1024) ?: return null, safeString(record.value, 16_384) ?: return null)
+            ParserWorkerRecord(
+                safeString(record.key, MAX_RECORD_KEY_CHARS) ?: return null,
+                safeString(record.value, MAX_RECORD_VALUE_CHARS) ?: return null,
+            )
         })
     }
 }
@@ -250,7 +382,10 @@ private fun decodeDiagnostics(value: dynamic): List<ParserWorkerDiagnostic>? {
     if (array.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION) return null
     return array.map { item ->
         if (!isPlainWireObject(item)) return null
-        ParserWorkerDiagnostic(safeString(item.code, 64) ?: return null, safeString(item.message, 1024) ?: return null)
+        ParserWorkerDiagnostic(
+            safeString(item.code, MAX_DIAGNOSTIC_CODE_CHARS) ?: return null,
+            safeString(item.message, MAX_DIAGNOSTIC_MESSAGE_CHARS) ?: return null,
+        )
     }
 }
 

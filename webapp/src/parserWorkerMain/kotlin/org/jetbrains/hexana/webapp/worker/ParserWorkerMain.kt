@@ -5,10 +5,7 @@ import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.webapp.ParserWorkerPresentation
-import org.jetbrains.hexana.webapp.ParserWorkerRange
-import org.jetbrains.hexana.webapp.ParserWorkerRecord
 import org.jetbrains.hexana.webapp.ParserWorkerSummary
-import org.jetbrains.hexana.webapp.ParserWorkerTable
 import org.jetbrains.hexana.webapp.encodeBoundedParserWorkerSuccess
 import org.jetbrains.hexana.webapp.PARSER_WORKER_PROTOCOL_VERSION
 import org.khronos.webgl.ArrayBuffer
@@ -58,13 +55,9 @@ private fun parse(workerScope: dynamic, requestId: String, input: ArrayBuffer) {
 
         val presentation = ParserWorkerPresentation(
             format = "core_wasm",
-            capabilities = listOf("summary", "structural_ranges", "tables", "diagnostics"),
+            capabilities = listOf("summary"),
             summary = ParserWorkerSummary(SCOPE_MARKER, true, input.byteLength, module.sections.size, importCount,
                 definedFunctionCount, codeBodyCount, now() - startedAt),
-            ranges = module.sections.mapIndexed { index, _ -> ParserWorkerRange(index, 0, "section-$index") },
-            tables = listOf(
-                ParserWorkerTable("sections", module.sections.mapIndexed { index, _ -> ParserWorkerRecord(index.toString(), "section") }),
-            ),
         )
         workerScope.postMessage(encodeBoundedParserWorkerSuccess(requestId, presentation))
     } catch (_: Throwable) {

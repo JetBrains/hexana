@@ -78,6 +78,10 @@ class ParserWorkerBrowserTest {
                                 assertEquals(1, state.summary.importCount)
                                 assertEquals(1, state.summary.definedFunctionCount)
                                 assertEquals(1, state.summary.codeBodyCount)
+                                assertEquals(listOf("summary"), state.presentation.capabilities)
+                                assertTrue(state.presentation.ranges.isEmpty())
+                                assertTrue(state.presentation.tables.isEmpty())
+                                assertTrue(state.presentation.diagnostics.isEmpty())
                                 resolve(Unit)
                             } catch (failure: Throwable) {
                                 reject(failure)

@@ -269,7 +269,11 @@ private fun parallelJson(sample: ParallelSample): dynamic {
 }
 
 private fun successDtoJsonBytes(sample: WorkerSample): Int {
-    val base = representativePresentation(sample.inputBytes)
+    val base = representativePresentation(sample.inputBytes).copy(
+        capabilities = listOf("summary"),
+        ranges = emptyList(),
+        tables = emptyList(),
+    )
     val presentation = base.copy(summary = base.summary.copy(elapsedMs = sample.parseMs ?: 0.0))
     return utf8WireBytes(
         encodeBoundedParserWorkerSuccess("parser-worker-1", presentation),
