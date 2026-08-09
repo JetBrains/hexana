@@ -24,6 +24,8 @@ fun openFilePicker(onFileLoaded: (name: String, bytes: ByteArray) -> Unit) {
  * as a ByteArray.
  */
 fun readFile(file: File, onFileLoaded: (name: String, bytes: ByteArray) -> Unit) {
+    if (!BrowserFileAdmissionPolicy.accepts(file.name)) return
+
     val reader = FileReader()
     reader.onload = { event ->
         val result = event.target.asDynamic().result

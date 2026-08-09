@@ -32,7 +32,7 @@ class BrowserHost(
     private val onScriptFileContent: (path: String, content: String) -> Unit,
 ) : Host {
 
-    override val canRunExport: Boolean get() = false
+    override val canRunExport: Boolean get() = BrowserCapabilityPolicy.canRunExports
 
     override fun showWat(watText: String, warning: String?) {
         downloadText(

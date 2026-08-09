@@ -20,6 +20,13 @@ kotlin {
                 implementation(project(":web-ui"))
             }
         }
+
+        jsTest {
+            dependencies {
+                implementation(libs.kotlin.test)
+                implementation(libs.kotlinx.browser)
+            }
+        }
     }
 }
 

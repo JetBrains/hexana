@@ -124,6 +124,7 @@ Run the narrowest command that proves your change.
 - Run native parser JVM tests: `./gradlew :parsing:common:jvmTest :parsing:elf:jvmTest :parsing:macho:jvmTest :parsing:pe:jvmTest`
 - Run native disassembly tests: `./gradlew :disassembly:core:jvmTest :disassembly:llvm-objdump:test`
 - Run JS browser parser tests: `./gradlew :wasmParser:jsBrowserTest`
+- Run browser webapp tests: `./gradlew :webapp:jsBrowserTest -Phx.tests.web.enableChromeOrChromium=1`
 - Run WasmJS browser parser tests: `./gradlew :wasmParser:wasmJsBrowserTest`
 - Build shared module: `./gradlew :plugins-shared:build`
 - Build neutral CLI runtime contracts: `./gradlew :cli:runtime:build`
