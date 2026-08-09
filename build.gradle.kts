@@ -186,6 +186,7 @@ val teamcityWebappTestTaskPaths = listOf(
     ":webapp:jsBrowserProductionWebpack",
     ":webapp:verifyPublicWebappCapabilityPolicy",
     ":webapp:jsBrowserDistribution",
+    ":webapp:verifyProductionPackage",
     ":webapp:buildComponent",
     ":webapp:jsBrowserTest",
 )
@@ -675,6 +676,7 @@ tasks.register("verifyTeamcityWebappTestsCoverage") {
             ":webapp:jsBrowserProductionWebpack",
             ":webapp:verifyPublicWebappCapabilityPolicy",
             ":webapp:jsBrowserDistribution",
+            ":webapp:verifyProductionPackage",
             ":webapp:buildComponent",
             ":webapp:jsBrowserTest",
         )

@@ -1,3 +1,6 @@
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.compose.multiplatform)
@@ -25,6 +28,7 @@ kotlin {
         browser {
             commonWebpackConfig {
                 outputFileName = "webapp.js"
+                sourceMaps = false
             }
             testTask {
                 useKarma {
@@ -137,6 +141,230 @@ tasks.named("jsBrowserDistribution") {
     dependsOn(copyEditorCss)
 }
 
+private fun sha256(file: File): String = MessageDigest.getInstance("SHA-256")
+    .digest(file.readBytes())
+    .joinToString("") { "%02x".format(it) }
+
+private fun json(value: String): String = buildString {
+    append('"')
+    value.forEach { character ->
+        append(
+            when (character) {
+                '\\' -> "\\\\"
+                '"' -> "\\\""
+                '\n' -> "\\n"
+                '\r' -> "\\r"
+                '\t' -> "\\t"
+                else -> character.toString()
+            }
+        )
+    }
+    append('"')
+}
+
+private fun packageFailure(message: String): Nothing = throw GradleException("Invalid production webapp package: $message")
+
+private val productionSourceAssets = listOf(
+    "index.html",
+    "boot.js",
+    "webapp.js",
+    "parser-worker.js",
+    "wasmprinter_wrapper.wasm",
+    "theme.css",
+    "editor.css",
+)
+
+private fun verifyProductionPackage(packageDir: File) {
+    if (!packageDir.isDirectory) packageFailure("missing package directory ${packageDir.absolutePath}")
+    val manifest = packageDir.resolve("package-manifest.json")
+    val checksums = packageDir.resolve("checksums.sha256")
+    val packageChecksum = packageDir.resolve("package.sha256")
+    listOf(manifest, checksums, packageChecksum).forEach { file ->
+        if (!file.isFile) packageFailure("missing evidence file ${file.name}")
+    }
+    val checksumEntries = checksums.readLines().filter { it.isNotBlank() }.map { line ->
+        val fields = line.split("  ", limit = 2)
+        if (fields.size != 2 || fields[0].length != 64) packageFailure("malformed checksum entry $line")
+        fields[1] to fields[0]
+    }
+    if (checksumEntries.map { it.first }.distinct().size != checksumEntries.size) {
+        packageFailure("duplicate checksum paths")
+    }
+    val actualFiles = packageDir.walkTopDown().filter { it.isFile }.map {
+        it.relativeTo(packageDir).invariantSeparatorsPath
+    }.sorted().toList()
+    val expectedFiles = (checksumEntries.map { it.first } + "checksums.sha256" + "package.sha256").sorted()
+    if (actualFiles != expectedFiles) packageFailure("allowlist mismatch: expected $expectedFiles, found $actualFiles")
+    checksumEntries.forEach { (path, hash) ->
+        val file = packageDir.resolve(path)
+        if (!file.isFile || sha256(file) != hash) packageFailure("hash mismatch for $path")
+    }
+    if (sha256(checksums) != packageChecksum.readText().trim()) packageFailure("overall checksum mismatch")
+    val manifestText = manifest.readText()
+    if (!manifestText.contains("\"schemaVersion\":1") || !manifestText.contains("\"cacheControl\"")) {
+        packageFailure("machine-readable manifest is incomplete")
+    }
+    val nonAssetAllowlist = listOf(
+        "index.html",
+        "build-identity.json",
+        "sbom.cdx.json",
+        "provenance.json",
+        "package-manifest.json",
+        "checksums.sha256",
+        "package.sha256",
+    )
+    if (actualFiles.filterNot { it.startsWith("assets/") } != nonAssetAllowlist.sorted()) {
+        packageFailure("non-asset allowlist mismatch")
+    }
+    val manifestAssetPaths = Regex("\\\"path\\\":\\\"(assets/[^\\\"]+)\\\"")
+        .findAll(manifestText)
+        .map { it.groupValues[1] }
+        .toList()
+        .distinct()
+        .sorted()
+    if (actualFiles.filter { it.startsWith("assets/") } != manifestAssetPaths) {
+        packageFailure("asset allowlist does not match the manifest")
+    }
+    if (actualFiles.any { it.endsWith(".map") || it.contains("node_modules") || it.contains("parser-worker-fixtures") }) {
+        packageFailure("source maps or development artifacts shipped")
+    }
+    val index = packageDir.resolve("index.html").readText()
+    if ("connect-src 'self'" !in index || "'unsafe-eval'" in index || "http://" in index || "https://" in index) {
+        packageFailure("index.html has an unsafe connection or script policy")
+    }
+    val immutableAssets = packageDir.resolve("assets").listFiles()?.filter { it.isFile }.orEmpty()
+    if (immutableAssets.isEmpty()) packageFailure("missing immutable assets")
+    immutableAssets.forEach { asset ->
+        val hashPrefix = asset.name.substringBeforeLast('.').substringAfterLast('.', "")
+        if (hashPrefix.length != 16 || !sha256(asset).startsWith(hashPrefix)) {
+            packageFailure("asset name is not content-addressed: ${asset.name}")
+        }
+    }
+    Regex("(?:src|href)=\"([^\"]+)\"").findAll(index).forEach { match ->
+        val target = match.groupValues[1]
+        if (!target.startsWith("data:") && !packageDir.resolve(target).isFile) {
+            packageFailure("index.html references missing asset $target")
+        }
+    }
+    listOf(packageDir.resolve("index.html"))
+        .plus(immutableAssets.filter { it.extension == "js" })
+        .forEach { file ->
+            Regex("assets/[A-Za-z0-9_.-]+").findAll(file.readText()).forEach { match ->
+                if (!packageDir.resolve(match.value).isFile) packageFailure("${file.name} references missing ${match.value}")
+            }
+        }
+    val textAssets = packageDir.walkTopDown().filter { it.isFile && it.extension in setOf("js", "html", "css") }
+    textAssets.forEach { file ->
+        val text = file.readText()
+        listOf("api.osv.dev", "/v1/querybatch", "/v1/vulns/").forEach { forbidden ->
+            if (forbidden in text) packageFailure("${file.name} contains forbidden $forbidden")
+        }
+        if (Regex("//[#@]\\s*sourceMappingURL=").containsMatchIn(text)) {
+            packageFailure("${file.name} contains a source map reference")
+        }
+    }
+}
+
+val packageProductionWebapp by tasks.registering {
+    group = "distribution"
+    description = "Produces a deterministic, immutable static package from the browser distribution."
+    dependsOn(tasks.named("jsBrowserDistribution"))
+
+    val sourceDir = layout.buildDirectory.dir("dist/js/productionExecutable")
+    val packageDir = layout.buildDirectory.dir("production-package")
+    inputs.dir(sourceDir)
+    inputs.files(
+        rootProject.file("gradle/libs.versions.toml"),
+        rootProject.file("gradle/wrapper/gradle-wrapper.properties"),
+        project.file("build.gradle.kts"),
+    )
+    outputs.dir(packageDir)
+
+    doLast {
+        val source = sourceDir.get().asFile
+        val output = packageDir.get().asFile
+        val sourceFiles = source.walkTopDown().filter { it.isFile }.map {
+            it.relativeTo(source).invariantSeparatorsPath
+        }.sorted().toList()
+        if (sourceFiles != productionSourceAssets.sorted()) {
+            packageFailure("production distribution allowlist mismatch: expected ${productionSourceAssets.sorted()}, found $sourceFiles")
+        }
+        output.deleteRecursively()
+        output.mkdirs()
+        val assets = output.resolve("assets").apply { mkdirs() }
+        fun immutableName(sourceName: String): String {
+            val sourceFile = source.resolve(sourceName)
+            val dot = sourceName.lastIndexOf('.')
+            return sourceName.substring(0, dot) + "." + sha256(sourceFile).take(16) + sourceName.substring(dot)
+        }
+        val workerName = immutableName("parser-worker.js")
+        val wasmName = immutableName("wasmprinter_wrapper.wasm")
+        val themeName = immutableName("theme.css")
+        val editorName = immutableName("editor.css")
+        source.resolve("parser-worker.js").copyTo(assets.resolve(workerName), overwrite = true)
+        source.resolve("wasmprinter_wrapper.wasm").copyTo(assets.resolve(wasmName), overwrite = true)
+        source.resolve("theme.css").copyTo(assets.resolve(themeName), overwrite = true)
+        source.resolve("editor.css").copyTo(assets.resolve(editorName), overwrite = true)
+        val webappText = source.resolve("webapp.js").readText().replace("parser-worker.js", "assets/$workerName")
+        if (webappText == source.resolve("webapp.js").readText()) packageFailure("webapp bundle did not reference parser-worker.js")
+        val webappName = "webapp." + MessageDigest.getInstance("SHA-256").digest(webappText.toByteArray()).joinToString("") { "%02x".format(it) }.take(16) + ".js"
+        assets.resolve(webappName).writeText(webappText, StandardCharsets.UTF_8)
+        val bootText = source.resolve("boot.js").readText().replace("./wasmprinter_wrapper.wasm", "./assets/$wasmName")
+        val bootName = "boot." + MessageDigest.getInstance("SHA-256").digest(bootText.toByteArray()).joinToString("") { "%02x".format(it) }.take(16) + ".js"
+        assets.resolve(bootName).writeText(bootText, StandardCharsets.UTF_8)
+        source.resolve("index.html").readText()
+            .replace("theme.css", "assets/$themeName")
+            .replace("editor.css", "assets/$editorName")
+            .replace("boot.js", "assets/$bootName")
+            .replace("webapp.js", "assets/$webappName")
+            .also { output.resolve("index.html").writeText(it, StandardCharsets.UTF_8) }
+
+        val revision = providers.exec { commandLine("git", "rev-parse", "HEAD") }.standardOutput.asText.get().trim()
+        val version = providers.gradleProperty("hexanaToolsVersion").orElse("unspecified").get()
+        val payloadFiles = output.walkTopDown().filter { it.isFile }.map { file ->
+            file.relativeTo(output).invariantSeparatorsPath to sha256(file)
+        }.sortedBy { it.first }.toList()
+        val cacheEntries = payloadFiles.joinToString(",") { (path, hash) ->
+            "{\"path\":${json(path)},\"sha256\":${json(hash)},\"cacheControl\":${json(if (path == "index.html") "no-cache" else "public, max-age=31536000, immutable")}}"
+        }
+        output.resolve("build-identity.json").writeText(
+            "{\"schemaVersion\":1,\"product\":\"hexana-webapp\",\"version\":${json(version)},\"revision\":${json(revision)}}\n",
+            StandardCharsets.UTF_8,
+        )
+        output.resolve("sbom.cdx.json").writeText(
+            "{\"bomFormat\":\"CycloneDX\",\"specVersion\":\"1.5\",\"version\":1,\"metadata\":{\"component\":{\"type\":\"application\",\"name\":\"hexana-webapp\",\"version\":${json(version)}}},\"components\":[{\"type\":\"library\",\"name\":\"kotlin\",\"group\":\"org.jetbrains.kotlin\",\"version\":${json(libs.versions.kotlin.get())}},{\"type\":\"library\",\"name\":\"compose-multiplatform\",\"group\":\"org.jetbrains.compose\",\"version\":${json(libs.versions.composeMultiplatform.get())}}]}\n",
+            StandardCharsets.UTF_8,
+        )
+        val evidenceFiles = listOf("gradle/libs.versions.toml", "gradle/wrapper/gradle-wrapper.properties", "webapp/build.gradle.kts")
+        val evidence = evidenceFiles.joinToString(",") { path -> "{\"path\":${json(path)},\"sha256\":${json(sha256(rootProject.file(path)))}}" }
+        output.resolve("provenance.json").writeText(
+            "{\"schemaVersion\":1,\"builder\":\"Gradle :webapp:packageProductionWebapp\",\"revision\":${json(revision)},\"inputs\":[$evidence]}\n",
+            StandardCharsets.UTF_8,
+        )
+        val manifestEntries = output.walkTopDown().filter { it.isFile }.map { file ->
+            file.relativeTo(output).invariantSeparatorsPath to sha256(file)
+        }.sortedBy { it.first }.joinToString(",") { (path, hash) ->
+            "{\"path\":${json(path)},\"sha256\":${json(hash)},\"cacheControl\":${json(if (path == "index.html" || path !in payloadFiles.map { it.first }) "no-cache" else "public, max-age=31536000, immutable")}}"
+        }
+        output.resolve("package-manifest.json").writeText(
+            "{\"schemaVersion\":1,\"files\":[$manifestEntries],\"payload\":[$cacheEntries]}\n",
+            StandardCharsets.UTF_8,
+        )
+        val checksums = output.walkTopDown().filter { it.isFile }.map { file ->
+            "${sha256(file)}  ${file.relativeTo(output).invariantSeparatorsPath}"
+        }.sorted().joinToString("\n", postfix = "\n")
+        output.resolve("checksums.sha256").writeText(checksums, StandardCharsets.UTF_8)
+        output.resolve("package.sha256").writeText(sha256(output.resolve("checksums.sha256")) + "\n", StandardCharsets.UTF_8)
+    }
+}
+
+tasks.register("verifyProductionPackage") {
+    group = "verification"
+    description = "Verifies the immutable production webapp package allowlist, integrity, references, and policy."
+    dependsOn(packageProductionWebapp)
+    doLast { verifyProductionPackage(layout.buildDirectory.dir("production-package").get().asFile) }
+}
+
 tasks.register("verifyPublicWebappCapabilityPolicy") {
     group = "verification"
     description = "Verifies the public webapp has no OSV-network capability."
@@ -179,15 +407,16 @@ tasks.register("verifyPublicWebappCapabilityPolicy") {
     }
 }
 
-// Build the distribution and serve it on http://0.0.0.0:8123 (LAN-reachable).
-// Backs the "Hexana WebApp" run configuration; stop the run to stop the server.
+// Developer-only preview server. It is not production hosting and does not serve
+// the immutable package created by packageProductionWebapp.
 tasks.register<Exec>("serve") {
     dependsOn(tasks.named("jsBrowserDistribution"))
     workingDir = layout.buildDirectory.dir("dist/js/productionExecutable").get().asFile
     commandLine("python3", "-m", "http.server", "8123")
 }
 
-// Build the webapp Component Model binary that embeds all static assets.
+// Developer-only experiment: build a Component Model binary that embeds the
+// un-packaged distribution. It is outside the production static-package contract.
 // Runs `cargo build --release` for the webapp_server crate and copies the
 // resulting component to webapp/build/component/hexana-webapp.component.wasm.
 val buildComponent by tasks.registering(Exec::class) {
@@ -210,7 +439,7 @@ val buildComponent by tasks.registering(Exec::class) {
     }
 }
 
-// Serve the Component Model binary on http://0.0.0.0:8124 via wasmtime.
+// Developer-only Component Model preview via wasmtime; not production hosting.
 tasks.register<Exec>("serveComponent") {
     dependsOn(buildComponent)
     val component = layout.buildDirectory.file("component/hexana-webapp.component.wasm").get().asFile
