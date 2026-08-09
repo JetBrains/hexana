@@ -179,6 +179,7 @@ val teamcityCoreTestTaskPaths = listOf(
 
 val teamcityVscodePluginTestTaskPaths = listOf(
     ":vscode-plugin:extension-lib:allTests",
+    ":vscode-plugin:webview:compileKotlinJs",
 )
 
 val teamcityWebappTestTaskPaths = listOf(
@@ -248,6 +249,7 @@ val teamcityCiTestTaskOrder = listOf(
     ":parsing:zip:allTests",
     ":plugins-shared:allTests",
     ":vscode-plugin:extension-lib:allTests",
+    ":vscode-plugin:webview:compileKotlinJs",
     ":wasmParser:allTests",
     ":idea-plugin:test",
     ":mcp:core:build",
@@ -285,14 +287,6 @@ val teamcityCliTestTaskPaths = listOf(
 )
 
 val teamcityFallbackCoreJvmTestTaskPaths = linkedSetOf<String>()
-
-project(":webapp") {
-    tasks.withType<KotlinJsTest>().configureEach {
-        if (name == "jsBrowserTest") {
-            environment("hx.tests.web.enableChromeOrChromium", "1")
-        }
-    }
-}
 
 subprojects {
     plugins.withId("org.jetbrains.kotlin.jvm") {
@@ -657,6 +651,7 @@ tasks.register("verifyTeamcityVscodePluginTestsCoverage") {
     doLast {
         val requiredTaskPaths = listOf(
             ":vscode-plugin:extension-lib:allTests",
+            ":vscode-plugin:webview:compileKotlinJs",
         )
         verifyExactTaskPaths(
             "teamcityVscodePluginTests inventory",
@@ -687,10 +682,6 @@ tasks.register("verifyTeamcityWebappTestsCoverage") {
             ":web-ui:jsBrowserTest",
         )
         verifyExactTaskPaths("teamcityWebappTests inventory", requiredTaskPaths, teamcityWebappTestTaskPaths)
-        val browserTest = tasks.getByPath(":webapp:jsBrowserTest") as KotlinJsTest
-        check(browserTest.environment["hx.tests.web.enableChromeOrChromium"] == "1") {
-            "teamcityWebappTests must enable Chrome or Chromium for :webapp:jsBrowserTest"
-        }
         verifyAggregateDirectDependencies(
             "teamcityWebappTests",
             teamcityWebappTestTaskPaths + ":verifyTeamcityWebappTestsCoverage",

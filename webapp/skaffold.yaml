@@ -11,7 +11,7 @@ build:
       docker:
         dockerfile: webapp/Dockerfile
         buildArgs:
-          HEXANA_SOURCE_REVISION: "{{.IMAGE_TAG}}"
+          HEXANA_SOURCE_REVISION: "{{.HEXANA_SOURCE_REVISION}}"
   local:
     useDockerCLI: false
     useBuildkit: true

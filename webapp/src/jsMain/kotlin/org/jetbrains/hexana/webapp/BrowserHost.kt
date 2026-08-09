@@ -188,6 +188,11 @@ internal class BrowserHost(
         // No extension host to notify.
     }
 
+    fun dispose() {
+        scriptFileLoader?.dispose()
+        scriptFileLoader = null
+    }
+
     // -------------------------------------------------------------------------
 
     private fun localStorage(key: String, value: String) {

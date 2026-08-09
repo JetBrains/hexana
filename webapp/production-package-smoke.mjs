@@ -5,6 +5,9 @@ import { join, normalize } from "node:path";
 import { spawn } from "node:child_process";
 
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+const ciChromeFlags = process.env.CI || process.env.TEAMCITY_VERSION
+    ? ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+    : [];
 
 async function main() {
     const [packageDir, fixture] = process.argv.slice(2);
@@ -30,7 +33,7 @@ async function main() {
         profile = await mkdtemp(join(tmpdir(), "hexana-webapp-smoke-"));
         const candidates = [process.env.CHROME_BIN, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "google-chrome", "chromium", "chromium-browser"].filter(Boolean);
         for (const candidate of candidates) {
-            const child = spawn(candidate, ["--headless=new", "--no-first-run", "--no-default-browser-check", "--remote-debugging-port=0", `--user-data-dir=${profile}`, `http://127.0.0.1:${port}/`], { stdio: "ignore" });
+            const child = spawn(candidate, ["--headless=new", "--no-first-run", "--no-default-browser-check", ...ciChromeFlags, "--remote-debugging-port=0", `--user-data-dir=${profile}`, `http://127.0.0.1:${port}/`], { stdio: "ignore" });
             const failed = await new Promise(resolve => { child.once("error", () => resolve(true)); setTimeout(() => resolve(child.exitCode !== null), 300); });
             if (!failed) { browser = child; break; }
         }

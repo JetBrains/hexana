@@ -98,6 +98,9 @@ internal fun WebAppRoot(
             },
         )
     }
+    DisposableEffect(host) {
+        onDispose(host::dispose)
+    }
     val onScriptTabConfirmed: (String, String) -> Unit = { path, content ->
         if (scriptTabs.none { it.path == path }) {
             scriptTabs.add(ScriptTabState(path, content))

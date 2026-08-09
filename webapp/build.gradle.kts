@@ -242,7 +242,7 @@ private fun sbomJson(version: String, components: List<ResolvedRuntimeComponent>
     return "{\"bomFormat\":\"CycloneDX\",\"specVersion\":\"1.5\",\"version\":1,\"metadata\":{\"component\":{\"type\":\"application\",\"bom-ref\":\"urn:hexana:webapp\",\"name\":\"hexana-webapp\",\"version\":${json(version)}}},\"components\":[$sbomComponents]}\n"
 }
 
-private val productionCsp = "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+private val productionCsp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 private fun productionCacheControl(path: String): String = when {
     path == "index.html" -> "no-cache"
