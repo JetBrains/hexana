@@ -25,6 +25,21 @@ data class WorkerWasmToolbarPresentation(
     val proposalIds: List<String> = emptyList(),
 )
 
+/** Worker-produced native-image metadata for the read-only initial browser route. */
+data class WorkerNativeImageToolbarPresentation(
+    val version: String? = null,
+    val edition: String = "unknown",
+    val platform: String? = null,
+    val hasSbom: Boolean = false,
+)
+
+private data class NativeImageBadgePresentation(
+    val version: String?,
+    val edition: String?,
+    val platform: String?,
+    val hasSbom: Boolean,
+)
+
 /**
  * Top toolbar that shows the file name, size, detected binary kind,
  * an optional run button for runnable modules, and edit-mode controls
@@ -45,11 +60,13 @@ fun EditorToolbar(
     onOpenSbomTab: (() -> Unit)? = null,
     fileTypeLabelOverride: String? = null,
     workerWasmToolbarPresentation: WorkerWasmToolbarPresentation? = null,
+    workerNativeImageToolbarPresentation: WorkerNativeImageToolbarPresentation? = null,
+    workerSizeTooltip: List<Pair<String, String>>? = null,
 ) {
     val isSubmodule = parentFileName != null || isSubmoduleFileName(fileName)
 
-    val sizeTooltip = remember(provider) {
-        buildSizeTooltip(provider)
+    val sizeTooltip = remember(provider, workerSizeTooltip) {
+        workerSizeTooltip ?: buildSizeTooltip(provider)
     }
 
     val runnableExportName = remember(provider, isSubmodule, workerWasmToolbarPresentation) {
@@ -79,9 +96,9 @@ fun EditorToolbar(
     // Lazy native-image detection: nativeImageInfo is an expensive lazy val.
     // Mirror the same pattern used in HexanaPanel so the cached value is shared.
     var nativeImageInfo by remember(provider) { mutableStateOf<NativeImageInfo?>(null) }
-    LaunchedEffect(provider) {
+    LaunchedEffect(provider, workerNativeImageToolbarPresentation) {
         nativeImageInfo = null
-        if (provider is NativeBinaryProvider) {
+        if (workerNativeImageToolbarPresentation == null && provider is NativeBinaryProvider) {
             nativeImageInfo = provider.nativeImageInfo
         }
     }
@@ -335,9 +352,16 @@ fun EditorToolbar(
                 )
             }
 
-            val ni = nativeImageInfo
-            if (ni != null && ni.isNativeImage) {
-                NativeImageBadges(ni, onOpenSbomTab = onOpenSbomTab)
+            val nativeImageBadge = workerNativeImageToolbarPresentation?.let { presentation ->
+                NativeImageBadgePresentation(
+                    version = presentation.version,
+                    edition = presentation.edition,
+                    platform = presentation.platform,
+                    hasSbom = presentation.hasSbom,
+                )
+            } ?: nativeImageInfo?.takeIf { it.isNativeImage }?.toBadgePresentation()
+            if (nativeImageBadge != null) {
+                NativeImageBadges(nativeImageBadge, onOpenSbomTab = onOpenSbomTab)
             }
 
             val proposals = remember(provider, workerWasmToolbarPresentation) {
@@ -605,15 +629,26 @@ private fun ShareFeedbackButton() {
  * Matches the IntelliJ [FileDescriptionBar.NativeImageBadges] rendering using
  * VS Code CSS variables in place of Compose Desktop colors.
  */
+private fun NativeImageInfo.toBadgePresentation(): NativeImageBadgePresentation = NativeImageBadgePresentation(
+    version = version,
+    edition = when (edition) {
+        NativeImageInfo.Edition.COMMUNITY -> "community"
+        NativeImageInfo.Edition.ENTERPRISE -> "enterprise"
+        NativeImageInfo.Edition.UNKNOWN -> "unknown"
+    },
+    platform = platform,
+    hasSbom = sbom != null,
+)
+
 @Composable
-private fun NativeImageBadges(info: NativeImageInfo, onOpenSbomTab: (() -> Unit)?) {
+private fun NativeImageBadges(info: NativeImageBadgePresentation, onOpenSbomTab: (() -> Unit)?) {
     val tooltipText = buildString {
         append("GraalVM Native Image")
         info.version?.let { append('\n').append(it) }
         val edition = when (info.edition) {
-            NativeImageInfo.Edition.COMMUNITY -> "Community"
-            NativeImageInfo.Edition.ENTERPRISE -> "Enterprise"
-            NativeImageInfo.Edition.UNKNOWN -> null
+            "community" -> "Community"
+            "enterprise" -> "Enterprise"
+            else -> null
         }
         edition?.let { append('\n').append(it) }
         info.platform?.let { append('\n').append(it) }
@@ -633,7 +668,7 @@ private fun NativeImageBadges(info: NativeImageInfo, onOpenSbomTab: (() -> Unit)
         Text("Native Image")
     }
 
-    if (info.sbom != null) {
+    if (info.hasSbom) {
         val hasSbomCallback = onOpenSbomTab != null
         Span({
             classes("hexana-badge", "hexana-sbom-badge")

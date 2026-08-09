@@ -73,6 +73,82 @@ class ParserWorkerPresentationProtocolTest {
     }
 
     @Test
+    fun nativeImageToolbarAndNumericSortValuesRoundTrip() {
+        val source = representativePresentation().copy(
+            format = "elf",
+            capabilities = listOf("summary", "structural_ranges", "tables"),
+            toolbar = ParserWorkerToolbar(
+                nativeImage = ParserWorkerNativeImage(
+                    version = "GraalVM 25",
+                    edition = "community",
+                    platform = "LINUX_AMD64",
+                    hasSbom = true,
+                ),
+            ),
+            tables = listOf(
+                ParserWorkerTable(
+                    "Top",
+                    listOf(ParserWorkerRecord(".text", "64 B", listOf(".text", "64 B"), numericValues = listOf(null, 64.0))),
+                    listOf("Type", "Size"),
+                ),
+            ),
+        )
+
+        val decoded = assertNotNull(decodeParserWorkerSuccess(encodeBoundedParserWorkerSuccess("request", source), "request"))
+
+        assertEquals("GraalVM 25", decoded.presentation.toolbar.nativeImage?.version)
+        assertTrue(decoded.presentation.toolbar.nativeImage?.hasSbom == true)
+        assertEquals(64.0, decoded.presentation.tables.single().records.single().numericValues[1])
+    }
+
+    @Test
+    fun recursiveRecordsCountTowardBoundsAndRejectMalformedNestedWireData() {
+        val children = (0 until MAX_PARSER_WORKER_RECORDS_PER_COLLECTION).map { index ->
+            ParserWorkerRecord("child-$index", "value-$index")
+        }
+        val source = presentation(listOf(ParserWorkerRecord("parent", "root", children = children)))
+        val bounded = boundParserWorkerSuccess("request", source)
+
+        assertEquals(listOf("record_limit"), bounded.partial.reasons)
+        assertEquals(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION, bounded.partial.emittedCount)
+        assertEquals(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION + 1, bounded.partial.totalCountLowerBound)
+        assertEquals(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION - 1, bounded.presentation.tables.single().records.single().children.size)
+
+        val wire = encodeSuccessWire("request", bounded.presentation, bounded.partial)
+        assertNotNull(decodeParserWorkerSuccess(wire, "request"))
+        wire.presentation.tables[0].records[0].children[0].numericValues = arrayOf(1)
+        assertNull(decodeParserWorkerSuccess(wire, "request"))
+    }
+
+    @Test
+    fun actionMetadataRoundTripsAndRejectsAnUnknownNestedAction() {
+        val action = ParserWorkerAction(
+            kind = "zip_entry",
+            name = "classes.dex",
+            dataOffset = 0,
+            compressedSize = 1,
+            uncompressedSize = 1,
+            compressionMethod = 0,
+        )
+        val source = representativePresentation(10).copy(
+            format = "zip",
+            capabilities = listOf("summary", "structural_ranges", "tables"),
+            diagnostics = emptyList(),
+            tables = listOf(
+                ParserWorkerTable(
+                    "Entries",
+                    listOf(ParserWorkerRecord("classes.dex", "1 B", actions = listOf(action))),
+                ),
+            ),
+        )
+        val wire = encodeBoundedParserWorkerSuccess("request", source)
+        assertEquals("zip_entry", assertNotNull(decodeParserWorkerSuccess(wire, "request")).presentation.tables.single().records.single().actions.single().kind)
+
+        wire.presentation.tables[0].records[0].actions[0].kind = "unknown"
+        assertNull(decodeParserWorkerSuccess(wire, "request"))
+    }
+
+    @Test
     fun oversizedParserDerivedStringsBecomeAnExplicitPartialInsteadOfAParseFailure() {
         val source = representativePresentation().copy(
             summary = representativePresentation().summary.copy(
@@ -103,6 +179,28 @@ class ParserWorkerPresentationProtocolTest {
         assertEquals(0, bounded.partial.emittedCount)
         assertEquals(6, bounded.partial.totalCount)
         assertTrue(decoded.partial.partial)
+    }
+
+    @Test
+    fun sanitizerRemapsTableFilterRowsAfterDroppingAnInvalidRootRecord() {
+        val source = representativePresentation().copy(
+            tables = listOf(
+                ParserWorkerTable(
+                    id = "records",
+                    records = listOf(
+                        ParserWorkerRecord("x".repeat(1_025), "invalid"),
+                        ParserWorkerRecord("matching", "value"),
+                        ParserWorkerRecord("nonmatching", "value"),
+                    ),
+                    filters = listOf(ParserWorkerTableFilter("Matching", listOf(1))),
+                ),
+            ),
+        )
+
+        val sanitized = sanitizeParserWorkerPresentation(source)
+
+        assertEquals(listOf("matching", "nonmatching"), sanitized.presentation.tables.single().records.map { it.key })
+        assertEquals(listOf(0), sanitized.presentation.tables.single().filters.single().matchingRootRows)
     }
 
     @Test
@@ -158,6 +256,36 @@ class ParserWorkerPresentationProtocolTest {
         assertTrue(utf8WireBytes(wire) <= MAX_PARSER_WORKER_WIRE_BYTES)
         assertEquals("0", bounded.presentation.tables.single().records.first().key)
         assertNotNull(decodeParserWorkerSuccess(wire, "request"))
+    }
+
+    @Test
+    fun byteLimitedTableFiltersOnlyRetainIndicesForEmittedRootRecords() {
+        val records = listOf(
+            ParserWorkerRecord("0", "first"),
+            ParserWorkerRecord("1", "x".repeat(10_000)),
+        )
+        val source = presentation(records).copy(
+            tables = listOf(
+                ParserWorkerTable(
+                    id = "records",
+                    records = records,
+                    filters = listOf(ParserWorkerTableFilter("All records", listOf(0, 1))),
+                ),
+            ),
+        )
+        val firstRecord = source.copy(tables = source.tables.map { table ->
+            table.copy(
+                records = table.records.take(1),
+                filters = listOf(ParserWorkerTableFilter("All records", listOf(0))),
+            )
+        })
+        val maxWireBytes = boundParserWorkerSuccess("request", firstRecord, Int.MAX_VALUE).wireBytes + 100
+
+        val bounded = boundParserWorkerSuccess("request", source, maxWireBytes)
+
+        assertEquals(1, bounded.presentation.tables.single().records.size)
+        assertEquals(listOf(0), bounded.presentation.tables.single().filters.single().matchingRootRows)
+        assertNotNull(decodeBounded(bounded))
     }
 
     @Test
@@ -245,6 +373,11 @@ class ParserWorkerPresentationProtocolTest {
             ),
             base.copy(
                 tables = listOf(
+                    ParserWorkerTable("table", listOf(ParserWorkerRecord("key", "value", numericValues = listOf(1.0)))),
+                ),
+            ),
+            base.copy(
+                tables = listOf(
                     ParserWorkerTable("table", listOf(ParserWorkerRecord("key", "value", offset = 0))),
                 ),
             ),
@@ -288,6 +421,7 @@ class ParserWorkerPresentationProtocolTest {
         assertWireRejected { it.presentation.tables[0].id = "x".repeat(65) }
         assertWireRejected { it.presentation.tables[0].records[0].key = "x".repeat(1_025) }
         assertWireRejected { it.presentation.tables[0].records[0].value = "x".repeat(16_385) }
+        assertWireRejected { it.presentation.tables[0].records[0].numericValues = arrayOf(1) }
         assertWireRejected { it.presentation.ranges[0].label = "x".repeat(257) }
         assertWireRejected(withDiagnostics = true) { it.presentation.diagnostics[0].code = "x".repeat(65) }
         assertWireRejected(withDiagnostics = true) { it.presentation.diagnostics[0].message = "x".repeat(1_025) }

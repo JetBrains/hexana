@@ -274,15 +274,10 @@ internal fun LandingView(
             onFileLoaded = { file, bytes ->
                 isReading = false
                 retainedFile = file
-                if (requiresWasmParserWorker(bytes)) {
-                    pendingCoreFileName = file.name
-                    pendingCoreBytes = bytes
-                    // The worker receives its own transferable copy. The UI bytes remain usable after transfer.
-                    parserController.parse(copyForParserWorker(bytes), PARSER_WORKER_TIMEOUT_MS)
-                } else {
-                    pendingCoreBytes = null
-                    currentOnFileLoaded.value(file.name, bytes, null)
-                }
+                pendingCoreFileName = file.name
+                pendingCoreBytes = bytes
+                // The worker receives its own transferable copy. The UI bytes remain usable after transfer.
+                parserController.parse(copyForParserWorker(bytes), PARSER_WORKER_TIMEOUT_MS, file.name)
             },
         )
     }
@@ -389,7 +384,7 @@ internal fun LandingView(
             is ParserWorkerState.Parsed -> null
             ParserWorkerState.TimedOut -> "Timed out while parsing."
             ParserWorkerState.Cancelled -> "Cancelled."
-            is ParserWorkerState.Failed -> "Failed to parse the core WebAssembly module."
+            is ParserWorkerState.Failed -> "Failed to parse the file in the Worker."
         }
         val parserStateName = when (parserState) {
             ParserWorkerState.Ready -> "ready"
@@ -434,14 +429,6 @@ internal fun LandingView(
         }) { Text("WASM, ELF, Mach-O, PE, class files, ZIP, DEX and more") }
     }
 }
-
-/**
- * The DedicatedWorker owns the initial core-Wasm and component-model analysis path.
- */
-internal fun requiresWasmParserWorker(bytes: ByteArray): Boolean =
-    bytes.size >= 8 && bytes[0] == 0.toByte() && bytes[1] == 0x61.toByte() && bytes[2] == 0x73.toByte() &&
-        bytes[3] == 0x6d.toByte() && bytes[5] == 0.toByte() &&
-        (bytes[4] == 1.toByte() || bytes[4] == 0x0d.toByte())
 
 /** Copies UI-owned bytes before transfer; transferring this buffer detaches only the worker copy. */
 internal fun copyForParserWorker(bytes: ByteArray): ArrayBuffer =

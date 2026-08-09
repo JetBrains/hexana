@@ -117,6 +117,9 @@ fun BinaryEditorContent(
     initialActiveTab: String = "Sections",
     onLegacyReparseRequested: ((ByteArray) -> Unit)? = null,
     workerWasmToolbarPresentation: WorkerWasmToolbarPresentation? = null,
+    workerNativeImageToolbarPresentation: WorkerNativeImageToolbarPresentation? = null,
+    workerSizeTooltip: List<Pair<String, String>>? = null,
+    scriptExecution: ScriptExecution? = null,
 ) {
     val selection = remember { HexSelectionState() }
     val buffer = remember(provider) { provider.bytes }
@@ -179,6 +182,8 @@ fun BinaryEditorContent(
             onOpenSbomTab = { activeTab = "SBOM" },
             fileTypeLabelOverride = fileTypeLabelOverride,
             workerWasmToolbarPresentation = workerWasmToolbarPresentation,
+            workerNativeImageToolbarPresentation = workerNativeImageToolbarPresentation,
+            workerSizeTooltip = workerSizeTooltip,
         )
         Div({
             style {
@@ -226,6 +231,7 @@ fun BinaryEditorContent(
             onDialogPickedPathConsumed = onDialogPickedPathConsumed,
             onScriptTabConfirmed = onScriptTabConfirmed,
             onScriptTabRemoved = onScriptTabRemoved,
+            scriptExecution = scriptExecution,
         )
     }
 }

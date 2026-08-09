@@ -191,6 +191,7 @@ val teamcityWebappTestTaskPaths = listOf(
     ":webapp:productionPackageChromeSmoke",
     ":webapp:buildComponent",
     ":webapp:jsBrowserTest",
+    ":web-ui:jsBrowserTest",
 )
 
 val teamcityIntellijPluginTestTaskPaths = listOf(
@@ -683,6 +684,7 @@ tasks.register("verifyTeamcityWebappTestsCoverage") {
             ":webapp:productionPackageChromeSmoke",
             ":webapp:buildComponent",
             ":webapp:jsBrowserTest",
+            ":web-ui:jsBrowserTest",
         )
         verifyExactTaskPaths("teamcityWebappTests inventory", requiredTaskPaths, teamcityWebappTestTaskPaths)
         val browserTest = tasks.getByPath(":webapp:jsBrowserTest") as KotlinJsTest

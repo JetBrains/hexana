@@ -675,6 +675,21 @@ private class VscFlatRow(
     val treePath: List<Int>,
 )
 
+internal fun compareTableValues(first: Any?, second: Any?): Int = when {
+    first is Number && second is Number -> {
+        if (first.isIntegralTableValue() && second.isIntegralTableValue()) {
+            first.toLong().compareTo(second.toLong())
+        } else {
+            first.toDouble().compareTo(second.toDouble())
+        }
+    }
+    first is String && second is String -> first.compareTo(second)
+    else -> 0
+}
+
+private fun Number.isIntegralTableValue(): Boolean =
+    this is Byte || this is Short || this is Int || this is Long
+
 private fun flattenTreeVsc(
     descriptor: TableTabDescriptor,
     expandedPaths: Set<List<Int>>,
@@ -694,11 +709,7 @@ private fun flattenTreeVsc(
         indices.sortWith { a, b ->
             val va = col.cellProvider(a).value
             val vb = col.cellProvider(b).value
-            val cmp = when {
-                va is Int && vb is Int -> va.compareTo(vb)
-                va is String && vb is String -> va.compareTo(vb)
-                else -> 0
-            }
+            val cmp = compareTableValues(va, vb)
             if (sortAscending) cmp else -cmp
         }
         return indices

@@ -3,15 +3,22 @@ package org.jetbrains.hexana.webapp
 import org.khronos.webgl.ArrayBuffer
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ParserWorkerControllerTest {
     @Test
-    fun coreAndComponentWasmRequireTheDedicatedParserWorker() {
-        assertTrue(requiresWasmParserWorker(byteArrayOf(0, 0x61, 0x73, 0x6d, 1, 0, 0, 0)))
-        assertTrue(requiresWasmParserWorker(byteArrayOf(0, 0x61, 0x73, 0x6d, 0x0d, 0, 0, 0)))
-        assertTrue(!requiresWasmParserWorker(byteArrayOf(0x7f, 0x45, 0x4c, 0x46, 0, 0, 0, 0)))
+    fun fileNameIsTransferredAndOversizedNamesAreRejectedBeforeWorkerStartup() {
+        val fixture = Fixture()
+
+        fixture.controller.parse(ArrayBuffer(8), 100, "application.apk")
+
+        assertEquals("application.apk", fixture.workers.single().postedFileName)
+        assertFailsWith<IllegalArgumentException> {
+            fixture.controller.parse(ArrayBuffer(8), 100, "x".repeat(MAX_PARSER_WORKER_FILE_NAME_CHARS + 1))
+        }
+        assertEquals(1, fixture.workers.size)
     }
 
     @Test
@@ -212,6 +219,7 @@ private class FakeParserWorker(private val throwOnPost: Boolean) : ParserWorkerP
     var terminateCalls = 0
     var clearCalls = 0
     var postedRequestId: String? = null
+    var postedFileName: String? = null
 
     override fun setHandlers(
         onMessage: (dynamic) -> Unit,
@@ -229,6 +237,7 @@ private class FakeParserWorker(private val throwOnPost: Boolean) : ParserWorkerP
 
     override fun postParse(request: dynamic, buffer: ArrayBuffer) {
         postedRequestId = request.requestId as? String
+        postedFileName = request.fileName as? String
         if (throwOnPost) error("post details")
     }
 

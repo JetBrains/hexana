@@ -14,6 +14,7 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.vscode.Host
 import org.jetbrains.hexana.vscode.LocalHost
+import org.jetbrains.hexana.vscode.ScriptTabState
 import org.jetbrains.hexana.vscode.WebUiCapabilities
 import org.w3c.dom.HTMLDivElement
 import org.w3c.dom.HTMLElement
@@ -77,6 +78,70 @@ class WorkerWasmEditorContentDomTest {
     }
 
     @Test
+    fun workerBackedWasmScriptTabUsesTheTypedSemanticProvider(): Promise<Unit> = Promise { resolve, reject ->
+        val root = workerRoot()
+        val factory = CountingLegacyProviderFactory()
+        var composition: Composition? = null
+        var addSemanticScript: (() -> Unit)? = null
+        try {
+            document.body?.appendChild(root)
+            composition = renderComposable(rootElementId = root.id) {
+                var hasSemanticScript by remember { mutableStateOf(false) }
+                addSemanticScript = { hasSemanticScript = true }
+                CompositionLocalProvider(LocalHost provides WorkerDomHost()) {
+                    WorkerBackedWasmContent(
+                        fileName = "addition.wasm",
+                        parentFileName = null,
+                        bytes = additionFixtureBytes(),
+                        response = coreResponse(),
+                        capabilities = WebUiCapabilities(),
+                        legacyWasmTab = null,
+                        onLegacyWasmTabChanged = {},
+                        onLegacyWasmReparseRequested = {},
+                        legacyWasmProviderFactory = factory,
+                        scriptTabs = if (hasSemanticScript) {
+                            listOf(ScriptTabState("semantic.js", "print(\"semantic-import-count:\" + binary.imports.length)"))
+                        } else emptyList(),
+                    )
+                }
+            }
+
+            afterWorkerDomFrames {
+                try {
+                    assertEquals(0, factory.calls)
+                    addSemanticScript?.invoke() ?: error("The script-tab test composition did not initialize.")
+                    awaitWorkerDomCondition(
+                        description = "semantic script tab",
+                        condition = { workerScriptTab(root, "semantic.js") != null },
+                        onReady = {
+                            try {
+                                workerScriptTab(root, "semantic.js")!!.click()
+                                awaitWorkerDomCondition(
+                                    description = "typed semantic script output",
+                                    condition = { root.textContent.orEmpty().contains("semantic-import-count:1") },
+                                    onReady = {
+                                        assertEquals(0, factory.calls)
+                                        assertEquals("semantic.js\u2715", root.querySelector(".hexana-tab-active")?.textContent)
+                                        finishWorkerDom(composition, root, resolve, reject)
+                                    },
+                                    onFailure = { failure -> finishWorkerDom(composition, root, resolve, reject, failure) },
+                                )
+                            } catch (failure: Throwable) {
+                                finishWorkerDom(composition, root, resolve, reject, failure)
+                            }
+                        },
+                        onFailure = { failure -> finishWorkerDom(composition, root, resolve, reject, failure) },
+                    )
+                } catch (failure: Throwable) {
+                    finishWorkerDom(composition, root, resolve, reject, failure)
+                }
+            }
+        } catch (failure: Throwable) {
+            finishWorkerDom(composition, root, resolve, reject, failure)
+        }
+    }
+
+    @Test
     fun initialComponentWorkerRouteRendersGraphAndPartialMarkerWithoutWindowConstruction(): Promise<Unit> = Promise { resolve, reject ->
         val root = workerRoot()
         val factory = CountingLegacyProviderFactory()
@@ -114,6 +179,119 @@ class WorkerWasmEditorContentDomTest {
                             assertNotNull(root.querySelector("[data-parser-worker-partial='byte_limit']"))
                             assertNotNull(root.querySelector("canvas"))
                             finishWorkerDom(composition, root, resolve, reject)
+                        } catch (failure: Throwable) {
+                            finishWorkerDom(composition, root, resolve, reject, failure)
+                        }
+                    }
+                } catch (failure: Throwable) {
+                    finishWorkerDom(composition, root, resolve, reject, failure)
+                }
+            }
+        } catch (failure: Throwable) {
+            finishWorkerDom(composition, root, resolve, reject, failure)
+        }
+    }
+
+    @Test
+    fun nonWasmDeferredActionsStayReadOnlyAndNeverConstructTheLegacyProvider(): Promise<Unit> = Promise { resolve, reject ->
+        val root = workerRoot()
+        val factory = CountingLegacyProviderFactory()
+        var composition: Composition? = null
+        try {
+            document.body?.appendChild(root)
+            composition = renderComposable(rootElementId = root.id) {
+                CompositionLocalProvider(LocalHost provides WorkerDomHost()) {
+                    WorkerBackedWasmContent(
+                        fileName = "application.apk",
+                        parentFileName = null,
+                        bytes = ByteArray(32),
+                        response = zipResponseWithDeferredAction(),
+                        capabilities = WebUiCapabilities(),
+                        legacyWasmTab = null,
+                        onLegacyWasmTabChanged = {},
+                        onLegacyWasmReparseRequested = {},
+                        legacyWasmProviderFactory = factory,
+                    )
+                }
+            }
+
+            afterWorkerDomFrames {
+                try {
+                    assertEquals(0, factory.calls)
+                    afterWorkerDomFrames {
+                        try {
+                            val entry = root.querySelector(".hexana-panel-row") as? HTMLElement
+                                ?: error("The Worker-backed ZIP entries table did not render a row.")
+                            entry.click()
+                            afterWorkerDomFrames {
+                                try {
+                                    assertEquals(0, factory.calls)
+                                    assertTrue(root.textContent.orEmpty().contains("classes.dex"))
+                                    finishWorkerDom(composition, root, resolve, reject)
+                                } catch (failure: Throwable) {
+                                    finishWorkerDom(composition, root, resolve, reject, failure)
+                                }
+                            }
+                        } catch (failure: Throwable) {
+                            finishWorkerDom(composition, root, resolve, reject, failure)
+                        }
+                    }
+                } catch (failure: Throwable) {
+                    finishWorkerDom(composition, root, resolve, reject, failure)
+                }
+            }
+        } catch (failure: Throwable) {
+            finishWorkerDom(composition, root, resolve, reject, failure)
+        }
+    }
+
+    @Test
+    fun nativeWorkerPresentationRendersBadgesSbomAndWorkerDerivedSizeTooltip(): Promise<Unit> = Promise { resolve, reject ->
+        val root = workerRoot()
+        val factory = CountingLegacyProviderFactory()
+        var composition: Composition? = null
+        try {
+            document.body?.appendChild(root)
+            composition = renderComposable(rootElementId = root.id) {
+                CompositionLocalProvider(LocalHost provides WorkerDomHost()) {
+                    WorkerBackedWasmContent(
+                        fileName = "native-image",
+                        parentFileName = null,
+                        bytes = ByteArray(32),
+                        response = nativeResponse(),
+                        capabilities = WebUiCapabilities(),
+                        legacyWasmTab = null,
+                        onLegacyWasmTabChanged = {},
+                        onLegacyWasmReparseRequested = {},
+                        legacyWasmProviderFactory = factory,
+                    )
+                }
+            }
+
+            afterWorkerDomFrames {
+                try {
+                    assertEquals(0, factory.calls)
+                    assertNotNull(root.querySelector(".hexana-ni-badge"))
+                    val sbomBadge = root.querySelector(".hexana-sbom-badge") as? HTMLElement
+                        ?: error("The Worker-backed native presentation did not render the SBOM badge.")
+                    assertNotNull(workerTab(root, "Top"))
+                    assertNotNull(workerTab(root, "SBOM"))
+                    val size = workerElementWithExactText(root, "32 B")?.parentElement as? HTMLElement
+                        ?: error("The Worker-backed toolbar did not render the file size.")
+                    workerMouseEnter(size)
+                    afterWorkerDomFrames {
+                        try {
+                            assertTrue(root.textContent.orEmpty().contains("Contents (×2)"))
+                            sbomBadge.click()
+                            afterWorkerDomFrames {
+                                try {
+                                    assertEquals(0, factory.calls)
+                                    assertEquals("SBOM", root.querySelector(".hexana-tab-active")?.textContent)
+                                    finishWorkerDom(composition, root, resolve, reject)
+                                } catch (failure: Throwable) {
+                                    finishWorkerDom(composition, root, resolve, reject, failure)
+                                }
+                            }
                         } catch (failure: Throwable) {
                             finishWorkerDom(composition, root, resolve, reject, failure)
                         }
@@ -368,6 +546,86 @@ private fun componentResponse(partial: Boolean): BoundedParserWorkerSuccess = Bo
     wireBytes = 0,
 )
 
+private fun zipResponseWithDeferredAction(): BoundedParserWorkerSuccess = BoundedParserWorkerSuccess(
+    presentation = ParserWorkerPresentation(
+        format = "zip",
+        capabilities = listOf("summary", "tables"),
+        summary = ParserWorkerSummary("DedicatedWorkerGlobalScope", true, 32, 0, 0, 0, 0, 0.0),
+        tables = listOf(
+            ParserWorkerTable(
+                id = "Entries",
+                records = listOf(
+                    ParserWorkerRecord(
+                        key = "classes.dex",
+                        value = "classes.dex",
+                        values = listOf("classes.dex", "deferred action"),
+                        offset = 0,
+                        size = 1,
+                        actions = listOf(
+                            ParserWorkerAction(
+                                kind = "zip_entry",
+                                name = "classes.dex",
+                                dataOffset = 0,
+                                compressedSize = 0,
+                                uncompressedSize = 0,
+                                compressionMethod = 0,
+                            ),
+                        ),
+                    ),
+                ),
+                columns = listOf("Name", "Status"),
+            ),
+        ),
+    ),
+    partial = ParserWorkerPartial(false, emptyList(), 1, 1, null),
+    wireBytes = 0,
+)
+
+private fun nativeResponse(): BoundedParserWorkerSuccess = BoundedParserWorkerSuccess(
+    presentation = ParserWorkerPresentation(
+        format = "elf",
+        capabilities = listOf("summary", "tables"),
+        summary = ParserWorkerSummary("DedicatedWorkerGlobalScope", true, 32, 0, 0, 0, 0, 0.0),
+        tables = listOf(
+            ParserWorkerTable(
+                id = "Top",
+                records = listOf(
+                    ParserWorkerRecord("Contents", "16 B", listOf("Contents", "16 B"), numericValues = listOf(null, 16.0)),
+                    ParserWorkerRecord("Contents", "16 B", listOf("Contents", "16 B"), numericValues = listOf(null, 16.0)),
+                ),
+                columns = listOf("Type", "Size"),
+                defaultSortColumn = 1,
+            ),
+            ParserWorkerTable(
+                id = "Native Image",
+                records = listOf(ParserWorkerRecord("Version", "24.1.0", listOf("Version", "24.1.0"))),
+                columns = listOf("Property", "Value"),
+            ),
+            ParserWorkerTable(
+                id = "SBOM",
+                records = listOf(ParserWorkerRecord("example", "1.0", listOf("example", "1.0"))),
+                columns = listOf("Component", "Version"),
+                prologueText = "CycloneDX 1.5 • 1 component • 1 dependency",
+            ),
+            ParserWorkerTable(
+                id = "SBOM Dependencies",
+                records = listOf(ParserWorkerRecord("example", "dependency", listOf("example", "dependency"))),
+                columns = listOf("Component", "Depends on"),
+            ),
+        ),
+        toolbar = ParserWorkerToolbar(
+            nativeImage = ParserWorkerNativeImage(
+                version = "24.1.0",
+                edition = "community",
+                platform = "linux-amd64",
+                hasSbom = true,
+            ),
+        ),
+    ),
+    partial = ParserWorkerPartial(false, emptyList(), 5, 5, null),
+    wireBytes = 0,
+)
+
 private fun additionFixtureBytes(): ByteArray = byteArrayOf(
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02,
     0x60, 0x01, 0x7f, 0x00, 0x60, 0x00, 0x00, 0x02, 0x0f, 0x01, 0x07,
@@ -382,6 +640,9 @@ private fun workerRoot(): HTMLDivElement = document.createElement("div").unsafeC
 
 private fun workerTab(root: HTMLElement, label: String): HTMLElement? =
     workerElements(root, ".hexana-tab").firstOrNull { it.textContent == label }
+
+private fun workerScriptTab(root: HTMLElement, label: String): HTMLElement? =
+    workerElements(root, ".hexana-tab").firstOrNull { it.textContent?.startsWith(label) == true }
 
 private fun workerElementWithExactText(root: HTMLElement, text: String): HTMLElement? =
     workerElements(root, "span").firstOrNull { it.textContent == text }
@@ -422,6 +683,11 @@ private fun awaitWorkerDomCondition(
 
 private fun workerMouseDown(target: HTMLElement) {
     val event = js("new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })")
+    target.dispatchEvent(event.unsafeCast<Event>())
+}
+
+private fun workerMouseEnter(target: HTMLElement) {
+    val event = js("new MouseEvent('mouseenter', { bubbles: true, cancelable: true })")
     target.dispatchEvent(event.unsafeCast<Event>())
 }
 

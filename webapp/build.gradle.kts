@@ -21,6 +21,7 @@ kotlin {
                     implementation(project(":encdec"))
                     implementation(project(":binaryProvider"))
                     implementation(project(":plugins-shared"))
+                    implementation(libs.kotlinx.coroutines.core)
                     compileOnly(composeRuntimeForCompiler)
                 }
             }

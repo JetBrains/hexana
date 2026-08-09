@@ -8,6 +8,13 @@ import org.jetbrains.compose.web.dom.Td
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.GenericBinaryProvider
+import org.jetbrains.hexana.shared.CellValue
+import org.jetbrains.hexana.shared.ColumnDescriptor
+import org.jetbrains.hexana.shared.PredefinedFilter
+import org.jetbrains.hexana.shared.RowSelectionData
+import org.jetbrains.hexana.shared.TableTabChildRows
+import org.jetbrains.hexana.shared.TableTabDescriptor
+import org.jetbrains.hexana.shared.formatSize
 import org.jetbrains.hexana.providers.StructureRange
 import org.jetbrains.hexana.vscode.BinaryEditorContent
 import org.jetbrains.hexana.vscode.ComponentDependencyGraphEdgeData
@@ -18,7 +25,9 @@ import org.jetbrains.hexana.vscode.PanelTab
 import org.jetbrains.hexana.vscode.PanelTableRow
 import org.jetbrains.hexana.vscode.SearchableTable
 import org.jetbrains.hexana.vscode.ScriptTabState
+import org.jetbrains.hexana.vscode.TableTabContent
 import org.jetbrains.hexana.vscode.WebUiCapabilities
+import org.jetbrains.hexana.vscode.WorkerNativeImageToolbarPresentation
 import org.jetbrains.hexana.vscode.WorkerWasmToolbarPresentation
 import org.jetbrains.hexana.vscode.scrollHexViewerTo
 
@@ -39,7 +48,25 @@ internal fun WorkerWasmEditorContent(
     onScriptTabRemoved: (path: String) -> Unit = {},
 ) {
     val presentation = response.presentation
+    if (presentation.format != "core_wasm" && presentation.format != "wasm_component") {
+        WorkerBinaryEditorContent(
+            fileName = fileName,
+            parentFileName = parentFileName,
+            bytes = bytes,
+            response = response,
+            capabilities = capabilities,
+            onLegacyReparseRequested = onLegacyWasmReparseRequested,
+            scriptTabs = scriptTabs,
+            dialogPickedPath = dialogPickedPath,
+            dialogPickedContent = dialogPickedContent,
+            onDialogPickedPathConsumed = onDialogPickedPathConsumed,
+            onScriptTabConfirmed = onScriptTabConfirmed,
+            onScriptTabRemoved = onScriptTabRemoved,
+        )
+        return
+    }
     val provider = remember(bytes) { GenericBinaryProvider(bytes.toCommonByteBuffer()) }
+    val scriptExecution = remember(bytes, fileName) { WorkerScriptExecution(bytes, fileName) }
     val ranges = remember(presentation.ranges) {
         presentation.ranges.map { range ->
             StructureRange(range.offset.toLong(), range.size.toLong(), range.label)
@@ -106,7 +133,101 @@ internal fun WorkerWasmEditorContent(
         },
         onLegacyReparseRequested = onLegacyWasmReparseRequested,
         workerWasmToolbarPresentation = toolbarPresentation,
+        scriptExecution = scriptExecution,
     )
+}
+
+@Composable
+private fun WorkerBinaryEditorContent(
+    fileName: String,
+    parentFileName: String?,
+    bytes: ByteArray,
+    response: BoundedParserWorkerSuccess,
+    capabilities: WebUiCapabilities,
+    onLegacyReparseRequested: (ByteArray) -> Unit,
+    scriptTabs: List<ScriptTabState>,
+    dialogPickedPath: String,
+    dialogPickedContent: String,
+    onDialogPickedPathConsumed: () -> Unit,
+    onScriptTabConfirmed: (path: String, content: String) -> Unit,
+    onScriptTabRemoved: (path: String) -> Unit,
+) {
+    val presentation = response.presentation
+    val provider = remember(bytes) { GenericBinaryProvider(bytes.toCommonByteBuffer()) }
+    val scriptExecution = remember(bytes, fileName) { WorkerScriptExecution(bytes, fileName) }
+    val ranges = remember(presentation.ranges) {
+        presentation.ranges.map { StructureRange(it.offset.toLong(), it.size.toLong(), it.label) }
+    }
+    val nativeImageToolbar = remember(presentation.toolbar.nativeImage) {
+        presentation.toolbar.nativeImage?.let { nativeImage ->
+            WorkerNativeImageToolbarPresentation(
+                version = nativeImage.version,
+                edition = nativeImage.edition,
+                platform = nativeImage.platform,
+                hasSbom = nativeImage.hasSbom,
+            )
+        }
+    }
+    val sizeTooltip = remember(presentation.tables) { presentation.workerSizeTooltip() }
+    val tabs = presentation.tables.map { table ->
+        PanelTab(table.id) { selection ->
+            WorkerWasmPartialPanel(response.partial) { WorkerWasmTableTab(table, selection) }
+        }
+    }
+    BinaryEditorContent(
+        fileName = fileName,
+        parentFileName = parentFileName,
+        provider = provider,
+        extraTabs = tabs,
+        capabilities = capabilities,
+        scriptTabs = scriptTabs,
+        dialogPickedPath = dialogPickedPath,
+        dialogPickedContent = dialogPickedContent,
+        onDialogPickedPathConsumed = onDialogPickedPathConsumed,
+        onScriptTabConfirmed = onScriptTabConfirmed,
+        onScriptTabRemoved = onScriptTabRemoved,
+        initialStructureRanges = ranges,
+        fileTypeLabelOverride = workerFileTypeLabel(presentation.format, fileName),
+        initialActiveTab = presentation.tables.firstOrNull()?.id ?: "Sections",
+        onLegacyReparseRequested = onLegacyReparseRequested,
+        workerNativeImageToolbarPresentation = nativeImageToolbar,
+        workerSizeTooltip = sizeTooltip,
+        scriptExecution = scriptExecution,
+    )
+}
+
+private fun workerFileTypeLabel(format: String, fileName: String): String = when (format) {
+    "zip" -> if (fileName.endsWith(".jar", ignoreCase = true)) "Jar File" else "Zip File"
+    "class" -> "Class File"
+    "dex" -> "Android DEX File"
+    "pcap" -> "PCAP Capture"
+    "protobuf" -> "Protocol Buffers"
+    "elf" -> "ELF"
+    "macho" -> "Mach-O"
+    "fat_macho" -> "Universal Mach-O"
+    "pe" -> "PE"
+    "coff" -> "COFF"
+    "archive" -> "Archive"
+    else -> "Binary"
+}
+
+private fun ParserWorkerPresentation.workerSizeTooltip(): List<Pair<String, String>>? {
+    val top = tables.firstOrNull { it.id == "Top" } ?: return null
+    val typeColumn = top.columns.indexOf("Type")
+    val sizeColumn = top.columns.indexOf("Size")
+    if (typeColumn < 0 || sizeColumn < 0) return null
+    val grouped = linkedMapOf<String, Long>()
+    for (record in top.records) {
+        val name = record.values.getOrNull(typeColumn) ?: return null
+        val size = record.numericValues.getOrNull(sizeColumn) ?: return null
+        if (size < 0 || size % 1.0 != 0.0 || size > Int.MAX_VALUE) return null
+        grouped[name] = (grouped[name] ?: 0L) + size.toLong()
+    }
+    return grouped.entries.sortedByDescending { it.value }.map { (name, size) ->
+        val count = top.records.count { it.values.getOrNull(typeColumn) == name }
+        val label = if (count > 1) "$name (×$count)" else name
+        label to formatSize(size.toInt())
+    }
 }
 
 @Composable
@@ -201,27 +322,60 @@ private fun summaryRows(summary: ParserWorkerSummary): List<Pair<String, String>
 
 @Composable
 private fun WorkerWasmTableTab(table: ParserWorkerTable, selection: HexSelectionState) {
-    SearchableTable(headers = table.columns, defaultSortColumn = -1) {
-        table.records.forEach { record ->
-            val hasRange = record.offset != null && record.size != null
-            val end = if (hasRange) record.offset!! + record.size!! - 1 else -1
-            PanelTableRow(
-                isHighlighted = hasRange && selection.hasSelection &&
-                    selection.selectionStart == record.offset && selection.selectionEnd == end,
-                onClick = {
-                    if (hasRange) {
-                        val offset = record.offset!!
-                        selection.anchorIndex = offset
-                        selection.activeIndex = end
-                        selection.cursorIndex = offset
-                        scrollHexViewerTo(offset)
-                    }
-                },
-            ) {
-                record.values.forEach { value ->
-                    Td({ classes("cell") }) { Text(value) }
-                }
-            }
+    val descriptor = remember(table) { table.toTableTabDescriptor() }
+    TableTabContent(descriptor, selection)
+}
+
+private fun ParserWorkerTable.toTableTabDescriptor(): TableTabDescriptor {
+    fun columnsFor(records: List<ParserWorkerRecord>): List<ColumnDescriptor> = columns.mapIndexed { columnIndex, name ->
+        ColumnDescriptor(name) { index -> workerCellValue(records[index], columnIndex) }
+    }
+
+    fun selectionFor(records: List<ParserWorkerRecord>): (Int) -> RowSelectionData? = { index ->
+        records.getOrNull(index)?.let { record ->
+            if (record.offset != null && record.size != null) RowSelectionData(record.offset, record.size) else null
         }
+    }
+
+    fun childRowsFor(records: List<ParserWorkerRecord>): TableTabChildRows = TableTabChildRows(
+        columns = columnsFor(records),
+        rowCount = records.size,
+        rowSelectionProvider = selectionFor(records),
+        childrenProvider = { index ->
+            records.getOrNull(index)?.children?.takeIf { it.isNotEmpty() }?.let(::childRowsFor)
+        },
+    )
+
+    val hasChildren = records.any { it.children.isNotEmpty() }
+    return TableTabDescriptor(
+        name = id,
+        columns = columnsFor(records),
+        rowCount = records.size,
+        defaultSortColumn = defaultSortColumn,
+        defaultSortAscending = defaultSortAscending,
+        rowSelectionProvider = selectionFor(records),
+        prologueText = prologueText,
+        emptyMessage = emptyMessage,
+        childrenProvider = if (hasChildren) { index ->
+            records.getOrNull(index)?.children?.takeIf { it.isNotEmpty() }?.let(::childRowsFor)
+        } else null,
+        alwaysShowSearch = alwaysShowSearch,
+        searchPlaceholder = searchPlaceholder,
+        showIdColumn = showIdColumn,
+        predefinedFilters = filters.map { filter ->
+            val matching = filter.matchingRootRows.toSet()
+            PredefinedFilter(filter.label) { it in matching }
+        },
+        defaultFilterShowAll = defaultFilterShowAll,
+    )
+}
+
+private fun workerCellValue(record: ParserWorkerRecord, columnIndex: Int): CellValue<*> {
+    val representation = record.values[columnIndex]
+    val numeric = record.numericValues[columnIndex] ?: return CellValue(representation)
+    return if (numeric % 1.0 == 0.0 && numeric in Int.MIN_VALUE.toDouble()..Int.MAX_VALUE.toDouble()) {
+        CellValue(numeric.toInt(), representation)
+    } else {
+        CellValue(numeric, representation)
     }
 }

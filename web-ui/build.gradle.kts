@@ -27,5 +27,10 @@ kotlin {
                 api(libs.kotlinx.coroutines.core)
             }
         }
+        jsTest {
+            dependencies {
+                implementation(libs.kotlin.test)
+            }
+        }
     }
 }

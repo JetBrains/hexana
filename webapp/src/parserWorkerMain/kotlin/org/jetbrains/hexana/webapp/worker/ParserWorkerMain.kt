@@ -1,14 +1,45 @@
 package org.jetbrains.hexana.webapp.worker
 
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.javabytecode.JavaBytecodeInstruction
+import org.jetbrains.hexana.javabytecode.JavaBytecodeOperands
+import org.jetbrains.hexana.javabytecode.JavaClassAccess
+import org.jetbrains.hexana.javabytecode.JavaCodeAttributeParser
+import org.jetbrains.hexana.javabytecode.JavaConstantPool
+import org.jetbrains.hexana.javabytecode.JavaConstantPoolEntry
+import org.jetbrains.hexana.javabytecode.JavaMethodAccess
+import org.jetbrains.hexana.providers.ArchiveBinaryProvider
+import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.ClassFileBinaryProvider
+import org.jetbrains.hexana.providers.CoffBinaryProvider
+import org.jetbrains.hexana.providers.DexBinaryProvider
+import org.jetbrains.hexana.providers.ElfBinaryProvider
+import org.jetbrains.hexana.providers.FatMachOBinaryProvider
+import org.jetbrains.hexana.providers.GenericBinaryProvider
+import org.jetbrains.hexana.providers.MachOBinaryProvider
+import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.providers.PcapBinaryProvider
+import org.jetbrains.hexana.providers.PeBinaryProvider
+import org.jetbrains.hexana.providers.ProtobufBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.providers.ZipBinaryProvider
+import org.jetbrains.hexana.providers.classifyArchiveMember
+import org.jetbrains.hexana.providers.nativeOrGenericBinaryProvider
+import org.jetbrains.hexana.pcap.PcapDissector
+import org.jetbrains.hexana.providers.NativeImageInfo
+import org.jetbrains.hexana.providers.sbom.CycloneDxParser
+import org.jetbrains.hexana.providers.sbom.extractSbomJson
 import org.jetbrains.hexana.shared.componentExternDescriptionLabel
 import org.jetbrains.hexana.shared.componentSortIndexLabel
 import org.jetbrains.hexana.shared.exportKindLabel
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
+import org.jetbrains.hexana.shared.TableTabChildRows
+import org.jetbrains.hexana.shared.TableTabDescriptor
+import org.jetbrains.hexana.shared.TableTabsContext
+import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.components.ComponentInstanceExpression
 import org.jetbrains.hexana.wasm.components.InlineInstanceCoreExpression
@@ -18,20 +49,52 @@ import org.jetbrains.hexana.webapp.ParserWorkerComponentGraph
 import org.jetbrains.hexana.webapp.ParserWorkerComponentGraphEdge
 import org.jetbrains.hexana.webapp.ParserWorkerComponentGraphNode
 import org.jetbrains.hexana.webapp.ParserWorkerDiagnostic
+import org.jetbrains.hexana.webapp.ParserWorkerNativeImage
 import org.jetbrains.hexana.webapp.ParserWorkerPresentation
 import org.jetbrains.hexana.webapp.ParserWorkerRange
 import org.jetbrains.hexana.webapp.ParserWorkerRecord
 import org.jetbrains.hexana.webapp.ParserWorkerSummary
 import org.jetbrains.hexana.webapp.ParserWorkerTable
+import org.jetbrains.hexana.webapp.ParserWorkerTableFilter
 import org.jetbrains.hexana.webapp.ParserWorkerToolbar
+import org.jetbrains.hexana.webapp.ParserWorkerAction
+import org.jetbrains.hexana.webapp.MAX_PARSER_WORKER_RECORDS_PER_COLLECTION
+import org.jetbrains.hexana.webapp.MAX_PARSER_WORKER_TABLES
 import org.jetbrains.hexana.webapp.componentGraphSourceId
 import org.jetbrains.hexana.webapp.encodeBoundedParserWorkerSuccess
+import org.jetbrains.hexana.webapp.isValidParserWorkerFileName
 import org.jetbrains.hexana.webapp.isValidParserWorkerRequestId
 import org.jetbrains.hexana.webapp.PARSER_WORKER_PROTOCOL_VERSION
 import org.jetbrains.hexana.webapp.sanitizeParserWorkerPresentation
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.khronos.webgl.ArrayBuffer
 
 private const val SCOPE_MARKER = "DedicatedWorkerGlobalScope"
+private const val MAX_WORKER_TABLE_TREE_DEPTH = 32
+private const val SCRIPT_WORKER_PROTOCOL_VERSION = 1
+private const val MAX_SCRIPT_SOURCE_CHARS = 256 * 1024
+private const val MAX_SCRIPT_OUTPUT_LINES = 1_024
+private const val MAX_SCRIPT_OUTPUT_LINE_CHARS = 4_096
+private const val MAX_SCRIPT_ERROR_CHARS = 1_024
+private val parserWorkerScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+private data class WorkerPresentationResult(
+    val presentation: ParserWorkerPresentation,
+    val producerRecordLimited: Boolean = false,
+)
+
+private data class MaterializedWorkerTables(
+    val tables: List<ParserWorkerTable>,
+    val producerRecordLimited: Boolean,
+)
+
+private data class ClassFileWorkerTables(
+    val tables: List<ParserWorkerTable>,
+    val producerRecordLimited: Boolean,
+)
 
 fun main() {
     val workerScope = js("self")
@@ -44,19 +107,44 @@ fun main() {
         val request = event.data
         val plainRequest = isPlainObject(request)
         val rawRequestId = if (plainRequest) request.requestId as? String else null
+        val rawFileName = if (plainRequest) request.fileName as? String else null
         val requestId = rawRequestId?.takeIf(::isValidParserWorkerRequestId).orEmpty()
         if (!isDedicatedWorker || !documentAbsent) {
             postError(workerScope, requestId, "INVALID_SCOPE", "Parser worker scope is unavailable.")
-        } else if (
-            !plainRequest ||
-            request.protocolVersion != PARSER_WORKER_PROTOCOL_VERSION ||
-            request.kind != "parse" ||
-            !isValidParserWorkerRequestId(rawRequestId ?: "") ||
-            !js("request.buffer instanceof ArrayBuffer").unsafeCast<Boolean>()
-        ) {
-            postError(workerScope, requestId, "INVALID_REQUEST", "Parser worker request is invalid.")
         } else {
-            parse(workerScope, requestId, request.buffer.unsafeCast<ArrayBuffer>())
+            when (request.kind as? String) {
+                "parse" -> {
+                    if (
+                        request.protocolVersion != PARSER_WORKER_PROTOCOL_VERSION ||
+                        !isValidParserWorkerRequestId(rawRequestId ?: "") ||
+                        (request.fileName != null && (rawFileName == null || !isValidParserWorkerFileName(rawFileName))) ||
+                        !js("request.buffer instanceof ArrayBuffer").unsafeCast<Boolean>()
+                    ) {
+                        postError(workerScope, requestId, "INVALID_REQUEST", "Parser worker request is invalid.")
+                    } else {
+                        parserWorkerScope.launch {
+                            parse(workerScope, requestId, request.buffer.unsafeCast<ArrayBuffer>(), rawFileName)
+                        }
+                    }
+                }
+                "script" -> {
+                    val script = request.script as? String
+                    if (
+                        request.protocolVersion != SCRIPT_WORKER_PROTOCOL_VERSION ||
+                        !isValidParserWorkerRequestId(rawRequestId ?: "") ||
+                        rawFileName == null || !isValidParserWorkerFileName(rawFileName) ||
+                        script == null || script.length > MAX_SCRIPT_SOURCE_CHARS ||
+                        !js("request.buffer instanceof ArrayBuffer").unsafeCast<Boolean>()
+                    ) {
+                        postScriptDone(workerScope, requestId, "Script worker request is invalid.")
+                    } else {
+                        parserWorkerScope.launch {
+                            runScript(workerScope, requestId, request.buffer.unsafeCast<ArrayBuffer>(), rawFileName, script)
+                        }
+                    }
+                }
+                else -> postError(workerScope, requestId, "INVALID_REQUEST", "Parser worker request is invalid.")
+            }
         }
     }
 }
@@ -64,23 +152,689 @@ fun main() {
 private fun isPlainObject(value: dynamic): Boolean =
     value != null && js("Object.prototype.toString.call(value) === '[object Object]'").unsafeCast<Boolean>()
 
-private fun parse(workerScope: dynamic, requestId: String, input: ArrayBuffer) {
+private suspend fun parse(workerScope: dynamic, requestId: String, input: ArrayBuffer, fileName: String?) {
     val startedAt = now()
     try {
         val bytes = input.toCommonByteBuffer()
-        val presentation = when (WasmBinaryProviderSelector.select(bytes.duplicate())) {
-            BinaryProviderType.Wasm -> corePresentation(WasmBinaryProvider(bytes), input.byteLength, startedAt)
-            BinaryProviderType.WasmComponent -> componentPresentation(WasmComponentBinaryProvider(bytes), input.byteLength, startedAt)
-            BinaryProviderType.Generic -> null
-        } ?: return postError(workerScope, requestId, "PARSE_FAILED", "The input is not a supported WebAssembly binary.")
-        val sanitized = sanitizeParserWorkerPresentation(presentation)
+        val result = when (WasmBinaryProviderSelector.select(bytes.duplicate())) {
+            BinaryProviderType.Wasm -> corePresentation(WasmBinaryProvider(bytes), input.byteLength, startedAt)?.let(::WorkerPresentationResult)
+            BinaryProviderType.WasmComponent -> componentPresentation(WasmComponentBinaryProvider(bytes), input.byteLength, startedAt)?.let(::WorkerPresentationResult)
+            BinaryProviderType.Generic -> nonWasmPresentation(nativeOrGenericBinaryProvider(bytes, fileName), input.byteLength, startedAt, fileName)
+        } ?: return postError(workerScope, requestId, "PARSE_FAILED", "The input could not be parsed safely.")
+        val sanitized = sanitizeParserWorkerPresentation(result.presentation)
         workerScope.postMessage(
-            encodeBoundedParserWorkerSuccess(requestId, sanitized.presentation, sanitized.omittedRecordCount),
+            encodeBoundedParserWorkerSuccess(
+                requestId,
+                sanitized.presentation,
+                omittedRecordCount = sanitized.omittedRecordCount,
+                producerRecordLimited = result.producerRecordLimited,
+            ),
         )
     } catch (_: Throwable) {
         postError(workerScope, requestId, "PARSE_FAILED", "The input could not be parsed safely.")
     }
 }
+
+private suspend fun runScript(
+    workerScope: dynamic,
+    requestId: String,
+    input: ArrayBuffer,
+    fileName: String,
+    source: String,
+) {
+    try {
+        val bytes = input.toCommonByteBuffer()
+        val provider = when (WasmBinaryProviderSelector.select(bytes.duplicate())) {
+            BinaryProviderType.Wasm -> WasmBinaryProvider(bytes)
+            BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(bytes)
+            BinaryProviderType.Generic -> nativeOrGenericBinaryProvider(bytes, fileName)
+        }
+        var outputLines = 0
+        var outputChars = 0
+        var truncated = false
+        val print: (dynamic) -> Unit = { value ->
+            val line = runCatching { value.toString() }.getOrElse { "<unprintable>" }
+            if (
+                outputLines >= MAX_SCRIPT_OUTPUT_LINES || line.length > MAX_SCRIPT_OUTPUT_LINE_CHARS ||
+                outputChars > MAX_SCRIPT_OUTPUT_LINES * MAX_SCRIPT_OUTPUT_LINE_CHARS - line.length
+            ) {
+                truncated = true
+            } else {
+                outputLines++
+                outputChars += line.length
+                postScriptLine(workerScope, requestId, line)
+            }
+        }
+        val error = executeWorkerScript(source, scriptValue(provider), print)
+        postScriptDone(workerScope, requestId, if (truncated && error == null) "Script output exceeded the browser limit." else error)
+    } catch (_: Throwable) {
+        postScriptDone(workerScope, requestId, "Script execution failed.")
+    }
+}
+
+private fun executeWorkerScript(source: String, binary: dynamic, print: (dynamic) -> Unit): String? {
+    @Suppress("UNUSED_VARIABLE")
+    val sourceValue = source
+    @Suppress("UNUSED_VARIABLE")
+    val binaryValue = binary
+    @Suppress("UNUSED_VARIABLE")
+    val printValue = print
+    return js("""
+        (function(source, binary, print) {
+            try {
+                new Function('binary', 'print', source)(binary, print);
+                return null;
+            } catch (error) {
+                var message = error && error.message ? String(error.message) : 'Script execution failed.';
+                return message.length > 1024 ? message.substring(0, 1024) : message;
+            }
+        })(sourceValue, binaryValue, printValue)
+    """)
+}
+
+private fun postScriptLine(workerScope: dynamic, requestId: String, line: String) {
+    val response = js("({})")
+    response.protocolVersion = SCRIPT_WORKER_PROTOCOL_VERSION
+    response.kind = "script_line"
+    response.requestId = requestId
+    response.line = line
+    workerScope.postMessage(response)
+}
+
+private fun postScriptDone(workerScope: dynamic, requestId: String, error: String?) {
+    val response = js("({})")
+    response.protocolVersion = SCRIPT_WORKER_PROTOCOL_VERSION
+    response.kind = "script_done"
+    response.requestId = requestId
+    response.error = error?.take(MAX_SCRIPT_ERROR_CHARS)
+    workerScope.postMessage(response)
+}
+
+private fun scriptValue(value: Any?): dynamic {
+    if (value == null || value is String || value is Number || value is Boolean) return value
+    if (value is List<*>) {
+        val result = js("[]")
+        value.forEach { result.push(scriptValue(it)) }
+        return result
+    }
+    val objectValue = js("({})")
+    when (value) {
+        is BinaryProvider -> {
+            defineScriptValue(objectValue, "bytes") { value.bytes }
+            defineScriptValue(objectValue, "sizeAnalysis") { value.sizeAnalysis }
+            defineScriptValue(objectValue, "strings") { value.strings }
+        }
+    }
+    if (value is WasmBinaryProvider) {
+        defineScriptValue(objectValue, "parsedModule") { value.parsedModule }
+        defineScriptValue(objectValue, "wasmModule") { value.wasmModule }
+        defineScriptValue(objectValue, "imports") { value.imports }
+        defineScriptValue(objectValue, "exports") { value.exports }
+        defineScriptValue(objectValue, "data") { value.data }
+        defineScriptValue(objectValue, "nameSection") { value.nameSection }
+        defineScriptValue(objectValue, "codeRecords") { value.codeRecords }
+        defineScriptValue(objectValue, "functions") { value.functions }
+    }
+    if (value is GenericBinaryProvider) defineScriptValue(objectValue, "nativeFormat") { value.nativeFormat }
+    @Suppress("UNUSED_VARIABLE")
+    val sourceValue = value.asDynamic()
+    @Suppress("UNUSED_VARIABLE")
+    val objectValueValue = objectValue
+    @Suppress("UNUSED_VARIABLE")
+    val wrapValue: (Any?) -> dynamic = ::scriptValue
+    return js("""
+        (function(source, objectValue, wrap) {
+            if (Object.keys(objectValue).length !== 0) return objectValue;
+            var result = {};
+            var prototype = Object.getPrototypeOf(source);
+            var getterPattern = /^get_(.+?)_[a-z0-9]+$/;
+            while (prototype && prototype !== Object.prototype) {
+                Object.getOwnPropertyNames(prototype).forEach(function(name) {
+                    var match = name.match(getterPattern);
+                    if (match && result[match[1]] === undefined && typeof source[name] === 'function') {
+                        Object.defineProperty(result, match[1], {
+                            get: function() { return wrap(source[name]()); }, enumerable: true
+                        });
+                    }
+                });
+                prototype = Object.getPrototypeOf(prototype);
+            }
+            return Object.keys(result).length === 0 ? source : result;
+        })(sourceValue, objectValueValue, wrapValue)
+    """)
+}
+
+private fun defineScriptValue(objectValue: dynamic, name: String, getter: () -> Any?) {
+    @Suppress("UNUSED_VARIABLE")
+    val propertyName = name
+    @Suppress("UNUSED_VARIABLE")
+    val propertyGetter: () -> dynamic = { scriptValue(getter()) }
+    js("Object.defineProperty(objectValue, propertyName, { get: propertyGetter, enumerable: true })")
+}
+
+private suspend fun nonWasmPresentation(
+    provider: BinaryProvider,
+    inputBytes: Int,
+    startedAt: Double,
+    fileName: String?,
+): WorkerPresentationResult {
+    val materialized = workerTables(provider, inputBytes, fileName)
+    val tables = materialized.tables.toMutableList()
+    var producerRecordLimited = materialized.producerRecordLimited
+    if (provider is ClassFileBinaryProvider) {
+        val classFileTables = classFileTables(provider, inputBytes)
+        classFileTables.tables.forEach { table ->
+            if (tables.none { it.id == table.id }) {
+                if (tables.size < MAX_PARSER_WORKER_TABLES) tables += table else producerRecordLimited = true
+            }
+        }
+        producerRecordLimited = producerRecordLimited || classFileTables.producerRecordLimited
+    }
+    val nativeImage = (provider as? NativeBinaryProvider)?.nativeImageInfo?.takeIf { it.isNativeImage }
+    nativeImage?.let { info ->
+        nativeImageTables(provider, info).forEach { table ->
+            if (tables.size < MAX_PARSER_WORKER_TABLES) tables += table else producerRecordLimited = true
+        }
+    }
+    val sourceRanges = provider.structureRanges
+    if (sourceRanges.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION) producerRecordLimited = true
+    return WorkerPresentationResult(ParserWorkerPresentation(
+        format = nonWasmFormat(provider),
+        capabilities = buildList {
+            add("summary")
+            if (provider.structureRanges.isNotEmpty()) add("structural_ranges")
+            if (tables.isNotEmpty()) add("tables")
+        },
+        summary = ParserWorkerSummary(
+            SCOPE_MARKER, true, inputBytes, sourceRanges.size, 0, 0, 0,
+            now() - startedAt,
+        ),
+        ranges = sourceRanges.take(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION).mapNotNull { range ->
+            val offset = range.offset.toInt()
+            val size = range.size.toInt()
+            ParserWorkerRange(offset, size, range.label).takeIf { offset >= 0 && size > 0 && offset <= inputBytes - size }
+        },
+        tables = tables,
+        toolbar = ParserWorkerToolbar(
+            nativeImage = nativeImage?.let { info ->
+                ParserWorkerNativeImage(
+                    version = info.version,
+                    edition = info.edition.name.lowercase(),
+                    platform = info.platform,
+                    hasSbom = info.sbom != null,
+                )
+            },
+        ),
+    ), producerRecordLimited)
+}
+
+private suspend fun nativeImageTables(
+    provider: NativeBinaryProvider,
+    info: NativeImageInfo,
+): List<ParserWorkerTable> {
+    val nativeImage = ParserWorkerTable(
+        id = "Native Image",
+        records = listOf(
+            row(listOf("Version", info.version ?: "unknown")),
+            row(listOf("Edition", info.edition.name.lowercase())),
+            row(listOf("Platform", info.platform ?: "unknown")),
+            row(listOf("SBOM", if (info.sbom == null) "not embedded" else "embedded")),
+        ),
+        columns = listOf("Property", "Value"),
+    )
+    val locator = info.sbom ?: return listOf(nativeImage)
+    val json = extractSbomJson(provider.bytes, locator)
+    val sbom = json?.let(CycloneDxParser::parse)
+    if (sbom == null) {
+        return listOf(
+            nativeImage,
+            ParserWorkerTable(
+                id = "SBOM",
+                records = emptyList(),
+                columns = listOf("Component", "Version", "Licenses", "PURL"),
+                prologueText = "CycloneDX SBOM embedded in ${info.version ?: "this Native Image"}.",
+                emptyMessage = "Embedded CycloneDX SBOM could not be decoded.",
+                alwaysShowSearch = true,
+                searchPlaceholder = "Search SBOM components…",
+                showIdColumn = false,
+            ),
+        )
+    }
+    val format = buildString {
+        append(sbom.bomFormat ?: "CycloneDX")
+        sbom.specVersion?.let { append(' ').append(it) }
+        append(" • ${sbom.components.size} component")
+        if (sbom.components.size != 1) append('s')
+        append(" • ${sbom.dependencies.size} dependenc")
+        append(if (sbom.dependencies.size == 1) "y" else "ies")
+        info.version?.let { append(" • Producer: ").append(it) }
+    }
+    return listOf(
+        nativeImage,
+        ParserWorkerTable(
+            id = "SBOM",
+            records = sbom.components.map { component ->
+                val componentName = listOfNotNull(component.group, component.name).joinToString(":").ifBlank { "?" }
+                row(listOf(componentName, component.version.orEmpty(), component.licenses.joinToString(", "), component.purl.orEmpty()))
+            },
+            columns = listOf("Component", "Version", "Licenses", "PURL"),
+            prologueText = format,
+            emptyMessage = "No components in the embedded CycloneDX SBOM.",
+            defaultSortColumn = 0,
+            alwaysShowSearch = true,
+            searchPlaceholder = "Search SBOM components…",
+            showIdColumn = false,
+        ),
+        ParserWorkerTable(
+            id = "SBOM Dependencies",
+            records = sbom.dependencies.map { dependency -> row(listOf(dependency.ref, dependency.dependsOn.joinToString(", "))) },
+            columns = listOf("Component", "Depends on"),
+            emptyMessage = "No dependency edges in the embedded CycloneDX SBOM.",
+            defaultSortColumn = 0,
+            alwaysShowSearch = true,
+            searchPlaceholder = "Search SBOM dependencies…",
+            showIdColumn = false,
+        ),
+    )
+}
+
+private fun nonWasmFormat(provider: BinaryProvider): String = when (provider) {
+    is ZipBinaryProvider -> "zip"
+    is ClassFileBinaryProvider -> "class"
+    is DexBinaryProvider -> "dex"
+    is PcapBinaryProvider -> "pcap"
+    is ProtobufBinaryProvider -> "protobuf"
+    is ElfBinaryProvider -> "elf"
+    is MachOBinaryProvider -> "macho"
+    is FatMachOBinaryProvider -> "fat_macho"
+    is PeBinaryProvider -> "pe"
+    is CoffBinaryProvider -> "coff"
+    is ArchiveBinaryProvider -> "archive"
+    else -> "generic"
+}
+
+/** Materialises UI-free descriptors in the Worker; callbacks and providers never cross the wire. */
+private fun workerTables(provider: BinaryProvider, inputBytes: Int, fileName: String?): MaterializedWorkerTables {
+    var producerRecordLimited = false
+    val tables = mutableListOf<ParserWorkerTable>()
+
+    fun addDescriptor(name: String, descriptor: TableTabDescriptor) {
+        if (tables.any { it.id == name }) return
+        if (descriptor.columns.isEmpty()) {
+            if (descriptor.emptyMessage != null && tables.size < MAX_PARSER_WORKER_TABLES) {
+                tables += ParserWorkerTable(
+                    id = name,
+                    records = emptyList(),
+                    columns = listOf("Details"),
+                    prologueText = descriptor.prologueText,
+                    emptyMessage = descriptor.emptyMessage,
+                )
+            } else {
+                producerRecordLimited = true
+            }
+            return
+        }
+        if (descriptor.columns.size > 16) {
+            producerRecordLimited = true
+            return
+        }
+        if (tables.size >= MAX_PARSER_WORKER_TABLES) {
+            producerRecordLimited = true
+            return
+        }
+        var visitedRows = 0
+
+        fun appendRows(rows: TableTabChildRows?, depth: Int): List<ParserWorkerRecord>? {
+            if (depth > MAX_WORKER_TABLE_TREE_DEPTH) {
+                producerRecordLimited = true
+                return null
+            }
+            val columns = rows?.columns ?: descriptor.columns
+            val count = rows?.rowCount ?: descriptor.rowCount
+            val selection = rows?.rowSelectionProvider ?: descriptor.rowSelectionProvider
+            val children = rows?.childrenProvider ?: descriptor.childrenProvider
+            val materialized = mutableListOf<ParserWorkerRecord>()
+            for (index in 0 until count) {
+                if (visitedRows >= MAX_PARSER_WORKER_RECORDS_PER_COLLECTION) {
+                    producerRecordLimited = true
+                    return null
+                }
+                visitedRows++
+                val cells = runCatching { columns.map { it.cellProvider(index) } }.getOrNull() ?: continue
+                val values = cells.map { it.representation }
+                if (values.size != descriptor.columns.size) continue
+                val range = selection(index)
+                val offset = range?.offset?.takeIf { it >= 0 && range.size > 0 && it <= inputBytes - range.size }
+                val childRows = runCatching { children?.invoke(index) }.getOrNull()
+                val childRecords = childRows?.let { appendRows(it, depth + 1) }
+                if (childRows != null && childRecords == null) return null
+                val actions = if (rows == null) workerRowActions(provider, name, index, inputBytes) else emptyList()
+                materialized += row(
+                    values = values,
+                    offset = offset,
+                    size = offset?.let { range!!.size },
+                    actions = actions,
+                    children = childRecords.orEmpty(),
+                    numericValues = cells.map { cell -> (cell.value as? Number)?.toDouble()?.takeIf(::isWireSafeNumber) },
+                )
+            }
+            return materialized
+        }
+
+        val records = appendRows(null, 0).orEmpty()
+        val filters = descriptor.predefinedFilters.take(16).map { filter ->
+            ParserWorkerTableFilter(
+                label = filter.label,
+                matchingRootRows = (0 until descriptor.rowCount).filter { index ->
+                    runCatching { filter.predicate(index) }.getOrDefault(false)
+                },
+            )
+        }
+        if (descriptor.predefinedFilters.size > filters.size) producerRecordLimited = true
+        tables += ParserWorkerTable(
+            id = name,
+            records = records,
+            columns = descriptor.columns.map { it.name },
+            prologueText = descriptor.prologueText,
+            emptyMessage = descriptor.emptyMessage,
+            defaultSortColumn = descriptor.defaultSortColumn,
+            defaultSortAscending = descriptor.defaultSortAscending,
+            alwaysShowSearch = descriptor.alwaysShowSearch,
+            searchPlaceholder = descriptor.searchPlaceholder,
+            showIdColumn = descriptor.showIdColumn,
+            filters = filters,
+            defaultFilterShowAll = descriptor.defaultFilterShowAll,
+        )
+    }
+
+    data class DescriptorEntry(val descriptor: TableTabDescriptor, val providerIndex: Int)
+    val descriptors = buildList {
+        TableTabsProviderRegistry.providers.forEachIndexed { providerIndex, tabProvider ->
+            // Only Wasm currently emits grouped tabs and Wasm never reaches this route. Do not flatten a future
+            // non-Wasm group into ordinary tables: that would silently change the navigation hierarchy.
+            check(runCatching { tabProvider.groupedTabs(provider) }.getOrDefault(emptyList()).isEmpty()) {
+                "Non-Wasm parser-worker table groups require an explicit wire representation."
+            }
+            runCatching { tabProvider.tableTabs(provider, TableTabsContext(fileName = fileName)) }
+                .getOrDefault(emptyList())
+                .forEach { descriptor -> add(DescriptorEntry(descriptor, providerIndex)) }
+        }
+    }.sortedWith(compareBy<DescriptorEntry> { it.descriptor.priority }.thenBy { it.providerIndex })
+    for (entry in descriptors) {
+        addDescriptor(entry.descriptor.name, entry.descriptor)
+    }
+    return MaterializedWorkerTables(tables, producerRecordLimited)
+}
+
+private fun workerRowActions(
+    provider: BinaryProvider,
+    tableId: String,
+    rowIndex: Int,
+    inputBytes: Int,
+): List<ParserWorkerAction> = when {
+    provider is ZipBinaryProvider && tableId == "Entries" -> {
+        val entry = provider.displayEntries.getOrNull(rowIndex) ?: return emptyList()
+        val range = boundedInputRange(entry.dataOffset, entry.compressedSize, inputBytes) ?: return emptyList()
+        listOf(
+            ParserWorkerAction(
+                kind = "zip_entry",
+                name = entry.name,
+                dataOffset = range.first,
+                compressedSize = range.second,
+                uncompressedSize = entry.uncompressedSize,
+                compressionMethod = entry.compressionMethod,
+            ),
+        )
+    }
+    provider is ArchiveBinaryProvider && tableId == "Members" -> {
+        val member = provider.members.filterNot { it.isBookkeeping }.getOrNull(rowIndex) ?: return emptyList()
+        val range = boundedInputRange(member.contentRange.offset.toLong(), member.contentRange.size.toLong(), inputBytes)
+            ?: return emptyList()
+        listOf(
+            ParserWorkerAction(
+                kind = "archive_member",
+                index = member.index,
+                name = member.name,
+                offset = range.first,
+                size = range.second,
+                openable = classifyArchiveMember(provider.bytes, member.contentRange).openable,
+            ),
+        )
+    }
+    provider is PcapBinaryProvider && tableId == "Packets" -> {
+        val pcap = provider.parsedPcapFile ?: return emptyList()
+        val packet = pcap.packets.getOrNull(rowIndex) ?: return emptyList()
+        val dissected = runCatching { PcapDissector.dissect(provider.bytes, packet, pcap.header.network) }.getOrNull()
+            ?: return emptyList()
+        val range = boundedInputRange(dissected.httpBodyFileOffset, dissected.httpBodySize.toLong(), inputBytes)
+            ?: return emptyList()
+        listOf(
+            ParserWorkerAction(
+                kind = "pcap_http_body",
+                index = rowIndex,
+                name = "http-body-packet-${rowIndex + 1}${httpContentTypeExtension(dissected.httpContentType)}",
+                offset = range.first,
+                size = range.second,
+                contentType = dissected.httpContentType,
+                openable = true,
+            ),
+        )
+    }
+    else -> emptyList()
+}
+
+private fun boundedInputRange(offset: Long, size: Long, inputBytes: Int): Pair<Int, Int>? =
+    if (offset < 0 || size < 0 || offset > inputBytes || size > inputBytes || offset > inputBytes - size) null
+    else offset.toInt() to size.toInt()
+
+private fun httpContentTypeExtension(contentType: String?): String {
+    val mime = contentType?.substringBefore(';')?.trim()?.lowercase() ?: return ""
+    return when {
+        mime == "application/json" -> ".json"
+        mime == "application/xml" || mime == "text/xml" -> ".xml"
+        mime == "text/html" -> ".html"
+        mime == "text/css" -> ".css"
+        mime == "text/javascript" || mime == "application/javascript" -> ".js"
+        mime == "text/plain" -> ".txt"
+        mime == "application/octet-stream" -> ".bin"
+        mime == "application/wasm" -> ".wasm"
+        mime == "application/zip" -> ".zip"
+        mime == "image/png" -> ".png"
+        mime == "image/jpeg" -> ".jpg"
+        mime == "image/gif" -> ".gif"
+        mime == "image/svg+xml" -> ".svg"
+        mime.startsWith("text/") -> ".txt"
+        else -> ""
+    }
+}
+
+private fun classFileTables(provider: ClassFileBinaryProvider, inputBytes: Int): ClassFileWorkerTables {
+    val classFile = provider.parsedClassFile ?: return ClassFileWorkerTables(emptyList(), false)
+    val header = buildList {
+        add(row(listOf("Class", classFile.thisClassName)))
+        add(row(listOf("Superclass", classFile.superClassName ?: "<none>")))
+        add(row(listOf("Version", "${classFile.majorVersion}.${classFile.minorVersion}")))
+        add(row(listOf("Access flags", "${classFile.accessFlags} ${renderClassAccessFlags(classFile.accessFlags.raw)}".trim())))
+        if (classFile.interfaceIndices.isEmpty()) {
+            add(row(listOf("Implements", "(none)")))
+        } else {
+            classFile.interfaceIndices.forEach { index ->
+                val interfaceName = (classFile.constantPool[index] as? JavaConstantPoolEntry.ClassRef)
+                    ?.let { ref -> runCatching { classFile.constantPool.utf8(ref.nameIndex) }.getOrNull() }
+                    ?: "<#$index ???>"
+                add(row(listOf("Implements", interfaceName)))
+            }
+        }
+        add(row(listOf("Fields", classFile.fields.size.toString())))
+        add(row(listOf("Methods", classFile.methods.size.toString())))
+        add(row(listOf("Class attributes", classFile.attributes.size.toString())))
+    }
+    val methods = mutableListOf<ParserWorkerRecord>()
+    var recordCount = 0
+    var producerRecordLimited = false
+    fun safeOffset(offset: Int): Int? = offset.takeIf { it in 0 until inputBytes }
+    fun addBodyRow(body: MutableList<ParserWorkerRecord>, text: String, offset: Int?) {
+        if (recordCount >= MAX_PARSER_WORKER_RECORDS_PER_COLLECTION) {
+            producerRecordLimited = true
+        } else {
+            body += row(listOf("", text, ""), offset, offset?.let { 1 })
+            recordCount++
+        }
+    }
+    for (method in classFile.methods) {
+        if (recordCount >= MAX_PARSER_WORKER_RECORDS_PER_COLLECTION) {
+            producerRecordLimited = true
+            break
+        }
+        val name = runCatching { classFile.constantPool.utf8(method.nameIndex) }.getOrDefault("<#${method.nameIndex}>")
+        val descriptor = runCatching { classFile.constantPool.utf8(method.descriptorIndex) }.getOrDefault("<#${method.descriptorIndex}>")
+        val flags = renderMethodAccessFlags(method.accessFlags.raw)
+        val signature = listOf(flags, name, descriptor).filter { it.isNotEmpty() }.joinToString(" ")
+        val offset = safeOffset(method.byteOffset)
+        recordCount++
+        val body = mutableListOf<ParserWorkerRecord>()
+        addBodyRow(body, "flags: 0x${method.accessFlags.raw.toString(16).padStart(4, '0')}", offset)
+        val code = runCatching { JavaCodeAttributeParser.parse(method, classFile.constantPool) }.getOrNull()
+        if (code == null) {
+            addBodyRow(body, "(no Code attribute — abstract or native)", offset)
+        } else {
+            val codeOffset = safeOffset(code.codeBaseFileOffset)
+            addBodyRow(body, "max_stack=${code.maxStack} max_locals=${code.maxLocals} code_length=${code.code.size} handlers=${code.exceptionTable.size}", codeOffset)
+            for (instruction in code.instructions) {
+                if (recordCount >= MAX_PARSER_WORKER_RECORDS_PER_COLLECTION) {
+                    producerRecordLimited = true
+                    break
+                }
+                addBodyRow(
+                    body,
+                    "${instruction.bytecodeOffset.toString().padStart(4, ' ')}: ${formatClassInstruction(instruction, classFile.constantPool)}",
+                    safeOffset(code.codeBaseFileOffset + instruction.bytecodeOffset),
+                )
+            }
+            if (!producerRecordLimited && code.exceptionTable.isNotEmpty()) {
+                addBodyRow(body, "exception_table:", codeOffset)
+                for (handler in code.exceptionTable) {
+                    if (recordCount >= MAX_PARSER_WORKER_RECORDS_PER_COLLECTION) {
+                        producerRecordLimited = true
+                        break
+                    }
+                    val catchName = if (handler.catchTypeCpIndex == 0) "any" else {
+                        (classFile.constantPool[handler.catchTypeCpIndex] as? JavaConstantPoolEntry.ClassRef)
+                            ?.let { ref -> runCatching { classFile.constantPool.utf8(ref.nameIndex) }.getOrNull() }
+                            ?: "<#${handler.catchTypeCpIndex} ???>"
+                    }
+                    addBodyRow(
+                        body,
+                        "[${handler.startPc.toString().padStart(4, ' ')}-${handler.endPc.toString().padStart(4, ' ')}) -> " +
+                            "${handler.handlerPc.toString().padStart(4, ' ')}  catch $catchName",
+                        safeOffset(code.codeBaseFileOffset + handler.handlerPc),
+                    )
+                }
+            }
+        }
+        methods += row(listOf(signature, "method", "0x${method.byteOffset.toString(16)}"), offset, offset?.let { 1 }, children = body)
+        if (producerRecordLimited) break
+    }
+    return ClassFileWorkerTables(buildList {
+        add(ParserWorkerTable("Header", header, listOf("Property", "Value")))
+        add(
+            ParserWorkerTable(
+                id = "Methods",
+                records = methods,
+                columns = listOf("Method", "Detail", "Offset"),
+                emptyMessage = "(no methods)",
+                alwaysShowSearch = true,
+                searchPlaceholder = "Search methods…",
+                showIdColumn = false,
+            ),
+        )
+    }, producerRecordLimited)
+}
+
+private fun formatClassInstruction(instruction: JavaBytecodeInstruction, constantPool: JavaConstantPool): String {
+    val mnemonic = instruction.opcode.mnemonic
+    return when (val operands = instruction.operands) {
+        JavaBytecodeOperands.None -> mnemonic
+        is JavaBytecodeOperands.Byte1 -> "$mnemonic ${operands.value}"
+        is JavaBytecodeOperands.Short1 -> constantPoolReference(operands.value, constantPool)
+            ?.let { "$mnemonic #${operands.value}  // $it" }
+            ?: "$mnemonic ${operands.value}"
+        is JavaBytecodeOperands.Wide1 -> "$mnemonic ${operands.value}"
+        is JavaBytecodeOperands.IInc -> "$mnemonic ${operands.varIndex}, ${operands.delta}"
+        is JavaBytecodeOperands.InvokeInterface ->
+            "$mnemonic #${operands.cpIndex}, ${operands.count}  // ${constantPoolReference(operands.cpIndex, constantPool) ?: "?"}"
+        is JavaBytecodeOperands.InvokeDynamic ->
+            "$mnemonic #${operands.cpIndex}  // ${constantPoolReference(operands.cpIndex, constantPool) ?: "?"}"
+        is JavaBytecodeOperands.MultiANewArray ->
+            "$mnemonic #${operands.cpIndex}, ${operands.dimensions}  // ${constantPoolReference(operands.cpIndex, constantPool) ?: "?"}"
+        is JavaBytecodeOperands.TableSwitch ->
+            "$mnemonic default=${operands.defaultOffset} ${operands.low}..${operands.high} -> ${operands.jumpOffsets}"
+        is JavaBytecodeOperands.LookupSwitch -> "$mnemonic default=${operands.defaultOffset} pairs=${operands.pairs}"
+        is JavaBytecodeOperands.Wide ->
+            "$mnemonic 0x${operands.innerOpcode.toString(16).padStart(2, '0')} var=${operands.varIndex}" +
+                (operands.constant?.let { ", const=$it" } ?: "")
+        is JavaBytecodeOperands.Raw -> "$mnemonic <raw ${operands.bytes.size} bytes>"
+    }
+}
+
+private fun constantPoolReference(index: Int, constantPool: JavaConstantPool): String? {
+    if (index <= 0) return null
+    val entry = runCatching { constantPool[index] }.getOrNull() ?: return null
+    return when (entry) {
+        is JavaConstantPoolEntry.ClassRef -> runCatching { constantPool.utf8(entry.nameIndex) }.getOrNull()
+        is JavaConstantPoolEntry.StringRef -> "\"${runCatching { constantPool.utf8(entry.stringIndex) }.getOrDefault("?")}\""
+        is JavaConstantPoolEntry.Methodref,
+        is JavaConstantPoolEntry.InterfaceMethodref,
+        is JavaConstantPoolEntry.Fieldref,
+        -> {
+            val (classIndex, nameAndTypeIndex) = when (entry) {
+                is JavaConstantPoolEntry.Methodref -> entry.classIndex to entry.nameAndTypeIndex
+                is JavaConstantPoolEntry.InterfaceMethodref -> entry.classIndex to entry.nameAndTypeIndex
+                is JavaConstantPoolEntry.Fieldref -> entry.classIndex to entry.nameAndTypeIndex
+                else -> return null
+            }
+            val owner = (constantPool[classIndex] as? JavaConstantPoolEntry.ClassRef)
+                ?.let { runCatching { constantPool.utf8(it.nameIndex) }.getOrNull() } ?: "?"
+            val nameAndType = constantPool[nameAndTypeIndex] as? JavaConstantPoolEntry.NameAndType ?: return owner
+            val name = runCatching { constantPool.utf8(nameAndType.nameIndex) }.getOrDefault("?")
+            val descriptor = runCatching { constantPool.utf8(nameAndType.descriptorIndex) }.getOrDefault("?")
+            "$owner.$name:$descriptor"
+        }
+        is JavaConstantPoolEntry.Integer -> entry.value.toString()
+        is JavaConstantPoolEntry.Float -> "${entry.value}f"
+        is JavaConstantPoolEntry.Long -> "${entry.value}L"
+        is JavaConstantPoolEntry.Double -> entry.value.toString()
+        is JavaConstantPoolEntry.Utf8 -> "\"${entry.value}\""
+        else -> null
+    }
+}
+
+private fun renderClassAccessFlags(raw: Int): String = buildString {
+    if (raw and JavaClassAccess.PUBLIC != 0) append("public ")
+    if (raw and JavaClassAccess.FINAL != 0) append("final ")
+    if (raw and JavaClassAccess.SUPER != 0) append("super ")
+    if (raw and JavaClassAccess.INTERFACE != 0) append("interface ")
+    if (raw and JavaClassAccess.ABSTRACT != 0) append("abstract ")
+    if (raw and JavaClassAccess.SYNTHETIC != 0) append("synthetic ")
+    if (raw and JavaClassAccess.ANNOTATION != 0) append("annotation ")
+    if (raw and JavaClassAccess.ENUM != 0) append("enum ")
+    if (raw and JavaClassAccess.MODULE != 0) append("module ")
+}.trim()
+
+private fun renderMethodAccessFlags(raw: Int): String = buildString {
+    if (raw and JavaMethodAccess.PUBLIC != 0) append("public ")
+    if (raw and JavaMethodAccess.PRIVATE != 0) append("private ")
+    if (raw and JavaMethodAccess.PROTECTED != 0) append("protected ")
+    if (raw and JavaMethodAccess.STATIC != 0) append("static ")
+    if (raw and JavaMethodAccess.FINAL != 0) append("final ")
+    if (raw and JavaMethodAccess.SYNCHRONIZED != 0) append("synchronized ")
+    if (raw and JavaMethodAccess.BRIDGE != 0) append("bridge ")
+    if (raw and JavaMethodAccess.VARARGS != 0) append("varargs ")
+    if (raw and JavaMethodAccess.NATIVE != 0) append("native ")
+    if (raw and JavaMethodAccess.ABSTRACT != 0) append("abstract ")
+    if (raw and JavaMethodAccess.STRICT != 0) append("strict ")
+    if (raw and JavaMethodAccess.SYNTHETIC != 0) append("synthetic ")
+}.trim()
 
 private fun corePresentation(provider: WasmBinaryProvider, inputBytes: Int, startedAt: Double): ParserWorkerPresentation? {
     val module = provider.wasmModule ?: return null
@@ -220,8 +974,22 @@ private fun MutableList<ParserWorkerTable>.addTable(
     if (records.isNotEmpty()) add(ParserWorkerTable(id, records, columns))
 }
 
-private fun row(values: List<String>, offset: Int? = null, size: Int? = null): ParserWorkerRecord =
-    ParserWorkerRecord(values.firstOrNull().orEmpty(), values.getOrElse(1) { values.firstOrNull().orEmpty() }, values, offset, size)
+private fun row(
+    values: List<String>,
+    offset: Int? = null,
+    size: Int? = null,
+    actions: List<ParserWorkerAction> = emptyList(),
+    children: List<ParserWorkerRecord> = emptyList(),
+    numericValues: List<Double?> = List(values.size) { null },
+): ParserWorkerRecord =
+    ParserWorkerRecord(
+        values.firstOrNull().orEmpty(),
+        values.getOrElse(1) { values.firstOrNull().orEmpty() },
+        values, offset, size, actions = actions, children = children, numericValues = numericValues,
+    )
+
+private fun isWireSafeNumber(value: Double): Boolean =
+    value.isFinite() && value >= -9_007_199_254_740_991.0 && value <= 9_007_199_254_740_991.0
 
 private fun componentGraph(provider: WasmComponentBinaryProvider): ParserWorkerComponentGraph {
     val nodes = mutableListOf<ParserWorkerComponentGraphNode>()

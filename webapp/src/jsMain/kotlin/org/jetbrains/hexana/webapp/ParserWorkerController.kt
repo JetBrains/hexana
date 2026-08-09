@@ -62,8 +62,9 @@ internal class ParserWorkerController(
     private var generation = 0
     private var active: ActiveRequest? = null
 
-    fun parse(buffer: ArrayBuffer, timeoutMs: Int) {
+    fun parse(buffer: ArrayBuffer, timeoutMs: Int, fileName: String? = null) {
         require(timeoutMs > 0)
+        require(fileName == null || isValidParserWorkerFileName(fileName)) { "Invalid parser-worker file name." }
         // TODO(MCP-181): Remove when bounded parallel parsing with per-request ownership/isolation is implemented and browser-tested.
         invalidateAndTerminateActive()
         val requestGeneration = generation
@@ -89,6 +90,7 @@ internal class ParserWorkerController(
         wireRequest.protocolVersion = PARSER_WORKER_PROTOCOL_VERSION
         wireRequest.kind = "parse"
         wireRequest.requestId = requestId
+        wireRequest.fileName = fileName
         wireRequest.buffer = buffer
         try {
             worker.postParse(wireRequest, buffer)

@@ -188,25 +188,73 @@ class ParserWorkerBrowserTest {
         }
 
     @Test
-    fun realWorkerReturnsFixedSafeErrorForInvalidInput(): Promise<Unit> =
+    fun realWorkerReturnsSuccessfulRawPresentationForGenericInput(): Promise<Unit> =
         Promise { resolve, reject ->
             val controller = ParserWorkerController(
                 workerFactory = browserParserWorkerFactory,
                 scheduler = browserParserWorkerScheduler,
                 onStateChanged = { state ->
-                    if (state is ParserWorkerState.Failed) {
+                    if (state is ParserWorkerState.Parsed) {
                         try {
-                            assertEquals("PARSE_FAILED", state.code)
-                            assertTrue(state.message.length <= 160)
-                            assertFalse("exception" in state.message.lowercase())
+                            assertEquals("generic", state.presentation.format)
+                            assertEquals(listOf("summary"), state.presentation.capabilities)
+                            assertTrue(state.presentation.tables.isEmpty())
                             resolve(Unit)
                         } catch (failure: Throwable) {
                             reject(failure)
                         }
+                    } else if (state is ParserWorkerState.Failed) {
+                        reject(Throwable("Generic worker input failed: ${state.code}: ${state.message}"))
                     }
                 },
             )
             controller.parse(ArrayBuffer(32), 5_000)
+        }
+
+    @Test
+    fun realWorkerParsesAnApkDescriptorAndKeepsItsOpenActionDeferred(): Promise<Unit> =
+        Promise { resolve, reject ->
+            val input = apkFixtureBuffer()
+            var controller: ParserWorkerController? = null
+            val guard = window.setTimeout({
+                controller?.dispose()
+                reject(Throwable("APK parser worker did not answer within the browser-test deadline."))
+            }, REAL_WORKER_TEST_TIMEOUT_MS)
+            controller = ParserWorkerController(
+                workerFactory = browserParserWorkerFactory,
+                scheduler = browserParserWorkerScheduler,
+                onStateChanged = { state ->
+                    when (state) {
+                        is ParserWorkerState.Parsed -> {
+                            window.clearTimeout(guard)
+                            try {
+                                assertEquals("zip", state.presentation.format)
+                                assertEquals("DedicatedWorkerGlobalScope", state.summary.scopeMarker)
+                                assertTrue(state.summary.documentAbsent)
+                                val entries = state.presentation.tables.single { it.id == "Entries" }
+                                assertEquals(listOf("Name", "Compressed", "Uncompressed", "Kind"), entries.columns)
+                                val entry = entries.records.single()
+                                assertEquals("classes.dex", entry.values.first())
+                                assertEquals("zip_entry", entry.actions.single().kind)
+                                assertEquals("classes.dex", entry.actions.single().name)
+                                resolve(Unit)
+                            } catch (failure: Throwable) {
+                                reject(failure)
+                            }
+                        }
+                        is ParserWorkerState.Failed -> {
+                            window.clearTimeout(guard)
+                            reject(Throwable("APK worker input failed: ${state.code}: ${state.message}"))
+                        }
+                        ParserWorkerState.TimedOut -> {
+                            window.clearTimeout(guard)
+                            reject(Throwable("APK worker input timed out."))
+                        }
+                        else -> Unit
+                    }
+                },
+            )
+            controller.parse(input, 5_000, "application.apk")
         }
 
     @Test
@@ -316,6 +364,20 @@ class ParserWorkerBrowserTest {
         }
 
     @Test
+    fun rawRealWorkerRejectsOversizedAndNonStringFileNames(): Promise<Unit> =
+        Promise { resolve, reject ->
+            rawWorkerRejectsInvalidFileName("x".repeat(MAX_PARSER_WORKER_FILE_NAME_CHARS + 1)).then(
+                onFulfilled = {
+                    rawWorkerRejectsInvalidFileName(42).then(
+                        onFulfilled = { resolve(Unit) },
+                        onRejected = reject,
+                    )
+                },
+                onRejected = reject,
+            )
+        }
+
+    @Test
     fun nonresponsiveWorkerTimesOutByTerminationAndNextRealWorkerRecovers(): Promise<Unit> =
         Promise { resolve, reject ->
             val blob = js("new Blob(['self.onmessage = function () {}'], { type: 'text/javascript' })")
@@ -377,6 +439,98 @@ internal fun additionFixtureBuffer(): ArrayBuffer {
     )
     return Uint8Array(bytes.map(Int::toDouble).toTypedArray()).buffer
 }
+
+private fun apkFixtureBuffer(): ArrayBuffer {
+    val output = mutableListOf<Byte>()
+    val name = "classes.dex".encodeToByteArray()
+    val data = byteArrayOf(0)
+
+    fun u2(value: Int) {
+        output += (value and 0xff).toByte()
+        output += ((value ushr 8) and 0xff).toByte()
+    }
+    fun u4(value: Int) {
+        output += (value and 0xff).toByte()
+        output += ((value ushr 8) and 0xff).toByte()
+        output += ((value ushr 16) and 0xff).toByte()
+        output += ((value ushr 24) and 0xff).toByte()
+    }
+    fun bytes(value: ByteArray) {
+        value.forEach(output::add)
+    }
+
+    u4(0x04034B50)
+    u2(20); u2(0); u2(0); u2(0); u2(0)
+    u4(0); u4(data.size); u4(data.size)
+    u2(name.size); u2(0)
+    bytes(name); bytes(data)
+
+    val centralDirectoryOffset = output.size
+    u4(0x02014B50)
+    u2(20); u2(20); u2(0); u2(0); u2(0); u2(0)
+    u4(0); u4(data.size); u4(data.size)
+    u2(name.size); u2(0); u2(0); u2(0); u2(0); u4(0); u4(0)
+    bytes(name)
+
+    val centralDirectorySize = output.size - centralDirectoryOffset
+    u4(0x06054B50)
+    u2(0); u2(0); u2(1); u2(1)
+    u4(centralDirectorySize); u4(centralDirectoryOffset); u2(0)
+
+    return Uint8Array(output.map { it.toInt().and(0xff).toDouble() }.toTypedArray()).buffer
+}
+
+private fun rawWorkerRejectsInvalidFileName(fileName: dynamic): Promise<Unit> =
+    Promise { resolve, reject ->
+        val worker = BrowserParserWorkerPort()
+        val input = ArrayBuffer(1)
+        var finished = false
+        var guard = 0
+
+        fun cleanup() {
+            if (finished) return
+            finished = true
+            window.clearTimeout(guard)
+            worker.clearHandlers()
+            worker.terminate()
+        }
+
+        guard = window.setTimeout({
+            cleanup()
+            reject(Throwable("Raw invalid file-name worker request did not answer within the browser-test deadline."))
+        }, REAL_WORKER_TEST_TIMEOUT_MS)
+        worker.setHandlers(
+            onMessage = { message ->
+                cleanup()
+                try {
+                    assertEquals(PARSER_WORKER_PROTOCOL_VERSION, message.protocolVersion)
+                    assertEquals("error", message.kind)
+                    assertEquals("raw-invalid-file-name", message.requestId)
+                    assertEquals("INVALID_REQUEST", message.code)
+                    assertEquals("Parser worker request is invalid.", message.message)
+                    resolve(Unit)
+                } catch (failure: Throwable) {
+                    reject(failure)
+                }
+            },
+            onError = {
+                cleanup()
+                reject(Throwable("Raw invalid file-name worker request raised a worker error."))
+            },
+            onMessageError = {
+                cleanup()
+                reject(Throwable("Raw invalid file-name worker response could not be decoded."))
+            },
+        )
+
+        val request = js("({})")
+        request.protocolVersion = PARSER_WORKER_PROTOCOL_VERSION
+        request.kind = "parse"
+        request.requestId = "raw-invalid-file-name"
+        request.fileName = fileName
+        request.buffer = input
+        worker.postParse(request, input)
+    }
 
 internal class TrackingParserWorkerPort(
     private val delegate: ParserWorkerPort,

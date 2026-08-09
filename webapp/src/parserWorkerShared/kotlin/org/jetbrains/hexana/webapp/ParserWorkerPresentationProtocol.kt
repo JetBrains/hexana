@@ -3,16 +3,18 @@ package org.jetbrains.hexana.webapp
 import org.jetbrains.hexana.wasm.components.ComponentCoreSort
 import org.jetbrains.hexana.wasm.components.ComponentSort
 import org.jetbrains.hexana.wasm.components.ComponentSortWithCoreSort
+import org.jetbrains.hexana.shared.TableTabDescriptor
 
 /** The serialised JSON representation of a worker success is never larger than this value. */
 internal const val MAX_PARSER_WORKER_WIRE_BYTES = 10 * 1024 * 1024
 internal const val MAX_PARSER_WORKER_RECORDS_PER_COLLECTION = 10_000
 internal const val MAX_PARSER_WORKER_REQUEST_ID_CHARS = 128
+internal const val MAX_PARSER_WORKER_FILE_NAME_CHARS = 1_024
 /** Fixed schema collections are rejected on the producer side instead of silently changing their identity. */
 internal const val MAX_PARSER_WORKER_CAPABILITIES = 32
 internal const val MAX_PARSER_WORKER_TABLES = 32
 internal const val MAX_PARSER_WORKER_LEGACY_TABS = 16
-internal const val PARSER_WORKER_PROTOCOL_VERSION = 5
+internal const val PARSER_WORKER_PROTOCOL_VERSION = 8
 
 private const val MAX_FORMAT_CHARS = 64
 private const val MAX_CAPABILITY_CHARS = 64
@@ -20,9 +22,17 @@ private const val MAX_RANGE_LABEL_CHARS = 256
 private const val MAX_TABLE_ID_CHARS = 64
 private const val MAX_TABLE_COLUMNS = 16
 private const val MAX_TABLE_COLUMN_CHARS = 64
+private const val MAX_TABLE_TEXT_CHARS = 1_024
+private const val MAX_TABLE_FILTERS = 16
 private const val MAX_RECORD_KEY_CHARS = 1_024
 private const val MAX_RECORD_VALUE_CHARS = 16_384
 private const val MAX_RECORD_VALUES = MAX_TABLE_COLUMNS
+private const val MAX_RECORD_ACTIONS = 1
+private const val MAX_RECORD_CHILDREN = MAX_PARSER_WORKER_RECORDS_PER_COLLECTION
+private const val MAX_RECORD_TREE_DEPTH = 32
+private const val MAX_ACTION_KIND_CHARS = 32
+private const val MAX_ACTION_NAME_CHARS = 1_024
+private const val MAX_ACTION_CONTENT_TYPE_CHARS = 256
 private const val MAX_DIAGNOSTIC_CODE_CHARS = 64
 private const val MAX_DIAGNOSTIC_MESSAGE_CHARS = 1_024
 private const val MAX_PARTIAL_REASONS = 3
@@ -37,8 +47,12 @@ private const val MAX_TOOLCHAIN_IMPORT_MODULE_CHARS = 64
 private const val MAX_TOOLBAR_PROPOSALS = 16
 private const val MAX_TOOLBAR_PROPOSAL_ID_CHARS = 64
 private const val MAX_TOOLBAR_RUNNABLE_EXPORT_CHARS = 64
+private const val MAX_NATIVE_IMAGE_TEXT_CHARS = 1_024
 
-private val supportedFormats = setOf("core_wasm", "wasm_component", "unknown")
+private val supportedFormats = setOf(
+    "core_wasm", "wasm_component", "zip", "class", "dex", "pcap", "protobuf",
+    "elf", "macho", "fat_macho", "pe", "coff", "archive", "generic",
+)
 private val supportedCapabilities = setOf("summary", "structural_ranges", "tables", "diagnostics", "component_dependency_graph")
 private val supportedGraphNodeKinds = setOf("import", "module", "nested_component", "core_instance", "instance", "export")
 private val supportedToolbarProposalIds = setOf(
@@ -49,7 +63,18 @@ private val supportedToolbarProposalIds = setOf(
 private val supportedLegacyTabsByFormat = mapOf(
     "core_wasm" to setOf("Data", "Tags", "Exceptions", "Custom", "Top", "Monos", "Garbage", "Wat", "WAT (virtualized)"),
     "wasm_component" to setOf("Components", "Wat", "WAT (virtualized)"),
-    "unknown" to emptySet(),
+    "zip" to emptySet(),
+    "class" to emptySet(),
+    "dex" to emptySet(),
+    "pcap" to emptySet(),
+    "protobuf" to emptySet(),
+    "elf" to emptySet(),
+    "macho" to emptySet(),
+    "fat_macho" to emptySet(),
+    "pe" to emptySet(),
+    "coff" to emptySet(),
+    "archive" to emptySet(),
+    "generic" to emptySet(),
 )
 private const val RECORD_LIMIT_REASON = "record_limit"
 private const val BYTE_LIMIT_REASON = "byte_limit"
@@ -78,11 +103,41 @@ internal data class ParserWorkerRecord(
     val values: List<String> = listOf(key, value),
     val offset: Int? = null,
     val size: Int? = null,
+    val actions: List<ParserWorkerAction> = emptyList(),
+    val children: List<ParserWorkerRecord> = emptyList(),
+    /** Numeric sort keys preserve descriptor ordering while the display values remain text. */
+    val numericValues: List<Double?> = List(values.size) { null },
+)
+internal data class ParserWorkerTableFilter(
+    val label: String,
+    val matchingRootRows: List<Int>,
+)
+internal data class ParserWorkerAction(
+    val kind: String,
+    val index: Int? = null,
+    val name: String? = null,
+    val offset: Int? = null,
+    val size: Int? = null,
+    val dataOffset: Int? = null,
+    val compressedSize: Int? = null,
+    val uncompressedSize: Long? = null,
+    val compressionMethod: Int? = null,
+    val contentType: String? = null,
+    val openable: Boolean = false,
 )
 internal data class ParserWorkerTable(
     val id: String,
     val records: List<ParserWorkerRecord>,
     val columns: List<String> = listOf("Key", "Value"),
+    val prologueText: String? = null,
+    val emptyMessage: String? = null,
+    val defaultSortColumn: Int? = null,
+    val defaultSortAscending: Boolean = true,
+    val alwaysShowSearch: Boolean = false,
+    val searchPlaceholder: String? = null,
+    val showIdColumn: Boolean = true,
+    val filters: List<ParserWorkerTableFilter> = emptyList(),
+    val defaultFilterShowAll: Boolean = false,
 )
 internal data class ParserWorkerDiagnostic(val code: String, val message: String)
 internal data class ParserWorkerComponentGraphNode(
@@ -103,6 +158,15 @@ internal data class ParserWorkerComponentGraph(
 internal data class ParserWorkerToolbar(
     val runnableExportName: String? = null,
     val proposalIds: List<String> = emptyList(),
+    val nativeImage: ParserWorkerNativeImage? = null,
+)
+
+/** Read-only native-image metadata produced by the Worker; it deliberately carries no parser provider or callbacks. */
+internal data class ParserWorkerNativeImage(
+    val version: String? = null,
+    val edition: String = "unknown",
+    val platform: String? = null,
+    val hasSbom: Boolean = false,
 )
 
 internal data class ParserWorkerPresentation(
@@ -145,21 +209,22 @@ internal fun boundParserWorkerSuccess(
     presentation: ParserWorkerPresentation,
     maxWireBytes: Int = MAX_PARSER_WORKER_WIRE_BYTES,
     omittedRecordCount: Int = 0,
+    producerRecordLimited: Boolean = false,
 ): BoundedParserWorkerSuccess {
     require(maxWireBytes > 0)
     require(omittedRecordCount >= 0) { "Parser-worker omitted record count is invalid." }
     require(isValidParserWorkerRequestId(requestId)) { "Invalid parser-worker request ID." }
     requireValidProducerPresentation(presentation)
 
-    val recordLimited = presentation.ranges.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION ||
-        presentation.tables.any { it.records.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION } ||
+    val recordLimited = producerRecordLimited || presentation.ranges.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION ||
+        presentation.tables.any { it.records.recordCount() > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION } ||
         presentation.diagnostics.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION ||
         (presentation.componentGraph?.nodes?.size ?: 0) > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION ||
         (presentation.componentGraph?.edges?.size ?: 0) > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION
     val capped = presentation.copy(
         ranges = presentation.ranges.take(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION),
         tables = presentation.tables.map { table ->
-            table.copy(records = table.records.take(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION))
+            table.withBoundedRecords(table.records.takeDeterministicRecordPrefix(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION))
         },
         diagnostics = presentation.diagnostics.take(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION),
         componentGraph = presentation.componentGraph?.let { graph ->
@@ -175,7 +240,7 @@ internal fun boundParserWorkerSuccess(
             )
         },
     )
-    val total = presentation.responseRecordCount().toLong() + omittedRecordCount
+    val total = presentation.responseRecordCount().toLong() + omittedRecordCount + if (producerRecordLimited) 1 else 0
     require(total <= Int.MAX_VALUE) { "Parser-worker record count exceeds the wire representation." }
     val totalCount = total.toInt()
     val cappedTotal = capped.responseRecordCount()
@@ -217,9 +282,15 @@ internal fun encodeBoundedParserWorkerSuccess(
     requestId: String,
     presentation: ParserWorkerPresentation,
     omittedRecordCount: Int = 0,
+    producerRecordLimited: Boolean = false,
 ): dynamic {
     require(isValidParserWorkerRequestId(requestId)) { "Invalid parser-worker request ID." }
-    val bounded = boundParserWorkerSuccess(requestId, presentation, omittedRecordCount = omittedRecordCount)
+    val bounded = boundParserWorkerSuccess(
+        requestId,
+        presentation,
+        omittedRecordCount = omittedRecordCount,
+        producerRecordLimited = producerRecordLimited,
+    )
     return encodeSuccessWire(requestId, bounded.presentation, bounded.partial)
 }
 
@@ -261,7 +332,7 @@ private fun partialMetadata(
 }
 
 private fun ParserWorkerPresentation.responseRecordCount(): Int {
-    val count = ranges.size.toLong() + tables.sumOf { it.records.size.toLong() } + diagnostics.size.toLong() +
+    val count = ranges.size.toLong() + tables.sumOf { it.records.recordCount().toLong() } + diagnostics.size.toLong() +
         (componentGraph?.nodes?.size ?: 0) + (componentGraph?.edges?.size ?: 0)
     require(count <= Int.MAX_VALUE) { "Parser-worker record count exceeds the wire representation." }
     return count.toInt()
@@ -272,9 +343,9 @@ private fun ParserWorkerPresentation.takeDeterministicPrefix(count: Int): Parser
     val ranges = ranges.take(minOf(remaining, ranges.size))
     remaining -= ranges.size
     val tables = tables.map { table ->
-        val emitted = minOf(remaining, table.records.size)
-        remaining -= emitted
-        table.copy(records = table.records.take(emitted))
+        val records = table.records.takeDeterministicRecordPrefix(remaining)
+        remaining -= records.recordCount()
+        table.withBoundedRecords(records)
     }
     val diagnostics = diagnostics.take(minOf(remaining, diagnostics.size))
     remaining -= diagnostics.size
@@ -285,6 +356,34 @@ private fun ParserWorkerPresentation.takeDeterministicPrefix(count: Int): Parser
         graph.copy(nodes = nodes, edges = edges)
     }
     return copy(ranges = ranges, tables = tables, diagnostics = diagnostics, componentGraph = componentGraph)
+}
+
+private fun ParserWorkerTable.withBoundedRecords(records: List<ParserWorkerRecord>): ParserWorkerTable = copy(
+    records = records,
+    filters = filters.map { filter ->
+        filter.copy(matchingRootRows = filter.matchingRootRows.filter { it in records.indices })
+    },
+)
+
+private fun List<ParserWorkerRecord>.recordCount(): Int {
+    val count = fold(0L) { total, record -> total + record.recordCount() }
+    require(count <= Int.MAX_VALUE) { "Parser-worker record count exceeds the wire representation." }
+    return count.toInt()
+}
+
+private fun ParserWorkerRecord.recordCount(): Long =
+    1L + children.fold(0L) { total, child -> total + child.recordCount() }
+
+private fun List<ParserWorkerRecord>.takeDeterministicRecordPrefix(limit: Int): List<ParserWorkerRecord> {
+    var remaining = limit
+    fun take(records: List<ParserWorkerRecord>): List<ParserWorkerRecord> = buildList {
+        for (record in records) {
+            if (remaining == 0) break
+            remaining--
+            add(record.copy(children = take(record.children)))
+        }
+    }
+    return take(this)
 }
 
 internal fun decodeParserWorkerSuccess(value: dynamic, requestId: String): BoundedParserWorkerSuccess? {
@@ -330,7 +429,7 @@ internal fun decodeParserWorkerSuccess(
         val emitted = safeWireInt(partial.emittedCount) ?: return null
         val total = if (partial.totalCount == null) null else safeWireInt(partial.totalCount) ?: return null
         val lowerBound = if (partial.totalCountLowerBound == null) null else safeWireInt(partial.totalCountLowerBound) ?: return null
-        val actual = ranges.size + tables.sumOf { it.records.size } + diagnostics.size +
+        val actual = ranges.size + tables.sumOf { it.records.recordCount() } + diagnostics.size +
             componentGraph.nodes.size + componentGraph.edges.size
         if (emitted != actual || !isValidPartialMetadata(isPartial, reasons, emitted, total, lowerBound)) return null
 
@@ -382,12 +481,21 @@ internal fun encodeSuccessWire(requestId: String, presentation: ParserWorkerPres
         val wire = wireObject()
         wire.id = table.id
         wire.columns = table.columns.toTypedArray()
-        wire.records = table.records.map { record ->
-            val item = wireObject()
-            item.key = record.key; item.value = record.value; item.values = record.values.toTypedArray()
-            item.offset = record.offset; item.size = record.size
-            item
+        wire.prologueText = table.prologueText
+        wire.emptyMessage = table.emptyMessage
+        wire.defaultSortColumn = table.defaultSortColumn
+        wire.defaultSortAscending = table.defaultSortAscending
+        wire.alwaysShowSearch = table.alwaysShowSearch
+        wire.searchPlaceholder = table.searchPlaceholder
+        wire.showIdColumn = table.showIdColumn
+        wire.filters = table.filters.map { filter ->
+            val filterWire = wireObject()
+            filterWire.label = filter.label
+            filterWire.matchingRootRows = filter.matchingRootRows.toTypedArray()
+            filterWire
         }.toTypedArray()
+        wire.defaultFilterShowAll = table.defaultFilterShowAll
+        wire.records = table.records.map(::encodeRecordWire).toTypedArray()
         wire
     }.toTypedArray()
     value.presentation.componentGraph = presentation.componentGraph?.let { graph ->
@@ -408,6 +516,14 @@ internal fun encodeSuccessWire(requestId: String, presentation: ParserWorkerPres
     val toolbar = wireObject()
     toolbar.runnableExportName = presentation.toolbar.runnableExportName
     toolbar.proposalIds = presentation.toolbar.proposalIds.toTypedArray()
+    toolbar.nativeImage = presentation.toolbar.nativeImage?.let { nativeImage ->
+        val nativeImageWire = wireObject()
+        nativeImageWire.version = nativeImage.version
+        nativeImageWire.edition = nativeImage.edition
+        nativeImageWire.platform = nativeImage.platform
+        nativeImageWire.hasSbom = nativeImage.hasSbom
+        nativeImageWire
+    }
     value.presentation.toolbar = toolbar
     value.presentation.diagnostics = presentation.diagnostics.map { diagnostic ->
         val wire = wireObject()
@@ -422,6 +538,24 @@ internal fun encodeSuccessWire(requestId: String, presentation: ParserWorkerPres
     return value
 }
 
+private fun encodeRecordWire(record: ParserWorkerRecord): dynamic {
+    val item = wireObject()
+    item.key = record.key; item.value = record.value; item.values = record.values.toTypedArray()
+    item.offset = record.offset; item.size = record.size
+    item.numericValues = record.numericValues.toTypedArray()
+    item.actions = record.actions.map { action ->
+        val actionWire = wireObject()
+        actionWire.kind = action.kind; actionWire.index = action.index; actionWire.name = action.name
+        actionWire.offset = action.offset; actionWire.size = action.size
+        actionWire.dataOffset = action.dataOffset; actionWire.compressedSize = action.compressedSize
+        actionWire.uncompressedSize = action.uncompressedSize?.toDouble(); actionWire.compressionMethod = action.compressionMethod
+        actionWire.contentType = action.contentType; actionWire.openable = action.openable
+        actionWire
+    }.toTypedArray()
+    item.children = record.children.map(::encodeRecordWire).toTypedArray()
+    return item
+}
+
 internal fun utf8WireBytes(value: dynamic): Int =
     js("new TextEncoder().encode(JSON.stringify(value)).length").unsafeCast<Int>()
 
@@ -434,6 +568,9 @@ internal fun parserWorkerResponseEnvelopeBytesOrNull(value: dynamic): Int? = try
 
 internal fun isValidParserWorkerRequestId(value: String): Boolean =
     value.isNotBlank() && value.length <= MAX_PARSER_WORKER_REQUEST_ID_CHARS
+
+internal fun isValidParserWorkerFileName(value: String): Boolean =
+    value.length <= MAX_PARSER_WORKER_FILE_NAME_CHARS
 
 /**
  * Drops whole presentation records whose untrusted parser-derived strings cannot fit the protocol.
@@ -460,18 +597,70 @@ internal fun sanitizeParserWorkerPresentation(presentation: ParserWorkerPresenta
             if (!valid) omit()
         }
     }
-    val tables = presentation.tables.mapNotNull { table ->
-        val records = table.records.filter { record ->
-            val valid = record.key.length <= MAX_RECORD_KEY_CHARS &&
-                record.value.length <= MAX_RECORD_VALUE_CHARS &&
-                record.values.size in 1..MAX_RECORD_VALUES &&
-                record.values.all { it.length <= MAX_RECORD_VALUE_CHARS } &&
-                record.values.size == table.columns.size &&
-                isValidRecordRange(record, summary.inputBytes)
-            if (!valid) omit()
-            valid
+    fun sanitizeRecord(record: ParserWorkerRecord, columnCount: Int, depth: Int): ParserWorkerRecord? {
+        val valid = record.key.length <= MAX_RECORD_KEY_CHARS &&
+            record.value.length <= MAX_RECORD_VALUE_CHARS &&
+            record.values.size in 1..MAX_RECORD_VALUES &&
+            record.values.all { it.length <= MAX_RECORD_VALUE_CHARS } &&
+            record.values.size == columnCount &&
+            record.numericValues.size == columnCount &&
+            record.numericValues.all { it == null || (it.isFinite() && it >= -9_007_199_254_740_991.0 && it <= 9_007_199_254_740_991.0) } &&
+            isValidRecordRange(record, summary.inputBytes)
+        if (!valid) {
+            omit()
+            return null
         }
-        table.copy(records = records).takeIf { records.isNotEmpty() }
+        val actions = record.actions.filter { action ->
+            isValidAction(action, summary.inputBytes).also { actionValid -> if (!actionValid) omit() }
+        }
+        if (depth >= MAX_RECORD_TREE_DEPTH) {
+            omit(record.children.recordCount())
+            return record.copy(actions = actions, children = emptyList())
+        }
+        val children = record.children.take(MAX_RECORD_CHILDREN).mapNotNull { child -> sanitizeRecord(child, columnCount, depth + 1) }
+        if (record.children.size > MAX_RECORD_CHILDREN) omit(record.children.drop(MAX_RECORD_CHILDREN).recordCount())
+        return record.copy(actions = actions, children = children)
+    }
+    val tables = presentation.tables.mapNotNull { table ->
+        val validTableMetadata = table.id.isNotBlank() && table.id.length <= MAX_TABLE_ID_CHARS &&
+            table.columns.size in 1..MAX_TABLE_COLUMNS && table.columns.all { it.length <= MAX_TABLE_COLUMN_CHARS } &&
+            (table.defaultSortColumn == null || table.defaultSortColumn == TableTabDescriptor.ID_COLUMN ||
+                table.defaultSortColumn in table.columns.indices) &&
+            (table.searchPlaceholder == null || table.searchPlaceholder.length <= MAX_TABLE_TEXT_CHARS)
+        if (!validTableMetadata) {
+            omit(table.records.recordCount())
+            return@mapNotNull null
+        }
+        val prologueText = table.prologueText?.takeIf { it.length <= MAX_TABLE_TEXT_CHARS }.also {
+            if (table.prologueText != null && it == null) omit()
+        }
+        val emptyMessage = table.emptyMessage?.takeIf { it.length <= MAX_TABLE_TEXT_CHARS }.also {
+            if (table.emptyMessage != null && it == null) omit()
+        }
+        val retainedRootRowsByOriginalRow = mutableMapOf<Int, Int>()
+        val records = buildList {
+            table.records.forEachIndexed { originalRow, record ->
+                sanitizeRecord(record, table.columns.size, depth = 0)?.let { sanitizedRecord ->
+                    retainedRootRowsByOriginalRow[originalRow] = size
+                    add(sanitizedRecord)
+                }
+            }
+        }
+        val filters = table.filters.take(MAX_TABLE_FILTERS).mapNotNull { filter ->
+            if (
+                filter.label.isBlank() || filter.label.length > MAX_TABLE_TEXT_CHARS ||
+                filter.matchingRootRows.size > table.records.size ||
+                filter.matchingRootRows.distinct().size != filter.matchingRootRows.size ||
+                filter.matchingRootRows.any { it !in table.records.indices }
+            ) {
+                omit()
+                null
+            } else {
+                filter.copy(matchingRootRows = filter.matchingRootRows.mapNotNull(retainedRootRowsByOriginalRow::get))
+            }
+        }
+        if (table.filters.size > MAX_TABLE_FILTERS) omit(table.filters.size - MAX_TABLE_FILTERS)
+        table.copy(records = records, prologueText = prologueText, emptyMessage = emptyMessage, filters = filters)
     }
     val diagnostics = presentation.diagnostics.filter { diagnostic ->
         val valid = diagnostic.code.length <= MAX_DIAGNOSTIC_CODE_CHARS && diagnostic.message.length <= MAX_DIAGNOSTIC_MESSAGE_CHARS
@@ -536,14 +725,23 @@ private fun requireValidProducerPresentation(presentation: ParserWorkerPresentat
         require(table.columns.size in 1..MAX_TABLE_COLUMNS && table.columns.all { it.length <= MAX_TABLE_COLUMN_CHARS }) {
             "Invalid parser-worker table columns."
         }
+        require((table.prologueText == null || table.prologueText.length <= MAX_TABLE_TEXT_CHARS) &&
+            (table.emptyMessage == null || table.emptyMessage.length <= MAX_TABLE_TEXT_CHARS)) {
+            "Parser-worker table text is too long."
+        }
+        require(table.defaultSortColumn == null || table.defaultSortColumn == TableTabDescriptor.ID_COLUMN ||
+            table.defaultSortColumn in table.columns.indices) { "Invalid parser-worker table sort column." }
+        require(table.searchPlaceholder == null || table.searchPlaceholder.length <= MAX_TABLE_TEXT_CHARS) {
+            "Parser-worker table search placeholder is too long."
+        }
+        require(table.filters.size <= MAX_TABLE_FILTERS && table.filters.all { filter ->
+            filter.label.isNotBlank() && filter.label.length <= MAX_TABLE_TEXT_CHARS &&
+                filter.matchingRootRows.size <= table.records.size &&
+                filter.matchingRootRows.distinct().size == filter.matchingRootRows.size &&
+                filter.matchingRootRows.all { it in table.records.indices }
+        }) { "Invalid parser-worker table filters." }
         table.records.forEach { record ->
-            require(record.key.length <= MAX_RECORD_KEY_CHARS) { "Parser-worker record key is too long." }
-            require(record.value.length <= MAX_RECORD_VALUE_CHARS) { "Parser-worker record value is too long." }
-            require(record.values.size in 1..MAX_RECORD_VALUES && record.values.all { it.length <= MAX_RECORD_VALUE_CHARS }) {
-                "Invalid parser-worker record values."
-            }
-            require(record.values.size == table.columns.size) { "Parser-worker record values do not match table columns." }
-            require(isValidRecordRange(record, presentation.summary.inputBytes)) { "Invalid parser-worker record range." }
+            requireValidRecord(record, table.columns.size, presentation.summary.inputBytes, depth = 0)
         }
     }
     require(presentation.tables.map { it.id }.distinct().size == presentation.tables.size) {
@@ -578,7 +776,14 @@ private fun isValidToolbar(format: String, toolbar: ParserWorkerToolbar): Boolea
             "core_wasm" -> toolbar.runnableExportName == null || toolbar.runnableExportName in setOf("_start", "_initialize")
             "wasm_component" -> toolbar.runnableExportName == null || toolbar.runnableExportName == "wasi:cli/run"
             else -> toolbar.runnableExportName == null
-        }
+        } &&
+        (toolbar.nativeImage == null ||
+            (format in setOf("elf", "macho", "pe") && isValidNativeImage(toolbar.nativeImage)))
+
+private fun isValidNativeImage(nativeImage: ParserWorkerNativeImage): Boolean =
+    nativeImage.edition in setOf("community", "enterprise", "unknown") &&
+        (nativeImage.version == null || nativeImage.version.length <= MAX_NATIVE_IMAGE_TEXT_CHARS) &&
+        (nativeImage.platform == null || nativeImage.platform.length <= MAX_NATIVE_IMAGE_TEXT_CHARS)
 
 private fun hasCoherentContent(
     format: String,
@@ -622,6 +827,54 @@ private fun isValidRecordRange(record: ParserWorkerRecord, inputBytes: Int): Boo
     record.offset == null && record.size == null -> true
     record.offset == null || record.size == null -> false
     else -> record.offset >= 0 && record.size > 0 && record.size <= inputBytes && record.offset <= inputBytes - record.size
+}
+
+private fun requireValidRecord(record: ParserWorkerRecord, columnCount: Int, inputBytes: Int, depth: Int) {
+    require(record.key.length <= MAX_RECORD_KEY_CHARS) { "Parser-worker record key is too long." }
+    require(record.value.length <= MAX_RECORD_VALUE_CHARS) { "Parser-worker record value is too long." }
+    require(record.values.size in 1..MAX_RECORD_VALUES && record.values.all { it.length <= MAX_RECORD_VALUE_CHARS }) {
+        "Invalid parser-worker record values."
+    }
+    require(record.values.size == columnCount) { "Parser-worker record values do not match table columns." }
+    require(record.numericValues.size == columnCount && record.numericValues.all { value ->
+        value == null || (value.isFinite() && value >= -9_007_199_254_740_991.0 && value <= 9_007_199_254_740_991.0)
+    }) { "Invalid parser-worker record numeric values." }
+    require(isValidRecordRange(record, inputBytes)) { "Invalid parser-worker record range." }
+    require(record.actions.size <= MAX_RECORD_ACTIONS && record.actions.all { isValidAction(it, inputBytes) }) {
+        "Invalid parser-worker record action."
+    }
+    require(record.children.size <= MAX_RECORD_CHILDREN) { "Too many parser-worker child records." }
+    require(depth < MAX_RECORD_TREE_DEPTH || record.children.isEmpty()) { "Parser-worker record tree is too deep." }
+    record.children.forEach { child -> requireValidRecord(child, columnCount, inputBytes, depth + 1) }
+}
+
+private fun isValidAction(action: ParserWorkerAction, inputBytes: Int): Boolean {
+    if (
+        action.kind.length > MAX_ACTION_KIND_CHARS ||
+        (action.name?.length ?: 0) > MAX_ACTION_NAME_CHARS ||
+        (action.contentType?.length ?: 0) > MAX_ACTION_CONTENT_TYPE_CHARS
+    ) {
+        return false
+    }
+    fun validRange(offset: Int?, size: Int?): Boolean =
+        offset != null && size != null && offset >= 0 && size >= 0 && size <= inputBytes && offset <= inputBytes - size
+
+    return when (action.kind) {
+        "zip_entry" ->
+            action.index == null && !action.name.isNullOrBlank() && action.offset == null && action.size == null &&
+                validRange(action.dataOffset, action.compressedSize) && action.uncompressedSize != null &&
+                action.uncompressedSize in 0..9_007_199_254_740_991L &&
+                action.compressionMethod != null && action.compressionMethod in 0..0xffff && action.contentType == null && !action.openable
+        "archive_member" ->
+            action.index != null && action.index >= 0 && !action.name.isNullOrBlank() && validRange(action.offset, action.size) &&
+                action.dataOffset == null && action.compressedSize == null && action.uncompressedSize == null &&
+                action.compressionMethod == null && action.contentType == null
+        "pcap_http_body" ->
+            action.index != null && action.index >= 0 && !action.name.isNullOrBlank() && validRange(action.offset, action.size) &&
+                action.dataOffset == null && action.compressedSize == null && action.uncompressedSize == null &&
+                action.compressionMethod == null
+        else -> false
+    }
 }
 
 private fun requireValidComponentGraph(graph: ParserWorkerComponentGraph) {
@@ -709,20 +962,107 @@ private fun decodeTables(value: dynamic, inputBytes: Int): List<ParserWorkerTabl
         if (columns.isEmpty()) return null
         val records = item.records as? Array<dynamic> ?: return null
         if (records.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION) return null
-        ParserWorkerTable(safeString(item.id, MAX_TABLE_ID_CHARS) ?: return null, records.map { record ->
-            if (!isPlainWireObject(record)) return null
-            val values = decodeStrings(record.values, MAX_RECORD_VALUES, MAX_RECORD_VALUE_CHARS) ?: return null
-            ParserWorkerRecord(
-                safeString(record.key, MAX_RECORD_KEY_CHARS) ?: return null,
-                safeString(record.value, MAX_RECORD_VALUE_CHARS) ?: return null,
-                values,
-                if (record.offset == null) null else safeWireInt(record.offset) ?: return null,
-                if (record.size == null) null else safeWireInt(record.size) ?: return null,
-            )
-        }.also { decoded ->
-            if (!decoded.all { it.values.size == columns.size && isValidRecordRange(it, inputBytes) }) return null
-        }, columns).takeIf { it.id.isNotBlank() } ?: return null
+        ParserWorkerTable(
+            id = safeString(item.id, MAX_TABLE_ID_CHARS) ?: return null,
+            records = records.map { record ->
+                decodeRecord(record, columns.size, inputBytes) ?: return null
+            }.also { decoded ->
+                if (!decoded.all { record ->
+                        isValidRecord(record, columns.size, inputBytes)
+                    }) return null
+            },
+            columns = columns,
+            prologueText = if (item.prologueText == null) null else safeString(item.prologueText, MAX_TABLE_TEXT_CHARS) ?: return null,
+            emptyMessage = if (item.emptyMessage == null) null else safeString(item.emptyMessage, MAX_TABLE_TEXT_CHARS) ?: return null,
+            defaultSortColumn = if (item.defaultSortColumn == null) null else safeWireIntAllowNegativeOne(item.defaultSortColumn) ?: return null,
+            defaultSortAscending = item.defaultSortAscending as? Boolean ?: return null,
+            alwaysShowSearch = item.alwaysShowSearch as? Boolean ?: return null,
+            searchPlaceholder = if (item.searchPlaceholder == null) null else safeString(item.searchPlaceholder, MAX_TABLE_TEXT_CHARS) ?: return null,
+            showIdColumn = item.showIdColumn as? Boolean ?: return null,
+            filters = decodeTableFilters(item.filters, records.size) ?: return null,
+            defaultFilterShowAll = item.defaultFilterShowAll as? Boolean ?: return null,
+        ).takeIf { table ->
+            table.id.isNotBlank() &&
+                (table.defaultSortColumn == null || table.defaultSortColumn == TableTabDescriptor.ID_COLUMN ||
+                    table.defaultSortColumn in table.columns.indices)
+        } ?: return null
     }.takeIf { tables -> tables.map { it.id }.distinct().size == tables.size }
+}
+
+private fun decodeRecord(value: dynamic, columnCount: Int, inputBytes: Int, depth: Int = 0): ParserWorkerRecord? {
+    if (!isPlainWireObject(value)) return null
+    if (depth > MAX_RECORD_TREE_DEPTH) return null
+    val values = decodeStrings(value.values, MAX_RECORD_VALUES, MAX_RECORD_VALUE_CHARS) ?: return null
+    val numericValues = decodeNumericValues(value.numericValues, columnCount) ?: return null
+    val children = value.children as? Array<dynamic> ?: return null
+    if (children.size > MAX_RECORD_CHILDREN) return null
+    val record = ParserWorkerRecord(
+        safeString(value.key, MAX_RECORD_KEY_CHARS) ?: return null,
+        safeString(value.value, MAX_RECORD_VALUE_CHARS) ?: return null,
+        values,
+        if (value.offset == null) null else safeWireInt(value.offset) ?: return null,
+        if (value.size == null) null else safeWireInt(value.size) ?: return null,
+        decodeActions(value.actions, inputBytes) ?: return null,
+        children.map { child -> decodeRecord(child, columnCount, inputBytes, depth + 1) ?: return null },
+        numericValues,
+    )
+    return record.takeIf { isValidRecord(it, columnCount, inputBytes, depth) }
+}
+
+private fun isValidRecord(record: ParserWorkerRecord, columnCount: Int, inputBytes: Int, depth: Int = 0): Boolean =
+    record.values.size == columnCount && isValidRecordRange(record, inputBytes) &&
+        record.numericValues.size == columnCount &&
+        record.numericValues.all { value ->
+            value == null || (value.isFinite() && value >= -9_007_199_254_740_991.0 && value <= 9_007_199_254_740_991.0)
+        } &&
+        record.actions.size <= MAX_RECORD_ACTIONS && record.actions.all { isValidAction(it, inputBytes) } &&
+        record.children.size <= MAX_RECORD_CHILDREN &&
+        (depth < MAX_RECORD_TREE_DEPTH || record.children.isEmpty()) &&
+        record.children.all { isValidRecord(it, columnCount, inputBytes, depth + 1) }
+
+private fun decodeNumericValues(value: dynamic, columnCount: Int): List<Double?>? {
+    val array = value as? Array<dynamic> ?: return null
+    if (array.size != columnCount) return null
+    return array.map { item ->
+        if (item == null) null else safeWireFiniteNumber(item) ?: return null
+    }
+}
+
+private fun decodeTableFilters(value: dynamic, rootRecordCount: Int): List<ParserWorkerTableFilter>? {
+    val array = value as? Array<dynamic> ?: return null
+    if (array.size > MAX_TABLE_FILTERS) return null
+    return array.map { item ->
+        if (!isPlainWireObject(item)) return null
+        val matching = item.matchingRootRows as? Array<dynamic> ?: return null
+        ParserWorkerTableFilter(
+            label = safeString(item.label, MAX_TABLE_TEXT_CHARS)?.takeIf { it.isNotBlank() } ?: return null,
+            matchingRootRows = matching.map { safeWireInt(it) ?: return null },
+        ).takeIf { filter ->
+            filter.matchingRootRows.distinct().size == filter.matchingRootRows.size &&
+                filter.matchingRootRows.all { it in 0 until rootRecordCount }
+        } ?: return null
+    }
+}
+
+private fun decodeActions(value: dynamic, inputBytes: Int): List<ParserWorkerAction>? {
+    val array = value as? Array<dynamic> ?: return null
+    if (array.size > MAX_RECORD_ACTIONS) return null
+    return array.map { item ->
+        if (!isPlainWireObject(item)) return null
+        ParserWorkerAction(
+            kind = safeString(item.kind, MAX_ACTION_KIND_CHARS) ?: return null,
+            index = if (item.index == null) null else safeWireInt(item.index) ?: return null,
+            name = if (item.name == null) null else safeString(item.name, MAX_ACTION_NAME_CHARS) ?: return null,
+            offset = if (item.offset == null) null else safeWireInt(item.offset) ?: return null,
+            size = if (item.size == null) null else safeWireInt(item.size) ?: return null,
+            dataOffset = if (item.dataOffset == null) null else safeWireInt(item.dataOffset) ?: return null,
+            compressedSize = if (item.compressedSize == null) null else safeWireInt(item.compressedSize) ?: return null,
+            uncompressedSize = if (item.uncompressedSize == null) null else safeWireLong(item.uncompressedSize) ?: return null,
+            compressionMethod = if (item.compressionMethod == null) null else safeWireInt(item.compressionMethod) ?: return null,
+            contentType = if (item.contentType == null) null else safeString(item.contentType, MAX_ACTION_CONTENT_TYPE_CHARS) ?: return null,
+            openable = item.openable as? Boolean ?: return null,
+        ).takeIf { isValidAction(it, inputBytes) } ?: return null
+    }
 }
 
 private fun decodeComponentGraph(value: dynamic): ParserWorkerComponentGraph? {
@@ -778,8 +1118,20 @@ private fun decodeToolbar(value: dynamic, format: String): ParserWorkerToolbar? 
     val toolbar = ParserWorkerToolbar(
         if (value.runnableExportName == null) null else safeString(value.runnableExportName, MAX_TOOLBAR_RUNNABLE_EXPORT_CHARS) ?: return null,
         decodeStrings(value.proposalIds, MAX_TOOLBAR_PROPOSALS, MAX_TOOLBAR_PROPOSAL_ID_CHARS) ?: return null,
+        decodeNativeImage(value.nativeImage),
     )
     return toolbar.takeIf { isValidToolbar(format, it) }
+}
+
+private fun decodeNativeImage(value: dynamic): ParserWorkerNativeImage? {
+    if (value == null) return null
+    if (!isPlainWireObject(value)) return null
+    return ParserWorkerNativeImage(
+        version = if (value.version == null) null else safeString(value.version, MAX_NATIVE_IMAGE_TEXT_CHARS) ?: return null,
+        edition = safeString(value.edition, MAX_NATIVE_IMAGE_TEXT_CHARS) ?: return null,
+        platform = if (value.platform == null) null else safeString(value.platform, MAX_NATIVE_IMAGE_TEXT_CHARS) ?: return null,
+        hasSbom = value.hasSbom as? Boolean ?: return null,
+    ).takeIf(::isValidNativeImage)
 }
 
 private fun decodeStrings(value: dynamic, maxItems: Int, maxLength: Int): List<String>? {
@@ -794,5 +1146,26 @@ internal fun safeWireInt(value: dynamic): Int? {
     if (jsTypeOf(value) != "number") return null
     val number = value.unsafeCast<Double>()
     return number.takeIf { it.isFinite() && it >= 0 && it <= Int.MAX_VALUE && it % 1.0 == 0.0 }?.toInt()
+}
+private fun safeWireIntAllowNegativeOne(value: dynamic): Int? {
+    if (jsTypeOf(value) != "number") return null
+    val number = value.unsafeCast<Double>()
+    return when {
+        number == -1.0 -> -1
+        number.isFinite() && number >= 0 && number <= Int.MAX_VALUE && number % 1.0 == 0.0 -> number.toInt()
+        else -> null
+    }
+}
+
+private fun safeWireFiniteNumber(value: dynamic): Double? {
+    if (jsTypeOf(value) != "number") return null
+    return value.unsafeCast<Double>().takeIf {
+        it.isFinite() && it >= -9_007_199_254_740_991.0 && it <= 9_007_199_254_740_991.0
+    }
+}
+internal fun safeWireLong(value: dynamic): Long? {
+    if (jsTypeOf(value) != "number") return null
+    val number = value.unsafeCast<Double>()
+    return number.takeIf { it.isFinite() && it >= 0 && it <= 9_007_199_254_740_991.0 && it % 1.0 == 0.0 }?.toLong()
 }
 internal fun safeWireDouble(value: dynamic): Double? = if (jsTypeOf(value) == "number") value.unsafeCast<Double>().takeIf { it.isFinite() && it >= 0 } else null

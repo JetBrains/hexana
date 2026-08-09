@@ -8,6 +8,27 @@ import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import kotlin.js.Promise
 
+/** Executes a user script outside the Compose UI thread. */
+interface ScriptExecution {
+    fun start(
+        scriptContent: String,
+        onLine: (String) -> Unit,
+        onComplete: (String?) -> Unit,
+    ): ScriptExecutionHandle
+}
+
+interface ScriptExecutionHandle {
+    fun cancel()
+}
+
+private object NoopScriptExecutionHandle : ScriptExecutionHandle {
+    override fun cancel() = Unit
+}
+
+private class ScriptRunScope {
+    var generation: Int = 0
+}
+
 /**
  * Detects whether the first two lines look like CSV or TSV.
  * Returns the delimiter character if detected, or `null` for plain text.
@@ -387,6 +408,7 @@ internal fun ScriptTabContent(
     scriptContent: String,
     provider: BinaryProvider,
     onRequestRefresh: () -> Unit,
+    scriptExecution: ScriptExecution? = null,
 ) {
     val outputLines = remember { mutableStateListOf<String>() }
     var isRunning by remember { mutableStateOf(false) }
@@ -398,10 +420,12 @@ internal fun ScriptTabContent(
     val pendingLines = remember { mutableListOf<String>() }
     var scriptDone by remember { mutableStateOf(false) }
     var scriptError by remember { mutableStateOf<String?>(null) }
+    val runScope = remember { ScriptRunScope() }
 
     // Re-execute whenever scriptContent or executionKey changes
-    LaunchedEffect(scriptContent, executionKey) {
+    LaunchedEffect(scriptContent, executionKey, scriptExecution) {
         if (scriptContent.isBlank()) return@LaunchedEffect
+        val runGeneration = ++runScope.generation
         outputLines.clear()
         pendingLines.clear()
         error = null
@@ -409,27 +433,41 @@ internal fun ScriptTabContent(
         scriptDone = false
         isRunning = true
 
-        // Launch script in a Web Worker
-        val promise = executeScriptAsync(scriptContent, provider) { line ->
-            pendingLines.add(line)
+        fun acceptLine(line: String) {
+            if (runScope.generation == runGeneration) pendingLines.add(line)
         }
-        promise.then { err -> scriptError = err; scriptDone = true }
+        fun complete(errorMessage: String?) {
+            if (runScope.generation == runGeneration) {
+                scriptError = errorMessage
+                scriptDone = true
+            }
+        }
+        val handle = scriptExecution?.start(scriptContent, ::acceptLine, ::complete)
+            ?: run {
+                executeScriptAsync(scriptContent, provider, ::acceptLine).then(::complete)
+                NoopScriptExecutionHandle
+            }
 
-        // Poll for new lines until the script finishes
-        while (!scriptDone) {
-            delay(50)
+        try {
+            // Poll for new lines until the script finishes.
+            while (!scriptDone) {
+                delay(50)
+                if (pendingLines.isNotEmpty()) {
+                    outputLines.addAll(pendingLines)
+                    pendingLines.clear()
+                }
+            }
+            // Drain any remaining lines
             if (pendingLines.isNotEmpty()) {
                 outputLines.addAll(pendingLines)
                 pendingLines.clear()
             }
+            error = scriptError
+            isRunning = false
+        } finally {
+            handle.cancel()
+            if (runScope.generation == runGeneration) runScope.generation++
         }
-        // Drain any remaining lines
-        if (pendingLines.isNotEmpty()) {
-            outputLines.addAll(pendingLines)
-            pendingLines.clear()
-        }
-        error = scriptError
-        isRunning = false
     }
 
     Div({

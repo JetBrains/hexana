@@ -62,6 +62,7 @@ fun HexanaPanel(
     onDialogPickedPathConsumed: () -> Unit = {},
     onScriptTabConfirmed: (path: String, content: String) -> Unit = { _, _ -> },
     onScriptTabRemoved: (path: String) -> Unit = {},
+    scriptExecution: ScriptExecution? = null,
 ) {
     val host = LocalHost.current
     val pendingRun = rememberPendingRunState()
@@ -195,6 +196,7 @@ fun HexanaPanel(
                         scriptContent = st.content,
                         provider = provider,
                         onRequestRefresh = { host.readScriptFile(st.path) },
+                        scriptExecution = scriptExecution,
                     )
                 })
             }
