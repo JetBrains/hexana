@@ -35,6 +35,7 @@ import org.jetbrains.hexana.providers.sbom.extractSbomJson
 import org.jetbrains.hexana.shared.componentExternDescriptionLabel
 import org.jetbrains.hexana.shared.componentSortIndexLabel
 import org.jetbrains.hexana.shared.exportKindLabel
+import org.jetbrains.hexana.shared.fileTypeDescription
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.shared.TableTabChildRows
 import org.jetbrains.hexana.shared.TableTabDescriptor
@@ -332,9 +333,11 @@ private suspend fun nonWasmPresentation(
     }
     val nativeImage = (provider as? NativeBinaryProvider)?.nativeImageInfo?.takeIf { it.isNativeImage }
     nativeImage?.let { info ->
-        nativeImageTables(provider, info).forEach { table ->
+        val nativeImageTables = nativeImageTables(provider, info)
+        nativeImageTables.tables.forEach { table ->
             if (tables.size < MAX_PARSER_WORKER_TABLES) tables += table else producerRecordLimited = true
         }
+        producerRecordLimited = producerRecordLimited || nativeImageTables.producerRecordLimited
     }
     val sourceRanges = provider.structureRanges
     if (sourceRanges.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION) producerRecordLimited = true
@@ -349,10 +352,8 @@ private suspend fun nonWasmPresentation(
             SCOPE_MARKER, true, inputBytes, sourceRanges.size, 0, 0, 0,
             now() - startedAt,
         ),
-        ranges = sourceRanges.take(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION).mapNotNull { range ->
-            val offset = range.offset.toInt()
-            val size = range.size.toInt()
-            ParserWorkerRange(offset, size, range.label).takeIf { offset >= 0 && size > 0 && offset <= inputBytes - size }
+        ranges = sourceRanges.take(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION).map { range ->
+            ParserWorkerRange(range.offset.toInt(), range.size.toInt(), range.label)
         },
         tables = tables,
         toolbar = ParserWorkerToolbar(
@@ -365,13 +366,25 @@ private suspend fun nonWasmPresentation(
                 )
             },
         ),
+        displayLabel = fileTypeDescription(provider, fileName),
     ), producerRecordLimited)
 }
+
+private const val MAX_WORKER_SBOM_TEXT_ITEMS = 64
+private const val MAX_WORKER_SBOM_CELL_CHARS = 16_384
+private const val MAX_WORKER_SBOM_TABLE_TEXT_CHARS = 1_024
+private val oversizedWorkerSbomCell = "x".repeat(MAX_WORKER_SBOM_CELL_CHARS + 1)
+private val oversizedWorkerSbomTableText = "x".repeat(MAX_WORKER_SBOM_TABLE_TEXT_CHARS + 1)
+
+private data class BoundedWorkerText(
+    val value: String,
+    val sourceTailLimited: Boolean = false,
+)
 
 private suspend fun nativeImageTables(
     provider: NativeBinaryProvider,
     info: NativeImageInfo,
-): List<ParserWorkerTable> {
+): MaterializedWorkerTables {
     val nativeImage = ParserWorkerTable(
         id = "Native Image",
         records = listOf(
@@ -382,41 +395,73 @@ private suspend fun nativeImageTables(
         ),
         columns = listOf("Property", "Value"),
     )
-    val locator = info.sbom ?: return listOf(nativeImage)
+    val locator = info.sbom ?: return MaterializedWorkerTables(listOf(nativeImage), false)
     val json = extractSbomJson(provider.bytes, locator)
     val sbom = json?.let(CycloneDxParser::parse)
     if (sbom == null) {
-        return listOf(
+        return MaterializedWorkerTables(listOf(
             nativeImage,
             ParserWorkerTable(
                 id = "SBOM",
                 records = emptyList(),
                 columns = listOf("Component", "Version", "Licenses", "PURL"),
-                prologueText = "CycloneDX SBOM embedded in ${info.version ?: "this Native Image"}.",
+                prologueText = boundedWorkerTableText(buildList {
+                    add("CycloneDX SBOM embedded in ")
+                    add(info.version ?: "this Native Image")
+                    add(".")
+                }),
                 emptyMessage = "Embedded CycloneDX SBOM could not be decoded.",
                 alwaysShowSearch = true,
                 searchPlaceholder = "Search SBOM components…",
                 showIdColumn = false,
             ),
-        )
+        ), false)
     }
-    val format = buildString {
-        append(sbom.bomFormat ?: "CycloneDX")
-        sbom.specVersion?.let { append(' ').append(it) }
-        append(" • ${sbom.components.size} component")
-        if (sbom.components.size != 1) append('s')
-        append(" • ${sbom.dependencies.size} dependenc")
-        append(if (sbom.dependencies.size == 1) "y" else "ies")
-        info.version?.let { append(" • Producer: ").append(it) }
+    var producerRecordLimited = false
+    val format = boundedWorkerTableText(buildList {
+        add(sbom.bomFormat ?: "CycloneDX")
+        sbom.specVersion?.let { specVersion ->
+            add(" ")
+            add(specVersion)
+        }
+        add(" • ${sbom.components.size} component${if (sbom.components.size == 1) "" else "s"}")
+        add(" • ${sbom.dependencies.size} dependenc${if (sbom.dependencies.size == 1) "y" else "ies"}")
+        info.version?.let { version ->
+            add(" • Producer: ")
+            add(version)
+        }
+    })
+    val componentRecords = buildList {
+        val count = minOf(sbom.components.size, MAX_PARSER_WORKER_RECORDS_PER_COLLECTION)
+        for (index in 0 until count) {
+            val component = sbom.components[index]
+            val name = boundedWorkerCell(listOfNotNull(component.group, component.name), ":", emptyValue = "?")
+            val version = boundedWorkerCell(listOf(component.version.orEmpty()))
+            val licenses = boundedWorkerCell(component.licenses, ", ")
+            val purl = boundedWorkerCell(listOf(component.purl.orEmpty()))
+            if (name.sourceTailLimited || version.sourceTailLimited || licenses.sourceTailLimited || purl.sourceTailLimited) {
+                producerRecordLimited = true
+            }
+            add(row(listOf(name.value, version.value, licenses.value, purl.value)))
+        }
+        if (sbom.components.size > count) producerRecordLimited = true
     }
-    return listOf(
+    val dependencyRecords = buildList {
+        val count = minOf(sbom.dependencies.size, MAX_PARSER_WORKER_RECORDS_PER_COLLECTION)
+        for (index in 0 until count) {
+            val dependency = sbom.dependencies[index]
+            val reference = boundedWorkerCell(listOf(dependency.ref))
+            val dependsOn = boundedWorkerCell(dependency.dependsOn, ", ")
+            if (reference.sourceTailLimited || dependsOn.sourceTailLimited) producerRecordLimited = true
+            add(row(listOf(reference.value, dependsOn.value)))
+        }
+        if (sbom.dependencies.size > count) producerRecordLimited = true
+    }
+    return MaterializedWorkerTables(listOf(
         nativeImage,
         ParserWorkerTable(
             id = "SBOM",
-            records = sbom.components.map { component ->
-                val componentName = listOfNotNull(component.group, component.name).joinToString(":").ifBlank { "?" }
-                row(listOf(componentName, component.version.orEmpty(), component.licenses.joinToString(", "), component.purl.orEmpty()))
-            },
+            records = componentRecords,
             columns = listOf("Component", "Version", "Licenses", "PURL"),
             prologueText = format,
             emptyMessage = "No components in the embedded CycloneDX SBOM.",
@@ -427,7 +472,7 @@ private suspend fun nativeImageTables(
         ),
         ParserWorkerTable(
             id = "SBOM Dependencies",
-            records = sbom.dependencies.map { dependency -> row(listOf(dependency.ref, dependency.dependsOn.joinToString(", "))) },
+            records = dependencyRecords,
             columns = listOf("Component", "Depends on"),
             emptyMessage = "No dependency edges in the embedded CycloneDX SBOM.",
             defaultSortColumn = 0,
@@ -435,7 +480,37 @@ private suspend fun nativeImageTables(
             searchPlaceholder = "Search SBOM dependencies…",
             showIdColumn = false,
         ),
-    )
+    ), producerRecordLimited)
+}
+
+private fun boundedWorkerCell(
+    values: List<String>,
+    separator: String = "",
+    emptyValue: String = "",
+): BoundedWorkerText {
+    if (values.isEmpty()) return BoundedWorkerText(emptyValue)
+    val count = minOf(values.size, MAX_WORKER_SBOM_TEXT_ITEMS)
+    val builder = StringBuilder()
+    for (index in 0 until count) {
+        val separatorLength = if (index == 0) 0 else separator.length
+        val value = values[index]
+        if (value.length > MAX_WORKER_SBOM_CELL_CHARS - builder.length - separatorLength) {
+            return BoundedWorkerText(oversizedWorkerSbomCell)
+        }
+        if (index > 0) builder.append(separator)
+        builder.append(value)
+    }
+    return if (values.size > count) BoundedWorkerText(oversizedWorkerSbomCell, sourceTailLimited = true)
+    else BoundedWorkerText(builder.toString())
+}
+
+private fun boundedWorkerTableText(parts: List<String>): String {
+    val builder = StringBuilder()
+    for (part in parts) {
+        if (part.length > MAX_WORKER_SBOM_TABLE_TEXT_CHARS - builder.length) return oversizedWorkerSbomTableText
+        builder.append(part)
+    }
+    return builder.toString()
 }
 
 private fun nonWasmFormat(provider: BinaryProvider): String = when (provider) {
@@ -484,31 +559,57 @@ private fun workerTables(provider: BinaryProvider, inputBytes: Int, fileName: St
         }
         var visitedRows = 0
 
-        fun appendRows(rows: TableTabChildRows?, depth: Int): List<ParserWorkerRecord>? {
+        fun appendRows(
+            rows: TableTabChildRows?,
+            depth: Int,
+            retainedRootSourceIndices: MutableList<Int>? = null,
+        ): List<ParserWorkerRecord> {
             if (depth > MAX_WORKER_TABLE_TREE_DEPTH) {
                 producerRecordLimited = true
-                return null
+                return emptyList()
             }
             val columns = rows?.columns ?: descriptor.columns
             val count = rows?.rowCount ?: descriptor.rowCount
             val selection = rows?.rowSelectionProvider ?: descriptor.rowSelectionProvider
             val children = rows?.childrenProvider ?: descriptor.childrenProvider
             val materialized = mutableListOf<ParserWorkerRecord>()
+            if (count < 0) {
+                producerRecordLimited = true
+                return materialized
+            }
             for (index in 0 until count) {
                 if (visitedRows >= MAX_PARSER_WORKER_RECORDS_PER_COLLECTION) {
                     producerRecordLimited = true
-                    return null
+                    break
                 }
                 visitedRows++
-                val cells = runCatching { columns.map { it.cellProvider(index) } }.getOrNull() ?: continue
+                val cells = runCatching { columns.map { it.cellProvider(index) } }.getOrElse {
+                    producerRecordLimited = true
+                    continue
+                }
                 val values = cells.map { it.representation }
-                if (values.size != descriptor.columns.size) continue
-                val range = selection(index)
+                if (values.size != descriptor.columns.size) {
+                    producerRecordLimited = true
+                    continue
+                }
+                val range = runCatching { selection(index) }.getOrElse {
+                    producerRecordLimited = true
+                    null
+                }
                 val offset = range?.offset?.takeIf { it >= 0 && range.size > 0 && it <= inputBytes - range.size }
-                val childRows = runCatching { children?.invoke(index) }.getOrNull()
-                val childRecords = childRows?.let { appendRows(it, depth + 1) }
-                if (childRows != null && childRecords == null) return null
-                val actions = if (rows == null) workerRowActions(provider, name, index, inputBytes) else emptyList()
+                val childRows = runCatching { children?.invoke(index) }.getOrElse {
+                    producerRecordLimited = true
+                    null
+                }
+                val childRecords = childRows?.let { appendRows(it, depth + 1) }.orEmpty()
+                val actions = if (rows == null) {
+                    runCatching { workerRowActions(provider, name, index, inputBytes) }.getOrElse {
+                        producerRecordLimited = true
+                        emptyList()
+                    }
+                } else {
+                    emptyList()
+                }
                 materialized += row(
                     values = values,
                     offset = offset,
@@ -517,17 +618,26 @@ private fun workerTables(provider: BinaryProvider, inputBytes: Int, fileName: St
                     children = childRecords.orEmpty(),
                     numericValues = cells.map { cell -> (cell.value as? Number)?.toDouble()?.takeIf(::isWireSafeNumber) },
                 )
+                retainedRootSourceIndices?.add(index)
             }
             return materialized
         }
 
-        val records = appendRows(null, 0).orEmpty()
+        val retainedRootSourceIndices = mutableListOf<Int>()
+        val records = appendRows(null, 0, retainedRootSourceIndices)
+        if (descriptor.rowCount != retainedRootSourceIndices.size) producerRecordLimited = true
         val filters = descriptor.predefinedFilters.take(16).map { filter ->
+            val matchingRootRows = mutableListOf<Int>()
+            retainedRootSourceIndices.forEachIndexed { retainedRootIndex, sourceIndex ->
+                val matches = runCatching { filter.predicate(sourceIndex) }.getOrElse {
+                    producerRecordLimited = true
+                    false
+                }
+                if (matches) matchingRootRows += retainedRootIndex
+            }
             ParserWorkerTableFilter(
                 label = filter.label,
-                matchingRootRows = (0 until descriptor.rowCount).filter { index ->
-                    runCatching { filter.predicate(index) }.getOrDefault(false)
-                },
+                matchingRootRows = matchingRootRows,
             )
         }
         if (descriptor.predefinedFilters.size > filters.size) producerRecordLimited = true
@@ -552,11 +662,18 @@ private fun workerTables(provider: BinaryProvider, inputBytes: Int, fileName: St
         TableTabsProviderRegistry.providers.forEachIndexed { providerIndex, tabProvider ->
             // Only Wasm currently emits grouped tabs and Wasm never reaches this route. Do not flatten a future
             // non-Wasm group into ordinary tables: that would silently change the navigation hierarchy.
-            check(runCatching { tabProvider.groupedTabs(provider) }.getOrDefault(emptyList()).isEmpty()) {
+            val groupedTabs = runCatching { tabProvider.groupedTabs(provider) }.getOrElse {
+                producerRecordLimited = true
+                emptyList()
+            }
+            check(groupedTabs.isEmpty()) {
                 "Non-Wasm parser-worker table groups require an explicit wire representation."
             }
             runCatching { tabProvider.tableTabs(provider, TableTabsContext(fileName = fileName)) }
-                .getOrDefault(emptyList())
+                .getOrElse {
+                    producerRecordLimited = true
+                    emptyList()
+                }
                 .forEach { descriptor -> add(DescriptorEntry(descriptor, providerIndex)) }
         }
     }.sortedWith(compareBy<DescriptorEntry> { it.descriptor.priority }.thenBy { it.providerIndex })
@@ -608,17 +725,21 @@ private fun workerRowActions(
             ?: return emptyList()
         val range = boundedInputRange(dissected.httpBodyFileOffset, dissected.httpBodySize.toLong(), inputBytes)
             ?: return emptyList()
-        listOf(
-            ParserWorkerAction(
-                kind = "pcap_http_body",
-                index = rowIndex,
-                name = "http-body-packet-${rowIndex + 1}${httpContentTypeExtension(dissected.httpContentType)}",
-                offset = range.first,
-                size = range.second,
-                contentType = dissected.httpContentType,
-                openable = true,
-            ),
-        )
+        if (range.second == 0) {
+            emptyList()
+        } else {
+            listOf(
+                ParserWorkerAction(
+                    kind = "pcap_http_body",
+                    index = rowIndex,
+                    name = "http-body-packet-${rowIndex + 1}${httpContentTypeExtension(dissected.httpContentType)}",
+                    offset = range.first,
+                    size = range.second,
+                    contentType = dissected.httpContentType,
+                    openable = true,
+                ),
+            )
+        }
     }
     else -> emptyList()
 }
@@ -889,6 +1010,7 @@ private fun corePresentation(provider: WasmBinaryProvider, inputBytes: Int, star
                 ?.name,
             proposalIds = proposals.map { it.name },
         ),
+        displayLabel = fileTypeDescription(provider),
     )
 }
 
@@ -949,6 +1071,7 @@ private fun componentPresentation(
         toolbar = ParserWorkerToolbar(
             runnableExportName = if (hasWasiCliRunExport(provider)) "wasi:cli/run" else null,
         ),
+        displayLabel = fileTypeDescription(provider),
     )
 }
 

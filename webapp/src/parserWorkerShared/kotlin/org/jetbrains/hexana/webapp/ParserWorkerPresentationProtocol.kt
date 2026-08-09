@@ -14,9 +14,10 @@ internal const val MAX_PARSER_WORKER_FILE_NAME_CHARS = 1_024
 internal const val MAX_PARSER_WORKER_CAPABILITIES = 32
 internal const val MAX_PARSER_WORKER_TABLES = 32
 internal const val MAX_PARSER_WORKER_LEGACY_TABS = 16
-internal const val PARSER_WORKER_PROTOCOL_VERSION = 8
+internal const val PARSER_WORKER_PROTOCOL_VERSION = 9
 
 private const val MAX_FORMAT_CHARS = 64
+private const val MAX_DISPLAY_LABEL_CHARS = 1_024
 private const val MAX_CAPABILITY_CHARS = 64
 private const val MAX_RANGE_LABEL_CHARS = 256
 private const val MAX_TABLE_ID_CHARS = 64
@@ -179,6 +180,8 @@ internal data class ParserWorkerPresentation(
     val componentGraph: ParserWorkerComponentGraph? = null,
     val legacyTabs: List<String> = emptyList(),
     val toolbar: ParserWorkerToolbar = ParserWorkerToolbar(),
+    /** Bounded Worker-derived label; the Window must not redetect the binary format. */
+    val displayLabel: String = "Binary",
 )
 
 internal data class ParserWorkerPartial(
@@ -422,7 +425,8 @@ internal fun decodeParserWorkerSuccess(
         val componentGraph = decodeComponentGraph(presentation.componentGraph) ?: return null
         val legacyTabs = decodeLegacyTabs(presentation.legacyTabs, format) ?: return null
         val toolbar = decodeToolbar(presentation.toolbar, format) ?: return null
-        if (!hasCoherentContent(format, capabilities, ranges, tables, diagnostics, componentGraph)) return null
+        val displayLabel = safeString(presentation.displayLabel, MAX_DISPLAY_LABEL_CHARS)?.takeIf { it.isNotBlank() } ?: return null
+        if (!hasCoherentContent(format, capabilities, ranges, tables, diagnostics, componentGraph, toolbar)) return null
 
         val reasons = decodeStrings(partial.reasons, MAX_PARTIAL_REASONS, MAX_PARTIAL_REASON_CHARS) ?: return null
         val isPartial = partial.partial as? Boolean ?: return null
@@ -444,6 +448,7 @@ internal fun decodeParserWorkerSuccess(
                 componentGraph.takeIf { it.nodes.isNotEmpty() || it.edges.isNotEmpty() },
                 legacyTabs,
                 toolbar,
+                displayLabel,
             ),
             ParserWorkerPartial(isPartial, reasons, emitted, total, lowerBound),
             wireBytes,
@@ -460,6 +465,7 @@ internal fun encodeSuccessWire(requestId: String, presentation: ParserWorkerPres
     value.requestId = requestId
     value.presentation = js("({})")
     value.presentation.format = presentation.format
+    value.presentation.displayLabel = presentation.displayLabel
     value.presentation.capabilities = presentation.capabilities.toTypedArray()
     value.presentation.summary = js("({})")
     with(value.presentation.summary) {
@@ -584,6 +590,10 @@ internal fun sanitizeParserWorkerPresentation(presentation: ParserWorkerPresenta
         omitted += count
         require(omitted <= Int.MAX_VALUE) { "Parser-worker omitted record count exceeds the wire representation." }
     }
+    fun omit(count: Long) {
+        omitted += count
+        require(omitted <= Int.MAX_VALUE) { "Parser-worker omitted record count exceeds the wire representation." }
+    }
 
     val summary = presentation.summary.let { source ->
         if (isValidGraalWebImageMetadata(source)) source
@@ -607,7 +617,7 @@ internal fun sanitizeParserWorkerPresentation(presentation: ParserWorkerPresenta
             record.numericValues.all { it == null || (it.isFinite() && it >= -9_007_199_254_740_991.0 && it <= 9_007_199_254_740_991.0) } &&
             isValidRecordRange(record, summary.inputBytes)
         if (!valid) {
-            omit()
+            omit(record.recordCount())
             return null
         }
         val actions = record.actions.filter { action ->
@@ -682,6 +692,25 @@ internal fun sanitizeParserWorkerPresentation(presentation: ParserWorkerPresenta
         ParserWorkerComponentGraph(nodes, edges).takeIf { nodes.isNotEmpty() || edges.isNotEmpty() }
     }
 
+    val displayLabel = presentation.displayLabel.takeIf { it.isNotBlank() && it.length <= MAX_DISPLAY_LABEL_CHARS }.also {
+        if (it == null) omit()
+    } ?: "Binary"
+    val coherentToolbar = presentation.toolbar.copy(
+        nativeImage = presentation.toolbar.nativeImage?.let { nativeImage ->
+            val version = nativeImage.version?.takeIf { it.length <= MAX_NATIVE_IMAGE_TEXT_CHARS }.also {
+                if (nativeImage.version != null && it == null) omit()
+            }
+            val platform = nativeImage.platform?.takeIf { it.length <= MAX_NATIVE_IMAGE_TEXT_CHARS }.also {
+                if (nativeImage.platform != null && it == null) omit()
+            }
+            nativeImage.copy(
+                version = version,
+                platform = platform,
+                hasSbom = tables.any { it.id == "SBOM" },
+            )
+        },
+    )
+
     return SanitizedParserWorkerPresentation(
         presentation.copy(
             summary = summary,
@@ -689,6 +718,8 @@ internal fun sanitizeParserWorkerPresentation(presentation: ParserWorkerPresenta
             tables = tables,
             diagnostics = diagnostics,
             componentGraph = componentGraph,
+            toolbar = coherentToolbar,
+            displayLabel = displayLabel,
         ),
         omitted.toInt(),
     )
@@ -710,9 +741,20 @@ private fun requireValidProducerPresentation(presentation: ParserWorkerPresentat
     require(isValidCapabilities(presentation.capabilities)) { "Invalid parser-worker capability collection." }
     require(isValidLegacyTabs(presentation.format, presentation.legacyTabs)) { "Invalid parser-worker legacy tabs." }
     require(isValidToolbar(presentation.format, presentation.toolbar)) { "Invalid parser-worker toolbar presentation." }
+    require(presentation.displayLabel.isNotBlank() && presentation.displayLabel.length <= MAX_DISPLAY_LABEL_CHARS) {
+        "Invalid parser-worker display label."
+    }
     require(presentation.tables.size <= MAX_PARSER_WORKER_TABLES) { "Too many parser-worker tables." }
     require(isValidSummary(presentation.summary)) { "Invalid parser-worker summary." }
-    require(hasCoherentContent(presentation.format, presentation.capabilities, presentation.ranges, presentation.tables, presentation.diagnostics, presentation.componentGraph ?: ParserWorkerComponentGraph(emptyList(), emptyList()))) {
+    require(hasCoherentContent(
+        presentation.format,
+        presentation.capabilities,
+        presentation.ranges,
+        presentation.tables,
+        presentation.diagnostics,
+        presentation.componentGraph ?: ParserWorkerComponentGraph(emptyList(), emptyList()),
+        presentation.toolbar,
+    )) {
         "Parser-worker content does not match its capabilities."
     }
     presentation.responseRecordCount()
@@ -792,13 +834,17 @@ private fun hasCoherentContent(
     tables: List<ParserWorkerTable>,
     diagnostics: List<ParserWorkerDiagnostic>,
     componentGraph: ParserWorkerComponentGraph,
+    toolbar: ParserWorkerToolbar,
 ): Boolean =
     (ranges.isEmpty() || "structural_ranges" in capabilities) &&
         (tables.isEmpty() || "tables" in capabilities) &&
         (diagnostics.isEmpty() || "diagnostics" in capabilities) &&
         ("component_dependency_graph" !in capabilities || format == "wasm_component") &&
         ((componentGraph.nodes.isEmpty() && componentGraph.edges.isEmpty()) ||
-            (format == "wasm_component" && "component_dependency_graph" in capabilities))
+            (format == "wasm_component" && "component_dependency_graph" in capabilities)) &&
+        (toolbar.nativeImage?.let { nativeImage ->
+            nativeImage.hasSbom == tables.any { it.id == "SBOM" }
+        } ?: true)
 
 private fun isValidSummary(summary: ParserWorkerSummary): Boolean =
     summary.scopeMarker == "DedicatedWorkerGlobalScope" &&
@@ -870,7 +916,8 @@ private fun isValidAction(action: ParserWorkerAction, inputBytes: Int): Boolean 
                 action.dataOffset == null && action.compressedSize == null && action.uncompressedSize == null &&
                 action.compressionMethod == null && action.contentType == null
         "pcap_http_body" ->
-            action.index != null && action.index >= 0 && !action.name.isNullOrBlank() && validRange(action.offset, action.size) &&
+            action.index != null && action.index >= 0 && !action.name.isNullOrBlank() && action.size != null && action.size > 0 &&
+                validRange(action.offset, action.size) &&
                 action.dataOffset == null && action.compressedSize == null && action.uncompressedSize == null &&
                 action.compressionMethod == null
         else -> false
@@ -962,10 +1009,11 @@ private fun decodeTables(value: dynamic, inputBytes: Int): List<ParserWorkerTabl
         if (columns.isEmpty()) return null
         val records = item.records as? Array<dynamic> ?: return null
         if (records.size > MAX_PARSER_WORKER_RECORDS_PER_COLLECTION) return null
+        val budget = ParserWorkerTableDecodeBudget()
         ParserWorkerTable(
             id = safeString(item.id, MAX_TABLE_ID_CHARS) ?: return null,
             records = records.map { record ->
-                decodeRecord(record, columns.size, inputBytes) ?: return null
+                decodeRecord(record, columns.size, inputBytes, budget = budget) ?: return null
             }.also { decoded ->
                 if (!decoded.all { record ->
                         isValidRecord(record, columns.size, inputBytes)
@@ -989,9 +1037,21 @@ private fun decodeTables(value: dynamic, inputBytes: Int): List<ParserWorkerTabl
     }.takeIf { tables -> tables.map { it.id }.distinct().size == tables.size }
 }
 
-private fun decodeRecord(value: dynamic, columnCount: Int, inputBytes: Int, depth: Int = 0): ParserWorkerRecord? {
+private class ParserWorkerTableDecodeBudget(
+    var remaining: Int = MAX_PARSER_WORKER_RECORDS_PER_COLLECTION,
+)
+
+private fun decodeRecord(
+    value: dynamic,
+    columnCount: Int,
+    inputBytes: Int,
+    depth: Int = 0,
+    budget: ParserWorkerTableDecodeBudget,
+): ParserWorkerRecord? {
     if (!isPlainWireObject(value)) return null
     if (depth > MAX_RECORD_TREE_DEPTH) return null
+    if (budget.remaining == 0) return null
+    budget.remaining--
     val values = decodeStrings(value.values, MAX_RECORD_VALUES, MAX_RECORD_VALUE_CHARS) ?: return null
     val numericValues = decodeNumericValues(value.numericValues, columnCount) ?: return null
     val children = value.children as? Array<dynamic> ?: return null
@@ -1003,7 +1063,7 @@ private fun decodeRecord(value: dynamic, columnCount: Int, inputBytes: Int, dept
         if (value.offset == null) null else safeWireInt(value.offset) ?: return null,
         if (value.size == null) null else safeWireInt(value.size) ?: return null,
         decodeActions(value.actions, inputBytes) ?: return null,
-        children.map { child -> decodeRecord(child, columnCount, inputBytes, depth + 1) ?: return null },
+        children.map { child -> decodeRecord(child, columnCount, inputBytes, depth + 1, budget) ?: return null },
         numericValues,
     )
     return record.takeIf { isValidRecord(it, columnCount, inputBytes, depth) }

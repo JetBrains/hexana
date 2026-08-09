@@ -91,14 +91,17 @@ class ParserWorkerPresentationProtocolTest {
                     listOf(ParserWorkerRecord(".text", "64 B", listOf(".text", "64 B"), numericValues = listOf(null, 64.0))),
                     listOf("Type", "Size"),
                 ),
+                ParserWorkerTable("SBOM", emptyList(), listOf("Component")),
             ),
+            displayLabel = "ELF64",
         )
 
         val decoded = assertNotNull(decodeParserWorkerSuccess(encodeBoundedParserWorkerSuccess("request", source), "request"))
 
         assertEquals("GraalVM 25", decoded.presentation.toolbar.nativeImage?.version)
         assertTrue(decoded.presentation.toolbar.nativeImage?.hasSbom == true)
-        assertEquals(64.0, decoded.presentation.tables.single().records.single().numericValues[1])
+        assertEquals(64.0, decoded.presentation.tables.first { it.id == "Top" }.records.single().numericValues[1])
+        assertEquals("ELF64", decoded.presentation.displayLabel)
     }
 
     @Test
@@ -352,6 +355,8 @@ class ParserWorkerPresentationProtocolTest {
         val base = representativePresentation()
         val invalidPresentations = listOf(
             base.copy(format = "x".repeat(65)),
+            base.copy(displayLabel = ""),
+            base.copy(displayLabel = "x".repeat(1_025)),
             base.copy(capabilities = listOf("summary", "unknown")),
             base.copy(capabilities = listOf("summary", "summary")),
             base.copy(legacyTabs = List(MAX_PARSER_WORKER_LEGACY_TABS + 1) { "Top" }),
@@ -410,6 +415,8 @@ class ParserWorkerPresentationProtocolTest {
     @Test
     fun decoderRejectsCapabilityAndEveryVariableStringOverflow() {
         assertWireRejected { it.presentation.format = "x".repeat(65) }
+        assertWireRejected { it.presentation.displayLabel = "" }
+        assertWireRejected { it.presentation.displayLabel = "x".repeat(1_025) }
         assertWireRejected { it.presentation.capabilities = js("Array(33).fill('summary')") }
         assertWireRejected { it.presentation.capabilities = arrayOf("summary", "unknown") }
         assertWireRejected { it.presentation.capabilities = arrayOf("summary", "x".repeat(65)) }
@@ -467,6 +474,107 @@ class ParserWorkerPresentationProtocolTest {
         assertWireRejected { it.partial.partial = true; it.partial.reasons = arrayOf("byte_limit", "byte_limit") }
         assertWireRejected { it.partial.partial = true; it.partial.reasons = js("Array(3).fill('byte_limit')") }
         assertWireRejected { it.partial.partial = true; it.partial.reasons = arrayOf("unknown") }
+    }
+
+    @Test
+    fun decoderRejectsARecursiveTableThatExceedsTheSharedTenThousandRecordBudget() {
+        val wire = encodeBoundedParserWorkerSuccess("request", presentation(emptyList()))
+        val leaf = js("({})")
+        leaf.key = "leaf"
+        leaf.value = "value"
+        leaf.values = arrayOf("leaf", "value")
+        leaf.offset = null
+        leaf.size = null
+        leaf.numericValues = arrayOf(null, null)
+        leaf.actions = emptyArray<dynamic>()
+        leaf.children = emptyArray<dynamic>()
+        val root = js("({})")
+        root.key = "root"
+        root.value = "value"
+        root.values = arrayOf("root", "value")
+        root.offset = null
+        root.size = null
+        root.numericValues = arrayOf(null, null)
+        root.actions = emptyArray<dynamic>()
+        root.children = js("Array(10000).fill(leaf)")
+        wire.presentation.tables[0].records = arrayOf(root)
+
+        assertNull(decodeParserWorkerSuccess(wire, "request"))
+    }
+
+    @Test
+    fun sanitizerCountsTheFullDroppedSubtreeAndKeepsContentAndProducerLimitMetadataCoherent() {
+        val source = presentation(
+            listOf(
+                ParserWorkerRecord(
+                    key = "x".repeat(1_025),
+                    value = "invalid",
+                    children = listOf(ParserWorkerRecord("child-1", "value"), ParserWorkerRecord("child-2", "value")),
+                ),
+            ),
+        )
+
+        val sanitized = sanitizeParserWorkerPresentation(source)
+        val bounded = boundParserWorkerSuccess(
+            "request",
+            sanitized.presentation,
+            omittedRecordCount = sanitized.omittedRecordCount,
+            producerRecordLimited = true,
+        )
+
+        assertEquals(3, sanitized.omittedRecordCount)
+        assertEquals(listOf("content_limit", "record_limit"), bounded.partial.reasons)
+        assertEquals(0, bounded.partial.emittedCount)
+        assertEquals(4, bounded.partial.totalCountLowerBound)
+    }
+
+    @Test
+    fun nativeImageSbomAndPcapActionsHaveCoherentWireContracts() {
+        val native = representativePresentation(8).copy(
+            format = "elf",
+            capabilities = listOf("summary", "structural_ranges", "tables"),
+            diagnostics = emptyList(),
+            toolbar = ParserWorkerToolbar(nativeImage = ParserWorkerNativeImage(hasSbom = true)),
+            tables = listOf(ParserWorkerTable("Top", emptyList())),
+        )
+        assertFailsWith<IllegalArgumentException> { encodeBoundedParserWorkerSuccess("request", native) }
+
+        val nativeWithUnflaggedSbom = native.copy(
+            toolbar = ParserWorkerToolbar(nativeImage = ParserWorkerNativeImage(hasSbom = false)),
+            tables = listOf(ParserWorkerTable("SBOM", emptyList(), listOf("Component"))),
+        )
+        assertFailsWith<IllegalArgumentException> { encodeBoundedParserWorkerSuccess("request", nativeWithUnflaggedSbom) }
+        assertTrue(sanitizeParserWorkerPresentation(nativeWithUnflaggedSbom).presentation.toolbar.nativeImage?.hasSbom == true)
+
+        val pcap = representativePresentation(8).copy(
+            format = "pcap",
+            capabilities = listOf("summary", "structural_ranges", "tables"),
+            diagnostics = emptyList(),
+            tables = listOf(
+                ParserWorkerTable(
+                    "Packets",
+                    listOf(
+                        ParserWorkerRecord(
+                            "packet",
+                            "payload",
+                            actions = listOf(
+                                ParserWorkerAction(
+                                    kind = "pcap_http_body",
+                                    index = 0,
+                                    name = "payload.bin",
+                                    offset = 0,
+                                    size = 1,
+                                    openable = true,
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val wire = encodeBoundedParserWorkerSuccess("request", pcap)
+        wire.presentation.tables[0].records[0].actions[0].size = 0
+        assertNull(decodeParserWorkerSuccess(wire, "request"))
     }
 
     private fun record(index: Int): ParserWorkerRecord = ParserWorkerRecord(index.toString(), "record-$index")

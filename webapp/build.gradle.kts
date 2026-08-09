@@ -98,6 +98,8 @@ tasks.named<Copy>("jsTestProcessResources") {
     into("parser-worker-fixtures") {
         from(rootProject.file("wasmParser/src/commonTest/resources/snippets/addition.wasm"))
         from(rootProject.file("wasmParser/src/commonTest/resources/component/composed.wasm"))
+        from(rootProject.file("parsing/native-fixtures/test-data/elf/sample.elf"))
+        from(rootProject.file("parsing/native-fixtures/test-data/pe/sample.lib"))
         if (parserWorkerMeasurementsEnabled.get()) {
             from(rootProject.file("wasmParser/src/commonTest/resources/faustide.wasm"))
             from(rootProject.file("wasmParser/src/commonTest/resources/mpp-demo.wasm"))

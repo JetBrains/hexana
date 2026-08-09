@@ -126,11 +126,7 @@ internal fun WorkerWasmEditorContent(
         onScriptTabConfirmed = onScriptTabConfirmed,
         onScriptTabRemoved = onScriptTabRemoved,
         initialStructureRanges = ranges,
-        fileTypeLabelOverride = when (presentation.format) {
-            "core_wasm" -> "Core Wasm"
-            "wasm_component" -> "Component Model"
-            else -> null
-        },
+        fileTypeLabelOverride = presentation.displayLabel,
         onLegacyReparseRequested = onLegacyWasmReparseRequested,
         workerWasmToolbarPresentation = toolbarPresentation,
         scriptExecution = scriptExecution,
@@ -187,28 +183,13 @@ private fun WorkerBinaryEditorContent(
         onScriptTabConfirmed = onScriptTabConfirmed,
         onScriptTabRemoved = onScriptTabRemoved,
         initialStructureRanges = ranges,
-        fileTypeLabelOverride = workerFileTypeLabel(presentation.format, fileName),
+        fileTypeLabelOverride = presentation.displayLabel,
         initialActiveTab = presentation.tables.firstOrNull()?.id ?: "Sections",
         onLegacyReparseRequested = onLegacyReparseRequested,
         workerNativeImageToolbarPresentation = nativeImageToolbar,
         workerSizeTooltip = sizeTooltip,
         scriptExecution = scriptExecution,
     )
-}
-
-private fun workerFileTypeLabel(format: String, fileName: String): String = when (format) {
-    "zip" -> if (fileName.endsWith(".jar", ignoreCase = true)) "Jar File" else "Zip File"
-    "class" -> "Class File"
-    "dex" -> "Android DEX File"
-    "pcap" -> "PCAP Capture"
-    "protobuf" -> "Protocol Buffers"
-    "elf" -> "ELF"
-    "macho" -> "Mach-O"
-    "fat_macho" -> "Universal Mach-O"
-    "pe" -> "PE"
-    "coff" -> "COFF"
-    "archive" -> "Archive"
-    else -> "Binary"
 }
 
 private fun ParserWorkerPresentation.workerSizeTooltip(): List<Pair<String, String>>? {

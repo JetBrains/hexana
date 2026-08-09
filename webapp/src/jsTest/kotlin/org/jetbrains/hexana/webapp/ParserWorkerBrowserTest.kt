@@ -80,6 +80,7 @@ class ParserWorkerBrowserTest {
                                 assertEquals(1, state.summary.definedFunctionCount)
                                 assertEquals(1, state.summary.codeBodyCount)
                                 assertEquals(0, state.presentation.summary.exportCount)
+                                assertEquals("Core Wasm", state.presentation.displayLabel)
                                 assertEquals(
                                     listOf("summary", "structural_ranges", "tables", "diagnostics"),
                                     state.presentation.capabilities,
@@ -139,6 +140,7 @@ class ParserWorkerBrowserTest {
                                             window.clearTimeout(guard)
                                             try {
                                                 assertEquals("wasm_component", state.presentation.format)
+                                                assertEquals("Component Model", state.presentation.displayLabel)
                                                 assertEquals("DedicatedWorkerGlobalScope", state.summary.scopeMarker)
                                                 assertTrue(state.summary.documentAbsent)
                                                 assertTrue("component_dependency_graph" in state.presentation.capabilities)
@@ -197,6 +199,7 @@ class ParserWorkerBrowserTest {
                     if (state is ParserWorkerState.Parsed) {
                         try {
                             assertEquals("generic", state.presentation.format)
+                            assertEquals("Binary", state.presentation.displayLabel)
                             assertEquals(listOf("summary"), state.presentation.capabilities)
                             assertTrue(state.presentation.tables.isEmpty())
                             resolve(Unit)
@@ -229,6 +232,7 @@ class ParserWorkerBrowserTest {
                             window.clearTimeout(guard)
                             try {
                                 assertEquals("zip", state.presentation.format)
+                                assertEquals("Zip File", state.presentation.displayLabel)
                                 assertEquals("DedicatedWorkerGlobalScope", state.summary.scopeMarker)
                                 assertTrue(state.summary.documentAbsent)
                                 val entries = state.presentation.tables.single { it.id == "Entries" }
@@ -255,6 +259,90 @@ class ParserWorkerBrowserTest {
                 },
             )
             controller.parse(input, 5_000, "application.apk")
+        }
+
+    @Test
+    fun realWorkerParsesClassFileWithWorkerDerivedLabelAndTables(): Promise<Unit> =
+        assertRealWorkerPresentation(minimalClassFileBuffer(), "Class file") { presentation ->
+            assertEquals("class", presentation.format)
+            assertEquals("Class File", presentation.displayLabel)
+            assertTrue("Header" in presentation.tables.map { it.id })
+            assertTrue("Methods" in presentation.tables.map { it.id })
+        }
+
+    @Test
+    fun realWorkerParsesDexWithWorkerDerivedLabelAndTables(): Promise<Unit> =
+        assertRealWorkerPresentation(minimalDexBuffer(), "DEX") { presentation ->
+            assertEquals("dex", presentation.format)
+            assertEquals("Android DEX File", presentation.displayLabel)
+            assertTrue("Header" in presentation.tables.map { it.id })
+        }
+
+    @Test
+    fun realWorkerParsesPcapAndPcapNgWithDistinctWorkerDerivedLabels(): Promise<Unit> =
+        Promise { resolve, reject ->
+            assertRealWorkerPresentation(minimalPcapBuffer(), "PCAP") { pcap ->
+                assertEquals("pcap", pcap.format)
+                assertEquals("PCAP Capture", pcap.displayLabel)
+                assertTrue("Header" in pcap.tables.map { it.id })
+            }.then(
+                onFulfilled = {
+                    assertRealWorkerPresentation(minimalPcapNgBuffer(), "PCAP-NG") { pcapNg ->
+                        assertEquals("pcap", pcapNg.format)
+                        assertEquals("PCAP-NG Capture", pcapNg.displayLabel)
+                        assertTrue("Header" in pcapNg.tables.map { it.id })
+                    }.then(
+                        onFulfilled = { resolve(Unit) },
+                        onRejected = reject,
+                    )
+                },
+                onRejected = reject,
+            )
+        }
+
+    @Test
+    fun realWorkerParsesProtobufDescriptorWithGenericWorkerLabel(): Promise<Unit> =
+        assertRealWorkerPresentation(protobufDescriptorSetBuffer(), "Protobuf descriptor") { presentation ->
+            assertEquals("protobuf", presentation.format)
+            assertEquals("Binary", presentation.displayLabel)
+            assertTrue("Files" in presentation.tables.map { it.id })
+        }
+
+    @Test
+    fun realWorkerParsesNativeElfFixtureWithExactWorkerDerivedLabelAndTables(): Promise<Unit> =
+        assertFixtureWorkerPresentation("sample.elf", "ELF") { presentation ->
+            assertEquals("elf", presentation.format)
+            assertEquals("ELF64", presentation.displayLabel)
+            assertTrue("Headers" in presentation.tables.map { it.id })
+            assertTrue("Sections" in presentation.tables.map { it.id })
+        }
+
+    @Test
+    fun realWorkerParsesStaticArchiveFixtureWithWorkerDerivedLabelAndTables(): Promise<Unit> =
+        assertFixtureWorkerPresentation("sample.lib", "static archive") { presentation ->
+            assertEquals("archive", presentation.format)
+            assertEquals("Archive", presentation.displayLabel)
+            assertTrue("Members" in presentation.tables.map { it.id })
+        }
+
+    @Test
+    fun arrowAndParquetMagicStayGenericInTheWorker(): Promise<Unit> =
+        Promise { resolve, reject ->
+            assertRealWorkerPresentation(binaryBuffer("ARROW1".encodeToByteArray()), "Arrow magic") { arrow ->
+                assertEquals("generic", arrow.format)
+                assertEquals("Binary", arrow.displayLabel)
+            }.then(
+                onFulfilled = {
+                    assertRealWorkerPresentation(binaryBuffer("PAR1".encodeToByteArray()), "Parquet magic") { parquet ->
+                        assertEquals("generic", parquet.format)
+                        assertEquals("Binary", parquet.displayLabel)
+                    }.then(
+                        onFulfilled = { resolve(Unit) },
+                        onRejected = reject,
+                    )
+                },
+                onRejected = reject,
+            )
         }
 
     @Test
@@ -479,6 +567,135 @@ private fun apkFixtureBuffer(): ArrayBuffer {
 
     return Uint8Array(output.map { it.toInt().and(0xff).toDouble() }.toTypedArray()).buffer
 }
+
+private fun assertRealWorkerPresentation(
+    input: ArrayBuffer,
+    description: String,
+    fileName: String? = null,
+    assertion: (ParserWorkerPresentation) -> Unit,
+): Promise<Unit> = Promise { resolve, reject ->
+    var controller: ParserWorkerController? = null
+    val guard = window.setTimeout({
+        controller?.dispose()
+        reject(Throwable("$description parser worker did not answer within the browser-test deadline."))
+    }, REAL_WORKER_TEST_TIMEOUT_MS)
+    controller = ParserWorkerController(
+        workerFactory = browserParserWorkerFactory,
+        scheduler = browserParserWorkerScheduler,
+        onStateChanged = { state ->
+            when (state) {
+                is ParserWorkerState.Parsed -> {
+                    window.clearTimeout(guard)
+                    try {
+                        assertion(state.presentation)
+                        resolve(Unit)
+                    } catch (failure: Throwable) {
+                        reject(failure)
+                    }
+                }
+                is ParserWorkerState.Failed -> {
+                    window.clearTimeout(guard)
+                    reject(Throwable("$description worker input failed: ${state.code}: ${state.message}"))
+                }
+                ParserWorkerState.TimedOut -> {
+                    window.clearTimeout(guard)
+                    reject(Throwable("$description parser worker timed out."))
+                }
+                else -> Unit
+            }
+        },
+    )
+    controller.parse(input, 5_000, fileName)
+}
+
+private fun assertFixtureWorkerPresentation(
+    fixtureName: String,
+    description: String,
+    assertion: (ParserWorkerPresentation) -> Unit,
+): Promise<Unit> = Promise { resolve, reject ->
+    window.fetch("/kotlin/parser-worker-fixtures/$fixtureName", js("({})").unsafeCast<RequestInit>()).then(
+        onFulfilled = { fixture ->
+            if (!fixture.ok) {
+                reject(Throwable("Could not fetch the $description parser-worker fixture."))
+                return@then
+            }
+            fixture.arrayBuffer().then(
+                onFulfilled = { input ->
+                    assertRealWorkerPresentation(input, description, fixtureName, assertion).then(
+                        onFulfilled = { resolve(Unit) },
+                        onRejected = reject,
+                    )
+                },
+                onRejected = reject,
+            )
+        },
+        onRejected = reject,
+    )
+}
+
+private fun minimalClassFileBuffer(): ArrayBuffer = binaryBuffer(
+    byteArrayOf(
+        0xca.toByte(), 0xfe.toByte(), 0xba.toByte(), 0xbe.toByte(),
+        0x00, 0x00, 0x00, 0x34, 0x00, 0x05,
+        0x01, 0x00, 0x06, 0x48, 0x65, 0x78, 0x61, 0x6e, 0x61,
+        0x07, 0x00, 0x01,
+        0x01, 0x00, 0x10, 0x6a, 0x61, 0x76, 0x61, 0x2f, 0x6c, 0x61, 0x6e, 0x67, 0x2f, 0x4f, 0x62, 0x6a, 0x65, 0x63, 0x74,
+        0x07, 0x00, 0x03,
+        0x00, 0x21, 0x00, 0x02, 0x00, 0x04,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ),
+)
+
+private fun minimalDexBuffer(): ArrayBuffer {
+    val bytes = ByteArray(112)
+    bytes[0] = 'd'.code.toByte(); bytes[1] = 'e'.code.toByte(); bytes[2] = 'x'.code.toByte(); bytes[3] = '\n'.code.toByte()
+    bytes[4] = '0'.code.toByte(); bytes[5] = '3'.code.toByte(); bytes[6] = '5'.code.toByte()
+    putU32Le(bytes, 32, 112)
+    putU32Le(bytes, 36, 112)
+    putU32Le(bytes, 40, 0x12345678)
+    return binaryBuffer(bytes)
+}
+
+private fun minimalPcapBuffer(): ArrayBuffer {
+    val bytes = ByteArray(24)
+    bytes[0] = 0xd4.toByte(); bytes[1] = 0xc3.toByte(); bytes[2] = 0xb2.toByte(); bytes[3] = 0xa1.toByte()
+    bytes[4] = 2; bytes[6] = 4
+    putU32Le(bytes, 16, 65_535)
+    putU32Le(bytes, 20, 1)
+    return binaryBuffer(bytes)
+}
+
+private fun minimalPcapNgBuffer(): ArrayBuffer {
+    val sectionHeader = ByteArray(28)
+    sectionHeader[0] = 0x0a; sectionHeader[1] = 0x0d; sectionHeader[2] = 0x0d; sectionHeader[3] = 0x0a
+    putU32Le(sectionHeader, 4, 28)
+    sectionHeader[8] = 0x4d; sectionHeader[9] = 0x3c; sectionHeader[10] = 0x2b; sectionHeader[11] = 0x1a
+    sectionHeader[12] = 1
+    for (index in 16..23) sectionHeader[index] = 0xff.toByte()
+    putU32Le(sectionHeader, 24, 28)
+
+    val interfaceDescription = ByteArray(20)
+    putU32Le(interfaceDescription, 0, 1)
+    putU32Le(interfaceDescription, 4, 20)
+    interfaceDescription[8] = 1
+    putU32Le(interfaceDescription, 12, 65_535)
+    putU32Le(interfaceDescription, 16, 20)
+    return binaryBuffer(sectionHeader + interfaceDescription)
+}
+
+private fun protobufDescriptorSetBuffer(): ArrayBuffer = binaryBuffer(
+    byteArrayOf(0x0a, 12, 0x0a, 10) + "test.proto".encodeToByteArray(),
+)
+
+private fun putU32Le(bytes: ByteArray, offset: Int, value: Int) {
+    bytes[offset] = value.toByte()
+    bytes[offset + 1] = (value ushr 8).toByte()
+    bytes[offset + 2] = (value ushr 16).toByte()
+    bytes[offset + 3] = (value ushr 24).toByte()
+}
+
+private fun binaryBuffer(bytes: ByteArray): ArrayBuffer =
+    Uint8Array(bytes.map { byte -> (byte.toInt() and 0xff).toDouble() }.toTypedArray()).buffer
 
 private fun rawWorkerRejectsInvalidFileName(fileName: dynamic): Promise<Unit> =
     Promise { resolve, reject ->
