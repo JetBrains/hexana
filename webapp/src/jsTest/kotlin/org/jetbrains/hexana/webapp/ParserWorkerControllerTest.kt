@@ -8,10 +8,10 @@ import kotlin.test.assertTrue
 
 class ParserWorkerControllerTest {
     @Test
-    fun onlyCoreWasmRequiresTheDedicatedParserWorker() {
-        assertTrue(requiresCoreParserWorker(byteArrayOf(0, 0x61, 0x73, 0x6d, 1, 0, 0, 0)))
-        assertTrue(!requiresCoreParserWorker(byteArrayOf(0, 0x61, 0x73, 0x6d, 0x0d, 0, 0, 0)))
-        assertTrue(!requiresCoreParserWorker(byteArrayOf(0x7f, 0x45, 0x4c, 0x46, 0, 0, 0, 0)))
+    fun coreAndComponentWasmRequireTheDedicatedParserWorker() {
+        assertTrue(requiresWasmParserWorker(byteArrayOf(0, 0x61, 0x73, 0x6d, 1, 0, 0, 0)))
+        assertTrue(requiresWasmParserWorker(byteArrayOf(0, 0x61, 0x73, 0x6d, 0x0d, 0, 0, 0)))
+        assertTrue(!requiresWasmParserWorker(byteArrayOf(0x7f, 0x45, 0x4c, 0x46, 0, 0, 0, 0)))
     }
 
     @Test
@@ -152,7 +152,7 @@ class ParserWorkerControllerTest {
         val fixture = Fixture()
         fixture.controller.parse(ArrayBuffer(8), 100)
         val wrongVersion = success("parser-worker-1")
-        wrongVersion.protocolVersion = 3
+        wrongVersion.protocolVersion = 2
         fixture.workers.single().fireMessage(wrongVersion)
         assertEquals("INVALID_RESPONSE", assertIs<ParserWorkerState.Failed>(fixture.states.last()).code)
 

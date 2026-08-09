@@ -112,15 +112,19 @@ fun BinaryEditorContent(
     onScriptTabConfirmed: (path: String, content: String) -> Unit = { _, _ -> },
     onScriptTabRemoved: (path: String) -> Unit = {},
     showSemanticHighlighting: Boolean = true,
+    initialStructureRanges: List<StructureRange>? = null,
+    fileTypeLabelOverride: String? = null,
+    initialActiveTab: String = "Sections",
+    onLegacyReparseRequested: ((ByteArray) -> Unit)? = null,
 ) {
     val selection = remember { HexSelectionState() }
     val buffer = remember(provider) { provider.bytes }
     var panelHeight by remember { mutableStateOf(DEFAULT_PANEL_HEIGHT) }
-    var activeTab by remember { mutableStateOf("Sections") }
+    var activeTab by remember(provider, initialActiveTab) { mutableStateOf(initialActiveTab) }
     var showDataInspector by remember { mutableStateOf(false) }
 
-    val hasTopTab = remember(provider) {
-        provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider
+    val hasTopTab = remember(provider, extraTabs) {
+        provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider || extraTabs.any { it.label == "Top" }
     }
 
     // Edit state: tracks in-memory byte modifications.
@@ -168,8 +172,11 @@ fun BinaryEditorContent(
             editState = editState,
             overwriteShadow = overwriteShadow,
             onOverwriteShadowChanged = { overwriteShadow = it },
-            onReparseAfterOverwrite = { reparseCounter++ },
+            onReparseAfterOverwrite = {
+                onLegacyReparseRequested?.invoke(editState.getEditedBytes()) ?: run { reparseCounter++ }
+            },
             onOpenSbomTab = { activeTab = "SBOM" },
+            fileTypeLabelOverride = fileTypeLabelOverride,
         )
         Div({
             style {
@@ -183,8 +190,8 @@ fun BinaryEditorContent(
                 bytes = buffer,
                 selection = selection,
                 editState = editState,
-                structureRanges = remember(provider, showSemanticHighlighting) {
-                    if (showSemanticHighlighting) provider.structureRanges.sortedBy { it.offset } else emptyList()
+                structureRanges = remember(provider, initialStructureRanges, showSemanticHighlighting) {
+                    if (showSemanticHighlighting) (initialStructureRanges ?: provider.structureRanges).sortedBy { it.offset } else emptyList()
                 },
                 onTabChangeRequest = { tabName -> activeTab = tabName },
             )

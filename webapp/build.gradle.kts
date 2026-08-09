@@ -15,6 +15,8 @@ kotlin {
                 dependencies {
                     implementation(project(":wasmParser"))
                     implementation(project(":encdec"))
+                    implementation(project(":binaryProvider"))
+                    implementation(project(":plugins-shared"))
                     compileOnly(composeRuntimeForCompiler)
                 }
             }
@@ -89,6 +91,7 @@ tasks.named<Copy>("jsTestProcessResources") {
     }
     into("parser-worker-fixtures") {
         from(rootProject.file("wasmParser/src/commonTest/resources/snippets/addition.wasm"))
+        from(rootProject.file("wasmParser/src/commonTest/resources/component/composed.wasm"))
         if (parserWorkerMeasurementsEnabled.get()) {
             from(rootProject.file("wasmParser/src/commonTest/resources/faustide.wasm"))
             from(rootProject.file("wasmParser/src/commonTest/resources/mpp-demo.wasm"))

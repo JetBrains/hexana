@@ -4,6 +4,7 @@ import kotlinx.browser.window
 import org.khronos.webgl.ArrayBuffer
 import org.khronos.webgl.Int8Array
 import org.khronos.webgl.Uint8Array
+import org.w3c.fetch.RequestInit
 import kotlin.js.Promise
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -78,9 +79,20 @@ class ParserWorkerBrowserTest {
                                 assertEquals(1, state.summary.importCount)
                                 assertEquals(1, state.summary.definedFunctionCount)
                                 assertEquals(1, state.summary.codeBodyCount)
-                                assertEquals(listOf("summary"), state.presentation.capabilities)
-                                assertTrue(state.presentation.ranges.isEmpty())
-                                assertTrue(state.presentation.tables.isEmpty())
+                                assertEquals(0, state.presentation.summary.exportCount)
+                                assertEquals(
+                                    listOf("summary", "structural_ranges", "tables", "diagnostics"),
+                                    state.presentation.capabilities,
+                                )
+                                assertTrue(state.presentation.ranges.isNotEmpty())
+                                assertEquals(
+                                    listOf("Imports", "Functions"),
+                                    state.presentation.tables.map { it.id },
+                                )
+                                assertEquals(
+                                    listOf("Top", "Garbage", "Wat", "WAT (virtualized)"),
+                                    state.presentation.legacyTabs,
+                                )
                                 assertTrue(state.presentation.diagnostics.isEmpty())
                                 resolve(Unit)
                             } catch (failure: Throwable) {
@@ -100,6 +112,79 @@ class ParserWorkerBrowserTest {
                 },
             )
             controller.parse(input, 5_000)
+        }
+
+    @Test
+    fun realWorkerParsesComponentFixtureAndReturnsDependencyGraph(): Promise<Unit> =
+        Promise { resolve, reject ->
+            window.fetch("/kotlin/parser-worker-fixtures/composed.wasm", js("({})").unsafeCast<RequestInit>()).then(
+                onFulfilled = { fixture ->
+                    if (!fixture.ok) {
+                        reject(Throwable("Could not fetch the component worker fixture."))
+                        return@then
+                    }
+                    fixture.arrayBuffer().then(
+                        onFulfilled = { input ->
+                            var controller: ParserWorkerController? = null
+                            val guard = window.setTimeout({
+                                controller?.dispose()
+                                reject(Throwable("Component parser worker did not answer within the browser-test deadline."))
+                            }, REAL_WORKER_TEST_TIMEOUT_MS)
+                            controller = ParserWorkerController(
+                                workerFactory = browserParserWorkerFactory,
+                                scheduler = browserParserWorkerScheduler,
+                                onStateChanged = { state ->
+                                    when (state) {
+                                        is ParserWorkerState.Parsed -> {
+                                            window.clearTimeout(guard)
+                                            try {
+                                                assertEquals("wasm_component", state.presentation.format)
+                                                assertEquals("DedicatedWorkerGlobalScope", state.summary.scopeMarker)
+                                                assertTrue(state.summary.documentAbsent)
+                                                assertTrue("component_dependency_graph" in state.presentation.capabilities)
+                                                assertTrue(state.presentation.ranges.isNotEmpty())
+                                                assertTrue(state.presentation.tables.isNotEmpty())
+                                                assertTrue(state.presentation.tables.all { table ->
+                                                    table.id in setOf("Imports", "Exports", "Modules")
+                                                })
+                                                val graph = checkNotNull(state.presentation.componentGraph)
+                                                assertTrue(graph.nodes.isNotEmpty())
+                                                assertTrue(graph.edges.all { edge ->
+                                                    graph.nodes.any { it.id == edge.fromId } &&
+                                                        graph.nodes.any { it.id == edge.toId }
+                                                })
+                                                assertEquals(
+                                                    graph.nodes.any { it.kind == "nested_component" },
+                                                    "Components" in state.presentation.legacyTabs,
+                                                )
+                                                assertEquals(
+                                                    listOf("Wat", "WAT (virtualized)"),
+                                                    state.presentation.legacyTabs.takeLast(2),
+                                                )
+                                                resolve(Unit)
+                                            } catch (failure: Throwable) {
+                                                reject(failure)
+                                            }
+                                        }
+                                        is ParserWorkerState.Failed -> {
+                                            window.clearTimeout(guard)
+                                            reject(Throwable("Component parser worker failed safely: ${state.code}: ${state.message}"))
+                                        }
+                                        ParserWorkerState.TimedOut -> {
+                                            window.clearTimeout(guard)
+                                            reject(Throwable("Component parser worker timed out."))
+                                        }
+                                        else -> Unit
+                                    }
+                                },
+                            )
+                            controller.parse(input, 5_000)
+                        },
+                        onRejected = reject,
+                    )
+                },
+                onRejected = reject,
+            )
         }
 
     @Test

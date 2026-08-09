@@ -35,6 +35,21 @@ import kotlin.math.min
 
 private enum class NodeKind { IMPORT, MODULE, NESTED_COMPONENT, CORE_INSTANCE, INSTANCE, EXPORT }
 
+/** Serializable presentation boundary for dependency-graph data produced outside the Web UI. */
+data class ComponentDependencyGraphNodeData(
+    val id: String,
+    val kind: String,
+    val label: String,
+    val sublabel: String? = null,
+)
+
+/** Serializable presentation boundary for dependency-graph edges produced outside the Web UI. */
+data class ComponentDependencyGraphEdgeData(
+    val fromId: String,
+    val toId: String,
+    val label: String? = null,
+)
+
 private data class GraphNode(
     val id: String,
     val kind: NodeKind,
@@ -997,7 +1012,37 @@ private fun roundRect(ctx: CanvasRenderingContext2D, x: Double, y: Double, w: Do
 
 @Composable
 fun DependencyGraphTabContent(provider: WasmComponentBinaryProvider) {
-    val rawGraph = remember(provider) { buildDependencyGraph(provider) }
+    DependencyGraphTabContent(remember(provider) { buildDependencyGraph(provider) })
+}
+
+@Composable
+fun DependencyGraphTabContent(
+    nodes: List<ComponentDependencyGraphNodeData>,
+    edges: List<ComponentDependencyGraphEdgeData>,
+) {
+    val rawGraph = remember(nodes, edges) {
+        DependencyGraph(
+            nodes.associate { node ->
+                node.id to GraphNode(node.id, checkNotNull(node.kind.toGraphNodeKind()), node.label, node.sublabel)
+            },
+            edges.map { GraphEdge(it.fromId, it.toId, it.label) },
+        )
+    }
+    DependencyGraphTabContent(rawGraph)
+}
+
+private fun String.toGraphNodeKind(): NodeKind? = when (this) {
+    "import" -> NodeKind.IMPORT
+    "module" -> NodeKind.MODULE
+    "nested_component" -> NodeKind.NESTED_COMPONENT
+    "core_instance" -> NodeKind.CORE_INSTANCE
+    "instance" -> NodeKind.INSTANCE
+    "export" -> NodeKind.EXPORT
+    else -> null
+}
+
+@Composable
+private fun DependencyGraphTabContent(rawGraph: DependencyGraph) {
 
     if (rawGraph.nodes.isEmpty()) {
         Div({ style { property("padding", "16px") } }) {

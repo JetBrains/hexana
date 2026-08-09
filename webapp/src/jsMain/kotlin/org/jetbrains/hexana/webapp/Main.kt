@@ -17,12 +17,21 @@ fun main() {
     }
 }
 
+private data class BrowserLoadedFile(
+    val fileName: String,
+    val bytes: ByteArray,
+    val workerResponse: BoundedParserWorkerSuccess?,
+    val legacyWasmTab: String?,
+)
+
 @Composable
 fun WebAppRoot() {
     var wasmBytes by remember { mutableStateOf<ByteArray?>(null) }
     var fileName by remember { mutableStateOf("") }
-    // Navigation stack: each entry is (fileName, bytes) for parent modules.
-    val navStack = remember { mutableStateListOf<Pair<String, ByteArray>>() }
+    var workerResponse by remember { mutableStateOf<BoundedParserWorkerSuccess?>(null) }
+    var legacyWasmTab by remember { mutableStateOf<String?>(null) }
+    val navStack = remember { mutableStateListOf<BrowserLoadedFile>() }
+    val capabilities = remember { BrowserCapabilityPolicy.createWebUiCapabilities() }
 
     val scriptTabs = remember { mutableStateListOf<ScriptTabState>() }
     var dialogPickedPath by remember { mutableStateOf("") }
@@ -32,23 +41,32 @@ fun WebAppRoot() {
     val openModule: (Int, String, ByteArray) -> Unit = { _, newFileName, data ->
         val current = wasmBytes
         if (current != null) {
-            navStack.add(fileName to current)
+            navStack.add(BrowserLoadedFile(fileName, current, workerResponse, legacyWasmTab))
         }
         fileName = newFileName
         wasmBytes = data
+        workerResponse = null
+        // MCP-186 owns nested-module reparsing. This path is entered only after an explicit module-open action.
+        legacyWasmTab = "Sections"
     }
 
     val navigateToParent: () -> Unit = {
         val parent = navStack.removeLastOrNull()
         if (parent != null) {
-            fileName = parent.first
-            wasmBytes = parent.second
+            fileName = parent.fileName
+            wasmBytes = parent.bytes
+            workerResponse = parent.workerResponse
+            legacyWasmTab = parent.legacyWasmTab
         }
     }
 
     val onScriptFilePicked: (String, String) -> Unit = { path, content ->
         dialogPickedPath = path
         dialogPickedContent = content
+    }
+    val onDialogPickedPathConsumed: () -> Unit = {
+        dialogPickedPath = ""
+        dialogPickedContent = ""
     }
 
     val host = remember(navStack.size) {
@@ -64,60 +82,87 @@ fun WebAppRoot() {
             },
         )
     }
+    val onScriptTabConfirmed: (String, String) -> Unit = { path, content ->
+        if (scriptTabs.none { it.path == path }) {
+            scriptTabs.add(ScriptTabState(path, content))
+            host.scriptTabAdded(path)
+        }
+    }
+    val onScriptTabRemoved: (String) -> Unit = { path ->
+        scriptTabs.removeAll { it.path == path }
+    }
 
     CompositionLocalProvider(LocalHost provides host) {
         val bytes = wasmBytes
         if (bytes == null) {
-            LandingView(onFileLoaded = { name, data ->
+            LandingView(onFileLoaded = { name, data, response ->
                 fileName = name
                 wasmBytes = data
+                workerResponse = response
+                legacyWasmTab = null
             })
         } else {
-            val buffer = bytes.toCommonByteBuffer()
-            buffer.position(0)
+            val response = workerResponse
+            if (response != null && legacyWasmTab == null) {
+                WorkerWasmEditorContent(
+                    fileName = fileName,
+                    parentFileName = navStack.lastOrNull()?.fileName,
+                    bytes = bytes,
+                    response = response,
+                    capabilities = capabilities,
+                    scriptTabs = scriptTabs,
+                    dialogPickedPath = dialogPickedPath,
+                    dialogPickedContent = dialogPickedContent,
+                    onDialogPickedPathConsumed = onDialogPickedPathConsumed,
+                    onScriptTabConfirmed = onScriptTabConfirmed,
+                    onScriptTabRemoved = onScriptTabRemoved,
+                    onLegacyWasmViewRequested = { tab -> legacyWasmTab = tab },
+                    onLegacyWasmReparseRequested = { editedBytes ->
+                        wasmBytes = editedBytes
+                        workerResponse = null
+                        legacyWasmTab = "Sections"
+                    },
+                )
+            } else {
+                // MCP-186 owns these explicit legacy paths (WAT, edits, and nested-module reparsing).
+                val buffer = bytes.toCommonByteBuffer()
+                buffer.position(0)
 
-            val provider = remember(buffer, fileName) {
-                when (WasmBinaryProviderSelector.select(buffer)) {
-                    BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
-                    BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
-                    else -> nativeOrGenericBinaryProvider(buffer, fileName)
-                }
-            }
-
-            val extraTabs = remember(buffer) { computeExtraTabs(buffer) }
-
-            val parentFileName = navStack.lastOrNull()?.first
-
-            BinaryEditorContent(
-                fileName = fileName,
-                parentFileName = parentFileName,
-                provider = provider,
-                extraTabs = extraTabs,
-                scriptTabs = scriptTabs,
-                showSemanticHighlighting = showSemanticHighlighting,
-                dialogPickedPath = dialogPickedPath,
-                dialogPickedContent = dialogPickedContent,
-                onDialogPickedPathConsumed = {
-                    dialogPickedPath = ""
-                    dialogPickedContent = ""
-                },
-                onScriptTabConfirmed = { path, content ->
-                    if (scriptTabs.none { it.path == path }) {
-                        scriptTabs.add(ScriptTabState(path, content))
-                        host.scriptTabAdded(path)
+                val provider = remember(buffer, fileName) {
+                    when (WasmBinaryProviderSelector.select(buffer)) {
+                        BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
+                        BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
+                        else -> nativeOrGenericBinaryProvider(buffer, fileName)
                     }
-                },
-                onScriptTabRemoved = { path ->
-                    scriptTabs.removeAll { it.path == path }
-                },
-            )
+                }
+
+                val extraTabs = remember(buffer) { computeExtraTabs(buffer) }
+
+                val parentFileName = navStack.lastOrNull()?.fileName
+
+                BinaryEditorContent(
+                    fileName = fileName,
+                    parentFileName = parentFileName,
+                    provider = provider,
+                    extraTabs = extraTabs,
+                    capabilities = capabilities,
+                    scriptTabs = scriptTabs,
+                    dialogPickedPath = dialogPickedPath,
+                    dialogPickedContent = dialogPickedContent,
+                    onDialogPickedPathConsumed = onDialogPickedPathConsumed,
+                    onScriptTabConfirmed = onScriptTabConfirmed,
+                    onScriptTabRemoved = onScriptTabRemoved,
+                    showSemanticHighlighting = showSemanticHighlighting,
+                    initialActiveTab = legacyWasmTab ?: "Sections",
+                )
+            }
         }
     }
 }
 
 @Composable
 internal fun LandingView(
-    onFileLoaded: (name: String, bytes: ByteArray) -> Unit,
+    onFileLoaded: (name: String, bytes: ByteArray, response: BoundedParserWorkerSuccess?) -> Unit,
     readerFactory: BrowserFileReaderFactory = domBrowserFileReaderFactory,
     workerFactory: ParserWorkerFactory = browserParserWorkerFactory,
     workerScheduler: ParserWorkerScheduler = browserParserWorkerScheduler,
@@ -139,7 +184,7 @@ internal fun LandingView(
                 if (state is ParserWorkerState.Parsed) {
                     val bytes = pendingCoreBytes ?: return@ParserWorkerController
                     pendingCoreBytes = null
-                    currentOnFileLoaded.value(pendingCoreFileName, bytes)
+                    currentOnFileLoaded.value(pendingCoreFileName, bytes, state.response)
                 } else if (state is ParserWorkerState.TimedOut || state is ParserWorkerState.Cancelled || state is ParserWorkerState.Failed) {
                     // Retry deliberately re-reads retainedFile; do not retain a potentially 50 MiB prior read.
                     pendingCoreBytes = null
@@ -158,15 +203,14 @@ internal fun LandingView(
             onFileLoaded = { file, bytes ->
                 isReading = false
                 retainedFile = file
-                if (requiresCoreParserWorker(bytes)) {
+                if (requiresWasmParserWorker(bytes)) {
                     pendingCoreFileName = file.name
                     pendingCoreBytes = bytes
                     // The worker receives its own transferable copy. The UI bytes remain usable after transfer.
                     parserController.parse(copyForParserWorker(bytes), PARSER_WORKER_TIMEOUT_MS)
                 } else {
                     pendingCoreBytes = null
-                    // Components and other formats keep their existing main-thread path (MCP-184+).
-                    currentOnFileLoaded.value(file.name, bytes)
+                    currentOnFileLoaded.value(file.name, bytes, null)
                 }
             },
         )
@@ -313,12 +357,12 @@ internal fun LandingView(
 }
 
 /**
- * Only core Wasm is gated in MCP-182. Provider construction remains on the main thread after this
- * validation boundary; moving provider/lazy UI analysis is explicitly deferred to MCP-184 and later.
+ * The DedicatedWorker owns the initial core-Wasm and component-model analysis path.
  */
-internal fun requiresCoreParserWorker(bytes: ByteArray): Boolean =
+internal fun requiresWasmParserWorker(bytes: ByteArray): Boolean =
     bytes.size >= 8 && bytes[0] == 0.toByte() && bytes[1] == 0x61.toByte() && bytes[2] == 0x73.toByte() &&
-        bytes[3] == 0x6d.toByte() && bytes[4] == 1.toByte() && bytes[5] == 0.toByte()
+        bytes[3] == 0x6d.toByte() && bytes[5] == 0.toByte() &&
+        (bytes[4] == 1.toByte() || bytes[4] == 0x0d.toByte())
 
 /** Copies UI-owned bytes before transfer; transferring this buffer detaches only the worker copy. */
 internal fun copyForParserWorker(bytes: ByteArray): ArrayBuffer =

@@ -20,6 +20,54 @@ class ParserWorkerPresentationProtocolTest {
     }
 
     @Test
+    fun componentGraphRoundTripsAndRejectsDanglingEdges() {
+        val source = componentPresentation()
+        val wire = encodeBoundedParserWorkerSuccess("request", source)
+        val decoded = assertNotNull(decodeParserWorkerSuccess(wire, "request"))
+
+        assertEquals("wasm_component", decoded.presentation.format)
+        assertEquals(2, decoded.presentation.componentGraph?.nodes?.size)
+        assertEquals(1, decoded.presentation.componentGraph?.edges?.size)
+
+        wire.presentation.componentGraph.edges[0].toId = "missing"
+        assertNull(decodeParserWorkerSuccess(wire, "request"))
+    }
+
+    @Test
+    fun legacyTabsRoundTripAndRejectsMalformedMetadata() {
+        val source = representativePresentation().copy(legacyTabs = listOf("Top", "Wat", "WAT (virtualized)"))
+        val wire = encodeBoundedParserWorkerSuccess("request", source)
+        val decoded = assertNotNull(decodeParserWorkerSuccess(wire, "request"))
+
+        assertEquals(source.legacyTabs, decoded.presentation.legacyTabs)
+
+        wire.presentation.legacyTabs = arrayOf("Components")
+        assertNull(decodeParserWorkerSuccess(wire, "request"))
+
+        wire.presentation.legacyTabs = js("undefined")
+        assertNull(decodeParserWorkerSuccess(wire, "request"))
+    }
+
+    @Test
+    fun componentGraphRecordLimitDropsOnlyEdgesWhoseNodesWereTruncated() {
+        val nodes = (0..10_000).map { index ->
+            ParserWorkerComponentGraphNode("node:$index", "module", "module $index")
+        }
+        val edges = (0 until 10_000).map { index ->
+            ParserWorkerComponentGraphEdge("node:$index", "node:${index + 1}")
+        }
+        val bounded = boundParserWorkerSuccess(
+            "request",
+            componentPresentation().copy(componentGraph = ParserWorkerComponentGraph(nodes, edges)),
+        )
+
+        assertEquals(listOf("record_limit"), bounded.partial.reasons)
+        assertEquals(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION, bounded.presentation.componentGraph?.nodes?.size)
+        assertEquals(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION - 1, bounded.presentation.componentGraph?.edges?.size)
+        assertNotNull(decodeBounded(bounded))
+    }
+
+    @Test
     fun recordLimitPreservesTheExactTenThousandBoundaryAndTruncatesOneOver() {
         val exact = boundParserWorkerSuccess("request", presentation((0 until 10_000).map(::record)))
         assertEquals(false, exact.partial.partial)
@@ -121,6 +169,9 @@ class ParserWorkerPresentationProtocolTest {
             base.copy(format = "x".repeat(65)),
             base.copy(capabilities = listOf("summary", "unknown")),
             base.copy(capabilities = listOf("summary", "summary")),
+            base.copy(legacyTabs = List(MAX_PARSER_WORKER_LEGACY_TABS + 1) { "Top" }),
+            base.copy(legacyTabs = listOf("Unknown")),
+            base.copy(legacyTabs = listOf("Top", "Top")),
             base.copy(summary = base.summary.copy(inputBytes = -1)),
             base.copy(summary = base.summary.copy(elapsedMs = Double.NaN)),
             base.copy(ranges = listOf(ParserWorkerRange(8, 1, "outside"))),
@@ -128,8 +179,25 @@ class ParserWorkerPresentationProtocolTest {
             base.copy(ranges = listOf(ParserWorkerRange(0, 1, "x".repeat(257)))),
             base.copy(tables = List(MAX_PARSER_WORKER_TABLES + 1) { ParserWorkerTable("$it", emptyList()) }),
             base.copy(tables = listOf(ParserWorkerTable("x".repeat(65), emptyList()))),
+            base.copy(tables = listOf(ParserWorkerTable("", emptyList()))),
+            base.copy(tables = listOf(ParserWorkerTable("table", emptyList(), emptyList()))),
+            base.copy(
+                tables = listOf(
+                    ParserWorkerTable("table", listOf(ParserWorkerRecord("key", "value", listOf("one")))),
+                ),
+            ),
+            base.copy(
+                tables = listOf(
+                    ParserWorkerTable("table", listOf(ParserWorkerRecord("key", "value", offset = 0))),
+                ),
+            ),
+            base.copy(tables = listOf(ParserWorkerTable("table", emptyList()), ParserWorkerTable("table", emptyList()))),
             base.copy(tables = listOf(ParserWorkerTable("table", listOf(ParserWorkerRecord("x".repeat(1_025), "value"))))),
-            base.copy(tables = listOf(ParserWorkerTable("table", listOf(ParserWorkerRecord("key", "x".repeat(16_385)))))),
+            base.copy(
+                tables = listOf(
+                    ParserWorkerTable("table", listOf(ParserWorkerRecord("key", "x".repeat(16_385)))),
+                ),
+            ),
             base.copy(diagnostics = listOf(ParserWorkerDiagnostic("x".repeat(65), "message"))),
             base.copy(diagnostics = listOf(ParserWorkerDiagnostic("code", "x".repeat(1_025)))),
         )
@@ -156,6 +224,9 @@ class ParserWorkerPresentationProtocolTest {
         assertWireRejected { it.presentation.capabilities = arrayOf("summary", "unknown") }
         assertWireRejected { it.presentation.capabilities = arrayOf("summary", "x".repeat(65)) }
         assertWireRejected { it.presentation.capabilities = arrayOf("summary", "summary") }
+        assertWireRejected { it.presentation.legacyTabs = arrayOf("Components") }
+        assertWireRejected { it.presentation.legacyTabs = arrayOf("Top", "Top") }
+        assertWireRejected { it.presentation.legacyTabs = arrayOf("x".repeat(65)) }
         assertWireRejected { it.presentation.tables = js("Array(33).fill({id: 'table', records: []})") }
         assertWireRejected { it.presentation.tables[0].id = "x".repeat(65) }
         assertWireRejected { it.presentation.tables[0].records[0].key = "x".repeat(1_025) }
@@ -167,7 +238,7 @@ class ParserWorkerPresentationProtocolTest {
 
     @Test
     fun decoderRejectsInvalidNumbersRangesVersionsAndPartialMatrices() {
-        assertWireRejected { it.protocolVersion = 3 }
+        assertWireRejected { it.protocolVersion = 2 }
         assertWireRejected { it.presentation.summary.sectionCount = -1 }
         assertWireRejected { it.presentation.summary.sectionCount = js("NaN") }
         assertWireRejected { it.presentation.summary.elapsedMs = js("Infinity") }
@@ -213,6 +284,19 @@ class ParserWorkerPresentationProtocolTest {
         ranges = emptyList(),
         tables = listOf(ParserWorkerTable("records", records)),
         diagnostics = emptyList(),
+    )
+
+    private fun componentPresentation(): ParserWorkerPresentation = representativePresentation(10).copy(
+        format = "wasm_component",
+        capabilities = listOf("summary", "structural_ranges", "tables", "component_dependency_graph"),
+        diagnostics = emptyList(),
+        componentGraph = ParserWorkerComponentGraph(
+            nodes = listOf(
+                ParserWorkerComponentGraphNode("module:0", "module", "core module 0"),
+                ParserWorkerComponentGraphNode("export:0", "export", "run"),
+            ),
+            edges = listOf(ParserWorkerComponentGraphEdge("module:0", "export:0")),
+        ),
     )
 
     private fun decodeBounded(bounded: BoundedParserWorkerSuccess): BoundedParserWorkerSuccess? =

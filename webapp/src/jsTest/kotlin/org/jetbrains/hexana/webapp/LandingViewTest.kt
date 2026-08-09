@@ -28,7 +28,7 @@ class LandingViewTest {
         try {
             document.body?.appendChild(root)
             composition = renderComposable(rootElementId = root.id) {
-                LandingView(onFileLoaded = { _, bytes ->
+                LandingView(onFileLoaded = { _, bytes, _ ->
                     window.clearTimeout(guard)
                     try {
                         assertEquals(55, bytes.size)
@@ -73,7 +73,7 @@ class LandingViewTest {
             document.body?.appendChild(root)
             composition = renderComposable(rootElementId = root.id) {
                 LandingView(
-                    onFileLoaded = { name, bytes ->
+                    onFileLoaded = { name, bytes, _ ->
                         try {
                             assertEquals("retry.wasm", name); assertEquals(55, bytes.size)
                             assertEquals(2, readers.readFiles.size); assertTrue(readers.readFiles.all { it === file })
@@ -117,7 +117,7 @@ class LandingViewTest {
         document.body?.appendChild(root)
         val composition = renderComposable(rootElementId = root.id) {
             LandingView(
-                onFileLoaded = { _, bytes -> loaded += bytes },
+                onFileLoaded = { _, bytes, _ -> loaded += bytes },
                 readerFactory = readers,
                 workerFactory = ParserWorkerFactory { worker },
                 workerScheduler = LandingScheduler(),
@@ -220,7 +220,7 @@ class LandingViewTest {
                 checkNotNull(document.body).appendChild(root)
                 composition = renderComposable(rootElementId = root.id) {
                     LandingView(
-                        onFileLoaded = { name, _ -> loadedNames += name },
+                        onFileLoaded = { name, _, _ -> loadedNames += name },
                         readerFactory = factory,
                     )
                 }

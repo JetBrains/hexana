@@ -36,6 +36,7 @@ fun EditorToolbar(
     onOverwriteShadowChanged: ((OverwriteShadow?) -> Unit)? = null,
     onReparseAfterOverwrite: () -> Unit = {},
     onOpenSbomTab: (() -> Unit)? = null,
+    fileTypeLabelOverride: String? = null,
 ) {
     val isSubmodule = parentFileName != null || isSubmoduleFileName(fileName)
 
@@ -267,7 +268,7 @@ fun EditorToolbar(
                     property("color", "var(--vscode-badge-foreground, #FFF)")
                 }
             }) {
-                Text(fileTypeDescription(provider, fileName))
+                Text(fileTypeLabelOverride ?: fileTypeDescription(provider, fileName))
             }
 
             if (isSubmodule) {
