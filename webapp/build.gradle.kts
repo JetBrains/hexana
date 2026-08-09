@@ -239,6 +239,16 @@ private fun sbomJson(version: String, components: List<ResolvedRuntimeComponent>
     return "{\"bomFormat\":\"CycloneDX\",\"specVersion\":\"1.5\",\"version\":1,\"metadata\":{\"component\":{\"type\":\"application\",\"bom-ref\":\"urn:hexana:webapp\",\"name\":\"hexana-webapp\",\"version\":${json(version)}}},\"components\":[$sbomComponents]}\n"
 }
 
+private val productionCsp = "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+
+private fun productionCacheControl(path: String): String = when {
+    path == "index.html" -> "no-cache"
+    path.startsWith("assets/") -> "public, max-age=31536000, immutable"
+    else -> "no-store"
+}
+
+private fun hostingPolicyJson(): String = "{\"schemaVersion\":1,\"headers\":{\"Content-Security-Policy\":${json(productionCsp)},\"X-Content-Type-Options\":\"nosniff\",\"Referrer-Policy\":\"no-referrer\",\"Permissions-Policy\":\"geolocation=(), microphone=(), camera=(), payment=(), usb=()\",\"X-Frame-Options\":\"DENY\",\"Cross-Origin-Opener-Policy\":\"same-origin\",\"Cross-Origin-Embedder-Policy\":\"require-corp\",\"Cross-Origin-Resource-Policy\":\"same-origin\"},\"cache\":{\"index.html\":\"no-cache\",\"assets/*\":\"public, max-age=31536000, immutable\",\"evidence\":\"no-store\"},\"hsts\":\"HTTPS edge-only; configure Strict-Transport-Security at the TLS terminator, not in this static artifact.\",\"coopCoepDecision\":\"enabled: all app, worker, and Wasm resources are same-origin and the production-package smoke verifies worker parsing under COOP/COEP\"}\n"
+
 private fun verifyProductionPackage(packageDir: File) {
     if (!packageDir.isDirectory) packageFailure("missing package directory ${packageDir.absolutePath}")
     val manifest = packageDir.resolve("package-manifest.json")
@@ -275,6 +285,9 @@ private fun verifyProductionPackage(packageDir: File) {
     if (packageDir.resolve("sbom.cdx.json").readText() != sbomJson(version, resolvedComponents)) {
         packageFailure("SBOM does not match the complete resolved runtime dependency evidence")
     }
+    if (packageDir.resolve("hosting-policy.json").readText() != hostingPolicyJson()) {
+        packageFailure("deployed-equivalent hosting policy is missing or changed")
+    }
     checksumEntries.forEach { (path, hash) ->
         val file = packageDir.resolve(path)
         if (!file.isFile || sha256(file) != hash) packageFailure("hash mismatch for $path")
@@ -289,6 +302,7 @@ private fun verifyProductionPackage(packageDir: File) {
         "build-identity.json",
         "sbom.cdx.json",
         "resolved-dependencies.json",
+        "hosting-policy.json",
         "provenance.json",
         "package-manifest.json",
         "checksums.sha256",
@@ -310,8 +324,15 @@ private fun verifyProductionPackage(packageDir: File) {
         packageFailure("source maps or development artifacts shipped")
     }
     val index = packageDir.resolve("index.html").readText()
-    if ("connect-src 'self'" !in index || "'unsafe-eval'" in index || "http://" in index || "https://" in index) {
+    if (!index.contains("http-equiv=\"Content-Security-Policy\"") || !index.contains(productionCsp) || "http://" in index || "https://" in index) {
         packageFailure("index.html has an unsafe connection or script policy")
+    }
+    val policy = packageDir.resolve("hosting-policy.json").readText()
+    listOf("object-src 'none'", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'", "X-Content-Type-Options\":\"nosniff", "Referrer-Policy\":\"no-referrer", "Permissions-Policy", "X-Frame-Options\":\"DENY", "Cross-Origin-Opener-Policy\":\"same-origin", "Cross-Origin-Embedder-Policy\":\"require-corp", "HTTPS edge-only").forEach { required ->
+        if (required !in policy) packageFailure("hosting policy omits $required")
+    }
+    if ("api.osv.dev" in policy || "connect-src *" in policy || "frame-ancestors *" in policy) {
+        packageFailure("hosting policy grants a forbidden capability")
     }
     val immutableAssets = packageDir.resolve("assets").listFiles()?.filter { it.isFile }.orEmpty()
     if (immutableAssets.isEmpty()) packageFailure("missing immutable assets")
@@ -420,7 +441,7 @@ val packageProductionWebapp by tasks.registering {
             file.relativeTo(output).invariantSeparatorsPath to sha256(file)
         }.sortedBy { it.first }.toList()
         val cacheEntries = payloadFiles.joinToString(",") { (path, hash) ->
-            "{\"path\":${json(path)},\"sha256\":${json(hash)},\"cacheControl\":${json(if (path == "index.html") "no-cache" else "public, max-age=31536000, immutable")}}"
+            "{\"path\":${json(path)},\"sha256\":${json(hash)},\"cacheControl\":${json(productionCacheControl(path))}}"
         }
         output.resolve("build-identity.json").writeText(
             "{\"schemaVersion\":1,\"product\":\"hexana-webapp\",\"version\":${json(version)},\"versionSource\":${json(versionSource)},\"revision\":${json(revision)}}\n",
@@ -431,6 +452,7 @@ val packageProductionWebapp by tasks.registering {
             resolutionEvidenceJson(resolvedComponents),
             StandardCharsets.UTF_8,
         )
+        output.resolve("hosting-policy.json").writeText(hostingPolicyJson(), StandardCharsets.UTF_8)
         val evidenceFiles = listOf("gradle/libs.versions.toml", "gradle/wrapper/gradle-wrapper.properties", "webapp/build.gradle.kts")
         val evidence = evidenceFiles.joinToString(",") { path -> "{\"path\":${json(path)},\"sha256\":${json(sha256(rootProject.file(path)))}}" }
         output.resolve("provenance.json").writeText(
@@ -440,7 +462,7 @@ val packageProductionWebapp by tasks.registering {
         val manifestEntries = output.walkTopDown().filter { it.isFile }.map { file ->
             file.relativeTo(output).invariantSeparatorsPath to sha256(file)
         }.sortedBy { it.first }.joinToString(",") { (path, hash) ->
-            "{\"path\":${json(path)},\"sha256\":${json(hash)},\"cacheControl\":${json(if (path == "index.html" || path !in payloadFiles.map { it.first }) "no-cache" else "public, max-age=31536000, immutable")}}"
+            "{\"path\":${json(path)},\"sha256\":${json(hash)},\"cacheControl\":${json(productionCacheControl(path))}}"
         }
         output.resolve("package-manifest.json").writeText(
             "{\"schemaVersion\":1,\"files\":[$manifestEntries],\"payload\":[$cacheEntries]}\n",
@@ -459,6 +481,18 @@ tasks.register("verifyProductionPackage") {
     description = "Verifies the immutable production webapp package allowlist, integrity, references, and policy."
     dependsOn(packageProductionWebapp)
     doLast { verifyProductionPackage(layout.buildDirectory.dir("production-package").get().asFile) }
+}
+
+tasks.register<Exec>("productionPackageChromeSmoke") {
+    group = "verification"
+    description = "Serves the immutable package with its deployed-equivalent policy and verifies Chrome worker parsing."
+    dependsOn(packageProductionWebapp)
+    commandLine(
+        "node",
+        project.file("production-package-smoke.mjs").absolutePath,
+        layout.buildDirectory.dir("production-package").get().asFile.absolutePath,
+        rootProject.file("wasmParser/src/commonTest/resources/snippets/addition.wasm").absolutePath,
+    )
 }
 
 tasks.register("verifyPublicWebappCapabilityPolicy") {
