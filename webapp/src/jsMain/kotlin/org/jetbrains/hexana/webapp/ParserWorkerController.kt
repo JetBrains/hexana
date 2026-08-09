@@ -3,28 +3,20 @@ package org.jetbrains.hexana.webapp
 import kotlinx.browser.window
 import org.khronos.webgl.ArrayBuffer
 
-internal const val PARSER_WORKER_PROTOCOL_VERSION = 1
 /** Same-origin public-distribution asset; Karma maps this URL to its test fixture. */
 internal const val PARSER_WORKER_URL = "parser-worker.js"
 
 /** Production lifecycle policy. Tests inject a scheduler and assert this value without waiting. */
 internal const val PARSER_WORKER_TIMEOUT_MS = 240_000
 
-internal data class ParserWorkerSummary(
-    val scopeMarker: String,
-    val documentAbsent: Boolean,
-    val inputBytes: Int,
-    val sectionCount: Int,
-    val importCount: Int,
-    val definedFunctionCount: Int,
-    val codeBodyCount: Int,
-    val elapsedMs: Double,
-)
-
 internal sealed interface ParserWorkerState {
     data object Ready : ParserWorkerState
     data class Parsing(val requestId: String) : ParserWorkerState
-    data class Parsed(val summary: ParserWorkerSummary) : ParserWorkerState
+    data class Parsed(val response: BoundedParserWorkerSuccess) : ParserWorkerState {
+        val summary: ParserWorkerSummary get() = response.presentation.summary
+        val presentation: ParserWorkerPresentation get() = response.presentation
+        val partial: ParserWorkerPartial get() = response.partial
+    }
     data class Failed(val code: String, val message: String) : ParserWorkerState
     data object TimedOut : ParserWorkerState
     data object Cancelled : ParserWorkerState
@@ -119,7 +111,7 @@ internal class ParserWorkerController(
         when (val decoded = decodeParserWorkerResponse(message, request.requestId)) {
             is DecodedWorkerResponse.Success -> {
                 complete(request)
-                onStateChanged(ParserWorkerState.Parsed(decoded.summary))
+                onStateChanged(ParserWorkerState.Parsed(decoded.response))
             }
             is DecodedWorkerResponse.Error -> {
                 complete(request)
@@ -176,42 +168,18 @@ internal class ParserWorkerController(
 }
 
 internal sealed interface DecodedWorkerResponse {
-    data class Success(val summary: ParserWorkerSummary) : DecodedWorkerResponse
+    data class Success(val response: BoundedParserWorkerSuccess) : DecodedWorkerResponse
     data class Error(val code: String, val message: String) : DecodedWorkerResponse
     data object Malformed : DecodedWorkerResponse
 }
 
 internal fun decodeParserWorkerResponse(value: dynamic, requestId: String): DecodedWorkerResponse {
-    if (!isPlainWireObject(value)) return DecodedWorkerResponse.Malformed
-    if (value.protocolVersion != PARSER_WORKER_PROTOCOL_VERSION || value.requestId != requestId) {
+    if (!isPlainWireObject(value) || value.protocolVersion != PARSER_WORKER_PROTOCOL_VERSION || value.requestId != requestId) {
         return DecodedWorkerResponse.Malformed
     }
     return when (value.kind as? String) {
-        "success" -> {
-            val scopeMarker = value.scopeMarker as? String ?: return DecodedWorkerResponse.Malformed
-            val documentAbsent = value.documentAbsent as? Boolean ?: return DecodedWorkerResponse.Malformed
-            val inputBytes = safeWireInt(value.inputBytes) ?: return DecodedWorkerResponse.Malformed
-            val sectionCount = safeWireInt(value.sectionCount) ?: return DecodedWorkerResponse.Malformed
-            val importCount = safeWireInt(value.importCount) ?: return DecodedWorkerResponse.Malformed
-            val definedFunctionCount = safeWireInt(value.definedFunctionCount) ?: return DecodedWorkerResponse.Malformed
-            val codeBodyCount = safeWireInt(value.codeBodyCount) ?: return DecodedWorkerResponse.Malformed
-            val elapsedMs = safeWireDouble(value.elapsedMs) ?: return DecodedWorkerResponse.Malformed
-            if (scopeMarker != "DedicatedWorkerGlobalScope" || !documentAbsent) {
-                return DecodedWorkerResponse.Malformed
-            }
-            DecodedWorkerResponse.Success(
-                ParserWorkerSummary(
-                    scopeMarker,
-                    documentAbsent,
-                    inputBytes,
-                    sectionCount,
-                    importCount,
-                    definedFunctionCount,
-                    codeBodyCount,
-                    elapsedMs,
-                )
-            )
-        }
+        "success" -> decodeParserWorkerSuccess(value, requestId)?.let(DecodedWorkerResponse::Success)
+            ?: DecodedWorkerResponse.Malformed
         "error" -> {
             val code = value.code as? String ?: return DecodedWorkerResponse.Malformed
             val message = value.message as? String ?: return DecodedWorkerResponse.Malformed
@@ -230,20 +198,6 @@ internal fun isDedicatedWorkerScope(scope: dynamic): Boolean =
         js("scope instanceof DedicatedWorkerGlobalScope").unsafeCast<Boolean>() &&
         scope.document == null
 
-private fun isPlainWireObject(value: dynamic): Boolean =
-    value != null && js("Object.prototype.toString.call(value) === '[object Object]'").unsafeCast<Boolean>()
-
-private fun safeWireInt(value: dynamic): Int? {
-    if (jsTypeOf(value) != "number") return null
-    val number = value.unsafeCast<Double>()
-    if (!number.isFinite() || number < 0.0 || number > Int.MAX_VALUE || number % 1.0 != 0.0) return null
-    return number.toInt()
-}
-
-private fun safeWireDouble(value: dynamic): Double? {
-    if (jsTypeOf(value) != "number") return null
-    return value.unsafeCast<Double>().takeIf { it.isFinite() && it >= 0.0 }
-}
 
 @JsName("Worker")
 private external class NativeWorker(scriptUrl: String) {

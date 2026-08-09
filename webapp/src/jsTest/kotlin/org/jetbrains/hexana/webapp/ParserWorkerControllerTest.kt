@@ -69,7 +69,9 @@ class ParserWorkerControllerTest {
 
         assertEquals(1, oldWorker.terminateCalls)
         assertEquals(1, newWorker.terminateCalls)
-        assertEquals(16, assertIs<ParserWorkerState.Parsed>(fixture.states.last()).summary.inputBytes)
+        val parsed = assertIs<ParserWorkerState.Parsed>(fixture.states.last())
+        assertEquals(16, parsed.summary.inputBytes)
+        assertEquals(false, parsed.partial.partial)
     }
 
     @Test
@@ -91,7 +93,7 @@ class ParserWorkerControllerTest {
         val fixture = Fixture()
         fixture.controller.parse(ArrayBuffer(8), 100)
         val malformed = success("parser-worker-1")
-        malformed.sectionCount = -1
+        malformed.presentation.summary.sectionCount = -1
 
         fixture.workers.single().fireMessage(malformed)
 
@@ -150,15 +152,16 @@ class ParserWorkerControllerTest {
         val fixture = Fixture()
         fixture.controller.parse(ArrayBuffer(8), 100)
         val wrongVersion = success("parser-worker-1")
-        wrongVersion.protocolVersion = 2
+        wrongVersion.protocolVersion = 3
         fixture.workers.single().fireMessage(wrongVersion)
         assertEquals("INVALID_RESPONSE", assertIs<ParserWorkerState.Failed>(fixture.states.last()).code)
 
         val wrongId = decodeParserWorkerResponse(success("other"), "expected")
         assertEquals(DecodedWorkerResponse.Malformed, wrongId)
         val wrongScope = success("expected")
-        wrongScope.scopeMarker = "Window"
+        wrongScope.presentation.summary.scopeMarker = "Window"
         assertEquals(DecodedWorkerResponse.Malformed, decodeParserWorkerResponse(wrongScope, "expected"))
+        assertEquals(DecodedWorkerResponse.Malformed, decodeParserWorkerResponse(null, "expected"))
     }
 }
 
@@ -235,20 +238,16 @@ private class FakeScheduler : ParserWorkerScheduler {
 }
 
 private fun success(requestId: String, inputBytes: Int = 8): dynamic {
-    val value = js("({})")
-    value.protocolVersion = PARSER_WORKER_PROTOCOL_VERSION
-    value.kind = "success"
-    value.requestId = requestId
-    value.scopeMarker = "DedicatedWorkerGlobalScope"
-    value.documentAbsent = true
-    value.inputBytes = inputBytes
-    value.sectionCount = 5
-    value.importCount = 1
-    value.definedFunctionCount = 1
-    value.codeBodyCount = 1
-    value.elapsedMs = 1.0
-    return value
+    return encodeBoundedParserWorkerSuccess(requestId, representativePresentation(inputBytes))
 }
+
+internal fun representativePresentation(inputBytes: Int = 8): ParserWorkerPresentation = ParserWorkerPresentation(
+    format = "core_wasm",
+    capabilities = listOf("summary", "structural_ranges", "tables", "diagnostics"),
+    summary = ParserWorkerSummary("DedicatedWorkerGlobalScope", true, inputBytes, 5, 1, 1, 1, 1.0),
+    ranges = listOf(ParserWorkerRange(0, 8, "header")),
+    tables = listOf(ParserWorkerTable("sections", listOf(ParserWorkerRecord("0", "type")))),
+)
 
 private fun workerErrorResponse(requestId: String): dynamic {
     val value = js("({})")

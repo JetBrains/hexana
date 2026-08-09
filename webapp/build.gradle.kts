@@ -11,6 +11,7 @@ kotlin {
         val parserWorker = compilations.create("parserWorker") {
             defaultSourceSet {
                 kotlin.srcDir("src/parserWorkerMain/kotlin")
+                kotlin.srcDir("src/parserWorkerShared/kotlin")
                 dependencies {
                     implementation(project(":wasmParser"))
                     implementation(project(":encdec"))
@@ -36,6 +37,7 @@ kotlin {
 
     sourceSets {
         jsMain {
+            kotlin.srcDir("src/parserWorkerShared/kotlin")
             dependencies {
                 implementation(project(":web-ui"))
             }

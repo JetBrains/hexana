@@ -269,19 +269,11 @@ private fun parallelJson(sample: ParallelSample): dynamic {
 }
 
 private fun successDtoJsonBytes(sample: WorkerSample): Int {
-    val value = js("({})")
-    value.protocolVersion = 1
-    value.kind = "success"
-    value.requestId = "parser-worker-1"
-    value.scopeMarker = "DedicatedWorkerGlobalScope"
-    value.documentAbsent = true
-    value.inputBytes = sample.inputBytes
-    value.sectionCount = 5
-    value.importCount = 1
-    value.definedFunctionCount = 1
-    value.codeBodyCount = 1
-    value.elapsedMs = sample.parseMs
-    return js("new TextEncoder().encode(JSON.stringify(value)).byteLength").unsafeCast<Int>()
+    val base = representativePresentation(sample.inputBytes)
+    val presentation = base.copy(summary = base.summary.copy(elapsedMs = sample.parseMs ?: 0.0))
+    return utf8WireBytes(
+        encodeBoundedParserWorkerSuccess("parser-worker-1", presentation),
+    )
 }
 
 private fun usedJsHeapBytes(): Double? {

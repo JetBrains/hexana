@@ -4,9 +4,15 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
 import org.jetbrains.hexana.wasm.WasmModule
+import org.jetbrains.hexana.webapp.ParserWorkerPresentation
+import org.jetbrains.hexana.webapp.ParserWorkerRange
+import org.jetbrains.hexana.webapp.ParserWorkerRecord
+import org.jetbrains.hexana.webapp.ParserWorkerSummary
+import org.jetbrains.hexana.webapp.ParserWorkerTable
+import org.jetbrains.hexana.webapp.encodeBoundedParserWorkerSuccess
+import org.jetbrains.hexana.webapp.PARSER_WORKER_PROTOCOL_VERSION
 import org.khronos.webgl.ArrayBuffer
 
-private const val PROTOCOL_VERSION = 1
 private const val SCOPE_MARKER = "DedicatedWorkerGlobalScope"
 
 fun main() {
@@ -23,7 +29,7 @@ fun main() {
             postError(workerScope, requestId ?: "", "INVALID_SCOPE", "Parser worker scope is unavailable.")
         } else if (
             !isPlainObject(request) ||
-            request.protocolVersion != PROTOCOL_VERSION ||
+            request.protocolVersion != PARSER_WORKER_PROTOCOL_VERSION ||
             request.kind != "parse" ||
             requestId.isNullOrBlank() ||
             !js("request.buffer instanceof ArrayBuffer").unsafeCast<Boolean>()
@@ -50,19 +56,17 @@ private fun parse(workerScope: dynamic, requestId: String, input: ArrayBuffer) {
         val definedFunctionCount = module.functionSection?.let { with(it) { buffer.parseFunctions().size } } ?: 0
         val codeBodyCount = module.codeSection?.let { with(it) { buffer.scan().size } } ?: 0
 
-        val response = js("({})")
-        response.protocolVersion = PROTOCOL_VERSION
-        response.kind = "success"
-        response.requestId = requestId
-        response.scopeMarker = SCOPE_MARKER
-        response.documentAbsent = true
-        response.inputBytes = input.byteLength
-        response.sectionCount = module.sections.size
-        response.importCount = importCount
-        response.definedFunctionCount = definedFunctionCount
-        response.codeBodyCount = codeBodyCount
-        response.elapsedMs = now() - startedAt
-        workerScope.postMessage(response)
+        val presentation = ParserWorkerPresentation(
+            format = "core_wasm",
+            capabilities = listOf("summary", "structural_ranges", "tables", "diagnostics"),
+            summary = ParserWorkerSummary(SCOPE_MARKER, true, input.byteLength, module.sections.size, importCount,
+                definedFunctionCount, codeBodyCount, now() - startedAt),
+            ranges = module.sections.mapIndexed { index, _ -> ParserWorkerRange(index, 0, "section-$index") },
+            tables = listOf(
+                ParserWorkerTable("sections", module.sections.mapIndexed { index, _ -> ParserWorkerRecord(index.toString(), "section") }),
+            ),
+        )
+        workerScope.postMessage(encodeBoundedParserWorkerSuccess(requestId, presentation))
     } catch (_: Throwable) {
         postError(workerScope, requestId, "PARSE_FAILED", "The input could not be parsed safely.")
     }
@@ -75,7 +79,7 @@ private fun postError(
     message: String,
 ) {
     val response = js("({})")
-    response.protocolVersion = PROTOCOL_VERSION
+    response.protocolVersion = PARSER_WORKER_PROTOCOL_VERSION
     response.kind = "error"
     response.requestId = requestId
     response.code = code

@@ -383,19 +383,7 @@ private class LandingWorker : ParserWorkerPort {
     override fun postParse(request: dynamic, buffer: ArrayBuffer) { requestId = request.requestId as String }
     override fun terminate() { terminateCalls++ }
     fun fireSuccess() {
-        val value = js("({})")
-        value.protocolVersion = PARSER_WORKER_PROTOCOL_VERSION
-        value.kind = "success"
-        value.requestId = requestId
-        value.scopeMarker = "DedicatedWorkerGlobalScope"
-        value.documentAbsent = true
-        value.inputBytes = 55
-        value.sectionCount = 5
-        value.importCount = 1
-        value.definedFunctionCount = 1
-        value.codeBodyCount = 1
-        value.elapsedMs = 1.0
-        onMessage(value)
+        onMessage(encodeBoundedParserWorkerSuccess(requestId, representativePresentation(55)))
     }
 }
 
