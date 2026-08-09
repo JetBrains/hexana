@@ -7,6 +7,9 @@ import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.vscode.*
+import org.khronos.webgl.ArrayBuffer
+import org.khronos.webgl.Int8Array
+import org.w3c.files.File
 
 fun main() {
     renderComposable(rootElementId = "root") {
@@ -116,19 +119,70 @@ fun WebAppRoot() {
 internal fun LandingView(
     onFileLoaded: (name: String, bytes: ByteArray) -> Unit,
     readerFactory: BrowserFileReaderFactory = domBrowserFileReaderFactory,
+    workerFactory: ParserWorkerFactory = browserParserWorkerFactory,
+    workerScheduler: ParserWorkerScheduler = browserParserWorkerScheduler,
 ) {
     var isDragging by remember { mutableStateOf(false) }
+    var isReading by remember { mutableStateOf(false) }
     var loadStatus by remember { mutableStateOf(BrowserFileLoadStatus.Ready) }
+    var parserState by remember { mutableStateOf<ParserWorkerState>(ParserWorkerState.Ready) }
+    var retainedFile by remember { mutableStateOf<File?>(null) }
+    var pendingCoreBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingCoreFileName by remember { mutableStateOf("") }
     val currentOnFileLoaded = rememberUpdatedState(onFileLoaded)
-    val loader = remember(readerFactory) {
-        BrowserFileLoader(
-            readerFactory = readerFactory,
-            onStatusChanged = { loadStatus = it },
-            onFileLoaded = { name, bytes -> currentOnFileLoaded.value(name, bytes) },
+    val parserController = remember(workerFactory, workerScheduler) {
+        ParserWorkerController(
+            workerFactory = workerFactory,
+            scheduler = workerScheduler,
+            onStateChanged = { state ->
+                parserState = state
+                if (state is ParserWorkerState.Parsed) {
+                    val bytes = pendingCoreBytes ?: return@ParserWorkerController
+                    pendingCoreBytes = null
+                    currentOnFileLoaded.value(pendingCoreFileName, bytes)
+                } else if (state is ParserWorkerState.TimedOut || state is ParserWorkerState.Cancelled || state is ParserWorkerState.Failed) {
+                    // Retry deliberately re-reads retainedFile; do not retain a potentially 50 MiB prior read.
+                    pendingCoreBytes = null
+                    pendingCoreFileName = ""
+                }
+            },
         )
     }
-    DisposableEffect(loader) {
-        onDispose { loader.dispose() }
+    val loader = remember(readerFactory, parserController) {
+        BrowserFileLoader(
+            readerFactory = readerFactory,
+            onStatusChanged = {
+                loadStatus = it
+                isReading = it == BrowserFileLoadStatus.Reading
+            },
+            onFileLoaded = { file, bytes ->
+                isReading = false
+                retainedFile = file
+                if (requiresCoreParserWorker(bytes)) {
+                    pendingCoreFileName = file.name
+                    pendingCoreBytes = bytes
+                    // The worker receives its own transferable copy. The UI bytes remain usable after transfer.
+                    parserController.parse(copyForParserWorker(bytes), PARSER_WORKER_TIMEOUT_MS)
+                } else {
+                    pendingCoreBytes = null
+                    // Components and other formats keep their existing main-thread path (MCP-184+).
+                    currentOnFileLoaded.value(file.name, bytes)
+                }
+            },
+        )
+    }
+    DisposableEffect(loader, parserController) {
+        onDispose {
+            loader.dispose()
+            parserController.dispose()
+        }
+    }
+
+    val selectFile: (File) -> Unit = { file ->
+        parserController.cancel()
+        // A fresh read replaces a terminal parser state; Retry must not remain clickable while it is in flight.
+        parserState = ParserWorkerState.Ready
+        loader.select(file)
     }
 
     Div({
@@ -157,7 +211,7 @@ internal fun LandingView(
                 loader.cancelPickerSelection()
                 return@onDrop
             }
-            loader.select(file)
+            selectFile(file)
         }
     }) {
         Span({
@@ -195,7 +249,7 @@ internal fun LandingView(
             onClick {
                 openFilePicker { file ->
                     if (file == null) loader.cancelPickerSelection()
-                    else loader.select(file)
+                    else selectFile(file)
                 }
             }
         }) { Text("Open file…") }
@@ -214,6 +268,41 @@ internal fun LandingView(
             }
         }) { Text(loadStatus.message) }
 
+        val parserMessage = when (val state = parserState) {
+            ParserWorkerState.Ready -> null
+            is ParserWorkerState.Parsing -> "Parsing…"
+            is ParserWorkerState.Parsed -> null
+            ParserWorkerState.TimedOut -> "Timed out while parsing."
+            ParserWorkerState.Cancelled -> "Cancelled."
+            is ParserWorkerState.Failed -> "Failed to parse the core WebAssembly module."
+        }
+        if (parserMessage != null) {
+            Span({
+                attr("role", "status")
+                attr("aria-live", "polite")
+                attr("data-parser-worker-state", parserMessage)
+                style {
+                    property("font-size", "12px")
+                    property("min-height", "18px")
+                    property("opacity", "0.9")
+                    if (parserState is ParserWorkerState.Failed || parserState == ParserWorkerState.TimedOut) {
+                        property("color", "var(--vscode-inputValidation-errorForeground, #f48771)")
+                    }
+                }
+            }) { Text(parserMessage) }
+        }
+        if (parserState is ParserWorkerState.Parsing) {
+            Button({
+                attr("data-parser-worker-action", "cancel")
+                onClick { parserController.cancel() }
+            }) { Text("Cancel") }
+        } else if (!isReading && retainedFile != null && (parserState == ParserWorkerState.TimedOut || parserState == ParserWorkerState.Cancelled || parserState is ParserWorkerState.Failed)) {
+            Button({
+                attr("data-parser-worker-action", "retry")
+                onClick { selectFile(requireNotNull(retainedFile)) }
+            }) { Text("Retry") }
+        }
+
         Span({
             style {
                 property("font-size", "11px")
@@ -222,3 +311,15 @@ internal fun LandingView(
         }) { Text("WASM, ELF, Mach-O, PE, class files, ZIP, DEX and more") }
     }
 }
+
+/**
+ * Only core Wasm is gated in MCP-182. Provider construction remains on the main thread after this
+ * validation boundary; moving provider/lazy UI analysis is explicitly deferred to MCP-184 and later.
+ */
+internal fun requiresCoreParserWorker(bytes: ByteArray): Boolean =
+    bytes.size >= 8 && bytes[0] == 0.toByte() && bytes[1] == 0x61.toByte() && bytes[2] == 0x73.toByte() &&
+        bytes[3] == 0x6d.toByte() && bytes[4] == 1.toByte() && bytes[5] == 0.toByte()
+
+/** Copies UI-owned bytes before transfer; transferring this buffer detaches only the worker copy. */
+internal fun copyForParserWorker(bytes: ByteArray): ArrayBuffer =
+    bytes.copyOf().unsafeCast<Int8Array>().buffer

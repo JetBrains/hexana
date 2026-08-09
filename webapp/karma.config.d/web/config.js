@@ -16,6 +16,7 @@ config.files.push({
 config.proxies = {
     ...(config.proxies || {}),
     "/kotlin": "/base/kotlin/",
+    "/parser-worker.js": "/base/kotlin/parser-worker.js",
 };
 
 const isCi = Boolean(process.env["CI"] || process.env["TEAMCITY_VERSION"]);

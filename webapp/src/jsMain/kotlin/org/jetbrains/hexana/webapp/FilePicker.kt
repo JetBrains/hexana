@@ -74,7 +74,7 @@ internal val domBrowserFileReaderFactory = BrowserFileReaderFactory { DomBrowser
 internal class BrowserFileLoader(
     private val readerFactory: BrowserFileReaderFactory = domBrowserFileReaderFactory,
     private val onStatusChanged: (BrowserFileLoadStatus) -> Unit,
-    private val onFileLoaded: (name: String, bytes: ByteArray) -> Unit,
+    private val onFileLoaded: (file: File, bytes: ByteArray) -> Unit,
 ) {
     private data class ActiveRead(
         val generation: Int,
@@ -107,7 +107,7 @@ internal class BrowserFileLoader(
         activeRead = ActiveRead(currentGeneration, reader)
         try {
             reader.setHandlers(
-                onLoad = { buffer -> handleLoad(currentGeneration, reader, file.name, buffer) },
+            onLoad = { buffer -> handleLoad(currentGeneration, reader, file, buffer) },
                 onError = { finishWithStatus(currentGeneration, reader, BrowserFileLoadStatus.ReadError) },
                 onAbort = { finishWithStatus(currentGeneration, reader, BrowserFileLoadStatus.Aborted) },
             )
@@ -129,7 +129,7 @@ internal class BrowserFileLoader(
     private fun handleLoad(
         expectedGeneration: Int,
         reader: BrowserFileReader,
-        fileName: String,
+        file: File,
         buffer: ArrayBuffer,
     ) {
         if (!isActive(expectedGeneration, reader)) return
@@ -141,7 +141,7 @@ internal class BrowserFileLoader(
             return
         }
         releaseIfActive(expectedGeneration, reader)
-        onFileLoaded(fileName, bytes)
+        onFileLoaded(file, bytes)
     }
 
     private fun finishWithStatus(

@@ -45,7 +45,8 @@ class BrowserFileLoaderTest {
         val loaded = mutableListOf<Pair<String, ByteArray>>()
         val loader = loader(factory, statuses, loaded)
 
-        loader.select(syntheticFile("first.bin", 4.0))
+        val retainedFile = syntheticFile("first.bin", 4.0)
+        loader.select(retainedFile)
         val failedReader = factory.readers.single()
         failedReader.fireError()
 
@@ -53,11 +54,12 @@ class BrowserFileLoaderTest {
         assertFalse(loader.hasActiveReader)
         assertEquals(1, failedReader.clearCalls)
 
-        loader.select(syntheticFile("retry.bin", 4.0))
+        // A retry reads the retained browser File again; it does not reuse a transferred buffer.
+        loader.select(retainedFile)
         factory.readers.last().fireLoad(bufferOf(0x00, 0x7f, 0x80, 0xff))
 
         assertFalse(loader.hasActiveReader)
-        assertEquals("retry.bin", loaded.single().first)
+        assertEquals("first.bin", loaded.single().first)
         assertContentEquals(listOf(0x00, 0x7f, 0x80, 0xff), loaded.single().second.unsignedValues())
     }
 
@@ -198,7 +200,7 @@ class BrowserFileLoaderTest {
     ): BrowserFileLoader = BrowserFileLoader(
         readerFactory = factory,
         onStatusChanged = statuses::add,
-        onFileLoaded = { name, bytes -> loaded += name to bytes },
+        onFileLoaded = { file, bytes -> loaded += file.name to bytes },
     )
 }
 

@@ -58,7 +58,7 @@ val parserWorkerMeasurementsEnabled = providers.environmentVariable("HX_WEB_PARS
 
 val parserWorkerBrowserProductionWebpack by tasks.registering(Exec::class) {
     group = "verification"
-    description = "Bundles the isolated parser worker for browser tests."
+    description = "Bundles the isolated parser worker for the public browser distribution."
     dependsOn(parserWorkerCompileSync, rootProject.tasks.named("kotlinNpmInstall"))
 
     val rootJsDir = rootProject.layout.buildDirectory.dir("js")
@@ -91,6 +91,13 @@ tasks.named<Copy>("jsTestProcessResources") {
             from(rootProject.file("wasmParser/src/commonTest/resources/faustide.wasm"))
             from(rootProject.file("wasmParser/src/commonTest/resources/mpp-demo.wasm"))
         }
+    }
+}
+
+tasks.named<org.gradle.api.tasks.Sync>("jsBrowserDistribution") {
+    dependsOn(parserWorkerBrowserProductionWebpack)
+    from(parserWorkerOutputDir) {
+        include("parser-worker.js")
     }
 }
 
@@ -141,6 +148,13 @@ tasks.register("verifyPublicWebappCapabilityPolicy") {
         }
         val index = indexFile.readText()
         check("api.osv.dev" !in index) { "Public CSP must not permit OSV networking" }
+        check("worker-src 'self'" in index) { "Public CSP must permit only same-origin workers" }
+        check(distributionDir.resolve("parser-worker.js").isFile) {
+            "Public distribution is missing the dedicated parser worker asset"
+        }
+        check(distributionDir.resolve("parser-worker-fixtures").exists().not()) {
+            "Test-only parser-worker fixtures must not ship in the public distribution"
+        }
 
         val forbiddenLiterals = listOf("api.osv.dev", "/v1/querybatch", "/v1/vulns/")
         val productionBundles = distributionDir.walkTopDown()

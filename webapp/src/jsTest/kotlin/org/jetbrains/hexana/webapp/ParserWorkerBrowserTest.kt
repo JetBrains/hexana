@@ -2,6 +2,7 @@ package org.jetbrains.hexana.webapp
 
 import kotlinx.browser.window
 import org.khronos.webgl.ArrayBuffer
+import org.khronos.webgl.Int8Array
 import org.khronos.webgl.Uint8Array
 import kotlin.js.Promise
 import kotlin.test.Test
@@ -13,6 +14,42 @@ import kotlin.test.assertTrue
 private const val REAL_WORKER_TEST_TIMEOUT_MS = 10_000
 
 class ParserWorkerBrowserTest {
+    @Test
+    fun workerTransferDetachesOnlyTheWorkerCopyAndLeavesUiBytesUsable(): Promise<Unit> =
+        Promise { resolve, reject ->
+            val uiBytes = Int8Array(additionFixtureBuffer()).unsafeCast<ByteArray>()
+            val workerBuffer = copyForParserWorker(uiBytes)
+            var guard = 0
+            val controller = ParserWorkerController(
+                workerFactory = browserParserWorkerFactory,
+                scheduler = browserParserWorkerScheduler,
+                onStateChanged = { state ->
+                    when (state) {
+                    is ParserWorkerState.Parsed -> {
+                        window.clearTimeout(guard)
+                        try {
+                            assertEquals(0, workerBuffer.byteLength)
+                            assertEquals(55, uiBytes.size)
+                            assertEquals(0, uiBytes[0].toInt() and 0xff)
+                            assertEquals(0x6d, uiBytes[3].toInt() and 0xff)
+                            resolve(Unit)
+                        } catch (failure: Throwable) {
+                            reject(failure)
+                        }
+                    }
+                    is ParserWorkerState.Failed -> { window.clearTimeout(guard); reject(Throwable("Worker copy proof failed: ${state.code}")) }
+                    ParserWorkerState.TimedOut -> { window.clearTimeout(guard); reject(Throwable("Worker copy proof timed out.")) }
+                    else -> Unit
+                    }
+                },
+            )
+            guard = window.setTimeout({
+                controller.dispose()
+                reject(Throwable("Worker copy proof did not complete."))
+            }, REAL_WORKER_TEST_TIMEOUT_MS)
+            controller.parse(workerBuffer, 5_000)
+        }
+
     @Test
     fun realWorkerProvesDedicatedScopeParsesAdditionAndTransfersOwnership(): Promise<Unit> =
         Promise { resolve, reject ->

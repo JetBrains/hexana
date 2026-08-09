@@ -5,6 +5,7 @@ import kotlinx.browser.document
 import kotlinx.browser.window
 import org.jetbrains.compose.web.renderComposable
 import org.khronos.webgl.ArrayBuffer
+import org.khronos.webgl.Int8Array
 import org.w3c.dom.Element
 import org.w3c.dom.HTMLDivElement
 import org.w3c.dom.events.Event
@@ -12,11 +13,124 @@ import org.w3c.files.File
 import kotlin.js.Promise
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 private const val DOM_WAIT_TIMEOUT_MS = 2_000.0
 private var landingRootSequence = 0
 
 class LandingViewTest {
+    @Test
+    fun coreWasmLandingPathUsesProductionWorkerBeforeExposingUiBytes(): Promise<Unit> = Promise { resolve, reject ->
+        val root = landingRoot()
+        val factory = LandingReaderFactory()
+        var composition: Composition? = null
+        var guard = 0
+        try {
+            document.body?.appendChild(root)
+            composition = renderComposable(rootElementId = root.id) {
+                LandingView(onFileLoaded = { _, bytes ->
+                    window.clearTimeout(guard)
+                    try {
+                        assertEquals(55, bytes.size)
+                        assertEquals(0, bytes[0].toInt() and 0xff)
+                        assertEquals(0x6d, bytes[3].toInt() and 0xff)
+                        resolve(Unit)
+                    } catch (failure: Throwable) { reject(failure) }
+                    composition?.dispose()
+                    root.parentNode?.removeChild(root)
+                }, readerFactory = factory)
+            }
+            guard = window.setTimeout({
+                composition?.dispose(); root.parentNode?.removeChild(root)
+                reject(Throwable("Landing core-Wasm production worker did not complete."))
+            }, DOM_WAIT_TIMEOUT_MS.toInt())
+            drop(root.querySelector("[data-file-drop-zone]")!!, landingSyntheticFile("addition.wasm", 55.0))
+            factory.readers.single().fireLoad(additionFixtureBuffer())
+        } catch (failure: Throwable) {
+            composition?.dispose(); root.parentNode?.removeChild(root); reject(failure)
+        }
+    }
+
+    @Test
+    fun timeoutRetryRereadsRetainedFileAndUsesFreshWorker(): Promise<Unit> = Promise { resolve, reject ->
+        val root = landingRoot()
+        val readers = LandingReaderFactory()
+        val scheduler = LandingScheduler()
+        val workers = mutableListOf<LandingWorker>()
+        val file = landingSyntheticFile("retry.wasm", 55.0)
+        var composition: Composition? = null
+        var finished = false
+        var guard = 0
+        fun finish(failure: Throwable? = null) {
+            if (finished) return
+            finished = true
+            window.clearTimeout(guard)
+            composition?.dispose()
+            root.parentNode?.removeChild(root)
+            if (failure == null) resolve(Unit) else reject(failure)
+        }
+        try {
+            document.body?.appendChild(root)
+            composition = renderComposable(rootElementId = root.id) {
+                LandingView(
+                    onFileLoaded = { name, bytes ->
+                        try {
+                            assertEquals("retry.wasm", name); assertEquals(55, bytes.size)
+                            assertEquals(2, readers.readFiles.size); assertTrue(readers.readFiles.all { it === file })
+                            assertEquals(PARSER_WORKER_TIMEOUT_MS, scheduler.lastDelayMs)
+                            finish()
+                        } catch (t: Throwable) { finish(t) }
+                    },
+                    readerFactory = readers,
+                    workerFactory = ParserWorkerFactory { LandingWorker().also(workers::add) },
+                    workerScheduler = scheduler,
+                )
+            }
+            guard = window.setTimeout({ finish(Throwable("Landing timeout retry did not complete.")) }, DOM_WAIT_TIMEOUT_MS.toInt())
+            drop(root.querySelector("[data-file-drop-zone]")!!, file)
+            readers.readers.single().fireLoad(additionFixtureBuffer())
+            scheduler.fireActive()
+            window.requestAnimationFrame {
+                window.requestAnimationFrame {
+                try {
+                    root.querySelector("[data-parser-worker-action='retry']")
+                        .unsafeCast<org.w3c.dom.HTMLButtonElement>().click()
+                    window.requestAnimationFrame {
+                        try {
+                            assertEquals(2, readers.readers.size)
+                            readers.readers.last().fireLoad(additionFixtureBuffer())
+                            workers.last().fireSuccess()
+                        } catch (t: Throwable) { finish(t) }
+                    }
+                } catch (t: Throwable) { finish(t) }
+                }
+            }
+        } catch (t: Throwable) { finish(t) }
+    }
+
+    @Test
+    fun unmountTerminatesLandingWorkerAndStaleCallbackCannotExposeBytes() {
+        val root = landingRoot()
+        val readers = LandingReaderFactory()
+        val worker = LandingWorker()
+        val loaded = mutableListOf<ByteArray>()
+        document.body?.appendChild(root)
+        val composition = renderComposable(rootElementId = root.id) {
+            LandingView(
+                onFileLoaded = { _, bytes -> loaded += bytes },
+                readerFactory = readers,
+                workerFactory = ParserWorkerFactory { worker },
+                workerScheduler = LandingScheduler(),
+            )
+        }
+        drop(root.querySelector("[data-file-drop-zone]")!!, landingSyntheticFile("active.wasm", 55.0))
+        readers.readers.single().fireLoad(additionFixtureBuffer())
+        composition.dispose()
+        worker.fireSuccess()
+        root.parentNode?.removeChild(root)
+        assertEquals(1, worker.terminateCalls)
+        assertTrue(loaded.isEmpty())
+    }
     @Test
     fun landingStatusRecoversFromRejectedAndFailedDropForSuccessfulRetry(): Promise<Unit> {
         return Promise { resolve, reject ->
@@ -216,14 +330,15 @@ private class LandingReaderFactory : BrowserFileReaderFactory {
     var createCalls = 0
         private set
     val readers = mutableListOf<LandingReader>()
+    val readFiles = mutableListOf<File>()
 
     override fun create(): BrowserFileReader {
         createCalls++
-        return LandingReader().also(readers::add)
+        return LandingReader(readFiles).also(readers::add)
     }
 }
 
-private class LandingReader : BrowserFileReader {
+private class LandingReader(private val readFiles: MutableList<File>) : BrowserFileReader {
     private var onLoad: ((ArrayBuffer) -> Unit)? = null
     private var onError: (() -> Unit)? = null
     private var onAbort: (() -> Unit)? = null
@@ -244,7 +359,7 @@ private class LandingReader : BrowserFileReader {
         onAbort = null
     }
 
-    override fun readAsArrayBuffer(file: File) = Unit
+    override fun readAsArrayBuffer(file: File) { readFiles += file }
 
     override fun abort() = Unit
 
@@ -255,6 +370,49 @@ private class LandingReader : BrowserFileReader {
     fun fireError() {
         requireNotNull(onError)()
     }
+}
+
+private class LandingWorker : ParserWorkerPort {
+    private lateinit var onMessage: (dynamic) -> Unit
+    var terminateCalls = 0
+    private var requestId = ""
+    override fun setHandlers(onMessage: (dynamic) -> Unit, onError: () -> Unit, onMessageError: () -> Unit) {
+        this.onMessage = onMessage
+    }
+    override fun clearHandlers() = Unit
+    override fun postParse(request: dynamic, buffer: ArrayBuffer) { requestId = request.requestId as String }
+    override fun terminate() { terminateCalls++ }
+    fun fireSuccess() {
+        val value = js("({})")
+        value.protocolVersion = PARSER_WORKER_PROTOCOL_VERSION
+        value.kind = "success"
+        value.requestId = requestId
+        value.scopeMarker = "DedicatedWorkerGlobalScope"
+        value.documentAbsent = true
+        value.inputBytes = 55
+        value.sectionCount = 5
+        value.importCount = 1
+        value.definedFunctionCount = 1
+        value.codeBodyCount = 1
+        value.elapsedMs = 1.0
+        onMessage(value)
+    }
+}
+
+private class LandingScheduler : ParserWorkerScheduler {
+    private data class Item(var cancelled: Boolean, val callback: () -> Unit)
+    private val items = mutableListOf<Item>()
+    var lastDelayMs: Int? = null
+    override fun schedule(delayMs: Int, callback: () -> Unit): ParserWorkerTimer {
+        lastDelayMs = delayMs
+        val item = Item(false, callback); items += item
+        return object : ParserWorkerTimer { override fun cancel() { item.cancelled = true } }
+    }
+    fun fireActive() = items.last { !it.cancelled }.callback()
+}
+
+private fun landingRoot(): HTMLDivElement = document.createElement("div").unsafeCast<HTMLDivElement>().also {
+    it.id = "landing-view-test-root-${landingRootSequence++}"
 }
 
 private fun drop(target: Element, file: File) {

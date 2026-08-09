@@ -8,6 +8,23 @@ import kotlin.test.assertTrue
 
 class ParserWorkerControllerTest {
     @Test
+    fun onlyCoreWasmRequiresTheDedicatedParserWorker() {
+        assertTrue(requiresCoreParserWorker(byteArrayOf(0, 0x61, 0x73, 0x6d, 1, 0, 0, 0)))
+        assertTrue(!requiresCoreParserWorker(byteArrayOf(0, 0x61, 0x73, 0x6d, 0x0d, 0, 0, 0)))
+        assertTrue(!requiresCoreParserWorker(byteArrayOf(0x7f, 0x45, 0x4c, 0x46, 0, 0, 0, 0)))
+    }
+
+    @Test
+    fun productionTimeoutIsExactlyFourMinutesWithoutWaiting() {
+        val fixture = Fixture()
+
+        fixture.controller.parse(ArrayBuffer(8), PARSER_WORKER_TIMEOUT_MS)
+
+        assertEquals(240_000, PARSER_WORKER_TIMEOUT_MS)
+        assertEquals(PARSER_WORKER_TIMEOUT_MS, fixture.scheduler.lastDelayMs)
+    }
+
+    @Test
     fun cancelTerminatesExactlyOnceAndIgnoresStaleReply() {
         val fixture = Fixture()
         fixture.controller.parse(ArrayBuffer(8), 100)
@@ -21,6 +38,21 @@ class ParserWorkerControllerTest {
         assertEquals(1, worker.terminateCalls)
         assertEquals(1, worker.clearCalls)
         assertEquals(ParserWorkerState.Cancelled, fixture.states.last())
+    }
+
+    @Test
+    fun disposalTerminatesOutstandingWorkerAndInvalidatesItsCallback() {
+        val fixture = Fixture()
+        fixture.controller.parse(ArrayBuffer(8), 100)
+        val worker = fixture.workers.single()
+        val staleHandler = worker.messageHandler
+
+        fixture.controller.dispose()
+        staleHandler(success("parser-worker-1"))
+
+        assertEquals(1, worker.terminateCalls)
+        assertEquals(1, worker.clearCalls)
+        assertTrue(fixture.states.last() is ParserWorkerState.Parsing)
     }
 
     @Test
@@ -183,8 +215,11 @@ private class FakeParserWorker(private val throwOnPost: Boolean) : ParserWorkerP
 private class FakeScheduler : ParserWorkerScheduler {
     private data class Scheduled(var cancelled: Boolean, val callback: () -> Unit)
     private val scheduled = mutableListOf<Scheduled>()
+    var lastDelayMs: Int? = null
+        private set
 
     override fun schedule(delayMs: Int, callback: () -> Unit): ParserWorkerTimer {
+        lastDelayMs = delayMs
         val item = Scheduled(false, callback)
         scheduled += item
         return object : ParserWorkerTimer {

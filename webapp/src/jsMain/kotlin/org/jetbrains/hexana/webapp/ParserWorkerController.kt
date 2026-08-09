@@ -4,7 +4,11 @@ import kotlinx.browser.window
 import org.khronos.webgl.ArrayBuffer
 
 internal const val PARSER_WORKER_PROTOCOL_VERSION = 1
-internal const val PARSER_WORKER_URL = "/kotlin/parser-worker.js"
+/** Same-origin public-distribution asset; Karma maps this URL to its test fixture. */
+internal const val PARSER_WORKER_URL = "parser-worker.js"
+
+/** Production lifecycle policy. Tests inject a scheduler and assert this value without waiting. */
+internal const val PARSER_WORKER_TIMEOUT_MS = 240_000
 
 internal data class ParserWorkerSummary(
     val scopeMarker: String,
