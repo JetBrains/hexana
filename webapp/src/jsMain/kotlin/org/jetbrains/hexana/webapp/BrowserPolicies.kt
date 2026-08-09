@@ -3,11 +3,15 @@ package org.jetbrains.hexana.webapp
 import org.jetbrains.hexana.vscode.WebUiCapabilities
 
 /**
- * The landing page intentionally admits every file selected by the browser.
- * Hexana detects the binary format after the file has been read.
+ * The landing page is extension-independent because Hexana detects the binary
+ * format after reading. Size admission is enforced before a reader is created.
  */
 internal object BrowserFileAdmissionPolicy {
-    fun accepts(fileName: String): Boolean = true
+    fun accepts(@Suppress("UNUSED_PARAMETER") fileName: String, fileSizeBytes: Double): Boolean {
+        return fileSizeBytes.isFinite() &&
+            fileSizeBytes >= 0.0 &&
+            fileSizeBytes <= MAX_BROWSER_FILE_SIZE_BYTES
+    }
 }
 
 /** Browser-only capabilities that differ from the VS Code host. */

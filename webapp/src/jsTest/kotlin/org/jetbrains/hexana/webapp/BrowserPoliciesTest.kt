@@ -10,9 +10,9 @@ import kotlin.test.assertTrue
 class BrowserPoliciesTest {
     @Test
     fun landingAdmitsFilesRegardlessOfTheirNameOrExtension() {
-        assertTrue(BrowserFileAdmissionPolicy.accepts("module.wasm"))
-        assertTrue(BrowserFileAdmissionPolicy.accepts("firmware.bin"))
-        assertTrue(BrowserFileAdmissionPolicy.accepts("unrecognized.payload"))
+        assertTrue(BrowserFileAdmissionPolicy.accepts("module.wasm", 1.0))
+        assertTrue(BrowserFileAdmissionPolicy.accepts("firmware.bin", 1.0))
+        assertTrue(BrowserFileAdmissionPolicy.accepts("unrecognized.payload", 1.0))
     }
 
     @Test

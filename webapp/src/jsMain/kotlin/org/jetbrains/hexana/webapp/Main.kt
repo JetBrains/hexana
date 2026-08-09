@@ -113,10 +113,26 @@ fun WebAppRoot() {
 }
 
 @Composable
-private fun LandingView(onFileLoaded: (name: String, bytes: ByteArray) -> Unit) {
+internal fun LandingView(
+    onFileLoaded: (name: String, bytes: ByteArray) -> Unit,
+    readerFactory: BrowserFileReaderFactory = domBrowserFileReaderFactory,
+) {
     var isDragging by remember { mutableStateOf(false) }
+    var loadStatus by remember { mutableStateOf(BrowserFileLoadStatus.Ready) }
+    val currentOnFileLoaded = rememberUpdatedState(onFileLoaded)
+    val loader = remember(readerFactory) {
+        BrowserFileLoader(
+            readerFactory = readerFactory,
+            onStatusChanged = { loadStatus = it },
+            onFileLoaded = { name, bytes -> currentOnFileLoaded.value(name, bytes) },
+        )
+    }
+    DisposableEffect(loader) {
+        onDispose { loader.dispose() }
+    }
 
     Div({
+        attr("data-file-drop-zone", "true")
         style {
             display(DisplayStyle.Flex)
             property("flex-direction", "column")
@@ -136,8 +152,12 @@ private fun LandingView(onFileLoaded: (name: String, bytes: ByteArray) -> Unit) 
         onDrop { event ->
             event.preventDefault()
             isDragging = false
-            val file = event.dataTransfer?.files?.item(0) ?: return@onDrop
-            readFile(file, onFileLoaded)
+            val file = event.dataTransfer?.files?.item(0)
+            if (file == null) {
+                loader.cancelPickerSelection()
+                return@onDrop
+            }
+            loader.select(file)
         }
     }) {
         Span({
@@ -172,8 +192,27 @@ private fun LandingView(onFileLoaded: (name: String, bytes: ByteArray) -> Unit) 
                 property("background", "var(--vscode-button-background, #0e639c)")
                 property("color", "var(--vscode-button-foreground, #fff)")
             }
-            onClick { openFilePicker(onFileLoaded) }
+            onClick {
+                openFilePicker { file ->
+                    if (file == null) loader.cancelPickerSelection()
+                    else loader.select(file)
+                }
+            }
         }) { Text("Open file…") }
+
+        Span({
+            attr("role", "status")
+            attr("aria-live", "polite")
+            attr("data-file-load-status", loadStatus.name)
+            style {
+                property("font-size", "12px")
+                property("min-height", "18px")
+                property("opacity", if (loadStatus.isError) "0.9" else "0.6")
+                if (loadStatus.isError) {
+                    property("color", "var(--vscode-inputValidation-errorForeground, #f48771)")
+                }
+            }
+        }) { Text(loadStatus.message) }
 
         Span({
             style {

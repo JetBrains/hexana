@@ -4,7 +4,6 @@ import kotlinx.browser.document
 import kotlinx.browser.window
 import org.jetbrains.hexana.vscode.Host
 import org.w3c.dom.HTMLAnchorElement
-import org.w3c.dom.HTMLInputElement
 import org.w3c.dom.url.URL
 import org.khronos.webgl.Int8Array
 import org.khronos.webgl.Uint8Array
@@ -12,6 +11,43 @@ import org.w3c.files.Blob
 import org.w3c.files.BlobPropertyBag
 
 private const val STORAGE_PREFIX = "hexana."
+
+internal interface BrowserDownloadApi {
+    fun createObjectUrl(blob: Blob): String
+
+    fun revokeObjectUrl(objectUrl: String)
+
+    fun createAnchor(): HTMLAnchorElement
+
+    fun appendAnchor(anchor: HTMLAnchorElement)
+
+    fun clickAnchor(anchor: HTMLAnchorElement)
+
+    fun removeAnchor(anchor: HTMLAnchorElement)
+}
+
+private object DomBrowserDownloadApi : BrowserDownloadApi {
+    override fun createObjectUrl(blob: Blob): String = URL.createObjectURL(blob)
+
+    override fun revokeObjectUrl(objectUrl: String) {
+        URL.revokeObjectURL(objectUrl)
+    }
+
+    override fun createAnchor(): HTMLAnchorElement =
+        document.createElement("a").unsafeCast<HTMLAnchorElement>()
+
+    override fun appendAnchor(anchor: HTMLAnchorElement) {
+        document.body?.appendChild(anchor)
+    }
+
+    override fun clickAnchor(anchor: HTMLAnchorElement) {
+        anchor.click()
+    }
+
+    override fun removeAnchor(anchor: HTMLAnchorElement) {
+        anchor.parentNode?.removeChild(anchor)
+    }
+}
 
 /**
  * [Host] implementation for the standalone browser webapp.
@@ -23,14 +59,16 @@ private const val STORAGE_PREFIX = "hexana."
  *
  * [canRunExport] is false: running exports requires the VS Code extension.
  */
-class BrowserHost(
+internal class BrowserHost(
     private val currentFileName: () -> String,
     private val currentBytes: () -> ByteArray?,
     private val openModule: (moduleIndex: Int, fileName: String, data: ByteArray) -> Unit,
     private val navigateToParent: () -> Unit,
     private val onScriptFilePicked: (path: String, content: String) -> Unit,
     private val onScriptFileContent: (path: String, content: String) -> Unit,
+    private val downloadApi: BrowserDownloadApi = DomBrowserDownloadApi,
 ) : Host {
+    private var scriptFileLoader: BrowserFileLoader? = null
 
     override val canRunExport: Boolean get() = BrowserCapabilityPolicy.canRunExports
 
@@ -113,37 +151,22 @@ class BrowserHost(
     }
 
     override fun pickScriptFile() {
-        val input = document.createElement("input").unsafeCast<HTMLInputElement>()
-        input.type = "file"
-        input.accept = ".js"
-        input.onchange = {
-            val file = input.files?.item(0)
+        openFilePicker(accept = ".js") { file ->
             if (file != null) {
-                readFile(file) { name, bytes ->
-                    val text = bytes.decodeToString()
-                    onScriptFilePicked(name, text)
-                }
+                loadScriptFile(file) { name, content -> onScriptFilePicked(name, content) }
             }
         }
-        input.click()
     }
 
     override fun readScriptFile(scriptPath: String) {
         // In the browser the "path" is just the file name used as a key;
         // we cannot re-read it from disk. The content was captured at pick time.
         // Trigger a re-pick so the user can refresh the file.
-        val input = document.createElement("input").unsafeCast<HTMLInputElement>()
-        input.type = "file"
-        input.accept = ".js"
-        input.onchange = {
-            val file = input.files?.item(0)
+        openFilePicker(accept = ".js") { file ->
             if (file != null) {
-                readFile(file) { _, bytes ->
-                    onScriptFileContent(scriptPath, bytes.decodeToString())
-                }
+                loadScriptFile(file) { _, content -> onScriptFileContent(scriptPath, content) }
             }
         }
-        input.click()
     }
 
     override fun scriptTabAdded(scriptPath: String) {
@@ -171,26 +194,55 @@ class BrowserHost(
         window.localStorage.setItem("$STORAGE_PREFIX$key", value)
     }
 
+    private fun loadScriptFile(file: org.w3c.files.File, onLoaded: (String, String) -> Unit) {
+        scriptFileLoader?.dispose()
+        lateinit var loader: BrowserFileLoader
+        loader = BrowserFileLoader(
+            onStatusChanged = { status ->
+                if (status != BrowserFileLoadStatus.Reading && scriptFileLoader === loader) {
+                    scriptFileLoader = null
+                }
+            },
+            onFileLoaded = { loadedFile, bytes ->
+                if (scriptFileLoader === loader) scriptFileLoader = null
+                onLoaded(loadedFile.name, bytes.decodeToString())
+            },
+        )
+        scriptFileLoader = loader
+        loader.select(file)
+    }
+
     private fun downloadBytes(bytes: ByteArray, name: String) {
         // Kotlin/JS ByteArray is Int8Array at runtime; reinterpret as Uint8Array without copying.
         val int8 = bytes.unsafeCast<Int8Array>()
         val uint8 = Uint8Array(int8.buffer, int8.byteOffset, bytes.size)
         val blob = Blob(arrayOf(uint8), BlobPropertyBag(type = "application/octet-stream"))
-        triggerDownload(URL.createObjectURL(blob), name)
+        downloadBlob(blob, name)
     }
 
     private fun downloadText(text: String, name: String, mimeType: String) {
         val blob = Blob(arrayOf(text), BlobPropertyBag(type = mimeType))
-        triggerDownload(URL.createObjectURL(blob), name)
+        downloadBlob(blob, name)
+    }
+
+    private fun downloadBlob(blob: Blob, name: String) {
+        val objectUrl = downloadApi.createObjectUrl(blob)
+        try {
+            triggerDownload(objectUrl, name)
+        } finally {
+            downloadApi.revokeObjectUrl(objectUrl)
+        }
     }
 
     private fun triggerDownload(objectUrl: String, name: String) {
-        val a = document.createElement("a").unsafeCast<HTMLAnchorElement>()
-        a.href = objectUrl
-        a.download = name
-        document.body?.appendChild(a)
-        a.click()
-        document.body?.removeChild(a)
-        URL.revokeObjectURL(objectUrl)
+        val anchor = downloadApi.createAnchor()
+        try {
+            anchor.href = objectUrl
+            anchor.download = name
+            downloadApi.appendAnchor(anchor)
+            downloadApi.clickAnchor(anchor)
+        } finally {
+            downloadApi.removeAnchor(anchor)
+        }
     }
 }
