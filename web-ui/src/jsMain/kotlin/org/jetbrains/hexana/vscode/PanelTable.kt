@@ -15,7 +15,7 @@ import org.w3c.dom.events.EventListener
 import org.w3c.dom.events.KeyboardEvent
 
 /** Sort direction for table columns. */
-internal enum class SortDirection { NONE, ASC, DESC }
+enum class SortDirection { NONE, ASC, DESC }
 
 /** Mutable sort state shared between the header and the DOM reorder effect. */
 internal class TableSortState(
@@ -45,7 +45,7 @@ internal class TableSortState(
  * the query (case-insensitive) are hidden.
  */
 @Composable
-internal fun SearchableTable(
+fun SearchableTable(
     headers: List<String>,
     columnAligns: List<String> = emptyList(),
     defaultSortColumn: Int = headers.indexOf("ID").takeIf { it >= 0 } ?: -1,
@@ -410,7 +410,7 @@ private class RowCallbacks {
  * between sibling rows, preventing the hex viewer from stealing focus.
  */
 @Composable
-internal fun PanelTableRow(
+fun PanelTableRow(
     isHighlighted: Boolean = false,
     backgroundColor: String? = null,
     attrs: Map<String, String> = emptyMap(),

@@ -184,6 +184,7 @@ val teamcityVscodePluginTestTaskPaths = listOf(
 val teamcityWebappTestTaskPaths = listOf(
     ":webapp:compileProductionExecutableKotlinJs",
     ":webapp:jsBrowserProductionWebpack",
+    ":webapp:verifyPublicWebappCapabilityPolicy",
     ":webapp:jsBrowserDistribution",
     ":webapp:buildComponent",
     ":webapp:jsBrowserTest",
@@ -672,6 +673,7 @@ tasks.register("verifyTeamcityWebappTestsCoverage") {
         val requiredTaskPaths = listOf(
             ":webapp:compileProductionExecutableKotlinJs",
             ":webapp:jsBrowserProductionWebpack",
+            ":webapp:verifyPublicWebappCapabilityPolicy",
             ":webapp:jsBrowserDistribution",
             ":webapp:buildComponent",
             ":webapp:jsBrowserTest",

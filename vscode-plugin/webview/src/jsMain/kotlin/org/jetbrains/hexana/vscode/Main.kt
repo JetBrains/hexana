@@ -165,6 +165,11 @@ fun BinaryEditorApp() {
                 parentFileName = parentFileName,
                 provider = provider,
                 extraTabs = extraTabs,
+                capabilities = WebUiCapabilities(
+                    sbomVulnerabilityCheck = SbomVulnerabilityContribution { sbom, onReportReady ->
+                        VulnBar(sbom, onReportReady)
+                    },
+                ),
                 scriptTabs = scriptTabs,
                 showSemanticHighlighting = showSemanticHighlighting,
                 dialogPickedPath = dialogPickedPath,

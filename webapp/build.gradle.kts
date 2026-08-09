@@ -61,6 +61,41 @@ tasks.named("jsBrowserDistribution") {
     dependsOn(copyEditorCss)
 }
 
+tasks.register("verifyPublicWebappCapabilityPolicy") {
+    group = "verification"
+    description = "Verifies the public webapp has no OSV-network capability."
+    dependsOn(tasks.named("jsBrowserDistribution"))
+
+    doLast {
+        val distributionDir = layout.buildDirectory.dir("dist/js/productionExecutable").get().asFile
+        check(distributionDir.isDirectory) {
+            "Final public distribution is missing: ${distributionDir.absolutePath}"
+        }
+        val indexFile = distributionDir.resolve("index.html")
+        check(indexFile.isFile) {
+            "Final public distribution is missing index.html: ${indexFile.absolutePath}"
+        }
+        val index = indexFile.readText()
+        check("api.osv.dev" !in index) { "Public CSP must not permit OSV networking" }
+
+        val forbiddenLiterals = listOf("api.osv.dev", "/v1/querybatch", "/v1/vulns/")
+        val productionBundles = distributionDir.walkTopDown()
+            .filter { it.isFile && it.extension == "js" }
+            .toList()
+        check(productionBundles.isNotEmpty()) {
+            "No JavaScript bundles were found in ${distributionDir.absolutePath}"
+        }
+        productionBundles.forEach { bundle ->
+            val bundleText = bundle.readText()
+            forbiddenLiterals.forEach { literal ->
+                check(literal !in bundleText) {
+                    "Public bundle ${bundle.name} contains forbidden capability literal: $literal"
+                }
+            }
+        }
+    }
+}
+
 // Build the distribution and serve it on http://0.0.0.0:8123 (LAN-reachable).
 // Backs the "Hexana WebApp" run configuration; stop the run to stop the server.
 tasks.register<Exec>("serve") {

@@ -55,6 +55,7 @@ fun SbomTabContent(
     locator: SbomLocator,
     graalVersion: String?,
     fileName: String = "",
+    vulnerabilityCheck: SbomVulnerabilityContribution? = null,
 ) {
     var state by remember(provider, locator) { mutableStateOf<SbomLoadState>(SbomLoadState.Loading) }
 
@@ -73,12 +74,18 @@ fun SbomTabContent(
         is SbomLoadState.Loading -> StatusMessage("Loading SBOM…", muted = true)
         is SbomLoadState.ExtractionFailed -> StatusMessage("Error: ${s.reason}")
         is SbomLoadState.ParseFailed -> StatusMessage("Error: ${s.reason}")
-        is SbomLoadState.Loaded -> SbomLoaded(s.sbom, s.json, graalVersion, fileName)
+        is SbomLoadState.Loaded -> SbomLoaded(s.sbom, s.json, graalVersion, fileName, vulnerabilityCheck)
     }
 }
 
 @Composable
-private fun SbomLoaded(sbom: CycloneDxSbom, json: String, graalVersion: String?, fileName: String) {
+private fun SbomLoaded(
+    sbom: CycloneDxSbom,
+    json: String,
+    graalVersion: String?,
+    fileName: String,
+    vulnerabilityCheck: SbomVulnerabilityContribution?,
+) {
     var vulnReport by remember(sbom) {
         mutableStateOf<SbomVulnerabilityReport?>(null)
     }
@@ -91,7 +98,7 @@ private fun SbomLoaded(sbom: CycloneDxSbom, json: String, graalVersion: String?,
         }
     }) {
         SbomHeaderRow(sbom, json, graalVersion, fileName)
-        VulnBar(sbom) { report -> vulnReport = report }
+        vulnerabilityCheck?.render?.invoke(sbom) { report -> vulnReport = report }
         SbomComponentList(sbom, vulnReport)
     }
 }

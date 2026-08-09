@@ -55,6 +55,7 @@ fun HexanaPanel(
     activeTab: String = FixedTab.Summary.label,
     onActiveTabChange: (String) -> Unit = {},
     extraTabs: List<PanelTab> = emptyList(),
+    capabilities: WebUiCapabilities = WebUiCapabilities(),
     scriptTabs: List<ScriptTabState> = emptyList(),
     dialogPickedPath: String = "",
     dialogPickedContent: String = "",
@@ -87,7 +88,7 @@ fun HexanaPanel(
     // -----------------------------------------------------------------------
     // Build the tab list: provider-generated table tabs + fixed tabs
     // -----------------------------------------------------------------------
-    val tabs = remember(provider, fileName, extraTabs, scriptTabs.size, sbomLocator) {
+    val tabs = remember(provider, fileName, extraTabs, scriptTabs.size, sbomLocator, capabilities.sbomVulnerabilityCheck) {
         buildList {
             // Summary is always first
             if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {
@@ -174,7 +175,7 @@ fun HexanaPanel(
             val graalVer = sbomGraalVersion
             if (locator != null && provider is NativeBinaryProvider) {
                 add(PanelTab(FixedTab.Sbom.label) { _ ->
-                    SbomTabContent(provider, locator, graalVer, fileName)
+                    SbomTabContent(provider, locator, graalVer, fileName, capabilities.sbomVulnerabilityCheck)
                 })
             }
 

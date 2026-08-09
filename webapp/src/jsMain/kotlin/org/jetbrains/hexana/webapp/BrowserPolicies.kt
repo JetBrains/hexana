@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.webapp
 
+import org.jetbrains.hexana.vscode.WebUiCapabilities
+
 /**
  * The landing page intentionally admits every file selected by the browser.
  * Hexana detects the binary format after the file has been read.
@@ -11,4 +13,6 @@ internal object BrowserFileAdmissionPolicy {
 /** Browser-only capabilities that differ from the VS Code host. */
 internal object BrowserCapabilityPolicy {
     const val canRunExports: Boolean = false
+
+    fun createWebUiCapabilities(): WebUiCapabilities = WebUiCapabilities()
 }

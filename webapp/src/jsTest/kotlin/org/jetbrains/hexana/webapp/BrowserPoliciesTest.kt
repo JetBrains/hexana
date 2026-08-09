@@ -4,6 +4,7 @@ import kotlinx.browser.document
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class BrowserPoliciesTest {
@@ -34,5 +35,12 @@ class BrowserPoliciesTest {
         )
 
         assertFalse(host.canRunExport)
+    }
+
+    @Test
+    fun publicWebUiCapabilitiesExcludeRemoteSbomChecks() {
+        val capabilities = BrowserCapabilityPolicy.createWebUiCapabilities()
+
+        assertNull(capabilities.sbomVulnerabilityCheck)
     }
 }
