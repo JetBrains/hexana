@@ -1,3 +1,5 @@
+import io.gitlab.arturbosch.detekt.Detekt
+import io.gitlab.arturbosch.detekt.extensions.DetektExtension
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsEnvSpec
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsPlugin
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin
@@ -14,6 +16,7 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform) apply(false)
     alias(libs.plugins.compose.compiler) apply(false)
     alias(libs.plugins.compose.multiplatform) apply(false)
+    alias(libs.plugins.detekt) apply(false)
 }
 
 val kotlinNodeVersion = "22.22.0"
@@ -94,6 +97,53 @@ plugins.withType<WasmNodeJsRootPlugin> {
     extensions.configure<WasmNodeJsEnvSpec> {
         version.set(kotlinNodeVersion)
     }
+}
+
+// Advisory visual baseline: keep this deliberately limited to the measured CLI/MCP projects.
+val detektCliMcpProjectPaths = listOf(
+    ":cli:runtime",
+    ":cli:metadata",
+    ":cli:core",
+    ":cli:scripting",
+    ":cli:product",
+    ":cli:integration-tests",
+    ":cli:hexana-cli",
+    ":cli:hexana-cli-script",
+    ":mcp:core",
+    ":mcp:scripting",
+    ":mcp:tools-generator",
+    ":mcp:server",
+    ":mcp:vscode-server",
+)
+val detektCliMcpTaskPaths = detektCliMcpProjectPaths.map { "$it:detekt" }
+
+detektCliMcpProjectPaths.forEach { projectPath ->
+    project(projectPath) {
+        pluginManager.withPlugin("org.jetbrains.kotlin.jvm") {
+            pluginManager.apply("io.gitlab.arturbosch.detekt")
+
+            extensions.configure<DetektExtension> {
+                // Match Detekt's default JVM scope explicitly: production and unit-test Kotlin sources only.
+                source.setFrom(files("src/main/kotlin", "src/test/kotlin"))
+            }
+
+            tasks.withType<Detekt>().configureEach {
+                ignoreFailures = true
+                reports.xml.required.set(true)
+                reports.xml.outputLocation.set(layout.buildDirectory.file("reports/detekt/detekt-checkstyle.xml"))
+                reports.html.required.set(true)
+                reports.html.outputLocation.set(layout.buildDirectory.file("reports/detekt/detekt.html"))
+                reports.sarif.required.set(false)
+                reports.md.required.set(false)
+            }
+        }
+    }
+}
+
+tasks.register("detektCliMcp") {
+    group = "verification"
+    description = "Run advisory Detekt on main and test sources for the 13 selected CLI/MCP projects."
+    detektCliMcpTaskPaths.forEach(::dependsOn)
 }
 
 // Aggregator lists driven by ci-configuration's build configurations.
