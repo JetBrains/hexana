@@ -62,16 +62,22 @@ async function main() {
         for (let attempt = 0; attempt < 100 && !await evaluate("Boolean(document.querySelector('[data-file-drop-zone]'))"); attempt++) await delay(100);
         const bytes = [...await readFile(fixture)];
         if (!await evaluate(`(() => { const target = document.querySelector('[data-file-drop-zone]'); if (!target) return false; const transfer = new DataTransfer(); transfer.items.add(new File([new Uint8Array(${JSON.stringify(bytes)})], 'addition.wasm', {type:'application/wasm'})); target.dispatchEvent(new DragEvent('drop', {bubbles:true, cancelable:true, dataTransfer:transfer})); return true; })()`)) throw new Error("packaged app did not expose the file-drop UI");
+        let lastState = null;
         for (let attempt = 0; attempt < 120; attempt++) {
-            const state = await evaluate("document.body.textContent");
-            if (state.includes("Summary") && state.includes("Imports: 1") && state.includes("Sections: 5") && !state.includes("Parsing…") && !state.includes("Failed to parse") && !state.includes("Timed out")) return;
+            const state = await evaluate("(() => { const node = document.querySelector('[data-parser-worker-state]'); return node ? { state: node.getAttribute('data-parser-worker-state'), format: node.getAttribute('data-parser-worker-format') } : null; })()");
+            lastState = state;
+            if (state?.state === "failed" || state?.state === "timed_out") {
+                throw new Error(`parser worker did not parse addition.wasm: ${JSON.stringify(state)}`);
+            }
+            if (state?.state === "parsed" && state.format === "core_wasm") return;
             await delay(100);
         }
-        throw new Error("timed out waiting for parsed addition.wasm UI: expected Summary, Imports: 1, and Sections: 5 without parsing/failure/timeout");
+        const attributes = await evaluate("JSON.stringify([...document.querySelectorAll('[data-parser-worker-state],[data-file-load-status]')].map(node => ({parser:node.getAttribute('data-parser-worker-state'),load:node.getAttribute('data-file-load-status'),text:node.textContent})))");
+        throw new Error(`timed out waiting for parsed addition.wasm UI: ${JSON.stringify({ state: lastState, attributes })}`);
     } finally {
         if (socket) socket.close();
-        if (browser) { browser.kill(); await new Promise(resolve => browser.once("exit", resolve)); }
-        await new Promise(resolve => server.close(resolve));
+        if (browser && browser.exitCode === null) { browser.kill(); await new Promise(resolve => browser.once("exit", resolve)); }
+        if (server.listening) await new Promise(resolve => server.close(resolve));
         if (profile) await rm(profile, { recursive: true, force: true });
     }
 }

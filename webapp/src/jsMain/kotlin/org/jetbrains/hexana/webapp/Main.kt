@@ -120,6 +120,11 @@ internal fun WebAppRoot(
         } else {
             val response = workerResponse
             if (response != null) {
+                Span({
+                    attr("data-parser-worker-state", "parsed")
+                    attr("data-parser-worker-format", response.presentation.format)
+                    attr("hidden", "")
+                })
                 WorkerBackedWasmContent(
                     fileName = fileName,
                     parentFileName = navStack.lastOrNull()?.fileName,
@@ -386,11 +391,19 @@ internal fun LandingView(
             ParserWorkerState.Cancelled -> "Cancelled."
             is ParserWorkerState.Failed -> "Failed to parse the core WebAssembly module."
         }
+        val parserStateName = when (parserState) {
+            ParserWorkerState.Ready -> "ready"
+            is ParserWorkerState.Parsing -> "parsing"
+            is ParserWorkerState.Parsed -> "parsed"
+            ParserWorkerState.TimedOut -> "timed_out"
+            ParserWorkerState.Cancelled -> "cancelled"
+            is ParserWorkerState.Failed -> "failed"
+        }
         if (parserMessage != null) {
             Span({
                 attr("role", "status")
                 attr("aria-live", "polite")
-                attr("data-parser-worker-state", parserMessage)
+                attr("data-parser-worker-state", parserStateName)
                 style {
                     property("font-size", "12px")
                     property("min-height", "18px")
