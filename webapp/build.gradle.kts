@@ -1,5 +1,6 @@
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -145,6 +146,10 @@ private fun sha256(file: File): String = MessageDigest.getInstance("SHA-256")
     .digest(file.readBytes())
     .joinToString("") { "%02x".format(it) }
 
+private fun sha256(text: String): String = MessageDigest.getInstance("SHA-256")
+    .digest(text.toByteArray(StandardCharsets.UTF_8))
+    .joinToString("") { "%02x".format(it) }
+
 private fun json(value: String): String = buildString {
     append('"')
     value.forEach { character ->
@@ -174,6 +179,66 @@ private val productionSourceAssets = listOf(
     "editor.css",
 )
 
+private data class ResolvedRuntimeComponent(
+    val identity: String,
+    val bomRef: String,
+    val type: String,
+    val group: String,
+    val name: String,
+    val version: String,
+    val runtimes: Set<String>,
+)
+
+private fun resolvedRuntimeComponents(revision: String): List<ResolvedRuntimeComponent> {
+    val runtimeNames = listOf("jsRuntimeClasspath", "jsParserWorkerRuntimeClasspath")
+    val components = mutableMapOf<String, ResolvedRuntimeComponent>()
+    runtimeNames.forEach { runtimeName ->
+        configurations.getByName(runtimeName).incoming.resolutionResult.allComponents.forEach { component ->
+            val projectComponent = component.id as? ProjectComponentIdentifier
+            val resolved = if (projectComponent != null) {
+                ResolvedRuntimeComponent(
+                    identity = "project:${projectComponent.projectPath}@$revision",
+                    bomRef = "urn:hexana:component:${sha256(projectComponent.projectPath)}",
+                    type = "application",
+                    group = "org.jetbrains.hexana",
+                    name = projectComponent.projectPath,
+                    version = revision,
+                    runtimes = emptySet(),
+                )
+            } else {
+                val module = component.moduleVersion ?: packageFailure("unversioned resolved component ${component.id.displayName}")
+                ResolvedRuntimeComponent(
+                    identity = "module:${module.group}:${module.name}:${module.version}",
+                    bomRef = "pkg:maven/${module.group}/${module.name}@${module.version}",
+                    type = "library",
+                    group = module.group,
+                    name = module.name,
+                    version = module.version,
+                    runtimes = emptySet(),
+                )
+            }
+            val previous = components[resolved.identity]
+            components[resolved.identity] = resolved.copy(runtimes = (previous?.runtimes.orEmpty() + runtimeName))
+        }
+    }
+    return components.values.sortedBy { it.identity }
+}
+
+private fun componentJson(component: ResolvedRuntimeComponent): String {
+    val runtimes = component.runtimes.sorted().joinToString(",") { json(it) }
+    return "{\"identity\":${json(component.identity)},\"bomRef\":${json(component.bomRef)},\"type\":${json(component.type)},\"group\":${json(component.group)},\"name\":${json(component.name)},\"version\":${json(component.version)},\"runtimes\":[$runtimes]}"
+}
+
+private fun resolutionEvidenceJson(components: List<ResolvedRuntimeComponent>): String =
+    "{\"schemaVersion\":1,\"kind\":\"resolution-evidence\",\"lockStatus\":\"not-a-lock\",\"components\":[${components.joinToString(",", transform = ::componentJson)}]}\n"
+
+private fun sbomJson(version: String, components: List<ResolvedRuntimeComponent>): String {
+    val sbomComponents = components.joinToString(",") { component ->
+        "{\"type\":${json(component.type)},\"bom-ref\":${json(component.bomRef)},\"group\":${json(component.group)},\"name\":${json(component.name)},\"version\":${json(component.version)},\"properties\":[{\"name\":\"hexana.runtime\",\"value\":${json(component.runtimes.sorted().joinToString(","))}}]}"
+    }
+    return "{\"bomFormat\":\"CycloneDX\",\"specVersion\":\"1.5\",\"version\":1,\"metadata\":{\"component\":{\"type\":\"application\",\"bom-ref\":\"urn:hexana:webapp\",\"name\":\"hexana-webapp\",\"version\":${json(version)}}},\"components\":[$sbomComponents]}\n"
+}
+
 private fun verifyProductionPackage(packageDir: File) {
     if (!packageDir.isDirectory) packageFailure("missing package directory ${packageDir.absolutePath}")
     val manifest = packageDir.resolve("package-manifest.json")
@@ -195,6 +260,21 @@ private fun verifyProductionPackage(packageDir: File) {
     }.sorted().toList()
     val expectedFiles = (checksumEntries.map { it.first } + "checksums.sha256" + "package.sha256").sorted()
     if (actualFiles != expectedFiles) packageFailure("allowlist mismatch: expected $expectedFiles, found $actualFiles")
+    val revision = webappRevision.get()
+    val version = webappArtifactVersion.get()
+    val versionSource = webappArtifactVersionSource.get()
+    val expectedIdentity = "{\"schemaVersion\":1,\"product\":\"hexana-webapp\",\"version\":${json(version)},\"versionSource\":${json(versionSource)},\"revision\":${json(revision)}}\n"
+    if (packageDir.resolve("build-identity.json").readText() != expectedIdentity) {
+        packageFailure("identity does not match the declared revision and webapp artifact version")
+    }
+    val resolvedComponents = resolvedRuntimeComponents(revision)
+    if (resolvedComponents.isEmpty()) packageFailure("resolved dependency evidence is empty")
+    if (packageDir.resolve("resolved-dependencies.json").readText() != resolutionEvidenceJson(resolvedComponents)) {
+        packageFailure("resolved dependency evidence omits, duplicates, or changes a runtime component")
+    }
+    if (packageDir.resolve("sbom.cdx.json").readText() != sbomJson(version, resolvedComponents)) {
+        packageFailure("SBOM does not match the complete resolved runtime dependency evidence")
+    }
     checksumEntries.forEach { (path, hash) ->
         val file = packageDir.resolve(path)
         if (!file.isFile || sha256(file) != hash) packageFailure("hash mismatch for $path")
@@ -208,6 +288,7 @@ private fun verifyProductionPackage(packageDir: File) {
         "index.html",
         "build-identity.json",
         "sbom.cdx.json",
+        "resolved-dependencies.json",
         "provenance.json",
         "package-manifest.json",
         "checksums.sha256",
@@ -265,6 +346,15 @@ private fun verifyProductionPackage(packageDir: File) {
     }
 }
 
+val webappRevision = providers.exec { commandLine("git", "rev-parse", "HEAD") }
+    .standardOutput.asText.map(String::trim)
+// Supply -PhexanaWebappVersion=<release-version> when a release assigns one;
+// otherwise the complete source revision is the artifact version.
+val webappArtifactVersion = providers.gradleProperty("hexanaWebappVersion").orElse(webappRevision)
+val webappArtifactVersionSource = providers.gradleProperty("hexanaWebappVersion")
+    .map { "hexanaWebappVersion" }
+    .orElse("git-revision")
+
 val packageProductionWebapp by tasks.registering {
     group = "distribution"
     description = "Produces a deterministic, immutable static package from the browser distribution."
@@ -278,6 +368,9 @@ val packageProductionWebapp by tasks.registering {
         rootProject.file("gradle/wrapper/gradle-wrapper.properties"),
         project.file("build.gradle.kts"),
     )
+    inputs.property("webappRevision", webappRevision)
+    inputs.property("webappArtifactVersion", webappArtifactVersion)
+    inputs.property("webappArtifactVersionSource", webappArtifactVersionSource)
     outputs.dir(packageDir)
 
     doLast {
@@ -319,8 +412,10 @@ val packageProductionWebapp by tasks.registering {
             .replace("webapp.js", "assets/$webappName")
             .also { output.resolve("index.html").writeText(it, StandardCharsets.UTF_8) }
 
-        val revision = providers.exec { commandLine("git", "rev-parse", "HEAD") }.standardOutput.asText.get().trim()
-        val version = providers.gradleProperty("hexanaToolsVersion").orElse("unspecified").get()
+        val revision = webappRevision.get()
+        val version = webappArtifactVersion.get()
+        val versionSource = webappArtifactVersionSource.get()
+        val resolvedComponents = resolvedRuntimeComponents(revision)
         val payloadFiles = output.walkTopDown().filter { it.isFile }.map { file ->
             file.relativeTo(output).invariantSeparatorsPath to sha256(file)
         }.sortedBy { it.first }.toList()
@@ -328,11 +423,12 @@ val packageProductionWebapp by tasks.registering {
             "{\"path\":${json(path)},\"sha256\":${json(hash)},\"cacheControl\":${json(if (path == "index.html") "no-cache" else "public, max-age=31536000, immutable")}}"
         }
         output.resolve("build-identity.json").writeText(
-            "{\"schemaVersion\":1,\"product\":\"hexana-webapp\",\"version\":${json(version)},\"revision\":${json(revision)}}\n",
+            "{\"schemaVersion\":1,\"product\":\"hexana-webapp\",\"version\":${json(version)},\"versionSource\":${json(versionSource)},\"revision\":${json(revision)}}\n",
             StandardCharsets.UTF_8,
         )
-        output.resolve("sbom.cdx.json").writeText(
-            "{\"bomFormat\":\"CycloneDX\",\"specVersion\":\"1.5\",\"version\":1,\"metadata\":{\"component\":{\"type\":\"application\",\"name\":\"hexana-webapp\",\"version\":${json(version)}}},\"components\":[{\"type\":\"library\",\"name\":\"kotlin\",\"group\":\"org.jetbrains.kotlin\",\"version\":${json(libs.versions.kotlin.get())}},{\"type\":\"library\",\"name\":\"compose-multiplatform\",\"group\":\"org.jetbrains.compose\",\"version\":${json(libs.versions.composeMultiplatform.get())}}]}\n",
+        output.resolve("sbom.cdx.json").writeText(sbomJson(version, resolvedComponents), StandardCharsets.UTF_8)
+        output.resolve("resolved-dependencies.json").writeText(
+            resolutionEvidenceJson(resolvedComponents),
             StandardCharsets.UTF_8,
         )
         val evidenceFiles = listOf("gradle/libs.versions.toml", "gradle/wrapper/gradle-wrapper.properties", "webapp/build.gradle.kts")
