@@ -247,7 +247,7 @@ private fun productionCacheControl(path: String): String = when {
     else -> "no-store"
 }
 
-private fun hostingPolicyJson(): String = "{\"schemaVersion\":1,\"headers\":{\"Content-Security-Policy\":${json(productionCsp)},\"X-Content-Type-Options\":\"nosniff\",\"Referrer-Policy\":\"no-referrer\",\"Permissions-Policy\":\"geolocation=(), microphone=(), camera=(), payment=(), usb=()\",\"X-Frame-Options\":\"DENY\",\"Cross-Origin-Opener-Policy\":\"same-origin\",\"Cross-Origin-Embedder-Policy\":\"require-corp\",\"Cross-Origin-Resource-Policy\":\"same-origin\"},\"cache\":{\"index.html\":\"no-cache\",\"assets/*\":\"public, max-age=31536000, immutable\",\"evidence\":\"no-store\"},\"hsts\":\"HTTPS edge-only; configure Strict-Transport-Security at the TLS terminator, not in this static artifact.\",\"coopCoepDecision\":\"enabled: all app, worker, and Wasm resources are same-origin and the production-package smoke verifies worker parsing under COOP/COEP\"}\n"
+private fun hostingPolicyJson(): String = "{\"schemaVersion\":1,\"headers\":{\"Content-Security-Policy\":${json(productionCsp)},\"X-Content-Type-Options\":\"nosniff\",\"Referrer-Policy\":\"no-referrer\",\"Permissions-Policy\":\"geolocation=(), microphone=(), camera=(), payment=(), usb=()\",\"X-Frame-Options\":\"DENY\",\"Cross-Origin-Opener-Policy\":\"same-origin\",\"Cross-Origin-Embedder-Policy\":\"require-corp\",\"Cross-Origin-Resource-Policy\":\"same-origin\"},\"edgeHeaders\":{\"Strict-Transport-Security\":\"max-age=31536000; includeSubDomains\"},\"hstsScope\":\"HTTPS edge-only: configure this header at the TLS terminator; the static origin does not terminate TLS.\",\"cache\":{\"index.html\":\"no-cache\",\"assets/*\":\"public, max-age=31536000, immutable\",\"evidence\":\"no-store\"},\"coopCoepDecision\":\"enabled: all app, worker, and Wasm resources are same-origin and the production-package smoke verifies worker parsing under COOP/COEP\"}\n"
 
 private fun verifyProductionPackage(packageDir: File) {
     if (!packageDir.isDirectory) packageFailure("missing package directory ${packageDir.absolutePath}")
@@ -328,7 +328,7 @@ private fun verifyProductionPackage(packageDir: File) {
         packageFailure("index.html has an unsafe connection or script policy")
     }
     val policy = packageDir.resolve("hosting-policy.json").readText()
-    listOf("object-src 'none'", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'", "X-Content-Type-Options\":\"nosniff", "Referrer-Policy\":\"no-referrer", "Permissions-Policy", "X-Frame-Options\":\"DENY", "Cross-Origin-Opener-Policy\":\"same-origin", "Cross-Origin-Embedder-Policy\":\"require-corp", "HTTPS edge-only").forEach { required ->
+    listOf("object-src 'none'", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'", "X-Content-Type-Options\":\"nosniff", "Referrer-Policy\":\"no-referrer", "Permissions-Policy", "X-Frame-Options\":\"DENY", "Cross-Origin-Opener-Policy\":\"same-origin", "Cross-Origin-Embedder-Policy\":\"require-corp", "Strict-Transport-Security\":\"max-age=31536000; includeSubDomains", "HTTPS edge-only").forEach { required ->
         if (required !in policy) packageFailure("hosting policy omits $required")
     }
     if ("api.osv.dev" in policy || "connect-src *" in policy || "frame-ancestors *" in policy) {
