@@ -72,6 +72,7 @@ internal class ParserWorkerController(
 
     fun parse(buffer: ArrayBuffer, timeoutMs: Int) {
         require(timeoutMs > 0)
+        // TODO(MCP-181): Remove when bounded parallel parsing with per-request ownership/isolation is implemented and browser-tested.
         invalidateAndTerminateActive()
         val requestGeneration = generation
         val requestId = "parser-worker-$requestGeneration"
