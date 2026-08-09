@@ -7,11 +7,10 @@ config.files.push({
     watched: false,
 });
 config.files.push({
-    pattern: path.resolve(config.basePath, "kotlin", "parser-worker-fixtures", "*.wasm"),
+    pattern: path.resolve(config.basePath, "kotlin", "parser-worker-fixtures", "*"),
     included: false,
     served: true,
     watched: false,
-    type: "wasm",
 });
 config.proxies = {
     ...(config.proxies || {}),

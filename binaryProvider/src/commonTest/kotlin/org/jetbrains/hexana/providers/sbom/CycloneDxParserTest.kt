@@ -98,6 +98,34 @@ class CycloneDxParserTest {
     }
 
     @Test
+    fun boundedParseUsesGlobalComponentAndDependencyBudgets() {
+        val json = """
+            {
+              "bomFormat": "CycloneDX",
+              "components": [
+                { "name": "a", "components": [{"name":"a1"},{"name":"a2"},{"name":"a3"}] },
+                { "name": "b" },
+                { "name": "c" }
+              ],
+              "dependencies": [
+                { "ref": "a", "dependsOn": ["b", "c", "d"] },
+                { "ref": "b" },
+                { "ref": "c" }
+              ]
+            }
+        """.trimIndent()
+
+        val sbom = assertNotNull(CycloneDxParser.parse(json, maxComponents = 2, maxDependencies = 2))
+
+        assertEquals(listOf("a"), sbom.components.map { it.name })
+        assertEquals(listOf("a1"), sbom.components.first().children.map { it.name })
+        assertEquals(listOf("a", "b"), sbom.dependencies.map { it.ref })
+        assertEquals(listOf("b", "c"), sbom.dependencies.first().dependsOn)
+        assertTrue(sbom.componentDataTruncated)
+        assertTrue(sbom.dependencyDataTruncated)
+    }
+
+    @Test
     fun parsesClassLevelNestedComponentsPropertiesAndDependencyGraph() {
         val json = """
             {

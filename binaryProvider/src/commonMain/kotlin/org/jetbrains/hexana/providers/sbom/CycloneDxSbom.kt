@@ -26,6 +26,8 @@ data class CycloneDxSbom(
     val components: List<CdxComponent>,
     val dependencies: List<CdxDependency>,
     val vulnerabilities: List<CdxVulnerability>,
+    val componentDataTruncated: Boolean = false,
+    val dependencyDataTruncated: Boolean = false,
 ) {
     val dependencyCount: Int get() = dependencies.size
 
@@ -83,6 +85,16 @@ data class CdxVulnerability(
 private fun splitNames(value: String?): List<String> =
     value?.split('\n', ',', ';')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
 
+private class ParseBudget(limit: Int) {
+    private var remaining = limit
+
+    fun tryTake(): Boolean {
+        if (remaining == 0) return false
+        remaining--
+        return true
+    }
+}
+
 /**
  * Parses CycloneDX JSON (the format GraalVM Native Image embeds) into a
  * [CycloneDxSbom]. Uses kotlinx.serialization's tree API (JsonElement) so it
@@ -91,7 +103,13 @@ private fun splitNames(value: String?): List<String> =
  */
 object CycloneDxParser {
 
-    fun parse(json: String): CycloneDxSbom? {
+    fun parse(
+        json: String,
+        maxComponents: Int = Int.MAX_VALUE,
+        maxDependencies: Int = Int.MAX_VALUE,
+    ): CycloneDxSbom? {
+        require(maxComponents >= 0) { "Component limit must not be negative." }
+        require(maxDependencies >= 0) { "Dependency limit must not be negative." }
         val root = try {
             val element = Json.parseToJsonElement(json)
             element as? JsonObject ?: return null
@@ -99,9 +117,12 @@ object CycloneDxParser {
             return null
         }
 
-        val components = root.array("components")
-            ?.mapNotNull { (it as? JsonObject)?.let(::parseComponent) }
-            .orEmpty()
+        var componentDataTruncated = false
+        var dependencyDataTruncated = false
+        val componentBudget = ParseBudget(maxComponents)
+        val components = parseComponents(root.array("components"), componentBudget) {
+            componentDataTruncated = true
+        }
         val bomFormat = root.string("bomFormat")
         // Be lenient, but reject obvious non-CycloneDX JSON: accept when it either
         // declares the CycloneDX format or actually carries a components array.
@@ -116,15 +137,48 @@ object CycloneDxParser {
             serialNumber = root.string("serialNumber"),
             version = root.intOrNull("version"),
             metadataTimestamp = metadata?.string("timestamp"),
-            mainComponent = metadata?.obj("component")?.let(::parseComponent),
+            mainComponent = metadata?.obj("component")?.let { component ->
+                if (componentBudget.tryTake()) {
+                    parseComponent(component, componentBudget) { componentDataTruncated = true }
+                } else {
+                    componentDataTruncated = true
+                    null
+                }
+            },
             tools = parseTools(metadata),
             components = components,
-            dependencies = parseDependencies(root.array("dependencies")),
+            dependencies = parseDependencies(
+                root.array("dependencies"),
+                ParseBudget(maxDependencies),
+                ParseBudget(maxDependencies),
+            ) {
+                dependencyDataTruncated = true
+            },
             vulnerabilities = parseVulnerabilities(root.array("vulnerabilities")),
+            componentDataTruncated = componentDataTruncated,
+            dependencyDataTruncated = dependencyDataTruncated,
         )
     }
 
-    private fun parseComponent(o: JsonObject): CdxComponent = CdxComponent(
+    private fun parseComponents(
+        elements: JsonArray?,
+        budget: ParseBudget,
+        onTruncated: () -> Unit,
+    ): List<CdxComponent> {
+        if (elements == null) return emptyList()
+        val components = mutableListOf<CdxComponent>()
+        for (element in elements) {
+            val component = element as? JsonObject ?: continue
+            if (!budget.tryTake()) {
+                onTruncated()
+                break
+            }
+            components += parseComponent(component, budget, onTruncated)
+        }
+        return components
+    }
+
+    private fun parseComponent(o: JsonObject, budget: ParseBudget, onTruncated: () -> Unit): CdxComponent = CdxComponent(
         type = o.string("type"),
         group = o.string("group"),
         name = o.string("name"),
@@ -133,7 +187,7 @@ object CycloneDxParser {
         bomRef = o.string("bom-ref"),
         licenses = parseLicenses(o.array("licenses")),
         properties = parseProperties(o.array("properties")),
-        children = o.array("components")?.mapNotNull { (it as? JsonObject)?.let(::parseComponent) }.orEmpty(),
+        children = parseComponents(o.array("components"), budget, onTruncated),
     )
 
     private fun parseProperties(arr: JsonArray?): List<CdxProperty> {
@@ -146,16 +200,45 @@ object CycloneDxParser {
     }
 
     /** `dependencies[]` entries: `{ "ref": "<bom-ref>", "dependsOn": ["<bom-ref>", ...] }`. */
-    private fun parseDependencies(arr: JsonArray?): List<CdxDependency> {
+    private fun parseDependencies(
+        arr: JsonArray?,
+        dependencyBudget: ParseBudget,
+        referenceBudget: ParseBudget,
+        onTruncated: () -> Unit,
+    ): List<CdxDependency> {
         if (arr == null) return emptyList()
-        return arr.mapNotNull { element ->
-            val o = element as? JsonObject ?: return@mapNotNull null
-            val ref = o.string("ref") ?: return@mapNotNull null
-            val dependsOn = o.array("dependsOn")
-                ?.mapNotNull { e -> runCatching { e.jsonPrimitive.contentOrNull }.getOrNull() }
-                .orEmpty()
-            CdxDependency(ref, dependsOn)
+        val dependencies = mutableListOf<CdxDependency>()
+        for (element in arr) {
+            val dependency = element as? JsonObject ?: continue
+            val ref = dependency.string("ref") ?: continue
+            if (!dependencyBudget.tryTake()) {
+                onTruncated()
+                break
+            }
+            dependencies += CdxDependency(
+                ref = ref,
+                dependsOn = parseDependencyReferences(dependency.array("dependsOn"), referenceBudget, onTruncated),
+            )
         }
+        return dependencies
+    }
+
+    private fun parseDependencyReferences(
+        elements: JsonArray?,
+        budget: ParseBudget,
+        onTruncated: () -> Unit,
+    ): List<String> {
+        if (elements == null) return emptyList()
+        val references = mutableListOf<String>()
+        for (element in elements) {
+            val reference = runCatching { element.jsonPrimitive.contentOrNull }.getOrNull() ?: continue
+            if (!budget.tryTake()) {
+                onTruncated()
+                break
+            }
+            references += reference
+        }
+        return references
     }
 
     /** `licenses` entries are `{license:{id|name}}` or `{expression:"..."}`. */

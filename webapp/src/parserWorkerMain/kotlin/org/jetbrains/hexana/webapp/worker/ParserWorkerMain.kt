@@ -397,7 +397,13 @@ private suspend fun nativeImageTables(
     )
     val locator = info.sbom ?: return MaterializedWorkerTables(listOf(nativeImage), false)
     val json = extractSbomJson(provider.bytes, locator)
-    val sbom = json?.let(CycloneDxParser::parse)
+    val sbom = json?.let { value ->
+        CycloneDxParser.parse(
+            value,
+            maxComponents = MAX_PARSER_WORKER_RECORDS_PER_COLLECTION,
+            maxDependencies = MAX_PARSER_WORKER_RECORDS_PER_COLLECTION,
+        )
+    }
     if (sbom == null) {
         return MaterializedWorkerTables(listOf(
             nativeImage,
@@ -417,7 +423,7 @@ private suspend fun nativeImageTables(
             ),
         ), false)
     }
-    var producerRecordLimited = false
+    var producerRecordLimited = sbom.componentDataTruncated || sbom.dependencyDataTruncated
     val format = boundedWorkerTableText(buildList {
         add(sbom.bomFormat ?: "CycloneDX")
         sbom.specVersion?.let { specVersion ->
