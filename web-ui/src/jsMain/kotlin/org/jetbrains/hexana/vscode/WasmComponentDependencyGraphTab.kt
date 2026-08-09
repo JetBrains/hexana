@@ -167,7 +167,6 @@ private fun buildDependencyGraph(provider: WasmComponentBinaryProvider): Depende
             }
             ComponentSort.Instance -> "instance:${exp.sortIndex.index}"
             ComponentSort.Component -> "component:${exp.sortIndex.index}"
-            ComponentSort.Func -> "instance:${exp.sortIndex.index}"
             else -> null
         }
         if (sourceId != null && nodes.containsKey(sourceId)) {

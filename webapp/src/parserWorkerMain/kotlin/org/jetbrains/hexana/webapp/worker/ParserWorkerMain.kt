@@ -8,10 +8,9 @@ import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.componentExternDescriptionLabel
 import org.jetbrains.hexana.shared.componentSortIndexLabel
 import org.jetbrains.hexana.shared.exportKindLabel
-import org.jetbrains.hexana.wasm.components.ComponentCoreSort
+import org.jetbrains.hexana.shared.hasWasiCliRunExport
+import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.components.ComponentInstanceExpression
-import org.jetbrains.hexana.wasm.components.ComponentSort
-import org.jetbrains.hexana.wasm.components.ComponentSortWithCoreSort
 import org.jetbrains.hexana.wasm.components.InlineInstanceCoreExpression
 import org.jetbrains.hexana.wasm.components.InlineInstanceExpression
 import org.jetbrains.hexana.wasm.components.ModuleInstanceCoreExpression
@@ -24,9 +23,12 @@ import org.jetbrains.hexana.webapp.ParserWorkerRange
 import org.jetbrains.hexana.webapp.ParserWorkerRecord
 import org.jetbrains.hexana.webapp.ParserWorkerSummary
 import org.jetbrains.hexana.webapp.ParserWorkerTable
+import org.jetbrains.hexana.webapp.ParserWorkerToolbar
+import org.jetbrains.hexana.webapp.componentGraphSourceId
 import org.jetbrains.hexana.webapp.encodeBoundedParserWorkerSuccess
 import org.jetbrains.hexana.webapp.isValidParserWorkerRequestId
 import org.jetbrains.hexana.webapp.PARSER_WORKER_PROTOCOL_VERSION
+import org.jetbrains.hexana.webapp.sanitizeParserWorkerPresentation
 import org.khronos.webgl.ArrayBuffer
 
 private const val SCOPE_MARKER = "DedicatedWorkerGlobalScope"
@@ -71,7 +73,10 @@ private fun parse(workerScope: dynamic, requestId: String, input: ArrayBuffer) {
             BinaryProviderType.WasmComponent -> componentPresentation(WasmComponentBinaryProvider(bytes), input.byteLength, startedAt)
             BinaryProviderType.Generic -> null
         } ?: return postError(workerScope, requestId, "PARSE_FAILED", "The input is not a supported WebAssembly binary.")
-        workerScope.postMessage(encodeBoundedParserWorkerSuccess(requestId, presentation))
+        val sanitized = sanitizeParserWorkerPresentation(presentation)
+        workerScope.postMessage(
+            encodeBoundedParserWorkerSuccess(requestId, sanitized.presentation, sanitized.omittedRecordCount),
+        )
     } catch (_: Throwable) {
         postError(workerScope, requestId, "PARSE_FAILED", "The input could not be parsed safely.")
     }
@@ -84,6 +89,7 @@ private fun corePresentation(provider: WasmBinaryProvider, inputBytes: Int, star
     val codeOffsets = provider.codeOffsets
     val problems = provider.parseProblems
     val proposals = provider.usedProposals.sortedBy { it.toString() }
+    val graalWebImage = provider.graalWebImageInfo
     return ParserWorkerPresentation(
         format = "core_wasm",
         capabilities = listOf("summary", "structural_ranges", "tables", "diagnostics"),
@@ -99,6 +105,8 @@ private fun corePresentation(provider: WasmBinaryProvider, inputBytes: Int, star
             exports.size,
             0,
             proposals.size,
+            graalWebImage.isWebImage,
+            graalWebImage.matchedImportModules.sorted(),
         ),
         ranges = provider.structureRanges.map { range ->
             ParserWorkerRange(range.offset.toInt(), range.size.toInt(), range.label)
@@ -121,6 +129,12 @@ private fun corePresentation(provider: WasmBinaryProvider, inputBytes: Int, star
         },
         diagnostics = problems.map { item -> ParserWorkerDiagnostic(item.kind.toString(), item.message) },
         legacyTabs = coreLegacyTabs(module),
+        toolbar = ParserWorkerToolbar(
+            runnableExportName = exports.filterIsInstance<WasmFunctionExportRecordEntry>()
+                .firstOrNull { it.name == "_start" || it.name == "_initialize" }
+                ?.name,
+            proposalIds = proposals.map { it.name },
+        ),
     )
 }
 
@@ -155,12 +169,12 @@ private fun componentPresentation(
         },
         tables = buildList {
             addTable("Imports", listOf("Name", "Extern Description"), imports.map { item ->
-                row(listOf(item.importName + (item.version ?: ""), componentExternDescriptionLabel(item.externDescription)), item.offset, item.size)
+                row(listOf(componentName(item.importName, item.version), componentExternDescriptionLabel(item.externDescription)), item.offset, item.size)
             })
             addTable("Exports", listOf("Name", "Sort Index", "Extern Description"), exports.map { item ->
                 row(
                     listOf(
-                        item.exportName + (item.version ?: ""),
+                        componentName(item.exportName, item.version),
                         componentSortIndexLabel(item.sortIndex) ?: "",
                         item.externDescription?.let(::componentExternDescriptionLabel) ?: "",
                     ),
@@ -178,6 +192,9 @@ private fun componentPresentation(
             add("Wat")
             add("WAT (virtualized)")
         },
+        toolbar = ParserWorkerToolbar(
+            runnableExportName = if (hasWasiCliRunExport(provider)) "wasi:cli/run" else null,
+        ),
     )
 }
 
@@ -213,7 +230,7 @@ private fun componentGraph(provider: WasmComponentBinaryProvider): ParserWorkerC
         nodes += ParserWorkerComponentGraphNode(
             "import:$index",
             "import",
-            item.importName + (item.version ?: ""),
+            componentName(item.importName, item.version),
             componentExternDescriptionLabel(item.externDescription),
         )
     }
@@ -247,7 +264,7 @@ private fun componentGraph(provider: WasmComponentBinaryProvider): ParserWorkerC
             is ComponentInstanceExpression -> {
                 nodes += ParserWorkerComponentGraphNode(id, "instance", "instance $index", "instantiates component ${instance.index}")
                 edges += ParserWorkerComponentGraphEdge("component:${instance.index}", id)
-                instance.args.forEach { arg -> componentArgumentSource(arg.sortIndex.sort, arg.sortIndex.index.toInt())?.let { source ->
+                instance.args.forEach { arg -> componentGraphSourceId(arg.sortIndex.sort, arg.sortIndex.index.toInt())?.let { source ->
                     edges += ParserWorkerComponentGraphEdge(source, id, arg.name)
                 } }
             }
@@ -259,10 +276,10 @@ private fun componentGraph(provider: WasmComponentBinaryProvider): ParserWorkerC
         nodes += ParserWorkerComponentGraphNode(
             id,
             "export",
-            export.exportName + (export.version ?: ""),
+            componentName(export.exportName, export.version),
             componentSortIndexLabel(export.sortIndex) ?: "",
         )
-        componentArgumentSource(export.sortIndex.sort, export.sortIndex.index.toInt())?.let { source ->
+        componentGraphSourceId(export.sortIndex.sort, export.sortIndex.index.toInt())?.let { source ->
             edges += ParserWorkerComponentGraphEdge(source, id)
         }
     }
@@ -270,17 +287,8 @@ private fun componentGraph(provider: WasmComponentBinaryProvider): ParserWorkerC
     return ParserWorkerComponentGraph(nodes, edges.filter { it.fromId in nodeIds && it.toId in nodeIds })
 }
 
-private fun componentArgumentSource(sort: ComponentSort, index: Int): String? = when (sort) {
-    is ComponentSortWithCoreSort -> when (sort.cs) {
-        ComponentCoreSort.Module -> "module:$index"
-        ComponentCoreSort.Instance -> "core-instance:$index"
-        else -> null
-    }
-    ComponentSort.Instance -> "instance:$index"
-    ComponentSort.Component -> "component:$index"
-    ComponentSort.Func -> "instance:$index"
-    else -> null
-}
+private fun componentName(name: String, version: String?): String =
+    if (version == null) name else "$name@$version"
 
 private fun postError(
     workerScope: dynamic,

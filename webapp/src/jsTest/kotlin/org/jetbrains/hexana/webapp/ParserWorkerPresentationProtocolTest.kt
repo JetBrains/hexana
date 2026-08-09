@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.webapp
 
+import org.jetbrains.hexana.wasm.components.ComponentSort
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -8,6 +9,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ParserWorkerPresentationProtocolTest {
+    @Test
+    fun componentFunctionSortNeverCreatesAnInstanceEdgeFromTheSameIndex() {
+        assertNull(componentGraphSourceId(ComponentSort.Func, 0))
+        assertEquals("instance:0", componentGraphSourceId(ComponentSort.Instance, 0))
+    }
+
     @Test
     fun representativePresentationRoundTripsWithoutTruncation() {
         val wire = encodeBoundedParserWorkerSuccess("request", representativePresentation(55))
@@ -46,6 +53,56 @@ class ParserWorkerPresentationProtocolTest {
 
         wire.presentation.legacyTabs = js("undefined")
         assertNull(decodeParserWorkerSuccess(wire, "request"))
+    }
+
+    @Test
+    fun toolbarAndGraalSummaryRoundTrip() {
+        val source = representativePresentation().copy(
+            summary = representativePresentation().summary.copy(
+                graalWebImage = true,
+                graalWebImageMatchedImportModules = listOf("compat", "interop"),
+            ),
+            toolbar = ParserWorkerToolbar("_start", listOf("BulkMemoryOperations")),
+        )
+
+        val decoded = assertNotNull(decodeParserWorkerSuccess(encodeBoundedParserWorkerSuccess("request", source), "request"))
+
+        assertEquals(listOf("compat", "interop"), decoded.presentation.summary.graalWebImageMatchedImportModules)
+        assertEquals("_start", decoded.presentation.toolbar.runnableExportName)
+        assertEquals(listOf("BulkMemoryOperations"), decoded.presentation.toolbar.proposalIds)
+    }
+
+    @Test
+    fun oversizedParserDerivedStringsBecomeAnExplicitPartialInsteadOfAParseFailure() {
+        val source = representativePresentation().copy(
+            summary = representativePresentation().summary.copy(
+                graalWebImage = true,
+                graalWebImageMatchedImportModules = listOf("x".repeat(65)),
+            ),
+            ranges = listOf(ParserWorkerRange(0, 1, "x".repeat(257))),
+            tables = listOf(ParserWorkerTable("records", listOf(ParserWorkerRecord("x".repeat(1_025), "value")))),
+            diagnostics = listOf(ParserWorkerDiagnostic("code", "x".repeat(1_025))),
+            componentGraph = ParserWorkerComponentGraph(
+                nodes = listOf(ParserWorkerComponentGraphNode("module:0", "module", "x".repeat(1_025))),
+                edges = listOf(ParserWorkerComponentGraphEdge("module:0", "module:0")),
+            ),
+        )
+
+        val sanitized = sanitizeParserWorkerPresentation(source)
+        val bounded = boundParserWorkerSuccess("request", sanitized.presentation, omittedRecordCount = sanitized.omittedRecordCount)
+        val decoded = assertNotNull(
+            decodeParserWorkerSuccess(
+                encodeBoundedParserWorkerSuccess("request", sanitized.presentation, sanitized.omittedRecordCount),
+                "request",
+            ),
+        )
+
+        assertEquals(6, sanitized.omittedRecordCount)
+        assertTrue(bounded.partial.partial)
+        assertEquals(listOf("content_limit"), bounded.partial.reasons)
+        assertEquals(0, bounded.partial.emittedCount)
+        assertEquals(6, bounded.partial.totalCount)
+        assertTrue(decoded.partial.partial)
     }
 
     @Test

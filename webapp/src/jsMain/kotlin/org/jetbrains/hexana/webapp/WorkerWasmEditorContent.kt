@@ -19,6 +19,7 @@ import org.jetbrains.hexana.vscode.PanelTableRow
 import org.jetbrains.hexana.vscode.SearchableTable
 import org.jetbrains.hexana.vscode.ScriptTabState
 import org.jetbrains.hexana.vscode.WebUiCapabilities
+import org.jetbrains.hexana.vscode.WorkerWasmToolbarPresentation
 import org.jetbrains.hexana.vscode.scrollHexViewerTo
 
 @Composable
@@ -28,14 +29,14 @@ internal fun WorkerWasmEditorContent(
     bytes: ByteArray,
     response: BoundedParserWorkerSuccess,
     capabilities: WebUiCapabilities,
-    scriptTabs: List<ScriptTabState>,
-    dialogPickedPath: String,
-    dialogPickedContent: String,
-    onDialogPickedPathConsumed: () -> Unit,
-    onScriptTabConfirmed: (path: String, content: String) -> Unit,
-    onScriptTabRemoved: (path: String) -> Unit,
     onLegacyWasmViewRequested: (String) -> Unit,
     onLegacyWasmReparseRequested: (ByteArray) -> Unit,
+    scriptTabs: List<ScriptTabState> = emptyList(),
+    dialogPickedPath: String = "",
+    dialogPickedContent: String = "",
+    onDialogPickedPathConsumed: () -> Unit = {},
+    onScriptTabConfirmed: (path: String, content: String) -> Unit = { _, _ -> },
+    onScriptTabRemoved: (path: String) -> Unit = {},
 ) {
     val presentation = response.presentation
     val provider = remember(bytes) { GenericBinaryProvider(bytes.toCommonByteBuffer()) }
@@ -44,25 +45,38 @@ internal fun WorkerWasmEditorContent(
             StructureRange(range.offset.toLong(), range.size.toLong(), range.label)
         }
     }
+    val toolbarPresentation = remember(presentation.format, presentation.toolbar) {
+        WorkerWasmToolbarPresentation(
+            isComponent = presentation.format == "wasm_component",
+            runnableExportName = presentation.toolbar.runnableExportName,
+            proposalIds = presentation.toolbar.proposalIds,
+        )
+    }
     val extraTabs = buildList {
         add(PanelTab("Sections") { selection ->
-            WorkerWasmSummaryTab(presentation, response.partial, selection)
+            WorkerWasmPartialPanel(response.partial) {
+                WorkerWasmSummaryTab(presentation, selection)
+            }
         })
         presentation.tables.forEach { table ->
             add(PanelTab(table.id) { selection ->
-                WorkerWasmTableTab(table, selection)
+                WorkerWasmPartialPanel(response.partial) {
+                    WorkerWasmTableTab(table, selection)
+                }
             })
         }
         presentation.componentGraph?.let { graph ->
             add(PanelTab("Dependencies", padding = false) { _ ->
-                DependencyGraphTabContent(
-                    nodes = graph.nodes.map { node ->
-                        ComponentDependencyGraphNodeData(node.id, node.kind, node.label, node.sublabel)
-                    },
-                    edges = graph.edges.map { edge ->
-                        ComponentDependencyGraphEdgeData(edge.fromId, edge.toId, edge.label)
-                    },
-                )
+                WorkerWasmPartialPanel(response.partial) {
+                    DependencyGraphTabContent(
+                        nodes = graph.nodes.map { node ->
+                            ComponentDependencyGraphNodeData(node.id, node.kind, node.label, node.sublabel)
+                        },
+                        edges = graph.edges.map { edge ->
+                            ComponentDependencyGraphEdgeData(edge.fromId, edge.toId, edge.label)
+                        },
+                    )
+                }
             })
         }
         presentation.legacyTabs.forEach { label ->
@@ -91,6 +105,7 @@ internal fun WorkerWasmEditorContent(
             else -> null
         },
         onLegacyReparseRequested = onLegacyWasmReparseRequested,
+        workerWasmToolbarPresentation = toolbarPresentation,
     )
 }
 
@@ -102,16 +117,20 @@ private fun LegacyWasmTab(label: String, onLegacyWasmViewRequested: (String) -> 
 }
 
 @Composable
-private fun WorkerWasmSummaryTab(
-    presentation: ParserWorkerPresentation,
-    partial: ParserWorkerPartial,
-    selection: HexSelectionState,
-) {
+private fun WorkerWasmPartialPanel(partial: ParserWorkerPartial, content: @Composable () -> Unit) {
     if (partial.partial) {
         Div({ attr("data-parser-worker-partial", partial.reasons.joinToString(",")) }) {
             Text("Partial results")
         }
     }
+    content()
+}
+
+@Composable
+private fun WorkerWasmSummaryTab(
+    presentation: ParserWorkerPresentation,
+    selection: HexSelectionState,
+) {
     SearchableTable(headers = listOf("Metric", "Value"), defaultSortColumn = -1) {
         summaryRows(presentation.summary).forEach { (metric, value) ->
             PanelTableRow {
@@ -143,6 +162,29 @@ private fun WorkerWasmSummaryTab(
                     Td({ classes("cell-right") }) { Text("${range.size} bytes") }
                 }
             }
+        }
+    }
+    if (presentation.summary.graalWebImage) {
+        val modules = presentation.summary.graalWebImageMatchedImportModules.sorted().joinToString(", ")
+        Div({
+            style {
+                property("margin-top", "8px")
+                property("padding-top", "6px")
+                property("border-top", "1px solid var(--hexana-border, #333)")
+            }
+        }) {
+            Div({
+                style {
+                    property("font-weight", "600")
+                    property("margin-bottom", "2px")
+                }
+            }) { Text("Toolchain: GraalVM Web Image") }
+            Div({
+                style {
+                    property("color", "var(--vscode-descriptionForeground, #888)")
+                    property("font-size", "11px")
+                }
+            }) { Text("via: $modules") }
         }
     }
 }

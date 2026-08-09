@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.webapp
 
+import org.jetbrains.hexana.wasm.components.ComponentCoreSort
+import org.jetbrains.hexana.wasm.components.ComponentSort
+import org.jetbrains.hexana.wasm.components.ComponentSortWithCoreSort
+
 /** The serialised JSON representation of a worker success is never larger than this value. */
 internal const val MAX_PARSER_WORKER_WIRE_BYTES = 10 * 1024 * 1024
 internal const val MAX_PARSER_WORKER_RECORDS_PER_COLLECTION = 10_000
@@ -8,7 +12,7 @@ internal const val MAX_PARSER_WORKER_REQUEST_ID_CHARS = 128
 internal const val MAX_PARSER_WORKER_CAPABILITIES = 32
 internal const val MAX_PARSER_WORKER_TABLES = 32
 internal const val MAX_PARSER_WORKER_LEGACY_TABS = 16
-internal const val PARSER_WORKER_PROTOCOL_VERSION = 4
+internal const val PARSER_WORKER_PROTOCOL_VERSION = 5
 
 private const val MAX_FORMAT_CHARS = 64
 private const val MAX_CAPABILITY_CHARS = 64
@@ -21,17 +25,27 @@ private const val MAX_RECORD_VALUE_CHARS = 16_384
 private const val MAX_RECORD_VALUES = MAX_TABLE_COLUMNS
 private const val MAX_DIAGNOSTIC_CODE_CHARS = 64
 private const val MAX_DIAGNOSTIC_MESSAGE_CHARS = 1_024
-private const val MAX_PARTIAL_REASONS = 2
+private const val MAX_PARTIAL_REASONS = 3
 private const val MAX_PARTIAL_REASON_CHARS = 32
 private const val MAX_GRAPH_NODE_ID_CHARS = 128
 private const val MAX_GRAPH_NODE_KIND_CHARS = 32
 private const val MAX_GRAPH_NODE_LABEL_CHARS = 1_024
 private const val MAX_GRAPH_EDGE_LABEL_CHARS = 1_024
 private const val MAX_LEGACY_TAB_LABEL_CHARS = 64
+private const val MAX_TOOLCHAIN_IMPORT_MODULES = 8
+private const val MAX_TOOLCHAIN_IMPORT_MODULE_CHARS = 64
+private const val MAX_TOOLBAR_PROPOSALS = 16
+private const val MAX_TOOLBAR_PROPOSAL_ID_CHARS = 64
+private const val MAX_TOOLBAR_RUNNABLE_EXPORT_CHARS = 64
 
 private val supportedFormats = setOf("core_wasm", "wasm_component", "unknown")
 private val supportedCapabilities = setOf("summary", "structural_ranges", "tables", "diagnostics", "component_dependency_graph")
 private val supportedGraphNodeKinds = setOf("import", "module", "nested_component", "core_instance", "instance", "export")
+private val supportedToolbarProposalIds = setOf(
+    "SignExtensionOps", "NonTrappingFloatToInt", "MultiValue", "ReferenceTypes", "BulkMemoryOperations", "SIMD",
+    "MutableGlobals", "TailCall", "TypedFunctionReferences", "GarbageCollection", "MultipleMemories", "RelaxedSIMD",
+    "ExceptionHandling", "Memory64", "Threads", "LegacyExceptionHandling",
+)
 private val supportedLegacyTabsByFormat = mapOf(
     "core_wasm" to setOf("Data", "Tags", "Exceptions", "Custom", "Top", "Monos", "Garbage", "Wat", "WAT (virtualized)"),
     "wasm_component" to setOf("Components", "Wat", "WAT (virtualized)"),
@@ -39,6 +53,7 @@ private val supportedLegacyTabsByFormat = mapOf(
 )
 private const val RECORD_LIMIT_REASON = "record_limit"
 private const val BYTE_LIMIT_REASON = "byte_limit"
+private const val CONTENT_LIMIT_REASON = "content_limit"
 
 internal data class ParserWorkerSummary(
     val scopeMarker: String,
@@ -52,6 +67,8 @@ internal data class ParserWorkerSummary(
     val exportCount: Int = 0,
     val moduleCount: Int = 0,
     val proposalCount: Int = 0,
+    val graalWebImage: Boolean = false,
+    val graalWebImageMatchedImportModules: List<String> = emptyList(),
 )
 
 internal data class ParserWorkerRange(val offset: Int, val size: Int, val label: String)
@@ -83,6 +100,10 @@ internal data class ParserWorkerComponentGraph(
     val nodes: List<ParserWorkerComponentGraphNode>,
     val edges: List<ParserWorkerComponentGraphEdge>,
 )
+internal data class ParserWorkerToolbar(
+    val runnableExportName: String? = null,
+    val proposalIds: List<String> = emptyList(),
+)
 
 internal data class ParserWorkerPresentation(
     val format: String,
@@ -93,6 +114,7 @@ internal data class ParserWorkerPresentation(
     val diagnostics: List<ParserWorkerDiagnostic> = emptyList(),
     val componentGraph: ParserWorkerComponentGraph? = null,
     val legacyTabs: List<String> = emptyList(),
+    val toolbar: ParserWorkerToolbar = ParserWorkerToolbar(),
 )
 
 internal data class ParserWorkerPartial(
@@ -109,6 +131,11 @@ internal data class BoundedParserWorkerSuccess(
     val wireBytes: Int,
 )
 
+internal data class SanitizedParserWorkerPresentation(
+    val presentation: ParserWorkerPresentation,
+    val omittedRecordCount: Int,
+)
+
 /**
  * Produces a deterministic response-record prefix. JSON is measured exactly as UTF-8 before it is posted.
  * The binary search probes a monotonic prefix length, avoiding repeated quadratic full-payload serialisation.
@@ -117,8 +144,10 @@ internal fun boundParserWorkerSuccess(
     requestId: String,
     presentation: ParserWorkerPresentation,
     maxWireBytes: Int = MAX_PARSER_WORKER_WIRE_BYTES,
+    omittedRecordCount: Int = 0,
 ): BoundedParserWorkerSuccess {
     require(maxWireBytes > 0)
+    require(omittedRecordCount >= 0) { "Parser-worker omitted record count is invalid." }
     require(isValidParserWorkerRequestId(requestId)) { "Invalid parser-worker request ID." }
     requireValidProducerPresentation(presentation)
 
@@ -146,14 +175,16 @@ internal fun boundParserWorkerSuccess(
             )
         },
     )
-    val total = presentation.responseRecordCount()
+    val total = presentation.responseRecordCount().toLong() + omittedRecordCount
+    require(total <= Int.MAX_VALUE) { "Parser-worker record count exceeds the wire representation." }
+    val totalCount = total.toInt()
     val cappedTotal = capped.responseRecordCount()
 
     fun candidate(keep: Int, byteLimited: Boolean): Pair<ParserWorkerPresentation, ParserWorkerPartial> {
         val bounded = capped.takeDeterministicPrefix(keep)
         return Pair(
             bounded,
-            partialMetadata(recordLimited, byteLimited, bounded.responseRecordCount(), total),
+            partialMetadata(recordLimited, omittedRecordCount > 0, byteLimited, bounded.responseRecordCount(), totalCount),
         )
     }
 
@@ -182,28 +213,40 @@ internal fun boundParserWorkerSuccess(
     return BoundedParserWorkerSuccess(bounded.first, bounded.second, candidateWireBytes(bounded))
 }
 
-internal fun encodeBoundedParserWorkerSuccess(requestId: String, presentation: ParserWorkerPresentation): dynamic {
+internal fun encodeBoundedParserWorkerSuccess(
+    requestId: String,
+    presentation: ParserWorkerPresentation,
+    omittedRecordCount: Int = 0,
+): dynamic {
     require(isValidParserWorkerRequestId(requestId)) { "Invalid parser-worker request ID." }
-    val bounded = boundParserWorkerSuccess(requestId, presentation)
+    val bounded = boundParserWorkerSuccess(requestId, presentation, omittedRecordCount = omittedRecordCount)
     return encodeSuccessWire(requestId, bounded.presentation, bounded.partial)
 }
 
 private fun partialMetadata(
     recordLimited: Boolean,
+    contentLimited: Boolean,
     byteLimited: Boolean,
     emittedCount: Int,
     totalCount: Int,
 ): ParserWorkerPartial = when {
     recordLimited -> ParserWorkerPartial(
         partial = true,
-        reasons = if (byteLimited) listOf(RECORD_LIMIT_REASON, BYTE_LIMIT_REASON) else listOf(RECORD_LIMIT_REASON),
+        reasons = buildList {
+            if (contentLimited) add(CONTENT_LIMIT_REASON)
+            add(RECORD_LIMIT_REASON)
+            if (byteLimited) add(BYTE_LIMIT_REASON)
+        },
         emittedCount = emittedCount,
         totalCount = null,
         totalCountLowerBound = totalCount,
     )
-    byteLimited -> ParserWorkerPartial(
+    contentLimited || byteLimited -> ParserWorkerPartial(
         partial = true,
-        reasons = listOf(BYTE_LIMIT_REASON),
+        reasons = buildList {
+            if (contentLimited) add(CONTENT_LIMIT_REASON)
+            if (byteLimited) add(BYTE_LIMIT_REASON)
+        },
         emittedCount = emittedCount,
         totalCount = totalCount,
         totalCountLowerBound = null,
@@ -279,6 +322,7 @@ internal fun decodeParserWorkerSuccess(
         val diagnostics = decodeDiagnostics(presentation.diagnostics) ?: return null
         val componentGraph = decodeComponentGraph(presentation.componentGraph) ?: return null
         val legacyTabs = decodeLegacyTabs(presentation.legacyTabs, format) ?: return null
+        val toolbar = decodeToolbar(presentation.toolbar, format) ?: return null
         if (!hasCoherentContent(format, capabilities, ranges, tables, diagnostics, componentGraph)) return null
 
         val reasons = decodeStrings(partial.reasons, MAX_PARTIAL_REASONS, MAX_PARTIAL_REASON_CHARS) ?: return null
@@ -300,6 +344,7 @@ internal fun decodeParserWorkerSuccess(
                 diagnostics,
                 componentGraph.takeIf { it.nodes.isNotEmpty() || it.edges.isNotEmpty() },
                 legacyTabs,
+                toolbar,
             ),
             ParserWorkerPartial(isPartial, reasons, emitted, total, lowerBound),
             wireBytes,
@@ -325,6 +370,8 @@ internal fun encodeSuccessWire(requestId: String, presentation: ParserWorkerPres
         codeBodyCount = presentation.summary.codeBodyCount; elapsedMs = presentation.summary.elapsedMs
         exportCount = presentation.summary.exportCount; moduleCount = presentation.summary.moduleCount
         proposalCount = presentation.summary.proposalCount
+        graalWebImage = presentation.summary.graalWebImage
+        graalWebImageMatchedImportModules = presentation.summary.graalWebImageMatchedImportModules.toTypedArray()
     }
     value.presentation.ranges = presentation.ranges.map { range ->
         val wire = wireObject()
@@ -358,6 +405,10 @@ internal fun encodeSuccessWire(requestId: String, presentation: ParserWorkerPres
         wire
     }
     value.presentation.legacyTabs = presentation.legacyTabs.toTypedArray()
+    val toolbar = wireObject()
+    toolbar.runnableExportName = presentation.toolbar.runnableExportName
+    toolbar.proposalIds = presentation.toolbar.proposalIds.toTypedArray()
+    value.presentation.toolbar = toolbar
     value.presentation.diagnostics = presentation.diagnostics.map { diagnostic ->
         val wire = wireObject()
         wire.code = diagnostic.code; wire.message = diagnostic.message
@@ -384,10 +435,92 @@ internal fun parserWorkerResponseEnvelopeBytesOrNull(value: dynamic): Int? = try
 internal fun isValidParserWorkerRequestId(value: String): Boolean =
     value.isNotBlank() && value.length <= MAX_PARSER_WORKER_REQUEST_ID_CHARS
 
+/**
+ * Drops whole presentation records whose untrusted parser-derived strings cannot fit the protocol.
+ * The caller passes [SanitizedParserWorkerPresentation.omittedRecordCount] into the bounded encoder,
+ * so the UI receives an explicit partial-result marker instead of a misleading parse failure or a
+ * truncated identifier.
+ */
+internal fun sanitizeParserWorkerPresentation(presentation: ParserWorkerPresentation): SanitizedParserWorkerPresentation {
+    var omitted = 0L
+    fun omit(count: Int = 1) {
+        omitted += count
+        require(omitted <= Int.MAX_VALUE) { "Parser-worker omitted record count exceeds the wire representation." }
+    }
+
+    val summary = presentation.summary.let { source ->
+        if (isValidGraalWebImageMetadata(source)) source
+        else {
+            omit()
+            source.copy(graalWebImage = false, graalWebImageMatchedImportModules = emptyList())
+        }
+    }
+    val ranges = presentation.ranges.filter { range ->
+        (isValidRange(range, summary.inputBytes) && range.label.length <= MAX_RANGE_LABEL_CHARS).also { valid ->
+            if (!valid) omit()
+        }
+    }
+    val tables = presentation.tables.mapNotNull { table ->
+        val records = table.records.filter { record ->
+            val valid = record.key.length <= MAX_RECORD_KEY_CHARS &&
+                record.value.length <= MAX_RECORD_VALUE_CHARS &&
+                record.values.size in 1..MAX_RECORD_VALUES &&
+                record.values.all { it.length <= MAX_RECORD_VALUE_CHARS } &&
+                record.values.size == table.columns.size &&
+                isValidRecordRange(record, summary.inputBytes)
+            if (!valid) omit()
+            valid
+        }
+        table.copy(records = records).takeIf { records.isNotEmpty() }
+    }
+    val diagnostics = presentation.diagnostics.filter { diagnostic ->
+        val valid = diagnostic.code.length <= MAX_DIAGNOSTIC_CODE_CHARS && diagnostic.message.length <= MAX_DIAGNOSTIC_MESSAGE_CHARS
+        if (!valid) omit()
+        valid
+    }
+    val componentGraph = presentation.componentGraph?.let { graph ->
+        val nodes = graph.nodes.filter { node ->
+            val valid = isValidComponentGraphNode(node)
+            if (!valid) omit()
+            valid
+        }
+        val nodeIds = nodes.mapTo(mutableSetOf()) { it.id }
+        val edges = graph.edges.filter { edge ->
+            val valid = isValidComponentGraphEdge(edge) && edge.fromId in nodeIds && edge.toId in nodeIds
+            if (!valid) omit()
+            valid
+        }
+        ParserWorkerComponentGraph(nodes, edges).takeIf { nodes.isNotEmpty() || edges.isNotEmpty() }
+    }
+
+    return SanitizedParserWorkerPresentation(
+        presentation.copy(
+            summary = summary,
+            ranges = ranges,
+            tables = tables,
+            diagnostics = diagnostics,
+            componentGraph = componentGraph,
+        ),
+        omitted.toInt(),
+    )
+}
+
+internal fun componentGraphSourceId(sort: ComponentSort, index: Int): String? = when (sort) {
+    is ComponentSortWithCoreSort -> when (sort.cs) {
+        ComponentCoreSort.Module -> "module:$index"
+        ComponentCoreSort.Instance -> "core-instance:$index"
+        else -> null
+    }
+    ComponentSort.Instance -> "instance:$index"
+    ComponentSort.Component -> "component:$index"
+    else -> null
+}
+
 private fun requireValidProducerPresentation(presentation: ParserWorkerPresentation) {
     require(isValidFormat(presentation.format)) { "Unsupported parser-worker format." }
     require(isValidCapabilities(presentation.capabilities)) { "Invalid parser-worker capability collection." }
     require(isValidLegacyTabs(presentation.format, presentation.legacyTabs)) { "Invalid parser-worker legacy tabs." }
+    require(isValidToolbar(presentation.format, presentation.toolbar)) { "Invalid parser-worker toolbar presentation." }
     require(presentation.tables.size <= MAX_PARSER_WORKER_TABLES) { "Too many parser-worker tables." }
     require(isValidSummary(presentation.summary)) { "Invalid parser-worker summary." }
     require(hasCoherentContent(presentation.format, presentation.capabilities, presentation.ranges, presentation.tables, presentation.diagnostics, presentation.componentGraph ?: ParserWorkerComponentGraph(emptyList(), emptyList()))) {
@@ -436,6 +569,17 @@ private fun isValidLegacyTabs(format: String, legacyTabs: List<String>): Boolean
         legacyTabs.all { it.length <= MAX_LEGACY_TAB_LABEL_CHARS && it in supportedLegacyTabsByFormat.getValue(format) } &&
         legacyTabs.distinct().size == legacyTabs.size
 
+private fun isValidToolbar(format: String, toolbar: ParserWorkerToolbar): Boolean =
+    toolbar.proposalIds.size <= MAX_TOOLBAR_PROPOSALS &&
+        toolbar.proposalIds.all { it.length <= MAX_TOOLBAR_PROPOSAL_ID_CHARS && it in supportedToolbarProposalIds } &&
+        toolbar.proposalIds.distinct().size == toolbar.proposalIds.size &&
+        (format == "core_wasm" || toolbar.proposalIds.isEmpty()) &&
+        when (format) {
+            "core_wasm" -> toolbar.runnableExportName == null || toolbar.runnableExportName in setOf("_start", "_initialize")
+            "wasm_component" -> toolbar.runnableExportName == null || toolbar.runnableExportName == "wasi:cli/run"
+            else -> toolbar.runnableExportName == null
+        }
+
 private fun hasCoherentContent(
     format: String,
     capabilities: List<String>,
@@ -462,7 +606,14 @@ private fun isValidSummary(summary: ParserWorkerSummary): Boolean =
         summary.exportCount >= 0 &&
         summary.moduleCount >= 0 &&
         summary.proposalCount >= 0 &&
+        isValidGraalWebImageMetadata(summary) &&
         summary.elapsedMs.isFinite() && summary.elapsedMs >= 0
+
+private fun isValidGraalWebImageMetadata(summary: ParserWorkerSummary): Boolean =
+    (summary.graalWebImage || summary.graalWebImageMatchedImportModules.isEmpty()) &&
+        summary.graalWebImageMatchedImportModules.size <= MAX_TOOLCHAIN_IMPORT_MODULES &&
+        summary.graalWebImageMatchedImportModules.all { it.isNotBlank() && it.length <= MAX_TOOLCHAIN_IMPORT_MODULE_CHARS } &&
+        summary.graalWebImageMatchedImportModules.distinct().size == summary.graalWebImageMatchedImportModules.size
 
 private fun isValidRange(range: ParserWorkerRange, inputBytes: Int): Boolean =
     range.offset >= 0 && range.size > 0 && range.size <= inputBytes && range.offset <= inputBytes - range.size
@@ -502,7 +653,12 @@ private fun isValidPartialMetadata(
 ): Boolean = when (reasons) {
     emptyList<String>() -> !partial && total == emitted && lowerBound == null
     listOf(BYTE_LIMIT_REASON) -> partial && total != null && total > emitted && lowerBound == null
-    listOf(RECORD_LIMIT_REASON), listOf(RECORD_LIMIT_REASON, BYTE_LIMIT_REASON) ->
+    listOf(CONTENT_LIMIT_REASON), listOf(CONTENT_LIMIT_REASON, BYTE_LIMIT_REASON) ->
+        partial && total != null && total > emitted && lowerBound == null
+    listOf(RECORD_LIMIT_REASON),
+    listOf(RECORD_LIMIT_REASON, BYTE_LIMIT_REASON),
+    listOf(CONTENT_LIMIT_REASON, RECORD_LIMIT_REASON),
+    listOf(CONTENT_LIMIT_REASON, RECORD_LIMIT_REASON, BYTE_LIMIT_REASON) ->
         partial && total == null && lowerBound != null && lowerBound > emitted
     else -> false
 }
@@ -523,6 +679,9 @@ private fun decodeSummary(value: dynamic): ParserWorkerSummary? {
         safeWireInt(value.exportCount) ?: return null,
         safeWireInt(value.moduleCount) ?: return null,
         safeWireInt(value.proposalCount) ?: return null,
+        value.graalWebImage as? Boolean ?: return null,
+        decodeStrings(value.graalWebImageMatchedImportModules, MAX_TOOLCHAIN_IMPORT_MODULES, MAX_TOOLCHAIN_IMPORT_MODULE_CHARS)
+            ?: return null,
     )
     return summary.takeIf(::isValidSummary)
 }
@@ -613,6 +772,15 @@ private fun decodeDiagnostics(value: dynamic): List<ParserWorkerDiagnostic>? {
 private fun decodeLegacyTabs(value: dynamic, format: String): List<String>? =
     decodeStrings(value, MAX_PARSER_WORKER_LEGACY_TABS, MAX_LEGACY_TAB_LABEL_CHARS)
         ?.takeIf { isValidLegacyTabs(format, it) }
+
+private fun decodeToolbar(value: dynamic, format: String): ParserWorkerToolbar? {
+    if (!isPlainWireObject(value)) return null
+    val toolbar = ParserWorkerToolbar(
+        if (value.runnableExportName == null) null else safeString(value.runnableExportName, MAX_TOOLBAR_RUNNABLE_EXPORT_CHARS) ?: return null,
+        decodeStrings(value.proposalIds, MAX_TOOLBAR_PROPOSALS, MAX_TOOLBAR_PROPOSAL_ID_CHARS) ?: return null,
+    )
+    return toolbar.takeIf { isValidToolbar(format, it) }
+}
 
 private fun decodeStrings(value: dynamic, maxItems: Int, maxLength: Int): List<String>? {
     val array = value as? Array<dynamic> ?: return null

@@ -24,8 +24,24 @@ private data class BrowserLoadedFile(
     val legacyWasmTab: String?,
 )
 
+internal fun interface LegacyWasmProviderFactory {
+    fun create(bytes: ByteArray, fileName: String): BinaryProvider
+}
+
+internal val defaultLegacyWasmProviderFactory = LegacyWasmProviderFactory { bytes, fileName ->
+    val buffer = bytes.toCommonByteBuffer()
+    buffer.position(0)
+    when (WasmBinaryProviderSelector.select(buffer)) {
+        BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
+        BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
+        else -> nativeOrGenericBinaryProvider(buffer, fileName)
+    }
+}
+
 @Composable
-fun WebAppRoot() {
+internal fun WebAppRoot(
+    legacyWasmProviderFactory: LegacyWasmProviderFactory = defaultLegacyWasmProviderFactory,
+) {
     var wasmBytes by remember { mutableStateOf<ByteArray?>(null) }
     var fileName by remember { mutableStateOf("") }
     var workerResponse by remember { mutableStateOf<BoundedParserWorkerSuccess?>(null) }
@@ -103,8 +119,8 @@ fun WebAppRoot() {
             })
         } else {
             val response = workerResponse
-            if (response != null && legacyWasmTab == null) {
-                WorkerWasmEditorContent(
+            if (response != null) {
+                WorkerBackedWasmContent(
                     fileName = fileName,
                     parentFileName = navStack.lastOrNull()?.fileName,
                     bytes = bytes,
@@ -116,27 +132,19 @@ fun WebAppRoot() {
                     onDialogPickedPathConsumed = onDialogPickedPathConsumed,
                     onScriptTabConfirmed = onScriptTabConfirmed,
                     onScriptTabRemoved = onScriptTabRemoved,
-                    onLegacyWasmViewRequested = { tab -> legacyWasmTab = tab },
+                    legacyWasmTab = legacyWasmTab,
+                    onLegacyWasmTabChanged = { tab -> legacyWasmTab = tab },
                     onLegacyWasmReparseRequested = { editedBytes ->
                         wasmBytes = editedBytes
                         workerResponse = null
                         legacyWasmTab = "Sections"
                     },
+                    legacyWasmProviderFactory = legacyWasmProviderFactory,
+                    showSemanticHighlighting = showSemanticHighlighting,
                 )
             } else {
-                // MCP-186 owns these explicit legacy paths (WAT, edits, and nested-module reparsing).
-                val buffer = bytes.toCommonByteBuffer()
-                buffer.position(0)
-
-                val provider = remember(buffer, fileName) {
-                    when (WasmBinaryProviderSelector.select(buffer)) {
-                        BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
-                        BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
-                        else -> nativeOrGenericBinaryProvider(buffer, fileName)
-                    }
-                }
-
-                val extraTabs = remember(buffer) { computeExtraTabs(buffer) }
+                val provider = remember(bytes, fileName) { legacyWasmProviderFactory.create(bytes, fileName) }
+                val extraTabs = remember(provider) { computeExtraTabs(provider.bytes.duplicate().position(0)) }
 
                 val parentFileName = navStack.lastOrNull()?.fileName
 
@@ -158,6 +166,64 @@ fun WebAppRoot() {
             }
         }
     }
+}
+
+@Composable
+internal fun WorkerBackedWasmContent(
+    fileName: String,
+    parentFileName: String?,
+    bytes: ByteArray,
+    response: BoundedParserWorkerSuccess,
+    capabilities: WebUiCapabilities,
+    legacyWasmTab: String?,
+    onLegacyWasmTabChanged: (String?) -> Unit,
+    onLegacyWasmReparseRequested: (ByteArray) -> Unit,
+    legacyWasmProviderFactory: LegacyWasmProviderFactory = defaultLegacyWasmProviderFactory,
+    showSemanticHighlighting: Boolean = true,
+    scriptTabs: List<ScriptTabState> = emptyList(),
+    dialogPickedPath: String = "",
+    dialogPickedContent: String = "",
+    onDialogPickedPathConsumed: () -> Unit = {},
+    onScriptTabConfirmed: (path: String, content: String) -> Unit = { _, _ -> },
+    onScriptTabRemoved: (path: String) -> Unit = {},
+) {
+    if (legacyWasmTab == null) {
+        WorkerWasmEditorContent(
+            fileName = fileName,
+            parentFileName = parentFileName,
+            bytes = bytes,
+            response = response,
+            capabilities = capabilities,
+            scriptTabs = scriptTabs,
+            dialogPickedPath = dialogPickedPath,
+            dialogPickedContent = dialogPickedContent,
+            onDialogPickedPathConsumed = onDialogPickedPathConsumed,
+            onScriptTabConfirmed = onScriptTabConfirmed,
+            onScriptTabRemoved = onScriptTabRemoved,
+            onLegacyWasmViewRequested = onLegacyWasmTabChanged,
+            onLegacyWasmReparseRequested = onLegacyWasmReparseRequested,
+        )
+        return
+    }
+
+    // MCP-186 owns these explicit legacy paths (WAT, edits, and nested-module reparsing).
+    val provider = remember(bytes, fileName, legacyWasmTab) { legacyWasmProviderFactory.create(bytes, fileName) }
+    val extraTabs = remember(provider) { computeExtraTabs(provider.bytes.duplicate().position(0)) }
+    BinaryEditorContent(
+        fileName = fileName,
+        parentFileName = parentFileName,
+        provider = provider,
+        extraTabs = extraTabs,
+        capabilities = capabilities,
+        scriptTabs = scriptTabs,
+        dialogPickedPath = dialogPickedPath,
+        dialogPickedContent = dialogPickedContent,
+        onDialogPickedPathConsumed = onDialogPickedPathConsumed,
+        onScriptTabConfirmed = onScriptTabConfirmed,
+        onScriptTabRemoved = onScriptTabRemoved,
+        showSemanticHighlighting = showSemanticHighlighting,
+        initialActiveTab = legacyWasmTab,
+    )
 }
 
 @Composable

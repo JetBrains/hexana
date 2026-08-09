@@ -18,6 +18,13 @@ import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.wasm.analysis.WasmProposal
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 
+/** Worker-produced Wasm metadata that preserves toolbar behavior without a Window parser provider. */
+data class WorkerWasmToolbarPresentation(
+    val isComponent: Boolean,
+    val runnableExportName: String? = null,
+    val proposalIds: List<String> = emptyList(),
+)
+
 /**
  * Top toolbar that shows the file name, size, detected binary kind,
  * an optional run button for runnable modules, and edit-mode controls
@@ -37,6 +44,7 @@ fun EditorToolbar(
     onReparseAfterOverwrite: () -> Unit = {},
     onOpenSbomTab: (() -> Unit)? = null,
     fileTypeLabelOverride: String? = null,
+    workerWasmToolbarPresentation: WorkerWasmToolbarPresentation? = null,
 ) {
     val isSubmodule = parentFileName != null || isSubmoduleFileName(fileName)
 
@@ -44,8 +52,9 @@ fun EditorToolbar(
         buildSizeTooltip(provider)
     }
 
-    val runnableExportName = remember(provider, isSubmodule) {
+    val runnableExportName = remember(provider, isSubmodule, workerWasmToolbarPresentation) {
         if (isSubmodule) return@remember null
+        workerWasmToolbarPresentation?.let { return@remember it.runnableExportName }
         when (provider) {
             is WasmBinaryProvider -> {
                 if (!provider.canProvideWasmModule()) return@remember null
@@ -65,7 +74,7 @@ fun EditorToolbar(
 
     val host = LocalHost.current
     val isRunnable = runnableExportName != null && host.canRunExport
-    val isComponent = provider is WasmComponentBinaryProvider
+    val isComponent = workerWasmToolbarPresentation?.isComponent ?: provider is WasmComponentBinaryProvider
 
     // Lazy native-image detection: nativeImageInfo is an expensive lazy val.
     // Mirror the same pattern used in HexanaPanel so the cached value is shared.
@@ -331,7 +340,12 @@ fun EditorToolbar(
                 NativeImageBadges(ni, onOpenSbomTab = onOpenSbomTab)
             }
 
-            val proposals = remember(provider) {
+            val proposals = remember(provider, workerWasmToolbarPresentation) {
+                workerWasmToolbarPresentation?.let { presentation ->
+                    return@remember presentation.proposalIds.mapNotNull { id ->
+                        WasmProposal.entries.firstOrNull { it.name == id }
+                    }
+                }
                 if (provider !is WasmBinaryProvider) return@remember emptyList()
                 if (!provider.canProvideWasmModule()) return@remember emptyList()
                 provider.usedProposals.sorted()

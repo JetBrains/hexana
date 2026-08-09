@@ -116,6 +116,7 @@ fun BinaryEditorContent(
     fileTypeLabelOverride: String? = null,
     initialActiveTab: String = "Sections",
     onLegacyReparseRequested: ((ByteArray) -> Unit)? = null,
+    workerWasmToolbarPresentation: WorkerWasmToolbarPresentation? = null,
 ) {
     val selection = remember { HexSelectionState() }
     val buffer = remember(provider) { provider.bytes }
@@ -177,6 +178,7 @@ fun BinaryEditorContent(
             },
             onOpenSbomTab = { activeTab = "SBOM" },
             fileTypeLabelOverride = fileTypeLabelOverride,
+            workerWasmToolbarPresentation = workerWasmToolbarPresentation,
         )
         Div({
             style {
