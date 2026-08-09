@@ -5,13 +5,33 @@ plugins {
 }
 
 kotlin {
+    val composeRuntimeForCompiler = compose.runtime
+
     js(IR) {
+        val parserWorker = compilations.create("parserWorker") {
+            defaultSourceSet {
+                kotlin.srcDir("src/parserWorkerMain/kotlin")
+                dependencies {
+                    implementation(project(":wasmParser"))
+                    implementation(project(":encdec"))
+                    compileOnly(composeRuntimeForCompiler)
+                }
+            }
+        }
+
         browser {
             commonWebpackConfig {
                 outputFileName = "webapp.js"
             }
+            testTask {
+                useKarma {
+                    useChrome()
+                    useConfigDirectory(project.projectDir.resolve("karma.config.d/web"))
+                }
+            }
         }
         binaries.executable()
+        parserWorker.binaries.executable(parserWorker)
     }
 
     sourceSets {
@@ -26,6 +46,50 @@ kotlin {
                 implementation(libs.kotlin.test)
                 implementation(libs.kotlinx.browser)
             }
+        }
+    }
+}
+
+val parserWorkerCompileSync = tasks.named("jsParserWorkerParserWorkerProductionExecutableCompileSync")
+val parserWorkerOutputDir = layout.buildDirectory.dir("parser-worker/production")
+val parserWorkerMeasurementsEnabled = providers.environmentVariable("HX_WEB_PARSER_WORKER_MEASUREMENTS")
+    .map { it == "1" }
+    .orElse(false)
+
+val parserWorkerBrowserProductionWebpack by tasks.registering(Exec::class) {
+    group = "verification"
+    description = "Bundles the isolated parser worker for browser tests."
+    dependsOn(parserWorkerCompileSync, rootProject.tasks.named("kotlinNpmInstall"))
+
+    val rootJsDir = rootProject.layout.buildDirectory.dir("js")
+    val workerEntry = rootJsDir.map {
+        it.file("packages/hexana-webapp-parserWorker/kotlin/hexana-webapp-parserWorker.js")
+    }
+    inputs.dir(rootJsDir.map { it.dir("packages/hexana-webapp-parserWorker/kotlin") })
+    outputs.file(parserWorkerOutputDir.map { it.file("parser-worker.js") })
+    workingDir(rootJsDir)
+    doFirst {
+        commandLine(
+            "node",
+            rootJsDir.get().file("node_modules/webpack/bin/webpack.js").asFile,
+            "--mode", "production",
+            "--entry", workerEntry.get().asFile.absolutePath,
+            "--output-path", parserWorkerOutputDir.get().asFile.absolutePath,
+            "--output-filename", "parser-worker.js",
+        )
+    }
+}
+
+tasks.named<Copy>("jsTestProcessResources") {
+    dependsOn(parserWorkerBrowserProductionWebpack)
+    from(parserWorkerOutputDir) {
+        include("parser-worker.js")
+    }
+    into("parser-worker-fixtures") {
+        from(rootProject.file("wasmParser/src/commonTest/resources/snippets/addition.wasm"))
+        if (parserWorkerMeasurementsEnabled.get()) {
+            from(rootProject.file("wasmParser/src/commonTest/resources/faustide.wasm"))
+            from(rootProject.file("wasmParser/src/commonTest/resources/mpp-demo.wasm"))
         }
     }
 }
