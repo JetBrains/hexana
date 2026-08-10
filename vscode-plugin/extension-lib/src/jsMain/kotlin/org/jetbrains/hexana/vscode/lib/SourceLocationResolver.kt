@@ -2,6 +2,8 @@
 
 package org.jetbrains.hexana.vscode.lib
 
+import org.jetbrains.hexana.dwarf.DwarfTypeInfo
+import org.jetbrains.hexana.dwarf.Tag
 import org.jetbrains.hexana.shared.CdpSourceLocationResolver
 
 /**
@@ -82,6 +84,41 @@ class SourceLocationResolver private constructor(
             .toTypedArray()
     }
 
+    /**
+     * Returns DWARF-described variables for the subprogram covering [offset] whose values
+     * live in Wasm linear memory (frame-relative `DW_OP_fbreg` or static `DW_OP_addr`).
+     *
+     * Variables already visible as V8 `wasmvalue` scope entries (wasm locals/globals) are
+     * omitted; only memory-backed variables are returned here.
+     *
+     * @param offset the CDP columnNumber for the wasm:// frame (module-absolute byte offset)
+     */
+    fun memoryVariablesAt(offset: Int): Array<MemoryVariable> {
+        return delegate.memoryVariablesAt(offset.toULong()).map { v ->
+            val isFbreg = v.fbregOffset != null
+            val isGlobal = isFbreg && (v.frameBaseLocalIndex ?: 0) < 0
+            MemoryVariable(
+                name = v.name,
+                typeSummary = typeSummary(v.type),
+                fbregOffset = v.fbregOffset?.toInt() ?: 0,
+                frameBaseLocalIndex = v.frameBaseLocalIndex?.toInt() ?: 0,
+                absoluteAddress = v.absoluteAddress?.toInt() ?: 0,
+                byteSize = v.byteSize,
+                isFbreg = isFbreg,
+                frameBaseIsGlobal = isGlobal,
+            )
+        }.toTypedArray()
+    }
+
+    private fun typeSummary(type: DwarfTypeInfo): String = when (type) {
+        is DwarfTypeInfo.Base -> type.name
+        is DwarfTypeInfo.Pointer -> "${typeSummary(type.pointee ?: DwarfTypeInfo.Unknown(Tag.DW_TAG_unspecified_type))}*"
+        is DwarfTypeInfo.Struct -> type.name ?: "struct"
+        is DwarfTypeInfo.Array -> "[${type.count ?: "?"}]${typeSummary(type.elementType ?: DwarfTypeInfo.Unknown(Tag.DW_TAG_unspecified_type))}"
+        is DwarfTypeInfo.Enumeration -> type.name ?: "enum"
+        is DwarfTypeInfo.Unknown -> "?"
+    }
+
     companion object {
         /**
          * Creates a resolver from raw Wasm binary bytes.
@@ -133,4 +170,34 @@ data class InlinedFrame(
     val callLine: Int?,
     val callColumn: Int?,
     val depth: Int,
+)
+
+/**
+ * A DWARF-described variable whose value lives in Wasm linear memory.
+ *
+ * CDP callers should:
+ * 1. If [absoluteAddress] is non-null: read [byteSize] bytes from `memories[0]` at [absoluteAddress].
+ * 2. Otherwise: read the value of wasm local at index [frameBaseLocalIndex] from the frame's scope
+ *    (as a number), add [fbregOffset], and read [byteSize] bytes from `memories[0]` at that address.
+ *    A negative [frameBaseLocalIndex] encodes `-(globalIndex+1)` meaning "use wasm global, not local".
+ *
+ * @property name DWARF source variable name
+ * @property typeSummary one-line type description for display
+ * @property fbregOffset signed byte offset from the frame-base pointer; null for absolute-address vars
+ * @property frameBaseLocalIndex the wasm local index of the shadow stack pointer; null for absolute-address vars
+ * @property absoluteAddress fixed linear-memory address for `DW_OP_addr` variables; null for frame-relative
+ * @property byteSize number of bytes to read from linear memory (capped at 4096)
+ */
+@JsExport
+data class MemoryVariable(
+    val name: String,
+    val typeSummary: String,
+    val fbregOffset: Int,
+    val frameBaseLocalIndex: Int,
+    val absoluteAddress: Int,
+    val byteSize: Int,
+    /** True when this is a frame-relative variable (use frameBaseLocalIndex + fbregOffset). */
+    val isFbreg: Boolean,
+    /** True when frameBaseLocalIndex is actually a wasm global index (negated). */
+    val frameBaseIsGlobal: Boolean,
 )

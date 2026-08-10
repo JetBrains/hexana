@@ -6,10 +6,13 @@ import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver
 import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver.AddressSourceLocation
 import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver.SourceLocation
 import org.jetbrains.hexana.dwarf.DwarfExprOp
+import org.jetbrains.hexana.dwarf.DwarfInfoSection
 import org.jetbrains.hexana.dwarf.DwarfLocationDescription
 import org.jetbrains.hexana.dwarf.DwarfSubprogramInfo
+import org.jetbrains.hexana.dwarf.DwarfTypeResolver
 import org.jetbrains.hexana.dwarf.DwarfVariableInfo
 import org.jetbrains.hexana.dwarf.DwarfVariableInfoExtractor
+import org.jetbrains.hexana.dwarf.buildDieIndex
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.BaseModule
@@ -60,6 +63,16 @@ class CdpSourceLocationResolver private constructor(
      * Keyed by the full DWARF path (compDir-joined, forward slashes).
      */
     private val lineTablePathToOffsets: Map<String, List<LineOffset>> = emptyMap(),
+    /**
+     * Type resolver for decoding DWARF type DIEs; non-null when DWARF info is present.
+     * Shared with [memoryVariablesAt] and built once from the same accessor.
+     */
+    private val typeResolver: DwarfTypeResolver? = null,
+    /**
+     * Buffer used by [memoryVariablesAt] for type resolution.
+     * Same buffer instance as [bufferForInline].
+     */
+    private val bufferForMemVar: CommonByteBuffer? = null,
 ) {
 
     /**
@@ -107,6 +120,100 @@ class CdpSourceLocationResolver private constructor(
             return emptyList()
         }
         return with(ext) { buf.inlinedFramesAt(codeRelOffset) }
+    }
+
+    /**
+     * Returns DWARF-described variables for the subprogram covering [moduleOffset]
+     * whose values live in Wasm linear memory (frame-relative or absolute-address).
+     *
+     * Only variables with `DW_OP_fbreg` or `DW_OP_addr` location descriptions are
+     * returned; wasm-local-backed variables (already visible as V8 `wasmvalue` scope
+     * entries) are omitted. The frame-base local index is extracted from the
+     * subprogram's `DW_AT_frame_base` attribute; if it uses a wasm global instead of
+     * a local (rare), that is recorded in [CdpMemoryVariable.frameBaseLocalIndex] as
+     * negative to signal "use global N instead".
+     *
+     * Returns an empty list when DWARF info is absent, when no subprogram covers the
+     * offset, or when parsing fails.
+     *
+     * @param moduleOffset module-absolute wasm byte offset (CDP `columnNumber` for wasm:// scripts)
+     */
+    fun memoryVariablesAt(moduleOffset: ULong): List<CdpMemoryVariable> {
+        val resolver = typeResolver ?: return emptyList()
+        val buf = bufferForMemVar ?: return emptyList()
+        val codeRelOffset = if (moduleOffset >= codeSectionOffset.toULong()) {
+            (moduleOffset - codeSectionOffset.toULong()).toInt()
+        } else {
+            return emptyList()
+        }
+
+        // Find subprogram covering codeRelOffset. subprograms are code-section-relative.
+        val subprogram = subprograms.firstOrNull { sp ->
+            val low = sp.lowPc ?: return@firstOrNull false
+            val high = sp.highPc ?: return@firstOrNull false
+            codeRelOffset in low until high
+        } ?: return emptyList()
+
+        // Determine which wasm local carries the frame base (shadow stack pointer).
+        // DW_AT_frame_base is typically DW_OP_WASM_location local N + DW_OP_stack_value.
+        val frameBaseOp = subprogram.frameBase?.operations?.firstOrNull()
+        val frameBaseLocalIndex: Long? = when (frameBaseOp) {
+            is DwarfExprOp.WasmLocal -> frameBaseOp.index
+            // Wasm globals used as frame base: encode as -(index+1) to distinguish from locals
+            is DwarfExprOp.WasmGlobal -> -(frameBaseOp.index + 1)
+            is DwarfExprOp.WasmGlobalU32 -> -(frameBaseOp.index + 1)
+            else -> null
+        }
+
+        val result = mutableListOf<CdpMemoryVariable>()
+        for (v in subprogram.variables) {
+            val name = v.name ?: continue
+            val typeOffset = v.typeOffset ?: continue
+            val loc = effectiveLocation(v) ?: continue
+
+            val primaryOp = loc.operations.firstOrNull() ?: continue
+            when (primaryOp) {
+                is DwarfExprOp.FrameBaseOffset -> {
+                    // Variable in linear memory at frame_base + offset.
+                    // Only emit when we know the frame base local.
+                    if (frameBaseLocalIndex == null) continue
+                    val typeInfo = with(resolver) { buf.resolveTypeAtOffset(typeOffset) } ?: continue
+                    val byteSize = DwarfMemoryDecoder.typeByteSize(typeInfo)
+                        ?.coerceAtMost(CdpMemoryVariable.MAX_SLAB_BYTES) ?: continue
+                    result.add(
+                        CdpMemoryVariable(
+                            name = name,
+                            type = typeInfo,
+                            fbregOffset = primaryOp.offset,
+                            frameBaseLocalIndex = frameBaseLocalIndex,
+                            absoluteAddress = null,
+                            byteSize = byteSize,
+                        )
+                    )
+                }
+                is DwarfExprOp.Address -> {
+                    // Variable at a fixed linear-memory address (static/global).
+                    val typeInfo = with(resolver) { buf.resolveTypeAtOffset(typeOffset) } ?: continue
+                    val byteSize = DwarfMemoryDecoder.typeByteSize(typeInfo)
+                        ?.coerceAtMost(CdpMemoryVariable.MAX_SLAB_BYTES) ?: continue
+                    result.add(
+                        CdpMemoryVariable(
+                            name = name,
+                            type = typeInfo,
+                            fbregOffset = null,
+                            frameBaseLocalIndex = null,
+                            absoluteAddress = primaryOp.address,
+                            byteSize = byteSize,
+                        )
+                    )
+                }
+                else -> {
+                    // WasmLocal / WasmGlobal / StackValue etc. — already visible via
+                    // V8 scope properties or not readable from linear memory; skip.
+                }
+            }
+        }
+        return result
     }
 
     /**
@@ -449,6 +556,16 @@ class CdpSourceLocationResolver private constructor(
 
                 val accessor2 = accessor
                 val buffer2 = buffer
+                val typeResolver = run {
+                    val infoSection = accessor.debugInfoSection() ?: return@run null
+                    val cus = with(infoSection) { buffer2.scanDwarfInfo() }
+                    val allDies = buildMap {
+                        for (cu in cus) {
+                            for (child in cu.children) putAll(buildDieIndex(child))
+                        }
+                    }
+                    DwarfTypeResolver(allDies, accessor, infoSection.contentOffset)
+                }
                 CdpSourceLocationResolver(
                     locations, codeSectionOffset, subprograms,
                     inlineExtractorFactory = {
@@ -459,6 +576,8 @@ class CdpSourceLocationResolver private constructor(
                     lineTableSourceToOffsets = buildReverseIndex(lineTableLocations),
                     cuPathToOffsets = buildFullPathIndex(cuLocations),
                     lineTablePathToOffsets = buildFullPathIndex(lineTableLocations),
+                    typeResolver = typeResolver,
+                    bufferForMemVar = buffer2,
                 )
             } catch (_: Exception) {
                 null

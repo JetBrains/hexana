@@ -1513,12 +1513,24 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                             objectId: scope.object.objectId,
                             ownProperties: true,
                         });
+                        const wasmLocalValues = new Map<number, number>();
                         let localIndex = 0;
                         for (const prop of (result.result || [])) {
                             const rawName = String(prop.name ?? "");
                             const val = prop.value || {};
                             const subtype = val.subtype;
                             const displayName = this.resolveVariableDisplayName(rawName, localToName, localIndex);
+
+                            // Collect numeric values from wasmvalue locals for frame-base resolution.
+                            if (subtype === "wasmvalue") {
+                                const varMatch = WASM_VAR_REGEX.exec(rawName);
+                                if (varMatch) {
+                                    const idx = Number(varMatch[1]);
+                                    const innerStr = await this.resolveWasmValue(val);
+                                    const inner = innerStr !== undefined ? Number(innerStr) : NaN;
+                                    if (Number.isFinite(inner)) wasmLocalValues.set(idx, inner);
+                                }
+                            }
 
                             if (this.sourceLocationResolver && !hasDwarfMatch && subtype === "wasmvalue") {
                                 localIndex++;
@@ -1532,12 +1544,108 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                             variables.push(await this.cdpValueToVariable(displayName, val));
                             localIndex++;
                         }
+
+                        // Append DWARF linear-memory variables.
+                        const wasmOffset = (frame.location?.columnNumber as number) || 0;
+                        await this.appendMemoryVariables(
+                            variables, frame.callFrameId, wasmOffset, wasmLocalValues,
+                        );
                     } catch { /* ignore */ }
                 }
             }
         }
 
         this.sendDapResponse(msg, true, undefined, { variables });
+    }
+
+    /**
+     * Reads DWARF linear-memory variables for the current frame and appends them to `variables`.
+     *
+     * For each memory variable returned by `sourceLocationResolver.memoryVariablesAt`:
+     * 1. Compute the linear-memory address (frame-relative or absolute).
+     * 2. Read `byteSize` bytes from `memories[0]` using `Debugger.evaluateOnCallFrame`.
+     *    V8 exposes wasm linear memory as `memories[0]` in the wasm frame evaluate context.
+     *    We build a hex string to avoid binary encoding issues.
+     * 3. Decode the bytes as a display value using the `typeSummary` from the resolver.
+     *
+     * Failures are silently ignored (logged once per frame).
+     */
+    private async appendMemoryVariables(
+        variables: any[],
+        callFrameId: string | undefined,
+        wasmOffset: number,
+        wasmLocalValues: Map<number, number>,
+    ): Promise<void> {
+        if (!this.sourceLocationResolver || !callFrameId) return;
+        const memVars = this.sourceLocationResolver.memoryVariablesAt(wasmOffset);
+        if (!memVars || memVars.length === 0) return;
+
+        let loggedReadFailure = false;
+        for (const v of Array.from(memVars as ArrayLike<any>)) {
+            try {
+                let address: number;
+                if (!v.isFbreg) {
+                    address = v.absoluteAddress;
+                } else {
+                    const fbLocalIdx = v.frameBaseLocalIndex as number;
+                    if (fbLocalIdx < 0) continue; // wasm-global frame base, not yet supported
+                    const frameBase = wasmLocalValues.get(fbLocalIdx);
+                    if (frameBase === undefined) continue;
+                    address = frameBase + (v.fbregOffset as number);
+                }
+
+                const byteSize = v.byteSize as number;
+                if (byteSize <= 0 || byteSize > 4096) continue;
+
+                const hexExpr = `(function(){var mem=memories[0].buffer;var arr=new Uint8Array(mem,${address},${byteSize});var h='';for(var i=0;i<arr.length;i++){var b=arr[i].toString(16);h+=(b.length<2?'0'+b:b);}return h;})()`;
+
+                let hexStr: string | undefined;
+                try {
+                    const evalResult = await this.cdpSend("Debugger.evaluateOnCallFrame", {
+                        callFrameId,
+                        expression: hexExpr,
+                        returnByValue: true,
+                    });
+                    hexStr = evalResult?.result?.value as string | undefined;
+                } catch (e) {
+                    if (!loggedReadFailure) {
+                        console.warn(`[hexana] CDP linear-memory read failed for '${v.name}': ${e}`);
+                        loggedReadFailure = true;
+                    }
+                    continue;
+                }
+
+                if (!hexStr || hexStr.length !== byteSize * 2) continue;
+
+                // Decode hex string to a display value.
+                // Use typeSummary as type and interpret the bytes as a little-endian integer for scalars.
+                const displayValue = this.decodeHexMemory(hexStr, byteSize, v.typeSummary as string);
+                variables.push({
+                    name: v.name as string,
+                    value: displayValue,
+                    type: v.typeSummary as string,
+                    variablesReference: 0,
+                });
+            } catch { /* skip this variable */ }
+        }
+    }
+
+    /**
+     * Decodes a little-endian hex string from wasm linear memory into a display string.
+     * Handles scalars and falls back to hex for composite/unknown types.
+     */
+    private decodeHexMemory(hex: string, byteSize: number, typeSummary: string): string {
+        if (!hex || hex.length !== byteSize * 2) return `0x${hex}`;
+        // For small scalars, decode as little-endian integer and show the value.
+        // Composite types (struct/array) show as hex since byte-level decode is in Kotlin.
+        if (byteSize <= 8 && !typeSummary.startsWith("[") && typeSummary !== "struct") {
+            let value = 0;
+            for (let i = byteSize - 1; i >= 0; i--) {
+                value = (value * 256 + parseInt(hex.substring(i * 2, i * 2 + 2), 16));
+            }
+            return String(value);
+        }
+        return `0x${hex}`;
     }
 
     private buildWasmLocalToNameMap(frame: any): Map<number, string> {

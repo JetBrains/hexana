@@ -108,6 +108,39 @@ export interface InlinedFrame {
 }
 
 /**
+ * A DWARF-described variable whose value lives in Wasm linear memory.
+ * Returned by {@link SourceLocationResolver.memoryVariablesAt}.
+ *
+ * Usage:
+ * - If `isFbreg` is true: read `byteSize` bytes from `memories[0]` at address
+ *   `(value of wasm local frameBaseLocalIndex) + fbregOffset`.
+ *   If `frameBaseIsGlobal` is true, `frameBaseLocalIndex` encodes `-(globalIndex+1)`;
+ *   resolve the global instead of a local.
+ * - If `isFbreg` is false: read `byteSize` bytes from `memories[0]` at `absoluteAddress`.
+ */
+export interface MemoryVariable {
+    /** DWARF source variable name. */
+    readonly name: string;
+    /** One-line type description for display (e.g. `"i32"`, `"Point"`, `"[4]i32"`). */
+    readonly typeSummary: string;
+    /** Signed byte offset from the frame-base pointer (frame-relative vars only). */
+    readonly fbregOffset: number;
+    /**
+     * Wasm local index whose value is the shadow stack pointer (frame-relative vars only).
+     * Negative values encode `-(globalIndex+1)` meaning use a wasm global instead.
+     */
+    readonly frameBaseLocalIndex: number;
+    /** Fixed linear-memory address for `DW_OP_addr` (absolute-address vars only). */
+    readonly absoluteAddress: number;
+    /** Number of bytes to read from linear memory (capped at 4096). */
+    readonly byteSize: number;
+    /** True when this is a frame-relative variable (use `frameBaseLocalIndex + fbregOffset`). */
+    readonly isFbreg: boolean;
+    /** True when `frameBaseLocalIndex` is a wasm global index (negated), not a local. */
+    readonly frameBaseIsGlobal: boolean;
+}
+
+/**
  * DWARF-based source ↔ Wasm byte offset resolver.
  *
  * Created from raw Wasm binary bytes; provides mappings between
@@ -148,6 +181,16 @@ export interface SourceLocationResolver {
      * @param offset the CDP columnNumber for the wasm:// frame
      */
     inlinedFramesAt(offset: number): InlinedFrame[];
+
+    /**
+     * Returns DWARF-described variables for the subprogram covering `offset` whose values
+     * live in Wasm linear memory. Frame-relative (`DW_OP_fbreg`) and absolute-address
+     * (`DW_OP_addr`) variables are returned; wasm-local-backed variables already visible
+     * as V8 scope entries are omitted.
+     *
+     * @param offset the CDP columnNumber for the wasm:// frame (module-absolute byte offset)
+     */
+    memoryVariablesAt(offset: number): MemoryVariable[];
 }
 
 export namespace SourceLocationResolver {

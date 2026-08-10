@@ -27,7 +27,9 @@ import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import org.jetbrains.hexana.dwarf.DwarfInlineFrame
+import org.jetbrains.hexana.shared.CdpMemoryVariable
 import org.jetbrains.hexana.shared.CdpSourceLocationResolver
+import org.jetbrains.hexana.shared.DwarfMemoryDecoder
 
 /**
  * An [XDebugProcess] that communicates with Node.js or Chrome via the
@@ -412,6 +414,7 @@ internal class CdpDebugProcess(
                         lineNumber = effectiveTopFrame.lineNumber,
                         columnNumber = effectiveTopFrame.columnNumber,
                         dwarfVariableResolver = dwarfVariableResolver,
+                        sourceLocationResolver = sourceLocationResolver,
                     )
                     val remainingFrames = filteredFrames.drop(1)
                     CdpSuspendContext(
@@ -537,6 +540,7 @@ internal class CdpDebugProcess(
             lineNumber = lineNumber,
             columnNumber = columnNumber,
             dwarfVariableResolver = dwarfVariableResolver,
+            sourceLocationResolver = sourceLocationResolver,
         )
 
         // Only look up inlined frames for wasm:// frames that have a DWARF resolver.
@@ -586,6 +590,7 @@ internal class CdpDebugProcess(
             lineNumber = lineNumber,
             columnNumber = columnNumber,
             dwarfVariableResolver = dwarfVariableResolver,
+            sourceLocationResolver = sourceLocationResolver,
         )
 
         return syntheticFrames + physicalWithCallSite
@@ -1306,6 +1311,7 @@ internal class CdpStackFrame(
     internal val lineNumber: Int,
     internal val columnNumber: Int = 0,
     private val dwarfVariableResolver: WasmDwarfVariableResolver? = null,
+    private val sourceLocationResolver: CdpSourceLocationResolver? = null,
 ) : XStackFrame() {
 
     /** For wasm frames, columnNumber is the byte offset within the module. */
@@ -1339,6 +1345,9 @@ internal class CdpStackFrame(
         scope.launch {
             try {
                 val list = XValueChildrenList()
+                // Collect wasm local values for frame-base resolution (keyed by $varN index).
+                // Maps V8 local index -> numeric value (used to resolve the shadow stack pointer).
+                val wasmLocalValues = mutableMapOf<Long, Long>()
                 var localIndex = 0L
                 for (scopeEntry in scopeChain) {
                     val type = scopeEntry["type"] as? String ?: continue
@@ -1364,6 +1373,19 @@ internal class CdpStackFrame(
                         // then fall back to positional index for non-$varN
                         // names (e.g. wasm name section names like "arg0_1")
                         val displayName = resolveVariableDisplayName(name, localToName, localIndex)
+
+                        // Collect numeric values from wasmvalue locals for frame-base resolution.
+                        // These are needed to compute the shadow-stack-pointer address.
+                        if (subtype == "wasmvalue") {
+                            val match = WASM_VAR_PATTERN.matchEntire(name)
+                            if (match != null) {
+                                val idx = match.groupValues[1].toLongOrNull()
+                                if (idx != null) {
+                                    val innerVal = resolveWasmValue(value, cdp)?.toLongOrNull()
+                                    if (innerVal != null) wasmLocalValues[idx] = innerVal
+                                }
+                            }
+                        }
 
                         // Hide variables in two cases:
                         // 1. Function has no DWARF subprogram (wrapper/
@@ -1393,9 +1415,100 @@ internal class CdpStackFrame(
                         localIndex++
                     }
                 }
+
+                // Append DWARF linear-memory variables if the source location resolver is available.
+                appendMemoryVariables(list, wasmLocalValues)
+
                 node.addChildren(list, true)
             } catch (e: Exception) {
                 node.setErrorMessage("Failed to retrieve variables: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Reads DWARF linear-memory variables for this frame and appends them to [list].
+     *
+     * For each memory variable:
+     * 1. Compute the linear-memory address:
+     *    - Frame-relative: base = value of wasm local [frameBaseLocalIndex] from [wasmLocalValues],
+     *      address = base + fbregOffset.
+     *    - Absolute: address = absoluteAddress.
+     * 2. Read [byteSize] bytes from `memories[0]` using `Debugger.evaluateOnCallFrame` on a
+     *    JS expression that slices the memory ArrayBuffer. V8 exposes the wasm instance's linear
+     *    memory as `memories[0]` in the wasm frame's evaluate context (available since Node 12).
+     *    We use `new Uint8Array(memories[0].buffer, addr, size)` and convert to a hex string;
+     *    this round-trips as a string property on the returned object, avoiding binary encoding.
+     * 3. Decode the bytes using [DwarfMemoryDecoder] and present the result.
+     *
+     * Failures are logged once and silently omitted (never throw).
+     */
+    @Suppress("UNCHECKED_CAST")
+    private suspend fun appendMemoryVariables(
+        list: XValueChildrenList,
+        wasmLocalValues: Map<Long, Long>,
+    ) {
+        val locResolver = sourceLocationResolver ?: return
+        val memVars = locResolver.memoryVariablesAt(columnNumber.toULong())
+        if (memVars.isEmpty()) return
+
+        var loggedMemoryReadFailure = false
+        for (v in memVars) {
+            try {
+                val address: Long = if (v.absoluteAddress != null) {
+                    v.absoluteAddress!!
+                } else {
+                    // Frame-relative: frameBaseLocalIndex holds local index (negative = global, not yet supported).
+                    val fbLocalIdx = v.frameBaseLocalIndex ?: continue
+                    if (fbLocalIdx < 0) {
+                        // Wasm-global frame base — not resolvable from wasmLocalValues; skip.
+                        continue
+                    }
+                    val frameBase = wasmLocalValues[fbLocalIdx] ?: continue
+                    frameBase + (v.fbregOffset ?: 0L)
+                }
+
+                val byteSize = v.byteSize
+                if (byteSize <= 0) continue
+
+                // Read bytes from linear memory via Debugger.evaluateOnCallFrame.
+                // The expression builds a Uint8Array view and converts it to a hex string.
+                // V8 exposes wasm memories[0] in the evaluate context of a wasm frame.
+                val hexExpr = """(function(){
+                    var mem = memories[0].buffer;
+                    var arr = new Uint8Array(mem, $address, $byteSize);
+                    var hex = '';
+                    for(var i=0;i<arr.length;i++){var b=arr[i].toString(16);hex+=(b.length<2?'0'+b:b);}
+                    return hex;
+                })()""".trimIndent()
+
+                val evalResult = try {
+                    cdp.send("Debugger.evaluateOnCallFrame", mapOf(
+                        "callFrameId" to callFrameId,
+                        "expression" to hexExpr,
+                        "returnByValue" to true,
+                    ))
+                } catch (e: Exception) {
+                    if (!loggedMemoryReadFailure) {
+                        LOG.warn("CDP: linear-memory read failed for '${v.name}': ${e.message}")
+                        loggedMemoryReadFailure = true
+                    }
+                    continue
+                }
+
+                val resultObj = evalResult["result"] as? Map<String, Any?> ?: continue
+                val hexStr = resultObj["value"] as? String ?: continue
+
+                // Decode hex string to byte array
+                if (hexStr.length != byteSize * 2) continue
+                val bytes = ByteArray(byteSize) { i ->
+                    hexStr.substring(i * 2, i * 2 + 2).toInt(16).toByte()
+                }
+
+                val rendered = DwarfMemoryDecoder.decode(bytes, 0, v.type) ?: continue
+                list.add(v.name, CdpMemoryValue(v.name, v.type, rendered, bytes, cdp, scope, callFrameId, address))
+            } catch (e: Exception) {
+                LOG.warn("CDP: failed to render memory variable '${v.name}': ${e.message}")
             }
         }
     }
@@ -1604,5 +1717,80 @@ internal class CdpDebuggerEvaluator(
                 callback.errorOccurred(e.message ?: "Evaluation failed")
             }
         }
+    }
+}
+
+/**
+ * Presents a DWARF linear-memory variable decoded from wasm linear memory.
+ *
+ * Scalars (base types, enums, pointers) are shown inline. Composite types
+ * (structs, arrays) are shown with expandable children built from the already-decoded
+ * [DwarfMemoryDecoder.RenderedValue] tree — no additional CDP round-trips for the
+ * initial slab. Pointer dereferences are lazy (one level on expansion, not implemented
+ * here: the expand slot shows "dereference not available in CDP mode").
+ */
+@Suppress("UNCHECKED_CAST")
+internal class CdpMemoryValue(
+    private val name: String,
+    private val type: org.jetbrains.hexana.dwarf.DwarfTypeInfo,
+    private val rendered: DwarfMemoryDecoder.RenderedValue,
+    @Suppress("unused") private val rawBytes: ByteArray,
+    @Suppress("unused") private val cdp: CdpClient,
+    private val scope: CoroutineScope,
+    @Suppress("unused") private val callFrameId: String,
+    @Suppress("unused") private val baseAddress: Long,
+) : XNamedValue(name) {
+
+    override fun computePresentation(node: XValueNode, place: XValuePlace) {
+        val typeName = when (type) {
+            is org.jetbrains.hexana.dwarf.DwarfTypeInfo.Base -> type.name
+            is org.jetbrains.hexana.dwarf.DwarfTypeInfo.Struct -> type.name ?: "struct"
+            is org.jetbrains.hexana.dwarf.DwarfTypeInfo.Array -> "array"
+            is org.jetbrains.hexana.dwarf.DwarfTypeInfo.Enumeration -> type.name ?: "enum"
+            is org.jetbrains.hexana.dwarf.DwarfTypeInfo.Pointer -> "pointer"
+            is org.jetbrains.hexana.dwarf.DwarfTypeInfo.Unknown -> "?"
+        }
+        val hasChildren = rendered.children.isNotEmpty()
+        node.setPresentation(null, typeName, rendered.summary, hasChildren)
+    }
+
+    override fun computeChildren(node: XCompositeNode) {
+        if (rendered.children.isEmpty()) {
+            node.addChildren(XValueChildrenList.EMPTY, true)
+            return
+        }
+        scope.launch {
+            val list = XValueChildrenList()
+            for (child in rendered.children) {
+                list.add(child.name, CdpMemoryLeafValue(child.name, child.value))
+            }
+            if (rendered.truncated) {
+                list.add("<truncated>", CdpMemoryLeafValue("<truncated>",
+                    DwarfMemoryDecoder.RenderedValue("... (${DwarfMemoryDecoder.MAX_ARRAY_CHILDREN} of ${rendered.summary})")))
+            }
+            node.addChildren(list, true)
+        }
+    }
+}
+
+/** A non-expandable leaf value for struct members or array elements. */
+internal class CdpMemoryLeafValue(
+    name: String,
+    private val rendered: DwarfMemoryDecoder.RenderedValue,
+) : XNamedValue(name) {
+    override fun computePresentation(node: XValueNode, place: XValuePlace) {
+        node.setPresentation(null, null, rendered.summary, rendered.children.isNotEmpty())
+    }
+
+    override fun computeChildren(node: XCompositeNode) {
+        if (rendered.children.isEmpty()) {
+            node.addChildren(XValueChildrenList.EMPTY, true)
+            return
+        }
+        val list = XValueChildrenList()
+        for (child in rendered.children) {
+            list.add(child.name, CdpMemoryLeafValue(child.name, child.value))
+        }
+        node.addChildren(list, true)
     }
 }
