@@ -26,6 +26,9 @@ import java.io.File
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import com.intellij.execution.ui.RunnerLayoutUi
+import com.intellij.ui.content.ContentFactory
+import com.intellij.xdebugger.ui.XDebugTabLayouter
 import org.jetbrains.hexana.dwarf.DwarfInlineFrame
 import org.jetbrains.hexana.shared.CdpMemoryVariable
 import org.jetbrains.hexana.shared.CdpSourceLocationResolver
@@ -49,10 +52,18 @@ internal class CdpDebugProcess(
     internal var sourceLocationResolver: CdpSourceLocationResolver? = null,
     private val httpServer: HttpServer? = null,
     private val tempUserDataDir: File? = null,
+    /** Absolute path to the wasm file; used to populate the Wasm Disassembly debugger tab. */
+    private val wasmFilePath: String? = null,
 ) : XDebugProcess(session) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cdp = CdpClient(scope)
+
+    // --- Debugger tab panels ---
+    private val wasmStackModel = WasmStackTableModel()
+    private val wasmDisassemblyModel = WasmDisassemblyTableModel()
+    private val wasmDisassemblyPanel = WasmDisassemblyPanel(wasmDisassemblyModel)
+    private val wasmDisassemblySource = WasmDisassemblySource(wasmFilePath)
 
     private val breakpointHandler = CdpBreakpointHandler(this)
     private val stopping = AtomicBoolean(false)
@@ -83,6 +94,30 @@ internal class CdpDebugProcess(
     )
 
     override fun getEditorsProvider(): XDebuggerEditorsProvider = CdpEditorsProvider()
+
+    override fun createTabLayouter(): XDebugTabLayouter = object : XDebugTabLayouter() {
+        override fun registerAdditionalContent(ui: RunnerLayoutUi) {
+            val stackContent = ui.createContent(
+                "WasmStack",
+                buildWasmStackPanel(wasmStackModel),
+                "Wasm Stack",
+                null,
+                null,
+            )
+            stackContent.isCloseable = false
+            ui.addContent(stackContent)
+
+            val disasmContent = ui.createContent(
+                "WasmDisassembly",
+                wasmDisassemblyPanel.component,
+                "Wasm Disassembly",
+                null,
+                null,
+            )
+            disasmContent.isCloseable = false
+            ui.addContent(disasmContent)
+        }
+    }
 
     private val sessionProcessHandler = object : ProcessHandler() {
         private var started = false
@@ -134,6 +169,15 @@ internal class CdpDebugProcess(
 
     override fun sessionInitialized() {
         super.sessionInitialized()
+
+        registerDebugTabsListener(
+            session = session,
+            scope = scope,
+            cdp = cdp,
+            stackModel = wasmStackModel,
+            disassemblyPanel = wasmDisassemblyPanel,
+            disassemblySource = wasmDisassemblySource,
+        )
 
         scope.launch {
             try {
@@ -1283,7 +1327,7 @@ internal class CdpExecutionStack(
 internal class CdpInlinedStackFrame(
     private val sourcePosition: XSourcePosition?,
     private val displayName: String,
-    private val physicalFrame: CdpStackFrame,
+    internal val physicalFrame: CdpStackFrame,
 ) : XStackFrame() {
 
     override fun getSourcePosition(): XSourcePosition? = sourcePosition
@@ -1372,10 +1416,12 @@ internal class CdpStackFrame(
                         val value = prop["value"] as? Map<String, Any?> ?: continue
                         val subtype = value["subtype"] as? String
 
-                        // Non-wasm scope artifacts (e.g. V8's "Stack" operand-stack
-                        // object): keep the raw name. They are not wasm locals, so
-                        // they consume no local index and get no DWARF name.
+                        // Non-wasm scope artifacts: keep the raw name. They are not wasm locals,
+                        // so they consume no local index and get no DWARF name.
+                        // Exception: the "stack" operand-stack object (className "Stack") is
+                        // shown in the dedicated "Wasm Stack" debugger tab instead.
                         if (subtype != "wasmvalue") {
+                            if (name == "stack" && value["className"] == "Stack") continue
                             list.add(name, CdpValue(name, value, cdp, scope))
                             continue
                         }

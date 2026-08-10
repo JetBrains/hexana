@@ -108,6 +108,7 @@ class CdpDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     sourceLocationResolver = sourceLocResolver,
                     httpServer = null,
                     tempUserDataDir = null,
+                    wasmFilePath = configuration.wasmFilePath.ifBlank { null },
                 )
             }
         }
@@ -227,6 +228,7 @@ class CdpDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     sourceLocationResolver = sourceLocResolver,
                     httpServer = prep.httpServer,
                     tempUserDataDir = prep.tempUserDataDir,
+                    wasmFilePath = configuration.wasmFilePath.ifBlank { null },
                 )
             }
         }
