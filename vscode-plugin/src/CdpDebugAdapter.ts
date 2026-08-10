@@ -1587,8 +1587,13 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
         const memVars = this.sourceLocationResolver.memoryVariablesAt(wasmOffset);
         if (!memVars || memVars.length === 0) return;
 
+        // A DWARF fbreg param is often also mapped onto a wasm local by the
+        // positional name fallback; the wasmvalue row already shows it.
+        const alreadyShown = new Set(variables.map((entry) => entry?.name));
+
         let loggedReadFailure = false;
         for (const v of Array.from(memVars as ArrayLike<any>)) {
+            if (alreadyShown.has(v.name)) continue;
             try {
                 let address: number;
                 if (!v.isFbreg) {

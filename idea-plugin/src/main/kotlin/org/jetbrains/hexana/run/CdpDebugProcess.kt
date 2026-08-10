@@ -1348,6 +1348,9 @@ internal class CdpStackFrame(
                 // Collect wasm local values for frame-base resolution (keyed by $varN index).
                 // Maps V8 local index -> numeric value (used to resolve the shadow stack pointer).
                 val wasmLocalValues = mutableMapOf<Long, Long>()
+                // Names already presented from the wasmvalue path, to dedupe the
+                // linear-memory variables (fbreg params appear in both).
+                val shownNames = mutableSetOf<String>()
                 var localIndex = 0L
                 for (scopeEntry in scopeChain) {
                     val type = scopeEntry["type"] as? String ?: continue
@@ -1414,12 +1417,13 @@ internal class CdpStackFrame(
                         val wasmType = value["description"] as? String
                         val innerValue = resolveWasmValue(value, cdp)
                         list.add(displayName, CdpWasmLocalValue(displayName, wasmType, innerValue, value, cdp, scope))
+                        shownNames.add(displayName)
                         localIndex++
                     }
                 }
 
                 // Append DWARF linear-memory variables if the source location resolver is available.
-                appendMemoryVariables(list, wasmLocalValues)
+                appendMemoryVariables(list, wasmLocalValues, shownNames)
 
                 node.addChildren(list, true)
             } catch (e: Exception) {
@@ -1449,6 +1453,7 @@ internal class CdpStackFrame(
     private suspend fun appendMemoryVariables(
         list: XValueChildrenList,
         wasmLocalValues: Map<Long, Long>,
+        alreadyShown: Set<String>,
     ) {
         val locResolver = sourceLocationResolver ?: return
         val memVars = locResolver.memoryVariablesAt(columnNumber.toULong())
@@ -1456,6 +1461,9 @@ internal class CdpStackFrame(
 
         var loggedMemoryReadFailure = false
         for (v in memVars) {
+            // A DWARF fbreg param is often also mapped onto a wasm local by the
+            // positional name fallback; the wasmvalue row already shows it.
+            if (v.name in alreadyShown) continue
             try {
                 val address: Long = if (v.absoluteAddress != null) {
                     v.absoluteAddress!!
