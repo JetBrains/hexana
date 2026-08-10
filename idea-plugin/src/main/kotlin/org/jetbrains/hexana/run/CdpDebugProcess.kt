@@ -1563,7 +1563,7 @@ internal class CdpStackFrame(
          * its properties and extracting the `value` field.
          */
         @Suppress("UNCHECKED_CAST")
-        private suspend fun resolveWasmValue(
+        internal suspend fun resolveWasmValue(
             valueDescriptor: Map<String, Any?>,
             cdp: CdpClient,
         ): String? {
@@ -1663,7 +1663,16 @@ internal class CdpValue(
                 for (prop in properties) {
                     val propName = prop["name"] as? String ?: continue
                     val propValue = prop["value"] as? Map<String, Any?> ?: continue
-                    list.add(propName, CdpValue(propName, propValue, cdp, scope))
+                    // Flatten nested wasmvalue objects (operand-stack entries, globals)
+                    // so e.g. the "stack" object expands to `0 = {i32} 9` directly
+                    // instead of another opaque `{object} wasmvalue` level.
+                    if (propValue["subtype"] as? String == "wasmvalue") {
+                        val wasmType = propValue["description"] as? String
+                        val innerValue = CdpStackFrame.resolveWasmValue(propValue, cdp)
+                        list.add(propName, CdpWasmLocalValue(propName, wasmType, innerValue, propValue, cdp, scope))
+                    } else {
+                        list.add(propName, CdpValue(propName, propValue, cdp, scope))
+                    }
                 }
                 node.addChildren(list, true)
             } catch (e: Exception) {
