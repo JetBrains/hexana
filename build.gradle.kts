@@ -180,6 +180,14 @@ val teamcityVscodePluginTestTaskPaths = listOf(
     ":vscode-plugin:extension-lib:allTests",
 )
 
+val teamcityWebappTestTaskPaths = listOf(
+    ":webapp:compileProductionExecutableKotlinJs",
+    ":webapp:jsBrowserProductionWebpack",
+    ":webapp:jsBrowserDistribution",
+    ":webapp:buildComponent",
+    ":webapp:jsBrowserTest",
+)
+
 val teamcityIntellijPluginTestTaskPaths = listOf(
     ":idea-plugin:test",
     ":idea-plugin:verifyHexanaToolsetUpToDate",
@@ -271,6 +279,14 @@ val teamcityCliTestTaskPaths = listOf(
 )
 
 val teamcityFallbackCoreJvmTestTaskPaths = linkedSetOf<String>()
+
+project(":webapp") {
+    tasks.withType<KotlinJsTest>().configureEach {
+        if (name == "jsBrowserTest") {
+            environment("hx.tests.web.enableChromeOrChromium", "1")
+        }
+    }
+}
 
 subprojects {
     plugins.withId("org.jetbrains.kotlin.jvm") {
@@ -635,6 +651,29 @@ tasks.register("verifyTeamcityVscodePluginTestsCoverage") {
     }
 }
 
+tasks.register("verifyTeamcityWebappTestsCoverage") {
+    group = "verification"
+    description = "Verify the TeamCity webapp aggregate includes production packaging and Chrome browser tests."
+    doLast {
+        val requiredTaskPaths = listOf(
+            ":webapp:compileProductionExecutableKotlinJs",
+            ":webapp:jsBrowserProductionWebpack",
+            ":webapp:jsBrowserDistribution",
+            ":webapp:buildComponent",
+            ":webapp:jsBrowserTest",
+        )
+        verifyExactTaskPaths("teamcityWebappTests inventory", requiredTaskPaths, teamcityWebappTestTaskPaths)
+        val browserTest = tasks.getByPath(":webapp:jsBrowserTest") as KotlinJsTest
+        check(browserTest.environment["hx.tests.web.enableChromeOrChromium"] == "1") {
+            "teamcityWebappTests must enable Chrome or Chromium for :webapp:jsBrowserTest"
+        }
+        verifyAggregateDirectDependencies(
+            "teamcityWebappTests",
+            teamcityWebappTestTaskPaths + ":verifyTeamcityWebappTestsCoverage",
+        )
+    }
+}
+
 tasks.register("verifyTeamcityIntellijPluginTestsCoverage") {
     group = "verification"
     description = "Verify the TeamCity IntelliJ plugin aggregate includes all required test tasks."
@@ -752,6 +791,13 @@ tasks.register("teamcityVscodePluginTests") {
     description = "Aggregate VS Code plugin tests for the TeamCity VS Code Plugin Tests build."
     dependsOn("verifyTeamcityVscodePluginTestsCoverage")
     teamcityVscodePluginTestTaskPaths.forEach { dependsOn(it) }
+}
+
+tasks.register("teamcityWebappTests") {
+    group = "verification"
+    description = "Aggregate production webapp packaging and Chrome-backed browser tests for TeamCity."
+    dependsOn("verifyTeamcityWebappTestsCoverage")
+    teamcityWebappTestTaskPaths.forEach { dependsOn(it) }
 }
 
 tasks.register("teamcityIntellijPluginTests") {

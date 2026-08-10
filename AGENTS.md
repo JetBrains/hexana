@@ -140,6 +140,8 @@ Run the narrowest command that proves your change.
   Kotlin Multiplatform projects remain explicit Core-topology debt until their `allTests` task is proven safe in
   the Core Docker lane.
 - Run the TeamCity-ready VS Code plugin aggregate intended for the next rollout step: `./gradlew teamcityVscodePluginTests`
+- Run the TeamCity-ready Webapp aggregate with production packaging and Chrome-backed browser tests:
+  `./gradlew teamcityWebappTests`
 - Run the dedicated TeamCity IntelliJ plugin test lane: `./gradlew teamcityIntellijPluginTests`
 - Run the TeamCity-ready server and CLI aggregate intended for the next rollout step: `./gradlew teamcityServerCliTests`;
   it includes `teamcityCliTests` transitively plus the standalone MCP/server gates, including the R8 standalone,
