@@ -47,6 +47,12 @@ checks:
     executeOnChanges:
       - "/vscode-plugin/**"
       - "/web-ui/**"
+  - configurationId: "InnoHub_HexFlow_WebappTestsPatronus"
+    group:
+      id: "hexana-product-tests"
+    executeOnChanges:
+      - "/webapp/**"
+      - "/web-ui/**"
   - configurationId: "InnoHub_HexFlow_ServerCliTestsPatronus"
     group:
       id: "hexana-product-tests"

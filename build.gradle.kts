@@ -26,6 +26,7 @@ val requiredGraalVmMajorVersion = graalVmVersion.substringBefore('.').toInt()
 val corePatronusConfigurationId = "InnoHub_HexFlow_CoreTestsPatronus"
 val intellijPatronusConfigurationId = "InnoHub_HexFlow_IntellijPluginTestsPatronus"
 val vscodePatronusConfigurationId = "InnoHub_HexFlow_VscodePluginTestsPatronus"
+val webappPatronusConfigurationId = "InnoHub_HexFlow_WebappTestsPatronus"
 val serverCliPatronusConfigurationId = "InnoHub_HexFlow_ServerCliTestsPatronus"
 
 // Explicit product owners stay strict. Unlisted non-exempt Kotlin/JVM projects use Core as the safe fallback.
@@ -42,6 +43,7 @@ val primaryLaneProjectPaths = linkedMapOf(
     ),
     intellijPatronusConfigurationId to listOf(":idea-plugin"),
     vscodePatronusConfigurationId to listOf(":vscode-plugin", ":vscode-plugin:extension-lib", ":vscode-plugin:webview", ":web-ui"),
+    webappPatronusConfigurationId to listOf(":webapp"),
     serverCliPatronusConfigurationId to listOf(
         ":cli", ":cli:core", ":cli:hexana-cli", ":cli:hexana-cli-script", ":cli:integration-tests",
         ":cli:metadata", ":cli:product", ":cli:runtime", ":cli:scripting", ":mcp", ":mcp:server",
@@ -52,7 +54,6 @@ val primaryLaneProjectPaths = linkedMapOf(
 val exemptProjectReasons = mapOf(
     ":ui-driver-tests" to "UI/daily lane",
     ":jvm-jit-jmh" to "benchmark/Safe-Merge-only",
-    ":webapp" to "browser shell without tests/Safe-Merge-only",
 )
 
 val explicitlyOwnedProjectPaths = primaryLaneProjectPaths.values.flatten().toSet()
@@ -428,6 +429,7 @@ tasks.register("verifyPatronusRoutingCoverage") {
         val intellijId = intellijPatronusConfigurationId
         val coreId = corePatronusConfigurationId
         val vscodeId = vscodePatronusConfigurationId
+        val webappId = webappPatronusConfigurationId
         val serverCliId = serverCliPatronusConfigurationId
         val productGroupId = "hexana-product-tests"
         val expectedChecks = linkedMapOf(
@@ -452,6 +454,7 @@ tasks.register("verifyPatronusRoutingCoverage") {
                 ),
             ),
             vscodeId to PatronusCheck(vscodeId, productGroupId, false, listOf("/vscode-plugin/**", "/web-ui/**")),
+            webappId to PatronusCheck(webappId, productGroupId, false, listOf("/webapp/**", "/web-ui/**")),
             serverCliId to PatronusCheck(
                 serverCliId,
                 productGroupId,
@@ -498,6 +501,14 @@ tasks.register("verifyPatronusRoutingCoverage") {
                 "duplicates: ${duplicateClassifications.sorted().joinToString()}, " +
                 "stale classifications: ${staleClassifications.sorted().joinToString()}"
         }
+        val sharedProjectDirectLanes = mapOf(":web-ui" to listOf(vscodeId, webappId))
+        val staleSharedProjectDirectLanes = sharedProjectDirectLanes.keys - actualProjects.keys
+        val sharedProjectsWithoutPrimaryOwners = sharedProjectDirectLanes.keys - explicitlyOwnedProjectPaths
+        check(staleSharedProjectDirectLanes.isEmpty() && sharedProjectsWithoutPrimaryOwners.isEmpty()) {
+            "Patronus shared direct-route inventory must name existing explicitly owned projects; " +
+                "stale: ${staleSharedProjectDirectLanes.sorted().joinToString()}, " +
+                "without primary owners: ${sharedProjectsWithoutPrimaryOwners.sorted().joinToString()}"
+        }
 
         fun selectedExplicitLanes(changePath: String): List<String> =
             primaryLaneProjectPaths.keys.filter { laneId ->
@@ -529,9 +540,12 @@ tasks.register("verifyPatronusRoutingCoverage") {
                 explicitClassification.startsWith("exempt:") -> check(directLanes.isEmpty()) {
                     "Exempt ${project.path} (/$relativeDirectory/**) must not have a direct product lane, but selected $directLanes"
                 }
-                else -> check(directLanes == listOf(explicitClassification)) {
-                    "${project.path} (/$relativeDirectory/**) must route directly to $explicitClassification, " +
-                        "but selected ${directLanes.ifEmpty { listOf("no direct product lane") }}"
+                else -> {
+                    val expectedDirectLanes = sharedProjectDirectLanes[project.path] ?: listOf(explicitClassification)
+                    check(directLanes == expectedDirectLanes) {
+                        "${project.path} (/$relativeDirectory/**) must route directly to $expectedDirectLanes, " +
+                            "but selected ${directLanes.ifEmpty { listOf("no direct product lane") }}"
+                    }
                 }
             }
         }

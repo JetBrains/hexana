@@ -158,6 +158,7 @@ Run the narrowest command that proves your change.
   - root Gradle wrapper, catalog, build, and Karma inputs plus shared/core module paths select
     `InnoHub_HexFlow_CoreTestsPatronus`, which fans out across all product test leaves
   - `vscode-plugin/**` selects `InnoHub_HexFlow_VscodePluginTestsPatronus`
+  - `webapp/**` selects `InnoHub_HexFlow_WebappTestsPatronus`; shared `web-ui/**` selects both the VS Code and Webapp owners
   - `cli/**` and non-shared `mcp/**` paths select `InnoHub_HexFlow_ServerCliTestsPatronus`; `mcp/core/**`,
     `mcp/scripting/**`, and `mcp/tools-generator/**` are excluded there and route through the Core composite
 - Keep `.patronus/config.yaml` and the explicit Gradle-project routing inventory in the root build synchronized.
