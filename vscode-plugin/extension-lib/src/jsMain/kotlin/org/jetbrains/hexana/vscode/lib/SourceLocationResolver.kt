@@ -68,6 +68,20 @@ class SourceLocationResolver private constructor(
             .toTypedArray()
     }
 
+    /**
+     * Returns the inlined call chain covering [offset] (module-absolute
+     * byte offset, as reported by CDP `columnNumber` for wasm:// scripts),
+     * innermost first. Empty when no inlined subroutines cover the offset
+     * or when DWARF info is absent.
+     *
+     * @param offset the CDP columnNumber for the wasm:// frame
+     */
+    fun inlinedFramesAt(offset: Int): Array<InlinedFrame> {
+        return delegate.inlinedFramesAt(offset.toULong())
+            .map { f -> InlinedFrame(f.name, f.callFile, f.callLine, f.callColumn, f.depth) }
+            .toTypedArray()
+    }
+
     companion object {
         /**
          * Creates a resolver from raw Wasm binary bytes.
@@ -100,4 +114,23 @@ data class ResolvedSourceLocation(
 data class WasmLocalName(
     val index: Int,
     val name: String,
+)
+
+/**
+ * One frame in an inlined call chain, as returned by
+ * [SourceLocationResolver.inlinedFramesAt].
+ *
+ * @property name the resolved function name, or `null` if unavailable
+ * @property callFile the source file at the call site, or `null`
+ * @property callLine 1-based source line at the call site, or `null`
+ * @property callColumn source column at the call site, or `null`
+ * @property depth nesting depth (1 = directly inlined, 2 = inlined inside inlined, ...)
+ */
+@JsExport
+data class InlinedFrame(
+    val name: String?,
+    val callFile: String?,
+    val callLine: Int?,
+    val callColumn: Int?,
+    val depth: Int,
 )

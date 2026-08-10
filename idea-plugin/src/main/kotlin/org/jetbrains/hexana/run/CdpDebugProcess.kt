@@ -26,6 +26,7 @@ import java.io.File
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import org.jetbrains.hexana.dwarf.DwarfInlineFrame
 import org.jetbrains.hexana.shared.CdpSourceLocationResolver
 
 /**
@@ -355,9 +356,12 @@ internal class CdpDebugProcess(
         }
 
         val topFrame = callFrames[0]
-        val topStackFrame = buildStackFrame(topFrame, 0)
+        // buildStackFrame returns 1+ frames: synthetic inlined frames (innermost first)
+        // followed by the physical frame. We flatten all physical frames into one list.
+        val topFrameList = buildStackFrame(topFrame, 0)
+        val topStackFrame = topFrameList.first()
 
-        val allBuiltFrames = callFrames.mapIndexed { index, frame -> buildStackFrame(frame, index) }
+        val allBuiltFrames = callFrames.flatMapIndexed { index, frame -> buildStackFrame(frame, index) }
         val filteredFrames = filterWasmWrapperFrames(allBuiltFrames)
         val effectiveTopFrame = filteredFrames.firstOrNull() ?: topStackFrame
 
@@ -387,7 +391,15 @@ internal class CdpDebugProcess(
                 // scope. If the effective top frame's source position
                 // doesn't match the breakpoint, override it.
                 val bpPosition = ideBp.sourcePosition
-                val correctedContext = if (bpPosition != null && effectiveTopFrame.sourcePosition != bpPosition) {
+                // When the effective top frame is a synthetic inlined frame, its source
+                // position already comes from DWARF and is reliable — skip the override.
+                // Only apply the correction when a physical CdpStackFrame is on top and
+                // its resolved position differs from the breakpoint position.
+                val correctedContext = if (
+                    bpPosition != null &&
+                    effectiveTopFrame is CdpStackFrame &&
+                    effectiveTopFrame.sourcePosition != bpPosition
+                ) {
                     val correctedTopFrame = CdpStackFrame(
                         sourcePosition = bpPosition,
                         functionName = effectiveTopFrame.functionName,
@@ -487,15 +499,22 @@ internal class CdpDebugProcess(
 
     /**
      * Filters out wasm-bindgen wrapper frames from the call stack.
-     * Keeps all non-wasm frames and wasm frames that have a DWARF
-     * subprogram entry (i.e. real user functions).
+     * Keeps all non-wasm frames, all synthetic inlined frames, and wasm frames
+     * that have a DWARF subprogram entry (i.e. real user functions).
+     *
+     * [CdpInlinedStackFrame] instances are never filtered: they are already derived
+     * from a physical frame that passed the wrapper check.
      */
-    private fun filterWasmWrapperFrames(frames: List<CdpStackFrame>): List<CdpStackFrame> {
-        return frames.filter { !isWasmWrapperFrame(it) }
+    private fun filterWasmWrapperFrames(frames: List<XStackFrame>): List<XStackFrame> {
+        return frames.filter { frame ->
+            // Synthetic inlined frames are never wrapper frames — always keep them.
+            if (frame is CdpInlinedStackFrame) return@filter true
+            if (frame is CdpStackFrame) !isWasmWrapperFrame(frame) else true
+        }
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun buildStackFrame(frame: Map<String, Any?>, frameIndex: Int): CdpStackFrame {
+    private fun buildStackFrame(frame: Map<String, Any?>, frameIndex: Int): List<XStackFrame> {
         val functionName = frame["functionName"] as? String ?: "<anonymous>"
         val location = frame["location"] as? Map<String, Any?>
         val scriptId = location?.get("scriptId") as? String
@@ -506,7 +525,7 @@ internal class CdpDebugProcess(
 
         val sourcePosition = resolveSourcePosition(scriptId, lineNumber, columnNumber)
 
-        return CdpStackFrame(
+        val physical = CdpStackFrame(
             sourcePosition = sourcePosition,
             functionName = functionName,
             callFrameId = callFrameId,
@@ -519,6 +538,69 @@ internal class CdpDebugProcess(
             columnNumber = columnNumber,
             dwarfVariableResolver = dwarfVariableResolver,
         )
+
+        // Only look up inlined frames for wasm:// frames that have a DWARF resolver.
+        val locResolver = sourceLocationResolver
+        if (locResolver == null || scriptId == null) return listOf(physical)
+        val scriptInfo = cdp.scripts[scriptId] ?: return listOf(physical)
+        if (!scriptInfo.url.startsWith("wasm://")) return listOf(physical)
+
+        val chain: List<DwarfInlineFrame> = locResolver.inlinedFramesAt(columnNumber.toULong())
+        if (chain.isEmpty()) return listOf(physical)
+
+        // Build synthetic frames for the inline chain.
+        // chain[0] is the innermost (paused) frame; chain[n-1] is the outermost.
+        // Frame presentation:
+        //   - synthetic[0] (innermost): shows the actual pause source position
+        //   - synthetic[i] (i > 0): shows the call site of the frame above it,
+        //     i.e. chain[i-1].callFile / callLine
+        //   - physical frame: keeps its own name, shows the call site of chain.last()
+        val syntheticFrames = mutableListOf<XStackFrame>()
+        for (i in chain.indices) {
+            val inlined = chain[i]
+            val frameSourcePosition: XSourcePosition? = if (i == 0) {
+                // Innermost: paused at the actual DWARF source position (same as physical)
+                sourcePosition
+            } else {
+                // Each subsequent frame shows where the frame above it was called
+                val caller = chain[i - 1]
+                resolveInlinedSourcePosition(caller.callFile, caller.callLine)
+            }
+            val name = (inlined.name ?: functionName) + " (inlined)"
+            syntheticFrames.add(CdpInlinedStackFrame(frameSourcePosition, name, physical))
+        }
+
+        // The physical frame's display position becomes the outermost call site.
+        // We rebuild it with the outermost call site so it shows where the inlined
+        // chain begins in the real subprogram, keeping the physical frame's own name.
+        val outerCallSite = resolveInlinedSourcePosition(chain.last().callFile, chain.last().callLine)
+        val physicalWithCallSite = CdpStackFrame(
+            sourcePosition = outerCallSite ?: sourcePosition,
+            functionName = functionName,
+            callFrameId = callFrameId,
+            scopeChain = scopeChain,
+            cdp = cdp,
+            scope = scope,
+            frameIndex = frameIndex,
+            scriptId = scriptId,
+            lineNumber = lineNumber,
+            columnNumber = columnNumber,
+            dwarfVariableResolver = dwarfVariableResolver,
+        )
+
+        return syntheticFrames + physicalWithCallSite
+    }
+
+    /**
+     * Resolves a DWARF call-site file path and 1-based line number to an
+     * [XSourcePosition], or `null` when either argument is absent or the
+     * file cannot be found on disk.
+     */
+    private fun resolveInlinedSourcePosition(callFile: String?, callLine: Int?): XSourcePosition? {
+        if (callFile == null || callLine == null) return null
+        val vf = findSourceFileByName(callFile) ?: return null
+        // DWARF call_line is 1-based; IDE positions are 0-based.
+        return XDebuggerUtil.getInstance().createPosition(vf, callLine - 1)
     }
 
     private fun resolveSourcePosition(scriptId: String?, lineNumber: Int, columnNumber: Int): XSourcePosition? {
@@ -1152,8 +1234,8 @@ internal fun translateCondition(condition: String, nameToVar: Map<String, String
 // ---- CDP-specific suspend context and stack frames ----
 
 internal class CdpSuspendContext(
-    private val topFrame: CdpStackFrame,
-    private val allFrames: List<CdpStackFrame>,
+    private val topFrame: XStackFrame,
+    private val allFrames: List<XStackFrame>,
 ) : XSuspendContext() {
 
     private val executionStack = CdpExecutionStack(topFrame, allFrames)
@@ -1163,8 +1245,8 @@ internal class CdpSuspendContext(
 }
 
 internal class CdpExecutionStack(
-    private val topFrame: CdpStackFrame,
-    private val allFrames: List<CdpStackFrame>,
+    private val topFrame: XStackFrame,
+    private val allFrames: List<XStackFrame>,
 ) : XExecutionStack("Wasm Thread") {
 
     override fun getTopFrame(): XStackFrame = topFrame
@@ -1178,6 +1260,37 @@ internal class CdpExecutionStack(
         }
         container.addStackFrames(result, true)
     }
+}
+
+
+/**
+ * A synthetic stack frame that represents one level in a DWARF inlined call chain.
+ *
+ * Synthetic frames are display-only: variable scopes and evaluation remain attached
+ * to the physical [physicalFrame] so that locals are visible when this frame is
+ * selected in the IDE. Stepping semantics are unaffected — the debugger always steps
+ * through the physical wasm frame.
+ *
+ * @param sourcePosition the source location shown for this inlined call site
+ * @param displayName the inlined function name, suffixed with " (inlined)"
+ * @param physicalFrame the real CDP frame whose scopes/evaluator this frame delegates to
+ */
+internal class CdpInlinedStackFrame(
+    private val sourcePosition: XSourcePosition?,
+    private val displayName: String,
+    private val physicalFrame: CdpStackFrame,
+) : XStackFrame() {
+
+    override fun getSourcePosition(): XSourcePosition? = sourcePosition
+
+    override fun getEvaluator(): XDebuggerEvaluator = physicalFrame.getEvaluator()
+
+    override fun customizePresentation(component: com.intellij.ui.ColoredTextContainer) {
+        val line = sourcePosition?.let { ":${it.line + 1}" } ?: ""
+        component.append("$displayName$line", com.intellij.ui.SimpleTextAttributes.REGULAR_ATTRIBUTES)
+    }
+
+    override fun computeChildren(node: XCompositeNode) = physicalFrame.computeChildren(node)
 }
 
 @Suppress("UNCHECKED_CAST")

@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.dwarf.DwarfInlineFrame
+import org.jetbrains.hexana.dwarf.DwarfInlineFrameExtractor
 import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver
 import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver.AddressSourceLocation
 import org.jetbrains.hexana.dwarf.DwarfSourceLocationResolver.SourceLocation
@@ -8,6 +10,7 @@ import org.jetbrains.hexana.dwarf.DwarfLocationDescription
 import org.jetbrains.hexana.dwarf.DwarfSubprogramInfo
 import org.jetbrains.hexana.dwarf.DwarfVariableInfo
 import org.jetbrains.hexana.dwarf.DwarfVariableInfoExtractor
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.BaseModule
 import org.jetbrains.hexana.wasm.WasmModule
@@ -29,6 +32,10 @@ class CdpSourceLocationResolver private constructor(
     private val locations: List<AddressSourceLocation>,
     private val codeSectionOffset: Int,
     private val subprograms: List<DwarfSubprogramInfo> = emptyList(),
+    /** Lazily-invoked inline frame extractor; null when DWARF info is absent. */
+    private val inlineExtractorFactory: (() -> DwarfInlineFrameExtractor?)? = null,
+    /** Buffer held alongside the extractor; both are initialized once on first use. */
+    private val bufferForInline: CommonByteBuffer? = null,
     /**
      * Reverse index built from CU-filtered entries only.
      * These entries use compDir for accurate file paths and produce
@@ -68,7 +75,39 @@ class CdpSourceLocationResolver private constructor(
      */
     private val allDwarfPaths: Set<String> = buildAllDwarfPaths(locations)
 
+    /**
+     * Cached inline-frame extractor. Initialized once on first call to
+     * [inlinedFramesAt]; null when DWARF info is absent or factory is unset.
+     */
+    private val inlineExtractor: DwarfInlineFrameExtractor? by lazy {
+        inlineExtractorFactory?.invoke()
+    }
+
     data class LineOffset(val line: Int, val offset: ULong)
+
+    /**
+     * Returns the inlined call chain covering [moduleOffset] (module-absolute,
+     * as reported by CDP `columnNumber` for wasm:// scripts), innermost first.
+     *
+     * The conversion from module-absolute to code-section-relative follows the
+     * same arithmetic as [wasmOffsetToSource]:
+     *   codeRelOffset = moduleOffset - codeSectionOffset  (clamped to 0)
+     *
+     * An empty list is returned when no inlined subroutines cover the offset,
+     * when DWARF info is absent, or when the offset lies before the code section.
+     *
+     * @param moduleOffset the wasm byte offset from CDP (columnNumber)
+     */
+    fun inlinedFramesAt(moduleOffset: ULong): List<DwarfInlineFrame> {
+        val ext = inlineExtractor ?: return emptyList()
+        val buf = bufferForInline ?: return emptyList()
+        val codeRelOffset = if (moduleOffset >= codeSectionOffset.toULong()) {
+            (moduleOffset - codeSectionOffset.toULong()).toInt()
+        } else {
+            return emptyList()
+        }
+        return with(ext) { buf.inlinedFramesAt(codeRelOffset) }
+    }
 
     /**
      * Finds the Wasm byte offset for a breakpoint at the given
@@ -408,8 +447,14 @@ class CdpSourceLocationResolver private constructor(
                     emptyList()
                 }
 
+                val accessor2 = accessor
+                val buffer2 = buffer
                 CdpSourceLocationResolver(
                     locations, codeSectionOffset, subprograms,
+                    inlineExtractorFactory = {
+                        if (accessor2.debugInfoSection() != null) DwarfInlineFrameExtractor(accessor2) else null
+                    },
+                    bufferForInline = buffer2,
                     cuSourceToOffsets = buildReverseIndex(cuLocations),
                     lineTableSourceToOffsets = buildReverseIndex(lineTableLocations),
                     cuPathToOffsets = buildFullPathIndex(cuLocations),

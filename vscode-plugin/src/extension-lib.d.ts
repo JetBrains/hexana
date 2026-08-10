@@ -91,6 +91,23 @@ export interface WasmLocalName {
 }
 
 /**
+ * One frame in a DWARF inlined call chain, returned by
+ * {@link SourceLocationResolver.inlinedFramesAt}.
+ */
+export interface InlinedFrame {
+    /** Resolved function name, or `null` if unavailable. */
+    readonly name: string | null;
+    /** Source file path at the call site, or `null`. */
+    readonly callFile: string | null;
+    /** 1-based source line at the call site, or `null`. */
+    readonly callLine: number | null;
+    /** Source column at the call site, or `null`. */
+    readonly callColumn: number | null;
+    /** Nesting depth (1 = directly inlined, 2 = inlined inside inlined, …). */
+    readonly depth: number;
+}
+
+/**
  * DWARF-based source ↔ Wasm byte offset resolver.
  *
  * Created from raw Wasm binary bytes; provides mappings between
@@ -122,6 +139,15 @@ export interface SourceLocationResolver {
 
     /** Returns Wasm local-index to DWARF source-name mappings for the given CDP function name. */
     wasmLocalNames(functionName: string | null): WasmLocalName[];
+
+    /**
+     * Returns the inlined call chain covering `offset` (module-absolute byte offset,
+     * as reported by CDP `columnNumber` for wasm:// scripts), innermost first.
+     * Empty when no inlined subroutines cover the offset or DWARF info is absent.
+     *
+     * @param offset the CDP columnNumber for the wasm:// frame
+     */
+    inlinedFramesAt(offset: number): InlinedFrame[];
 }
 
 export namespace SourceLocationResolver {

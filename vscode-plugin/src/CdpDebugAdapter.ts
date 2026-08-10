@@ -212,6 +212,12 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
     private pausedFrames: any[] | undefined;
     /** Hit breakpoint IDs from the last Debugger.paused event. */
     private pausedHitBreakpoints: string[] = [];
+    /**
+     * Maps each DAP stackFrame id to the index of the underlying CDP call
+     * frame in pausedFrames. Synthetic inlined frames map to the same CDP
+     * frame index as their physical parent so that scopes/evaluate work.
+     */
+    private frameIdToCdpFrameIndex: number[] = [];
     /** Whether the last DAP action was "continue" (not step). */
     private lastActionWasContinue = false;
     /** CDP breakpoint IDs that were hit at the last stop reported to DAP. */
@@ -868,6 +874,7 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
         this.lastActionWasContinue = false;
         this.pausedFrames = callFrames;
         this.pausedHitBreakpoints = hitBreakpoints;
+        this.frameIdToCdpFrameIndex = []; // rebuilt in handleStackTrace
         this.lastStoppedBreakpoints = new Set(hitBreakpoints.filter(id => this.breakpoints.has(id)));
 
         const dapReason = hasOurBp ? "breakpoint" : "step";
@@ -1281,35 +1288,101 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
     // ---- DAP: stackTrace ----
 
     private async handleStackTrace(msg: any): Promise<void> {
-        const frames = this.pausedFrames || [];
-        const stackFrames = frames.map((f: any, i: number) => {
+        const cdpFrames = this.pausedFrames || [];
+        const stackFrames: any[] = [];
+        // Rebuild the DAP-frame → CDP-frame-index mapping on each stackTrace response.
+        this.frameIdToCdpFrameIndex = [];
+
+        for (let cdpIdx = 0; cdpIdx < cdpFrames.length; cdpIdx++) {
+            const f = cdpFrames[cdpIdx];
             const loc = f.location || {};
             const scriptId = loc.scriptId as string;
             const info = scriptId ? this.scripts.get(scriptId) : undefined;
             const url = info?.url || "";
-            let lineNumber = (loc.lineNumber as number || 0) + 1; // CDP 0-based → DAP 1-based
-            let columnNumber = (loc.columnNumber as number || 0) + 1;
+            const wasmOffset = loc.columnNumber as number || 0;
             const name = (f.functionName as string) || "<anonymous>";
 
+            if (url.startsWith("wasm://") && this.sourceLocationResolver) {
+                // Look up the inlined call chain at this offset (innermost first).
+                const inlinedChain: any[] = Array.from(
+                    this.sourceLocationResolver.inlinedFramesAt(wasmOffset) as ArrayLike<any>,
+                );
+
+                if (inlinedChain.length > 0) {
+                    // Emit synthetic inlined frames followed by the physical frame.
+                    // chain[0] = innermost inlined call (paused position)
+                    // chain[n-1] = outermost inlined call
+                    // physical frame = shows the call site of chain[n-1]
+
+                    for (let ci = 0; ci < inlinedChain.length; ci++) {
+                        const inlined = inlinedChain[ci];
+                        const inlinedName = (inlined.name ?? name) + " (inlined)";
+                        const inlinedSource: any = {};
+                        let inlinedLine = 1;
+
+                        // innermost (ci === 0): show the physical pause position
+                        // subsequent: show where the frame above was called from
+                        const srcFile = ci === 0
+                            ? this.sourceLocationResolver.wasmOffsetToSource(wasmOffset)?.file
+                            : inlinedChain[ci - 1].callFile;
+                        const srcLine = ci === 0
+                            ? this.sourceLocationResolver.wasmOffsetToSource(wasmOffset)?.line
+                            : (inlinedChain[ci - 1].callLine ?? undefined);
+
+                        if (srcFile) {
+                            const dwarfPath = (srcFile as string).replace(/\\/g, "/");
+                            inlinedSource.name = path.basename(dwarfPath);
+                            const fullPath = this.findWorkspaceFileByDwarfPath(dwarfPath);
+                            if (fullPath) inlinedSource.path = fullPath;
+                        }
+                        if (srcLine != null) inlinedLine = srcLine as number;
+
+                        const dapId = stackFrames.length;
+                        this.frameIdToCdpFrameIndex.push(cdpIdx);
+                        stackFrames.push({
+                            id: dapId,
+                            name: inlinedName,
+                            source: Object.keys(inlinedSource).length > 0 ? inlinedSource : undefined,
+                            line: inlinedLine,
+                            column: 1,
+                        });
+                    }
+
+                    // Physical frame: show call site of outermost inlined frame.
+                    const outerCallFile = inlinedChain[inlinedChain.length - 1].callFile as string | undefined;
+                    const outerCallLine = inlinedChain[inlinedChain.length - 1].callLine as number | undefined;
+                    const physSource: any = {};
+                    if (outerCallFile) {
+                        const dp = outerCallFile.replace(/\\/g, "/");
+                        physSource.name = path.basename(dp);
+                        const fp = this.findWorkspaceFileByDwarfPath(dp);
+                        if (fp) physSource.path = fp;
+                    }
+                    const physLine = outerCallLine ?? 1;
+                    const physDapId = stackFrames.length;
+                    this.frameIdToCdpFrameIndex.push(cdpIdx);
+                    stackFrames.push({
+                        id: physDapId,
+                        name,
+                        source: Object.keys(physSource).length > 0 ? physSource : undefined,
+                        line: physLine,
+                        column: 1,
+                    });
+                    continue;
+                }
+            }
+
+            // No inlined frames (or not a wasm frame): resolve normally.
+            let lineNumber = (loc.lineNumber as number || 0) + 1; // CDP 0-based → DAP 1-based
+            let columnNumber = (loc.columnNumber as number || 0) + 1;
             const source: any = {};
+
             if (url.startsWith("wasm://")) {
-                // Try to map wasm:// frames back to the original source
-                // file (Rust, C, Go) using DWARF info or breakpoint data,
-                // so VS Code opens the real source editor.
                 let mappedToSource = false;
 
-                // Use DWARF resolver to map the wasm byte offset back
-                // to a source location (works for all frames, not just
-                // the top frame hit by a breakpoint).
-                const wasmOffset = loc.columnNumber as number || 0;
                 if (this.sourceLocationResolver) {
                     const resolved = this.sourceLocationResolver.wasmOffsetToSource(wasmOffset);
                     if (resolved) {
-                        // DWARF line is 1-based, DAP line is 1-based — use directly.
-                        // resolved.file is the full DWARF path (compDir-joined).
-                        // Use path-suffix matching against breakpoint source paths
-                        // to find the workspace file, preferring the longest suffix
-                        // match so lib.rs in mycrate beats lib.rs in anothercrate.
                         const resolvedDwarfPath = resolved.file.replace(/\\/g, "/");
                         const resolvedBaseName = path.basename(resolvedDwarfPath);
                         const fullPath = this.findWorkspaceFileByDwarfPath(resolvedDwarfPath);
@@ -1324,7 +1397,7 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                 }
 
                 // Fallback for top frame: check hit breakpoints
-                if (!mappedToSource && i === 0) {
+                if (!mappedToSource && cdpIdx === 0) {
                     for (const bpId of this.pausedHitBreakpoints) {
                         const bp = this.breakpoints.get(bpId);
                         if (bp?.source?.path && !bp.source.path.endsWith(".wasm")) {
@@ -1338,7 +1411,6 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                     }
                 }
                 if (!mappedToSource) {
-                    // Fall back to the .wasm file on disk
                     const wasmFile = this.config.wasmFile as string | undefined;
                     if (wasmFile) {
                         source.name = path.basename(wasmFile);
@@ -1356,14 +1428,16 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                 source.name = url;
             }
 
-            return {
-                id: i,
+            const dapId = stackFrames.length;
+            this.frameIdToCdpFrameIndex.push(cdpIdx);
+            stackFrames.push({
+                id: dapId,
                 name,
                 source: Object.keys(source).length > 0 ? source : undefined,
                 line: lineNumber,
                 column: columnNumber,
-            };
-        });
+            });
+        }
 
         this.sendDapResponse(msg, true, undefined, {
             stackFrames,
@@ -1371,11 +1445,18 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
         });
     }
 
+    /** Resolves a DAP frameId to the underlying CDP call frame in pausedFrames. */
+    private cdpFrameForDapId(frameId: number): any | undefined {
+        const cdpIdx = this.frameIdToCdpFrameIndex[frameId];
+        if (cdpIdx === undefined) return undefined;
+        return this.pausedFrames?.[cdpIdx];
+    }
+
     // ---- DAP: scopes ----
 
     private async handleScopes(msg: any): Promise<void> {
         const frameId = msg.arguments?.frameId ?? 0;
-        const frame = this.pausedFrames?.[frameId];
+        const frame = this.cdpFrameForDapId(frameId);
         if (!frame) {
             this.sendDapResponse(msg, true, undefined, { scopes: [] });
             return;
@@ -1417,7 +1498,7 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
         } else {
             // Scope variables
             const { frameId, scopeIdx } = this.decodeVarRef(varRef);
-            const frame = this.pausedFrames?.[frameId];
+            const frame = this.cdpFrameForDapId(frameId);
             if (frame) {
                 const scopeChain = (frame.scopeChain || []) as any[];
                 const filteredScopes = scopeChain.filter((s: any) => s.type !== "global" && s.type !== "module");
@@ -1539,7 +1620,7 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
     private async handleEvaluate(msg: any): Promise<void> {
         const expression = msg.arguments?.expression || "";
         const frameId = msg.arguments?.frameId;
-        const frame = frameId !== undefined ? this.pausedFrames?.[frameId] : undefined;
+        const frame = frameId !== undefined ? this.cdpFrameForDapId(frameId) : undefined;
 
         try {
             let result: any;

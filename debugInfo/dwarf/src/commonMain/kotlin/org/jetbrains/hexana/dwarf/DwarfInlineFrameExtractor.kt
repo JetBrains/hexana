@@ -34,6 +34,12 @@ data class DwarfInlineFrame(
  * entries, providing an API to query the inlined call chain covering a given
  * code offset.
  *
+ * The `.debug_info`/`.debug_line` sections are parsed once per extractor
+ * instance on the first [inlinedFramesAt] call; subsequent queries reuse the
+ * cached per-CU index and only walk the in-memory DIE trees. Debugger pause
+ * handling may query from background threads: the cache field is volatile and
+ * a lost race merely rebuilds the same immutable index.
+ *
  * Only DWARF v4 format with `DW_AT_low_pc`/`DW_AT_high_pc` is supported for
  * PC coverage of inlined subroutines. `DW_AT_ranges` is not yet supported
  * (those inlined subroutines are skipped).
@@ -42,6 +48,27 @@ data class DwarfInlineFrame(
  */
 class DwarfInlineFrameExtractor(private val dwarfAccessor: DwarfAccessor) {
 
+    /** Per-CU data parsed once and reused by every [inlinedFramesAt] query. */
+    private class CuData(
+        val addressSize: Int,
+        val dieIndex: Map<Int, DebugInformationEntry>,
+        val lineHeader: DwarfLineUnitHeader<*>?,
+        val topLevelDies: List<DebugInformationEntry>,
+    )
+
+    /** The one-time parse result: `.debug_info` content offset + per-CU data. */
+    private class InlineIndex(
+        val infoContentOffset: Int,
+        val cus: List<CuData>,
+    )
+
+    /**
+     * Parsed index, built on first query. Volatile so concurrent pause
+     * handlers see a fully constructed index; a duplicate build is benign.
+     */
+    @kotlin.concurrent.Volatile
+    private var cachedIndex: InlineIndex? = null
+
     /**
      * Returns the inlined call chain covering [codeOffset], innermost frame
      * first. Returns an empty list when the offset is not covered by any
@@ -49,38 +76,25 @@ class DwarfInlineFrameExtractor(private val dwarfAccessor: DwarfAccessor) {
      *
      * The [codeOffset] space is the same as the `DW_AT_low_pc` values used in
      * the existing [DwarfVariableInfoExtractor] (Code-section-relative).
+     *
+     * The first call parses the DWARF sections and caches the result; later
+     * calls are lookup-only.
      */
     fun CommonByteBuffer.inlinedFramesAt(codeOffset: Int): List<DwarfInlineFrame> {
-        val debugInfoSection = dwarfAccessor.debugInfoSection() ?: return emptyList()
-        val debugLineSection = dwarfAccessor.debugLineSection()
-        val compilationUnits = with(debugInfoSection) { scanDwarfInfo() }
+        val index = cachedIndex
+            ?: buildInlineIndex()?.also { cachedIndex = it }
+            ?: return emptyList()
 
-        val infoContentOffset = debugInfoSection.contentOffset
         val result = mutableListOf<DwarfInlineFrame>()
-        for (cu in compilationUnits) {
-            val addressSize = cu.addressSize.toInt()
-            val lineHeaders = resolveLineHeaders(debugLineSection)
-
-            // Build a flat DIE index for this CU (keyed by absolute buffer offset).
-            val cuIndex = mutableMapOf<Int, DebugInformationEntry>()
-            for (topLevelDie in cu.children) {
-                cuIndex.putAll(buildDieIndex(topLevelDie))
-            }
-
-            // Resolve call_file index -> path using the CU's line unit header.
-            val cuRoot = cu.children.firstOrNull() ?: continue
-            val stmtListOffset = cuRoot.attributes
-                .find { it.attribute.name == Attribute.DW_AT_stmt_list }?.intValue
-            val lineHeader = stmtListOffset?.let { lineHeaders[it] }
-
-            for (topLevelDie in cu.children) {
+        for (cu in index.cus) {
+            for (topLevelDie in cu.topLevelDies) {
                 collectInlinedFrames(
                     die = topLevelDie,
                     targetOffset = codeOffset,
-                    addressSize = addressSize,
-                    dieIndex = cuIndex,
-                    infoContentOffset = infoContentOffset,
-                    lineHeader = lineHeader,
+                    addressSize = cu.addressSize,
+                    dieIndex = cu.dieIndex,
+                    infoContentOffset = index.infoContentOffset,
+                    lineHeader = cu.lineHeader,
                     depth = 0,
                     result = result,
                 )
@@ -90,6 +104,36 @@ class DwarfInlineFrameExtractor(private val dwarfAccessor: DwarfAccessor) {
         // Sort innermost (deepest) first.
         result.sortByDescending { it.depth }
         return result
+    }
+
+    /**
+     * One-time parse phase: scans `.debug_info` compilation units, the
+     * `.debug_line` unit headers, and builds a flat DIE index per CU.
+     * Returns `null` when `.debug_info` is absent.
+     */
+    private fun CommonByteBuffer.buildInlineIndex(): InlineIndex? {
+        val debugInfoSection = dwarfAccessor.debugInfoSection() ?: return null
+        val debugLineSection = dwarfAccessor.debugLineSection()
+        val compilationUnits = with(debugInfoSection) { scanDwarfInfo() }
+        val lineHeaders = resolveLineHeaders(debugLineSection)
+
+        val cus = compilationUnits.mapNotNull { cu ->
+            val cuRoot = cu.children.firstOrNull() ?: return@mapNotNull null
+
+            // Build a flat DIE index for this CU (keyed by absolute buffer offset).
+            val cuIndex = mutableMapOf<Int, DebugInformationEntry>()
+            for (topLevelDie in cu.children) {
+                cuIndex.putAll(buildDieIndex(topLevelDie))
+            }
+
+            // Resolve call_file index -> path using the CU's line unit header.
+            val stmtListOffset = cuRoot.attributes
+                .find { it.attribute.name == Attribute.DW_AT_stmt_list }?.intValue
+            val lineHeader = stmtListOffset?.let { lineHeaders[it] }
+
+            CuData(cu.addressSize.toInt(), cuIndex, lineHeader, cu.children)
+        }
+        return InlineIndex(debugInfoSection.contentOffset, cus)
     }
 
     private fun CommonByteBuffer.collectInlinedFrames(
