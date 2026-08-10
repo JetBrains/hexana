@@ -204,7 +204,7 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
     /** DAP seq counter for messages sent to VS Code. */
     private dapSeq = 1;
     /** Maps CDP breakpoint IDs to DAP breakpoint info. */
-    private readonly breakpoints = new Map<string, { id: number; source: any; line: number }>();
+    private readonly breakpoints = new Map<string, { id: number; source: any; line: number; condition?: string }>();
     /** Tracks wasm byte offsets that already have a CDP breakpoint, to avoid duplicates. */
     private readonly wasmBreakpointOffsets = new Map<number, string>();
     private nextBpId = 1;
@@ -273,7 +273,7 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                 this.sendDapResponse(msg, true, undefined, {
                     supportsConfigurationDoneRequest: true,
                     supportsFunctionBreakpoints: false,
-                    supportsConditionalBreakpoints: false,
+                    supportsConditionalBreakpoints: true,
                     supportsEvaluateForHovers: true,
                     supportsStepBack: false,
                     supportsSetVariable: false,
@@ -930,6 +930,13 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
         const results: any[] = [];
         for (const bp of breakpointLines) {
             const line = bp.line as number;
+            // Condition passed through raw (no DWARF name translation on VS Code
+            // side: the local-name map requires a function name that is not known
+            // at breakpoint-set time; DWARF name translation is only available on
+            // the IntelliJ side where the resolver has offset-based lookup).
+            const condition: string | undefined = (bp.condition && bp.condition.trim())
+                ? bp.condition.trim()
+                : undefined;
 
             // For non-.wasm sources (Rust, C, Go), use the DWARF
             // resolver to map source file + line → Wasm byte offsets.
@@ -979,16 +986,18 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                                     lineNumber: 0,
                                     columnNumber: snapped,
                                 },
+                                ...(condition !== undefined ? { condition } : {}),
                             })
                             : await this.cdpSend("Debugger.setBreakpointByUrl", {
                                 urlRegex: "^wasm://",
                                 lineNumber: 0,
                                 columnNumber: snapped,
+                                ...(condition !== undefined ? { condition } : {}),
                             });
                         const bpId = cdpResult.breakpointId;
                         if (bpId) {
                             const dapId = this.nextBpId++;
-                            this.breakpoints.set(bpId, { id: dapId, source, line });
+                            this.breakpoints.set(bpId, { id: dapId, source, line, condition });
                             this.wasmBreakpointOffsets.set(snapped, bpId);
                             if (!anySet) {
                                 results.push({ id: dapId, verified: true, line });
@@ -1040,11 +1049,12 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                                 lineNumber: 0,
                                 columnNumber: offset,
                             },
+                            ...(condition !== undefined ? { condition } : {}),
                         });
                         const bpId = cdpResult.breakpointId;
                         if (bpId) {
                             const dapId = this.nextBpId++;
-                            this.breakpoints.set(bpId, { id: dapId, source, line });
+                            this.breakpoints.set(bpId, { id: dapId, source, line, condition });
                             this.wasmBreakpointOffsets.set(offset, bpId);
                             results.push({ id: dapId, verified: true, line });
                             this.log.appendLine(
@@ -1086,11 +1096,12 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                             urlRegex: "^wasm://",
                             lineNumber: 0,
                             columnNumber: offset,
+                            ...(condition !== undefined ? { condition } : {}),
                         });
                         const bpId = cdpResult.breakpointId;
                         if (bpId) {
                             const dapId = this.nextBpId++;
-                            this.breakpoints.set(bpId, { id: dapId, source, line });
+                            this.breakpoints.set(bpId, { id: dapId, source, line, condition });
                             this.wasmBreakpointOffsets.set(offset, bpId);
                             results.push({ id: dapId, verified: true, line });
                             this.log.appendLine(
@@ -1116,11 +1127,12 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                         lineNumber: line - 1, // DAP is 1-based, CDP is 0-based
                         url: fileUrl,
                         columnNumber: 0,
+                        ...(condition !== undefined ? { condition } : {}),
                     });
                     const bpId = cdpResult.breakpointId;
                     if (bpId) {
                         const dapId = this.nextBpId++;
-                        this.breakpoints.set(bpId, { id: dapId, source, line });
+                        this.breakpoints.set(bpId, { id: dapId, source, line, condition });
                         results.push({ id: dapId, verified: true, line });
                         this.log.appendLine(
                             `[Hexana CDP] Set source breakpoint at ${sourcePath}:${line}`,

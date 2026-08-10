@@ -633,6 +633,27 @@ internal class CdpDebugProcess(
 
     // ---- Breakpoint management ----
 
+    /**
+     * Translates a raw condition expression for use at [wasmOffset].
+     *
+     * When [dwarfVariableResolver] is available, looks up the DWARF
+     * subprogram covering [wasmOffset], builds the local-index-to-name
+     * map, inverts it to a name-to-$varN map, and substitutes source
+     * variable names in [condition] with V8 internal names. When no
+     * resolver is available, or the offset matches no subprogram, the
+     * condition is returned unchanged.
+     *
+     * Returns `null` when [condition] is `null`.
+     */
+    private fun resolveBreakpointCondition(condition: String?, wasmOffset: Int): String? {
+        condition ?: return null
+        val resolver = dwarfVariableResolver ?: return condition
+        val localToName = resolver.buildWasmLocalToNameMapByOffset(wasmOffset)
+        if (localToName.isEmpty()) return condition
+        val nameToVar = localToName.entries.associate { (index, name) -> name to "\$var$index" }
+        return translateCondition(condition, nameToVar)
+    }
+
     internal fun registerBreakpointInCdp(breakpoint: XLineBreakpoint<WasmBreakpointProperties>) {
         val sourcePosition = breakpoint.sourcePosition ?: run {
             LOG.debug("CDP: registerBreakpoint skipped — no source position")
@@ -678,6 +699,8 @@ internal class CdpDebugProcess(
         line: Int,
     ) {
         try {
+            val condition = breakpoint.conditionExpression?.expression?.takeUnless { it.isBlank() }
+
             // If a wasm script is already known, use scriptId-based
             // breakpoints. Otherwise, use URL-regex breakpoints that
             // V8 will apply automatically when the wasm script appears
@@ -685,9 +708,9 @@ internal class CdpDebugProcess(
             // and wasm code execution.
             val wasmScriptId = findWasmScriptId()
             val results = if (wasmScriptId != null) {
-                trySetBreakpointsViaDwarf(file, line)
+                trySetBreakpointsViaDwarf(file, line, condition)
             } else {
-                trySetBreakpointsViaDwarfByUrl(file, line)
+                trySetBreakpointsViaDwarfByUrl(file, line, condition)
             }
 
             LOG.warn("CDP: DWARF breakpoint results count=${results.size} (byUrl=${wasmScriptId == null})")
@@ -708,7 +731,7 @@ internal class CdpDebugProcess(
                 )
             } else {
                 // Fall back to URL-based breakpoint for non-wasm scripts
-                val urlResult = trySetBreakpointByUrl(file, line)
+                val urlResult = trySetBreakpointByUrl(file, line, condition)
                 val breakpointId = urlResult?.get("breakpointId") as? String
                 if (breakpointId != null) {
                     cdpBreakpointToIde[breakpointId] = breakpoint
@@ -817,21 +840,25 @@ internal class CdpDebugProcess(
     private suspend fun trySetBreakpointsViaDwarfByUrl(
         file: VirtualFile,
         line: Int,
+        condition: String? = null,
     ): List<Map<String, Any?>> {
         val locResolver = sourceLocationResolver ?: return emptyList()
 
         val wasmOffsets = locResolver.sourceToAllWasmOffsets(file.name, line)
-        LOG.warn("CDP: trySetBreakpointsViaDwarfByUrl file=${file.name} line=$line offsets=$wasmOffsets")
+        LOG.warn("CDP: trySetBreakpointsViaDwarfByUrl file=${file.name} line=$line offsets=$wasmOffsets condition=${condition != null}")
         if (wasmOffsets.isEmpty()) return emptyList()
 
         val results = mutableListOf<Map<String, Any?>>()
         for (offset in wasmOffsets) {
             try {
-                val result = cdp.send("Debugger.setBreakpointByUrl", mapOf(
-                    "urlRegex" to "^wasm://",
-                    "lineNumber" to 0,
-                    "columnNumber" to offset.toInt(),
-                ))
+                val resolvedCondition = resolveBreakpointCondition(condition, offset.toInt())
+                val params = buildMap<String, Any?> {
+                    put("urlRegex", "^wasm://")
+                    put("lineNumber", 0)
+                    put("columnNumber", offset.toInt())
+                    if (resolvedCondition != null) put("condition", resolvedCondition)
+                }
+                val result = cdp.send("Debugger.setBreakpointByUrl", params)
                 LOG.warn("CDP: setBreakpointByUrl offset=$offset result=$result")
                 if (result["breakpointId"] != null) {
                     results.add(result)
@@ -859,11 +886,12 @@ internal class CdpDebugProcess(
     private suspend fun trySetBreakpointsViaDwarf(
         file: VirtualFile,
         line: Int,
+        condition: String? = null,
     ): List<Map<String, Any?>> {
         val locResolver = sourceLocationResolver ?: return emptyList()
 
         val wasmOffsets = locResolver.sourceToAllWasmOffsets(file.name, line)
-        LOG.warn("CDP: trySetBreakpointsViaDwarf file=${file.name} line=$line offsets=$wasmOffsets")
+        LOG.warn("CDP: trySetBreakpointsViaDwarf file=${file.name} line=$line offsets=$wasmOffsets condition=${condition != null}")
         if (wasmOffsets.isEmpty()) return emptyList()
 
         // Find the wasm script in CDP — V8 reports wasm modules with wasm:// URLs
@@ -873,13 +901,16 @@ internal class CdpDebugProcess(
         val results = mutableListOf<Map<String, Any?>>()
         for (offset in wasmOffsets) {
             try {
-                val result = cdp.send("Debugger.setBreakpoint", mapOf(
-                    "location" to mapOf(
+                val resolvedCondition = resolveBreakpointCondition(condition, offset.toInt())
+                val params = buildMap<String, Any?> {
+                    put("location", mapOf(
                         "scriptId" to wasmScriptId,
                         "lineNumber" to 0,
                         "columnNumber" to offset.toInt(),
-                    ),
-                ))
+                    ))
+                    if (resolvedCondition != null) put("condition", resolvedCondition)
+                }
+                val result = cdp.send("Debugger.setBreakpoint", params)
                 LOG.warn("CDP: setBreakpoint scriptId=$wasmScriptId offset=$offset result=$result")
                 if (result["breakpointId"] != null) {
                     results.add(result)
@@ -898,6 +929,7 @@ internal class CdpDebugProcess(
     private suspend fun trySetBreakpointByUrl(
         file: VirtualFile,
         line: Int,
+        condition: String? = null,
     ): Map<String, Any?>? {
         // Convert IDE VFS path to a file:// URL that V8 can match.
         // On Unix, paths start with "/"; on Windows, with a drive
@@ -909,11 +941,15 @@ internal class CdpDebugProcess(
             "file:///" + file.path.replace('\\', '/')
         }
 
-        return cdp.send("Debugger.setBreakpointByUrl", mapOf(
-            "lineNumber" to line,
-            "url" to fileUrl,
-            "columnNumber" to 0,
-        ))
+        val params = buildMap<String, Any?> {
+            put("lineNumber", line)
+            put("url", fileUrl)
+            put("columnNumber", 0)
+            // For non-wasm file-URL breakpoints, no offset is known so
+            // the condition is passed raw (no DWARF name translation).
+            if (condition != null) put("condition", condition)
+        }
+        return cdp.send("Debugger.setBreakpointByUrl", params)
     }
 
     /**
@@ -1024,6 +1060,28 @@ internal class CdpDebugProcess(
 
     companion object {
         private val LOG = Logger.getInstance(CdpDebugProcess::class.java)
+    }
+}
+
+// ---- Condition translation ----
+
+/**
+ * Translates DWARF source variable names in [condition] to their V8
+ * internal `$varN` equivalents using [nameToVar].
+ *
+ * Each key in [nameToVar] is a source-level name (e.g. `x`); the
+ * value is the corresponding V8 name (e.g. `$var0`). Substitution
+ * uses word boundaries so that `x` does not match `max` or `px`.
+ *
+ * The function is pure and has no side effects, making it directly
+ * unit-testable.
+ */
+internal fun translateCondition(condition: String, nameToVar: Map<String, String>): String {
+    if (nameToVar.isEmpty()) return condition
+    return nameToVar.entries.fold(condition) { expr, (sourceName, varName) ->
+        // escapeReplacement is required because varName contains '$' (e.g. "$var0"),
+        // which would otherwise be interpreted as a regex group reference.
+        expr.replace("""\b${Regex.escape(sourceName)}\b""".toRegex(), Regex.escapeReplacement(varName))
     }
 }
 
@@ -1344,13 +1402,7 @@ internal class CdpDebuggerEvaluator(
     override fun evaluate(expression: String, callback: XEvaluationCallback, expressionPosition: XSourcePosition?) {
         // Translate source-level variable names to V8 internal names
         // so that the user can evaluate expressions using DWARF names.
-        val resolvedExpression = if (nameToVar.isNotEmpty()) {
-            nameToVar.entries.fold(expression) { expr, (sourceName, varName) ->
-                expr.replace("""\b${Regex.escape(sourceName)}\b""".toRegex(), varName)
-            }
-        } else {
-            expression
-        }
+        val resolvedExpression = translateCondition(expression, nameToVar)
 
         scope.launch {
             try {

@@ -172,6 +172,28 @@ internal class WasmDwarfVariableResolver private constructor(
         }
     }
 
+    /**
+     * Builds a mapping from Wasm local indices to DWARF variable names
+     * using only the Wasm byte offset (no function name). Used during
+     * breakpoint registration when the function name is not yet known
+     * but the DWARF offset is available.
+     *
+     * Falls back to empty map when no subprogram covers the offset.
+     */
+    fun buildWasmLocalToNameMapByOffset(wasmByteOffset: Int): Map<Long, String> {
+        val matchingSubprograms = findMatchingSubprograms(null, wasmByteOffset)
+        if (matchingSubprograms.isEmpty()) return emptyMap()
+        // Delegate to buildWasmLocalToNameMap with an explicit offset so
+        // that it uses the same variable-assignment logic (WasmLocal ops,
+        // then positional fallback).  Pass null for functionName so that
+        // the name-only path is skipped and offset matching is used.
+        // Rather than duplicating the logic, find the function name from
+        // the matched subprogram and delegate.
+        val sp = matchingSubprograms.first()
+        val nameForLookup = sp.name ?: sp.linkageName
+        return buildWasmLocalToNameMap(nameForLookup, wasmByteOffset)
+    }
+
     fun buildWasmLocalToNameMap(functionName: String?, wasmByteOffset: Int? = null): Map<Long, String> {
         // Use name-only matching first. The offset-based fallback in
         // findMatchingSubprograms can match a *different* function whose
