@@ -1369,6 +1369,14 @@ internal class CdpStackFrame(
                         val value = prop["value"] as? Map<String, Any?> ?: continue
                         val subtype = value["subtype"] as? String
 
+                        // Non-wasm scope artifacts (e.g. V8's "Stack" operand-stack
+                        // object): keep the raw name. They are not wasm locals, so
+                        // they consume no local index and get no DWARF name.
+                        if (subtype != "wasmvalue") {
+                            list.add(name, CdpValue(name, value, cdp, scope))
+                            continue
+                        }
+
                         // Resolve display name: try $varN pattern first,
                         // then fall back to positional index for non-$varN
                         // names (e.g. wasm name section names like "arg0_1")
@@ -1376,25 +1384,23 @@ internal class CdpStackFrame(
 
                         // Collect numeric values from wasmvalue locals for frame-base resolution.
                         // These are needed to compute the shadow-stack-pointer address.
-                        if (subtype == "wasmvalue") {
-                            val match = WASM_VAR_PATTERN.matchEntire(name)
-                            if (match != null) {
-                                val idx = match.groupValues[1].toLongOrNull()
-                                if (idx != null) {
-                                    val innerVal = resolveWasmValue(value, cdp)?.toLongOrNull()
-                                    if (innerVal != null) wasmLocalValues[idx] = innerVal
-                                }
+                        val match = WASM_VAR_PATTERN.matchEntire(name)
+                        if (match != null) {
+                            val idx = match.groupValues[1].toLongOrNull()
+                            if (idx != null) {
+                                val innerVal = resolveWasmValue(value, cdp)?.toLongOrNull()
+                                if (innerVal != null) wasmLocalValues[idx] = innerVal
                             }
                         }
 
-                        // Hide variables in two cases:
+                        // Hide wasm locals in two cases:
                         // 1. Function has no DWARF subprogram (wrapper/
                         //    generated function) — all its locals are
                         //    compiler-internal garbage (stack pointers etc.)
                         // 2. Function has DWARF info and localToName is
                         //    non-empty but this specific local has no
                         //    mapping — it's a compiler-internal spill slot
-                        if (dwarfVariableResolver != null && !hasDwarfMatch && subtype == "wasmvalue") {
+                        if (dwarfVariableResolver != null && !hasDwarfMatch) {
                             localIndex++
                             continue
                         }
@@ -1403,15 +1409,11 @@ internal class CdpStackFrame(
                             continue
                         }
 
-                        if (subtype == "wasmvalue") {
-                            // Flatten wasmvalue objects: extract the inner
-                            // type and value and present them directly
-                            val wasmType = value["description"] as? String
-                            val innerValue = resolveWasmValue(value, cdp)
-                            list.add(displayName, CdpWasmLocalValue(displayName, wasmType, innerValue, value, cdp, scope))
-                        } else {
-                            list.add(displayName, CdpValue(displayName, value, cdp, scope))
-                        }
+                        // Flatten wasmvalue objects: extract the inner
+                        // type and value and present them directly
+                        val wasmType = value["description"] as? String
+                        val innerValue = resolveWasmValue(value, cdp)
+                        list.add(displayName, CdpWasmLocalValue(displayName, wasmType, innerValue, value, cdp, scope))
                         localIndex++
                     }
                 }

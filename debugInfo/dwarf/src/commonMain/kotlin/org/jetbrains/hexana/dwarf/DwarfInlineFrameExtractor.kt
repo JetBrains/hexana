@@ -51,15 +51,21 @@ class DwarfInlineFrameExtractor(private val dwarfAccessor: DwarfAccessor) {
     /** Per-CU data parsed once and reused by every [inlinedFramesAt] query. */
     private class CuData(
         val addressSize: Int,
-        val dieIndex: Map<Int, DebugInformationEntry>,
+        val cuOffset: Int,
         val lineHeader: DwarfLineUnitHeader<*>?,
         val topLevelDies: List<DebugInformationEntry>,
     )
 
-    /** The one-time parse result: `.debug_info` content offset + per-CU data. */
+    /**
+     * The one-time parse result: `.debug_info` content offset, per-CU data, and
+     * a DIE index over ALL compilation units keyed by absolute buffer offset.
+     * The index must be global because `DW_FORM_ref_addr` origins may cross CU
+     * boundaries.
+     */
     private class InlineIndex(
         val infoContentOffset: Int,
         val cus: List<CuData>,
+        val globalDieIndex: Map<Int, DebugInformationEntry>,
     )
 
     /**
@@ -91,8 +97,8 @@ class DwarfInlineFrameExtractor(private val dwarfAccessor: DwarfAccessor) {
                 collectInlinedFrames(
                     die = topLevelDie,
                     targetOffset = codeOffset,
-                    addressSize = cu.addressSize,
-                    dieIndex = cu.dieIndex,
+                    cuOffset = cu.cuOffset,
+                    dieIndex = index.globalDieIndex,
                     infoContentOffset = index.infoContentOffset,
                     lineHeader = cu.lineHeader,
                     depth = 0,
@@ -117,13 +123,13 @@ class DwarfInlineFrameExtractor(private val dwarfAccessor: DwarfAccessor) {
         val compilationUnits = with(debugInfoSection) { scanDwarfInfo() }
         val lineHeaders = resolveLineHeaders(debugLineSection)
 
+        val globalIndex = mutableMapOf<Int, DebugInformationEntry>()
         val cus = compilationUnits.mapNotNull { cu ->
             val cuRoot = cu.children.firstOrNull() ?: return@mapNotNull null
 
-            // Build a flat DIE index for this CU (keyed by absolute buffer offset).
-            val cuIndex = mutableMapOf<Int, DebugInformationEntry>()
+            // Merge this CU's DIEs into the global index (keyed by absolute buffer offset).
             for (topLevelDie in cu.children) {
-                cuIndex.putAll(buildDieIndex(topLevelDie))
+                globalIndex.putAll(buildDieIndex(topLevelDie))
             }
 
             // Resolve call_file index -> path using the CU's line unit header.
@@ -131,15 +137,15 @@ class DwarfInlineFrameExtractor(private val dwarfAccessor: DwarfAccessor) {
                 .find { it.attribute.name == Attribute.DW_AT_stmt_list }?.intValue
             val lineHeader = stmtListOffset?.let { lineHeaders[it] }
 
-            CuData(cu.addressSize.toInt(), cuIndex, lineHeader, cu.children)
+            CuData(cu.addressSize.toInt(), cu.offset, lineHeader, cu.children)
         }
-        return InlineIndex(debugInfoSection.contentOffset, cus)
+        return InlineIndex(debugInfoSection.contentOffset, cus, globalIndex)
     }
 
     private fun CommonByteBuffer.collectInlinedFrames(
         die: DebugInformationEntry,
         targetOffset: Int,
-        addressSize: Int,
+        cuOffset: Int,
         dieIndex: Map<Int, DebugInformationEntry>,
         infoContentOffset: Int,
         lineHeader: DwarfLineUnitHeader<*>?,
@@ -151,7 +157,7 @@ class DwarfInlineFrameExtractor(private val dwarfAccessor: DwarfAccessor) {
                 // Only recurse into subprograms whose PC range contains the target.
                 if (!subprogramContains(die, targetOffset)) return
                 for (child in die.children) {
-                    collectInlinedFrames(child, targetOffset, addressSize, dieIndex, infoContentOffset, lineHeader, depth, result)
+                    collectInlinedFrames(child, targetOffset, cuOffset, dieIndex, infoContentOffset, lineHeader, depth, result)
                 }
             }
 
@@ -159,12 +165,12 @@ class DwarfInlineFrameExtractor(private val dwarfAccessor: DwarfAccessor) {
                 val (lowPc, highPc) = extractPcRange(die) ?: return
                 if (targetOffset < lowPc || targetOffset >= highPc) return
 
-                val frame = buildFrame(die, dieIndex, infoContentOffset, lineHeader, depth + 1)
+                val frame = buildFrame(die, cuOffset, dieIndex, infoContentOffset, lineHeader, depth + 1)
                 result.add(frame)
 
                 // Recurse into nested inlined subroutines.
                 for (child in die.children) {
-                    collectInlinedFrames(child, targetOffset, addressSize, dieIndex, infoContentOffset, lineHeader, depth + 1, result)
+                    collectInlinedFrames(child, targetOffset, cuOffset, dieIndex, infoContentOffset, lineHeader, depth + 1, result)
                 }
             }
 
@@ -173,7 +179,7 @@ class DwarfInlineFrameExtractor(private val dwarfAccessor: DwarfAccessor) {
             Tag.DW_TAG_namespace -> {
                 // Descend into these containers without incrementing depth.
                 for (child in die.children) {
-                    collectInlinedFrames(child, targetOffset, addressSize, dieIndex, infoContentOffset, lineHeader, depth, result)
+                    collectInlinedFrames(child, targetOffset, cuOffset, dieIndex, infoContentOffset, lineHeader, depth, result)
                 }
             }
 
@@ -181,10 +187,20 @@ class DwarfInlineFrameExtractor(private val dwarfAccessor: DwarfAccessor) {
         }
     }
 
+    /**
+     * True when [lowPc] is a linker tombstone for dead-stripped code rather
+     * than a real address. wasm-ld writes 0xFFFFFFFF (reads as -1) into
+     * `DW_AT_low_pc` of GC'd functions; older lld versions wrote 0. Offset 0
+     * is never a valid wasm code-section instruction address, so `<= 0` covers
+     * both without excluding live code.
+     */
+    private fun isTombstonedLowPc(lowPc: Int): Boolean = lowPc <= 0
+
     /** Returns true when the subprogram's PC range covers [offset]. */
     private fun subprogramContains(die: DebugInformationEntry, offset: Int): Boolean {
         val lowPc = die.attributes.find { it.attribute.name == Attribute.DW_AT_low_pc }?.intValue
             ?: return false
+        if (isTombstonedLowPc(lowPc)) return false
         val highPcField = die.attributes.find { it.attribute.name == Attribute.DW_AT_high_pc }
             ?: return false
         val highPc = when (highPcField.attribute.form) {
@@ -206,6 +222,7 @@ class DwarfInlineFrameExtractor(private val dwarfAccessor: DwarfAccessor) {
         val lowPcField = die.attributes.find { it.attribute.name == Attribute.DW_AT_low_pc }
             ?: return null
         val lowPc = lowPcField.intValue ?: return null
+        if (isTombstonedLowPc(lowPc)) return null
         val highPcField = die.attributes.find { it.attribute.name == Attribute.DW_AT_high_pc }
             ?: return null
         val highPc = when (highPcField.attribute.form) {
@@ -220,12 +237,13 @@ class DwarfInlineFrameExtractor(private val dwarfAccessor: DwarfAccessor) {
 
     private fun CommonByteBuffer.buildFrame(
         die: DebugInformationEntry,
+        cuOffset: Int,
         dieIndex: Map<Int, DebugInformationEntry>,
         infoContentOffset: Int,
         lineHeader: DwarfLineUnitHeader<*>?,
         depth: Int,
     ): DwarfInlineFrame {
-        val origin = resolveAbstractOrigin(die, dieIndex, infoContentOffset)
+        val origin = resolveAbstractOrigin(die, cuOffset, dieIndex, infoContentOffset)
 
         val name = resolveStringAttr(origin ?: die, Attribute.DW_AT_name)
         val linkageName = resolveStringAttr(origin ?: die, Attribute.DW_AT_linkage_name)
@@ -250,27 +268,38 @@ class DwarfInlineFrameExtractor(private val dwarfAccessor: DwarfAccessor) {
      * find the origin DIE carrying the function name. Returns `null` when the
      * reference cannot be resolved.
      *
-     * [infoContentOffset] is the `.debug_info` section's `contentOffset`,
-     * used to convert section-relative `DW_FORM_ref4` values to absolute
-     * buffer offsets for DIE index lookups.
+     * Reference forms differ in their base: `DW_FORM_ref1/2/4/8/ref_udata`
+     * values are relative to the referring DIE's CU header ([cuOffset], an
+     * absolute buffer offset), while `DW_FORM_ref_addr` is relative to the
+     * `.debug_info` section start ([infoContentOffset]).
      */
     private fun resolveAbstractOrigin(
         die: DebugInformationEntry,
+        cuOffset: Int,
         dieIndex: Map<Int, DebugInformationEntry>,
         infoContentOffset: Int,
     ): DebugInformationEntry? {
-        val originSectionOffset = die.attributes
-            .find { it.attribute.name == Attribute.DW_AT_abstract_origin }?.intValue
+        val origin = resolveRef(die, Attribute.DW_AT_abstract_origin, cuOffset, dieIndex, infoContentOffset)
             ?: return null
-        val origin = dieIndex[infoContentOffset + originSectionOffset] ?: return null
         // Follow DW_AT_specification if present (for out-of-line definitions).
-        val specSectionOffset = origin.attributes
-            .find { it.attribute.name == Attribute.DW_AT_specification }?.intValue
-        return if (specSectionOffset != null) {
-            dieIndex[infoContentOffset + specSectionOffset] ?: origin
-        } else {
-            origin
+        return resolveRef(origin, Attribute.DW_AT_specification, cuOffset, dieIndex, infoContentOffset) ?: origin
+    }
+
+    /** Resolves a reference-class attribute of [die] to its target DIE, form-aware. */
+    private fun resolveRef(
+        die: DebugInformationEntry,
+        attr: Attribute,
+        cuOffset: Int,
+        dieIndex: Map<Int, DebugInformationEntry>,
+        infoContentOffset: Int,
+    ): DebugInformationEntry? {
+        val field = die.attributes.find { it.attribute.name == attr } ?: return null
+        val value = field.intValue ?: return null
+        val base = when (field.attribute.form) {
+            is Form.DW_FORM_ref_addr -> infoContentOffset
+            else -> cuOffset
         }
+        return dieIndex[base + value]
     }
 
     private fun CommonByteBuffer.resolveStringAttr(

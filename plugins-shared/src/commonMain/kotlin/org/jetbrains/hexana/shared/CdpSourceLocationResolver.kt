@@ -165,10 +165,14 @@ class CdpSourceLocationResolver private constructor(
             else -> null
         }
 
+        // Raw DW_AT_type values are CU-relative (DW_FORM_ref4); the type
+        // resolver's public API takes absolute buffer offsets.
+        val cuBase = subprogram.cuOffset ?: return emptyList()
+
         val result = mutableListOf<CdpMemoryVariable>()
         for (v in subprogram.variables) {
             val name = v.name ?: continue
-            val typeOffset = v.typeOffset ?: continue
+            val typeOffset = v.typeOffset?.let { cuBase + it } ?: continue
             val loc = effectiveLocation(v) ?: continue
 
             val primaryOp = loc.operations.firstOrNull() ?: continue
@@ -564,7 +568,7 @@ class CdpSourceLocationResolver private constructor(
                             for (child in cu.children) putAll(buildDieIndex(child))
                         }
                     }
-                    DwarfTypeResolver(allDies, accessor, infoSection.contentOffset)
+                    DwarfTypeResolver(allDies, accessor, infoSection.contentOffset, cus.map { it.offset })
                 }
                 CdpSourceLocationResolver(
                     locations, codeSectionOffset, subprograms,

@@ -99,9 +99,9 @@ sealed class DwarfTypeInfo {
  * Resolves DWARF type DIEs into [DwarfTypeInfo] values.
  *
  * Construct one instance per parse session (it holds a memo per-buffer
- * operation). Call [resolveTypeAtOffset] with a section-relative `.debug_info`
- * offset (e.g. the value of `DW_AT_type` / `DW_AT_abstract_origin`, which is
- * a `DW_FORM_ref4` section-relative integer).
+ * operation). Call [resolveTypeAtOffset] with an ABSOLUTE buffer offset. Raw
+ * `DW_FORM_ref4` attribute values are CU-relative: convert with
+ * `cuOffset + value` (see [DwarfSubprogramInfo.cuOffset]) before calling.
  *
  * @param allDies a flat index of all DIEs in the compilation unit, keyed by
  *        their **absolute** buffer offset. Build this once per CU from
@@ -115,8 +115,34 @@ class DwarfTypeResolver(
     private val allDies: Map<Int, DebugInformationEntry>,
     private val accessor: DwarfAccessor,
     private val infoContentOffset: Int,
+    cuOffsets: List<Int> = emptyList(),
 ) {
     private val memo = mutableMapOf<Int, DwarfTypeInfo?>()
+
+    /** Sorted absolute buffer offsets of CU headers, for CU-relative ref resolution. */
+    private val sortedCuOffsets = cuOffsets.sorted()
+
+    /**
+     * Absolute buffer offset of the CU header containing the DIE at
+     * [dieOffset] (the largest CU offset not exceeding it). Falls back to
+     * [infoContentOffset] when no CU offsets were provided (legacy behavior,
+     * correct only for the first CU).
+     */
+    private fun cuOffsetFor(dieOffset: Int): Int {
+        var lo = 0
+        var hi = sortedCuOffsets.size - 1
+        var best = -1
+        while (lo <= hi) {
+            val mid = (lo + hi) / 2
+            if (sortedCuOffsets[mid] <= dieOffset) {
+                best = sortedCuOffsets[mid]
+                lo = mid + 1
+            } else {
+                hi = mid - 1
+            }
+        }
+        return if (best >= 0) best else infoContentOffset
+    }
 
     /**
      * Resolves the type DIE at [absOffset] (the absolute buffer offset as
@@ -137,23 +163,28 @@ class DwarfTypeResolver(
     }
 
     /**
-     * Resolves a section-relative `DW_FORM_ref4` attribute value (e.g. from
-     * `DW_AT_type`) to an absolute buffer offset by adding [infoContentOffset],
-     * then delegates to [resolveTypeAtOffset].
+     * Resolves a reference-class `DW_AT_type` attribute of [referringDie] to
+     * a [DwarfTypeInfo], honoring the reference form's base: `DW_FORM_ref_addr`
+     * values are `.debug_info`-section-relative, all other ref forms
+     * (`DW_FORM_ref1/2/4/8/ref_udata`) are relative to the referring DIE's CU
+     * header.
      */
-    private fun CommonByteBuffer.resolveRefAtOffset(sectionRelativeOffset: Int): DwarfTypeInfo? =
-        resolveTypeAtOffset(infoContentOffset + sectionRelativeOffset)
+    private fun CommonByteBuffer.resolveTypeRef(referringDie: DebugInformationEntry): DwarfTypeInfo? {
+        val field = referringDie.attributes.find { it.attribute.name == Attribute.DW_AT_type } ?: return null
+        val value = field.intValue ?: return null
+        val base = when (field.attribute.form) {
+            is Form.DW_FORM_ref_addr -> infoContentOffset
+            else -> cuOffsetFor(referringDie.offset)
+        }
+        return resolveTypeAtOffset(base + value)
+    }
 
     private fun CommonByteBuffer.resolveOnce(absOffset: Int): DwarfTypeInfo? {
         val die = allDies[absOffset] ?: return null
         return when (die.tag) {
             Tag.DW_TAG_typedef,
             Tag.DW_TAG_const_type,
-            Tag.DW_TAG_volatile_type -> {
-                val typeOffset = die.attributes.find { it.attribute.name == Attribute.DW_AT_type }?.intValue
-                    ?: return null
-                resolveRefAtOffset(typeOffset)
-            }
+            Tag.DW_TAG_volatile_type -> resolveTypeRef(die)
 
             Tag.DW_TAG_base_type -> {
                 val name = resolveStringAttr(die, Attribute.DW_AT_name) ?: "?"
@@ -162,11 +193,7 @@ class DwarfTypeResolver(
                 DwarfTypeInfo.Base(name, byteSize, encoding)
             }
 
-            Tag.DW_TAG_pointer_type -> {
-                val typeOffset = die.attributes.find { it.attribute.name == Attribute.DW_AT_type }?.intValue
-                val pointee = typeOffset?.let { resolveRefAtOffset(it) }
-                DwarfTypeInfo.Pointer(pointee)
-            }
+            Tag.DW_TAG_pointer_type -> DwarfTypeInfo.Pointer(resolveTypeRef(die))
 
             Tag.DW_TAG_structure_type,
             Tag.DW_TAG_class_type -> {
@@ -178,17 +205,14 @@ class DwarfTypeResolver(
                         val memberName = resolveStringAttr(member, Attribute.DW_AT_name)
                         val memberOffset = member.attributes
                             .find { it.attribute.name == Attribute.DW_AT_data_member_location }?.intValue ?: 0
-                        val memberTypeOffset = member.attributes
-                            .find { it.attribute.name == Attribute.DW_AT_type }?.intValue
-                        val memberType = memberTypeOffset?.let { resolveRefAtOffset(it) }
+                        val memberType = resolveTypeRef(member)
                         DwarfTypeInfo.Struct.Member(memberName, memberOffset, memberType)
                     }
                 DwarfTypeInfo.Struct(name, byteSize, members)
             }
 
             Tag.DW_TAG_array_type -> {
-                val elemTypeOffset = die.attributes.find { it.attribute.name == Attribute.DW_AT_type }?.intValue
-                val elemType = elemTypeOffset?.let { resolveRefAtOffset(it) }
+                val elemType = resolveTypeRef(die)
                 val subrange = die.children.firstOrNull { it.tag == Tag.DW_TAG_subrange_type }
                 val count = subrange?.attributes?.find { it.attribute.name == Attribute.DW_AT_count }?.intValue
                     ?: subrange?.attributes?.find { it.attribute.name == Attribute.DW_AT_upper_bound }?.intValue

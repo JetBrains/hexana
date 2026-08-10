@@ -1519,20 +1519,27 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                             const rawName = String(prop.name ?? "");
                             const val = prop.value || {};
                             const subtype = val.subtype;
+
+                            // Non-wasm scope artifacts (e.g. V8's "Stack" operand-stack
+                            // object): keep the raw name. They are not wasm locals, so
+                            // they consume no local index and get no DWARF name.
+                            if (subtype !== "wasmvalue") {
+                                variables.push(await this.cdpValueToVariable(rawName, val));
+                                continue;
+                            }
+
                             const displayName = this.resolveVariableDisplayName(rawName, localToName, localIndex);
 
                             // Collect numeric values from wasmvalue locals for frame-base resolution.
-                            if (subtype === "wasmvalue") {
-                                const varMatch = WASM_VAR_REGEX.exec(rawName);
-                                if (varMatch) {
-                                    const idx = Number(varMatch[1]);
-                                    const innerStr = await this.resolveWasmValue(val);
-                                    const inner = innerStr !== undefined ? Number(innerStr) : NaN;
-                                    if (Number.isFinite(inner)) wasmLocalValues.set(idx, inner);
-                                }
+                            const varMatch = WASM_VAR_REGEX.exec(rawName);
+                            if (varMatch) {
+                                const idx = Number(varMatch[1]);
+                                const innerStr = await this.resolveWasmValue(val);
+                                const inner = innerStr !== undefined ? Number(innerStr) : NaN;
+                                if (Number.isFinite(inner)) wasmLocalValues.set(idx, inner);
                             }
 
-                            if (this.sourceLocationResolver && !hasDwarfMatch && subtype === "wasmvalue") {
+                            if (this.sourceLocationResolver && !hasDwarfMatch) {
                                 localIndex++;
                                 continue;
                             }

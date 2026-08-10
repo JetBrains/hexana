@@ -48,6 +48,12 @@ data class DwarfSubprogramInfo(
     val frameBase: DwarfLocationDescription?,
     val frameBaseList: List<DwarfLocationListEntry> = emptyList(),
     val variables: List<DwarfVariableInfo>,
+    /**
+     * Absolute buffer offset of the compilation unit header this subprogram
+     * belongs to. CU-relative reference values (`DW_FORM_ref4`, e.g.
+     * [DwarfVariableInfo.typeOffset]) resolve to `cuOffset + value`.
+     */
+    val cuOffset: Int? = null,
 )
 
 /**
@@ -188,6 +194,7 @@ class DwarfVariableInfoExtractor(private val dwarfAccessor: DwarfAccessor) {
             frameBase = frameBase,
             frameBaseList = frameBaseList,
             variables = variables,
+            cuOffset = cu.offset,
         )
     }
 

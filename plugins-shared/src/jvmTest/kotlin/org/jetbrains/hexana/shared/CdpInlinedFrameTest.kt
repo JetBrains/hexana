@@ -128,14 +128,17 @@ class CdpInlinedFrameTest {
 
     // ---- End-to-end via CdpSourceLocationResolver + dwarf-types.wasm fixture ----
 
-    private fun fixtureBytes(): ByteArray {
-        val root = generateSequence(java.nio.file.Path.of("").toAbsolutePath()) { it.parent }
+    private fun repoRoot(): java.nio.file.Path? =
+        generateSequence(java.nio.file.Path.of("").toAbsolutePath()) { it.parent }
             .firstOrNull { java.nio.file.Files.isDirectory(it.resolve("debugInfo").resolve("dwarf-fixtures")) }
-            ?: return ByteArray(0)
-        val fixture = root.resolve("debugInfo").resolve("dwarf-fixtures")
-            .resolve("test-data").resolve("wasm32").resolve("dwarf-types.wasm")
+
+    private fun fixtureBytes(relative: String): ByteArray {
+        val fixture = repoRoot()?.resolve(relative) ?: return ByteArray(0)
         return if (java.nio.file.Files.exists(fixture)) java.nio.file.Files.readAllBytes(fixture) else ByteArray(0)
     }
+
+    private fun fixtureBytes(): ByteArray =
+        fixtureBytes("debugInfo/dwarf-fixtures/test-data/wasm32/dwarf-types.wasm")
 
     @Test
     fun `inlinedFramesAt returns add frame at module-absolute offset`() {
@@ -153,10 +156,29 @@ class CdpInlinedFrameTest {
         val moduleOffset = 0x79uL
 
         val chain = resolver.inlinedFramesAt(moduleOffset)
-        assertTrue(chain.isNotEmpty(), "Expected at least one inlined frame at module offset 0x79")
-        val addFrame = chain.firstOrNull { it.name == "add" }
-        assertTrue(addFrame != null, "Expected frame named 'add' in chain")
-        assertEquals(23, addFrame.callLine, "call_line for add should be 23 (from DW_AT_call_line)")
+        // Exclusive assertion: dead-stripped stdlib DIEs carry tombstoned
+        // low_pc values and must NOT appear in the chain (regression for the
+        // 338-frame explosion on debug-add.wasm).
+        assertEquals(1, chain.size, "Expected exactly one inlined frame at module offset 0x79, got $chain")
+        assertEquals("add", chain[0].name, "The single frame must be the resolved 'add' origin")
+        assertEquals(23, chain[0].callLine, "call_line for add should be 23 (from DW_AT_call_line)")
+    }
+
+    @Test
+    fun `no inlined frames inside plain function in debug-add wasm`() {
+        val bytes = fixtureBytes("ui-driver-tests/testData/projects/hexana_wasm_project/debug-add.wasm")
+        if (bytes.isEmpty()) return
+        val resolver = CdpSourceLocationResolver.create(bytes) ?: return
+
+        val offsets = resolver.sourceToAllWasmOffsets("debug_add.rs", 10)
+        assertTrue(offsets.isNotEmpty(), "Expected line-table offsets for debug_add.rs:10")
+        for (offset in offsets) {
+            val chain = resolver.inlinedFramesAt(offset.toULong())
+            assertTrue(
+                chain.isEmpty(),
+                "add() in debug_add.rs is not inlined; expected empty chain at offset $offset, got ${chain.size} frames",
+            )
+        }
     }
 
     @Test
