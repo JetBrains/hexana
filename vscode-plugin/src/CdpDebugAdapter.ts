@@ -941,11 +941,13 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
             // For non-.wasm sources (Rust, C, Go), use the DWARF
             // resolver to map source file + line → Wasm byte offsets.
             // For .wasm sources the DAP line IS the byte offset.
+            // Pass the full sourcePath so the resolver can apply
+            // path-suffix matching for multi-crate projects where
+            // several files share the same name (lib.rs, mod.rs, etc.).
             let dwarfOffsets: number[] | undefined;
             if (!isWasmSource && this.sourceLocationResolver) {
-                const fileName = path.basename(sourcePath);
                 // DAP lines are 1-based; the resolver expects 0-based
-                const resolvedArr = this.sourceLocationResolver.sourceToAllWasmOffsets(fileName, line - 1);
+                const resolvedArr = this.sourceLocationResolver.sourceToAllWasmOffsets(sourcePath, line - 1);
                 if (resolvedArr && resolvedArr.length > 0) {
                     dwarfOffsets = Array.from(resolvedArr);
                     this.log.appendLine(
@@ -1158,6 +1160,63 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
     }
 
     /**
+     * Finds the best matching workspace file path for a DWARF-reported
+     * source path using longest-path-suffix matching.
+     *
+     * Strategy:
+     * 1. Check registered breakpoint source paths for a suffix match,
+     *    preferring the longest matching suffix (most path segments).
+     * 2. If no breakpoint matches, check all workspace folders for a
+     *    file whose path ends with the DWARF path suffix.
+     * Falls back to `undefined` when no match is found.
+     */
+    private findWorkspaceFileByDwarfPath(dwarfPath: string): string | undefined {
+        const normalizedDwarf = dwarfPath.replace(/\\/g, "/");
+        const segments = normalizedDwarf.split("/").filter(s => s.length > 0);
+        const baseName = segments[segments.length - 1] ?? "";
+
+        let bestPath: string | undefined;
+        let bestMatchLen = -1;
+
+        // Helper: score a candidate path against the DWARF path segments.
+        const score = (candidate: string): number => {
+            const norm = candidate.replace(/\\/g, "/");
+            for (let start = 0; start < segments.length; start++) {
+                const suffix = segments.slice(start).join("/");
+                if (norm.endsWith(suffix)) {
+                    const prefixLen = norm.length - suffix.length;
+                    if (prefixLen === 0 || norm[prefixLen - 1] === "/") {
+                        return segments.length - start;
+                    }
+                }
+            }
+            return -1;
+        };
+
+        // Check breakpoint source paths first (cheapest, already in memory).
+        for (const bp of this.breakpoints.values()) {
+            const bpPath = bp.source?.path as string | undefined;
+            if (!bpPath || path.basename(bpPath) !== baseName) continue;
+            const s = score(bpPath);
+            if (s > bestMatchLen) { bestMatchLen = s; bestPath = bpPath; }
+        }
+        if (bestMatchLen > 0) return bestPath;
+
+        // Fall back to workspace folder scan.
+        for (const folder of (vscode.workspace.workspaceFolders ?? [])) {
+            const folderPath = folder.uri.fsPath.replace(/\\/g, "/");
+            // Try building the full path by appending the DWARF path;
+            // if the DWARF path is absolute this resolves correctly too.
+            const candidate = folderPath + "/" + normalizedDwarf;
+            if (require("fs").existsSync(candidate)) {
+                const s = score(candidate);
+                if (s > bestMatchLen) { bestMatchLen = s; bestPath = candidate; }
+            }
+        }
+        return bestMatchLen > 0 ? bestPath : undefined;
+    }
+
+    /**
      * Finds the nearest valid byte offset at or after the requested offset
      * using binary search on the sorted array of valid offsets.
      */
@@ -1247,16 +1306,13 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                     const resolved = this.sourceLocationResolver.wasmOffsetToSource(wasmOffset);
                     if (resolved) {
                         // DWARF line is 1-based, DAP line is 1-based — use directly.
-                        // Try to find the full path on disk by checking
-                        // the breakpoint source paths for a matching file name.
-                        const resolvedBaseName = path.basename(resolved.file);
-                        let fullPath: string | undefined;
-                        for (const bp of this.breakpoints.values()) {
-                            if (bp.source?.path && path.basename(bp.source.path) === resolvedBaseName) {
-                                fullPath = bp.source.path;
-                                break;
-                            }
-                        }
+                        // resolved.file is the full DWARF path (compDir-joined).
+                        // Use path-suffix matching against breakpoint source paths
+                        // to find the workspace file, preferring the longest suffix
+                        // match so lib.rs in mycrate beats lib.rs in anothercrate.
+                        const resolvedDwarfPath = resolved.file.replace(/\\/g, "/");
+                        const resolvedBaseName = path.basename(resolvedDwarfPath);
+                        const fullPath = this.findWorkspaceFileByDwarfPath(resolvedDwarfPath);
                         source.name = resolvedBaseName;
                         if (fullPath) {
                             source.path = fullPath;

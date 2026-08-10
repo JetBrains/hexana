@@ -578,57 +578,117 @@ internal class CdpDebugProcess(
     }
 
     /**
-     * Finds a source file in the project by matching the file name
-     * from DWARF debug info against files in the local file system.
+     * Finds a source file in the project by matching the DWARF-reported
+     * file path against files in the local file system.
+     *
+     * Resolution strategy (first match wins):
+     * (a) Absolute path: try the DWARF path directly on disk.
+     * (b) Project-relative: resolve against the project base path.
+     * (c) Content-root relative: try each content root.
+     * (d) Breakpoint cache: check already-open breakpoint files whose
+     *     path ends with the DWARF path suffix.
+     * (e) Recursive content-root search with longest-path-suffix-wins:
+     *     among all files whose name matches the basename, prefer the
+     *     one whose project-relative path shares the longest suffix
+     *     with the DWARF path.
      */
     private fun findSourceFileByName(dwarfPath: String): VirtualFile? {
-        // Try as an absolute path first
-        val absolute = LocalFileSystem.getInstance().findFileByPath(dwarfPath)
+        val normalized = dwarfPath.replace('\\', '/')
+
+        // (a) Try as an absolute path first
+        val absolute = LocalFileSystem.getInstance().findFileByPath(normalized)
         if (absolute != null) return absolute
 
-        // Try resolving relative to the project base path
+        // (b) Try resolving relative to the project base path
         val projectBasePath = session.project.basePath
         if (projectBasePath != null) {
-            val resolved = LocalFileSystem.getInstance().findFileByPath("$projectBasePath/$dwarfPath")
+            val resolved = LocalFileSystem.getInstance().findFileByPath("$projectBasePath/$normalized")
             if (resolved != null) return resolved
         }
 
-        // Try resolving relative to each content root
-        val fileName = dwarfPath.substringAfterLast('/')
+        // (c) Try resolving relative to each content root
         for (root in com.intellij.openapi.roots.ProjectRootManager.getInstance(session.project).contentRoots) {
-            val resolved = root.findFileByRelativePath(dwarfPath)
+            val resolved = root.findFileByRelativePath(normalized)
             if (resolved != null) return resolved
         }
 
-        // Fall back to matching by file name among the source files
-        // already known from registered breakpoints — the user placed
-        // a breakpoint on a file whose name matches the DWARF path.
+        val fileName = normalized.substringAfterLast('/')
+
+        // (d) Check already-registered breakpoint files with path-suffix match
         for (bp in cdpBreakpointToIde.values) {
             val bpFile = bp.sourcePosition?.file ?: continue
-            if (bpFile.name == fileName && bpFile.path.endsWith(dwarfPath)) {
+            if (bpFile.name == fileName && pathSuffixMatches(bpFile.path.replace('\\', '/'), normalized)) {
                 return bpFile
             }
         }
 
-        // Search content roots recursively by file name
+        // (e) Search content roots recursively, collect all name matches,
+        //     then pick the one with the longest matching path suffix.
+        val candidates = mutableListOf<VirtualFile>()
         for (root in com.intellij.openapi.roots.ProjectRootManager.getInstance(session.project).contentRoots) {
-            val found = findFileRecursively(root, fileName, dwarfPath)
-            if (found != null) return found
+            findFileRecursively(root, fileName, candidates)
         }
-
-        return null
+        return pickBestSuffixMatch(candidates, normalized)
     }
 
-    private fun findFileRecursively(dir: VirtualFile, fileName: String, dwarfPath: String): VirtualFile? {
+    /**
+     * Collects all files under [dir] whose name equals [fileName]
+     * into [results]. Used by [findSourceFileByName] to gather
+     * candidates for longest-path-suffix selection.
+     */
+    private fun findFileRecursively(dir: VirtualFile, fileName: String, results: MutableList<VirtualFile>) {
         for (child in dir.children) {
             if (child.isDirectory) {
-                val found = findFileRecursively(child, fileName, dwarfPath)
-                if (found != null) return found
-            } else if (child.name == fileName && child.path.endsWith(dwarfPath)) {
-                return child
+                findFileRecursively(child, fileName, results)
+            } else if (child.name == fileName) {
+                results.add(child)
             }
         }
-        return null
+    }
+
+    /**
+     * Returns `true` when [candidatePath] ends with [dwarfSuffix]
+     * at a path-segment boundary (i.e. the character before the
+     * suffix is a `/` or the suffix is the full path).
+     */
+    private fun pathSuffixMatches(candidatePath: String, dwarfSuffix: String): Boolean {
+        if (!candidatePath.endsWith(dwarfSuffix)) return false
+        val prefixLen = candidatePath.length - dwarfSuffix.length
+        return prefixLen == 0 || candidatePath[prefixLen - 1] == '/'
+    }
+
+    /**
+     * Picks the best candidate from [files] by finding the longest
+     * suffix of [dwarfPath] (split at `/` boundaries) that matches
+     * each candidate's normalized path. Returns the candidate with
+     * the most matching path segments, or the first file if no
+     * suffix at all matches (bare-name fallback).
+     */
+    private fun pickBestSuffixMatch(files: List<VirtualFile>, dwarfPath: String): VirtualFile? {
+        if (files.isEmpty()) return null
+        if (files.size == 1) return files[0]
+
+        val segments = dwarfPath.split('/')
+        var bestFile: VirtualFile? = null
+        var bestMatchLen = -1
+
+        for (f in files) {
+            val fPath = f.path.replace('\\', '/')
+            // Find the longest suffix of dwarfPath that matches the end of fPath
+            var matchLen = 0
+            for (startIdx in 0 until segments.size) {
+                val suffix = segments.drop(startIdx).joinToString("/")
+                if (pathSuffixMatches(fPath, suffix)) {
+                    matchLen = segments.size - startIdx
+                    break
+                }
+            }
+            if (matchLen > bestMatchLen) {
+                bestMatchLen = matchLen
+                bestFile = f
+            }
+        }
+        return bestFile ?: files[0]
     }
 
     // ---- Breakpoint management ----
@@ -882,6 +942,10 @@ internal class CdpDebugProcess(
      * same source line, multiple offsets exist — setting breakpoints
      * at all of them ensures the debugger pauses in the correct
      * function (the real function body, not just the wrapper).
+     *
+     * Passes the full VirtualFile path to the resolver so that
+     * path-suffix matching can disambiguate files with the same name
+     * in multi-crate Rust projects (e.g. several `lib.rs` files).
      */
     private suspend fun trySetBreakpointsViaDwarf(
         file: VirtualFile,
@@ -890,8 +954,8 @@ internal class CdpDebugProcess(
     ): List<Map<String, Any?>> {
         val locResolver = sourceLocationResolver ?: return emptyList()
 
-        val wasmOffsets = locResolver.sourceToAllWasmOffsets(file.name, line)
-        LOG.warn("CDP: trySetBreakpointsViaDwarf file=${file.name} line=$line offsets=$wasmOffsets condition=${condition != null}")
+        val wasmOffsets = locResolver.sourceToAllWasmOffsets(file.path, line)
+        LOG.warn("CDP: trySetBreakpointsViaDwarf file=${file.path} line=$line offsets=$wasmOffsets condition=${condition != null}")
         if (wasmOffsets.isEmpty()) return emptyList()
 
         // Find the wasm script in CDP — V8 reports wasm modules with wasm:// URLs

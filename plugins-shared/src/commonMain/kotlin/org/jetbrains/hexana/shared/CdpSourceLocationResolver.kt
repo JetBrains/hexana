@@ -33,14 +33,26 @@ class CdpSourceLocationResolver private constructor(
      * Reverse index built from CU-filtered entries only.
      * These entries use compDir for accurate file paths and produce
      * offsets that V8 reliably stops at.
+     * Keyed by normalized file name (basename).
      */
     private val cuSourceToOffsets: Map<String, List<LineOffset>> = emptyMap(),
     /**
      * Reverse index built from unfiltered line-table entries.
      * These catch functions that fall outside the CU address range
      * (e.g. `add` in wasm-bindgen binaries).
+     * Keyed by normalized file name (basename).
      */
     private val lineTableSourceToOffsets: Map<String, List<LineOffset>> = emptyMap(),
+    /**
+     * Full-path reverse index from CU-filtered entries.
+     * Keyed by the full DWARF path (compDir-joined, forward slashes).
+     */
+    private val cuPathToOffsets: Map<String, List<LineOffset>> = emptyMap(),
+    /**
+     * Full-path reverse index from unfiltered line-table entries.
+     * Keyed by the full DWARF path (compDir-joined, forward slashes).
+     */
+    private val lineTablePathToOffsets: Map<String, List<LineOffset>> = emptyMap(),
 ) {
 
     /**
@@ -50,13 +62,19 @@ class CdpSourceLocationResolver private constructor(
      */
     private val sourceToOffsets: Map<String, List<LineOffset>> = buildReverseIndex(locations)
 
+    /**
+     * All known full DWARF paths (forward-slash-normalized), from both
+     * CU-filtered and line-table entries. Used for path-suffix matching.
+     */
+    private val allDwarfPaths: Set<String> = buildAllDwarfPaths(locations)
+
     data class LineOffset(val line: Int, val offset: ULong)
 
     /**
      * Finds the Wasm byte offset for a breakpoint at the given
      * source file and line number.
      *
-     * @param fileName the source file name (can be a full path or just the file name)
+     * @param fileName source file name (can be a full path or just the file name)
      * @param line 0-based line number from the IDE breakpoint
      * @return the Wasm byte offset, or `null` if no mapping exists
      */
@@ -72,12 +90,25 @@ class CdpSourceLocationResolver private constructor(
      *
      * Setting breakpoints at all returned offsets ensures the
      * debugger pauses in the correct function.
+     *
+     * When [fileName] contains path separators, path-suffix matching
+     * is applied against known DWARF paths so that e.g.
+     * `"mycrate/src/lib.rs"` resolves to the correct CU even when
+     * another CU has a file with the same basename.
      */
     fun sourceToAllWasmOffsets(fileName: String, line: Int): List<ULong> {
-        val normalizedName = normalizeFileName(fileName)
-
         // DWARF lines are 1-based, IDE lines are 0-based
         val dwarfLine = line + 1
+
+        // If the caller supplies a path (contains a separator), try
+        // path-suffix matching first against the full-path indexes.
+        val normalizedInput = fileName.replace('\\', '/')
+        if ('/' in normalizedInput) {
+            val pathOffsets = resolveByPathSuffix(normalizedInput, dwarfLine)
+            if (pathOffsets.isNotEmpty()) return pathOffsets
+        }
+
+        val normalizedName = normalizeFileName(fileName)
 
         // Query both CU-filtered and line-table indexes independently.
         // CU-filtered entries have accurate file paths (via compDir)
@@ -94,6 +125,50 @@ class CdpSourceLocationResolver private constructor(
         )
         return (cuOffsets + ltOffsets).distinct()
     }
+
+    /**
+     * Resolves offsets using the longest-suffix match of [inputPath]
+     * against the full-path DWARF indexes. Tries progressively shorter
+     * suffixes of the normalized input path until a match is found.
+     *
+     * For example, `"my_crate/src/lib.rs"` is tried before `"src/lib.rs"`
+     * before `"lib.rs"`, preventing a bare-name collision with another
+     * crate's `lib.rs`.
+     */
+    fun resolveByPathSuffix(inputPath: String, dwarfLine: Int): List<ULong> {
+        val normalized = inputPath.replace('\\', '/')
+        // Build suffix candidates from longest to shortest by iterating
+        // the path segments. Start at index 0 (full path), then 1, etc.
+        val segments = normalized.split('/')
+        for (startIndex in 0 until segments.size) {
+            val suffix = segments.drop(startIndex).joinToString("/")
+            // Check CU index first (more reliable), then line-table
+            val cuEntry = cuPathToOffsets.entries.firstOrNull { (k, _) ->
+                k.endsWith(suffix) && (k.length == suffix.length || k[k.length - suffix.length - 1] == '/')
+            }
+            val ltEntry = lineTablePathToOffsets.entries.firstOrNull { (k, _) ->
+                k.endsWith(suffix) && (k.length == suffix.length || k[k.length - suffix.length - 1] == '/')
+            }
+            val cuOffsets = resolveOffsetsFromEntries(cuEntry?.value, dwarfLine)
+            val ltOffsets = resolveOffsetsFromEntries(ltEntry?.value, dwarfLine)
+            val merged = (cuOffsets + ltOffsets).distinct()
+            if (merged.isNotEmpty()) return merged
+        }
+        return emptyList()
+    }
+
+    /**
+     * Returns all known full DWARF paths that share the given
+     * basename. Used by callers that need to select among candidates.
+     */
+    fun dwarfPathsForBasename(basename: String): List<String> {
+        return allDwarfPaths.filter { normalizeFileName(it) == basename }
+    }
+
+    /**
+     * Returns all known full DWARF paths from the line table.
+     */
+    fun knownDwarfPaths(): Set<String> = allDwarfPaths
 
     /**
      * Resolves breakpoint offsets from a single set of entries using
@@ -182,6 +257,11 @@ class CdpSourceLocationResolver private constructor(
 
     /**
      * Resolves a Wasm byte offset to a source location.
+     *
+     * The returned [SourceLocation.file] is the full DWARF path
+     * (compDir-joined, forward-slash-normalized) as recorded in the
+     * DWARF line table. Callers that need only the basename can use
+     * [normalizeFileName] or `substringAfterLast('/')`.
      *
      * @param offset the Wasm byte offset (from CDP columnNumber in wasm scripts)
      * @return the source location, or `null` if no mapping exists
@@ -332,6 +412,8 @@ class CdpSourceLocationResolver private constructor(
                     locations, codeSectionOffset, subprograms,
                     cuSourceToOffsets = buildReverseIndex(cuLocations),
                     lineTableSourceToOffsets = buildReverseIndex(lineTableLocations),
+                    cuPathToOffsets = buildFullPathIndex(cuLocations),
+                    lineTablePathToOffsets = buildFullPathIndex(lineTableLocations),
                 )
             } catch (_: Exception) {
                 null
@@ -349,7 +431,29 @@ class CdpSourceLocationResolver private constructor(
             return result.mapValues { (_, v) -> v.sortedBy { it.line } }
         }
 
-        private fun normalizeFileName(path: String): String {
+        /**
+         * Builds a reverse index keyed by the full DWARF path
+         * (forward-slash-normalized). Used for path-suffix matching.
+         */
+        private fun buildFullPathIndex(locations: List<AddressSourceLocation>): Map<String, List<LineOffset>> {
+            val result = mutableMapOf<String, MutableList<LineOffset>>()
+            for (loc in locations) {
+                val fullPath = loc.sourceLocation.file.replace('\\', '/')
+                result.getOrPut(fullPath) { mutableListOf() }
+                    .add(LineOffset(loc.sourceLocation.line, loc.offset))
+            }
+            return result.mapValues { (_, v) -> v.sortedBy { it.line } }
+        }
+
+        /**
+         * Collects all distinct full DWARF paths from the location list
+         * (forward-slash-normalized).
+         */
+        private fun buildAllDwarfPaths(locations: List<AddressSourceLocation>): Set<String> {
+            return locations.map { it.sourceLocation.file.replace('\\', '/') }.toSet()
+        }
+
+        fun normalizeFileName(path: String): String {
             // Extract just the file name from the path for flexible matching.
             // Handle both Unix (/) and Windows (\) path separators.
             val lastSep = maxOf(path.lastIndexOf('/'), path.lastIndexOf('\\'))
