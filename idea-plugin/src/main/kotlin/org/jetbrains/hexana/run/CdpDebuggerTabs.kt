@@ -396,23 +396,28 @@ internal fun registerDebugTabsListener(
             try {
                 val rows = mutableListOf<WasmStackTableModel.Row>()
 
-                // Find the local scope
-                val localScope = physical.scopeChain.firstOrNull { it["type"] == "local" }
-                val localObjectId = (localScope?.get("object") as? Map<*, *>)?.get("objectId") as? String
-                if (localObjectId != null) {
+                // V8 exposes the operand stack as a "stack" property (className
+                // "Stack") inside a dedicated scope of type "wasm-expression-stack";
+                // older layouts put it in the "local" scope. Search both.
+                var stackObjectId: String? = null
+                for (scopeEntry in physical.scopeChain) {
+                    val scopeType = scopeEntry["type"]
+                    if (scopeType != "wasm-expression-stack" && scopeType != "local") continue
+                    val scopeObjectId = (scopeEntry["object"] as? Map<*, *>)?.get("objectId") as? String ?: continue
                     val propsResult = cdp.send("Runtime.getProperties", mapOf(
-                        "objectId" to localObjectId,
+                        "objectId" to scopeObjectId,
                         "ownProperties" to true,
                     ))
                     @Suppress("UNCHECKED_CAST")
                     val props = propsResult["result"] as? List<Map<String, Any?>> ?: emptyList()
-
-                    // Find the "stack" property with className "Stack"
                     val stackProp = props.firstOrNull { prop ->
                         prop["name"] == "stack" &&
                             (prop["value"] as? Map<*, *>)?.get("className") == "Stack"
                     }
-                    val stackObjectId = (stackProp?.get("value") as? Map<*, *>)?.get("objectId") as? String
+                    stackObjectId = (stackProp?.get("value") as? Map<*, *>)?.get("objectId") as? String
+                    if (stackObjectId != null) break
+                }
+                run {
                     if (stackObjectId != null) {
                         val stackPropsResult = cdp.send("Runtime.getProperties", mapOf(
                             "objectId" to stackObjectId,
