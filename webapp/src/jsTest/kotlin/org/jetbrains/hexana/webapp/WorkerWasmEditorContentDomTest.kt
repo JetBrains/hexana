@@ -492,6 +492,7 @@ private class WorkerDomHost : Host {
     override fun navigateToParent() = Unit
     override fun saveAs() = Unit
     override fun openZipEntry(name: String, dataOffset: Long, compressedSize: Long, uncompressedSize: Long, compressionMethod: Int) = Unit
+    override fun openTarEntry(name: String, dataOffset: Long, size: Long) = Unit
     override fun overwriteFile(bytes: ByteArray) = Unit
     override fun saveCopy(outputName: String, bytes: ByteArray) = Unit
     override fun openUrl(url: String) = Unit

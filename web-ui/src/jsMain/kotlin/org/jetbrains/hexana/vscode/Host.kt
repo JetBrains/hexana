@@ -32,6 +32,7 @@ interface Host {
         uncompressedSize: Long,
         compressionMethod: Int,
     )
+    fun openTarEntry(name: String, dataOffset: Long, size: Long)
     fun overwriteFile(bytes: ByteArray)
     fun saveCopy(outputName: String, bytes: ByteArray)
     fun openUrl(url: String)

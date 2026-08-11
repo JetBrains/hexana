@@ -121,6 +121,10 @@ internal class BrowserHost(
         // v1 no-op: opening ZIP entries requires native decompression or extension-host help.
     }
 
+    override fun openTarEntry(name: String, dataOffset: Long, size: Long) {
+        // v1 no-op: opening TAR entries requires native decompression or extension-host help.
+    }
+
     override fun overwriteFile(bytes: ByteArray) {
         // No FS write access in the browser — fall back to a download under the same name.
         downloadBytes(bytes, currentFileName().substringAfterLast('/').substringAfterLast('\\'))

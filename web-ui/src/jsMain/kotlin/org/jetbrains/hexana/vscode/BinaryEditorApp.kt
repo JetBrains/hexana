@@ -120,6 +120,7 @@ fun BinaryEditorContent(
     workerNativeImageToolbarPresentation: WorkerNativeImageToolbarPresentation? = null,
     workerSizeTooltip: List<Pair<String, String>>? = null,
     scriptExecution: ScriptExecution? = null,
+    isDecompressed: Boolean = false,
 ) {
     val selection = remember { HexSelectionState() }
     val buffer = remember(provider) { provider.bytes }
@@ -184,6 +185,7 @@ fun BinaryEditorContent(
             workerWasmToolbarPresentation = workerWasmToolbarPresentation,
             workerNativeImageToolbarPresentation = workerNativeImageToolbarPresentation,
             workerSizeTooltip = workerSizeTooltip,
+            isDecompressed = isDecompressed,
         )
         Div({
             style {

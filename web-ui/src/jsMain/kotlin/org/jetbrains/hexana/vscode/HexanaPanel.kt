@@ -722,7 +722,7 @@ private fun enrichTarEntriesTab(
     contextMenuItems = tab.contextMenuItems,
     rowClickAction = { index ->
         val entry = entries[index]
-        postOpenTarEntryToHost(
+        host.openTarEntry(
             name = entry.name,
             dataOffset = entry.dataOffset,
             size = entry.size,

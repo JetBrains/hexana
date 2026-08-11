@@ -3,6 +3,7 @@ package org.jetbrains.hexana.vscode
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import kotlinx.browser.window
+import org.jetbrains.compose.web.css.selectors.CSSSelector.PseudoClass.host
 import org.jetbrains.hexana.shared.WasmImportStubGenerator
 import org.jetbrains.hexana.shared.componentImportNames
 import org.jetbrains.hexana.shared.isRuntimeImport
@@ -394,6 +395,7 @@ class VscodeHost : Host {
     override fun openZipEntry(
         name: String, dataOffset: Long, compressedSize: Long, uncompressedSize: Long, compressionMethod: Int,
     ) = postOpenZipEntryToHost(name, dataOffset, compressedSize, uncompressedSize, compressionMethod)
+    override fun openTarEntry(name: String, dataOffset: Long, size: Long) = postOpenTarEntryToHost(name, dataOffset, size)
     override fun overwriteFile(bytes: ByteArray) = postOverwriteFileToHost(bytes)
     override fun saveCopy(outputName: String, bytes: ByteArray) = postSaveCopyToHost(outputName, bytes)
     override fun openUrl(url: String) = postOpenUrlToHost(url)
