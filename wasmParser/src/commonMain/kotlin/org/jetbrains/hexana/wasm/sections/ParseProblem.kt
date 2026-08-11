@@ -36,4 +36,8 @@ enum class ParseProblemKind {
     UNKNOWN_TYPE_BYTE,
     /** An init-expression (global/element/data) could not be parsed. */
     INIT_EXPR_PARSE_FAILURE,
+    /** A component core-instance entry starts with a tag byte other than 0x00/0x01. */
+    UNKNOWN_CORE_INSTANCE_TAG,
+    /** A component core-instance entry failed to decode; the section remainder is skipped. */
+    CORE_INSTANCE_ENTRY_CORRUPT,
 }

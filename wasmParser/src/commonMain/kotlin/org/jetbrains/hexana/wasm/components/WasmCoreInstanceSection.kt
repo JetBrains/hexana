@@ -20,8 +20,21 @@ class WasmCoreInstanceSection(sectionSize: Int, sectionOffset: Int, contentSize:
     fun CommonByteBuffer.parseCoreInstances(): List<InstanceCoreExpression> {
         position(contentOffset)
         val instances = mutableListOf<InstanceCoreExpression>()
-        consumeArray {
-            instances.add(componentCoreInstance())
+        var entryOffset = contentOffset
+        try {
+            consumeArray {
+                entryOffset = position()
+                instances.add(componentCoreInstance())
+            }
+        } catch (e: Exception) {
+            // A misencoded entry poisons the rest of the section (entry sizes are
+            // not self-delimiting): record the remainder as one corrupt region.
+            val end = contentOffset + contentSize
+            instances.add(CorruptInstanceCoreExpression(
+                offset = entryOffset,
+                size = (end - entryOffset).coerceAtLeast(1),
+                message = e.message ?: "core-instance entry could not be decoded",
+            ))
         }
         return instances
     }
@@ -48,6 +61,20 @@ class ModuleInstanceCoreExpression(
 
 class InlineInstanceCoreExpression(val e: List<InlineInstanceCoreInlineExpression>): InstanceCoreExpression()
 
+/**
+ * A core-instance entry whose leading tag byte is not a known encoding
+ * (the spec defines only 0x00 instantiate and 0x01 inline exports).
+ * Only the tag byte is consumed; [offset] is its absolute position.
+ */
+class UnknownInstanceCoreExpression(val tag: Byte, val offset: Int): InstanceCoreExpression()
+
+/**
+ * Remainder of a core-instance section that failed to decode. Covers the
+ * region from the start of the failing entry ([offset], [size] bytes) to the
+ * section end; [message] carries the decode failure.
+ */
+class CorruptInstanceCoreExpression(val offset: Int, val size: Int, val message: String): InstanceCoreExpression()
+
 sealed class InlineInstanceCoreInlineExpression
 class FuncInlineCoreExpression(val name: String, val index: UInt): InlineInstanceCoreInlineExpression()
 class TableInlineCoreExpression(val name: String, val index: UInt): InlineInstanceCoreInlineExpression()
@@ -62,50 +89,55 @@ data class ComponentInstantiateArg(val name: String, val sortIndex: ComponentSor
 
 object ComponentCoreInstance {
 
-    fun CommonByteBuffer.componentCoreInstance(): InstanceCoreExpression = when (get()) {
-        0.toByte() -> {
-            ModuleInstanceCoreExpression(uint32(), consumeInstantiateArgs())
-        }
+    fun CommonByteBuffer.componentCoreInstance(): InstanceCoreExpression {
+        val tagOffset = position()
+        return when (val tag = get()) {
+            0.toByte() -> {
+                ModuleInstanceCoreExpression(uint32(), consumeInstantiateArgs())
+            }
 
-        1.toByte() -> {
-            val args = mutableListOf<InlineInstanceCoreInlineExpression>()
-            consumeArray {
-                val (name, sort) = instanceCoreInlineExport()
-                when (sort.sort) {
-                    ComponentCoreSort.Func -> {
-                        args.add(FuncInlineCoreExpression(name, sort.index))
-                    }
+            1.toByte() -> {
+                val args = mutableListOf<InlineInstanceCoreInlineExpression>()
+                consumeArray {
+                    val (name, sort) = instanceCoreInlineExport()
+                    when (sort.sort) {
+                        ComponentCoreSort.Func -> {
+                            args.add(FuncInlineCoreExpression(name, sort.index))
+                        }
 
-                    ComponentCoreSort.Table -> {
-                        args.add(TableInlineCoreExpression(name, sort.index))
-                    }
+                        ComponentCoreSort.Table -> {
+                            args.add(TableInlineCoreExpression(name, sort.index))
+                        }
 
-                    ComponentCoreSort.Memory-> {
-                        args.add(MemoryInlineCoreExpression(name, sort.index))
-                    }
+                        ComponentCoreSort.Memory -> {
+                            args.add(MemoryInlineCoreExpression(name, sort.index))
+                        }
 
-                    ComponentCoreSort.Global -> {
-                        args.add(GlobalInlineCoreExpression(name, sort.index))
-                    }
+                        ComponentCoreSort.Global -> {
+                            args.add(GlobalInlineCoreExpression(name, sort.index))
+                        }
 
-                    ComponentCoreSort.Type -> {
-                        args.add(TypeInlineCoreExpression(name, sort.index))
-                    }
+                        ComponentCoreSort.Type -> {
+                            args.add(TypeInlineCoreExpression(name, sort.index))
+                        }
 
-                    ComponentCoreSort.Module -> {
-                        args.add(ModuleInlineCoreExpression(name, sort.index))
-                    }
+                        ComponentCoreSort.Module -> {
+                            args.add(ModuleInlineCoreExpression(name, sort.index))
+                        }
 
-                    ComponentCoreSort.Instance -> {
-                        args.add(InstanceInlineCoreExpression(name, sort.index))
+                        ComponentCoreSort.Instance -> {
+                            args.add(InstanceInlineCoreExpression(name, sort.index))
+                        }
                     }
                 }
+                InlineInstanceCoreExpression(args)
             }
-            InlineInstanceCoreExpression(args)
-        }
 
-        else -> {
-            TODO()
+            else -> {
+                // Unknown encoding: consume only the tag byte and let the provider
+                // surface it as a parse problem instead of failing the whole section.
+                UnknownInstanceCoreExpression(tag, tagOffset)
+            }
         }
     }
 

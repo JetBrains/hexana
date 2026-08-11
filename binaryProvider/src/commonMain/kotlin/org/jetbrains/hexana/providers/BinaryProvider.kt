@@ -773,6 +773,39 @@ open class WasmComponentBinaryProvider(private val sharedBytes: CommonByteBuffer
         }
     }
 
+    /**
+     * Parse problems found in this component: core-instance entries whose tag
+     * byte is not a known encoding, and section remainders that failed to
+     * decode. Derived from [coreInstances] without an extra parse pass.
+     */
+    val parseProblems: List<ParseProblem> by lazy {
+        coreInstances.mapNotNull { instance ->
+            when (instance) {
+                is UnknownInstanceCoreExpression -> ParseProblem(
+                    kind = ParseProblemKind.UNKNOWN_CORE_INSTANCE_TAG,
+                    sectionId = WasmCoreInstanceSection.SECTION_ID.toInt(),
+                    sectionName = "Instance",
+                    funcIdx = null,
+                    typeIdx = null,
+                    byteOffset = instance.offset,
+                    byteSize = 1,
+                    message = "unknown core-instance tag 0x${instance.tag.toHexString()}",
+                )
+                is CorruptInstanceCoreExpression -> ParseProblem(
+                    kind = ParseProblemKind.CORE_INSTANCE_ENTRY_CORRUPT,
+                    sectionId = WasmCoreInstanceSection.SECTION_ID.toInt(),
+                    sectionName = "Instance",
+                    funcIdx = null,
+                    typeIdx = null,
+                    byteOffset = instance.offset,
+                    byteSize = instance.size,
+                    message = instance.message,
+                )
+                else -> null
+            }
+        }
+    }
+
     val nestedComponents: List<NestedComponentData> by lazy {
         val componentSection = wasmModule?.componentSection ?: return@lazy emptyList()
         // Single duplicate for the whole sequence: parseNestedComponent + position + get

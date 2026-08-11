@@ -64,6 +64,7 @@ import org.jetbrains.hexana.wasm.components.ComponentValueType
 import org.jetbrains.hexana.wasm.components.ComponentVariantType
 import org.jetbrains.hexana.wasm.components.ComponentVoidType
 import org.jetbrains.hexana.wasm.components.CoreInstanceInlineExport
+import org.jetbrains.hexana.wasm.components.CorruptInstanceCoreExpression
 import org.jetbrains.hexana.wasm.components.ExportDeclaration
 import org.jetbrains.hexana.wasm.components.FuncInlineCoreExpression
 import org.jetbrains.hexana.wasm.components.FuncInstanceInlineExport
@@ -86,6 +87,7 @@ import org.jetbrains.hexana.wasm.components.TypeBoundSubResource
 import org.jetbrains.hexana.wasm.components.TypeBoundType
 import org.jetbrains.hexana.wasm.components.TypeInlineCoreExpression
 import org.jetbrains.hexana.wasm.components.TypeInstanceInlineExport
+import org.jetbrains.hexana.wasm.components.UnknownInstanceCoreExpression
 import org.jetbrains.hexana.wasm.components.ValueBoundType
 import org.jetbrains.hexana.wasm.components.ValueBoundValue
 import org.jetbrains.hexana.wasm.components.ValueInstanceInlineExport
@@ -282,6 +284,8 @@ fun instanceCoreExpressionWat(expression: InstanceCoreExpression): String = when
             expression.instantiateArgs.joinToString("") { " (with \"${it.name}\" (instance ${it.instanceIndex}))" }
         })"
     is InlineInstanceCoreExpression -> "(core instance ${expression.e.joinBounded(::coreInlineExportWat)})"
+    is UnknownInstanceCoreExpression -> "(; unknown core-instance tag 0x${expression.tag.toHexString()} ;)"
+    is CorruptInstanceCoreExpression -> "(; corrupt core-instance entry: ${expression.message} ;)"
 }
 
 private fun coreInlineExportWat(export: InlineInstanceCoreInlineExpression): String = when (export) {

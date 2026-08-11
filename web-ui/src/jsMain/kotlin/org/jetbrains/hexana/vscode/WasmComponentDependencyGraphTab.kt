@@ -113,6 +113,12 @@ private fun buildDependencyGraph(provider: WasmComponentBinaryProvider): Depende
             is InlineInstanceCoreExpression -> {
                 nodes[id] = GraphNode(id, NodeKind.CORE_INSTANCE, "core instance $i", "inline exports")
             }
+            is UnknownInstanceCoreExpression -> {
+                nodes[id] = GraphNode(id, NodeKind.CORE_INSTANCE, "core instance $i", "unknown encoding")
+            }
+            is CorruptInstanceCoreExpression -> {
+                nodes[id] = GraphNode(id, NodeKind.CORE_INSTANCE, "core instance $i", "corrupt entry")
+            }
         }
     }
 

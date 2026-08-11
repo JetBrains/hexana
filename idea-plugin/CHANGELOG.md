@@ -20,6 +20,7 @@
 ### Removed
 
 ### Fixed
+- Opening the **Dependencies** tab of a Component Model binary crashed with `NotImplementedError` when the core-instance section contained an entry the parser cannot decode. Such entries are now recorded as parse problems instead: an unknown instance-encoding tag consumes only the tag byte, and a decode failure mid-entry skips the section remainder as one corrupt region. Both show up in the **Problems** tab, which now also covers component binaries, with kind, byte offset, size and message; clicking a row selects the bytes in the hex view. The dependency graph and the component WAT text label the affected instances explicitly instead of failing.
 - Navigating to a function in the **WAT (virtualized)** tab (from the Problems tab, go-to-function or search) landed on the wrong function in modules whose type section contains collapsed `(rec …)` groups: every collapsed group member before the target shifted the scroll one row further (clicking func 25 landed on func 83 in a 216-type WasmGC module). The scroll index now accounts for group-collapsed rows.
 - The WAT view's hex byte column garbled every line after an unparsed opcode region: the renderer advanced one byte instead of the region's full size.
 - Debugger pauses and breakpoints could open the wrong file in projects where several crates share source file names (`lib.rs`, `mod.rs`): DWARF paths were matched by base name only. Both the display and the breakpoint direction now prefer the longest matching path suffix.

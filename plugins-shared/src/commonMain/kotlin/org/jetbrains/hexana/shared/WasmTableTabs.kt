@@ -6,6 +6,7 @@ import org.jetbrains.hexana.wasm.analysis.MonosResult
 import org.jetbrains.hexana.wasm.analysis.exceptions.ThrowingFunction
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageReason
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageResult
+import org.jetbrains.hexana.wasm.sections.ParseProblem
 import org.jetbrains.hexana.wasm.sections.ParseProblemKind
 
 /**
@@ -331,7 +332,11 @@ private fun customTab(provider: WasmBinaryProvider): TableTabDescriptor? {
 private fun problemsTab(provider: WasmBinaryProvider): TableTabDescriptor? {
     // parseProblems is lazy — this forces it. The work is bounded (capped at 1000)
     // and runs on a background thread (singleTab is always called off-EDT).
-    val problems = provider.parseProblems
+    return problemsTabDescriptor(provider.parseProblems)
+}
+
+/** Problems tab shared by core-module and component providers. */
+internal fun problemsTabDescriptor(problems: List<ParseProblem>): TableTabDescriptor? {
     if (problems.isEmpty()) return null
 
     return TableTabDescriptor(
@@ -378,6 +383,8 @@ private fun ParseProblemKind.label(): String = when (this) {
     ParseProblemKind.CODE_ENTRY_CORRUPT -> "Code entry corrupt"
     ParseProblemKind.UNKNOWN_TYPE_BYTE -> "Unknown type byte"
     ParseProblemKind.INIT_EXPR_PARSE_FAILURE -> "Init expr failure"
+    ParseProblemKind.UNKNOWN_CORE_INSTANCE_TAG -> "Unknown instance tag"
+    ParseProblemKind.CORE_INSTANCE_ENTRY_CORRUPT -> "Instance entry corrupt"
 }
 
 /**

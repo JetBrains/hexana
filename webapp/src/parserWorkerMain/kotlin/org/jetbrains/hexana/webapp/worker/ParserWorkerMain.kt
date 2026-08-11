@@ -45,7 +45,9 @@ import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.components.ComponentInstanceExpression
 import org.jetbrains.hexana.wasm.components.InlineInstanceCoreExpression
 import org.jetbrains.hexana.wasm.components.InlineInstanceExpression
+import org.jetbrains.hexana.wasm.components.CorruptInstanceCoreExpression
 import org.jetbrains.hexana.wasm.components.ModuleInstanceCoreExpression
+import org.jetbrains.hexana.wasm.components.UnknownInstanceCoreExpression
 import org.jetbrains.hexana.webapp.ParserWorkerComponentGraph
 import org.jetbrains.hexana.webapp.ParserWorkerComponentGraphEdge
 import org.jetbrains.hexana.webapp.ParserWorkerComponentGraphNode
@@ -1153,6 +1155,10 @@ private fun componentGraph(provider: WasmComponentBinaryProvider): ParserWorkerC
                 }
             }
             is InlineInstanceCoreExpression -> nodes += ParserWorkerComponentGraphNode(id, "core_instance", "core instance $index", "inline exports")
+            is UnknownInstanceCoreExpression ->
+                nodes += ParserWorkerComponentGraphNode(id, "core_instance", "core instance $index", "unknown encoding")
+            is CorruptInstanceCoreExpression ->
+                nodes += ParserWorkerComponentGraphNode(id, "core_instance", "core instance $index", "corrupt entry")
         }
     }
     provider.instances.forEachIndexed { index, instance ->

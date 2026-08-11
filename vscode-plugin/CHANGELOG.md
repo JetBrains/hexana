@@ -1,5 +1,6 @@
 # Unreleased
 - "Problems" tab for WASM binaries listing regions the parser could not decode (unknown opcodes, unsupported proposal constructs) with location, offset and message; clicking a row jumps to the function in the WAT tab, rows without a function select the bytes in the hex view
+- "Problems" tab for WASM Component binaries: core-instance entries the parser cannot decode (unknown encoding tag, corrupt entry) are listed with offset and message instead of breaking the component dependency graph, which now labels the affected instances
 - parsing support for the custom-descriptors proposal type encodings (exact reference types, descriptor/describes clauses); WasmGC modules using them previously failed to parse
 - function bodies with a single undecodable instruction now keep everything decoded up to that point instead of turning into one unparsed blob
 - basic support for pcap/pcapng files – viewing packets, opening http response body in a new tab
