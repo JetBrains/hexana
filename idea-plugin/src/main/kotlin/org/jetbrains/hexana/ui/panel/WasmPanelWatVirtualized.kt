@@ -172,7 +172,13 @@ internal fun WasmPanelWatVirtualized(
     var panelState by remember { mutableStateOf<PanelState?>(null) }
     androidx.compose.runtime.LaunchedEffect(provider) {
         panelState = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            buildPanelState(provider)
+            try {
+                buildPanelState(provider)
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (_: Exception) {
+                null
+            }
         }
     }
     val ready = panelState

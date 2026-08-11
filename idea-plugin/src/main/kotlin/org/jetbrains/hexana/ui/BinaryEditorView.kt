@@ -339,26 +339,35 @@ internal fun BinaryEditorView(
                         val (ordinaryNames, groupedNames) = availableNames
                         val tabJobs = ordinaryNames.map { tabName ->
                             launch {
-                                // Cheap discovery is optimistic: a tab it advertised can
-                                // resolve to nothing (e.g. Monos with no groups). Remove
-                                // the placeholder then, or its spinner never ends.
-                                val tab = p.singleTab(tabName, binaryProvider, tableTabsContext)
-                                val enriched = tab?.let { enricher(listOf(it), state, pathsNav).firstOrNull() }
-                                if (enriched == null) {
+                                try {
+                                    // Cheap discovery is optimistic: a tab it advertised can
+                                    // resolve to nothing (e.g. Monos with no groups). Remove
+                                    // the placeholder then, or its spinner never ends.
+                                    val tab = p.singleTab(tabName, binaryProvider, tableTabsContext)
+                                    val enriched = tab?.let { enricher(listOf(it), state, pathsNav).firstOrNull() }
+                                    if (enriched == null) {
+                                        withContext(Dispatchers.Main) {
+                                            replacePlaceholder(panels, tabName, panel = null)
+                                        }
+                                        return@launch
+                                    }
+                                    val panel = binaryProvider.resolveOrdinaryTabPanel(
+                                        tab = enriched,
+                                        state = state,
+                                        archiveName = fileName,
+                                        onOpenZipEntry = onOpenZipEntry,
+                                        onOpenTarEntry = onOpenTarEntry,
+                                    )
+                                    withContext(Dispatchers.Main) {
+                                        replacePlaceholders(panels, listOf(panel))
+                                    }
+                                } catch (c: kotlinx.coroutines.CancellationException) {
+                                    throw c
+                                } catch (t: Throwable) {
+                                    HexanaLog.LOG.warn("Failed to resolve tab '$tabName'", t)
                                     withContext(Dispatchers.Main) {
                                         replacePlaceholder(panels, tabName, panel = null)
                                     }
-                                    return@launch
-                                }
-                                val panel = binaryProvider.resolveOrdinaryTabPanel(
-                                    tab = enriched,
-                                    state = state,
-                                    archiveName = fileName,
-                                    onOpenZipEntry = onOpenZipEntry,
-                                    onOpenTarEntry = onOpenTarEntry,
-                                )
-                                withContext(Dispatchers.Main) {
-                                    replacePlaceholders(panels, listOf(panel))
                                 }
                             }
                         }
@@ -377,14 +386,23 @@ internal fun BinaryEditorView(
                         }
                         val groupedJobs = grouped.map { g ->
                             launch {
-                                val panel = binaryProvider.resolveGroupedTabPanel(
-                                    g = g, state = state, pathsNav = pathsNav,
-                                )
-                                // Match by the group name, not the panel name: a single-subtab
-                                // group is promoted to a "Group: Sub" panel name that would
-                                // never match its "Group" placeholder.
-                                withContext(Dispatchers.Main) {
-                                    replacePlaceholder(panels, g.name, panel)
+                                try {
+                                    val panel = binaryProvider.resolveGroupedTabPanel(
+                                        g = g, state = state, pathsNav = pathsNav,
+                                    )
+                                    // Match by the group name, not the panel name: a single-subtab
+                                    // group is promoted to a "Group: Sub" panel name that would
+                                    // never match its "Group" placeholder.
+                                    withContext(Dispatchers.Main) {
+                                        replacePlaceholder(panels, g.name, panel)
+                                    }
+                                } catch (c: kotlinx.coroutines.CancellationException) {
+                                    throw c
+                                } catch (t: Throwable) {
+                                    HexanaLog.LOG.warn("Failed to resolve grouped tab '${g.name}'", t)
+                                    withContext(Dispatchers.Main) {
+                                        replacePlaceholder(panels, g.name, panel = null)
+                                    }
                                 }
                             }
                         }

@@ -974,18 +974,20 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
         val functionSection = wasmModule.functionSection ?: return@lazy emptyList()
         val typesSection = wasmModule.typesSection ?: return@lazy emptyList()
 
-        val funs = with(functionSection) {
-             bytes.parseFunctions()
+        try {
+            val funs = with(functionSection) {
+                 bytes.parseFunctions()
+            }
+
+            val types = with(typesSection) {
+                bytes.parseTypes()
+            }
+
+            // TODO: Investigate when this can be a case and how this is better to be approached
+            funs.mapNotNull { types.getOrNull(it) }
+        } catch (_: Exception) {
+            emptyList()
         }
-
-        val types = with(typesSection) {
-            bytes.parseTypes()
-        }
-
-        // TODO: Investigate when this can be a case and how this is better to be approached
-        val signatures = funs.mapNotNull { types.getOrNull(it) }
-
-        signatures
     }
 
     override val sizeAnalysis: SizeNode.Module? by lazy {
@@ -1009,7 +1011,11 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
     }
 
     val callGraphResult: CallGraphResult? by lazy {
-        wasmModule?.let { CallGraphBuilder(bytes, it).build() }
+        try {
+            wasmModule?.let { CallGraphBuilder(bytes, it).build() }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     val callGraphDominators: DominatorResult? by lazy {
@@ -1022,7 +1028,11 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
      * sections, no code decoding) but still built off the EDT by UI callers.
      */
     val dispatchCandidates: DispatchCandidates? by lazy {
-        wasmModule?.let { DispatchCandidatesBuilder(bytes, it).build() }
+        try {
+            wasmModule?.let { DispatchCandidatesBuilder(bytes, it).build() }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     /**
