@@ -1474,6 +1474,14 @@ internal class CdpStackFrame(
         scope.launch {
             try {
                 val list = XValueChildrenList()
+                // Names of variables whose DWARF location is linear memory (fbreg or
+                // absolute address). Their values come from the memory-read path; the
+                // positional wasm-local name fallback must NOT claim these names — at
+                // -O0 it would label the shadow stack pointer with a variable name.
+                val memoryVariableNames = sourceLocationResolver
+                    ?.memoryVariablesAt(columnNumber.toULong())
+                    ?.mapTo(mutableSetOf()) { it.name }
+                    ?: emptySet<String>()
                 // Collect wasm local values for frame-base resolution (keyed by $varN index).
                 // Maps V8 local index -> numeric value (used to resolve the shadow stack pointer).
                 val wasmLocalValues = mutableMapOf<Long, Long>()
@@ -1539,6 +1547,14 @@ internal class CdpStackFrame(
                             continue
                         }
                         if (localToName.isNotEmpty() && displayName == name) {
+                            localIndex++
+                            continue
+                        }
+                        // 3. The DWARF name belongs to a linear-memory variable: the
+                        //    positional fallback mislabeled this wasm local (at -O0 it
+                        //    is typically the shadow stack pointer or a scratch slot).
+                        //    The memory-read path below renders the real value.
+                        if (displayName != name && displayName in memoryVariableNames) {
                             localIndex++
                             continue
                         }

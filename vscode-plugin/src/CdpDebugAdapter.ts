@@ -1513,6 +1513,15 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                             objectId: scope.object.objectId,
                             ownProperties: true,
                         });
+                        // Names of DWARF linear-memory variables at this offset: the
+                        // positional wasm-local name fallback must not claim them (at
+                        // -O0 it would label the shadow stack pointer with a variable
+                        // name); the memory-read path renders their real values.
+                        const memWasmOffset = (frame.location?.columnNumber as number) || 0;
+                        const memNames = new Set<string>(
+                            (this.sourceLocationResolver?.memoryVariablesAt(memWasmOffset) ?? [])
+                                .map((v: any) => String(v.name)),
+                        );
                         const wasmLocalValues = new Map<number, number>();
                         let localIndex = 0;
                         for (const prop of (result.result || [])) {
@@ -1544,6 +1553,12 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                                 continue;
                             }
                             if (localToName.size > 0 && displayName === rawName) {
+                                localIndex++;
+                                continue;
+                            }
+                            // The DWARF name belongs to a linear-memory variable: the
+                            // positional fallback mislabeled this wasm local.
+                            if (displayName !== rawName && memNames.has(displayName)) {
                                 localIndex++;
                                 continue;
                             }
