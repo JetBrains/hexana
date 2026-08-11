@@ -68,6 +68,12 @@ class WasmParser {
             }
             sections.add(wasmSection)
             val nextIndex = wasmSection.sectionOffset + wasmSection.sectionSize
+            // A malformed section header (e.g. an overlong LEB128 that decodes to a
+            // negative size) can make nextIndex fail to advance past this section's
+            // own start. Stop scanning rather than re-reading the same bytes forever;
+            // sections already parsed are preserved, same as the buffer-exhausted break below.
+            if (nextIndex <= wasmSection.sectionOffset)
+                break
             if (nextIndex >= buffer.limit())
                 break
             buffer.position(nextIndex)

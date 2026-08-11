@@ -315,9 +315,16 @@ private val parseOpCodesDeep = DeepRecursiveFunction<OpCodeParseState, List<OpCo
                 0x03u -> Flow.Loop(buffer.blockType(), callRecursive(state), offset)
                 0x04u -> Flow.If(buffer.blockType(), callRecursive(state), offset)
                 0x05u -> {
+                    val elsePosition = buffer.position()
                     val body = callRecursive(state)
-                    // If and Else sections share terminal OpCode - that said, we just (sort of) give it back to parent If declaration
-                    buffer.position(buffer.position() - 1)
+                    // If and Else sections share terminal OpCode - that said, we just (sort of) give it back to parent If declaration.
+                    // Only give the byte back when the nested body actually advanced past it (i.e. it consumed the
+                    // shared terminator). If the input was truncated right after `else` with no terminator to find,
+                    // callRecursive returns immediately without consuming anything; rewinding in that case would
+                    // land back on this same `else` byte and re-read it forever.
+                    if (buffer.position() > elsePosition) {
+                        buffer.position(buffer.position() - 1)
+                    }
                     Flow.Else(body, offset)
                 }
                 LegacyEH.Try.code.toUInt() -> LegacyEH.Try(buffer.blockType(), callRecursive(state), offset)
