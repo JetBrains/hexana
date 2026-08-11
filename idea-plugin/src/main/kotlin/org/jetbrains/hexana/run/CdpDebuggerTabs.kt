@@ -15,10 +15,10 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
-import org.jetbrains.hexana.wasm.opcodes.MemArg
+import org.jetbrains.hexana.providers.format.watFor
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodeWithOffset
-import org.jetbrains.hexana.wasm.opcodes.OpCodeWithValue
+import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.CodeEntryOffset
 import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
 import org.jetbrains.hexana.wasm.sections.WasmSectionCode
@@ -300,63 +300,42 @@ internal class WasmDisassemblySource(wasmFilePath: String?) {
         return try {
             val buf = bytes.toCommonByteBuffer()
             val record = buf.parseCodeEntry(entry.offset)
-            // Emit one row per instruction, in parse order. Opcodes with immediates
-            // carry their real byte offset; singleton zero-operand opcodes (I32.Add,
-            // Drop, Return, …) are shared object instances whose inherited offset
-            // defaults to 0 and means nothing — show them with a blank offset cell
-            // rather than dropping them from the listing.
-            record.opCodes.map { opCode ->
-                val offset = (opCode as? OpCodeWithOffset)?.offset?.takeIf { it > 0 } ?: -1
-                WasmDisassemblyTableModel.Row(offset, opcodeText(opCode))
-            }
+            val rows = mutableListOf<WasmDisassemblyTableModel.Row>()
+            appendRows(record.opCodes, 0, rows)
+            rows
         } catch (e: Exception) {
             LOG.debug("WasmDisassemblySource: failed to parse func localIdx=$localIdx", e)
             emptyList()
         }
     }
 
-    /** Converts an [OpCode] to a readable WAT-style string. */
-    private fun opcodeText(opCode: OpCode): String {
-        return when (opCode) {
-            is UnparsedOpCode -> "<unparsed: ${opCode.e.message}>"
-            else -> {
-                // Use the Kotlin class simple name; it matches the WAT mnemonic closely
-                // (e.g. "I32.Add" -> "i32.add", "F64.Load" -> "f64.load").
-                val rawName = opCode::class.simpleName ?: opCode::class.qualifiedName ?: "unknown"
-                // Prepend the enclosing object name for nested types (e.g. I32.Add)
-                val qualified = opCode::class.qualifiedName ?: rawName
-                // Extract last two segments (e.g. "I32.Add" from "...opcodes.numeric.I32.Add")
-                val segments = qualified.split(".")
-                val displayName = if (segments.size >= 2) {
-                    val last = segments[segments.size - 1]
-                    val secondLast = segments[segments.size - 2]
-                    // Join if secondLast looks like a type prefix. Nesting objects are
-                    // mixed-case in the opcode tree (I32 under numeric, i32 under Memory).
-                    if (secondLast.matches(Regex("(?i)[ifv](8|16|32|64|128)(x[0-9]+)?|[A-Z][0-9A-Za-z]+"))) {
-                        "${secondLast.lowercase()}.${camelToSnake(last)}"
-                    } else {
-                        camelToSnake(last)
-                    }
-                } else camelToSnake(rawName)
-                // Append immediates
-                val immediates = immediatesText(opCode)
-                if (immediates.isNotEmpty()) "$displayName $immediates" else displayName
+    /**
+     * Emits one row per instruction using the same [watFor] mnemonic renderer as
+     * the virtualized WAT view, recursing into block bodies (the parser nests
+     * them inside Block/Loop/If/Else and TryTable rather than keeping the list
+     * flat) with two-space indentation and a synthetic `end` row per block.
+     *
+     * Opcodes with immediates carry their real byte offset; singleton
+     * zero-operand opcodes are shared object instances whose inherited offset
+     * defaults to 0 and means nothing — they get a blank offset cell.
+     */
+    private fun appendRows(ops: List<OpCode>, depth: Int, rows: MutableList<WasmDisassemblyTableModel.Row>) {
+        val indent = "  ".repeat(depth)
+        for (op in ops) {
+            val offset = (op as? OpCodeWithOffset)?.offset?.takeIf { it > 0 } ?: -1
+            val text = if (op is UnparsedOpCode) "<unparsed: ${op.e.message}>" else watFor(op)
+            rows.add(WasmDisassemblyTableModel.Row(offset, indent + text))
+            when (op) {
+                is OpCodes.Flow.Block -> { // also Loop, If, Else (subclasses)
+                    appendRows(op.value, depth + 1, rows)
+                    rows.add(WasmDisassemblyTableModel.Row(-1, indent + "end"))
+                }
+                is OpCodes.Flow.TryTable -> {
+                    appendRows(op.code, depth + 1, rows)
+                    rows.add(WasmDisassemblyTableModel.Row(-1, indent + "end"))
+                }
+                else -> {}
             }
-        }
-    }
-
-    private fun camelToSnake(name: String): String =
-        name.replace(Regex("([A-Z])"), "_$1").trimStart('_').lowercase()
-            .replace("__", "_")
-
-    @Suppress("UNCHECKED_CAST")
-    private fun immediatesText(opCode: OpCode): String {
-        val withVal = opCode as? OpCodeWithValue<*> ?: return ""
-        return when (val value = withVal.value) {
-            // Zero-operand singletons carry Unit as a placeholder payload.
-            is Unit -> ""
-            is MemArg -> "offset=${value.offset} align=${value.align}"
-            else -> value.toString()
         }
     }
 }

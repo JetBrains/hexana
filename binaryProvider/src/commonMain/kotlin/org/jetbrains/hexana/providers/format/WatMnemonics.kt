@@ -24,7 +24,7 @@ import org.jetbrains.hexana.wasm.opcodes.numeric.I64
  * Resolves a symbolic name for a function index, for symbolic operand rendering.
  * Returns null to fall back to the numeric index.
  */
-internal fun interface WatSymbolNames {
+fun interface WatSymbolNames {
     fun function(funcIdx: Int): String?
 }
 
@@ -32,7 +32,7 @@ private fun callOperand(funcIdx: UInt, symbols: WatSymbolNames?): String =
     symbols?.function(funcIdx.toInt())?.let { "\$$it" } ?: funcIdx.toString()
 
 @Suppress("CyclomaticComplexMethod", "LongMethod")
-internal fun watFor(op: OpCode, symbols: WatSymbolNames? = null): String {
+fun watFor(op: OpCode, symbols: WatSymbolNames? = null): String {
     return when (op) {
         // -- Parametric -----------------------------------------------------
         is OpCodes.ParametricInstructions.Unreachable -> "unreachable"
