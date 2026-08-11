@@ -86,11 +86,11 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 
 ## Repo-Wide Baseline
 
-- JDK: 21.
+- Build JDK: 25 for `idea-plugin`; emitted plugin bytecode remains Java 21 compatible.
 - Build tool: Gradle wrapper (`./gradlew`).
-- Kotlin: 2.2.21.
-- IntelliJ Platform Gradle Plugin: 2.10.5.
-- Main plugin target: IntelliJ IDEA `2025.3`.
+- Kotlin: 2.4.0.
+- IntelliJ Platform Gradle Plugin: 2.18.1.
+- Main plugin target: IntelliJ IDEA `2026.2`.
 - Root dependency coordinates live in `gradle/libs.versions.toml`.
 - Included modules are declared in `settings.gradle.kts`.
 

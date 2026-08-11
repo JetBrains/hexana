@@ -4,6 +4,20 @@ import com.intellij.testFramework.UsefulTestCase
 import kotlin.io.path.exists
 
 class HexanaWhatsNewTest : UsefulTestCase() {
+    fun testComposeModelLoadsBundledReleaseSource() {
+        val content = requireNotNull(HexanaWhatsNewContentService.createContent("0.15"))
+        try {
+            val model = loadWhatsNewUiModel(content)
+            assertEquals("0.15", model.version)
+            assertEquals(5, model.features.size)
+            assertEquals("See where every byte goes", model.features.first().title)
+            assertTrue(model.features.first().asset?.exists() == true)
+            assertFalse(model.features.first().entries.first().contains("**"))
+        } finally {
+            content.dispose()
+        }
+    }
+
     fun testMajorMinorVersion() {
         assertEquals("0.12", majorMinorVersion("0.12-SNAPSHOT"))
         assertEquals("0.12", majorMinorVersion("0.12.34-nightly"))

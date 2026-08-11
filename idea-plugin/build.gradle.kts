@@ -163,9 +163,9 @@ intellijPlatform {
             // and no extension references a missing (Java-only) EP. Explicit entries — not
             // recommended(), which can silently resolve zero IDEs. ~2 GB download each; intended
             // for a dedicated CI compatibility slice rather than every local build.
-            ide(IntelliJPlatformType.CLion, ideLibs.versions.defaultIdeVersion.get())
-            ide(IntelliJPlatformType.WebStorm, ideLibs.versions.defaultIdeVersion.get())
-            ide(IntelliJPlatformType.PyCharmProfessional, ideLibs.versions.defaultIdeVersion.get())
+            create(IntelliJPlatformType.CLion, ideLibs.versions.defaultIdeVersion)
+            create(IntelliJPlatformType.WebStorm, ideLibs.versions.defaultIdeVersion)
+            create(IntelliJPlatformType.PyCharmProfessional, ideLibs.versions.defaultIdeVersion)
         }
     }
 }
@@ -264,7 +264,7 @@ tasks {
         val pluginsFile = layout.buildDirectory.file("fus/plugins.txt")
         applySandboxFrom(project.tasks.named<PrepareSandboxTask>("prepareSandbox"))
         splitMode.set(false)
-        splitModeTarget.set(SplitModeAware.SplitModeTarget.BACKEND)
+        pluginInstallationTarget.set(SplitModeAware.PluginInstallationTarget.BACKEND)
         outputs.file(outputFile)
         environment("FUS_DESCRIPTION_REGISTRATION_ENABLED", "true")
         environment("FUS_COLLECTOR_FILENAME_ENABLED", "true")
@@ -490,7 +490,15 @@ tasks.register("verifyReleaseWhatsNew") {
 }
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(25)
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(21)
 }
 
 // Exclude standard kotlin coroutines from runtime / testRuntime since IDEA is using its own implementation

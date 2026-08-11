@@ -42,7 +42,7 @@ fun WasmValueType<*>.getDescription(typeNames: Map<Int, String>? = null): String
         is WasmRefType -> {
             val type = this.code.heapType.type.toInt()
             val name = typeNames?.get(type)
-            val nullabilityIndicator = when (code.heapType) {
+            val nullabilityIndicator = when (code) {
                 is WasmNullableReferenceType -> "?"
                 else -> ""
             }

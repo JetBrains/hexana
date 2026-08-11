@@ -159,8 +159,11 @@ Testing conventions already used here:
 
 ## Known Constraints
 
-- The plugin targets IntelliJ IDEA `2025.3`.
+- The plugin targets IntelliJ IDEA `2026.2`.
+- Compiling against the 2026.2 Platform requires JDK 25, while Kotlin and Java output remains targeted to JVM 21 for
+  compatibility with the configured `since-build` range.
 - It depends on bundled plugin `com.intellij.mcpServer`.
+- The What's New editor uses the same native Compose/Jewel host as the rest of the plugin and does not depend on JCEF.
 - Built-in Wasm-to-WAT conversion flows through `graalwasm`, not external CLI tools, in the current code path.
 - Linux and Windows Wasmtime debug disable LLDB external symbol lookup before target creation because some LLVM
   distributions can block indefinitely in external symbol locators. Wasmtime's GDB JIT symbol loading remains enabled separately.

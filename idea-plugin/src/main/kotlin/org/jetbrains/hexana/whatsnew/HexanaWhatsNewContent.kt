@@ -20,9 +20,6 @@ internal data class HexanaWhatsNewContent(
     val rootDirectory: Path,
     val indexFile: Path,
 ) {
-    val rootUrl: String = rootDirectory.toUri().toString()
-    val indexUrl: String = indexFile.toUri().toString()
-
     fun dispose() {
         runCatching {
             NioFiles.deleteRecursively(rootDirectory)
