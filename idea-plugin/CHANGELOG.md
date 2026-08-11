@@ -8,6 +8,10 @@
 - Basic support for pcap/pcapng files - viewing packets, opening http response body in a new tab
 - Support for viewing tar entries directly in Hexana
 - Support for gzip - compressed files of supported kinds (like .wasm.gz) can be opened directly in Hexana
+- **Wasm** tab in the debugger when debugging a wasm module under Node.js or a browser. The left pane disassembles the paused function to WAT (same mnemonics and symbolic `call $name` operands as the WAT view, block bodies indented) with the current instruction selected and following every step; the right pane shows the live operand stack with typed entries. Stepping granularity follows the tab: while it is selected, one step is one wasm instruction; otherwise a step runs until the source line changes. V8 natively steps wasm one instruction at a time, so a single source line previously took several Step Over clicks to cross.
+- Conditional breakpoints in wasm debug sessions. Condition expressions are translated from DWARF source variable names to V8's internal wasm-local names before registration, so conditions use the same names the Variables view shows.
+- Inlined call frames in the debugger stack. When a pause lands inside code the compiler inlined, the stack shows synthetic frames suffixed `(inlined)`, reconstructed from DWARF: the innermost inlined function at the pause location, each caller at its recorded call site. Variables and evaluation stay attached to the physical frame; stepping remains physical.
+- Variables stored in linear memory now appear when debugging under Node.js. V8 only surfaces wasm locals and globals, so anything on the shadow stack or at a fixed address (structs, arrays, enums; typical for parameters and locals in unoptimized builds) used to be invisible. They are now located via DWARF, read from the module's memory over the debugger protocol and decoded per their DWARF types: structs expand to members at their recorded offsets, enums render by enumerator name, arrays are bounded, reads are capped per variable.
 
 ### Changed
 
@@ -18,6 +22,8 @@
 ### Fixed
 - Navigating to a function in the **WAT (virtualized)** tab (from the Problems tab, go-to-function or search) landed on the wrong function in modules whose type section contains collapsed `(rec …)` groups: every collapsed group member before the target shifted the scroll one row further (clicking func 25 landed on func 83 in a 216-type WasmGC module). The scroll index now accounts for group-collapsed rows.
 - The WAT view's hex byte column garbled every line after an unparsed opcode region: the renderer advanced one byte instead of the region's full size.
+- Debugger pauses and breakpoints could open the wrong file in projects where several crates share source file names (`lib.rs`, `mod.rs`): DWARF paths were matched by base name only. Both the display and the breakpoint direction now prefer the longest matching path suffix.
+- In unoptimized wasm builds the Variables view labeled compiler scratch locals with source variable names (the shadow stack pointer showed up as a struct variable): the positional name fallback no longer claims variables whose DWARF location is linear memory. V8's operand-stack object also no longer appears in Variables under a stolen variable name; its entries live in the **Wasm** tab.
 
 ### Security
 

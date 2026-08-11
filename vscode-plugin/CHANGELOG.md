@@ -5,6 +5,10 @@
 - basic support for pcap/pcapng files – viewing packets, opening http response body in a new tab
 - support for viewing tar entries directly in Hexana
 - support for gzip - compressed files of supported kinds (like .wasm.gz) can be opened directly in Hexana
+- conditional breakpoints in wasm debug sessions (nodejs runtime); conditions are evaluated by V8, expressions referencing wasm-level names work directly
+- inlined call frames in the debug stack trace, reconstructed from DWARF and marked "(inlined)"; variables and evaluation stay on the physical frame
+- variables stored in linear memory (structs, arrays, enums; typical for unoptimized builds) are located via DWARF, read from the module's memory and decoded per type in the Variables view when debugging with nodejs
+- fixed the wrong file opening on pause or breakpoints when several crates share a source file name; DWARF paths now match by longest path suffix instead of base name
 
 # 0.9.0 - 05.08.2026
 - size diagram ("Top" tab) for wasm and native binaries that shows largest by size entities
