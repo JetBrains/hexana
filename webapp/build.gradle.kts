@@ -371,15 +371,23 @@ private fun verifyProductionPackage(packageDir: File) {
 }
 
 val suppliedWebappRevision = providers.gradleProperty("hexanaWebappRevision")
-val gitWebappRevision = providers.exec { commandLine("git", "rev-parse", "HEAD") }
-    .standardOutput.asText.map(String::trim)
-val webappRevision = suppliedWebappRevision.orElse(gitWebappRevision)
+private val gitRevisionPattern = Regex("^[0-9a-fA-F]{7,64}$")
+val gitWebappRevision = providers.provider {
+    runCatching {
+        val process = ProcessBuilder("git", "rev-parse", "HEAD")
+            .redirectErrorStream(true)
+            .start()
+        val revision = process.inputStream.bufferedReader().use { it.readText().trim() }
+        revision.takeIf { process.waitFor() == 0 && gitRevisionPattern.matches(it) }
+    }.getOrNull()
+}
+val webappRevision = suppliedWebappRevision.orElse(gitWebappRevision).orElse("SNAPSHOT")
 // Supply -PhexanaWebappVersion=<release-version> when a release assigns one;
 // otherwise the complete source revision is the artifact version.
 val webappArtifactVersion = providers.gradleProperty("hexanaWebappVersion").orElse(webappRevision)
 val webappArtifactVersionSource = providers.gradleProperty("hexanaWebappVersion")
     .map { "hexanaWebappVersion" }
-    .orElse("git-revision")
+    .orElse(webappRevision.map { if (it == "SNAPSHOT") "snapshot" else "git-revision" })
 
 val packageProductionWebapp by tasks.registering {
     group = "distribution"
