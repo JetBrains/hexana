@@ -15,6 +15,7 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
+import org.jetbrains.hexana.providers.format.WatSymbolNames
 import org.jetbrains.hexana.providers.format.watFor
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodeWithOffset
@@ -225,10 +226,21 @@ internal class WasmDisassemblySource(wasmFilePath: String?) {
      */
     private val importFuncCount: Int
 
+    /**
+     * Function names from the name custom section, keyed by GLOBAL function
+     * index (imports first, then defined functions). Null when the module has
+     * no name section (stripped builds) — calls then render numerically.
+     */
+    private val funcNames: Map<Int, String>?
+
+    /** Symbolic operand resolver passed to [watFor], same contract as the WAT view. */
+    private val watSymbols = WatSymbolNames { funcIdx -> funcNames?.get(funcIdx) }
+
     init {
         var tempOffsets: List<CodeEntryOffset>? = null
         var tempBytes: ByteArray? = null
         var tempImportCount = 0
+        var tempFuncNames: Map<Int, String>? = null
         if (wasmFilePath != null) {
             try {
                 val file = File(wasmFilePath)
@@ -248,6 +260,11 @@ internal class WasmDisassemblySource(wasmFilePath: String?) {
                             val imports = with(importSection) { buf.duplicate().getImportRecords() }
                             tempImportCount = imports.count { it.type is WasmTypeIndexExternalType }
                         }
+                        tempFuncNames = with(module) {
+                            getCustomSectionByName("name")?.let { customSection ->
+                                with(customSection) { buf.duplicate().parseAsNameSection() }
+                            }
+                        }?.functionSubsection?.namemap
                         tempBytes = bytes
                     }
                 }
@@ -258,6 +275,7 @@ internal class WasmDisassemblySource(wasmFilePath: String?) {
         offsets = tempOffsets
         wasmBytes = tempBytes
         importFuncCount = tempImportCount
+        funcNames = tempFuncNames
     }
 
     /** Returns true if the wasm binary was successfully indexed. */
@@ -323,7 +341,7 @@ internal class WasmDisassemblySource(wasmFilePath: String?) {
         val indent = "  ".repeat(depth)
         for (op in ops) {
             val offset = (op as? OpCodeWithOffset)?.offset?.takeIf { it > 0 } ?: -1
-            val text = if (op is UnparsedOpCode) "<unparsed: ${op.e.message}>" else watFor(op)
+            val text = if (op is UnparsedOpCode) "<unparsed: ${op.e.message}>" else watFor(op, watSymbols)
             rows.add(WasmDisassemblyTableModel.Row(offset, indent + text))
             when (op) {
                 is OpCodes.Flow.Block -> { // also Loop, If, Else (subclasses)
