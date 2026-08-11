@@ -28,6 +28,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import com.intellij.execution.ui.RunnerLayoutUi
 import com.intellij.ui.content.ContentFactory
+import com.intellij.ui.content.ContentManagerEvent
+import com.intellij.ui.content.ContentManagerListener
 import com.intellij.xdebugger.ui.XDebugTabLayouter
 import org.jetbrains.hexana.dwarf.DwarfInlineFrame
 import org.jetbrains.hexana.shared.CdpMemoryVariable
@@ -116,6 +118,87 @@ internal class CdpDebugProcess(
             )
             disasmContent.isCloseable = false
             ui.addContent(disasmContent)
+
+            // Track whether the disassembly tab is the selected one: stepping is
+            // per-instruction while it is visible, per-source-line otherwise.
+            val contentManager = ui.contentManager
+            disassemblyTabSelected = contentManager.isSelected(disasmContent)
+            contentManager.addContentManagerListener(object : ContentManagerListener {
+                override fun selectionChanged(event: ContentManagerEvent) {
+                    disassemblyTabSelected = contentManager.isSelected(disasmContent)
+                }
+            })
+        }
+    }
+
+    /** True while the "Wasm Disassembly" tab is selected; switches stepping to instruction granularity. */
+    @Volatile
+    private var disassemblyTabSelected = false
+
+    /**
+     * In-flight source-line step: V8 steps wasm one instruction at a time, so a
+     * source-level step re-issues [command] until the DWARF line (or the stack
+     * depth) changes. [remaining] caps the auto-repeat to avoid spinning on
+     * single-line loops.
+     */
+    private class LineStepState(
+        val command: String,
+        val file: String?,
+        val line: Int?,
+        val depth: Int,
+        @Volatile var remaining: Int,
+    )
+
+    @Volatile
+    private var lineStepState: LineStepState? = null
+
+    /** Stack depth (CDP callFrames.size) at the last presented pause; baseline for line steps. */
+    @Volatile
+    private var frameDepthAtPause = 0
+
+    /** DWARF (file, line) of a CDP call frame, or null when it is not a mapped wasm frame. */
+    @Suppress("UNCHECKED_CAST")
+    private fun dwarfPositionOf(frame: Map<String, Any?>): Pair<String, Int>? {
+        val location = frame["location"] as? Map<String, Any?> ?: return null
+        val scriptId = location["scriptId"] as? String ?: return null
+        if (cdp.scripts[scriptId]?.url?.startsWith("wasm://") != true) return null
+        val offset = (location["columnNumber"] as? Number)?.toInt() ?: return null
+        val source = sourceLocationResolver?.wasmOffsetToSource(offset.toULong()) ?: return null
+        return source.file to source.line
+    }
+
+    /**
+     * Issues a CDP step. With the disassembly tab selected the single V8 step
+     * (one wasm instruction) is presented directly; otherwise a [LineStepState]
+     * is armed so [handleDebuggerPaused] keeps stepping until the source line
+     * changes.
+     */
+    private fun startStep(command: String, context: XSuspendContext?) {
+        if (!disassemblyTabSelected) {
+            val topFrame = (context as? CdpSuspendContext)?.activeExecutionStack?.topFrame
+            val physical = when (topFrame) {
+                is CdpStackFrame -> topFrame
+                is CdpInlinedStackFrame -> topFrame.physicalFrame
+                else -> null
+            }
+            val pos = physical?.let { frame ->
+                val scriptId = frame.scriptId
+                if (scriptId != null && cdp.scripts[scriptId]?.url?.startsWith("wasm://") == true) {
+                    sourceLocationResolver?.wasmOffsetToSource(frame.columnNumber.toULong())
+                } else null
+            }
+            lineStepState = if (pos != null) {
+                LineStepState(command, pos.file, pos.line, frameDepthAtPause, MAX_AUTO_STEPS)
+            } else null
+        } else {
+            lineStepState = null
+        }
+        scope.launch {
+            try {
+                cdp.send(command)
+            } catch (e: Exception) {
+                LOG.warn("Failed to $command", e)
+            }
         }
     }
 
@@ -400,6 +483,36 @@ internal class CdpDebugProcess(
             }
             return
         }
+
+        // Source-line stepping: V8 steps wasm one instruction at a time. While a
+        // line step is armed and the pause is still on the recorded DWARF line at
+        // the same stack depth, re-issue the step instead of presenting the pause.
+        // A hit breakpoint or the auto-step cap always presents.
+        val stepState = lineStepState
+        if (stepState != null) {
+            if (!hitBreakpoints.isNullOrEmpty()) {
+                lineStepState = null
+            } else {
+                val current = dwarfPositionOf(callFrames[0])
+                val sameLine = current != null &&
+                    callFrames.size == stepState.depth &&
+                    current.first == stepState.file &&
+                    current.second == stepState.line
+                if (sameLine && stepState.remaining > 0) {
+                    stepState.remaining--
+                    scope.launch {
+                        try {
+                            cdp.send(stepState.command)
+                        } catch (e: Exception) {
+                            LOG.warn("CDP: auto line-step failed", e)
+                        }
+                    }
+                    return
+                }
+                lineStepState = null
+            }
+        }
+        frameDepthAtPause = callFrames.size
 
         val topFrame = callFrames[0]
         // buildStackFrame returns 1+ frames: synthetic inlined frames (innermost first)
@@ -1196,35 +1309,11 @@ internal class CdpDebugProcess(
         }
     }
 
-    override fun startStepOver(context: XSuspendContext?) {
-        scope.launch {
-            try {
-                cdp.send("Debugger.stepOver")
-            } catch (e: Exception) {
-                LOG.warn("Failed to step over", e)
-            }
-        }
-    }
+    override fun startStepOver(context: XSuspendContext?) = startStep("Debugger.stepOver", context)
 
-    override fun startStepInto(context: XSuspendContext?) {
-        scope.launch {
-            try {
-                cdp.send("Debugger.stepInto")
-            } catch (e: Exception) {
-                LOG.warn("Failed to step into", e)
-            }
-        }
-    }
+    override fun startStepInto(context: XSuspendContext?) = startStep("Debugger.stepInto", context)
 
-    override fun startStepOut(context: XSuspendContext?) {
-        scope.launch {
-            try {
-                cdp.send("Debugger.stepOut")
-            } catch (e: Exception) {
-                LOG.warn("Failed to step out", e)
-            }
-        }
-    }
+    override fun startStepOut(context: XSuspendContext?) = startStep("Debugger.stepOut", context)
 
     override fun stop() {
         if (!stopping.compareAndSet(false, true)) return
@@ -1255,6 +1344,12 @@ internal class CdpDebugProcess(
 
     companion object {
         private val LOG = Logger.getInstance(CdpDebugProcess::class.java)
+
+        /**
+         * Cap on auto-repeated instruction steps within one source-line step,
+         * so a single-line loop (e.g. `loop {}`) cannot spin the debugger.
+         */
+        private const val MAX_AUTO_STEPS = 256
     }
 }
 
