@@ -5,6 +5,9 @@
 ### Added
 - **Problems** tab for WASM binaries. When the parser hits bytes it cannot decode (for example instructions from a not-yet-supported proposal), it no longer discards the whole function body: decoding keeps everything up to the failure and records the rest as one unparsed region, and every such region shows up as a row in the new tab with its kind, location, byte offset, size and message. Clicking a row jumps to the affected function in the **WAT (virtualized)** tab; the context menu also offers the plain **Wat** tab, which now scrolls to the nearest annotated line. Rows not tied to a function select the failed byte range in the hex view. The tab appears only when the module actually has parse problems.
 - Type-section encodings from the custom-descriptors proposal (Phase 3): exact reference types (`(ref null (exact $t))`) and `descriptor` / `describes` clauses now parse with correct alignment. WasmGC modules emitted with these encodings (recent Kotlin/Wasm and J2CL toolchains) previously failed to parse at all: the type section silently misparsed from the first exact type onward and every later function body degraded to an unparsed blob or a NullPointerException.
+- Basic support for pcap/pcapng files - viewing packets, opening http response body in a new tab
+- Support for viewing tar entries directly in Hexana
+- Support for gzip - compressed files of supported kinds (like .wasm.gz) can be opened directly in Hexana
 
 ### Changed
 
