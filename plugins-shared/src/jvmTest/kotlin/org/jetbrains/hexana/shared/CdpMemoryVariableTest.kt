@@ -43,10 +43,14 @@ class CdpMemoryVariableTest {
         val resolver = CdpSourceLocationResolver.create(bytes)
             ?: fail("resolver creation failed for dwarf-memvars.wasm")
 
-        // Module-absolute offsets inside make's body, from the line table
-        // (line 11 is `p.x += 1;` — after the struct is initialized).
-        val offsets = resolver.sourceToAllWasmOffsets("lib.rs", 11)
-        assertTrue(offsets.isNotEmpty(), "Expected line-table offsets for lib.rs:11")
+        // Module-absolute offsets inside make's body, from the line table.
+        // sourceToAllWasmOffsets is keyed by 0-BASED editor lines (the IDE
+        // passes XLineBreakpoint.line directly): key 10 = display line 11,
+        // `p.x += 1;`, where the struct is initialized. Verified against a
+        // live node --inspect-brk session on 2026-08-11 (Point{5,2,3} at
+        // this offset, pre-increment).
+        val offsets = resolver.sourceToAllWasmOffsets("lib.rs", 10)
+        assertTrue(offsets.isNotEmpty(), "Expected line-table offsets for display line 11")
 
         val vars = resolver.memoryVariablesAt(offsets.first().toULong())
         val p = vars.firstOrNull { it.name == "p" }
