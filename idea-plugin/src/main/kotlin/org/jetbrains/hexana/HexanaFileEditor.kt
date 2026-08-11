@@ -576,9 +576,13 @@ class HexanaFileEditor(
         if (ext == "gz") {
             val decompressed = decompressGzip(commonBuffer)
                 ?: return nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
+            // Store the decompressed bytes on the virtual file so that
+            // VirtualFile-backed providers (WasmBinaryVirtualFileProvider etc.)
+            // read the decompressed content instead of the raw gzip stream.
+            myFile.putUserData(HexanaBinaryVirtualFile.BUFFER_KEY, decompressed)
             val innerName = myFile.name.removeSuffix(".gz").removeSuffix(".GZ")
             val innerExt = innerName.substringAfterLast('.', "").lowercase().ifEmpty { null }
-            return resolveProvider(innerExt, inMemoryBuffer, decompressed, sourcePath)
+            return resolveProvider(innerExt, decompressed, decompressed, sourcePath)
         }
 
         if (ext != "wasm") {
