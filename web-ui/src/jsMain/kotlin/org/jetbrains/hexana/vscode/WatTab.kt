@@ -1177,8 +1177,12 @@ private fun SectionShortcutBar(
 // HTML builders — pure string functions, no Compose overhead
 // ---------------------------------------------------------------------------
 
-private fun escapeHtml(text: String): String =
-    text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+internal fun escapeHtml(text: String): String =
+    text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&#39;")
 
 private fun buildHexPreview(
     snapshot: org.jetbrains.hexana.document.BinaryDocumentSnapshot,
