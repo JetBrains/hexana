@@ -27,6 +27,7 @@ fun BinaryEditorApp() {
     var dialogPickedPath by remember { mutableStateOf("") }
     var dialogPickedContent by remember { mutableStateOf("") }
     var showSemanticHighlighting by remember { mutableStateOf(true) }
+    var isDecompressed by remember { mutableStateOf(false) }
 
     // Global arrow-key handler for panel-table rows.  VSCode webviews
     // intercept keydown events before they reach focused DOM elements, so
@@ -46,6 +47,7 @@ fun BinaryEditorApp() {
                     wasmBytes = message.data
                     parentFileName = message.parentFileName
                     configuredRuntimeId = message.wasmRuntime
+                    isDecompressed = message.decompressed
                     message.showSemanticHighlighting?.let { showSemanticHighlighting = it }
                 }
                 "update-setting" -> {
@@ -164,6 +166,7 @@ fun BinaryEditorApp() {
                 fileName = fileName,
                 parentFileName = parentFileName,
                 provider = provider,
+                isDecompressed = isDecompressed,
                 extraTabs = extraTabs,
                 capabilities = WebUiCapabilities(
                     sbomVulnerabilityCheck = SbomVulnerabilityContribution { sbom, onReportReady ->

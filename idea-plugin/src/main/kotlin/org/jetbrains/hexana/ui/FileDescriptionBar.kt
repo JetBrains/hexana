@@ -544,9 +544,10 @@ private fun editModeToolbarContent(
     // to — treat them as file-less so those actions stay disabled.
     val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
         ?.takeUnless { it is HexanaBinaryVirtualFile }
-    val finalizedName = sourceFile?.name?.let { computeFinalizedName(it) }
+    val isGzipSource = sourceFile?.name?.endsWith(".gz", ignoreCase = true) == true
+    val finalizedName = sourceFile?.name?.let { computeFinalizedName(it, stripGz = isGzipSource) }
     val hasEdits = doc.canUndo()
-    val canOverwrite = hasEdits && sourceFile != null
+    val canOverwrite = hasEdits && sourceFile != null && !isGzipSource
     val canSaveCopy = hasEdits && sourceFile != null
 
     val isPostOverwrite = overwriteShadowRanges != null && sourceFile != null
@@ -676,10 +677,17 @@ private fun overwriteSourceFile(
  * is no extension. Subsequent finalizes overwrite the same target \u2014 the user
  * can clone it before re-finalizing if they want history.
  */
-private fun computeFinalizedName(originalName: String): String {
-    val dot = originalName.lastIndexOf('.')
-    return if (dot < 0) "$originalName.edited"
-    else originalName.substring(0, dot) + ".edited" + originalName.substring(dot)
+private fun computeFinalizedName(originalName: String, stripGz: Boolean = false): String {
+    // For gzip files, strip the .gz extension so the copy is the decompressed
+    // inner file (e.g. "foo.wasm.gz" → "foo.edited.wasm").
+    val baseName = if (stripGz && originalName.endsWith(".gz", ignoreCase = true)) {
+        originalName.substring(0, originalName.length - 3)
+    } else {
+        originalName
+    }
+    val dot = baseName.lastIndexOf('.')
+    return if (dot < 0) "$baseName.edited"
+    else baseName.substring(0, dot) + ".edited" + baseName.substring(dot)
 }
 
 /**

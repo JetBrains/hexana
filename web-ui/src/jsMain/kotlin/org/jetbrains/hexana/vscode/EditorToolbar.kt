@@ -62,6 +62,7 @@ fun EditorToolbar(
     workerWasmToolbarPresentation: WorkerWasmToolbarPresentation? = null,
     workerNativeImageToolbarPresentation: WorkerNativeImageToolbarPresentation? = null,
     workerSizeTooltip: List<Pair<String, String>>? = null,
+    isDecompressed: Boolean = false,
 ) {
     val isSubmodule = parentFileName != null || isSubmoduleFileName(fileName)
 
@@ -224,6 +225,7 @@ fun EditorToolbar(
 
         if (showEditControls && editState != null && onOverwriteShadowChanged != null) {
             val isFileScheme = !isSubmodule
+            val canOverwrite = hasEdits && isFileScheme && !isDecompressed
 
                 Div({
                     classes("hexana-edit-controls")
@@ -258,7 +260,7 @@ fun EditorToolbar(
                         }
                         EditToolbarButton(
                             label = "Overwrite",
-                            enabled = hasEdits && isFileScheme,
+                            enabled = canOverwrite,
                             primary = true,
                         ) {
                             val shadow = editState.captureOverwriteShadow()
@@ -268,9 +270,8 @@ fun EditorToolbar(
                             editState.markSaved()
                             onReparseAfterOverwrite()
                         }
-                        val finalizedName = computeFinalizedName(
-                            fileName.substringAfterLast('/').substringAfterLast('\\'),
-                        )
+                        val baseName = fileName.substringAfterLast('/').substringAfterLast('\\')
+                        val finalizedName = computeFinalizedName(baseName, stripGz = isDecompressed)
                         EditToolbarButton(
                             label = "Save a copy \u2192 $finalizedName",
                             enabled = hasEdits && isFileScheme,
@@ -517,10 +518,15 @@ private fun buildSizeTooltip(provider: BinaryProvider): List<Pair<String, String
  * `<base>.edited.<ext>` next to the original. Plain `<name>.edited` if there
  * is no extension.
  */
-private fun computeFinalizedName(originalName: String): String {
-    val dot = originalName.lastIndexOf('.')
-    return if (dot < 0) "$originalName.edited"
-    else originalName.substring(0, dot) + ".edited" + originalName.substring(dot)
+private fun computeFinalizedName(originalName: String, stripGz: Boolean = false): String {
+    val baseName = if (stripGz && originalName.endsWith(".gz", ignoreCase = true)) {
+        originalName.substring(0, originalName.length - 3)
+    } else {
+        originalName
+    }
+    val dot = baseName.lastIndexOf('.')
+    return if (dot < 0) "$baseName.edited"
+    else baseName.substring(0, dot) + ".edited" + baseName.substring(dot)
 }
 
 /**

@@ -522,6 +522,9 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     wasmRuntime: getSelectedRuntime(),
                     showSemanticHighlighting: vscode.workspace.getConfiguration("hexana").get<boolean>("showSemanticHighlighting", true),
                 };
+                if (document.displayName && document.displayName !== path.basename(document.uri.fsPath)) {
+                    loadMsg.decompressed = true;
+                }
                 const parentFileName = this.resolveParentFileName(document.uri);
                 if (parentFileName) {
                     loadMsg.parentFileName = parentFileName;

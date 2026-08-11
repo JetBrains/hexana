@@ -32,6 +32,7 @@ data class VscodeMessage(
     val settingKey: String = "",
     val settingValue: Boolean = false,
     val parentFileName: String? = null,
+    val decompressed: Boolean = false,
 )
 
 /**
@@ -439,6 +440,7 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                             wasmRuntime = (data.wasmRuntime as? String),
                             showSemanticHighlighting = (data.showSemanticHighlighting as? Boolean),
                             parentFileName = (data.parentFileName as? String),
+                            decompressed = (data.decompressed as? Boolean) ?: false,
                         )
                     }
                     "update-setting" -> {
