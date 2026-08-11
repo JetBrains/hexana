@@ -2,6 +2,7 @@ package org.jetbrains.hexana.run
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.ui.OnePixelSplitter
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.table.JBTable
 import com.intellij.xdebugger.XDebugSession
@@ -14,6 +15,7 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
+import org.jetbrains.hexana.wasm.opcodes.MemArg
 import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodeWithOffset
 import org.jetbrains.hexana.wasm.opcodes.OpCodeWithValue
@@ -24,6 +26,7 @@ import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 import org.jetbrains.hexana.wasm.sections.parseCodeEntry
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.table.AbstractTableModel
 
@@ -74,8 +77,8 @@ internal class WasmStackTableModel : AbstractTableModel() {
 }
 
 /**
- * Creates the "Wasm Stack" panel containing a [JBTable] that shows the
- * wasm operand-stack slots (index, type, value) for the currently paused frame.
+ * Creates the wasm operand-stack panel containing a [JBTable] that shows the
+ * stack slots (index, type, value) for the currently paused frame.
  */
 internal fun buildWasmStackPanel(model: WasmStackTableModel): JPanel {
     val table = JBTable(model).apply {
@@ -88,6 +91,20 @@ internal fun buildWasmStackPanel(model: WasmStackTableModel): JPanel {
     val panel = JPanel(java.awt.BorderLayout())
     panel.add(JBScrollPane(table), java.awt.BorderLayout.CENTER)
     return panel
+}
+
+/**
+ * Combined "Wasm" debugger tab content: the disassembly of the paused function
+ * on the left, the operand stack on the right.
+ */
+internal fun buildCombinedWasmPanel(
+    stackModel: WasmStackTableModel,
+    disassemblyPanel: WasmDisassemblyPanel,
+): JComponent {
+    val splitter = OnePixelSplitter(false, 0.68f)
+    splitter.firstComponent = disassemblyPanel.component
+    splitter.secondComponent = buildWasmStackPanel(stackModel)
+    return splitter
 }
 
 // ---------------------------------------------------------------------------
@@ -313,8 +330,9 @@ internal class WasmDisassemblySource(wasmFilePath: String?) {
                 val displayName = if (segments.size >= 2) {
                     val last = segments[segments.size - 1]
                     val secondLast = segments[segments.size - 2]
-                    // Only join if secondLast looks like a type prefix (I32, I64, F32, F64, V128, etc.)
-                    if (secondLast.matches(Regex("[A-Z][0-9A-Za-z]+"))) {
+                    // Join if secondLast looks like a type prefix. Nesting objects are
+                    // mixed-case in the opcode tree (I32 under numeric, i32 under Memory).
+                    if (secondLast.matches(Regex("(?i)[ifv](8|16|32|64|128)(x[0-9]+)?|[A-Z][0-9A-Za-z]+"))) {
                         "${secondLast.lowercase()}.${camelToSnake(last)}"
                     } else {
                         camelToSnake(last)
@@ -334,7 +352,12 @@ internal class WasmDisassemblySource(wasmFilePath: String?) {
     @Suppress("UNCHECKED_CAST")
     private fun immediatesText(opCode: OpCode): String {
         val withVal = opCode as? OpCodeWithValue<*> ?: return ""
-        return withVal.value?.toString() ?: ""
+        return when (val value = withVal.value) {
+            // Zero-operand singletons carry Unit as a placeholder payload.
+            is Unit -> ""
+            is MemArg -> "offset=${value.offset} align=${value.align}"
+            else -> value.toString()
+        }
     }
 }
 

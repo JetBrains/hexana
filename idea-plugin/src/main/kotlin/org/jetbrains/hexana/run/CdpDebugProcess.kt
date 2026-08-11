@@ -99,33 +99,23 @@ internal class CdpDebugProcess(
 
     override fun createTabLayouter(): XDebugTabLayouter = object : XDebugTabLayouter() {
         override fun registerAdditionalContent(ui: RunnerLayoutUi) {
-            val stackContent = ui.createContent(
-                "WasmStack",
-                buildWasmStackPanel(wasmStackModel),
-                "Wasm Stack",
-                null,
-                null,
-            )
-            stackContent.isCloseable = false
-            ui.addContent(stackContent)
-
-            val disasmContent = ui.createContent(
+            val wasmContent = ui.createContent(
                 "WasmDisassembly",
-                wasmDisassemblyPanel.component,
-                "Wasm Disassembly",
+                buildCombinedWasmPanel(wasmStackModel, wasmDisassemblyPanel),
+                "Wasm",
                 null,
                 null,
             )
-            disasmContent.isCloseable = false
-            ui.addContent(disasmContent)
+            wasmContent.isCloseable = false
+            ui.addContent(wasmContent)
 
-            // Track whether the disassembly tab is the selected one: stepping is
+            // Track whether the Wasm tab is the selected one: stepping is
             // per-instruction while it is visible, per-source-line otherwise.
             val contentManager = ui.contentManager
-            disassemblyTabSelected = contentManager.isSelected(disasmContent)
+            disassemblyTabSelected = contentManager.isSelected(wasmContent)
             contentManager.addContentManagerListener(object : ContentManagerListener {
                 override fun selectionChanged(event: ContentManagerEvent) {
-                    disassemblyTabSelected = contentManager.isSelected(disasmContent)
+                    disassemblyTabSelected = contentManager.isSelected(wasmContent)
                 }
             })
         }
