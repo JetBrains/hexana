@@ -39,7 +39,7 @@ const KNOWN_EXTENSIONS = new Set([
  * Returns true for ELF, Mach-O (thin and fat/universal), PE, static-library
  * archive, and COFF object files.
  */
-function isNativeBinary(bytes: Uint8Array): boolean {
+export function isNativeBinary(bytes: Uint8Array): boolean {
     const len = bytes.length;
     if (len < 4) return false;
 

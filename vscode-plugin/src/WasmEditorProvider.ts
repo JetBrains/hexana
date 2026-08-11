@@ -3,6 +3,7 @@ import * as zlib from "zlib";
 import * as vscode from "vscode";
 import { getWebviewContent } from "./webviewContent";
 import { extensionLib, getSelectedRuntime, runExport } from "./WasmRunConfigurations";
+import { isNativeBinary } from "./NativeBinaryFileTypeDetector";
 
 /**
  * In-memory store for nested module byte arrays.
@@ -860,7 +861,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const ext = childName.includes(".") ? childName.substring(childName.lastIndexOf(".") + 1).toLowerCase() : "";
         const binaryExtensions = new Set(["wasm", "class", "dex", "jar", "zip", "war", "apk", "bin", "elf", "exe", "so", "o", "a", "dll", "dylib", "tar", "tgz"]);
 
-        if (binaryExtensions.has(ext)) {
+        if (binaryExtensions.has(ext) || isNativeBinary(bytes)) {
             const parentKey = document.uri.toString();
             const moduleUri = vscode.Uri.parse(
                 `hexana-module:/${childName}?parent=${encodeURIComponent(parentKey)}&entry=${encodeURIComponent(name)}`,
@@ -930,7 +931,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const ext = childName.includes(".") ? childName.substring(childName.lastIndexOf(".") + 1).toLowerCase() : "";
         const binaryExtensions = new Set(["wasm", "class", "dex", "jar", "zip", "war", "apk", "bin", "elf", "exe", "so", "o", "a", "dll", "dylib"]);
 
-        if (binaryExtensions.has(ext)) {
+        if (binaryExtensions.has(ext) || isNativeBinary(bytes)) {
             // Open as a binary in our custom editor.
             const parentKey = document.uri.toString();
             const moduleUri = vscode.Uri.parse(
