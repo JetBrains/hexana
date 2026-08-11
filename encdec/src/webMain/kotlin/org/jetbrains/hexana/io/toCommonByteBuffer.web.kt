@@ -17,7 +17,16 @@ private class WebByteBuffer(private val buffer: ArrayBuffer) : CommonByteBuffer 
     private val dataView = DataView(buffer)
 
     // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer
+    //
+    // A JS TypedArray out-of-bounds (or negative) index yields `undefined`, which
+    // coerces to 0 — it never throws. Check the bound ourselves so a read past the
+    // end fails fast, matching the JVM implementation's BufferUnderflowException.
     override fun get(): Byte {
+        if (cursorPosition < 0 || cursorPosition >= buffer.byteLength) {
+            throw IndexOutOfBoundsException(
+                "Read past end of buffer: position=$cursorPosition, byteLength=${buffer.byteLength}"
+            )
+        }
         val res = Int8Array(buffer)[position()]
         cursorPosition++
         return res
@@ -26,6 +35,15 @@ private class WebByteBuffer(private val buffer: ArrayBuffer) : CommonByteBuffer 
     override fun get(index: Int): Byte = dataView.getInt8(index)
 
     override fun get(dst: ByteArray, offset: Int, size: Int) {
+        // `ArrayBuffer.slice` clamps its end index instead of throwing, so a read
+        // past the end would otherwise silently zero-fill `dst`. Compare via
+        // `size > buffer.byteLength - cursorPosition` (not `cursorPosition + size`)
+        // to avoid Int overflow when `size` is huge.
+        if (size < 0 || cursorPosition < 0 || size > buffer.byteLength - cursorPosition) {
+            throw IndexOutOfBoundsException(
+                "Read past end of buffer: position=$cursorPosition, size=$size, byteLength=${buffer.byteLength}"
+            )
+        }
         val slice = Int8Array(buffer.slice(cursorPosition, cursorPosition + size))
         for (i in offset until offset + size) {
             dst.set(i, slice.get(i - offset))

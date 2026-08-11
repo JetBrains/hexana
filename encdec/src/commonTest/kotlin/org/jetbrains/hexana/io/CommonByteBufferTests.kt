@@ -3,6 +3,7 @@ package org.jetbrains.hexana.io
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 import kotlin.test.assertTrue
 
 
@@ -50,6 +51,49 @@ class CommonByteBufferTests {
         repeat(5) { buffer.get() }
         assertEquals(0, buffer.remaining())
         assertTrue(!buffer.hasRemaining())
+    }
+
+    // ========================================================================
+    // Out-of-bounds reads must fail fast rather than silently returning
+    // zero-filled data. This is JS-target-critical: a raw JS TypedArray index out
+    // of range yields `undefined` (coerced to 0), and `ArrayBuffer.slice` clamps
+    // instead of throwing, so both `get()` and `get(dst, offset, size)` need an
+    // explicit bounds check on that platform. The JVM already throws
+    // `BufferUnderflowException` for the same reads, so assert only that *some*
+    // exception is thrown — the exact type differs per platform (JVM:
+    // `BufferUnderflowException`; JS/WasmJS: `IndexOutOfBoundsException`).
+    // ========================================================================
+
+    @Test
+    fun `get() throws when reading past end of buffer`() {
+        val buffer = createByteBuffer(1, 2, 3)
+        buffer.position(3)
+        assertFails { buffer.get() }
+    }
+
+    @Test
+    fun `get() at the last valid index still succeeds`() {
+        val buffer = createByteBuffer(1, 2, 3)
+        buffer.position(2)
+        assertEquals(3, buffer.get().toInt())
+    }
+
+    @Test
+    fun `get(dst, offset, size) throws when size exceeds remaining bytes`() {
+        val buffer = createByteBuffer(1, 2, 3)
+        buffer.position(1)
+        val dst = ByteArray(5)
+        assertFails { buffer.get(dst, 0, 5) }
+    }
+
+    @Test
+    fun `get(dst, offset, size) reading exactly the remaining bytes still succeeds`() {
+        val buffer = createByteBuffer(1, 2, 3)
+        buffer.position(1)
+        val dst = ByteArray(2)
+        buffer.get(dst, 0, 2)
+        assertContentEquals(listOf(2, 3), dst.map { it.toInt() })
+        assertEquals(3, buffer.position())
     }
 
     @Test

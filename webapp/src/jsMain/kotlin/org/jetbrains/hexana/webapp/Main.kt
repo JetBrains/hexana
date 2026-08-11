@@ -151,26 +151,48 @@ internal fun WebAppRoot(
                     showSemanticHighlighting = showSemanticHighlighting,
                 )
             } else {
-                val provider = remember(bytes, fileName) { legacyWasmProviderFactory.create(bytes, fileName) }
-                val extraTabs = remember(provider) { computeExtraTabs(provider.bytes.duplicate().position(0)) }
+                // Malformed nested-module or post-edit bytes can throw here; this runs on the
+                // main thread inside `remember`, so an uncaught throw would crash the whole tab.
+                val provider = remember(bytes, fileName) {
+                    try {
+                        legacyWasmProviderFactory.create(bytes, fileName)
+                    } catch (_: Throwable) {
+                        null
+                    }
+                }
+                if (provider == null) {
+                    LegacyParseFailureNotice(
+                        fileName = fileName,
+                        onBack = {
+                            if (navStack.isNotEmpty()) {
+                                navigateToParent()
+                            } else {
+                                fileName = ""
+                                wasmBytes = null
+                            }
+                        },
+                    )
+                } else {
+                    val extraTabs = remember(provider) { computeExtraTabs(provider.bytes.duplicate().position(0)) }
 
-                val parentFileName = navStack.lastOrNull()?.fileName
+                    val parentFileName = navStack.lastOrNull()?.fileName
 
-                BinaryEditorContent(
-                    fileName = fileName,
-                    parentFileName = parentFileName,
-                    provider = provider,
-                    extraTabs = extraTabs,
-                    capabilities = capabilities,
-                    scriptTabs = scriptTabs,
-                    dialogPickedPath = dialogPickedPath,
-                    dialogPickedContent = dialogPickedContent,
-                    onDialogPickedPathConsumed = onDialogPickedPathConsumed,
-                    onScriptTabConfirmed = onScriptTabConfirmed,
-                    onScriptTabRemoved = onScriptTabRemoved,
-                    showSemanticHighlighting = showSemanticHighlighting,
-                    initialActiveTab = legacyWasmTab ?: "Sections",
-                )
+                    BinaryEditorContent(
+                        fileName = fileName,
+                        parentFileName = parentFileName,
+                        provider = provider,
+                        extraTabs = extraTabs,
+                        capabilities = capabilities,
+                        scriptTabs = scriptTabs,
+                        dialogPickedPath = dialogPickedPath,
+                        dialogPickedContent = dialogPickedContent,
+                        onDialogPickedPathConsumed = onDialogPickedPathConsumed,
+                        onScriptTabConfirmed = onScriptTabConfirmed,
+                        onScriptTabRemoved = onScriptTabRemoved,
+                        showSemanticHighlighting = showSemanticHighlighting,
+                        initialActiveTab = legacyWasmTab ?: "Sections",
+                    )
+                }
             }
         }
     }
@@ -215,7 +237,22 @@ internal fun WorkerBackedWasmContent(
     }
 
     // MCP-186 owns these explicit legacy paths (WAT, edits, and nested-module reparsing).
-    val provider = remember(bytes, fileName, legacyWasmTab) { legacyWasmProviderFactory.create(bytes, fileName) }
+    // Construction runs on the main thread inside `remember`; catch so a malformed
+    // module cannot crash the tab the way an uncaught throw out of composition would.
+    val provider = remember(bytes, fileName, legacyWasmTab) {
+        try {
+            legacyWasmProviderFactory.create(bytes, fileName)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+    if (provider == null) {
+        LegacyParseFailureNotice(
+            fileName = fileName,
+            onBack = { onLegacyWasmTabChanged(null) },
+        )
+        return
+    }
     val extraTabs = remember(provider) { computeExtraTabs(provider.bytes.duplicate().position(0)) }
     BinaryEditorContent(
         fileName = fileName,
@@ -232,6 +269,42 @@ internal fun WorkerBackedWasmContent(
         showSemanticHighlighting = showSemanticHighlighting,
         initialActiveTab = legacyWasmTab,
     )
+}
+
+/**
+ * Shown in place of [BinaryEditorContent] when the main-thread legacy provider
+ * construction throws. Mirrors the worker path's `ParserWorkerState.Failed`
+ * presentation (same `data-parser-worker-state` marker and error styling) so a
+ * malformed nested module or post-edit reparse degrades to a visible, recoverable
+ * message instead of crashing the tab.
+ */
+@Composable
+private fun LegacyParseFailureNotice(fileName: String, onBack: () -> Unit) {
+    Div({
+        style {
+            display(DisplayStyle.Flex)
+            property("flex-direction", "column")
+            property("align-items", "center")
+            property("justify-content", "center")
+            width(100.percent)
+            height(100.percent)
+            property("gap", "12px")
+        }
+    }) {
+        Span({
+            attr("role", "status")
+            attr("aria-live", "polite")
+            attr("data-parser-worker-state", "failed")
+            style {
+                property("font-size", "13px")
+                property("color", "var(--vscode-inputValidation-errorForeground, #f48771)")
+            }
+        }) { Text("Failed to parse \"$fileName\".") }
+        Button({
+            attr("data-parser-worker-action", "back")
+            onClick { onBack() }
+        }) { Text("Back") }
+    }
 }
 
 @Composable
