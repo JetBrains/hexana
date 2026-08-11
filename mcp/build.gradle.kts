@@ -107,6 +107,7 @@ val r8OwnedJarNames = setOf(
     "protobuf-jvm.jar",
     "scripting.jar",
     "server-$mcpServerVersion.jar",
+    "tar-jvm.jar",
     "thrift-jvm.jar",
     "wasmprinter.jar",
     "wasmParser-jvm.jar",
