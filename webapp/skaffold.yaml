@@ -32,10 +32,24 @@ profiles:
       helm:
         releases:
           - name: hexana-webapp
+            remoteChart: oci://registry.jetbrains.team/p/cb/helm-charts/simple-app
+            version: 0.2.1
+            upgradeOnChange: true
             valuesFiles: [values_staging.yaml]
+            setValueTemplates:
+              image: "{{.IMAGE_FULLY_QUALIFIED}}"
+              imagePullSecret: "{{.IMAGE_PULL_SECRET}}"
+              applicationName: "{{.APPLICATION_NAME}}"
   - name: production
     deploy:
       helm:
         releases:
           - name: hexana-webapp
+            remoteChart: oci://registry.jetbrains.team/p/cb/helm-charts/simple-app
+            version: 0.2.1
+            upgradeOnChange: true
             valuesFiles: [values_production.yaml]
+            setValueTemplates:
+              image: "{{.IMAGE_FULLY_QUALIFIED}}"
+              imagePullSecret: "{{.IMAGE_PULL_SECRET}}"
+              applicationName: "{{.APPLICATION_NAME}}"
