@@ -25,6 +25,7 @@ kotlin {
                 implementation(project(":binaryProvider"))
                 implementation(project(":encdec"))
                 implementation(project(":plugins-shared"))
+                implementation(project(":analytics:api"))
                 implementation(project(":analytics"))
             }
         }

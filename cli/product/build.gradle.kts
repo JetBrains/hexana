@@ -19,6 +19,7 @@ dependencies {
     api(project(":cli:runtime"))
     api(project(":mcp:core"))
     api(libs.kotlinx.serialization.json)
+    implementation(project(":analytics:api"))
     implementation(project(":analytics"))
 
     testImplementation(libs.junit4)
@@ -36,6 +37,7 @@ val verifyCliProductBoundary = tasks.register("verifyCliProductBoundary") {
     doLast {
         val allowedProjectPaths = setOf(
             ":analytics",
+            ":analytics:api",
             ":cli:metadata",
             ":cli:runtime",
             ":mcp:core",

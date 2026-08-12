@@ -13,6 +13,12 @@ kotlin {
     }
 
     sourceSets {
+        commonMain {
+            dependencies {
+                implementation(project(":analytics:api"))
+            }
+        }
+
         commonTest {
             dependencies {
                 implementation(libs.kotlin.test)

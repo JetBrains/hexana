@@ -92,6 +92,7 @@ dependencies {
         zipSigner()
     }
 
+    implementation(project(":analytics:api"))
     implementation(project(":analytics"))
     implementation(project(":encdec"))
     implementation(project(":wasmParser"))

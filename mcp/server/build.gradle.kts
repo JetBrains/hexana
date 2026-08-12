@@ -159,6 +159,7 @@ tasks.register("verifyHexanaToolDispatcherUpToDate") {
 }
 
 dependencies {
+    implementation(project(":analytics:api"))
     implementation(project(":analytics"))
     implementation(project(":mcp:core"))
     implementation(project(":mcp:scripting"))

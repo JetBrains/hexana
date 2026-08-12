@@ -82,6 +82,7 @@ val standardCliJarName = "hexana-cli-$mcpServerVersion.jar"
 val scriptCliJarName = "hexana-cli-script-$mcpServerVersion.jar"
 val r8OwnedJarNames = setOf(
     "analytics-jvm.jar",
+    "api-jvm.jar",
     "arrow-jvm.jar",
     "binaryProvider-jvm.jar",
     "cli-core.jar",
