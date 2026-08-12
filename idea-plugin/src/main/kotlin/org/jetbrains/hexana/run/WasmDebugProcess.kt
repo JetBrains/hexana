@@ -25,6 +25,8 @@ import com.intellij.xdebugger.frame.XSuspendContext
 import com.intellij.xdebugger.impl.XDebuggerUtilImpl
 import com.intellij.xdebugger.ui.XDebugTabLayouter
 import org.jetbrains.hexana.shared.JIT_REGISTER_FUNCTION_NAME
+import org.jetbrains.hexana.shared.WasmStackShapeAnalyzer
+import org.jetbrains.hexana.shared.WasmStackShapeResult
 import org.jetbrains.hexana.shared.WasmtimeAddrmap
 import org.jetbrains.hexana.shared.LLDB_ADVANCE_PC_PAST_TRAP_CMD
 import org.jetbrains.hexana.shared.cuPathEndsWithProjectRelative
@@ -103,9 +105,26 @@ open class WasmDebugProcess(
 
     private val wasmDisassemblyModel = WasmDisassemblyTableModel()
     private val wasmDisassemblyPanel = WasmDisassemblyPanel(wasmDisassemblyModel)
+    private val wasmStackModel = WasmStackTableModel()
 
     /** Indexes the executed wasm binary; initialized lazily on first stop (off-EDT). */
     private val wasmDisassemblySource by lazy { WasmDisassemblySource(executedWasmPath) }
+
+    /**
+     * Statically reconstructs the symbolic operand stack shown next to the
+     * disassembly — wasmtime/Cranelift cannot expose the real one, so shape
+     * and provenance come from abstract interpretation of the wasm body.
+     */
+    private val wasmStackAnalyzer: WasmStackShapeAnalyzer? by lazy {
+        executedWasmPath?.let { path ->
+            try {
+                WasmStackShapeAnalyzer.create(File(path).readBytes())
+            } catch (e: Exception) {
+                LOG.debug("Stack-shape analyzer init failed for $path", e)
+                null
+            }
+        }
+    }
 
     /**
      * Addrmaps decoded from the ELF images the debuggee registered with the
@@ -133,7 +152,7 @@ open class WasmDebugProcess(
             if (engine != WasmEngine.WASMTIME || executedWasmPath == null) return
             val content = ui.createContent(
                 "WasmDisassembly",
-                wasmDisassemblyPanel.component,
+                buildCombinedWasmPanel(wasmStackModel, wasmDisassemblyPanel),
                 "Wasm",
                 null,
                 null,
@@ -149,7 +168,10 @@ open class WasmDebugProcess(
         if (engine == WasmEngine.WASMTIME && executedWasmPath != null) {
             session.addSessionListener(object : XDebugSessionListener {
                 override fun sessionResumed() {
-                    ApplicationManager.getApplication().invokeLater { wasmDisassemblyModel.clear() }
+                    ApplicationManager.getApplication().invokeLater {
+                        wasmDisassemblyModel.clear()
+                        wasmStackModel.clear()
+                    }
                 }
             })
         }
@@ -1124,12 +1146,15 @@ open class WasmDebugProcess(
         val pc = parseLldbFramePc(frameInfoLines)
         val wasmOffset = pc?.let { lookupWasmOffset(communicator, it) }
         val rows = wasmOffset?.let { wasmDisassemblySource.rowsForOffset(it)?.first }
+        val stackRows = if (rows != null && wasmOffset != null) symbolicStackRows(wasmOffset) else emptyList()
         ApplicationManager.getApplication().invokeLater {
             if (rows == null || wasmOffset == null) {
                 wasmDisassemblyModel.clear()
+                wasmStackModel.clear()
             } else {
                 wasmDisassemblyModel.update(rows)
                 wasmDisassemblyPanel.highlight(wasmOffset)
+                wasmStackModel.update(stackRows)
             }
         }
     }
@@ -1156,6 +1181,29 @@ open class WasmDebugProcess(
             }
         }
         LOG.debug("refreshJitAddrmaps: ${jitAddrmaps.size} addrmap(s) decoded")
+    }
+
+    /**
+     * Rows for the symbolic operand-stack pane: the statically reconstructed
+     * stack at [wasmOffset], with local slots decorated by their DWARF source
+     * names when available. A reconstruction failure becomes a single
+     * explanatory row rather than a silently empty pane.
+     */
+    private fun symbolicStackRows(wasmOffset: Int): List<WasmStackTableModel.Row> {
+        val analyzer = wasmStackAnalyzer ?: return emptyList()
+        val localNames = try {
+            dwarfVariableResolver?.buildWasmLocalToNameMapByOffset(wasmOffset).orEmpty()
+        } catch (e: Exception) {
+            LOG.debug("Local-name map failed at offset $wasmOffset", e)
+            emptyMap()
+        }
+        return when (val result = analyzer.stackAt(wasmOffset) { idx -> localNames[idx.toLong()] }) {
+            is WasmStackShapeResult.Ok -> result.slots.mapIndexed { i, slot ->
+                WasmStackTableModel.Row(i, slot.type, slot.provenance)
+            }
+            is WasmStackShapeResult.Unavailable ->
+                listOf(WasmStackTableModel.Row(0, "", "stack shape unavailable: ${result.reason}"))
+        }
     }
 
     /**
