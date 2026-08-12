@@ -40,8 +40,12 @@ import org.jetbrains.hexana.shared.parseLldbFunctionName
 import org.jetbrains.hexana.shared.parseRawDwarfLine
 import org.jetbrains.hexana.shared.parseRawDwarfPath
 import org.jetbrains.hexana.shared.pathMatchesBreakpointLocation
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.shared.stripCuHashSuffix
 import java.io.File
+import java.nio.channels.FileChannel
+import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 
 /**
  * A debug process that launches wasmtime under LLDB so that
@@ -118,7 +122,14 @@ open class WasmDebugProcess(
     private val wasmStackAnalyzer: WasmStackShapeAnalyzer? by lazy {
         executedWasmPath?.let { path ->
             try {
-                WasmStackShapeAnalyzer.create(File(path).readBytes())
+                // Read-only mmap instead of a whole-file copy; the analyzer
+                // reads via duplicates, so the mapping is shared and lazy.
+                // (On Windows the mapping pins the file until GC — acceptable
+                // for the session-scoped composed temp file.)
+                val mapped = FileChannel.open(Path.of(path), StandardOpenOption.READ).use { channel ->
+                    channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size())
+                }
+                WasmStackShapeAnalyzer.create(mapped.toCommonByteBuffer())
             } catch (e: Exception) {
                 LOG.debug("Stack-shape analyzer init failed for $path", e)
                 null

@@ -1,7 +1,6 @@
 package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.format.WatSymbolNames
 import org.jetbrains.hexana.providers.format.watFor
 import org.jetbrains.hexana.wasm.BaseModule
@@ -78,10 +77,15 @@ class WasmStackShapeAnalyzer private constructor(
 ) {
 
     companion object {
-        /** Indexes the module's sections; returns null when [wasmBytes] is not a parseable core module with code. */
-        fun create(wasmBytes: ByteArray): WasmStackShapeAnalyzer? {
+        /**
+         * Indexes the module's sections; returns null when [wasmBuffer] is not
+         * a parseable core module with code. The buffer is read via duplicates
+         * only (the caller's cursor is untouched) and kept for lazy per-pause
+         * function-body parsing, so a memory-mapped buffer stays zero-copy.
+         */
+        fun create(wasmBuffer: CommonByteBuffer): WasmStackShapeAnalyzer? {
             return try {
-                val buf = wasmBytes.toCommonByteBuffer()
+                val buf = wasmBuffer.duplicate()
                 val result = WasmParser().parse(buf.duplicate()) as? WasmParseSuccess ?: return null
                 val module = result.wasmModule as? WasmModule ?: return null
                 val codeSection = module.codeSection ?: return null

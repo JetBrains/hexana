@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -30,7 +31,7 @@ class WasmStackShapeAnalyzerTest {
     private fun tinyAnalyzer(): WasmStackShapeAnalyzer {
         val stream = WasmStackShapeAnalyzerTest::class.java.classLoader.getResourceAsStream("wasmtime-tiny.wasm")
             ?: error("Test resource not found: wasmtime-tiny.wasm")
-        return assertNotNull(WasmStackShapeAnalyzer.create(stream.readBytes()), "tiny module must index")
+        return assertNotNull(WasmStackShapeAnalyzer.create(stream.readBytes().toCommonByteBuffer()), "tiny module must index")
     }
 
     private fun okSlots(result: WasmStackShapeResult): List<WasmSymbolicStackSlot> =
@@ -103,7 +104,7 @@ class WasmStackShapeAnalyzerTest {
     }
 
     @Test fun `garbage bytes do not index`() {
-        assertNull(WasmStackShapeAnalyzer.create(ByteArray(32) { 7 }))
+        assertNull(WasmStackShapeAnalyzer.create(ByteArray(32) { 7 }.toCommonByteBuffer()))
     }
 
     // ── dwarf-memvars: real rustc -O0 body (globals, stores, load) ─────
@@ -116,7 +117,7 @@ class WasmStackShapeAnalyzerTest {
     private fun memvarsAnalyzer(): WasmStackShapeAnalyzer {
         val file = File("../wasmParser/src/commonTest/resources/rust/dwarf-memvars.wasm")
         assertTrue(file.exists(), "fixture must exist: ${file.absolutePath}")
-        return assertNotNull(WasmStackShapeAnalyzer.create(file.readBytes()), "dwarf-memvars must index")
+        return assertNotNull(WasmStackShapeAnalyzer.create(file.readBytes().toCommonByteBuffer()), "dwarf-memvars must index")
     }
 
     @Test fun `rust shadow stack prologue`() {
