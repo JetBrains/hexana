@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PcapChunkedHttpTest {
@@ -148,6 +149,73 @@ class PcapChunkedHttpTest {
         )
         assertNotNull(body)
         assertContentEquals("Hello, World".encodeToByteArray(), body)
+    }
+
+    @Test
+    fun dissectDetectsContentEncoding() {
+        val httpResponse = "HTTP/1.1 200 OK\r\n" +
+            "Content-Encoding: gzip\r\n" +
+            "Content-Type: application/json\r\n" +
+            "\r\n" +
+            "compressed-data-here"
+        val pcapBytes = buildEthernetIpv4TcpPcap(
+            srcIp = byteArrayOf(10, 0, 0, 1),
+            dstIp = byteArrayOf(10, 0, 0, 2),
+            srcPort = 80,
+            dstPort = 12345,
+            payload = httpResponse.encodeToByteArray(),
+        )
+        val buffer = pcapBytes.toCommonByteBuffer()
+        val pcap = PcapParser.parse(buffer)
+        assertNotNull(pcap)
+
+        val dissected = PcapDissector.dissect(buffer, pcap.packets[0], pcap.header.network)
+        assertEquals("HTTP", dissected.protocol)
+        assertEquals("gzip", dissected.httpContentEncoding)
+        assertEquals("application/json", dissected.httpContentType)
+    }
+
+    @Test
+    fun dissectDetectsDeflateContentEncoding() {
+        val httpResponse = "HTTP/1.1 200 OK\r\n" +
+            "Content-Encoding: deflate\r\n" +
+            "Content-Type: text/html\r\n" +
+            "\r\n" +
+            "deflated-data"
+        val pcapBytes = buildEthernetIpv4TcpPcap(
+            srcIp = byteArrayOf(10, 0, 0, 1),
+            dstIp = byteArrayOf(10, 0, 0, 2),
+            srcPort = 80,
+            dstPort = 12345,
+            payload = httpResponse.encodeToByteArray(),
+        )
+        val buffer = pcapBytes.toCommonByteBuffer()
+        val pcap = PcapParser.parse(buffer)
+        assertNotNull(pcap)
+
+        val dissected = PcapDissector.dissect(buffer, pcap.packets[0], pcap.header.network)
+        assertEquals("deflate", dissected.httpContentEncoding)
+    }
+
+    @Test
+    fun dissectNoContentEncodingReturnsNull() {
+        val httpResponse = "HTTP/1.1 200 OK\r\n" +
+            "Content-Type: text/plain\r\n" +
+            "\r\n" +
+            "plain body"
+        val pcapBytes = buildEthernetIpv4TcpPcap(
+            srcIp = byteArrayOf(10, 0, 0, 1),
+            dstIp = byteArrayOf(10, 0, 0, 2),
+            srcPort = 80,
+            dstPort = 12345,
+            payload = httpResponse.encodeToByteArray(),
+        )
+        val buffer = pcapBytes.toCommonByteBuffer()
+        val pcap = PcapParser.parse(buffer)
+        assertNotNull(pcap)
+
+        val dissected = PcapDissector.dissect(buffer, pcap.packets[0], pcap.header.network)
+        assertNull(dissected.httpContentEncoding)
     }
 
     // ---- Test helpers ----

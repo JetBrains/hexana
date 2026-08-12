@@ -1279,9 +1279,10 @@ private fun PcapBinaryProvider.enrichPcapPacketsTab(
             if (d.httpBodyFileOffset < 0 || d.httpBodySize <= 0) return@RowContextMenuItemDescriptor
             scope.launch(Dispatchers.IO) {
                 try {
-                    val bodyBytes = PcapDissector.reassembleHttpBody(
+                    val rawBody = PcapDissector.reassembleHttpBody(
                         provider.bytes, packets, index, linkType, d,
                     ) ?: return@launch
+                    val bodyBytes = decompressHttpBody(rawBody, d.httpContentEncoding)
 
                     val ext = httpContentTypeToExtension(d.httpContentType)
                     val fileName = "http-body-packet-${index + 1}$ext"
@@ -1331,6 +1332,68 @@ private fun PcapBinaryProvider.enrichPcapPacketsTab(
         priority = tab.priority,
         predefinedFilters = tab.predefinedFilters,
     )
+}
+
+/**
+ * Decompresses an HTTP body according to the Content-Encoding header.
+ * Supports gzip, deflate (raw deflate and zlib-wrapped), and x-gzip.
+ * Returns the original bytes unchanged when the encoding is `identity`,
+ * absent, or unrecognised.
+ */
+private fun decompressHttpBody(body: ByteArray, contentEncoding: String?): ByteArray {
+    if (body.isEmpty()) return body
+    val encoding = contentEncoding?.trim()?.lowercase() ?: return body
+    return when (encoding) {
+        "gzip", "x-gzip" -> {
+            try {
+                java.util.zip.GZIPInputStream(body.inputStream()).use { it.readBytes() }
+            } catch (_: Exception) {
+                body
+            }
+        }
+        "deflate" -> {
+            // RFC 7230: "deflate" can be raw deflate or zlib-wrapped.
+            // Try zlib (Inflater with nowrap=false) first, fall back to raw deflate.
+            try {
+                val inflater = java.util.zip.Inflater(false)
+                try {
+                    inflater.setInput(body)
+                    val out = java.io.ByteArrayOutputStream(body.size * 2)
+                    val buf = ByteArray(8192)
+                    while (!inflater.finished()) {
+                        val n = inflater.inflate(buf)
+                        if (n == 0 && inflater.needsInput()) break
+                        out.write(buf, 0, n)
+                    }
+                    out.toByteArray()
+                } finally {
+                    inflater.end()
+                }
+            } catch (_: Exception) {
+                // Fall back to raw deflate (nowrap=true)
+                try {
+                    val inflater = java.util.zip.Inflater(true)
+                    try {
+                        inflater.setInput(body)
+                        val out = java.io.ByteArrayOutputStream(body.size * 2)
+                        val buf = ByteArray(8192)
+                        while (!inflater.finished()) {
+                            val n = inflater.inflate(buf)
+                            if (n == 0 && inflater.needsInput()) break
+                            out.write(buf, 0, n)
+                        }
+                        out.toByteArray()
+                    } finally {
+                        inflater.end()
+                    }
+                } catch (_: Exception) {
+                    body
+                }
+            }
+        }
+        "identity" -> body
+        else -> body // br, zstd, etc. — not supported, return raw
+    }
 }
 
 /** Maps an HTTP Content-Type to a file extension hint for the temp file. */

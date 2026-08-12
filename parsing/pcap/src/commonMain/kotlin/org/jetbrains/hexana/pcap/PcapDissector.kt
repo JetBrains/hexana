@@ -163,6 +163,7 @@ object PcapDissector {
                     httpBodySize = http.bodySize,
                     httpContentType = http.contentType,
                     isChunkedTransferEncoding = http.isChunkedTransferEncoding,
+                    httpContentEncoding = http.contentEncoding,
                 )
             }
 
@@ -595,6 +596,7 @@ object PcapDissector {
         val bodySize: Int,
         val contentType: String?,
         val isChunkedTransferEncoding: Boolean = false,
+        val contentEncoding: String? = null,
     )
 
     private val HTTP_METHODS = listOf("GET ", "POST ", "PUT ", "DELETE ", "HEAD ", "OPTIONS ", "PATCH ", "CONNECT ", "TRACE ")
@@ -623,6 +625,7 @@ object PcapDissector {
         val contentType = parseHeaderValue(preview, "content-type")
         val transferEncoding = parseHeaderValue(preview, "transfer-encoding")
         val isChunked = transferEncoding?.lowercase()?.contains("chunked") == true
+        val contentEncoding = parseHeaderValue(preview, "content-encoding")
 
         val bodyFileOffset: Long
         val bodySize: Int
@@ -640,7 +643,7 @@ object PcapDissector {
                 append(firstLine)
                 if (contentType != null) append("  ($contentType)")
             }
-            HttpInfo("HTTP", statusInfo, bodyFileOffset, bodySize, contentType, isChunked)
+            HttpInfo("HTTP", statusInfo, bodyFileOffset, bodySize, contentType, isChunked, contentEncoding)
         } else {
             // e.g. "GET /index.html HTTP/1.1"
             HttpInfo("HTTP", firstLine, -1, 0, null)
@@ -723,6 +726,8 @@ data class PcapDissectedPacket(
     val httpContentType: String? = null,
     /** `true` when the HTTP response uses chunked transfer encoding. */
     val isChunkedTransferEncoding: Boolean = false,
+    /** HTTP Content-Encoding header value (e.g. "gzip", "deflate", "br"), or `null` when not compressed. */
+    val httpContentEncoding: String? = null,
     /**
      * Decrypted TLS application data plaintext, or `null` when the packet
      * is not encrypted or decryption was not possible (no key / unsupported cipher).
@@ -738,6 +743,7 @@ data class PcapDissectedPacket(
             httpBodySize == other.httpBodySize &&
             httpContentType == other.httpContentType &&
             isChunkedTransferEncoding == other.isChunkedTransferEncoding &&
+            httpContentEncoding == other.httpContentEncoding &&
             (decryptedData contentEquals other.decryptedData)
     }
 
@@ -750,6 +756,7 @@ data class PcapDissectedPacket(
         h = 31 * h + httpBodySize
         h = 31 * h + (httpContentType?.hashCode() ?: 0)
         h = 31 * h + isChunkedTransferEncoding.hashCode()
+        h = 31 * h + (httpContentEncoding?.hashCode() ?: 0)
         h = 31 * h + (decryptedData?.contentHashCode() ?: 0)
         return h
     }
