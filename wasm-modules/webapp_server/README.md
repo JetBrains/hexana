@@ -13,7 +13,7 @@ The crate compiles to a single `.wasm` component that:
   not in the allowlist.
 - Sets correct content-type headers and streams large files in 4 KB chunks.
 
-The allowlisted assets are: `index.html`, `boot.js`, `webapp.js`, `theme.css`, `editor.css`,
+The allowlisted assets are: `index.html`, `robots.txt`, `boot.js`, `webapp.js`, `theme.css`, `editor.css`,
 `wasmprinter_wrapper.wasm`, and everything under `composeResources/`.
 
 Files intentionally excluded: `webapp.js.map`, `mpp-demo.wasm`, `skiko.wasm`,

@@ -18,6 +18,7 @@ fn main() {
     // Allowlisted root files (exact names).
     let root_allowlist: &[&str] = &[
         "index.html",
+        "robots.txt",
         "boot.js",
         "webapp.js",
         "theme.css",
@@ -101,6 +102,8 @@ fn collect_dir(
 fn mime_for(name: &str) -> &'static str {
     if name.ends_with(".html") {
         "text/html; charset=utf-8"
+    } else if name.ends_with(".txt") {
+        "text/plain; charset=utf-8"
     } else if name.ends_with(".js") {
         "text/javascript"
     } else if name.ends_with(".css") {

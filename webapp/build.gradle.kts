@@ -174,6 +174,7 @@ private fun packageFailure(message: String): Nothing = throw GradleException("In
 
 private val productionSourceAssets = listOf(
     "index.html",
+    "robots.txt",
     "boot.js",
     "webapp.js",
     "parser-worker.js",
@@ -181,6 +182,8 @@ private val productionSourceAssets = listOf(
     "theme.css",
     "editor.css",
 )
+
+private val robotsPolicy = "User-agent: *\nDisallow: /\n"
 
 private data class ResolvedRuntimeComponent(
     val identity: String,
@@ -302,6 +305,7 @@ private fun verifyProductionPackage(packageDir: File) {
     }
     val nonAssetAllowlist = listOf(
         "index.html",
+        "robots.txt",
         "build-identity.json",
         "sbom.cdx.json",
         "resolved-dependencies.json",
@@ -329,6 +333,9 @@ private fun verifyProductionPackage(packageDir: File) {
     val index = packageDir.resolve("index.html").readText()
     if (!index.contains("http-equiv=\"Content-Security-Policy\"") || !index.contains(productionCsp) || "http://" in index || "https://" in index) {
         packageFailure("index.html has an unsafe connection or script policy")
+    }
+    if (packageDir.resolve("robots.txt").readText() != robotsPolicy) {
+        packageFailure("robots.txt does not disallow crawling")
     }
     val policy = packageDir.resolve("hosting-policy.json").readText()
     listOf("object-src 'none'", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'", "X-Content-Type-Options\":\"nosniff", "Referrer-Policy\":\"no-referrer", "Permissions-Policy", "X-Frame-Options\":\"DENY", "Cross-Origin-Opener-Policy\":\"same-origin", "Cross-Origin-Embedder-Policy\":\"require-corp", "Strict-Transport-Security\":\"max-age=31536000\"", "HTTPS edge-only").forEach { required ->
@@ -445,6 +452,7 @@ val packageProductionWebapp by tasks.registering {
             .replace("boot.js", "assets/$bootName")
             .replace("webapp.js", "assets/$webappName")
             .also { output.resolve("index.html").writeText(it, StandardCharsets.UTF_8) }
+        source.resolve("robots.txt").copyTo(output.resolve("robots.txt"), overwrite = true)
 
         val revision = webappRevision.get()
         val version = webappArtifactVersion.get()
