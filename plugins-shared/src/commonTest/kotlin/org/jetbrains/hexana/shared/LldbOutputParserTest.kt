@@ -167,6 +167,28 @@ class LldbOutputParserTest {
         assertNull(parseLldbFrameLocation(lines))
     }
 
+    @Test
+    fun framePc() {
+        val lines = listOf(
+            "frame #0: 0x0000000102290abc JIT(0x5678)`calculate(a=1, b=2) at src/lib.rs:42:5"
+        )
+        assertEquals(0x102290abcuL, parseLldbFramePc(lines))
+    }
+
+    @Test
+    fun framePcPrefersLastFrameLine() {
+        val lines = listOf(
+            "frame #1: 0x0000000100001000 wasmtime`main",
+            "frame #0: 0x0000000102290abc JIT(0x5678)`calculate",
+        )
+        assertEquals(0x102290abcuL, parseLldbFramePc(lines))
+    }
+
+    @Test
+    fun framePcNotFound() {
+        assertEquals(null, parseLldbFramePc(listOf("Process 123 stopped", "no frame here 0x1234")))
+    }
+
     // ── parseRawDwarfPath / parseRawDwarfLine ───────────────────────
 
     @Test

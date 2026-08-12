@@ -367,6 +367,67 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
         return resolved
     }
 
+    /**
+     * Dumps every ELF image registered with the GDB JIT interface
+     * (`__jit_debug_descriptor`) from the inferior's memory into
+     * [tempDir], one file per registered entry.
+     *
+     * Wasmtime registers one image per compiled module; each contains
+     * the `.wasmtime.addrmap` section with the `.text` address patched
+     * to the real load address of the JIT-compiled code, which is what
+     * [org.jetbrains.hexana.shared.WasmtimeAddrmap] consumes.
+     *
+     * Must be called while the process is stopped.
+     *
+     * @return absolute paths of the dumped image files, empty when the
+     *         descriptor is absent or has no populated entries (e.g.
+     *         wasmtime on Windows ARM64).
+     */
+    fun dumpJitImages(tempDir: String): List<String> {
+        val escapedTempDir = tempDir.replace("\\", "/")
+        val pythonLines = listOf(
+            "import struct, os, lldb",
+            "t = lldb.debugger.GetSelectedTarget()",
+            "p = t.GetProcess()",
+            "e = t.GetByteOrder()",
+            "ps = t.GetAddressByteSize()",
+            "bo = '<' if e == lldb.eByteOrderLittle else '>'",
+            "pfmt = bo + ('Q' if ps == 8 else 'I')",
+            "syms = [s for s in t.FindSymbols('__jit_debug_descriptor')]",
+            "desc_addr = syms[0].GetSymbol().GetStartAddress().GetLoadAddress(t) if syms else 0",
+            "err = lldb.SBError()",
+            "desc = p.ReadMemory(desc_addr, 8 + ps + ps, err) if desc_addr else b''",
+            "first = struct.unpack_from(pfmt, desc, 8 + ps)[0] if err.Success() and len(desc) >= 8 + ps + ps else 0",
+            "entry = first",
+            "i = 0",
+            "while entry and i < 64:",
+            "    eb = p.ReadMemory(entry, ps * 3 + 8, err)",
+            "    if not err.Success() or len(eb) < ps * 3 + 8:",
+            "        break",
+            "    nxt = struct.unpack_from(pfmt, eb, 0)[0]",
+            "    sym_addr = struct.unpack_from(pfmt, eb, ps * 2)[0]",
+            "    sym_size = struct.unpack_from(bo + 'Q', eb, ps * 3)[0]",
+            "    if sym_addr and 0 < sym_size < 100 * 1024 * 1024:",
+            "        img = p.ReadMemory(sym_addr, sym_size, err)",
+            "        if err.Success() and len(img) == sym_size:",
+            "            fp = os.path.join('$escapedTempDir', 'jit_img_%d_%x.elf' % (i, sym_addr))",
+            "            with open(fp, 'wb') as f:",
+            "                f.write(img)",
+            "            print('JITIMG:%s' % fp)",
+            "    entry = nxt",
+            "    i += 1",
+            "",  // end of while block
+        )
+        val output = sendPythonScriptAndCollectOutput(pythonLines, timeoutMs = 30_000)
+        val paths = output.filter { "JITIMG:" in it }.map { it.substringAfter("JITIMG:").trim() }
+        if (paths.isEmpty()) {
+            LOG.warn("dumpJitImages: no JIT images found: ${output.joinToString(" ")}")
+        } else {
+            LOG.debug("dumpJitImages: dumped ${paths.size} image(s): $paths")
+        }
+        return paths
+    }
+
     fun sendSourceMap(from: String, to: String) {
         sendCommand("settings set target.source-map \"$from\" \"$to\"")
     }

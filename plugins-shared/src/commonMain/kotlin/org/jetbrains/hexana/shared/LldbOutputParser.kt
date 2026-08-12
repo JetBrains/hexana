@@ -180,6 +180,32 @@ fun parseLldbFrameLocation(lines: List<String>): LldbFrameLocation? {
 }
 
 /**
+ * Matches the program counter in LLDB frame output:
+ * `frame #0: 0x0000000102290abc ...`.
+ */
+private val FRAME_PC_PATTERN =
+    """frame #\d+: (0x[0-9a-fA-F]+)""".toRegex()
+
+/**
+ * Parses the program counter from LLDB frame output lines (e.g. the
+ * output of `frame info`).
+ *
+ * Scans lines in reverse order (most recent frame first), mirroring
+ * [parseLldbFrameLocation].
+ *
+ * @return the pc as an unsigned 64-bit address, or `null` when no
+ *         frame line with a hex pc is found
+ */
+fun parseLldbFramePc(lines: List<String>): ULong? {
+    for (line in lines.asReversed()) {
+        val match = FRAME_PC_PATTERN.find(line) ?: continue
+        val pc = match.groupValues[1].removePrefix("0x").toULongOrNull(16) ?: continue
+        return pc
+    }
+    return null
+}
+
+/**
  * Extracts the raw file path from LLDB frame output without
  * attempting to resolve it to a local file. This is the path
  * exactly as LLDB reports it in the `at <path>:<line>` portion

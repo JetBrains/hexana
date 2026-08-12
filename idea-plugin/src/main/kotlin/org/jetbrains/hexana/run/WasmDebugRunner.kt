@@ -156,6 +156,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     compositionUsed = buildResult.compositionUsed,
                     dwarfInjected = buildResult.dwarfInjected,
                     engine = WasmEngine.WASMTIME,
+                    executedWasmPath = buildResult.executedWasmPath,
                 ).also {
                     it.dwarfVariableResolver = dwarfResolver
                 }

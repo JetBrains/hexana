@@ -2,6 +2,7 @@ package org.jetbrains.hexana.run
 
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.ui.ExecutionConsole
+import com.intellij.execution.ui.RunnerLayoutUi
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Document
@@ -9,9 +10,11 @@ import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.fileTypes.PlainTextFileType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.SystemInfo
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugSession
+import com.intellij.xdebugger.XDebugSessionListener
 import com.intellij.xdebugger.XExpression
 import com.intellij.xdebugger.XSourcePosition
 import com.intellij.xdebugger.breakpoints.XBreakpointHandler
@@ -20,7 +23,9 @@ import com.intellij.xdebugger.evaluation.EvaluationMode
 import com.intellij.xdebugger.evaluation.XDebuggerEditorsProvider
 import com.intellij.xdebugger.frame.XSuspendContext
 import com.intellij.xdebugger.impl.XDebuggerUtilImpl
+import com.intellij.xdebugger.ui.XDebugTabLayouter
 import org.jetbrains.hexana.shared.JIT_REGISTER_FUNCTION_NAME
+import org.jetbrains.hexana.shared.WasmtimeAddrmap
 import org.jetbrains.hexana.shared.LLDB_ADVANCE_PC_PAST_TRAP_CMD
 import org.jetbrains.hexana.shared.cuPathEndsWithProjectRelative
 import org.jetbrains.hexana.shared.extractCrateName
@@ -28,11 +33,13 @@ import org.jetbrains.hexana.shared.cuPathMatchesIdePath
 import org.jetbrains.hexana.shared.extractProjectRelativePath
 import org.jetbrains.hexana.shared.functionNameMatchesIdePath
 import org.jetbrains.hexana.shared.parseLldbFrameLocation
+import org.jetbrains.hexana.shared.parseLldbFramePc
 import org.jetbrains.hexana.shared.parseLldbFunctionName
 import org.jetbrains.hexana.shared.parseRawDwarfLine
 import org.jetbrains.hexana.shared.parseRawDwarfPath
 import org.jetbrains.hexana.shared.pathMatchesBreakpointLocation
 import org.jetbrains.hexana.shared.stripCuHashSuffix
+import java.io.File
 
 /**
  * A debug process that launches wasmtime under LLDB so that
@@ -56,6 +63,12 @@ open class WasmDebugProcess(
     private val compositionUsed: Boolean = false,
     private val dwarfInjected: Boolean = false,
     internal val engine: WasmEngine = WasmEngine.WASMTIME,
+    /**
+     * Path of the wasm binary the debuggee actually executes (the composed
+     * temp file when component composition was used). Enables the "Wasm"
+     * disassembly tab with per-instruction highlight; null disables it.
+     */
+    internal val executedWasmPath: String? = null,
 ) : XDebugProcess(session) {
 
     /**
@@ -86,6 +99,24 @@ open class WasmDebugProcess(
     @Volatile
     private var eventLoopThread: Thread? = null
 
+    // --- "Wasm" debugger tab (wasmtime only): per-instruction disassembly highlight ---
+
+    private val wasmDisassemblyModel = WasmDisassemblyTableModel()
+    private val wasmDisassemblyPanel = WasmDisassemblyPanel(wasmDisassemblyModel)
+
+    /** Indexes the executed wasm binary; initialized lazily on first stop (off-EDT). */
+    private val wasmDisassemblySource by lazy { WasmDisassemblySource(executedWasmPath) }
+
+    /**
+     * Addrmaps decoded from the ELF images the debuggee registered with the
+     * GDB JIT interface, one per compiled wasm module. Populated on the
+     * first stop whose pc is not covered by the cached maps.
+     */
+    @Volatile
+    private var jitAddrmaps: List<WasmtimeAddrmap> = emptyList()
+
+    private val jitImagesDir by lazy { FileUtil.createTempDirectory("hexana-jit-images", null, true) }
+
     /** Provides access to the LLDB communicator for subclasses. */
     internal fun getLldb(): LldbCommunicator? = lldb
 
@@ -97,9 +128,31 @@ open class WasmDebugProcess(
 
     override fun getBreakpointHandlers(): Array<XBreakpointHandler<*>> = arrayOf(breakpointHandler)
 
+    override fun createTabLayouter(): XDebugTabLayouter = object : XDebugTabLayouter() {
+        override fun registerAdditionalContent(ui: RunnerLayoutUi) {
+            if (engine != WasmEngine.WASMTIME || executedWasmPath == null) return
+            val content = ui.createContent(
+                "WasmDisassembly",
+                wasmDisassemblyPanel.component,
+                "Wasm",
+                null,
+                null,
+            )
+            content.isCloseable = false
+            ui.addContent(content)
+        }
+    }
+
     override fun sessionInitialized() {
         super.sessionInitialized()
         LOG.debug("sessionInitialized: lldb=${lldb != null}, isWindows=${SystemInfo.isWindows}, engine=$engine, registeredBreakpoints=${registeredBreakpoints.size}")
+        if (engine == WasmEngine.WASMTIME && executedWasmPath != null) {
+            session.addSessionListener(object : XDebugSessionListener {
+                override fun sessionResumed() {
+                    ApplicationManager.getApplication().invokeLater { wasmDisassemblyModel.clear() }
+                }
+            })
+        }
         if (lldb != null) {
             if (compositionUsed) {
                 if (dwarfInjected) {
@@ -921,6 +974,7 @@ open class WasmDebugProcess(
                 } else null
 
             if (effectiveBreakpoint != null) {
+                updateWasmDisassemblyTab(communicator, lines)
                 val frame = WasmStackFrame(
                     resolvedPosition, functionName, lldb,
                     dwarfVariableResolver = dwarfVariableResolver,
@@ -1045,6 +1099,7 @@ open class WasmDebugProcess(
             return
         }
 
+        updateWasmDisassemblyTab(communicator, lines)
         val frame = WasmStackFrame(
             sourcePosition, functionName, lldb,
             dwarfVariableResolver = dwarfVariableResolver,
@@ -1054,6 +1109,53 @@ open class WasmDebugProcess(
         ApplicationManager.getApplication().invokeLater {
             session.positionReached(context)
         }
+    }
+
+    /**
+     * Refreshes the "Wasm" disassembly tab for a stop that is about to be
+     * presented: translates the stopped pc to a wasm instruction offset via
+     * the JIT images' `.wasmtime.addrmap` and highlights that instruction.
+     *
+     * Runs on the event loop thread while the process is stopped; only the
+     * table update touches the EDT. No-op for non-wasmtime engines.
+     */
+    private fun updateWasmDisassemblyTab(communicator: LldbCommunicator, frameInfoLines: List<String>) {
+        if (engine != WasmEngine.WASMTIME || executedWasmPath == null) return
+        val pc = parseLldbFramePc(frameInfoLines)
+        val wasmOffset = pc?.let { lookupWasmOffset(communicator, it) }
+        val rows = wasmOffset?.let { wasmDisassemblySource.rowsForOffset(it)?.first }
+        ApplicationManager.getApplication().invokeLater {
+            if (rows == null || wasmOffset == null) {
+                wasmDisassemblyModel.clear()
+            } else {
+                wasmDisassemblyModel.update(rows)
+                wasmDisassemblyPanel.highlight(wasmOffset)
+            }
+        }
+    }
+
+    private fun lookupWasmOffset(communicator: LldbCommunicator, pc: ULong): Int? {
+        if (jitAddrmaps.none { it.containsPc(pc) }) {
+            // The registered image set may have grown since the last dump
+            // (wasmtime registers one image per compiled module), so refresh
+            // when the pc is not covered. Stops in non-wasm code (runtime
+            // frames) pay one Python round-trip each; wasm stops after the
+            // first dump are pure cache hits.
+            refreshJitAddrmaps(communicator)
+        }
+        return jitAddrmaps.firstOrNull { it.containsPc(pc) }?.wasmOffsetForPc(pc)
+    }
+
+    private fun refreshJitAddrmaps(communicator: LldbCommunicator) {
+        jitAddrmaps = communicator.dumpJitImages(jitImagesDir.absolutePath).mapNotNull { path ->
+            try {
+                WasmtimeAddrmap.parse(File(path).readBytes())
+            } catch (e: Exception) {
+                LOG.debug("Failed to read/parse JIT image $path", e)
+                null
+            }
+        }
+        LOG.debug("refreshJitAddrmaps: ${jitAddrmaps.size} addrmap(s) decoded")
     }
 
     /**

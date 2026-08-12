@@ -132,6 +132,7 @@ class WasmtimeDebugCommandLineState(
                 arguments = cmdLine.arguments,
                 compositionUsed = compositionUsed,
                 dwarfInjected = dwarfInjected,
+                executedWasmPath = effectiveWasmPath.ifBlank { null },
             )
         }
 
@@ -151,6 +152,8 @@ class WasmtimeDebugCommandLineState(
             val arguments: List<String>,
             val compositionUsed: Boolean,
             val dwarfInjected: Boolean = false,
+            /** Path of the wasm binary wasmtime actually runs (the composed temp file when composition was used). */
+            val executedWasmPath: String? = null,
         )
     }
 }
