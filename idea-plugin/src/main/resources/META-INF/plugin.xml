@@ -89,6 +89,10 @@
         <postStartupActivity implementation="org.jetbrains.hexana.whatsnew.HexanaWhatsNewStartupActivity"
                              order="last"/>
 
+        <!-- Warms the DWARF source-name cache used by WasmLineBreakpointType.canPutAt
+             (EDT-safe breakpoint placement needs the index snapshot preloaded). -->
+        <postStartupActivity implementation="org.jetbrains.hexana.run.WasmDwarfSourceNamesPreloader"/>
+
         <!-- Status bar widget surfacing in-flight Hexana disassembly work.
              Hidden when idle; shows "Disassembling: N" while decode +
              render is happening. -->

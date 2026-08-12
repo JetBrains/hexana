@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.run
 
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
@@ -7,7 +8,11 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.util.indexing.FileBasedIndex
 import com.intellij.xdebugger.breakpoints.XLineBreakpointType
 import org.jetbrains.hexana.DwarfIndexId
@@ -60,25 +65,29 @@ class WasmLineBreakpointType :
     }
 }
 
-/**
- * Project-level cache of source file names referenced by DWARF debug info
- * in the project's wasm binaries (basenames of [DwarfIndexId] keys).
- *
- * [WasmLineBreakpointType.canPutAt] runs on the EDT where querying the
- * file-based index directly is a prohibited slow operation, so the index
- * is read on a pooled thread and the result cached. Reads return the last
- * loaded snapshot (or `null` before the first load completes — breakpoint
- * placement is then temporarily unavailable and self-heals on the next
- * gutter interaction) and schedule a background refresh at most once per
- * [REFRESH_INTERVAL_MS].
- */
 @Service(Service.Level.PROJECT)
-class WasmDwarfSourceNamesCache(private val project: Project) {
+class WasmDwarfSourceNamesCache(private val project: Project) : Disposable {
 
     @Volatile
     private var names: Set<String>? = null
 
     private var lastLoadStarted = 0L
+
+    init {
+        // A rebuilt/added wasm binary changes the DWARF index; refresh
+        // eagerly so the very next gutter click sees the new source names
+        // instead of waiting out the TTL.
+        project.messageBus.connect(this).subscribe(
+            VirtualFileManager.VFS_CHANGES,
+            object : BulkFileListener {
+                override fun after(events: List<VFileEvent>) {
+                    if (events.any { it.file?.extension?.lowercase() == "wasm" }) {
+                        forceRefresh()
+                    }
+                }
+            },
+        )
+    }
 
     /** Returns the cached DWARF source basenames, scheduling a refresh when stale. */
     fun sourceFileNames(): Set<String>? {
@@ -86,7 +95,12 @@ class WasmDwarfSourceNamesCache(private val project: Project) {
         return names
     }
 
-    private fun scheduleRefreshIfStale() {
+    private fun forceRefresh() {
+        synchronized(this) { lastLoadStarted = 0L }
+        scheduleRefreshIfStale()
+    }
+
+    internal fun scheduleRefreshIfStale() {
         val now = System.currentTimeMillis()
         synchronized(this) {
             if (now - lastLoadStarted < REFRESH_INTERVAL_MS) return
@@ -99,16 +113,30 @@ class WasmDwarfSourceNamesCache(private val project: Project) {
                     FileBasedIndex.getInstance().getAllKeys(DwarfIndexId, project)
                 }
                 names = keys.mapTo(mutableSetOf()) { it.substringAfterLast('/') }
+                LOG.debug("Loaded ${keys.size} DWARF source names")
             } catch (e: ProcessCanceledException) {
                 throw e
             } catch (e: Exception) {
-                Logger.getInstance(WasmDwarfSourceNamesCache::class.java)
-                    .debug("Failed to load DWARF source names", e)
+                LOG.debug("Failed to load DWARF source names", e)
             }
         }
     }
 
+    override fun dispose() {}
+
     private companion object {
         const val REFRESH_INTERVAL_MS = 5_000L
+        val LOG = Logger.getInstance(WasmDwarfSourceNamesCache::class.java)
+    }
+}
+
+/**
+ * Warms [WasmDwarfSourceNamesCache] at project startup so the first gutter
+ * click already has the DWARF source names (a cold cache makes
+ * [WasmLineBreakpointType.canPutAt] deny the very first placement attempt).
+ */
+internal class WasmDwarfSourceNamesPreloader : ProjectActivity {
+    override suspend fun execute(project: Project) {
+        project.service<WasmDwarfSourceNamesCache>().scheduleRefreshIfStale()
     }
 }
