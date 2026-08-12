@@ -164,6 +164,12 @@ object PcapDissector {
                     httpContentType = http.contentType,
                 )
             }
+
+            // Try TLS detection on TCP payload
+            val tls = TlsRecordParser.dissect(buffer, payloadOffset, payloadLen)
+            if (tls != null) {
+                return PcapDissectedPacket(src, dst, tls.protocol, tls.info)
+            }
         }
 
         val flagStr = buildString {
@@ -450,7 +456,7 @@ data class PcapDissectedPacket(
     val source: String,
     /** Destination address (IP, MAC, or empty if unknown). */
     val destination: String,
-    /** Protocol name (e.g. "TCP", "UDP", "ARP", "ICMP"). */
+    /** Protocol name (e.g. "TCP", "UDP", "ARP", "ICMP", "TLSv1.2"). */
     val protocol: String,
     /** Short info string similar to Wireshark's Info column. */
     val info: String,
@@ -463,4 +469,32 @@ data class PcapDissectedPacket(
     val httpBodySize: Int = 0,
     /** HTTP Content-Type header value, or `null` when not available. */
     val httpContentType: String? = null,
-)
+    /**
+     * Decrypted TLS application data plaintext, or `null` when the packet
+     * is not encrypted or decryption was not possible (no key / unsupported cipher).
+     */
+    val decryptedData: ByteArray? = null,
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is PcapDissectedPacket) return false
+        return source == other.source && destination == other.destination &&
+            protocol == other.protocol && info == other.info &&
+            httpBodyFileOffset == other.httpBodyFileOffset &&
+            httpBodySize == other.httpBodySize &&
+            httpContentType == other.httpContentType &&
+            (decryptedData contentEquals other.decryptedData)
+    }
+
+    override fun hashCode(): Int {
+        var h = source.hashCode()
+        h = 31 * h + destination.hashCode()
+        h = 31 * h + protocol.hashCode()
+        h = 31 * h + info.hashCode()
+        h = 31 * h + httpBodyFileOffset.hashCode()
+        h = 31 * h + httpBodySize
+        h = 31 * h + (httpContentType?.hashCode() ?: 0)
+        h = 31 * h + (decryptedData?.contentHashCode() ?: 0)
+        return h
+    }
+}

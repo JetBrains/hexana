@@ -73,6 +73,7 @@ private fun pcapPacketsTab(pcap: PcapFile, provider: PcapBinaryProvider): TableT
         pcap.header.magic == org.jetbrains.hexana.pcap.PCAP_MAGIC_NSEC_BE
 
     val linkType = pcap.header.network
+    val hasKeyLog = provider.sslKeyLog.isNotEmpty
 
     // Reference timestamp from the first packet for relative display (like Wireshark)
     val firstPacket = packets[0]
@@ -90,28 +91,51 @@ private fun pcapPacketsTab(pcap: PcapFile, provider: PcapBinaryProvider): TableT
         }
     }
 
+    val columns = mutableListOf(
+        col("No.", ColumnWidth.MeasuredMin("99999")) { CellValue(it + 1) },
+        col("Time", ColumnWidth.MeasuredMin("00000.000000")) { i ->
+            val p = packets[i]
+            val deltaSec = (p.tsSec - refSec).toDouble() + (p.tsUsec - refUsec).toDouble() / fracDivisor
+            val formatted = formatRelativeTime(deltaSec, nsResolution)
+            CellValue(formatted)
+        },
+        col("Source", ColumnWidth.MeasuredMin("000.000.000.000")) { CellValue(dissected(it).source) },
+        col("Destination", ColumnWidth.MeasuredMin("000.000.000.000")) { CellValue(dissected(it).destination) },
+        col("Protocol", ColumnWidth.MeasuredMin("Protocol")) { CellValue(dissected(it).protocol) },
+        col("Length", ColumnWidth.MeasuredMin("Length")) { CellValue(packets[it].origLen) },
+        col("Info", ColumnWidth.Fill()) { CellValue(dissected(it).info) },
+    )
+
+    // When an SSL key log is loaded, add a column showing decryption status
+    if (hasKeyLog) {
+        columns.add(col("Decrypted", ColumnWidth.MeasuredMin("Decrypted")) { i ->
+            val d = dissected(i)
+            val decrypted = d.decryptedData
+            val text = when {
+                decrypted != null -> "✓ ${decrypted.size} bytes"
+                d.protocol.startsWith("TLS") && d.info.contains("Application Data") -> "🔒 encrypted"
+                else -> ""
+            }
+            CellValue(text)
+        })
+    }
+
+    val prologueText = if (hasKeyLog) {
+        "🔑 SSL key log loaded (${provider.sslKeyLog.sessionCount} sessions)"
+    } else {
+        null
+    }
+
     return TableTabDescriptor(
         name = "Packets",
-        columns = listOf(
-            col("No.", ColumnWidth.MeasuredMin("99999")) { CellValue(it + 1) },
-            col("Time", ColumnWidth.MeasuredMin("00000.000000")) { i ->
-                val p = packets[i]
-                val deltaSec = (p.tsSec - refSec).toDouble() + (p.tsUsec - refUsec).toDouble() / fracDivisor
-                val formatted = formatRelativeTime(deltaSec, nsResolution)
-                CellValue(formatted)
-            },
-            col("Source", ColumnWidth.MeasuredMin("000.000.000.000")) { CellValue(dissected(it).source) },
-            col("Destination", ColumnWidth.MeasuredMin("000.000.000.000")) { CellValue(dissected(it).destination) },
-            col("Protocol", ColumnWidth.MeasuredMin("Protocol")) { CellValue(dissected(it).protocol) },
-            col("Length", ColumnWidth.MeasuredMin("Length")) { CellValue(packets[it].origLen) },
-            col("Info", ColumnWidth.Fill()) { CellValue(dissected(it).info) },
-        ),
+        columns = columns,
         rowCount = packets.size,
         defaultSortColumn = 0,
         alwaysShowSearch = true,
         showIdColumn = false,
         searchPlaceholder = "Search packets",
         priority = TabPriority.High,
+        prologueText = prologueText,
         rowSelectionProvider = { i ->
             val p = packets[i]
             val offset = p.fileOffset.toInt()

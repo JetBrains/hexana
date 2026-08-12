@@ -249,6 +249,12 @@ private fun NormalModeContent(
         )
     }
 
+    // SSL key log button for PCAP files — shown only when encrypted packets are present
+    if (binaryProvider is org.jetbrains.hexana.providers.PcapBinaryProvider &&
+        (binaryProvider.hasEncryptedPackets || binaryProvider.sslKeyLog.isNotEmpty)) {
+        PcapSslKeyLogButton(binaryProvider, state)
+    }
+
     if (parentFileName != null) {
         val linkColor = if (JewelTheme.isDark) Color(0xFF589DF6) else Color(0xFF2470B3)
         val parentExt = parentFileName.substringAfterLast('.', "").lowercase()
@@ -712,4 +718,175 @@ private fun finalizeWriteToSibling(
             )
         }
     }
+}
+
+// ---- PCAP SSL Key Log UI ----
+
+/** Well-known sibling file names for auto-detecting SSL key log files. */
+private val SSL_KEY_LOG_SIBLING_NAMES = listOf(
+    "sslkeylog.txt",
+    "sslkeylog.log",
+    "ssl-key.log",
+    "keylog.txt",
+    "premaster.txt",
+)
+
+/**
+ * Attempts to find an SSL key log file next to the PCAP file.
+ * Checks for well-known names and files matching `*.sslkeylog` or
+ * `<pcapname>.keylog`.
+ */
+internal fun autoDetectSslKeyLog(
+    pcapFile: com.intellij.openapi.vfs.VirtualFile,
+): com.intellij.openapi.vfs.VirtualFile? {
+    val parent = pcapFile.parent ?: return null
+    val baseName = pcapFile.nameWithoutExtension.lowercase()
+
+    // Check well-known names
+    for (name in SSL_KEY_LOG_SIBLING_NAMES) {
+        val sibling = parent.findChild(name)
+        if (sibling != null && sibling.isValid && !sibling.isDirectory) return sibling
+    }
+
+    // Check <pcapname>.keylog or <pcapname>.sslkeylog
+    val keylogName = "$baseName.keylog"
+    val sslKeylogName = "$baseName.sslkeylog"
+    for (child in parent.children) {
+        val childName = child.name.lowercase()
+        if (childName == keylogName || childName == sslKeylogName) return child
+    }
+
+    return null
+}
+
+/**
+ * Button in the file description bar for PCAP files that allows loading
+ * an SSL key log file for TLS decryption. Auto-detects sibling key files
+ * on first render.
+ */
+@Composable
+private fun PcapSslKeyLogButton(
+    provider: org.jetbrains.hexana.providers.PcapBinaryProvider,
+    state: HexViewStateHolder,
+) {
+    val hasKeyLog = provider.sslKeyLog.isNotEmpty
+    val keyBadgeBg = if (hasKeyLog) {
+        if (JewelTheme.isDark) Color(0xFF2E5339) else Color(0xFFE8F5E9)
+    } else {
+        if (JewelTheme.isDark) Color(0xFF4D4D4D) else Color(0xFFE0E0E0)
+    }
+    val keyBadgeFg = if (JewelTheme.isDark) Color.White else Color.Black
+
+    // Auto-detect sibling key log on first composition
+    val sourceFile = (provider as? org.jetbrains.hexana.providers.BinaryVirtualFileProvider)?.file
+    androidx.compose.runtime.LaunchedEffect(provider) {
+        if (provider.sslKeyLog.isNotEmpty) return@LaunchedEffect
+        if (sourceFile == null) return@LaunchedEffect
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val keyFile = autoDetectSslKeyLog(sourceFile) ?: return@withContext
+            try {
+                val content = String(keyFile.contentsToByteArray(), Charsets.UTF_8)
+                val keyLog = org.jetbrains.hexana.pcap.SslKeyLog.parse(content)
+                if (keyLog.isNotEmpty) {
+                    provider.sslKeyLog = keyLog
+                    org.jetbrains.hexana.HexanaLog.LOG.info(
+                        "Auto-detected SSL key log: ${keyFile.name} (${keyLog.sessionCount} sessions)"
+                    )
+                }
+            } catch (t: Throwable) {
+                org.jetbrains.hexana.HexanaLog.LOG.warn("Failed to load auto-detected SSL key log: ${keyFile.name}", t)
+            }
+        }
+    }
+
+    if (hasKeyLog) {
+        Text(
+            text = "\uD83D\uDD11 SSL keys loaded (${provider.sslKeyLog.sessionCount} sessions)",
+            modifier = Modifier
+                .background(keyBadgeBg, RoundedCornerShape(4.dp))
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+            style = TextStyle(fontSize = 11.sp, color = keyBadgeFg),
+        )
+    }
+
+    OutlinedButton(
+        onClick = {
+            @Suppress("DEPRECATION")
+            val descriptor = com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
+                .createSingleFileDescriptor()
+                .withTitle("Select SSL Key Log File")
+                .withDescription("Choose an SSLKEYLOGFILE (NSS Key Log Format) for TLS decryption")
+            val chosen = com.intellij.openapi.fileChooser.FileChooser.chooseFile(
+                descriptor, state.project, null,
+            )
+            if (chosen != null) {
+                try {
+                    val content = String(chosen.contentsToByteArray(), Charsets.UTF_8)
+                    if (looksLikePrivateKey(content)) {
+                        showPrivateKeyHintDialog(state.project)
+                        return@OutlinedButton
+                    }
+                    val keyLog = org.jetbrains.hexana.pcap.SslKeyLog.parse(content)
+                    if (keyLog.isNotEmpty) {
+                        provider.sslKeyLog = keyLog
+                        org.jetbrains.hexana.HexanaLog.LOG.info(
+                            "Loaded SSL key log: ${chosen.name} (${keyLog.sessionCount} sessions)"
+                        )
+                    } else {
+                        Messages.showWarningDialog(
+                            state.project,
+                            "The selected file does not contain any recognised SSL key log entries.\n\n" +
+                                "Expected format: CLIENT_RANDOM <hex> <hex>",
+                            "No Keys Found",
+                        )
+                    }
+                } catch (t: Throwable) {
+                    org.jetbrains.hexana.HexanaLog.LOG.warn("Failed to load SSL key log: ${chosen.name}", t)
+                    Messages.showErrorDialog(
+                        state.project,
+                        "Failed to read the key log file: ${t.message}",
+                        "SSL Key Log Error",
+                    )
+                }
+            }
+        },
+        modifier = Modifier.height(24.dp),
+    ) {
+        Text(
+            text = if (hasKeyLog) "Change Key Log\u2026" else "Load SSL Key Log\u2026",
+            style = TextStyle(fontSize = 11.sp),
+        )
+    }
+}
+
+/**
+ * Returns `true` when [content] looks like a PEM-encoded private key
+ * (RSA, EC, PKCS#8, etc.) rather than an NSS Key Log file.
+ */
+private fun looksLikePrivateKey(content: String): Boolean {
+    val trimmed = content.trimStart()
+    return trimmed.startsWith("-----BEGIN") && trimmed.contains("PRIVATE KEY-----")
+}
+
+/**
+ * Shows an informational dialog when the user selects a private key file
+ * instead of an SSLKEYLOG file, explaining how to obtain the correct
+ * key material for TLS decryption.
+ */
+private fun showPrivateKeyHintDialog(project: com.intellij.openapi.project.Project) {
+    Messages.showInfoMessage(
+        project,
+        "You selected a private key file. Hexana uses the NSS Key Log Format " +
+            "(SSLKEYLOGFILE) for TLS decryption, not raw private keys.\n\n" +
+            "To capture an SSL key log:\n" +
+            "  \u2022 Set the SSLKEYLOGFILE environment variable before starting your " +
+            "application, e.g.:\n" +
+            "      export SSLKEYLOGFILE=/tmp/sslkeys.log\n" +
+            "  \u2022 Run the TLS client/server \u2014 the key log file will be created " +
+            "automatically.\n" +
+            "  \u2022 Then load that file here.\n\n" +
+            "Most TLS libraries (OpenSSL, NSS, BoringSSL, Go, Java 17+) honour " +
+            "this variable.",
+        "Private Key Not Supported",
+    )
 }

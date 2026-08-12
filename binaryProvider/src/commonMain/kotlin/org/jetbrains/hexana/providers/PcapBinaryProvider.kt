@@ -7,6 +7,10 @@ import org.jetbrains.hexana.pcap.PcapNgFile
 import org.jetbrains.hexana.pcap.PcapNgParser
 import org.jetbrains.hexana.pcap.PcapPacketRecord
 import org.jetbrains.hexana.pcap.PcapParser
+import org.jetbrains.hexana.pcap.PcapDissector
+import org.jetbrains.hexana.pcap.SslKeyLog
+import org.jetbrains.hexana.pcap.TcpStreamKey
+import org.jetbrains.hexana.pcap.buildTlsSessionMap
 
 /**
  * Binary provider for PCAP and PCAP-NG capture files. Extends [GenericBinaryProvider]
@@ -46,6 +50,41 @@ class PcapBinaryProvider(
         } catch (_: Throwable) {
             null
         }
+    }
+
+    /**
+     * SSL key log loaded for this capture. When set, TLS Application Data
+     * packets can be decrypted and their plaintext shown in the UI.
+     * Updated from the IDE layer when the user loads a key file or one is
+     * auto-detected next to the PCAP file.
+     */
+    var sslKeyLog: SslKeyLog = SslKeyLog.EMPTY
+
+    /**
+     * `true` when at least one packet in the capture contains a TLS record.
+     * Used to decide whether to show the "Load SSL Key Log" button.
+     */
+    val hasEncryptedPackets: Boolean by lazy {
+        val pcap = parsedPcapFile ?: return@lazy false
+        val linkType = pcap.header.network
+        pcap.packets.any { packet ->
+            try {
+                val d = PcapDissector.dissect(bytes, packet, linkType)
+                d.protocol.startsWith("TLS")
+            } catch (_: Throwable) {
+                false
+            }
+        }
+    }
+
+    /**
+     * Map from canonical TCP stream key to hex-encoded client random.
+     * Built lazily after the PCAP is parsed; used to correlate TLS
+     * sessions with SSLKEYLOG entries.
+     */
+    val tlsSessionMap: Map<TcpStreamKey, String> by lazy {
+        val pcap = parsedPcapFile ?: return@lazy emptyMap()
+        buildTlsSessionMap(bytes, pcap.packets, pcap.header.network)
     }
 
     companion object {
