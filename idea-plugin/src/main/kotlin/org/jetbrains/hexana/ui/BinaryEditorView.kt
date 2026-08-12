@@ -1353,8 +1353,25 @@ private fun httpContentTypeToExtension(contentType: String?): String {
         mime == "application/wasm" -> ".wasm"
         mime == "application/zip" -> ".zip"
         mime == "application/gzip" -> ".gz"
+        // Textual application/* subtypes — open as text, not hex.
+        mime == "application/xhtml+xml" -> ".xhtml"
+        mime == "application/soap+xml" -> ".xml"
+        mime == "application/rss+xml" -> ".xml"
+        mime == "application/atom+xml" -> ".xml"
+        mime == "application/yaml" || mime == "application/x-yaml" -> ".yaml"
+        mime == "application/graphql" -> ".graphql"
+        mime == "application/ld+json" -> ".jsonld"
+        mime == "application/x-www-form-urlencoded" -> ".txt"
+        mime == "application/sql" -> ".sql"
+        mime == "application/rtf" -> ".rtf"
+        mime == "application/csv" -> ".csv"
+        mime == "application/x-sh" || mime == "application/x-csh" -> ".sh"
+        mime == "application/typescript" -> ".ts"
+        mime.endsWith("+xml") -> ".xml"
+        mime.endsWith("+json") -> ".json"
         mime.startsWith("text/") -> ".txt"
-        else -> ""
+        mime.startsWith("application/") -> ".bin"
+        else -> ".bin"
     }
 }
 
