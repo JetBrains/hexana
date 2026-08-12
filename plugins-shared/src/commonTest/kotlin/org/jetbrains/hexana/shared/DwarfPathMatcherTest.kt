@@ -98,6 +98,32 @@ class DwarfPathMatcherTest {
     }
 
     @Test
+    fun cuCrateRootLayoutSameCrateDir() {
+        // Crate-root layout (no src/): the directory above the file is
+        // crate-identifying, so a 2-component tail confirms identity.
+        // Regression: dwarf-memvars fixture built in /private/tmp but
+        // debugged from a copy under the project's .cache.
+        assertTrue(
+            cuPathMatchesIdePath(
+                "/private/tmp/dwarf-memvars/lib.rs",
+                "/Users/dev/project/.cache/nodejs-debug-test/dwarf-memvars/lib.rs",
+            )
+        )
+    }
+
+    @Test
+    fun cuCrateRootLayoutGenericDirStillRejected() {
+        // A 2-component tail whose directory is a generic source dir
+        // (src, tests, ...) identifies nothing — must stay rejected.
+        assertFalse(
+            cuPathMatchesIdePath(
+                "/build/adder/tests/common.rs",
+                "/Users/dev/calculator/tests/common.rs",
+            )
+        )
+    }
+
+    @Test
     fun cuShortPathOptimistic() {
         assertTrue(
             cuPathMatchesIdePath(

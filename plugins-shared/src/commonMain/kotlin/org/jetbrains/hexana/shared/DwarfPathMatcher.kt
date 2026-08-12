@@ -111,8 +111,27 @@ fun cuPathMatchesIdePath(
     // exactly 2 levels above the filename, so a matching tail
     // of 3 components (crate + src + file) confirms same-crate
     // identity.
-    return matchingFromEnd >= 3
+    if (matchingFromEnd >= 3) return true
+
+    // Crate-root layout `<crate>/<file>` (no src/): the directory
+    // directly above the filename is itself crate-identifying, so a
+    // matching tail of 2 confirms identity — unless that directory is
+    // a generic source-dir name shared by unrelated crates (a tail of
+    // `src/lib.rs` matches both `adder/src/lib.rs` and
+    // `calculator/src/lib.rs` and proves nothing).
+    return matchingFromEnd == 2 &&
+        cuComponents[cuComponents.size - 2] !in GENERIC_SOURCE_DIRS
 }
+
+/**
+ * Directory names that commonly appear directly above source files in
+ * many unrelated crates/projects; a matching path tail of
+ * `<generic>/<file>` therefore does not identify a crate.
+ */
+private val GENERIC_SOURCE_DIRS = setOf(
+    "src", "source", "sources", "lib", "include",
+    "test", "tests", "examples", "benches", "bin",
+)
 
 /**
  * Checks whether the CU path ends with the given project-
