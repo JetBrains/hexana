@@ -41,6 +41,7 @@ internal val defaultLegacyWasmProviderFactory = LegacyWasmProviderFactory { byte
 @Composable
 internal fun WebAppRoot(
     legacyWasmProviderFactory: LegacyWasmProviderFactory = defaultLegacyWasmProviderFactory,
+    telemetryFactory: WebAppTelemetryFactory = browserWebAppTelemetryFactory,
 ) {
     var wasmBytes by remember { mutableStateOf<ByteArray?>(null) }
     var fileName by remember { mutableStateOf("") }
@@ -53,6 +54,13 @@ internal fun WebAppRoot(
     var dialogPickedPath by remember { mutableStateOf("") }
     var dialogPickedContent by remember { mutableStateOf("") }
     var showSemanticHighlighting by remember { mutableStateOf(true) }
+    val telemetry = remember { telemetryFactory.create() }
+    var telemetryEnabled by remember { mutableStateOf(telemetry.isEnabled) }
+
+    DisposableEffect(telemetry) {
+        telemetry.initialize()
+        onDispose {}
+    }
 
     val openModule: (Int, String, ByteArray) -> Unit = { _, newFileName, data ->
         val current = wasmBytes
@@ -96,6 +104,7 @@ internal fun WebAppRoot(
                 val tab = scriptTabs.find { it.path == path }
                 tab?.let { it.content = content }
             },
+            onTabSelected = telemetry::captureTabSelected,
         )
     }
     DisposableEffect(host) {
@@ -112,6 +121,13 @@ internal fun WebAppRoot(
     }
 
     CompositionLocalProvider(LocalHost provides host) {
+        TelemetryConsentControl(
+            enabled = telemetryEnabled,
+            onEnabledChange = { enabled ->
+                telemetry.setEnabled(enabled)
+                telemetryEnabled = enabled
+            },
+        )
         val bytes = wasmBytes
         if (bytes == null) {
             LandingView(onFileLoaded = { name, data, response ->
@@ -119,6 +135,7 @@ internal fun WebAppRoot(
                 wasmBytes = data
                 workerResponse = response
                 legacyWasmTab = null
+                telemetry.captureBinaryOpened(data.size, response?.presentation?.format)
             })
         } else {
             val response = workerResponse
@@ -196,6 +213,27 @@ internal fun WebAppRoot(
             }
         }
     }
+}
+
+@Composable
+internal fun TelemetryConsentControl(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+) {
+    Button({
+        attr("data-telemetry-consent-toggle", "true")
+        attr("aria-label", "Enable anonymous usage analytics")
+        attr("aria-pressed", enabled.toString())
+        style {
+            position(Position.Fixed)
+            top(12.px)
+            right(12.px)
+            property("z-index", "1")
+            property("padding", "6px 10px")
+            property("cursor", "pointer")
+        }
+        onClick { onEnabledChange(!enabled) }
+    }) { Text("Anonymous analytics: ${if (enabled) "On" else "Off"}") }
 }
 
 @Composable

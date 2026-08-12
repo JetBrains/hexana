@@ -66,6 +66,7 @@ internal class BrowserHost(
     private val navigateToParent: () -> Unit,
     private val onScriptFilePicked: (path: String, content: String) -> Unit,
     private val onScriptFileContent: (path: String, content: String) -> Unit,
+    private val onTabSelected: (tabName: String) -> Unit = {},
     private val downloadApi: BrowserDownloadApi = DomBrowserDownloadApi,
 ) : Host {
     private var scriptFileLoader: BrowserFileLoader? = null
@@ -97,7 +98,7 @@ internal class BrowserHost(
     }
 
     override fun tabSelected(tabName: String) {
-        // No-op: analytics event only relevant for VS Code.
+        onTabSelected(tabName)
     }
 
     override fun updateRuntimeSetting(runtime: String) {

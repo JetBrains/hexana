@@ -22,6 +22,28 @@ class HexanaEventTest {
     }
 
     @Test
+    fun binaryOpenedWebappFormats() {
+        val expectedFormats = mapOf(
+            HexanaEvent.BinaryFormat.DEX to "dex",
+            HexanaEvent.BinaryFormat.PCAP to "pcap",
+            HexanaEvent.BinaryFormat.PROTOBUF to "protobuf",
+            HexanaEvent.BinaryFormat.ARCHIVE to "archive",
+            HexanaEvent.BinaryFormat.OTHER to "other",
+        )
+
+        for ((format, expectedValue) in expectedFormats) {
+            val event = HexanaEvent.BinaryOpened(
+                format = format,
+                fileSizeBytes = 1024L,
+                surface = HexanaEvent.Surface.WEBAPP,
+            )
+
+            assertEquals("webapp", event.properties["surface"])
+            assertEquals(expectedValue, event.properties["format"])
+        }
+    }
+
+    @Test
     fun binaryOpenedFullyTagged() {
         val event = HexanaEvent.BinaryOpened(
             format = HexanaEvent.BinaryFormat.ELF,

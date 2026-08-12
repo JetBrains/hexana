@@ -9,9 +9,26 @@ const requireText = (text, fragment, source) => {
 const forbid = (text, expression, source) => {
     if (expression.test(text)) throw new Error(`${source} contains forbidden ${expression}`);
 };
+const telemetryIngestionOrigin = "https://eu.i.posthog.com";
+const productionCsp = `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ${telemetryIngestionOrigin}; img-src 'self' data:; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+const externalUrls = text => [...text.matchAll(/https?:\/\/[^\s"'<>;]+/g)].map(match => match[0]);
+const requireProductionCsp = (policy, source) => {
+    if (policy !== productionCsp) throw new Error(`${source} must use the exact production CSP`);
+    if (!policy.includes(`connect-src 'self' ${telemetryIngestionOrigin}`)) throw new Error(`${source} must permit the telemetry ingestion origin only via connect-src`);
+    if (policy.includes("*") || policy.includes("api.osv.dev")) throw new Error(`${source} weakens the CSP with a wildcard or OSV endpoint`);
+    if (JSON.stringify(externalUrls(policy)) !== JSON.stringify([telemetryIngestionOrigin])) throw new Error(`${source} permits an unexpected external URL`);
+};
+const requireRejected = (policy, source) => {
+    try {
+        requireProductionCsp(policy, source);
+    } catch {
+        return;
+    }
+    throw new Error(`${source} unexpectedly accepted a non-PostHog external endpoint`);
+};
 
-const [dockerignore, dockerfile, nginx, securityHeaders, skaffold, staging, production] = await Promise.all([
-    read(".dockerignore"), read("webapp/Dockerfile"), read("webapp/nginx.conf"), read("webapp/security-headers.conf"), read("webapp/skaffold.yaml"), read("webapp/values_staging.yaml"), read("webapp/values_production.yaml"),
+const [dockerignore, dockerfile, nginx, securityHeaders, index, buildScript, skaffold, staging, production] = await Promise.all([
+    read(".dockerignore"), read("webapp/Dockerfile"), read("webapp/nginx.conf"), read("webapp/security-headers.conf"), read("webapp/src/jsMain/resources/index.html"), read("webapp/build.gradle.kts"), read("webapp/skaffold.yaml"), read("webapp/values_staging.yaml"), read("webapp/values_production.yaml"),
 ]);
 for (const ignored of [".git", "out", "**/build", "**/node_modules", "**/src/*Test", "vscode-plugin/test", "task.txt"]) requireText(dockerignore, ignored, ".dockerignore");
 requireText(dockerfile, "FROM gradle:8.10.2-jdk21 AS package", "Dockerfile");
@@ -27,6 +44,14 @@ forbid(dockerfile, /\b(latest|stable|mainline)\b/i, "Dockerfile");
 for (const header of ["Content-Security-Policy", "X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy", "X-Frame-Options", "Cross-Origin-Opener-Policy", "Cross-Origin-Embedder-Policy", "Cross-Origin-Resource-Policy"]) requireText(securityHeaders, header, "security-headers.conf");
 requireText(securityHeaders, "'wasm-unsafe-eval'", "security-headers.conf");
 forbid(securityHeaders, /['"]unsafe-eval['"]/, "security-headers.conf");
+const indexCsp = index.match(/http-equiv="Content-Security-Policy"\s+content="([^"]+)"/s)?.[1];
+const nginxCsp = securityHeaders.match(/add_header Content-Security-Policy "([^"]+)" always;/)?.[1];
+const packageCsp = buildScript.match(/private val productionCsp = "([^"]+)"/)?.[1];
+for (const [source, csp] of [["index.html", indexCsp], ["security-headers.conf", nginxCsp], ["build.gradle.kts hosting policy", packageCsp]]) {
+    if (!csp) throw new Error(`${source} is missing a production CSP`);
+    requireProductionCsp(csp, source);
+}
+requireRejected(productionCsp.replace(telemetryIngestionOrigin, "https://evil.example"), "negative CSP fixture");
 if ((nginx.match(/include \/etc\/nginx\/snippets\/security-headers\.conf;/g) || []).length !== 5) throw new Error("nginx.conf must apply security headers at the server and every cache-policy location");
 for (const location of ["location = /healthz", "location = /index.html", "location /assets/", "location / {"]) {
     const config = nginx.split("\n").find(line => line.includes(location));

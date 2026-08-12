@@ -185,7 +185,8 @@ sealed class HexanaEvent {
     enum class Surface(val value: String) {
         IDE_PLUGIN("ide_plugin"),
         VSCODE_EXTENSION("vscode_extension"),
-        MCP_SERVER("mcp_server")
+        MCP_SERVER("mcp_server"),
+        WEBAPP("webapp"),
     }
 
     enum class McpTransport(val value: String) {
@@ -215,6 +216,11 @@ sealed class HexanaEvent {
         PARQUET("parquet"),
         ARROW_IPC("arrow_ipc"),
         TAR("tar"),
+        DEX("dex"),
+        PCAP("pcap"),
+        PROTOBUF("protobuf"),
+        ARCHIVE("archive"),
+        OTHER("other"),
         GENERIC("generic"),
         ;
 

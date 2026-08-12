@@ -48,6 +48,8 @@ kotlin {
             kotlin.srcDir("src/parserWorkerShared/kotlin")
             dependencies {
                 implementation(project(":web-ui"))
+                implementation(project(":analytics:api"))
+                implementation(project(":analytics:browser"))
             }
         }
 
@@ -245,7 +247,16 @@ private fun sbomJson(version: String, components: List<ResolvedRuntimeComponent>
     return "{\"bomFormat\":\"CycloneDX\",\"specVersion\":\"1.5\",\"version\":1,\"metadata\":{\"component\":{\"type\":\"application\",\"bom-ref\":\"urn:hexana:webapp\",\"name\":\"hexana-webapp\",\"version\":${json(version)}}},\"components\":[$sbomComponents]}\n"
 }
 
-private val productionCsp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+private val telemetryIngestionOrigin = "https://eu.i.posthog.com"
+private val productionCsp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://eu.i.posthog.com; img-src 'self' data:; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+private val externalUrlPattern = Regex("""https?://[^\s"'<>;]+""")
+
+private fun verifyOnlyTelemetryOrigin(text: String, source: String) {
+    val externalUrls = externalUrlPattern.findAll(text).map { it.value }.toSet()
+    if (externalUrls != setOf(telemetryIngestionOrigin)) {
+        packageFailure("$source permits external URLs other than $telemetryIngestionOrigin: $externalUrls")
+    }
+}
 
 private fun productionCacheControl(path: String): String = when {
     path == "index.html" -> "no-cache"
@@ -331,12 +342,13 @@ private fun verifyProductionPackage(packageDir: File) {
         packageFailure("source maps or development artifacts shipped")
     }
     val index = packageDir.resolve("index.html").readText()
-    if (!index.contains("http-equiv=\"Content-Security-Policy\"") || !index.contains(productionCsp) || "http://" in index || "https://" in index) {
+    if (!index.contains("http-equiv=\"Content-Security-Policy\"") || !index.contains(productionCsp)) {
         packageFailure("index.html has an unsafe connection or script policy")
     }
     if (packageDir.resolve("robots.txt").readText() != robotsPolicy) {
         packageFailure("robots.txt does not disallow crawling")
     }
+    verifyOnlyTelemetryOrigin(index, "index.html")
     val policy = packageDir.resolve("hosting-policy.json").readText()
     listOf("object-src 'none'", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'", "X-Content-Type-Options\":\"nosniff", "Referrer-Policy\":\"no-referrer", "Permissions-Policy", "X-Frame-Options\":\"DENY", "Cross-Origin-Opener-Policy\":\"same-origin", "Cross-Origin-Embedder-Policy\":\"require-corp", "Strict-Transport-Security\":\"max-age=31536000\"", "HTTPS edge-only").forEach { required ->
         if (required !in policy) packageFailure("hosting policy omits $required")
@@ -344,6 +356,7 @@ private fun verifyProductionPackage(packageDir: File) {
     if ("api.osv.dev" in policy || "connect-src *" in policy || "frame-ancestors *" in policy) {
         packageFailure("hosting policy grants a forbidden capability")
     }
+    verifyOnlyTelemetryOrigin(policy, "hosting-policy.json")
     val immutableAssets = packageDir.resolve("assets").listFiles()?.filter { it.isFile }.orEmpty()
     if (immutableAssets.isEmpty()) packageFailure("missing immutable assets")
     immutableAssets.forEach { asset ->
