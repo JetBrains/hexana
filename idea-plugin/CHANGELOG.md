@@ -3,6 +3,20 @@
 ## Unreleased
 
 ### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## 0.17 - 2026-08-12
+
+### Added
 - **Problems** tab for WASM binaries. When the parser hits bytes it cannot decode (for example instructions from a not-yet-supported proposal), it no longer discards the whole function body: decoding keeps everything up to the failure and records the rest as one unparsed region, and every such region shows up as a row in the new tab with its kind, location, byte offset, size and message. Clicking a row jumps to the affected function in the **WAT (virtualized)** tab; the context menu also offers the plain **Wat** tab, which now scrolls to the nearest annotated line. Rows not tied to a function select the failed byte range in the hex view. The tab appears only when the module actually has parse problems.
 - Type-section encodings from the custom-descriptors proposal (Phase 3): exact reference types (`(ref null (exact $t))`) and `descriptor` / `describes` clauses now parse with correct alignment. WasmGC modules emitted with these encodings (recent Kotlin/Wasm and J2CL toolchains) previously failed to parse at all: the type section silently misparsed from the first exact type onward and every later function body degraded to an unparsed blob or a NullPointerException.
 - Basic support for pcap/pcapng files - viewing packets, opening http response body in a new tab
@@ -14,12 +28,6 @@
 - Variables stored in linear memory now appear when debugging under Node.js. V8 only surfaces wasm locals and globals, so anything on the shadow stack or at a fixed address (structs, arrays, enums; typical for parameters and locals in unoptimized builds) used to be invisible. They are now located via DWARF, read from the module's memory over the debugger protocol and decoded per their DWARF types: structs expand to members at their recorded offsets, enums render by enumerator name, arrays are bounded, reads are capped per variable.
 - The **Wasm** debugger tab now also appears when debugging under wasmtime. The left pane disassembles the paused function with the current wasm instruction selected: wasmtime serializes a native-address-to-wasm-offset table into every compiled module, and the stopped pc is translated through it, so the highlight is per instruction even though LLDB only sees native code (instructions that emit no machine code, like `local.get` or `i32.const`, are never pause targets and are skipped, which mirrors what the CPU executes). The right pane shows a symbolic operand stack: Cranelift compiles the wasm stack machine away, so the concrete values are not recoverable from the process, but the stack's depth, types and origins are reconstructed statically per wasm's validation rules. Each slot names where its value came from: a local (with its DWARF source name when known), a constant (the one case with a real value), or the producing instruction (`i32.add @0x52`, `call make @0x341f`). When the shape cannot be reconstructed (unsupported instructions, SIMD/atomics in the function), the pane says so explicitly instead of showing a wrong stack.
 
-### Changed
-
-### Deprecated
-
-### Removed
-
 ### Fixed
 - Opening the **Dependencies** tab of a Component Model binary crashed with `NotImplementedError` when the core-instance section contained an entry the parser cannot decode. Such entries are now recorded as parse problems instead: an unknown instance-encoding tag consumes only the tag byte, and a decode failure mid-entry skips the section remainder as one corrupt region. Both show up in the **Problems** tab, which now also covers component binaries, with kind, byte offset, size and message; clicking a row selects the bytes in the hex view. The dependency graph and the component WAT text label the affected instances explicitly instead of failing.
 - Navigating to a function in the **WAT (virtualized)** tab (from the Problems tab, go-to-function or search) landed on the wrong function in modules whose type section contains collapsed `(rec …)` groups: every collapsed group member before the target shifted the scroll one row further (clicking func 25 landed on func 83 in a 216-type WasmGC module). The scroll index now accounts for group-collapsed rows.
@@ -29,8 +37,6 @@
 - Wasmtime breakpoint stops were silently skipped for crates that keep sources at the crate root (`<crate>/lib.rs` with no `src/` directory, common for standalone examples and moved/downloaded fixtures): the stop-location verification assumed the `<crate>/src/<file>` layout and auto-resumed past the breakpoint as a suspected wrong-file match. A matching crate directory directly above the file now confirms the stop; colliding generic tails like `src/lib.rs` across different crates are still rejected.
 - Placing a breakpoint in a wasm source file no longer queries the DWARF file index on the UI thread (it tripped the platform's slow-operation assertion). The index snapshot is cached in the background, preloaded at project open and refreshed immediately when any `.wasm` file in the project changes, so a breakpoint can be set right after rebuilding a module without waiting or clicking twice.
 - Starting a wasm debug session no longer logs a "[Split debugger] RunContentDescriptor should not be used" error on 2026.1+: all debug runners now start sessions through the platform's session-builder API where available, keeping the old path on IDEs that predate it.
-
-### Security
 
 ## 0.16 - 2026-08-05
 
