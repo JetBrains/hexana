@@ -57,11 +57,6 @@ internal fun WebAppRoot(
     val telemetry = remember { telemetryFactory.create() }
     var telemetryEnabled by remember { mutableStateOf(telemetry.isEnabled) }
 
-    DisposableEffect(telemetry) {
-        telemetry.initialize()
-        onDispose {}
-    }
-
     val openModule: (Int, String, ByteArray) -> Unit = { _, newFileName, data ->
         val current = wasmBytes
         if (current != null) {
@@ -121,22 +116,22 @@ internal fun WebAppRoot(
     }
 
     CompositionLocalProvider(LocalHost provides host) {
-        TelemetryConsentControl(
-            enabled = telemetryEnabled,
-            onEnabledChange = { enabled ->
-                telemetry.setEnabled(enabled)
-                telemetryEnabled = enabled
-            },
-        )
         val bytes = wasmBytes
         if (bytes == null) {
-            LandingView(onFileLoaded = { name, data, response ->
-                fileName = name
-                wasmBytes = data
-                workerResponse = response
-                legacyWasmTab = null
-                telemetry.captureBinaryOpened(data.size, response?.presentation?.format)
-            })
+            LandingView(
+                onFileLoaded = { name, data, response ->
+                    fileName = name
+                    wasmBytes = data
+                    workerResponse = response
+                    legacyWasmTab = null
+                    telemetry.captureBinaryOpened(data.size, response?.presentation?.format)
+                },
+                telemetryEnabled = telemetryEnabled,
+                onTelemetryEnabledChange = { enabled ->
+                    telemetry.setEnabled(enabled)
+                    telemetryEnabled = enabled
+                },
+            )
         } else {
             val response = workerResponse
             if (response != null) {
@@ -222,18 +217,19 @@ internal fun TelemetryConsentControl(
 ) {
     Button({
         attr("data-telemetry-consent-toggle", "true")
-        attr("aria-label", "Enable anonymous usage analytics")
+        attr("aria-label", if (enabled) "Disable anonymous usage analytics" else "Enable anonymous usage analytics")
         attr("aria-pressed", enabled.toString())
         style {
-            position(Position.Fixed)
-            top(12.px)
-            right(12.px)
-            property("z-index", "1")
-            property("padding", "6px 10px")
+            property("margin-top", "12px")
+            property("padding", "0")
+            property("border", "none")
+            property("background", "transparent")
+            property("color", "var(--vscode-textLink-foreground, #3794ff)")
+            property("font-size", "11px")
             property("cursor", "pointer")
         }
         onClick { onEnabledChange(!enabled) }
-    }) { Text("Anonymous analytics: ${if (enabled) "On" else "Off"}") }
+    }) { Text("Anonymous usage analytics: ${if (enabled) "On — turn off" else "Off — turn on"}") }
 }
 
 @Composable
@@ -348,6 +344,8 @@ private fun LegacyParseFailureNotice(fileName: String, onBack: () -> Unit) {
 @Composable
 internal fun LandingView(
     onFileLoaded: (name: String, bytes: ByteArray, response: BoundedParserWorkerSuccess?) -> Unit,
+    telemetryEnabled: Boolean = true,
+    onTelemetryEnabledChange: (Boolean) -> Unit = {},
     readerFactory: BrowserFileReaderFactory = domBrowserFileReaderFactory,
     workerFactory: ParserWorkerFactory = browserParserWorkerFactory,
     workerScheduler: ParserWorkerScheduler = browserParserWorkerScheduler,
@@ -541,6 +539,11 @@ internal fun LandingView(
                 property("opacity", "0.35")
             }
         }) { Text("WASM, ELF, Mach-O, PE, class files, ZIP, DEX and more") }
+
+        TelemetryConsentControl(
+            enabled = telemetryEnabled,
+            onEnabledChange = onTelemetryEnabledChange,
+        )
     }
 }
 

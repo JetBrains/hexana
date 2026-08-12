@@ -30,7 +30,7 @@ data class BrowserAnalyticsConfig(
     val disableSessionRecording: Boolean = true,
     val personProfiles: String = "never",
     val requestBatching: Boolean? = null,
-    val advancedDisableDecide: Boolean? = null,
+    val advancedDisableDecide: Boolean = true,
     val optOutUseragentFilter: Boolean? = null,
 )
 
@@ -62,7 +62,7 @@ private class PostHogBrowserAnalyticsClient(
         options.person_profiles = configuration.personProfiles
         options.opt_out_capturing_by_default = true
         configuration.requestBatching?.let { options.request_batching = it }
-        configuration.advancedDisableDecide?.let { options.advanced_disable_decide = it }
+        options.advanced_disable_decide = configuration.advancedDisableDecide
         configuration.optOutUseragentFilter?.let { options.opt_out_useragent_filter = it }
         options.before_send = ::sanitizeCapture
         PostHogBrowserModule.default.init(configuration.apiKey, options)

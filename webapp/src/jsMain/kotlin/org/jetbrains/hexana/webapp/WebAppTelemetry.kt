@@ -70,7 +70,9 @@ internal class BrowserWebAppTelemetry(
     }
 
     private fun capture(event: HexanaEvent) {
-        if (isEnabled) analyticsClient.capture(event)
+        if (!isEnabled) return
+        initialize()
+        analyticsClient.capture(event)
     }
 
     private fun updateConsent() {
@@ -78,7 +80,7 @@ internal class BrowserWebAppTelemetry(
     }
 
     private fun readPersistedConsent(): Boolean = try {
-        storage.get(WEBAPP_TELEMETRY_CONSENT_KEY) == "true"
+        storage.get(WEBAPP_TELEMETRY_CONSENT_KEY) != "false"
     } catch (_: Throwable) {
         false
     }

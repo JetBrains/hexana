@@ -17,6 +17,7 @@ import kotlin.js.Promise
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class WebAppTelemetryTest {
@@ -53,6 +54,7 @@ class WebAppTelemetryTest {
             poll = poll@ {
                 try {
                     if (root.querySelector("[data-parser-worker-state='parsed']") != null) {
+                        assertNull(root.querySelector("[data-telemetry-consent-toggle]"))
                         window.setTimeout({ finish() }, 250)
                     } else {
                         window.requestAnimationFrame(poll)
@@ -76,9 +78,6 @@ class WebAppTelemetryTest {
                 )
                 window.requestAnimationFrame {
                     try {
-                        root.querySelector("[data-telemetry-consent-toggle]")
-                            .unsafeCast<HTMLButtonElement>()
-                            .click()
                         telemetryDrop(
                             checkNotNull(root.querySelector("[data-file-drop-zone]")),
                             js("new File([new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])], 'module.wasm')")
@@ -103,7 +102,6 @@ class WebAppTelemetryTest {
         val client = FakeBrowserAnalyticsClient()
         val telemetry = BrowserWebAppTelemetry(storage, client)
 
-        telemetry.initialize()
         telemetry.setEnabled(true)
         telemetry.captureBinaryOpened(fileSizeBytes = 55, parserFormat = "core_wasm")
         telemetry.captureTabSelected("Functions")
@@ -120,7 +118,7 @@ class WebAppTelemetryTest {
             ),
             client.events,
         )
-        assertEquals(listOf(false, true), client.consentUpdates)
+        assertEquals(listOf(true), client.consentUpdates)
         assertEquals("true", storage.values["hexana.webapp.telemetryEnabled"])
     }
 
@@ -129,13 +127,28 @@ class WebAppTelemetryTest {
         val client = FakeBrowserAnalyticsClient()
         val telemetry = BrowserWebAppTelemetry(FakeTelemetryStorage(), client)
 
-        telemetry.initialize()
+        telemetry.setEnabled(false)
         telemetry.captureBinaryOpened(fileSizeBytes = 55, parserFormat = "core_wasm")
         telemetry.captureTabSelected("Sections")
 
         assertTrue(client.events.isEmpty())
-        assertEquals(listOf(false), client.consentUpdates)
+        assertTrue(client.consentUpdates.isEmpty())
         assertFalse(telemetry.isEnabled)
+    }
+
+    @Test
+    fun storageFailuresFailClosedWithoutBreakingConsentChanges() {
+        val client = FakeBrowserAnalyticsClient()
+        val telemetry = BrowserWebAppTelemetry(ThrowingTelemetryStorage(), client)
+
+        assertFalse(telemetry.isEnabled)
+
+        telemetry.setEnabled(true)
+        telemetry.captureBinaryOpened(fileSizeBytes = 55, parserFormat = "core_wasm")
+
+        assertTrue(telemetry.isEnabled)
+        assertEquals(listOf(true), client.consentUpdates)
+        assertEquals(1, client.events.size)
     }
 
     @Test
@@ -157,7 +170,7 @@ class WebAppTelemetryTest {
     }
 
     @Test
-    fun consentControlIsAccessibleAndReloadsPersistedChoice(): Promise<Unit> = Promise { resolve, reject ->
+    fun landingConsentControlDefaultsToEnabledAndPersistsOptOut(): Promise<Unit> = Promise { resolve, reject ->
         val storage = FakeTelemetryStorage()
         val firstTelemetry = BrowserWebAppTelemetry(storage, FakeBrowserAnalyticsClient())
         val root = document.createElement("div").unsafeCast<HTMLDivElement>()
@@ -173,50 +186,34 @@ class WebAppTelemetryTest {
             root.parentNode?.removeChild(root)
             if (failure == null) resolve(Unit) else reject(failure)
         }
-        fun awaitLoaded() {
-            val deadline = window.performance.now() + 2_000.0
-            lateinit var poll: (Double) -> Unit
-            poll = poll@ { timestamp ->
-                try {
-                    if (root.querySelector("[data-parser-worker-state='parsed']") != null) {
-                        val toggle = root.querySelector("[data-telemetry-consent-toggle]")
-                            .unsafeCast<HTMLButtonElement>()
-                        assertEquals("Enable anonymous usage analytics", toggle.getAttribute("aria-label"))
-                        assertEquals("false", toggle.getAttribute("aria-pressed"))
-                        toggle.click()
-                        window.requestAnimationFrame {
-                            window.requestAnimationFrame {
-                                try {
-                                    assertEquals("true", toggle.getAttribute("aria-pressed"))
-                                    assertTrue(BrowserWebAppTelemetry(storage, FakeBrowserAnalyticsClient()).isEnabled)
-                                    finish()
-                                } catch (failure: Throwable) {
-                                    finish(failure)
-                                }
-                            }
-                        }
-                    } else if (timestamp >= deadline) {
-                        finish(AssertionError("Telemetry control was not available after the binary loaded."))
-                    } else {
-                        window.requestAnimationFrame(poll)
-                    }
-                } catch (failure: Throwable) {
-                    finish(failure)
-                }
-            }
-            window.requestAnimationFrame(poll)
-        }
         try {
             checkNotNull(document.body).appendChild(root)
             composition = renderComposable(rootElementId = root.id) {
                 WebAppRoot(telemetryFactory = WebAppTelemetryFactory { firstTelemetry })
             }
             timeout = window.setTimeout({ finish(AssertionError("Telemetry control test timed out.")) }, 2_500)
-            telemetryDrop(
-                checkNotNull(root.querySelector("[data-file-drop-zone]")),
-                js("new File([new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])], 'module.wasm')").unsafeCast<File>(),
-            )
-            awaitLoaded()
+            window.requestAnimationFrame {
+                try {
+                    val toggle = root.querySelector("[data-telemetry-consent-toggle]")
+                        .unsafeCast<HTMLButtonElement>()
+                    assertEquals("Disable anonymous usage analytics", toggle.getAttribute("aria-label"))
+                    assertEquals("true", toggle.getAttribute("aria-pressed"))
+                    toggle.click()
+                    window.requestAnimationFrame {
+                        window.requestAnimationFrame {
+                            try {
+                                assertEquals("false", toggle.getAttribute("aria-pressed"))
+                                assertFalse(BrowserWebAppTelemetry(storage, FakeBrowserAnalyticsClient()).isEnabled)
+                                finish()
+                            } catch (failure: Throwable) {
+                                finish(failure)
+                            }
+                        }
+                    }
+                } catch (failure: Throwable) {
+                    finish(failure)
+                }
+            }
         } catch (failure: Throwable) {
             finish(failure)
         }
@@ -240,6 +237,14 @@ private class FakeTelemetryStorage : WebAppTelemetryStorage {
 
     override fun set(key: String, value: String) {
         values[key] = value
+    }
+}
+
+private class ThrowingTelemetryStorage : WebAppTelemetryStorage {
+    override fun get(key: String): String? = error("Storage is unavailable")
+
+    override fun set(key: String, value: String) {
+        error("Storage is unavailable")
     }
 }
 
