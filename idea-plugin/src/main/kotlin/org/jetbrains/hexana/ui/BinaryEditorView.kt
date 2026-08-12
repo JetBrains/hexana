@@ -57,6 +57,7 @@ import org.jetbrains.hexana.shared.NativeDebugTabData
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsContext
 import org.jetbrains.hexana.shared.TabPriority
+import org.jetbrains.hexana.shared.PcapTableTabsProvider
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.ui.panel.*
 import org.jetbrains.hexana.pcap.PcapDissectedPacket
@@ -521,6 +522,18 @@ internal fun BinaryEditorView(
                             val rebuilt = rebuildProviderFromBytes(binaryProvider, currentBytes)
                             if (rebuilt != null) liveProvider = rebuilt
                         } catch (_: Throwable) { /* keep current */ }
+                    },
+                    onSslKeyLogLoaded = {
+                        val pcap = liveProvider as? PcapBinaryProvider ?: return@FileDescriptionBar
+                        val tabsProvider = PcapTableTabsProvider()
+                        val newTabs = tabsProvider.tableTabs(pcap)
+                        val packetsTab = newTabs.firstOrNull { it.name == "Packets" } ?: return@FileDescriptionBar
+                        val enriched = pcap.enrichPcapPacketsTab(packetsTab, state.project)
+                        val newPanel = enriched.toPanel(state)
+                        val idx = panels.indexOfFirst { it.description == "Packets" }
+                        if (idx >= 0) {
+                            panels[idx] = newPanel
+                        }
                     },
                 )
                 Row(modifier = Modifier.fillMaxWidth().weight(1f)) {

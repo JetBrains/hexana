@@ -75,6 +75,7 @@ internal fun FileDescriptionBar(
     overwriteShadowRanges: OverwriteShadowRanges? = null,
     onOverwriteShadowRangesChanged: ((OverwriteShadowRanges?) -> Unit)? = null,
     onReparseAfterOverwrite: () -> Unit = {},
+    onSslKeyLogLoaded: () -> Unit = {},
 ) {
     val size = binaryProvider.bytes.limit()
 
@@ -136,6 +137,7 @@ internal fun FileDescriptionBar(
                     fileName = fileName,
                     onNavigateToParent = onNavigateToParent,
                     onSaveAs = onSaveAs,
+                    onSslKeyLogLoaded = onSslKeyLogLoaded,
                 )
             }
         } else {
@@ -146,6 +148,7 @@ internal fun FileDescriptionBar(
                 fileName = fileName,
                 onNavigateToParent = onNavigateToParent,
                 onSaveAs = onSaveAs,
+                onSslKeyLogLoaded = onSslKeyLogLoaded,
             )
         }
     }
@@ -222,6 +225,7 @@ private fun NormalModeContent(
     fileName: String?,
     onNavigateToParent: (() -> Unit)?,
     onSaveAs: (() -> Unit)? = null,
+    onSslKeyLogLoaded: () -> Unit = {},
 ) {
     val moduleType = fileTypeDescription(binaryProvider, fileName)
 
@@ -252,7 +256,7 @@ private fun NormalModeContent(
     // SSL key log button for PCAP files — shown only when encrypted packets are present
     if (binaryProvider is org.jetbrains.hexana.providers.PcapBinaryProvider &&
         (binaryProvider.hasEncryptedPackets || binaryProvider.sslKeyLog.isNotEmpty)) {
-        PcapSslKeyLogButton(binaryProvider, state)
+        PcapSslKeyLogButton(binaryProvider, state, onSslKeyLogLoaded)
     }
 
     if (parentFileName != null) {
@@ -768,6 +772,7 @@ internal fun autoDetectSslKeyLog(
 private fun PcapSslKeyLogButton(
     provider: org.jetbrains.hexana.providers.PcapBinaryProvider,
     state: HexViewStateHolder,
+    onSslKeyLogLoaded: () -> Unit = {},
 ) {
     val hasKeyLog = provider.sslKeyLog.isNotEmpty
     val keyBadgeBg = if (hasKeyLog) {
@@ -792,6 +797,9 @@ private fun PcapSslKeyLogButton(
                     org.jetbrains.hexana.HexanaLog.LOG.info(
                         "Auto-detected SSL key log: ${keyFile.name} (${keyLog.sessionCount} sessions)"
                     )
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onSslKeyLogLoaded()
+                    }
                 }
             } catch (t: Throwable) {
                 org.jetbrains.hexana.HexanaLog.LOG.warn("Failed to load auto-detected SSL key log: ${keyFile.name}", t)
@@ -832,6 +840,7 @@ private fun PcapSslKeyLogButton(
                         org.jetbrains.hexana.HexanaLog.LOG.info(
                             "Loaded SSL key log: ${chosen.name} (${keyLog.sessionCount} sessions)"
                         )
+                        onSslKeyLogLoaded()
                     } else {
                         Messages.showWarningDialog(
                             state.project,
