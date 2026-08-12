@@ -1279,9 +1279,9 @@ private fun PcapBinaryProvider.enrichPcapPacketsTab(
             if (d.httpBodyFileOffset < 0 || d.httpBodySize <= 0) return@RowContextMenuItemDescriptor
             scope.launch(Dispatchers.IO) {
                 try {
-                    val bodyBytes = provider.bytes
-                        .slice(d.httpBodyFileOffset.toInt(), d.httpBodySize)
-                        .toByteArray()
+                    val bodyBytes = PcapDissector.reassembleHttpBody(
+                        provider.bytes, packets, index, linkType, d,
+                    ) ?: return@launch
 
                     val ext = httpContentTypeToExtension(d.httpContentType)
                     val fileName = "http-body-packet-${index + 1}$ext"

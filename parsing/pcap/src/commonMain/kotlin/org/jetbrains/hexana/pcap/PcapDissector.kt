@@ -162,6 +162,7 @@ object PcapDissector {
                     httpBodyFileOffset = http.bodyFileOffset,
                     httpBodySize = http.bodySize,
                     httpContentType = http.contentType,
+                    isChunkedTransferEncoding = http.isChunkedTransferEncoding,
                 )
             }
 
@@ -337,6 +338,254 @@ object PcapDissector {
         }
     }
 
+    /**
+     * Reassembles the full HTTP response body for the packet at [packetIndex].
+     *
+     * For non-chunked responses whose body fits in a single packet, this simply
+     * returns the body bytes from that packet. For chunked transfer-encoded
+     * responses (or bodies that span multiple TCP segments), this collects TCP
+     * payloads from subsequent packets in the same stream and, when chunked,
+     * decodes the chunked encoding to produce the raw body.
+     *
+     * Returns `null` if the packet is not an HTTP response with a body.
+     */
+    fun reassembleHttpBody(
+        buffer: CommonByteBuffer,
+        packets: List<PcapPacketRecord>,
+        packetIndex: Int,
+        linkType: Long,
+        dissected: PcapDissectedPacket,
+    ): ByteArray? {
+        if (dissected.httpBodyFileOffset < 0 || dissected.httpBodySize <= 0) return null
+
+        // Extract TCP stream identity from the response packet
+        val streamId = extractTcpStreamId(buffer, packets[packetIndex], linkType) ?: return null
+
+        // Collect the body bytes from the initial response packet
+        val rawChunks = mutableListOf<ByteArray>()
+        rawChunks.add(buffer.slice(dissected.httpBodyFileOffset.toInt(), dissected.httpBodySize).toByteArray())
+
+        // Walk subsequent packets in the same TCP stream (same direction:
+        // server→client) and collect their TCP payloads until we see a new
+        // HTTP response, a FIN/RST, or run out of packets.
+        for (i in (packetIndex + 1) until packets.size) {
+            val pkt = packets[i]
+            val tcp = extractTcpPayloadInfo(buffer, pkt, linkType) ?: continue
+            // Same stream, same direction (server → client)
+            if (tcp.srcIp != streamId.srcIp || tcp.dstIp != streamId.dstIp ||
+                tcp.srcPort != streamId.srcPort || tcp.dstPort != streamId.dstPort) continue
+
+            // Stop on FIN or RST
+            if (tcp.fin || tcp.rst) break
+
+            if (tcp.payloadLen <= 0) continue
+
+            // Stop if this payload starts a new HTTP response
+            val previewLen = minOf(tcp.payloadLen, 16)
+            val preview = readAscii(buffer, tcp.payloadOffset, previewLen)
+            if (preview.startsWith("HTTP/")) break
+
+            rawChunks.add(buffer.slice(tcp.payloadOffset, tcp.payloadLen).toByteArray())
+        }
+
+        val concatenated = concatenateByteArrays(rawChunks)
+
+        return if (dissected.isChunkedTransferEncoding) {
+            decodeChunkedBody(concatenated)
+        } else {
+            concatenated
+        }
+    }
+
+    /**
+     * Decodes an HTTP chunked transfer-encoded body.
+     * Format: `<hex-size>\r\n<data>\r\n` repeated, terminated by `0\r\n\r\n`.
+     */
+    internal fun decodeChunkedBody(encoded: ByteArray): ByteArray {
+        val result = mutableListOf<ByteArray>()
+        var pos = 0
+        while (pos < encoded.size) {
+            // Find the end of the chunk-size line
+            val lineEnd = findCrLf(encoded, pos)
+            if (lineEnd < 0) break
+
+            // Parse hex chunk size (ignore chunk extensions after ';')
+            val sizeLine = encoded.decodeToString(pos, lineEnd)
+            val sizeStr = sizeLine.substringBefore(';').trim()
+            if (sizeStr.isEmpty()) break
+            val chunkSize = sizeStr.toLongOrNull(16) ?: break
+            if (chunkSize == 0L) break // terminal chunk
+
+            pos = lineEnd + 2 // skip \r\n after size line
+            val end = minOf(pos + chunkSize.toInt(), encoded.size)
+            if (pos < end) {
+                result.add(encoded.copyOfRange(pos, end))
+            }
+            pos = end + 2 // skip \r\n after chunk data
+        }
+        return concatenateByteArrays(result)
+    }
+
+    private fun findCrLf(data: ByteArray, from: Int): Int {
+        var i = from
+        while (i < data.size - 1) {
+            if (data[i] == 0x0D.toByte() && data[i + 1] == 0x0A.toByte()) return i
+            i++
+        }
+        return -1
+    }
+
+    private fun concatenateByteArrays(arrays: List<ByteArray>): ByteArray {
+        if (arrays.size == 1) return arrays[0]
+        val total = arrays.sumOf { it.size }
+        val result = ByteArray(total)
+        var offset = 0
+        for (arr in arrays) {
+            arr.copyInto(result, offset)
+            offset += arr.size
+        }
+        return result
+    }
+
+    private class TcpStreamId(
+        val srcIp: String, val dstIp: String,
+        val srcPort: Int, val dstPort: Int,
+    )
+
+    private class TcpPayloadInfo(
+        val srcIp: String, val dstIp: String,
+        val srcPort: Int, val dstPort: Int,
+        val payloadOffset: Int, val payloadLen: Int,
+        val fin: Boolean, val rst: Boolean,
+    )
+
+    private fun extractTcpStreamId(
+        buffer: CommonByteBuffer, packet: PcapPacketRecord, linkType: Long,
+    ): TcpStreamId? {
+        val info = extractTcpPayloadInfo(buffer, packet, linkType) ?: return null
+        return TcpStreamId(info.srcIp, info.dstIp, info.srcPort, info.dstPort)
+    }
+
+    /**
+     * Extracts TCP-level metadata (IPs, ports, payload location, flags) from
+     * a packet without performing HTTP/TLS detection.
+     */
+    private fun extractTcpPayloadInfo(
+        buffer: CommonByteBuffer, packet: PcapPacketRecord, linkType: Long,
+    ): TcpPayloadInfo? {
+        val dataOffset = packet.dataOffset.toInt()
+        val dataLen = packet.inclLen.toInt()
+        if (dataLen <= 0 || dataOffset + dataLen > buffer.size) return null
+
+        // Navigate through link layer to IP layer
+        val ipResult = when (linkType.toInt()) {
+            1 -> findIpInEthernet(buffer, dataOffset, dataLen)
+            101 -> findIpRaw(buffer, dataOffset, dataLen)
+            228 -> IpLocation(dataOffset, dataLen, isV6 = false)
+            229 -> IpLocation(dataOffset, dataLen, isV6 = true)
+            0 -> findIpInNullLoopback(buffer, dataOffset, dataLen)
+            113 -> findIpInLinuxSll(buffer, dataOffset, dataLen)
+            else -> null
+        } ?: return null
+
+        // Parse IP header to get addresses and find TCP
+        return if (ipResult.isV6) {
+            extractTcpFromIpv6(buffer, ipResult.offset, ipResult.len)
+        } else {
+            extractTcpFromIpv4(buffer, ipResult.offset, ipResult.len)
+        }
+    }
+
+    private class IpLocation(val offset: Int, val len: Int, val isV6: Boolean)
+
+    private fun findIpInEthernet(buffer: CommonByteBuffer, offset: Int, len: Int): IpLocation? {
+        if (len < 14) return null
+        var etherType = readBigU16(buffer, offset + 12)
+        var ipOffset = offset + 14
+        if (etherType == 0x8100 && len >= 18) {
+            etherType = readBigU16(buffer, offset + 16)
+            ipOffset = offset + 18
+        }
+        return when (etherType) {
+            0x0800 -> IpLocation(ipOffset, len - (ipOffset - offset), isV6 = false)
+            0x86DD -> IpLocation(ipOffset, len - (ipOffset - offset), isV6 = true)
+            else -> null
+        }
+    }
+
+    private fun findIpRaw(buffer: CommonByteBuffer, offset: Int, len: Int): IpLocation? {
+        if (len < 1) return null
+        val version = (readU8(buffer, offset) shr 4) and 0x0F
+        return when (version) {
+            4 -> IpLocation(offset, len, isV6 = false)
+            6 -> IpLocation(offset, len, isV6 = true)
+            else -> null
+        }
+    }
+
+    private fun findIpInNullLoopback(buffer: CommonByteBuffer, offset: Int, len: Int): IpLocation? {
+        if (len < 4) return null
+        val family = readLittleU32(buffer, offset)
+        return when (family) {
+            2L -> IpLocation(offset + 4, len - 4, isV6 = false)
+            24L, 28L, 30L -> IpLocation(offset + 4, len - 4, isV6 = true)
+            else -> null
+        }
+    }
+
+    private fun findIpInLinuxSll(buffer: CommonByteBuffer, offset: Int, len: Int): IpLocation? {
+        if (len < 16) return null
+        val protocol = readBigU16(buffer, offset + 14)
+        return when (protocol) {
+            0x0800 -> IpLocation(offset + 16, len - 16, isV6 = false)
+            0x86DD -> IpLocation(offset + 16, len - 16, isV6 = true)
+            else -> null
+        }
+    }
+
+    private fun extractTcpFromIpv4(buffer: CommonByteBuffer, offset: Int, len: Int): TcpPayloadInfo? {
+        if (len < 20) return null
+        val versionIhl = readU8(buffer, offset)
+        val ihl = (versionIhl and 0x0F) * 4
+        val protocol = readU8(buffer, offset + 9)
+        if (protocol != 6) return null // not TCP
+        val srcIp = readIpv4(buffer, offset + 12)
+        val dstIp = readIpv4(buffer, offset + 16)
+        val tcpOffset = offset + ihl
+        val tcpLen = len - ihl
+        return extractTcpFields(buffer, tcpOffset, tcpLen, srcIp, dstIp)
+    }
+
+    private fun extractTcpFromIpv6(buffer: CommonByteBuffer, offset: Int, len: Int): TcpPayloadInfo? {
+        if (len < 40) return null
+        val nextHeader = readU8(buffer, offset + 6)
+        if (nextHeader != 6) return null // not TCP
+        val srcIp = readIpv6(buffer, offset + 8)
+        val dstIp = readIpv6(buffer, offset + 24)
+        val tcpOffset = offset + 40
+        val tcpLen = len - 40
+        return extractTcpFields(buffer, tcpOffset, tcpLen, srcIp, dstIp)
+    }
+
+    private fun extractTcpFields(
+        buffer: CommonByteBuffer, offset: Int, len: Int,
+        srcIp: String, dstIp: String,
+    ): TcpPayloadInfo? {
+        if (len < 20) return null
+        val srcPort = readBigU16(buffer, offset)
+        val dstPort = readBigU16(buffer, offset + 2)
+        val flags = readU8(buffer, offset + 13)
+        val dataOff = ((readU8(buffer, offset + 12) shr 4) and 0x0F) * 4
+        val payloadOffset = offset + dataOff
+        val payloadLen = len - dataOff
+        return TcpPayloadInfo(
+            srcIp, dstIp, srcPort, dstPort,
+            payloadOffset, payloadLen,
+            fin = flags and 0x01 != 0,
+            rst = flags and 0x04 != 0,
+        )
+    }
+
     // ---- HTTP detection ----
 
     private class HttpInfo(
@@ -345,6 +594,7 @@ object PcapDissector {
         val bodyFileOffset: Long,
         val bodySize: Int,
         val contentType: String?,
+        val isChunkedTransferEncoding: Boolean = false,
     )
 
     private val HTTP_METHODS = listOf("GET ", "POST ", "PUT ", "DELETE ", "HEAD ", "OPTIONS ", "PATCH ", "CONNECT ", "TRACE ")
@@ -371,6 +621,8 @@ object PcapDissector {
 
         // Parse Content-Type from headers
         val contentType = parseHeaderValue(preview, "content-type")
+        val transferEncoding = parseHeaderValue(preview, "transfer-encoding")
+        val isChunked = transferEncoding?.lowercase()?.contains("chunked") == true
 
         val bodyFileOffset: Long
         val bodySize: Int
@@ -388,7 +640,7 @@ object PcapDissector {
                 append(firstLine)
                 if (contentType != null) append("  ($contentType)")
             }
-            HttpInfo("HTTP", statusInfo, bodyFileOffset, bodySize, contentType)
+            HttpInfo("HTTP", statusInfo, bodyFileOffset, bodySize, contentType, isChunked)
         } else {
             // e.g. "GET /index.html HTTP/1.1"
             HttpInfo("HTTP", firstLine, -1, 0, null)
@@ -469,6 +721,8 @@ data class PcapDissectedPacket(
     val httpBodySize: Int = 0,
     /** HTTP Content-Type header value, or `null` when not available. */
     val httpContentType: String? = null,
+    /** `true` when the HTTP response uses chunked transfer encoding. */
+    val isChunkedTransferEncoding: Boolean = false,
     /**
      * Decrypted TLS application data plaintext, or `null` when the packet
      * is not encrypted or decryption was not possible (no key / unsupported cipher).
@@ -483,6 +737,7 @@ data class PcapDissectedPacket(
             httpBodyFileOffset == other.httpBodyFileOffset &&
             httpBodySize == other.httpBodySize &&
             httpContentType == other.httpContentType &&
+            isChunkedTransferEncoding == other.isChunkedTransferEncoding &&
             (decryptedData contentEquals other.decryptedData)
     }
 
@@ -494,6 +749,7 @@ data class PcapDissectedPacket(
         h = 31 * h + httpBodyFileOffset.hashCode()
         h = 31 * h + httpBodySize
         h = 31 * h + (httpContentType?.hashCode() ?: 0)
+        h = 31 * h + isChunkedTransferEncoding.hashCode()
         h = 31 * h + (decryptedData?.contentHashCode() ?: 0)
         return h
     }

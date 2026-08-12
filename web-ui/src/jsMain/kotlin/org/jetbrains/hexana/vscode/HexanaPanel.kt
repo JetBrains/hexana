@@ -767,9 +767,9 @@ private fun enrichPcapPacketsTab(
             val d = dissected(index)
             if (d.httpBodyFileOffset < 0 || d.httpBodySize <= 0) return@RowContextMenuItemDescriptor
             try {
-                val bodyBytes = provider.bytes
-                    .slice(d.httpBodyFileOffset.toInt(), d.httpBodySize)
-                    .toByteArray()
+                val bodyBytes = PcapDissector.reassembleHttpBody(
+                    provider.bytes, packets, index, linkType, d,
+                ) ?: return@RowContextMenuItemDescriptor
                 val ext = httpContentTypeToExtension(d.httpContentType)
                 val fileName = "http-body-packet-${index + 1}$ext"
                 host.openHttpBody(fileName, bodyBytes, d.httpContentType)
