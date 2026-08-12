@@ -162,8 +162,8 @@ Testing conventions already used here:
 - The plugin targets IntelliJ IDEA `2025.3`.
 - It depends on bundled plugin `com.intellij.mcpServer`.
 - Built-in Wasm-to-WAT conversion flows through `graalwasm`, not external CLI tools, in the current code path.
-- Linux Wasmtime debug disables LLDB external symbol lookup before target creation because LLVM apt builds can block
-  indefinitely in external symbol locators. Wasmtime's GDB JIT symbol loading remains enabled separately.
+- Linux and Windows Wasmtime debug disable LLDB external symbol lookup before target creation because some LLVM
+  distributions can block indefinitely in external symbol locators. Wasmtime's GDB JIT symbol loading remains enabled separately.
 - `HexanaSettings.useBuiltInWasmTools` currently reads as always enabled.
 - `polyglotimpl.DisableMultiReleaseCheck` is intentionally set for Graal/polyglot integration.
 

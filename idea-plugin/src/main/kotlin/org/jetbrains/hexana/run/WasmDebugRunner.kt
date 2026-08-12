@@ -388,11 +388,11 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
         internal fun buildWasmtimeLldbParameters(
             wasmtimePath: String,
             wasmtimeArguments: List<String>,
-            disableExternalSymbolLookup: Boolean = SystemInfo.isLinux,
+            disableExternalSymbolLookup: Boolean = shouldDisableExternalSymbolLookup(),
         ): List<String> = buildList {
             if (disableExternalSymbolLookup) {
                 // This must run before LLDB creates the Wasmtime target. Some Linux
-                // LLDB distributions can block indefinitely in external symbol
+                // and Windows LLDB distributions can block indefinitely in external symbol
                 // locators during target creation. Wasmtime's JIT symbols are loaded
                 // later through the GDB JIT interface and are unaffected.
                 add("-O")
@@ -402,6 +402,11 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             add(wasmtimePath)
             addAll(wasmtimeArguments)
         }
+
+        internal fun shouldDisableExternalSymbolLookup(
+            isLinux: Boolean = SystemInfo.isLinux,
+            isWindows: Boolean = SystemInfo.isWindows,
+        ): Boolean = isLinux || isWindows
 
         /**
          * Resolves the default LLDB executable path by checking

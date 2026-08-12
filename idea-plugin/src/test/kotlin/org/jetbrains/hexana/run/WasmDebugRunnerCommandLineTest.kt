@@ -8,7 +8,10 @@ class WasmDebugRunnerCommandLineTest : UsefulTestCase() {
         val parameters = WasmDebugRunner.buildWasmtimeLldbParameters(
             wasmtimePath = "/opt/wasmtime/bin/wasmtime",
             wasmtimeArguments = listOf("run", "module.wasm"),
-            disableExternalSymbolLookup = true,
+            disableExternalSymbolLookup = WasmDebugRunner.shouldDisableExternalSymbolLookup(
+                isLinux = true,
+                isWindows = false,
+            ),
         )
 
         assertEquals(
@@ -24,11 +27,37 @@ class WasmDebugRunnerCommandLineTest : UsefulTestCase() {
         )
     }
 
+    fun testWindowsDisablesExternalSymbolLookupBeforeTargetCreation() {
+        val parameters = WasmDebugRunner.buildWasmtimeLldbParameters(
+            wasmtimePath = "C:/wasmtime/bin/wasmtime.exe",
+            wasmtimeArguments = listOf("run", "module.wasm"),
+            disableExternalSymbolLookup = WasmDebugRunner.shouldDisableExternalSymbolLookup(
+                isLinux = false,
+                isWindows = true,
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                "-O",
+                "settings set symbols.enable-external-lookup false",
+                "--",
+                "C:/wasmtime/bin/wasmtime.exe",
+                "run",
+                "module.wasm",
+            ),
+            parameters,
+        )
+    }
+
     fun testOtherPlatformsKeepTargetArgumentsUnchanged() {
         val parameters = WasmDebugRunner.buildWasmtimeLldbParameters(
             wasmtimePath = "/opt/wasmtime/bin/wasmtime",
             wasmtimeArguments = listOf("run", "module.wasm"),
-            disableExternalSymbolLookup = false,
+            disableExternalSymbolLookup = WasmDebugRunner.shouldDisableExternalSymbolLookup(
+                isLinux = false,
+                isWindows = false,
+            ),
         )
 
         assertEquals(
