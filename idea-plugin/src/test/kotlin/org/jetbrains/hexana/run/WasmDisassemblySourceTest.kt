@@ -23,19 +23,19 @@ class WasmDisassemblySourceTest : UsefulTestCase() {
     // -----------------------------------------------------------------------
 
     fun testNullPathIsUnavailable() {
-        val src = WasmDisassemblySource(null)
+        val src = WasmDisassemblySource(mapWasmFileToBuffer(null))
         assertFalse("null path must not be available", src.isAvailable())
     }
 
     fun testMissingPathIsUnavailable() {
-        val src = WasmDisassemblySource("/nonexistent/totally/fake.wasm")
+        val src = WasmDisassemblySource(mapWasmFileToBuffer("/nonexistent/totally/fake.wasm"))
         assertFalse("missing file must not be available", src.isAvailable())
     }
 
     fun testValidWasmIsAvailable() {
         val file = wasmParserResource("loop.wasm")
         assertTrue("test resource must exist: ${file.absolutePath}", file.exists())
-        val src = WasmDisassemblySource(file.absolutePath)
+        val src = WasmDisassemblySource(mapWasmFileToBuffer(file.absolutePath))
         assertTrue("valid wasm file must be available", src.isAvailable())
     }
 
@@ -46,7 +46,7 @@ class WasmDisassemblySourceTest : UsefulTestCase() {
     fun testOffsetBeyondCodeSectionReturnsNull() {
         val file = wasmParserResource("loop.wasm")
         assertTrue(file.exists())
-        val src = WasmDisassemblySource(file.absolutePath)
+        val src = WasmDisassemblySource(mapWasmFileToBuffer(file.absolutePath))
         assertTrue(src.isAvailable())
         // offset 0 is in the header/magic — before any code entry
         assertNull("offset 0 should not match any code entry", src.rowsForOffset(0))
@@ -55,7 +55,7 @@ class WasmDisassemblySourceTest : UsefulTestCase() {
     fun testOffsetInsideFunctionReturnsRows() {
         val file = debugInfoFixture("dwarf-types.wasm")
         assertTrue("test resource must exist: ${file.absolutePath}", file.exists())
-        val src = WasmDisassemblySource(file.absolutePath)
+        val src = WasmDisassemblySource(mapWasmFileToBuffer(file.absolutePath))
         assertTrue("dwarf-types.wasm must be available", src.isAvailable())
 
         // Find the first valid function by scanning at a known code-section offset.
@@ -84,7 +84,7 @@ class WasmDisassemblySourceTest : UsefulTestCase() {
     fun testRowOffsetsAreMonotonicallyNonDecreasing() {
         val file = debugInfoFixture("dwarf-types.wasm")
         assertTrue(file.exists())
-        val src = WasmDisassemblySource(file.absolutePath)
+        val src = WasmDisassemblySource(mapWasmFileToBuffer(file.absolutePath))
         assertTrue(src.isAvailable())
 
         val bytes = file.readBytes()
@@ -123,7 +123,7 @@ class WasmDisassemblySourceTest : UsefulTestCase() {
     fun testCachingReturnsSameRows() {
         val file = debugInfoFixture("dwarf-types.wasm")
         assertTrue(file.exists())
-        val src = WasmDisassemblySource(file.absolutePath)
+        val src = WasmDisassemblySource(mapWasmFileToBuffer(file.absolutePath))
         assertTrue(src.isAvailable())
 
         val bytes = file.readBytes()

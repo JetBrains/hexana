@@ -40,12 +40,9 @@ import org.jetbrains.hexana.shared.parseLldbFunctionName
 import org.jetbrains.hexana.shared.parseRawDwarfLine
 import org.jetbrains.hexana.shared.parseRawDwarfPath
 import org.jetbrains.hexana.shared.pathMatchesBreakpointLocation
-import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.shared.stripCuHashSuffix
 import java.io.File
-import java.nio.channels.FileChannel
-import java.nio.file.Path
-import java.nio.file.StandardOpenOption
 
 /**
  * A debug process that launches wasmtime under LLDB so that
@@ -111,8 +108,16 @@ open class WasmDebugProcess(
     private val wasmDisassemblyPanel = WasmDisassemblyPanel(wasmDisassemblyModel)
     private val wasmStackModel = WasmStackTableModel()
 
+    /**
+     * Read-only mmap of the executed wasm binary, shared by the disassembly
+     * source and the stack analyzer (both read via duplicates). On Windows
+     * the mapping pins the file until GC — acceptable for the session-scoped
+     * composed temp file.
+     */
+    private val executedWasmBuffer: CommonByteBuffer? by lazy { mapWasmFileToBuffer(executedWasmPath) }
+
     /** Indexes the executed wasm binary; initialized lazily on first stop (off-EDT). */
-    private val wasmDisassemblySource by lazy { WasmDisassemblySource(executedWasmPath) }
+    private val wasmDisassemblySource by lazy { WasmDisassemblySource(executedWasmBuffer) }
 
     /**
      * Statically reconstructs the symbolic operand stack shown next to the
@@ -120,21 +125,7 @@ open class WasmDebugProcess(
      * and provenance come from abstract interpretation of the wasm body.
      */
     private val wasmStackAnalyzer: WasmStackShapeAnalyzer? by lazy {
-        executedWasmPath?.let { path ->
-            try {
-                // Read-only mmap instead of a whole-file copy; the analyzer
-                // reads via duplicates, so the mapping is shared and lazy.
-                // (On Windows the mapping pins the file until GC — acceptable
-                // for the session-scoped composed temp file.)
-                val mapped = FileChannel.open(Path.of(path), StandardOpenOption.READ).use { channel ->
-                    channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size())
-                }
-                WasmStackShapeAnalyzer.create(mapped.toCommonByteBuffer())
-            } catch (e: Exception) {
-                LOG.debug("Stack-shape analyzer init failed for $path", e)
-                null
-            }
-        }
+        executedWasmBuffer?.let { WasmStackShapeAnalyzer.create(it) }
     }
 
     /**

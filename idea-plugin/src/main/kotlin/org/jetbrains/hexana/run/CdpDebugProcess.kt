@@ -65,7 +65,7 @@ internal class CdpDebugProcess(
     private val wasmStackModel = WasmStackTableModel()
     private val wasmDisassemblyModel = WasmDisassemblyTableModel()
     private val wasmDisassemblyPanel = WasmDisassemblyPanel(wasmDisassemblyModel)
-    private val wasmDisassemblySource = WasmDisassemblySource(wasmFilePath)
+    private val wasmDisassemblySource = WasmDisassemblySource(mapWasmFileToBuffer(wasmFilePath))
 
     private val breakpointHandler = CdpBreakpointHandler(this)
     private val stopping = AtomicBoolean(false)

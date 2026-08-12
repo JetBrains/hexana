@@ -11,6 +11,7 @@ import com.intellij.xdebugger.frame.XStackFrame
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmParseSuccess
@@ -25,7 +26,8 @@ import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
 import org.jetbrains.hexana.wasm.sections.WasmSectionCode
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 import org.jetbrains.hexana.wasm.sections.parseCodeEntry
-import java.io.File
+import java.nio.channels.FileChannel
+import java.nio.file.StandardOpenOption
 import java.util.concurrent.ConcurrentHashMap
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -205,17 +207,18 @@ internal class WasmDisassemblyPanel(val model: WasmDisassemblyTableModel) {
  * - Results are cached in [cache] so repeated stepping inside one function
  *   is a simple lookup.
  *
- * @param wasmFilePath absolute path to the wasm file; if null all queries return empty
+ * @param wasmBuffer the module bytes (e.g. a read-only mmap from
+ *        [mapWasmFileToBuffer]); if null all queries return empty
  */
-internal class WasmDisassemblySource(wasmFilePath: String?) {
+internal class WasmDisassemblySource(wasmBuffer: CommonByteBuffer?) {
 
     private val LOG = Logger.getInstance(WasmDisassemblySource::class.java)
 
     /** Sorted list of (codeSection-local) function offsets, index = local func idx (0-based). */
     private val offsets: List<CodeEntryOffset>?
 
-    /** The raw bytes, kept only as long as [offsets] is non-null and the cache may need fills. */
-    private val wasmBytes: ByteArray?
+    /** The module buffer, kept only as long as [offsets] is non-null and the cache may need fills. */
+    private val wasmBuffer: CommonByteBuffer?
 
     /** Cached disassembly rows per code-section-local function index. */
     private val cache = ConcurrentHashMap<Int, List<WasmDisassemblyTableModel.Row>>()
@@ -238,15 +241,13 @@ internal class WasmDisassemblySource(wasmFilePath: String?) {
 
     init {
         var tempOffsets: List<CodeEntryOffset>? = null
-        var tempBytes: ByteArray? = null
+        var tempBuffer: CommonByteBuffer? = null
         var tempImportCount = 0
         var tempFuncNames: Map<Int, String>? = null
-        if (wasmFilePath != null) {
+        if (wasmBuffer != null) {
             try {
-                val file = File(wasmFilePath)
-                if (file.exists()) {
-                    val bytes = file.readBytes()
-                    val buf = bytes.toCommonByteBuffer()
+                run {
+                    val buf = wasmBuffer.duplicate()
                     val result = WasmParser().parse(buf.duplicate()) as? WasmParseSuccess
                     val module = result?.wasmModule as? WasmModule
                     if (module != null) {
@@ -265,15 +266,15 @@ internal class WasmDisassemblySource(wasmFilePath: String?) {
                                 with(customSection) { buf.duplicate().parseAsNameSection() }
                             }
                         }?.functionSubsection?.namemap
-                        tempBytes = bytes
+                        tempBuffer = buf
                     }
                 }
             } catch (e: Exception) {
-                LOG.warn("WasmDisassemblySource: failed to init from $wasmFilePath", e)
+                LOG.warn("WasmDisassemblySource: failed to init from buffer", e)
             }
         }
         offsets = tempOffsets
-        wasmBytes = tempBytes
+        this.wasmBuffer = tempBuffer
         importFuncCount = tempImportCount
         funcNames = tempFuncNames
     }
@@ -290,7 +291,7 @@ internal class WasmDisassemblySource(wasmFilePath: String?) {
      */
     fun rowsForOffset(moduleAbsoluteOffset: Int): Pair<List<WasmDisassemblyTableModel.Row>, Int>? {
         val offs = offsets ?: return null
-        val bytes = wasmBytes ?: return null
+        val buffer = wasmBuffer ?: return null
         if (offs.isEmpty()) return null
 
         // Binary-search for the code entry whose range covers moduleAbsoluteOffset.
@@ -309,14 +310,14 @@ internal class WasmDisassemblySource(wasmFilePath: String?) {
         if (localIdx < 0) return null
 
         val rows = cache.getOrPut(localIdx) {
-            buildRows(bytes, offs[localIdx], localIdx)
+            buildRows(buffer, offs[localIdx], localIdx)
         }
         return rows to localIdx
     }
 
-    private fun buildRows(bytes: ByteArray, entry: CodeEntryOffset, localIdx: Int): List<WasmDisassemblyTableModel.Row> {
+    private fun buildRows(buffer: CommonByteBuffer, entry: CodeEntryOffset, localIdx: Int): List<WasmDisassemblyTableModel.Row> {
         return try {
-            val buf = bytes.toCommonByteBuffer()
+            val buf = buffer.duplicate()
             val record = buf.parseCodeEntry(entry.offset)
             val rows = mutableListOf<WasmDisassemblyTableModel.Row>()
             appendRows(record.opCodes, 0, rows)
@@ -355,6 +356,24 @@ internal class WasmDisassemblySource(wasmFilePath: String?) {
                 else -> {}
             }
         }
+    }
+}
+
+/**
+ * Maps [path] read-only into a [CommonByteBuffer], or null when [path] is
+ * null, missing, or cannot be mapped. All consumers read through duplicates,
+ * so the module is never materialized as a byte-array copy.
+ */
+internal fun mapWasmFileToBuffer(path: String?): CommonByteBuffer? {
+    if (path == null) return null
+    return try {
+        val mapped = FileChannel.open(java.nio.file.Path.of(path), StandardOpenOption.READ).use { channel ->
+            channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size())
+        }
+        mapped.toCommonByteBuffer()
+    } catch (e: Exception) {
+        Logger.getInstance("CdpDebuggerTabs").debug("Failed to map wasm file $path", e)
+        null
     }
 }
 
