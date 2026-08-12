@@ -37,6 +37,14 @@ class DwarfIndexTest : UsefulTestCase() {
         assertTrue("Should contain utf8.c", fileNames.any { it.endsWith("utf8.c") })
     }
 
+    fun testRustMemvarsFixtureFileName() {
+        val fileNames = extractAllFileNames(loadWasmResource("rust/dwarf-memvars.wasm"))
+        assertTrue(
+            "Fixture rebuilt from the repo source must index dwarf-memvars.rs, got: $fileNames",
+            fileNames.any { it == "dwarf-memvars.rs" || it.endsWith("/dwarf-memvars.rs") },
+        )
+    }
+
     fun testV5DwarfFileNames() {
         val fileNames = extractAllFileNames(loadWasmResource("c/utf8-c.dwarf5.wasm"))
         assertTrue("Should extract file names from DWARF V5 data", fileNames.isNotEmpty())
