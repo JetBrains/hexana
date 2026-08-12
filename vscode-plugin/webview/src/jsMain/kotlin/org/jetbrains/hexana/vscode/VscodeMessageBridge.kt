@@ -297,11 +297,12 @@ fun postOpenModuleToHost(moduleIndex: Int, fileName: String, data: ByteArray) {
  * [data] is the raw body bytes, and [contentType] is the HTTP Content-Type
  * header value (if available) so the host can choose the right language mode.
  */
-fun postOpenHttpBodyToHost(fileName: String, data: ByteArray, contentType: String?) {
+fun postOpenHttpBodyToHost(fileName: String, data: ByteArray, contentType: String?, contentEncoding: String?) {
     val msg = js("{}")
     msg.type = "open-http-body"
     msg.fileName = fileName
     msg.contentType = contentType ?: ""
+    msg.contentEncoding = contentEncoding ?: ""
     val jsArray = js("[]").unsafeCast<dynamic>()
     for (i in data.indices) {
         jsArray.push(data[i].toInt() and 0xFF)
@@ -402,8 +403,8 @@ class VscodeHost : Host {
     override fun openModule(moduleIndex: Int, fileName: String, data: ByteArray) =
         postOpenModuleToHost(moduleIndex, fileName, data)
     override fun openDts() = postOpenDtsToHost()
-    override fun openHttpBody(fileName: String, bodyBytes: ByteArray, httpContentType: String?) =
-        postOpenHttpBodyToHost(fileName, bodyBytes, httpContentType)
+    override fun openHttpBody(fileName: String, bodyBytes: ByteArray, httpContentType: String?, httpContentEncoding: String?) =
+        postOpenHttpBodyToHost(fileName, bodyBytes, httpContentType, httpContentEncoding)
     override fun openTextFile(fileName: String, content: String) = postOpenTextFileToHost(fileName, content)
     override fun pickScriptFile() = postPickScriptFileToHost()
     override fun readScriptFile(scriptPath: String) = postReadScriptFileToHost(scriptPath)

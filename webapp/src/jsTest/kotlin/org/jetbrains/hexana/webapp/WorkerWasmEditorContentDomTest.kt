@@ -498,7 +498,7 @@ private class WorkerDomHost : Host {
     override fun openUrl(url: String) = Unit
     override fun openModule(moduleIndex: Int, fileName: String, data: ByteArray) = Unit
     override fun openDts() = Unit
-    override fun openHttpBody(fileName: String, bodyBytes: ByteArray, httpContentType: String?) = Unit
+    override fun openHttpBody(fileName: String, bodyBytes: ByteArray, httpContentType: String?, httpContentEncoding: String?) = Unit
     override fun openTextFile(fileName: String, content: String) = Unit
     override fun pickScriptFile() = Unit
     override fun readScriptFile(scriptPath: String) = Unit

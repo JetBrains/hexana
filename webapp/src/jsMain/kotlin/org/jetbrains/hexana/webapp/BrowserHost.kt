@@ -147,7 +147,7 @@ internal class BrowserHost(
         // VS Code-specific (opens in Monaco editor); no-op in the browser.
     }
 
-    override fun openHttpBody(fileName: String, bodyBytes: ByteArray, httpContentType: String?) {
+    override fun openHttpBody(fileName: String, bodyBytes: ByteArray, httpContentType: String?, httpContentEncoding: String?) {
         // todo
     }
 

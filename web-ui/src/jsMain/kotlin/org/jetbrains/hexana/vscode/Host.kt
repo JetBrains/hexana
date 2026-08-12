@@ -38,7 +38,7 @@ interface Host {
     fun openUrl(url: String)
     fun openModule(moduleIndex: Int, fileName: String, data: ByteArray)
     fun openDts()
-    fun openHttpBody(fileName: String, bodyBytes: ByteArray, httpContentType: String? = null)
+    fun openHttpBody(fileName: String, bodyBytes: ByteArray, httpContentType: String? = null, httpContentEncoding: String? = null)
     fun openTextFile(fileName: String, content: String)
     fun pickScriptFile()
     fun readScriptFile(scriptPath: String)

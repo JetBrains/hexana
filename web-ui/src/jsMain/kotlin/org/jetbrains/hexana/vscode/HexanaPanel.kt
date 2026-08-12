@@ -767,13 +767,12 @@ private fun enrichPcapPacketsTab(
             val d = dissected(index)
             if (d.httpBodyFileOffset < 0 || d.httpBodySize <= 0) return@RowContextMenuItemDescriptor
             try {
-                val rawBody = PcapDissector.reassembleHttpBody(
+                val bodyBytes = PcapDissector.reassembleHttpBody(
                     provider.bytes, packets, index, linkType, d,
                 ) ?: return@RowContextMenuItemDescriptor
-                val bodyBytes = decompressHttpBodyJs(rawBody, d.httpContentEncoding)
                 val ext = httpContentTypeToExtension(d.httpContentType)
                 val fileName = "http-body-packet-${index + 1}$ext"
-                host.openHttpBody(fileName, bodyBytes, d.httpContentType)
+                host.openHttpBody(fileName, bodyBytes, d.httpContentType, d.httpContentEncoding)
             } catch (_: Exception) {
                 // Extraction failed — silently ignore
             }
@@ -806,18 +805,6 @@ private fun enrichPcapPacketsTab(
     )
 }
 
-/**
- * Attempts to decompress an HTTP body based on Content-Encoding.
- * In the browser environment synchronous decompression is not available
- * for gzip/deflate, so this returns the raw bytes unchanged. The VS Code
- * extension host or IDE plugin handles decompression on their respective
- * platforms.
- */
-private fun decompressHttpBodyJs(body: ByteArray, contentEncoding: String?): ByteArray {
-    // Browser environment lacks synchronous gzip/deflate decompression.
-    // Return raw bytes; the host can decompress if needed.
-    return body
-}
 
 /** Maps an HTTP Content-Type to a file extension hint. */
 private fun httpContentTypeToExtension(contentType: String?): String {

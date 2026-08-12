@@ -569,7 +569,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     vscode.env.openExternal(vscode.Uri.parse(url));
                 }
             } else if (message.type === "open-http-body") {
-                this.openHttpBody(document, message);
+                this.openHttpBody(document, message as any);
             } else if (message.type === "open-dts") {
                 this.openDtsReference();
             } else if (message.type === "pick-script-file") {
@@ -1090,10 +1090,10 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
      */
     private async openHttpBody(
         _document: WasmDocument,
-        message: { fileName: string; data: number[]; contentType: string },
+        message: { fileName: string; data: number[]; contentType: string; contentEncoding?: string },
     ): Promise<void> {
         try {
-            const bytes = new Uint8Array(message.data);
+            const bytes = this.decompressHttpBody(new Uint8Array(message.data), message.contentEncoding);
 
             if (this.isTextContentType(message.contentType)) {
                 const content = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
@@ -1120,6 +1120,42 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             }
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to open HTTP body: ${err}`);
+        }
+    }
+
+    /**
+     * Decompresses an HTTP body according to the Content-Encoding header.
+     * Supports gzip, x-gzip, and deflate. Returns the original bytes
+     * unchanged when the encoding is absent, identity, or unrecognised.
+     */
+    private decompressHttpBody(bytes: Uint8Array, contentEncoding?: string): Uint8Array {
+        if (!contentEncoding || bytes.length === 0) return bytes;
+        const encoding = contentEncoding.trim().toLowerCase();
+        try {
+            switch (encoding) {
+                case "gzip":
+                case "x-gzip": {
+                    const buf = zlib.gunzipSync(bytes);
+                    return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+                }
+                case "deflate": {
+                    // "deflate" can be zlib-wrapped or raw; try zlib first.
+                    try {
+                        const buf = zlib.inflateSync(bytes);
+                        return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+                    } catch {
+                        const buf = zlib.inflateRawSync(bytes);
+                        return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+                    }
+                }
+                case "identity":
+                    return bytes;
+                default:
+                    return bytes;
+            }
+        } catch (err) {
+            console.warn(`[Hexana] Failed to decompress HTTP body (${encoding}):`, err);
+            return bytes;
         }
     }
 
