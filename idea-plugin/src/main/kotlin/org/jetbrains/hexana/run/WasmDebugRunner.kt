@@ -22,7 +22,6 @@ import com.intellij.openapi.util.ThrowableComputable
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugProcessStarter
 import com.intellij.xdebugger.XDebugSession
-import com.intellij.xdebugger.XDebuggerManager
 import org.jetbrains.hexana.shared.looksLikeWamrDebugNotSupported
 import java.io.File
 import java.util.Collections
@@ -163,10 +162,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             }
         }
 
-        val session = XDebuggerManager.getInstance(environment.project)
-            .startSession(environment, starter)
-
-        return session.runContentDescriptor
+        return startDebugSessionForRunner(environment, starter)
     }
 
     /**
@@ -240,10 +236,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             }
         }
 
-        val session = XDebuggerManager.getInstance(environment.project)
-            .startSession(environment, starter)
-
-        return session.runContentDescriptor
+        return startDebugSessionForRunner(environment, starter)
     }
 
     /**

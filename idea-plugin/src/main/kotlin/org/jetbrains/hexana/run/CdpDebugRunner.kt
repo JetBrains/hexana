@@ -22,7 +22,6 @@ import com.intellij.openapi.util.ThrowableComputable
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugProcessStarter
 import com.intellij.xdebugger.XDebugSession
-import com.intellij.xdebugger.XDebuggerManager
 import com.sun.net.httpserver.HttpServer
 import org.jetbrains.hexana.shared.WasmRunInput
 import org.jetbrains.hexana.shared.buildNodeJsRunArgs
@@ -113,10 +112,7 @@ class CdpDebugRunner : GenericProgramRunner<RunnerSettings>() {
             }
         }
 
-        val session = XDebuggerManager.getInstance(environment.project)
-            .startSession(environment, starter)
-
-        return session.runContentDescriptor
+        return startDebugSessionForRunner(environment, starter)
     }
 
     private class NodeJsPrepResult(
@@ -233,10 +229,7 @@ class CdpDebugRunner : GenericProgramRunner<RunnerSettings>() {
             }
         }
 
-        val session = XDebuggerManager.getInstance(environment.project)
-            .startSession(environment, starter)
-
-        return session.runContentDescriptor
+        return startDebugSessionForRunner(environment, starter)
     }
 
     private class BrowserPrepResult(
