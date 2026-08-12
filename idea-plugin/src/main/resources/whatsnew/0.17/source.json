@@ -1,0 +1,127 @@
+{
+  "clusters": [
+    {
+      "asset": "screenshots/wasm-debugger-tab.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Wasm** tab in the debugger when debugging a wasm module under Node.js or a browser. The left pane disassembles the paused function to WAT (same mnemonics and symbolic `call $name` operands as the WAT view, block bodies indented) with the current instruction selected and following every step; the right pane shows the live operand stack with typed entries. Stepping granularity follows the tab: while it is selected, one step is one wasm instruction; otherwise a step runs until the source line changes. V8 natively steps wasm one instruction at a time, so a single source line previously took several Step Over clicks to cross."
+        },
+        {
+          "section": "Added",
+          "text": "The **Wasm** debugger tab now also appears when debugging under wasmtime. The left pane disassembles the paused function with the current wasm instruction selected: wasmtime serializes a native-address-to-wasm-offset table into every compiled module, and the stopped pc is translated through it, so the highlight is per instruction even though LLDB only sees native code (instructions that emit no machine code, like `local.get` or `i32.const`, are never pause targets and are skipped, which mirrors what the CPU executes). The right pane shows a symbolic operand stack: Cranelift compiles the wasm stack machine away, so the concrete values are not recoverable from the process, but the stack's depth, types and origins are reconstructed statically per wasm's validation rules. Each slot names where its value came from: a local (with its DWARF source name when known), a constant (the one case with a real value), or the producing instruction (`i32.add @0x52`, `call make @0x341f`). When the shape cannot be reconstructed (unsupported instructions, SIMD/atomics in the function), the pane says so explicitly instead of showing a wrong stack."
+        }
+      ],
+      "eyebrow": "WASM debugger",
+      "id": "wasm-debugger-tab",
+      "recipe": "paused-nodejs-wasm-debugger-tab",
+      "summary": "The Wasm debugger tab shows the paused function, current instruction, and operand stack for Node.js, browser, and wasmtime sessions.",
+      "title": "Step through paused WASM at instruction precision"
+    },
+    {
+      "asset": "screenshots/wasm-problems-tab.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Problems** tab for WASM binaries. When the parser hits bytes it cannot decode (for example instructions from a not-yet-supported proposal), it no longer discards the whole function body: decoding keeps everything up to the failure and records the rest as one unparsed region, and every such region shows up as a row in the new tab with its kind, location, byte offset, size and message. Clicking a row jumps to the affected function in the **WAT (virtualized)** tab; the context menu also offers the plain **Wat** tab, which now scrolls to the nearest annotated line. Rows not tied to a function select the failed byte range in the hex view. The tab appears only when the module actually has parse problems."
+        },
+        {
+          "section": "Fixed",
+          "text": "Opening the **Dependencies** tab of a Component Model binary crashed with `NotImplementedError` when the core-instance section contained an entry the parser cannot decode. Such entries are now recorded as parse problems instead: an unknown instance-encoding tag consumes only the tag byte, and a decode failure mid-entry skips the section remainder as one corrupt region. Both show up in the **Problems** tab, which now also covers component binaries, with kind, byte offset, size and message; clicking a row selects the bytes in the hex view. The dependency graph and the component WAT text label the affected instances explicitly instead of failing."
+        },
+        {
+          "section": "Fixed",
+          "text": "Navigating to a function in the **WAT (virtualized)** tab (from the Problems tab, go-to-function or search) landed on the wrong function in modules whose type section contains collapsed `(rec \u2026)` groups: every collapsed group member before the target shifted the scroll one row further (clicking func 25 landed on func 83 in a 216-type WasmGC module). The scroll index now accounts for group-collapsed rows."
+        }
+      ],
+      "eyebrow": "WASM inspection",
+      "id": "wasm-problems-tab",
+      "recipe": "wasm-unknown-opcode-problems-tab",
+      "summary": "The Problems tab preserves the readable part of a module and links each unparsed region back to WAT or its original bytes.",
+      "title": "Keep investigating modules with parse problems"
+    },
+    {
+      "asset": "screenshots/pcap-packet-inspection.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Basic support for pcap/pcapng files - viewing packets, opening http response body in a new tab"
+        }
+      ],
+      "eyebrow": "Network captures",
+      "id": "pcap-packet-inspection",
+      "recipe": "pcapng-packets-and-http-response-body",
+      "summary": "Open packet captures in Hexana, browse their packets, and open HTTP response bodies in a separate tab.",
+      "title": "Inspect PCAP and PCAPNG packets"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Conditional breakpoints in wasm debug sessions. Condition expressions are translated from DWARF source variable names to V8's internal wasm-local names before registration, so conditions use the same names the Variables view shows."
+        },
+        {
+          "section": "Added",
+          "text": "Inlined call frames in the debugger stack. When a pause lands inside code the compiler inlined, the stack shows synthetic frames suffixed `(inlined)`, reconstructed from DWARF: the innermost inlined function at the pause location, each caller at its recorded call site. Variables and evaluation stay attached to the physical frame; stepping remains physical."
+        },
+        {
+          "section": "Added",
+          "text": "Variables stored in linear memory now appear when debugging under Node.js. V8 only surfaces wasm locals and globals, so anything on the shadow stack or at a fixed address (structs, arrays, enums; typical for parameters and locals in unoptimized builds) used to be invisible. They are now located via DWARF, read from the module's memory over the debugger protocol and decoded per their DWARF types: structs expand to members at their recorded offsets, enums render by enumerator name, arrays are bounded, reads are capped per variable."
+        },
+        {
+          "section": "Fixed",
+          "text": "In unoptimized wasm builds the Variables view labeled compiler scratch locals with source variable names (the shadow stack pointer showed up as a struct variable): the positional name fallback no longer claims variables whose DWARF location is linear memory. V8's operand-stack object also no longer appears in Variables under a stolen variable name; its entries live in the **Wasm** tab."
+        }
+      ],
+      "eyebrow": "WASM debugger",
+      "id": "advanced-wasm-debugging",
+      "recipe": "wasm-debugger-conditions-inlined-frames-and-memory-variables",
+      "summary": "Conditional breakpoints, reconstructed inlined frames, and DWARF-backed linear-memory variables make optimized and unoptimized WASM sessions easier to understand.",
+      "title": "Debug source-level state with more context"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Support for viewing tar entries directly in Hexana"
+        },
+        {
+          "section": "Added",
+          "text": "Support for gzip - compressed files of supported kinds (like .wasm.gz) can be opened directly in Hexana"
+        }
+      ],
+      "eyebrow": "Archives",
+      "id": "tar-and-gzip",
+      "recipe": "tar-entries-and-gzip-supported-binaries",
+      "summary": "Browse TAR entries in Hexana and inspect supported files such as .wasm.gz without manually unpacking them first.",
+      "title": "Open TAR entries and gzip-compressed binaries directly"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Type-section encodings from the custom-descriptors proposal (Phase 3): exact reference types (`(ref null (exact $t))`) and `descriptor` / `describes` clauses now parse with correct alignment. WasmGC modules emitted with these encodings (recent Kotlin/Wasm and J2CL toolchains) previously failed to parse at all: the type section silently misparsed from the first exact type onward and every later function body degraded to an unparsed blob or a NullPointerException."
+        }
+      ],
+      "eyebrow": "WasmGC",
+      "id": "wasmgc-custom-descriptors",
+      "recipe": "wasmgc-custom-descriptors-type-section-alignment",
+      "summary": "Type sections using custom-descriptor encodings now retain their alignment, so modules from current Kotlin/Wasm and J2CL toolchains remain inspectable.",
+      "title": "Read current WasmGC custom descriptors"
+    }
+  ],
+  "date": "2026-08-12",
+  "schema": 1,
+  "sources": {
+    "assets": "docs/whatsnew/assets.yml",
+    "assets_sha256": "1e90e00a61922a598f0fffb403df58de07d2ead71184efdc37592d1047cb3841",
+    "changelog": "idea-plugin/CHANGELOG.md",
+    "changelog_sha256": "a71ebc56817d0bd9327c3a83a9890c89201fae2b52768667f6ef88b371474cef",
+    "design": "docs/whatsnew/DESIGN.md",
+    "design_sha256": "9d78242126b778ea9b2e726407499489193e7c5a71661d09e2dda0f9c8238af4"
+  },
+  "version": "0.17"
+}

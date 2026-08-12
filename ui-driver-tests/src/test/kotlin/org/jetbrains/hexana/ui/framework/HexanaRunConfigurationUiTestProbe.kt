@@ -150,6 +150,35 @@ internal fun Driver.debugNodeJsWithBreakpointAndInspectVariables(
     )
 }
 
+internal fun Driver.startNodeJsDebugWithBreakpointForCapture(
+    wasmFileName: String,
+    sourceFileName: String,
+    breakpointLine: Int,
+    nodeOptions: String = "",
+    exportName: String = "",
+    programArgs: String = "",
+) {
+    utility(DebugTestHelperRef::class).startNodeJsDebugWithBreakpointForCapture(
+        singleProject(),
+        wasmFileName,
+        sourceFileName,
+        breakpointLine,
+        nodeOptions,
+        exportName,
+        programArgs,
+        HexanaRunConfigurationRuntimePreflight.ensureNodeJs(),
+    )
+}
+
+internal fun Driver.cdpDebuggerCaptureState(): HexanaCdpDebuggerCaptureState =
+    HexanaProbePayload.cdpDebuggerCaptureState(
+        utility(DebugTestHelperRef::class).cdpDebuggerCaptureState(singleProject()),
+    )
+
+internal fun Driver.resumeDebuggerForCapture() {
+    utility(DebugTestHelperRef::class).resumeDebuggerForCapture(singleProject())
+}
+
 @Remote(
     "org.jetbrains.hexana.uitestframework.HexanaRunConfigurationUiTestProbe",
     plugin = HEXANA_PLUGIN_ID,
@@ -230,4 +259,16 @@ internal interface DebugTestHelperRef {
         programArgs: String,
         wasmtimePath: String,
     ): String
+    fun startNodeJsDebugWithBreakpointForCapture(
+        project: com.intellij.driver.sdk.Project,
+        wasmFileName: String,
+        sourceFileName: String,
+        breakpointLine: Int,
+        nodeOptions: String,
+        exportName: String,
+        programArgs: String,
+        nodePath: String,
+    )
+    fun cdpDebuggerCaptureState(project: com.intellij.driver.sdk.Project): List<String>
+    fun resumeDebuggerForCapture(project: com.intellij.driver.sdk.Project)
 }

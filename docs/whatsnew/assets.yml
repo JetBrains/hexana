@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "default_release": "0.16",
+  "default_release": "0.17",
   "asset_root": ".",
   "capture_policy": {
     "preferred_source": "ui-driver",
@@ -449,6 +449,110 @@
       "image_candidates": [
         "docs/whatsnew/captures/0.16/nested-component-editor.png"
       ]
+    },
+    "wasm-debugger-tab": {
+      "release": "0.17",
+      "eyebrow": "WASM debugger",
+      "title": "Step through paused WASM at instruction precision",
+      "summary": "The Wasm debugger tab shows the paused function, current instruction, and operand stack for Node.js, browser, and wasmtime sessions.",
+      "recipe": "paused-nodejs-wasm-debugger-tab",
+      "keywords": [
+        "Wasm tab in the debugger",
+        "same mnemonics",
+        "current instruction selected",
+        "live operand stack",
+        "wasm instruction",
+        "also appears when debugging under wasmtime"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.17/wasm-debugger-tab.png"
+      ]
+    },
+    "wasm-problems-tab": {
+      "release": "0.17",
+      "eyebrow": "WASM inspection",
+      "title": "Keep investigating modules with parse problems",
+      "summary": "The Problems tab preserves the readable part of a module and links each unparsed region back to WAT or its original bytes.",
+      "recipe": "wasm-unknown-opcode-problems-tab",
+      "keywords": [
+        "Problems tab",
+        "parser hits bytes it cannot decode",
+        "unparsed region",
+        "plain Wat tab",
+        "parse problems",
+        "component binaries"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.17/wasm-problems-tab.png"
+      ]
+    },
+    "pcap-packet-inspection": {
+      "release": "0.17",
+      "eyebrow": "Network captures",
+      "title": "Inspect PCAP and PCAPNG packets",
+      "summary": "Open packet captures in Hexana, browse their packets, and open HTTP response bodies in a separate tab.",
+      "recipe": "pcapng-packets-and-http-response-body",
+      "keywords": [
+        "pcap/pcapng",
+        "viewing packets",
+        "http response body"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.17/pcap-packets.png"
+      ]
+    },
+    "advanced-wasm-debugging": {
+      "release": "0.17",
+      "presentation": "text",
+      "eyebrow": "WASM debugger",
+      "title": "Debug source-level state with more context",
+      "summary": "Conditional breakpoints, reconstructed inlined frames, and DWARF-backed linear-memory variables make optimized and unoptimized WASM sessions easier to understand.",
+      "recipe": "wasm-debugger-conditions-inlined-frames-and-memory-variables",
+      "keywords": [
+        "Conditional breakpoints",
+        "Inlined call frames",
+        "Variables stored in linear memory",
+        "DWARF source variable names",
+        "synthetic frames suffixed",
+        "shadow stack"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "tar-and-gzip": {
+      "release": "0.17",
+      "presentation": "text",
+      "eyebrow": "Archives",
+      "title": "Open TAR entries and gzip-compressed binaries directly",
+      "summary": "Browse TAR entries in Hexana and inspect supported files such as .wasm.gz without manually unpacking them first.",
+      "recipe": "tar-entries-and-gzip-supported-binaries",
+      "keywords": [
+        "tar entries",
+        "gzip",
+        ".wasm.gz"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "wasmgc-custom-descriptors": {
+      "release": "0.17",
+      "presentation": "text",
+      "eyebrow": "WasmGC",
+      "title": "Read current WasmGC custom descriptors",
+      "summary": "Type sections using custom-descriptor encodings now retain their alignment, so modules from current Kotlin/Wasm and J2CL toolchains remain inspectable.",
+      "recipe": "wasmgc-custom-descriptors-type-section-alignment",
+      "keywords": [
+        "custom-descriptors proposal",
+        "exact reference types",
+        "describes clauses",
+        "Kotlin/Wasm",
+        "J2CL"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
     }
   }
 }

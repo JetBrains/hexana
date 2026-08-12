@@ -409,6 +409,15 @@ internal data class HexanaNativeDiffState(
     val error: String?,
 )
 
+internal data class HexanaCdpDebuggerCaptureState(
+    val sessionSuspended: Boolean,
+    val wasmFrame: Boolean,
+    val wasmTabRegistered: Boolean,
+    val disassemblyRowCount: Int,
+    val selectedDisassemblyRow: Int,
+    val operandStackRowCount: Int,
+)
+
 internal data class HexanaArchiveMemberState(
     val index: Int,
     val name: String,

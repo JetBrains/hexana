@@ -66,6 +66,7 @@ internal class CdpDebugProcess(
     private val wasmDisassemblyModel = WasmDisassemblyTableModel()
     private val wasmDisassemblyPanel = WasmDisassemblyPanel(wasmDisassemblyModel)
     private val wasmDisassemblySource = WasmDisassemblySource(mapWasmFileToBuffer(wasmFilePath))
+    private val wasmTabRegistered = AtomicBoolean(false)
 
     private val breakpointHandler = CdpBreakpointHandler(this)
     private val stopping = AtomicBoolean(false)
@@ -108,6 +109,7 @@ internal class CdpDebugProcess(
             )
             wasmContent.isCloseable = false
             ui.addContent(wasmContent)
+            wasmTabRegistered.set(true)
 
             // Track whether the Wasm tab is the selected one: stepping is
             // per-instruction while it is visible, per-source-line otherwise.
@@ -119,6 +121,22 @@ internal class CdpDebugProcess(
                 }
             })
         }
+    }
+
+    /**
+     * A compact, state-only view used by the packaged UI-driver capture probe.
+     * It deliberately exposes no debugger controls or test-only behavior.
+     */
+    internal fun whatsNewCaptureState(): CdpDebuggerCaptureState {
+        val frame = session.currentStackFrame
+        return CdpDebuggerCaptureState(
+            sessionSuspended = session.isSuspended,
+            wasmFrame = frame is CdpStackFrame || frame is CdpInlinedStackFrame,
+            wasmTabRegistered = wasmTabRegistered.get(),
+            disassemblyRowCount = wasmDisassemblyModel.rowCount(),
+            selectedDisassemblyRow = wasmDisassemblyPanel.table.selectedRow,
+            operandStackRowCount = wasmStackModel.rowCount,
+        )
     }
 
     /** True while the "Wasm Disassembly" tab is selected; switches stepping to instruction granularity. */
@@ -1342,6 +1360,15 @@ internal class CdpDebugProcess(
         private const val MAX_AUTO_STEPS = 256
     }
 }
+
+internal data class CdpDebuggerCaptureState(
+    val sessionSuspended: Boolean,
+    val wasmFrame: Boolean,
+    val wasmTabRegistered: Boolean,
+    val disassemblyRowCount: Int,
+    val selectedDisassemblyRow: Int,
+    val operandStackRowCount: Int,
+)
 
 // ---- Condition translation ----
 

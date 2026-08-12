@@ -42,6 +42,7 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         assertEquals("0.12", resolveWhatsNewResourceVersion("0.12"))
         assertEquals("0.13", resolveWhatsNewResourceVersion("0.13"))
         assertEquals("0.15", resolveWhatsNewResourceVersion("0.15"))
+        assertEquals("0.17", resolveWhatsNewResourceVersion("0.17"))
         assertNull(resolveWhatsNewResourceVersion("0.12.1"))
     }
 
@@ -151,6 +152,26 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         }
     }
 
+    fun testCreatesGeneratedBundledHtmlContentFor017() {
+        val content = HexanaWhatsNewContentService.createContent("0.17")
+        assertNotNull(content)
+        content!!
+
+        try {
+            assertEquals("0.17", content.resourceVersion)
+            assertTrue(content.indexFile.exists())
+            assertTrue(content.rootDirectory.resolve("style.css").exists())
+            assertTrue(content.rootDirectory.resolve("source.json").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/wasm-debugger-tab.png").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/wasm-problems-tab.png").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/pcap-packet-inspection.png").exists())
+        } finally {
+            val root = content.rootDirectory
+            content.dispose()
+            assertFalse(root.exists())
+        }
+    }
+
     fun testGeneratedWhatsNew015StaticResourceContract() {
         val root = "whatsnew/0.15"
         val html = resourceText("$root/index.html")
@@ -220,6 +241,53 @@ class HexanaWhatsNewTest : UsefulTestCase() {
 
         val imageTags = Regex("""<img\b[^>]*>""").findAll(html).map { it.value }.toList()
         assertEquals(2, imageTags.size)
+        imageTags.forEach { imageTag ->
+            assertTrue("Missing image alt text: $imageTag", Regex("""\balt="[^"]*\S[^"]*""").containsMatchIn(imageTag))
+        }
+    }
+
+    fun testGeneratedWhatsNew017StaticResourceContract() {
+        val root = "whatsnew/0.17"
+        val html = resourceText("$root/index.html")
+        val css = resourceText("$root/style.css")
+        val sourceJson = resourceText("$root/source.json")
+        val manifestLines = resourceText("$root/manifest.txt")
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .toList()
+        val manifestEntries = manifestLines.toSet()
+
+        assertEquals(manifestLines.size, manifestEntries.size)
+        for (entry in manifestEntries) {
+            assertResourceExists("$root/$entry")
+        }
+
+        val htmlLocalReferences = htmlAttributeReferences(html).filter(::isLocalReference).toSortedSet()
+        val cssLocalReferences = cssUrlReferences(css).filter(::isLocalReference).toSortedSet()
+        val sourceAssetReferences = sourceAssetReferences(sourceJson)
+        val expectedLocalReferences = sortedSetOf(
+            "style.css",
+            "screenshots/wasm-debugger-tab.png",
+            "screenshots/wasm-problems-tab.png",
+            "screenshots/pcap-packet-inspection.png",
+        )
+
+        assertEquals(expectedLocalReferences, htmlLocalReferences)
+        assertTrue(cssLocalReferences.isEmpty())
+        assertTrue(manifestEntries.containsAll(htmlLocalReferences + cssLocalReferences + sourceAssetReferences))
+        assertTrue(html.contains("<h1>What's New in Hexana 0.17</h1>"))
+        assertTrue(html.contains("<h2>Step through paused WASM at instruction precision</h2>"))
+        assertTrue(html.contains("<h2>Keep investigating modules with parse problems</h2>"))
+        assertTrue(html.contains("<h2>Inspect PCAP and PCAPNG packets</h2>"))
+        assertTrue(html.contains("<h2>Also in 0.17</h2>"))
+        assertTrue(html.contains("<strong>Debug source-level state with more context</strong>"))
+        assertTrue(html.contains("<strong>Open TAR entries and gzip-compressed binaries directly</strong>"))
+        assertTrue(html.contains("<strong>Read current WasmGC custom descriptors</strong>"))
+        assertTrue(sourceJson.contains("\"version\": \"0.17\""))
+
+        val imageTags = Regex("""<img\b[^>]*>""").findAll(html).map { it.value }.toList()
+        assertEquals(3, imageTags.size)
         imageTags.forEach { imageTag ->
             assertTrue("Missing image alt text: $imageTag", Regex("""\balt="[^"]*\S[^"]*""").containsMatchIn(imageTag))
         }

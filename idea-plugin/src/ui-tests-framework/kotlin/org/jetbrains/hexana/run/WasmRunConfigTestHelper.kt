@@ -331,6 +331,98 @@ object WasmRunConfigTestHelper {
         return result.toString().trim()
     }
 
+    /**
+     * Starts a Node.js CDP session and leaves it paused at the requested DWARF breakpoint.
+     * The paired state and resume calls are used only by the opt-in What's New screenshot flow.
+     */
+    @JvmStatic
+    fun startNodeJsDebugWithBreakpointForCapture(
+        project: Project,
+        wasmFileName: String,
+        sourceFileName: String,
+        breakpointLine: Int,
+        nodeOptions: String,
+        exportName: String,
+        programArgs: String,
+        nodePath: String,
+    ) {
+        removeAllBreakpoints(project)
+
+        val basePath = project.basePath ?: error("project basePath is null")
+        val sourceFilePath = "$basePath/$sourceFileName"
+        val sourceVirtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(sourceFilePath)
+            ?: error("source file not found: $sourceFilePath")
+        val breakpointType = XDebuggerUtil.getInstance()
+            .findBreakpointType(WasmLineBreakpointType::class.java)
+        ApplicationManager.getApplication().invokeAndWait {
+            ApplicationManager.getApplication().runWriteAction {
+                val bpManager = XDebuggerManager.getInstance(project).breakpointManager
+                if (bpManager.allBreakpoints.none { breakpoint ->
+                        breakpoint.type == breakpointType &&
+                            breakpoint.sourcePosition?.file?.url == sourceVirtualFile.url &&
+                            breakpoint.sourcePosition?.line == breakpointLine - 1
+                    }
+                ) {
+                    bpManager.addLineBreakpoint(breakpointType, sourceVirtualFile.url, breakpointLine - 1, null)
+                }
+            }
+        }
+
+        val wasmFilePath = "$basePath/$wasmFileName"
+        val wasmVirtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(wasmFilePath)
+            ?: error("wasm file not found: $wasmFilePath")
+        val settings = createAndSelectDebugConfiguration(
+            project = project,
+            wasmVirtualFile = wasmVirtualFile,
+            engine = WasmEngine.NODE_JS,
+            dependencies = resolveDependencies(project, wasmVirtualFile),
+        ) {
+            this.nodeOptions = nodeOptions
+            this.exportName = exportName
+            this.programArguments = programArgs
+            this.nodePath = nodePath
+        }
+
+        onEdt {
+            ProgramRunnerUtil.executeConfiguration(settings, DefaultDebugExecutor.getDebugExecutorInstance())
+        }
+
+        val timeoutMs = if (SystemInfo.isWindows) 200_000 else 60_000
+        val deadlineMs = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadlineMs) {
+            val session = XDebuggerManager.getInstance(project).currentSession
+            if (session?.isSuspended == true) return
+            Thread.sleep(500)
+        }
+        error("Timed out waiting for Node.js CDP breakpoint after ${timeoutMs}ms")
+    }
+
+    @JvmStatic
+    fun cdpDebuggerCaptureState(project: Project): List<String> = onEdt {
+        val session = XDebuggerManager.getInstance(project).currentSession
+            ?: error("No active debugger session for What's New capture")
+        val process = session.debugProcess as? CdpDebugProcess
+            ?: error("Expected CdpDebugProcess for What's New capture, got ${session.debugProcess.javaClass.name}")
+        val state = process.whatsNewCaptureState()
+        listOf(
+            "schema=hexana-cdp-debugger-capture-state",
+            "version=1",
+            "sessionSuspended=${state.sessionSuspended}",
+            "wasmFrame=${state.wasmFrame}",
+            "wasmTabRegistered=${state.wasmTabRegistered}",
+            "disassemblyRowCount=${state.disassemblyRowCount}",
+            "selectedDisassemblyRow=${state.selectedDisassemblyRow}",
+            "operandStackRowCount=${state.operandStackRowCount}",
+        )
+    }
+
+    @JvmStatic
+    fun resumeDebuggerForCapture(project: Project) {
+        onEdt {
+            XDebuggerManager.getInstance(project).currentSession?.takeIf { it.isSuspended }?.resume()
+        }
+    }
+
     private fun removeAllBreakpoints(project: Project) {
         ApplicationManager.getApplication().invokeAndWait {
             ApplicationManager.getApplication().runWriteAction {

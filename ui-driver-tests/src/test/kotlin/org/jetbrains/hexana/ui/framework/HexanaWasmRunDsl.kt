@@ -245,6 +245,30 @@ internal class HexanaWasmRunDsl internal constructor(
         return HexanaWasmBreakpointDebugResult.parse(rawOutput)
     }
 
+    fun startNodeJsDebugWithBreakpointForCapture(
+        wasmFileName: String,
+        sourceFileName: String,
+        breakpointLine: Int,
+        nodeOptions: String = "",
+        exportName: String = "",
+        programArgs: String = "",
+    ) {
+        driver.startNodeJsDebugWithBreakpointForCapture(
+            wasmFileName,
+            sourceFileName,
+            breakpointLine,
+            nodeOptions,
+            exportName,
+            programArgs,
+        )
+    }
+
+    fun cdpDebuggerCaptureState(): HexanaCdpDebuggerCaptureState = driver.cdpDebuggerCaptureState()
+
+    fun resumeDebuggerForCapture() {
+        driver.resumeDebuggerForCapture()
+    }
+
     fun debugWasmWithBreakpoint(
         wasmFileName: String,
         sourceFileName: String,

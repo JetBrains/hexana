@@ -7,6 +7,7 @@ private const val WAT_STATE_SCHEMA = "hexana-editor-wat-state"
 private const val COMPONENT_DIFF_STATE_SCHEMA = "hexana-component-diff-state"
 private const val ARCHIVE_STATE_SCHEMA = "hexana-archive-state"
 private const val NATIVE_DIFF_STATE_SCHEMA = "hexana-native-diff-state"
+private const val CDP_DEBUGGER_CAPTURE_STATE_SCHEMA = "hexana-cdp-debugger-capture-state"
 
 internal object HexanaProbePayload {
     fun snapshot(payload: List<String>): HexanaEditorSnapshot =
@@ -96,6 +97,18 @@ internal object HexanaProbePayload {
                 changedRowCount = fields.int("changedRowCount"),
                 sections = fields.values("section"),
                 error = fields.value("error").takeIf { it.isNotEmpty() },
+            )
+        }
+
+    fun cdpDebuggerCaptureState(payload: List<String>): HexanaCdpDebuggerCaptureState =
+        parse(payload, CDP_DEBUGGER_CAPTURE_STATE_SCHEMA) { fields ->
+            HexanaCdpDebuggerCaptureState(
+                sessionSuspended = fields.boolean("sessionSuspended"),
+                wasmFrame = fields.boolean("wasmFrame"),
+                wasmTabRegistered = fields.boolean("wasmTabRegistered"),
+                disassemblyRowCount = fields.int("disassemblyRowCount"),
+                selectedDisassemblyRow = fields.int("selectedDisassemblyRow"),
+                operandStackRowCount = fields.int("operandStackRowCount"),
             )
         }
 
