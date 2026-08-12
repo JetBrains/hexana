@@ -8,7 +8,7 @@ import javax.crypto.spec.SecretKeySpec
  * key derivation (RFC 5246 §6.3). Used to derive traffic encryption
  * keys and IVs from the secrets stored in SSLKEYLOG files.
  */
-object TlsKeyDerivation {
+object TlsKeyDerivation : TlsKeyDeriver {
 
     /**
      * Derives TLS 1.3 traffic keys and IV from a traffic secret.
@@ -17,7 +17,7 @@ object TlsKeyDerivation {
      * @param cipherSuite the negotiated cipher suite
      * @return a pair of (key, iv) or null on failure
      */
-    fun deriveTrafficKeyAndIv(
+    override fun deriveTrafficKeyAndIv(
         trafficSecret: ByteArray,
         cipherSuite: TlsCipherSuite,
     ): Pair<ByteArray, ByteArray>? {
@@ -40,7 +40,7 @@ object TlsKeyDerivation {
      * @param cipherSuite the negotiated cipher suite
      * @return client and server (key, iv) pairs, or null on failure
      */
-    fun deriveTls12Keys(
+    override fun deriveTls12Keys(
         masterSecret: ByteArray,
         serverRandom: ByteArray,
         clientRandom: ByteArray,
@@ -167,30 +167,5 @@ object TlsKeyDerivation {
         TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
         -> "HmacSHA384"
         else -> "HmacSHA256"
-    }
-}
-
-/**
- * TLS 1.2 key material derived from the master secret.
- */
-data class Tls12KeyMaterial(
-    val clientWriteKey: ByteArray,
-    val clientWriteIv: ByteArray,
-    val serverWriteKey: ByteArray,
-    val serverWriteIv: ByteArray,
-) {
-    override fun equals(other: Any?): Boolean =
-        other is Tls12KeyMaterial &&
-            clientWriteKey.contentEquals(other.clientWriteKey) &&
-            clientWriteIv.contentEquals(other.clientWriteIv) &&
-            serverWriteKey.contentEquals(other.serverWriteKey) &&
-            serverWriteIv.contentEquals(other.serverWriteIv)
-
-    override fun hashCode(): Int {
-        var h = clientWriteKey.contentHashCode()
-        h = 31 * h + clientWriteIv.contentHashCode()
-        h = 31 * h + serverWriteKey.contentHashCode()
-        h = 31 * h + serverWriteIv.contentHashCode()
-        return h
     }
 }

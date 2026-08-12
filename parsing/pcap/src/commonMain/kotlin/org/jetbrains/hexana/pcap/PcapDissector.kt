@@ -12,6 +12,159 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 object PcapDissector {
 
     /**
+     * Lightweight protocol identification that navigates link/IP/TCP headers
+     * without building address strings, flag descriptions, or info text.
+     * Returns a short protocol name (e.g. "TCP", "UDP", "TLS", "HTTP", "DNS")
+     * or `null` when the packet cannot be parsed at all.
+     */
+    fun protocolInfo(buffer: CommonByteBuffer, packet: PcapPacketRecord, linkType: Long): String? {
+        val dataOffset = packet.dataOffset.toInt()
+        val dataLen = packet.inclLen.toInt()
+        if (dataLen <= 0 || dataOffset + dataLen > buffer.size) return null
+
+        return when (linkType.toInt()) {
+            1 -> protocolEthernet(buffer, dataOffset, dataLen)
+            101 -> protocolIp(buffer, dataOffset, dataLen)
+            228 -> protocolIpv4(buffer, dataOffset, dataLen)
+            229 -> protocolIpv6(buffer, dataOffset, dataLen)
+            0 -> protocolNullLoopback(buffer, dataOffset, dataLen)
+            113 -> protocolLinuxSll(buffer, dataOffset, dataLen)
+            else -> "Link:$linkType"
+        }
+    }
+
+    private fun protocolEthernet(buffer: CommonByteBuffer, offset: Int, len: Int): String? {
+        if (len < 14) return "Ethernet"
+        var etherType = readBigU16(buffer, offset + 12)
+        var ipOffset = offset + 14
+        if (etherType == 0x8100 && len >= 18) {
+            etherType = readBigU16(buffer, offset + 16)
+            ipOffset = offset + 18
+        }
+        return when (etherType) {
+            0x0800 -> protocolIpv4(buffer, ipOffset, len - (ipOffset - offset))
+            0x86DD -> protocolIpv6(buffer, ipOffset, len - (ipOffset - offset))
+            0x0806 -> "ARP"
+            else -> "Ethernet"
+        }
+    }
+
+    private fun protocolNullLoopback(buffer: CommonByteBuffer, offset: Int, len: Int): String? {
+        if (len < 4) return "Loopback"
+        val family = readLittleU32(buffer, offset)
+        return when (family) {
+            2L -> protocolIpv4(buffer, offset + 4, len - 4)
+            24L, 28L, 30L -> protocolIpv6(buffer, offset + 4, len - 4)
+            else -> "Loopback"
+        }
+    }
+
+    private fun protocolLinuxSll(buffer: CommonByteBuffer, offset: Int, len: Int): String? {
+        if (len < 16) return "Linux SLL"
+        val protocol = readBigU16(buffer, offset + 14)
+        return when (protocol) {
+            0x0800 -> protocolIpv4(buffer, offset + 16, len - 16)
+            0x86DD -> protocolIpv6(buffer, offset + 16, len - 16)
+            else -> "Linux SLL"
+        }
+    }
+
+    private fun protocolIp(buffer: CommonByteBuffer, offset: Int, len: Int): String? {
+        if (len < 1) return null
+        val version = (readU8(buffer, offset) shr 4) and 0x0F
+        return when (version) {
+            4 -> protocolIpv4(buffer, offset, len)
+            6 -> protocolIpv6(buffer, offset, len)
+            else -> "IP"
+        }
+    }
+
+    private fun protocolIpv4(buffer: CommonByteBuffer, offset: Int, len: Int): String? {
+        if (len < 20) return "IPv4"
+        val ihl = (readU8(buffer, offset) and 0x0F) * 4
+        val protocol = readU8(buffer, offset + 9)
+        return protocolTransport(buffer, offset + ihl, len - ihl, protocol)
+    }
+
+    private fun protocolIpv6(buffer: CommonByteBuffer, offset: Int, len: Int): String? {
+        if (len < 40) return "IPv6"
+        val nextHeader = readU8(buffer, offset + 6)
+        return protocolTransport(buffer, offset + 40, len - 40, nextHeader)
+    }
+
+    private fun protocolTransport(buffer: CommonByteBuffer, offset: Int, len: Int, protocol: Int): String {
+        return when (protocol) {
+            6 -> protocolTcp(buffer, offset, len)
+            17 -> protocolUdp(buffer, offset, len)
+            1 -> "ICMP"
+            58 -> "ICMPv6"
+            else -> ipProtocolName(protocol)
+        }
+    }
+
+    private fun protocolTcp(buffer: CommonByteBuffer, offset: Int, len: Int): String {
+        if (len < 20) return "TCP"
+        val dataOff = ((readU8(buffer, offset + 12) shr 4) and 0x0F) * 4
+        val payloadOffset = offset + dataOff
+        val payloadLen = len - dataOff
+        if (payloadLen > 0) {
+            if (isHttpPayload(buffer, payloadOffset, payloadLen)) return "HTTP"
+            if (TlsRecordParser.isTlsRecord(buffer, payloadOffset, payloadLen)) return "TLS"
+        }
+        return "TCP"
+    }
+
+    private fun protocolUdp(buffer: CommonByteBuffer, offset: Int, len: Int): String {
+        if (len < 8) return "UDP"
+        val srcPort = readBigU16(buffer, offset)
+        val dstPort = readBigU16(buffer, offset + 2)
+        return when {
+            srcPort == 53 || dstPort == 53 -> "DNS"
+            srcPort == 67 || dstPort == 67 || srcPort == 68 || dstPort == 68 -> "DHCP"
+            else -> "UDP"
+        }
+    }
+
+    /**
+     * Dissects a single packet record, attempting TLS decryption when a
+     * [decryptionContext] is provided. Returns a [PcapDissectedPacket] with
+     * whatever information could be extracted, including decrypted plaintext
+     * when decryption succeeds.
+     */
+    fun dissect(
+        buffer: CommonByteBuffer,
+        packet: PcapPacketRecord,
+        linkType: Long,
+        decryptionContext: TlsDecryptionContext?,
+    ): PcapDissectedPacket {
+        val base = dissect(buffer, packet, linkType)
+        if (decryptionContext == null) return base
+        // Only attempt decryption for TLS Application Data packets
+        if (!base.protocol.startsWith("TLS") || !base.info.contains("Application Data")) return base
+        val decrypted = try {
+            decryptionContext.tryDecrypt(buffer, packet, linkType)
+        } catch (_: Exception) {
+            null
+        }
+        return if (decrypted != null) {
+            PcapDissectedPacket(
+                source = base.source,
+                destination = base.destination,
+                protocol = base.protocol,
+                info = base.info,
+                httpBodyFileOffset = base.httpBodyFileOffset,
+                httpBodySize = base.httpBodySize,
+                httpContentType = base.httpContentType,
+                isChunkedTransferEncoding = base.isChunkedTransferEncoding,
+                httpContentEncoding = base.httpContentEncoding,
+                decryptedData = decrypted,
+            )
+        } else {
+            base
+        }
+    }
+
+    /**
      * Dissects a single packet record. Returns a [PcapDissectedPacket] with
      * whatever information could be extracted from the captured bytes.
      */
@@ -598,6 +751,37 @@ object PcapDissector {
         val isChunkedTransferEncoding: Boolean = false,
         val contentEncoding: String? = null,
     )
+
+    /**
+     * Quick check whether the TCP payload starts with an HTTP method or response.
+     * Does not allocate strings — reads only the first few bytes.
+     */
+    private fun isHttpPayload(buffer: CommonByteBuffer, offset: Int, len: Int): Boolean {
+        if (len < 4) return false
+        // Check for "HTTP/" response
+        if (matchAscii(buffer, offset, len, 'H', 'T', 'T', 'P')) return true
+        // Check common request methods by first two bytes
+        val b0 = readU8(buffer, offset)
+        val b1 = readU8(buffer, offset + 1)
+        return when {
+            b0 == 0x47 && b1 == 0x45 -> true // GE(T)
+            b0 == 0x50 && (b1 == 0x4F || b1 == 0x55 || b1 == 0x41) -> true // PO(ST), PU(T), PA(TCH)
+            b0 == 0x44 && b1 == 0x45 -> true // DE(LETE)
+            b0 == 0x48 && b1 == 0x45 -> true // HE(AD)
+            b0 == 0x4F && b1 == 0x50 -> true // OP(TIONS)
+            b0 == 0x43 && b1 == 0x4F -> true // CO(NNECT)
+            b0 == 0x54 && b1 == 0x52 -> true // TR(ACE)
+            else -> false
+        }
+    }
+
+    private fun matchAscii(buffer: CommonByteBuffer, offset: Int, len: Int, vararg chars: Char): Boolean {
+        if (len < chars.size) return false
+        for (i in chars.indices) {
+            if (readU8(buffer, offset + i) != chars[i].code) return false
+        }
+        return true
+    }
 
     private val HTTP_METHODS = listOf("GET ", "POST ", "PUT ", "DELETE ", "HEAD ", "OPTIONS ", "PATCH ", "CONNECT ", "TRACE ")
 

@@ -69,8 +69,7 @@ class PcapBinaryProvider(
         val linkType = pcap.header.network
         pcap.packets.any { packet ->
             try {
-                val d = PcapDissector.dissect(bytes, packet, linkType)
-                d.protocol.startsWith("TLS")
+                PcapDissector.protocolInfo(bytes, packet, linkType) == "TLS"
             } catch (_: Throwable) {
                 false
             }

@@ -143,6 +143,64 @@ interface TlsDecryptor {
 }
 
 /**
+ * Key derivation interface for TLS traffic keys. On JVM this is implemented
+ * using HMAC-based HKDF; on other platforms a no-op returns null.
+ */
+interface TlsKeyDeriver {
+    /** Derives TLS 1.3 traffic key and IV from a traffic secret. */
+    fun deriveTrafficKeyAndIv(
+        trafficSecret: ByteArray,
+        cipherSuite: TlsCipherSuite,
+    ): Pair<ByteArray, ByteArray>?
+
+    /** Derives TLS 1.2 key material from the master secret. */
+    fun deriveTls12Keys(
+        masterSecret: ByteArray,
+        serverRandom: ByteArray,
+        clientRandom: ByteArray,
+        cipherSuite: TlsCipherSuite,
+    ): Tls12KeyMaterial?
+
+    companion object {
+        val NOOP: TlsKeyDeriver = object : TlsKeyDeriver {
+            override fun deriveTrafficKeyAndIv(
+                trafficSecret: ByteArray, cipherSuite: TlsCipherSuite,
+            ): Pair<ByteArray, ByteArray>? = null
+
+            override fun deriveTls12Keys(
+                masterSecret: ByteArray, serverRandom: ByteArray,
+                clientRandom: ByteArray, cipherSuite: TlsCipherSuite,
+            ): Tls12KeyMaterial? = null
+        }
+    }
+}
+
+/**
+ * TLS 1.2 key material derived from the master secret.
+ */
+data class Tls12KeyMaterial(
+    val clientWriteKey: ByteArray,
+    val clientWriteIv: ByteArray,
+    val serverWriteKey: ByteArray,
+    val serverWriteIv: ByteArray,
+) {
+    override fun equals(other: Any?): Boolean =
+        other is Tls12KeyMaterial &&
+            clientWriteKey.contentEquals(other.clientWriteKey) &&
+            clientWriteIv.contentEquals(other.clientWriteIv) &&
+            serverWriteKey.contentEquals(other.serverWriteKey) &&
+            serverWriteIv.contentEquals(other.serverWriteIv)
+
+    override fun hashCode(): Int {
+        var h = clientWriteKey.contentHashCode()
+        h = 31 * h + clientWriteIv.contentHashCode()
+        h = 31 * h + serverWriteKey.contentHashCode()
+        h = 31 * h + serverWriteIv.contentHashCode()
+        return h
+    }
+}
+
+/**
  * Supported TLS cipher suites for decryption.
  */
 enum class TlsCipherSuite(

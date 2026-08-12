@@ -526,7 +526,11 @@ internal fun BinaryEditorView(
                     onSslKeyLogLoaded = {
                         val pcap = liveProvider as? PcapBinaryProvider ?: return@FileDescriptionBar
                         val tabsProvider = PcapTableTabsProvider()
-                        val newTabs = tabsProvider.tableTabs(pcap)
+                        val newTabs = tabsProvider.tableTabsWithDecryption(
+                            pcap,
+                            org.jetbrains.hexana.pcap.JvmTlsDecryptor,
+                            org.jetbrains.hexana.pcap.TlsKeyDerivation,
+                        )
                         val packetsTab = newTabs.firstOrNull { it.name == "Packets" } ?: return@FileDescriptionBar
                         val enriched = pcap.enrichPcapPacketsTab(packetsTab, state.project)
                         val newPanel = enriched.toPanel(state)

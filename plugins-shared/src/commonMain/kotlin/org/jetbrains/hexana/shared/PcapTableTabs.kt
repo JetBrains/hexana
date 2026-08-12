@@ -3,6 +3,9 @@ package org.jetbrains.hexana.shared
 import org.jetbrains.hexana.pcap.PcapDissectedPacket
 import org.jetbrains.hexana.pcap.PcapDissector
 import org.jetbrains.hexana.pcap.PcapFile
+import org.jetbrains.hexana.pcap.TlsDecryptionContext
+import org.jetbrains.hexana.pcap.TlsDecryptor
+import org.jetbrains.hexana.pcap.TlsKeyDeriver
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.PcapBinaryProvider
 
@@ -14,6 +17,22 @@ class PcapTableTabsProvider : TableTabsProvider {
         return listOfNotNull(
             pcapHeaderTab(pcap, provider),
             pcapPacketsTab(pcap, provider),
+        )
+    }
+
+    /**
+     * Builds the packets tab with TLS decryption support. Called when a
+     * [TlsDecryptor] and [TlsKeyDeriver] are available (JVM).
+     */
+    fun tableTabsWithDecryption(
+        provider: PcapBinaryProvider,
+        decryptor: TlsDecryptor,
+        keyDeriver: TlsKeyDeriver,
+    ): List<TableTabDescriptor> {
+        val pcap = provider.parsedPcapFile ?: return emptyList()
+        return listOfNotNull(
+            pcapHeaderTab(pcap, provider),
+            pcapPacketsTab(pcap, provider, decryptor, keyDeriver),
         )
     }
 }
@@ -65,7 +84,12 @@ private fun formatRelativeTime(seconds: Double, nsResolution: Boolean): String {
     return "$prefix$wholePart.${fracPart.toString().padStart(decimals, '0')}"
 }
 
-private fun pcapPacketsTab(pcap: PcapFile, provider: PcapBinaryProvider): TableTabDescriptor? {
+private fun pcapPacketsTab(
+    pcap: PcapFile,
+    provider: PcapBinaryProvider,
+    decryptor: TlsDecryptor? = null,
+    keyDeriver: TlsKeyDeriver? = null,
+): TableTabDescriptor? {
     val packets = pcap.packets
     if (packets.isEmpty()) return null
 
@@ -74,6 +98,25 @@ private fun pcapPacketsTab(pcap: PcapFile, provider: PcapBinaryProvider): TableT
 
     val linkType = pcap.header.network
     val hasKeyLog = provider.sslKeyLog.isNotEmpty
+
+    // Build decryption context when key log and crypto support are available
+    val decryptionContext: TlsDecryptionContext? = if (hasKeyLog && decryptor != null && keyDeriver != null) {
+        try {
+            TlsDecryptionContext.build(
+                buffer = provider.bytes,
+                packets = packets,
+                linkType = linkType,
+                sslKeyLog = provider.sslKeyLog,
+                tlsSessionMap = provider.tlsSessionMap,
+                decryptor = decryptor,
+                keyDeriver = keyDeriver,
+            )
+        } catch (_: Exception) {
+            null
+        }
+    } else {
+        null
+    }
 
     // Reference timestamp from the first packet for relative display (like Wireshark)
     val firstPacket = packets[0]
@@ -85,7 +128,7 @@ private fun pcapPacketsTab(pcap: PcapFile, provider: PcapBinaryProvider): TableT
     val dissectedCache = HashMap<Int, PcapDissectedPacket>()
     fun dissected(index: Int): PcapDissectedPacket = dissectedCache.getOrPut(index) {
         try {
-            PcapDissector.dissect(provider.bytes, packets[index], linkType)
+            PcapDissector.dissect(provider.bytes, packets[index], linkType, decryptionContext)
         } catch (_: Exception) {
             PcapDissectedPacket("", "", "?", "")
         }

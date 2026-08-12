@@ -129,7 +129,7 @@ data class TlsDissectionResult(
 object TlsRecordParser {
 
     /** TLS record header size. */
-    private const val RECORD_HEADER_SIZE = 5
+    const val RECORD_HEADER_SIZE = 5
 
     /**
      * Checks whether the bytes at [offset] look like a TLS record.
@@ -260,6 +260,57 @@ object TlsRecordParser {
             random[i] = buffer.get()
         }
         return random
+    }
+
+    /**
+     * Extracts the cipher suite from a ServerHello message.
+     * ServerHello layout: type(1) + length(3) + version(2) + random(32) +
+     * session_id_length(1) + session_id(variable) + cipher_suite(2).
+     */
+    fun extractCipherSuite(buffer: CommonByteBuffer, offset: Int, available: Int): Int? {
+        // Minimum: type(1) + length(3) + version(2) + random(32) + session_id_len(1) + cipher(2) = 41
+        if (available < 41) return null
+        val hsType = readU8(buffer, offset)
+        if (hsType != TlsHandshakeType.SERVER_HELLO) return null
+        val sessionIdLenOffset = offset + 1 + 3 + 2 + 32
+        val sessionIdLen = readU8(buffer, sessionIdLenOffset)
+        val cipherSuiteOffset = sessionIdLenOffset + 1 + sessionIdLen
+        if (cipherSuiteOffset + 2 > offset + available) return null
+        return readBigU16(buffer, cipherSuiteOffset)
+    }
+
+    /**
+     * Detects whether a ServerHello indicates TLS 1.3 by checking for the
+     * `supported_versions` extension with value 0x0304. In TLS 1.3 the
+     * record-layer version stays at 0x0303 (TLS 1.2) and the real version
+     * is negotiated via this extension.
+     */
+    fun isServerHelloTls13(buffer: CommonByteBuffer, offset: Int, available: Int): Boolean {
+        // ServerHello: type(1) + length(3) + version(2) + random(32) +
+        //   session_id_len(1) + session_id(var) + cipher(2) + compression(1) + extensions_len(2) + extensions
+        if (available < 41) return false
+        val hsType = readU8(buffer, offset)
+        if (hsType != TlsHandshakeType.SERVER_HELLO) return false
+        val sessionIdLenOffset = offset + 1 + 3 + 2 + 32
+        val sessionIdLen = readU8(buffer, sessionIdLenOffset)
+        // After cipher_suite(2) + compression_method(1) come extensions
+        val extensionsLenOffset = sessionIdLenOffset + 1 + sessionIdLen + 2 + 1
+        if (extensionsLenOffset + 2 > offset + available) return false
+        val extensionsLen = readBigU16(buffer, extensionsLenOffset)
+        val extensionsStart = extensionsLenOffset + 2
+        val extensionsEnd = minOf(extensionsStart + extensionsLen, offset + available)
+        // Scan extensions for supported_versions (type 0x002B)
+        var pos = extensionsStart
+        while (pos + 4 <= extensionsEnd) {
+            val extType = readBigU16(buffer, pos)
+            val extLen = readBigU16(buffer, pos + 2)
+            if (extType == 0x002B && extLen >= 2 && pos + 4 + extLen <= extensionsEnd) {
+                val version = readBigU16(buffer, pos + 4)
+                if (version == 0x0304) return true
+            }
+            pos += 4 + extLen
+        }
+        return false
     }
 
     private fun readU8(buffer: CommonByteBuffer, offset: Int): Int {
