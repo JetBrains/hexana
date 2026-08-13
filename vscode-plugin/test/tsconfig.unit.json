@@ -14,7 +14,8 @@
   "include": [
     "src/unit/**/*.ts",
     "../src/mcpServerTelemetry.ts",
-    "../src/wasiSdkManager.ts"
+    "../src/wasiSdkManager.ts",
+    "../src/webviewContent.ts"
   ],
   "exclude": [
     "node_modules",

@@ -67,3 +67,6 @@ update `TableTabEnricher.kt`.
 - The webview communicates with the extension host exclusively via `postMessage` / `onDidReceiveMessage`.
 - Follow the `org.jetbrains.hexana.vscode` package prefix for Kotlin sources in this module.
 - Do not duplicate parsing or analysis logic that already exists in `wasmParser` or `binaryProvider`.
+- Keep the generated webview JavaScript and Wasm printer embedded in `webview.html` and reconstructed as Blob URLs.
+  VS Code 1.131 on Windows can corrupt multi-chunk files loaded through `asWebviewUri`; the detailed compatibility
+  rationale and upstream fix are documented next to the bootstrap in `src/webviewContent.ts`.

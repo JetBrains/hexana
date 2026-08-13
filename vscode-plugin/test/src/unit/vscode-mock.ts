@@ -104,6 +104,16 @@ export function installVscodeMock(): VscodeMock {
                 path: fsPath,
                 toString: () => fsPath,
             }),
+            joinPath: (base: { fsPath: string; path: string }, ...segments: string[]) => {
+                const joined = [base.fsPath, ...segments]
+                    .map((segment, index) => index === 0 ? segment.replace(/[\\/]$/, '') : segment.replace(/^[\\/]/, ''))
+                    .join('/');
+                return {
+                    fsPath: joined,
+                    path: joined,
+                    toString: () => joined,
+                };
+            },
             parse: (value: string) => ({
                 fsPath: value,
                 path: value,
