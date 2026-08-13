@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -21,7 +22,7 @@ class WasmtimeAddrmapTest {
     private fun loadFixture(): WasmtimeAddrmap {
         val stream = WasmtimeAddrmapTest::class.java.classLoader.getResourceAsStream("wasmtime-tiny.cwasm")
             ?: error("Test resource not found: wasmtime-tiny.cwasm")
-        val map = WasmtimeAddrmap.parse(stream.readBytes())
+        val map = WasmtimeAddrmap.parse(stream.readBytes().toCommonByteBuffer())
         return assertNotNull(map, "fixture must parse")
     }
 
@@ -64,9 +65,13 @@ class WasmtimeAddrmapTest {
     }
 
     @Test fun `garbage input parses to null`() {
-        assertNull(WasmtimeAddrmap.parse(ByteArray(0)))
-        assertNull(WasmtimeAddrmap.parse(ByteArray(64) { 0x2A }))
+        assertNull(WasmtimeAddrmap.parse(ByteArray(0).toCommonByteBuffer()))
+        assertNull(WasmtimeAddrmap.parse(ByteArray(64) { 0x2A }.toCommonByteBuffer()))
         // A valid wasm module is not an ELF artifact.
-        assertNull(WasmtimeAddrmap.parse(byteArrayOf(0, 'a'.code.toByte(), 's'.code.toByte(), 'm'.code.toByte(), 1, 0, 0, 0)))
+        assertNull(
+            WasmtimeAddrmap.parse(
+                byteArrayOf(0, 'a'.code.toByte(), 's'.code.toByte(), 'm'.code.toByte(), 1, 0, 0, 0).toCommonByteBuffer()
+            )
+        )
     }
 }

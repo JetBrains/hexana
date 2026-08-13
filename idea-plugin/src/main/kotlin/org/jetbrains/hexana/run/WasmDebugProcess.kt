@@ -42,7 +42,6 @@ import org.jetbrains.hexana.shared.parseRawDwarfPath
 import org.jetbrains.hexana.shared.pathMatchesBreakpointLocation
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.shared.stripCuHashSuffix
-import java.io.File
 
 /**
  * A debug process that launches wasmtime under LLDB so that
@@ -1175,12 +1174,7 @@ open class WasmDebugProcess(
 
     private fun refreshJitAddrmaps(communicator: LldbCommunicator) {
         jitAddrmaps = communicator.dumpJitImages(jitImagesDir.absolutePath).mapNotNull { path ->
-            try {
-                WasmtimeAddrmap.parse(File(path).readBytes())
-            } catch (e: Exception) {
-                LOG.debug("Failed to read/parse JIT image $path", e)
-                null
-            }
+            mapWasmFileToBuffer(path)?.let { WasmtimeAddrmap.parse(it) }
         }
         LOG.debug("refreshJitAddrmaps: ${jitAddrmaps.size} addrmap(s) decoded")
     }

@@ -1,6 +1,6 @@
 package org.jetbrains.hexana.shared
 
-import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.elf.ElfParser
 
 /**
@@ -72,26 +72,28 @@ class WasmtimeAddrmap private constructor(
         /**
          * Parses a wasmtime ELF artifact and decodes its addrmap section.
          *
-         * @param imageBytes the full artifact bytes (a `.cwasm` file or a
-         *        JIT image dumped from the debuggee's memory)
-         * @return the decoded map, or null when [imageBytes] is not an ELF
+         * @param imageBuffer the full artifact bytes (a `.cwasm` file or a
+         *        JIT image dumped from the debuggee's memory); read via
+         *        absolute gets and a duplicate, the caller's cursor is
+         *        untouched
+         * @return the decoded map, or null when [imageBuffer] is not an ELF
          *         image or has no well-formed `.wasmtime.addrmap` section
          */
-        fun parse(imageBytes: ByteArray): WasmtimeAddrmap? {
-            val elf = ElfParser.parse(imageBytes.toCommonByteBuffer()).valueOrNull ?: return null
+        fun parse(imageBuffer: CommonByteBuffer): WasmtimeAddrmap? {
+            val elf = ElfParser.parse(imageBuffer.duplicate()).valueOrNull ?: return null
             val text = elf.sections.firstOrNull { it.name == TEXT_SECTION_NAME } ?: return null
             val section = elf.sections.firstOrNull { it.name == SECTION_NAME } ?: return null
 
             val start = section.fileOffset.toLong()
             val size = section.size.toLong()
-            if (start < 0 || size < 4 || start + size > imageBytes.size) return null
+            if (start < 0 || size < 4 || start + size > imageBuffer.limit()) return null
 
             fun u32(pos: Long): Int {
                 val i = pos.toInt()
-                return (imageBytes[i].toInt() and 0xFF) or
-                    ((imageBytes[i + 1].toInt() and 0xFF) shl 8) or
-                    ((imageBytes[i + 2].toInt() and 0xFF) shl 16) or
-                    ((imageBytes[i + 3].toInt() and 0xFF) shl 24)
+                return (imageBuffer.get(i).toInt() and 0xFF) or
+                    ((imageBuffer.get(i + 1).toInt() and 0xFF) shl 8) or
+                    ((imageBuffer.get(i + 2).toInt() and 0xFF) shl 16) or
+                    ((imageBuffer.get(i + 3).toInt() and 0xFF) shl 24)
             }
 
             val count = u32(start)
