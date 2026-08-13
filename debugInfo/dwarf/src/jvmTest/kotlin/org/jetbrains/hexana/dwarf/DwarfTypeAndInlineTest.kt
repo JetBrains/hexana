@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
  *
  * Fixture source: `dwarf-types.rs`, compiled with:
  *   rustc --edition 2021 --target wasm32-unknown-unknown --crate-type cdylib
- *          -g -C opt-level=1 -C lto=off -o dwarf-types.wasm lib.rs
+ *          -g -C opt-level=1 -C lto=off -o dwarf-types.wasm dwarf-types.rs
  *
  * Key DIEs verified with `llvm-dwarfdump --debug-info dwarf-types.wasm`:
  *   DW_TAG_structure_type "Point" byte_size=8, members: x@0, y@4, z@6
@@ -112,7 +112,7 @@ class DwarfTypeAndInlineTest {
         }
     }
 
-    // --------------- helper: parse all DIEs from first CU with "lib" namespace ---------------
+    // --------------- helper: parse all DIEs from first CU with "dwarf_types" namespace ---------------
 
     /**
      * Reads a DWARF string attribute value, resolving `.debug_str` offsets when
@@ -148,9 +148,9 @@ class DwarfTypeAndInlineTest {
     /**
      * Returns the compilation unit root DIE (DW_TAG_compile_unit child) for
      * the Rust lib cgu that contains our fixture types. That CU is identified
-     * by having a DW_TAG_namespace child named "lib".
+     * by having a DW_TAG_namespace child named "dwarf_types".
      */
-    private fun findLibCuRoot(
+    private fun findFixtureCuRoot(
         buffer: CommonByteBuffer,
         accessor: DwarfAccessor,
     ): DebugInformationEntry? {
@@ -162,7 +162,7 @@ class DwarfTypeAndInlineTest {
                 child.tag == Tag.DW_TAG_namespace &&
                     child.attributes.any { f ->
                         f.attribute.name == Attribute.DW_AT_name &&
-                            resolveName(f, buffer, accessor) == "lib"
+                            resolveName(f, buffer, accessor) == "dwarf_types"
                     }
             }
             if (hasLibNs) return cuRoot
@@ -178,7 +178,7 @@ class DwarfTypeAndInlineTest {
         val accessor = buildAccessor(bytes)
         val buffer = bytes.toCommonByteBuffer()
 
-        val cuRoot = findLibCuRoot(buffer, accessor)
+        val cuRoot = findFixtureCuRoot(buffer, accessor)
         assertNotNull(cuRoot, "lib CU root not found")
 
         val infoContentOffset = accessor.debugInfoSection()!!.contentOffset
@@ -225,7 +225,7 @@ class DwarfTypeAndInlineTest {
         val accessor = buildAccessor(bytes)
         val buffer = bytes.toCommonByteBuffer()
 
-        val cuRoot = findLibCuRoot(buffer, accessor)
+        val cuRoot = findFixtureCuRoot(buffer, accessor)
         assertNotNull(cuRoot, "lib CU root not found")
 
         val infoContentOffset = accessor.debugInfoSection()!!.contentOffset
@@ -255,7 +255,7 @@ class DwarfTypeAndInlineTest {
         val accessor = buildAccessor(bytes)
         val buffer = bytes.toCommonByteBuffer()
 
-        val cuRoot = findLibCuRoot(buffer, accessor)
+        val cuRoot = findFixtureCuRoot(buffer, accessor)
         assertNotNull(cuRoot, "lib CU root not found")
 
         val infoContentOffset = accessor.debugInfoSection()!!.contentOffset
@@ -283,7 +283,7 @@ class DwarfTypeAndInlineTest {
         val accessor = buildAccessor(bytes)
         val buffer = bytes.toCommonByteBuffer()
 
-        val cuRoot = findLibCuRoot(buffer, accessor)
+        val cuRoot = findFixtureCuRoot(buffer, accessor)
         assertNotNull(cuRoot, "lib CU root not found")
 
         val infoContentOffset = accessor.debugInfoSection()!!.contentOffset
@@ -307,7 +307,7 @@ class DwarfTypeAndInlineTest {
         val accessor = buildAccessor(bytes)
         val buffer = bytes.toCommonByteBuffer()
 
-        val cuRoot = findLibCuRoot(buffer, accessor)
+        val cuRoot = findFixtureCuRoot(buffer, accessor)
         assertNotNull(cuRoot, "lib CU root not found")
 
         val infoContentOffset = accessor.debugInfoSection()!!.contentOffset
@@ -332,7 +332,7 @@ class DwarfTypeAndInlineTest {
         val accessor = buildAccessor(bytes)
         val buffer = bytes.toCommonByteBuffer()
 
-        val cuRoot = findLibCuRoot(buffer, accessor)
+        val cuRoot = findFixtureCuRoot(buffer, accessor)
         assertNotNull(cuRoot)
 
         val infoContentOffset = accessor.debugInfoSection()!!.contentOffset
