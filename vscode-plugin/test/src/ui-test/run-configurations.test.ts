@@ -155,16 +155,6 @@ describe('Hexana Run Configurations – Exports Panel', function () {
         expect(fs.existsSync(DEBUG_DWARF_WASM), `Missing DWARF debug fixture: ${DEBUG_DWARF_WASM}`).to.be.true;
         expect(fs.existsSync(DEBUG_RUST_SOURCE), `Missing Rust source fixture: ${DEBUG_RUST_SOURCE}`).to.be.true;
 
-        // Point the extension at the wasmtime binary we just ensured
-        const wasmtimeBin = path.join(os.homedir(), '.wasmtime', 'bin',
-            process.platform === 'win32' ? 'wasmtime.exe' : 'wasmtime');
-        const settings = await new Workbench().openSettings();
-        const wasmtimeSetting = await settings.findSetting('Wasmtime Path', 'Hexana');
-        await wasmtimeSetting.setValue(wasmtimeBin);
-        await driver.sleep(1000);
-        // Close the Settings editor
-        await new EditorView().closeAllEditors();
-
         // Allow the workbench and extension to fully activate
         await driver.sleep(5000);
     });

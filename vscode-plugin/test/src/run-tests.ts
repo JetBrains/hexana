@@ -47,9 +47,16 @@ async function main(): Promise<void> {
         await runExtest(['get-chromedriver', '--code_version', codeVersion]);
         await runExtest(['install-vsix', '--extensions_dir', extensionsDir, '-f', vsixPath]);
 
-        fs.rmSync(mcpStorageDir, { recursive: true, force: true });
-        fs.mkdirSync(mcpStorageDir, { recursive: true });
+        const mainSettingsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hexana-vscode-main-settings-'));
         try {
+            fs.rmSync(mcpStorageDir, { recursive: true, force: true });
+            fs.mkdirSync(mcpStorageDir, { recursive: true });
+            // Seed this before VS Code opens its copied settings file. Updating the setting through the UI makes
+            // VS Code atomically rename settings.json, which can fail with EPERM on Windows CI and leave the
+            // debugger launch configuration pointing at a bare, unavailable wasmtime.exe.
+            const mainSettingsPath = writeSettingsOverride(mainSettingsDir, settingsPath, {
+                'hexana.wasmtimePath': defaultWasmtimePath(),
+            });
             fakePostHog.reset();
             await runExtest([
                 'run-tests',
@@ -59,7 +66,7 @@ async function main(): Promise<void> {
                 '--code_version',
                 codeVersion,
                 '--code_settings',
-                settingsPath,
+                mainSettingsPath,
                 '--extensions_dir',
                 extensionsDir,
                 '-r',
@@ -75,6 +82,7 @@ async function main(): Promise<void> {
                 VSCODE_EXTENSIONS_DIR: extensionsDir,
             });
         } finally {
+            fs.rmSync(mainSettingsDir, { recursive: true, force: true });
             fs.rmSync(mcpStorageDir, { recursive: true, force: true });
         }
 
@@ -222,6 +230,15 @@ function writeSettingsOverride(
     const settingsPath = path.join(directory, 'settings.json');
     fs.writeFileSync(settingsPath, JSON.stringify(deepMerge(baseSettings, override), null, 2));
     return settingsPath;
+}
+
+function defaultWasmtimePath(): string {
+    return path.join(
+        os.homedir(),
+        '.wasmtime',
+        'bin',
+        process.platform === 'win32' ? 'wasmtime.exe' : 'wasmtime',
+    );
 }
 
 function deepMerge(base: Record<string, unknown>, override: Record<string, unknown>): Record<string, unknown> {
