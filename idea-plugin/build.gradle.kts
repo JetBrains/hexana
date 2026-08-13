@@ -495,6 +495,7 @@ kotlin {
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
     compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+    compilerOptions.freeCompilerArgs.add("-Xjdk-release=21")
 }
 
 tasks.withType<JavaCompile>().configureEach {
