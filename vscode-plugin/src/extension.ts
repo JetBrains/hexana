@@ -5,6 +5,7 @@ import { registerWasmDebugAdapter } from "./WasmDebugAdapter";
 import { WasmEditorProvider } from "./WasmEditorProvider";
 import type * as ExtensionLib from "./extension-lib";
 import { registerHexanaMcpServerCommands } from "./mcpServerDownloader";
+import { initWasiSdkManager, registerWasiSdkCommands } from "./wasiSdkManager";
 import { registerMcpServerDefinitionProvider } from "./mcpServerProvider";
 import { registerNativeBinaryDetector } from "./NativeBinaryFileTypeDetector";
 
@@ -58,6 +59,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(WasmEditorProvider.registerCompareBinaryCommand(context));
     registerWasmDebugAdapter(context);
     registerHexanaMcpServerCommands(context);
+    initWasiSdkManager(context);
+    registerWasiSdkCommands(context);
     try {
         registerMcpServerDefinitionProvider(context, {
             isTelemetryEnabled: isHexanaTelemetryEnabled,

@@ -2,6 +2,7 @@ package org.jetbrains.hexana.run
 
 import com.intellij.execution.ExecutionException
 import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.execution.configurations.RunProfile
 import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.configurations.RunnerSettings
@@ -16,6 +17,7 @@ import com.intellij.execution.runners.GenericProgramRunner
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.ThrowableComputable
@@ -23,6 +25,7 @@ import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugProcessStarter
 import com.intellij.xdebugger.XDebugSession
 import org.jetbrains.hexana.shared.looksLikeWamrDebugNotSupported
+import org.jetbrains.hexana.wasisdk.WasiSdkOffer
 import java.io.File
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
@@ -95,6 +98,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
                 }
 
                 val lldbExe = resolveLldbPath(configuration)
+                notifyIfLldbMissing(environment.project, lldbExe)
                 val commandLine = GeneralCommandLine().apply {
                     exePath = lldbExe
                     addParameters(
@@ -196,6 +200,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             override fun start(session: XDebugSession): XDebugProcess {
                 // Step 2: Start LLDB (no inferior — we'll connect remotely)
                 val lldbExe = resolveLldbPath(configuration)
+                notifyIfLldbMissing(environment.project, lldbExe)
                 val lldbCommandLine = GeneralCommandLine().apply {
                     exePath = lldbExe
                     withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
@@ -478,6 +483,23 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             val configured = configuration.lldbPath.trim()
             if (configured.isNotBlank()) return configured
             return WasmRuntimeSettings.getInstance().effectiveLldbPath()
+        }
+
+        /**
+         * Shows the wasi-sdk download offer when the resolved LLDB command
+         * cannot start: an explicit path that does not exist, or a bare
+         * command name absent from PATH. Informational only; the session
+         * start proceeds and fails with the usual platform error.
+         */
+        private fun notifyIfLldbMissing(project: Project, lldbExe: String) {
+            val missing = if (lldbExe.contains('/') || lldbExe.contains('\\')) {
+                !File(lldbExe).exists()
+            } else {
+                PathEnvironmentVariableUtil.findInPath(lldbExe) == null
+            }
+            if (missing) {
+                WasiSdkOffer.showLldbMissingNotification(project)
+            }
         }
     }
 }

@@ -94,6 +94,34 @@ class WasmRuntimeConfigurable : DslConfigurableBase(), SearchableConfigurable {
                 }
             }
             group(HexanaBundle.message("wasm.runtime.settings.group.debugger")) {
+                // Managed wasi-sdk row: shows installed versions and lets the user
+                // write a managed lldb binary into the explicit LLDB path field below.
+                // The resolution order of effectiveLldbPath() is unchanged; the user
+                // opts in by clicking "Use as LLDB path".
+                row(HexanaBundle.message("wasm.runtime.settings.wasisdk.label")) {
+                    val sdkStorage = org.jetbrains.hexana.wasisdk.WasiSdkStorage.getInstance()
+                    val installed = sdkStorage.installedVersions()
+                    if (installed.isEmpty()) {
+                        label(HexanaBundle.message("wasm.runtime.settings.wasisdk.status.none"))
+                    } else {
+                        val versionItems = installed.map { it.toString() }
+                        val versionCombo = com.intellij.openapi.ui.ComboBox(versionItems.toTypedArray())
+                        cell(versionCombo)
+                            .comment(HexanaBundle.message("wasm.runtime.settings.wasisdk.combo.comment"))
+                        button(HexanaBundle.message("wasm.runtime.settings.wasisdk.use.button")) {
+                            val selectedVersion = (versionCombo.selectedItem as? String)?.toIntOrNull()
+                            if (selectedVersion != null) {
+                                val lldbPath = sdkStorage.lldbPathForVersion(selectedVersion)?.toString()
+                                if (lldbPath != null) {
+                                    settings.lldbPathInUi = lldbPath
+                                }
+                            }
+                        }
+                    }
+                    button(HexanaBundle.message("wasm.runtime.settings.wasisdk.download.button")) {
+                        org.jetbrains.hexana.wasisdk.WasiSdkOffer.showVersionChooserDialog(null)
+                    }
+                }
                 row(HexanaBundle.message("wasm.runtime.settings.lldb.path")) {
                     textFieldWithBrowseButton(FileChooserDescriptorFactory.singleFile())
                         .align(AlignX.FILL)

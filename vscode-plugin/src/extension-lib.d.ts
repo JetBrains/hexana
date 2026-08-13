@@ -475,3 +475,54 @@ export function buildWamrDebugCommandLine(
  * not supported by the current build.
  */
 export function isWamrDebugNotSupported(output: string): boolean;
+
+// ── WasiSdk ─────────────────────────────────────────────────────────
+//
+// Thin wrappers around the shared WasiSdkReleases Kotlin object so TypeScript
+// does not duplicate the logic. Each function is exported top-level from
+// extension-lib (matching the WasmAnalysis pattern).
+
+/** Oldest wasi-sdk version that bundles a working LLDB binary. */
+export const wasiSdkMinVersionWithLldb: number;
+
+/**
+ * Parses a GitHub tag name to a version number.
+ * Returns null for rc/prerelease tags, non-matching tags, or versions
+ * below `wasiSdkMinVersionWithLldb`.
+ */
+export function wasiSdkParseTag(tag: string): number | null;
+
+/**
+ * Picks the asset name matching `version`/`os`/`arch` from `assetNames`,
+ * or returns null if none matches.
+ *
+ * @param os one of "macos", "linux", "windows"
+ * @param arch one of "x86_64", "arm64"
+ */
+export function wasiSdkSelectAsset(assetNames: string[], version: number, os: string, arch: string): string | null;
+
+/**
+ * Extracts the hex digest from a "sha256:<hex>" string.
+ * Returns null for null, blank, or non-sha256 input.
+ */
+export function wasiSdkParseSha256Digest(digest: string | null | undefined): string | null;
+
+/** Directory name for an installed wasi-sdk version (e.g. "wasi-sdk-33.0"). */
+export function wasiSdkInstallDirName(version: number): string;
+
+/**
+ * Top-level directory name inside a wasi-sdk tarball
+ * (e.g. "wasi-sdk-33.0-arm64-macos").
+ *
+ * @param os one of "macos", "linux", "windows"
+ * @param arch one of "x86_64", "arm64"
+ */
+export function wasiSdkArchiveTopLevelDir(version: number, os: string, arch: string): string;
+
+/**
+ * Relative path to the lldb binary inside an installed wasi-sdk directory
+ * ("bin/lldb" or "bin/lldb.exe" on Windows).
+ *
+ * @param os one of "macos", "linux", "windows"
+ */
+export function wasiSdkLldbRelativePath(os: string): string;

@@ -67,6 +67,14 @@
       {
         "command": "hexana.compareBinary",
         "title": "Hexana: Compare Binary"
+      },
+      {
+        "command": "hexana.wasiSdk.download",
+        "title": "Hexana: Download wasi-sdk..."
+      },
+      {
+        "command": "hexana.wasiSdk.status",
+        "title": "Hexana: wasi-sdk Status"
       }
     ],
     "menus": {

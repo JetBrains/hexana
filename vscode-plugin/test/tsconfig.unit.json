@@ -13,7 +13,8 @@
   },
   "include": [
     "src/unit/**/*.ts",
-    "../src/mcpServerTelemetry.ts"
+    "../src/mcpServerTelemetry.ts",
+    "../src/wasiSdkManager.ts"
   ],
   "exclude": [
     "node_modules",
