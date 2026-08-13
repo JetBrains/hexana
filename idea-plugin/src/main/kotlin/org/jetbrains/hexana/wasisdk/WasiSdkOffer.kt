@@ -67,8 +67,13 @@ object WasiSdkOffer {
         notification.notify(project)
     }
 
-    /** Shows the version chooser dialog, fetching available versions in the background. */
-    fun showVersionChooserDialog(project: Project?) {
+    /**
+     * Shows the version chooser dialog, fetching available versions in the background.
+     *
+     * @param onInstalled called on the EDT with the installed version number after a successful
+     *   install. Use this to refresh UI state (e.g. the wasi-sdk combo in Settings).
+     */
+    fun showVersionChooserDialog(project: Project?, onInstalled: (Int) -> Unit = {}) {
         // Fetch releases off the EDT
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project,
@@ -89,7 +94,7 @@ object WasiSdkOffer {
                     val dialog = VersionChooserDialog(project, fetchResult)
                     if (dialog.showAndGet()) {
                         val selected = dialog.selectedRelease ?: return@invokeLater
-                        WasiSdkInstaller.install(project, selected)
+                        WasiSdkInstaller.install(project, selected, onInstalled)
                     }
                 }
             }

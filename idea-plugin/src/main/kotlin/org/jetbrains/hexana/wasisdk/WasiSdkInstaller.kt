@@ -43,7 +43,7 @@ object WasiSdkInstaller {
     fun install(
         project: Project?,
         release: WasiSdkReleasesClient.AvailableRelease,
-        onSuccess: () -> Unit = {},
+        onSuccess: (Int) -> Unit = {},
     ) {
         val storage = WasiSdkStorage.getInstance()
         ProgressManager.getInstance().run(
@@ -63,7 +63,7 @@ object WasiSdkInstaller {
                     if (lldbPath != null) {
                         showInstallSuccessNotification(project, release.version, lldbPath)
                     }
-                    onSuccess()
+                    onSuccess(release.version)
                 }
 
                 override fun onThrowable(error: Throwable) {
