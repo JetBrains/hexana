@@ -3,14 +3,18 @@
 ## Unreleased
 
 ### Added
+- Managed wasi-sdk installation. Wasm debugging needs an LLDB built with the wasm process plugin, and the wasi-sdk distribution ships one. The WebAssembly settings page now has a JDK-style selector that lists installed wasi-sdk versions and ends with a "Download wasi-sdk..." action opening a version chooser fed from the GitHub releases (download sizes shown, sha256 verified against the release digest, cancellable, versions installed side by side). The SDK lands under the IDE's common data directory, so one download serves every project and every JetBrains IDE on the machine. The LLDB selection mechanism is unchanged: the managed SDK takes effect only through an explicit "Use as LLDB path" action (in the settings row and in the install notification) that writes the ordinary LLDB path setting. When a debug session cannot find LLDB, a notification offers the download.
+- Per-instruction stepping in the **Wasm** debugger tab under wasmtime. While the tab is selected, Step Over and Step Into advance exactly one wasm instruction, including instructions the old native path could never stop on (`local.get`, `i32.const`); with any other tab selected, stepping stays at source-line granularity. This matches the behavior the tab already had under Node.js.
 
 ### Changed
+- Wasmtime debugging switched to wasmtime's built-in gdbstub guest debugger: the session starts `wasmtime run -g <port>` and attaches LLDB over the gdb-remote protocol (`process connect --plugin wasm`). LLDB reads DWARF directly from the wasm module, so the JIT loader, the native-address-to-wasm-offset translation and the trap workarounds of the old native path are gone. The practical wins: arguments and locals show concrete values (Cranelift compiled them away before; the Variables view could only show storage-location hints), stepping is per wasm instruction, and the stack shows guest frames only. Requires wasmtime 44 or newer (older versions fail early with an update hint) and an LLDB with the wasm process plugin (wasi-sdk ships one, see the managed download above; recent LLVM builds include it as well).
 
 ### Deprecated
 
 ### Removed
 
 ### Fixed
+- Evaluating an expression in a wasmtime debug session no longer kills the LLDB process. LLDB's expression compiler cannot generate code for wasm targets and aborts on any expression that parses (an upstream LLVM defect, present in wasi-sdk and stock LLVM builds alike). Hexana now evaluates variable paths (`x`, `s.field`, `p->x`, `arr[0]`) through `frame variable`, which is unaffected, and rejects other expressions with an explanatory message instead of forwarding them.
 
 ### Security
 
