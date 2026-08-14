@@ -871,4 +871,69 @@ class WasmRuntimeCommandLineTest {
         val args = result.arguments
         assertTrue(args.contains("--invoke"), "Wasmtime should keep --invoke flag")
     }
+
+    // -----------------------------------------------------------------------
+    // buildWasmtimeGdbArgs
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun buildWasmtimeGdbArgsBasicShape() {
+        val input = WasmRunInput(wasmFilePath = "/path/to/module.wasm")
+        val result = buildWasmtimeGdbArgs(input, port = 4321)
+        val args = result.arguments
+        assertEquals("run", args[0])
+        val gIndex = args.indexOf("-g")
+        assertTrue(gIndex >= 0, "expected -g flag, got $args")
+        assertEquals("127.0.0.1:4321", args[gIndex + 1])
+        assertEquals("/path/to/module.wasm", args.last())
+        assertNull(result.workingDirectory)
+    }
+
+    @Test
+    fun buildWasmtimeGdbArgsCustomHostAndNoDebugInfoFlag() {
+        val input = WasmRunInput(wasmFilePath = "/mod.wasm")
+        val args = buildWasmtimeGdbArgs(input, port = 9999, host = "0.0.0.0").arguments
+        assertEquals("0.0.0.0:9999", args[args.indexOf("-g") + 1])
+        assertFalse(args.contains("-D"), "gdbstub mode must not pass -D debug-info: $args")
+    }
+
+    @Test
+    fun buildWasmtimeGdbArgsProgramArgumentsAfterModule() {
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            programArguments = "3 7",
+            workingDirectory = "/work",
+        )
+        val result = buildWasmtimeGdbArgs(input, port = 1234)
+        val args = result.arguments
+        val moduleIndex = args.indexOf("/mod.wasm")
+        assertTrue(moduleIndex >= 0)
+        assertEquals(listOf("3", "7"), args.drop(moduleIndex + 1))
+        assertEquals("/work", result.workingDirectory)
+    }
+
+    @Test
+    fun buildWasmtimeGdbArgsRuntimeOptionsBeforeModule() {
+        val input = WasmRunInput(
+            wasmFilePath = "/mod.wasm",
+            runtimeOptions = "--invoke add",
+        )
+        val args = buildWasmtimeGdbArgs(input, port = 1234).arguments
+        val invokeIndex = args.indexOf("--invoke")
+        assertTrue(invokeIndex in 1 until args.indexOf("/mod.wasm"), "runtime options must precede the module: $args")
+        assertEquals("add", args[invokeIndex + 1])
+    }
+
+    @Test
+    fun buildWasmtimeGdbArgsPreloadsCoreModuleDeps() {
+        val input = WasmRunInput(wasmFilePath = "/mod.wasm")
+        val args = buildWasmtimeGdbArgs(
+            input,
+            port = 1234,
+            coreModuleDeps = mapOf("env" to "/deps/env.wasm"),
+        ).arguments
+        val preloadIndex = args.indexOf("--preload")
+        assertTrue(preloadIndex >= 0, "expected --preload: $args")
+        assertEquals("env=/deps/env.wasm", args[preloadIndex + 1])
+    }
 }

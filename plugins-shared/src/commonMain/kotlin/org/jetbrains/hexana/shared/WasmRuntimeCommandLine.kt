@@ -451,6 +451,70 @@ fun buildWasmtimeDebugArgs(
     return WasmCommandLine(arguments = args, workingDirectory = workDir)
 }
 
+/**
+ * Builds the argument list for a Wasmtime guest-debugging run using the
+ * built-in gdbstub (`wasmtime run -g <port> module.wasm`).
+ *
+ * Unlike [buildWasmtimeDebugArgs], this mode does NOT use `-D debug-info`
+ * because the gdbstub exposes DWARF directly from the wasm binary to LLDB
+ * without going through the JIT loader.  LLDB reads DWARF from the wasm
+ * file itself via the wasm process plugin.
+ *
+ * Wasmtime pauses execution until a debugger attaches, so `-O opt-level=0`
+ * is still desirable for better variable visibility.
+ *
+ * @param port the local port wasmtime should listen on for the gdbstub
+ * @param host the local address, defaults to 127.0.0.1
+ */
+fun buildWasmtimeGdbArgs(
+    input: WasmRunInput,
+    port: Int,
+    host: String = "127.0.0.1",
+    coreModuleDeps: Map<String, String> = emptyMap(),
+): WasmCommandLine {
+    val args = mutableListOf<String>()
+    args.add("run")
+
+    // Enable gdbstub guest debugging; wasmtime pauses until a debugger
+    // attaches on this address:port.
+    args.add("-g")
+    args.add("$host:$port")
+
+    // Disable optimizations for better variable inspection.
+    args.add("-O")
+    args.add("opt-level=0")
+
+    // Proposal-specific flags (GC, threads, etc.) before user options.
+    val proposals = detectProposals(input.wasmBytes)
+    args.addAll(wasmtimeProposalFlags(proposals))
+
+    val options = input.runtimeOptions.trim()
+    if (options.isNotEmpty()) {
+        args.addAll(splitOptions(options))
+    }
+
+    for ((name, path) in coreModuleDeps) {
+        args.add("--preload")
+        args.add("$name=$path")
+    }
+
+    val wasmBytes = input.wasmBytes
+    if (wasmBytes != null && WasmImportStubGenerator.hasImports(wasmBytes)) {
+        args.add("-W")
+        args.add("unknown-imports-default")
+    }
+
+    args.add(input.effectiveWasmPath ?: input.wasmFilePath)
+
+    val programArgs = input.programArguments.trim()
+    if (programArgs.isNotEmpty()) {
+        args.addAll(programArgs.split("\\s+".toRegex()))
+    }
+
+    val workDir = input.workingDirectory.ifBlank { null }
+    return WasmCommandLine(arguments = args, workingDirectory = workDir)
+}
+
 // ---------------------------------------------------------------------------
 // WAMR (iwasm)
 // ---------------------------------------------------------------------------

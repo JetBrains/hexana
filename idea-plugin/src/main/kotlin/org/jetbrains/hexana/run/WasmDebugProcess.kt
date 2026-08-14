@@ -1160,7 +1160,24 @@ open class WasmDebugProcess(
         }
     }
 
-    private fun lookupWasmOffset(communicator: LldbCommunicator, pc: ULong): Int? {
+    private fun lookupWasmOffset(communicator: LldbCommunicator, pc: ULong): Int? =
+        wasmOffsetForPc(communicator, pc)
+
+    /**
+     * Translates a native PC to the corresponding wasm file byte offset for
+     * the "Wasm" disassembly tab.
+     *
+     * The default implementation uses the GDB JIT addrmap written by
+     * wasmtime's Cranelift backend (native JIT path).  Subclasses can
+     * override this when a different translation is available — for example
+     * [WasmtimeGdbDebugProcess] overrides [wasmOffsetForPc] to extract
+     * the offset from the low 32 bits of the gdbstub PC.
+     *
+     * This two-level dispatch keeps [lookupWasmOffset]'s communicator
+     * parameter available for the addrmap-refresh path while allowing
+     * communicator-free overrides.
+     */
+    protected open fun wasmOffsetForPc(communicator: LldbCommunicator, pc: ULong): Int? {
         if (jitAddrmaps.none { it.containsPc(pc) }) {
             // The registered image set may have grown since the last dump
             // (wasmtime registers one image per compiled module), so refresh
