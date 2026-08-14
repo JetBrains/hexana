@@ -166,6 +166,9 @@ private fun json(value: String): String = buildString {
                 '\n' -> "\\n"
                 '\r' -> "\\r"
                 '\t' -> "\\t"
+                '<' -> "\\u003c"
+                '>' -> "\\u003e"
+                '&' -> "\\u0026"
                 else -> character.toString()
             }
         )
@@ -248,6 +251,27 @@ private fun sbomJson(version: String, components: List<ResolvedRuntimeComponent>
     return "{\"bomFormat\":\"CycloneDX\",\"specVersion\":\"1.5\",\"version\":1,\"metadata\":{\"component\":{\"type\":\"application\",\"bom-ref\":\"urn:hexana:webapp\",\"name\":\"hexana-webapp\",\"version\":${json(version)}}},\"components\":[$sbomComponents]}\n"
 }
 
+private val releaseInfoPlaceholder = "__HEXANA_RELEASE_INFO__"
+private val hexanaRepositoryUrl = "https://github.com/JetBrains/hexana"
+private val hexanaWebsiteUrl = "https://jetbrains.github.io/hexana/"
+
+private fun verifyReleaseNavigationUrls(repositoryUrl: String, websiteUrl: String, source: String) {
+    if (repositoryUrl != hexanaRepositoryUrl || websiteUrl != hexanaWebsiteUrl) {
+        packageFailure("$source permits unapproved release navigation URLs")
+    }
+}
+
+private fun releaseInfoJson(
+    version: String,
+    versionSource: String,
+    revision: String,
+    repositoryUrl: String = hexanaRepositoryUrl,
+    websiteUrl: String = hexanaWebsiteUrl,
+): String {
+    verifyReleaseNavigationUrls(repositoryUrl, websiteUrl, "release information")
+    return "{\"schemaVersion\":1,\"product\":\"hexana-webapp\",\"version\":${json(version)},\"versionSource\":${json(versionSource)},\"revision\":${json(revision)},\"repositoryUrl\":${json(repositoryUrl)},\"websiteUrl\":${json(websiteUrl)},\"changelog\":${json(project.file("CHANGELOG.md").readText())}}\n"
+}
+
 private val telemetryIngestionOrigin = "https://eu.i.posthog.com"
 private val productionCsp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://eu.i.posthog.com; img-src 'self' data:; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 private val externalUrlPattern = Regex("""https?://[^\s"'<>;]+""")
@@ -295,6 +319,10 @@ private fun verifyProductionPackage(packageDir: File) {
     if (packageDir.resolve("build-identity.json").readText() != expectedIdentity) {
         packageFailure("identity does not match the declared revision and webapp artifact version")
     }
+    val expectedReleaseInfo = releaseInfoJson(version, versionSource, revision)
+    if (packageDir.resolve("release-info.json").readText() != expectedReleaseInfo) {
+        packageFailure("release information does not match the declared identity and checked-in changelog")
+    }
     val resolvedComponents = resolvedRuntimeComponents(revision)
     if (resolvedComponents.isEmpty()) packageFailure("resolved dependency evidence is empty")
     if (packageDir.resolve("resolved-dependencies.json").readText() != resolutionEvidenceJson(resolvedComponents)) {
@@ -319,6 +347,7 @@ private fun verifyProductionPackage(packageDir: File) {
         "index.html",
         "robots.txt",
         "build-identity.json",
+        "release-info.json",
         "sbom.cdx.json",
         "resolved-dependencies.json",
         "hosting-policy.json",
@@ -349,7 +378,9 @@ private fun verifyProductionPackage(packageDir: File) {
     if (packageDir.resolve("robots.txt").readText() != robotsPolicy) {
         packageFailure("robots.txt does not disallow crawling")
     }
-    verifyOnlyTelemetryOrigin(index, "index.html")
+    if (releaseInfoPlaceholder in index || "<script id=\"hexana-release-info\" type=\"application/json\">${expectedReleaseInfo.trimEnd()}</script>" !in index) {
+        packageFailure("index.html does not embed release information matching build identity")
+    }
     val policy = packageDir.resolve("hosting-policy.json").readText()
     listOf("object-src 'none'", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'", "X-Content-Type-Options\":\"nosniff", "Referrer-Policy\":\"no-referrer", "Permissions-Policy", "X-Frame-Options\":\"DENY", "Cross-Origin-Opener-Policy\":\"same-origin", "Cross-Origin-Embedder-Policy\":\"require-corp", "Strict-Transport-Security\":\"max-age=31536000\"", "HTTPS edge-only").forEach { required ->
         if (required !in policy) packageFailure("hosting policy omits $required")
@@ -481,6 +512,7 @@ val packageProductionWebapp by tasks.registering {
         rootProject.file("gradle/libs.versions.toml"),
         rootProject.file("gradle/wrapper/gradle-wrapper.properties"),
         project.file("build.gradle.kts"),
+        project.file("src/jsMain/resources/index.html"),
         webappVersionPropertiesFile,
         project.file("CHANGELOG.md"),
     )
@@ -522,17 +554,23 @@ val packageProductionWebapp by tasks.registering {
         val bootText = source.resolve("boot.js").readText().replace("./wasmprinter_wrapper.wasm", "./assets/$wasmName")
         val bootName = "boot." + MessageDigest.getInstance("SHA-256").digest(bootText.toByteArray()).joinToString("") { "%02x".format(it) }.take(16) + ".js"
         assets.resolve(bootName).writeText(bootText, StandardCharsets.UTF_8)
-        source.resolve("index.html").readText()
+        val revision = webappRevision.get()
+        val version = webappArtifactVersion.get()
+        val versionSource = webappArtifactVersionSource.get()
+        val releaseInfo = releaseInfoJson(version, versionSource, revision)
+        val sourceIndex = source.resolve("index.html").readText()
+        if (sourceIndex.split(releaseInfoPlaceholder).size != 2) {
+            packageFailure("production index must contain exactly one release information placeholder")
+        }
+        sourceIndex
             .replace("theme.css", "assets/$themeName")
             .replace("editor.css", "assets/$editorName")
             .replace("boot.js", "assets/$bootName")
             .replace("webapp.js", "assets/$webappName")
+            .replace(releaseInfoPlaceholder, releaseInfo.trimEnd())
             .also { output.resolve("index.html").writeText(it, StandardCharsets.UTF_8) }
         source.resolve("robots.txt").copyTo(output.resolve("robots.txt"), overwrite = true)
 
-        val revision = webappRevision.get()
-        val version = webappArtifactVersion.get()
-        val versionSource = webappArtifactVersionSource.get()
         val resolvedComponents = resolvedRuntimeComponents(revision)
         val payloadFiles = output.walkTopDown().filter { it.isFile }.map { file ->
             file.relativeTo(output).invariantSeparatorsPath to sha256(file)
@@ -544,6 +582,7 @@ val packageProductionWebapp by tasks.registering {
             "{\"schemaVersion\":1,\"product\":\"hexana-webapp\",\"version\":${json(version)},\"versionSource\":${json(versionSource)},\"revision\":${json(revision)}}\n",
             StandardCharsets.UTF_8,
         )
+        output.resolve("release-info.json").writeText(releaseInfo, StandardCharsets.UTF_8)
         output.resolve("sbom.cdx.json").writeText(sbomJson(version, resolvedComponents), StandardCharsets.UTF_8)
         output.resolve("resolved-dependencies.json").writeText(
             resolutionEvidenceJson(resolvedComponents),
@@ -556,6 +595,7 @@ val packageProductionWebapp by tasks.registering {
             "webapp/build.gradle.kts",
             "webapp/gradle.properties",
             "webapp/CHANGELOG.md",
+            "webapp/src/jsMain/resources/index.html",
         )
         val evidence = evidenceFiles.joinToString(",") { path -> "{\"path\":${json(path)},\"sha256\":${json(sha256(rootProject.file(path)))}}" }
         output.resolve("provenance.json").writeText(

@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.webapp
 
 import androidx.compose.runtime.*
+import kotlinx.browser.document
+import kotlinx.browser.window
 import org.jetbrains.compose.web.renderComposable
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
@@ -10,6 +12,8 @@ import org.jetbrains.hexana.vscode.*
 import org.khronos.webgl.ArrayBuffer
 import org.khronos.webgl.Int8Array
 import org.w3c.files.File
+import org.w3c.dom.HTMLElement
+import org.w3c.dom.events.KeyboardEvent
 
 fun main() {
     renderComposable(rootElementId = "root") {
@@ -131,6 +135,7 @@ internal fun WebAppRoot(
                     telemetry.setEnabled(enabled)
                     telemetryEnabled = enabled
                 },
+                releaseInfo = bundledWebappReleaseInfo(),
             )
         } else {
             val response = workerResponse
@@ -349,6 +354,7 @@ internal fun LandingView(
     readerFactory: BrowserFileReaderFactory = domBrowserFileReaderFactory,
     workerFactory: ParserWorkerFactory = browserParserWorkerFactory,
     workerScheduler: ParserWorkerScheduler = browserParserWorkerScheduler,
+    releaseInfo: WebappReleaseInfo? = null,
 ) {
     var isDragging by remember { mutableStateOf(false) }
     var isReading by remember { mutableStateOf(false) }
@@ -357,6 +363,12 @@ internal fun LandingView(
     var retainedFile by remember { mutableStateOf<File?>(null) }
     var pendingCoreBytes by remember { mutableStateOf<ByteArray?>(null) }
     var pendingCoreFileName by remember { mutableStateOf("") }
+    var aboutOpen by remember { mutableStateOf(false) }
+    var aboutTrigger by remember { mutableStateOf<HTMLElement?>(null) }
+    var aboutSurface by remember { mutableStateOf<HTMLElement?>(null) }
+    val currentAboutOpen = rememberUpdatedState(aboutOpen)
+    val currentAboutTrigger = rememberUpdatedState(aboutTrigger)
+    val currentAboutSurface = rememberUpdatedState(aboutSurface)
     val currentOnFileLoaded = rememberUpdatedState(onFileLoaded)
     val parserController = remember(workerFactory, workerScheduler) {
         ParserWorkerController(
@@ -398,6 +410,22 @@ internal fun LandingView(
             loader.dispose()
             parserController.dispose()
         }
+    }
+
+    DisposableEffect(Unit) {
+        val listener: (org.w3c.dom.events.Event) -> Unit = { event ->
+            val target = event.target as? org.w3c.dom.Node
+            if (
+                currentAboutOpen.value &&
+                target != null &&
+                currentAboutSurface.value?.contains(target) != true &&
+                currentAboutTrigger.value?.contains(target) != true
+            ) {
+                aboutOpen = false
+            }
+        }
+        document.addEventListener("mousedown", listener)
+        onDispose { document.removeEventListener("mousedown", listener) }
     }
 
     val selectFile: (File) -> Unit = { file ->
@@ -540,10 +568,131 @@ internal fun LandingView(
             }
         }) { Text("WASM, ELF, Mach-O, PE, class files, ZIP, DEX and more") }
 
+        releaseInfo?.let { info ->
+            AboutHexanaControl(
+                info = info,
+                open = aboutOpen,
+                onOpenChange = { aboutOpen = it },
+                onTriggerMounted = { aboutTrigger = it },
+                onTriggerDisposed = { element ->
+                    if (currentAboutTrigger.value === element) aboutTrigger = null
+                },
+                onSurfaceMounted = { aboutSurface = it },
+                onSurfaceDisposed = { element ->
+                    if (currentAboutSurface.value === element) aboutSurface = null
+                },
+            )
+        }
+
         TelemetryConsentControl(
             enabled = telemetryEnabled,
             onEnabledChange = onTelemetryEnabledChange,
         )
+    }
+}
+
+@Composable
+private fun AboutHexanaControl(
+    info: WebappReleaseInfo,
+    open: Boolean,
+    onOpenChange: (Boolean) -> Unit,
+    onTriggerMounted: (HTMLElement) -> Unit,
+    onTriggerDisposed: (HTMLElement) -> Unit,
+    onSurfaceMounted: (HTMLElement) -> Unit,
+    onSurfaceDisposed: (HTMLElement) -> Unit,
+) {
+    var triggerElement by remember { mutableStateOf<HTMLElement?>(null) }
+    val currentTriggerElement = rememberUpdatedState(triggerElement)
+    val closeAndFocusTrigger: () -> Unit = {
+        onOpenChange(false)
+        window.requestAnimationFrame { currentTriggerElement.value?.focus() }
+    }
+    val closeOnEscape: (org.jetbrains.compose.web.events.SyntheticKeyboardEvent) -> Unit = { event ->
+        val keyboard = event.nativeEvent as? KeyboardEvent
+        if (keyboard?.key == "Escape") {
+            keyboard.preventDefault()
+            closeAndFocusTrigger()
+        }
+    }
+    Div({
+        attr("data-about-hexana", "true")
+        style { property("position", "relative") }
+    }) {
+        Button({
+            id("hexana-about-trigger")
+            attr("data-about-trigger", "true")
+            attr("aria-label", "About Hexana ${info.version}")
+            attr("aria-expanded", open.toString())
+            attr("aria-controls", "hexana-about-surface")
+            ref { element ->
+                triggerElement = element
+                onTriggerMounted(element)
+                onDispose {
+                    if (currentTriggerElement.value === element) triggerElement = null
+                    onTriggerDisposed(element)
+                }
+            }
+            onClick { onOpenChange(!open) }
+            onKeyDown { event ->
+                val keyboard = event.nativeEvent as? KeyboardEvent
+                when (keyboard?.key) {
+                    "Enter", " " -> {
+                        keyboard.preventDefault()
+                        onOpenChange(!open)
+                    }
+                    "Escape" -> {
+                        keyboard.preventDefault()
+                        closeAndFocusTrigger()
+                    }
+                }
+            }
+        }) { Text("About Hexana ${info.version} ▾") }
+        if (open) {
+            Div({
+                id("hexana-about-surface")
+                attr("data-about-surface", "true")
+                attr("role", "dialog")
+                attr("aria-label", "About Hexana ${info.version}")
+                attr("tabindex", "-1")
+                ref { element ->
+                    onSurfaceMounted(element)
+                    onDispose { onSurfaceDisposed(element) }
+                }
+                onKeyDown(closeOnEscape)
+                style {
+                    property("position", "absolute")
+                    property("z-index", "1")
+                    property("width", "min(420px, calc(100vw - 32px))")
+                    property("max-height", "320px")
+                    property("overflow", "auto")
+                    property("padding", "12px")
+                    property("margin-top", "6px")
+                    property("text-align", "left")
+                    property("background", "var(--vscode-editorWidget-background, #252526)")
+                    property("border", "1px solid var(--vscode-editorWidget-border, #454545)")
+                }
+            }) {
+                Div({ attr("data-about-version", "true") }) { Text("Version: ${info.version}") }
+                Div({ attr("data-about-revision", "true") }) { Text("Revision: ${info.revision}") }
+                Div({ style { property("margin-top", "8px") } }) {
+                    A(href = info.repositoryUrl, {
+                        attr("data-about-link", "github")
+                        attr("target", "_blank")
+                        attr("rel", "noopener noreferrer")
+                    }) { Text("GitHub") }
+                    Text(" · ")
+                    A(href = info.websiteUrl, {
+                        attr("data-about-link", "website")
+                        attr("target", "_blank")
+                        attr("rel", "noopener noreferrer")
+                    }) { Text("Hexana website") }
+                }
+                Pre({
+                    attr("data-about-changelog", "true")
+                    style { property("white-space", "pre-wrap") }
+                }) { Text(info.changelog) }
+            }
+        }
     }
 }
 

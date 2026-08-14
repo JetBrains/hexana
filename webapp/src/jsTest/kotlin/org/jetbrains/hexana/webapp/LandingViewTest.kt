@@ -8,6 +8,7 @@ import org.khronos.webgl.ArrayBuffer
 import org.khronos.webgl.Int8Array
 import org.w3c.dom.Element
 import org.w3c.dom.HTMLDivElement
+import org.w3c.dom.HTMLElement
 import org.w3c.dom.events.Event
 import org.w3c.files.File
 import kotlin.js.Promise
@@ -19,6 +20,102 @@ private const val DOM_WAIT_TIMEOUT_MS = 2_000.0
 private var landingRootSequence = 0
 
 class LandingViewTest {
+    @Test
+    fun aboutMenuUsesBundledMetadataWithoutNetworkAccess(): Promise<Unit> {
+        return Promise { resolve, reject ->
+        val root = landingRoot()
+        var networkSpies: LandingNetworkSpies? = null
+        val info = WebappReleaseInfo(
+            version = "0.1.0",
+            revision = "0123456789abcdef",
+            changelog = "# Changelog\n\n## [0.1.0] - 2026-08-14\n\n- Initial public Webapp release.\n",
+            repositoryUrl = "https://github.com/JetBrains/hexana",
+            websiteUrl = "https://jetbrains.github.io/hexana/",
+        )
+        var composition: Composition? = null
+        var finished = false
+        fun finish(failure: Throwable? = null) {
+            if (finished) return
+            finished = true
+            var finalFailure = failure
+            try {
+                composition?.dispose()
+            } catch (cleanupFailure: Throwable) {
+                if (finalFailure == null) finalFailure = cleanupFailure
+            }
+            try {
+                root.parentNode?.removeChild(root)
+            } catch (cleanupFailure: Throwable) {
+                if (finalFailure == null) finalFailure = cleanupFailure
+            }
+            try {
+                networkSpies?.assertNoCalls()
+            } catch (cleanupFailure: Throwable) {
+                if (finalFailure == null) finalFailure = cleanupFailure
+            }
+            try {
+                networkSpies?.restore()
+            } catch (cleanupFailure: Throwable) {
+                if (finalFailure == null) finalFailure = cleanupFailure
+            }
+            if (finalFailure == null) resolve(Unit) else reject(finalFailure)
+        }
+        fun awaitCondition(description: String, condition: () -> Boolean, ready: () -> Unit) {
+            val deadline = window.performance.now() + DOM_WAIT_TIMEOUT_MS
+            fun poll() {
+                try {
+                    when {
+                        condition() -> ready()
+                        window.performance.now() >= deadline -> finish(AssertionError("Timed out waiting for $description"))
+                        else -> window.requestAnimationFrame { poll() }
+                    }
+                } catch (failure: Throwable) { finish(failure) }
+            }
+            window.requestAnimationFrame { poll() }
+        }
+        try {
+            networkSpies = LandingNetworkSpies()
+            document.body?.appendChild(root)
+            composition = renderComposable(rootElementId = root.id) {
+                LandingView(onFileLoaded = { _, _, _ -> }, releaseInfo = info)
+            }
+            val trigger = root.querySelector("[data-about-trigger]")!!.unsafeCast<HTMLElement>()
+            assertEquals("About Hexana 0.1.0", trigger.getAttribute("aria-label"))
+            assertEquals("false", trigger.getAttribute("aria-expanded"))
+            trigger.focus()
+            landingKeyDown(trigger, "Enter")
+            awaitCondition("about menu opening", { root.querySelector("[data-about-surface]") != null }) {
+                try {
+                    val surface = root.querySelector("[data-about-surface]")!!.unsafeCast<HTMLElement>()
+                    val openTrigger = root.querySelector("[data-about-trigger]")!!
+                    assertEquals("true", openTrigger.getAttribute("aria-expanded"))
+                    check(surface.textContent!!.contains(info.version))
+                    check(surface.textContent!!.contains(info.revision))
+                    check(surface.textContent!!.contains(info.changelog.trim()))
+                    val github = root.querySelector("[data-about-link='github']")!!
+                    assertEquals(info.repositoryUrl, github.getAttribute("href")); assertEquals("_blank", github.getAttribute("target")); assertEquals("noopener noreferrer", github.getAttribute("rel"))
+                    val website = root.querySelector("[data-about-link='website']")!!
+                    assertEquals(info.websiteUrl, website.getAttribute("href")); assertEquals("noopener noreferrer", website.getAttribute("rel"))
+                    landingKeyDown(surface, "Escape")
+                    awaitCondition("about menu closing with focus restoration", {
+                        val current = root.querySelector("[data-about-trigger]") as? HTMLElement
+                        root.querySelector("[data-about-surface]") == null && current?.getAttribute("aria-expanded") == "false" && document.activeElement === current
+                    }) {
+                        val current = root.querySelector("[data-about-trigger]")!!.unsafeCast<HTMLElement>()
+                        current.click()
+                        awaitCondition("about menu reopening", { root.querySelector("[data-about-surface]") != null }) {
+                            landingMouseDown(document.body!!)
+                            awaitCondition("outside click closing the about menu", { root.querySelector("[data-about-surface]") == null }) { finish() }
+                        }
+                    }
+                } catch (failure: Throwable) { finish(failure) }
+            }
+        } catch (failure: Throwable) {
+            finish(failure)
+        }
+    }
+    }
+
     @Test
     fun coreWasmLandingPathUsesProductionWorkerBeforeExposingUiBytes(): Promise<Unit> = Promise { resolve, reject ->
         val root = landingRoot()
@@ -410,6 +507,16 @@ private fun drop(target: Element, file: File) {
     val dataTransfer = js("({})")
     dataTransfer.files = files
     event.dataTransfer = dataTransfer
+    target.dispatchEvent(event.unsafeCast<Event>())
+}
+
+private fun landingKeyDown(target: Element, key: String) {
+    val event = js("new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: key })")
+    target.dispatchEvent(event.unsafeCast<Event>())
+}
+
+private fun landingMouseDown(target: Element) {
+    val event = js("new MouseEvent('mousedown', { bubbles: true, cancelable: true })")
     target.dispatchEvent(event.unsafeCast<Event>())
 }
 
