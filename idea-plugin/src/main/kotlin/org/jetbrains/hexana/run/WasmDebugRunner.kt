@@ -21,6 +21,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.ThrowableComputable
+import com.intellij.util.io.BaseOutputReader
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugProcessStarter
 import com.intellij.xdebugger.XDebugSession
@@ -181,6 +182,20 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
     )
 
     /**
+     * Process handler for long-lived, mostly silent debug processes
+     * (the wasmtime gdbstub waiting for a debugger, the interactive
+     * LLDB). Uses the blocking reader the platform recommends to avoid
+     * "Process hasn't generated any output for a long time" warnings
+     * and the busy-poll CPU cost behind them.
+     */
+    private class MostlySilentOSProcessHandler(
+        commandLine: GeneralCommandLine,
+    ) : OSProcessHandler(commandLine) {
+        override fun readerOptions(): BaseOutputReader.Options =
+            BaseOutputReader.Options.forMostlySilentProcess()
+    }
+
+    /**
      * Result holder for the blocking preparatory work for a Wasmtime
      * gdbstub debug session.
      */
@@ -223,7 +238,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
 
                 LOG.info("Starting LLDB for Wasmtime gdbstub connection")
 
-                val lldbHandler = OSProcessHandler(lldbCommandLine)
+                val lldbHandler = MostlySilentOSProcessHandler(lldbCommandLine)
                 val lldb = LldbCommunicator(lldbHandler)
                 lldb.attachToProcessHandler()
 
@@ -304,7 +319,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
 
         LOG.info("Starting Wasmtime gdbstub: ${wasmtimeCommandLine.commandLineString}")
 
-        val wasmtimeHandler = OSProcessHandler(wasmtimeCommandLine)
+        val wasmtimeHandler = MostlySilentOSProcessHandler(wasmtimeCommandLine)
         ProcessTerminatedListener.attach(wasmtimeHandler)
 
         // Wait for wasmtime to print "Debugger listening on 127.0.0.1:<port>".
