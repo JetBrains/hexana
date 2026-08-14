@@ -378,9 +378,11 @@ private fun verifyProductionPackage(packageDir: File) {
     if (packageDir.resolve("robots.txt").readText() != robotsPolicy) {
         packageFailure("robots.txt does not disallow crawling")
     }
-    if (releaseInfoPlaceholder in index || "<script id=\"hexana-release-info\" type=\"application/json\">${expectedReleaseInfo.trimEnd()}</script>" !in index) {
+    val expectedReleaseInfoScript = "<script id=\"hexana-release-info\" type=\"application/json\">${expectedReleaseInfo.trimEnd()}</script>"
+    if (releaseInfoPlaceholder in index || index.split(expectedReleaseInfoScript).size != 2) {
         packageFailure("index.html does not embed release information matching build identity")
     }
+    verifyOnlyTelemetryOrigin(index.replace(expectedReleaseInfoScript, ""), "index.html")
     val policy = packageDir.resolve("hosting-policy.json").readText()
     listOf("object-src 'none'", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'", "X-Content-Type-Options\":\"nosniff", "Referrer-Policy\":\"no-referrer", "Permissions-Policy", "X-Frame-Options\":\"DENY", "Cross-Origin-Opener-Policy\":\"same-origin", "Cross-Origin-Embedder-Policy\":\"require-corp", "Strict-Transport-Security\":\"max-age=31536000\"", "HTTPS edge-only").forEach { required ->
         if (required !in policy) packageFailure("hosting policy omits $required")
