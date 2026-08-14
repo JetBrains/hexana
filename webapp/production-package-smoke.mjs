@@ -81,7 +81,7 @@ async function main() {
         if (socket) socket.close();
         if (browser && browser.exitCode === null) { browser.kill(); await new Promise(resolve => browser.once("exit", resolve)); }
         if (server.listening) await new Promise(resolve => server.close(resolve));
-        if (profile) await rm(profile, { recursive: true, force: true });
+        if (profile) await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     }
 }
 
