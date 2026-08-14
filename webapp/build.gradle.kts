@@ -502,6 +502,34 @@ tasks.register<Exec>("testWebappReleaseContract") {
     commandLine("node", "--test", project.file("release-contract.test.mjs").absolutePath)
 }
 
+tasks.register<Exec>("testWebappOciEvidenceContract") {
+    group = "verification"
+    description = "Runs focused regression tests for detached OCI evidence validation."
+    inputs.files(project.file("oci-evidence-contract.mjs"), project.file("oci-evidence-contract.test.mjs"))
+    commandLine("node", "--test", project.file("oci-evidence-contract.test.mjs").absolutePath)
+}
+
+val webappOciReceipt = providers.gradleProperty("hexanaWebappOciReceipt")
+val webappOciPackageDirectory = providers.gradleProperty("hexanaWebappOciPackageDirectory")
+    .map { project.file(it) }
+    .orElse(layout.buildDirectory.dir("production-package").map { it.asFile })
+
+tasks.register<Exec>("verifyWebappOciEvidenceReceipt") {
+    group = "verification"
+    description = "Verifies a detached post-push OCI receipt against an extracted static image root without network access."
+    inputs.file(project.file("oci-evidence-contract.mjs"))
+    inputs.property("webappOciReceipt", webappOciReceipt.orNull ?: "")
+    inputs.property("webappOciPackageDirectory", webappOciPackageDirectory.get().absolutePath)
+    doFirst {
+        val receipt = webappOciReceipt.orNull ?: throw GradleException("-PhexanaWebappOciReceipt=<receipt.json> is required")
+        commandLine(
+            "node", project.file("oci-evidence-contract.mjs").absolutePath, "verify-receipt",
+            "--package-dir", webappOciPackageDirectory.get().absolutePath,
+            "--receipt", project.file(receipt).absolutePath,
+        )
+    }
+}
+
 val packageProductionWebapp by tasks.registering {
     group = "distribution"
     description = "Produces a deterministic, immutable static package from the browser distribution."

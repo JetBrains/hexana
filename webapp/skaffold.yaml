@@ -12,6 +12,8 @@ build:
         dockerfile: webapp/Dockerfile
         buildArgs:
           HEXANA_SOURCE_REVISION: "{{.HEXANA_SOURCE_REVISION}}"
+          HEXANA_WEBAPP_RELEASE_BRANCH: "{{.HEXANA_WEBAPP_RELEASE_BRANCH}}"
+          HEXANA_SOURCE_URL: "https://github.com/JetBrains/hexana"
   local:
     useDockerCLI: false
     useBuildkit: true

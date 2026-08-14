@@ -6,6 +6,9 @@
 out
 analysis
 **/build
+webapp/oci-package/*
+!webapp/oci-package/production-package/
+!webapp/oci-package/production-package/**
 **/.gradle
 **/.idea
 **/.kotlin
