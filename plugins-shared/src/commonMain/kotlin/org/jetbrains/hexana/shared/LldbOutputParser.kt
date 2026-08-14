@@ -38,6 +38,8 @@ private val EXIT_PATTERN =
  * - `* thread #1, stop reason = EXC_BREAKPOINT (code=1, subcode=0x...)`
  * - `* thread #1, stop reason = step in`
  * - `* thread #1, stop reason = plan complete`
+ * - `* thread #1, stop reason = instruction step into` (wasm gdbstub)
+ * - `* thread #1, stop reason = instruction step over` (wasm gdbstub)
  * - `* thread #1, stop reason = signal SIGSTOP` (stop-at-entry)
  * - `Process 12345 exited with status = 0 (0x00000000)`
  *
@@ -75,7 +77,8 @@ fun parseLldbStopEvent(line: String): LldbStopEvent? {
         return LldbStopEvent.StoppedAtEntry
     }
     if (trimmed.contains("stop reason = signal") || trimmed.contains("stop reason = trace") ||
-        trimmed.contains("stop reason = step") || trimmed.contains("stop reason = plan complete")
+        trimmed.contains("stop reason = step") || trimmed.contains("stop reason = plan complete") ||
+        trimmed.contains("stop reason = instruction step")
     ) {
         return LldbStopEvent.Stepped
     }

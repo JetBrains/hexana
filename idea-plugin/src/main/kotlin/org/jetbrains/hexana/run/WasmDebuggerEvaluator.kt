@@ -20,6 +20,7 @@ import javax.swing.Icon
 class WasmDebuggerEvaluator(
     private val lldb: LldbCommunicator,
     private val frameIndex: Int = 0,
+    private val guestOnly: Boolean = false,
 ) : XDebuggerEvaluator() {
 
     override fun evaluate(
@@ -44,6 +45,16 @@ class WasmDebuggerEvaluator(
         // Select the correct frame so the expression is evaluated in
         // the context of the stack frame this evaluator belongs to.
         lldb.sendCommandAndCollectOutput("frame select $frameIndex")
+
+        // In gdbstub guest sessions any `expression` command aborts the
+        // LLDB process: clang cannot generate code for the wasm object
+        // format (fatal "Objective-C support is unimplemented" LLVM
+        // error, present in Homebrew and wasi-sdk LLDB 22 alike). Only
+        // `frame variable` paths are safe there.
+        if (guestOnly) {
+            evaluateViaFrameVariable(expression.trim(), callback)
+            return
+        }
 
         // Initialize the Wasmtime VM context so that Wasm pointers and
         // variables can be resolved. Errors are ignored because the
@@ -72,8 +83,49 @@ class WasmDebuggerEvaluator(
         callback.evaluated(WasmExpressionValue(result.typeName, result.displayValue))
     }
 
+    /**
+     * Evaluates a plain variable path with `frame variable`, which reads
+     * values without invoking the expression compiler. Anything that is
+     * not a variable path is rejected with an explanatory error.
+     */
+    private fun evaluateViaFrameVariable(expression: String, callback: XEvaluationCallback) {
+        if (!isFrameVariablePath(expression)) {
+            callback.errorOccurred(
+                "Only variable paths (x, s.field, p->x, arr[0]) can be evaluated when " +
+                    "debugging the wasm guest: LLDB cannot compile expressions for wasm targets.",
+            )
+            return
+        }
+
+        val lines = lldb.sendCommandAndCollectOutput("frame variable $expression")
+        if (lines.isEmpty()) {
+            callback.errorOccurred("No response from LLDB")
+            return
+        }
+
+        val joined = lines.joinToString("\n").trim()
+        if (joined.startsWith("error:")) {
+            callback.errorOccurred(joined.removePrefix("error:").trim())
+            return
+        }
+
+        val result = parseLldbExpressionResult(joined)
+        callback.evaluated(WasmExpressionValue(result.typeName, result.displayValue))
+    }
+
     companion object {
         private val LOG = Logger.getInstance(WasmDebuggerEvaluator::class.java)
+
+        /**
+         * A `frame variable` expression path: an identifier followed by
+         * any number of `.member`, `->member`, or `[index]` segments.
+         */
+        private val FRAME_VARIABLE_PATH =
+            Regex("""[A-Za-z_$][A-Za-z0-9_$]*(?:(?:\.|->)[A-Za-z_$][A-Za-z0-9_$]*|\[\d+])*""")
+
+        /** True when [expression] is a plain variable path safe for `frame variable`. */
+        internal fun isFrameVariablePath(expression: String): Boolean =
+            FRAME_VARIABLE_PATH.matches(expression)
     }
 }
 

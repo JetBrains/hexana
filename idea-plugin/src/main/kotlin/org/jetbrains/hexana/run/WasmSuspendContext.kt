@@ -121,6 +121,7 @@ internal class WasmExecutionStack(
             frameIndex = frameIndex,
             dwarfVariableResolver = dwarfVariableResolver,
             engine = debugProcess?.engine ?: WasmEngine.WASMTIME,
+            guestOnly = debugProcess?.guestOnlyDebugging ?: false,
         )
     }
 

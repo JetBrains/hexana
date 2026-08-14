@@ -461,6 +461,31 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
         sendCommand("finish")
     }
 
+    /**
+     * Issues `thread step-inst` to LLDB: steps exactly one wasm instruction
+     * (the step-into variant for instruction-level stepping).
+     *
+     * Used by [WasmtimeGdbDebugProcess] when the Wasm disassembly tab is
+     * selected, so the user steps by individual wasm instructions rather than
+     * source lines.
+     */
+    fun stepInstInto() {
+        isRunning = true
+        sendCommand("thread step-inst")
+    }
+
+    /**
+     * Issues `thread step-inst-over` to LLDB: steps exactly one wasm
+     * instruction without entering called functions (step-over variant).
+     *
+     * Used by [WasmtimeGdbDebugProcess] when the Wasm disassembly tab is
+     * selected.
+     */
+    fun stepInstOver() {
+        isRunning = true
+        sendCommand("thread step-inst-over")
+    }
+
     fun runProcess() {
         LOG.debug("LLDB runProcess() called")
         isRunning = true

@@ -31,12 +31,13 @@ internal class WasmStackFrame(
     private val frameIndex: Int = 0,
     private val dwarfVariableResolver: WasmDwarfVariableResolver? = null,
     private val engine: WasmEngine = WasmEngine.WASMTIME,
+    private val guestOnly: Boolean = false,
 ) : XStackFrame() {
 
     override fun getSourcePosition(): XSourcePosition? = sourcePosition
 
     override fun getEvaluator(): XDebuggerEvaluator? =
-        lldb?.let { WasmDebuggerEvaluator(it, frameIndex) }
+        lldb?.let { WasmDebuggerEvaluator(it, frameIndex, guestOnly) }
 
     override fun customizePresentation(component: ColoredTextContainer) {
         val name = functionName ?: sourcePosition?.file?.name ?: "unknown"
@@ -64,8 +65,10 @@ internal class WasmStackFrame(
                     // inspecting variables — it sets the current Wasm instance
                     // context that LLDB needs for memory and pointer access.
                     // See https://docs.wasmtime.dev/examples-debugging-native-debugger.html
-                    // This is not needed for WAMR which uses a GDB remote stub.
-                    if (engine == WasmEngine.WASMTIME) {
+                    // This is not needed for WAMR which uses a GDB remote stub,
+                    // and must be SKIPPED in gdbstub guest sessions: any
+                    // `expression` command aborts LLDB for wasm targets.
+                    if (engine == WasmEngine.WASMTIME && !guestOnly) {
                         initializeVmContext(communicator)
                     }
 
@@ -79,7 +82,9 @@ internal class WasmStackFrame(
                     // (it uses a different code path for location lookup).
                     val resolved = variables.map { variable ->
                         if (!variable.isUnavailable) return@map variable
-                        val attempted = tryResolveViaExpression(communicator, variable)
+                        // The `expression` fallback would abort LLDB in
+                        // gdbstub guest sessions; skip straight to DWARF.
+                        val attempted = if (guestOnly) variable else tryResolveViaExpression(communicator, variable)
                         if (!attempted.isUnavailable) return@map attempted
 
                         // Try DWARF-based resolution using parsed location

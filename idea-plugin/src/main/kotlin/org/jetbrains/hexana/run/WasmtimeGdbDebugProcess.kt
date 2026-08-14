@@ -58,6 +58,21 @@ class WasmtimeGdbDebugProcess(
         deferBreakpointsToLldb = true
     }
 
+    /**
+     * Enable per-instruction stepping when the Wasm disassembly tab is
+     * selected. In gdbstub mode the PC encodes the wasm byte offset
+     * directly, so `thread step-inst` / `thread step-inst-over` advance
+     * by exactly one wasm instruction and the disassembly tab updates
+     * correctly through the existing stop -> wasmOffsetForPc pipeline.
+     */
+    override val supportsInstructionStepping: Boolean = true
+
+    /** Gdbstub breakpoints live in the stub; there is no JIT trap to skip. */
+    override val usesJitTrapWorkaround: Boolean = false
+
+    /** LLDB `expression` aborts on wasm targets; use `frame variable` only. */
+    override val guestOnlyDebugging: Boolean = true
+
     override fun sessionInitialized() {
         val communicator = getLldb()
         if (communicator != null) {
@@ -126,6 +141,7 @@ class WasmtimeGdbDebugProcess(
                     effectivePosition, functionName, getLldb(),
                     dwarfVariableResolver = dwarfVariableResolver,
                     engine = engine,
+                    guestOnly = true,
                 )
                 val context = WasmSuspendContext(frame, getLldb(), this)
                 ApplicationManager.getApplication().invokeLater {

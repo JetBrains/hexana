@@ -12,6 +12,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.ui.content.ContentManagerEvent
+import com.intellij.ui.content.ContentManagerListener
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.XDebugSessionListener
@@ -140,6 +142,44 @@ open class WasmDebugProcess(
     /** Provides access to the LLDB communicator for subclasses. */
     internal fun getLldb(): LldbCommunicator? = lldb
 
+    /**
+     * When `true`, step actions branch to per-instruction LLDB commands
+     * (`thread step-inst` / `thread step-inst-over`) while the Wasm
+     * disassembly tab is selected, instead of source-line stepping.
+     *
+     * The default is `false` (legacy JIT and WAMR paths are unaffected).
+     * [WasmtimeGdbDebugProcess] overrides this to `true`.
+     */
+    protected open val supportsInstructionStepping: Boolean = false
+
+    /**
+     * Whether resume/step must first advance the PC past the JIT trap
+     * instruction (`brk`/`ud2`) that the legacy native Wasmtime path
+     * patches in at breakpoint sites. Gdbstub sessions set breakpoints
+     * in the stub instead and must not run the trap-advance script.
+     */
+    protected open val usesJitTrapWorkaround: Boolean
+        get() = engine == WasmEngine.WASMTIME
+
+    /**
+     * When `true`, LLDB `expression` commands must never be sent in this
+     * session: clang cannot generate code for the wasm object format and
+     * aborts the whole LLDB process with a fatal LLVM error (verified with
+     * both Homebrew and wasi-sdk LLDB 22 against the wasmtime gdbstub).
+     * Variable lookups use `frame variable` instead, which does not
+     * involve the expression compiler.
+     */
+    internal open val guestOnlyDebugging: Boolean = false
+
+    /**
+     * `true` while the "Wasm" disassembly tab is the selected content.
+     * Only meaningful when [supportsInstructionStepping] is `true`.
+     * Written from the EDT inside a [ContentManagerListener]; read from
+     * the EDT in the step action overrides.
+     */
+    @Volatile
+    private var disassemblyTabSelected = false
+
     override fun getEditorsProvider(): XDebuggerEditorsProvider = WasmDebuggerEditorsProvider()
 
     override fun doGetProcessHandler(): ProcessHandler = processHandler
@@ -160,6 +200,19 @@ open class WasmDebugProcess(
             )
             content.isCloseable = false
             ui.addContent(content)
+
+            // Track whether the Wasm tab is selected so per-instruction
+            // stepping can be activated when [supportsInstructionStepping]
+            // is true. Mirrors the same pattern in CdpDebugProcess.
+            if (supportsInstructionStepping) {
+                val contentManager = ui.contentManager
+                disassemblyTabSelected = contentManager.isSelected(content)
+                contentManager.addContentManagerListener(object : ContentManagerListener {
+                    override fun selectionChanged(event: ContentManagerEvent) {
+                        disassemblyTabSelected = contentManager.isSelected(content)
+                    }
+                })
+            }
         }
     }
 
@@ -570,7 +623,7 @@ open class WasmDebugProcess(
 
     override fun resume(context: XSuspendContext?) {
         LOG.debug("resume() called, engine=$engine")
-        if (engine == WasmEngine.WASMTIME) {
+        if (usesJitTrapWorkaround) {
             advancePcPastTrapThen { lldb?.resume() }
         } else {
             lldb?.resume()
@@ -582,7 +635,13 @@ open class WasmDebugProcess(
     }
 
     override fun startStepOver(context: XSuspendContext?) {
-        if (engine == WasmEngine.WASMTIME) {
+        if (supportsInstructionStepping && disassemblyTabSelected) {
+            // Instruction-level step: `thread step-inst-over` in gdbstub
+            // mode steps one wasm instruction without descending into calls.
+            // No PC-past-trap advance is needed here — gdbstub mode does not
+            // use JIT trap instructions.
+            lldb?.stepInstOver()
+        } else if (usesJitTrapWorkaround) {
             advancePcPastTrapThen { lldb?.stepOver() }
         } else {
             lldb?.stepOver()
@@ -590,7 +649,11 @@ open class WasmDebugProcess(
     }
 
     override fun startStepInto(context: XSuspendContext?) {
-        if (engine == WasmEngine.WASMTIME) {
+        if (supportsInstructionStepping && disassemblyTabSelected) {
+            // Instruction-level step: `thread step-inst` in gdbstub mode
+            // steps exactly one wasm instruction, descending into calls.
+            lldb?.stepInstInto()
+        } else if (usesJitTrapWorkaround) {
             advancePcPastTrapThen { lldb?.stepInto() }
         } else {
             lldb?.stepInto()
@@ -598,7 +661,7 @@ open class WasmDebugProcess(
     }
 
     override fun startStepOut(context: XSuspendContext?) {
-        if (engine == WasmEngine.WASMTIME) {
+        if (usesJitTrapWorkaround) {
             advancePcPastTrapThen { lldb?.stepOut() }
         } else {
             lldb?.stepOut()
@@ -1002,6 +1065,7 @@ open class WasmDebugProcess(
                     resolvedPosition, functionName, lldb,
                     dwarfVariableResolver = dwarfVariableResolver,
                     engine = engine,
+                    guestOnly = guestOnlyDebugging,
                 )
                 val context = WasmSuspendContext(frame, lldb, this)
                 ApplicationManager.getApplication().invokeLater {
@@ -1087,6 +1151,7 @@ open class WasmDebugProcess(
                     bpPosition, functionName, lldb,
                     dwarfVariableResolver = dwarfVariableResolver,
                     engine = engine,
+                    guestOnly = guestOnlyDebugging,
                 )
                 val context = WasmSuspendContext(frame, lldb, this)
                 ApplicationManager.getApplication().invokeLater {
@@ -1127,6 +1192,7 @@ open class WasmDebugProcess(
             sourcePosition, functionName, lldb,
             dwarfVariableResolver = dwarfVariableResolver,
             engine = engine,
+            guestOnly = guestOnlyDebugging,
         )
         val context = WasmSuspendContext(frame, lldb, this)
         ApplicationManager.getApplication().invokeLater {

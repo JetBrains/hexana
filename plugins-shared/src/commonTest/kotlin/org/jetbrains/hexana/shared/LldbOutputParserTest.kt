@@ -251,6 +251,54 @@ class LldbOutputParserTest {
         assertEquals("add", parseLldbFunctionName(lines))
     }
 
+    // ── Wasmtime gdbstub instruction-step stop events ─────────────
+
+    @Test
+    fun instructionStepInto() {
+        // `thread step-inst` in gdbstub mode produces this stop reason.
+        val event = parseLldbStopEvent(
+            "* thread #1, stop reason = instruction step into"
+        )
+        assertIs<LldbStopEvent.Stepped>(event)
+    }
+
+    @Test
+    fun instructionStepOver() {
+        // `thread step-inst-over` in gdbstub mode produces this stop reason.
+        val event = parseLldbStopEvent(
+            "* thread #1, stop reason = instruction step over"
+        )
+        assertIs<LldbStopEvent.Stepped>(event)
+    }
+
+    @Test
+    fun instructionStepIntoWith64BitWasmPc() {
+        // In gdbstub mode the PC encodes the wasm byte offset in the low 32
+        // bits: 0x4000000000000095 -> wasm offset 0x95.
+        val lines = listOf(
+            "* thread #1, stop reason = instruction step into",
+            "    frame #0: 0x4000000000000095 wasm-0`add(a=3, b=7) at debug_add.rs:10:15",
+        )
+        val event = parseLldbStopEvent(lines[0])
+        assertIs<LldbStopEvent.Stepped>(event)
+
+        val pc = parseLldbFramePc(lines)
+        assertEquals(0x4000000000000095uL, pc)
+        // Subclass extracts wasm offset as low 32 bits.
+        assertEquals(0x95, (pc!! and 0xFFFFFFFFuL).toInt())
+    }
+
+    @Test
+    fun instructionStepOverWith64BitWasmPc() {
+        val lines = listOf(
+            "* thread #1, stop reason = instruction step over",
+            "    frame #0: 0x40000000000001a8 wasm-0`main() at main.rs:5:9",
+        )
+        val pc = parseLldbFramePc(lines)
+        assertEquals(0x40000000000001a8uL, pc)
+        assertEquals(0x1a8, (pc!! and 0xFFFFFFFFuL).toInt())
+    }
+
     // ── WAMR-specific stop events and frame output ────────────────
 
     @Test
