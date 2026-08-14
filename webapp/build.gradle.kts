@@ -1,5 +1,6 @@
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.util.Properties
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 
 plugins {
@@ -392,6 +393,24 @@ private fun verifyProductionPackage(packageDir: File) {
 
 val suppliedWebappRevision = providers.gradleProperty("hexanaWebappRevision")
 private val gitRevisionPattern = Regex("^[0-9a-fA-F]{7,64}$")
+private val semanticVersionPattern = Regex("^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$")
+private val webappVersionPropertiesFile = project.file("gradle.properties")
+private val checkedInWebappVersion = Properties().run {
+    webappVersionPropertiesFile.inputStream().use { load(it) }
+    getProperty("webappVersion")?.trim()
+        ?.takeIf(semanticVersionPattern::matches)
+        ?: throw GradleException("webapp/gradle.properties must define webappVersion as a semantic version")
+}
+private val legacyWebappArtifactVersion = providers.gradleProperty("hexanaWebappVersion")
+private val webappReleaseBranch = providers.gradleProperty("hexanaWebappReleaseBranch")
+
+if (legacyWebappArtifactVersion.orNull != null && legacyWebappArtifactVersion.get() != checkedInWebappVersion) {
+    throw GradleException(
+        "-PhexanaWebappVersion must equal the checked-in webappVersion $checkedInWebappVersion; " +
+            "webapp/gradle.properties is the release version authority",
+    )
+}
+
 val gitWebappRevision = providers.provider {
     runCatching {
         val process = ProcessBuilder("git", "rev-parse", "HEAD")
@@ -402,12 +421,53 @@ val gitWebappRevision = providers.provider {
     }.getOrNull()
 }
 val webappRevision = suppliedWebappRevision.orElse(gitWebappRevision).orElse("SNAPSHOT")
-// Supply -PhexanaWebappVersion=<release-version> when a release assigns one;
-// otherwise the complete source revision is the artifact version.
-val webappArtifactVersion = providers.gradleProperty("hexanaWebappVersion").orElse(webappRevision)
-val webappArtifactVersionSource = providers.gradleProperty("hexanaWebappVersion")
-    .map { "hexanaWebappVersion" }
+val webappArtifactVersion = webappReleaseBranch
+    .map { checkedInWebappVersion }
+    .orElse(webappRevision)
+val webappArtifactVersionSource = webappReleaseBranch
+    .map { "webapp/gradle.properties" }
     .orElse(webappRevision.map { if (it == "SNAPSHOT") "snapshot" else "git-revision" })
+
+val verifyWebappReleaseContract by tasks.registering(Exec::class) {
+    group = "verification"
+    description = "Verifies the checked-in webapp release version, branch family, and changelog contract."
+    inputs.file(webappVersionPropertiesFile)
+    inputs.file(project.file("CHANGELOG.md"))
+    inputs.file(project.file("release-contract.mjs"))
+    inputs.property("checkedInWebappVersion", checkedInWebappVersion)
+    inputs.property("webappReleaseBranch", webappReleaseBranch.orNull ?: "")
+    commandLine(
+        "node",
+        project.file("release-contract.mjs").absolutePath,
+        "--version",
+        checkedInWebappVersion,
+        "--changelog",
+        project.file("CHANGELOG.md").absolutePath,
+    )
+    webappReleaseBranch.orNull?.let { args("--release-branch", it) }
+    doLast {
+        val releaseMode = webappReleaseBranch.orNull != null
+        val expectedVersion = if (releaseMode) checkedInWebappVersion else webappRevision.get()
+        val expectedSource = if (releaseMode) "webapp/gradle.properties" else {
+            if (webappRevision.get() == "SNAPSHOT") "snapshot" else "git-revision"
+        }
+        check(webappArtifactVersion.get() == expectedVersion) {
+            "webapp artifact version does not match the release identity contract"
+        }
+        check(webappArtifactVersionSource.get() == expectedSource) {
+            "webapp artifact version source does not match the release identity contract"
+        }
+    }
+}
+
+tasks.register<Exec>("testWebappReleaseContract") {
+    group = "verification"
+    description = "Runs focused regression tests for the webapp release-contract validator."
+    inputs.file(project.file("CHANGELOG.md"))
+    inputs.file(project.file("release-contract.mjs"))
+    inputs.file(project.file("release-contract.test.mjs"))
+    commandLine("node", "--test", project.file("release-contract.test.mjs").absolutePath)
+}
 
 val packageProductionWebapp by tasks.registering {
     group = "distribution"
@@ -421,11 +481,14 @@ val packageProductionWebapp by tasks.registering {
         rootProject.file("gradle/libs.versions.toml"),
         rootProject.file("gradle/wrapper/gradle-wrapper.properties"),
         project.file("build.gradle.kts"),
+        webappVersionPropertiesFile,
+        project.file("CHANGELOG.md"),
     )
     inputs.property("webappRevision", webappRevision)
     inputs.property("webappArtifactVersion", webappArtifactVersion)
     inputs.property("webappArtifactVersionSource", webappArtifactVersionSource)
     outputs.dir(packageDir)
+    dependsOn(verifyWebappReleaseContract)
 
     doLast {
         val source = sourceDir.get().asFile
@@ -487,7 +550,13 @@ val packageProductionWebapp by tasks.registering {
             StandardCharsets.UTF_8,
         )
         output.resolve("hosting-policy.json").writeText(hostingPolicyJson(), StandardCharsets.UTF_8)
-        val evidenceFiles = listOf("gradle/libs.versions.toml", "gradle/wrapper/gradle-wrapper.properties", "webapp/build.gradle.kts")
+        val evidenceFiles = listOf(
+            "gradle/libs.versions.toml",
+            "gradle/wrapper/gradle-wrapper.properties",
+            "webapp/build.gradle.kts",
+            "webapp/gradle.properties",
+            "webapp/CHANGELOG.md",
+        )
         val evidence = evidenceFiles.joinToString(",") { path -> "{\"path\":${json(path)},\"sha256\":${json(sha256(rootProject.file(path)))}}" }
         output.resolve("provenance.json").writeText(
             "{\"schemaVersion\":1,\"builder\":\"Gradle :webapp:packageProductionWebapp\",\"revision\":${json(revision)},\"inputs\":[$evidence]}\n",
