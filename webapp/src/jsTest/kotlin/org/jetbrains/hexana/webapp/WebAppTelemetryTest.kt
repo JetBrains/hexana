@@ -34,6 +34,7 @@ class WebAppTelemetryTest {
             )),
         )
         val root = document.createElement("div").unsafeCast<HTMLDivElement>()
+        val releaseInfoFixture = installBundledReleaseInfoFixture()
         root.id = "telemetry-http-test-root"
         var composition: Composition? = null
         var completed = false
@@ -46,6 +47,7 @@ class WebAppTelemetryTest {
             telemetry.setEnabled(false)
             composition?.dispose()
             root.parentNode?.removeChild(root)
+            releaseInfoFixture.parentNode?.removeChild(releaseInfoFixture)
             if (failure == null) resolve(Unit) else reject(failure)
         }
 
@@ -174,6 +176,7 @@ class WebAppTelemetryTest {
         val storage = FakeTelemetryStorage()
         val firstTelemetry = BrowserWebAppTelemetry(storage, FakeBrowserAnalyticsClient())
         val root = document.createElement("div").unsafeCast<HTMLDivElement>()
+        val releaseInfoFixture = installBundledReleaseInfoFixture()
         root.id = "telemetry-consent-test-root"
         var composition: Composition? = null
         var completed = false
@@ -184,6 +187,7 @@ class WebAppTelemetryTest {
             window.clearTimeout(timeout)
             composition?.dispose()
             root.parentNode?.removeChild(root)
+            releaseInfoFixture.parentNode?.removeChild(releaseInfoFixture)
             if (failure == null) resolve(Unit) else reject(failure)
         }
         try {
@@ -218,6 +222,13 @@ class WebAppTelemetryTest {
             finish(failure)
         }
     }
+}
+
+private fun installBundledReleaseInfoFixture(): Element = document.createElement("script").also { fixture ->
+    fixture.id = "hexana-release-info"
+    fixture.setAttribute("type", "application/json")
+    fixture.textContent = """{"version":"0.1.0","revision":"test","changelog":"","repositoryUrl":"https://github.com/JetBrains/hexana","websiteUrl":"https://jetbrains.github.io/hexana/"}"""
+    checkNotNull(document.body).appendChild(fixture)
 }
 
 private fun telemetryDrop(target: Element, file: File) {
