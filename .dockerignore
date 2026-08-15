@@ -9,6 +9,8 @@ analysis
 webapp/oci-package/*
 !webapp/oci-package/production-package/
 !webapp/oci-package/production-package/**
+!webapp/oci-package/staging-package/
+!webapp/oci-package/staging-package/**
 **/.gradle
 **/.idea
 **/.kotlin

@@ -30,6 +30,17 @@ deploy:
           applicationName: "{{.APPLICATION_NAME}}"
 profiles:
   - name: staging
+    patches:
+      - op: remove
+        path: /build/artifacts/0/docker/buildArgs/HEXANA_WEBAPP_RELEASE_BRANCH
+      - op: add
+        path: /build/artifacts/0/hooks
+        value:
+          before:
+            - command: ["sh", "-c", "cd \"$(git rev-parse --show-toplevel)\" && exec node webapp/stage-cloud-console-staging-package.mjs"]
+      - op: add
+        path: /build/artifacts/0/docker/buildArgs/HEXANA_WEBAPP_PACKAGE_MODE
+        value: staging
     deploy:
       helm:
         releases:

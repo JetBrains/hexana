@@ -656,6 +656,50 @@ tasks.register("verifyProductionPackage") {
     doLast { verifyProductionPackage(layout.buildDirectory.dir("production-package").get().asFile) }
 }
 
+val stageCloudConsoleStagingPackage by tasks.registering(Sync::class) {
+    group = "distribution"
+    description = "Stages a verified SHA-only webapp package for the Cloud Console staging Docker context."
+    dependsOn(packageProductionWebapp)
+    from(layout.buildDirectory.dir("production-package"))
+    into(layout.projectDirectory.dir("oci-package/staging-package"))
+    inputs.file(project.file("oci-evidence-contract.mjs"))
+    inputs.property("stagingRevision", suppliedWebappRevision.orNull ?: "")
+
+    doFirst {
+        check(webappReleaseBranch.orNull == null) {
+            "Cloud Console staging packages must not use hexanaWebappReleaseBranch"
+        }
+        check(suppliedWebappRevision.orNull?.matches(Regex("^[0-9a-f]{40}$")) == true) {
+            "Cloud Console staging requires -PhexanaWebappRevision=<lowercase 40-character SHA>"
+        }
+        check(webappArtifactVersion.get() == webappRevision.get() && webappArtifactVersionSource.get() == "git-revision") {
+            "Cloud Console staging package identity must be SHA-only"
+        }
+    }
+    doLast {
+        val verification = ProcessBuilder(
+            "node", project.file("oci-evidence-contract.mjs").absolutePath, "verify-staging-package",
+            "--package-dir", destinationDir.absolutePath,
+            "--revision", suppliedWebappRevision.get(),
+        ).inheritIO().start()
+        check(verification.waitFor() == 0) {
+            "Cloud Console staging package verification failed"
+        }
+    }
+}
+
+tasks.register<Exec>("testWebappCloudConsoleStagingContract") {
+    group = "verification"
+    description = "Runs focused regression tests for the Cloud Console staging package gate."
+    inputs.files(
+        project.file("oci-evidence-contract.mjs"),
+        project.file("oci-evidence-contract.test.mjs"),
+        project.file("cloud-console-staging-contract.test.mjs"),
+        project.file("stage-cloud-console-staging-package.mjs"),
+    )
+    commandLine("node", "--test", project.file("cloud-console-staging-contract.test.mjs").absolutePath)
+}
+
 tasks.register<Exec>("verifyCloudConsoleDeploymentContract") {
     group = "verification"
     description = "Verifies the static Cloud Console Docker, Nginx, Skaffold, and values contract."

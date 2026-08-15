@@ -58,6 +58,19 @@ export function verifyPackage(packageDir, expected = {}) {
   requireReleaseIdentity(packageIdentity, expected);
   return { identity: packageIdentity, aggregateSha256: hash(resolve(root, "checksums.sha256")), evidence: Object.fromEntries(evidenceNames.map(name => [name, hash(resolve(root, name))])) };
 }
+export function verifyStagingPackage(packageDir, expected = {}) {
+  const root = resolve(packageDir);
+  if (!statSync(root).isDirectory()) fail("package directory is missing");
+  const entries = checksums(root);
+  const expectedFiles = entries.map(([path]) => path).concat("checksums.sha256", "package.sha256").sort();
+  if (JSON.stringify(files(root)) !== JSON.stringify(expectedFiles)) fail("package file allowlist differs from checksums");
+  for (const [path, value] of entries) if (hash(resolve(root, path)) !== value) fail(`packaged file hash differs for ${path}`);
+  if (readFileSync(resolve(root, "package.sha256"), "utf8") !== `${hash(resolve(root, "checksums.sha256"))}\n`) fail("package aggregate checksum differs");
+  const packageIdentity = identity(root);
+  if (packageIdentity?.schemaVersion !== 1 || packageIdentity.product !== "hexana-webapp" || !revision.test(packageIdentity.version) || packageIdentity.versionSource !== "git-revision" || !revision.test(packageIdentity.revision) || packageIdentity.version !== packageIdentity.revision) fail("package identity is not a SHA-only staging identity");
+  if (!revision.test(expected.revision ?? "") || packageIdentity.revision !== expected.revision) fail("staging package revision differs from the expected full revision");
+  return { identity: packageIdentity, aggregateSha256: hash(resolve(root, "checksums.sha256")), evidence: Object.fromEntries(evidenceNames.map(name => [name, hash(resolve(root, name))])) };
+}
 function validateImage(image) {
   if (!image || image.reference !== `${repository}@${image.manifestDigest}` || !digest.test(image.manifestDigest) || !digest.test(image.configDigest)) fail("image must use the canonical digest-form reference");
   if (image.manifestMediaType !== "application/vnd.oci.image.manifest.v1+json" || image.configMediaType !== "application/vnd.oci.image.config.v1+json" || image.platform?.os !== "linux" || image.platform?.architecture !== "amd64") fail("image must identify one linux/amd64 OCI manifest and config");
@@ -86,6 +99,10 @@ function main() {
     const versionFile = input.get("--version-file");
     if (!releaseBranch || !revision.test(sourceRevision ?? "") || !versionFile || input.size !== 4) fail("verify-package requires package-dir, release-branch, revision, and version-file");
     verifyPackage(packageDir, { releaseBranch, revision: sourceRevision, version: checkedInVersion(versionFile) });
+  } else if (command === "verify-staging-package") {
+    const sourceRevision = input.get("--revision");
+    if (!revision.test(sourceRevision ?? "") || input.size !== 2) fail("verify-staging-package requires package-dir and revision");
+    verifyStagingPackage(packageDir, { revision: sourceRevision });
   } else if (command === "verify-receipt") {
     const receipt = input.get("--receipt");
     if (!receipt || input.size !== 2) fail("verify-receipt requires package-dir and receipt");

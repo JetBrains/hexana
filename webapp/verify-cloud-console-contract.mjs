@@ -27,18 +27,24 @@ const requireRejected = (policy, source) => {
     throw new Error(`${source} unexpectedly accepted a non-PostHog external endpoint`);
 };
 
-const [dockerignore, dockerfile, nginx, securityHeaders, index, buildScript, skaffold, staging, production] = await Promise.all([
-    read(".dockerignore"), read("webapp/Dockerfile"), read("webapp/nginx.conf"), read("webapp/security-headers.conf"), read("webapp/src/jsMain/resources/index.html"), read("webapp/build.gradle.kts"), read("webapp/skaffold.yaml"), read("webapp/values_staging.yaml"), read("webapp/values_production.yaml"),
+const [dockerignore, dockerfile, nginx, securityHeaders, index, buildScript, skaffold, staging, production, stagingGate] = await Promise.all([
+    read(".dockerignore"), read("webapp/Dockerfile"), read("webapp/nginx.conf"), read("webapp/security-headers.conf"), read("webapp/src/jsMain/resources/index.html"), read("webapp/build.gradle.kts"), read("webapp/skaffold.yaml"), read("webapp/values_staging.yaml"), read("webapp/values_production.yaml"), read("webapp/stage-cloud-console-staging-package.mjs"),
 ]);
 for (const ignored of [".git", "out", "**/build", "**/node_modules", "**/src/*Test", "vscode-plugin/test", "task.txt"]) requireText(dockerignore, ignored, ".dockerignore");
-requireText(dockerfile, "FROM node:22.14.0-bookworm-slim AS package-verifier", "Dockerfile");
+for (const stagedPackage of ["!webapp/oci-package/production-package/**", "!webapp/oci-package/staging-package/**"]) requireText(dockerignore, stagedPackage, ".dockerignore");
+requireText(dockerfile, "FROM node:22.14.0-bookworm-slim AS production-package-verifier", "Dockerfile");
 requireText(dockerfile, "COPY webapp/oci-package/production-package/ /package/", "Dockerfile");
 requireText(dockerfile, "oci-evidence-contract.mjs verify-package", "Dockerfile");
 requireText(dockerfile, "HEXANA_WEBAPP_RELEASE_BRANCH", "Dockerfile");
+requireText(dockerfile, "FROM node:22.14.0-bookworm-slim AS staging-package-verifier", "Dockerfile");
+requireText(dockerfile, "COPY webapp/oci-package/staging-package/ /package/", "Dockerfile");
+requireText(dockerfile, "oci-evidence-contract.mjs verify-staging-package", "Dockerfile");
+requireText(dockerfile, "ARG HEXANA_WEBAPP_PACKAGE_MODE=production", "Dockerfile");
+requireText(dockerfile, "COPY --from=${HEXANA_WEBAPP_PACKAGE_MODE}-package-verifier", "Dockerfile");
 requireText(dockerfile, "org.opencontainers.image.source", "Dockerfile");
 requireText(dockerfile, "org.opencontainers.image.revision", "Dockerfile");
 requireText(dockerfile, "COPY webapp/security-headers.conf /etc/nginx/snippets/security-headers.conf", "Dockerfile");
-requireText(dockerfile, "COPY --from=package-verifier --chown=101:101 /package/", "Dockerfile");
+requireText(dockerfile, "COPY --from=${HEXANA_WEBAPP_PACKAGE_MODE}-package-verifier --chown=101:101 /package/", "Dockerfile");
 requireText(dockerfile, "nginxinc/nginx-unprivileged:1.27.5-alpine", "Dockerfile");
 forbid(dockerfile, /\b(latest|stable|mainline)\b/i, "Dockerfile");
 for (const header of ["Content-Security-Policy", "X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy", "X-Frame-Options", "Cross-Origin-Opener-Policy", "Cross-Origin-Embedder-Policy", "Cross-Origin-Resource-Policy"]) requireText(securityHeaders, header, "security-headers.conf");
@@ -67,6 +73,13 @@ requireText(skaffold, "context: ..", "skaffold.yaml");
 requireText(skaffold, "dockerfile: webapp/Dockerfile", "skaffold.yaml");
 requireText(skaffold, "oci://registry.jetbrains.team/p/cb/helm-charts/simple-app", "skaffold.yaml");
 for (const profile of ["name: staging", "name: production"]) requireText(skaffold, profile, "skaffold.yaml");
+requireText(skaffold, "stage-cloud-console-staging-package.mjs", "skaffold.yaml");
+requireText(skaffold, "path: /build/artifacts/0/hooks", "skaffold.yaml");
+requireText(skaffold, "path: /build/artifacts/0/docker/buildArgs/HEXANA_WEBAPP_RELEASE_BRANCH", "skaffold.yaml");
+requireText(skaffold, "HEXANA_WEBAPP_PACKAGE_MODE", "skaffold.yaml");
+requireText(skaffold, "value: staging", "skaffold.yaml");
+requireText(buildScript, "stageCloudConsoleStagingPackage", "build.gradle.kts");
+for (const required of ["HEXANA_SOURCE_REVISION must be a lowercase 40-character Git SHA", "HEXANA_SOURCE_REVISION must match the checked-out Git revision", "clean working tree", "verify-staging-package"]) requireText(stagingGate, required, "stage-cloud-console-staging-package.mjs");
 forbid(skaffold, /^\s*(namespace|hostname|secret|password|token):/im, "skaffold.yaml");
 for (const [name, values] of [["values_staging.yaml", staging], ["values_production.yaml", production]]) {
     for (const required of ["replicaCount: 1", "enabled: false", "runAsUser: 101", "containerPort: 8080", "path: /healthz", "type: RollingUpdate", "requests:", "limits:"]) requireText(values, required, name);
