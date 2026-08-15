@@ -659,7 +659,7 @@ tasks.register("verifyProductionPackage") {
 val stageCloudConsoleStagingPackage by tasks.registering(Sync::class) {
     group = "distribution"
     description = "Stages a verified SHA-only webapp package for the Cloud Console staging Docker context."
-    dependsOn(packageProductionWebapp)
+    dependsOn("verifyCloudConsoleDeploymentContract", packageProductionWebapp)
     from(layout.buildDirectory.dir("production-package"))
     into(layout.projectDirectory.dir("oci-package/staging-package"))
     inputs.file(project.file("oci-evidence-contract.mjs"))

@@ -79,6 +79,7 @@ requireText(skaffold, "path: /build/artifacts/0/docker/buildArgs/HEXANA_WEBAPP_R
 requireText(skaffold, "HEXANA_WEBAPP_PACKAGE_MODE", "skaffold.yaml");
 requireText(skaffold, "value: staging", "skaffold.yaml");
 requireText(buildScript, "stageCloudConsoleStagingPackage", "build.gradle.kts");
+requireText(buildScript, "dependsOn(\"verifyCloudConsoleDeploymentContract\", packageProductionWebapp)", "build.gradle.kts");
 for (const required of ["HEXANA_SOURCE_REVISION must be a lowercase 40-character Git SHA", "HEXANA_SOURCE_REVISION must match the checked-out Git revision", "clean working tree", "verify-staging-package"]) requireText(stagingGate, required, "stage-cloud-console-staging-package.mjs");
 forbid(skaffold, /^\s*(namespace|hostname|secret|password|token):/im, "skaffold.yaml");
 for (const [name, values] of [["values_staging.yaml", staging], ["values_production.yaml", production]]) {
