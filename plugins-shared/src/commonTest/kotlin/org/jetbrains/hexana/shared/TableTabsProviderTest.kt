@@ -266,6 +266,33 @@ class TableTabsProviderTest {
     }
 
     @Test
+    fun truncatedTypeSectionStillAdvertisesAndResolvesProblemsTab() {
+        // invalid/binary.63.wasm from the spec testsuite: type section declares
+        // size=7 count=2 but the file ends after the first functype. Pre-fix,
+        // parseTypes threw from the tab pipeline and the whole tab strip died
+        // silently (endless WAT loading, no Problems tab in the IDE).
+        val bytes = byteArrayOf(
+            0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+            0x01, 0x07, 0x02,
+            0x60, 0x00, 0x00,
+        )
+        val provider = WasmBinaryProvider(bytes.toCommonByteBuffer())
+        val ctx = TableTabsContext()
+
+        val advertised = WasmTableTabsProvider().availableTabNames(provider, ctx)
+        assertNotNull(advertised)
+        assertTrue("Problems" in advertised.first, "Problems must be advertised for a module with a type section")
+
+        val problems = WasmTableTabsProvider().singleTab("Problems", provider, ctx)
+        assertNotNull(problems, "Problems tab must resolve for the truncated type section")
+        assertEquals(1, problems.rowCount, "exactly one UNKNOWN_TYPE_BYTE problem expected")
+        assertEquals("Unknown type byte", problems.columns[0].cellProvider(0).representation)
+
+        val allTabs = WasmTableTabsProvider().tableTabs(provider)
+        assertEquals(listOf("Problems"), allTabs.map { it.name }, "only the Problems tab applies to this module")
+    }
+
+    @Test
     fun wasmProviderExportsTabRowSelectionReturnsData() {
         val provider = WasmBinaryProvider(buildWasmWithExport().toCommonByteBuffer())
         val tabs = WasmTableTabsProvider().tableTabs(provider)

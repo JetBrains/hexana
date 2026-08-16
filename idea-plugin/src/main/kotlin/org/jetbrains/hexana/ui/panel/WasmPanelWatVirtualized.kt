@@ -169,28 +169,37 @@ internal fun WasmPanelWatVirtualized(
     // survive commits exactly as they did when the build was synchronous.
     // `provider` travels inside [PanelState], so content never observes a
     // new provider paired with the old chunk tree during the rebuild window.
-    var panelState by remember { mutableStateOf<PanelState?>(null) }
+    var panelState by remember { mutableStateOf<Result<PanelState>?>(null) }
     androidx.compose.runtime.LaunchedEffect(provider) {
         panelState = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                buildPanelState(provider)
+                Result.success(buildPanelState(provider))
             } catch (c: kotlinx.coroutines.CancellationException) {
                 throw c
-            } catch (_: Exception) {
-                null
+            } catch (e: Exception) {
+                org.jetbrains.hexana.HexanaLog.LOG.warn("WAT panel state build failed", e)
+                Result.failure(e)
             }
         }
     }
-    val ready = panelState
+    val ready = panelState?.getOrNull()
     if (ready == null) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(HexanaTheme.backgroundColor),
         ) {
-            org.jetbrains.jewel.ui.component.CircularProgressIndicator(
-                modifier = Modifier.align(Alignment.Center),
-            )
+            val failure = panelState?.exceptionOrNull()
+            if (failure == null) {
+                org.jetbrains.jewel.ui.component.CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            } else {
+                org.jetbrains.jewel.ui.component.Text(
+                    text = "Failed to build the WAT view: ${failure.message ?: failure::class.simpleName}",
+                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                )
+            }
         }
         return
     }

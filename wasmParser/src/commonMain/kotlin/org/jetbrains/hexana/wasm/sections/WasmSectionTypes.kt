@@ -34,29 +34,13 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
         }
     }
 
-    fun CommonByteBuffer.parseTypes(): List<WasmTypeRecord> {
-        position(contentOffset)
-
-        val typeRecords = mutableListOf<WasmTypeRecord>()
-
-        consumeArray {
-            val offset = position()
-            // Type-group discriminants are S33 SLEB128 values per the GC spec.
-            // -0x32 (-50) is rec; anything else falls through to subtype().
-            val typCode = getSLEB128().toInt()
-            when (typCode) {
-                -0x32 -> typeRecords.add(recType())
-                else -> {
-                    // Un-consume by re-positioning: subtype() reads the discriminant itself.
-                    // We cannot un-read a multi-byte SLEB128 by position(-1), so we
-                    // delegate via a helper that receives the already-decoded code.
-                    typeRecords.add(subtypeFromCode(typCode, offset))
-                }
-            }
-        }
-
-        return typeRecords
-    }
+    /**
+     * Parses the type section, degrading to the decoded prefix when an entry
+     * cannot be decoded (truncated section, unknown encoding). Use
+     * [parseTypesPartial] when the failure offset is needed for reporting;
+     * [org.jetbrains.hexana.wasm.sections.ParseProblem] emission relies on it.
+     */
+    fun CommonByteBuffer.parseTypes(): List<WasmTypeRecord> = parseTypesPartial().first
 
     /**
      * Parses as many type records as possible. On the first unrecoverable byte,

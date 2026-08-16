@@ -223,6 +223,40 @@ class SpecCorpusRegressionTest {
         assertEquals(0, (types[0] as WasmSectionFunctionTypeRecord).retTypes.size)
     }
 
+    /**
+     * invalid/binary.63.wasm: type section declares size=7 count=2 but the file ends after
+     * the first (complete) functype. parseTypes must degrade to the decoded prefix instead
+     * of throwing; parseTypesPartial keeps reporting the failure offset for parseProblems.
+     *
+     * Pre-fix: parseTypes threw BufferUnderflowException on the second entry, which killed
+     * the WAT chunk-tree build and the whole editor tab strip (endless loading, no Problems
+     * tab) when this file was opened in the IDE.
+     */
+    @Test
+    fun `truncated type section degrades parseTypes to the decoded prefix`() = runTest {
+        // 00 61 73 6d 01 00 00 00  — magic + version
+        // 01 07 02                 — type section id=1, size=7 (lie: only 4 content bytes), count=2
+        // 60 00 00                 — entry 0: functype, 0 params, 0 results; entry 1 missing
+        val bytes = byteArrayOf(
+            0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+            0x01, 0x07, 0x02,
+            0x60, 0x00, 0x00,
+        )
+        val buffer = bytes.toCommonByteBuffer()
+        val result = WasmParser().parse(buffer)
+        assertIs<WasmParseSuccess>(result)
+        val module = result.wasmModule as WasmModule
+        val typesSection = requireNotNull(module.typesSection) { "type section must be present" }
+
+        val types = with(typesSection) { buffer.parseTypes() }
+        assertEquals(1, types.size, "expected the decoded prefix (1 functype) from the truncated section")
+        assertIs<WasmSectionFunctionTypeRecord>(types[0])
+
+        val (partial, failedOffset) = with(typesSection) { buffer.parseTypesPartial() }
+        assertEquals(1, partial.size)
+        assertEquals(14, failedOffset, "failure offset must point at the missing second entry")
+    }
+
     // ============================================================
     // Fix 4 — Extended limits flags
     // ============================================================
