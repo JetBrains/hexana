@@ -626,6 +626,33 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     }
 
     /**
+     * Sends a raw GDB-remote packet via LLDB's
+     * `process plugin packet send` command and returns the hex payload
+     * from the `response:` line.
+     *
+     * Example for wasmtime 44+ gdbstub operand-stack queries:
+     * ```
+     *   packet: qWasmStackValue:0;0
+     *   response: 03000000
+     * ```
+     * The payload is 4 bytes for i32/f32 values and 8 bytes for i64/f64,
+     * encoded as little-endian hex.
+     *
+     * @param packet   the raw packet string (without `$`, `#`, or checksum).
+     * @param timeoutMs how long to wait for the fenced LLDB response.
+     * @return the trimmed hex string after `"response: "`, or `null` when
+     *         the stub returns an empty response, the process has exited,
+     *         or the response line is absent.
+     */
+    fun sendRawPacket(packet: String, timeoutMs: Long = 2_000): String? {
+        val lines = sendCommandAndCollectOutput(
+            "process plugin packet send $packet",
+            timeoutMs = timeoutMs,
+        )
+        return org.jetbrains.hexana.shared.parseRawPacketResponse(lines)
+    }
+
+    /**
      * Re-offers a stop event back into the queue so it can be
      * consumed by the event loop. This is used when a stop event
      * (e.g. [StopEvent.ProcessExited]) is consumed during setup

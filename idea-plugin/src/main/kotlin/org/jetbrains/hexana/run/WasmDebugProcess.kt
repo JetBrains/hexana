@@ -43,6 +43,7 @@ import org.jetbrains.hexana.shared.parseRawDwarfLine
 import org.jetbrains.hexana.shared.parseRawDwarfPath
 import org.jetbrains.hexana.shared.pathMatchesBreakpointLocation
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.shared.decodeWasmValueHex
 import org.jetbrains.hexana.shared.stripCuHashSuffix
 
 /**
@@ -1205,6 +1206,12 @@ open class WasmDebugProcess(
      * presented: translates the stopped pc to a wasm instruction offset via
      * the JIT images' `.wasmtime.addrmap` and highlights that instruction.
      *
+     * When the session is a gdbstub session ([guestOnlyDebugging] is true),
+     * each symbolic stack slot is enriched with its concrete value read via
+     * `qWasmStackValue:<frame>;<index>`. On success the Value column shows
+     * `<value> (<provenance>)`; on failure (empty response or unsupported stub)
+     * the provenance-only string is preserved as before.
+     *
      * Runs on the event loop thread while the process is stopped; only the
      * table update touches the EDT. No-op for non-wasmtime engines.
      */
@@ -1213,7 +1220,14 @@ open class WasmDebugProcess(
         val pc = parseLldbFramePc(frameInfoLines)
         val wasmOffset = pc?.let { lookupWasmOffset(communicator, it) }
         val rows = wasmOffset?.let { wasmDisassemblySource.rowsForOffset(it)?.first }
-        val stackRows = if (rows != null && wasmOffset != null) symbolicStackRows(wasmOffset) else emptyList()
+        val stackRows = if (rows != null && wasmOffset != null) {
+            val symbolic = symbolicStackRows(wasmOffset)
+            if (guestOnlyDebugging && symbolic.isNotEmpty()) {
+                enrichStackRowsWithConcrete(communicator, symbolic, frameIdx = 0)
+            } else {
+                symbolic
+            }
+        } else emptyList()
         ApplicationManager.getApplication().invokeLater {
             if (rows == null || wasmOffset == null) {
                 wasmDisassemblyModel.clear()
@@ -1224,6 +1238,51 @@ open class WasmDebugProcess(
                 wasmStackModel.update(stackRows)
             }
         }
+    }
+
+    /**
+     * Enriches symbolic stack rows with concrete values from the gdbstub.
+     *
+     * Sends `qWasmStackValue:<frameIdx>;<i>` for each slot index [i] in
+     * [symbolic] (capped at 64). On the first empty response the stub is
+     * considered unsupported and remaining slots keep their symbolic values.
+     *
+     * @param communicator the LLDB communicator for the current session.
+     * @param symbolic     the symbolic rows produced by [symbolicStackRows].
+     * @param frameIdx     the LLDB frame index (0 = innermost).
+     * @return rows with the Value column set to `"<value> (<provenance>)"`
+     *         when the stub returns a concrete value, or the original
+     *         provenance string when it does not.
+     */
+    private fun enrichStackRowsWithConcrete(
+        communicator: LldbCommunicator,
+        symbolic: List<WasmStackTableModel.Row>,
+        frameIdx: Int,
+    ): List<WasmStackTableModel.Row> {
+        val result = mutableListOf<WasmStackTableModel.Row>()
+        var stubSupported = true
+        val cap = minOf(symbolic.size, 64)
+        for (i in 0 until cap) {
+            val row = symbolic[i]
+            if (!stubSupported) {
+                result.add(row)
+                continue
+            }
+            val hex = communicator.sendRawPacket("qWasmStackValue:$frameIdx;$i")
+            if (hex == null) {
+                // Empty response means index out of range or unsupported stub;
+                // stop querying and keep remaining rows symbolic.
+                stubSupported = false
+                result.add(row)
+                continue
+            }
+            val decoded = decodeWasmValueHex(hex, row.type)
+            val displayValue = if (decoded != null) "$decoded (${row.value})" else row.value
+            result.add(WasmStackTableModel.Row(row.index, row.type, displayValue))
+        }
+        // Append any rows beyond the cap unchanged.
+        for (i in cap until symbolic.size) result.add(symbolic[i])
+        return result
     }
 
     private fun lookupWasmOffset(communicator: LldbCommunicator, pc: ULong): Int? =
