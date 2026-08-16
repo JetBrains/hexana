@@ -700,6 +700,21 @@ tasks.register<Exec>("testWebappCloudConsoleStagingContract") {
     commandLine("node", "--test", project.file("cloud-console-staging-contract.test.mjs").absolutePath)
 }
 
+tasks.register<Exec>("testWebappCloudConsoleBuildEnvironmentContract") {
+    group = "verification"
+    description = "Verifies the source-owned Cloud Console build environment definition."
+    inputs.files(
+        project.file("cloud-console-build-environment/Dockerfile"),
+        project.file("cloud-console-build-environment/README.md"),
+        project.file("cloud-console-build-environment/contract.test.mjs"),
+    )
+    commandLine(
+        "node",
+        "--test",
+        project.file("cloud-console-build-environment/contract.test.mjs").absolutePath,
+    )
+}
+
 tasks.register<Exec>("verifyCloudConsoleDeploymentContract") {
     group = "verification"
     description = "Verifies the static Cloud Console Docker, Nginx, Skaffold, and values contract."
