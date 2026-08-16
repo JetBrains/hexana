@@ -37,7 +37,7 @@ profiles:
         path: /build/artifacts/0/hooks
         value:
           before:
-            - command: ["sh", "-c", "cd \"$(git rev-parse --show-toplevel)\" && exec node webapp/stage-cloud-console-staging-package.mjs"]
+            - command: ["sh", "-ec", "source_root=\"$(git rev-parse --show-toplevel)\"; exec docker run --rm --user \"$(id -u):$(id -g)\" --mount \"type=bind,src=${source_root},dst=/workspace\" --workdir /workspace --env \"HEXANA_SOURCE_REVISION=${HEXANA_SOURCE_REVISION:-}\" --env \"GRADLE_USER_HOME=/tmp/hexana-webapp-staging-gradle\" registry.jetbrains.team/p/hx/containers/hexana-webapp-build-environment@sha256:c9637fa0bb073a5009cba86bba38b564756ded1e75157251f76216292d68582c node webapp/stage-cloud-console-staging-package.mjs"]
       - op: add
         path: /build/artifacts/0/docker/buildArgs/HEXANA_WEBAPP_PACKAGE_MODE
         value: staging

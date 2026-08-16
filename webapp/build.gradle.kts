@@ -707,6 +707,7 @@ tasks.register<Exec>("testWebappCloudConsoleBuildEnvironmentContract") {
         project.file("cloud-console-build-environment/Dockerfile"),
         project.file("cloud-console-build-environment/README.md"),
         project.file("cloud-console-build-environment/contract.test.mjs"),
+        project.file("skaffold.yaml"),
     )
     commandLine(
         "node",
