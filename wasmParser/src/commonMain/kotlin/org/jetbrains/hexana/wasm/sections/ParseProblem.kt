@@ -46,4 +46,6 @@ enum class ParseProblemKind {
     IMPORT_ENTRY_CORRUPT,
     /** An export-section entry could not be decoded (truncated name or index). */
     EXPORT_ENTRY_CORRUPT,
+    /** A section entry (table, memory, function, tag) could not be decoded; entries before it are preserved. */
+    SECTION_ENTRY_CORRUPT,
 }

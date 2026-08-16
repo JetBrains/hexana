@@ -1268,21 +1268,97 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
             }
         }
 
+        // Table section: check for partial parse failure.
+        val tableSection = module?.tableSection
+        if (tableSection != null && problems.size < 1000) {
+            val (_, failedOffset) = with(tableSection) { bytes.scanTablePartial() }
+            if (failedOffset != null) {
+                val failedSize = tableSection.sectionOffset + tableSection.sectionSize - failedOffset
+                problems.add(ParseProblem(
+                    kind = ParseProblemKind.SECTION_ENTRY_CORRUPT,
+                    sectionId = WasmSectionTable.SECTION_ID.toInt(),
+                    sectionName = tableSection.name,
+                    funcIdx = null,
+                    typeIdx = null,
+                    byteOffset = failedOffset,
+                    byteSize = failedSize.coerceAtLeast(1),
+                    message = "table entry could not be decoded at offset $failedOffset",
+                ))
+            }
+        }
+
+        // Memory section: check for partial parse failure.
+        val memorySection = module?.memorySection
+        if (memorySection != null && problems.size < 1000) {
+            val (_, failedOffset) = with(memorySection) { bytes.scanPartial() }
+            if (failedOffset != null) {
+                val failedSize = memorySection.sectionOffset + memorySection.sectionSize - failedOffset
+                problems.add(ParseProblem(
+                    kind = ParseProblemKind.SECTION_ENTRY_CORRUPT,
+                    sectionId = WasmSectionMemory.SECTION_ID.toInt(),
+                    sectionName = memorySection.name,
+                    funcIdx = null,
+                    typeIdx = null,
+                    byteOffset = failedOffset,
+                    byteSize = failedSize.coerceAtLeast(1),
+                    message = "memory entry could not be decoded at offset $failedOffset",
+                ))
+            }
+        }
+
+        // Function section: check for partial parse failure.
+        val functionSection = module?.functionSection
+        if (functionSection != null && problems.size < 1000) {
+            val (_, failedOffset) = with(functionSection) { bytes.parseFunctionsPartial() }
+            if (failedOffset != null) {
+                val failedSize = functionSection.sectionOffset + functionSection.sectionSize - failedOffset
+                problems.add(ParseProblem(
+                    kind = ParseProblemKind.SECTION_ENTRY_CORRUPT,
+                    sectionId = WasmSectionFunctions.SECTION_ID.toInt(),
+                    sectionName = functionSection.name,
+                    funcIdx = null,
+                    typeIdx = null,
+                    byteOffset = failedOffset,
+                    byteSize = failedSize.coerceAtLeast(1),
+                    message = "function entry could not be decoded at offset $failedOffset",
+                ))
+            }
+        }
+
+        // Exception (tag) section: check for partial parse failure.
+        val exceptionSection = module?.exceptionSection
+        if (exceptionSection != null && problems.size < 1000) {
+            val (_, failedOffset) = with(exceptionSection) { bytes.scanTagsPartial() }
+            if (failedOffset != null) {
+                val failedSize = exceptionSection.sectionOffset + exceptionSection.sectionSize - failedOffset
+                problems.add(ParseProblem(
+                    kind = ParseProblemKind.SECTION_ENTRY_CORRUPT,
+                    sectionId = WasmSectionException.SECTION_ID.toInt(),
+                    sectionName = exceptionSection.name,
+                    funcIdx = null,
+                    typeIdx = null,
+                    byteOffset = failedOffset,
+                    byteSize = failedSize.coerceAtLeast(1),
+                    message = "tag entry could not be decoded at offset $failedOffset",
+                ))
+            }
+        }
+
         // Global section: detect init-expression parse failures.
         val globalSection = module?.globalSection
         if (globalSection != null && problems.size < 1000) {
-            try {
-                with(globalSection) { bytes.scan() }
-            } catch (e: Exception) {
+            val (_, failedOffset) = with(globalSection) { bytes.scanPartial() }
+            if (failedOffset != null) {
+                val failedSize = globalSection.sectionOffset + globalSection.sectionSize - failedOffset
                 problems.add(ParseProblem(
                     kind = ParseProblemKind.INIT_EXPR_PARSE_FAILURE,
                     sectionId = WasmSectionGlobal.SECTION_ID.toInt(),
                     sectionName = globalSection.name,
                     funcIdx = null,
                     typeIdx = null,
-                    byteOffset = globalSection.contentOffset,
-                    byteSize = globalSection.contentSize.coerceAtLeast(1),
-                    message = e.message ?: "global section init-expr failure",
+                    byteOffset = failedOffset,
+                    byteSize = failedSize.coerceAtLeast(1),
+                    message = "global section init-expr failure at offset $failedOffset",
                 ))
             }
         }
@@ -1290,18 +1366,18 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
         // Element section: detect init-expression parse failures.
         val elementSection = module?.elementSection
         if (elementSection != null && problems.size < 1000) {
-            try {
-                with(elementSection) { bytes.scanElements() }
-            } catch (e: Exception) {
+            val (_, failedOffset) = with(elementSection) { bytes.scanElementsPartial() }
+            if (failedOffset != null) {
+                val failedSize = elementSection.sectionOffset + elementSection.sectionSize - failedOffset
                 problems.add(ParseProblem(
                     kind = ParseProblemKind.INIT_EXPR_PARSE_FAILURE,
                     sectionId = WasmSectionElement.SECTION_ID.toInt(),
                     sectionName = elementSection.name,
                     funcIdx = null,
                     typeIdx = null,
-                    byteOffset = elementSection.contentOffset,
-                    byteSize = elementSection.contentSize.coerceAtLeast(1),
-                    message = e.message ?: "element section init-expr failure",
+                    byteOffset = failedOffset,
+                    byteSize = failedSize.coerceAtLeast(1),
+                    message = "element section init-expr failure at offset $failedOffset",
                 ))
             }
         }
@@ -1309,18 +1385,18 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
         // Data section: detect init-expression parse failures.
         val dataSection = module?.dataSection
         if (dataSection != null && problems.size < 1000) {
-            try {
-                with(dataSection) { bytes.scan() }
-            } catch (e: Exception) {
+            val (_, failedOffset) = with(dataSection) { bytes.scanPartial() }
+            if (failedOffset != null) {
+                val failedSize = dataSection.sectionOffset + dataSection.sectionSize - failedOffset
                 problems.add(ParseProblem(
                     kind = ParseProblemKind.INIT_EXPR_PARSE_FAILURE,
                     sectionId = WasmSectionData.SECTION_ID.toInt(),
                     sectionName = dataSection.name,
                     funcIdx = null,
                     typeIdx = null,
-                    byteOffset = dataSection.contentOffset,
-                    byteSize = dataSection.contentSize.coerceAtLeast(1),
-                    message = e.message ?: "data section init-expr failure",
+                    byteOffset = failedOffset,
+                    byteSize = failedSize.coerceAtLeast(1),
+                    message = "data section init-expr failure at offset $failedOffset",
                 ))
             }
         }

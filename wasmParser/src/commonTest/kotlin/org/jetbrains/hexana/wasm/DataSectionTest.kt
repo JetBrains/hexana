@@ -194,12 +194,12 @@ class DataSectionTest {
     }
 
     // ========================================================================
-    // Negative — unknown flag must be rejected
+    // Negative -- unknown flag degrades to an empty prefix
     //
     // Hand-crafted minimal module whose data section claims flag 5 (none of
-    // the legal 0/1/2). The current parser explicitly throws
-    // IllegalArgumentException for unknown flags (WasmSectionData.kt:47), so
-    // this test pins that behavior.
+    // the legal 0/1/2). scan() now delegates to scanPartial().first, which
+    // catches the IllegalArgumentException for the unknown flag and returns
+    // the decoded prefix (empty here, since entry 0 is the corrupt one).
     // ========================================================================
 
     @Test
@@ -214,7 +214,7 @@ class DataSectionTest {
         //   0x0b | 00 01          |   [memory 0] limits min=1
         //   0x0d | 0b 04          | data section, size 4
         //   0x0f | 01             |   count: 1
-        //   0x10 | 05             |   [data 0] flag 5 (illegal — spec allows 0/1/2)
+        //   0x10 | 05             |   [data 0] flag 5 (illegal -- spec allows 0/1/2)
         //   0x11 | 01 00          |     bytes: len=1, [0x00]
         // ```
         val bytes = byteArrayOf(
@@ -224,19 +224,14 @@ class DataSectionTest {
         )
         val buffer = bytes.toCommonByteBuffer()
         val parseResult = WasmParser().parse(buffer)
-        // Parse may succeed structurally because individual section bodies
-        // are scanned lazily. The actual scan() must reject the bogus flag.
+        // scan() now degrades gracefully: the corrupt entry is skipped and the
+        // decoded prefix (empty, since entry 0 is already bad) is returned.
         if (parseResult is WasmParseSuccess) {
             val module = parseResult.wasmModule as WasmModule
             val section = module.dataSection ?: fail("expected data section in crafted bytes")
-            try {
-                with(section) { buffer.scan() }
-                fail("scan() must throw for unknown data segment flag")
-            } catch (e: IllegalArgumentException) {
-                // expected per WasmSectionData.kt:47
-                assertTrue(e.message?.contains("Unknown data record type") == true,
-                    "exception message should identify the unknown record type, was: ${e.message}")
-            }
+            val records = with(section) { buffer.scan() }
+            // No entries before the corrupt one; scan() must not throw.
+            assertTrue(records.isEmpty(), "scan() must return an empty prefix for a leading corrupt entry")
         }
     }
 

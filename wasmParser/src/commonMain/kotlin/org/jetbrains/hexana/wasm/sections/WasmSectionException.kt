@@ -18,19 +18,32 @@ class WasmSectionException(sectionSize: Int, sectionOffset: Int, contentSize: In
 
     constructor(s: WasmSectionUnresolved) : this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
 
-    /** Per-entry byte range + decoded (attribute, typeidx) for each defined tag. */
-    fun CommonByteBuffer.scanTags(): List<WasmTagRecord> {
+    /**
+     * Parses as many tag entries as possible. On the first undecodable entry,
+     * stops and returns the partial list paired with the byte offset of that
+     * entry (null second means the section parsed fully).
+     */
+    fun CommonByteBuffer.scanTagsPartial(): Pair<MutableList<WasmTagRecord>, Int?> {
         position(contentOffset)
         val count = getULEB128().toInt()
         val out = ArrayList<WasmTagRecord>(count)
-        repeat(count) {
+        var failedOffset: Int? = null
+        for (i in 0 until count) {
             val start = position()
-            val attribute = get().toInt() and 0xFF
-            val typeIdx = getULEB128().toInt()
-            out.add(WasmTagRecord(offset = start, size = position() - start, attribute = attribute, typeIdx = typeIdx))
+            try {
+                val attribute = get().toInt() and 0xFF
+                val typeIdx = getULEB128().toInt()
+                out.add(WasmTagRecord(offset = start, size = position() - start, attribute = attribute, typeIdx = typeIdx))
+            } catch (e: Exception) {
+                failedOffset = start
+                break
+            }
         }
-        return out
+        return out to failedOffset
     }
+
+    /** Per-entry byte range + decoded (attribute, typeidx) for each defined tag. */
+    fun CommonByteBuffer.scanTags(): List<WasmTagRecord> = scanTagsPartial().first
 }
 
 data class WasmTagRecord(val offset: Int, val size: Int, val attribute: Int, val typeIdx: Int)

@@ -23,32 +23,47 @@ class WasmSectionData(sectionSize: Int, sectionOffset: Int, contentSize: Int, co
         }
     }
 
-    fun CommonByteBuffer.scan(): List<WasmDataRecord> {
+    /**
+     * Parses as many data segments as possible. On the first undecodable entry,
+     * stops and returns the partial list paired with the byte offset of that
+     * entry (null second means the section parsed fully).
+     */
+    fun CommonByteBuffer.scanPartial(): Pair<MutableList<WasmDataRecord>, Int?> {
         position(contentOffset)
-        return buildList {
-            consumeArray {
-                val off = position()
+        val records = mutableListOf<WasmDataRecord>()
+        var failedOffset: Int? = null
+
+        val count = getULEB128().toInt()
+        for (i in 0 until count) {
+            val off = position()
+            try {
                 when (val recordType = getULEB128().toUInt()) {
                     0u -> {
-                        val opCodes = this@scan.parseOpCodes(instructionReadingLimit())
-                        val data = this@scan.fetchDataSlice()
-                        add(WasmDataRecordActive(off, sizeFromOffset(off), opCodes, data))
+                        val opCodes = parseOpCodes(instructionReadingLimit())
+                        val data = fetchDataSlice()
+                        records.add(WasmDataRecordActive(off, sizeFromOffset(off), opCodes, data))
                     }
                     1u -> {
-                        val data = this@scan.fetchDataSlice()
-                        add(WasmDataRecordPassive(off, sizeFromOffset(off), data))
+                        val data = fetchDataSlice()
+                        records.add(WasmDataRecordPassive(off, sizeFromOffset(off), data))
                     }
                     2u -> {
                         val index = getULEB128().toUInt()
-                        val opCodes = this@scan.parseOpCodes(instructionReadingLimit())
-                        val data = this@scan.fetchDataSlice()
-                        add(WasmDataRecordActiveWithMemoryIndex(off, sizeFromOffset(off), index, opCodes, data))
+                        val opCodes = parseOpCodes(instructionReadingLimit())
+                        val data = fetchDataSlice()
+                        records.add(WasmDataRecordActiveWithMemoryIndex(off, sizeFromOffset(off), index, opCodes, data))
                     }
                     else -> throw IllegalArgumentException("Unknown data record type: $recordType")
                 }
+            } catch (e: Exception) {
+                failedOffset = off
+                break
             }
         }
+        return records to failedOffset
     }
+
+    fun CommonByteBuffer.scan(): List<WasmDataRecord> = scanPartial().first
 
     /**
      * Reads `vec(byte)` — a ULEB128 length followed by `length` raw bytes — and

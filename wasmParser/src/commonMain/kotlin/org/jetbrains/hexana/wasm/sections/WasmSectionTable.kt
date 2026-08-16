@@ -25,28 +25,43 @@ class WasmSectionTable(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
         }
     }
 
-    fun CommonByteBuffer.scanTable(): List<WasmTableEntry> {
+    /**
+     * Parses as many table entries as possible. On the first undecodable entry,
+     * stops and returns the partial list paired with the byte offset of that
+     * entry (null second means the section parsed fully).
+     */
+    fun CommonByteBuffer.scanTablePartial(): Pair<MutableList<WasmTableEntry>, Int?> {
         position(contentOffset)
         val entries = mutableListOf<WasmTableEntry>()
-        consumeArray {
+        var failedOffset: Int? = null
+
+        val count = getULEB128().toInt()
+        for (i in 0 until count) {
             val offset = position()
-            if (get() == 0x40.toByte()) {
-                if (get() == 0x00.toByte()) {
-                    val tableType = tableType()
-                    val opcodes = parseOpCodes()
-                    entries.add(WasmTableEntry(offset, sizeFromOffset(offset), tableType, opcodes))
-                    return@consumeArray
+            try {
+                if (get() == 0x40.toByte()) {
+                    if (get() == 0x00.toByte()) {
+                        val tableType = tableType()
+                        val opcodes = parseOpCodes()
+                        entries.add(WasmTableEntry(offset, sizeFromOffset(offset), tableType, opcodes))
+                        continue
+                    } else {
+                        position(position() - 1)
+                    }
                 } else {
                     position(position() - 1)
                 }
-            } else {
-                position(position() - 1)
+                val tableType = tableType()
+                entries.add(WasmTableEntry(offset, sizeFromOffset(offset), tableType))
+            } catch (e: Exception) {
+                failedOffset = offset
+                break
             }
-            val tableType = tableType()
-            entries.add(WasmTableEntry(offset, sizeFromOffset(offset), tableType))
         }
-        return entries
+        return entries to failedOffset
     }
+
+    fun CommonByteBuffer.scanTable(): List<WasmTableEntry> = scanTablePartial().first
 
     private fun CommonByteBuffer.tableType(): WasmTableType {
         return WasmTableType(referenceType()!!, limits())

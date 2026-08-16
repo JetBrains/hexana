@@ -22,16 +22,31 @@ class WasmSectionMemory(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
         }
     }
 
-    fun CommonByteBuffer.scan():List<WasmMemoryRecord> {
+    /**
+     * Parses as many memory entries as possible. On the first undecodable entry,
+     * stops and returns the partial list paired with the byte offset of that
+     * entry (null second means the section parsed fully).
+     */
+    fun CommonByteBuffer.scanPartial(): Pair<MutableList<WasmMemoryRecord>, Int?> {
         position(contentOffset)
         val records = mutableListOf<WasmMemoryRecord>()
-        consumeArray { memidx ->
+        var failedOffset: Int? = null
+
+        val count = getULEB128().toInt()
+        for (memidx in 0 until count) {
             val offset = position()
-            val limits = limits()
-            records.add(WasmMemoryRecord(offset, sizeFromOffset(offset), memidx, limits))
+            try {
+                val limits = limits()
+                records.add(WasmMemoryRecord(offset, sizeFromOffset(offset), memidx, limits))
+            } catch (e: Exception) {
+                failedOffset = offset
+                break
+            }
         }
-        return records
+        return records to failedOffset
     }
+
+    fun CommonByteBuffer.scan(): List<WasmMemoryRecord> = scanPartial().first
 }
 
 data class WasmMemoryRecord(

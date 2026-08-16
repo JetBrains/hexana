@@ -52,6 +52,8 @@ class WasmTableTabsProvider : TableTabsProvider {
             // to null and removes the placeholder when the module is clean.
             val problemSources = module.codeSection != null || module.typesSection != null ||
                 module.importSection != null || module.exportSection != null ||
+                module.tableSection != null || module.memorySection != null ||
+                module.functionSection != null || module.exceptionSection != null ||
                 module.globalSection != null || module.elementSection != null ||
                 module.dataSection != null || provider.hasSectionScanFailures
             if (problemSources) add("Problems")
@@ -393,6 +395,7 @@ private fun ParseProblemKind.label(): String = when (this) {
     ParseProblemKind.SECTION_TRUNCATED -> "Section truncated"
     ParseProblemKind.IMPORT_ENTRY_CORRUPT -> "Import entry corrupt"
     ParseProblemKind.EXPORT_ENTRY_CORRUPT -> "Export entry corrupt"
+    ParseProblemKind.SECTION_ENTRY_CORRUPT -> "Section entry corrupt"
 }
 
 /**

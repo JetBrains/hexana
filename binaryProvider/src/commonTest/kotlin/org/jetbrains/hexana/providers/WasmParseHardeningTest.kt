@@ -316,4 +316,219 @@ class WasmParseHardeningTest {
         assertEquals(ParseProblemKind.EXPORT_ENTRY_CORRUPT, problem.kind)
         assertEquals(11, problem.byteOffset, "problem must point at the corrupt entry start")
     }
+
+    // -------------------------------------------------------------------
+    // Test 8: table section with an invalid reftype byte
+    //
+    // Binary: header + table section id=0x04, size=0x02, count=1,
+    //   then 0xFF (not a valid reftype byte).
+    //
+    // Layout:
+    //   offset 0-7:  magic + version
+    //   offset 8:    section id 0x04 (table)
+    //   offset 9:    content size 0x02
+    //   offset 10:   count = 0x01
+    //   offset 11:   0xFF (invalid reftype)
+    //
+    // Pre-fix: scanTable() throws on the invalid reftype; no problem is recorded.
+    // Post-fix: scanTablePartial() catches the failure; one SECTION_ENTRY_CORRUPT
+    //   reported with byteOffset == 11 (the entry start).
+    // -------------------------------------------------------------------
+    private val tableSectionInvalidReftype: ByteArray =
+        HEADER + byteArrayOf(
+            0x04, 0x02,     // table section, content size 2
+            0x01,           // count = 1
+            0xFF.toByte(),  // invalid reftype (not 0x6B/0x6C/0x6D/0x6E/0x6F/0x70/0x7B etc.)
+        )
+
+    @Test
+    fun table_section_invalid_reftype_reports_section_entry_corrupt() {
+        val provider = WasmBinaryProvider(tableSectionInvalidReftype.toCommonByteBuffer())
+        // Pre-fix: parseProblems is empty (the throw escaped without being caught).
+        val problem = provider.parseProblems.singleOrNull { it.kind == ParseProblemKind.SECTION_ENTRY_CORRUPT }
+        assertNotNull(problem, "expected one SECTION_ENTRY_CORRUPT, got ${provider.parseProblems}")
+        // Entry 0 starts at offset 11 (8 header + 1 id + 1 size_leb + 1 count).
+        assertEquals(11, problem.byteOffset, "problem must point at the corrupt table entry start")
+    }
+
+    // -------------------------------------------------------------------
+    // Test 9: memory section with truncated limits (flags byte only)
+    //
+    // Binary: header + memory section id=0x05, size=0x01, count=1, then EOF.
+    // The limits() call tries to read the flags byte but the buffer is exhausted.
+    //
+    // Layout:
+    //   offset 0-7:  magic + version
+    //   offset 8:    section id 0x05 (memory)
+    //   offset 9:    content size 0x01
+    //   offset 10:   count = 0x01
+    //   (EOF -- no flags byte for the limits record)
+    //
+    // Pre-fix: scan() throws on buffer underflow; no problem is recorded.
+    // Post-fix: scanPartial() catches the failure; one SECTION_ENTRY_CORRUPT
+    //   reported with byteOffset == 11 (the entry start, right after count byte).
+    // -------------------------------------------------------------------
+    private val memorySectionTruncatedLimits: ByteArray =
+        HEADER + byteArrayOf(
+            0x05, 0x01,     // memory section, content size 1
+            0x01,           // count = 1 (no limits bytes follow)
+        )
+
+    @Test
+    fun memory_section_truncated_limits_reports_section_entry_corrupt() {
+        val provider = WasmBinaryProvider(memorySectionTruncatedLimits.toCommonByteBuffer())
+        // Pre-fix: parseProblems is empty (the throw was unguarded).
+        val problem = provider.parseProblems.singleOrNull { it.kind == ParseProblemKind.SECTION_ENTRY_CORRUPT }
+        assertNotNull(problem, "expected one SECTION_ENTRY_CORRUPT, got ${provider.parseProblems}")
+        // Entry 0 starts at offset 11 (8 header + 1 id + 1 size_leb + 1 count).
+        assertEquals(11, problem.byteOffset, "problem must point at the corrupt memory entry start")
+    }
+
+    // -------------------------------------------------------------------
+    // Test 10: function section truncated mid-vector (count=2, one typeidx present)
+    //
+    // Binary: header + type section (type[0] = () -> ()) + function section
+    //   with count=2 but only one typeidx byte present before EOF.
+    //
+    // Layout:
+    //   offset 0-7:  magic + version
+    //   offset 8-13: type section (id=0x01, size=0x04, 1 func type () -> ())
+    //   offset 14:   section id 0x03 (function)
+    //   offset 15:   content size 0x02
+    //   offset 16:   count = 0x02
+    //   offset 17:   typeidx 0x00 (first entry, valid)
+    //   (EOF -- second typeidx missing)
+    //
+    // Pre-fix: parseFunctions() throws on buffer underflow for the second entry;
+    //   no SECTION_ENTRY_CORRUPT problem is recorded.
+    // Post-fix: parseFunctionsPartial() catches the underflow; one
+    //   SECTION_ENTRY_CORRUPT reported with byteOffset == 18 (second entry start);
+    //   provider.functions reports the one decoded type.
+    // -------------------------------------------------------------------
+    private val functionSectionTruncatedMidVector: ByteArray = byteArrayOf(
+        // magic + version
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        // type section: type[0] = () -> ()
+        0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
+        // function section: count=2, only typeidx 0 present
+        0x03, 0x02,         // section id + content size 2
+        0x02,               // count = 2
+        0x00,               // typeidx 0 (valid)
+        // EOF -- second typeidx missing
+    )
+
+    @Test
+    fun function_section_truncated_mid_vector_reports_section_entry_corrupt() {
+        val provider = WasmBinaryProvider(functionSectionTruncatedMidVector.toCommonByteBuffer())
+        // Pre-fix: parseProblems is empty (parseFunctions throws without a guard).
+        val problem = provider.parseProblems.singleOrNull { it.kind == ParseProblemKind.SECTION_ENTRY_CORRUPT }
+        assertNotNull(problem, "expected one SECTION_ENTRY_CORRUPT, got ${provider.parseProblems}")
+        // Second entry starts at offset 18 (8 header + 6 type section + 1 id + 1 size_leb + 1 count + 1 first entry).
+        assertEquals(18, problem.byteOffset, "problem must point at the start of the missing second entry")
+    }
+
+    @Test
+    fun function_section_prefix_preserved_after_truncation() {
+        val provider = WasmBinaryProvider(functionSectionTruncatedMidVector.toCommonByteBuffer())
+        // Pre-fix: provider.functions throws or is empty due to the full-parse failure.
+        // Post-fix: the first typeidx (0) decoded successfully; type[0] = () -> () maps to one type record.
+        assertEquals(1, provider.functions.size,
+            "the one decoded function entry must survive as a type record after truncation")
+    }
+
+    // -------------------------------------------------------------------
+    // Test 11: tag (exception) section with truncated entry
+    //
+    // Binary: header + tag section id=0x0D, size=0x01, count=1, then EOF.
+    // The attribute byte read fails immediately.
+    //
+    // Layout:
+    //   offset 0-7:  magic + version
+    //   offset 8:    section id 0x0D (tag/exception)
+    //   offset 9:    content size 0x01
+    //   offset 10:   count = 0x01
+    //   (EOF -- no attribute byte for the tag entry)
+    //
+    // Pre-fix: scanTags() throws on buffer underflow; no problem is recorded.
+    // Post-fix: scanTagsPartial() catches the failure; one SECTION_ENTRY_CORRUPT
+    //   reported with byteOffset == 11 (the entry start).
+    // -------------------------------------------------------------------
+    private val tagSectionTruncatedEntry: ByteArray =
+        HEADER + byteArrayOf(
+            0x0D, 0x01,     // tag section, content size 1
+            0x01,           // count = 1 (no entry bytes follow)
+        )
+
+    @Test
+    fun tag_section_truncated_entry_reports_section_entry_corrupt() {
+        val provider = WasmBinaryProvider(tagSectionTruncatedEntry.toCommonByteBuffer())
+        // Pre-fix: parseProblems is empty (scanTags throws without a guard).
+        val problem = provider.parseProblems.singleOrNull { it.kind == ParseProblemKind.SECTION_ENTRY_CORRUPT }
+        assertNotNull(problem, "expected one SECTION_ENTRY_CORRUPT, got ${provider.parseProblems}")
+        // Entry 0 starts at offset 11 (8 header + 1 id + 1 size_leb + 1 count).
+        assertEquals(11, problem.byteOffset, "problem must point at the corrupt tag entry start")
+    }
+
+    // -------------------------------------------------------------------
+    // Test 12: element section with a valid first entry and a corrupt second entry
+    //
+    // Entry 0: flags=0 (active default), offset expr = i32.const 0 end, 1 funcidx (0).
+    // Entry 1: flags=0 (active default), then EOF where the offset expr opcode should be.
+    //
+    // Layout:
+    //   offset 0-7:  magic + version
+    //   offset 8-13: type section (1 func type () -> ())
+    //   offset 14-17: function section (1 function, type index 0)
+    //   offset 18:   section id 0x09 (element)
+    //   offset 19:   content size 0x08
+    //   offset 20:   count = 0x02
+    //   offset 21:   entry 0 flags = 0x00
+    //   offset 22-24: i32.const 0 end (0x41 0x00 0x0B)
+    //   offset 25:   funcidxs count = 0x01
+    //   offset 26:   funcidx 0x00
+    //   offset 27:   entry 1 flags = 0x00
+    //   (EOF -- no offset expr bytes; parseOpCodes at limit=28 returns empty,
+    //    then consumeFuncidxs() calls consumeArray which reads getULEB128() and
+    //    hits underflow)
+    //
+    // Pre-fix: scanElements() reports the failure at elementSection.contentOffset (20),
+    //   not at the entry 1 start (27).
+    // Post-fix: scanElementsPartial() reports byteOffset == 27 (entry 1 start);
+    //   entry 0 is preserved via scanElements().
+    // -------------------------------------------------------------------
+    private val elementSectionSecondEntryCorrupt: ByteArray = byteArrayOf(
+        // magic + version
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        // type section: type[0] = () -> ()
+        0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
+        // function section: function[0] uses type 0
+        0x03, 0x02, 0x01, 0x00,
+        // element section: count=2, entry 0 valid, entry 1 corrupt
+        0x09, 0x08,                 // section id + content size 8
+        0x02,                       // count = 2
+        0x00,                       // entry 0: flags = 0 (active default)
+        0x41, 0x00, 0x0B,           // offset expr: i32.const 0, end
+        0x01, 0x00,                 // funcidxs: count=1, funcidx=0
+        0x00,                       // entry 1: flags = 0 (active default) -- then EOF
+    )
+
+    @Test
+    fun element_section_second_entry_corrupt_reports_init_expr_failure_at_entry_start() {
+        val provider = WasmBinaryProvider(elementSectionSecondEntryCorrupt.toCommonByteBuffer())
+        val problem = provider.parseProblems.singleOrNull { it.kind == ParseProblemKind.INIT_EXPR_PARSE_FAILURE }
+        assertNotNull(problem, "expected one INIT_EXPR_PARSE_FAILURE, got ${provider.parseProblems}")
+        // Pre-fix: byteOffset == 20 (contentOffset). Post-fix: byteOffset == 27 (entry 1 start).
+        assertEquals(27, problem.byteOffset,
+            "problem must point at the corrupt entry start (offset 27), not the section content start")
+    }
+
+    @Test
+    fun element_section_valid_first_entry_is_preserved() {
+        val provider = WasmBinaryProvider(elementSectionSecondEntryCorrupt.toCommonByteBuffer())
+        // Pre-fix: scanElements() throws; all entries are lost. Post-fix: entry 0 survives.
+        val module = provider.wasmModule
+        assertNotNull(module, "module must parse despite the corrupt element entry")
+        val elements = with(module.elementSection!!) { provider.bytes.scanElements() }
+        assertEquals(1, elements.size, "the valid first element entry must be preserved")
+    }
 }
