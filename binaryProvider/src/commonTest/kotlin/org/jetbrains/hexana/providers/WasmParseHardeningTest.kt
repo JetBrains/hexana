@@ -234,4 +234,86 @@ class WasmParseHardeningTest {
         assertTrue(problems.isEmpty(),
             "clean module must have no parse problems after hardening, got $problems")
     }
+
+    // -------------------------------------------------------------------
+    // Test 6: unknown import extern type (invalid/binary.66.wasm, byte-exact)
+    //
+    // Binary: header + import section id 0x02, size 0x04, count 1, empty
+    //   module/name strings, extern-type byte 0x05 (only 0x00-0x04 exist).
+    //
+    // Pre-fix: importRecord() throws IllegalStateException "unknown import
+    //   type: 5" (WasmSectionImport.kt error()) from every getImportRecords
+    //   caller; parseProblems stays empty (silent truncation).
+    // Post-fix: getImportRecords degrades to the decoded prefix and
+    //   parseProblems reports one IMPORT_ENTRY_CORRUPT at the entry start.
+    // -------------------------------------------------------------------
+    private val unknownImportExternType: ByteArray =
+        HEADER + byteArrayOf(
+            0x02, 0x04,     // import section, content size 4
+            0x01,           // count = 1
+            0x00, 0x00,     // empty module name, empty field name
+            0x05,           // extern-type byte 0x05: unknown
+        )
+
+    @Test
+    fun unknown_import_extern_type_degrades_to_prefix() {
+        val provider = WasmBinaryProvider(unknownImportExternType.toCommonByteBuffer())
+        // Pre-fix: this access throws IllegalStateException("unknown import type: 5").
+        assertEquals(0, provider.imports.size, "no import decodes before the corrupt entry")
+    }
+
+    @Test
+    fun unknown_import_extern_type_reports_import_entry_corrupt() {
+        val provider = WasmBinaryProvider(unknownImportExternType.toCommonByteBuffer())
+        val problem = provider.parseProblems.singleOrNull()
+        assertNotNull(problem, "expected exactly one problem, got ${provider.parseProblems}")
+        // Pre-fix: parseProblems is empty (the guard swallowed the throw silently).
+        assertEquals(ParseProblemKind.IMPORT_ENTRY_CORRUPT, problem.kind)
+        // Entry starts right after the count byte: 8 header + 2 section header + 1 count.
+        assertEquals(11, problem.byteOffset, "problem must point at the corrupt entry start")
+    }
+
+    @Test
+    fun import_entries_before_the_corrupt_one_are_preserved() {
+        // Two imports: a valid function import "a"."b" (type index 0), then the 0x05 entry.
+        val bytes = HEADER + byteArrayOf(
+            0x02, 0x0A,                 // import section, content size 10
+            0x02,                       // count = 2
+            0x01, 0x61, 0x01, 0x62,     // "a" "b"
+            0x00, 0x00,                 // func import, type index 0
+            0x00, 0x00,                 // empty module name, empty field name
+            0x05,                       // extern-type byte 0x05: unknown
+        )
+        val provider = WasmBinaryProvider(bytes.toCommonByteBuffer())
+        assertEquals(1, provider.imports.size, "the valid import before the corrupt entry must survive")
+        assertEquals(1, provider.parseProblems.count { it.kind == ParseProblemKind.IMPORT_ENTRY_CORRUPT })
+    }
+
+    // -------------------------------------------------------------------
+    // Test 7: truncated export entry (invalid/binary.89.wasm class)
+    //
+    // Binary: header + export section id 0x07, size 0x04, count 1, name "a",
+    //   extern-index byte 0x00, then EOF where the index LEB128 should be.
+    //
+    // Pre-fix: scan() throws from getULEB128 underflow (guarded lazies made it
+    //   silent); parseProblems stays empty.
+    // Post-fix: scan degrades to prefix; one EXPORT_ENTRY_CORRUPT reported.
+    // -------------------------------------------------------------------
+    private val truncatedExportEntry: ByteArray =
+        HEADER + byteArrayOf(
+            0x07, 0x04,     // export section, content size 4
+            0x01,           // count = 1
+            0x01, 0x61,     // name "a"
+            0x00,           // extern-index = func; index LEB128 missing (EOF)
+        )
+
+    @Test
+    fun truncated_export_entry_reports_export_entry_corrupt() {
+        val provider = WasmBinaryProvider(truncatedExportEntry.toCommonByteBuffer())
+        assertEquals(0, provider.exports.size, "no export decodes from the truncated entry")
+        val problem = provider.parseProblems.singleOrNull()
+        assertNotNull(problem, "expected exactly one problem, got ${provider.parseProblems}")
+        assertEquals(ParseProblemKind.EXPORT_ENTRY_CORRUPT, problem.kind)
+        assertEquals(11, problem.byteOffset, "problem must point at the corrupt entry start")
+    }
 }

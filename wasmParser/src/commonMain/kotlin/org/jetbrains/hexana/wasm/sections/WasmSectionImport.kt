@@ -28,17 +28,34 @@ class WasmSectionImport(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
         }
     }
 
-    fun CommonByteBuffer.getImportRecords(): MutableList<WasmImportRecord> {
+    /**
+     * Parses the import section, degrading to the decoded prefix when an entry
+     * cannot be decoded (unknown extern type, truncated entry). Use
+     * [getImportRecordsPartial] when the failure offset is needed for reporting.
+     */
+    fun CommonByteBuffer.getImportRecords(): MutableList<WasmImportRecord> = getImportRecordsPartial().first
+
+    /**
+     * Parses as many import records as possible. On the first undecodable entry,
+     * stops and returns the partial list paired with the byte offset of that
+     * entry (null second means the section parsed fully).
+     */
+    fun CommonByteBuffer.getImportRecordsPartial(): Pair<MutableList<WasmImportRecord>, Int?> {
         position(contentOffset)
-
         val records = mutableListOf<WasmImportRecord>()
-        consumeArray {
-            records.add(
-                importRecord()
-            )
-        }
+        var failedOffset: Int? = null
 
-        return records
+        val count = getULEB128().toInt()
+        for (i in 0 until count) {
+            val offset = position()
+            try {
+                records.add(importRecord())
+            } catch (e: Exception) {
+                failedOffset = offset
+                break
+            }
+        }
+        return records to failedOffset
     }
 
 }

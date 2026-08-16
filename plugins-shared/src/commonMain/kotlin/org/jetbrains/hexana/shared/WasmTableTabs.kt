@@ -47,9 +47,14 @@ class WasmTableTabsProvider : TableTabsProvider {
             }
             if (module.customSections.isNotEmpty()) add("Custom")
             // parseProblems is lazy; avoid forcing it here — advertise the tab
-            // only when there are code-section or type-section anomalies that we
-            // can detect cheaply without iterating all opcode records.
-            if (module.codeSection != null || module.typesSection != null) add("Problems")
+            // whenever any problem source exists (a section whose partial parse
+            // can fail, or a recorded section-scan failure). singleTab resolves
+            // to null and removes the placeholder when the module is clean.
+            val problemSources = module.codeSection != null || module.typesSection != null ||
+                module.importSection != null || module.exportSection != null ||
+                module.globalSection != null || module.elementSection != null ||
+                module.dataSection != null || provider.hasSectionScanFailures
+            if (problemSources) add("Problems")
         }
         return Pair(names, emptyList())
     }
@@ -386,6 +391,8 @@ private fun ParseProblemKind.label(): String = when (this) {
     ParseProblemKind.UNKNOWN_CORE_INSTANCE_TAG -> "Unknown instance tag"
     ParseProblemKind.CORE_INSTANCE_ENTRY_CORRUPT -> "Instance entry corrupt"
     ParseProblemKind.SECTION_TRUNCATED -> "Section truncated"
+    ParseProblemKind.IMPORT_ENTRY_CORRUPT -> "Import entry corrupt"
+    ParseProblemKind.EXPORT_ENTRY_CORRUPT -> "Export entry corrupt"
 }
 
 /**

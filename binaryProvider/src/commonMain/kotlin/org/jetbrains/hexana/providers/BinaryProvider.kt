@@ -881,6 +881,10 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
         else -> null
     }
 
+    /** Section-header / custom-section-name failures recorded during parse; cheap (no lazy forcing). */
+    val hasSectionScanFailures: Boolean
+        get() = sectionScanFailures.isNotEmpty()
+
     private val sectionScanFailures: List<SectionScanFailure> = when (parseResult) {
         is WasmParseSuccess -> parseResult.sectionScanFailures
         else -> emptyList()
@@ -1222,6 +1226,44 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
                     byteOffset = failedOffset,
                     byteSize = failedSize.coerceAtLeast(1),
                     message = "unknown type byte at offset $failedOffset",
+                ))
+            }
+        }
+
+        // Import section: check for partial parse failure.
+        val importSection = module?.importSection
+        if (importSection != null && problems.size < 1000) {
+            val (_, failedOffset) = with(importSection) { bytes.getImportRecordsPartial() }
+            if (failedOffset != null) {
+                val failedSize = importSection.sectionOffset + importSection.sectionSize - failedOffset
+                problems.add(ParseProblem(
+                    kind = ParseProblemKind.IMPORT_ENTRY_CORRUPT,
+                    sectionId = WasmSectionImport.SECTION_ID.toInt(),
+                    sectionName = importSection.name,
+                    funcIdx = null,
+                    typeIdx = null,
+                    byteOffset = failedOffset,
+                    byteSize = failedSize.coerceAtLeast(1),
+                    message = "import entry could not be decoded at offset $failedOffset",
+                ))
+            }
+        }
+
+        // Export section: check for partial parse failure.
+        val exportSection = module?.exportSection
+        if (exportSection != null && problems.size < 1000) {
+            val (_, failedOffset) = with(exportSection) { bytes.scanPartial() }
+            if (failedOffset != null) {
+                val failedSize = exportSection.sectionOffset + exportSection.sectionSize - failedOffset
+                problems.add(ParseProblem(
+                    kind = ParseProblemKind.EXPORT_ENTRY_CORRUPT,
+                    sectionId = WasmSectionExport.SECTION_ID.toInt(),
+                    sectionName = exportSection.name,
+                    funcIdx = null,
+                    typeIdx = null,
+                    byteOffset = failedOffset,
+                    byteSize = failedSize.coerceAtLeast(1),
+                    message = "export entry could not be decoded at offset $failedOffset",
                 ))
             }
         }

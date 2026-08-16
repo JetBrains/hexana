@@ -26,14 +26,34 @@ class WasmSectionExport(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
         }
     }
 
-    fun CommonByteBuffer.scan(): MutableList<WasmExportRecordEntry> {
+    /**
+     * Parses the export section, degrading to the decoded prefix when an entry
+     * cannot be decoded (truncated name or index). Use [scanPartial] when the
+     * failure offset is needed for reporting.
+     */
+    fun CommonByteBuffer.scan(): MutableList<WasmExportRecordEntry> = scanPartial().first
+
+    /**
+     * Parses as many export records as possible. On the first undecodable entry,
+     * stops and returns the partial list paired with the byte offset of that
+     * entry (null second means the section parsed fully).
+     */
+    fun CommonByteBuffer.scanPartial(): Pair<MutableList<WasmExportRecordEntry>, Int?> {
         position(contentOffset)
         val records = mutableListOf<WasmExportRecordEntry>()
-        consumeArray {
-            val entry = exportRecord()
-            records.add(entry)
+        var failedOffset: Int? = null
+
+        val count = getULEB128().toInt()
+        for (i in 0 until count) {
+            val offset = position()
+            try {
+                records.add(exportRecord())
+            } catch (e: Exception) {
+                failedOffset = offset
+                break
+            }
         }
-        return records
+        return records to failedOffset
     }
 }
 
