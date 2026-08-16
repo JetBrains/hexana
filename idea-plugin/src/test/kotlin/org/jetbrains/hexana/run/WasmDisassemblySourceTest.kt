@@ -88,7 +88,7 @@ class WasmDisassemblySourceTest : UsefulTestCase() {
         assertTrue(src.isAvailable())
 
         val bytes = file.readBytes()
-        // Collect rows from the first function we can find
+        // Collect rows from the first multi-instruction function we can find.
         var rows: List<WasmDisassemblyTableModel.Row>? = null
         for (off in 8 until minOf(bytes.size, 0x200000) step 16) {
             val result = src.rowsForOffset(off)
@@ -97,22 +97,33 @@ class WasmDisassemblySourceTest : UsefulTestCase() {
                 break
             }
         }
-        if (rows == null) return // no multi-instruction function found — skip
+        if (rows == null) return // no multi-instruction function found -- skip
 
-        // Singleton zero-operand opcodes carry no offset (-1) and are interleaved;
-        // monotonicity applies to the offset-bearing rows only.
-        val offsetBearing = rows.filter { it.offset >= 0 }
-        for (i in 1 until offsetBearing.size) {
+        // Offset deduction fills in singleton offsets, so all rows should bear a
+        // non-negative offset (deduction succeeded for this well-formed fixture).
+        assertTrue(
+            "all rows should have a deduced offset after singleton deduction",
+            rows.all { it.offset >= 0 },
+        )
+
+        // Offsets across ALL rows must be strictly increasing (singletons are interleaved
+        // and now have real offsets, so the full sequence is ordered).
+        for (i in 1 until rows.size) {
             assertTrue(
-                "row offsets must be non-decreasing: ${offsetBearing[i].offset} < ${offsetBearing[i - 1].offset}",
-                offsetBearing[i].offset >= offsetBearing[i - 1].offset,
+                "row offsets must be strictly increasing: rows[$i].offset=${rows[i].offset} <= rows[${i - 1}].offset=${rows[i - 1].offset}",
+                rows[i].offset > rows[i - 1].offset,
             )
         }
-        // Every function body ends with the singleton `end` opcode, so the listing
-        // must contain at least one blank-offset row.
+
+        // Singleton-offset assertion: the ground-truth function at offsets 0x72..0x7d
+        // has two i32.add singletons. Query that function and verify their offsets are deduced.
+        val computeRows = src.rowsForOffset(0x72)?.first
+        assertNotNull("must find function at 0x72 in dwarf-types.wasm", computeRows)
+        // The two i32.add singletons should appear at 0x79 and 0x7c.
+        val singletonOffsets = computeRows!!.map { it.offset }.filter { it == 0x79 || it == 0x7c }
         assertTrue(
-            "expected at least one singleton (blank-offset) row in the listing",
-            rows.any { it.offset < 0 },
+            "expected deduced singleton offsets 0x79 and 0x7c in compute function; got ${computeRows.map { "0x${it.offset.toString(16)}" }}",
+            singletonOffsets.containsAll(listOf(0x79, 0x7c)),
         )
     }
 

@@ -25,6 +25,8 @@ import org.jetbrains.hexana.wasm.sections.CodeEntryOffset
 import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
 import org.jetbrains.hexana.wasm.sections.WasmSectionCode
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
+import org.jetbrains.hexana.shared.FlattenedInstr
+import org.jetbrains.hexana.shared.WasmInstrOffsets
 import org.jetbrains.hexana.wasm.sections.parseCodeEntry
 import java.nio.channels.FileChannel
 import java.nio.file.StandardOpenOption
@@ -176,11 +178,21 @@ internal class WasmDisassemblyPanel(val model: WasmDisassemblyTableModel) {
     }
 
     /**
-     * Select and scroll to the row whose offset is the largest not exceeding
-     * [pauseOffset]. Rows without a recorded offset (singleton opcodes, offset -1)
-     * are skipped; a linear scan is fine at pause frequency for one function body.
+     * Select and scroll to the row whose offset matches [pauseOffset] exactly; if no
+     * exact match exists (offset deduction failed for that byte), fall back to the row
+     * whose offset is the largest not exceeding [pauseOffset]. Rows without a recorded
+     * offset (deduction failed, offset -1) are skipped in both passes.
      */
     fun highlight(pauseOffset: Int) {
+        // First pass: exact match wins.
+        for (i in 0 until model.rowCount()) {
+            if (model.offsetAt(i) == pauseOffset) {
+                table.setRowSelectionInterval(i, i)
+                table.scrollRectToVisible(table.getCellRect(i, 0, true))
+                return
+            }
+        }
+        // Fallback: nearest offset at or below pauseOffset.
         var best = -1
         for (i in 0 until model.rowCount()) {
             val offset = model.offsetAt(i)
@@ -320,7 +332,23 @@ internal class WasmDisassemblySource(wasmBuffer: CommonByteBuffer?) {
             val buf = buffer.duplicate()
             val record = buf.parseCodeEntry(entry.offset)
             val rows = mutableListOf<WasmDisassemblyTableModel.Row>()
-            appendRows(record.opCodes, 0, rows)
+            val flat = mutableListOf<FlattenedInstr>()
+            appendRows(record.opCodes, 0, rows, flat)
+            // Backward pass: deduce offsets for singleton opcodes (shared instances with no
+            // per-instance offset). entryEnd = entry.offset + entry.size (exclusive boundary).
+            if (WasmInstrOffsets.deduceOffsets(flat, entry.offset + entry.size)) {
+                for (i in rows.indices) {
+                    val deduced = flat[i].offset
+                    if (deduced >= 0 && rows[i].offset < 0) {
+                        rows[i] = rows[i].copy(offset = deduced)
+                    }
+                }
+            }
+            // The function's terminal `end` byte is consumed by the parser as its
+            // stop marker and never appears in opCodes, but it is a legitimate
+            // pause target (the return values are on the stack). Surface it as
+            // the last row so the highlight can land on it exactly.
+            rows.add(WasmDisassemblyTableModel.Row(offset = entry.offset + entry.size - 1, instruction = "end"))
             rows
         } catch (e: Exception) {
             LOG.debug("WasmDisassemblySource: failed to parse func localIdx=$localIdx", e)
@@ -334,26 +362,43 @@ internal class WasmDisassemblySource(wasmBuffer: CommonByteBuffer?) {
      * them inside Block/Loop/If/Else and TryTable rather than keeping the list
      * flat) with two-space indentation and a synthetic `end` row per block.
      *
-     * Opcodes with immediates carry their real byte offset; singleton
-     * zero-operand opcodes are shared object instances whose inherited offset
-     * defaults to 0 and means nothing — they get a blank offset cell.
+     * [flat] receives one [FlattenedInstr] per row in the same order so that
+     * [WasmInstrOffsets.deduceOffsets] can fill in offsets for singleton opcodes
+     * (zero-operand shared instances whose inherited offset field is meaningless).
      */
-    private fun appendRows(ops: List<OpCode>, depth: Int, rows: MutableList<WasmDisassemblyTableModel.Row>) {
+    private fun appendRows(
+        ops: List<OpCode>,
+        depth: Int,
+        rows: MutableList<WasmDisassemblyTableModel.Row>,
+        flat: MutableList<FlattenedInstr>,
+    ) {
         val indent = "  ".repeat(depth)
         for (op in ops) {
-            val offset = (op as? OpCodeWithOffset)?.offset?.takeIf { it > 0 } ?: -1
+            val recordedOffset = (op as? OpCodeWithOffset)?.offset?.takeIf { it > 0 } ?: -1
             val text = if (op is UnparsedOpCode) "<unparsed: ${op.e.message}>" else watFor(op, watSymbols)
-            rows.add(WasmDisassemblyTableModel.Row(offset, indent + text))
+            rows.add(WasmDisassemblyTableModel.Row(recordedOffset, indent + text))
             when (op) {
                 is OpCodes.Flow.Block -> { // also Loop, If, Else (subclasses)
-                    appendRows(op.value, depth + 1, rows)
+                    // Block opcode: block-start entry (byteLen=null because recorded offset
+                    // is the block's start and carried by the op), then body, then END.
+                    flat.add(FlattenedInstr(isEndMarker = false, byteLen = null, recordedOffset = recordedOffset))
+                    appendRows(op.value, depth + 1, rows, flat)
                     rows.add(WasmDisassemblyTableModel.Row(-1, indent + "end"))
+                    flat.add(FlattenedInstr(isEndMarker = true, byteLen = 1, recordedOffset = -1))
                 }
                 is OpCodes.Flow.TryTable -> {
-                    appendRows(op.code, depth + 1, rows)
+                    flat.add(FlattenedInstr(isEndMarker = false, byteLen = null, recordedOffset = recordedOffset))
+                    appendRows(op.code, depth + 1, rows, flat)
                     rows.add(WasmDisassemblyTableModel.Row(-1, indent + "end"))
+                    flat.add(FlattenedInstr(isEndMarker = true, byteLen = 1, recordedOffset = -1))
                 }
-                else -> {}
+                else -> flat.add(
+                    FlattenedInstr(
+                        isEndMarker = false,
+                        byteLen = WasmInstrOffsets.singletonByteLen(op),
+                        recordedOffset = recordedOffset,
+                    )
+                )
             }
         }
     }
