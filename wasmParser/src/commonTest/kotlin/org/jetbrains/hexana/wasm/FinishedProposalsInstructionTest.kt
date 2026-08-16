@@ -37,7 +37,7 @@ import kotlin.test.assertTrue
  *  - **Branch Hinting** — custom section; not yet wired into the parser.
  *  - **Memory64** — section-level (`0x04`/`0x05` limits already supported);
  *    its memarg-flag-bit extension is handled together with multi-memory.
- *  - **Multiple memories** load/store — see `multi-memory limitation`
+ *  - **Multiple memories** load/store — covered by the memarg bit-6 flag
  *    test below; bulk-memory dispatch *does* take memidx and is covered.
  */
 class FinishedProposalsInstructionTest {
@@ -378,28 +378,26 @@ class FinishedProposalsInstructionTest {
     // The proposal extends memarg encoding so load/store can target a
     // non-zero memidx: bit 6 of the align byte signals "memidx follows".
     //
-    // Bulk-memory dispatch (memory.init/copy/fill) already carries memidx as
+    // Bulk-memory dispatch (memory.init/copy/fill) carries memidx as
     // explicit immediates and is covered by the bulk-memory section above.
     //
-    // Load/store memarg-with-memidx is **not currently decoded** by
-    // `consumeMemArg` in `consumers.kt:11-15` — the parser reads only
-    // (align, offset). This test pins the current limitation: we feed
-    // i32.load with align-flag=0x42 (bit 6 set + log2 align 2), offset=0,
-    // memidx=1, and expect that the trailing memidx byte will be misread as
-    // the next opcode. If/when multi-memory support lands, flip this test
-    // to assert the correct decoded memidx.
+    // Load/store: `consumeMemArg` (consumers.kt) detects bit 6, consumes the
+    // trailing memidx ULEB128 for stream alignment, and clears the flag from
+    // the effective align stored in MemArg.
     // ========================================================================
 
     @Test
-    fun `multi-memory — i32_load with memidx is currently not decoded`() {
-        // 28 42 00 01: i32.load align=0x42 offset=0 memidx=1   (with memidx flag)
-        // Currently parsed as:
-        //   - Memory.i32.Load(align=0x42, offset=0)
-        //   - <byte 0x01> reinterpreted as next opcode (Nop = 0x01)
+    fun `multi-memory — i32_load with memidx decodes to single op`() {
+        // 28 42 00 01:
+        //   28     i32.load opcode
+        //   42     rawAlign = 0x42 (bit 6 set = memidx follows; effective log2 align = 2)
+        //   00     memidx = 0  (consumed for stream alignment, not stored in MemArg)
+        //   01     offset = 1
         val ops = byteArrayOf(0x28, 0x42, 0x00, 0x01).toCommonByteBuffer().parseOpCodes()
-        assertEquals(2, ops.size, "current parser splits memarg+memidx into two ops")
-        assertIs<OpCodes.Memory.i32.Load>(ops[0])
-        assertSame(OpCodes.ParametricInstructions.Nop, ops[1])
+        assertEquals(1, ops.size, "multi-memory load must produce exactly one op")
+        val load = assertIs<OpCodes.Memory.i32.Load>(ops.single())
+        assertEquals(2, load.value.align, "effective align must have bit 6 cleared")
+        assertEquals(1, load.value.offset)
     }
 
     // ========================================================================

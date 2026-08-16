@@ -1,0 +1,237 @@
+package org.jetbrains.hexana.providers
+
+import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.wasm.sections.ParseProblemKind
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+
+/**
+ * Hardening tests for [WasmBinaryProvider] on malformed WASM binaries.
+ *
+ * Each test documents which assertion fails without the corresponding fix,
+ * proving the test is not vacuous.
+ */
+class WasmParseHardeningTest {
+
+    // -------------------------------------------------------------------
+    // Helper: WASM magic + version 1 header (8 bytes)
+    // -------------------------------------------------------------------
+    private val HEADER = byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00)
+
+    // -------------------------------------------------------------------
+    // Test 1: truncated section header (custom.3.wasm style)
+    //
+    // Binary: magic+version (8 bytes) + one section-id byte (0x00 = custom)
+    // with zero bytes remaining for the LEB128 size.
+    //
+    // Pre-fix: construction throws BufferUnderflowException (escapes constructor).
+    // Post-fix: construction succeeds; parseProblems contains exactly 1
+    //   SECTION_TRUNCATED problem at byteOffset 0x08.
+    // -------------------------------------------------------------------
+    private val truncatedSectionHeader: ByteArray =
+        HEADER + byteArrayOf(0x00) // section-id only, no size byte
+
+    @Test
+    fun truncated_section_header_construction_succeeds() {
+        // Pre-fix: this line throws. Post-fix: it completes.
+        val provider = WasmBinaryProvider(truncatedSectionHeader.toCommonByteBuffer())
+        // Verify it did not produce a module (no valid sections were decoded).
+        // The primary assertion is that no exception escaped construction.
+        assertTrue(provider.parseProblems.isNotEmpty() || provider.wasmModule == null,
+            "malformed binary must either report a problem or yield no module")
+    }
+
+    @Test
+    fun truncated_section_header_reports_section_truncated_problem() {
+        val provider = WasmBinaryProvider(truncatedSectionHeader.toCommonByteBuffer())
+        // Pre-fix: parseProblems is never reached (constructor throws).
+        val problem = provider.parseProblems.singleOrNull {
+            it.kind == ParseProblemKind.SECTION_TRUNCATED
+        }
+        assertNotNull(problem, "expected exactly one SECTION_TRUNCATED problem, got ${provider.parseProblems}")
+        // The bad section starts at offset 8 (right after magic+version).
+        assertEquals(0x08, problem.byteOffset, "SECTION_TRUNCATED must point at the section start byte")
+    }
+
+    // -------------------------------------------------------------------
+    // Test 2: custom section with name-length > remaining bytes (custom.9 style)
+    //
+    // Binary: header + section-id 0x00 + size 0x05 (5 content bytes) +
+    //   name-len LEB 0x73 (= 115) + 4 bytes of padding.
+    // consumeString() rejects 115 > 4 remaining, throws WasmParseException.
+    //
+    // Pre-fix: the WasmParseException escapes the parse loop (unguarded
+    //   coreResolver call) and bubbles to the constructor caller.
+    // Post-fix: caught, recorded as SECTION_TRUNCATED at byteOffset 8;
+    //   construction completes.
+    // -------------------------------------------------------------------
+    private val badCustomSectionName: ByteArray =
+        HEADER + byteArrayOf(
+            0x00,                       // section-id = custom
+            0x05,                       // section content size = 5
+            0x73,                       // name-len LEB = 115 (> 4 remaining)
+            0x41, 0x42, 0x43, 0x44,    // 4 filler bytes
+        )
+
+    @Test
+    fun bad_custom_section_name_construction_succeeds() {
+        // Pre-fix: WasmParseException propagates out of parse(), which propagates
+        // out of the `parseResult` field initializer in the constructor.
+        val provider = WasmBinaryProvider(badCustomSectionName.toCommonByteBuffer())
+        // Accessing parseProblems must not throw either.
+        val problems = provider.parseProblems
+        assertTrue(problems.isNotEmpty(), "bad custom-section name must produce at least one problem")
+    }
+
+    @Test
+    fun bad_custom_section_name_reports_section_truncated_at_correct_offset() {
+        val provider = WasmBinaryProvider(badCustomSectionName.toCommonByteBuffer())
+        // Pre-fix: constructor throws, so this line is never reached.
+        val problem = provider.parseProblems.singleOrNull {
+            it.kind == ParseProblemKind.SECTION_TRUNCATED
+        }
+        assertNotNull(problem, "expected a SECTION_TRUNCATED problem, got ${provider.parseProblems}")
+        assertEquals(0x08, problem.byteOffset, "section starts at offset 8")
+    }
+
+    // -------------------------------------------------------------------
+    // Test 3: overlong LEB128 in code body (binary-leb128.43 style)
+    //
+    // A function body contains an 11-byte u32 LEB128 (all continuation bits
+    // set). Pre-fix: parser reads all 11 bytes, drifts past the declared code
+    // entry boundary, resumes on ghost bytes, and eventually throws
+    // BufferUnderflowException out of some later parse call.
+    // Post-fix: getULEB128 stops at 10 bytes; consumeCodeEntry's catch-all
+    // degrades the entry to UnparsedOpCode; parseProblems reports
+    // CODE_ENTRY_CORRUPT (no prefix decoded) — no uncaught exception.
+    //
+    // Module layout:
+    //   type[0] = () -> ()
+    //   function[0] uses type 0
+    //   code[0]: size=14, no locals, i32.const 0 (opcode 0x41 0x00),
+    //     i32.load memarg: align=0 (LEB 0x00), offset = 11-byte overlong LEB,
+    //     end (0x0b)
+    // The overlong offset LEB: 10 continuation bytes (0x80) + terminal 0x00 = 11 bytes total.
+    // Body size: 1 (no-locals) + 2 (i32.const 0) + 1 (i32.load opcode) +
+    //            1 (align) + 11 (overlong offset) + 1 (end) = 17 bytes.
+    // Code section: 1 (count) + 1 (size LEB for 17) + 17 = 19 bytes.
+    // -------------------------------------------------------------------
+    private val overlongLeb128InCodeBody: ByteArray = byteArrayOf(
+        // magic + version
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        // type section: type[0] = () -> ()
+        0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
+        // function section: function[0] uses type 0
+        0x03, 0x02, 0x01, 0x00,
+        // code section (id=10, size=19)
+        0x0A, 0x13,
+          0x01,         // 1 entry
+          0x11,         // entry size = 17
+            0x00,       // no locals
+            0x41, 0x00, // i32.const 0
+            0x28,       // i32.load
+            0x00,       // align = 0
+            // 11-byte overlong u32 LEB128 (10 continuation bytes + terminal):
+            0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte(),
+            0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte(),
+            0x80.toByte(), 0x80.toByte(), 0x00,
+            0x0B,       // end
+    )
+
+    @Test
+    fun overlong_leb128_in_code_body_does_not_throw() {
+        // Pre-fix: either construction or a property access throws
+        // BufferUnderflowException due to position drift past the code entry.
+        val provider = WasmBinaryProvider(overlongLeb128InCodeBody.toCommonByteBuffer())
+        // Force code records and parse problems — both must complete without throwing.
+        val records = provider.codeRecords
+        val problems = provider.parseProblems
+        // Either the entry is corrupt (UnparsedOpCode) or code decoded fine.
+        // The key guarantee is that no exception escapes.
+        assertTrue(records.isNotEmpty() || problems.isNotEmpty(),
+            "expected code records or problems, not a silent empty result")
+    }
+
+    @Test
+    fun overlong_leb128_in_code_body_has_one_code_record_and_no_section_truncation() {
+        val provider = WasmBinaryProvider(overlongLeb128InCodeBody.toCommonByteBuffer())
+        // Pre-fix: accessing codeRecords / parseProblems throws BufferUnderflowException
+        // because the LEB128 reader drifts 11 bytes and exits the code entry boundary.
+        val records = provider.codeRecords
+        val problems = provider.parseProblems
+        // The module has exactly one code entry; it must be accessible without throw.
+        assertEquals(1, records.size, "fixture has one function, must produce one code record")
+        // No section-truncation problems: the headers are all well-formed.
+        assertTrue(problems.none { it.kind == ParseProblemKind.SECTION_TRUNCATED },
+            "well-formed section headers must not produce SECTION_TRUNCATED, got $problems")
+    }
+
+    // -------------------------------------------------------------------
+    // Test 4: init-expr failure in global section
+    //
+    // A global section entry whose init-expression uses an opcode the parser
+    // does not recognize (0xFF = not a valid init-expr opcode). The scan
+    // throws before producing any global records.
+    //
+    // Pre-fix: WasmBinaryProvider.data / parseProblems (or the lazy that calls
+    //   globalSection.scan()) throws an uncaught exception.
+    // Post-fix: parseProblems catches the scan failure and emits an
+    //   INIT_EXPR_PARSE_FAILURE problem; globals decoded before the bad entry
+    //   may be empty (per-section degradation).
+    //
+    // Layout: type[0]=()→(), global[0]: type i32 mut, init = 0xFF (bad opcode)
+    // Global section content: 1 (count) + 0x7F (i32) + 0x01 (mutable) + 0xFF (bad opcode)
+    // -------------------------------------------------------------------
+    private val globalSectionInitExprFailure: ByteArray = byteArrayOf(
+        // magic + version
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        // type section (minimal, 1 func type () -> ())
+        0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
+        // global section (id=6, size=4): 1 global, i32 mutable, bad init opcode
+        0x06, 0x04,
+          0x01,         // count = 1
+          0x7F,         // value type = i32
+          0x01,         // mutability = mutable
+          0xFF.toByte(),// invalid init opcode (not i32.const / global.get / end)
+    )
+
+    @Test
+    fun global_section_init_expr_failure_construction_succeeds() {
+        // Pre-fix: construction or first property access throws.
+        val provider = WasmBinaryProvider(globalSectionInitExprFailure.toCommonByteBuffer())
+        // Must not throw; module may or may not be present.
+        @Suppress("UNUSED_VARIABLE") val ignored = provider.wasmModule
+    }
+
+    @Test
+    fun global_section_init_expr_failure_emits_init_expr_problem() {
+        val provider = WasmBinaryProvider(globalSectionInitExprFailure.toCommonByteBuffer())
+        // Pre-fix: parseProblems itself throws (uncaught from globalSection.scan()).
+        val problems = provider.parseProblems
+        val initProblem = problems.firstOrNull { it.kind == ParseProblemKind.INIT_EXPR_PARSE_FAILURE }
+        assertNotNull(initProblem,
+            "global section with bad init opcode must emit INIT_EXPR_PARSE_FAILURE, got $problems")
+    }
+
+    // -------------------------------------------------------------------
+    // Test 5: clean module still reports zero problems
+    //
+    // Ensures guards do not introduce false positives.
+    // -------------------------------------------------------------------
+    private val minimalClean: ByteArray = byteArrayOf(
+        0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
+        0x03, 0x02, 0x01, 0x00,
+        0x0A, 0x04, 0x01, 0x02, 0x00, 0x0B,
+    )
+
+    @Test
+    fun clean_module_still_reports_zero_hardening_problems() {
+        val provider = WasmBinaryProvider(minimalClean.toCommonByteBuffer())
+        val problems = provider.parseProblems
+        assertTrue(problems.isEmpty(),
+            "clean module must have no parse problems after hardening, got $problems")
+    }
+}

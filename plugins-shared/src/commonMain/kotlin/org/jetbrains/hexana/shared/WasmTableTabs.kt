@@ -385,6 +385,7 @@ private fun ParseProblemKind.label(): String = when (this) {
     ParseProblemKind.INIT_EXPR_PARSE_FAILURE -> "Init expr failure"
     ParseProblemKind.UNKNOWN_CORE_INSTANCE_TAG -> "Unknown instance tag"
     ParseProblemKind.CORE_INSTANCE_ENTRY_CORRUPT -> "Instance entry corrupt"
+    ParseProblemKind.SECTION_TRUNCATED -> "Section truncated"
 }
 
 /**

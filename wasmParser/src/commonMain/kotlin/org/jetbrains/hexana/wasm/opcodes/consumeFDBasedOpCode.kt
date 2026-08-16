@@ -313,6 +313,12 @@ fun CommonByteBuffer.consumeFDBasedOpCode(offset: Int, code: UInt): OpCode {
         i16x8.RelaxedDotSi8x16.code -> i16x8.RelaxedDotSi8x16
         i32x4.RelaxedDotAddSi16x8.code -> i32x4.RelaxedDotAddSi16x8
 
+        // relaxed-SIMD: i32x4.relaxed_trunc (0x101-0x104)
+        i32x4.RelaxedTruncF32x4S.code -> i32x4.RelaxedTruncF32x4S
+        i32x4.RelaxedTruncF32x4U.code -> i32x4.RelaxedTruncF32x4U
+        i32x4.RelaxedTruncF32x4SZero.code -> i32x4.RelaxedTruncF32x4SZero
+        i32x4.RelaxedTruncF32x4UZero.code -> i32x4.RelaxedTruncF32x4UZero
+
         else -> throw UnsupportedOpsException(code, offset)
     }
 }

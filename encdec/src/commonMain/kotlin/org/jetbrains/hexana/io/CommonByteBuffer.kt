@@ -69,9 +69,11 @@ interface CommonByteBuffer {
     fun getULEB128(): Long {
         var result = 0L
         var shift = 0
+        var bytesRead = 0
 
         while (true) {
             val byte = get().toInt() and 0xFF
+            bytesRead++
             // Convert to Long BEFORE shifting — UInt is 32-bit, so `UInt shl 33`
             // would wrap mod 32 and lose high bits in 10-byte ULEB128 values.
             result = result or ((byte and 0x7F).toLong() shl shift)
@@ -79,6 +81,11 @@ interface CommonByteBuffer {
                 break
             }
             shift += 7
+            // The WASM spec caps u64 LEB128 at 10 bytes (ceil(64/7)). An 11th
+            // continuation byte is malformed; stop rather than drift past valid data.
+            if (bytesRead >= 10) {
+                break
+            }
         }
 
         return result
@@ -87,9 +94,11 @@ interface CommonByteBuffer {
     fun getSLEB128(): Long {
         var result = 0L
         var shift = 0
+        var bytesRead = 0
 
         while (true) {
             val byte = get().toInt() and 0xFF
+            bytesRead++
             // Convert to Long BEFORE shifting — see getULEB128 for rationale.
             result = result or ((byte and 0x7F).toLong() shl shift)
             if (byte and 0x80 == 0) {
@@ -102,6 +111,10 @@ interface CommonByteBuffer {
                 break
             }
             shift += 7
+            // 10-byte cap mirrors getULEB128 — s64 is also at most 10 bytes.
+            if (bytesRead >= 10) {
+                break
+            }
         }
 
         return result

@@ -117,7 +117,7 @@ sealed class WasmLimits<T>(val kind: Byte, val min: T, val max: T?) {
 /**
  * [min, infinite)
  */
-class WasmOpenI32Limits(min: Int): WasmLimits<Int>(0, min, null)
+class WasmOpenI32Limits(min: Int, val shared: Boolean = false): WasmLimits<Int>(0, min, null)
 /**
  * [min, max]
  */
@@ -138,7 +138,7 @@ class WasmFixedI32Limits(min: Int, max: Int, val shared:Boolean = false): WasmLi
 /**
  * [min, infinite)
  */
-class WasmOpenI64Limits(min: Long): WasmLimits<Long>(4, min, null)
+class WasmOpenI64Limits(min: Long, val shared: Boolean = false): WasmLimits<Long>(4, min, null)
 
 /**
  * [min, max]

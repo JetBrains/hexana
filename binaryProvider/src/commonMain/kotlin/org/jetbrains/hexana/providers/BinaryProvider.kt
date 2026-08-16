@@ -44,6 +44,7 @@ import org.jetbrains.hexana.zip.ZipEntry
 import org.jetbrains.hexana.zip.ZipParser
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmNamedRange
+import org.jetbrains.hexana.wasm.SectionScanFailure
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.customSectionByName
 import org.jetbrains.hexana.wasm.analysis.GraalJavaSymbol
@@ -880,6 +881,11 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
         else -> null
     }
 
+    private val sectionScanFailures: List<SectionScanFailure> = when (parseResult) {
+        is WasmParseSuccess -> parseResult.sectionScanFailures
+        else -> emptyList()
+    }
+
     val wasmModule = parsedModule as? WasmModule
 
     fun canProvideWasmModule() = wasmModule != null
@@ -914,22 +920,34 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
 
     val imports: List<WasmImportRecord> by lazy {
         val importSection = wasmModule?.importSection ?: return@lazy emptyList()
-        with (importSection) {
-            bytes.getImportRecords()
+        try {
+            with (importSection) {
+                bytes.getImportRecords()
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 
     val exports: List<WasmExportRecordEntry> by lazy {
         val exportsSection = wasmModule?.exportSection ?: return@lazy emptyList()
-        with (exportsSection) {
-            bytes.scan()
+        try {
+            with (exportsSection) {
+                bytes.scan()
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 
     val data: List<WasmDataRecord> by lazy {
         val dataSection = wasmModule?.dataSection ?: return@lazy emptyList()
-        with (dataSection) {
-            bytes.scan()
+        try {
+            with (dataSection) {
+                bytes.scan()
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 
@@ -949,7 +967,11 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
      */
     val graalWebImageInfo: GraalWebImageInfo by lazy {
         val module = wasmModule ?: return@lazy GraalWebImageInfo.NOT_WEB_IMAGE
-        GraalWebImageDetector.detect(module, bytes)
+        try {
+            GraalWebImageDetector.detect(module, bytes)
+        } catch (_: Exception) {
+            GraalWebImageInfo.NOT_WEB_IMAGE
+        }
     }
 
     /**
@@ -969,7 +991,11 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
      */
     val kotlinWasmInfo: KotlinWasmInfo by lazy {
         val module = wasmModule ?: return@lazy KotlinWasmInfo.NOT_KOTLIN_WASM
-        KotlinWasmDetector.detect(module, bytes)
+        try {
+            KotlinWasmDetector.detect(module, bytes)
+        } catch (_: Exception) {
+            KotlinWasmInfo.NOT_KOTLIN_WASM
+        }
     }
 
     /**
@@ -1024,7 +1050,11 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
     }
 
     override val sizeAnalysis: SizeNode.Module? by lazy {
-        parsedModule?.let { SizeAnalysisBuilder(bytes, it).buildTree() }
+        try {
+            parsedModule?.let { SizeAnalysisBuilder(bytes, it).buildTree() }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     override val structureRanges: List<StructureRange> by lazy {
@@ -1052,7 +1082,11 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
     }
 
     val callGraphDominators: DominatorResult? by lazy {
-        callGraphResult?.let { DominatorTree.compute(it.graph) }
+        try {
+            callGraphResult?.let { DominatorTree.compute(it.graph) }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     /**
@@ -1074,7 +1108,11 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
      * sections, no code decoding.
      */
     val exceptionTags: WasmExceptionTags? by lazy {
-        wasmModule?.let { WasmExceptionTagsBuilder.build(bytes, it) }
+        try {
+            wasmModule?.let { WasmExceptionTagsBuilder.build(bytes, it) }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     /**
@@ -1086,25 +1124,57 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
      */
     val exceptionPropagation: ExceptionPropagation? by lazy {
         val module = wasmModule ?: return@lazy null
-        val names = nameSection?.functionSubsection?.namemap ?: emptyMap()
-        ExceptionPropagationBuilder.build(bytes, module, names)
+        try {
+            val names = nameSection?.functionSubsection?.namemap ?: emptyMap()
+            ExceptionPropagationBuilder.build(bytes, module, names)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     val importFuncCount: Int by lazy {
-        val importRecords = wasmModule?.importSection?.let { section ->
-            with(section) { bytes.getImportRecords() }
-        } ?: emptyList()
-        importRecords.count { it.type is org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType }
+        try {
+            val importRecords = wasmModule?.importSection?.let { section ->
+                with(section) { bytes.getImportRecords() }
+            } ?: emptyList()
+            importRecords.count { it.type is org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType }
+        } catch (_: Exception) {
+            0
+        }
     }
 
     /**
      * All parse problems found in this module: unparsed opcode tails, corrupt code entries,
-     * type-section failures, etc. Derived without extra parse passes where possible.
-     * Capped at 1000 entries.
+     * type-section failures, section-header truncations, init-expression failures, etc.
+     * Derived without extra parse passes where possible. Capped at 1000 entries.
+     * This lazy never throws.
      */
     val parseProblems: List<ParseProblem> by lazy {
+        try {
+            buildParseProblems()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun buildParseProblems(): List<ParseProblem> {
         val problems = mutableListOf<ParseProblem>()
         val module = wasmModule
+
+        // Section-header / custom-section-name truncation failures recorded during parse.
+        for (failure in sectionScanFailures) {
+            if (problems.size >= 1000) break
+            problems.add(ParseProblem(
+                kind = ParseProblemKind.SECTION_TRUNCATED,
+                sectionId = 0,
+                sectionName = "Section header",
+                funcIdx = null,
+                typeIdx = null,
+                byteOffset = failure.byteOffset,
+                byteSize = 1,
+                message = failure.message,
+            ))
+        }
 
         // Code section: scan codeRecords for UnparsedOpCode occurrences.
         val codeSection = module?.codeSection
@@ -1156,27 +1226,96 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
             }
         }
 
-        problems.take(1000)
+        // Global section: detect init-expression parse failures.
+        val globalSection = module?.globalSection
+        if (globalSection != null && problems.size < 1000) {
+            try {
+                with(globalSection) { bytes.scan() }
+            } catch (e: Exception) {
+                problems.add(ParseProblem(
+                    kind = ParseProblemKind.INIT_EXPR_PARSE_FAILURE,
+                    sectionId = WasmSectionGlobal.SECTION_ID.toInt(),
+                    sectionName = globalSection.name,
+                    funcIdx = null,
+                    typeIdx = null,
+                    byteOffset = globalSection.contentOffset,
+                    byteSize = globalSection.contentSize.coerceAtLeast(1),
+                    message = e.message ?: "global section init-expr failure",
+                ))
+            }
+        }
+
+        // Element section: detect init-expression parse failures.
+        val elementSection = module?.elementSection
+        if (elementSection != null && problems.size < 1000) {
+            try {
+                with(elementSection) { bytes.scanElements() }
+            } catch (e: Exception) {
+                problems.add(ParseProblem(
+                    kind = ParseProblemKind.INIT_EXPR_PARSE_FAILURE,
+                    sectionId = WasmSectionElement.SECTION_ID.toInt(),
+                    sectionName = elementSection.name,
+                    funcIdx = null,
+                    typeIdx = null,
+                    byteOffset = elementSection.contentOffset,
+                    byteSize = elementSection.contentSize.coerceAtLeast(1),
+                    message = e.message ?: "element section init-expr failure",
+                ))
+            }
+        }
+
+        // Data section: detect init-expression parse failures.
+        val dataSection = module?.dataSection
+        if (dataSection != null && problems.size < 1000) {
+            try {
+                with(dataSection) { bytes.scan() }
+            } catch (e: Exception) {
+                problems.add(ParseProblem(
+                    kind = ParseProblemKind.INIT_EXPR_PARSE_FAILURE,
+                    sectionId = WasmSectionData.SECTION_ID.toInt(),
+                    sectionName = dataSection.name,
+                    funcIdx = null,
+                    typeIdx = null,
+                    byteOffset = dataSection.contentOffset,
+                    byteSize = dataSection.contentSize.coerceAtLeast(1),
+                    message = e.message ?: "data section init-expr failure",
+                ))
+            }
+        }
+
+        return problems.take(1000)
     }
 
     val monosAnalysis: MonosResult? by lazy {
         val names = nameSection?.functionSubsection?.namemap ?: return@lazy null
-        val sizes = mutableMapOf<Int, Int>()
-        codeOffsets.forEachIndexed { codeIdx, entry ->
-            sizes[importFuncCount + codeIdx] = entry.size
+        try {
+            val sizes = mutableMapOf<Int, Int>()
+            codeOffsets.forEachIndexed { codeIdx, entry ->
+                sizes[importFuncCount + codeIdx] = entry.size
+            }
+            MonosAnalyzer.analyze(names, sizes)
+        } catch (_: Exception) {
+            null
         }
-        MonosAnalyzer.analyze(names, sizes)
     }
 
     val garbageAnalysis: GarbageResult? by lazy {
         val cg = callGraphResult ?: return@lazy null
         val dom = callGraphDominators ?: return@lazy null
-        GarbageAnalyzer(cg, dom, codeOffsets, importFuncCount, bytes, wasmModule).analyze()
+        try {
+            GarbageAnalyzer(cg, dom, codeOffsets, importFuncCount, bytes, wasmModule).analyze()
+        } catch (_: Exception) {
+            null
+        }
     }
 
     val usedProposals: Set<WasmProposal> by lazy {
         val module = wasmModule ?: return@lazy emptySet()
-        WasmProposalDetector.detect(module, bytes)
+        try {
+            WasmProposalDetector.detect(module, bytes)
+        } catch (_: Exception) {
+            emptySet()
+        }
     }
 
     /**
@@ -1186,12 +1325,16 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
      */
     val minification: MinificationResult by lazy {
         wasmModule ?: return@lazy MinificationResult.NONE
-        val funcImports = imports.filter { it.type is WasmTypeIndexExternalType }
-        WasmMinificationDetector.detect(
-            importModules = funcImports.map { it.prefix },
-            importFields = funcImports.map { it.name },
-            exportNames = exports.filterIsInstance<WasmFunctionExportRecordEntry>().map { it.name },
-        )
+        try {
+            val funcImports = imports.filter { it.type is WasmTypeIndexExternalType }
+            WasmMinificationDetector.detect(
+                importModules = funcImports.map { it.prefix },
+                importFields = funcImports.map { it.name },
+                exportNames = exports.filterIsInstance<WasmFunctionExportRecordEntry>().map { it.name },
+            )
+        } catch (_: Exception) {
+            MinificationResult.NONE
+        }
     }
 
     fun getCodeRecordByIndex(index: Int): WasmCodeRecord? {

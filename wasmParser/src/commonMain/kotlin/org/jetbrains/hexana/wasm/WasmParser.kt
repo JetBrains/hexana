@@ -58,13 +58,28 @@ class WasmParser {
         val (version, layer) = versionRaw.and(0xffffu).toUShort() to versionRaw.shr(16).and(0xfffffu).toUShort()
 
         val sections = mutableListOf<WasmSection>()
+        val scanFailures = mutableListOf<SectionScanFailure>()
         while (buffer.hasRemaining()) {
-            val wasmSection = buffer.resolveSection {
-                when {
-                    isCoreVersion(version, layer) -> coreResolver(it)
-                    isComponentsVersion(version, layer) -> componentResolver(it)
-                    else -> it
+            val sectionOffset = buffer.position()
+            val wasmSection = try {
+                buffer.resolveSection { unresolvedSection ->
+                    try {
+                        when {
+                            isCoreVersion(version, layer) -> coreResolver(unresolvedSection)
+                            isComponentsVersion(version, layer) -> componentResolver(unresolvedSection)
+                            else -> unresolvedSection
+                        }
+                    } catch (e: Exception) {
+                        // Custom-section name decode or resolver failure: record and
+                        // return the unresolved section so we can still advance past it.
+                        scanFailures.add(SectionScanFailure(sectionOffset, e.message ?: "section resolve failed"))
+                        unresolvedSection
+                    }
                 }
+            } catch (e: Exception) {
+                // Section header (id byte + LEB128 size) could not be read — truncated binary.
+                scanFailures.add(SectionScanFailure(sectionOffset, e.message ?: "section header truncated"))
+                break
             }
             sections.add(wasmSection)
             val nextIndex = wasmSection.sectionOffset + wasmSection.sectionSize
@@ -81,7 +96,7 @@ class WasmParser {
 
         val wasmModule = fromSections(version, layer, sections) ?: return WasmParseFailure()
 
-        return WasmParseSuccess(wasmModule)
+        return WasmParseSuccess(wasmModule, scanFailures)
     }
 
 }
@@ -128,5 +143,13 @@ internal fun CommonByteBuffer.coreResolver(unresolvedSection: WasmSectionUnresol
     }
 
 sealed interface WasmParseResult
-class WasmParseSuccess(val wasmModule: WasmComponentBase<*, *>) : WasmParseResult
+
+/** A section-header or section-resolve failure recorded during the scan loop. */
+data class SectionScanFailure(val byteOffset: Int, val message: String)
+
+class WasmParseSuccess(
+    val wasmModule: WasmComponentBase<*, *>,
+    val sectionScanFailures: List<SectionScanFailure> = emptyList(),
+) : WasmParseResult
+
 class WasmParseFailure : WasmParseResult

@@ -40,4 +40,6 @@ enum class ParseProblemKind {
     UNKNOWN_CORE_INSTANCE_TAG,
     /** A component core-instance entry failed to decode; the section remainder is skipped. */
     CORE_INSTANCE_ENTRY_CORRUPT,
+    /** A section header or custom-section name could not be read (truncated binary). */
+    SECTION_TRUNCATED,
 }

@@ -6,6 +6,7 @@ import org.jetbrains.hexana.wasm.WasmRange
 import org.jetbrains.hexana.wasm.components.WasmComponentCoreType
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.recType
 import org.jetbrains.hexana.wasm.sections.StandardTypesParser.subtype
+import org.jetbrains.hexana.wasm.sections.StandardTypesParser.subtypeFromCode
 
 class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int) :
     WasmSection("Types", sectionSize, sectionOffset, contentSize, contentOffset) {
@@ -40,14 +41,16 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
 
         consumeArray {
             val offset = position()
-            val type = get().toUByte()
-            when (type) {
-                0x4E.toUByte() -> {
-                    typeRecords.add(recType())
-                }
+            // Type-group discriminants are S33 SLEB128 values per the GC spec.
+            // -0x32 (-50) is rec; anything else falls through to subtype().
+            val typCode = getSLEB128().toInt()
+            when (typCode) {
+                -0x32 -> typeRecords.add(recType())
                 else -> {
-                    position(position() - 1)
-                    typeRecords.add(subtype(offset))
+                    // Un-consume by re-positioning: subtype() reads the discriminant itself.
+                    // We cannot un-read a multi-byte SLEB128 by position(-1), so we
+                    // delegate via a helper that receives the already-decoded code.
+                    typeRecords.add(subtypeFromCode(typCode, offset))
                 }
             }
         }
@@ -69,13 +72,11 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
         for (i in 0 until count) {
             val offset = position()
             try {
-                val type = get().toUByte()
-                when (type) {
-                    0x4E.toUByte() -> typeRecords.add(recType())
-                    else -> {
-                        position(position() - 1)
-                        typeRecords.add(subtype(offset))
-                    }
+                // Type-group discriminants are S33 SLEB128 values per the GC spec.
+                val typCode = getSLEB128().toInt()
+                when (typCode) {
+                    -0x32 -> typeRecords.add(recType())
+                    else -> typeRecords.add(subtypeFromCode(typCode, offset))
                 }
             } catch (e: Exception) {
                 failedOffset = offset
@@ -99,40 +100,53 @@ object StandardTypesParser {
     }
 
     fun CommonByteBuffer.subtype(offset: Int): WasmTypeRecord {
-        val subType = get()
-        return when (subType) {
-            0x4f.toByte(),
-            0x50.toByte() -> {
+        val typCode = getSLEB128().toInt()
+        return subtypeFromCode(typCode, offset)
+    }
+
+    internal fun CommonByteBuffer.subtypeFromCode(typCode: Int, offset: Int): WasmTypeRecord {
+        return when (typCode) {
+            -0x31, // 0x4f sub final
+            -0x30  // 0x50 sub
+            -> {
+                val isFinal = typCode == -0x31
                 val superTypers = mutableListOf<UInt>()
                 consumeArray {
-                    val subType = getULEB128().toUInt()
-                    superTypers.add(subType)
+                    val idx = getULEB128().toUInt()
+                    superTypers.add(idx)
                 }
                 // custom-descriptors proposal: optional descriptor clause (0x4D) and/or
                 // describes clause (0x4C) appear between the supertype list and the comptype.
                 // Consume them to maintain alignment.
                 var peeked = get()
                 while (peeked == 0x4D.toByte() || peeked == 0x4C.toByte()) {
-                    getULEB128() // clause type index — consumed for alignment, not modeled
+                    getULEB128() // clause type index
                     peeked = get()
                 }
                 position(position() - 1) // un-consume the non-clause byte (comptype prefix)
-                compType(offset, superTypers.toList(), subType.toUByte() == 0x4f.toUByte())
+                compType(offset, superTypers.toList(), isFinal)
             }
 
-            else -> {
-                position(position() - 1)
-                compType(offset, emptyList(), true)
-            }
+            else -> compTypeFromCode(typCode, offset, emptyList(), true)
         }
     }
 
     fun CommonByteBuffer.compType(offset: Int, superTypers: List<UInt>, isFinal: Boolean): WasmTypeRecord {
-        return when (get()) {
-            0x5e.toByte() -> arrayType(offset)
-            0x5f.toByte() -> structType(offset, superTypers, isFinal)
-            0x60.toByte() -> funcType(offset)
-            else -> error("unknown type id: 0x${get().toHexString()}")
+        val typCode = getSLEB128().toInt()
+        return compTypeFromCode(typCode, offset, superTypers, isFinal)
+    }
+
+    private fun CommonByteBuffer.compTypeFromCode(
+        typCode: Int,
+        offset: Int,
+        superTypers: List<UInt>,
+        isFinal: Boolean,
+    ): WasmTypeRecord {
+        return when (typCode) {
+            -0x22 -> arrayType(offset)   // 0x5e array
+            -0x21 -> structType(offset, superTypers, isFinal)  // 0x5f struct
+            -0x20 -> funcType(offset)    // 0x60 func
+            else -> error("unknown type id: 0x${typCode.toUInt().toString(16)}")
         }
     }
 
@@ -201,17 +215,30 @@ object StandardTypesParser {
 
     /**
      * 5.3.9 Limits
+     *
+     * Flags byte is a bitfield:
+     *   bit 0 = has-max
+     *   bit 1 = shared (threads proposal)
+     *   bit 2 = 64-bit index type (memory64 proposal)
+     *   bit 3 = custom page size (an extra ULEB128 page-size-log2 field follows max or min)
      */
     fun CommonByteBuffer.limits(): WasmLimits<*> {
-        val limitType = get()
-        return when (limitType) {
-            0x00.toByte() -> WasmOpenI32Limits(getULEB128().toInt())
-            0x01.toByte() -> WasmFixedI32Limits(getULEB128().toInt(), getULEB128().toInt())
-            0x03.toByte() -> WasmFixedI32Limits(uint32().toInt(), uint32().toInt(), true)
-            0x04.toByte() -> WasmOpenI64Limits(getULEB128())
-            0x05.toByte() -> WasmFixedI64Limits(getULEB128(), getULEB128())
-            0x07.toByte() -> WasmFixedI64Limits(getULEB128(), getULEB128(), true)
-            else -> error("unknown limits type")
+        val flags = get().toInt() and 0xFF
+        val hasMax    = flags and 0x01 != 0
+        val shared    = flags and 0x02 != 0
+        val is64      = flags and 0x04 != 0
+        val hasPageSz = flags and 0x08 != 0
+
+        return if (is64) {
+            val min = getULEB128()
+            val max = if (hasMax) getULEB128() else null
+            if (hasPageSz) getULEB128() // consume page-size-log2, not modeled
+            if (hasMax) WasmFixedI64Limits(min, max!!, shared) else WasmOpenI64Limits(min, shared)
+        } else {
+            val min = getULEB128().toInt()
+            val max = if (hasMax) getULEB128().toInt() else null
+            if (hasPageSz) getULEB128() // consume page-size-log2, not modeled
+            if (hasMax) WasmFixedI32Limits(min, max!!, shared) else WasmOpenI32Limits(min, shared)
         }
     }
 
