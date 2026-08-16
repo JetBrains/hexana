@@ -44,19 +44,24 @@ fun decodeWasmValueHex(hex: String, typeDisplay: String): String? {
                 ((bytes[1].toInt() and 0xFF) shl 8) or
                 ((bytes[2].toInt() and 0xFF) shl 16) or
                 ((bytes[3].toInt() and 0xFF) shl 24)
-            val f = Float.fromBits(bits)
-            f.toString()
+            ensureDecimal(Float.fromBits(bits).toString())
         }
         "f64" -> {
             if (bytes.size != 8) return null
             var bits = 0L
             for (i in 0..7) bits = bits or ((bytes[i].toLong() and 0xFF) shl (i * 8))
-            val d = Double.fromBits(bits)
-            d.toString()
+            ensureDecimal(Double.fromBits(bits).toString())
         }
         else -> null
     }
 }
+
+/**
+ * Kotlin/JS and Kotlin/Wasm render whole-number floats without a decimal part
+ * (`"1"` instead of the JVM's `"1.0"`). Append `.0` so all targets agree.
+ */
+private fun ensureDecimal(s: String): String =
+    if (s.any { it == '.' || it == 'e' || it == 'E' } || s.endsWith("NaN") || s.endsWith("Infinity")) s else "$s.0"
 
 /**
  * Extracts the hex payload from collected `process plugin packet send` output lines.
