@@ -37,6 +37,8 @@ test("contains no deployment identity or credential configuration", () => {
 });
 
 test("documents the external publication and Console configuration boundary", () => {
-    assert.match(readme, /immutable\s+image digest/i);
-    assert.match(readme, /Cloud Console \*\*Build environment\s+\(container image\)\*\*/);
+    assert.match(readme, /immutable\s+Linux\s+`amd64`\s+image digest/i);
+    assert.match(readme, /docker buildx build --platform\s+linux\/amd64 --push/);
+    assert.match(readme, /must not use a locally loaded single-architecture image/i);
+    assert.match(readme, /Cloud Console\s+\*\*Build environment\s+\(container image\)\*\*/);
 });
