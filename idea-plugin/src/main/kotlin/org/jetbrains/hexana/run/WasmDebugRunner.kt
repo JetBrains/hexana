@@ -219,6 +219,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
         configuration: WasmRunConfiguration,
         environment: ExecutionEnvironment,
     ): RunContentDescriptor? {
+        offerWasiSdkIfAbsent(environment.project, configuration)
         val prep = ProgressManager.getInstance()
             .runProcessWithProgressSynchronously(
                 ThrowableComputable { prepareWasmtimeGdbSession(configuration, environment.project) },
@@ -371,6 +372,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
         configuration: WasmRunConfiguration,
         environment: ExecutionEnvironment,
     ): RunContentDescriptor? {
+        offerWasiSdkIfAbsent(environment.project, configuration)
         // All blocking preparatory work (iwasm launch, server
         // readiness wait, DWARF parsing) runs inside a modal
         // progress task. The modal dialog pumps UI events so the
@@ -692,13 +694,43 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
          * start proceeds and fails with the usual platform error.
          */
         private fun notifyIfLldbMissing(project: Project, lldbExe: String) {
-            val missing = if (lldbExe.contains('/') || lldbExe.contains('\\')) {
+            if (isLldbCommandMissing(lldbExe)) {
+                WasiSdkOffer.showLldbMissingNotification(project)
+            }
+        }
+
+        private fun isLldbCommandMissing(lldbExe: String): Boolean =
+            if (lldbExe.contains('/') || lldbExe.contains('\\')) {
                 !File(lldbExe).exists()
             } else {
                 PathEnvironmentVariableUtil.findInPath(lldbExe) == null
             }
-            if (missing) {
-                WasiSdkOffer.showLldbMissingNotification(project)
+
+        /** Set once the wasi-sdk install offer was shown; resets with the IDE. */
+        @Volatile
+        private var wasiSdkOfferShown = false
+
+        /**
+         * Offers the wasi-sdk download once per IDE session when a wasm debug
+         * session starts with no managed wasi-sdk installed and no explicit
+         * LLDB path configured (per run configuration or in settings). Skipped
+         * when LLDB cannot be found at all, because [notifyIfLldbMissing]
+         * already shows the actionable warning for that case. Checks run on a
+         * pooled thread; the debug session is never blocked.
+         */
+        internal fun offerWasiSdkIfAbsent(project: Project, configuration: WasmRunConfiguration) {
+            if (wasiSdkOfferShown) return
+            if (configuration.lldbPath.isNotBlank()) return
+            com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+                if (wasiSdkOfferShown) return@executeOnPooledThread
+                val settings = WasmRuntimeSettings.getInstance()
+                if (!settings.state.lldbPath.isNullOrBlank()) return@executeOnPooledThread
+                if (isLldbCommandMissing(resolveDefaultLldbPath())) return@executeOnPooledThread
+                if (org.jetbrains.hexana.wasisdk.WasiSdkStorage.getInstance().installedVersions().isNotEmpty()) {
+                    return@executeOnPooledThread
+                }
+                wasiSdkOfferShown = true
+                WasiSdkOffer.showWasiSdkAbsentNotification(project)
             }
         }
 

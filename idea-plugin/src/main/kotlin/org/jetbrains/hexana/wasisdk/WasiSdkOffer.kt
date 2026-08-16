@@ -44,7 +44,32 @@ object WasiSdkOffer {
                 HexanaBundle.message("hexana.notification.wasisdk.lldb.missing.content"),
                 NotificationType.WARNING,
             )
+        addDownloadAndSettingsActions(notification, project)
+        notification.notify(project)
+    }
 
+    /**
+     * Shows a "wasi-sdk is not installed" balloon offering the download.
+     * Used when a wasm debug session starts on a discovered system LLDB
+     * with no managed wasi-sdk present; purely informational, the session
+     * proceeds. Callers are responsible for not showing it repeatedly.
+     */
+    fun showWasiSdkAbsentNotification(project: Project?) {
+        val notification = NotificationGroupManager.getInstance()
+            .getNotificationGroup("hexana")
+            .createNotification(
+                HexanaBundle.message("hexana.notification.wasisdk.absent.title"),
+                HexanaBundle.message("hexana.notification.wasisdk.absent.content"),
+                NotificationType.INFORMATION,
+            )
+        addDownloadAndSettingsActions(notification, project)
+        notification.notify(project)
+    }
+
+    private fun addDownloadAndSettingsActions(
+        notification: com.intellij.notification.Notification,
+        project: Project?,
+    ) {
         notification.addAction(object : com.intellij.openapi.actionSystem.AnAction(
             HexanaBundle.message("hexana.notification.wasisdk.lldb.missing.action.download"),
         ) {
@@ -63,8 +88,6 @@ object WasiSdkOffer {
                     .showSettingsDialog(project, "wasm.runtime.settings")
             }
         })
-
-        notification.notify(project)
     }
 
     /**
