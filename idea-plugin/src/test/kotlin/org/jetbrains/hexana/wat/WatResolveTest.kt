@@ -1482,4 +1482,353 @@ class WatResolveTest : BasePlatformTestCase() {
             )
         """)
     }
+
+    // -----------------------------------------------------------------------------------------
+    // Component model. `wasm-tools` restarts every index space in every nested scope, so the same
+    // id is declared many times over in one file and resolve has to pick the right scope.
+    // -----------------------------------------------------------------------------------------
+
+    /** The reference is in the component, so it must not see the instance type's own `$#type0`. */
+    fun testComponentTypeRefSkipsInstanceTypeScope() {
+        doTest($$"""
+            (component $app
+              (type (;TARGET;)$#type0
+                (instance
+                  (type $#type0 (enum "add" "sub"))
+                )
+              )
+              (import "calculator" (instance $#instance0 (type <caret>$#type0)))
+            )
+        """)
+    }
+
+    /** ...and the mirror case: inside the instance type, the inner declaration wins. */
+    fun testComponentTypeRefInsideInstanceType() {
+        doTest($$"""
+            (component $app
+              (type $#type0
+                (instance
+                  (type (;TARGET;)$#type0 (enum "add" "sub"))
+                  (export $#type1 "op" (type (eq <caret>$#type0)))
+                )
+              )
+              (import "calculator" (instance $#instance0 (type $#type0)))
+            )
+        """)
+    }
+
+    /** An instance type's `export` binds a new id, which the rest of the type can then name. */
+    fun testComponentExportBindsType() {
+        doTest($$"""
+            (component $app
+              (type $#type0
+                (instance
+                  (type $#type0 (enum "add" "sub"))
+                  (export (;TARGET;)$#type1 "op" (type (eq $#type0)))
+                  (type $#type2 (func (param "op" <caret>$#type1) (result u32)))
+                )
+              )
+            )
+        """)
+    }
+
+    /** A component function type numbers its params by name, so `(result $t)` is a type use. */
+    fun testComponentFuncTypeResult() {
+        doTest($$"""
+            (component $app
+              (type (;TARGET;)$#type0 (list string))
+              (type $#type1 (func (result <caret>$#type0)))
+            )
+        """)
+    }
+
+    fun testComponentTypeRefByIndex() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (result))
+              (type (;TARGET;)$#type1 (list string))
+              (type $#type2 (func (result <caret>1)))
+            )
+        """)
+    }
+
+    /** `(own $t)` and the other defvaltype forms name component types. */
+    fun testComponentOwnTypeRef() {
+        doTest($$"""
+            (component $app
+              (type (;TARGET;)$#type0 (record (field "x" u32)))
+              (type $#type1 (own <caret>$#type0))
+            )
+        """)
+    }
+
+    /** A core module inside a component has its own type space, unrelated to the component's. */
+    fun testCoreModuleInComponentHasOwnTypes() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (list string))
+              (core module $#module0
+                (type (;TARGET;)$#type0 (func (param i32)))
+                (func $#func0 (type <caret>$#type0) (nop))
+              )
+            )
+        """)
+    }
+
+    /** `(alias export $i ...)`'s first operand names a component instance. */
+    fun testAliasExportInstance() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (instance))
+              (import "io" (instance (;TARGET;)$#instance0 (type $#type0)))
+              (alias export <caret>$#instance0 "error" (type $#type1))
+            )
+        """)
+    }
+
+    /** `(alias core export $i ...)` names a *core* instance, a separate index space. */
+    fun testAliasCoreExportInstance() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (instance))
+              (import "io" (instance $#instance0 (type $#type0)))
+              (core module $#module0)
+              (core instance (;TARGET;)$#instance0 (instantiate $#module0))
+              (alias core export <caret>$#instance0 "memory" (core memory $#memory0))
+            )
+        """)
+    }
+
+    /** The `outer` operand names an enclosing component, which is where the alias reaches. */
+    fun testAliasOuterComponent() {
+        doTest($$"""
+            (component (;TARGET;)$app
+              (type $#type0 (list string))
+              (type $#type1
+                (instance
+                  (alias outer <caret>$app $#type0 (type $#type0))
+                )
+              )
+            )
+        """)
+    }
+
+    /** `(alias outer $app $#type0 ...)`'s second operand is resolved in `$app`, not locally. */
+    fun testAliasOuterIndexUsesOuterScope() {
+        doTest($$"""
+            (component $app
+              (type (;TARGET;)$#type0 (list string))
+              (type $#type1
+                (instance
+                  (type $#type0 (enum "a"))
+                  (alias outer $app <caret>$#type0 (type $#type1))
+                )
+              )
+            )
+        """)
+    }
+
+    /** A numeric `outer` count of 0 means the scope immediately enclosing the alias's own scope. */
+    fun testAliasOuterByCount() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (result))
+              (type (;TARGET;)$#type1 (list string))
+              (type $#type2
+                (instance
+                  (type $#type0 (enum "a"))
+                  (alias outer 0 <caret>1 (type $#type1))
+                )
+              )
+            )
+        """)
+    }
+
+    /** The `outer` count itself resolves to the scope it selects. */
+    fun testAliasOuterCountTargetsScope() {
+        doTest($$"""
+            (component (;TARGET;)$app
+              (type $#type0 (list string))
+              (type $#type1
+                (instance
+                  (alias outer <caret>0 0 (type $#type0))
+                )
+              )
+            )
+        """)
+    }
+
+    /** `(canon resource.drop $t)` names a component type even though it defines a core function. */
+    fun testCanonResourceDropType() {
+        doTest($$"""
+            (component $app
+              (type (;TARGET;)$#type0 (own $#type1))
+              (core func $#func0 (canon resource.drop <caret>$#type0))
+            )
+        """)
+    }
+
+    /** `(canon lower (func $f))` names a component function. */
+    fun testCanonLowerFunc() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (func))
+              (import "run" (func (;TARGET;)$#func0 (type $#type0)))
+              (core func $#func0 (canon lower (func <caret>$#func0)))
+            )
+        """)
+    }
+
+    /** `(canon lift (core func $f))` names a core function of the same name as a component one. */
+    fun testCanonLiftCoreFunc() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (func))
+              (import "run" (func $#func0 (type $#type0)))
+              (core module $#module0)
+              (core instance $#instance0 (instantiate $#module0))
+              (alias core export $#instance0 "run" (core func (;TARGET;)$#func0))
+              (func $#func1 (type $#type0) (canon lift (core func <caret>$#func0)))
+            )
+        """)
+    }
+
+    /** `(instantiate $m)` in a `(core instance ...)` names a core module. */
+    fun testCoreInstantiateModule() {
+        doTest($$"""
+            (component $app
+              (core module (;TARGET;)$#module0)
+              (core instance $#instance0 (instantiate <caret>$#module0))
+            )
+        """)
+    }
+
+    /** `(instantiate $c)` in a component `(instance ...)` names a component. */
+    fun testComponentInstantiateComponent() {
+        doTest($$"""
+            (component $app
+              (core module $#module0)
+              (component (;TARGET;)$#component0)
+              (instance $#instance0 (instantiate <caret>$#component0))
+            )
+        """)
+    }
+
+    /**
+     * A `with` argument takes its sort from the instance being defined: a core instantiation is
+     * wired from core instances, so this must not resolve to the component instance of the same id.
+     */
+    fun testCoreInstantiateWithCoreInstance() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (instance))
+              (import "io" (instance $#instance0 (type $#type0)))
+              (core module $#module0)
+              (core instance (;TARGET;)$#instance0 (instantiate $#module0))
+              (core instance $#instance1 (instantiate $#module0
+                  (with "env" (instance <caret>$#instance0))
+                )
+              )
+            )
+        """)
+    }
+
+    /** ...and a component instantiation is wired from component items. */
+    fun testComponentInstantiateWithComponentFunc() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (func))
+              (import "run" (func (;TARGET;)$#func0 (type $#type0)))
+              (core func $#func0 (canon lower (func $#func0)))
+              (component $#component0)
+              (instance $#instance0 (instantiate $#component0
+                  (with "run" (func <caret>$#func0))
+                )
+              )
+            )
+        """)
+    }
+
+    /** A component export names the item it exports, in that item's index space. */
+    fun testComponentExportRef() {
+        doTest($$"""
+            (component $app
+              (component $#component0)
+              (instance (;TARGET;)$#instance0 (instantiate $#component0))
+              (export $#instance1 "wasi:cli/run@0.2.3" (instance <caret>$#instance0))
+            )
+        """)
+    }
+
+    /** An inline export of a core instance names core items. */
+    fun testCoreInstanceInlineExport() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (func))
+              (import "run" (func $#func0 (type $#type0)))
+              (core module $#module0)
+              (core instance $#instance0 (instantiate $#module0))
+              (alias core export $#instance0 "_start" (core func (;TARGET;)$#func0))
+              (core instance $#instance1
+                (export "_start" (func <caret>$#func0))
+              )
+            )
+        """)
+    }
+
+    /** `(realloc $f)` is a canonical ABI option and always names a core function. */
+    fun testCanonReallocCoreFunc() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (func))
+              (import "run" (func $#func0 (type $#type0)))
+              (core module $#module0)
+              (core instance $#instance0 (instantiate $#module0))
+              (alias core export $#instance0 "realloc" (core func (;TARGET;)$#func0))
+              (alias core export $#instance0 "memory" (core memory $#memory0))
+              (core func $#func1 (canon lower (func $#func0) (memory $#memory0) (realloc <caret>$#func0)))
+            )
+        """)
+    }
+
+    /** `(memory $m)` in canonical ABI options names a core memory. */
+    fun testCanonMemory() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (func))
+              (import "run" (func $#func0 (type $#type0)))
+              (core module $#module0)
+              (core instance $#instance0 (instantiate $#module0))
+              (alias core export $#instance0 "memory" (core memory (;TARGET;)$#memory0))
+              (core func $#func1 (canon lower (func $#func0) (memory <caret>$#memory0)))
+            )
+        """)
+    }
+
+    /** A component function's `(type $t)` is resolved in the component, not in a core module. */
+    fun testComponentFuncTypeUse() {
+        doTest($$"""
+            (component $app
+              (core module $#module0
+                (type $#type0 (func (param i32)))
+              )
+              (type (;TARGET;)$#type0 (func))
+              (core instance $#instance0 (instantiate $#module0))
+              (alias core export $#instance0 "run" (core func $#func0))
+              (func $#func0 (type <caret>$#type0) (canon lift (core func $#func0)))
+            )
+        """)
+    }
+
+    /** Component index spaces count imports, definitions, aliases and exports alike. */
+    fun testComponentInstanceRefByIndex() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (instance))
+              (import "a" (instance $#instance0 (type $#type0)))
+              (import "b" (instance (;TARGET;)$#instance1 (type $#type0)))
+              (alias export <caret>1 "error" (type $#type1))
+            )
+        """)
+    }
 }

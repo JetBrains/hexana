@@ -120,4 +120,12 @@ class WatParserTest : ParsingTestCase("parser", "wat", true, WatParserDefinition
     fun testComponentTypes() {
         doTest()
     }
+
+    /**
+     * `wasm-tools`-shaped component output. It is the structure resolve depends on: nested scopes
+     * that each restart their ids, `core`-prefixed sorts, `alias`, `canon` and `instantiate`.
+     */
+    fun testComponent() {
+        doTest()
+    }
 }

@@ -1,5 +1,5 @@
 Wat File
-  WatPsiElement(MEMORY)
+  WatMemoryElement(MEMORY)
     PsiElement(()('(')
     PsiElement(memory)('memory')
     PsiWhiteSpace(' ')

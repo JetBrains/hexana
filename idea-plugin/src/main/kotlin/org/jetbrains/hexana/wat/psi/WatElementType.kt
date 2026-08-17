@@ -15,6 +15,16 @@ class WatElementType(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val MODULE = WatElementType("MODULE")
         @JvmField val COMPONENT = WatElementType("COMPONENT")
         @JvmField val INSTANCE = WatElementType("INSTANCE")
+
+        /**
+         * Component-model `(alias ...)`. It both *references* an item -- an instance, or an item of
+         * an enclosing component for the `outer` form -- and *binds* a new id for it in the current
+         * scope, so resolve has to treat its operands positionally.
+         */
+        @JvmField val ALIAS = WatElementType("ALIAS")
+
+        /** Component-model `value` sort. */
+        @JvmField val VALUE = WatElementType("VALUE")
         @JvmField val TYPE = WatElementType("TYPE")
         @JvmField val IMPORT = WatElementType("IMPORT")
         @JvmField val EXPORT = WatElementType("EXPORT")

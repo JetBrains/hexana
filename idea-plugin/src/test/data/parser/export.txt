@@ -1,11 +1,11 @@
 Wat File
-  WatPsiElement(EXPORT)
+  WatExportElement(EXPORT)
     PsiElement(()('(')
     PsiElement(export)('export')
     PsiWhiteSpace(' ')
     PsiElement(string)('"memory"')
     PsiWhiteSpace(' ')
-    WatPsiElement(MEMORY)
+    WatMemoryElement(MEMORY)
       PsiElement(()('(')
       PsiElement(memory)('memory')
       PsiWhiteSpace(' ')

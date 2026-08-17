@@ -638,6 +638,7 @@ nullref
 offset
 on
 option
+outer
 own
 pagesize
 param
@@ -744,6 +745,7 @@ v128.store32_lane
 v128.store64_lane
 v128.store8_lane
 v128.xor
+value
 variant
 with
 

@@ -114,6 +114,24 @@ public class WatParserDefinition implements ParserDefinition {
         if (nodeType == WatElementType.IMPORT) {
             return new WatImportElement(node);
         }
+        if (nodeType == WatElementType.EXPORT) {
+            return new WatExportElement(node);
+        }
+        if (nodeType == WatElementType.MEMORY) {
+            return new WatMemoryElement(node);
+        }
+        if (nodeType == WatElementType.COMPONENT) {
+            return new WatComponentElement(node);
+        }
+        if (nodeType == WatElementType.INSTANCE) {
+            return new WatInstanceElement(node);
+        }
+        if (nodeType == WatElementType.ALIAS) {
+            return new WatAliasElement(node);
+        }
+        if (nodeType == WatElementType.VALUE) {
+            return new WatValueElement(node);
+        }
         return new WatPsiElement(node);
     }
 

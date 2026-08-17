@@ -17,6 +17,12 @@ import java.util.Set;
 public class WatParser implements PsiParser {
 
     private final static Map<IElementType, IElementType> tokenMap = new HashMap<>();
+    /**
+     * Element types for the sort keyword that follows {@code core} in a component. The core sorts
+     * get the same element types as their core-module counterparts; whether an element belongs to a
+     * core or a component index space is read back off the {@code core} keyword itself.
+     */
+    private final static Map<IElementType, IElementType> coreTokenMap = new HashMap<>();
     private final static Map<IElementType, IElementType> uexpr1 = new HashMap<>();
     private final static Map<IElementType, IElementType> blocks = new HashMap<>();
     /** Unfolded instructions followed by a variable number of ids/indices. */
@@ -28,6 +34,8 @@ public class WatParser implements PsiParser {
         tokenMap.put(WatToken.TYPE, WatElementType.TYPE);
         tokenMap.put(WatToken.IMPORT, WatElementType.IMPORT);
         tokenMap.put(WatToken.INSTANCE, WatElementType.INSTANCE);
+        tokenMap.put(WatToken.ALIAS, WatElementType.ALIAS);
+        tokenMap.put(WatToken.VALUE, WatElementType.VALUE);
         tokenMap.put(WatToken.EXPORT, WatElementType.EXPORT);
         tokenMap.put(WatToken.GLOBAL, WatElementType.GLOBAL);
         tokenMap.put(WatToken.MEMORY, WatElementType.MEMORY);
@@ -53,6 +61,15 @@ public class WatParser implements PsiParser {
         tokenMap.put(WatToken.TRY, WatElementType.TRY);
         tokenMap.put(WatToken.DO, WatElementType.DO);
         tokenMap.put(WatElementType.FUNC_BODY, WatElementType.FUNC_BODY);
+
+        coreTokenMap.put(WatToken.MODULE, WatElementType.MODULE);
+        coreTokenMap.put(WatToken.INSTANCE, WatElementType.INSTANCE);
+        coreTokenMap.put(WatToken.TYPE, WatElementType.TYPE);
+        coreTokenMap.put(WatToken.FUNC, WatElementType.FUNC);
+        coreTokenMap.put(WatToken.TABLE, WatElementType.TABLE);
+        coreTokenMap.put(WatToken.MEMORY, WatElementType.MEMORY);
+        coreTokenMap.put(WatToken.GLOBAL, WatElementType.GLOBAL);
+        coreTokenMap.put(WatToken.TAG, WatElementType.TAG);
 
         uexpr1.put(WatToken.LOCAL_GET, WatElementType.UEXPR);
         uexpr1.put(WatToken.LOCAL_SET, WatElementType.UEXPR);
@@ -145,10 +162,7 @@ public class WatParser implements PsiParser {
             if (token == WatToken.OPEN_PAREN) {
                 PsiBuilder.Marker m = b.mark();
                 IElementType next = b.lookAhead(1);
-                IElementType exprType =
-                    next == WatToken.CORE
-                        ? b.lookAhead(2) == WatToken.MODULE ? WatElementType.MODULE : WatElementType.INSTANCE
-                        : (next != null ? tokenMap.getOrDefault(next, WatElementType.SEXPR) : WatElementType.SEXPR);
+                IElementType exprType = elementTypeFor(next, next == WatToken.CORE ? b.lookAhead(2) : null);
                 exprStack.add(new Expr(m, exprType));
                 unfoldedBlockStackSizes.add(unfoldedBlockStack.size());
                 b.advanceLexer();
@@ -279,6 +293,18 @@ public class WatParser implements PsiParser {
         }
 
         rootMark.done(root);
+    }
+
+    /**
+     * @param head the token right after the open parenthesis
+     * @param coreSort the sort keyword after {@code core}, or null when {@code head} is not
+     *   {@code core}
+     */
+    private static @NotNull IElementType elementTypeFor(@Nullable IElementType head, @Nullable IElementType coreSort) {
+        if (head == WatToken.CORE) {
+            return coreSort != null ? coreTokenMap.getOrDefault(coreSort, WatElementType.SEXPR) : WatElementType.SEXPR;
+        }
+        return head != null ? tokenMap.getOrDefault(head, WatElementType.SEXPR) : WatElementType.SEXPR;
     }
 
     private static @Nullable IElementType getLastTypeOrNull(@NotNull ArrayList<Expr> list) {

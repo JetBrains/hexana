@@ -494,6 +494,9 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val INSTANCE = WatToken("instance")
         @JvmField val INSTANTIATE = WatToken("instantiate")
         @JvmField val ALIAS = WatToken("alias")
+
+        /** `(alias outer <component> <index> ...)`: the one alias form that leaves the current scope. */
+        @JvmField val OUTER = WatToken("outer")
         @JvmField val WITH = WatToken("with")
         @JvmField val IMPORT = WatToken("import")
         @JvmField val ITEM = WatToken("item")
@@ -797,6 +800,9 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val ERROR = WatToken("error")
         @JvmField val RESOURCE = WatToken("resource")
 
+        /** The component-model `value` sort, as in `(import "x" (value $v (type u32)))`. */
+        @JvmField val VALUE = WatToken("value")
+
         /** Core representation of a resource: `(resource (rep i32))`. */
         @JvmField val REP = WatToken("rep")
 
@@ -947,7 +953,7 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
             BOOL, S8, U8, S16, U16, S32, S64, U64, CHAR, STRING_TYPE, FLOAT32, FLOAT64, ERROR_CONTEXT, RECORD,
             VARIANT, LIST, MAP, TUPLE, FLAGS, OWN, BORROW, OPTION, STREAM, FUTURE, CASE, ERROR, RESOURCE, REP, DTOR,
             REALLOC, POST_RETURN, CALLBACK, ASYNC, GC, STRING_ENCODING, UTF8, UTF16, LATIN1_PLUS_UTF16, CANCELLABLE,
-            RESOURCE_NEW, RESOURCE_DROP, RESOURCE_REP,
+            RESOURCE_NEW, RESOURCE_DROP, RESOURCE_REP, OUTER, VALUE,
         )
 
         /**
@@ -973,7 +979,7 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
             CONT, NOCONT, ON, SUSPEND, RESUME, RESUME_THROW, RESUME_THROW_REF, SWITCH,
             // Component model
             RECORD, VARIANT, CASE, LIST, MAP, TUPLE, FLAGS, OPTION, OWN, BORROW, RESOURCE, REP, DTOR, STREAM, FUTURE,
-            ERROR, ASYNC, CALLBACK, REALLOC, POST_RETURN, STRING_ENCODING, CANCELLABLE, GC
+            ERROR, ASYNC, CALLBACK, REALLOC, POST_RETURN, STRING_ENCODING, CANCELLABLE, GC, OUTER, VALUE
         )
 
         @JvmField
