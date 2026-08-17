@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.run
 
 import com.intellij.execution.process.ProcessHandler
+import com.intellij.execution.process.ProcessAdapter
+import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.ui.ExecutionConsole
 import com.intellij.execution.ui.RunnerLayoutUi
 import com.intellij.openapi.application.ApplicationManager
@@ -75,6 +77,51 @@ open class WasmDebugProcess(
      */
     internal val executedWasmPath: String? = null,
 ) : XDebugProcess(session) {
+
+    /**
+     * Mirrors CdpDebugProcess's session handler. The debugger must expose an
+     * IDEA-owned handler rather than the raw LLDB handler, whose remote
+     * gdbstub target can terminate before IDEA has finished preserving the
+     * Debug tool window and its console output.
+     */
+    private val sessionProcessHandler = object : ProcessHandler() {
+        private var started = false
+
+        override fun startNotify() {
+            if (started) return
+            started = true
+            super.startNotify()
+        }
+
+        override fun destroyProcessImpl() {
+            processHandler.destroyProcess()
+            notifyProcessTerminated(0)
+        }
+
+        override fun detachProcessImpl() {
+            processHandler.detachProcess()
+            notifyProcessDetached()
+        }
+
+        override fun detachIsDefault(): Boolean = processHandler.detachIsDefault()
+
+        override fun getProcessInput() = processHandler.processInput
+
+        fun fireProcessTerminated(exitCode: Int) = notifyProcessTerminated(exitCode)
+    }.also { wrapper ->
+        processHandler.addProcessListener(object : ProcessAdapter() {
+            override fun processTerminated(event: ProcessEvent) {
+                if (!wrapper.isProcessTerminated && !wrapper.isProcessTerminating) {
+                    wrapper.fireProcessTerminated(event.exitCode)
+                }
+                ApplicationManager.getApplication().invokeLater {
+                    if (!session.isStopped) {
+                        session.stop()
+                    }
+                }
+            }
+        })
+    }
 
     /**
      * Parsed DWARF variable location metadata from the Wasm binary.
@@ -183,7 +230,7 @@ open class WasmDebugProcess(
 
     override fun getEditorsProvider(): XDebuggerEditorsProvider = WasmDebuggerEditorsProvider()
 
-    override fun doGetProcessHandler(): ProcessHandler = processHandler
+    override fun doGetProcessHandler(): ProcessHandler = sessionProcessHandler
 
     override fun createConsole(): ExecutionConsole = console
 
