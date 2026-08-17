@@ -453,7 +453,9 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
     private fun prepareWamrSession(
         configuration: WasmRunConfiguration,
     ): WamrPrepResult {
-        val buildResult = WamrDebugCommandLineState.buildWamrArguments(configuration)
+        val debugHost = WamrDebugCommandLineState.DEFAULT_DEBUG_HOST
+        val debugPort = allocateFreePort()
+        val buildResult = WamrDebugCommandLineState.buildWamrArguments(configuration, debugHost, debugPort)
         val iwasmPath = configuration.wamrPath.ifBlank {
             WasmRuntimeSettings.getInstance().effectiveWamrPath()
         }

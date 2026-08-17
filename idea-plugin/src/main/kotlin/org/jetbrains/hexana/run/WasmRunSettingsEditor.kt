@@ -113,6 +113,8 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     private var lldbPathRow: Row? = null
     private var chromePathRow: Row? = null
     private var exportNameRow: Row? = null
+    private var noDebugHintRow: Row? = null
+    private val noDebugHintLabel = javax.swing.JLabel()
 
     init {
         wasmFileField.addBrowseFolderListener(
@@ -257,6 +259,15 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
         lldbPathRow?.visible(isWasmtime || isWamr)
         chromePathRow?.visible(isBrowser)
         exportNameRow?.visible(!isWasmtime)
+        val showNoDebugHint = !selected.supportsDebug
+        if (showNoDebugHint) {
+            noDebugHintLabel.text = if (isWazero) {
+                HexanaBundle.message("wasm.run.configuration.no.debug.hint.wazero")
+            } else {
+                HexanaBundle.message("wasm.run.configuration.no.debug.hint", selected.displayName)
+            }
+        }
+        noDebugHintRow?.visible(showNoDebugHint)
     }
 
     override fun resetEditorFrom(configuration: WasmRunConfiguration) {
@@ -306,6 +317,9 @@ class WasmRunSettingsEditor(private val project: Project) : SettingsEditor<WasmR
     override fun createEditor(): JComponent = panel {
         row(HexanaBundle.message("wasm.run.configuration.engine")) {
             cell(engineCombo).align(AlignX.FILL)
+        }
+        noDebugHintRow = row {
+            cell(noDebugHintLabel)
         }
         row(HexanaBundle.message("wasm.run.configuration.wasmFile")) {
             cell(wasmFileField).align(AlignX.FILL)

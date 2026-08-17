@@ -77,14 +77,42 @@ class WamrDebugCommandLineState(
         ): DebugBuildResult {
             val wasmFile = File(configuration.wasmFilePath)
             val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
-
-            val input = WasmRunInput(
+            return buildWamrArguments(
                 wasmFilePath = configuration.wasmFilePath,
                 wasmBytes = wasmBytes,
                 programArguments = configuration.programArguments,
                 workingDirectory = configuration.workingDirectory,
-                runtimeOptions = configuration.wamrOptions,
+                wamrOptions = configuration.wamrOptions,
                 exportName = configuration.exportName,
+                host = host,
+                port = port,
+            )
+        }
+
+        /**
+         * Test-seam overload: builds iwasm debug arguments from plain
+         * inputs without requiring a [WasmRunConfiguration] instance.
+         *
+         * @return a [DebugBuildResult] containing the argument list
+         *         and the debug connection address.
+         */
+        internal fun buildWamrArguments(
+            wasmFilePath: String,
+            wasmBytes: ByteArray?,
+            programArguments: String,
+            workingDirectory: String,
+            wamrOptions: String,
+            exportName: String,
+            host: String = DEFAULT_DEBUG_HOST,
+            port: Int = DEFAULT_DEBUG_PORT,
+        ): DebugBuildResult {
+            val input = WasmRunInput(
+                wasmFilePath = wasmFilePath,
+                wasmBytes = wasmBytes,
+                programArguments = programArguments,
+                workingDirectory = workingDirectory,
+                runtimeOptions = wamrOptions,
+                exportName = exportName,
             )
 
             val sharedResult = buildWamrDebugArgs(input, host, port, JvmStubFileWriter)
