@@ -16,6 +16,7 @@ import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.ui.content.ContentManagerEvent
 import com.intellij.ui.content.ContentManagerListener
+import com.intellij.util.concurrency.EdtExecutorService
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.XDebugSessionListener
@@ -47,6 +48,7 @@ import org.jetbrains.hexana.shared.pathMatchesBreakpointLocation
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.shared.decodeWasmValueHex
 import org.jetbrains.hexana.shared.stripCuHashSuffix
+import java.util.concurrent.TimeUnit
 
 /**
  * A debug process that launches wasmtime under LLDB so that
@@ -109,16 +111,36 @@ open class WasmDebugProcess(
 
         fun fireProcessTerminated(exitCode: Int) = notifyProcessTerminated(exitCode)
     }.also { wrapper ->
+        // Propagate the inner handler's termination only after the Debug tool
+        // window content for this session is attached. Since 263.3447 the
+        // platform disposes session content that stops while
+        // RunContentManagerImpl.showRunContent is still mounting, so a
+        // fast-exiting gdbstub target would leave no console at all. Bounded:
+        // after DEBUG_TAB_MOUNT_MAX_POLLS the termination goes through
+        // regardless, so a session can never leak.
+        fun propagateTermination(exitCode: Int, attemptsLeft: Int) {
+            ApplicationManager.getApplication().invokeLater {
+                val mounted = session.runContentDescriptor?.attachedContent != null
+                val alreadyDown = wrapper.isProcessTerminated || wrapper.isProcessTerminating
+                if (!mounted && !alreadyDown && attemptsLeft > 0) {
+                    EdtExecutorService.getScheduledExecutorInstance().schedule(
+                        { propagateTermination(exitCode, attemptsLeft - 1) },
+                        DEBUG_TAB_MOUNT_POLL_INTERVAL_MS,
+                        TimeUnit.MILLISECONDS,
+                    )
+                    return@invokeLater
+                }
+                if (!alreadyDown) {
+                    wrapper.fireProcessTerminated(exitCode)
+                }
+                if (!session.isStopped) {
+                    session.stop()
+                }
+            }
+        }
         processHandler.addProcessListener(object : ProcessAdapter() {
             override fun processTerminated(event: ProcessEvent) {
-                if (!wrapper.isProcessTerminated && !wrapper.isProcessTerminating) {
-                    wrapper.fireProcessTerminated(event.exitCode)
-                }
-                ApplicationManager.getApplication().invokeLater {
-                    if (!session.isStopped) {
-                        session.stop()
-                    }
-                }
+                propagateTermination(event.exitCode, DEBUG_TAB_MOUNT_MAX_POLLS)
             }
         })
     }
@@ -1606,6 +1628,15 @@ open class WasmDebugProcess(
          * "Process exited" after the debuggee terminates.
          */
         private const val WATCHDOG_NULL_EVENT_THRESHOLD = 10
+
+        /**
+         * How often, and how many times at most, the session waits for the
+         * Debug tool window content to attach before propagating the inner
+         * process handler's termination. 100 x 50 ms = 5 s upper bound; the
+         * tab normally mounts well under 2 s.
+         */
+        private const val DEBUG_TAB_MOUNT_POLL_INTERVAL_MS = 50L
+        private const val DEBUG_TAB_MOUNT_MAX_POLLS = 100
     }
 }
 
