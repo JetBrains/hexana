@@ -226,6 +226,7 @@
         <problemHighlightFilter implementation="org.jetbrains.hexana.wat.WatProblemHighlightFilter"/>
         <platform.backend.documentation.psiTargetProvider implementation="org.jetbrains.hexana.wat.WatDocumentationTargetProvider"/>
         <findUsagesHandlerFactory implementation="org.jetbrains.hexana.wat.WatFindUsagesHandlerFactory"/>
+        <lang.findUsagesProvider language="wat" implementationClass="org.jetbrains.hexana.wat.WatFindUsagesProvider"/>
 
         <!-- actionConfigurationCustomizer implementation="org.jetbrains.hexana.mcp.McpServerCustomizer"/-->
         <actionConfigurationCustomizer implementation="org.jetbrains.hexana.graalvm.GraalInstallationCustomizer"/>
