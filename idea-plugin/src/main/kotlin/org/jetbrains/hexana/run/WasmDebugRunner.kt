@@ -255,6 +255,16 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     .console
                     .also { it.attachToProcess(lldbHandler) }
 
+                // Under gdbstub the guest's stdio stays on the wasmtime process
+                // (unlike the old direct-LLDB flow where wasmtime was the LLDB
+                // inferior); mirror it into the session stream so the Debug
+                // console still shows the program output.
+                prep.wasmtimeHandler.addProcessListener(object : ProcessAdapter() {
+                    override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                        lldbHandler.notifyTextAvailable(event.text ?: return, outputType)
+                    }
+                })
+
                 return WasmtimeGdbDebugProcess(
                     session,
                     console,
