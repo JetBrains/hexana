@@ -15,6 +15,13 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val STRING = WatToken("string")
         @JvmField val IDENTIFIER = WatToken("identifier")
         @JvmField val ANNOTATION_ID = WatToken("annotation_id")
+
+        /**
+         * A bare word inside a custom annotation, such as `processed-by` in `(@producers ...)`.
+         * Annotation contents are free-form, so these are not keywords and must not be reported as
+         * lexical errors either.
+         */
+        @JvmField val ANNOTATION_WORD = WatToken("annotation_word")
         @JvmField val OPEN_PAREN = WatToken("(")
         @JvmField val CLOSE_PAREN = WatToken(")")
         @JvmField val MINUS = WatToken("-")

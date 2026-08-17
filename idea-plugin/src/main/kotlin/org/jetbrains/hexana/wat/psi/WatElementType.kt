@@ -25,6 +25,12 @@ class WatElementType(val name: String) : IElementType(name, WatLanguage) {
 
         /** Component-model `value` sort. */
         @JvmField val VALUE = WatElementType("VALUE")
+
+        /**
+         * A custom annotation such as `(@producers (processed-by "wit-component" "0.227.1"))`.
+         * Its contents are free-form text, so nothing inside declares or references an item.
+         */
+        @JvmField val ANNOTATION = WatElementType("ANNOTATION")
         @JvmField val TYPE = WatElementType("TYPE")
         @JvmField val IMPORT = WatElementType("IMPORT")
         @JvmField val EXPORT = WatElementType("EXPORT")

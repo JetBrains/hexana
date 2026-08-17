@@ -128,4 +128,12 @@ class WatParserTest : ParsingTestCase("parser", "wat", true, WatParserDefinition
     fun testComponent() {
         doTest()
     }
+
+    /**
+     * Custom annotations. Each `(@... )` is one element whose contents stay free-form text, so
+     * nothing inside a `(@producers ...)` section is taken for a declaration or a reference.
+     */
+    fun testAnnotations() {
+        doTest()
+    }
 }

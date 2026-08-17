@@ -31,6 +31,10 @@ class WatReference(
     }
 
     override fun resolve(): PsiElement? {
+        // A custom annotation's contents are free-form text, so an id inside one names nothing.
+        if (PsiTreeUtil.getParentOfType(nameOrIndex, WatAnnotationElement::class.java) != null) {
+            return null
+        }
         val scope = enclosingWatScope(nameOrIndex)
         // A missing scope means the operand sits outside any module or component; function-local
         // operands still resolve, everything else has nothing to resolve against.

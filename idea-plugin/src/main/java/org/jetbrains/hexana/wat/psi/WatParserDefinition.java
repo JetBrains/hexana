@@ -132,6 +132,9 @@ public class WatParserDefinition implements ParserDefinition {
         if (nodeType == WatElementType.VALUE) {
             return new WatValueElement(node);
         }
+        if (nodeType == WatElementType.ANNOTATION) {
+            return new WatAnnotationElement(node);
+        }
         return new WatPsiElement(node);
     }
 

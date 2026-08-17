@@ -51,7 +51,14 @@ public class WatLexer extends LexerBase {
     private CharSequence myBuffer;
     private int myOffset;
     private int myEndOffset;
-    private int myState;
+    /**
+     * Parenthesis nesting inside the custom annotation being lexed, or 0 outside any annotation.
+     * Reflects the text up to and including the current token, so it is one step ahead of what
+     * {@link #getState()} may report.
+     */
+    private int myAnnotationDepth;
+    /** {@link #myAnnotationDepth} as it was on entering the current token; see {@link #getState()}. */
+    private int myTokenAnnotationDepth;
 
     private IElementType myToken;
     private int myTokenStart;
@@ -63,13 +70,15 @@ public class WatLexer extends LexerBase {
         myBuffer = buffer;
         myOffset = startOffset;
         myEndOffset = endOffset;
-        myState = initialState;
+        myAnnotationDepth = initialState;
+        myTokenAnnotationDepth = initialState;
 
         advance();
     }
 
     @Override
     public void advance() {
+        myTokenAnnotationDepth = myAnnotationDepth;
         if (myOffset >= myEndOffset) {
             myToken = null;
             return;
@@ -87,15 +96,32 @@ public class WatLexer extends LexerBase {
             case '(' -> {
                 if (!readBlockComment()) {
                     readToken1(WatToken.OPEN_PAREN);
+                    if (myAnnotationDepth > 0) {
+                        myAnnotationDepth++;
+                    }
                 }
             }
-            case ')' -> readToken1(WatToken.CLOSE_PAREN);
+            case ')' -> {
+                readToken1(WatToken.CLOSE_PAREN);
+                if (myAnnotationDepth > 0) {
+                    myAnnotationDepth--;
+                }
+            }
             case '-' -> readToken1(WatToken.MINUS);
             case '+' -> readToken1(WatToken.PLUS);
             case '=' -> readToken1(WatToken.EQUALS);
             case '"' -> readString();
             case '$' -> readIdentifier(WatToken.IDENTIFIER);
-            case '@' -> readIdentifier(WatToken.ANNOTATION_ID);
+            case '@' -> {
+                // An annotation is `'(' '@' idchar+ ... ')'` with no space after the parenthesis,
+                // so the preceding character is what tells an annotation from a stray `@`.
+                boolean opensAnnotation = myAnnotationDepth == 0 &&
+                        myOffset > 0 && myBuffer.charAt(myOffset - 1) == '(';
+                readIdentifier(WatToken.ANNOTATION_ID);
+                if (opensAnnotation) {
+                    myAnnotationDepth = 1;
+                }
+            }
             default -> {
                 if ('a' <= c && c <= 'z') {
                     readKeyword();
@@ -243,9 +269,16 @@ public class WatLexer extends LexerBase {
         WatToken token = keywords.get(myBuffer, hash, myTokenStart, myTokenEnd - myTokenStart);
         if (token != null) {
             myToken = token;
-        } else {
+        } else if (isFloatLiteral()) {
             // Only on a keyword-map miss, so the common path stays a single hash lookup.
-            myToken = isFloatLiteral() ? WatToken.NUMBER : WatToken.UNKNOWN;
+            myToken = WatToken.NUMBER;
+        } else if (myAnnotationDepth > 0) {
+            // A custom annotation's contents are free-form by design -- `(@producers (processed-by
+            // "wit-component" "0.227.1") (language "Rust" ""))` is all valid -- so an unrecognised
+            // word inside one is ordinary text rather than a lexical error.
+            myToken = WatToken.ANNOTATION_WORD;
+        } else {
+            myToken = WatToken.UNKNOWN;
         }
     }
 
@@ -389,9 +422,14 @@ public class WatLexer extends LexerBase {
     }
 
 
+    /**
+     * The annotation nesting the current token starts in. Restarting with
+     * {@link #start(CharSequence, int, int, int)} at {@link #getTokenStart()} and this value
+     * reproduces the same token stream, which is what incremental relexing relies on.
+     */
     @Override
     public int getState() {
-        return myState;
+        return myTokenAnnotationDepth;
     }
 
     @Override

@@ -33,7 +33,11 @@ class WatSyntaxAttributes {
             put(WatToken.PLUS, arrayOf(DefaultLanguageHighlighterColors.OPERATION_SIGN))
             put(WatToken.MINUS, arrayOf(DefaultLanguageHighlighterColors.OPERATION_SIGN))
             put(WatToken.EQUALS, arrayOf(DefaultLanguageHighlighterColors.OPERATION_SIGN))
-            put(WatToken.ANNOTATION_ID, arrayOf(DefaultLanguageHighlighterColors.IDENTIFIER))
+            // Custom annotations -- `(@producers ...)`, `(@custom ...)`, `(@name ...)` -- are
+            // metadata rather than code, and their free-form words get the same colour as the
+            // annotation id so the whole section reads as one unit.
+            put(WatToken.ANNOTATION_ID, arrayOf(DefaultLanguageHighlighterColors.METADATA))
+            put(WatToken.ANNOTATION_WORD, arrayOf(DefaultLanguageHighlighterColors.METADATA))
             WatToken.KEYWORDS.forEach {
                 put(it, arrayOf(DefaultLanguageHighlighterColors.KEYWORD))
             }

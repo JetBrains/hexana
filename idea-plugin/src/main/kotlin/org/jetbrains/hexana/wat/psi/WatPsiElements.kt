@@ -87,6 +87,9 @@ class WatAliasElement(node: ASTNode) : WatPsiElement(node)
 /** A component-model `(value ...)`. */
 class WatValueElement(node: ASTNode) : WatNameIdentifierOwner(node)
 
+/** A custom annotation; see [WatElementType.ANNOTATION]. */
+class WatAnnotationElement(node: ASTNode) : WatPsiElement(node)
+
 class WatGlobalElement(node: ASTNode) : WatNameIdentifierOwner(node) {
     /**
      * Position of this global in its scope's global index space, imported globals included -- the

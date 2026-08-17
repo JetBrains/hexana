@@ -51,6 +51,16 @@ class WatLexerTest : LexerTestCase() {
         doTest()
     }
 
+    /**
+     * Custom annotation sections. Their contents are free-form, so words such as `processed-by`
+     * must lex as annotation text rather than as [WatToken.UNKNOWN] -- which is painted as a bad
+     * character, and made every `(@producers ...)` section in real component output look broken.
+     * The trailing lines check that annotation mode ends with the annotation.
+     */
+    fun testAnnotationSections() {
+        doTest()
+    }
+
     fun testFloatLiterals() {
         doTest()
     }
@@ -90,5 +100,40 @@ class WatLexerTest : LexerTestCase() {
         val fileName = getPathToTestDataFile(".wat")
         val fileText = FileUtil.loadFile(File(fileName), true)
         doTest(fileText)
+    }
+
+    /**
+     * Incremental highlighting restarts the lexer at a token boundary with the state
+     * [Lexer.getState] reported there, so every such restart must reproduce the rest of the file.
+     * Annotation nesting is the only thing the WAT lexer keeps in its state, and getting the state
+     * off by one token would relex a whole annotation section wrongly after any edit.
+     */
+    fun testRestartingAtAnyTokenReproducesTheSameTokens() {
+        val text = FileUtil.loadFile(Path.of(dirPath, "annotationSections.wat").toFile(), true)
+
+        data class Token(val start: Int, val state: Int, val type: IElementType)
+
+        val tokens = mutableListOf<Token>()
+        val lexer = createLexer()
+        lexer.start(text, 0, text.length, 0)
+        while (lexer.tokenType != null) {
+            tokens.add(Token(lexer.tokenStart, lexer.state, lexer.tokenType!!))
+            lexer.advance()
+        }
+        assertTrue("expected the fixture to produce tokens", tokens.isNotEmpty())
+
+        for ((index, token) in tokens.withIndex()) {
+            val restarted = createLexer()
+            restarted.start(text, token.start, text.length, token.state)
+            for (expected in tokens.drop(index)) {
+                assertEquals(
+                    "restarting at offset ${token.start} with state ${token.state} diverged",
+                    expected.type,
+                    restarted.tokenType,
+                )
+                restarted.advance()
+            }
+            assertNull("restart at offset ${token.start} produced extra tokens", restarted.tokenType)
+        }
     }
 }

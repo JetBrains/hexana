@@ -1820,6 +1820,38 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    /**
+     * A `(@producers ...)` section neither declares nor shadows anything, so the reference after it
+     * still resolves and the ids of the section itself are left alone.
+     */
+    fun testAnnotationSectionIsInert() {
+        doTest($$"""
+            (component $app
+              (type (;TARGET;)$#type0 (list string))
+              (@producers
+                (processed-by "wit-component" "0.227.1")
+                (language "Rust" "")
+              )
+              (type $#type1 (own <caret>$#type0))
+            )
+        """)
+    }
+
+    /** An id written inside an annotation is free-form text, not a reference. */
+    fun testAnnotationContentIsNotAReference() {
+        val file = myFixture.configureByText(
+            WatFileType.INSTANCE,
+            $$"""
+                (component $app
+                  (type $#type0 (list string))
+                  (@custom "hint" <caret>$#type0)
+                )
+            """.trimIndent(),
+        )
+        val reference = file.findReferenceAt(myFixture.editor.caretModel.offset)
+        assertNull("an annotation's contents must not resolve", reference?.resolve())
+    }
+
     /** Component index spaces count imports, definitions, aliases and exports alike. */
     fun testComponentInstanceRefByIndex() {
         doTest($$"""
