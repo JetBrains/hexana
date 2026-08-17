@@ -227,6 +227,7 @@
         <platform.backend.documentation.psiTargetProvider implementation="org.jetbrains.hexana.wat.WatDocumentationTargetProvider"/>
         <findUsagesHandlerFactory implementation="org.jetbrains.hexana.wat.WatFindUsagesHandlerFactory"/>
         <lang.findUsagesProvider language="wat" implementationClass="org.jetbrains.hexana.wat.WatFindUsagesProvider"/>
+        <usageTargetProvider order="first" implementation="org.jetbrains.hexana.wat.WatUsageTargetProvider"/>
 
         <!-- actionConfigurationCustomizer implementation="org.jetbrains.hexana.mcp.McpServerCustomizer"/-->
         <actionConfigurationCustomizer implementation="org.jetbrains.hexana.graalvm.GraalInstallationCustomizer"/>

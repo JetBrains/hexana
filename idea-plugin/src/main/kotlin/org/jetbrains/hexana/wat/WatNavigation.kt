@@ -20,12 +20,27 @@ import org.jetbrains.hexana.wat.psi.*
 
 class WatNavigation {
     companion object {
-        fun navigateInWatEditor(watFile: VirtualFile, offset: Int): Boolean {
+        /**
+         * @param navigateIfFilesMatch move the caret even when the WAT view already shows
+         *   [watFile]. Callers that only want to *redirect* the platform's own navigation leave
+         *   this off, so that an unhandled case falls back to the default behaviour; callers that
+         *   replace it entirely have to turn it on.
+         */
+        fun navigateInWatEditor(watFile: VirtualFile, offset: Int, navigateIfFilesMatch: Boolean = false): Boolean {
             val fileset = watFile.getUserData(WatFileset.KEY)
-            if (fileset?.navigateToFile(watFile, offset) == true) {
-                return true
+            if (fileset != null) {
+                return fileset.navigateToFile(watFile, offset, navigateIfFilesMatch)
             }
-            return false
+            // Only a module too large for one document gets a fileset; an ordinary WAT view has a
+            // single file and a single editor, already showing it. There is nothing to switch, so
+            // only a caller that replaces the platform's navigation wants the caret moved.
+            if (!navigateIfFilesMatch) {
+                return false
+            }
+            val editor = watFile.getUserData(LightWatFile.VIEW_EDITOR)?.takeIf { !it.isDisposed } ?: return false
+            editor.caretModel.moveToOffset(offset)
+            editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
+            return true
         }
     }
 }
@@ -38,6 +53,18 @@ class LightWatFile(
 ): LightVirtualFile(watFileName, WatFileType.INSTANCE, text), BackedVirtualFile {
     override fun getOriginFile(): VirtualFile {
         return originWasmFile
+    }
+
+    companion object {
+        /**
+         * The editor the WAT view shows this file in.
+         *
+         * A [WatFileset] holds its own editor because it swaps chunks through one, but a view of a
+         * single file has no fileset -- and then this is the only way to reach the editor to
+         * navigate *into*, rather than opening the file as an editor of its own.
+         */
+        @JvmField
+        val VIEW_EDITOR = Key.create<Editor>("hexana_wat_view_editor")
     }
 }
 
