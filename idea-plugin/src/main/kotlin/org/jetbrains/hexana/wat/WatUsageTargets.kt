@@ -46,12 +46,20 @@ class WatUsage(usageInfo: UsageInfo) : UsageInfo2UsageAdapter(usageInfo) {
             super.navigate(requestFocus)
             return
         }
+        // Record the destination before asking for the editor: if the Hexana editor was closed,
+        // reopening it reconverts the binary asynchronously and builds a *new* WAT document, so
+        // there is nothing to move a caret in yet and this document will never be shown again. The
+        // rebuilt view picks the request up as soon as it has an editor.
+        WatViewEditors.requestNavigation(watFile, navigationOffset)
         // The WAT view is a tab of the Hexana editor for the binary, so that editor has to come
         // forward before moving the caret inside it.
         FileEditorManager.getInstance(usageInfo.project).openFile(watFile.originWasmFile, requestFocus)
-        if (!WatNavigation.navigateInWatEditor(watFile, navigationOffset, navigateIfFilesMatch = true)) {
-            super.navigate(requestFocus)
+        if (WatNavigation.navigateInWatEditor(watFile, navigationOffset, navigateIfFilesMatch = true)) {
+            WatViewEditors.clearPending(watFile)
         }
+        // Deliberately no super.navigate() fallback: that opens the in-memory document as a separate
+        // editor, which is the very thing this class exists to avoid. If the view is not ready the
+        // pending request handles it; if it never appears, nothing moves, which is the lesser evil.
     }
 }
 

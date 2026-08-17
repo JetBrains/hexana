@@ -4,6 +4,7 @@ import com.intellij.lang.LanguageParserDefinitions
 import com.intellij.lang.LighterASTNode
 import com.intellij.lang.impl.PsiBuilderImpl
 import com.intellij.notebook.editor.BackedVirtualFile
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.project.ProjectManager
@@ -37,9 +38,9 @@ class WatNavigation {
             if (!navigateIfFilesMatch) {
                 return false
             }
-            val editor = watFile.getUserData(LightWatFile.VIEW_EDITOR)?.takeIf { !it.isDisposed } ?: return false
-            editor.caretModel.moveToOffset(offset)
-            editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
+            val lightFile = watFile as? LightWatFile ?: return false
+            val editor = WatViewEditors.liveEditor(lightFile) ?: return false
+            WatViewEditors.moveCaret(editor, offset)
             return true
         }
     }
@@ -54,17 +55,73 @@ class LightWatFile(
     override fun getOriginFile(): VirtualFile {
         return originWasmFile
     }
+}
 
-    companion object {
-        /**
-         * The editor the WAT view shows this file in.
-         *
-         * A [WatFileset] holds its own editor because it swaps chunks through one, but a view of a
-         * single file has no fileset -- and then this is the only way to reach the editor to
-         * navigate *into*, rather than opening the file as an editor of its own.
-         */
-        @JvmField
-        val VIEW_EDITOR = Key.create<Editor>("hexana_wat_view_editor")
+/** A navigation that is waiting for a WAT view to exist; see [WatViewEditors.requestNavigation]. */
+private data class PendingWatNavigation(val watFileName: String, val offset: Int)
+
+/**
+ * The editor each WAT view is showing, so navigation can land *in* the view rather than open its
+ * in-memory document as an editor of its own.
+ *
+ * Keyed by the binary the view belongs to, not by the view's own document: closing and reopening the
+ * Hexana editor rebuilds the WAT view from scratch, with a fresh [LightWatFile], so anything holding
+ * the old document -- a usage in the Find tool window, say -- could never reach the new editor.
+ * A [WatFileset] additionally keeps its own editor, because it swaps chunks through one.
+ */
+object WatViewEditors {
+
+    private val EDITOR = Key.create<Editor>("hexana.wat.view.editor")
+    private val PENDING = Key.create<PendingWatNavigation>("hexana.wat.view.pendingNavigation")
+
+    /** Records the editor a WAT view has just created for [watFile], honouring any pending request. */
+    fun register(watFile: LightWatFile, editor: Editor) {
+        val origin = watFile.originWasmFile
+        origin.putUserData(EDITOR, editor)
+        val pending = origin.getUserData(PENDING) ?: return
+        origin.putUserData(PENDING, null)
+        // Deferred: the view is still being built, and an editor cannot scroll before it has a size.
+        ApplicationManager.getApplication().invokeLater {
+            applyPending(watFile, editor, pending)
+        }
+    }
+
+    /** The live editor of the view showing [watFile]'s binary, or null when there is none. */
+    fun liveEditor(watFile: LightWatFile): Editor? {
+        return watFile.originWasmFile.getUserData(EDITOR)?.takeIf { !it.isDisposed }
+    }
+
+    /**
+     * Remembers where to navigate once the view for [watFile]'s binary has an editor again.
+     *
+     * Reopening the Hexana editor reconverts the binary asynchronously, so at the moment navigation
+     * is asked for there is nothing to move a caret in yet. The view applies this from [register].
+     */
+    fun requestNavigation(watFile: LightWatFile, offset: Int) {
+        watFile.originWasmFile.putUserData(PENDING, PendingWatNavigation(watFile.name, offset))
+    }
+
+    fun clearPending(watFile: LightWatFile) {
+        watFile.originWasmFile.putUserData(PENDING, null)
+    }
+
+    fun moveCaret(editor: Editor, offset: Int) {
+        if (editor.isDisposed || offset > editor.document.textLength) {
+            return
+        }
+        editor.caretModel.moveToOffset(offset)
+        editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
+    }
+
+    private fun applyPending(shownFile: LightWatFile, editor: Editor, pending: PendingWatNavigation) {
+        if (shownFile.name == pending.watFileName) {
+            moveCaret(editor, pending.offset)
+            return
+        }
+        // A split module: the request names a different chunk of the rebuilt fileset.
+        val fileset = shownFile.getUserData(WatFileset.KEY) ?: return
+        val chunk = fileset.files.firstOrNull { it.name == pending.watFileName } ?: return
+        fileset.navigateToFile(chunk, pending.offset, navigateIfFilesMatch = true)
     }
 }
 
@@ -147,7 +204,9 @@ class WatFileset(
     }
 
     fun navigateToFile(file: VirtualFile, offset: Int, navigateIfFilesMatch: Boolean = false): Boolean {
-        val currentEditor = editor ?: return false
+        // A fileset outlives the view that built it -- a usage can still hold one after the Hexana
+        // editor was closed -- so its editor may be disposed by now.
+        val currentEditor = editor?.takeIf { !it.isDisposed } ?: return false
         if (currentEditor.virtualFile == file) {
             if (navigateIfFilesMatch) {
                 currentEditor.caretModel.moveToOffset(offset)

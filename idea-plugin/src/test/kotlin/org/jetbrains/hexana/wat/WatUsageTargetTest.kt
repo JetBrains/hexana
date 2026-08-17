@@ -181,24 +181,104 @@ class WatUsageTargetTest : BasePlatformTestCase() {
     }
 
     /**
-     * With no fileset there is no `WatFileset.editor` to navigate through, so the view records its
-     * editor on the file instead. Without that there is nothing to move the caret in, and
-     * navigation falls back to opening a separate editor -- the bug this whole path exists to fix.
+     * With no fileset there is no `WatFileset.editor` to navigate through, so the view registers its
+     * editor instead. Without that there is nothing to move the caret in, and navigation falls back
+     * to opening a separate editor -- the bug this whole path exists to fix.
      */
-    fun testNavigatesInTheViewEditorRecordedOnTheFile() {
+    fun testNavigatesInTheRegisteredViewEditor() {
         val file = watViewFile()
         val editor = editorFor(file)
-        file.putUserData(LightWatFile.VIEW_EDITOR, editor)
+        WatViewEditors.register(file, editor)
         val offset = watText.indexOf("(func \$f3")
 
         assertTrue(WatNavigation.navigateInWatEditor(file, offset, navigateIfFilesMatch = true))
         assertEquals("the caret must move inside the view's own editor", offset, editor.caretModel.offset)
     }
 
-    /** Without a recorded editor there is nothing to navigate into, so the caller must fall back. */
+    /** Without a registered editor there is nothing to navigate into, so the caller must fall back. */
     fun testNoViewEditorMeansNoRedirect() {
         val file = watViewFile()
         assertFalse(WatNavigation.navigateInWatEditor(file, 0, navigateIfFilesMatch = true))
+    }
+
+    /**
+     * Closing the Hexana editor disposes the view's editor. Navigation must not try to use it -- the
+     * request has to be left pending for the rebuilt view instead.
+     */
+    fun testDisposedViewEditorIsNotUsed() {
+        val file = watViewFile()
+        val document = FileDocumentManager.getInstance().getDocument(file)!!
+        val factory = EditorFactory.getInstance()
+        // Released here rather than at tear-down: this test needs it disposed *now*.
+        val disposed = factory.createEditor(document, project, file, true)
+        WatViewEditors.register(file, disposed)
+        factory.releaseEditor(disposed)
+
+        assertNull(WatViewEditors.liveEditor(file))
+        assertFalse(WatNavigation.navigateInWatEditor(file, 0, navigateIfFilesMatch = true))
+    }
+
+    /**
+     * The reopen case. A closed and reopened Hexana editor reconverts the binary into a *new*
+     * document, so a usage still holding the old one has to hand its destination over rather than
+     * navigate itself. Keying on the binary is what lets the two documents find each other.
+     */
+    fun testPendingNavigationIsAppliedWhenTheViewIsRebuilt() {
+        val closedView = watViewFile()
+        val offset = watText.indexOf("(func \$f3")
+        WatViewEditors.requestNavigation(closedView, offset)
+
+        // The rebuilt view: same binary, a different document object with the same name and text.
+        val rebuiltView = LightWatFile(closedView.originWasmFile, closedView.name, watText)
+        assertNotSame(closedView, rebuiltView)
+        val rebuiltEditor = editorFor(rebuiltView)
+        WatViewEditors.register(rebuiltView, rebuiltEditor)
+        // register() defers the caret move until the view has been laid out.
+        com.intellij.testFramework.PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
+
+        assertEquals("the rebuilt view must land on the pending offset", offset, rebuiltEditor.caretModel.offset)
+    }
+
+    /** A pending request is consumed once, so a later rebuild does not jump again. */
+    fun testPendingNavigationIsConsumed() {
+        val file = watViewFile()
+        WatViewEditors.requestNavigation(file, watText.indexOf("(func \$f3"))
+        WatViewEditors.register(file, editorFor(file))
+        com.intellij.testFramework.PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
+
+        val laterEditor = editorFor(LightWatFile(file.originWasmFile, file.name, watText))
+        WatViewEditors.register(file, laterEditor)
+        com.intellij.testFramework.PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
+
+        assertEquals("no stale jump on a later rebuild", 0, laterEditor.caretModel.offset)
+    }
+
+    /** Navigating with a live view must not leave a stale request behind for the next rebuild. */
+    fun testSuccessfulNavigationClearsThePendingRequest() {
+        val file = watViewFile()
+        val editor = editorFor(file)
+        WatViewEditors.register(file, editor)
+        val offset = watText.indexOf("(func \$f3")
+
+        WatViewEditors.requestNavigation(file, offset)
+        assertTrue(WatNavigation.navigateInWatEditor(file, offset, navigateIfFilesMatch = true))
+        WatViewEditors.clearPending(file)
+
+        val laterEditor = editorFor(LightWatFile(file.originWasmFile, file.name, watText))
+        WatViewEditors.register(file, laterEditor)
+        com.intellij.testFramework.PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
+        assertEquals(0, laterEditor.caretModel.offset)
+    }
+
+    /** An offset past the end of a regenerated document must not throw. */
+    fun testOutOfRangePendingOffsetIsIgnored() {
+        val file = watViewFile()
+        WatViewEditors.requestNavigation(file, watText.length + 500)
+        val editor = editorFor(file)
+        WatViewEditors.register(file, editor)
+        com.intellij.testFramework.PlatformTestUtil.dispatchAllInvocationEventsInIdeEventQueue()
+
+        assertEquals(0, editor.caretModel.offset)
     }
 
     /**
@@ -207,7 +287,7 @@ class WatUsageTargetTest : BasePlatformTestCase() {
      */
     fun testDeclarationNavigationStillDefersToThePlatform() {
         val file = watViewFile()
-        file.putUserData(LightWatFile.VIEW_EDITOR, editorFor(file))
+        WatViewEditors.register(file, editorFor(file))
         assertFalse(WatNavigation.navigateInWatEditor(file, watText.indexOf("(func \$f3")))
     }
 

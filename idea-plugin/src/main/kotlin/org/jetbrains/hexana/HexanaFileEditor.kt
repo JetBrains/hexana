@@ -76,6 +76,7 @@ import org.jetbrains.hexana.wasm.analysis.diff.summarize
 import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
 import org.jetbrains.hexana.wat.LightWatFile
 import org.jetbrains.hexana.wat.WatFileset
+import org.jetbrains.hexana.wat.WatViewEditors
 import com.intellij.ide.structureView.StructureViewBuilder
 import java.awt.BorderLayout
 import java.beans.PropertyChangeListener
@@ -617,7 +618,7 @@ class HexanaFileEditor(
                             // Lets navigation land in this editor instead of opening the in-memory
                             // WAT document as an editor of its own. Registered here because this is
                             // the single funnel every WAT view goes through, split or not.
-                            (file as? LightWatFile)?.putUserData(LightWatFile.VIEW_EDITOR, textEditor.editor)
+                            (file as? LightWatFile)?.let { WatViewEditors.register(it, textEditor.editor) }
                             stateHolder.setEditor(textEditor.editor)
                             textEditor
                         }
@@ -666,7 +667,7 @@ class HexanaFileEditor(
                             // Lets navigation land in this editor instead of opening the in-memory
                             // WAT document as an editor of its own. Registered here because this is
                             // the single funnel every WAT view goes through, split or not.
-                            (file as? LightWatFile)?.putUserData(LightWatFile.VIEW_EDITOR, textEditor.editor)
+                            (file as? LightWatFile)?.let { WatViewEditors.register(it, textEditor.editor) }
                             stateHolder.setEditor(textEditor.editor)
                             textEditor
                         }
