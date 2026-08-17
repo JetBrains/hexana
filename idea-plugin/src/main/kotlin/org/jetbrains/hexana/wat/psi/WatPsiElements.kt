@@ -102,6 +102,18 @@ class WatIfElement(node: ASTNode) : WatLabelOwner(node)
 class WatThenElement(node: ASTNode) : WatPsiElement(node)
 class WatElseElement(node: ASTNode) : WatPsiElement(node)
 
+/**
+ * `try_table` binds a label just like `block`, so it must be a [WatLabelOwner] for `br` to
+ * resolve through it.
+ */
+class WatTryTableElement(node: ASTNode) : WatLabelOwner(node)
+
+/** Legacy `try`, the pre-`try_table` form. Also a label owner. */
+class WatTryElement(node: ASTNode) : WatLabelOwner(node)
+
+/** The `(do ...)` clause of a folded legacy `try`. */
+class WatDoElement(node: ASTNode) : WatPsiElement(node)
+
 class WatFuncBodyElement(node: ASTNode) : WatPsiElement(node)
 
 class WatModuleElement(node: ASTNode) : WatPsiElement(node) {

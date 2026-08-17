@@ -99,6 +99,15 @@ public class WatParserDefinition implements ParserDefinition {
         if (nodeType == WatElementType.ELSE) {
             return new WatElseElement(node);
         }
+        if (nodeType == WatElementType.TRY_TABLE) {
+            return new WatTryTableElement(node);
+        }
+        if (nodeType == WatElementType.TRY) {
+            return new WatTryElement(node);
+        }
+        if (nodeType == WatElementType.DO) {
+            return new WatDoElement(node);
+        }
         if (nodeType == WatElementType.MODULE) {
             return new WatModuleElement(node);
         }

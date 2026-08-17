@@ -91,4 +91,33 @@ class WatParserTest : ParsingTestCase("parser", "wat", true, WatParserDefinition
     fun testUnbalancedIf() {
         doTest()
     }
+
+    /**
+     * `try_table` from the exception-handling proposal. `$nested` is the regression case: an
+     * unfolded `try_table` inside a `block` must be closed by its own `end`, not steal the
+     * block's.
+     */
+    fun testTryTable() {
+        doTest()
+    }
+
+    /**
+     * Legacy (pre-`try_table`) exception handling. `$delegating` covers `delegate` standing in
+     * for `end`, which is the only way a block instruction terminates on a token other than `end`.
+     */
+    fun testLegacyTry() {
+        doTest()
+    }
+
+    fun testAtomics() {
+        doTest()
+    }
+
+    fun testStackSwitching() {
+        doTest()
+    }
+
+    fun testComponentTypes() {
+        doTest()
+    }
 }

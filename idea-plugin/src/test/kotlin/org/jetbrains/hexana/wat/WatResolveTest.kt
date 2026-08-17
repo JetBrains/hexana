@@ -1197,6 +1197,270 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    fun testTryTableLabel() {
+        doTest($$"""
+            (module
+              (func $1
+                (try_table (;TARGET;)$t
+                  (br <caret>$t)
+                )
+              )
+            )
+        """)
+    }
+
+    fun testTryTableLabelUnfolded() {
+        doTest($$"""
+            (module
+              (func $1
+                try_table (;TARGET;)$t
+                  br <caret>$t
+                end
+              )
+            )
+        """)
+    }
+
+    fun testTryTableLabelByIndexUnfolded() {
+        doTest($$"""
+            (module
+              (func $1
+                block $outer
+                  try_table (;TARGET;)$inner
+                    br <caret>0
+                  end
+                end
+              )
+            )
+        """)
+    }
+
+    /**
+     * The regression that motivated adding `try_table` to the parser's block map: without it the
+     * `try_table` is not a label owner, so index 1 skips past the enclosing block.
+     */
+    fun testBrThroughTryTableByIndexUnfolded() {
+        doTest($$"""
+            (module
+              (func $1
+                block (;TARGET;)$outer
+                  try_table $inner
+                    br <caret>1
+                  end
+                  nop
+                end
+              )
+            )
+        """)
+    }
+
+    fun testTryTableCatchTag() {
+        doTest($$"""
+            (module
+              (tag (;TARGET;)$e (param i32))
+              (func $1
+                (try_table $t (catch <caret>$e $t)
+                  (nop)
+                )
+              )
+            )
+        """)
+    }
+
+    /** In `(catch $tag $label)` the second operand is a label, not another tag. */
+    fun testTryTableCatchLabel() {
+        doTest($$"""
+            (module
+              (tag $e (param i32))
+              (func $1
+                (try_table (;TARGET;)$t (catch $e <caret>$t)
+                  (nop)
+                )
+              )
+            )
+        """)
+    }
+
+    fun testTryTableCatchRefLabel() {
+        doTest($$"""
+            (module
+              (tag $e (param i32))
+              (func $1
+                (try_table (;TARGET;)$t (catch_ref $e <caret>$t)
+                  (nop)
+                )
+              )
+            )
+        """)
+    }
+
+    fun testTryTableCatchAllLabel() {
+        doTest($$"""
+            (module
+              (func $1
+                (try_table (;TARGET;)$t (catch_all <caret>$t)
+                  (nop)
+                )
+              )
+            )
+        """)
+    }
+
+    fun testTryTableCatchAllRefLabel() {
+        doTest($$"""
+            (module
+              (func $1
+                (try_table (;TARGET;)$t (catch_all_ref <caret>$t)
+                  (nop)
+                )
+              )
+            )
+        """)
+    }
+
+    fun testLegacyTryLabel() {
+        doTest($$"""
+            (module
+              (func $1
+                try (;TARGET;)$t
+                  nop
+                catch_all
+                  br <caret>$t
+                end
+              )
+            )
+        """)
+    }
+
+    fun testLegacyTryRethrow() {
+        doTest($$"""
+            (module
+              (func $1
+                try (;TARGET;)$t
+                  nop
+                catch_all
+                  rethrow <caret>$t
+                end
+              )
+            )
+        """)
+    }
+
+    /** `delegate`'s label is resolved outside the try, so it can only name an enclosing block. */
+    fun testLegacyTryDelegate() {
+        doTest($$"""
+            (module
+              (func $1
+                block (;TARGET;)$outer
+                  try $inner
+                    nop
+                  delegate <caret>$outer
+                end
+              )
+            )
+        """)
+    }
+
+    fun testLegacyTryDelegateByIndex() {
+        doTest($$"""
+            (module
+              (func $1
+                block (;TARGET;)$outer
+                  try $inner
+                    nop
+                  delegate <caret>0
+                end
+              )
+            )
+        """)
+    }
+
+    fun testSuspendTag() {
+        doTest($$"""
+            (module
+              (tag (;TARGET;)$yield (param i32))
+              (func $1
+                suspend <caret>$yield
+              )
+            )
+        """)
+    }
+
+    fun testContNewType() {
+        doTest($$"""
+            (module
+              (type $ft (func))
+              (type (;TARGET;)$ct (cont $ft))
+              (func $1
+                cont.new <caret>$ct
+              )
+            )
+        """)
+    }
+
+    fun testContBindType() {
+        doTest($$"""
+            (module
+              (type $ft (func))
+              (type (;TARGET;)$ct (cont $ft))
+              (func $1
+                cont.bind <caret>$ct $ct
+              )
+            )
+        """)
+    }
+
+    fun testResumeType() {
+        doTest($$"""
+            (module
+              (type $ft (func))
+              (type (;TARGET;)$ct (cont $ft))
+              (func $1
+                resume <caret>$ct
+              )
+            )
+        """)
+    }
+
+    fun testResumeThrowType() {
+        doTest($$"""
+            (module
+              (tag $e)
+              (type $ft (func))
+              (type (;TARGET;)$ct (cont $ft))
+              (func $1
+                resume_throw <caret>$ct $e
+              )
+            )
+        """)
+    }
+
+    fun testResumeThrowTag() {
+        doTest($$"""
+            (module
+              (tag (;TARGET;)$e)
+              (type $ft (func))
+              (type $ct (cont $ft))
+              (func $1
+                resume_throw $ct <caret>$e
+              )
+            )
+        """)
+    }
+
+    fun testSwitchTag() {
+        doTest($$"""
+            (module
+              (tag (;TARGET;)$e)
+              (type $ft (func))
+              (type $ct (cont $ft))
+              (func $1
+                switch $ct <caret>$e
+              )
+            )
+        """)
+    }
+
     fun testStart() {
         doTest($$"""
             (module

@@ -599,15 +599,381 @@ class WatToken(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val V128_STORE8_LANE = WatToken("v128.store8_lane")
         @JvmField val V128_XOR = WatToken("v128.xor")
 
+
+        /**
+         * Threads: the 67 `0xFE`-prefixed atomic instructions, plus the `shared`
+         * attribute on memory/table/global types. Merged into WebAssembly 3.0; the binary
+         * side already lives in `wasmParser` `opcodes/atomic/Atomic.kt`.
+         */
+        @JvmField val MEMORY_ATOMIC_NOTIFY = WatToken("memory.atomic.notify")
+        @JvmField val MEMORY_ATOMIC_WAIT32 = WatToken("memory.atomic.wait32")
+        @JvmField val MEMORY_ATOMIC_WAIT64 = WatToken("memory.atomic.wait64")
+        @JvmField val ATOMIC_FENCE = WatToken("atomic.fence")
+        @JvmField val I32_ATOMIC_LOAD = WatToken("i32.atomic.load")
+        @JvmField val I32_ATOMIC_LOAD8_U = WatToken("i32.atomic.load8_u")
+        @JvmField val I32_ATOMIC_LOAD16_U = WatToken("i32.atomic.load16_u")
+        @JvmField val I64_ATOMIC_LOAD = WatToken("i64.atomic.load")
+        @JvmField val I64_ATOMIC_LOAD8_U = WatToken("i64.atomic.load8_u")
+        @JvmField val I64_ATOMIC_LOAD16_U = WatToken("i64.atomic.load16_u")
+        @JvmField val I64_ATOMIC_LOAD32_U = WatToken("i64.atomic.load32_u")
+        @JvmField val I32_ATOMIC_STORE = WatToken("i32.atomic.store")
+        @JvmField val I32_ATOMIC_STORE8 = WatToken("i32.atomic.store8")
+        @JvmField val I32_ATOMIC_STORE16 = WatToken("i32.atomic.store16")
+        @JvmField val I64_ATOMIC_STORE = WatToken("i64.atomic.store")
+        @JvmField val I64_ATOMIC_STORE8 = WatToken("i64.atomic.store8")
+        @JvmField val I64_ATOMIC_STORE16 = WatToken("i64.atomic.store16")
+        @JvmField val I64_ATOMIC_STORE32 = WatToken("i64.atomic.store32")
+        @JvmField val I32_ATOMIC_RMW_ADD = WatToken("i32.atomic.rmw.add")
+        @JvmField val I32_ATOMIC_RMW8_ADD_U = WatToken("i32.atomic.rmw8.add_u")
+        @JvmField val I32_ATOMIC_RMW16_ADD_U = WatToken("i32.atomic.rmw16.add_u")
+        @JvmField val I64_ATOMIC_RMW_ADD = WatToken("i64.atomic.rmw.add")
+        @JvmField val I64_ATOMIC_RMW8_ADD_U = WatToken("i64.atomic.rmw8.add_u")
+        @JvmField val I64_ATOMIC_RMW16_ADD_U = WatToken("i64.atomic.rmw16.add_u")
+        @JvmField val I64_ATOMIC_RMW32_ADD_U = WatToken("i64.atomic.rmw32.add_u")
+        @JvmField val I32_ATOMIC_RMW_SUB = WatToken("i32.atomic.rmw.sub")
+        @JvmField val I32_ATOMIC_RMW8_SUB_U = WatToken("i32.atomic.rmw8.sub_u")
+        @JvmField val I32_ATOMIC_RMW16_SUB_U = WatToken("i32.atomic.rmw16.sub_u")
+        @JvmField val I64_ATOMIC_RMW_SUB = WatToken("i64.atomic.rmw.sub")
+        @JvmField val I64_ATOMIC_RMW8_SUB_U = WatToken("i64.atomic.rmw8.sub_u")
+        @JvmField val I64_ATOMIC_RMW16_SUB_U = WatToken("i64.atomic.rmw16.sub_u")
+        @JvmField val I64_ATOMIC_RMW32_SUB_U = WatToken("i64.atomic.rmw32.sub_u")
+        @JvmField val I32_ATOMIC_RMW_AND = WatToken("i32.atomic.rmw.and")
+        @JvmField val I32_ATOMIC_RMW8_AND_U = WatToken("i32.atomic.rmw8.and_u")
+        @JvmField val I32_ATOMIC_RMW16_AND_U = WatToken("i32.atomic.rmw16.and_u")
+        @JvmField val I64_ATOMIC_RMW_AND = WatToken("i64.atomic.rmw.and")
+        @JvmField val I64_ATOMIC_RMW8_AND_U = WatToken("i64.atomic.rmw8.and_u")
+        @JvmField val I64_ATOMIC_RMW16_AND_U = WatToken("i64.atomic.rmw16.and_u")
+        @JvmField val I64_ATOMIC_RMW32_AND_U = WatToken("i64.atomic.rmw32.and_u")
+        @JvmField val I32_ATOMIC_RMW_OR = WatToken("i32.atomic.rmw.or")
+        @JvmField val I32_ATOMIC_RMW8_OR_U = WatToken("i32.atomic.rmw8.or_u")
+        @JvmField val I32_ATOMIC_RMW16_OR_U = WatToken("i32.atomic.rmw16.or_u")
+        @JvmField val I64_ATOMIC_RMW_OR = WatToken("i64.atomic.rmw.or")
+        @JvmField val I64_ATOMIC_RMW8_OR_U = WatToken("i64.atomic.rmw8.or_u")
+        @JvmField val I64_ATOMIC_RMW16_OR_U = WatToken("i64.atomic.rmw16.or_u")
+        @JvmField val I64_ATOMIC_RMW32_OR_U = WatToken("i64.atomic.rmw32.or_u")
+        @JvmField val I32_ATOMIC_RMW_XOR = WatToken("i32.atomic.rmw.xor")
+        @JvmField val I32_ATOMIC_RMW8_XOR_U = WatToken("i32.atomic.rmw8.xor_u")
+        @JvmField val I32_ATOMIC_RMW16_XOR_U = WatToken("i32.atomic.rmw16.xor_u")
+        @JvmField val I64_ATOMIC_RMW_XOR = WatToken("i64.atomic.rmw.xor")
+        @JvmField val I64_ATOMIC_RMW8_XOR_U = WatToken("i64.atomic.rmw8.xor_u")
+        @JvmField val I64_ATOMIC_RMW16_XOR_U = WatToken("i64.atomic.rmw16.xor_u")
+        @JvmField val I64_ATOMIC_RMW32_XOR_U = WatToken("i64.atomic.rmw32.xor_u")
+        @JvmField val I32_ATOMIC_RMW_XCHG = WatToken("i32.atomic.rmw.xchg")
+        @JvmField val I32_ATOMIC_RMW8_XCHG_U = WatToken("i32.atomic.rmw8.xchg_u")
+        @JvmField val I32_ATOMIC_RMW16_XCHG_U = WatToken("i32.atomic.rmw16.xchg_u")
+        @JvmField val I64_ATOMIC_RMW_XCHG = WatToken("i64.atomic.rmw.xchg")
+        @JvmField val I64_ATOMIC_RMW8_XCHG_U = WatToken("i64.atomic.rmw8.xchg_u")
+        @JvmField val I64_ATOMIC_RMW16_XCHG_U = WatToken("i64.atomic.rmw16.xchg_u")
+        @JvmField val I64_ATOMIC_RMW32_XCHG_U = WatToken("i64.atomic.rmw32.xchg_u")
+        @JvmField val I32_ATOMIC_RMW_CMPXCHG = WatToken("i32.atomic.rmw.cmpxchg")
+        @JvmField val I32_ATOMIC_RMW8_CMPXCHG_U = WatToken("i32.atomic.rmw8.cmpxchg_u")
+        @JvmField val I32_ATOMIC_RMW16_CMPXCHG_U = WatToken("i32.atomic.rmw16.cmpxchg_u")
+        @JvmField val I64_ATOMIC_RMW_CMPXCHG = WatToken("i64.atomic.rmw.cmpxchg")
+        @JvmField val I64_ATOMIC_RMW8_CMPXCHG_U = WatToken("i64.atomic.rmw8.cmpxchg_u")
+        @JvmField val I64_ATOMIC_RMW16_CMPXCHG_U = WatToken("i64.atomic.rmw16.cmpxchg_u")
+        @JvmField val I64_ATOMIC_RMW32_CMPXCHG_U = WatToken("i64.atomic.rmw32.cmpxchg_u")
+        @JvmField val SHARED = WatToken("shared")
+
+        /**
+         * Legacy exception handling: the pre-`try_table` form still produced by older
+         * toolchains, accepted by wasm-tools behind its `legacy_exceptions` feature.
+         */
+        @JvmField val TRY = WatToken("try")
+        @JvmField val DO = WatToken("do")
+        @JvmField val DELEGATE = WatToken("delegate")
+        @JvmField val RETHROW = WatToken("rethrow")
+
+        /**
+         * Wide arithmetic proposal: 128-bit add/sub and widening multiply.
+         */
+        @JvmField val I64_ADD128 = WatToken("i64.add128")
+        @JvmField val I64_SUB128 = WatToken("i64.sub128")
+        @JvmField val I64_MUL_WIDE_S = WatToken("i64.mul_wide_s")
+        @JvmField val I64_MUL_WIDE_U = WatToken("i64.mul_wide_u")
+
+        /**
+         * Custom page sizes proposal: `(memory $m 1 (pagesize 1))`.
+         */
+        @JvmField val PAGESIZE = WatToken("pagesize")
+
+        /**
+         * Stack switching proposal: continuation types and the resume/suspend family.
+         * `on` introduces a handler clause, as in `(resume $ct (on $tag $label))`.
+         */
+        @JvmField val CONT = WatToken("cont")
+        @JvmField val NOCONT = WatToken("nocont")
+        @JvmField val CONTREF = WatToken("contref")
+        @JvmField val NULLCONTREF = WatToken("nullcontref")
+        @JvmField val ON = WatToken("on")
+        @JvmField val CONT_NEW = WatToken("cont.new")
+        @JvmField val CONT_BIND = WatToken("cont.bind")
+        @JvmField val SUSPEND = WatToken("suspend")
+        @JvmField val RESUME = WatToken("resume")
+        @JvmField val RESUME_THROW = WatToken("resume_throw")
+        @JvmField val RESUME_THROW_REF = WatToken("resume_throw_ref")
+        @JvmField val SWITCH = WatToken("switch")
+
+        /**
+         * Half-precision (FP16) proposal. Not yet in wasm-tools — there is no `fp16`
+         * feature flag — so `wat2wasm` still rejects these; they are recognised here only so
+         * the editor does not paint them as errors. Both competing spellings are accepted for
+         * the fused-multiply ops (`madd` per the proposal Overview vs `relaxed_madd` per
+         * clang's `wasm_simd128.h`) and for the truncations (`trunc_sat_f16x8` vs
+         * `trunc_f16x8`), because the proposal renamed them and either may appear in the wild.
+         */
+        @JvmField val F16 = WatToken("f16")
+        @JvmField val F32_LOAD_F16 = WatToken("f32.load_f16")
+        @JvmField val F32_STORE_F16 = WatToken("f32.store_f16")
+        @JvmField val F16X8_SPLAT = WatToken("f16x8.splat")
+        @JvmField val F16X8_EXTRACT_LANE = WatToken("f16x8.extract_lane")
+        @JvmField val F16X8_REPLACE_LANE = WatToken("f16x8.replace_lane")
+        @JvmField val F16X8_EQ = WatToken("f16x8.eq")
+        @JvmField val F16X8_NE = WatToken("f16x8.ne")
+        @JvmField val F16X8_LT = WatToken("f16x8.lt")
+        @JvmField val F16X8_GT = WatToken("f16x8.gt")
+        @JvmField val F16X8_LE = WatToken("f16x8.le")
+        @JvmField val F16X8_GE = WatToken("f16x8.ge")
+        @JvmField val F16X8_ABS = WatToken("f16x8.abs")
+        @JvmField val F16X8_NEG = WatToken("f16x8.neg")
+        @JvmField val F16X8_SQRT = WatToken("f16x8.sqrt")
+        @JvmField val F16X8_CEIL = WatToken("f16x8.ceil")
+        @JvmField val F16X8_FLOOR = WatToken("f16x8.floor")
+        @JvmField val F16X8_TRUNC = WatToken("f16x8.trunc")
+        @JvmField val F16X8_NEAREST = WatToken("f16x8.nearest")
+        @JvmField val F16X8_ADD = WatToken("f16x8.add")
+        @JvmField val F16X8_SUB = WatToken("f16x8.sub")
+        @JvmField val F16X8_MUL = WatToken("f16x8.mul")
+        @JvmField val F16X8_DIV = WatToken("f16x8.div")
+        @JvmField val F16X8_MIN = WatToken("f16x8.min")
+        @JvmField val F16X8_MAX = WatToken("f16x8.max")
+        @JvmField val F16X8_PMIN = WatToken("f16x8.pmin")
+        @JvmField val F16X8_PMAX = WatToken("f16x8.pmax")
+        @JvmField val F16X8_CONVERT_I16X8_S = WatToken("f16x8.convert_i16x8_s")
+        @JvmField val F16X8_CONVERT_I16X8_U = WatToken("f16x8.convert_i16x8_u")
+        @JvmField val F16X8_DEMOTE_F32X4_ZERO = WatToken("f16x8.demote_f32x4_zero")
+        @JvmField val F16X8_DEMOTE_F64X2_ZERO = WatToken("f16x8.demote_f64x2_zero")
+        @JvmField val F32X4_PROMOTE_LOW_F16X8 = WatToken("f32x4.promote_low_f16x8")
+        @JvmField val F16X8_MADD = WatToken("f16x8.madd")
+        @JvmField val F16X8_NMADD = WatToken("f16x8.nmadd")
+        @JvmField val F16X8_RELAXED_MADD = WatToken("f16x8.relaxed_madd")
+        @JvmField val F16X8_RELAXED_NMADD = WatToken("f16x8.relaxed_nmadd")
+        @JvmField val I16X8_TRUNC_SAT_F16X8_S = WatToken("i16x8.trunc_sat_f16x8_s")
+        @JvmField val I16X8_TRUNC_SAT_F16X8_U = WatToken("i16x8.trunc_sat_f16x8_u")
+        @JvmField val I16X8_TRUNC_F16X8_S = WatToken("i16x8.trunc_f16x8_s")
+        @JvmField val I16X8_TRUNC_F16X8_U = WatToken("i16x8.trunc_f16x8_u")
+
+        /**
+         * Component model: value types, canonical-ABI options and the stable MVP resource
+         * builtins. `result`, `enum`, `field`, `memory`, `core` and the numeric primitives are
+         * already declared above and are shared with the core language. The async/threading
+         * builtins (`task.return`, `waitable-set.wait`, ...) are deliberately omitted: wasm-tools
+         * spells them only as Rust `kw::` idents and their text names are still churning.
+         */
+        @JvmField val BOOL = WatToken("bool")
+        @JvmField val S8 = WatToken("s8")
+        @JvmField val U8 = WatToken("u8")
+        @JvmField val S16 = WatToken("s16")
+        @JvmField val U16 = WatToken("u16")
+        @JvmField val S32 = WatToken("s32")
+        @JvmField val S64 = WatToken("s64")
+        @JvmField val U64 = WatToken("u64")
+        @JvmField val CHAR = WatToken("char")
+        @JvmField val STRING_TYPE = WatToken("string")
+        @JvmField val FLOAT32 = WatToken("float32")
+        @JvmField val FLOAT64 = WatToken("float64")
+        @JvmField val ERROR_CONTEXT = WatToken("error-context")
+        @JvmField val RECORD = WatToken("record")
+        @JvmField val VARIANT = WatToken("variant")
+        @JvmField val LIST = WatToken("list")
+        @JvmField val MAP = WatToken("map")
+        @JvmField val TUPLE = WatToken("tuple")
+        @JvmField val FLAGS = WatToken("flags")
+        @JvmField val OWN = WatToken("own")
+        @JvmField val BORROW = WatToken("borrow")
+        @JvmField val OPTION = WatToken("option")
+        @JvmField val STREAM = WatToken("stream")
+        @JvmField val FUTURE = WatToken("future")
+        @JvmField val CASE = WatToken("case")
+        @JvmField val ERROR = WatToken("error")
+        @JvmField val RESOURCE = WatToken("resource")
+
+        /** Core representation of a resource: `(resource (rep i32))`. */
+        @JvmField val REP = WatToken("rep")
+
+        /** Optional resource destructor: `(resource (rep i32) (dtor (func $f)))`. */
+        @JvmField val DTOR = WatToken("dtor")
+        @JvmField val REALLOC = WatToken("realloc")
+        @JvmField val POST_RETURN = WatToken("post-return")
+        @JvmField val CALLBACK = WatToken("callback")
+        @JvmField val ASYNC = WatToken("async")
+        @JvmField val GC = WatToken("gc")
+        @JvmField val STRING_ENCODING = WatToken("string-encoding")
+        @JvmField val UTF8 = WatToken("utf8")
+        @JvmField val UTF16 = WatToken("utf16")
+        @JvmField val LATIN1_PLUS_UTF16 = WatToken("latin1+utf16")
+        @JvmField val CANCELLABLE = WatToken("cancellable")
+        @JvmField val RESOURCE_NEW = WatToken("resource.new")
+        @JvmField val RESOURCE_DROP = WatToken("resource.drop")
+        @JvmField val RESOURCE_REP = WatToken("resource.rep")
+
         @JvmField val UNKNOWN = WatToken("unknown")
 
+        /**
+         * Every keyword token, i.e. every token the lexer can produce by matching a bare word
+         * against [WatLexer]'s keyword map. This is the single source of that map — adding a
+         * keyword here is all that is required for the lexer to recognise it.
+         *
+         * Distinct from [KEYWORDS], which is the much smaller set of *structural* keywords that
+         * get keyword colouring; instruction mnemonics deliberately render as plain text.
+         */
+        @JvmField
+        val ALL_KEYWORDS = arrayOf<WatToken>(
+            ACTIVE, ALIAS, ALIGN, ANY, ANY_CONVERT_EXTERN, ANYREF, ARRAY, ARRAY_COPY, ARRAY_FILL, ARRAY_GET,
+            ARRAY_GET_S, ARRAY_GET_U, ARRAY_INIT_DATA, ARRAY_INIT_ELEM, ARRAY_LEN, ARRAY_NEW, ARRAY_NEW_DATA,
+            ARRAY_NEW_DEFAULT, ARRAY_NEW_ELEM, ARRAY_NEW_FIXED, ARRAY_SET, ARRAYREF, BLOCK, BR, BR_IF, BR_ON_CAST,
+            BR_ON_CAST_FAIL, BR_ON_NON_NULL, BR_ON_NULL, BR_TABLE, CALL, CALL_INDIRECT, CALL_REF, CANON, CATCH,
+            CATCH_ALL, CATCH_ALL_REF, CATCH_REF, CORE, COMPONENT, INSTANCE, INSTANTIATE, DATA, DATA_DROP, DECLARE,
+            DROP, ELEM, ELEM_DROP, ELSE, END, ENUM, EQ, EQREF, EXN, EXNREF, EXPORT, EXTERN, EXTERN_CONVERT_ANY,
+            EXTERNREF, F32, F32_ABS, F32_ADD, F32_CEIL, F32_CONST, F32_CONVERT_I32_S, F32_CONVERT_I32_U,
+            F32_CONVERT_I64_S, F32_CONVERT_I64_U, F32_COPYSIGN, F32_DEMOTE_F64, F32_DIV, F32_EQ, F32_FLOOR, F32_GE,
+            F32_GT, F32_LE, F32_LOAD, F32_LT, F32_MAX, F32_MIN, F32_MUL, F32_NE, F32_NEAREST, F32_NEG,
+            F32_REINTERPRET_I32, F32_SQRT, F32_STORE, F32_SUB, F32_TRUNC, F32X4_ABS, F32X4_ADD, F32X4_CEIL,
+            F32X4_CONVERT_S_I32X4, F32X4_CONVERT_U_I32X4, F32X4_DEMOTE_ZERO_F64X2, F32X4_DIV, F32X4_EQ,
+            F32X4_EXTRACT_LANE, F32X4_FLOOR, F32X4_GE, F32X4_GT, F32X4_LE, F32X4_LT, F32X4_MAX, F32X4_MIN, F32X4_MUL,
+            F32X4_NE, F32X4_NEAREST, F32X4_NEG, F32X4_PMAX, F32X4_PMIN, F32X4_RELAXED_MADD, F32X4_RELAXED_MAX,
+            F32X4_RELAXED_MIN, F32X4_RELAXED_NMADD, F32X4_REPLACE_LANE, F32X4_SPLAT, F32X4_SQRT, F32X4_SUB,
+            F32X4_TRUNC, F64, F64_ABS, F64_ADD, F64_CEIL, F64_CONST, F64_CONVERT_I32_S, F64_CONVERT_I32_U,
+            F64_CONVERT_I64_S, F64_CONVERT_I64_U, F64_COPYSIGN, F64_DIV, F64_EQ, F64_FLOOR, F64_GE, F64_GT, F64_LE,
+            F64_LOAD, F64_LT, F64_MAX, F64_MIN, F64_MUL, F64_NE, F64_NEAREST, F64_NEG, F64_PROMOTE_F32,
+            F64_REINTERPRET_I64, F64_SQRT, F64_STORE, F64_SUB, F64_TRUNC, F64X2_ABS, F64X2_ADD, F64X2_CEIL,
+            F64X2_CONVERT_LOW_S_I32X4, F64X2_CONVERT_LOW_U_I32X4, F64X2_DIV, F64X2_EQ, F64X2_EXTRACT_LANE,
+            F64X2_FLOOR, F64X2_GE, F64X2_GT, F64X2_LE, F64X2_LT, F64X2_MAX, F64X2_MIN, F64X2_MUL, F64X2_NE,
+            F64X2_NEAREST, F64X2_NEG, F64X2_PMAX, F64X2_PMIN, F64X2_PROMOTE_LOW_F32X4, F64X2_RELAXED_MADD,
+            F64X2_RELAXED_MAX, F64X2_RELAXED_MIN, F64X2_RELAXED_NMADD, F64X2_REPLACE_LANE, F64X2_SPLAT, F64X2_SQRT,
+            F64X2_SUB, F64X2_TRUNC, FIELD, FINAL, FUNC, FUNCREF, GLOBAL, GLOBAL_GET, GLOBAL_SET, I16, I16X8_ABS,
+            I16X8_ADD, I16X8_ADD_SAT_S, I16X8_ADD_SAT_U, I16X8_ALL_TRUE, I16X8_AVGR_U, I16X8_BITMASK, I16X8_EQ,
+            I16X8_EXTADD_PAIRWISE_I8X16_S, I16X8_EXTADD_PAIRWISE_I8X16_U, I16X8_EXTEND_HIGH_S_I8X16,
+            I16X8_EXTEND_HIGH_U_I8X16, I16X8_EXTEND_LOW_S_I8X16, I16X8_EXTEND_LOW_U_I8X16, I16X8_EXTMUL_HIGH_S_I8X16,
+            I16X8_EXTMUL_HIGH_U_I8X16, I16X8_EXTMUL_LOW_S_I8X16, I16X8_EXTMUL_LOW_U_I8X16, I16X8_EXTRACT_LANE_S,
+            I16X8_EXTRACT_LANE_U, I16X8_GE_S, I16X8_GE_U, I16X8_GT_S, I16X8_GT_U, I16X8_LE_S, I16X8_LE_U, I16X8_LT_S,
+            I16X8_LT_U, I16X8_MAX_S, I16X8_MAX_U, I16X8_MIN_S, I16X8_MIN_U, I16X8_MUL, I16X8_NARROW_I32X4_S,
+            I16X8_NARROW_I32X4_U, I16X8_NE, I16X8_NEG, I16X8_Q15MULR_SAT_S, I16X8_RELAXED_DOT_I8X16_I7X16_ADD_S,
+            I16X8_RELAXED_DOT_I8X16_I7X16_S, I16X8_RELAXED_DOT_S_I8X16, I16X8_RELAXED_LANESELECT,
+            I16X8_RELAXED_Q15MULR_S, I16X8_RELAXED_SWIZZLE, I16X8_REPLACE_LANE, I16X8_SHL, I16X8_SHR_S, I16X8_SHR_U,
+            I16X8_SPLAT, I16X8_SUB, I16X8_SUB_SAT_S, I16X8_SUB_SAT_U, I31, I31_GET_S, I31_GET_U, I31REF, I32, I32_ADD,
+            I32_AND, I32_CLZ, I32_CONST, I32_CTZ, I32_DIV_S, I32_DIV_U, I32_EQ, I32_EQZ, I32_EXTEND16_S,
+            I32_EXTEND8_S, I32_GE_S, I32_GE_U, I32_GT_S, I32_GT_U, I32_LE_S, I32_LE_U, I32_LOAD, I32_LOAD16_S,
+            I32_LOAD16_U, I32_LOAD8_S, I32_LOAD8_U, I32_LT_S, I32_LT_U, I32_MUL, I32_NE, I32_OR, I32_POPCNT,
+            I32_REINTERPRET_F32, I32_REM_S, I32_REM_U, I32_ROTL, I32_ROTR, I32_SHL, I32_SHR_S, I32_SHR_U, I32_STORE,
+            I32_STORE16, I32_STORE8, I32_SUB, I32_TRUNC_F32_S, I32_TRUNC_F32_U, I32_TRUNC_F64_S, I32_TRUNC_F64_U,
+            I32_TRUNC_SAT_F32_S, I32_TRUNC_SAT_F32_U, I32_TRUNC_SAT_F64_S, I32_TRUNC_SAT_F64_U, I32_WRAP_I64, I32_XOR,
+            I32X4_ABS, I32X4_ADD, I32X4_ALL_TRUE, I32X4_BITMASK, I32X4_DOT_S_I16X8, I32X4_EQ,
+            I32X4_EXTADD_PAIRWISE_I16X8_S, I32X4_EXTADD_PAIRWISE_I16X8_U, I32X4_EXTEND_HIGH_S_I16X8,
+            I32X4_EXTEND_HIGH_U_I16X8, I32X4_EXTEND_LOW_S_I16X8, I32X4_EXTEND_LOW_U_I16X8, I32X4_EXTMUL_HIGH_S_I16X8,
+            I32X4_EXTMUL_HIGH_U_I16X8, I32X4_EXTMUL_LOW_S_I16X8, I32X4_EXTMUL_LOW_U_I16X8, I32X4_EXTRACT_LANE,
+            I32X4_GE_S, I32X4_GE_U, I32X4_GT_S, I32X4_GT_U, I32X4_LE_S, I32X4_LE_U, I32X4_LT_S, I32X4_LT_U,
+            I32X4_MAX_S, I32X4_MAX_U, I32X4_MIN_S, I32X4_MIN_U, I32X4_MUL, I32X4_NE, I32X4_NEG,
+            I32X4_RELAXED_DOT_ADD_S_I16X8, I32X4_RELAXED_LANESELECT, I32X4_RELAXED_TRUNC_F32X4_S,
+            I32X4_RELAXED_TRUNC_F32X4_S_ZERO, I32X4_RELAXED_TRUNC_F32X4_U, I32X4_RELAXED_TRUNC_F32X4_U_ZERO,
+            I32X4_RELAXED_TRUNC_S_F32X4, I32X4_RELAXED_TRUNC_S_ZERO_F64X2, I32X4_RELAXED_TRUNC_U_F32X4,
+            I32X4_RELAXED_TRUNC_U_ZERO_F64X2, I32X4_REPLACE_LANE, I32X4_SHL, I32X4_SHR_S, I32X4_SHR_U, I32X4_SPLAT,
+            I32X4_SUB, I32X4_TRUNC_SAT_F32X4_S, I32X4_TRUNC_SAT_F32X4_U, I32X4_TRUNC_SAT_S_ZERO_F64X2,
+            I32X4_TRUNC_SAT_U_ZERO_F64X2, I64, I64_ADD, I64_AND, I64_CLZ, I64_CONST, I64_CTZ, I64_DIV_S, I64_DIV_U,
+            I64_EQ, I64_EQZ, I64_EXTEND16_S, I64_EXTEND32_S, I64_EXTEND8_S, I64_EXTEND_I32_S, I64_EXTEND_I32_U,
+            I64_GE_S, I64_GE_U, I64_GT_S, I64_GT_U, I64_LE_S, I64_LE_U, I64_LOAD, I64_LOAD16_S, I64_LOAD16_U,
+            I64_LOAD32_S, I64_LOAD32_U, I64_LOAD8_S, I64_LOAD8_U, I64_LT_S, I64_LT_U, I64_MUL, I64_NE, I64_OR,
+            I64_POPCNT, I64_REINTERPRET_F64, I64_REM_S, I64_REM_U, I64_ROTL, I64_ROTR, I64_SHL, I64_SHR_S, I64_SHR_U,
+            I64_STORE, I64_STORE16, I64_STORE32, I64_STORE8, I64_SUB, I64_TRUNC_F32_S, I64_TRUNC_F32_U,
+            I64_TRUNC_F64_S, I64_TRUNC_F64_U, I64_TRUNC_SAT_F32_S, I64_TRUNC_SAT_F32_U, I64_TRUNC_SAT_F64_S,
+            I64_TRUNC_SAT_F64_U, I64_XOR, I64X2_ABS, I64X2_ADD, I64X2_ALL_TRUE, I64X2_BITMASK, I64X2_EQ,
+            I64X2_EXTEND_HIGH_S_I32X4, I64X2_EXTEND_HIGH_U_I32X4, I64X2_EXTEND_LOW_S_I32X4, I64X2_EXTEND_LOW_U_I32X4,
+            I64X2_EXTMUL_HIGH_S_I32X4, I64X2_EXTMUL_HIGH_U_I32X4, I64X2_EXTMUL_LOW_S_I32X4, I64X2_EXTMUL_LOW_U_I32X4,
+            I64X2_EXTRACT_LANE, I64X2_GE_S, I64X2_GT_S, I64X2_LE_S, I64X2_LT_S, I64X2_MUL, I64X2_NE, I64X2_NEG,
+            I64X2_RELAXED_LANESELECT, I64X2_REPLACE_LANE, I64X2_SHL, I64X2_SHR_S, I64X2_SHR_U, I64X2_SPLAT, I64X2_SUB,
+            I8, I8X16_ABS, I8X16_ADD, I8X16_ADD_SAT_S, I8X16_ADD_SAT_U, I8X16_ALL_TRUE, I8X16_AVGR_U, I8X16_BITMASK,
+            I8X16_EQ, I8X16_EXTRACT_LANE_S, I8X16_EXTRACT_LANE_U, I8X16_GE_S, I8X16_GE_U, I8X16_GT_S, I8X16_GT_U,
+            I8X16_LE_S, I8X16_LE_U, I8X16_LT_S, I8X16_LT_U, I8X16_MAX_S, I8X16_MAX_U, I8X16_MIN_S, I8X16_MIN_U,
+            I8X16_NARROW_I16X8_S, I8X16_NARROW_I16X8_U, I8X16_NE, I8X16_NEG, I8X16_POPCNT, I8X16_RELAXED_LANESELECT,
+            I8X16_RELAXED_SWIZZLE, I8X16_REPLACE_LANE, I8X16_SHL, I8X16_SHR_S, I8X16_SHR_U, I8X16_SHUFFLE,
+            I8X16_SPLAT, I8X16_SUB, I8X16_SUB_SAT_S, I8X16_SUB_SAT_U, I8X16_SWIZZLE, IF, IMPORT, ITEM, LIFT, LOWER,
+            LOCAL, LOCAL_GET, LOCAL_SET, LOCAL_TEE, LOOP, MEMORY, MEMORY_COPY, MEMORY_FILL, MEMORY_GROW, MEMORY_INIT,
+            MEMORY_SIZE, MODULE, MUT, NOEXN, NOEXTERN, NOFUNC, NONE, NOP, NULL, NULLEXNREF, NULLEXTERNREF,
+            NULLFUNCREF, NULLREF, OFFSET, PARAM, PASSIVE, REC, REF, REF_AS_NON_NULL, REF_CAST, REF_EQ, REF_FUNC,
+            REF_I31, REF_IS_NULL, REF_NULL, REF_TEST, RESULT, RETURN, RETURN_CALL, RETURN_CALL_INDIRECT,
+            RETURN_CALL_REF, SELECT, START, STRUCT, STRUCT_GET, STRUCT_GET_S, STRUCT_GET_U, STRUCT_NEW,
+            STRUCT_NEW_DEFAULT, STRUCT_SET, STRUCTREF, SUB, TABLE, TABLE_COPY, TABLE_FILL, TABLE_GET, TABLE_GROW,
+            TABLE_INIT, TABLE_SET, TABLE_SIZE, TAG, THEN, THROW, THROW_REF, TRY_TABLE, TYPE, UNREACHABLE, U32, V128,
+            V128_AND, V128_ANDNOT, V128_ANY_TRUE, V128_BITSELECT, V128_CONST, V128_LOAD, V128_LOAD16_LANE,
+            V128_LOAD16_SPLAT, V128_LOAD16X4_S, V128_LOAD16X4_U, V128_LOAD32_LANE, V128_LOAD32_SPLAT,
+            V128_LOAD32_ZERO, V128_LOAD32X2_S, V128_LOAD32X2_U, V128_LOAD64_LANE, V128_LOAD64_SPLAT, V128_LOAD64_ZERO,
+            V128_LOAD8_LANE, V128_LOAD8_SPLAT, V128_LOAD8X8_S, V128_LOAD8X8_U, V128_NOT, V128_OR, V128_STORE,
+            V128_STORE16_LANE, V128_STORE32_LANE, V128_STORE64_LANE, V128_STORE8_LANE, V128_XOR, WITH,
+
+            // Threads
+            MEMORY_ATOMIC_NOTIFY, MEMORY_ATOMIC_WAIT32, MEMORY_ATOMIC_WAIT64, ATOMIC_FENCE, I32_ATOMIC_LOAD,
+            I32_ATOMIC_LOAD8_U, I32_ATOMIC_LOAD16_U, I64_ATOMIC_LOAD, I64_ATOMIC_LOAD8_U, I64_ATOMIC_LOAD16_U,
+            I64_ATOMIC_LOAD32_U, I32_ATOMIC_STORE, I32_ATOMIC_STORE8, I32_ATOMIC_STORE16, I64_ATOMIC_STORE,
+            I64_ATOMIC_STORE8, I64_ATOMIC_STORE16, I64_ATOMIC_STORE32, I32_ATOMIC_RMW_ADD, I32_ATOMIC_RMW8_ADD_U,
+            I32_ATOMIC_RMW16_ADD_U, I64_ATOMIC_RMW_ADD, I64_ATOMIC_RMW8_ADD_U, I64_ATOMIC_RMW16_ADD_U,
+            I64_ATOMIC_RMW32_ADD_U, I32_ATOMIC_RMW_SUB, I32_ATOMIC_RMW8_SUB_U, I32_ATOMIC_RMW16_SUB_U,
+            I64_ATOMIC_RMW_SUB, I64_ATOMIC_RMW8_SUB_U, I64_ATOMIC_RMW16_SUB_U, I64_ATOMIC_RMW32_SUB_U,
+            I32_ATOMIC_RMW_AND, I32_ATOMIC_RMW8_AND_U, I32_ATOMIC_RMW16_AND_U, I64_ATOMIC_RMW_AND,
+            I64_ATOMIC_RMW8_AND_U, I64_ATOMIC_RMW16_AND_U, I64_ATOMIC_RMW32_AND_U, I32_ATOMIC_RMW_OR,
+            I32_ATOMIC_RMW8_OR_U, I32_ATOMIC_RMW16_OR_U, I64_ATOMIC_RMW_OR, I64_ATOMIC_RMW8_OR_U,
+            I64_ATOMIC_RMW16_OR_U, I64_ATOMIC_RMW32_OR_U, I32_ATOMIC_RMW_XOR, I32_ATOMIC_RMW8_XOR_U,
+            I32_ATOMIC_RMW16_XOR_U, I64_ATOMIC_RMW_XOR, I64_ATOMIC_RMW8_XOR_U, I64_ATOMIC_RMW16_XOR_U,
+            I64_ATOMIC_RMW32_XOR_U, I32_ATOMIC_RMW_XCHG, I32_ATOMIC_RMW8_XCHG_U, I32_ATOMIC_RMW16_XCHG_U,
+            I64_ATOMIC_RMW_XCHG, I64_ATOMIC_RMW8_XCHG_U, I64_ATOMIC_RMW16_XCHG_U, I64_ATOMIC_RMW32_XCHG_U,
+            I32_ATOMIC_RMW_CMPXCHG, I32_ATOMIC_RMW8_CMPXCHG_U, I32_ATOMIC_RMW16_CMPXCHG_U, I64_ATOMIC_RMW_CMPXCHG,
+            I64_ATOMIC_RMW8_CMPXCHG_U, I64_ATOMIC_RMW16_CMPXCHG_U, I64_ATOMIC_RMW32_CMPXCHG_U, SHARED,
+            // Legacy exception handling
+            TRY, DO, DELEGATE, RETHROW,
+            // Wide arithmetic
+            I64_ADD128, I64_SUB128, I64_MUL_WIDE_S, I64_MUL_WIDE_U,
+            // Custom page sizes
+            PAGESIZE,
+            // Stack switching
+            CONT, NOCONT, CONTREF, NULLCONTREF, ON, CONT_NEW, CONT_BIND, SUSPEND, RESUME, RESUME_THROW,
+            RESUME_THROW_REF, SWITCH,
+            // Half-precision (FP16)
+            F16, F32_LOAD_F16, F32_STORE_F16, F16X8_SPLAT, F16X8_EXTRACT_LANE, F16X8_REPLACE_LANE, F16X8_EQ, F16X8_NE,
+            F16X8_LT, F16X8_GT, F16X8_LE, F16X8_GE, F16X8_ABS, F16X8_NEG, F16X8_SQRT, F16X8_CEIL, F16X8_FLOOR,
+            F16X8_TRUNC, F16X8_NEAREST, F16X8_ADD, F16X8_SUB, F16X8_MUL, F16X8_DIV, F16X8_MIN, F16X8_MAX, F16X8_PMIN,
+            F16X8_PMAX, F16X8_CONVERT_I16X8_S, F16X8_CONVERT_I16X8_U, F16X8_DEMOTE_F32X4_ZERO,
+            F16X8_DEMOTE_F64X2_ZERO, F32X4_PROMOTE_LOW_F16X8, F16X8_MADD, F16X8_NMADD, F16X8_RELAXED_MADD,
+            F16X8_RELAXED_NMADD, I16X8_TRUNC_SAT_F16X8_S, I16X8_TRUNC_SAT_F16X8_U, I16X8_TRUNC_F16X8_S,
+            I16X8_TRUNC_F16X8_U,
+            // Component model
+            BOOL, S8, U8, S16, U16, S32, S64, U64, CHAR, STRING_TYPE, FLOAT32, FLOAT64, ERROR_CONTEXT, RECORD,
+            VARIANT, LIST, MAP, TUPLE, FLAGS, OWN, BORROW, OPTION, STREAM, FUTURE, CASE, ERROR, RESOURCE, REP, DTOR,
+            REALLOC, POST_RETURN, CALLBACK, ASYNC, GC, STRING_ENCODING, UTF8, UTF16, LATIN1_PLUS_UTF16, CANCELLABLE,
+            RESOURCE_NEW, RESOURCE_DROP, RESOURCE_REP,
+        )
+
+        /**
+         * Keywords that get [com.intellij.openapi.editor.DefaultLanguageHighlighterColors.KEYWORD]
+         * colouring: module structure, types and control flow. Numeric/vector primitives (`i32`,
+         * `f64`, `v128`, and the component-model `s8`/`char`/`string`/... analogues) and plain
+         * instruction mnemonics are intentionally excluded so they render as ordinary text.
+         */
         @JvmField
         val KEYWORDS = arrayOf<WatToken>(
-            ALIGN, ANY, ALIAS, ARRAY, BLOCK, BR, BR_IF, BR_ON_CAST, BR_ON_CAST_FAIL, BR_ON_NULL, BR_ON_NULL,
+            ALIGN, ANY, ALIAS, ARRAY, BLOCK, BR, BR_IF, BR_ON_CAST, BR_ON_CAST_FAIL, BR_ON_NON_NULL, BR_ON_NULL,
             BR_TABLE, CATCH, CATCH_ALL, CATCH_ALL_REF, CATCH_REF, CALL, CALL_INDIRECT, CALL_REF, CANON, CORE, COMPONENT,
             DATA, ELEM, ELSE, END, ENUM, EXN, EXPORT, EXTERN, FIELD, FUNC, GLOBAL, IF, IMPORT, ITEM, INSTANCE, INSTANTIATE,
             LIFT, LOOP, LOWER, MUT, MODULE, MEMORY, NOEXN, NOEXTERN, OFFSET, PARAM, REC, RESULT, RETURN,
-            RETURN_CALL, SELECT, START, STRUCT, SUB, TABLE, TAG, THEN, THROW, TRY_TABLE, TYPE, WITH
+            RETURN_CALL, SELECT, START, STRUCT, SUB, TABLE, TAG, THEN, THROW, THROW_REF, TRY_TABLE, TYPE, WITH,
+            // Threads
+            SHARED,
+            // Legacy exception handling
+            TRY, DO, DELEGATE, RETHROW,
+            // Custom page sizes
+            PAGESIZE,
+            // Stack switching
+            CONT, NOCONT, ON, SUSPEND, RESUME, RESUME_THROW, RESUME_THROW_REF, SWITCH,
+            // Component model
+            RECORD, VARIANT, CASE, LIST, MAP, TUPLE, FLAGS, OPTION, OWN, BORROW, RESOURCE, REP, DTOR, STREAM, FUTURE,
+            ERROR, ASYNC, CALLBACK, REALLOC, POST_RETURN, STRING_ENCODING, CANCELLABLE, GC
         )
 
         @JvmField

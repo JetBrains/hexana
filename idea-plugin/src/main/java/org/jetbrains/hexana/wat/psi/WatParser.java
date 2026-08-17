@@ -10,13 +10,17 @@ import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 public class WatParser implements PsiParser {
 
     private final static Map<IElementType, IElementType> tokenMap = new HashMap<>();
     private final static Map<IElementType, IElementType> uexpr1 = new HashMap<>();
     private final static Map<IElementType, IElementType> blocks = new HashMap<>();
+    /** Unfolded instructions followed by a variable number of ids/indices. */
+    private final static Set<IElementType> uexprN = new HashSet<>();
 
     static {
         tokenMap.put(WatToken.MODULE, WatElementType.MODULE);
@@ -45,6 +49,9 @@ public class WatParser implements PsiParser {
         tokenMap.put(WatToken.IF, WatElementType.IF);
         tokenMap.put(WatToken.THEN, WatElementType.THEN);
         tokenMap.put(WatToken.ELSE, WatElementType.ELSE);
+        tokenMap.put(WatToken.TRY_TABLE, WatElementType.TRY_TABLE);
+        tokenMap.put(WatToken.TRY, WatElementType.TRY);
+        tokenMap.put(WatToken.DO, WatElementType.DO);
         tokenMap.put(WatElementType.FUNC_BODY, WatElementType.FUNC_BODY);
 
         uexpr1.put(WatToken.LOCAL_GET, WatElementType.UEXPR);
@@ -59,10 +66,27 @@ public class WatParser implements PsiParser {
         uexpr1.put(WatToken.BR_IF, WatElementType.UEXPR);
         uexpr1.put(WatToken.BR_ON_NULL, WatElementType.UEXPR);
         uexpr1.put(WatToken.BR_ON_NON_NULL, WatElementType.UEXPR);
+        // Legacy exception handling: `rethrow <label>`.
+        uexpr1.put(WatToken.RETHROW, WatElementType.UEXPR);
+        // Stack switching: `suspend <tag>`, `cont.new <type>`, `resume <type>`.
+        uexpr1.put(WatToken.SUSPEND, WatElementType.UEXPR);
+        uexpr1.put(WatToken.CONT_NEW, WatElementType.UEXPR);
+        uexpr1.put(WatToken.RESUME, WatElementType.UEXPR);
+        uexpr1.put(WatToken.RESUME_THROW_REF, WatElementType.UEXPR);
 
         blocks.put(WatToken.BLOCK, WatElementType.BLOCK);
         blocks.put(WatToken.LOOP, WatElementType.LOOP);
         blocks.put(WatToken.IF, WatElementType.IF);
+        // `try_table` and legacy `try` are block instructions terminated by `end`, so they must
+        // push a marker; otherwise their `end` closes the enclosing block instead.
+        blocks.put(WatToken.TRY_TABLE, WatElementType.TRY_TABLE);
+        blocks.put(WatToken.TRY, WatElementType.TRY);
+
+        // Instructions taking two indices, e.g. `cont.bind $ct1 $ct2`.
+        uexprN.add(WatToken.BR_TABLE);
+        uexprN.add(WatToken.CONT_BIND);
+        uexprN.add(WatToken.SWITCH);
+        uexprN.add(WatToken.RESUME_THROW);
     }
 
     private static class Expr {
@@ -207,15 +231,27 @@ public class WatParser implements PsiParser {
                     idOrNum(b, b.getTokenType());
                     m.done(unfoldedElementType);
                 }
-                else if (token == WatToken.BR_TABLE) {
+                else if (uexprN.contains(token)) {
                     PsiBuilder.Marker m = b.mark();
                     b.advanceLexer();
+                    // Greedy, which is safe: the token after the operands is always `(`, `)` or a
+                    // keyword, and idOrNum() reports false for all of those.
                     while (true) {
                         if (!idOrNum(b, b.getTokenType())) {
                             break;
                         }
                     }
                     m.done(WatElementType.UEXPR);
+                }
+                else if (token == WatToken.DELEGATE) {
+                    // `delegate <label>` terminates a legacy unfolded `try` in place of `end`.
+                    PsiBuilder.Marker m = b.mark();
+                    b.advanceLexer();
+                    idOrNum(b, b.getTokenType());
+                    m.done(WatElementType.UEXPR);
+                    if (getLastTypeOrNull(unfoldedBlockStack) == WatElementType.TRY) {
+                        unfoldedBlockStack.removeLast().done();
+                    }
                 }
                 else if (token == WatToken.BR_ON_CAST || token == WatToken.BR_ON_CAST_FAIL) {
                     PsiBuilder.Marker m = b.mark();

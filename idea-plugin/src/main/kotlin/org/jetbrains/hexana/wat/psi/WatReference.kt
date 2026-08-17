@@ -52,8 +52,13 @@ class WatReference(
         if (parent.elementType == WatElementType.GLOBAL_GET || parent.elementType == WatElementType.GLOBAL_SET) {
             return findInFileset(WatElementType.GLOBAL, nameOrIndex) ?: resolveGlobal(nameOrIndex.containingFile, nameOrIndex)
         }
-        if (parent.elementType == WatElementType.THROW || parent.elementType == WatElementType.CATCH) {
-            return findInFileset(WatElementType.TAG, nameOrIndex) ?: resolveTag(nameOrIndex.containingFile, nameOrIndex)
+        if (parent.elementType == WatElementType.THROW) {
+            return resolveTagRef()
+        }
+        if (parent.elementType == WatElementType.CATCH) {
+            // Legacy `catch $tag`, but `try_table`'s clause is `(catch $tag $label)`, so the
+            // second operand is a label rather than another tag.
+            return if (operandIndex() == 0) resolveTagRef() else resolveLabel(nameOrIndex)
         }
         val exprType = getExprToken(parent)
         if (exprType == WatToken.LOCAL_SET || exprType == WatToken.LOCAL_GET || exprType == WatToken.LOCAL_TEE) {
@@ -64,10 +69,60 @@ class WatReference(
         }
         if (exprType == WatToken.BR || exprType == WatToken.BR_IF || exprType == WatToken.BR_TABLE ||
             exprType == WatToken.BR_ON_NULL || exprType == WatToken.BR_ON_NON_NULL ||
-            exprType == WatToken.BR_ON_CAST || exprType == WatToken.BR_ON_CAST_FAIL) {
+            exprType == WatToken.BR_ON_CAST || exprType == WatToken.BR_ON_CAST_FAIL ||
+            // Legacy exception handling: `rethrow <label>`.
+            exprType == WatToken.RETHROW ||
+            // `try_table` clauses that carry only a label.
+            exprType == WatToken.CATCH_ALL || exprType == WatToken.CATCH_ALL_REF) {
             return resolveLabel(nameOrIndex)
         }
+        if (exprType == WatToken.DELEGATE) {
+            // `delegate <label>` terminates a legacy `try`, and its label is resolved in the
+            // scope *outside* that try -- so `delegate 0` targets the enclosing block, not the
+            // try itself, even though the parser keeps the clause inside the try's marker.
+            return resolveLabel(nameOrIndex, skipInnermostLabel = true)
+        }
+        // `(catch_ref $tag $label)` -- like CATCH above, but reached as a plain s-expression.
+        if (exprType == WatToken.CATCH_REF) {
+            return if (operandIndex() == 0) resolveTagRef() else resolveLabel(nameOrIndex)
+        }
+        if (exprType == WatToken.SUSPEND) {
+            return resolveTagRef()
+        }
+        // Stack switching: `resume_throw <type> <tag>` and `switch <type> <tag>`.
+        if (exprType == WatToken.RESUME_THROW || exprType == WatToken.SWITCH) {
+            return if (operandIndex() == 0) resolveTypeRef() else resolveTagRef()
+        }
+        // `cont.new <type>`, `cont.bind <type> <type>`, `resume <type>`, `resume_throw_ref <type>`.
+        if (exprType == WatToken.CONT_NEW || exprType == WatToken.CONT_BIND ||
+            exprType == WatToken.RESUME || exprType == WatToken.RESUME_THROW_REF) {
+            return resolveTypeRef()
+        }
         return null
+    }
+
+    private fun resolveTagRef(): PsiElement? {
+        return findInFileset(WatElementType.TAG, nameOrIndex) ?: resolveTag(nameOrIndex.containingFile, nameOrIndex)
+    }
+
+    private fun resolveTypeRef(): PsiElement? {
+        return findInFileset(WatElementType.TYPE, nameOrIndex) ?: resolveType(nameOrIndex.containingFile, nameOrIndex)
+    }
+
+    /**
+     * Position of [nameOrIndex] among the id/index operands of its enclosing expression. Used by
+     * instructions whose operands are of differing kinds, such as `(catch $tag $label)`.
+     */
+    private fun operandIndex(): Int {
+        var index = 0
+        var sibling = nameOrIndex.prevSibling
+        while (sibling != null) {
+            if (sibling is WatPsiIdentifierElement || sibling is WatPsiNumberElement) {
+                index++
+            }
+            sibling = sibling.prevSibling
+        }
+        return index
     }
 
     private fun findInFileset(targetElementType: IElementType, nameOrIndex: WatPsiElement): PsiElement? {
@@ -252,17 +307,25 @@ class WatReference(
         return null
     }
 
-    fun resolveLabel(nameOrIndex: WatPsiElement): PsiElement? {
+    /**
+     * @param skipInnermostLabel start the walk one label owner further out. Needed by `delegate`,
+     *   whose label is resolved outside the `try` that encloses it.
+     */
+    fun resolveLabel(nameOrIndex: WatPsiElement, skipInnermostLabel: Boolean = false): PsiElement? {
         return resolveByNameOrIndex(
             nameOrIndex.containingFile,
             nameOrIndex,
-            { _, name -> resolveLabelByName(nameOrIndex as WatPsiIdentifierElement, name) },
-            { _, index -> resolveLabelByIndex(nameOrIndex as WatPsiNumberElement, index) }
+            { _, name -> resolveLabelByName(nameOrIndex as WatPsiIdentifierElement, name, skipInnermostLabel) },
+            { _, index -> resolveLabelByIndex(nameOrIndex as WatPsiNumberElement, index, skipInnermostLabel) }
         )
     }
 
-    fun resolveLabelByName(identifier: WatPsiIdentifierElement, name: String): PsiElement? {
-        var e: PsiElement? = identifier
+    fun resolveLabelByName(
+        identifier: WatPsiIdentifierElement,
+        name: String,
+        skipInnermostLabel: Boolean = false,
+    ): PsiElement? {
+        var e: PsiElement? = startOfLabelWalk(identifier, skipInnermostLabel) ?: return null
         while (e != null) {
             val labelOwner = PsiTreeUtil.getParentOfType(e, WatLabelOwner::class.java)
             if (labelOwner?.nameIdentifier?.textMatches(name) == true) {
@@ -273,8 +336,12 @@ class WatReference(
         return null
     }
 
-    fun resolveLabelByIndex(number: WatPsiNumberElement, index: Int): PsiElement? {
-        var e: PsiElement? = number
+    fun resolveLabelByIndex(
+        number: WatPsiNumberElement,
+        index: Int,
+        skipInnermostLabel: Boolean = false,
+    ): PsiElement? {
+        var e: PsiElement? = startOfLabelWalk(number, skipInnermostLabel) ?: return null
         var currentIndex = 0
         while (e != null) {
             val labelOwner = PsiTreeUtil.getParentOfType(e, WatLabelOwner::class.java)
@@ -285,6 +352,17 @@ class WatReference(
             e = labelOwner
         }
         return null
+    }
+
+    /**
+     * [PsiTreeUtil.getParentOfType] is strict, so advancing to the innermost label owner before
+     * the walk begins is what makes it the *second* owner that index 0 refers to.
+     */
+    private fun startOfLabelWalk(from: PsiElement, skipInnermostLabel: Boolean): PsiElement? {
+        if (!skipInnermostLabel) {
+            return from
+        }
+        return PsiTreeUtil.getParentOfType(from, WatLabelOwner::class.java)
     }
 
     inline fun <reified T : PsiNameIdentifierOwner> findChildWithName(parent: PsiElement?, name: String): T? {

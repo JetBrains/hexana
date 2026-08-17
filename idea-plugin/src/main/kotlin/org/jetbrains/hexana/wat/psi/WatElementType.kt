@@ -41,6 +41,15 @@ class WatElementType(val name: String) : IElementType(name, WatLanguage) {
         @JvmField val IF = WatElementType("IF")
         @JvmField val THEN = WatElementType("THEN")
         @JvmField val ELSE = WatElementType("ELSE")
+
+        /** `try_table` from the exception-handling proposal. Binds a label, like [BLOCK]. */
+        @JvmField val TRY_TABLE = WatElementType("TRY_TABLE")
+
+        /** Legacy `try`, i.e. the pre-`try_table` form. Binds a label, like [BLOCK]. */
+        @JvmField val TRY = WatElementType("TRY")
+
+        /** The `(do ...)` clause of a folded legacy `try`. Analogous to [THEN]. */
+        @JvmField val DO = WatElementType("DO")
     }
 }
 
