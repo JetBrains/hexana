@@ -1,3 +1,5 @@
+import * as path from 'path';
+
 export function assertDownloadedVsCodeVersion(requestedVersion: string, actualVersion: string): void {
     if (!/^\d+\.\d+\.\d+$/.test(actualVersion)) {
         throw new Error(`Downloaded VS Code executable reported an invalid version: ${actualVersion}`);
@@ -23,4 +25,3 @@ export function parseDownloadedVsCodeVersion(productMetadata: string): string {
     }
     return version;
 }
-import * as path from 'path';
