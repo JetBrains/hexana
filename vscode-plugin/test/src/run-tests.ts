@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { CodeUtil } from 'vscode-extension-tester/out/util/codeUtil';
 import { FakePostHogServer } from './fakePostHogServer';
-import { assertDownloadedVsCodeVersion } from './vscodeVersion';
+import { assertDownloadedVsCodeVersion, downloadedVsCodeVersionArguments } from './vscodeVersion';
 
 function defaultVsixName(): string {
     const packageJsonPath = path.join(__dirname, '..', '..', 'package.json');
@@ -208,7 +208,7 @@ function verifyDownloadedVsCodeVersion(requestedVersion: string): void {
         throw new Error(`Downloaded VS Code executable was not found: ${executable}`);
     }
 
-    const result = childProcess.spawnSync(executable, ['--version'], {
+    const result = childProcess.spawnSync(executable, downloadedVsCodeVersionArguments(process.platform, process.getuid?.()), {
         encoding: 'utf8',
         windowsHide: true,
     });

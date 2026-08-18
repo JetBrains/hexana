@@ -8,3 +8,7 @@ export function assertDownloadedVsCodeVersion(requestedVersion: string, actualVe
         );
     }
 }
+
+export function downloadedVsCodeVersionArguments(platform: NodeJS.Platform, uid?: number): string[] {
+    return platform === 'linux' && uid === 0 ? ['--no-sandbox', '--version'] : ['--version'];
+}
