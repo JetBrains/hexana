@@ -32,6 +32,7 @@ import com.intellij.xdebugger.ui.XDebugTabLayouter
 import org.jetbrains.hexana.shared.JIT_REGISTER_FUNCTION_NAME
 import org.jetbrains.hexana.shared.WasmStackShapeAnalyzer
 import org.jetbrains.hexana.shared.WasmStackShapeResult
+import org.jetbrains.hexana.shared.WasmSymbolicStackSlot
 import org.jetbrains.hexana.shared.WasmtimeAddrmap
 import org.jetbrains.hexana.shared.LLDB_ADVANCE_PC_PAST_TRAP_CMD
 import org.jetbrains.hexana.shared.cuPathEndsWithProjectRelative
@@ -194,6 +195,15 @@ open class WasmDebugProcess(
     private val wasmStackModel = WasmStackTableModel()
 
     /**
+     * Whether this session shows the "Wasm" disassembly tab. Wasmtime
+     * (JIT addrmap or gdbstub) and WAMR (gdbstub) can translate stop PCs
+     * to wasm byte offsets via [wasmOffsetForPc]; [executedWasmPath]
+     * supplies the binary to disassemble.
+     */
+    private val wasmTabAvailable: Boolean
+        get() = (engine == WasmEngine.WASMTIME || engine == WasmEngine.WAMR) && executedWasmPath != null
+
+    /**
      * Read-only mmap of the executed wasm binary, shared by the disassembly
      * source and the stack analyzer (both read via duplicates). On Windows
      * the mapping pins the file until GC — acceptable for the session-scoped
@@ -274,7 +284,7 @@ open class WasmDebugProcess(
 
     override fun createTabLayouter(): XDebugTabLayouter = object : XDebugTabLayouter() {
         override fun registerAdditionalContent(ui: RunnerLayoutUi) {
-            if (engine != WasmEngine.WASMTIME || executedWasmPath == null) return
+            if (!wasmTabAvailable) return
             val content = ui.createContent(
                 "WasmDisassembly",
                 buildCombinedWasmPanel(wasmStackModel, wasmDisassemblyPanel),
@@ -300,19 +310,28 @@ open class WasmDebugProcess(
         }
     }
 
+    /**
+     * Clears the "Wasm" tab models whenever the session resumes, so stale
+     * disassembly is not shown while the debuggee runs. No-op when the tab
+     * is unavailable. Subclasses that skip `super.sessionInitialized()`
+     * (WAMR) must call this from their own session setup.
+     */
+    protected fun registerWasmTabClearOnResume() {
+        if (!wasmTabAvailable) return
+        session.addSessionListener(object : XDebugSessionListener {
+            override fun sessionResumed() {
+                ApplicationManager.getApplication().invokeLater {
+                    wasmDisassemblyModel.clear()
+                    wasmStackModel.clear()
+                }
+            }
+        })
+    }
+
     override fun sessionInitialized() {
         super.sessionInitialized()
         LOG.debug("sessionInitialized: lldb=${lldb != null}, isWindows=${SystemInfo.isWindows}, engine=$engine, registeredBreakpoints=${registeredBreakpoints.size}")
-        if (engine == WasmEngine.WASMTIME && executedWasmPath != null) {
-            session.addSessionListener(object : XDebugSessionListener {
-                override fun sessionResumed() {
-                    ApplicationManager.getApplication().invokeLater {
-                        wasmDisassemblyModel.clear()
-                        wasmStackModel.clear()
-                    }
-                }
-            })
-        }
+        registerWasmTabClearOnResume()
         if (lldb != null) {
             if (compositionUsed) {
                 if (dwarfInjected) {
@@ -1289,20 +1308,22 @@ open class WasmDebugProcess(
      * `<value> (<provenance>)`; on failure (empty response or unsupported stub)
      * the provenance-only string is preserved as before.
      *
-     * Runs on the event loop thread while the process is stopped; only the
-     * table update touches the EDT. No-op for non-wasmtime engines.
+     * Runs on a background thread while the process is stopped (the event
+     * loop, or WAMR's initial-stop path in session init); only the table
+     * update touches the EDT. No-op when the tab is unavailable.
      */
-    private fun updateWasmDisassemblyTab(communicator: LldbCommunicator, frameInfoLines: List<String>) {
-        if (engine != WasmEngine.WASMTIME || executedWasmPath == null) return
+    protected fun updateWasmDisassemblyTab(communicator: LldbCommunicator, frameInfoLines: List<String>) {
+        if (!wasmTabAvailable) return
         val pc = parseLldbFramePc(frameInfoLines)
         val wasmOffset = pc?.let { lookupWasmOffset(communicator, it) }
         val rows = wasmOffset?.let { wasmDisassemblySource.rowsForOffset(it)?.first }
         val stackRows = if (rows != null && wasmOffset != null) {
-            val symbolic = symbolicStackRows(wasmOffset)
-            if (guestOnlyDebugging && symbolic.isNotEmpty()) {
-                enrichStackRowsWithConcrete(communicator, symbolic, frameIdx = 0)
-            } else {
-                symbolic
+            val (symbolic, slots) = symbolicStackRows(wasmOffset)
+            when {
+                symbolic.isEmpty() -> symbolic
+                guestOnlyDebugging -> enrichStackRowsWithConcrete(communicator, symbolic, frameIdx = 0)
+                engine == WasmEngine.WAMR -> enrichStackRowsViaWamrPackets(communicator, symbolic, slots, frameIdx = 0)
+                else -> symbolic
             }
         } else emptyList()
         ApplicationManager.getApplication().invokeLater {
@@ -1362,6 +1383,51 @@ open class WasmDebugProcess(
         return result
     }
 
+    /**
+     * Enriches symbolic stack rows for WAMR, whose stub implements
+     * `qWasmLocal`/`qWasmGlobal` but NOT `qWasmStackValue` — and leaves
+     * unknown queries unanswered, desyncing the connection so the next
+     * resume times out (verified against WAMR 2.4.5). Never send
+     * `qWasmStackValue` to a WAMR session.
+     *
+     * Only slots whose value provably still mirrors a local or global
+     * ([WasmSymbolicStackSlot.localRef]/[WasmSymbolicStackSlot.globalRef])
+     * are resolved, via the packets WAMR does implement; computed
+     * intermediates keep their symbolic provenance. Responses are cached
+     * per packet so a local referenced by several slots costs one
+     * round-trip.
+     */
+    private fun enrichStackRowsViaWamrPackets(
+        communicator: LldbCommunicator,
+        symbolic: List<WasmStackTableModel.Row>,
+        slots: List<WasmSymbolicStackSlot>,
+        frameIdx: Int,
+    ): List<WasmStackTableModel.Row> {
+        val cache = mutableMapOf<String, String?>()
+        var stubResponsive = true
+        val cap = minOf(symbolic.size, 64)
+        return symbolic.mapIndexed { i, row ->
+            val slot = slots.getOrNull(i)
+            val packet = when {
+                slot?.localRef != null -> "qWasmLocal:$frameIdx;${slot.localRef}"
+                slot?.globalRef != null -> "qWasmGlobal:$frameIdx;${slot.globalRef}"
+                else -> null
+            }
+            if (i >= cap || packet == null || !stubResponsive) return@mapIndexed row
+            val hex = cache.getOrPut(packet) { communicator.sendRawPacket(packet) }
+            if (hex == null) {
+                stubResponsive = false
+                return@mapIndexed row
+            }
+            val decoded = decodeWasmValueHex(hex, row.type)
+            if (decoded != null) {
+                WasmStackTableModel.Row(row.index, row.type, "$decoded (${row.value})")
+            } else {
+                row
+            }
+        }
+    }
+
     private fun lookupWasmOffset(communicator: LldbCommunicator, pc: ULong): Int? =
         wasmOffsetForPc(communicator, pc)
 
@@ -1403,9 +1469,13 @@ open class WasmDebugProcess(
      * stack at [wasmOffset], with local slots decorated by their DWARF source
      * names when available. A reconstruction failure becomes a single
      * explanatory row rather than a silently empty pane.
+     *
+     * Also returns the underlying [WasmSymbolicStackSlot]s (empty on
+     * reconstruction failure) so enrichment can use their structured
+     * [WasmSymbolicStackSlot.localRef]/[WasmSymbolicStackSlot.globalRef] origins.
      */
-    private fun symbolicStackRows(wasmOffset: Int): List<WasmStackTableModel.Row> {
-        val analyzer = wasmStackAnalyzer ?: return emptyList()
+    private fun symbolicStackRows(wasmOffset: Int): Pair<List<WasmStackTableModel.Row>, List<WasmSymbolicStackSlot>> {
+        val analyzer = wasmStackAnalyzer ?: return emptyList<WasmStackTableModel.Row>() to emptyList()
         val localNames = try {
             dwarfVariableResolver?.buildWasmLocalToNameMapByOffset(wasmOffset).orEmpty()
         } catch (e: Exception) {
@@ -1415,9 +1485,9 @@ open class WasmDebugProcess(
         return when (val result = analyzer.stackAt(wasmOffset) { idx -> localNames[idx.toLong()] }) {
             is WasmStackShapeResult.Ok -> result.slots.mapIndexed { i, slot ->
                 WasmStackTableModel.Row(i, slot.type, slot.provenance)
-            }
+            } to result.slots
             is WasmStackShapeResult.Unavailable ->
-                listOf(WasmStackTableModel.Row(0, "", "stack shape unavailable: ${result.reason}"))
+                listOf(WasmStackTableModel.Row(0, "", "stack shape unavailable: ${result.reason}")) to emptyList()
         }
     }
 

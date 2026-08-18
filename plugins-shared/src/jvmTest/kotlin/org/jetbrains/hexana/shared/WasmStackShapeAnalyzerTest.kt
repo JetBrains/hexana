@@ -60,6 +60,14 @@ class WasmStackShapeAnalyzerTest {
         assertEquals(listOf("local 0 (a)"), provenances(result))
     }
 
+    @Test fun `local-sourced slots expose localRef, others null`() {
+        assertEquals(listOf(0, 1), okSlots(tinyAnalyzer().stackAt(0x52)).map { it.localRef })
+        val constSlots = okSlots(tinyAnalyzer().stackAt(0x6e))
+        assertEquals("const 1", constSlots.last().provenance)
+        assertEquals(null, constSlots.last().localRef)
+        assertEquals(null, constSlots.last().globalRef)
+    }
+
     // ── sum_to: block + loop + branches ─────────────────────────────────
 
     @Test fun `inside loop before comparison`() {

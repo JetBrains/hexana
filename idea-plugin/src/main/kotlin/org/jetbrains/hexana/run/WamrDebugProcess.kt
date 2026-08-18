@@ -30,6 +30,7 @@ class WamrDebugProcess(
     lldb: LldbCommunicator?,
     private val debugHost: String,
     private val debugPort: Int,
+    executedWasmPath: String? = null,
     engine: WasmEngine = WasmEngine.WAMR,
 ) : WasmDebugProcess(
     session,
@@ -39,6 +40,7 @@ class WamrDebugProcess(
     compositionUsed = false,
     dwarfInjected = false,
     engine = engine,
+    executedWasmPath = executedWasmPath,
 ) {
 
     init {
@@ -51,7 +53,30 @@ class WamrDebugProcess(
         deferBreakpointsToLldb = true
     }
 
+    /**
+     * Enable per-instruction stepping while the Wasm disassembly tab is
+     * selected. WAMR's stub advertises `vCont;c;C;s;S` and its debug
+     * interpreter single-steps one wasm instruction per `s` packet
+     * (verified live against WAMR 2.4.5: `thread step-inst` advanced
+     * the PC by exactly one instruction, and resume afterwards was
+     * clean), so the same pipeline as [WasmtimeGdbDebugProcess] applies.
+     */
+    override val supportsInstructionStepping: Boolean = true
+
+    /**
+     * PC-to-wasm-offset translation for the WAMR gdbstub. Same address
+     * scheme as the wasmtime gdbstub: LLDB's wasm process plugin reports
+     * PCs as `0x4000000000000000 | <wasm file byte offset>`, so the low
+     * 32 bits are the wasm file byte offset — no addrmap needed.
+     */
+    override fun wasmOffsetForPc(communicator: LldbCommunicator, pc: ULong): Int? =
+        (pc and 0xFFFFFFFFuL).toInt()
+
     override fun sessionInitialized() {
+        // The base sessionInitialized() is intentionally not called (see
+        // below), so register the "Wasm" tab resume listener here.
+        registerWasmTabClearOnResume()
+
         // Connect LLDB to the WAMR GDB remote stub.
         //
         // WAMR uses its own Wasm process plugin in LLDB, so the
@@ -139,6 +164,12 @@ class WamrDebugProcess(
                 val frameLines = communicator.sendCommandAndCollectOutput(
                     "frame info", timeoutMs = 10_000
                 )
+
+                // Populate the "Wasm" disassembly tab for this initial
+                // stop; later stops go through the event loop, which
+                // updates the tab itself.
+                updateWasmDisassemblyTab(communicator, frameLines)
+
                 val frameLocation = parseLldbFrameLocation(frameLines)
                 val functionName = parseLldbFunctionName(frameLines)
 

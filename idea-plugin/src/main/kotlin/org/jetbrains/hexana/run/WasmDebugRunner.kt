@@ -433,6 +433,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     lldb,
                     debugHost = prep.debugHost,
                     debugPort = prep.debugPort,
+                    executedWasmPath = configuration.wasmFilePath.takeIf { it.isNotBlank() },
                     engine = WasmEngine.WAMR,
                 ).also {
                     it.dwarfVariableResolver = prep.dwarfResolver

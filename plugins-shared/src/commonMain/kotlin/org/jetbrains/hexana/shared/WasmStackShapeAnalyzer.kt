@@ -35,6 +35,15 @@ data class WasmSymbolicStackSlot(
     val type: String,
     /** Human-readable origin, e.g. "local 1 (v)", "const 16", "i32.add @0x52", "call make @0x341f". */
     val provenance: String,
+    /**
+     * Index of the local this slot provably still mirrors (`local.get`/`local.tee`
+     * with no intervening write to that local), or null. Lets a debugger resolve
+     * the concrete value via a locals query (e.g. `qWasmLocal`) when the stub has
+     * no operand-stack accessor.
+     */
+    val localRef: Int? = null,
+    /** Same as [localRef] for a `global.get`-sourced slot; invalidated by any call or `global.set`. */
+    val globalRef: Int? = null,
 )
 
 /** Result of [WasmStackShapeAnalyzer.stackAt]. */
@@ -331,7 +340,7 @@ class WasmStackShapeAnalyzer private constructor(
             if (interp.ctrl.any { it.unreachable }) {
                 WasmStackShapeResult.Unavailable("pause offset is in statically unreachable code")
             } else {
-                WasmStackShapeResult.Ok(interp.stack.map { WasmSymbolicStackSlot(it.kind.display, it.prov) })
+                WasmStackShapeResult.Ok(interp.stack.map { WasmSymbolicStackSlot(it.kind.display, it.prov, it.localRef, it.globalRef) })
             }
 
         try {
