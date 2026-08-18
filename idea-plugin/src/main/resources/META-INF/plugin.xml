@@ -18,12 +18,15 @@
         <p><b>Binary formats</b></p>
         <ul>
           <li>Hex editor for any file, with search and go-to-offset</li>
-          <li>WASM (<code>.wasm</code>): section browser, imports/exports, function types, code bodies, GC types, WIT (Component Model) interfaces, DWARF 4/5 debug info</li>
+          <li>WASM (<code>.wasm</code>): section browser, imports/exports, function types, code bodies, GC types, WIT (Component Model) interfaces, DWARF 4/5 debug info; bytes the parser cannot decode are reported per region in a <b>Problems</b> tab instead of failing the view</li>
+          <li>Embedded core modules and nested components of a Component Model binary open recursively in their own editor views</li>
           <li>WASM size profiler: byte-accurate size attribution of sections and functions, expanding recursively through nested Component Model submodules</li>
-          <li>WASM diff (<b>Compare WASM With…</b>): size impact, changed entities, and on-demand WAT compare — for core modules and Component Model binaries</li>
+          <li>WASM diff (<b>Compare WASM With…</b>): size impact, changed entities, per-signature dispatch-table changes, and on-demand WAT compare — for core modules and Component Model binaries</li>
+          <li>Go to Source from function rows and WAT instructions to the originating line, via DWARF or source maps; <code>call_indirect</code> rows list their statically known dispatch candidates</li>
           <li>ELF (<code>.elf</code>, <code>.so</code>), Mach-O (<code>.dylib</code>, <code>.bundle</code>), PE (<code>.exe</code>, <code>.dll</code>, <code>.sys</code>) — magic-byte detection</li>
           <li>Multi-architecture disassembly for x86, x86-64, ARM, AArch64, RISC-V 32/64 — bundled as a Rust/WASM module, no host toolchain required, virtualized for multi-MB binaries</li>
-          <li>Archive viewer for <code>.jar</code>, <code>.zip</code>, <code>.war</code>, <code>.apk</code>, plus static libraries: Unix <code>ar</code> (<code>.a</code>) and Windows COFF import libraries (<code>.lib</code>)</li>
+          <li>Archive viewer for <code>.jar</code>, <code>.zip</code>, <code>.war</code>, <code>.apk</code>, <code>.tar</code>, plus static libraries: Unix <code>ar</code> (<code>.a</code>) and Windows COFF import libraries (<code>.lib</code>); gzip-compressed files of supported kinds (<code>.wasm.gz</code>) open directly</li>
+          <li>Network captures: pcap and pcapng packet viewer, with HTTP response bodies openable in their own tabs</li>
           <li>Android DEX (<code>.dex</code>) with string-table extraction</li>
           <li>Columnar data: Parquet (<code>.parquet</code>) and Arrow (<code>.arrow</code>) — schema, metadata, row groups / record batches, decoded column data</li>
           <li>Protocol Buffers: <code>FileDescriptorSet</code> files (<code>.desc</code>, <code>.protoset</code>, <code>.pb</code>), plus a schema-less <b>Open As Protobuf Message</b> wire decoder for opaque payloads</li>
@@ -38,8 +41,16 @@
           <li>JavaScript / TypeScript: type inference for <code>WebAssembly.instantiate(...)</code> imports and exports, resolved from the referenced <code>.wasm</code> file</li>
         </ul>
 
-        <p>WASM run configurations support line-breakpoint debugging, including Node.js targets. An MCP server exposes function lists,
-        type signatures, data segments, and module structure to AI assistants through the Model Context Protocol.</p>
+        <p><b>Debugging</b></p>
+        <ul>
+          <li>Line breakpoints in WASM run configurations under Node.js and browsers, wasmtime 44+ (its built-in gdbstub), and WAMR (debug-interpreter builds)</li>
+          <li><b>Wasm</b> debugger tab: the paused function disassembled to WAT with the exact current instruction highlighted, per-instruction Step Over / Step Into, and the operand stack (live values where the runtime serves them, statically reconstructed origins otherwise)</li>
+          <li>Conditional breakpoints, inlined call frames, and variables stored in linear memory, all resolved through DWARF</li>
+          <li>Managed wasi-sdk installation: WASM debugging needs an LLDB with the wasm process plugin, and the WebAssembly settings page downloads and verifies one, shared across projects and JetBrains IDEs</li>
+        </ul>
+
+        <p>An MCP server exposes function lists, type signatures, data segments, and module structure to AI assistants
+        through the Model Context Protocol.</p>
     ]]></description>
 
     <resource-bundle>messages.HexanaBundle</resource-bundle>
