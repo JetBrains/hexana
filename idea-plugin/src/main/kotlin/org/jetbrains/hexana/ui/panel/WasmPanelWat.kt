@@ -824,9 +824,12 @@ internal fun WatMultifileEditorContainer(
             watTextEditor.editor.settings.isUseSoftWraps = false
             watTextEditor.editor.settings.isLineNumbersShown = false
             watTextEditor.editor.asSafely<EditorEx>()?.isViewer = true
-            watTextEditor.editor.caretModel.moveToOffset(fileset.fileOffset)
+            // Clamped: fileOffset can have been recorded against an earlier conversion of this
+            // chunk, and moveToOffset rejects an offset past the end of the document.
+            val chunkOffset = fileset.fileOffset.coerceIn(0, watTextEditor.editor.document.textLength)
+            watTextEditor.editor.caretModel.moveToOffset(chunkOffset)
             watTextEditor.editor.scrollingModel.scrollTo(
-                watTextEditor.editor.offsetToLogicalPosition(fileset.fileOffset),
+                watTextEditor.editor.offsetToLogicalPosition(chunkOffset),
                 ScrollType.RELATIVE
             )
             value = UiDataProvider.wrapComponent(watTextEditor.component) { sink ->

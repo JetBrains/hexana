@@ -270,6 +270,47 @@ class WatUsageTargetTest : BasePlatformTestCase() {
         assertEquals(0, laterEditor.caretModel.offset)
     }
 
+    /**
+     * A fileset can outlive the view that built it, so its disposed editor must not short-circuit
+     * navigation: the binary may already have a rebuilt view, registered independently.
+     */
+    fun testStaleFilesetFallsThroughToTheRegisteredEditor() {
+        val staleView = watViewFileWithFileset()
+        val staleFileset = staleView.getUserData(WatFileset.KEY)!!
+        val factory = EditorFactory.getInstance()
+        val staleEditor = factory.createEditor(
+            FileDocumentManager.getInstance().getDocument(staleView)!!, project, staleView, true,
+        )
+        staleFileset.editor = staleEditor
+        factory.releaseEditor(staleEditor)
+
+        // The rebuilt view of the same binary, with its own document and a live editor.
+        val rebuiltView = LightWatFile(staleView.originWasmFile, staleView.name, watText)
+        val rebuiltEditor = editorFor(rebuiltView)
+        WatViewEditors.register(rebuiltView, rebuiltEditor)
+
+        val offset = watText.indexOf("(func \$f3")
+        assertTrue(
+            "the stale fileset must not block the rebuilt view",
+            WatNavigation.navigateInWatEditor(staleView, offset, navigateIfFilesMatch = true),
+        )
+        assertEquals(offset, rebuiltEditor.caretModel.offset)
+    }
+
+    /** The same bound check has to apply on the fileset path, which moves the caret itself. */
+    fun testOutOfRangeOffsetIsIgnoredOnTheFilesetPath() {
+        val view = watViewFileWithFileset()
+        val fileset = view.getUserData(WatFileset.KEY)!!
+        val editor = editorFor(view)
+        fileset.editor = editor
+
+        assertFalse(
+            "an offset past the end must be refused, not passed to moveToOffset",
+            WatNavigation.navigateInWatEditor(view, watText.length + 500, navigateIfFilesMatch = true),
+        )
+        assertEquals(0, editor.caretModel.offset)
+    }
+
     /** An offset past the end of a regenerated document must not throw. */
     fun testOutOfRangePendingOffsetIsIgnored() {
         val file = watViewFile()

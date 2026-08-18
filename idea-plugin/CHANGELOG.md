@@ -10,6 +10,9 @@
 
 ### Changed
 - Wasmtime debugging switched to wasmtime's built-in gdbstub guest debugger: the session starts `wasmtime run -g <port>` and attaches LLDB over the gdb-remote protocol (`process connect --plugin wasm`). LLDB reads DWARF directly from the wasm module, so the JIT loader, the native-address-to-wasm-offset translation and the trap workarounds of the old native path are gone. The practical wins: arguments and locals show concrete values (Cranelift compiled them away before; the Variables view could only show storage-location hints), stepping is per wasm instruction, and the stack shows guest frames only. Requires wasmtime 44 or newer (older versions fail early with an update hint) and an LLDB with the wasm process plugin (wasi-sdk ships one, see the managed download above; recent LLVM builds include it as well).
+- Improved support for Component Model in WAT files: parsing, reference resolution, navigation
+- **Find Usages** for WAT declarations now works in the embedded WAT editor
+- Custom WAT annotation sections such as `(@producers (processed-by "wit-component" "0.227.1") (language "Rust" ""))` no longer render as errors. Annotation contents are free-form by design, so an unrecognised word inside one is now annotation text rather than a bad character, and the whole section reads in the metadata colour. Unrecognised words outside an annotation are still flagged.
 
 ### Deprecated
 

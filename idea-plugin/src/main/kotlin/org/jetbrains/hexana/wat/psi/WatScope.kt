@@ -78,14 +78,27 @@ fun watScopeKind(element: PsiElement): WatScopeKind? {
         WatElementType.COMPONENT -> if (hasStructuralChildren(element)) WatScopeKind.COMPONENT else null
         // An instance *type* is written without an id -- the id, if any, sits on the enclosing
         // `(type ...)`. Every other `(instance ...)` either binds or names an instance instead.
+        //
+        // `core` and `(instantiate ...)` both rule a type out: instance types are a component-level
+        // construct, and an instantiation defines an instance rather than describing one. Without
+        // those two checks an anonymous `(core instance (instantiate $m))` would open a scope that
+        // declares nothing, and `$m` would resolve nowhere.
         WatElementType.INSTANCE ->
-            if (watDeclarationName(element) == null && hasStructuralChildren(element)) {
+            if (watDeclarationName(element) == null &&
+                hasStructuralChildren(element) &&
+                !hasCoreKeyword(element) &&
+                !isInstantiation(element)
+            ) {
                 WatScopeKind.INSTANCE_TYPE
             } else {
                 null
             }
         else -> null
     }
+}
+
+private fun isInstantiation(element: PsiElement): Boolean {
+    return element.children.any { it.node.findChildByType(WatToken.INSTANTIATE) != null }
 }
 
 /** Whether ids and indices directly inside [scope] belong to the core index spaces. */
@@ -114,37 +127,21 @@ fun watDeclarations(scope: PsiElement): Map<WatSort, List<PsiElement>> {
 }
 
 /**
- * Resolves [name] in [sort] starting at [scope] and widening outwards.
+ * Resolves [name] in [scope]'s [sort] index space, and nowhere else.
  *
- * The walk stops at the first scope that declares [sort] at all: index spaces are per-scope, so a
- * scope that has the sort but not the entry is the authoritative answer rather than a reason to
- * keep looking and report an unrelated item from an enclosing scope.
+ * The lookup deliberately does not widen to enclosing scopes. Index spaces are per-scope and the
+ * component model gives no implicit access to an outer one -- reaching out is spelled `alias outer`,
+ * which resolves against that scope explicitly. Widening would mean an id missing from its own scope
+ * silently resolves to an unrelated declaration that merely shares the name, which for
+ * `wasm-tools` output (a `$#type0` at every level) is close to guaranteed.
  */
 fun resolveWatName(scope: PsiElement, sort: WatSort, name: String): PsiElement? {
-    return lookupWatDeclaration(scope, sort) { declarations ->
-        declarations.firstOrNull { watDeclarationName(it)?.textMatches(name) == true }
-    }
+    return watDeclarations(scope)[sort]?.firstOrNull { watDeclarationName(it)?.textMatches(name) == true }
 }
 
-/** Resolves the [index]-th entry of [sort]; see [resolveWatName] for how scopes are widened. */
+/** Resolves the [index]-th entry of [scope]'s [sort] index space; see [resolveWatName]. */
 fun resolveWatIndex(scope: PsiElement, sort: WatSort, index: Int): PsiElement? {
-    return lookupWatDeclaration(scope, sort) { declarations -> declarations.getOrNull(index) }
-}
-
-private fun lookupWatDeclaration(
-    scope: PsiElement,
-    sort: WatSort,
-    find: (List<PsiElement>) -> PsiElement?,
-): PsiElement? {
-    var current: PsiElement? = scope
-    while (current != null) {
-        val declarations = watDeclarations(current)[sort]
-        if (declarations != null) {
-            return find(declarations)
-        }
-        current = enclosingWatScope(current)
-    }
-    return null
+    return watDeclarations(scope)[sort]?.getOrNull(index)
 }
 
 /**

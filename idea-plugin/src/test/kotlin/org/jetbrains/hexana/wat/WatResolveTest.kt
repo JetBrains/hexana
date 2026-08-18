@@ -1448,6 +1448,37 @@ class WatResolveTest : BasePlatformTestCase() {
         """)
     }
 
+    /** `(resume $ct (on $tag $label))`: the handler clause names a tag then a label. */
+    fun testResumeOnTag() {
+        doTest($$"""
+            (module
+              (tag (;TARGET;)$yield)
+              (type $ft (func))
+              (type $ct (cont $ft))
+              (func $1
+                (block $done
+                  (resume $ct (on <caret>$yield $done))
+                )
+              )
+            )
+        """)
+    }
+
+    fun testResumeOnLabel() {
+        doTest($$"""
+            (module
+              (tag $yield)
+              (type $ft (func))
+              (type $ct (cont $ft))
+              (func $1
+                (block (;TARGET;)$done
+                  (resume $ct (on $yield <caret>$done))
+                )
+              )
+            )
+        """)
+    }
+
     fun testSwitchTag() {
         doTest($$"""
             (module
@@ -1850,6 +1881,80 @@ class WatResolveTest : BasePlatformTestCase() {
         )
         val reference = file.findReferenceAt(myFixture.editor.caretModel.offset)
         assertNull("an annotation's contents must not resolve", reference?.resolve())
+    }
+
+    /**
+     * `(core func $i "run")` is the inline export alias sugar: per the component model the id
+     * "must select an instance" and the names project through its exports, so it names a core
+     * *instance* rather than a core function.
+     */
+    fun testInlineExportAliasNamesACoreInstance() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (func))
+              (core module $#module0)
+              (core instance (;TARGET;)$i (instantiate $#module0))
+              (func $#func0 (type $#type0) (canon lift (core func <caret>$i "run")))
+            )
+        """)
+    }
+
+    /** The component-level spelling of the same sugar names a component instance. */
+    fun testInlineExportAliasNamesAComponentInstance() {
+        doTest($$"""
+            (component $app
+              (component $#component0)
+              (instance (;TARGET;)$c (instantiate $#component0))
+              (export $#func0 "run" (func <caret>$c "run"))
+            )
+        """)
+    }
+
+    /** A canonical ABI option's inline alias resolves to a core instance too. */
+    fun testInlineExportAliasInCanonOptions() {
+        doTest($$"""
+            (component $app
+              (type $#type0 (func))
+              (import "run" (func $#func0 (type $#type0)))
+              (core module $#module0)
+              (core instance (;TARGET;)$i (instantiate $#module0))
+              (core func $#func1 (canon lower (func $#func0) (realloc (func <caret>$i "alloc"))))
+            )
+        """)
+    }
+
+    /**
+     * Index spaces do not nest: an id missing from its own scope must resolve to nothing rather than
+     * to a same-named declaration of an enclosing scope. Reaching out is spelled `alias outer`.
+     */
+    fun testReferenceDoesNotEscapeItsScope() {
+        val file = myFixture.configureByText(
+            WatFileType.INSTANCE,
+            $$"""
+                (component $app
+                  (core type $#type0 (module))
+                  (core module $#module0
+                    (func $#func0 (type <caret>$#type0) (nop))
+                  )
+                )
+            """.trimIndent(),
+        )
+        val reference = file.findReferenceAt(myFixture.editor.caretModel.offset)
+        assertNotNull("expected a reference at the caret", reference)
+        assertNull(
+            "the core module declares no types, so this must not reach the component's core type",
+            reference!!.resolve(),
+        )
+    }
+
+    /** An anonymous `(core instance (instantiate $m))` is a definition, not an instance type. */
+    fun testAnonymousCoreInstantiationIsNotAScope() {
+        doTest($$"""
+            (component $app
+              (core module (;TARGET;)$#module0)
+              (core instance (instantiate <caret>$#module0))
+            )
+        """)
     }
 
     /** Component index spaces count imports, definitions, aliases and exports alike. */

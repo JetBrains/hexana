@@ -174,7 +174,11 @@ public class WatParser implements PsiParser {
                     // during resolve without expanding the body.
                     idOrNum(b, b.getTokenType());
                     IElementType nextToken = b.getTokenType();
-                    if (nextToken != null && nextToken != WatToken.CLOSE_PAREN) {
+                    // A string right after the id makes this the component model's inline export
+                    // alias -- `(func $i "name")`, where the id names an instance and the string
+                    // projects one of its exports -- rather than a function with a body. Keeping the
+                    // string out of a FUNC_BODY is what lets resolve tell the two forms apart.
+                    if (nextToken != null && nextToken != WatToken.CLOSE_PAREN && nextToken != WatToken.STRING) {
                         exprStack.add(new Expr(b.mark(), WatElementType.FUNC_BODY));
                         unfoldedBlockStackSizes.add(unfoldedBlockStack.size());
                         if (collapseLazy) {

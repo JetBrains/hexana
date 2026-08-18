@@ -115,6 +115,11 @@ class WatReference(
         if (exprType == WatToken.SUSPEND) {
             return resolveCoreSort(scope, WatSort.CORE_TAG)
         }
+        // A `resume`/`resume_throw` handler clause: `(on <tag> <label>)`, or `(on <tag> switch)`
+        // where the second operand is the keyword rather than a label.
+        if (exprType == WatToken.ON) {
+            return if (operandIndex() == 0) resolveCoreSort(scope, WatSort.CORE_TAG) else resolveLabel(nameOrIndex)
+        }
         // Stack switching: `resume_throw <type> <tag>` and `switch <type> <tag>`.
         if (exprType == WatToken.RESUME_THROW || exprType == WatToken.SWITCH) {
             return if (operandIndex() == 0) {
@@ -185,7 +190,14 @@ class WatReference(
     private fun componentReferenceSort(parent: PsiElement): WatSort? {
         // `(sort $x)` naming an existing item, e.g. `(with "env" (instance $i))`.
         if (isWatSortElement(parent) && nameOrIndex == watDeclarationName(parent)) {
-            return watSortOf(parent, isCoreSortContext(parent))
+            val core = isCoreSortContext(parent)
+            // An inline export alias: `(core func $i "run")`, `(func $c "foo" "bar")`. Per the
+            // component model the id here "must select an instance" and the names project through
+            // its exports, so it does *not* name an item of the surrounding sort.
+            if (parent.node.findChildByType(WatToken.STRING) != null) {
+                return if (core || hasCoreKeyword(parent)) WatSort.CORE_INSTANCE else WatSort.INSTANCE
+            }
+            return watSortOf(parent, core)
         }
         return when (val head = headTokenOf(parent)) {
             // `(instantiate $m ...)` names a core module inside a `(core instance ...)` and a
