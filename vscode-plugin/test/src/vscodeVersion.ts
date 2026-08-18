@@ -9,6 +9,18 @@ export function assertDownloadedVsCodeVersion(requestedVersion: string, actualVe
     }
 }
 
-export function downloadedVsCodeVersionArguments(platform: NodeJS.Platform, uid?: number): string[] {
-    return platform === 'linux' && uid === 0 ? ['--no-sandbox', '--version'] : ['--version'];
+export function downloadedVsCodeProductMetadataPath(codeFolder: string, platform: NodeJS.Platform): string {
+    const appRoot = platform === 'darwin'
+        ? ['Contents', 'Resources', 'app']
+        : ['resources', 'app'];
+    return path.join(codeFolder, ...appRoot, 'product.json');
 }
+
+export function parseDownloadedVsCodeVersion(productMetadata: string): string {
+    const version = (JSON.parse(productMetadata) as { version?: unknown }).version;
+    if (typeof version !== 'string') {
+        throw new Error('Downloaded VS Code product metadata does not contain a string version');
+    }
+    return version;
+}
+import * as path from 'path';

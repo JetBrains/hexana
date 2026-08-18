@@ -4,7 +4,11 @@ import * as os from 'os';
 import * as path from 'path';
 import { CodeUtil } from 'vscode-extension-tester/out/util/codeUtil';
 import { FakePostHogServer } from './fakePostHogServer';
-import { assertDownloadedVsCodeVersion, downloadedVsCodeVersionArguments } from './vscodeVersion';
+import {
+    assertDownloadedVsCodeVersion,
+    downloadedVsCodeProductMetadataPath,
+    parseDownloadedVsCodeVersion,
+} from './vscodeVersion';
 
 function defaultVsixName(): string {
     const packageJsonPath = path.join(__dirname, '..', '..', 'package.json');
@@ -203,45 +207,14 @@ async function main(): Promise<void> {
 }
 
 function verifyDownloadedVsCodeVersion(requestedVersion: string): void {
-    const executable = downloadedVsCodeExecutable();
-    if (!fs.existsSync(executable)) {
-        throw new Error(`Downloaded VS Code executable was not found: ${executable}`);
+    const metadataPath = downloadedVsCodeProductMetadataPath(new CodeUtil().getCodeFolder(), process.platform);
+    if (!fs.existsSync(metadataPath)) {
+        throw new Error(`Downloaded VS Code product metadata was not found: ${metadataPath}`);
     }
-
-    const result = childProcess.spawnSync(executable, downloadedVsCodeVersionArguments(process.platform, process.getuid?.()), {
-        encoding: 'utf8',
-        windowsHide: true,
-    });
-    if (result.error) {
-        throw new Error(`Could not run downloaded VS Code executable ${executable}: ${result.error.message}`);
-    }
-    if (result.status !== 0) {
-        throw new Error(
-            `Downloaded VS Code executable ${executable} exited with ${result.status}: ${result.stderr || result.stdout}`,
-        );
-    }
-
-    const actualVersion = result.stdout.trim().split(/\r?\n/, 1)[0];
+    const actualVersion = parseDownloadedVsCodeVersion(fs.readFileSync(metadataPath, 'utf8'));
     assertDownloadedVsCodeVersion(requestedVersion, actualVersion);
-    console.log(`Downloaded VS Code executable: ${executable}`);
+    console.log(`Downloaded VS Code product metadata: ${metadataPath}`);
     console.log(`Downloaded VS Code version: ${actualVersion}`);
-}
-
-function downloadedVsCodeExecutable(): string {
-    const codeFolder = new CodeUtil().getCodeFolder();
-    const candidates = process.platform === 'darwin'
-        ? [
-            path.join(codeFolder, 'Contents', 'MacOS', 'Code'),
-            path.join(codeFolder, 'Contents', 'MacOS', 'Electron'),
-        ]
-        : process.platform === 'win32'
-            ? [path.join(codeFolder, 'Code.exe')]
-            : [path.join(codeFolder, 'code')];
-    const executable = candidates.find(fs.existsSync);
-    if (!executable) {
-        throw new Error(`Extest downloaded VS Code under ${codeFolder}, but no executable was found`);
-    }
-    return executable;
 }
 
 function runExtest(args: string[], env: NodeJS.ProcessEnv = {}, unsetEnv: string[] = []): Promise<void> {

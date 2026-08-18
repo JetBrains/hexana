@@ -1,5 +1,9 @@
 import { expect } from 'chai';
-import { assertDownloadedVsCodeVersion, downloadedVsCodeVersionArguments } from '../vscodeVersion';
+import {
+    assertDownloadedVsCodeVersion,
+    downloadedVsCodeProductMetadataPath,
+    parseDownloadedVsCodeVersion,
+} from '../vscodeVersion';
 
 describe('run-tests VS Code version verification', () => {
     it('accepts the exact requested downloaded version', () => {
@@ -11,12 +15,26 @@ describe('run-tests VS Code version verification', () => {
             .to.throw('Requested VS Code 1.131.0, but downloaded executable reports 1.133.0');
     });
 
-    it('runs the downloaded VS Code executable without a sandbox only as Linux root', () => {
-        expect(downloadedVsCodeVersionArguments('linux', 0)).to.deep.equal(['--no-sandbox', '--version']);
+    it('uses the Linux and Windows product metadata location', () => {
+        expect(downloadedVsCodeProductMetadataPath('/download/VSCode', 'linux'))
+            .to.equal('/download/VSCode/resources/app/product.json');
+        expect(downloadedVsCodeProductMetadataPath('/download/VSCode', 'win32'))
+            .to.equal('/download/VSCode/resources/app/product.json');
     });
 
-    it('keeps the default version command outside Linux root', () => {
-        expect(downloadedVsCodeVersionArguments('darwin', 0)).to.deep.equal(['--version']);
-        expect(downloadedVsCodeVersionArguments('linux', 501)).to.deep.equal(['--version']);
+    it('uses the macOS product metadata location', () => {
+        expect(downloadedVsCodeProductMetadataPath('/download/Visual Studio Code.app', 'darwin'))
+            .to.equal('/download/Visual Studio Code.app/Contents/Resources/app/product.json');
+    });
+
+    it('parses the downloaded product metadata version before strict validation', () => {
+        const actualVersion = parseDownloadedVsCodeVersion('{"version":"1.131.0"}');
+        expect(actualVersion).to.equal('1.131.0');
+        expect(() => assertDownloadedVsCodeVersion('1.131.0', actualVersion)).not.to.throw();
+    });
+
+    it('rejects product metadata without a string version', () => {
+        expect(() => parseDownloadedVsCodeVersion('{"version":131}'))
+            .to.throw('Downloaded VS Code product metadata does not contain a string version');
     });
 });
