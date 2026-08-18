@@ -111,38 +111,52 @@ open class WasmDebugProcess(
 
         fun fireProcessTerminated(exitCode: Int) = notifyProcessTerminated(exitCode)
     }.also { wrapper ->
-        // Propagate the inner handler's termination only after the Debug tool
-        // window content for this session is attached. Since 263.3447 the
-        // platform disposes session content that stops while
-        // RunContentManagerImpl.showRunContent is still mounting, so a
-        // fast-exiting gdbstub target would leave no console at all. Bounded:
-        // after DEBUG_TAB_MOUNT_MAX_POLLS the termination goes through
-        // regardless, so a session can never leak.
-        fun propagateTermination(exitCode: Int, attemptsLeft: Int) {
-            ApplicationManager.getApplication().invokeLater {
-                val mounted = session.runContentDescriptor?.attachedContent != null
-                val alreadyDown = wrapper.isProcessTerminated || wrapper.isProcessTerminating
-                if (!mounted && !alreadyDown && attemptsLeft > 0) {
-                    EdtExecutorService.getScheduledExecutorInstance().schedule(
-                        { propagateTermination(exitCode, attemptsLeft - 1) },
-                        DEBUG_TAB_MOUNT_POLL_INTERVAL_MS,
-                        TimeUnit.MILLISECONDS,
-                    )
-                    return@invokeLater
-                }
-                if (!alreadyDown) {
-                    wrapper.fireProcessTerminated(exitCode)
-                }
-                if (!session.isStopped) {
-                    session.stop()
-                }
-            }
-        }
         processHandler.addProcessListener(object : ProcessAdapter() {
             override fun processTerminated(event: ProcessEvent) {
-                propagateTermination(event.exitCode, DEBUG_TAB_MOUNT_MAX_POLLS)
+                finishSessionWhenDebugTabMounted(event.exitCode)
             }
         })
+    }
+
+    /**
+     * Ends the session only after the Debug tool window content is mounted.
+     * Since 263.3447 the platform disposes XDebug session content that stops
+     * while RunContentManagerImpl.showRunContent is still mounting, so a
+     * fast-exiting gdbstub target would leave no console at all and
+     * XWatchesViewImpl storms IncorrectOperationException (IJPL-252327).
+     * Every session-ending path in this class must go through here; a direct
+     * session.stop() reopens the race.
+     *
+     * The mount signal is the console component becoming showing. It works in
+     * both classic and split debugger modes, unlike
+     * XDebugSession.getRunContentDescriptor, which is deprecated in split
+     * mode and logs a SEVERE per call. Bounded: after
+     * DEBUG_TAB_MOUNT_MAX_POLLS the shutdown proceeds regardless, so a
+     * session can never leak.
+     */
+    internal fun finishSessionWhenDebugTabMounted(
+        exitCode: Int? = null,
+        attemptsLeft: Int = DEBUG_TAB_MOUNT_MAX_POLLS,
+    ) {
+        ApplicationManager.getApplication().invokeLater {
+            if (!console.component.isShowing && attemptsLeft > 0 && !session.isStopped) {
+                EdtExecutorService.getScheduledExecutorInstance().schedule(
+                    { finishSessionWhenDebugTabMounted(exitCode, attemptsLeft - 1) },
+                    DEBUG_TAB_MOUNT_POLL_INTERVAL_MS,
+                    TimeUnit.MILLISECONDS,
+                )
+                return@invokeLater
+            }
+            if (exitCode != null &&
+                !sessionProcessHandler.isProcessTerminated &&
+                !sessionProcessHandler.isProcessTerminating
+            ) {
+                sessionProcessHandler.fireProcessTerminated(exitCode)
+            }
+            if (!session.isStopped) {
+                session.stop()
+            }
+        }
     }
 
     /**
@@ -820,9 +834,7 @@ open class WasmDebugProcess(
                         if (lldb.debuggeeExited) {
                             LOG.debug("Debuggee exited (detected via flag) — stopping debug session")
                             sessionStopRequested = true
-                            ApplicationManager.getApplication().invokeLater {
-                                session.stop()
-                            }
+                            finishSessionWhenDebugTabMounted()
                             break
                         }
                         // Watchdog: on Windows, LLDB sometimes fails to
@@ -861,9 +873,7 @@ open class WasmDebugProcess(
                         is LldbCommunicator.StopEvent.ProcessExited -> {
                             LOG.debug("Wasmtime process exited with code ${event.exitCode}")
                             sessionStopRequested = true
-                            ApplicationManager.getApplication().invokeLater {
-                                session.stop()
-                            }
+                            finishSessionWhenDebugTabMounted()
                             break
                         }
                     }
@@ -880,9 +890,7 @@ open class WasmDebugProcess(
                     (lldb.debuggeeExited || processHandler.isProcessTerminated)
                 ) {
                     LOG.debug("Event loop exited early — debuggee already exited, stopping debug session")
-                    ApplicationManager.getApplication().invokeLater {
-                        session.stop()
-                    }
+                    finishSessionWhenDebugTabMounted()
                 }
             } catch (e: InterruptedException) {
                 LOG.debug("Event loop interrupted (shutdown)", e)
