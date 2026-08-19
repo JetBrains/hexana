@@ -8,8 +8,10 @@ import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.util.SystemInfo
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.shared.WasmRunInput
 import org.jetbrains.hexana.shared.buildWamrRunArgs
+import org.jetbrains.hexana.toCommonByteBuffer
 import java.io.File
 
 /**
@@ -31,12 +33,11 @@ class WamrCommandLineState(
             WasmRuntimeSettings.getInstance().effectiveWamrPath()
         }
 
-        val wasmFile = File(configuration.wasmFilePath)
-        val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
+        val wasmBuffer = File(configuration.wasmFilePath).toCommonByteBuffer()
 
         val input = WasmRunInput(
             wasmFilePath = configuration.wasmFilePath,
-            wasmBytes = wasmBytes,
+            wasmBuffer = wasmBuffer,
             programArguments = configuration.programArguments,
             workingDirectory = configuration.workingDirectory,
             runtimeOptions = configuration.wamrOptions,
@@ -74,8 +75,8 @@ class WamrCommandLineState(
          * The files are named `<module_name>.wasm` so that WAMR's
          * built-in module reader can locate them by name.
          */
-        fun generateImportStubFiles(wasmBytes: ByteArray?): File? {
-            val stubDir = org.jetbrains.hexana.shared.generateWamrStubFiles(wasmBytes, JvmStubFileWriter)
+        fun generateImportStubFiles(wasmBuffer: CommonByteBuffer?): File? {
+            val stubDir = org.jetbrains.hexana.shared.generateWamrStubFiles(wasmBuffer, JvmStubFileWriter)
             return stubDir?.let { File(it) }
         }
     }

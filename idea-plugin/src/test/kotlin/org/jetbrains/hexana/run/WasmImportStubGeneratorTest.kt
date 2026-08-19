@@ -22,7 +22,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateStubs(wasm.toCommonByteBuffer())
         assertTrue("No stubs should be generated for a module without imports", stubs.isEmpty())
     }
 
@@ -38,7 +38,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateStubs(wasm.toCommonByteBuffer())
         assertEquals("Should generate one stub module for 'env'", 1, stubs.size)
         assertEquals("env", stubs[0].moduleName)
 
@@ -62,7 +62,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateStubs(wasm.toCommonByteBuffer())
         assertEquals(1, stubs.size)
         assertEquals("env", stubs[0].moduleName)
 
@@ -87,7 +87,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateStubs(wasm.toCommonByteBuffer())
         assertEquals(2, stubs.size)
 
         val envStub = stubs.first { it.moduleName == "env" }
@@ -115,7 +115,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateStubs(wasm.toCommonByteBuffer())
         assertEquals(1, stubs.size)
         assertValidWasmModule(stubs[0].wasmBytes)
 
@@ -135,7 +135,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateStubs(wasm.toCommonByteBuffer())
         assertEquals(1, stubs.size)
         assertValidWasmModule(stubs[0].wasmBytes)
 
@@ -155,7 +155,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateStubs(wasm.toCommonByteBuffer())
         assertEquals(1, stubs.size)
         assertValidWasmModule(stubs[0].wasmBytes)
 
@@ -178,7 +178,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateStubs(wasm.toCommonByteBuffer())
         assertEquals(1, stubs.size)
         assertValidWasmModule(stubs[0].wasmBytes)
 
@@ -198,7 +198,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateStubs(wasm.toCommonByteBuffer())
         assertEquals(1, stubs.size)
 
         val context = Context.newBuilder("wasm")
@@ -234,7 +234,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateStubs(wasm.toCommonByteBuffer())
         assertEquals(1, stubs.size)
 
         val context = Context.newBuilder("wasm")
@@ -268,7 +268,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateStubs(wasm.toCommonByteBuffer())
 
         val context = Context.newBuilder("wasm")
             .option("engine.WarnInterpreterOnly", "false")
@@ -297,7 +297,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        assertFalse("Module without imports should return false", WasmImportStubGenerator.hasImports(wasm))
+        assertFalse("Module without imports should return false", WasmImportStubGenerator.hasImports(wasm.toCommonByteBuffer()))
     }
 
     fun testHasImportsWithFunctionImport() {
@@ -310,7 +310,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        assertTrue("Module with function import should return true", WasmImportStubGenerator.hasImports(wasm))
+        assertTrue("Module with function import should return true", WasmImportStubGenerator.hasImports(wasm.toCommonByteBuffer()))
     }
 
     fun testHasImportsWithMemoryImport() {
@@ -323,7 +323,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        assertTrue("Module with memory import should return true", WasmImportStubGenerator.hasImports(wasm))
+        assertTrue("Module with memory import should return true", WasmImportStubGenerator.hasImports(wasm.toCommonByteBuffer()))
     }
 
     fun testHasNonFunctionImportsWithOnlyFunctions() {
@@ -339,7 +339,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
 
         assertFalse(
             "Module with only function imports should return false",
-            WasmImportStubGenerator.hasNonFunctionImports(wasm),
+            WasmImportStubGenerator.hasNonFunctionImports(wasm.toCommonByteBuffer()),
         )
     }
 
@@ -355,7 +355,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
 
         assertTrue(
             "Module with memory import should return true",
-            WasmImportStubGenerator.hasNonFunctionImports(wasm),
+            WasmImportStubGenerator.hasNonFunctionImports(wasm.toCommonByteBuffer()),
         )
     }
 
@@ -371,7 +371,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
 
         assertTrue(
             "Module with global import should return true",
-            WasmImportStubGenerator.hasNonFunctionImports(wasm),
+            WasmImportStubGenerator.hasNonFunctionImports(wasm.toCommonByteBuffer()),
         )
     }
 
@@ -388,7 +388,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
 
         assertTrue(
             "Module with mixed imports should return true for non-function imports",
-            WasmImportStubGenerator.hasNonFunctionImports(wasm),
+            WasmImportStubGenerator.hasNonFunctionImports(wasm.toCommonByteBuffer()),
         )
     }
 
@@ -404,7 +404,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm.toCommonByteBuffer())
         assertEquals("Should generate one stub module for 'env'", 1, stubs.size)
         assertEquals("env", stubs[0].moduleName)
 
@@ -428,7 +428,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm.toCommonByteBuffer())
         assertTrue("Should generate no stubs for function-only imports", stubs.isEmpty())
     }
 
@@ -444,7 +444,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm.toCommonByteBuffer())
         assertEquals("Should generate two stub modules", 2, stubs.size)
 
         val envStub = stubs.first { it.moduleName == "env" }
@@ -481,7 +481,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm.toCommonByteBuffer())
         assertEquals("Should generate one stub for 'foo' (the only module with non-function imports)", 1, stubs.size)
         assertEquals("foo", stubs[0].moduleName)
 
@@ -514,7 +514,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm.toCommonByteBuffer())
         assertEquals("Should generate one stub for 'foo'", 1, stubs.size)
         assertEquals("foo", stubs[0].moduleName)
 
@@ -537,7 +537,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
         // runtimes like wasmtime reject duplicate exports.
         val wasm = buildWasmWithDuplicateImports()
 
-        val stubs = WasmImportStubGenerator.generateStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateStubs(wasm.toCommonByteBuffer())
         assertEquals("Should generate one stub module for 'foo'", 1, stubs.size)
         assertEquals("foo", stubs[0].moduleName)
 
@@ -554,7 +554,7 @@ class WasmImportStubGeneratorTest : UsefulTestCase() {
         // from the same module.
         val wasm = buildWasmWithDuplicateMemoryImports()
 
-        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm)
+        val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasm.toCommonByteBuffer())
         assertEquals("Should generate one stub module for 'env'", 1, stubs.size)
         assertEquals("env", stubs[0].moduleName)
 

@@ -1,6 +1,6 @@
 package org.jetbrains.hexana.shared
 
-import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.sections.*
 
@@ -23,8 +23,8 @@ object WasmImportStubGenerator {
     /**
      * Checks whether the given Wasm binary has any imports at all.
      */
-    fun hasImports(wasmBytes: ByteArray): Boolean {
-        val provider = WasmBinaryProvider(wasmBytes.toCommonByteBuffer())
+    fun hasImports(wasmBuffer: CommonByteBuffer): Boolean {
+        val provider = WasmBinaryProvider(wasmBuffer.duplicate())
         if (!provider.canProvideWasmModule()) return false
         return provider.imports.isNotEmpty()
     }
@@ -35,8 +35,8 @@ object WasmImportStubGenerator {
      * wasmtime's `--preload` since `-W unknown-imports-default` only
      * handles function imports.
      */
-    fun hasNonFunctionImports(wasmBytes: ByteArray): Boolean {
-        val provider = WasmBinaryProvider(wasmBytes.toCommonByteBuffer())
+    fun hasNonFunctionImports(wasmBuffer: CommonByteBuffer): Boolean {
+        val provider = WasmBinaryProvider(wasmBuffer.duplicate())
         if (!provider.canProvideWasmModule()) return false
         return provider.imports.any { it.type !is WasmTypeIndexExternalType }
     }
@@ -52,8 +52,8 @@ object WasmImportStubGenerator {
      * symbols, `-W unknown-imports-default` would try to re-define the
      * same names as function traps, causing a "defined twice" linker error.
      */
-    fun generateNonFunctionStubs(wasmBytes: ByteArray): List<ImportModuleStub> {
-        val provider = WasmBinaryProvider(wasmBytes.toCommonByteBuffer())
+    fun generateNonFunctionStubs(wasmBuffer: CommonByteBuffer): List<ImportModuleStub> {
+        val provider = WasmBinaryProvider(wasmBuffer.duplicate())
         if (!provider.canProvideWasmModule()) return emptyList()
 
         val imports = provider.imports
@@ -62,7 +62,7 @@ object WasmImportStubGenerator {
 
         val types = provider.wasmModule?.typesSection?.let { typeSection ->
             with(typeSection) {
-                wasmBytes.toCommonByteBuffer().parseTypes()
+                wasmBuffer.duplicate().parseTypes()
             }
         } ?: emptyList()
 
@@ -82,8 +82,8 @@ object WasmImportStubGenerator {
      * Parses the given Wasm binary for imports and generates one stub module
      * per distinct import module name.
      */
-    fun generateStubs(wasmBytes: ByteArray): List<ImportModuleStub> {
-        val provider = WasmBinaryProvider(wasmBytes.toCommonByteBuffer())
+    fun generateStubs(wasmBuffer: CommonByteBuffer): List<ImportModuleStub> {
+        val provider = WasmBinaryProvider(wasmBuffer.duplicate())
         if (!provider.canProvideWasmModule()) return emptyList()
 
         val imports = provider.imports
@@ -91,7 +91,7 @@ object WasmImportStubGenerator {
 
         val types = provider.wasmModule?.typesSection?.let { typeSection ->
             with(typeSection) {
-                wasmBytes.toCommonByteBuffer().parseTypes()
+                wasmBuffer.duplicate().parseTypes()
             }
         } ?: emptyList()
 
@@ -106,8 +106,8 @@ object WasmImportStubGenerator {
      * Returns the distinct import module names from a core Wasm binary.
      * Useful for determining which modules need to be preloaded.
      */
-    fun importModuleNames(wasmBytes: ByteArray): List<String> {
-        val provider = WasmBinaryProvider(wasmBytes.toCommonByteBuffer())
+    fun importModuleNames(wasmBuffer: CommonByteBuffer): List<String> {
+        val provider = WasmBinaryProvider(wasmBuffer.duplicate())
         if (!provider.canProvideWasmModule()) return emptyList()
         return provider.imports.map { it.prefix }.distinct()
     }

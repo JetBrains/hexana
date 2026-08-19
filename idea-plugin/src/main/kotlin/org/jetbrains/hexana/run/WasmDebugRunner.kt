@@ -28,6 +28,7 @@ import com.intellij.xdebugger.XDebugSession
 import org.jetbrains.hexana.shared.WasmRunInput
 import org.jetbrains.hexana.shared.buildWasmtimeGdbArgs
 import org.jetbrains.hexana.shared.looksLikeWamrDebugNotSupported
+import org.jetbrains.hexana.toCommonByteBuffer
 import org.jetbrains.hexana.wasisdk.WasiSdkOffer
 import java.io.File
 import java.net.ServerSocket
@@ -309,8 +310,8 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
         val wasmtimeArgs = buildWasmtimeGdbArgs(
             input = WasmRunInput(
                 wasmFilePath = configuration.wasmFilePath,
-                wasmBytes = buildResult.executedWasmPath?.let { java.io.File(it).readBytes() }
-                    ?: java.io.File(configuration.wasmFilePath).takeIf { it.exists() }?.readBytes(),
+                wasmBuffer = buildResult.executedWasmPath?.let { java.io.File(it).toCommonByteBuffer() }
+                    ?: java.io.File(configuration.wasmFilePath).toCommonByteBuffer(),
                 programArguments = configuration.programArguments,
                 workingDirectory = configuration.workingDirectory,
                 runtimeOptions = configuration.wasmtimeOptions,

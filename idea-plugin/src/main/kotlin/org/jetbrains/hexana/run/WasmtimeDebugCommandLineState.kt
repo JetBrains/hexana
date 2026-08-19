@@ -9,6 +9,7 @@ import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
+import org.jetbrains.hexana.toCommonByteBuffer
 import org.jetbrains.hexana.shared.WasmRunInput
 import org.jetbrains.hexana.shared.buildWasmtimeDebugArgs
 import org.jetbrains.hexana.shared.classifyDependencies
@@ -63,9 +64,8 @@ class WasmtimeDebugCommandLineState(
          *         (which strips DWARF debug info).
          */
         fun buildWasmtimeArguments(configuration: WasmRunConfiguration, project: Project): DebugBuildResult {
-            val wasmFile = File(configuration.wasmFilePath)
-            val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
-            val resolvedDeps = resolveDeps(configuration, wasmBytes, project)
+            val wasmBuffer = File(configuration.wasmFilePath).toCommonByteBuffer()
+            val resolvedDeps = resolveDeps(configuration, wasmBuffer, project)
 
             val (coreModuleDeps, componentDeps) = classifyDependencies(resolvedDeps) { path ->
                 val f = File(path)
@@ -120,7 +120,7 @@ class WasmtimeDebugCommandLineState(
 
             val input = WasmRunInput(
                 wasmFilePath = configuration.wasmFilePath,
-                wasmBytes = wasmBytes,
+                wasmBuffer = wasmBuffer,
                 programArguments = configuration.programArguments,
                 runtimeOptions = configuration.wasmtimeOptions,
                 effectiveWasmPath = effectiveWasmPath,

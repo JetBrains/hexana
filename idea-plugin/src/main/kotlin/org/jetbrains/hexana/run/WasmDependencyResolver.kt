@@ -5,7 +5,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.hexana.WasmIndexId
-import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
@@ -39,18 +39,18 @@ internal object WasmDependencyResolver {
      * transitively so that the full dependency graph is available for
      * composition.
      */
-    fun resolveDependencies(wasmBytes: ByteArray, project: Project, excludeFile: VirtualFile? = null): Map<String, String> {
+    fun resolveDependencies(wasmBuffer: CommonByteBuffer, project: Project, excludeFile: VirtualFile? = null): Map<String, String> {
         val wasmFilePath = excludeFile?.path
-        return when (WasmBinaryProviderSelector.select(wasmBytes.toCommonByteBuffer())) {
+        return when (WasmBinaryProviderSelector.select(wasmBuffer)) {
             BinaryProviderType.WasmComponent -> {
-                val provider = WasmComponentBinaryProvider(wasmBytes.toCommonByteBuffer())
+                val provider = WasmComponentBinaryProvider(wasmBuffer.duplicate())
                 if (!provider.canProvideWasmModule()) return emptyMap()
                 val importNames = provider.imports.map { it.importName }.distinct()
                 val resolved = resolveImportNames(importNames, project, excludeFile, wasmFilePath)
                 SharedResolver.resolveTransitiveDependencies(resolved, buildScanRoots(project.basePath, wasmFilePath), wasmFilePath, JVM_FILE_SYSTEM)
             }
             BinaryProviderType.Wasm -> {
-                val provider = WasmBinaryProvider(wasmBytes.toCommonByteBuffer())
+                val provider = WasmBinaryProvider(wasmBuffer.duplicate())
                 if (!provider.canProvideWasmModule()) return emptyMap()
                 val importModuleNames = provider.imports.map { it.prefix }.distinct()
                 resolveImportNames(importModuleNames, project, excludeFile, wasmFilePath)

@@ -4,6 +4,7 @@ import org.graalvm.polyglot.Context
 import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.io.ByteSequence
 import org.graalvm.polyglot.proxy.ProxyObject
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.shared.WasmImportStubGenerator as SharedStubGenerator
 
 /**
@@ -31,15 +32,15 @@ internal object WasmImportStubGenerator {
         return ProxyObject.fromMap(moduleMap)
     }
 
-    fun hasImports(wasmBytes: ByteArray): Boolean =
-        SharedStubGenerator.hasImports(wasmBytes)
+    fun hasImports(wasmBuffer: CommonByteBuffer): Boolean =
+        SharedStubGenerator.hasImports(wasmBuffer)
 
-    fun hasNonFunctionImports(wasmBytes: ByteArray): Boolean =
-        SharedStubGenerator.hasNonFunctionImports(wasmBytes)
+    fun hasNonFunctionImports(wasmBuffer: CommonByteBuffer): Boolean =
+        SharedStubGenerator.hasNonFunctionImports(wasmBuffer)
 
-    fun generateNonFunctionStubs(wasmBytes: ByteArray): List<SharedStubGenerator.ImportModuleStub> =
-        SharedStubGenerator.generateNonFunctionStubs(wasmBytes)
+    fun generateNonFunctionStubs(wasmBuffer: CommonByteBuffer): List<SharedStubGenerator.ImportModuleStub> =
+        SharedStubGenerator.generateNonFunctionStubs(wasmBuffer)
 
-    fun generateStubs(wasmBytes: ByteArray): List<SharedStubGenerator.ImportModuleStub> =
-        SharedStubGenerator.generateStubs(wasmBytes)
+    fun generateStubs(wasmBuffer: CommonByteBuffer): List<SharedStubGenerator.ImportModuleStub> =
+        SharedStubGenerator.generateStubs(wasmBuffer)
 }

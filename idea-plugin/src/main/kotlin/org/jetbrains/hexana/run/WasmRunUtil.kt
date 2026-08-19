@@ -18,6 +18,8 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaBundle
+import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.shared.WasmCommandLine
@@ -145,8 +147,8 @@ private fun doRun(file: VirtualFile, project: Project, settings: RunnerAndConfig
         private var resolved: Map<String, String> = emptyMap()
 
         override fun run(indicator: ProgressIndicator) {
-            val wasmBytes = file.contentsToByteArray()
-            resolved = WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = file)
+            val wasmBuffer = file.toCommonByteBuffer() ?: return
+            resolved = WasmDependencyResolver.resolveDependencies(wasmBuffer, project, excludeFile = file)
         }
 
         override fun onSuccess() {
@@ -184,7 +186,7 @@ fun runCommandLine(runtimeExecutable: String, cmdLine: WasmCommandLine): OSProce
  */
 fun resolveDeps(
     configuration: WasmRunConfiguration,
-    wasmBytes: ByteArray?,
+    wasmBuffer: CommonByteBuffer?,
     project: Project,
 ): Map<String, String> {
     val stored = configuration.dependencies
@@ -193,8 +195,8 @@ fun resolveDeps(
             if (parts.size == 2) parts[0] to parts[1] else null
         }
         .toMap()
-    if (stored.isNotEmpty() || wasmBytes == null) return stored
+    if (stored.isNotEmpty() || wasmBuffer == null) return stored
 
     val vFile = LocalFileSystem.getInstance().findFileByPath(configuration.wasmFilePath)
-    return WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = vFile)
+    return WasmDependencyResolver.resolveDependencies(wasmBuffer, project, excludeFile = vFile)
 }

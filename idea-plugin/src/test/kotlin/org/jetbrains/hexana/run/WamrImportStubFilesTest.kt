@@ -17,7 +17,7 @@ class WamrImportStubFilesTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubDir = WamrCommandLineState.generateImportStubFiles(wasm)
+        val stubDir = WamrCommandLineState.generateImportStubFiles(wasm.toCommonByteBuffer())
         assertNull("No stub directory should be created for a module without imports", stubDir)
     }
 
@@ -39,7 +39,7 @@ class WamrImportStubFilesTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubDir = WamrCommandLineState.generateImportStubFiles(wasm)
+        val stubDir = WamrCommandLineState.generateImportStubFiles(wasm.toCommonByteBuffer())
         assertNotNull("Stub directory should be created", stubDir)
         assertTrue("Stub directory should exist", stubDir!!.exists())
         assertTrue("Stub directory should be a directory", stubDir.isDirectory)
@@ -82,7 +82,7 @@ class WamrImportStubFilesTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubDir = WamrCommandLineState.generateImportStubFiles(wasm)
+        val stubDir = WamrCommandLineState.generateImportStubFiles(wasm.toCommonByteBuffer())
         assertNotNull("Stub directory should be created", stubDir)
 
         val envStub = File(stubDir!!, "env.wasm")
@@ -105,7 +105,7 @@ class WamrImportStubFilesTest : UsefulTestCase() {
             )
         """.trimIndent())
 
-        val stubDir = WamrCommandLineState.generateImportStubFiles(wasm)
+        val stubDir = WamrCommandLineState.generateImportStubFiles(wasm.toCommonByteBuffer())
         assertNotNull("Stub directory should be created", stubDir)
 
         val envStub = File(stubDir!!, "env.wasm")

@@ -2,6 +2,7 @@
 
 package org.jetbrains.hexana.vscode.lib
 
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.shared.WasmImportStubGenerator
 import org.jetbrains.hexana.shared.componentExportNames
@@ -62,6 +63,6 @@ data class JsImportModuleStub(
  */
 @JsExport
 fun generateImportStubs(wasmBytes: ByteArray): Array<JsImportModuleStub> =
-    WasmImportStubGenerator.generateStubs(wasmBytes).map {
+    WasmImportStubGenerator.generateStubs(wasmBytes.toCommonByteBuffer()).map {
         JsImportModuleStub(it.moduleName, it.wasmBytes)
     }.toTypedArray()

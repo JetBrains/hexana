@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.analysis.WasmProposal
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -348,13 +349,13 @@ class WasmRuntimeCommandLineTest {
 
     @Test
     fun detectProposalsReturnsEmptyForMvpModule() {
-        val proposals = detectProposals(buildMvpWasm())
+        val proposals = detectProposals(buildMvpWasm().toCommonByteBuffer())
         assertFalse(WasmProposal.Threads in proposals)
     }
 
     @Test
     fun detectProposalsDetectsThreads() {
-        val proposals = detectProposals(buildSharedMemoryWasm())
+        val proposals = detectProposals(buildSharedMemoryWasm().toCommonByteBuffer())
         assertTrue(WasmProposal.Threads in proposals)
     }
 
@@ -525,7 +526,7 @@ class WasmRuntimeCommandLineTest {
     fun wasmtimeRunArgsIncludesThreadsFlagsForSharedMemory() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = buildSharedMemoryWasm(),
+            wasmBuffer = buildSharedMemoryWasm().toCommonByteBuffer(),
         )
         val result = buildWasmtimeRunArgs(input)
         assertTrue(result.arguments.contains("-W"), "Should contain -W flag")
@@ -538,7 +539,7 @@ class WasmRuntimeCommandLineTest {
     fun wasmtimeRunArgsNoProposalFlagsForMvp() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = buildMvpWasm(),
+            wasmBuffer = buildMvpWasm().toCommonByteBuffer(),
         )
         val result = buildWasmtimeRunArgs(input)
         // Should only have "run" and the wasm file path
@@ -549,7 +550,7 @@ class WasmRuntimeCommandLineTest {
     fun wasmtimeDebugArgsIncludesThreadsFlags() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = buildSharedMemoryWasm(),
+            wasmBuffer = buildSharedMemoryWasm().toCommonByteBuffer(),
         )
         val result = buildWasmtimeDebugArgs(input)
         assertTrue(result.arguments.contains("-W"), "Debug should contain -W flag")
@@ -562,7 +563,7 @@ class WasmRuntimeCommandLineTest {
     fun wamrRunArgsNoProposalFlagsForSharedMemory() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = buildSharedMemoryWasm(),
+            wasmBuffer = buildSharedMemoryWasm().toCommonByteBuffer(),
         )
         val result = buildWamrRunArgs(input)
         assertEquals(listOf("/mod.wasm"), result.arguments, "WAMR should not emit proposal flags")
@@ -572,7 +573,7 @@ class WasmRuntimeCommandLineTest {
     fun wamrRunArgsNoProposalFlagsForMvp() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = buildMvpWasm(),
+            wasmBuffer = buildMvpWasm().toCommonByteBuffer(),
         )
         val result = buildWamrRunArgs(input)
         assertEquals(listOf("/mod.wasm"), result.arguments)
@@ -582,7 +583,7 @@ class WasmRuntimeCommandLineTest {
     fun wamrDebugArgsNoProposalFlagsForSharedMemory() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = buildSharedMemoryWasm(),
+            wasmBuffer = buildSharedMemoryWasm().toCommonByteBuffer(),
         )
         val result = buildWamrDebugArgs(input)
         assertFalse(result.commandLine.arguments.contains("--max-threads=4"), "Debug should not contain --max-threads=4")
@@ -592,7 +593,7 @@ class WasmRuntimeCommandLineTest {
     fun graalWasmRunArgsIncludesThreadsFlagsForSharedMemory() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = buildSharedMemoryWasm(),
+            wasmBuffer = buildSharedMemoryWasm().toCommonByteBuffer(),
         )
         val result = buildGraalWasmRunArgs(input)
         assertTrue(result.arguments.contains("--experimental-options"), "Should contain --experimental-options")
@@ -604,7 +605,7 @@ class WasmRuntimeCommandLineTest {
     fun graalWasmRunArgsIncludesMemory64FlagsForMemory64Module() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = buildMemory64Wasm(),
+            wasmBuffer = buildMemory64Wasm().toCommonByteBuffer(),
         )
         val result = buildGraalWasmRunArgs(input)
         assertTrue(result.arguments.contains("--experimental-options"), "Should contain --experimental-options")
@@ -616,7 +617,7 @@ class WasmRuntimeCommandLineTest {
     fun graalWasmRunArgsNoProposalFlagsForMvp() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = buildMvpWasm(),
+            wasmBuffer = buildMvpWasm().toCommonByteBuffer(),
         )
         val result = buildGraalWasmRunArgs(input)
         assertEquals(listOf("/mod.wasm"), result.arguments)
@@ -626,7 +627,7 @@ class WasmRuntimeCommandLineTest {
     fun proposalFlagsBeforeUserOptions() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = buildSharedMemoryWasm(),
+            wasmBuffer = buildSharedMemoryWasm().toCommonByteBuffer(),
             runtimeOptions = "--custom-flag",
         )
         val result = buildWasmtimeRunArgs(input)
@@ -639,7 +640,7 @@ class WasmRuntimeCommandLineTest {
     fun wamrUserOptionsStillWork() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = buildSharedMemoryWasm(),
+            wasmBuffer = buildSharedMemoryWasm().toCommonByteBuffer(),
             runtimeOptions = "--custom-flag",
         )
         val result = buildWamrRunArgs(input)
@@ -652,7 +653,7 @@ class WasmRuntimeCommandLineTest {
     fun graalWasmProposalFlagsBeforeWasmFile() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = buildSharedMemoryWasm(),
+            wasmBuffer = buildSharedMemoryWasm().toCommonByteBuffer(),
         )
         val result = buildGraalWasmRunArgs(input)
         val threadsIdx = result.arguments.indexOf("--wasm.Threads=true")
@@ -721,7 +722,7 @@ class WasmRuntimeCommandLineTest {
         // must use -W unknown-imports-default exclusively and never preload.
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = buildImportedSharedMemoryWasm(),
+            wasmBuffer = buildImportedSharedMemoryWasm().toCommonByteBuffer(),
         )
         val result = buildWasmtimeRunArgs(input)
         val args = result.arguments
@@ -738,7 +739,7 @@ class WasmRuntimeCommandLineTest {
     fun wasmtimeDebugArgsUsesUnknownImportsDefaultForSharedMemoryModule() {
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = buildImportedSharedMemoryWasm(),
+            wasmBuffer = buildImportedSharedMemoryWasm().toCommonByteBuffer(),
         )
         val result = buildWasmtimeDebugArgs(input)
         val args = result.arguments
@@ -769,7 +770,7 @@ class WasmRuntimeCommandLineTest {
 
         val input = WasmRunInput(
             wasmFilePath = "/mod.wasm",
-            wasmBytes = w.toByteArray(),
+            wasmBuffer = w.toByteArray().toCommonByteBuffer(),
         )
         val result = buildWasmtimeRunArgs(input)
         val args = result.arguments

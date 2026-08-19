@@ -5,6 +5,7 @@ import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.util.SystemInfo
+import org.jetbrains.hexana.toCommonByteBuffer
 import org.jetbrains.hexana.shared.WasmRunInput
 import org.jetbrains.hexana.shared.buildWasmtimeRunArgs
 import org.jetbrains.hexana.shared.classifyDependencies
@@ -20,9 +21,8 @@ class WasmtimeCommandLineState(
             WasmRuntimeSettings.getInstance().effectiveWasmtimePath()
         }
 
-        val wasmFile = File(configuration.wasmFilePath)
-        val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
-        val resolvedDeps = resolveDeps(configuration, wasmBytes, this.environment.project)
+        val wasmBuffer = File(configuration.wasmFilePath).toCommonByteBuffer()
+        val resolvedDeps = resolveDeps(configuration, wasmBuffer, this.environment.project)
 
         val (coreModuleDeps, componentDeps) = classifyDependencies(resolvedDeps) { path ->
             val f = File(path)
@@ -41,7 +41,7 @@ class WasmtimeCommandLineState(
 
         val input = WasmRunInput(
             wasmFilePath = configuration.wasmFilePath,
-            wasmBytes = wasmBytes,
+            wasmBuffer = wasmBuffer,
             programArguments = configuration.programArguments,
             workingDirectory = configuration.workingDirectory,
             runtimeOptions = configuration.wasmtimeOptions,

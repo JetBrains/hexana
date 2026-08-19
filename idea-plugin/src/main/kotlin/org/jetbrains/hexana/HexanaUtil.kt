@@ -9,6 +9,7 @@ import io.ktor.http.*
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
@@ -115,6 +116,18 @@ fun VirtualFile.toMappedBuffer(): MappedByteBuffer? {
     return FileChannel.open(filePath, StandardOpenOption.READ).use { fileChannel ->
         fileChannel.map(FileChannel.MapMode.READ_ONLY, 0, fileSize)
     }
+}
+
+/**
+ * Memory-maps the file read-only and adapts it to [CommonByteBuffer],
+ * or returns `null` when the file does not exist. Avoids loading
+ * multi-GB wasm binaries onto the heap just to parse their headers.
+ */
+fun File.toCommonByteBuffer(): CommonByteBuffer? {
+    if (!isFile) return null
+    return FileChannel.open(toPath(), StandardOpenOption.READ).use { channel ->
+        channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size())
+    }.toCommonByteBuffer()
 }
 
 fun VirtualFile.toCommonByteBuffer(): CommonByteBuffer? {

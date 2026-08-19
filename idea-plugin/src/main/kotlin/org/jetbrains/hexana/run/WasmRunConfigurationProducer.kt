@@ -6,6 +6,7 @@ import com.intellij.execution.configurations.ConfigurationTypeUtil
 import com.intellij.openapi.util.Ref
 import com.intellij.openapi.vfs.isFile
 import com.intellij.psi.PsiElement
+import org.jetbrains.hexana.toCommonByteBuffer
 
 class WasmRunConfigurationProducer : LazyRunConfigurationProducer<WasmRunConfiguration>() {
 
@@ -33,8 +34,9 @@ class WasmRunConfigurationProducer : LazyRunConfigurationProducer<WasmRunConfigu
         configuration.wasmFilePath = file.path
         configuration.name = file.nameWithoutExtension
         configuration.workingDirectory = file.parent?.path ?: ""
-        val wasmBytes = file.contentsToByteArray()
-        val resolved = WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = file)
+        val resolved = file.toCommonByteBuffer()
+            ?.let { WasmDependencyResolver.resolveDependencies(it, project, excludeFile = file) }
+            ?: emptyMap()
         configuration.dependencies = resolved.map { (name, path) -> "$name=$path" }
         return true
     }

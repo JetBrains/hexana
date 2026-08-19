@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import kotlinx.browser.window
 import org.jetbrains.compose.web.css.selectors.CSSSelector.PseudoClass.host
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.shared.WasmImportStubGenerator
 import org.jetbrains.hexana.shared.componentImportNames
 import org.jetbrains.hexana.shared.isRuntimeImport
@@ -92,10 +93,11 @@ fun postRunExportToHost(
     if (wasmBytes != null) {
         if (!isComponent) {
             // Core module: generate stub modules for non-function imports
-            val hasImports = WasmImportStubGenerator.hasImports(wasmBytes)
+            val wasmBuffer = wasmBytes.toCommonByteBuffer()
+            val hasImports = WasmImportStubGenerator.hasImports(wasmBuffer)
             msg.hasImports = hasImports
-            if (hasImports && WasmImportStubGenerator.hasNonFunctionImports(wasmBytes)) {
-                val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasmBytes)
+            if (hasImports && WasmImportStubGenerator.hasNonFunctionImports(wasmBuffer)) {
+                val stubs = WasmImportStubGenerator.generateNonFunctionStubs(wasmBuffer)
                 val jsStubs = js("[]")
                 for (stub in stubs) {
                     val jsStub = js("{}")

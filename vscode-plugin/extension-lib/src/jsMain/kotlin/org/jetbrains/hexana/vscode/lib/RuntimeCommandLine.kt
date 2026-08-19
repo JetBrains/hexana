@@ -2,6 +2,7 @@
 
 package org.jetbrains.hexana.vscode.lib
 
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.shared.StubFileWriter
 import org.jetbrains.hexana.shared.WasmRunInput
 import org.jetbrains.hexana.shared.buildGraalWasmRunArgs
@@ -70,7 +71,7 @@ fun buildWasmtimeCommandLine(
 ): CommandLineResult {
     val input = WasmRunInput(
         wasmFilePath = wasmFilePath,
-        wasmBytes = wasmBytes,
+        wasmBuffer = wasmBytes?.toCommonByteBuffer(),
         programArguments = programArguments,
         runtimeOptions = runtimeOptions,
         effectiveWasmPath = effectiveWasmPath,
@@ -111,7 +112,7 @@ fun buildWamrCommandLine(
 ): CommandLineResult {
     val input = WasmRunInput(
         wasmFilePath = wasmFilePath,
-        wasmBytes = wasmBytes,
+        wasmBuffer = wasmBytes?.toCommonByteBuffer(),
         programArguments = programArguments,
         runtimeOptions = runtimeOptions,
         exportName = exportName,
@@ -207,7 +208,7 @@ fun buildWasmtimeDebugCommandLine(
 ): WasmtimeDebugCommandLineResult {
     val input = WasmRunInput(
         wasmFilePath = wasmFilePath,
-        wasmBytes = wasmBytes,
+        wasmBuffer = wasmBytes?.toCommonByteBuffer(),
         programArguments = programArguments,
         runtimeOptions = runtimeOptions,
         effectiveWasmPath = effectiveWasmPath,
@@ -275,7 +276,7 @@ fun buildWamrDebugCommandLine(
 ): WamrDebugCommandLineResult {
     val input = WasmRunInput(
         wasmFilePath = wasmFilePath,
-        wasmBytes = wasmBytes,
+        wasmBuffer = wasmBytes?.toCommonByteBuffer(),
         programArguments = programArguments,
         runtimeOptions = runtimeOptions,
         exportName = exportName,

@@ -9,7 +9,7 @@ class WamrDebugCommandLineStateTest : UsefulTestCase() {
         val port = 19876
         val result = WamrDebugCommandLineState.buildWamrArguments(
             wasmFilePath = "/tmp/module.wasm",
-            wasmBytes = null,
+            wasmBuffer = null,
             programArguments = "",
             workingDirectory = "",
             wamrOptions = "",
@@ -30,7 +30,7 @@ class WamrDebugCommandLineStateTest : UsefulTestCase() {
         val wasmPath = "/home/user/hello.wasm"
         val result = WamrDebugCommandLineState.buildWamrArguments(
             wasmFilePath = wasmPath,
-            wasmBytes = null,
+            wasmBuffer = null,
             programArguments = "",
             workingDirectory = "",
             wamrOptions = "",
@@ -45,7 +45,7 @@ class WamrDebugCommandLineStateTest : UsefulTestCase() {
         val wasmPath = "/tmp/calc.wasm"
         val result = WamrDebugCommandLineState.buildWamrArguments(
             wasmFilePath = wasmPath,
-            wasmBytes = null,
+            wasmBuffer = null,
             programArguments = "42 hello",
             workingDirectory = "",
             wamrOptions = "",
@@ -63,7 +63,7 @@ class WamrDebugCommandLineStateTest : UsefulTestCase() {
         val port = ServerSocket(0).use { it.localPort }
         val result = WamrDebugCommandLineState.buildWamrArguments(
             wasmFilePath = "/tmp/module.wasm",
-            wasmBytes = null,
+            wasmBuffer = null,
             programArguments = "",
             workingDirectory = "",
             wamrOptions = "",
@@ -86,7 +86,7 @@ class WamrDebugCommandLineStateTest : UsefulTestCase() {
 
         val r1 = WamrDebugCommandLineState.buildWamrArguments(
             wasmFilePath = "/tmp/m.wasm",
-            wasmBytes = null,
+            wasmBuffer = null,
             programArguments = "",
             workingDirectory = "",
             wamrOptions = "",
@@ -95,7 +95,7 @@ class WamrDebugCommandLineStateTest : UsefulTestCase() {
         )
         val r2 = WamrDebugCommandLineState.buildWamrArguments(
             wasmFilePath = "/tmp/m.wasm",
-            wasmBytes = null,
+            wasmBuffer = null,
             programArguments = "",
             workingDirectory = "",
             wamrOptions = "",
@@ -112,7 +112,7 @@ class WamrDebugCommandLineStateTest : UsefulTestCase() {
     fun testExportNameAddsMinusFFlag() {
         val result = WamrDebugCommandLineState.buildWamrArguments(
             wasmFilePath = "/tmp/module.wasm",
-            wasmBytes = null,
+            wasmBuffer = null,
             programArguments = "",
             workingDirectory = "",
             wamrOptions = "",

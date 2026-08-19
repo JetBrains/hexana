@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
@@ -18,8 +19,9 @@ import org.jetbrains.hexana.wasm.analysis.WasmProposalDetector
  * [WasmCommandLine] without touching platform-specific APIs.
  *
  * @property wasmFilePath absolute path to the `.wasm` file to run
- * @property wasmBytes raw bytes of [wasmFilePath], or `null` when the
- *           file has not been read yet (disables import-stub generation)
+ * @property wasmBuffer contents of [wasmFilePath] (typically a memory-mapped
+ *           buffer), or `null` when the file has not been read yet
+ *           (disables import-stub generation)
  * @property programArguments whitespace-separated program arguments
  * @property workingDirectory working directory override, blank means
  *           "use the platform default"
@@ -35,7 +37,7 @@ import org.jetbrains.hexana.wasm.analysis.WasmProposalDetector
  */
 data class WasmRunInput(
     val wasmFilePath: String,
-    val wasmBytes: ByteArray? = null,
+    val wasmBuffer: CommonByteBuffer? = null,
     val programArguments: String = "",
     val workingDirectory: String = "",
     val runtimeOptions: String = "",
@@ -138,12 +140,12 @@ fun classifyDependencies(
 /**
  * Detects which WebAssembly proposals are used by the given binary.
  *
- * Returns an empty set when [wasmBytes] is `null` or cannot be parsed.
+ * Returns an empty set when [wasmBuffer] is `null` or cannot be parsed.
  */
-fun detectProposals(wasmBytes: ByteArray?): Set<WasmProposal> {
-    if (wasmBytes == null) return emptySet()
+fun detectProposals(wasmBuffer: CommonByteBuffer?): Set<WasmProposal> {
+    if (wasmBuffer == null) return emptySet()
     return try {
-        val buffer = wasmBytes.toCommonByteBuffer()
+        val buffer = wasmBuffer.duplicate()
         val result = WasmParser().parse(buffer)
         val module = (result as? WasmParseSuccess)?.wasmModule as? WasmModule ?: return emptySet()
         buffer.position(0)
@@ -361,7 +363,7 @@ fun buildWasmtimeRunArgs(
 
     // Inject proposal-specific flags before user options so that user
     // options can override them if needed.
-    val proposals = detectProposals(input.wasmBytes)
+    val proposals = detectProposals(input.wasmBuffer)
     args.addAll(wasmtimeProposalFlags(proposals))
 
     val options = input.runtimeOptions.trim()
@@ -374,8 +376,8 @@ fun buildWasmtimeRunArgs(
         args.add("$name=$path")
     }
 
-    val wasmBytes = input.wasmBytes
-    if (wasmBytes != null && WasmImportStubGenerator.hasImports(wasmBytes)) {
+    val wasmBuffer = input.wasmBuffer
+    if (wasmBuffer != null && WasmImportStubGenerator.hasImports(wasmBuffer)) {
         // Wasmtime's `-W unknown-imports-default` supplies default values
         // for ALL unresolved import types (functions, memories, tables,
         // globals). Using `--preload` stubs is incompatible: wasmtime
@@ -420,7 +422,7 @@ fun buildWasmtimeDebugArgs(
 
     // Inject proposal-specific flags before user options so that user
     // options can override them if needed.
-    val proposals = detectProposals(input.wasmBytes)
+    val proposals = detectProposals(input.wasmBuffer)
     args.addAll(wasmtimeProposalFlags(proposals))
 
     val options = input.runtimeOptions.trim()
@@ -433,8 +435,8 @@ fun buildWasmtimeDebugArgs(
         args.add("$name=$path")
     }
 
-    val wasmBytes = input.wasmBytes
-    if (wasmBytes != null && WasmImportStubGenerator.hasImports(wasmBytes)) {
+    val wasmBuffer = input.wasmBuffer
+    if (wasmBuffer != null && WasmImportStubGenerator.hasImports(wasmBuffer)) {
         // See buildWasmtimeRunArgs — same rationale applies.
         args.add("-W")
         args.add("unknown-imports-default")
@@ -485,7 +487,7 @@ fun buildWasmtimeGdbArgs(
     args.add("opt-level=0")
 
     // Proposal-specific flags (GC, threads, etc.) before user options.
-    val proposals = detectProposals(input.wasmBytes)
+    val proposals = detectProposals(input.wasmBuffer)
     args.addAll(wasmtimeProposalFlags(proposals))
 
     val options = input.runtimeOptions.trim()
@@ -498,8 +500,8 @@ fun buildWasmtimeGdbArgs(
         args.add("$name=$path")
     }
 
-    val wasmBytes = input.wasmBytes
-    if (wasmBytes != null && WasmImportStubGenerator.hasImports(wasmBytes)) {
+    val wasmBuffer = input.wasmBuffer
+    if (wasmBuffer != null && WasmImportStubGenerator.hasImports(wasmBuffer)) {
         args.add("-W")
         args.add("unknown-imports-default")
     }
@@ -533,14 +535,14 @@ fun buildWamrRunArgs(
 ): WasmCommandLine {
     val args = mutableListOf<String>()
 
-    val wasmBytes = input.wasmBytes
+    val wasmBuffer = input.wasmBuffer
     val stubDir = if (stubFileWriter != null) {
-        generateWamrStubFiles(wasmBytes, stubFileWriter)
+        generateWamrStubFiles(wasmBuffer, stubFileWriter)
     } else null
 
     // Inject proposal-specific flags before user options so that user
     // options can override them if needed.
-    val proposals = detectProposals(wasmBytes)
+    val proposals = detectProposals(wasmBuffer)
     args.addAll(wamrProposalFlags(proposals))
 
     val options = input.runtimeOptions.trim()
@@ -582,9 +584,9 @@ fun buildWamrDebugArgs(
 ): WamrDebugCommandLine {
     val args = mutableListOf<String>()
 
-    val wasmBytes = input.wasmBytes
+    val wasmBuffer = input.wasmBuffer
     val stubDir = if (stubFileWriter != null) {
-        generateWamrStubFiles(wasmBytes, stubFileWriter)
+        generateWamrStubFiles(wasmBuffer, stubFileWriter)
     } else null
 
     // Enable debug server
@@ -592,7 +594,7 @@ fun buildWamrDebugArgs(
 
     // Inject proposal-specific flags before user options so that user
     // options can override them if needed.
-    val proposals = detectProposals(wasmBytes)
+    val proposals = detectProposals(wasmBuffer)
     args.addAll(wamrProposalFlags(proposals))
 
     val options = input.runtimeOptions.trim()
@@ -632,11 +634,11 @@ fun buildWamrDebugArgs(
  * that need the stub directory without building the full argument list.
  */
 fun generateWamrStubFiles(
-    wasmBytes: ByteArray?,
+    wasmBuffer: CommonByteBuffer?,
     stubFileWriter: StubFileWriter,
 ): String? {
-    if (wasmBytes == null || !WasmImportStubGenerator.hasImports(wasmBytes)) return null
-    val stubs = WasmImportStubGenerator.generateStubs(wasmBytes)
+    if (wasmBuffer == null || !WasmImportStubGenerator.hasImports(wasmBuffer)) return null
+    val stubs = WasmImportStubGenerator.generateStubs(wasmBuffer)
     if (stubs.isEmpty()) return null
     val tempDir = stubFileWriter.createTempDir("hexana-wamr-stubs")
     for (stub in stubs) {
@@ -660,7 +662,7 @@ fun buildGraalWasmRunArgs(input: WasmRunInput): WasmCommandLine {
     val args = mutableListOf<String>()
 
     // Inject proposal-specific flags before other options.
-    val proposals = detectProposals(input.wasmBytes)
+    val proposals = detectProposals(input.wasmBuffer)
     args.addAll(graalWasmProposalFlags(proposals))
 
     val targetExport = input.exportName.ifBlank { null }
@@ -758,9 +760,9 @@ fun buildWazeroRunArgs(
     val args = mutableListOf<String>()
     args.add("run")
 
-    val wasmBytes = input.wasmBytes
+    val wasmBuffer = input.wasmBuffer
     val stubPaths = if (stubFileWriter != null) {
-        generateWazeroStubFiles(wasmBytes, stubFileWriter)
+        generateWazeroStubFiles(wasmBuffer, stubFileWriter)
     } else emptyList()
 
     val options = input.runtimeOptions.trim()
@@ -791,11 +793,11 @@ fun buildWazeroRunArgs(
  * Returns an empty list when no stubs are needed.
  */
 fun generateWazeroStubFiles(
-    wasmBytes: ByteArray?,
+    wasmBuffer: CommonByteBuffer?,
     stubFileWriter: StubFileWriter,
 ): List<String> {
-    if (wasmBytes == null || !WasmImportStubGenerator.hasImports(wasmBytes)) return emptyList()
-    val stubs = WasmImportStubGenerator.generateStubs(wasmBytes)
+    if (wasmBuffer == null || !WasmImportStubGenerator.hasImports(wasmBuffer)) return emptyList()
+    val stubs = WasmImportStubGenerator.generateStubs(wasmBuffer)
     if (stubs.isEmpty()) return emptyList()
     val tempDir = stubFileWriter.createTempDir("hexana-wazero-stubs")
     return stubs.map { stub ->

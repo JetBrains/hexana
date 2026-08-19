@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.io.toCommonByteBuffer
+
 /**
  * Platform-agnostic runtime executable resolution.
  *
@@ -113,7 +115,7 @@ object WasmRuntimeResolver {
 
         val input = WasmRunInput(
             wasmFilePath = wasmFilePath,
-            wasmBytes = wasmBytes,
+            wasmBuffer = wasmBytes?.toCommonByteBuffer(),
             programArguments = programArgs,
             runtimeOptions = effectiveOptions,
             exportName = exportName,

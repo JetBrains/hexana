@@ -7,8 +7,10 @@ import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.diagnostic.Logger
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.shared.WasmRunInput
 import org.jetbrains.hexana.shared.buildWamrDebugArgs
+import org.jetbrains.hexana.toCommonByteBuffer
 import java.io.File
 
 /**
@@ -75,11 +77,10 @@ class WamrDebugCommandLineState(
             host: String = DEFAULT_DEBUG_HOST,
             port: Int = DEFAULT_DEBUG_PORT,
         ): DebugBuildResult {
-            val wasmFile = File(configuration.wasmFilePath)
-            val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
+            val wasmBuffer = File(configuration.wasmFilePath).toCommonByteBuffer()
             return buildWamrArguments(
                 wasmFilePath = configuration.wasmFilePath,
-                wasmBytes = wasmBytes,
+                wasmBuffer = wasmBuffer,
                 programArguments = configuration.programArguments,
                 workingDirectory = configuration.workingDirectory,
                 wamrOptions = configuration.wamrOptions,
@@ -98,7 +99,7 @@ class WamrDebugCommandLineState(
          */
         internal fun buildWamrArguments(
             wasmFilePath: String,
-            wasmBytes: ByteArray?,
+            wasmBuffer: CommonByteBuffer?,
             programArguments: String,
             workingDirectory: String,
             wamrOptions: String,
@@ -108,7 +109,7 @@ class WamrDebugCommandLineState(
         ): DebugBuildResult {
             val input = WasmRunInput(
                 wasmFilePath = wasmFilePath,
-                wasmBytes = wasmBytes,
+                wasmBuffer = wasmBuffer,
                 programArguments = programArguments,
                 workingDirectory = workingDirectory,
                 runtimeOptions = wamrOptions,

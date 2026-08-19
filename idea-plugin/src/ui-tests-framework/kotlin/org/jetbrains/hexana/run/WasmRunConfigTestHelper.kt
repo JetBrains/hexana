@@ -14,6 +14,7 @@ import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.frame.*
 import com.intellij.xdebugger.frame.presentation.XValuePresentation
+import org.jetbrains.hexana.toCommonByteBuffer
 
 object WasmRunConfigTestHelper {
 
@@ -538,8 +539,9 @@ object WasmRunConfigTestHelper {
         wasmVirtualFile: VirtualFile,
     ): List<String> =
         ApplicationManager.getApplication().runReadAction<List<String>> {
-            val wasmBytes = wasmVirtualFile.contentsToByteArray()
-            WasmDependencyResolver.resolveDependencies(wasmBytes, project, excludeFile = wasmVirtualFile)
+            val wasmBuffer = wasmVirtualFile.toCommonByteBuffer()
+                ?: return@runReadAction emptyList()
+            WasmDependencyResolver.resolveDependencies(wasmBuffer, project, excludeFile = wasmVirtualFile)
                 .map { (name, path) -> "$name=$path" }
         }
 

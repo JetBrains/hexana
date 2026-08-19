@@ -6,6 +6,7 @@ import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.util.SystemInfo
 import org.jetbrains.hexana.shared.WasmRunInput
 import org.jetbrains.hexana.shared.buildWazeroRunArgs
+import org.jetbrains.hexana.toCommonByteBuffer
 import java.io.File
 
 /**
@@ -25,12 +26,11 @@ class WazeroCommandLineState(
             WasmRuntimeSettings.getInstance().effectiveWazeroPath()
         }
 
-        val wasmFile = File(configuration.wasmFilePath)
-        val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
+        val wasmBuffer = File(configuration.wasmFilePath).toCommonByteBuffer()
 
         val input = WasmRunInput(
             wasmFilePath = configuration.wasmFilePath,
-            wasmBytes = wasmBytes,
+            wasmBuffer = wasmBuffer,
             programArguments = configuration.programArguments,
             workingDirectory = configuration.workingDirectory,
             runtimeOptions = configuration.wazeroOptions,

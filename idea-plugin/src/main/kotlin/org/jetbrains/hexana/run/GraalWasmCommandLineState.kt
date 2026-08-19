@@ -19,12 +19,13 @@ import org.jetbrains.hexana.shared.buildGraalWasmRunArgs
 import org.graalvm.polyglot.Context
 import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.proxy.ProxyObject
-import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
 import org.jetbrains.hexana.shared.detectProposals
 import org.jetbrains.hexana.shared.graalWasmContextOptions
+import org.jetbrains.hexana.toCommonByteBuffer
 import org.jetbrains.hexana.wasm.sections.*
 import java.io.File
 import java.io.OutputStream
@@ -93,12 +94,11 @@ private class ExternalGraalWasmCommandLineState(
         val jarDir = File(polyglotJars.first()).parent + File.separator + "*"
         val classpath = listOf(classesDir, jarDir).joinToString(File.pathSeparator)
 
-        val wasmFile = File(configuration.wasmFilePath)
-        val wasmBytes = if (wasmFile.exists()) wasmFile.readBytes() else null
+        val wasmBuffer = File(configuration.wasmFilePath).toCommonByteBuffer()
 
         val input = WasmRunInput(
             wasmFilePath = configuration.wasmFilePath,
-            wasmBytes = wasmBytes,
+            wasmBuffer = wasmBuffer,
             programArguments = configuration.programArguments,
             workingDirectory = configuration.workingDirectory,
             exportName = configuration.exportName,
@@ -108,8 +108,8 @@ private class ExternalGraalWasmCommandLineState(
 
         // Generate import stub modules and write them to temp files
         val stubArgs = mutableListOf<String>()
-        if (wasmBytes != null) {
-            val stubs = org.jetbrains.hexana.shared.WasmImportStubGenerator.generateStubs(wasmBytes)
+        if (wasmBuffer != null) {
+            val stubs = org.jetbrains.hexana.shared.WasmImportStubGenerator.generateStubs(wasmBuffer)
             val stubDir = Path.of(System.getProperty("java.io.tmpdir"), "hexana-graalwasm-runner", "stubs")
             Files.createDirectories(stubDir)
             for (stub in stubs) {
@@ -322,8 +322,8 @@ class GraalWasmProcessHandler(
             return
         }
 
-        val wasmBytes = wasmFile.readBytes()
-        val binaryType = WasmBinaryProviderSelector.select(wasmBytes.toCommonByteBuffer())
+        val wasmBuffer = wasmFile.toCommonByteBuffer() ?: return
+        val binaryType = WasmBinaryProviderSelector.select(wasmBuffer)
         if (binaryType is BinaryProviderType.WasmComponent) {
             notifyTextAvailable(
                 "Error: GraalWasm does not support the WebAssembly Component Model.\n" +
@@ -341,13 +341,8 @@ class GraalWasmProcessHandler(
             }
             .toMap()
         val coreModuleDeps = resolvedDeps.filter { (_, path) ->
-            val depFile = File(path)
-            if (depFile.exists()) {
-                val depType = WasmBinaryProviderSelector.select(depFile.readBytes().toCommonByteBuffer())
-                depType is BinaryProviderType.Wasm
-            } else {
-                false
-            }
+            val depBuffer = File(path).toCommonByteBuffer()
+            depBuffer != null && WasmBinaryProviderSelector.select(depBuffer) is BinaryProviderType.Wasm
         }
         val resolvedCoreModuleNames = coreModuleDeps.keys
 
@@ -379,7 +374,7 @@ class GraalWasmProcessHandler(
 
         val targetExport = configuration.exportName.ifBlank { null }
 
-        val proposals = detectProposals(wasmBytes)
+        val proposals = detectProposals(wasmBuffer)
         val proposalOptions = graalWasmContextOptions(proposals)
 
         val contextBuilder = Context.newBuilder("wasm")
@@ -413,7 +408,7 @@ class GraalWasmProcessHandler(
                 }
             }
 
-            val stubs = WasmImportStubGenerator.generateStubs(wasmBytes)
+            val stubs = WasmImportStubGenerator.generateStubs(wasmBuffer)
                 .filter { it.moduleName !in resolvedCoreModuleNames }
             for (stub in stubs) {
                 val stubSource = Source.newBuilder("wasm", org.graalvm.polyglot.io.ByteSequence.create(stub.wasmBytes), stub.moduleName)
@@ -435,7 +430,7 @@ class GraalWasmProcessHandler(
             if (targetExport != null) {
                 val func = exports.getMember(targetExport)
                 if (func != null && func.canExecute()) {
-                    val typedArgs = convertArgsToWasmTypes(wasmBytes, targetExport, programArgs)
+                    val typedArgs = convertArgsToWasmTypes(wasmBuffer, targetExport, programArgs)
                     val result = func.execute(*typedArgs.toTypedArray())
                     if (result != null && !result.isNull) {
                         notifyTextAvailable(result.toString() + "\n", ProcessOutputType.STDOUT)
@@ -473,13 +468,13 @@ class GraalWasmProcessHandler(
 }
 
 private fun convertArgsToWasmTypes(
-    wasmBytes: ByteArray,
+    wasmBuffer: CommonByteBuffer,
     exportName: String,
     args: List<String>,
 ): List<Any> {
     if (args.isEmpty()) return emptyList()
 
-    val provider = WasmBinaryProvider(wasmBytes.toCommonByteBuffer())
+    val provider = WasmBinaryProvider(wasmBuffer.duplicate())
     val export = provider.exports
         .filterIsInstance<WasmFunctionExportRecordEntry>()
         .firstOrNull { it.name == exportName }
