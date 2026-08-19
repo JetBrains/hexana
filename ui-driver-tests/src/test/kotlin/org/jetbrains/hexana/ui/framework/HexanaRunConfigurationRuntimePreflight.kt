@@ -10,6 +10,8 @@ import java.util.zip.ZipInputStream
 
 internal object HexanaRunConfigurationRuntimePreflight {
     private const val WASMTIME_VERSION = "v44.0.0"
+    private const val WHATS_NEW_WASMTIME_ENV = "HEXANA_WASMTIME_PATH"
+    private const val WHATS_NEW_LLDB_ENV = "HEXANA_WASM_LLDB_PATH"
 
     private val wasmtimePath by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         resolveWasmtimePath()?.also { logOutput("Wasmtime already available at: $it") } ?: downloadWasmtime()
@@ -22,6 +24,34 @@ internal object HexanaRunConfigurationRuntimePreflight {
 
     fun ensureWasmtime(): String = validateRuntimePath("Wasmtime", wasmtimePath)
     fun ensureNodeJs(): String = validateRuntimePath("Node.js", nodePath)
+
+    fun ensureWasmtimeForWhatsNew018Capture(): String {
+        val path = requiredCaptureExecutable(WHATS_NEW_WASMTIME_ENV, "Wasmtime")
+        val output = runCapturePreflight(path, "--version")
+        val major = Regex("\\bwasmtime\\s+(\\d+)", RegexOption.IGNORE_CASE)
+            .find(output)?.groupValues?.get(1)?.toIntOrNull()
+            ?: error("Wasmtime capture preflight failed: could not parse version from '$output'")
+        require(major >= 44) {
+            "Wasmtime capture preflight failed: version 44+ is required, got '$output'"
+        }
+        logOutput("What's New 0.18 Wasmtime preflight: $output ($path)")
+        return path
+    }
+
+    fun ensureWasmLldbForWhatsNew018Capture(): String {
+        val path = requiredCaptureExecutable(WHATS_NEW_LLDB_ENV, "LLDB")
+        val version = runCapturePreflight(path, "--version")
+        val plugins = runCapturePreflight(path, "-b", "-o", "plugin list", "-o", "quit")
+        val hasWasmProcessPlugin = Regex(
+            "(?ms)^process\\s*$.*?^\\s*\\[\\+\\]\\s+wasm\\s+.*WebAssembly debugging plug-in\\.\\s*$",
+        ).containsMatchIn(plugins)
+        require(hasWasmProcessPlugin) {
+            "LLDB capture preflight failed: 'plugin list' does not contain the process wasm plugin; " +
+                "version='$version', path=$path"
+        }
+        logOutput("What's New 0.18 LLDB preflight: $version with process wasm ($path)")
+        return path
+    }
 
     private fun resolveNodePath(): String? = lookupExecutable(
         executableName = "node",
@@ -62,6 +92,28 @@ internal object HexanaRunConfigurationRuntimePreflight {
             "$runtimeName preflight failed: resolved executable does not exist: $path"
         }
         return path
+    }
+
+    private fun requiredCaptureExecutable(environmentVariable: String, runtimeName: String): String {
+        val path = System.getenv(environmentVariable)?.trim()?.ifBlank { null }
+            ?: error("$runtimeName capture preflight failed: $environmentVariable must point to the explicit executable")
+        return validateRuntimePath(runtimeName, Path.of(path).toAbsolutePath().normalize().toString())
+    }
+
+    private fun runCapturePreflight(executable: String, vararg arguments: String): String {
+        val process = ProcessBuilder(listOf(executable) + arguments)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().readText().trim()
+        val completed = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)
+        if (!completed) {
+            process.destroyForcibly()
+            error("Capture preflight timed out: $executable ${arguments.joinToString(" ")}")
+        }
+        require(process.exitValue() == 0) {
+            "Capture preflight failed (${process.exitValue()}): $executable ${arguments.joinToString(" ")}\n$output"
+        }
+        return output
     }
 
     private fun downloadWasmtime(): String {

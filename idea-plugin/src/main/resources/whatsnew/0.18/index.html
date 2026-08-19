@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What's New in Hexana 0.18</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+  <section class="hero">
+    <p class="eyebrow">Hexana update</p>
+    <h1>What's New in Hexana 0.18</h1>
+    <p class="lead">Hexana 0.18 focuses on WASM debugger, Debugger setup, and Component Model while refining binary inspection inside JetBrains IDEs.</p>
+    <div class="actions">
+      <a class="button primary" href="https://plugins.jetbrains.com/plugin/29090-hexana--webassembly--binary-inspector">Open release notes</a>
+      <a class="button" href="https://github.com/JetBrains/hexana">Open GitHub</a>
+    </div>
+  </section>
+
+  <section class="feature">
+    <div>
+      <p class="eyebrow">WASM debugger</p>
+      <h2>Debug Wasmtime one WASM instruction at a time</h2>
+      <p>Wasmtime 44+ sessions now use the guest gdbstub for exact instruction stepping, live operand values, guest frames, and concrete source variables.</p>
+        <input class="more-toggle" type="checkbox" id="wasmtime-live-debugger-more">
+        <ul class="note-list">
+          <li>Per-instruction stepping in the <strong>Wasm</strong> debugger tab under wasmtime. <span class="more-continuation">While the tab is selected, Step Over and Step Into advance exactly one wasm instruction, including instructions the old native path could never stop on (<code>local.get</code>, <code>i32.const</code>).</span></li>
+          <li>The <strong>Wasm</strong> tab&#x27;s operand stack shows live values under wasmtime. <span class="more-continuation">Each slot is read from the runtime at every stop (wasmtime&#x27;s gdbstub serves the operand stack over the debug protocol.</span></li>
+          <li>Exact current-instruction highlight in the <strong>Wasm</strong> tab. <span class="more-continuation">Instructions without immediates (<code>i32.add</code>, <code>end</code>, <code>drop</code>, ...) have no recorded offsets in the parser model; their rows now get offsets deduced from neighboring instructions.</span></li>
+          <li>Wasmtime debugging switched to wasmtime&#x27;s built-in gdbstub guest debugger: the session starts <code>wasmtime run -g &lt;port&gt;</code> and attaches LLDB over the gdb-remote protocol (<code>process connect --plugin wasm</code>). <span class="more-continuation">LLDB reads DWARF directly from the wasm module, so the JIT loader, the native-address-to-wasm-offset translation and the trap workarounds of the old native path are gone.</span></li>
+          <li>Evaluating an expression in a wasmtime debug session no longer kills the LLDB process. <span class="more-continuation">LLDB&#x27;s expression compiler cannot generate code for wasm targets and aborts on any expression that parses (an upstream LLVM defect, present in wasi-sdk and stock LLVM builds.</span></li>
+        </ul>
+        <label class="show-more-link" for="wasmtime-live-debugger-more">Show more</label>
+        <label class="show-less-link" for="wasmtime-live-debugger-more">Show less</label>
+    </div>
+      <img src="screenshots/wasmtime-live-debugger.png" alt="Debug Wasmtime one WASM instruction at a time screenshot">
+  </section>
+  <section class="feature reversed">
+    <div>
+      <p class="eyebrow">Debugger setup</p>
+      <h2>Install and select wasi-sdk from the IDE</h2>
+      <p>Download managed wasi-sdk versions side by side, then explicitly use the selected SDK&#x27;s LLDB for WebAssembly debugging.</p>
+        <input class="more-toggle" type="checkbox" id="managed-wasi-sdk-more">
+        <ul class="note-list">
+          <li>Managed wasi-sdk installation. <span class="more-continuation">Wasm debugging needs an LLDB built with the wasm process plugin, and the wasi-sdk distribution ships one.</span></li>
+        </ul>
+        <label class="show-more-link" for="managed-wasi-sdk-more">Show more</label>
+        <label class="show-less-link" for="managed-wasi-sdk-more">Show less</label>
+    </div>
+      <img src="screenshots/managed-wasi-sdk.png" alt="Install and select wasi-sdk from the IDE screenshot">
+  </section>
+  <section class="feature">
+    <div>
+      <p class="eyebrow">Component Model</p>
+      <h2>Navigate Component Model WAT with confidence</h2>
+      <p>Component Model declarations now parse and resolve for navigation, Find Usages works in embedded WAT, and annotation sections render as metadata.</p>
+        <input class="more-toggle" type="checkbox" id="wat-component-authoring-more">
+        <ul class="note-list">
+          <li>Improved support for Component Model in WAT files: parsing, reference resolution, navigation.</li>
+          <li><strong>Find Usages</strong> for WAT declarations now works in the embedded WAT editor.</li>
+          <li>Custom WAT annotation sections such as <code>(@producers (processed-by &quot;wit-component&quot; &quot;0.227.1&quot;) (language &quot;Rust&quot; &quot;&quot;))</code> no longer render as errors. <span class="more-continuation">Annotation contents are free-form by design, so an unrecognised word inside one is now annotation text rather than a bad character.</span></li>
+        </ul>
+        <label class="show-more-link" for="wat-component-authoring-more">Show more</label>
+        <label class="show-less-link" for="wat-component-authoring-more">Show less</label>
+    </div>
+      <img src="screenshots/wat-component-authoring.png" alt="Navigate Component Model WAT with confidence screenshot">
+  </section>
+
+  <section class="notes">
+    <h2>Also in 0.18</h2>
+    <ul class="improvements">
+      <li>
+        <strong>Bring the Wasm debugger tab to WAMR</strong>
+        <span>WAMR sessions gain current-instruction highlighting, instruction stepping, and live values where the runtime exposes locals or globals.</span>
+      </li>
+    </ul>
+  </section>
+
+</main>
+</body>
+</html>

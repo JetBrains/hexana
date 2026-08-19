@@ -14,6 +14,9 @@ import org.jetbrains.hexana.run.WasmRunConfiguration
 import org.jetbrains.hexana.run.WasmRunMode
 import org.jetbrains.hexana.run.WasmRuntimeSettings
 import org.jetbrains.hexana.run.runWasmConfiguration
+import org.jetbrains.hexana.wasisdk.WasiSdkStorage
+import org.jetbrains.hexana.shared.WasiSdkReleases
+import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -27,6 +30,37 @@ object HexanaRunConfigurationUiTestProbe {
 
     @JvmStatic
     fun ping(): String = "pong"
+
+    @JvmStatic
+    fun seedWasiSdkForWhatsNewCapture(version: Int): List<String> {
+        val storage = WasiSdkStorage.getInstance()
+        val root = storage.root.toAbsolutePath().normalize()
+        Files.createDirectories(root)
+        Files.list(root).use { entries ->
+            require(entries.findAny().isEmpty) {
+                "Refusing to seed non-empty wasi-sdk capture root: $root"
+            }
+        }
+        Files.writeString(root.resolve(WASI_SDK_CAPTURE_MARKER), version.toString())
+        val lldb = storage.installDir(version).resolve(WasiSdkReleases.lldbRelativePath(storage.currentOs()))
+        Files.createDirectories(lldb.parent)
+        Files.writeString(lldb, "#!/bin/sh\n")
+        lldb.toFile().setExecutable(true)
+        storage.recordInstalled(version)
+        WasmRuntimeSettings.getInstance().lldbPathInUi = ""
+        return wasiSdkCaptureState(storage, version)
+    }
+
+    @JvmStatic
+    fun cleanupWasiSdkForWhatsNewCapture(version: Int) {
+        val storage = WasiSdkStorage.getInstance()
+        val root = storage.root.toAbsolutePath().normalize()
+        val marker = root.resolve(WASI_SDK_CAPTURE_MARKER)
+        require(Files.readString(marker) == version.toString()) {
+            "Refusing to clean wasi-sdk root without the expected capture marker: $root"
+        }
+        root.toFile().deleteRecursively()
+    }
 
     @JvmStatic
     fun launchWasmtimeRunConfiguration(
@@ -276,6 +310,16 @@ object HexanaRunConfigurationUiTestProbe {
             addAll(entries)
         }
 
+    private fun wasiSdkCaptureState(storage: WasiSdkStorage, version: Int): List<String> = listOf(
+        "schema=hexana-wasi-sdk-capture-state",
+        "version=1",
+        "sdkVersion=$version",
+        "installedVersions=${storage.installedVersions().joinToString(",")}",
+        "activeVersion=${storage.activeVersion()?.toString().orEmpty()}",
+        "lldbPathSetting=${WasmRuntimeSettings.getInstance().lldbPathInUi.orEmpty()}",
+        "storageRoot=${storage.root.toAbsolutePath().normalize()}",
+    )
+
     private class DebugSessionObserver(
         private val project: Project,
         private val wasmFilePath: String,
@@ -311,6 +355,8 @@ object HexanaRunConfigurationUiTestProbe {
             connection.disconnect()
         }
     }
+
+    private const val WASI_SDK_CAPTURE_MARKER = ".hexana-whats-new-018-capture"
 
     private data class DebugProcessStartState(
         val matchesExpectedLaunch: Boolean,

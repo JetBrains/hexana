@@ -387,7 +387,7 @@ object WasmRunConfigTestHelper {
             ProgramRunnerUtil.executeConfiguration(settings, DefaultDebugExecutor.getDebugExecutorInstance())
         }
 
-        val timeoutMs = if (SystemInfo.isWindows) 200_000 else 60_000
+        val timeoutMs = if (SystemInfo.isWindows) 200_000L else 60_000L
         val deadlineMs = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadlineMs) {
             val session = XDebuggerManager.getInstance(project).currentSession
@@ -395,6 +395,107 @@ object WasmRunConfigTestHelper {
             Thread.sleep(500)
         }
         error("Timed out waiting for Node.js CDP breakpoint after ${timeoutMs}ms")
+    }
+
+    @JvmStatic
+    fun startWasmtimeDebugWithBreakpointForCapture(
+        project: Project,
+        wasmFileName: String,
+        sourceFileName: String,
+        breakpointLine: Int,
+        wasmtimeOptions: String,
+        exportName: String,
+        programArgs: String,
+        wasmtimePath: String,
+        lldbPath: String,
+    ) {
+        removeAllBreakpoints(project)
+
+        val basePath = project.basePath ?: error("project basePath is null")
+        val sourceFilePath = "$basePath/$sourceFileName"
+        val sourceVirtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(sourceFilePath)
+            ?: error("source file not found: $sourceFilePath")
+        val breakpointType = XDebuggerUtil.getInstance()
+            .findBreakpointType(WasmLineBreakpointType::class.java)
+        ApplicationManager.getApplication().invokeAndWait {
+            ApplicationManager.getApplication().runWriteAction {
+                XDebuggerManager.getInstance(project).breakpointManager.addLineBreakpoint(
+                    breakpointType,
+                    sourceVirtualFile.url,
+                    breakpointLine - 1,
+                    null,
+                )
+            }
+        }
+
+        val wasmFilePath = "$basePath/$wasmFileName"
+        val wasmVirtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(wasmFilePath)
+            ?: error("wasm file not found: $wasmFilePath")
+        WasmRuntimeSettings.getInstance().lldbPathInUi = lldbPath
+        val settings = createAndSelectDebugConfiguration(
+            project = project,
+            wasmVirtualFile = wasmVirtualFile,
+            engine = WasmEngine.WASMTIME,
+            dependencies = resolveDependencies(project, wasmVirtualFile),
+        ) {
+            this.wasmtimeOptions = wasmtimeOptions
+            this.exportName = exportName
+            this.programArguments = programArgs
+            this.wasmtimePath = wasmtimePath
+        }
+
+        onEdt {
+            ProgramRunnerUtil.executeConfiguration(settings, DefaultDebugExecutor.getDebugExecutorInstance())
+        }
+
+        val timeoutMs = if (SystemInfo.isWindows) 200_000L else 60_000L
+        val deadlineMs = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadlineMs) {
+            val session = XDebuggerManager.getInstance(project).currentSession
+            if (session?.isSuspended == true && session.debugProcess is WasmtimeGdbDebugProcess) return
+            Thread.sleep(500)
+        }
+        error(
+            debugTimeoutReport(
+                project = project,
+                sourceFilePath = sourceFilePath,
+                breakpointLine = breakpointLine,
+                wasmFilePath = wasmVirtualFile.path,
+                settings = settings,
+                timeoutMs = timeoutMs,
+            ),
+        )
+    }
+
+    @JvmStatic
+    fun wasmtimeDebuggerCaptureState(project: Project): List<String> = onEdt {
+        val session = XDebuggerManager.getInstance(project).currentSession
+            ?: error("No active debugger session for Wasmtime What's New capture")
+        val process = session.debugProcess as? WasmtimeGdbDebugProcess
+            ?: error("Expected WasmtimeGdbDebugProcess, got ${session.debugProcess.javaClass.name}")
+        val state = process.whatsNewCaptureState()
+        buildList {
+            add("schema=hexana-wasmtime-debugger-capture-state")
+            add("version=1")
+            add("sessionSuspended=${state.sessionSuspended}")
+            add("engine=${state.engine}")
+            add("wasmTabAvailable=${state.wasmTabAvailable}")
+            add("wasmTabSelected=${state.wasmTabSelected}")
+            add("disassemblyRowCount=${state.disassemblyRowCount}")
+            add("selectedDisassemblyRow=${state.selectedDisassemblyRow}")
+            add("selectedOffset=${state.selectedOffset?.toString().orEmpty()}")
+            add("selectedInstruction=${state.selectedInstruction.orEmpty()}")
+            state.operandRows.forEach { row ->
+                add("operand=${row.index}|${row.type}|${row.value}")
+            }
+        }
+    }
+
+    @JvmStatic
+    fun terminateDebuggerForCapture(project: Project) {
+        onEdt {
+            XDebuggerManager.getInstance(project).currentSession?.stop()
+        }
     }
 
     @JvmStatic

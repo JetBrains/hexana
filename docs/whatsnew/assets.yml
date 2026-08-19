@@ -553,6 +553,69 @@
       ],
       "doc_candidates": [],
       "image_candidates": []
+    },
+    "wasmtime-live-debugger": {
+      "release": "0.18",
+      "eyebrow": "WASM debugger",
+      "title": "Debug Wasmtime one WASM instruction at a time",
+      "summary": "Wasmtime 44+ sessions now use the guest gdbstub for exact instruction stepping, live operand values, guest frames, and concrete source variables.",
+      "recipe": "wasmtime-gdbstub-live-instruction-debugger",
+      "keywords": [
+        "Per-instruction stepping",
+        "operand stack shows live values under wasmtime",
+        "Exact current-instruction highlight",
+        "built-in gdbstub guest debugger",
+        "Evaluating an expression in a wasmtime debug session"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.18/wasmtime-live-debugger.png"
+      ]
+    },
+    "managed-wasi-sdk": {
+      "release": "0.18",
+      "eyebrow": "Debugger setup",
+      "title": "Install and select wasi-sdk from the IDE",
+      "summary": "Download managed wasi-sdk versions side by side, then explicitly use the selected SDK's LLDB for WebAssembly debugging.",
+      "recipe": "managed-wasi-sdk-settings-selector",
+      "keywords": [
+        "Managed wasi-sdk installation"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.18/managed-wasi-sdk.png"
+      ]
+    },
+    "wat-component-authoring": {
+      "release": "0.18",
+      "eyebrow": "Component Model",
+      "title": "Navigate Component Model WAT with confidence",
+      "summary": "Component Model declarations now parse and resolve for navigation, Find Usages works in embedded WAT, and annotation sections render as metadata.",
+      "recipe": "component-model-wat-find-usages",
+      "keywords": [
+        "Improved support for Component Model in WAT files",
+        "Find Usages for WAT declarations",
+        "Custom WAT annotation sections"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.18/wat-component-find-usages.png"
+      ]
+    },
+    "wamr-wasm-debugger": {
+      "release": "0.18",
+      "presentation": "text",
+      "eyebrow": "WASM debugger",
+      "title": "Bring the Wasm debugger tab to WAMR",
+      "summary": "WAMR sessions gain current-instruction highlighting, instruction stepping, and live values where the runtime exposes locals or globals.",
+      "recipe": "wamr-wasm-debugger-tab",
+      "keywords": [
+        "Wasm debugger tab now also appears when debugging under WAMR",
+        "WAMR's gdbstub reports wasm byte offsets directly",
+        "WAMR_BUILD_DEBUG_INTERP=1"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
     }
   }
 }

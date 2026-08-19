@@ -48,7 +48,7 @@ Each release page contains:
 - Screenshot sections for every big visible feature. Prefer real UI-driver captures; use existing repository screenshots only when the release capture policy explicitly allows fallback assets. When fallback is disabled, missing captures make the page incomplete rather than text-only complete.
 - A short improvements section for fixed, changed, or lower-visual items that do not need a full card.
 
-For version 0.12 the expected lead clusters are Component Model WebAssembly workflows and static-library archive inspection. Claims already shipped in 0.11.1 should not be presented as new 0.12 highlights; keep lower-visual 0.12 additions in a compact improvements section.
+Release-specific lead clusters and their presentation mode belong in `assets.yml`. Do not repeat claims from an earlier release as new highlights; keep lower-visual additions in the compact improvements section.
 
 ## Visual Direction
 

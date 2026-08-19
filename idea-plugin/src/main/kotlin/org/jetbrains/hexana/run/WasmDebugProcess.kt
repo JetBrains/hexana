@@ -29,6 +29,7 @@ import com.intellij.xdebugger.evaluation.XDebuggerEditorsProvider
 import com.intellij.xdebugger.frame.XSuspendContext
 import com.intellij.xdebugger.impl.XDebuggerUtilImpl
 import com.intellij.xdebugger.ui.XDebugTabLayouter
+import org.jetbrains.annotations.TestOnly
 import org.jetbrains.hexana.shared.JIT_REGISTER_FUNCTION_NAME
 import org.jetbrains.hexana.shared.WasmStackShapeAnalyzer
 import org.jetbrains.hexana.shared.WasmStackShapeResult
@@ -193,6 +194,32 @@ open class WasmDebugProcess(
     private val wasmDisassemblyModel = WasmDisassemblyTableModel()
     private val wasmDisassemblyPanel = WasmDisassemblyPanel(wasmDisassemblyModel)
     private val wasmStackModel = WasmStackTableModel()
+
+    @TestOnly
+    internal fun whatsNewCaptureState(): WasmDebuggerCaptureState {
+        val selectedRow = wasmDisassemblyPanel.table.selectedRow
+        val selectedOffset = selectedRow.takeIf { it >= 0 }?.let(wasmDisassemblyModel::offsetAt)
+        val selectedInstruction = selectedRow.takeIf { it >= 0 }
+            ?.let { wasmDisassemblyModel.getValueAt(it, 1).toString() }
+        val operandRows = (0 until wasmStackModel.rowCount).map { row ->
+            WasmDebuggerCaptureState.OperandRow(
+                index = wasmStackModel.getValueAt(row, 0).toString().toInt(),
+                type = wasmStackModel.getValueAt(row, 1).toString(),
+                value = wasmStackModel.getValueAt(row, 2).toString(),
+            )
+        }
+        return WasmDebuggerCaptureState(
+            sessionSuspended = session.isSuspended,
+            engine = engine.name,
+            wasmTabAvailable = wasmTabAvailable,
+            wasmTabSelected = disassemblyTabSelected,
+            disassemblyRowCount = wasmDisassemblyModel.rowCount(),
+            selectedDisassemblyRow = selectedRow,
+            selectedOffset = selectedOffset,
+            selectedInstruction = selectedInstruction,
+            operandRows = operandRows,
+        )
+    }
 
     /**
      * Whether this session shows the "Wasm" disassembly tab. Wasmtime
@@ -1716,6 +1743,21 @@ open class WasmDebugProcess(
         private const val DEBUG_TAB_MOUNT_POLL_INTERVAL_MS = 50L
         private const val DEBUG_TAB_MOUNT_MAX_POLLS = 100
     }
+}
+
+@TestOnly
+internal data class WasmDebuggerCaptureState(
+    val sessionSuspended: Boolean,
+    val engine: String,
+    val wasmTabAvailable: Boolean,
+    val wasmTabSelected: Boolean,
+    val disassemblyRowCount: Int,
+    val selectedDisassemblyRow: Int,
+    val selectedOffset: Int?,
+    val selectedInstruction: String?,
+    val operandRows: List<OperandRow>,
+) {
+    data class OperandRow(val index: Int, val type: String, val value: String)
 }
 
 private class WasmDebuggerEditorsProvider : XDebuggerEditorsProvider() {

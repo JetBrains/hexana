@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.ui.framework
 
 import com.intellij.driver.client.Driver
+import com.intellij.driver.sdk.invokeAction
 import kotlin.time.Duration.Companion.minutes
 
 internal fun HexanaIde.runWasm(
@@ -261,6 +262,37 @@ internal class HexanaWasmRunDsl internal constructor(
             exportName,
             programArgs,
         )
+    }
+
+    fun startWasmtimeDebugWithBreakpointForCapture(
+        wasmFileName: String,
+        sourceFileName: String,
+        breakpointLine: Int,
+        wasmtimeOptions: String = "",
+        exportName: String = "",
+        programArgs: String = "",
+    ) {
+        driver.startWasmtimeDebugWithBreakpointForCapture(
+            wasmFileName = wasmFileName,
+            sourceFileName = sourceFileName,
+            breakpointLine = breakpointLine,
+            wasmtimeOptions = wasmtimeOptions,
+            exportName = exportName,
+            programArgs = programArgs,
+            wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtimeForWhatsNew018Capture(),
+            lldbPath = HexanaRunConfigurationRuntimePreflight.ensureWasmLldbForWhatsNew018Capture(),
+        )
+    }
+
+    fun wasmtimeDebuggerCaptureState(): HexanaWasmtimeDebuggerCaptureState =
+        driver.wasmtimeDebuggerCaptureState()
+
+    fun stepIntoInstructionForCapture() {
+        driver.invokeAction("StepInto")
+    }
+
+    fun terminateDebuggerForCapture() {
+        driver.terminateDebuggerForCapture()
     }
 
     fun cdpDebuggerCaptureState(): HexanaCdpDebuggerCaptureState = driver.cdpDebuggerCaptureState()

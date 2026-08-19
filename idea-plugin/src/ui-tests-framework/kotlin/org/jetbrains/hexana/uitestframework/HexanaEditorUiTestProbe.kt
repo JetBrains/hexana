@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.uitestframework
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.editor.ScrollType
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
@@ -9,6 +11,10 @@ import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.ToolWindowId
 import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.SyntaxTraverser
+import com.intellij.psi.search.searches.ReferencesSearch
+import com.intellij.usages.UsageViewManager
 import org.jetbrains.hexana.HexanaComponentDiffVirtualFile
 import org.jetbrains.hexana.HexanaFileEditor
 import org.jetbrains.hexana.HexanaNativeDiffVirtualFile
@@ -30,6 +36,9 @@ import org.jetbrains.hexana.ui.ScriptTabSettings
 import org.jetbrains.hexana.ui.WasmFunctionNavTarget
 import org.jetbrains.hexana.ui.panel.enrichComponentTabs
 import org.jetbrains.hexana.ui.panel.WatConversionState
+import org.jetbrains.hexana.wat.LightWatFile
+import org.jetbrains.hexana.wat.WatUsageTarget
+import org.jetbrains.hexana.wat.psi.WatComponentElement
 import java.nio.file.Path
 
 private const val WIRE_VERSION = "1"
@@ -37,6 +46,7 @@ private const val SNAPSHOT_SCHEMA = "hexana-editor-snapshot"
 private const val SEARCH_STATE_SCHEMA = "hexana-editor-search-state"
 private const val WAT_STATE_SCHEMA = "hexana-editor-wat-state"
 private const val NATIVE_DIFF_STATE_SCHEMA = "hexana-native-diff-state"
+private const val WAT_FIND_USAGES_CAPTURE_STATE_SCHEMA = "hexana-wat-find-usages-capture-state"
 private const val PROJECT_RELATIVE_FILE_IDENTIFIER_PREFIX = "project-relative:"
 private const val ABSOLUTE_FILE_IDENTIFIER_PREFIX = "absolute:"
 
@@ -355,6 +365,63 @@ object HexanaEditorUiTestProbe {
     @JvmStatic
     fun watState(fileIdentifier: String): List<String> =
         runOnEdt { requireHexanaEditor(fileIdentifier).watState() }
+
+    @JvmStatic
+    fun showFindUsagesForComponentDeclaration(fileIdentifier: String): List<String> = runOnEdt {
+        val hexanaEditor = requireHexanaEditor(fileIdentifier)
+        val watEditor = hexanaEditor.stateHolder.editor
+            ?: error("The embedded WAT editor is not ready for '$fileIdentifier'")
+        val watFile = FileDocumentManager.getInstance().getFile(watEditor.document) as? LightWatFile
+            ?: error("Expected a LightWatFile in the embedded WAT editor for '$fileIdentifier'")
+        val psiFile = PsiDocumentManager.getInstance(hexanaEditor.myProject).getPsiFile(watEditor.document)
+            ?: error("Could not resolve PSI for embedded WAT file ${watFile.name}")
+        val candidate = ApplicationManager.getApplication().runReadAction<WatComponentElement?> {
+            SyntaxTraverser.psiTraverser(psiFile)
+                .filter(WatComponentElement::class.java)
+                .filter { !it.name.isNullOrBlank() }
+                .map { component ->
+                    component to ReferencesSearch.search(component, component.useScope).findAll().size
+                }
+                .filter { it.second > 0 }
+                .maxByOrNull { it.second }
+                ?.first
+        } ?: error("No referenced named component declaration was found in ${watFile.name}")
+        val expectedUsages = ApplicationManager.getApplication().runReadAction<Int> {
+            ReferencesSearch.search(candidate, candidate.useScope).findAll().size
+        }
+        val declarationOffset = candidate.nameIdentifier?.textOffset ?: candidate.textOffset
+        watEditor.caretModel.moveToOffset(declarationOffset)
+        watEditor.scrollingModel.scrollToCaret(ScrollType.CENTER)
+        watEditor.contentComponent.requestFocusInWindow()
+        WatUsageTarget(candidate).findUsages()
+
+        payload(
+            "hexana-wat-find-usages-invocation",
+            listOf(
+                "fileName=${watFile.name}",
+                "targetName=${candidate.name.orEmpty()}",
+                "declarationOffset=$declarationOffset",
+                "expectedUsages=$expectedUsages",
+            ),
+        )
+    }
+
+    @JvmStatic
+    fun watFindUsagesCaptureState(): List<String> = runOnEdt {
+        val project = singleOpenProject()
+        val usageView = UsageViewManager.getInstance(project).selectedUsageView
+        val findToolWindow = ToolWindowManager.getInstance(project).getToolWindow(ToolWindowId.FIND)
+        payload(
+            WAT_FIND_USAGES_CAPTURE_STATE_SCHEMA,
+            listOf(
+                "toolWindowVisible=${findToolWindow?.isVisible == true}",
+                "searchInProgress=${usageView?.isSearchInProgress ?: true}",
+                "usageCount=${usageView?.usagesCount ?: 0}",
+                "tabText=${usageView?.presentation?.tabText.orEmpty()}",
+                "searchString=${usageView?.presentation?.searchString.orEmpty()}",
+            ),
+        )
+    }
 
     private fun HexanaFileEditor.snapshot(): List<String> {
         val provider = binaryProvider

@@ -1,0 +1,95 @@
+{
+  "clusters": [
+    {
+      "asset": "screenshots/wasmtime-live-debugger.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Per-instruction stepping in the **Wasm** debugger tab under wasmtime. While the tab is selected, Step Over and Step Into advance exactly one wasm instruction, including instructions the old native path could never stop on (`local.get`, `i32.const`); with any other tab selected, stepping stays at source-line granularity. This matches the behavior the tab already had under Node.js."
+        },
+        {
+          "section": "Added",
+          "text": "The **Wasm** tab's operand stack shows live values under wasmtime. Each slot is read from the runtime at every stop (wasmtime's gdbstub serves the operand stack over the debug protocol; wasmtime 44+) and rendered next to its statically reconstructed origin, e.g. `7 (i32.add @0x7c)`. The 0.17 release could only show the origins, because the native debug path had no access to the values Cranelift compiles away. On runtimes that do not answer, the pane keeps the origin-only display."
+        },
+        {
+          "section": "Added",
+          "text": "Exact current-instruction highlight in the **Wasm** tab. Instructions without immediates (`i32.add`, `end`, `drop`, ...) have no recorded offsets in the parser model; their rows now get offsets deduced from neighboring instructions, and the function's closing `end`, a legitimate pause target with the return values on the stack, is rendered as a row. Previously the highlight snapped to the nearest earlier offset-bearing row, which per-instruction stepping made visibly wrong."
+        },
+        {
+          "section": "Changed",
+          "text": "Wasmtime debugging switched to wasmtime's built-in gdbstub guest debugger: the session starts `wasmtime run -g <port>` and attaches LLDB over the gdb-remote protocol (`process connect --plugin wasm`). LLDB reads DWARF directly from the wasm module, so the JIT loader, the native-address-to-wasm-offset translation and the trap workarounds of the old native path are gone. The practical wins: arguments and locals show concrete values (Cranelift compiled them away before; the Variables view could only show storage-location hints), stepping is per wasm instruction, and the stack shows guest frames only. Requires wasmtime 44 or newer (older versions fail early with an update hint) and an LLDB with the wasm process plugin (wasi-sdk ships one, see the managed download above; recent LLVM builds include it as well)."
+        },
+        {
+          "section": "Fixed",
+          "text": "Evaluating an expression in a wasmtime debug session no longer kills the LLDB process. LLDB's expression compiler cannot generate code for wasm targets and aborts on any expression that parses (an upstream LLVM defect, present in wasi-sdk and stock LLVM builds alike). Hexana now evaluates variable paths (`x`, `s.field`, `p->x`, `arr[0]`) through `frame variable`, which is unaffected, and rejects other expressions with an explanatory message instead of forwarding them."
+        }
+      ],
+      "eyebrow": "WASM debugger",
+      "id": "wasmtime-live-debugger",
+      "recipe": "wasmtime-gdbstub-live-instruction-debugger",
+      "summary": "Wasmtime 44+ sessions now use the guest gdbstub for exact instruction stepping, live operand values, guest frames, and concrete source variables.",
+      "title": "Debug Wasmtime one WASM instruction at a time"
+    },
+    {
+      "asset": "screenshots/managed-wasi-sdk.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Managed wasi-sdk installation. Wasm debugging needs an LLDB built with the wasm process plugin, and the wasi-sdk distribution ships one. The WebAssembly settings page now has a JDK-style selector that lists installed wasi-sdk versions and ends with a \"Download wasi-sdk...\" action opening a version chooser fed from the GitHub releases (download sizes shown, sha256 verified against the release digest, cancellable, versions installed side by side). The SDK lands under the IDE's common data directory, so one download serves every project and every JetBrains IDE on the machine. The LLDB selection mechanism is unchanged: the managed SDK takes effect only through an explicit \"Use as LLDB path\" action (in the settings row and in the install notification) that writes the ordinary LLDB path setting. When a debug session cannot find LLDB, a notification offers the download; when LLDB is found but no wasi-sdk is installed and no explicit LLDB path is set, a one-time notification suggests it."
+        }
+      ],
+      "eyebrow": "Debugger setup",
+      "id": "managed-wasi-sdk",
+      "recipe": "managed-wasi-sdk-settings-selector",
+      "summary": "Download managed wasi-sdk versions side by side, then explicitly use the selected SDK's LLDB for WebAssembly debugging.",
+      "title": "Install and select wasi-sdk from the IDE"
+    },
+    {
+      "asset": "screenshots/wat-component-authoring.png",
+      "entries": [
+        {
+          "section": "Changed",
+          "text": "Improved support for Component Model in WAT files: parsing, reference resolution, navigation"
+        },
+        {
+          "section": "Changed",
+          "text": "**Find Usages** for WAT declarations now works in the embedded WAT editor"
+        },
+        {
+          "section": "Changed",
+          "text": "Custom WAT annotation sections such as `(@producers (processed-by \"wit-component\" \"0.227.1\") (language \"Rust\" \"\"))` no longer render as errors. Annotation contents are free-form by design, so an unrecognised word inside one is now annotation text rather than a bad character, and the whole section reads in the metadata colour. Unrecognised words outside an annotation are still flagged."
+        }
+      ],
+      "eyebrow": "Component Model",
+      "id": "wat-component-authoring",
+      "recipe": "component-model-wat-find-usages",
+      "summary": "Component Model declarations now parse and resolve for navigation, Find Usages works in embedded WAT, and annotation sections render as metadata.",
+      "title": "Navigate Component Model WAT with confidence"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "The **Wasm** debugger tab now also appears when debugging under WAMR. WAMR's gdbstub reports wasm byte offsets directly, so the current-instruction highlight and per-instruction stepping (Step Over and Step Into while the tab is selected) work the same way as under wasmtime's gdbstub. The operand stack shows live values for slots that mirror a local or a global, read over the debug protocol; WAMR's stub has no operand-stack accessor, so computed intermediates (arithmetic results, call returns) keep their statically reconstructed origin. Requires an iwasm built with `WAMR_BUILD_DEBUG_INTERP=1`: a stock iwasm (Homebrew, release tarballs) lacks the `-g` option, and the session fails early with rebuild instructions."
+        }
+      ],
+      "eyebrow": "WASM debugger",
+      "id": "wamr-wasm-debugger",
+      "recipe": "wamr-wasm-debugger-tab",
+      "summary": "WAMR sessions gain current-instruction highlighting, instruction stepping, and live values where the runtime exposes locals or globals.",
+      "title": "Bring the Wasm debugger tab to WAMR"
+    }
+  ],
+  "date": "2026-08-19",
+  "schema": 1,
+  "sources": {
+    "assets": "docs/whatsnew/assets.yml",
+    "assets_sha256": "20fa643f5541d50600b7bec2bf8b76b781aa8fc2b89c64ac8dccc615a890b681",
+    "changelog": "idea-plugin/CHANGELOG.md",
+    "changelog_sha256": "cf76b706214e728a61470a818734be2b16db36b5c2d29b02141137cb95791e00",
+    "design": "docs/whatsnew/DESIGN.md",
+    "design_sha256": "0ceecf26706245b8de840cb18c1907e734d4e265d304d80729b917451b390b99"
+  },
+  "version": "0.18"
+}

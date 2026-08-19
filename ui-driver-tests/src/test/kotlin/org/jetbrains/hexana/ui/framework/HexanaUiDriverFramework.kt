@@ -73,6 +73,14 @@ internal class HexanaIdeConfiguration internal constructor() {
         patchContext { context -> HexanaUiDriverTestSupport.configureShowWhatsNewOnNewVersion(context, enabled) }
     }
 
+    fun isolatedUserHomeForCapture(path: Path) {
+        patchContext { context ->
+            context.applyVMOptionsPatch {
+                addSystemProperty("user.home", path.toAbsolutePath().normalize().toString())
+            }
+        }
+    }
+
     internal fun applyToContext(context: IDETestContext): IDETestContext =
         contextPatches.fold(context) { patchedContext, patch -> patch(patchedContext) }
 }
@@ -184,6 +192,12 @@ internal class HexanaEditor internal constructor(
 
     fun watState(): HexanaEditorWatState =
         HexanaProbePayload.watState(probe.watState(fileIdentifier))
+
+    fun showFindUsagesForComponentDeclaration(): HexanaWatFindUsagesInvocation =
+        HexanaProbePayload.watFindUsagesInvocation(probe.showFindUsagesForComponentDeclaration(fileIdentifier))
+
+    fun watFindUsagesCaptureState(): HexanaWatFindUsagesCaptureState =
+        HexanaProbePayload.watFindUsagesCaptureState(probe.watFindUsagesCaptureState())
 
     fun componentDiffState(): HexanaComponentDiffState =
         HexanaProbePayload.componentDiffState(probe.componentDiffState(fileIdentifier))
@@ -418,6 +432,39 @@ internal data class HexanaCdpDebuggerCaptureState(
     val operandStackRowCount: Int,
 )
 
+internal data class HexanaWasmtimeDebuggerCaptureState(
+    val sessionSuspended: Boolean,
+    val engine: String,
+    val wasmTabAvailable: Boolean,
+    val wasmTabSelected: Boolean,
+    val disassemblyRowCount: Int,
+    val selectedDisassemblyRow: Int,
+    val selectedOffset: Int?,
+    val selectedInstruction: String?,
+    val operands: List<HexanaWasmOperandCaptureState>,
+)
+
+internal data class HexanaWasmOperandCaptureState(
+    val index: Int,
+    val type: String,
+    val value: String,
+)
+
+internal data class HexanaWatFindUsagesInvocation(
+    val fileName: String,
+    val targetName: String,
+    val declarationOffset: Int,
+    val expectedUsages: Int,
+)
+
+internal data class HexanaWatFindUsagesCaptureState(
+    val toolWindowVisible: Boolean,
+    val searchInProgress: Boolean,
+    val usageCount: Int,
+    val tabText: String,
+    val searchString: String,
+)
+
 internal data class HexanaArchiveMemberState(
     val index: Int,
     val name: String,
@@ -450,4 +497,6 @@ internal interface HexanaEditorUiTestProbeRef {
     fun editorSnapshot(fileName: String): List<String>
     fun searchState(fileName: String): List<String>
     fun watState(fileName: String): List<String>
+    fun showFindUsagesForComponentDeclaration(fileName: String): List<String>
+    fun watFindUsagesCaptureState(): List<String>
 }

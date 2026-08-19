@@ -57,6 +57,7 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         assertEquals("0.13", resolveWhatsNewResourceVersion("0.13"))
         assertEquals("0.15", resolveWhatsNewResourceVersion("0.15"))
         assertEquals("0.17", resolveWhatsNewResourceVersion("0.17"))
+        assertEquals("0.18", resolveWhatsNewResourceVersion("0.18"))
         assertNull(resolveWhatsNewResourceVersion("0.12.1"))
     }
 
@@ -186,6 +187,26 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         }
     }
 
+    fun testCreatesGeneratedBundledHtmlContentFor018() {
+        val content = HexanaWhatsNewContentService.createContent("0.18")
+        assertNotNull(content)
+        content!!
+
+        try {
+            assertEquals("0.18", content.resourceVersion)
+            assertTrue(content.indexFile.exists())
+            assertTrue(content.rootDirectory.resolve("style.css").exists())
+            assertTrue(content.rootDirectory.resolve("source.json").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/wasmtime-live-debugger.png").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/managed-wasi-sdk.png").exists())
+            assertTrue(content.rootDirectory.resolve("screenshots/wat-component-authoring.png").exists())
+        } finally {
+            val root = content.rootDirectory
+            content.dispose()
+            assertFalse(root.exists())
+        }
+    }
+
     fun testGeneratedWhatsNew015StaticResourceContract() {
         val root = "whatsnew/0.15"
         val html = resourceText("$root/index.html")
@@ -304,6 +325,52 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         assertEquals(3, imageTags.size)
         imageTags.forEach { imageTag ->
             assertTrue("Missing image alt text: $imageTag", Regex("""\balt="[^"]*\S[^"]*""").containsMatchIn(imageTag))
+        }
+    }
+
+    fun testGeneratedWhatsNew018StaticResourceContract() {
+        val root = "whatsnew/0.18"
+        val html = resourceText("$root/index.html")
+        val css = resourceText("$root/style.css")
+        val sourceJson = resourceText("$root/source.json")
+        val manifestLines = resourceText("$root/manifest.txt")
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .toList()
+        val manifestEntries = manifestLines.toSet()
+
+        assertEquals(manifestLines.size, manifestEntries.size)
+        for (entry in manifestEntries) {
+            assertResourceExists("$root/$entry")
+        }
+
+        val htmlLocalReferences = htmlAttributeReferences(html).filter(::isLocalReference).toSortedSet()
+        val cssLocalReferences = cssUrlReferences(css).filter(::isLocalReference).toSortedSet()
+        val sourceAssetReferences = sourceAssetReferences(sourceJson)
+        val expectedLocalReferences = sortedSetOf(
+            "style.css",
+            "screenshots/wasmtime-live-debugger.png",
+            "screenshots/managed-wasi-sdk.png",
+            "screenshots/wat-component-authoring.png",
+        )
+
+        assertEquals(expectedLocalReferences, htmlLocalReferences)
+        assertTrue(cssLocalReferences.isEmpty())
+        assertTrue(manifestEntries.containsAll(htmlLocalReferences + cssLocalReferences + sourceAssetReferences))
+        assertTrue(html.contains("<h1>What's New in Hexana 0.18</h1>"))
+        assertTrue(html.contains("<h2>Debug Wasmtime one WASM instruction at a time</h2>"))
+        assertTrue(html.contains("<h2>Install and select wasi-sdk from the IDE</h2>"))
+        assertTrue(html.contains("<h2>Navigate Component Model WAT with confidence</h2>"))
+        assertTrue(html.contains("<h2>Also in 0.18</h2>"))
+        assertTrue(html.contains("<strong>Bring the Wasm debugger tab to WAMR</strong>"))
+        assertTrue(sourceJson.contains("\"version\": \"0.18\""))
+        assertTrue(sourceJson.contains("explicitly use the selected SDK's LLDB"))
+
+        val imageTags = Regex("""<img\b[^>]*>""").findAll(html).map { it.value }.toList()
+        assertEquals(3, imageTags.size)
+        imageTags.forEach { imageTag ->
+            assertTrue("Missing image alt text: $imageTag", Regex("""\balt="[^"]*\S[^"]*"""").containsMatchIn(imageTag))
         }
     }
 

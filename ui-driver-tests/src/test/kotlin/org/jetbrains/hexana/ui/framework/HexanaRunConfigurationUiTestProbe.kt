@@ -13,6 +13,13 @@ internal fun Driver.runConfigurationProbeResponds() {
     assertEquals("1", probe.frameworkVersion())
 }
 
+internal fun Driver.seedWasiSdkForWhatsNewCapture(version: Int): List<String> =
+    utility(HexanaRunConfigurationUiTestProbeRef::class).seedWasiSdkForWhatsNewCapture(version)
+
+internal fun Driver.cleanupWasiSdkForWhatsNewCapture(version: Int) {
+    utility(HexanaRunConfigurationUiTestProbeRef::class).cleanupWasiSdkForWhatsNewCapture(version)
+}
+
 internal fun Driver.launchWasmtimeRunConfiguration(
     wasmFileName: String,
     wasmtimePath: String,
@@ -170,6 +177,38 @@ internal fun Driver.startNodeJsDebugWithBreakpointForCapture(
     )
 }
 
+internal fun Driver.startWasmtimeDebugWithBreakpointForCapture(
+    wasmFileName: String,
+    sourceFileName: String,
+    breakpointLine: Int,
+    wasmtimeOptions: String,
+    exportName: String,
+    programArgs: String,
+    wasmtimePath: String,
+    lldbPath: String,
+) {
+    utility(DebugTestHelperRef::class).startWasmtimeDebugWithBreakpointForCapture(
+        singleProject(),
+        wasmFileName,
+        sourceFileName,
+        breakpointLine,
+        wasmtimeOptions,
+        exportName,
+        programArgs,
+        wasmtimePath,
+        lldbPath,
+    )
+}
+
+internal fun Driver.wasmtimeDebuggerCaptureState(): HexanaWasmtimeDebuggerCaptureState =
+    HexanaProbePayload.wasmtimeDebuggerCaptureState(
+        utility(DebugTestHelperRef::class).wasmtimeDebuggerCaptureState(singleProject()),
+    )
+
+internal fun Driver.terminateDebuggerForCapture() {
+    utility(DebugTestHelperRef::class).terminateDebuggerForCapture(singleProject())
+}
+
 internal fun Driver.cdpDebuggerCaptureState(): HexanaCdpDebuggerCaptureState =
     HexanaProbePayload.cdpDebuggerCaptureState(
         utility(DebugTestHelperRef::class).cdpDebuggerCaptureState(singleProject()),
@@ -186,6 +225,8 @@ internal fun Driver.resumeDebuggerForCapture() {
 internal interface HexanaRunConfigurationUiTestProbeRef {
     fun frameworkVersion(): String
     fun ping(): String
+    fun seedWasiSdkForWhatsNewCapture(version: Int): List<String>
+    fun cleanupWasiSdkForWhatsNewCapture(version: Int)
     fun launchWasmtimeRunConfiguration(
         project: com.intellij.driver.sdk.Project,
         wasmFileName: String,
@@ -269,6 +310,19 @@ internal interface DebugTestHelperRef {
         programArgs: String,
         nodePath: String,
     )
+    fun startWasmtimeDebugWithBreakpointForCapture(
+        project: com.intellij.driver.sdk.Project,
+        wasmFileName: String,
+        sourceFileName: String,
+        breakpointLine: Int,
+        wasmtimeOptions: String,
+        exportName: String,
+        programArgs: String,
+        wasmtimePath: String,
+        lldbPath: String,
+    )
+    fun wasmtimeDebuggerCaptureState(project: com.intellij.driver.sdk.Project): List<String>
+    fun terminateDebuggerForCapture(project: com.intellij.driver.sdk.Project)
     fun cdpDebuggerCaptureState(project: com.intellij.driver.sdk.Project): List<String>
     fun resumeDebuggerForCapture(project: com.intellij.driver.sdk.Project)
 }

@@ -8,6 +8,9 @@ private const val COMPONENT_DIFF_STATE_SCHEMA = "hexana-component-diff-state"
 private const val ARCHIVE_STATE_SCHEMA = "hexana-archive-state"
 private const val NATIVE_DIFF_STATE_SCHEMA = "hexana-native-diff-state"
 private const val CDP_DEBUGGER_CAPTURE_STATE_SCHEMA = "hexana-cdp-debugger-capture-state"
+private const val WASMTIME_DEBUGGER_CAPTURE_STATE_SCHEMA = "hexana-wasmtime-debugger-capture-state"
+private const val WAT_FIND_USAGES_INVOCATION_SCHEMA = "hexana-wat-find-usages-invocation"
+private const val WAT_FIND_USAGES_CAPTURE_STATE_SCHEMA = "hexana-wat-find-usages-capture-state"
 
 internal object HexanaProbePayload {
     fun snapshot(payload: List<String>): HexanaEditorSnapshot =
@@ -109,6 +112,46 @@ internal object HexanaProbePayload {
                 disassemblyRowCount = fields.int("disassemblyRowCount"),
                 selectedDisassemblyRow = fields.int("selectedDisassemblyRow"),
                 operandStackRowCount = fields.int("operandStackRowCount"),
+            )
+        }
+
+    fun wasmtimeDebuggerCaptureState(payload: List<String>): HexanaWasmtimeDebuggerCaptureState =
+        parse(payload, WASMTIME_DEBUGGER_CAPTURE_STATE_SCHEMA) { fields ->
+            HexanaWasmtimeDebuggerCaptureState(
+                sessionSuspended = fields.boolean("sessionSuspended"),
+                engine = fields.value("engine"),
+                wasmTabAvailable = fields.boolean("wasmTabAvailable"),
+                wasmTabSelected = fields.boolean("wasmTabSelected"),
+                disassemblyRowCount = fields.int("disassemblyRowCount"),
+                selectedDisassemblyRow = fields.int("selectedDisassemblyRow"),
+                selectedOffset = fields.optionalInt("selectedOffset"),
+                selectedInstruction = fields.value("selectedInstruction").takeIf(String::isNotEmpty),
+                operands = fields.values("operand").map { operand ->
+                    val parts = operand.split('|', limit = 3)
+                    if (parts.size != 3) payloadError(payload, "malformed operand '$operand'")
+                    HexanaWasmOperandCaptureState(parts[0].toInt(), parts[1], parts[2])
+                },
+            )
+        }
+
+    fun watFindUsagesInvocation(payload: List<String>): HexanaWatFindUsagesInvocation =
+        parse(payload, WAT_FIND_USAGES_INVOCATION_SCHEMA) { fields ->
+            HexanaWatFindUsagesInvocation(
+                fileName = fields.value("fileName"),
+                targetName = fields.value("targetName"),
+                declarationOffset = fields.int("declarationOffset"),
+                expectedUsages = fields.int("expectedUsages"),
+            )
+        }
+
+    fun watFindUsagesCaptureState(payload: List<String>): HexanaWatFindUsagesCaptureState =
+        parse(payload, WAT_FIND_USAGES_CAPTURE_STATE_SCHEMA) { fields ->
+            HexanaWatFindUsagesCaptureState(
+                toolWindowVisible = fields.boolean("toolWindowVisible"),
+                searchInProgress = fields.boolean("searchInProgress"),
+                usageCount = fields.int("usageCount"),
+                tabText = fields.value("tabText"),
+                searchString = fields.value("searchString"),
             )
         }
 
