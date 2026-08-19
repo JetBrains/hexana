@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 
 export function assertDownloadedVsCodeVersion(requestedVersion: string, actualVersion: string): void {
@@ -15,7 +16,21 @@ export function downloadedVsCodeProductMetadataPath(codeFolder: string, platform
     const appRoot = platform === 'darwin'
         ? ['Contents', 'Resources', 'app']
         : ['resources', 'app'];
-    return path.join(codeFolder, ...appRoot, 'product.json');
+    const legacyPath = path.join(codeFolder, ...appRoot, 'product.json');
+    if (platform !== 'win32' || fs.existsSync(legacyPath) || !fs.existsSync(codeFolder)) {
+        return legacyPath;
+    }
+
+    const nestedCandidates = fs.readdirSync(codeFolder, { withFileTypes: true })
+        .filter(entry => entry.isDirectory())
+        .map(entry => path.join(codeFolder, entry.name, 'resources', 'app', 'product.json'))
+        .filter(fs.existsSync);
+    if (nestedCandidates.length > 1) {
+        throw new Error(
+            `Ambiguous Windows VS Code product metadata under ${codeFolder}: ${nestedCandidates.join(', ')}`,
+        );
+    }
+    return nestedCandidates[0] ?? legacyPath;
 }
 
 export function parseDownloadedVsCodeVersion(productMetadata: string): string {
