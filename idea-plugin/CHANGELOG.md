@@ -3,6 +3,20 @@
 ## Unreleased
 
 ### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## 0.18 - 2026-08-19
+
+### Added
 - Managed wasi-sdk installation. Wasm debugging needs an LLDB built with the wasm process plugin, and the wasi-sdk distribution ships one. The WebAssembly settings page now has a JDK-style selector that lists installed wasi-sdk versions and ends with a "Download wasi-sdk..." action opening a version chooser fed from the GitHub releases (download sizes shown, sha256 verified against the release digest, cancellable, versions installed side by side). The SDK lands under the IDE's common data directory, so one download serves every project and every JetBrains IDE on the machine. The LLDB selection mechanism is unchanged: the managed SDK takes effect only through an explicit "Use as LLDB path" action (in the settings row and in the install notification) that writes the ordinary LLDB path setting. When a debug session cannot find LLDB, a notification offers the download; when LLDB is found but no wasi-sdk is installed and no explicit LLDB path is set, a one-time notification suggests it.
 - Per-instruction stepping in the **Wasm** debugger tab under wasmtime. While the tab is selected, Step Over and Step Into advance exactly one wasm instruction, including instructions the old native path could never stop on (`local.get`, `i32.const`); with any other tab selected, stepping stays at source-line granularity. This matches the behavior the tab already had under Node.js.
 - The **Wasm** tab's operand stack shows live values under wasmtime. Each slot is read from the runtime at every stop (wasmtime's gdbstub serves the operand stack over the debug protocol; wasmtime 44+) and rendered next to its statically reconstructed origin, e.g. `7 (i32.add @0x7c)`. The 0.17 release could only show the origins, because the native debug path had no access to the values Cranelift compiles away. On runtimes that do not answer, the pane keeps the origin-only display.
@@ -15,14 +29,8 @@
 - **Find Usages** for WAT declarations now works in the embedded WAT editor
 - Custom WAT annotation sections such as `(@producers (processed-by "wit-component" "0.227.1") (language "Rust" ""))` no longer render as errors. Annotation contents are free-form by design, so an unrecognised word inside one is now annotation text rather than a bad character, and the whole section reads in the metadata colour. Unrecognised words outside an annotation are still flagged.
 
-### Deprecated
-
-### Removed
-
 ### Fixed
 - Evaluating an expression in a wasmtime debug session no longer kills the LLDB process. LLDB's expression compiler cannot generate code for wasm targets and aborts on any expression that parses (an upstream LLVM defect, present in wasi-sdk and stock LLVM builds alike). Hexana now evaluates variable paths (`x`, `s.field`, `p->x`, `arr[0]`) through `frame variable`, which is unaffected, and rejects other expressions with an explanatory message instead of forwarding them.
-
-### Security
 
 ## 0.17 - 2026-08-12
 
