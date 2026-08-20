@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as vscode from "vscode";
 import { extensionLib } from "./WasmRunConfigurations";
-import type { SourceLocationResolver, WasmDisassembly, WasmStackShape } from "./extension-lib";
+import type { SourceLocationResolver, WasmModuleIndex } from "./extension-lib";
 
 /**
  * The "Wasm" debug view: a webview in the bottom panel (next to the Debug
@@ -80,11 +80,14 @@ function activeWasmSession(): vscode.DebugSession | undefined {
  * lldb-dap only reports (file, line), so the extension maps that to a wasm
  * offset via the DWARF line table and renders the module's disassembly
  * itself. Both indexes are built lazily from the session's wasm file.
+ *
+ * `modules` is per core module, because that is the granularity the stub
+ * addresses: a component-model binary embeds one core module per `module`
+ * section and its offsets belong to the embedded module's own space.
  */
 interface LldbViewContext {
-    disasm: WasmDisassembly | null;
+    modules: WasmModuleIndex | null;
     resolver: SourceLocationResolver | null;
-    stackShape: WasmStackShape | null;
 }
 
 const lldbContexts = new Map<string, LldbViewContext>();
@@ -92,15 +95,14 @@ const lldbContexts = new Map<string, LldbViewContext>();
 function lldbContextFor(session: vscode.DebugSession): LldbViewContext {
     let ctx = lldbContexts.get(session.id);
     if (!ctx) {
-        ctx = { disasm: null, resolver: null, stackShape: null };
+        ctx = { modules: null, resolver: null };
         const wasmFile = session.configuration.wasmFile as string | undefined;
         if (extensionLib && wasmFile && fs.existsSync(wasmFile)) {
             try {
                 const buf = fs.readFileSync(wasmFile);
                 const int8 = new Int8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-                ctx.disasm = extensionLib.createWasmDisassembly(int8);
+                ctx.modules = extensionLib.createWasmModuleIndex(int8);
                 ctx.resolver = extensionLib.SourceLocationResolver.create(int8);
-                ctx.stackShape = extensionLib.createWasmStackShape(int8);
             } catch {
                 // Leave nulls — the view will show its empty state.
             }
@@ -134,9 +136,10 @@ interface StackEntry { index: number; type: string; value: string; }
 
 /**
  * Builds the operand-stack entries for an LLDB pause: the statically
- * reconstructed shape (types + provenance) at [pauseOffset], enriched with
- * concrete values from the gdbstub for guest sessions. Mirrors IntelliJ's
- * `WasmDebugProcess.updateWasmDisassemblyTab` enrichment rules:
+ * reconstructed shape (types + provenance) at [pauseOffset] of core module
+ * [moduleId], enriched with concrete values from the gdbstub for guest sessions.
+ * Mirrors IntelliJ's `WasmDebugProcess.updateWasmDisassemblyTab` enrichment
+ * rules:
  *
  * - wasmtime gdbstub: `qWasmStackValue:<frame>;<index>` per slot (cap 64);
  *   the first empty response means the stub does not support it — remaining
@@ -149,10 +152,11 @@ interface StackEntry { index: number; type: string; value: string; }
 async function lldbStackEntries(
     session: vscode.DebugSession,
     ctx: LldbViewContext,
+    moduleId: number,
     pauseOffset: number,
     guest: boolean,
 ): Promise<{ entries: StackEntry[]; stackNote?: string }> {
-    const shape = ctx.stackShape?.stackAt(pauseOffset);
+    const shape = ctx.modules?.stackShapeFor(moduleId, pauseOffset)?.stackAt(pauseOffset);
     if (!shape) {
         return { entries: [] };
     }
@@ -248,10 +252,12 @@ export function registerWasmDebugView(context: vscode.ExtensionContext): void {
      */
     const refreshLldb = async (session: vscode.DebugSession, threadId?: number) => {
         const ctx = lldbContextFor(session);
-        if (!ctx.disasm) {
+        if (!ctx.modules || !extensionLib) {
             provider.clear();
             return;
         }
+        const lib = extensionLib;
+        const modules = ctx.modules;
         try {
             let tid = threadId;
             if (tid === undefined) {
@@ -264,29 +270,37 @@ export function registerWasmDebugView(context: vscode.ExtensionContext): void {
             }
             const guest = isGuestLldbSession(session);
             const st = await session.customRequest("stackTrace", { threadId: tid, startFrame: 0, levels: 5 });
-            const render = async (pauseOffset: number): Promise<boolean> => {
-                const range = ctx.disasm!.functionRangeForOffset(pauseOffset);
+            /**
+             * Renders the stop at [pauseOffset] of core module [moduleId]. A negative
+             * [moduleId] means the id is unknown and the module is deduced from the
+             * offset — for a single-module binary that is always the right answer.
+             */
+            const render = async (moduleId: number, pauseOffset: number): Promise<boolean> => {
+                const disasm = modules.disassemblyFor(moduleId, pauseOffset);
+                if (!disasm) return false;
+                const range = disasm.functionRangeForOffset(pauseOffset);
                 if (!range) return false;
-                const rows = ctx.disasm!.rowsForFunction(range.index)
+                const rows = disasm.rowsForFunction(range.index)
                     .map(r => ({ offset: r.offset, instruction: r.instruction }));
-                const { entries, stackNote } = await lldbStackEntries(session, ctx, pauseOffset, guest);
+                const { entries, stackNote } = await lldbStackEntries(session, ctx, moduleId, pauseOffset, guest);
                 provider.update({ rows, pauseOffset, entries, stackNote });
                 return true;
             };
             for (const frame of (st?.stackFrames ?? [])) {
-                // Guest sessions (gdbstub/WAMR): the frame PC carries the wasm
-                // byte offset in the low 32 bits — exact instruction highlight.
+                // Guest sessions (gdbstub/WAMR): the frame PC carries both the core
+                // module id and the byte offset inside it — exact instruction
+                // highlight. The offset is module-relative, so for a component both
+                // halves are needed to land in the right embedded module.
                 const ipRef = frame?.instructionPointerReference as string | undefined;
                 if (guest && ipRef) {
-                    try {
-                        const offset = Number(BigInt(ipRef) & 0xFFFFFFFFn);
-                        if (await render(offset)) return;
-                    } catch {
-                        // Unparseable reference — fall through to line mapping.
-                    }
+                    const offset = lib.wasmOffsetForGdbPcString(ipRef);
+                    const moduleId = lib.wasmModuleIdForGdbPcString(ipRef);
+                    // -1 means the reference was unparseable — fall through to line mapping.
+                    if (offset >= 0 && await render(moduleId, offset)) return;
                 }
                 // Fallback: map the frame's (file, line) through the DWARF
-                // line table. Line granularity only.
+                // line table. Line granularity only, and no module id — the
+                // resolver reads the binary's DWARF, not a per-module index.
                 if (!ctx.resolver) continue;
                 const file = frame?.source?.path || frame?.source?.name;
                 const line = frame?.line;
@@ -294,7 +308,7 @@ export function registerWasmDebugView(context: vscode.ExtensionContext): void {
                 // The resolver takes 0-based lines; DAP lines are 1-based.
                 const offsets: number[] = Array.from(ctx.resolver.sourceToAllWasmOffsets(file, line - 1));
                 if (offsets.length === 0) continue;
-                if (await render(Math.min(...offsets))) return;
+                if (await render(-1, Math.min(...offsets))) return;
             }
             provider.clear();
         } catch {

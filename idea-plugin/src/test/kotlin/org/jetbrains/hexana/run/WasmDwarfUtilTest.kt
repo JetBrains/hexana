@@ -60,6 +60,46 @@ class WasmDwarfUtilTest : UsefulTestCase() {
         assertTrue(WasmDwarfUtil.dwarfSectionNames(byteArrayOf()).isEmpty())
     }
 
+    // ── Component-model binaries ────────────────────────────────────
+
+    fun testEmbeddedCoreModulesAreStandaloneModules() {
+        val first = buildWasmWithCustomSection("name", byteArrayOf(0x00))
+        val second = buildWasmWithCustomSection(".debug_line", byteArrayOf(0x01))
+        val component = WasmComponentTestBuilder.component(first, second)
+
+        val embedded = WasmDwarfUtil.embeddedCoreModules(component)
+        assertEquals("both module sections must be enumerated, in order", 2, embedded.size)
+        assertTrue("the first embedded module must be returned verbatim", first.contentEquals(embedded[0]))
+        assertTrue("the second embedded module must be returned verbatim", second.contentEquals(embedded[1]))
+        // Each element starts at its own magic, so a core-module parser can take it as is.
+        assertEquals(
+            listOf(0x00, 0x61, 0x73, 0x6d),
+            embedded[0].take(4).map { it.toInt() and 0xFF },
+        )
+    }
+
+    fun testEmbeddedCoreModulesOfACoreModuleIsEmpty() {
+        val wasm = wat2wasm("(module)")
+        assertTrue(
+            "a core module embeds nothing — it IS the module",
+            WasmDwarfUtil.embeddedCoreModules(wasm).isEmpty(),
+        )
+    }
+
+    fun testHasDwarfInfoFindsDwarfInsideAnEmbeddedCoreModule() {
+        val plain = buildWasmWithCustomSection("name", byteArrayOf(0x00))
+        val withDwarf = buildWasmWithCustomSection(".debug_info", byteArrayOf(0x00, 0x01))
+
+        assertTrue(
+            "DWARF in any embedded module must count as DWARF in the component",
+            WasmDwarfUtil.hasDwarfInfo(WasmComponentTestBuilder.component(plain, withDwarf)),
+        )
+        assertFalse(
+            "a component whose modules carry no DWARF must not report DWARF",
+            WasmDwarfUtil.hasDwarfInfo(WasmComponentTestBuilder.component(plain)),
+        )
+    }
+
     /**
      * Builds a minimal Wasm module with one custom section appended.
      */

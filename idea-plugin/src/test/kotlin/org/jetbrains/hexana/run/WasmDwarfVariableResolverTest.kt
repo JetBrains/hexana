@@ -18,6 +18,33 @@ class WasmDwarfVariableResolverTest : UsefulTestCase() {
         assertNotNull("Resolver should be created from a Wasm binary with DWARF info", resolver)
     }
 
+    // ── Component-model binaries ────────────────────────────────────
+
+    /**
+     * A component's DWARF lives in its embedded core modules, not at the component
+     * level, so the resolver has to look inside them — otherwise every component
+     * session loses variable names.
+     */
+    fun testCreateResolverFromComponentWithDwarfInEmbeddedModule() {
+        val core = loadWasmResource("rust/hello_world.wasm")
+        val component = WasmComponentTestBuilder.component(loadWasmResource("string.wasm"), core)
+
+        val resolver = WasmDwarfVariableResolver.create(component)
+        assertNotNull("Resolver should be created from the embedded module carrying DWARF", resolver)
+        // The DWARF read out of the embedded module is the same as from the module alone.
+        val map = resolver!!.buildWasmLocalToNameMap("\$add")
+        assertEquals("a", map[0L])
+        assertEquals("b", map[1L])
+    }
+
+    fun testCreateResolverFromComponentWithoutDwarf() {
+        val component = WasmComponentTestBuilder.component(loadWasmResource("string.wasm"))
+        assertNull(
+            "Resolver should be null when no embedded module carries DWARF",
+            WasmDwarfVariableResolver.create(component),
+        )
+    }
+
     fun testCreateResolverFromWasmWithoutDwarf() {
         val bytes = loadWasmResource("string.wasm")
         val resolver = WasmDwarfVariableResolver.create(bytes)

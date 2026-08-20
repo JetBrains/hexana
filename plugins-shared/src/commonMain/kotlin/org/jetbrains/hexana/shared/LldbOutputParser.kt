@@ -209,6 +209,34 @@ fun parseLldbFramePc(lines: List<String>): ULong? {
 }
 
 /**
+ * Translates an LLDB program counter reported over a wasm gdbstub connection
+ * into a byte offset inside the core module the stop belongs to.
+ *
+ * LLDB's wasm process plugin encodes wasm code addresses as
+ * `0x4000000000000000 | (<module id> << 32) | <byte offset in that module>`, so
+ * the low 32 bits are the offset. Both wasmtime's and WAMR's stubs use this
+ * scheme, and no addrmap or JIT loader is involved.
+ *
+ * The offset is relative to the start of the addressed core module, NOT to the
+ * start of the executed file: a component-model binary embeds its core modules
+ * at non-zero offsets, and the stub still counts from each module's own magic.
+ * Pair this with [wasmModuleIdForGdbPc] to know which module to resolve it in
+ * (see `WasmDebugModules`).
+ */
+fun wasmOffsetForGdbPc(pc: ULong): Int = (pc and 0xFFFFFFFFuL).toInt()
+
+/**
+ * The id of the compiled core module an LLDB wasm gdbstub PC points into —
+ * bits 32–47, which LLDB also surfaces as the `wasm-<id>` module name in frames.
+ *
+ * A plain core module is always id 0. For a component, the runtime compiles each
+ * embedded core module separately and ids follow the component's `module` section
+ * order (verified against wasmtime 44; see `WasmDebugModules.moduleFor` for how a
+ * mismatch is absorbed).
+ */
+fun wasmModuleIdForGdbPc(pc: ULong): Int = ((pc shr 32) and 0xFFFFuL).toInt()
+
+/**
  * Extracts the raw file path from LLDB frame output without
  * attempting to resolve it to a local file. This is the path
  * exactly as LLDB reports it in the `at <path>:<line>` portion

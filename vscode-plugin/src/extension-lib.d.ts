@@ -259,6 +259,68 @@ export interface WasmStackShape {
 /** Indexes wasm bytes for stack-shape analysis; null when not a parseable core module. */
 export function createWasmStackShape(wasmBytes: Int8Array): WasmStackShape | null;
 
+// ── WasmModuleIndex ─────────────────────────────────────────────────
+
+/**
+ * The core modules a wasm debug session can stop inside, each with its own
+ * disassembly and operand-stack analysis.
+ *
+ * A plain core module is a single module with id 0. A component-model binary is a
+ * container: the runtime compiles each embedded core module separately and the stub
+ * addresses a stop as `(moduleId, offset within that module)`, counting from the
+ * embedded module's own magic — NOT from the start of the component file. Resolving
+ * a component's offset against the whole file finds nothing.
+ */
+export interface WasmModuleIndex {
+    /** Number of core modules the binary can stop in — 1 unless it is a component. */
+    readonly moduleCount: number;
+
+    /** Whether the executed binary is a component, so offsets are per embedded core module. */
+    readonly isComponent: boolean;
+
+    /**
+     * The disassembly of the core module owning the offset, or null when no indexed
+     * module has a function body there. Pass a negative `moduleId` when the id is
+     * unknown, to have the module deduced from the offset. Offsets passed to the
+     * returned object are in that module's own space — the one the stub reports.
+     */
+    disassemblyFor(moduleId: number, offset: number): WasmDisassembly | null;
+
+    /**
+     * The operand-stack analysis of the core module owning the offset, or null when
+     * no module has a body there or that module's stack cannot be reconstructed.
+     * Same `moduleId` convention as `disassemblyFor`.
+     */
+    stackShapeFor(moduleId: number, offset: number): WasmStackShape | null;
+}
+
+/**
+ * Indexes wasm bytes per core module — the module itself for a core module, every
+ * embedded core module for a component. Null when neither yields a module with code.
+ */
+export function createWasmModuleIndex(wasmBytes: Int8Array): WasmModuleIndex | null;
+
+/**
+ * Translates an LLDB program counter reported over a wasm gdbstub connection into a
+ * byte offset inside the core module the stop is in (the low 32 bits; both
+ * wasmtime's and WAMR's stubs encode addresses as
+ * `0x4000000000000000 | (moduleId << 32) | offset`).
+ *
+ * The offset counts from that module's own start, so for a component it must be
+ * resolved against the embedded module named by `wasmModuleIdForGdbPcString`.
+ *
+ * Accepts the DAP `instructionPointerReference` form (`"0x4000000000000052"`) and
+ * plain decimal. Returns -1 when the value cannot be parsed.
+ */
+export function wasmOffsetForGdbPcString(pc: string): number;
+
+/**
+ * The id of the core module an LLDB wasm gdbstub PC points into (bits 32–47).
+ * Always 0 for a plain core module; a component's ids follow its `module` section
+ * order. Returns -1 when the value cannot be parsed.
+ */
+export function wasmModuleIdForGdbPcString(pc: string): number;
+
 /**
  * Decodes a gdbstub stack/local value hex payload (little-endian, 4 bytes for
  * i32/f32, 8 for i64/f64) per the wasm value type from the static analyzer.

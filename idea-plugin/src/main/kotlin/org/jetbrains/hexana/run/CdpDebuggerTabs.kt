@@ -13,7 +13,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
-import org.jetbrains.hexana.shared.WasmDisassemblyIndex
+import org.jetbrains.hexana.shared.WasmDebugModules
+import org.jetbrains.hexana.shared.WasmStackShapeAnalyzer
 import java.nio.channels.FileChannel
 import java.nio.file.StandardOpenOption
 import java.util.concurrent.ConcurrentHashMap
@@ -265,39 +266,69 @@ internal fun wasmDebuggerTabStateOf(
 // Wasm binary disassembly engine
 // ---------------------------------------------------------------------------
 
+/**
+ * The disassembly and operand-stack analysis of the core module a stop landed in.
+ *
+ * @property moduleId the resolved module's id (0 for a plain core module, the
+ *           component `module` section index otherwise).
+ * @property rows the disassembly of the function covering the queried offset.
+ * @property stackAnalyzer that module's operand-stack analyzer, or null when the
+ *           reconstruction is not available for it.
+ */
+internal class WasmStopAnalysis(
+    val moduleId: Int,
+    val rows: List<WasmDisassemblyTableModel.Row>,
+    val stackAnalyzer: WasmStackShapeAnalyzer?,
+)
+
 internal class WasmDisassemblySource(wasmBuffer: CommonByteBuffer?) {
 
     private val LOG = Logger.getInstance(WasmDisassemblySource::class.java)
 
-    /** Shared parse/index/render core; null when the buffer is absent or unparseable. */
-    private val index: WasmDisassemblyIndex? = WasmDisassemblyIndex.create(wasmBuffer).also {
-        if (it == null && wasmBuffer != null) {
-            LOG.warn("WasmDisassemblySource: failed to init from buffer")
+    /**
+     * The core modules a stop can land in — the binary itself when it is a core
+     * module, every embedded core module when it is a component. Null when the
+     * buffer is absent or nothing in it could be indexed.
+     */
+    private val modules: WasmDebugModules? = wasmBuffer?.let {
+        WasmDebugModules.create(it).also { indexed ->
+            if (indexed == null) LOG.warn("WasmDisassemblySource: failed to init from buffer")
         }
     }
 
-    /** Cached disassembly rows per code-section-local function index. */
-    private val cache = ConcurrentHashMap<Int, List<WasmDisassemblyTableModel.Row>>()
+    /** Cached disassembly rows, keyed by module id in the high 32 bits and function index in the low. */
+    private val cache = ConcurrentHashMap<Long, List<WasmDisassemblyTableModel.Row>>()
 
-    /** Returns true if the wasm binary was successfully indexed. */
-    fun isAvailable(): Boolean = index != null
+    /** Returns true if at least one core module of the wasm binary was successfully indexed. */
+    fun isAvailable(): Boolean = modules != null
+
+    /** True when the executed binary is a component, so offsets are per embedded core module. */
+    fun isComponent(): Boolean = modules?.isComponent == true
 
     /**
-     * Returns disassembly rows for the function containing [moduleAbsoluteOffset], or null
-     * if the offset is not in the code section or the binary is unavailable.
+     * Analyses a stop reported as [moduleId] (null when the translation path has no
+     * module id) plus [offset], a byte offset in that module's own offset space.
      *
-     * Also returns the code-section-local function index so the caller can use
-     * it for cache look-up checks.
+     * Returns null when no indexed module has a function body covering the offset.
      */
-    fun rowsForOffset(moduleAbsoluteOffset: Int): Pair<List<WasmDisassemblyTableModel.Row>, Int>? {
-        val idx = index ?: return null
-        val localIdx = idx.functionIndexForOffset(moduleAbsoluteOffset)
+    fun analyse(moduleId: Int?, offset: Int): WasmStopAnalysis? {
+        val modules = this.modules ?: return null
+        val module = modules.moduleFor(moduleId, offset) ?: return null
+        // Resolve the cache key first: parsing the body and only then looking it up
+        // would make the cache pure overhead.
+        val localIdx = module.disassembly.functionIndexForOffset(offset)
         if (localIdx < 0) return null
-        val rows = cache.getOrPut(localIdx) {
-            idx.disassembleFunction(localIdx).map { WasmDisassemblyTableModel.Row(it.offset, it.instruction) }
-                .also { if (it.isEmpty()) LOG.debug("WasmDisassemblySource: failed to parse func localIdx=$localIdx") }
+        val key = (module.moduleId.toLong() shl 32) or localIdx.toLong()
+        val rows = cache.getOrPut(key) {
+            module.disassembly.disassembleFunction(localIdx)
+                .map { WasmDisassemblyTableModel.Row(it.offset, it.instruction) }
+                .also {
+                    if (it.isEmpty()) {
+                        LOG.debug("WasmDisassemblySource: failed to parse module=${module.moduleId} func localIdx=$localIdx")
+                    }
+                }
         }
-        return rows to localIdx
+        return WasmStopAnalysis(module.moduleId, rows, module.stackAnalyzer)
     }
 }
 
@@ -420,13 +451,15 @@ internal fun registerDebugTabsListener(
 
         scope.launch {
             try {
-                val result = disassemblySource.rowsForOffset(byteOffset)
+                // V8 reports the offset within the wasm script it is executing and has
+                // no module-id notion of its own (it never runs components), so the
+                // module is resolved from the offset alone.
+                val result = disassemblySource.analyse(moduleId = null, offset = byteOffset)
                 ApplicationManager.getApplication().invokeLater {
                     if (result == null) {
                         disassemblyPanel.model.clear()
                     } else {
-                        val (newRows, _) = result
-                        disassemblyPanel.model.update(newRows)
+                        disassemblyPanel.model.update(result.rows)
                         disassemblyPanel.highlight(byteOffset)
                     }
                 }

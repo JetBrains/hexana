@@ -9,6 +9,8 @@ import com.intellij.xdebugger.impl.XDebuggerUtilImpl
 import com.intellij.openapi.vfs.LocalFileSystem
 import org.jetbrains.hexana.shared.parseLldbFrameLocation
 import org.jetbrains.hexana.shared.parseLldbFunctionName
+import org.jetbrains.hexana.shared.wasmModuleIdForGdbPc
+import org.jetbrains.hexana.shared.wasmOffsetForGdbPc
 
 /**
  * A debug process for the WAMR runtime that extends [WasmDebugProcess]
@@ -64,13 +66,14 @@ class WamrDebugProcess(
     override val supportsInstructionStepping: Boolean = true
 
     /**
-     * PC-to-wasm-offset translation for the WAMR gdbstub. Same address
+     * PC-to-wasm-location translation for the WAMR gdbstub. Same address
      * scheme as the wasmtime gdbstub: LLDB's wasm process plugin reports
-     * PCs as `0x4000000000000000 | <wasm file byte offset>`, so the low
-     * 32 bits are the wasm file byte offset — no addrmap needed.
+     * PCs as `0x4000000000000000 | (<module id> << 32) | <byte offset>`, so
+     * both halves come straight from the PC — no addrmap needed. WAMR runs
+     * core modules only, so the id is 0 in practice.
      */
-    override fun wasmOffsetForPc(communicator: LldbCommunicator, pc: ULong): Int? =
-        (pc and 0xFFFFFFFFuL).toInt()
+    override fun wasmLocationForPc(communicator: LldbCommunicator, pc: ULong): WasmStopLocation =
+        WasmStopLocation(moduleId = wasmModuleIdForGdbPc(pc), offset = wasmOffsetForGdbPc(pc))
 
     override fun sessionInitialized() {
         // The base sessionInitialized() is intentionally not called (see

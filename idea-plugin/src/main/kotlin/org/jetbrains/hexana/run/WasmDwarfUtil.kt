@@ -63,18 +63,36 @@ internal object WasmDwarfUtil {
             }
 
             // Then check embedded core modules
-            for (coreModule in provider.modules) {
+            return embeddedCoreModules(wasmBytes).any { hasDwarfInCoreModule(it) }
+        } catch (_: Exception) {
+            // Not a valid component or parsing failed
+            return false
+        }
+    }
+
+    /**
+     * The bytes of every core module embedded in [wasmBytes], in `module` section
+     * order — the same order the runtime assigns module ids in, so index `i` is the
+     * module a gdbstub PC with module id `i` addresses.
+     *
+     * Each element is a standalone core module starting at its own magic, so it can
+     * be handed to any core-module parser and its offsets line up with the ones the
+     * stub reports. Empty when [wasmBytes] is not a parseable component.
+     */
+    fun embeddedCoreModules(wasmBytes: ByteArray): List<ByteArray> {
+        return try {
+            val buffer = wasmBytes.toCommonByteBuffer()
+            val provider = WasmComponentBinaryProvider(buffer)
+            if (!provider.canProvideWasmModule()) return emptyList()
+            provider.modules.map { coreModule ->
                 val moduleBytes = ByteArray(coreModule.contentSize)
                 buffer.position(coreModule.contentOffset)
                 buffer.get(moduleBytes, 0, coreModule.contentSize)
-                if (hasDwarfInCoreModule(moduleBytes)) {
-                    return true
-                }
+                moduleBytes
             }
         } catch (_: Exception) {
-            // Not a valid component or parsing failed
+            emptyList()
         }
-        return false
     }
 
     /**

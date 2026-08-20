@@ -348,6 +348,32 @@ class LldbOutputParserTest {
         assertEquals(15, parseRawDwarfLine(lines))
     }
 
+    // ── wasm gdbstub program counters ───────────────────────────────
+
+    @Test
+    fun coreModulePcIsModuleZero() {
+        // A plain core module: the whole low 32 bits are the offset, id is 0.
+        assertEquals(0x52, wasmOffsetForGdbPc(0x4000000000000052uL))
+        assertEquals(0, wasmModuleIdForGdbPc(0x4000000000000052uL))
+    }
+
+    @Test
+    fun componentPcCarriesTheEmbeddedModuleId() {
+        // Live-observed wasmtime 44 stops in hello_component.wasm: module 1 at
+        // offset 0x1656, module 2 at offset 0x7f — both module-relative.
+        assertEquals(1, wasmModuleIdForGdbPc(0x4000000100001656uL))
+        assertEquals(0x1656, wasmOffsetForGdbPc(0x4000000100001656uL))
+        assertEquals(2, wasmModuleIdForGdbPc(0x400000020000007fuL))
+        assertEquals(0x7f, wasmOffsetForGdbPc(0x400000020000007fuL))
+    }
+
+    @Test
+    fun theWasmAddressTagIsNotPartOfEitherHalf() {
+        // The 0x4000... tag lives above bit 47, so it must not leak into the id.
+        assertEquals(0, wasmModuleIdForGdbPc(0x4000000000000000uL))
+        assertEquals(0, wasmOffsetForGdbPc(0x4000000000000000uL))
+    }
+
     // ── looksLikeWamrDebugNotSupported ──────────────────────────────
 
     @Test

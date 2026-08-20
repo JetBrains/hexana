@@ -9,6 +9,8 @@ import com.intellij.xdebugger.impl.XDebuggerUtilImpl
 import com.intellij.openapi.vfs.LocalFileSystem
 import org.jetbrains.hexana.shared.parseLldbFrameLocation
 import org.jetbrains.hexana.shared.parseLldbFunctionName
+import org.jetbrains.hexana.shared.wasmModuleIdForGdbPc
+import org.jetbrains.hexana.shared.wasmOffsetForGdbPc
 import org.jetbrains.hexana.wasisdk.WasiSdkOffer
 
 /**
@@ -63,7 +65,7 @@ class WasmtimeGdbDebugProcess(
      * selected. In gdbstub mode the PC encodes the wasm byte offset
      * directly, so `thread step-inst` / `thread step-inst-over` advance
      * by exactly one wasm instruction and the disassembly tab updates
-     * correctly through the existing stop -> wasmOffsetForPc pipeline.
+     * correctly through the existing stop -> wasmLocationForPc pipeline.
      */
     override val supportsInstructionStepping: Boolean = true
 
@@ -154,13 +156,17 @@ class WasmtimeGdbDebugProcess(
     }
 
     /**
-     * PC-to-wasm-offset translation for the wasmtime gdbstub.
+     * PC-to-wasm-location translation for the wasmtime gdbstub.
      *
-     * In gdbstub mode, LLDB reports PCs as `0x4000000000000000 | <wasm byte offset>`.
-     * The low 32 bits are the wasm file byte offset — no addrmap or JIT loader needed.
+     * In gdbstub mode, LLDB reports PCs as
+     * `0x4000000000000000 | (<module id> << 32) | <byte offset in that module>`, so
+     * both halves are read straight out of the PC — no addrmap or JIT loader needed.
+     * The offset counts from the addressed module's own start, which is why a
+     * component's stops resolve against its embedded core modules rather than
+     * against the component file.
      */
-    override fun wasmOffsetForPc(communicator: LldbCommunicator, pc: ULong): Int? =
-        (pc and 0xFFFFFFFFuL).toInt()
+    override fun wasmLocationForPc(communicator: LldbCommunicator, pc: ULong): WasmStopLocation =
+        WasmStopLocation(moduleId = wasmModuleIdForGdbPc(pc), offset = wasmOffsetForGdbPc(pc))
 
     /**
      * Attempts to connect LLDB to the Wasmtime gdbstub, retrying up to

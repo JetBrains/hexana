@@ -53,6 +53,18 @@ import org.jetbrains.hexana.shared.stripCuHashSuffix
 import java.util.concurrent.TimeUnit
 
 /**
+ * Where a stop is in wasm terms, as translated from the native/stub PC.
+ *
+ * @property moduleId the core module the stop is in, or null when the translation
+ *           path cannot tell (the legacy JIT addrmap) and the module has to be
+ *           deduced from [offset] instead.
+ * @property offset byte offset within that module — for a component-model binary
+ *           this counts from the embedded module's own magic, not from the start
+ *           of the component file.
+ */
+data class WasmStopLocation(val moduleId: Int?, val offset: Int)
+
+/**
  * A debug process that launches wasmtime under LLDB so that
  * breakpoints set in source files (WAT, C, Rust, etc.) are
  * actually hit when the Wasm binary contains DWARF debug info.
@@ -224,31 +236,27 @@ open class WasmDebugProcess(
     /**
      * Whether this session shows the "Wasm" disassembly tab. Wasmtime
      * (JIT addrmap or gdbstub) and WAMR (gdbstub) can translate stop PCs
-     * to wasm byte offsets via [wasmOffsetForPc]; [executedWasmPath]
+     * to wasm stop locations via [wasmLocationForPc]; [executedWasmPath]
      * supplies the binary to disassemble.
      */
     private val wasmTabAvailable: Boolean
         get() = (engine == WasmEngine.WASMTIME || engine == WasmEngine.WAMR) && executedWasmPath != null
 
     /**
-     * Read-only mmap of the executed wasm binary, shared by the disassembly
-     * source and the stack analyzer (both read via duplicates). On Windows
-     * the mapping pins the file until GC — acceptable for the session-scoped
-     * composed temp file.
+     * Read-only mmap of the executed wasm binary, read by the disassembly
+     * source via duplicates and slices. On Windows the mapping pins the file
+     * until GC — acceptable for the session-scoped composed temp file.
      */
     private val executedWasmBuffer: CommonByteBuffer? by lazy { mapWasmFileToBuffer(executedWasmPath) }
 
-    /** Indexes the executed wasm binary; initialized lazily on first stop (off-EDT). */
-    private val wasmDisassemblySource by lazy { WasmDisassemblySource(executedWasmBuffer) }
-
     /**
-     * Statically reconstructs the symbolic operand stack shown next to the
-     * disassembly — wasmtime/Cranelift cannot expose the real one, so shape
-     * and provenance come from abstract interpretation of the wasm body.
+     * Indexes the executed wasm binary — the module itself, or every embedded core
+     * module when it is a component. Also owns the per-module symbolic operand-stack
+     * analyzers shown next to the disassembly: wasmtime/Cranelift cannot expose the
+     * real stack, so shape and provenance come from abstract interpretation of the
+     * wasm body. Initialized lazily on first stop (off-EDT).
      */
-    private val wasmStackAnalyzer: WasmStackShapeAnalyzer? by lazy {
-        executedWasmBuffer?.let { WasmStackShapeAnalyzer.create(it) }
-    }
+    private val wasmDisassemblySource by lazy { WasmDisassemblySource(executedWasmBuffer) }
 
     /**
      * Addrmaps decoded from the ELF images the debuggee registered with the
@@ -1358,10 +1366,12 @@ open class WasmDebugProcess(
     protected fun updateWasmDisassemblyTab(communicator: LldbCommunicator, frameInfoLines: List<String>) {
         if (!wasmTabAvailable) return
         val pc = parseLldbFramePc(frameInfoLines)
-        val wasmOffset = pc?.let { lookupWasmOffset(communicator, it) }
-        val rows = wasmOffset?.let { wasmDisassemblySource.rowsForOffset(it)?.first }
-        val stackRows = if (rows != null && wasmOffset != null) {
-            val (symbolic, slots) = symbolicStackRows(wasmOffset)
+        val location = pc?.let { lookupWasmLocation(communicator, it) }
+        // The offset is relative to the core module the stop is in, which for a
+        // component is one of its embedded modules rather than the whole file.
+        val analysis = location?.let { wasmDisassemblySource.analyse(it.moduleId, it.offset) }
+        val stackRows = if (analysis != null && location != null) {
+            val (symbolic, slots) = symbolicStackRows(analysis.stackAnalyzer, location.offset)
             when {
                 symbolic.isEmpty() -> symbolic
                 guestOnlyDebugging -> enrichStackRowsWithConcrete(communicator, symbolic, frameIdx = 0)
@@ -1370,12 +1380,12 @@ open class WasmDebugProcess(
             }
         } else emptyList()
         ApplicationManager.getApplication().invokeLater {
-            if (rows == null || wasmOffset == null) {
+            if (analysis == null || location == null) {
                 wasmDisassemblyModel.clear()
                 wasmStackModel.clear()
             } else {
-                wasmDisassemblyModel.update(rows)
-                wasmDisassemblyPanel.highlight(wasmOffset)
+                wasmDisassemblyModel.update(analysis.rows)
+                wasmDisassemblyPanel.highlight(location.offset)
                 wasmStackModel.update(stackRows)
             }
         }
@@ -1471,24 +1481,25 @@ open class WasmDebugProcess(
         }
     }
 
-    private fun lookupWasmOffset(communicator: LldbCommunicator, pc: ULong): Int? =
-        wasmOffsetForPc(communicator, pc)
+    private fun lookupWasmLocation(communicator: LldbCommunicator, pc: ULong): WasmStopLocation? =
+        wasmLocationForPc(communicator, pc)
 
     /**
-     * Translates a native PC to the corresponding wasm file byte offset for
-     * the "Wasm" disassembly tab.
+     * Translates a native PC into the wasm stop location the "Wasm" disassembly
+     * tab renders: which core module, and the byte offset inside it.
      *
      * The default implementation uses the GDB JIT addrmap written by
-     * wasmtime's Cranelift backend (native JIT path).  Subclasses can
-     * override this when a different translation is available — for example
-     * [WasmtimeGdbDebugProcess] overrides [wasmOffsetForPc] to extract
-     * the offset from the low 32 bits of the gdbstub PC.
+     * wasmtime's Cranelift backend (native JIT path).  Its addrmaps carry no
+     * module identity, so the module id is left unknown and resolved from the
+     * offset instead. Subclasses override this when a different translation is
+     * available — [WasmtimeGdbDebugProcess] and [WamrDebugProcess] take both the
+     * module id and the offset straight out of the gdbstub PC.
      *
-     * This two-level dispatch keeps [lookupWasmOffset]'s communicator
+     * This two-level dispatch keeps [lookupWasmLocation]'s communicator
      * parameter available for the addrmap-refresh path while allowing
      * communicator-free overrides.
      */
-    protected open fun wasmOffsetForPc(communicator: LldbCommunicator, pc: ULong): Int? {
+    protected open fun wasmLocationForPc(communicator: LldbCommunicator, pc: ULong): WasmStopLocation? {
         if (jitAddrmaps.none { it.containsPc(pc) }) {
             // The registered image set may have grown since the last dump
             // (wasmtime registers one image per compiled module), so refresh
@@ -1497,7 +1508,8 @@ open class WasmDebugProcess(
             // first dump are pure cache hits.
             refreshJitAddrmaps(communicator)
         }
-        return jitAddrmaps.firstOrNull { it.containsPc(pc) }?.wasmOffsetForPc(pc)
+        val offset = jitAddrmaps.firstOrNull { it.containsPc(pc) }?.wasmOffsetForPc(pc) ?: return null
+        return WasmStopLocation(moduleId = null, offset = offset)
     }
 
     private fun refreshJitAddrmaps(communicator: LldbCommunicator) {
@@ -1513,12 +1525,19 @@ open class WasmDebugProcess(
      * names when available. A reconstruction failure becomes a single
      * explanatory row rather than a silently empty pane.
      *
+     * [analyzer] belongs to the core module the stop was resolved in — for a
+     * component that is one of the embedded modules — so [wasmOffset] is read in
+     * that module's own offset space, the same one the stub reports.
+     *
      * Also returns the underlying [WasmSymbolicStackSlot]s (empty on
      * reconstruction failure) so enrichment can use their structured
      * [WasmSymbolicStackSlot.localRef]/[WasmSymbolicStackSlot.globalRef] origins.
      */
-    private fun symbolicStackRows(wasmOffset: Int): Pair<List<WasmStackTableModel.Row>, List<WasmSymbolicStackSlot>> {
-        val analyzer = wasmStackAnalyzer ?: return emptyList<WasmStackTableModel.Row>() to emptyList()
+    private fun symbolicStackRows(
+        analyzer: WasmStackShapeAnalyzer?,
+        wasmOffset: Int,
+    ): Pair<List<WasmStackTableModel.Row>, List<WasmSymbolicStackSlot>> {
+        if (analyzer == null) return emptyList<WasmStackTableModel.Row>() to emptyList()
         val localNames = try {
             dwarfVariableResolver?.buildWasmLocalToNameMapByOffset(wasmOffset).orEmpty()
         } catch (e: Exception) {

@@ -698,10 +698,22 @@ internal class WasmDwarfVariableResolver private constructor(
          * Creates a resolver from raw Wasm binary bytes by parsing
          * the DWARF debug info sections.
          *
+         * A component-model binary carries no DWARF of its own: the debug info sits
+         * in the core modules it embeds, so those are tried in `module` section order
+         * and the first one carrying DWARF wins. That is the module the app code is
+         * compiled from (adapters ship stripped, and [WasmDwarfInjector] injects into
+         * the first embedded module for the same reason); variable resolution for a
+         * stop in a *different* embedded module is not covered.
+         *
          * @return a [WasmDwarfVariableResolver], or `null` if the
          *         binary has no DWARF info or parsing fails
          */
-        fun create(wasmBytes: ByteArray): WasmDwarfVariableResolver? {
+        fun create(wasmBytes: ByteArray): WasmDwarfVariableResolver? =
+            createFromCoreModule(wasmBytes)
+                ?: WasmDwarfUtil.embeddedCoreModules(wasmBytes).firstNotNullOfOrNull { createFromCoreModule(it) }
+
+        /** [create] for bytes that must already be a core module. */
+        private fun createFromCoreModule(wasmBytes: ByteArray): WasmDwarfVariableResolver? {
             return try {
                 val buffer = wasmBytes.toCommonByteBuffer()
                 val parseResult = WasmParser().parse(buffer) as? WasmParseSuccess
