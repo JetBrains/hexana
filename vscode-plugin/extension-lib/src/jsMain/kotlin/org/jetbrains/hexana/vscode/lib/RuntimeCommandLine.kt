@@ -9,6 +9,7 @@ import org.jetbrains.hexana.shared.buildGraalWasmRunArgs
 import org.jetbrains.hexana.shared.buildWamrDebugArgs
 import org.jetbrains.hexana.shared.buildWamrRunArgs
 import org.jetbrains.hexana.shared.buildWasmtimeDebugArgs
+import org.jetbrains.hexana.shared.buildWasmtimeGdbArgs
 import org.jetbrains.hexana.shared.buildWasmtimeRunArgs
 import org.jetbrains.hexana.shared.looksLikeWamrDebugNotSupported
 
@@ -294,6 +295,75 @@ fun buildWamrDebugCommandLine(
         workingDirectory = result.commandLine.workingDirectory,
         debugHost = result.debugHost,
         debugPort = result.debugPort,
+    )
+}
+
+/**
+ * JS-exported result of building a Wasmtime gdbstub command line.
+ *
+ * @property arguments the wasmtime argument list (excluding the
+ *                     `wasmtime` executable itself)
+ * @property workingDirectory the working directory, or `null`
+ * @property debugHost the host wasmtime listens on for the gdbstub
+ * @property debugPort the port wasmtime listens on for the gdbstub
+ */
+@JsExport
+data class WasmtimeGdbCommandLineResult(
+    val arguments: Array<String>,
+    val workingDirectory: String?,
+    val debugHost: String,
+    val debugPort: Int,
+) {
+    override fun equals(other: Any?): Boolean =
+        other is WasmtimeGdbCommandLineResult && arguments.contentEquals(other.arguments) &&
+            workingDirectory == other.workingDirectory && debugHost == other.debugHost && debugPort == other.debugPort
+
+    override fun hashCode(): Int = arguments.contentHashCode() + (workingDirectory?.hashCode() ?: 0) +
+        debugHost.hashCode() + debugPort
+}
+
+/**
+ * Builds the argument list for a Wasmtime guest-debugging run using the
+ * built-in gdbstub (`wasmtime run -g <host>:<port> module.wasm`).
+ *
+ * Exposes the shared [buildWasmtimeGdbArgs] builder to TypeScript so the
+ * VS Code extension produces the same command line as the IntelliJ plugin:
+ * no `-D debug-info` / JIT loader — the gdbstub exposes DWARF from the
+ * wasm binary directly and LLDB attaches via `process connect --plugin wasm`.
+ *
+ * @param wasmFilePath path to the `.wasm` file to debug
+ * @param wasmBytes raw bytes of the wasm file, or `null`
+ * @param programArguments whitespace-separated program arguments
+ * @param runtimeOptions extra wasmtime CLI options (including `--invoke`)
+ * @param host address wasmtime should listen on (default `"127.0.0.1"`)
+ * @param port port wasmtime should listen on
+ * @param effectiveWasmPath path to the composed binary, or `null`
+ */
+@JsExport
+fun buildWasmtimeGdbCommandLine(
+    wasmFilePath: String,
+    wasmBytes: ByteArray? = null,
+    programArguments: String = "",
+    runtimeOptions: String = "",
+    host: String = "127.0.0.1",
+    port: Int = 4712,
+    effectiveWasmPath: String? = null,
+): WasmtimeGdbCommandLineResult {
+    val input = WasmRunInput(
+        wasmFilePath = wasmFilePath,
+        wasmBuffer = wasmBytes?.toCommonByteBuffer(),
+        programArguments = programArguments,
+        runtimeOptions = runtimeOptions,
+        effectiveWasmPath = effectiveWasmPath,
+    )
+
+    val result = buildWasmtimeGdbArgs(input = input, port = port, host = host)
+
+    return WasmtimeGdbCommandLineResult(
+        arguments = result.arguments.toTypedArray(),
+        workingDirectory = result.workingDirectory,
+        debugHost = host,
+        debugPort = port,
     )
 }
 

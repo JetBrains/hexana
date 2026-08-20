@@ -201,6 +201,73 @@ export namespace SourceLocationResolver {
     function create(wasmBytes: Int8Array): SourceLocationResolver | null;
 }
 
+// ── WasmDisassembly ─────────────────────────────────────────────────
+
+/** One disassembly row: module-absolute byte offset (-1 when unknown) and WAT-style text. */
+export interface DisasmRow {
+    readonly offset: number;
+    readonly instruction: string;
+}
+
+/** A function's code-section entry: code-section-local index and module-absolute byte range [start, end). */
+export interface DisasmFunctionRange {
+    readonly index: number;
+    readonly start: number;
+    readonly end: number;
+}
+
+/**
+ * Lazy per-function wasm disassembly backing the DAP `disassemble` request.
+ * Function bodies are parsed on first access and cached by code-section-local index.
+ */
+export interface WasmDisassembly {
+    /** Number of functions in the code section. */
+    functionCount(): number;
+    /** The entry range covering the offset, or null when outside the code section. */
+    functionRangeForOffset(moduleAbsoluteOffset: number): DisasmFunctionRange | null;
+    /** The entry range of the function at the code-section-local index, or null when out of bounds. */
+    functionRange(localIndex: number): DisasmFunctionRange | null;
+    /** Disassembly rows of the function (cached; empty on parse failure). */
+    rowsForFunction(localIndex: number): DisasmRow[];
+}
+
+/** Indexes wasm bytes for disassembly; null when the bytes are not a parseable wasm module. */
+export function createWasmDisassembly(wasmBytes: Int8Array): WasmDisassembly | null;
+
+// ── WasmStackShape ──────────────────────────────────────────────────
+
+/** A symbolic operand-stack slot; localRef/globalRef are -1 when absent. */
+export interface SymbolicStackSlot {
+    readonly type: string;
+    readonly provenance: string;
+    readonly localRef: number;
+    readonly globalRef: number;
+}
+
+/** Result of stackAt: slots bottom-to-top, or null with unavailableReason set. */
+export interface StackShapeResult {
+    readonly slots: SymbolicStackSlot[] | null;
+    readonly unavailableReason: string | null;
+}
+
+/** Statically reconstructs the wasm operand stack (types + provenance) at an offset. */
+export interface WasmStackShape {
+    /** Stack state BEFORE the instruction at the module-absolute offset executes. */
+    stackAt(offset: number): StackShapeResult;
+}
+
+/** Indexes wasm bytes for stack-shape analysis; null when not a parseable core module. */
+export function createWasmStackShape(wasmBytes: Int8Array): WasmStackShape | null;
+
+/**
+ * Decodes a gdbstub stack/local value hex payload (little-endian, 4 bytes for
+ * i32/f32, 8 for i64/f64) per the wasm value type from the static analyzer.
+ */
+export function decodeWasmStackValueHex(hex: string, typeDisplay: string): string | null;
+
+/** Extracts the hex payload from LLDB `process plugin packet send` output. */
+export function parseRawPacketOutput(lines: string[]): string | null;
+
 // ── ShellUtils ──────────────────────────────────────────────────────
 
 /**
@@ -469,6 +536,29 @@ export function buildWamrDebugCommandLine(
     port?: number,
     stubWriter?: JsStubFileWriter | null,
 ): WamrDebugCommandLineResult;
+
+/** Result of building a Wasmtime gdbstub command line. */
+export interface WasmtimeGdbCommandLineResult {
+    readonly arguments: string[];
+    readonly workingDirectory: string | null;
+    readonly debugHost: string;
+    readonly debugPort: number;
+}
+
+/**
+ * Builds the argument list for a Wasmtime guest-debugging run using the
+ * built-in gdbstub (`wasmtime run -g host:port module.wasm`). No JIT
+ * loader / `-D debug-info` — LLDB attaches via `process connect --plugin wasm`.
+ */
+export function buildWasmtimeGdbCommandLine(
+    wasmFilePath: string,
+    wasmBytes?: Int8Array | null,
+    programArguments?: string,
+    runtimeOptions?: string,
+    host?: string,
+    port?: number,
+    effectiveWasmPath?: string | null,
+): WasmtimeGdbCommandLineResult;
 
 /**
  * Detects whether iwasm output indicates the `-g` debug option is

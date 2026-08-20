@@ -843,9 +843,46 @@ export function waitForIwasmReady(
     iwasmProcess: ChildProcess,
     timeoutMs: number,
 ): Promise<void> {
+    return waitForDebugServerReady(
+        iwasmProcess,
+        timeoutMs,
+        ["Debug server listening on", "debug server listening on"],
+        "iwasm",
+        (output) => extensionLib?.isWamrDebugNotSupported(output)
+            ? "\n\nThe installed iwasm does not support " +
+              "the \"-g\" debug option. Rebuild iwasm with:\n" +
+              "  cmake .. -DWAMR_BUILD_DEBUG_INTERP=1\n" +
+              "  make"
+            : undefined,
+    );
+}
+
+/**
+ * Waits for the wasmtime gdbstub to print "Debugger listening on"
+ * (matching IntelliJ's `WasmtimeGdbDebugProcess.READY_MARKER`).
+ */
+export function waitForWasmtimeGdbReady(
+    wasmtimeProcess: ChildProcess,
+    timeoutMs: number,
+): Promise<void> {
+    return waitForDebugServerReady(
+        wasmtimeProcess,
+        timeoutMs,
+        ["Debugger listening on"],
+        "wasmtime",
+    );
+}
+
+function waitForDebugServerReady(
+    proc: ChildProcess,
+    timeoutMs: number,
+    readyMarkers: string[],
+    label: string,
+    earlyExitHint?: (output: string) => string | undefined,
+): Promise<void> {
     const log = getDebugOutputChannel();
     log.appendLine(
-        `[Hexana] Waiting for iwasm to print debug server ready message ` +
+        `[Hexana] Waiting for ${label} to print debug server ready message ` +
         `(timeout=${timeoutMs}ms)`,
     );
 
@@ -866,12 +903,9 @@ export function waitForIwasmReady(
             // Check accumulated output (not just this chunk) because
             // Node.js may split the ready message across chunks.
             const accumulated = collectedOutput.join("");
-            if (
-                accumulated.includes("Debug server listening on") ||
-                accumulated.includes("debug server listening on")
-            ) {
+            if (readyMarkers.some(marker => accumulated.includes(marker))) {
                 log.appendLine(
-                    `[Hexana] WAMR debug server is ready`,
+                    `[Hexana] ${label} debug server is ready`,
                 );
                 settle(() => resolve());
             }
@@ -879,31 +913,29 @@ export function waitForIwasmReady(
 
         function onExit(code: number | null, signal: string | null): void {
             const output = collectedOutput.join("").trim();
-            let details = `iwasm exited before debug server started ` +
+            let details = `${label} exited before debug server started ` +
                 `(code=${code}, signal=${signal}).`;
-            if (extensionLib?.isWamrDebugNotSupported(output)) {
-                details += "\n\nThe installed iwasm does not support " +
-                    "the \"-g\" debug option. Rebuild iwasm with:\n" +
-                    "  cmake .. -DWAMR_BUILD_DEBUG_INTERP=1\n" +
-                    "  make";
+            const hint = earlyExitHint?.(output);
+            if (hint) {
+                details += hint;
             } else if (output) {
-                details += `\n\niwasm output:\n${output}`;
+                details += `\n\n${label} output:\n${output}`;
             }
             settle(() => reject(new Error(details)));
         }
 
         function onError(err: Error): void {
             settle(() => reject(
-                new Error(`iwasm failed to start: ${err.message}`),
+                new Error(`${label} failed to start: ${err.message}`),
             ));
         }
 
         function cleanup(): void {
             clearTimeout(timer);
-            iwasmProcess.stdout?.off("data", onData);
-            iwasmProcess.stderr?.off("data", onData);
-            iwasmProcess.off("exit", onExit);
-            iwasmProcess.off("error", onError);
+            proc.stdout?.off("data", onData);
+            proc.stderr?.off("data", onData);
+            proc.off("exit", onExit);
+            proc.off("error", onError);
         }
 
         const timer = setTimeout(() => {
@@ -914,17 +946,17 @@ export function waitForIwasmReady(
             // the server isn't actually ready.
             log.appendLine(
                 `[Hexana] Timed out after ${timeoutMs}ms waiting for ` +
-                `iwasm debug server ready message. ` +
+                `${label} debug server ready message. ` +
                 `Proceeding with LLDB connection anyway.` +
-                (output ? `\n  iwasm output so far: ${output}` : ""),
+                (output ? `\n  ${label} output so far: ${output}` : ""),
             );
             settle(() => resolve());
         }, timeoutMs);
 
-        iwasmProcess.stdout?.on("data", onData);
-        iwasmProcess.stderr?.on("data", onData);
-        iwasmProcess.on("exit", onExit);
-        iwasmProcess.on("error", onError);
+        proc.stdout?.on("data", onData);
+        proc.stderr?.on("data", onData);
+        proc.on("exit", onExit);
+        proc.on("error", onError);
     });
 }
 
@@ -1003,6 +1035,154 @@ export function launchIwasmDebugServer(
         iwasmProcess,
         debugHost: debugCmdLine.debugHost,
         debugPort: debugCmdLine.debugPort,
+    };
+}
+
+/**
+ * Probes whether the wasmtime binary supports the gdbstub flag by
+ * checking `wasmtime run --help` for "--gdbstub" (matching IntelliJ's
+ * `WasmDebugRunner.probeWasmtimeGdbSupport`). Returns `true` when the
+ * probe itself fails (e.g. wasmtime not found) so the actual launch
+ * surfaces the more informative OS error.
+ */
+export function probeWasmtimeGdbSupport(wasmtimeCmd: string): boolean {
+    try {
+        const out = execFileSync(wasmtimeCmd, ["run", "--help"], {
+            stdio: ["ignore", "pipe", "pipe"],
+            encoding: "utf8",
+        });
+        return out.includes("--gdbstub");
+    } catch (e: any) {
+        // execFileSync throws on non-zero exit; the help text may still
+        // be in stdout/stderr of the error object.
+        const out = `${e?.stdout ?? ""}${e?.stderr ?? ""}`;
+        if (out) {
+            return out.includes("--gdbstub");
+        }
+        return true;
+    }
+}
+
+/**
+ * Resolves a wasmtime binary that supports the gdbstub (`--gdbstub` in
+ * `run --help`, wasmtime 44+). Tries the normally resolved runtime first,
+ * then wasmtime's own installer location (`~/.wasmtime/bin`) — the
+ * installer prepends it to the shell PATH, but GUI-launched VS Code does
+ * not see that. Returns `null` when no gdbstub-capable wasmtime exists.
+ */
+export function resolveGdbCapableWasmtime(): string | null {
+    const isWindows = os.platform() === "win32";
+    const cmd = getRuntimeCommand("wasmtime", isWindows);
+    if (cmd && probeWasmtimeGdbSupport(cmd)) {
+        return cmd;
+    }
+    const installerBinary = path.join(
+        os.homedir(), ".wasmtime", "bin", isWindows ? "wasmtime.exe" : "wasmtime",
+    );
+    if (installerBinary !== cmd && fs.existsSync(installerBinary) && probeWasmtimeGdbSupport(installerBinary)) {
+        getDebugOutputChannel().appendLine(
+            `[Hexana] Using ${installerBinary} for guest debugging (the resolved wasmtime lacks --gdbstub)`,
+        );
+        return installerBinary;
+    }
+    return null;
+}
+
+/** Allocates a free ephemeral TCP port on 127.0.0.1. */
+function allocateFreePort(): Promise<number> {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const net = require("net") as typeof import("net");
+    return new Promise((resolve, reject) => {
+        const server = net.createServer();
+        server.once("error", reject);
+        server.listen(0, "127.0.0.1", () => {
+            const address = server.address();
+            const port = typeof address === "object" && address ? address.port : 0;
+            server.close(() => port > 0 ? resolve(port) : reject(new Error("No free port")));
+        });
+    });
+}
+
+/**
+ * Launches wasmtime with the built-in gdbstub (`wasmtime run -g host:port`)
+ * on a free ephemeral port. Wasmtime pauses until LLDB attaches via
+ * `process connect --plugin wasm` (injected by the tracker as
+ * `launchCommands`). Mirrors IntelliJ's `prepareWasmtimeGdbSession`.
+ *
+ * The caller must wait for readiness via `waitForWasmtimeGdbReady()`
+ * before letting lldb-dap connect.
+ */
+export async function launchWasmtimeGdbServer(
+    config: vscode.DebugConfiguration,
+    wasmtimeCmd: string,
+): Promise<{ wasmtimeProcess: ChildProcess; debugHost: string; debugPort: number } | undefined> {
+    if (!extensionLib) {
+        vscode.window.showErrorMessage("Cannot debug: extension library is not available.");
+        return undefined;
+    }
+
+    const wasmFilePath = config.wasmFile as string;
+    const wasmBytes = readWasmBytes(wasmFilePath);
+    const programArgs = config.programArgs || "";
+    const runtimeOptions = (config.runtimeOptions || "") as string;
+    const invokeArgs = (config.invokeArgs || "") as string;
+    const effectiveWasmPath = (config.effectiveWasmPath || null) as string | null;
+
+    // Same combination as the run path and the native debug path: the
+    // webview sends `invokeArgs` as a ready-made wasmtime CLI fragment.
+    const combinedOptions = [runtimeOptions, invokeArgs]
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(" ");
+
+    let debugPort: number;
+    try {
+        debugPort = await allocateFreePort();
+    } catch (e) {
+        vscode.window.showErrorMessage(`Cannot debug: no free port for the wasmtime gdbstub (${e}).`);
+        return undefined;
+    }
+
+    const cmdLine = extensionLib.buildWasmtimeGdbCommandLine(
+        wasmFilePath,
+        wasmBytes,
+        programArgs,
+        combinedOptions,
+        "127.0.0.1",
+        debugPort,
+        effectiveWasmPath,
+    );
+
+    const log = getDebugOutputChannel();
+    const args = [...cmdLine.arguments];
+    const cwd = cmdLine.workingDirectory || path.dirname(wasmFilePath);
+
+    log.appendLine(
+        `[Hexana] Starting wasmtime gdbstub: ${wasmtimeCmd} ${args.join(" ")} (cwd=${cwd})`,
+    );
+
+    const wasmtimeProcess = spawn(wasmtimeCmd, args, {
+        cwd,
+        stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    wasmtimeProcess.stdout?.on("data", (chunk: Buffer) => {
+        log.appendLine(`[wasmtime stdout] ${chunk.toString().trimEnd()}`);
+    });
+    wasmtimeProcess.stderr?.on("data", (chunk: Buffer) => {
+        log.appendLine(`[wasmtime stderr] ${chunk.toString().trimEnd()}`);
+    });
+    wasmtimeProcess.on("error", (err) => {
+        log.appendLine(`[wasmtime ERROR] ${err.message}`);
+    });
+    wasmtimeProcess.on("exit", (code, signal) => {
+        log.appendLine(`[wasmtime EXIT] code=${code}, signal=${signal}`);
+    });
+
+    return {
+        wasmtimeProcess,
+        debugHost: cmdLine.debugHost,
+        debugPort: cmdLine.debugPort,
     };
 }
 

@@ -13,21 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
-import org.jetbrains.hexana.wasm.WasmModule
-import org.jetbrains.hexana.wasm.WasmParseSuccess
-import org.jetbrains.hexana.wasm.WasmParser
-import org.jetbrains.hexana.providers.format.WatSymbolNames
-import org.jetbrains.hexana.providers.format.watFor
-import org.jetbrains.hexana.wasm.opcodes.OpCode
-import org.jetbrains.hexana.wasm.opcodes.OpCodeWithOffset
-import org.jetbrains.hexana.wasm.opcodes.OpCodes
-import org.jetbrains.hexana.wasm.sections.CodeEntryOffset
-import org.jetbrains.hexana.wasm.sections.UnparsedOpCode
-import org.jetbrains.hexana.wasm.sections.WasmSectionCode
-import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
-import org.jetbrains.hexana.shared.FlattenedInstr
-import org.jetbrains.hexana.shared.WasmInstrOffsets
-import org.jetbrains.hexana.wasm.sections.parseCodeEntry
+import org.jetbrains.hexana.shared.WasmDisassemblyIndex
 import java.nio.channels.FileChannel
 import java.nio.file.StandardOpenOption
 import java.util.concurrent.ConcurrentHashMap
@@ -209,198 +195,39 @@ internal class WasmDisassemblyPanel(val model: WasmDisassemblyTableModel) {
 // Wasm binary disassembly engine
 // ---------------------------------------------------------------------------
 
-/**
- * Lazily parses wasm function bodies on first access and caches the resulting
- * [WasmDisassemblyTableModel.Row] lists by function index (code-section local).
- *
- * Design constraints (50MB / 14k-function modules):
- * - The code-section index ([CodeEntryOffset] list) is scanned once at init.
- * - Individual function bodies are parsed on demand via [parseCodeEntry].
- * - Results are cached in [cache] so repeated stepping inside one function
- *   is a simple lookup.
- *
- * @param wasmBuffer the module bytes (e.g. a read-only mmap from
- *        [mapWasmFileToBuffer]); if null all queries return empty
- */
 internal class WasmDisassemblySource(wasmBuffer: CommonByteBuffer?) {
 
     private val LOG = Logger.getInstance(WasmDisassemblySource::class.java)
 
-    /** Sorted list of (codeSection-local) function offsets, index = local func idx (0-based). */
-    private val offsets: List<CodeEntryOffset>?
-
-    /** The module buffer, kept only as long as [offsets] is non-null and the cache may need fills. */
-    private val wasmBuffer: CommonByteBuffer?
+    /** Shared parse/index/render core; null when the buffer is absent or unparseable. */
+    private val index: WasmDisassemblyIndex? = WasmDisassemblyIndex.create(wasmBuffer).also {
+        if (it == null && wasmBuffer != null) {
+            LOG.warn("WasmDisassemblySource: failed to init from buffer")
+        }
+    }
 
     /** Cached disassembly rows per code-section-local function index. */
     private val cache = ConcurrentHashMap<Int, List<WasmDisassemblyTableModel.Row>>()
 
-    /**
-     * Number of imported functions (code-section indices are shifted by this value to get
-     * the module-level function index; for offset look-ups we only need local indices).
-     */
-    private val importFuncCount: Int
-
-    /**
-     * Function names from the name custom section, keyed by GLOBAL function
-     * index (imports first, then defined functions). Null when the module has
-     * no name section (stripped builds) — calls then render numerically.
-     */
-    private val funcNames: Map<Int, String>?
-
-    /** Symbolic operand resolver passed to [watFor], same contract as the WAT view. */
-    private val watSymbols = WatSymbolNames { funcIdx -> funcNames?.get(funcIdx) }
-
-    init {
-        var tempOffsets: List<CodeEntryOffset>? = null
-        var tempBuffer: CommonByteBuffer? = null
-        var tempImportCount = 0
-        var tempFuncNames: Map<Int, String>? = null
-        if (wasmBuffer != null) {
-            try {
-                run {
-                    val buf = wasmBuffer.duplicate()
-                    val result = WasmParser().parse(buf.duplicate()) as? WasmParseSuccess
-                    val module = result?.wasmModule as? WasmModule
-                    if (module != null) {
-                        val codeSection = module.codeSection
-                        if (codeSection != null) {
-                            tempOffsets = with(codeSection) { buf.duplicate().scanOffsets() }
-                        }
-                        // Count imported functions to translate module-absolute offsets
-                        val importSection = module.importSection
-                        if (importSection != null) {
-                            val imports = with(importSection) { buf.duplicate().getImportRecords() }
-                            tempImportCount = imports.count { it.type is WasmTypeIndexExternalType }
-                        }
-                        tempFuncNames = with(module) {
-                            getCustomSectionByName("name")?.let { customSection ->
-                                with(customSection) { buf.duplicate().parseAsNameSection() }
-                            }
-                        }?.functionSubsection?.namemap
-                        tempBuffer = buf
-                    }
-                }
-            } catch (e: Exception) {
-                LOG.warn("WasmDisassemblySource: failed to init from buffer", e)
-            }
-        }
-        offsets = tempOffsets
-        this.wasmBuffer = tempBuffer
-        importFuncCount = tempImportCount
-        funcNames = tempFuncNames
-    }
-
     /** Returns true if the wasm binary was successfully indexed. */
-    fun isAvailable(): Boolean = offsets != null
+    fun isAvailable(): Boolean = index != null
 
     /**
      * Returns disassembly rows for the function containing [moduleAbsoluteOffset], or null
      * if the offset is not in the code section or the binary is unavailable.
      *
-     * Also returns the code-section-local function index via [localFuncIndexOut] (if provided)
-     * so the caller can use it for cache look-up checks.
+     * Also returns the code-section-local function index so the caller can use
+     * it for cache look-up checks.
      */
     fun rowsForOffset(moduleAbsoluteOffset: Int): Pair<List<WasmDisassemblyTableModel.Row>, Int>? {
-        val offs = offsets ?: return null
-        val buffer = wasmBuffer ?: return null
-        if (offs.isEmpty()) return null
-
-        // Binary-search for the code entry whose range covers moduleAbsoluteOffset.
-        // Each CodeEntryOffset.offset is the start of the LEB128-size prefix (the full entry).
-        var lo = 0; var hi = offs.size - 1; var localIdx = -1
-        while (lo <= hi) {
-            val mid = (lo + hi) ushr 1
-            val entry = offs[mid]
-            val entryEnd = entry.offset + entry.size
-            when {
-                moduleAbsoluteOffset < entry.offset -> hi = mid - 1
-                moduleAbsoluteOffset >= entryEnd -> lo = mid + 1
-                else -> { localIdx = mid; break }
-            }
-        }
+        val idx = index ?: return null
+        val localIdx = idx.functionIndexForOffset(moduleAbsoluteOffset)
         if (localIdx < 0) return null
-
         val rows = cache.getOrPut(localIdx) {
-            buildRows(buffer, offs[localIdx], localIdx)
+            idx.disassembleFunction(localIdx).map { WasmDisassemblyTableModel.Row(it.offset, it.instruction) }
+                .also { if (it.isEmpty()) LOG.debug("WasmDisassemblySource: failed to parse func localIdx=$localIdx") }
         }
         return rows to localIdx
-    }
-
-    private fun buildRows(buffer: CommonByteBuffer, entry: CodeEntryOffset, localIdx: Int): List<WasmDisassemblyTableModel.Row> {
-        return try {
-            val buf = buffer.duplicate()
-            val record = buf.parseCodeEntry(entry.offset)
-            val rows = mutableListOf<WasmDisassemblyTableModel.Row>()
-            val flat = mutableListOf<FlattenedInstr>()
-            appendRows(record.opCodes, 0, rows, flat)
-            // Backward pass: deduce offsets for singleton opcodes (shared instances with no
-            // per-instance offset). entryEnd = entry.offset + entry.size (exclusive boundary).
-            if (WasmInstrOffsets.deduceOffsets(flat, entry.offset + entry.size)) {
-                for (i in rows.indices) {
-                    val deduced = flat[i].offset
-                    if (deduced >= 0 && rows[i].offset < 0) {
-                        rows[i] = rows[i].copy(offset = deduced)
-                    }
-                }
-            }
-            // The function's terminal `end` byte is consumed by the parser as its
-            // stop marker and never appears in opCodes, but it is a legitimate
-            // pause target (the return values are on the stack). Surface it as
-            // the last row so the highlight can land on it exactly.
-            rows.add(WasmDisassemblyTableModel.Row(offset = entry.offset + entry.size - 1, instruction = "end"))
-            rows
-        } catch (e: Exception) {
-            LOG.debug("WasmDisassemblySource: failed to parse func localIdx=$localIdx", e)
-            emptyList()
-        }
-    }
-
-    /**
-     * Emits one row per instruction using the same [watFor] mnemonic renderer as
-     * the virtualized WAT view, recursing into block bodies (the parser nests
-     * them inside Block/Loop/If/Else and TryTable rather than keeping the list
-     * flat) with two-space indentation and a synthetic `end` row per block.
-     *
-     * [flat] receives one [FlattenedInstr] per row in the same order so that
-     * [WasmInstrOffsets.deduceOffsets] can fill in offsets for singleton opcodes
-     * (zero-operand shared instances whose inherited offset field is meaningless).
-     */
-    private fun appendRows(
-        ops: List<OpCode>,
-        depth: Int,
-        rows: MutableList<WasmDisassemblyTableModel.Row>,
-        flat: MutableList<FlattenedInstr>,
-    ) {
-        val indent = "  ".repeat(depth)
-        for (op in ops) {
-            val recordedOffset = (op as? OpCodeWithOffset)?.offset?.takeIf { it > 0 } ?: -1
-            val text = if (op is UnparsedOpCode) "<unparsed: ${op.e.message}>" else watFor(op, watSymbols)
-            rows.add(WasmDisassemblyTableModel.Row(recordedOffset, indent + text))
-            when (op) {
-                is OpCodes.Flow.Block -> { // also Loop, If, Else (subclasses)
-                    // Block opcode: block-start entry (byteLen=null because recorded offset
-                    // is the block's start and carried by the op), then body, then END.
-                    flat.add(FlattenedInstr(isEndMarker = false, byteLen = null, recordedOffset = recordedOffset))
-                    appendRows(op.value, depth + 1, rows, flat)
-                    rows.add(WasmDisassemblyTableModel.Row(-1, indent + "end"))
-                    flat.add(FlattenedInstr(isEndMarker = true, byteLen = 1, recordedOffset = -1))
-                }
-                is OpCodes.Flow.TryTable -> {
-                    flat.add(FlattenedInstr(isEndMarker = false, byteLen = null, recordedOffset = recordedOffset))
-                    appendRows(op.code, depth + 1, rows, flat)
-                    rows.add(WasmDisassemblyTableModel.Row(-1, indent + "end"))
-                    flat.add(FlattenedInstr(isEndMarker = true, byteLen = 1, recordedOffset = -1))
-                }
-                else -> flat.add(
-                    FlattenedInstr(
-                        isEndMarker = false,
-                        byteLen = WasmInstrOffsets.singletonByteLen(op),
-                        recordedOffset = recordedOffset,
-                    )
-                )
-            }
-        }
     }
 }
 

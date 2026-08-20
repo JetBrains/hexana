@@ -8,7 +8,10 @@ import {
     LldbDapProxy,
     resolveLldbDapPath,
     launchIwasmDebugServer,
+    launchWasmtimeGdbServer,
+    resolveGdbCapableWasmtime,
     waitForIwasmReady,
+    waitForWasmtimeGdbReady,
     WAMR_DEBUG_SERVER_READY_TIMEOUT_MS,
     buildWasmtimeLaunchConfig,
     writeWindowsJitLoaderScript,
@@ -154,27 +157,64 @@ class WasmDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
 
         const args: string[] = [];
 
-        // Enable JIT loader for Wasmtime so LLDB can see
-        // JIT-compiled symbols.  The lldb-dap binary accepts
-        // `--pre-init-command` (alias `-c`) — NOT `--init-command`.
-        //
-        // On macOS/Linux, this is required for LLDB to
-        // automatically discover symbols in JIT-compiled code.
-        // On Windows, the built-in JIT loader does not work
-        // reliably (the IntelliJ plugin uses a manual workaround),
-        // but enabling it is still attempted as a best-effort
-        // measure for lldb-dap which handles LLDB internally.
         if (runtime === "wasmtime") {
+            // Prefer the gdbstub model (wasmtime 44+): wasmtime runs the
+            // guest with `-g host:port` and LLDB attaches via
+            // `process connect --plugin wasm` — DWARF comes straight from
+            // the wasm binary, no JIT loader or trap-advance workarounds,
+            // and no `expression` injection (it aborts wasm targets).
+            // This matches the IntelliJ plugin's WasmtimeGdbDebugProcess.
+            const gdbWasmtime = resolveGdbCapableWasmtime();
+            if (gdbWasmtime) {
+                return launchWasmtimeGdbServer(config, gdbWasmtime).then((gdb) => {
+                    if (!gdb) {
+                        return undefined; // error already shown
+                    }
+                    // Store connection info on the session config so the
+                    // tracker can inject `launchCommands` later.
+                    config._wasmtimeGdbHost = gdb.debugHost;
+                    config._wasmtimeGdbPort = gdb.debugPort;
+
+                    return waitForWasmtimeGdbReady(
+                        gdb.wasmtimeProcess,
+                        WAMR_DEBUG_SERVER_READY_TIMEOUT_MS,
+                    ).then(() => {
+                        const proxy = new LldbDapProxy(lldbDapPath, args, false);
+                        proxy.setIwasmProcess(gdb.wasmtimeProcess);
+                        proxy.start();
+                        return new vscode.DebugAdapterInlineImplementation(proxy);
+                    }, (err) => {
+                        gdb.wasmtimeProcess.kill();
+                        const errMsg = err instanceof Error ? err.message : String(err);
+                        vscode.window.showErrorMessage(
+                            `Wasmtime debug server did not become ready: ${errMsg}`,
+                        );
+                        return undefined;
+                    });
+                });
+            }
+
+            // Make the degradation visible — the silent fallback made a
+            // stale wasmtime look like a broken gdbstub integration.
+            vscode.window.showWarningMessage(
+                "The available wasmtime does not support guest debugging " +
+                "(-g / --gdbstub, requires wasmtime 44+). Falling back to " +
+                "native debugging. Update wasmtime for reliable wasm-level debugging.",
+            );
+
+            // Legacy fallback for wasmtime without gdbstub support (< 44):
+            // lldb-dap launches wasmtime as a native process. Enable the
+            // JIT loader so LLDB can see JIT-compiled symbols (the
+            // lldb-dap binary accepts `--pre-init-command`, alias `-c` —
+            // NOT `--init-command`). On Windows the built-in JIT loader is
+            // unreliable (a manual workaround is injected by the tracker),
+            // but enabling it is still attempted as a best-effort measure.
+            // The inline proxy intercepts DAP messages and injects
+            // `__vmctx->set()` on demand before variable inspection.
             args.push(
                 "--pre-init-command",
                 "settings set plugin.jit-loader.gdb.enable on",
             );
-        }
-
-        // For Wasmtime, use the inline proxy adapter so we can
-        // intercept DAP messages and inject __vmctx->set() on
-        // demand before variable inspection.
-        if (runtime === "wasmtime") {
             const proxy = new LldbDapProxy(lldbDapPath, args, true);
             proxy.start();
             return new vscode.DebugAdapterInlineImplementation(proxy);
@@ -241,7 +281,22 @@ class WasmDebugAdapterTracker implements vscode.DebugAdapterTracker {
         const runtime: string = config.runtime || "wasmtime";
 
         try {
-            if (runtime === "wasmtime") {
+            if (runtime === "wasmtime" && config._wasmtimeGdbPort) {
+                // Gdbstub model: wasmtime is already running with
+                // `-g host:port` (launched by the factory); configure
+                // lldb-dap to connect via the wasm process plugin, like
+                // the WAMR branch below. Do NOT set `program` — the wasm
+                // plugin creates its own target from the remote stub.
+                const args = message.arguments || {};
+                args.launchCommands = [
+                    `process connect --plugin wasm connect://${config._wasmtimeGdbHost || "127.0.0.1"}:${config._wasmtimeGdbPort}`,
+                ];
+                // Force stopOnEntry so configurationDone sends a stopped
+                // event; the LldbDapProxy intercepts this initial stop and
+                // continues unless it matches a user breakpoint.
+                args.stopOnEntry = true;
+                message.arguments = args;
+            } else if (runtime === "wasmtime") {
                 const launchConfig = buildWasmtimeLaunchConfig(config);
                 const args = message.arguments || {};
                 args.program = launchConfig.program;

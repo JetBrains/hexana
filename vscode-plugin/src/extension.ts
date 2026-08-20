@@ -2,6 +2,7 @@ import * as https from "https";
 import * as path from "path";
 import * as vscode from "vscode";
 import { registerWasmDebugAdapter } from "./WasmDebugAdapter";
+import { registerWasmDebugView } from "./WasmDebugView";
 import { WasmEditorProvider } from "./WasmEditorProvider";
 import type * as ExtensionLib from "./extension-lib";
 import { registerHexanaMcpServerCommands } from "./mcpServerDownloader";
@@ -58,6 +59,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(WasmEditorProvider.registerCompareCommand(context));
     context.subscriptions.push(WasmEditorProvider.registerCompareBinaryCommand(context));
     registerWasmDebugAdapter(context);
+    registerWasmDebugView(context);
     registerHexanaMcpServerCommands(context);
     initWasiSdkManager(context);
     registerWasiSdkCommands(context);

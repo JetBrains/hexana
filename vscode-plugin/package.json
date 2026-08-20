@@ -47,6 +47,25 @@
         "label": "Hexana MCP"
       }
     ],
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "hexanaWasm",
+          "title": "Wasm",
+          "icon": "media/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "hexanaWasm": [
+        {
+          "type": "webview",
+          "id": "hexanaWasmView",
+          "name": "Wasm",
+          "when": "hexana.wasmDebugActive"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "hexana.mcp.updateServer",
@@ -59,6 +78,16 @@
       {
         "command": "hexana.mcp.showServerStatus",
         "title": "Hexana MCP: Show Server Status"
+      },
+      {
+        "command": "hexana.openWasmView",
+        "title": "Hexana: Open Wasm View",
+        "enablement": "hexana.wasmDebugActive"
+      },
+      {
+        "command": "hexana.openWasmDisassembly",
+        "title": "Hexana: Open WebAssembly Disassembly",
+        "enablement": "hexana.wasmDebugActive"
       },
       {
         "command": "hexana.compareWasm",

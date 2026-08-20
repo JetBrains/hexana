@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 import { execFileSync, spawn, ChildProcess } from "child_process";
 import { extensionLib } from "./WasmRunConfigurations";
 import { getDebugOutputChannel, readWasmBytes } from "./WasmDebugAdapter";
-import type { SourceLocationResolver } from "./extension-lib";
+import type { DisasmRow, SourceLocationResolver, WasmDisassembly } from "./extension-lib";
 
 /**
  * Cap for the source-line stepping auto-repeat: a single-line loop
@@ -208,6 +208,8 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
     private wasmFunctionOffsets: number[] = [];
     /** DWARF-based source ↔ Wasm offset resolver (null when no DWARF info). */
     private sourceLocationResolver: SourceLocationResolver | undefined;
+    /** Lazy per-function disassembly backing the DAP disassemble request (null when unparseable). */
+    private disassembly: WasmDisassembly | undefined;
     /** DAP seq counter for messages sent to VS Code. */
     private dapSeq = 1;
     /** Maps CDP breakpoint IDs to DAP breakpoint info. */
@@ -239,6 +241,12 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
         | undefined;
     /** Stack depth (CDP callFrames.length) at the last reported pause; baseline for line steps. */
     private frameDepthAtPause = 0;
+    /**
+     * True while the "Wasm" view is visible; switches stepping to instruction
+     * granularity (the IntelliJ Wasm-tab-selected semantics). Toggled by the
+     * extension via the "hexanaInstructionMode" custom request.
+     */
+    private instructionMode = false;
     /** CDP breakpoint IDs that were hit at the last stop reported to DAP. */
     private lastStoppedBreakpoints = new Set<string>();
     /** Whether at least one wasm:// script has been seen. */
@@ -305,6 +313,8 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                     supportsRestartFrame: false,
                     supportsGotoTargetsRequest: false,
                     supportsCompletionsRequest: false,
+                    supportsDisassembleRequest: true,
+                    supportsSteppingGranularity: true,
                 });
                 this.sendDapEvent("initialized", {});
                 break;
@@ -353,20 +363,37 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
 
             case "next":
                 this.lastActionWasContinue = false;
-                await this.startStep("Debugger.stepOver");
+                await this.startStep("Debugger.stepOver", msg.arguments?.granularity);
                 this.sendDapResponse(msg, true);
                 break;
 
             case "stepIn":
                 this.lastActionWasContinue = false;
-                await this.startStep("Debugger.stepInto");
+                await this.startStep("Debugger.stepInto", msg.arguments?.granularity);
                 this.sendDapResponse(msg, true);
                 break;
 
             case "stepOut":
                 this.lastActionWasContinue = false;
-                await this.startStep("Debugger.stepOut");
+                await this.startStep("Debugger.stepOut", msg.arguments?.granularity);
                 this.sendDapResponse(msg, true);
+                break;
+
+            case "disassemble":
+                this.handleDisassemble(msg);
+                break;
+
+            case "hexanaWasmStack":
+                await this.handleWasmStackRequest(msg);
+                break;
+
+            case "hexanaInstructionMode":
+                this.instructionMode = !!msg.arguments?.enabled;
+                this.sendDapResponse(msg, true);
+                break;
+
+            case "hexanaWasmState":
+                await this.handleWasmStateRequest(msg);
                 break;
 
             case "pause":
@@ -419,6 +446,13 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                         }
                     } catch (e) {
                         this.log.appendLine(`[Hexana CDP] Failed to create source location resolver: ${e}`);
+                    }
+
+                    try {
+                        const wasmInt8 = new Int8Array(wasmBuf.buffer, wasmBuf.byteOffset, wasmBuf.byteLength);
+                        this.disassembly = extensionLib.createWasmDisassembly(wasmInt8) ?? undefined;
+                    } catch (e) {
+                        this.log.appendLine(`[Hexana CDP] Failed to create disassembly index: ${e}`);
                     }
                 }
             }
@@ -822,10 +856,15 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
      * Issues a CDP step, arming a line-step state so [handlePaused] keeps
      * stepping until the DWARF source line (or the stack depth) changes.
      * When the current top frame has no DWARF mapping the step degrades to
-     * a single V8 step (one wasm instruction).
+     * a single V8 step (one wasm instruction). VS Code sends
+     * granularity === "instruction" while the Disassembly View is focused —
+     * then the single V8 step is presented directly (no auto-repeat),
+     * mirroring the IntelliJ Wasm-tab-selected behavior.
      */
-    private async startStep(command: string): Promise<void> {
-        const pos = this.dwarfPositionOf(this.pausedFrames?.[0]);
+    private async startStep(command: string, granularity?: string): Promise<void> {
+        const pos = granularity === "instruction" || this.instructionMode
+            ? undefined
+            : this.dwarfPositionOf(this.pausedFrames?.[0]);
         this.lineStepState = pos
             ? {
                 command,
@@ -836,6 +875,187 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
             }
             : undefined;
         await this.cdpSend(command);
+    }
+
+    // ---- Custom request: hexanaWasmStack (Wasm Stack tree view) ----
+
+    private async handleWasmStackRequest(msg: any): Promise<void> {
+        this.sendDapResponse(msg, true, undefined, { entries: await this.collectWasmStack() });
+    }
+
+    /**
+     * Combined state for the "Wasm" view: disassembly rows of the paused
+     * function (including rows without a deduced offset, rendered with blank
+     * offset cells like the IntelliJ tab), the pause offset for highlighting,
+     * and the operand-stack entries.
+     */
+    private async handleWasmStateRequest(msg: any): Promise<void> {
+        let rows: Array<{ offset: number; instruction: string }> = [];
+        let pauseOffset = -1;
+        const top = this.pausedFrames?.[0];
+        const loc = top?.location;
+        const scriptId = loc?.scriptId as string | undefined;
+        if (scriptId && this.scripts.get(scriptId)?.url?.startsWith("wasm://") && this.disassembly) {
+            const offset = (loc.columnNumber as number) || 0;
+            const range = this.disassembly.functionRangeForOffset(offset);
+            if (range) {
+                pauseOffset = offset;
+                rows = this.disassembly.rowsForFunction(range.index)
+                    .map(r => ({ offset: r.offset, instruction: r.instruction }));
+            }
+        }
+        this.sendDapResponse(msg, true, undefined, {
+            rows,
+            pauseOffset,
+            entries: await this.collectWasmStack(),
+        });
+    }
+
+    /**
+     * Collects the operand-stack entries of the paused top wasm frame,
+     * mirroring the IntelliJ Wasm tab's stack table
+     * (CdpDebuggerTabs.registerDebugTabsListener).
+     */
+    private async collectWasmStack(): Promise<Array<{ index: number; type: string; value: string }>> {
+        const entries: Array<{ index: number; type: string; value: string }> = [];
+        try {
+            const top = this.pausedFrames?.[0];
+            const scopeChain = (top?.scopeChain as any[]) || [];
+
+            // V8 exposes the operand stack as a "stack" property (className
+            // "Stack") inside a dedicated scope of type "wasm-expression-stack";
+            // older layouts put it in the "local" scope. Search both.
+            let stackObjectId: string | undefined;
+            for (const scope of scopeChain) {
+                const scopeType = scope?.type;
+                if (scopeType !== "wasm-expression-stack" && scopeType !== "local") continue;
+                const scopeObjectId = scope?.object?.objectId as string | undefined;
+                if (!scopeObjectId) continue;
+                const props = await this.cdpSend("Runtime.getProperties", {
+                    objectId: scopeObjectId,
+                    ownProperties: true,
+                });
+                const stackProp = ((props.result || []) as any[]).find(p =>
+                    p.name === "stack" && p.value?.className === "Stack");
+                stackObjectId = stackProp?.value?.objectId;
+                if (stackObjectId) break;
+            }
+
+            if (stackObjectId) {
+                const stackProps = await this.cdpSend("Runtime.getProperties", {
+                    objectId: stackObjectId,
+                    ownProperties: true,
+                });
+                for (const entry of ((stackProps.result || []) as any[])) {
+                    const idx = parseInt(entry.name, 10);
+                    if (isNaN(idx) || !entry.value) continue;
+                    const type = entry.value.description || "?";
+                    const value = await this.resolveWasmValue(entry.value) ?? "?";
+                    entries.push({ index: idx, type, value });
+                }
+                entries.sort((a, b) => a.index - b.index);
+            }
+        } catch (e) {
+            this.log.appendLine(`[Hexana CDP] wasm stack collection failed: ${e}`);
+        }
+        return entries;
+    }
+
+    // ---- DAP: disassemble (built-in Disassembly View) ----
+
+    /**
+     * Serves the DAP `disassemble` request from the lazy per-function
+     * disassembly index. Addresses are module-absolute wasm byte offsets
+     * (hex). The window is anchored at the instruction containing
+     * `memoryReference + offset` and shifted by `instructionOffset`
+     * instructions; adjacent functions are pulled in as needed and
+     * out-of-module positions are padded with `invalid` rows so exactly
+     * `instructionCount` instructions are returned, as the spec requires.
+     */
+    private handleDisassemble(msg: any): void {
+        const args = msg.arguments || {};
+        const count = (args.instructionCount as number) || 0;
+        const anchorAddr = Number(args.memoryReference) + ((args.offset as number) || 0);
+        const instrOffset = (args.instructionOffset as number) || 0;
+        const dis = this.disassembly;
+
+        const invalidRow = (address: number) => ({
+            address: "0x" + Math.max(0, address).toString(16),
+            instruction: "??",
+            presentationHint: "invalid",
+        });
+
+        const range = dis && !isNaN(anchorAddr) ? dis.functionRangeForOffset(anchorAddr) : null;
+        if (!dis || !range) {
+            this.sendDapResponse(msg, true, undefined, {
+                instructions: Array.from({ length: count }, (_, i) => invalidRow(anchorAddr + i)),
+            });
+            return;
+        }
+
+        // Rows without a deduced offset cannot be addressed in the view; drop them
+        // (deduction only fails for functions using prefixed zero-operand opcodes).
+        const addressed = (rows: DisasmRow[]) => rows.filter(r => r.offset >= 0);
+
+        let rows = addressed(dis.rowsForFunction(range.index));
+        let firstFunc = range.index;
+        let lastFunc = range.index;
+
+        // Anchor row: largest offset not exceeding the anchor address.
+        let anchor = 0;
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i].offset <= anchorAddr) anchor = i;
+            else break;
+        }
+
+        let start = anchor + instrOffset;
+        while (start < 0 && firstFunc > 0) {
+            firstFunc--;
+            const prev = addressed(dis.rowsForFunction(firstFunc));
+            rows = prev.concat(rows);
+            start += prev.length;
+        }
+        while (start + count > rows.length && lastFunc + 1 < dis.functionCount()) {
+            lastFunc++;
+            rows = rows.concat(addressed(dis.rowsForFunction(lastFunc)));
+        }
+
+        const instructions: any[] = [];
+        let prevFile: string | undefined;
+        let prevLine: number | undefined;
+        for (let i = start; i < start + count; i++) {
+            if (i < 0 || rows.length === 0) {
+                instructions.push(invalidRow((rows[0]?.offset ?? anchorAddr) + i));
+                continue;
+            }
+            if (i >= rows.length) {
+                instructions.push(invalidRow(rows[rows.length - 1].offset + (i - rows.length + 1)));
+                continue;
+            }
+            const row = rows[i];
+            const instr: any = {
+                address: "0x" + row.offset.toString(16),
+                instruction: row.instruction,
+            };
+            const resolved = this.sourceLocationResolver?.wasmOffsetToSource(row.offset);
+            if (resolved) {
+                // Per DAP, location/line are only sent when they change.
+                if (resolved.file !== prevFile) {
+                    const dwarfPath = resolved.file.replace(/\\/g, "/");
+                    const fullPath = this.findWorkspaceFileByDwarfPath(dwarfPath);
+                    instr.location = { name: path.basename(dwarfPath), ...(fullPath ? { path: fullPath } : {}) };
+                    prevFile = resolved.file;
+                    prevLine = undefined;
+                }
+                if (resolved.line !== prevLine) {
+                    instr.line = resolved.line;
+                    prevLine = resolved.line;
+                }
+            }
+            instructions.push(instr);
+        }
+
+        this.sendDapResponse(msg, true, undefined, { instructions });
     }
 
     // ---- Debugger.paused handler ----
@@ -1422,6 +1642,7 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                             source: Object.keys(inlinedSource).length > 0 ? inlinedSource : undefined,
                             line: inlinedLine,
                             column: 1,
+                            instructionPointerReference: "0x" + wasmOffset.toString(16),
                         });
                     }
 
@@ -1444,6 +1665,7 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                         source: Object.keys(physSource).length > 0 ? physSource : undefined,
                         line: physLine,
                         column: 1,
+                        instructionPointerReference: "0x" + wasmOffset.toString(16),
                     });
                     continue;
                 }
@@ -1513,6 +1735,9 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                 source: Object.keys(source).length > 0 ? source : undefined,
                 line: lineNumber,
                 column: columnNumber,
+                ...(url.startsWith("wasm://")
+                    ? { instructionPointerReference: "0x" + wasmOffset.toString(16) }
+                    : {}),
             });
         }
 
