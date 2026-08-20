@@ -15,6 +15,25 @@ Release packages record the checked-in semantic version and the full Git revisio
 Builds without the release-branch property keep the revision as their package version.
 `hexanaWebappVersion` is accepted only when it equals the checked-in authority.
 
+## Live deployment smoke
+
+Run the source-owned smoke from the repository root after deployment. Master uses
+its full revision as both version and revision; production uses the release's
+strict semantic version. The image digest is required deployment evidence but is
+not inferred from HTTP headers.
+
+```bash
+HEXANA_WEBAPP_SMOKE_TARGET=production \
+HEXANA_WEBAPP_EXPECTED_VERSION=0.1.0 \
+HEXANA_WEBAPP_EXPECTED_REVISION=0123456789abcdef0123456789abcdef01234567 \
+HEXANA_WEBAPP_EXPECTED_DIGEST=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+node webapp/live-webapp-smoke.mjs
+```
+
+The smoke writes `summary.json`, `junit.xml`, and per-host HTTP/browser evidence
+under `webapp/build/live-smoke`. Production checks both approved hosts and requires
+their release identities to match.
+
 ## Vulnerability scan
 
 The source-owned OCI release scan requires Bash, Node.js, a running Docker daemon,

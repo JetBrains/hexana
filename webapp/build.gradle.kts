@@ -520,6 +520,17 @@ tasks.register<Exec>("testWebappReleaseContract") {
     commandLine("node", "--test", project.file("release-contract.test.mjs").absolutePath)
 }
 
+tasks.register<Exec>("testWebappLiveSmoke") {
+    group = "verification"
+    description = "Runs source-owned regression tests for the deployed webapp live smoke contract."
+    inputs.files(
+        project.file("live-webapp-smoke.mjs"),
+        project.file("live-webapp-smoke.test.mjs"),
+        project.file("production-package-smoke.mjs"),
+    )
+    commandLine("node", "--test", project.file("live-webapp-smoke.test.mjs").absolutePath)
+}
+
 tasks.register<Exec>("testWebappOciEvidenceContract") {
     group = "verification"
     description = "Runs focused regression tests for detached OCI evidence validation."
