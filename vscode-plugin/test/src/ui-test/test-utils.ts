@@ -50,3 +50,19 @@ export async function submitQuickInputPath(driver: WebDriver, filePath: string):
         await okButton.click();
     }
 }
+
+export async function waitForLaunchOpenedFixture(
+    waitForWebviewEditor: () => Promise<void>,
+    openFixture: () => Promise<void>,
+    isExpectedReadinessTimeout: (error: unknown) => boolean,
+): Promise<void> {
+    try {
+        await waitForWebviewEditor();
+    } catch (error) {
+        if (!isExpectedReadinessTimeout(error)) {
+            throw error;
+        }
+        await openFixture();
+        await waitForWebviewEditor();
+    }
+}

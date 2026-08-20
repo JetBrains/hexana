@@ -1,9 +1,10 @@
 import * as path from 'path';
 import { Workbench, EditorView, WebView, By, VSBrowser, WebDriver } from 'vscode-extension-tester';
+import { error as seleniumError } from 'selenium-webdriver';
 import { expect } from 'chai';
 import * as fs from "fs";
 import { waitForFakePostHogEvent } from '../fakePostHogAssertions';
-import { submitQuickInputPath } from './test-utils';
+import { submitQuickInputPath, waitForLaunchOpenedFixture } from './test-utils';
 
 /**
  * Basic acceptance integration tests for the Hexana VS Code extension.
@@ -45,35 +46,30 @@ describe('Hexana Wasm Editor – Acceptance Tests', function () {
 
     describe('Opening a .wasm file', function () {
         let webview: WebView;
+        let webviewInitialized = false;
 
         before(async function () {
             this.timeout(120_000);
 
-            // The test runner opens the .wasm fixture via --open_resource.
-            // Check whether the file is already open as a tab; if not, open
-            // it through the command palette.
-            const editorView = new EditorView();
-            const titles = await editorView.getOpenEditorTitles();
-            const wasmOpen = titles.some(t => t.includes('test-exports.wasm'));
-
-            if (!wasmOpen) {
-                // Fallback: open the fixture via the command palette.
-                // The test settings set "window.dialogStyle": "custom" so the
-                // "File: Open File…" command shows a VS Code quick-input
-                // dialog instead of a native OS dialog.
-                const workbench = new Workbench();
-                await workbench.executeCommand('File: Open File...');
-                await driver.sleep(1000);
-
-                await submitQuickInputPath(driver, WASM_FIXTURE);
-
-                // Wait for the custom editor to appear
-                await driver.sleep(8000);
-            } else {
-                // Make sure the wasm tab is active
-                await editorView.openEditor('test-exports.wasm');
-                await driver.sleep(2000);
-            }
+            await waitForLaunchOpenedFixture(
+                async () => {
+                    await driver.wait(async () => {
+                        const frames = await driver.findElements(By.css('.editor-instance'));
+                        return frames.length > 0;
+                    }, 30_000, 'Webview editor instance did not appear within 30 seconds');
+                },
+                async () => {
+                    // The test settings set "window.dialogStyle": "custom" so
+                    // the "File: Open File…" command shows a VS Code quick-input
+                    // dialog instead of a native OS dialog.
+                    const workbench = new Workbench();
+                    await workbench.executeCommand('File: Open File...');
+                    await driver.sleep(1000);
+                    await submitQuickInputPath(driver, WASM_FIXTURE);
+                    await driver.sleep(8000);
+                },
+                (error) => error instanceof seleniumError.TimeoutError,
+            );
 
             // capture a screenshot here
             await driver.takeScreenshot().then((png) => {
@@ -81,15 +77,10 @@ describe('Hexana Wasm Editor – Acceptance Tests', function () {
                 fs.writeFileSync('collected-screenshots/screenshot.png', png, 'base64');
             });
 
-            // Wait for the webview editor instance to be present before switching
-            await driver.wait(async () => {
-                const frames = await driver.findElements(By.css('.editor-instance'));
-                return frames.length > 0;
-            }, 30_000, 'Webview editor instance did not appear within 30 seconds');
-
             // Switch into the webview iframe
             webview = new WebView();
             await webview.switchToFrame();
+            webviewInitialized = true;
 
             // Wait for the Compose app to render (the .hexana-editor container)
             await driver.wait(async () => {
@@ -100,6 +91,9 @@ describe('Hexana Wasm Editor – Acceptance Tests', function () {
 
         after(async function () {
             this.timeout(30_000);
+            if (!webviewInitialized) {
+                return;
+            }
             try {
                 await webview.switchBack();
             } catch {
