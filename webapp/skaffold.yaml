@@ -31,6 +31,14 @@ deploy:
 profiles:
   - name: staging
     patches:
+      - op: replace
+        path: /build/tagPolicy
+        value:
+          gitCommit:
+            variant: CommitSha
+      - op: replace
+        path: /build/artifacts/0/docker/buildArgs/HEXANA_SOURCE_REVISION
+        value: "{{.IMAGE_TAG}}"
       - op: remove
         path: /build/artifacts/0/docker/buildArgs/HEXANA_WEBAPP_RELEASE_BRANCH
       - op: add

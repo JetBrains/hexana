@@ -68,6 +68,19 @@ test("staging hook invokes only the published digest-pinned helper", () => {
     assert.doesNotMatch(skaffold, /docker\.sock|--privileged|--network(?:=|\s+)host|insecure|tls-verify=false/i);
 });
 
+test("staging hands the full Git SHA tag to Docker without changing the base production contract", () => {
+    const staging = skaffold.slice(skaffold.indexOf("  - name: staging"), skaffold.indexOf("  - name: production"));
+    const production = skaffold.slice(skaffold.indexOf("  - name: production"));
+
+    assert.match(skaffold, /^  tagPolicy:\n    sha256: \{\}$/m);
+    assert.match(skaffold, /^          HEXANA_SOURCE_REVISION: "\{\{\.HEXANA_SOURCE_REVISION\}\}"$/m);
+    assert.match(staging, /op: replace\n        path: \/build\/tagPolicy\n        value:\n          gitCommit:\n            variant: CommitSha/);
+    assert.match(staging, /op: replace\n        path: \/build\/artifacts\/0\/docker\/buildArgs\/HEXANA_SOURCE_REVISION\n        value: "\{\{\.IMAGE_TAG\}\}"/);
+    assert.doesNotMatch(staging, /value: "\{\{\.HEXANA_SOURCE_REVISION\}\}"/);
+    assert.doesNotMatch(staging, /\{\{\s*(?:cmd|shell)\b/);
+    assert.doesNotMatch(production, /tagPolicy|HEXANA_SOURCE_REVISION|HEXANA_WEBAPP_RELEASE_BRANCH/);
+});
+
 function stagingHook() {
     const command = skaffold.split("\n").find(line => line.includes("stage-cloud-console-staging-package.mjs"));
     return JSON.parse(command.trim().replace(/^- command: /, ""));

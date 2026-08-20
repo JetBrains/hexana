@@ -83,7 +83,7 @@ forbid(`${nginx}\n${securityHeaders}`, /Strict-Transport-Security|proxy_pass|fas
 requireText(skaffold, 'HEXANA_SOURCE_REVISION: "{{.HEXANA_SOURCE_REVISION}}"', "skaffold.yaml");
 requireText(skaffold, 'HEXANA_WEBAPP_RELEASE_BRANCH: "{{.HEXANA_WEBAPP_RELEASE_BRANCH}}"', "skaffold.yaml");
 requireText(skaffold, 'HEXANA_SOURCE_URL: "https://github.com/JetBrains/hexana"', "skaffold.yaml");
-forbid(skaffold, /HEXANA_SOURCE_REVISION:\s*["']?\{\{\.IMAGE_TAG\}\}/, "skaffold.yaml");
+requireText(skaffold, 'value: "{{.IMAGE_TAG}}"', "skaffold.yaml");
 requireText(skaffold, "registry.jetbrains.team/p/hx/containers/hexana-webapp", "skaffold.yaml");
 requireText(skaffold, "context: ..", "skaffold.yaml");
 requireText(skaffold, "dockerfile: webapp/Dockerfile", "skaffold.yaml");
