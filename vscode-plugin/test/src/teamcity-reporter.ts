@@ -13,13 +13,20 @@ class TeamCityReporter {
     private readonly activeTests = new Set<string>();
 
     constructor(runner: Runner) {
+        const ignoreTestFailures = process.env.HEXANA_TEAMCITY_IGNORE_TEST_FAILURES === 'true';
+
         runner.on('suite', suite => this.startSuite(suite));
         runner.on('suite end', suite => this.finishSuite(suite));
         runner.on('test', test => this.startTest(test));
         runner.on('pass', test => this.finishTest(test));
         runner.on('fail', (test, error) => this.failTest(test, error as MochaError));
         runner.on('pending', test => this.ignoreTest(test));
-        runner.once('end', () => this.closeOpenSuites());
+        runner.once('end', () => {
+            this.closeOpenSuites();
+            if (ignoreTestFailures) {
+                runner.failures = 0;
+            }
+        });
 
         this.openSuite(rootSuiteName);
     }

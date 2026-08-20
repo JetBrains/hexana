@@ -73,7 +73,13 @@ On TeamCity, the Mocha run uses the checked-in TeamCity reporter from
 `src/teamcity-reporter.ts`. It emits `testSuiteStarted`, `testStarted`,
 `testFailed`, and `testFinished` service messages so the build results page
 shows passed and failed VS Code tests instead of only the command-line step
-status.
+status. Set `HEXANA_TEAMCITY_IGNORE_TEST_FAILURES=true` when each UI suite must
+continue after a failed test and TeamCity's test-failure build condition should
+own the final build status. The reporter still emits `testFailed`, but clears
+Mocha's final test-failure count at the end of the run. The value must be
+exactly `true`; without it, Mocha failures remain non-zero. Launch, compilation,
+version-validation, and other failures outside the Mocha runner are unaffected
+and remain non-zero.
 
 ## Test Fixtures
 
