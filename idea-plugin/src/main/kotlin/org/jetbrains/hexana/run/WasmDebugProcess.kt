@@ -294,12 +294,29 @@ open class WasmDebugProcess(
 
     /**
      * `true` while the "Wasm" disassembly tab is the selected content.
-     * Only meaningful when [supportsInstructionStepping] is `true`.
      * Written from the EDT inside a [ContentManagerListener]; read from
-     * the EDT in the step action overrides.
+     * the EDT in the step action overrides, where it only changes behavior
+     * when [supportsInstructionStepping] is `true`.
      */
     @Volatile
     private var disassemblyTabSelected = false
+
+    /** `true` once the "Wasm" tab has been added to the debugger layout. */
+    @Volatile
+    private var wasmTabRegistered = false
+
+    /**
+     * What the "Wasm" tab currently presents: row count, highlighted
+     * instruction, operand-stack size, and whether the tab is selected (i.e.
+     * whether stepping is per-instruction). State-only; must be read on the EDT.
+     */
+    internal fun wasmTabState(): WasmDebuggerTabState = wasmDebuggerTabStateOf(
+        sessionSuspended = session.isSuspended,
+        tabRegistered = wasmTabRegistered,
+        tabSelected = disassemblyTabSelected,
+        disassemblyPanel = wasmDisassemblyPanel,
+        stackModel = wasmStackModel,
+    )
 
     override fun getEditorsProvider(): XDebuggerEditorsProvider = WasmDebuggerEditorsProvider()
 
@@ -321,19 +338,18 @@ open class WasmDebugProcess(
             )
             content.isCloseable = false
             ui.addContent(content)
+            wasmTabRegistered = true
 
             // Track whether the Wasm tab is selected so per-instruction
             // stepping can be activated when [supportsInstructionStepping]
             // is true. Mirrors the same pattern in CdpDebugProcess.
-            if (supportsInstructionStepping) {
-                val contentManager = ui.contentManager
-                disassemblyTabSelected = contentManager.isSelected(content)
-                contentManager.addContentManagerListener(object : ContentManagerListener {
-                    override fun selectionChanged(event: ContentManagerEvent) {
-                        disassemblyTabSelected = contentManager.isSelected(content)
-                    }
-                })
-            }
+            val contentManager = ui.contentManager
+            disassemblyTabSelected = contentManager.isSelected(content)
+            contentManager.addContentManagerListener(object : ContentManagerListener {
+                override fun selectionChanged(event: ContentManagerEvent) {
+                    disassemblyTabSelected = contentManager.isSelected(content)
+                }
+            })
         }
     }
 

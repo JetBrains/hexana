@@ -10,6 +10,7 @@ This module contains expensive end-to-end UI tests for the plugin using JetBrain
 - Open a sample project from `testData/projects/hexana_wasm_project`.
 - Verify that `hello.wasm` can be opened successfully.
 - Run/debug Wasm configurations with Wasmtime and Node.js (core modules, exported functions, component models, DWARF breakpoints).
+- Assert the "Wasm" debugger tab shows the paused function's disassembly and steps one wasm instruction at a time.
 - Exercise Hexana's Compose editor through a hybrid Driver plus plugin-side `@Remote` probe approach.
 - Run a packaged-plugin MCP smoke against the IDE MCP server and Hexana MCP tools.
 
@@ -17,6 +18,7 @@ Main test entry points:
 
 - `src/test/kotlin/org/jetbrains/hexana/ui/HexanaWasmProjectDriverTest.kt`
 - `src/test/kotlin/org/jetbrains/hexana/ui/HexanaRunConfigurationDriverTest.kt`
+- `src/test/kotlin/org/jetbrains/hexana/ui/HexanaWasmDebuggerTabDriverTest.kt`
 - `src/test/kotlin/org/jetbrains/hexana/ui/HexanaEditorSurfaceSmokeTest.kt`
 - `src/test/kotlin/org/jetbrains/hexana/ui/HexanaSettingsSmokeTest.kt`
 - `src/test/kotlin/org/jetbrains/hexana/ui/HexanaMcpPackagedSmokeTest.kt`
@@ -40,6 +42,10 @@ Support code:
   - run/debug workflows through `HexanaIde.runWasm(...)`, `HexanaIde.debugWasm(...)`, `HexanaIde.runNodeJsWasm(...)`,
     `HexanaIde.debugNodeJsWasm(...)`, `HexanaIde.debugWasmWithBreakpoint(...)`, and
     `HexanaIde.debugNodeJsWasmWithBreakpoint(...)`;
+  - paused-session debugger workflows through `HexanaIde.withWasmRunDsl(...)` plus
+    `startNodeJsDebugPausedAtBreakpoint(...)` / `startWasmtimeDebugPausedAtBreakpoint(...)`,
+    `selectWasmDebuggerTab()`, `awaitWasmDebuggerTabState(...)`,
+    `stepInWasmDebuggerAndAwaitNewHighlight(...)`, and `stopWasmDebugSession()`;
   - packaged MCP workflows through `HexanaIde.withGlobalMcpClient { ... }`.
 - Run/debug migration is complete at the visible test surface. Keep any low-level run/debug setup behind
   `HexanaRunConfigurationUiTestProbe` or a focused helper in `src/test/kotlin/org/jetbrains/hexana/ui/framework/`,
@@ -58,6 +64,9 @@ Support code:
   Any match means the visible test surface still leaks the old path.
 - Keep the UI-first boundary clear: Driver owns user workflows when stable controls exist; probes observe product state
   or perform narrow unavoidable setup for flows such as run/debug and MCP that cannot be driven reliably through UI.
+- For debugger flows this means: selecting the "Wasm" debugger tab goes through Driver, because only the production
+  `ContentManagerListener` flips stepping to instruction granularity. Session control (start-paused, step, resume, stop)
+  goes through `WasmRunConfigTestHelper`, which calls the same `XDebugSession` entry points as the toolbar actions.
 - Packaged probes intentionally live under `idea-plugin/src/ui-tests-framework/kotlin` and ship in the plugin ZIP used by
   these tests. Keep them tiny, assertion-oriented, and meaningful as product state rather than test-only behavior.
 - Add Compose accessibility names only for durable user-facing controls that Driver must locate or activate. Do not add
@@ -85,6 +94,7 @@ Do not use this module as the default validation path for normal parser or edito
 - Focused local runs:
   - `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaWasmProjectDriverTest`
   - `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaRunConfigurationDriverTest`
+  - `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaWasmDebuggerTabDriverTest`
   - `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaEditorSurfaceSmokeTest`
   - `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaSettingsSmokeTest`
   - `./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaMcpPackagedSmokeTest`

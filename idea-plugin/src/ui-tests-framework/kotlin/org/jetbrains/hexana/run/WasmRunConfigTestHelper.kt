@@ -347,12 +347,161 @@ object WasmRunConfigTestHelper {
         programArgs: String,
         nodePath: String,
     ) {
+        startWasmDebugPausedAtBreakpoint(
+            project = project,
+            wasmFileName = wasmFileName,
+            sourceFileName = sourceFileName,
+            breakpointLine = breakpointLine,
+            engine = WasmEngine.NODE_JS.name,
+            runtimeOptions = nodeOptions,
+            exportName = exportName,
+            programArgs = programArgs,
+            runtimePath = nodePath,
+        )
+    }
+
+    /**
+     * Starts a debug session for [wasmFileName] with the given [engine] and
+     * leaves it suspended at the DWARF breakpoint in [sourceFileName]:[breakpointLine].
+     *
+     * [runtimeOptions] and [runtimePath] are the engine's own options/executable
+     * (`nodeOptions`/`nodePath` for Node.js, `wasmtimeOptions`/`wasmtimePath` for
+     * Wasmtime). Unlike [debugWithBreakpointAndInspectVariables] this does not
+     * resume: the caller inspects the paused session (debugger-tab state,
+     * stepping) and is responsible for resuming or stopping it.
+     */
+    @JvmStatic
+    fun startWasmDebugPausedAtBreakpoint(
+        project: Project,
+        wasmFileName: String,
+        sourceFileName: String,
+        breakpointLine: Int,
+        engine: String,
+        runtimeOptions: String,
+        exportName: String,
+        programArgs: String,
+        runtimePath: String,
+    ) {
         removeAllBreakpoints(project)
 
         val basePath = project.basePath ?: error("project basePath is null")
         val sourceFilePath = "$basePath/$sourceFileName"
         val sourceVirtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(sourceFilePath)
             ?: error("source file not found: $sourceFilePath")
+        addLineBreakpointIfAbsent(project, sourceVirtualFile, breakpointLine)
+
+        val wasmFilePath = "$basePath/$wasmFileName"
+        val wasmVirtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(wasmFilePath)
+            ?: error("wasm file not found: $wasmFilePath")
+        val selectedEngine = WasmEngine.fromString(engine)
+        val settings = createAndSelectDebugConfiguration(
+            project = project,
+            wasmVirtualFile = wasmVirtualFile,
+            engine = selectedEngine,
+            dependencies = resolveDependencies(project, wasmVirtualFile),
+        ) {
+            this.exportName = exportName
+            this.programArguments = programArgs
+            when (selectedEngine) {
+                WasmEngine.NODE_JS -> {
+                    this.nodeOptions = runtimeOptions
+                    if (runtimePath.isNotBlank()) this.nodePath = runtimePath
+                }
+                WasmEngine.WASMTIME -> {
+                    this.wasmtimeOptions = runtimeOptions
+                    if (runtimePath.isNotBlank()) this.wasmtimePath = runtimePath
+                }
+                else -> error("Paused-at-breakpoint sessions support NODE_JS and WASMTIME, got $engine")
+            }
+        }
+
+        onEdt {
+            ProgramRunnerUtil.executeConfiguration(settings, DefaultDebugExecutor.getDebugExecutorInstance())
+        }
+
+        val timeoutMs = if (SystemInfo.isWindows) 200_000L else 60_000L
+        val deadlineMs = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadlineMs) {
+            val session = XDebuggerManager.getInstance(project).currentSession
+            if (session?.isSuspended == true) return
+            Thread.sleep(500)
+        }
+        error(
+            debugTimeoutReport(
+                project = project,
+                sourceFilePath = sourceFilePath,
+                breakpointLine = breakpointLine,
+                wasmFilePath = wasmVirtualFile.path,
+                settings = settings,
+                timeoutMs = timeoutMs,
+            )
+        )
+    }
+
+    /**
+     * Reports what the "Wasm" debugger tab currently presents for the project's
+     * current debug session, engine-independently (CDP or LLDB-backed).
+     *
+     * A missing or already stopped session is reported as `sessionActive=false`
+     * rather than an error, so callers can poll this across resume/pause
+     * transitions and session shutdown.
+     */
+    @JvmStatic
+    fun wasmDebuggerTabState(project: Project): List<String> = onEdt {
+        val session = XDebuggerManager.getInstance(project).currentSession?.takeIf { !it.isStopped }
+        val state = when (val process = session?.debugProcess) {
+            null -> WasmDebuggerTabState.NO_SESSION
+            is CdpDebugProcess -> process.wasmTabState()
+            is WasmDebugProcess -> process.wasmTabState()
+            else -> error("Unexpected debug process for the Wasm debugger tab: ${process.javaClass.name}")
+        }
+        listOf(
+            "schema=hexana-wasm-debugger-tab-state",
+            "version=1",
+            "sessionActive=${state.sessionActive}",
+            "sessionSuspended=${state.sessionSuspended}",
+            "tabRegistered=${state.tabRegistered}",
+            "tabSelected=${state.tabSelected}",
+            "disassemblyRowCount=${state.disassemblyRowCount}",
+            "selectedRow=${state.selectedRow}",
+            "selectedOffset=${state.selectedOffset}",
+            "selectedInstruction=${state.selectedInstruction}",
+            "operandStackRowCount=${state.operandStackRowCount}",
+        )
+    }
+
+    /**
+     * Issues a step in the current debug session through the same
+     * [com.intellij.xdebugger.XDebugSession] entry points as the debugger
+     * toolbar actions. [kind] is `over`, `into`, or `out`.
+     */
+    @JvmStatic
+    fun stepInWasmDebugSession(project: Project, kind: String) {
+        onEdt {
+            val session = XDebuggerManager.getInstance(project).currentSession
+                ?: error("No active debug session to step in")
+            when (kind) {
+                "over" -> session.stepOver(false)
+                "into" -> session.stepInto()
+                "out" -> session.stepOut()
+                else -> error("Unknown step kind '$kind'; expected over, into, or out")
+            }
+        }
+    }
+
+    /** Stops the current debug session, if any, so a paused session cannot block IDE shutdown. */
+    @JvmStatic
+    fun stopWasmDebugSession(project: Project) {
+        onEdt {
+            XDebuggerManager.getInstance(project).currentSession?.takeIf { !it.isStopped }?.stop()
+        }
+    }
+
+    private fun addLineBreakpointIfAbsent(
+        project: Project,
+        sourceVirtualFile: VirtualFile,
+        breakpointLine: Int,
+    ) {
         val breakpointType = XDebuggerUtil.getInstance()
             .findBreakpointType(WasmLineBreakpointType::class.java)
         ApplicationManager.getApplication().invokeAndWait {
@@ -368,34 +517,6 @@ object WasmRunConfigTestHelper {
                 }
             }
         }
-
-        val wasmFilePath = "$basePath/$wasmFileName"
-        val wasmVirtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(wasmFilePath)
-            ?: error("wasm file not found: $wasmFilePath")
-        val settings = createAndSelectDebugConfiguration(
-            project = project,
-            wasmVirtualFile = wasmVirtualFile,
-            engine = WasmEngine.NODE_JS,
-            dependencies = resolveDependencies(project, wasmVirtualFile),
-        ) {
-            this.nodeOptions = nodeOptions
-            this.exportName = exportName
-            this.programArguments = programArgs
-            this.nodePath = nodePath
-        }
-
-        onEdt {
-            ProgramRunnerUtil.executeConfiguration(settings, DefaultDebugExecutor.getDebugExecutorInstance())
-        }
-
-        val timeoutMs = if (SystemInfo.isWindows) 200_000L else 60_000L
-        val deadlineMs = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadlineMs) {
-            val session = XDebuggerManager.getInstance(project).currentSession
-            if (session?.isSuspended == true) return
-            Thread.sleep(500)
-        }
-        error("Timed out waiting for Node.js CDP breakpoint after ${timeoutMs}ms")
     }
 
     @JvmStatic

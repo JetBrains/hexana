@@ -2,6 +2,9 @@ package org.jetbrains.hexana.ui.framework
 
 import com.intellij.driver.client.Driver
 import com.intellij.driver.sdk.invokeAction
+import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
+import com.intellij.driver.sdk.ui.ui
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
 internal fun HexanaIde.runWasm(
@@ -301,6 +304,122 @@ internal class HexanaWasmRunDsl internal constructor(
         driver.resumeDebuggerForCapture()
     }
 
+    /**
+     * Starts a Node.js/CDP debug session and leaves it paused at the DWARF
+     * breakpoint in [sourceFileName]:[breakpointLine]. The caller owns the
+     * paused session and must finish it with [stopWasmDebugSession].
+     */
+    fun startNodeJsDebugPausedAtBreakpoint(
+        wasmFileName: String,
+        sourceFileName: String,
+        breakpointLine: Int,
+        nodeOptions: String = "",
+        exportName: String = "",
+        programArgs: String = "",
+    ) {
+        driver.startWasmDebugPausedAtBreakpoint(
+            wasmFileName = wasmFileName,
+            sourceFileName = sourceFileName,
+            breakpointLine = breakpointLine,
+            engine = "NODE_JS",
+            runtimeOptions = nodeOptions,
+            exportName = exportName,
+            programArgs = programArgs,
+            runtimePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs(),
+        )
+    }
+
+    /**
+     * Starts a Wasmtime gdbstub debug session and leaves it paused at the DWARF
+     * breakpoint in [sourceFileName]:[breakpointLine]. The caller owns the
+     * paused session and must finish it with [stopWasmDebugSession].
+     */
+    fun startWasmtimeDebugPausedAtBreakpoint(
+        wasmFileName: String,
+        sourceFileName: String,
+        breakpointLine: Int,
+        wasmtimeOptions: String = "",
+        exportName: String = "",
+        programArgs: String = "",
+    ) {
+        driver.startWasmDebugPausedAtBreakpoint(
+            wasmFileName = wasmFileName,
+            sourceFileName = sourceFileName,
+            breakpointLine = breakpointLine,
+            engine = "WASMTIME",
+            runtimeOptions = wasmtimeOptions,
+            exportName = exportName,
+            programArgs = programArgs,
+            runtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtime(),
+        )
+    }
+
+    /**
+     * Clicks the "Wasm" debugger tab through the real debugger layout, which is
+     * what switches stepping to wasm-instruction granularity.
+     */
+    fun selectWasmDebuggerTab(timeout: Duration = 2.minutes) {
+        driver.withContext {
+            ui.x { and(byClass("SingleHeightLabel"), byAccessibleName("Wasm")) }.waitFound(timeout).click()
+        }
+    }
+
+    fun wasmDebuggerTabState(): HexanaWasmDebuggerTabState = driver.wasmDebuggerTabState()
+
+    /**
+     * Polls the "Wasm" debugger tab state until [predicate] holds, then returns
+     * the matching state. Fails with [description] and the last observed state
+     * when [timeout] expires.
+     */
+    fun awaitWasmDebuggerTabState(
+        description: String,
+        timeout: Duration = 2.minutes,
+        predicate: (HexanaWasmDebuggerTabState) -> Boolean,
+    ): HexanaWasmDebuggerTabState {
+        val deadline = System.nanoTime() + timeout.inWholeNanoseconds
+        var lastState: HexanaWasmDebuggerTabState? = null
+        while (System.nanoTime() < deadline) {
+            lastState = wasmDebuggerTabState()
+            if (predicate(lastState)) return lastState
+            Thread.sleep(250)
+        }
+        throw AssertionError("Timed out waiting for $description; last Wasm debugger tab state: $lastState")
+    }
+
+    /** Waits until the session is suspended with a wasm instruction highlighted in the tab. */
+    fun awaitHighlightedWasmInstruction(timeout: Duration = 2.minutes): HexanaWasmDebuggerTabState =
+        awaitWasmDebuggerTabState("a paused wasm frame with a highlighted instruction", timeout) { state ->
+            state.sessionActive && state.sessionSuspended && state.hasHighlightedInstruction
+        }
+
+    /**
+     * Issues [step] through the same session entry point as the debugger toolbar
+     * action and waits for the next pause to highlight an instruction other than
+     * the one at [previousOffset].
+     */
+    fun stepInWasmDebuggerAndAwaitNewHighlight(
+        step: HexanaWasmDebuggerStep,
+        previousOffset: Int,
+        timeout: Duration = 2.minutes,
+    ): HexanaWasmDebuggerTabState {
+        driver.stepInWasmDebugSession(step.id)
+        return awaitWasmDebuggerTabState("${step.id} step to leave offset $previousOffset", timeout) { state ->
+            state.sessionActive &&
+                state.sessionSuspended &&
+                state.hasHighlightedInstruction &&
+                state.selectedOffset != previousOffset
+        }
+    }
+
+    /** Issues [step] without waiting for the resulting pause. */
+    fun stepInWasmDebugger(step: HexanaWasmDebuggerStep) {
+        driver.stepInWasmDebugSession(step.id)
+    }
+
+    fun stopWasmDebugSession() {
+        driver.stopWasmDebugSession()
+    }
+
     fun debugWasmWithBreakpoint(
         wasmFileName: String,
         sourceFileName: String,
@@ -320,6 +439,13 @@ internal class HexanaWasmRunDsl internal constructor(
         )
         return HexanaWasmBreakpointDebugResult.parse(rawOutput)
     }
+}
+
+/** Debugger step actions available while the "Wasm" debugger tab is open. */
+internal enum class HexanaWasmDebuggerStep(val id: String) {
+    OVER("over"),
+    INTO("into"),
+    OUT("out"),
 }
 
 internal data class HexanaWasmExecutionResult(

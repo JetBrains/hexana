@@ -139,6 +139,20 @@ internal class CdpDebugProcess(
         )
     }
 
+    /**
+     * What the "Wasm" tab currently presents. State-only, like
+     * [whatsNewCaptureState], but also reports the highlighted instruction and
+     * whether the tab is selected (i.e. whether stepping is per-instruction),
+     * which the UI-driver debugger-tab tests assert on.
+     */
+    internal fun wasmTabState(): WasmDebuggerTabState = wasmDebuggerTabStateOf(
+        sessionSuspended = session.isSuspended,
+        tabRegistered = wasmTabRegistered.get(),
+        tabSelected = disassemblyTabSelected,
+        disassemblyPanel = wasmDisassemblyPanel,
+        stackModel = wasmStackModel,
+    )
+
     /** True while the "Wasm Disassembly" tab is selected; switches stepping to instruction granularity. */
     @Volatile
     private var disassemblyTabSelected = false

@@ -10,6 +10,8 @@ This module contains end-to-end UI tests for the Hexana IntelliJ plugin using Je
 - Opens a local wasm project and verifies `hello.wasm` can be opened.
 - Runs and debugs Wasm configurations with Wasmtime and Node.js: core modules (`_start`), exported functions
   (`--invoke`), component models, and DWARF breakpoint variable-inspection flows.
+- Checks the "Wasm" debugger tab on a paused session: the paused function's disassembly with the current instruction
+  highlighted, and step over/into/out moving that highlight one wasm instruction at a time.
 - Runs a packaged-plugin MCP smoke through the framework MCP DSL and checks that Hexana tools are exposed through the
   real IDE MCP server.
 
@@ -32,6 +34,10 @@ for normal IDE workflows:
 - Keep the low-level launch/debug plumbing inside `HexanaRunConfigurationUiTestProbe` and the framework helpers, not
   in the visible test body. The breakpoint-inspection helper `org.jetbrains.hexana.run.WasmRunConfigTestHelper`
   lives in `idea-plugin/src/ui-tests-framework/kotlin` with the packaged probe boundary.
+- `HexanaWasmDebuggerTabDriverTest` drives the paused-session debugger DSL in `HexanaWasmRunDsl.kt`. Selecting the
+  "Wasm" tab is a Driver click, because only the production `ContentManagerListener` switches stepping to wasm
+  instruction granularity; start-paused, step, and stop go through `WasmRunConfigTestHelper`, which calls the same
+  `XDebugSession` entry points as the debugger toolbar actions.
 - Packaged MCP tests should use `HexanaIde.withGlobalMcpClient { ... }`. The helper owns IDE MCP server URL resolution,
   transport fallback, project-path headers, and connection retry, while tests keep the real MCP client calls visible.
 
@@ -110,6 +116,8 @@ Useful focused runs:
 ./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaWasmProjectDriverTest
 
 ./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaRunConfigurationDriverTest
+
+./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaWasmDebuggerTabDriverTest
 
 ./gradlew :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaEditorSurfaceSmokeTest
 

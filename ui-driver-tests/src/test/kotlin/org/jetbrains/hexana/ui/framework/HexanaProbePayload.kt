@@ -8,6 +8,7 @@ private const val COMPONENT_DIFF_STATE_SCHEMA = "hexana-component-diff-state"
 private const val ARCHIVE_STATE_SCHEMA = "hexana-archive-state"
 private const val NATIVE_DIFF_STATE_SCHEMA = "hexana-native-diff-state"
 private const val CDP_DEBUGGER_CAPTURE_STATE_SCHEMA = "hexana-cdp-debugger-capture-state"
+private const val WASM_DEBUGGER_TAB_STATE_SCHEMA = "hexana-wasm-debugger-tab-state"
 private const val WASMTIME_DEBUGGER_CAPTURE_STATE_SCHEMA = "hexana-wasmtime-debugger-capture-state"
 private const val WAT_FIND_USAGES_INVOCATION_SCHEMA = "hexana-wat-find-usages-invocation"
 private const val WAT_FIND_USAGES_CAPTURE_STATE_SCHEMA = "hexana-wat-find-usages-capture-state"
@@ -111,6 +112,21 @@ internal object HexanaProbePayload {
                 wasmTabRegistered = fields.boolean("wasmTabRegistered"),
                 disassemblyRowCount = fields.int("disassemblyRowCount"),
                 selectedDisassemblyRow = fields.int("selectedDisassemblyRow"),
+                operandStackRowCount = fields.int("operandStackRowCount"),
+            )
+        }
+
+    fun wasmDebuggerTabState(payload: List<String>): HexanaWasmDebuggerTabState =
+        parse(payload, WASM_DEBUGGER_TAB_STATE_SCHEMA) { fields ->
+            HexanaWasmDebuggerTabState(
+                sessionActive = fields.boolean("sessionActive"),
+                sessionSuspended = fields.boolean("sessionSuspended"),
+                tabRegistered = fields.boolean("tabRegistered"),
+                tabSelected = fields.boolean("tabSelected"),
+                disassemblyRowCount = fields.int("disassemblyRowCount"),
+                selectedRow = fields.int("selectedRow"),
+                selectedOffset = fields.int("selectedOffset"),
+                selectedInstruction = fields.value("selectedInstruction"),
                 operandStackRowCount = fields.int("operandStackRowCount"),
             )
         }

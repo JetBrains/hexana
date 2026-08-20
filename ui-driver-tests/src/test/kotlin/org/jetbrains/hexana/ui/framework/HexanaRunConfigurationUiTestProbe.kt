@@ -218,6 +218,42 @@ internal fun Driver.resumeDebuggerForCapture() {
     utility(DebugTestHelperRef::class).resumeDebuggerForCapture(singleProject())
 }
 
+internal fun Driver.startWasmDebugPausedAtBreakpoint(
+    wasmFileName: String,
+    sourceFileName: String,
+    breakpointLine: Int,
+    engine: String,
+    runtimeOptions: String,
+    exportName: String,
+    programArgs: String,
+    runtimePath: String,
+) {
+    utility(DebugTestHelperRef::class).startWasmDebugPausedAtBreakpoint(
+        singleProject(),
+        wasmFileName,
+        sourceFileName,
+        breakpointLine,
+        engine,
+        runtimeOptions,
+        exportName,
+        programArgs,
+        runtimePath,
+    )
+}
+
+internal fun Driver.wasmDebuggerTabState(): HexanaWasmDebuggerTabState =
+    HexanaProbePayload.wasmDebuggerTabState(
+        utility(DebugTestHelperRef::class).wasmDebuggerTabState(singleProject()),
+    )
+
+internal fun Driver.stepInWasmDebugSession(kind: String) {
+    utility(DebugTestHelperRef::class).stepInWasmDebugSession(singleProject(), kind)
+}
+
+internal fun Driver.stopWasmDebugSession() {
+    utility(DebugTestHelperRef::class).stopWasmDebugSession(singleProject())
+}
+
 @Remote(
     "org.jetbrains.hexana.uitestframework.HexanaRunConfigurationUiTestProbe",
     plugin = HEXANA_PLUGIN_ID,
@@ -325,4 +361,18 @@ internal interface DebugTestHelperRef {
     fun terminateDebuggerForCapture(project: com.intellij.driver.sdk.Project)
     fun cdpDebuggerCaptureState(project: com.intellij.driver.sdk.Project): List<String>
     fun resumeDebuggerForCapture(project: com.intellij.driver.sdk.Project)
+    fun startWasmDebugPausedAtBreakpoint(
+        project: com.intellij.driver.sdk.Project,
+        wasmFileName: String,
+        sourceFileName: String,
+        breakpointLine: Int,
+        engine: String,
+        runtimeOptions: String,
+        exportName: String,
+        programArgs: String,
+        runtimePath: String,
+    )
+    fun wasmDebuggerTabState(project: com.intellij.driver.sdk.Project): List<String>
+    fun stepInWasmDebugSession(project: com.intellij.driver.sdk.Project, kind: String)
+    fun stopWasmDebugSession(project: com.intellij.driver.sdk.Project)
 }

@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.ui.framework
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -92,6 +93,59 @@ class HexanaProbePayloadTest {
         assertEquals("(module | (func)", state.textSummary)
         assertNull(state.error)
         assertTrue(state.isSuccess)
+    }
+
+    @Test
+    fun wasmDebuggerTabStateParsesVersionedPayload() {
+        val state = HexanaProbePayload.wasmDebuggerTabState(
+            listOf(
+                "schema=hexana-wasm-debugger-tab-state",
+                "version=1",
+                "sessionActive=true",
+                "sessionSuspended=true",
+                "tabRegistered=true",
+                "tabSelected=true",
+                "disassemblyRowCount=12",
+                "selectedRow=3",
+                "selectedOffset=155",
+                "selectedInstruction=  local.get 0",
+                "operandStackRowCount=2",
+            ),
+        )
+
+        assertTrue(state.sessionActive)
+        assertTrue(state.sessionSuspended)
+        assertTrue(state.tabRegistered)
+        assertTrue(state.tabSelected)
+        assertEquals(12, state.disassemblyRowCount)
+        assertEquals(3, state.selectedRow)
+        assertEquals(155, state.selectedOffset)
+        assertEquals("  local.get 0", state.selectedInstruction)
+        assertEquals(2, state.operandStackRowCount)
+        assertTrue(state.hasHighlightedInstruction)
+    }
+
+    @Test
+    fun wasmDebuggerTabStateWithoutSessionHasNoHighlight() {
+        val state = HexanaProbePayload.wasmDebuggerTabState(
+            listOf(
+                "schema=hexana-wasm-debugger-tab-state",
+                "version=1",
+                "sessionActive=false",
+                "sessionSuspended=false",
+                "tabRegistered=false",
+                "tabSelected=false",
+                "disassemblyRowCount=0",
+                "selectedRow=-1",
+                "selectedOffset=-1",
+                "selectedInstruction=",
+                "operandStackRowCount=0",
+            ),
+        )
+
+        assertFalse(state.sessionActive)
+        assertFalse(state.hasHighlightedInstruction)
+        assertEquals("", state.selectedInstruction)
     }
 
     @Test

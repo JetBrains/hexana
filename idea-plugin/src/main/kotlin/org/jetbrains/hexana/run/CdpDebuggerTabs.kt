@@ -129,6 +129,7 @@ internal class WasmDisassemblyTableModel : AbstractTableModel() {
 
     fun rowCount(): Int = rows.size
     fun offsetAt(index: Int): Int = rows[index].offset
+    fun instructionAt(index: Int): String = rows[index].instruction
 
     override fun getRowCount(): Int = rows.size
     override fun getColumnCount(): Int = COLUMNS.size
@@ -189,6 +190,75 @@ internal class WasmDisassemblyPanel(val model: WasmDisassemblyTableModel) {
         table.setRowSelectionInterval(best, best)
         table.scrollRectToVisible(table.getCellRect(best, 0, true))
     }
+}
+
+// ---------------------------------------------------------------------------
+// "Wasm" tab state
+// ---------------------------------------------------------------------------
+
+/**
+ * State-only view of the "Wasm" debugger tab, shared by every debug process that
+ * shows it (CDP, wasmtime, WAMR). Exposes no controls: it reports what the tab
+ * currently presents so the packaged UI-driver probe can assert on it.
+ *
+ * [selectedOffset] is `-1` and [selectedInstruction] empty when no row is
+ * highlighted (no pause yet, resumed session, or a non-wasm frame).
+ */
+internal data class WasmDebuggerTabState(
+    /** False when the project has no live debug session (none started, or already stopped). */
+    val sessionActive: Boolean,
+    val sessionSuspended: Boolean,
+    /** True once the tab has been added to the debugger layout. */
+    val tabRegistered: Boolean,
+    /** True while the tab is the selected content; switches stepping to instruction granularity. */
+    val tabSelected: Boolean,
+    val disassemblyRowCount: Int,
+    val selectedRow: Int,
+    val selectedOffset: Int,
+    val selectedInstruction: String,
+    val operandStackRowCount: Int,
+) {
+    companion object {
+        /** State for a project without a live debug session. */
+        val NO_SESSION = WasmDebuggerTabState(
+            sessionActive = false,
+            sessionSuspended = false,
+            tabRegistered = false,
+            tabSelected = false,
+            disassemblyRowCount = 0,
+            selectedRow = -1,
+            selectedOffset = -1,
+            selectedInstruction = "",
+            operandStackRowCount = 0,
+        )
+    }
+}
+
+/**
+ * Reads the current [WasmDebuggerTabState] off the tab's models. Must be called
+ * on the EDT: [WasmDisassemblyPanel.table] selection is Swing state.
+ */
+internal fun wasmDebuggerTabStateOf(
+    sessionSuspended: Boolean,
+    tabRegistered: Boolean,
+    tabSelected: Boolean,
+    disassemblyPanel: WasmDisassemblyPanel,
+    stackModel: WasmStackTableModel,
+): WasmDebuggerTabState {
+    val rowCount = disassemblyPanel.model.rowCount()
+    val selectedRow = disassemblyPanel.table.selectedRow
+    val highlighted = selectedRow in 0 until rowCount
+    return WasmDebuggerTabState(
+        sessionActive = true,
+        sessionSuspended = sessionSuspended,
+        tabRegistered = tabRegistered,
+        tabSelected = tabSelected,
+        disassemblyRowCount = rowCount,
+        selectedRow = selectedRow,
+        selectedOffset = if (highlighted) disassemblyPanel.model.offsetAt(selectedRow) else -1,
+        selectedInstruction = if (highlighted) disassemblyPanel.model.instructionAt(selectedRow) else "",
+        operandStackRowCount = stackModel.rowCount,
+    )
 }
 
 // ---------------------------------------------------------------------------

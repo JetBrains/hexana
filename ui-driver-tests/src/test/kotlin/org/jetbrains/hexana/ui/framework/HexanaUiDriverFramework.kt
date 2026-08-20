@@ -465,6 +465,31 @@ internal data class HexanaWatFindUsagesCaptureState(
     val searchString: String,
 )
 
+/**
+ * What the "Wasm" debugger tab presents for the current debug session, reported
+ * engine-independently (Node.js/CDP, Wasmtime, WAMR).
+ *
+ * [selectedOffset] is `-1` and [selectedInstruction] blank while no instruction
+ * is highlighted: before the first pause, after a resume, or in a non-wasm frame.
+ */
+internal data class HexanaWasmDebuggerTabState(
+    /** False when there is no live debug session: none started, or it already stopped. */
+    val sessionActive: Boolean,
+    val sessionSuspended: Boolean,
+    val tabRegistered: Boolean,
+    /** True while the tab is the selected content, which switches stepping to instruction granularity. */
+    val tabSelected: Boolean,
+    val disassemblyRowCount: Int,
+    val selectedRow: Int,
+    val selectedOffset: Int,
+    val selectedInstruction: String,
+    val operandStackRowCount: Int,
+) {
+    /** True when a wasm instruction is highlighted in a populated disassembly. */
+    val hasHighlightedInstruction: Boolean
+        get() = disassemblyRowCount > 0 && selectedRow in 0 until disassemblyRowCount && selectedOffset >= 0
+}
+
 internal data class HexanaArchiveMemberState(
     val index: Int,
     val name: String,
