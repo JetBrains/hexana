@@ -3,4 +3,5 @@ out/
 graalvm-runner/
 server/lib/
 server/bin/
+test/out-unit/
 *.vsix
