@@ -340,6 +340,15 @@ fun splitOptions(options: String): List<String> {
     return result
 }
 
+/**
+ * Builds a `--invoke "<expression>"` option string such that [splitOptions]
+ * reconstructs `<expression>` exactly as a single token. Backslashes and
+ * double quotes inside the expression are escaped for the double-quoted
+ * segment; single quotes (WAVE char literals) pass through untouched.
+ */
+fun buildInvokeOption(expression: String): String =
+    "--invoke \"" + expression.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 // ---------------------------------------------------------------------------
 // Wasmtime
 // ---------------------------------------------------------------------------

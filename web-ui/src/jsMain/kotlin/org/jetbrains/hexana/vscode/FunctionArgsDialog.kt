@@ -14,6 +14,8 @@ data class FunctionArgDescriptor(
     val defaultValue: String = "0",
     val enumEntries: List<String>? = null,
     val validate: ((String) -> String?)? = null,
+    /** Formats the raw value for the invoke expression (e.g. WAVE quoting); identity when null. */
+    val format: ((String) -> String)? = null,
 )
 
 /**

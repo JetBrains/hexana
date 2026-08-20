@@ -142,6 +142,29 @@ fun isTrivialComponentType(type: ComponentValueType, types: List<ComponentDefTyp
     return false
 }
 
+/**
+ * True when [text] is exactly one Unicode code point: a single UTF-16
+ * unit or a valid surrogate pair (e.g. an emoji).
+ */
+fun isSingleUnicodeCharacter(text: String): Boolean =
+    text.length == 1 ||
+        (text.length == 2 && text[0].isHighSurrogate() && text[1].isLowSurrogate())
+
+/**
+ * Formats a raw dialog value as a WAVE argument for a `wasmtime --invoke`
+ * expression. Char values become single-quoted literals and string values
+ * double-quoted literals (with `\` and the quote character escaped);
+ * numbers, bools, and enum labels pass through bare.
+ */
+fun formatComponentArgWave(text: String, type: ComponentValueType): String {
+    val primitive = (type as? ComponentPrimitiveValueType)?.type ?: return text
+    return when (primitive) {
+        is ComponentPrimitiveCharType -> "'" + text.replace("\\", "\\\\").replace("'", "\\'") + "'"
+        is ComponentPrimitiveString -> "\"" + text.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+        else -> text
+    }
+}
+
 fun resolveComponentFunctionType(
     export: WasmComponentExport,
     provider: WasmComponentBinaryProvider,

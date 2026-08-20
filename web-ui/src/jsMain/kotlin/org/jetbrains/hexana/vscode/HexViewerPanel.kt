@@ -337,6 +337,15 @@ fun HexViewerPanel(
             val focusTarget = ke.target as? HTMLElement
             if (focusTarget?.closest(".hexana-tab-content") != null) return@handler
 
+            // Never intercept keys typed into editable elements — dialog
+            // fields and search inputs live outside .hexana-tab-content,
+            // and the hex-digit branch below would otherwise swallow every
+            // 0-9/a-f keystroke aimed at them.
+            val focusTag = focusTarget?.tagName
+            if (focusTag == "INPUT" || focusTag == "TEXTAREA" || focusTag == "SELECT" ||
+                focusTarget?.isContentEditable == true
+            ) return@handler
+
             // Cmd/Ctrl+F opens the hex search bar.
             if (key == "f" && (ke.metaKey || ke.ctrlKey)) {
                 // Only intercept when focus is on the hex viewer or the body.

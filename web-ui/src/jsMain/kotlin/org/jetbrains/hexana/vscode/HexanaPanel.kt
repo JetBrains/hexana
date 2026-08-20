@@ -18,6 +18,7 @@ import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.shared.RowContextMenuItemDescriptor
+import org.jetbrains.hexana.shared.buildInvokeOption
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsContext
 import org.jetbrains.hexana.shared.TabPriority
@@ -231,9 +232,13 @@ fun HexanaPanel(
     // -----------------------------------------------------------------------
     val wasmPending = pendingRun.wasmExport
     if (wasmPending != null) {
+        // Descriptors must keep a stable identity while the dialog is open:
+        // rebuilding them on every recomposition resets the dialog's
+        // remember(args) field state and wipes typed input.
+        val wasmArgs = remember(wasmPending) { wasmArgDescriptors(pendingRun.wasmParams) }
         FunctionArgsDialog(
             exportName = wasmPending.name,
-            args = wasmArgDescriptors(pendingRun.wasmParams),
+            args = wasmArgs,
             isComponent = false,
             onConfirm = { result ->
                 val programArgs = result.args.joinToString(" ")
@@ -288,10 +293,12 @@ fun HexanaPanel(
             args = pendingRun.funcArgs,
             isComponent = true,
             onConfirm = { result ->
-                val argsString = result.args.joinToString(", ")
+                val argsString = result.args.mapIndexed { i, value ->
+                    pendingRun.funcArgs.getOrNull(i)?.format?.invoke(value) ?: value
+                }.joinToString(", ")
                 host.runExport(
                     exportName = funcPending.exportName,
-                    invokeArgs = "--invoke \"${pendingRun.funcInvokeName}($argsString)\"",
+                    invokeArgs = buildInvokeOption("${pendingRun.funcInvokeName}($argsString)"),
                     isComponent = true,
                     programArgs = "",
                     wasmBytes = provider.bytes.toByteArray(),

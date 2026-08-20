@@ -60,6 +60,35 @@ class WasmRuntimeCommandLineTest {
     }
 
     // -----------------------------------------------------------------------
+    // buildInvokeOption
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun buildInvokeOptionPlainExpression() {
+        assertEquals("""--invoke "add(1, 2)"""", buildInvokeOption("add(1, 2)"))
+        assertEquals(listOf("--invoke", "add(1, 2)"), splitOptions(buildInvokeOption("add(1, 2)")))
+    }
+
+    @Test
+    fun buildInvokeOptionRoundTripsQuotedStringArg() {
+        val expr = """greet("hello world")"""
+        assertEquals(listOf("--invoke", expr), splitOptions(buildInvokeOption(expr)))
+    }
+
+    @Test
+    fun buildInvokeOptionRoundTripsEscapesInStringArg() {
+        // A WAVE string literal containing an escaped quote and backslash
+        val expr = """log("he\"ll\\o")"""
+        assertEquals(listOf("--invoke", expr), splitOptions(buildInvokeOption(expr)))
+    }
+
+    @Test
+    fun buildInvokeOptionRoundTripsCharArg() {
+        val expr = "classify('x', ' ')"
+        assertEquals(listOf("--invoke", expr), splitOptions(buildInvokeOption(expr)))
+    }
+
+    // -----------------------------------------------------------------------
     // buildWasmtimeRunArgs – basic
     // -----------------------------------------------------------------------
 

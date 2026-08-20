@@ -302,6 +302,7 @@ private fun componentArgDescriptors(
             defaultValue = if (enumEntries != null) enumEntries.firstOrNull() ?: "" else "0",
             enumEntries = enumEntries,
             validate = { text -> validateComponentArg(text, param.value, types) },
+            format = { text -> formatComponentArgWave(text, param.value) },
         )
     }
 
@@ -313,6 +314,15 @@ private fun validateComponentArg(
     type: org.jetbrains.hexana.wasm.components.ComponentValueType,
     types: List<org.jetbrains.hexana.wasm.components.ComponentDefType>,
 ): String? {
+    val primitive = (type as? org.jetbrains.hexana.wasm.components.ComponentPrimitiveValueType)?.type
+    // Char and string params accept whitespace-only values, so they are
+    // checked before the generic blank rejection. Any text is a valid
+    // string; quoting for the WAVE invoke expression happens downstream
+    // in formatComponentArgWave.
+    if (primitive is org.jetbrains.hexana.wasm.components.ComponentPrimitiveString) return null
+    if (primitive is org.jetbrains.hexana.wasm.components.ComponentPrimitiveCharType) {
+        return if (isSingleUnicodeCharacter(text)) null else "Expected a single character"
+    }
     if (text.isBlank()) return "Value is required"
     if (type is org.jetbrains.hexana.wasm.components.ComponentValueIdxType) {
         val resolved = types.getOrNull(type.idx.toInt())
@@ -334,8 +344,6 @@ private fun validateComponentArg(
         is org.jetbrains.hexana.wasm.components.ComponentPrimitiveS64Type -> if (text.toLongOrNull() == null) "Expected an s64 integer" else null
         is org.jetbrains.hexana.wasm.components.ComponentPrimitiveF32Type -> if (text.toFloatOrNull() == null) "Expected an f32 number" else null
         is org.jetbrains.hexana.wasm.components.ComponentPrimitiveF64Type -> if (text.toDoubleOrNull() == null) "Expected an f64 number" else null
-        is org.jetbrains.hexana.wasm.components.ComponentPrimitiveCharType -> if (text.length != 1) "Expected a single character" else null
-        is org.jetbrains.hexana.wasm.components.ComponentPrimitiveString -> null
         else -> null
     }
 }

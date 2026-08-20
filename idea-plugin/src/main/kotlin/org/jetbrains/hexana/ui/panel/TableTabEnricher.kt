@@ -619,8 +619,10 @@ private fun runComponentExportedFunction(
         val dialog = FunctionArgsDialog(project, invokeName, componentArgDescriptors(params, componentTypes), isComponentModel = true)
         if (!dialog.showAndGet()) return
         val result = dialog.result ?: return
-        val argsString = dialog.argValues.joinToString(", ")
-        runWasmConfiguration(project, file, invokeName, "", "--invoke \"${invokeName}($argsString)\"", result.engine, result.mode)
+        val argsString = dialog.argValues.mapIndexed { i, value ->
+            params.getOrNull(i)?.let { formatComponentArgWave(value, it.value) } ?: value
+        }.joinToString(", ")
+        runWasmConfiguration(project, file, invokeName, "", buildInvokeOption("$invokeName($argsString)"), result.engine, result.mode)
     } else {
         val dialog = WasmRunDialog.createSimple(project, "Run '$invokeName'", isComponentModel = true)
         if (!dialog.showAndGet()) return
@@ -646,6 +648,15 @@ private fun componentArgDescriptors(
     }
 
 private fun validateComponentArg(text: String, type: ComponentValueType, types: List<ComponentDefType>): ValidationInfo? {
+    val primitive = (type as? ComponentPrimitiveValueType)?.type
+    // Char and string params accept whitespace-only values, so they are
+    // checked before the generic blank rejection. Any text is a valid
+    // string; quoting for the WAVE invoke expression happens downstream
+    // in formatComponentArgWave.
+    if (primitive is ComponentPrimitiveString) return null
+    if (primitive is ComponentPrimitiveCharType) {
+        return if (isSingleUnicodeCharacter(text)) null else ValidationInfo("Expected a single character")
+    }
     if (text.isBlank()) return ValidationInfo("Value is required")
     if (type is ComponentValueIdxType) {
         val resolved = types.getOrNull(type.idx.toInt())
@@ -667,8 +678,6 @@ private fun validateComponentArg(text: String, type: ComponentValueType, types: 
         is ComponentPrimitiveS64Type -> if (text.toLongOrNull() == null) ValidationInfo("Expected an s64 integer") else null
         is ComponentPrimitiveF32Type -> if (text.toFloatOrNull() == null) ValidationInfo("Expected an f32 number") else null
         is ComponentPrimitiveF64Type -> if (text.toDoubleOrNull() == null) ValidationInfo("Expected an f64 number") else null
-        is ComponentPrimitiveCharType -> if (text.length != 1) ValidationInfo("Expected a single character") else null
-        is ComponentPrimitiveString -> null
         else -> null
     }
 }
