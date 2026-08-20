@@ -8,6 +8,13 @@ import { getDebugOutputChannel, readWasmBytes } from "./WasmDebugAdapter";
 import type { SourceLocationResolver } from "./extension-lib";
 
 /**
+ * Cap for the source-line stepping auto-repeat: a single-line loop
+ * (`loop {}`) would otherwise re-step forever. On exhaustion the pause
+ * is reported wherever execution is. Matches IntelliJ's CdpDebugProcess.
+ */
+const MAX_AUTO_STEPS = 256;
+
+/**
  * Resolves the Chrome/Chromium executable path from settings,
  * environment, or well-known locations.
  */
@@ -220,6 +227,18 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
     private frameIdToCdpFrameIndex: number[] = [];
     /** Whether the last DAP action was "continue" (not step). */
     private lastActionWasContinue = false;
+    /**
+     * In-flight source-line step: V8 steps wasm one instruction at a time,
+     * so a source-level step re-issues `command` until the DWARF line (or
+     * the stack depth) changes. `remaining` caps the auto-repeat to avoid
+     * spinning on single-line loops. Mirrors IntelliJ's
+     * `CdpDebugProcess.LineStepState`.
+     */
+    private lineStepState:
+        | { command: string; file: string; line: number; depth: number; remaining: number }
+        | undefined;
+    /** Stack depth (CDP callFrames.length) at the last reported pause; baseline for line steps. */
+    private frameDepthAtPause = 0;
     /** CDP breakpoint IDs that were hit at the last stop reported to DAP. */
     private lastStoppedBreakpoints = new Set<string>();
     /** Whether at least one wasm:// script has been seen. */
@@ -334,19 +353,19 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
 
             case "next":
                 this.lastActionWasContinue = false;
-                await this.cdpSend("Debugger.stepOver");
+                await this.startStep("Debugger.stepOver");
                 this.sendDapResponse(msg, true);
                 break;
 
             case "stepIn":
                 this.lastActionWasContinue = false;
-                await this.cdpSend("Debugger.stepInto");
+                await this.startStep("Debugger.stepInto");
                 this.sendDapResponse(msg, true);
                 break;
 
             case "stepOut":
                 this.lastActionWasContinue = false;
-                await this.cdpSend("Debugger.stepOut");
+                await this.startStep("Debugger.stepOut");
                 this.sendDapResponse(msg, true);
                 break;
 
@@ -786,6 +805,39 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
         try { this.ws?.close(); } catch { /* ignore */ }
     }
 
+    // ---- Stepping ----
+
+    /** DWARF (file, line) of a CDP call frame, or undefined when it is not a mapped wasm frame. */
+    private dwarfPositionOf(frame: any): { file: string; line: number } | undefined {
+        const loc = frame?.location;
+        const scriptId = loc?.scriptId as string | undefined;
+        if (!scriptId || !this.scripts.get(scriptId)?.url?.startsWith("wasm://")) return undefined;
+        const offset = loc.columnNumber as number | undefined;
+        if (offset == null || !this.sourceLocationResolver) return undefined;
+        const resolved = this.sourceLocationResolver.wasmOffsetToSource(offset);
+        return resolved ? { file: resolved.file as string, line: resolved.line as number } : undefined;
+    }
+
+    /**
+     * Issues a CDP step, arming a line-step state so [handlePaused] keeps
+     * stepping until the DWARF source line (or the stack depth) changes.
+     * When the current top frame has no DWARF mapping the step degrades to
+     * a single V8 step (one wasm instruction).
+     */
+    private async startStep(command: string): Promise<void> {
+        const pos = this.dwarfPositionOf(this.pausedFrames?.[0]);
+        this.lineStepState = pos
+            ? {
+                command,
+                file: pos.file,
+                line: pos.line,
+                depth: this.frameDepthAtPause,
+                remaining: MAX_AUTO_STEPS,
+            }
+            : undefined;
+        await this.cdpSend(command);
+    }
+
     // ---- Debugger.paused handler ----
 
     private handlePaused(params: any): void {
@@ -870,6 +922,31 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
                 return;
             }
         }
+
+        // Source-line stepping: V8 steps wasm one instruction at a time.
+        // While a line step is armed and the pause is still on the recorded
+        // DWARF line at the same stack depth, re-issue the step instead of
+        // reporting the stop (VS Code keeps showing "running"). A hit
+        // breakpoint or the exhausted auto-step budget always reports.
+        const stepState = this.lineStepState;
+        if (stepState) {
+            if (hitBreakpoints.length > 0) {
+                this.lineStepState = undefined;
+            } else {
+                const current = this.dwarfPositionOf(callFrames[0]);
+                const sameLine = current !== undefined &&
+                    callFrames.length === stepState.depth &&
+                    current.file === stepState.file &&
+                    current.line === stepState.line;
+                if (sameLine && stepState.remaining > 0) {
+                    stepState.remaining--;
+                    this.cdpSend(stepState.command).catch(() => {});
+                    return;
+                }
+                this.lineStepState = undefined;
+            }
+        }
+        this.frameDepthAtPause = callFrames.length;
 
         this.lastActionWasContinue = false;
         this.pausedFrames = callFrames;
