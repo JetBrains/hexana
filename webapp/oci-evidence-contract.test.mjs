@@ -26,6 +26,16 @@ function fixture() {
 }
 function withFixture(action) { const value = fixture(); try { action(value); } finally { rmSync(value.root, { recursive: true, force: true }); } }
 
-test("accepts a detached receipt for an extracted static image root", () => withFixture(({ root, receipt }) => assert.doesNotThrow(() => verifyReceipt(receipt, root))));
+const ociManifest = "application/vnd.oci.image.manifest.v1+json";
+const ociConfig = "application/vnd.oci.image.config.v1+json";
+const dockerManifest = "application/vnd.docker.distribution.manifest.v2+json";
+const dockerConfig = "application/vnd.docker.container.image.v1+json";
+function setMediaTypes(receipt, manifestMediaType, configMediaType) { Object.assign(receipt.image, { manifestMediaType, configMediaType }); }
+
+test("accepts an OCI manifest and config", () => withFixture(({ root, receipt }) => assert.doesNotThrow(() => verifyReceipt(receipt, root))));
+test("accepts a Docker schema-2 manifest and container config", () => withFixture(({ root, receipt }) => { setMediaTypes(receipt, dockerManifest, dockerConfig); assert.doesNotThrow(() => verifyReceipt(receipt, root)); }));
+test("rejects an OCI manifest with a Docker config", () => withFixture(({ root, receipt }) => { setMediaTypes(receipt, ociManifest, dockerConfig); assert.throws(() => verifyReceipt(receipt, root), /matching config/); }));
+test("rejects a Docker manifest with an OCI config", () => withFixture(({ root, receipt }) => { setMediaTypes(receipt, dockerManifest, ociConfig); assert.throws(() => verifyReceipt(receipt, root), /matching config/); }));
+test("rejects unknown image media types", () => withFixture(({ root, receipt }) => { setMediaTypes(receipt, "application/example-manifest", "application/example-config"); assert.throws(() => verifyReceipt(receipt, root), /matching config/); }));
 test("rejects mutation of a packaged file", () => withFixture(({ root, receipt }) => { writeFileSync(join(root, "index.html"), "changed\n"); assert.throws(() => verifyReceipt(receipt, root), /packaged file hash differs/); }));
 test("rejects a substituted manifest digest", () => withFixture(({ root, receipt }) => { receipt.image.reference = `${repository}@sha256:${"c".repeat(64)}`; assert.throws(() => verifyReceipt(receipt, root), /digest-form reference/); }));

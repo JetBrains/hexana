@@ -194,12 +194,27 @@ private val robotsPolicy = "User-agent: *\nDisallow: /\n"
 private data class ResolvedRuntimeComponent(
     val identity: String,
     val bomRef: String,
+    val purl: String?,
     val type: String,
     val group: String,
     val name: String,
     val version: String,
     val runtimes: Set<String>,
 )
+
+private fun purlComponent(value: String): String = value.toByteArray(StandardCharsets.UTF_8).joinToString("") { byte ->
+    val code = byte.toInt() and 0xff
+    if ((code in 'a'.code..'z'.code) || (code in 'A'.code..'Z'.code) || (code in '0'.code..'9'.code) || code == '-'.code || code == '.'.code || code == '_'.code || code == '~'.code) {
+        code.toChar().toString()
+    } else {
+        "%%%02X".format(code)
+    }
+}
+
+private fun canonicalMavenPurl(group: String, name: String, version: String): String {
+    if (group.isBlank() || name.isBlank() || version.isBlank()) packageFailure("external resolved component has blank Maven coordinates")
+    return "pkg:maven/${purlComponent(group)}/${purlComponent(name)}@${purlComponent(version)}"
+}
 
 private fun resolvedRuntimeComponents(revision: String): List<ResolvedRuntimeComponent> {
     val runtimeNames = listOf("jsRuntimeClasspath", "jsParserWorkerRuntimeClasspath")
@@ -211,6 +226,7 @@ private fun resolvedRuntimeComponents(revision: String): List<ResolvedRuntimeCom
                 ResolvedRuntimeComponent(
                     identity = "project:${projectComponent.projectPath}@$revision",
                     bomRef = "urn:hexana:component:${sha256(projectComponent.projectPath)}",
+                    purl = null,
                     type = "application",
                     group = "org.jetbrains.hexana",
                     name = projectComponent.projectPath,
@@ -219,9 +235,11 @@ private fun resolvedRuntimeComponents(revision: String): List<ResolvedRuntimeCom
                 )
             } else {
                 val module = component.moduleVersion ?: packageFailure("unversioned resolved component ${component.id.displayName}")
+                val purl = canonicalMavenPurl(module.group, module.name, module.version)
                 ResolvedRuntimeComponent(
                     identity = "module:${module.group}:${module.name}:${module.version}",
-                    bomRef = "pkg:maven/${module.group}/${module.name}@${module.version}",
+                    bomRef = purl,
+                    purl = purl,
                     type = "library",
                     group = module.group,
                     name = module.name,
@@ -246,7 +264,7 @@ private fun resolutionEvidenceJson(components: List<ResolvedRuntimeComponent>): 
 
 private fun sbomJson(version: String, components: List<ResolvedRuntimeComponent>): String {
     val sbomComponents = components.joinToString(",") { component ->
-        "{\"type\":${json(component.type)},\"bom-ref\":${json(component.bomRef)},\"group\":${json(component.group)},\"name\":${json(component.name)},\"version\":${json(component.version)},\"properties\":[{\"name\":\"hexana.runtime\",\"value\":${json(component.runtimes.sorted().joinToString(","))}}]}"
+        "{\"type\":${json(component.type)},\"bom-ref\":${json(component.bomRef)},\"group\":${json(component.group)},\"name\":${json(component.name)},\"version\":${json(component.version)}${component.purl?.let { ",\"purl\":${json(it)}" } ?: ""},\"properties\":[{\"name\":\"hexana.runtime\",\"value\":${json(component.runtimes.sorted().joinToString(","))}}]}"
     }
     return "{\"bomFormat\":\"CycloneDX\",\"specVersion\":\"1.5\",\"version\":1,\"metadata\":{\"component\":{\"type\":\"application\",\"bom-ref\":\"urn:hexana:webapp\",\"name\":\"hexana-webapp\",\"version\":${json(version)}}},\"components\":[$sbomComponents]}\n"
 }
@@ -507,6 +525,18 @@ tasks.register<Exec>("testWebappOciEvidenceContract") {
     description = "Runs focused regression tests for detached OCI evidence validation."
     inputs.files(project.file("oci-evidence-contract.mjs"), project.file("oci-evidence-contract.test.mjs"))
     commandLine("node", "--test", project.file("oci-evidence-contract.test.mjs").absolutePath)
+}
+
+tasks.register<Exec>("testWebappVulnerabilityReportContract") {
+    group = "verification"
+    description = "Runs focused regression tests for the webapp vulnerability evidence gate."
+    inputs.files(project.file("vulnerability-report-contract.mjs"), project.file("vulnerability-report-contract.test.mjs"), project.file("oci-evidence-contract.mjs"), project.file("scan-webapp-oci-release.sh"))
+    commandLine("node", "--test", project.file("vulnerability-report-contract.test.mjs").absolutePath)
+    doLast {
+        check(canonicalMavenPurl("g r", "a/b", "1.0+1") == "pkg:maven/g%20r/a%2Fb@1.0%2B1") {
+            "canonical Maven purl encoding changed"
+        }
+    }
 }
 
 val webappOciReceipt = providers.gradleProperty("hexanaWebappOciReceipt")

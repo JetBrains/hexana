@@ -8,6 +8,10 @@ const revision = /^[0-9a-f]{40}$/;
 const version = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const branch = /^release\/webapp\/(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const evidenceNames = ["build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"];
+const imageMediaTypePairs = [
+  ["application/vnd.oci.image.manifest.v1+json", "application/vnd.oci.image.config.v1+json"],
+  ["application/vnd.docker.distribution.manifest.v2+json", "application/vnd.docker.container.image.v1+json"],
+];
 
 function fail(message) { throw new Error(`Invalid webapp OCI evidence: ${message}`); }
 function hash(file) { return createHash("sha256").update(readFileSync(file)).digest("hex"); }
@@ -73,7 +77,8 @@ export function verifyStagingPackage(packageDir, expected = {}) {
 }
 function validateImage(image) {
   if (!image || image.reference !== `${repository}@${image.manifestDigest}` || !digest.test(image.manifestDigest) || !digest.test(image.configDigest)) fail("image must use the canonical digest-form reference");
-  if (image.manifestMediaType !== "application/vnd.oci.image.manifest.v1+json" || image.configMediaType !== "application/vnd.oci.image.config.v1+json" || image.platform?.os !== "linux" || image.platform?.architecture !== "amd64") fail("image must identify one linux/amd64 OCI manifest and config");
+  const matchedMediaTypes = imageMediaTypePairs.some(([manifest, config]) => image.manifestMediaType === manifest && image.configMediaType === config);
+  if (!matchedMediaTypes || image.platform?.os !== "linux" || image.platform?.architecture !== "amd64") fail("image must identify one linux/amd64 OCI or Docker schema-2 manifest and matching config");
 }
 export function verifyReceipt(receipt, packageDir) {
   if (receipt?.schemaVersion !== 1 || receipt.kind !== "hexana-webapp-oci-evidence" || !branch.test(receipt.releaseBranch ?? "") || !revision.test(receipt.sourceRevision ?? "")) fail("unsupported receipt schema");

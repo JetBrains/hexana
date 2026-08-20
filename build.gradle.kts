@@ -184,6 +184,7 @@ val teamcityVscodePluginTestTaskPaths = listOf(
 )
 
 val teamcityWebappTestTaskPaths = listOf(
+    ":webapp:testWebappVulnerabilityReportContract",
     ":webapp:compileProductionExecutableKotlinJs",
     ":webapp:jsBrowserProductionWebpack",
     ":webapp:verifyPublicWebappCapabilityPolicy",
@@ -673,6 +674,7 @@ tasks.register("verifyTeamcityWebappTestsCoverage") {
     description = "Verify the TeamCity webapp aggregate includes production packaging and Chrome browser tests."
     doLast {
         val requiredTaskPaths = listOf(
+            ":webapp:testWebappVulnerabilityReportContract",
             ":webapp:compileProductionExecutableKotlinJs",
             ":webapp:jsBrowserProductionWebpack",
             ":webapp:verifyPublicWebappCapabilityPolicy",

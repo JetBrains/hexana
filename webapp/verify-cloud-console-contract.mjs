@@ -9,7 +9,16 @@ const requireText = (text, fragment, source) => {
 const forbid = (text, expression, source) => {
     if (expression.test(text)) throw new Error(`${source} contains forbidden ${expression}`);
 };
+const requireOrdered = (text, fragments, source) => {
+    let offset = 0;
+    for (const fragment of fragments) {
+        const index = text.indexOf(fragment, offset);
+        if (index < 0) throw new Error(`${source} is missing ordered fragment ${fragment}`);
+        offset = index + fragment.length;
+    }
+};
 const telemetryIngestionOrigin = "https://eu.i.posthog.com";
+const runtimeBase = "nginxinc/nginx-unprivileged:1.30.4-alpine3.24@sha256:44e36330f74d4f3a1d4e222acca9e23b401fb87811a7597024502bb759c4dd49";
 const productionCsp = `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' ${telemetryIngestionOrigin}; img-src 'self' data:; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 const externalUrls = text => [...text.matchAll(/https?:\/\/[^\s"'<>;]+/g)].map(match => match[0]);
 const requireProductionCsp = (policy, source) => {
@@ -48,7 +57,11 @@ if ((dockerfile.match(/^COPY\s+--from=selected-package-verifier\b/mg) || []).len
 requireText(dockerfile, "org.opencontainers.image.source", "Dockerfile");
 requireText(dockerfile, "org.opencontainers.image.revision", "Dockerfile");
 requireText(dockerfile, "COPY webapp/security-headers.conf /etc/nginx/snippets/security-headers.conf", "Dockerfile");
-requireText(dockerfile, "nginxinc/nginx-unprivileged:1.27.5-alpine", "Dockerfile");
+const runtimeFrom = dockerfile.match(/^FROM\s+nginxinc\/nginx-unprivileged:\S+$/gm)?.at(-1);
+if (runtimeFrom !== `FROM ${runtimeBase}`) throw new Error(`Dockerfile runtime stage must use ${runtimeBase}`);
+const runtimeStage = dockerfile.slice(dockerfile.lastIndexOf(`FROM ${runtimeBase}`));
+requireOrdered(runtimeStage, ["USER root", "RUN rm -rf /usr/share/nginx/html", "mkdir -p /usr/share/nginx/html", "USER 101", "COPY --from=selected-package-verifier --chown=101:101 /package/"], "Dockerfile runtime stage");
+if (runtimeStage.match(/^USER\s+\S+/gm)?.at(-1) !== "USER 101") throw new Error("Dockerfile runtime stage must restore USER 101 as its final user");
 forbid(dockerfile, /\b(latest|stable|mainline)\b/i, "Dockerfile");
 for (const header of ["Content-Security-Policy", "X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy", "X-Frame-Options", "Cross-Origin-Opener-Policy", "Cross-Origin-Embedder-Policy", "Cross-Origin-Resource-Policy"]) requireText(securityHeaders, header, "security-headers.conf");
 requireText(securityHeaders, "'wasm-unsafe-eval'", "security-headers.conf");

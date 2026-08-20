@@ -24,12 +24,16 @@ RUN test "$HEXANA_SOURCE_URL" = "https://github.com/JetBrains/hexana" && \
 
 FROM ${HEXANA_WEBAPP_PACKAGE_MODE}-package-verifier AS selected-package-verifier
 
-FROM nginxinc/nginx-unprivileged:1.27.5-alpine
+FROM nginxinc/nginx-unprivileged:1.30.4-alpine3.24@sha256:44e36330f74d4f3a1d4e222acca9e23b401fb87811a7597024502bb759c4dd49
 ARG HEXANA_SOURCE_URL
 ARG HEXANA_SOURCE_REVISION
 LABEL org.opencontainers.image.source="${HEXANA_SOURCE_URL}" \
       org.opencontainers.image.revision="${HEXANA_SOURCE_REVISION}"
+USER root
+RUN rm -rf /usr/share/nginx/html && \
+    mkdir -p /usr/share/nginx/html
 COPY webapp/nginx.conf /etc/nginx/conf.d/default.conf
 COPY webapp/security-headers.conf /etc/nginx/snippets/security-headers.conf
+USER 101
 COPY --from=selected-package-verifier --chown=101:101 /package/ /usr/share/nginx/html/
 EXPOSE 8080

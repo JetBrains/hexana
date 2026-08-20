@@ -14,3 +14,36 @@ For a `0.1.x` patch release:
 Release packages record the checked-in semantic version and the full Git revision.
 Builds without the release-branch property keep the revision as their package version.
 `hexanaWebappVersion` is accepted only when it equals the checked-in authority.
+
+## Vulnerability scan
+
+The source-owned OCI release scan requires Bash, Node.js, a running Docker daemon,
+registry credentials for the Hexana release image, and the repository's
+Gradle/JDK toolchain. The pinned Trivy image is anonymously readable. Prepare
+these fixed inputs first:
+
+- `webapp/build/oci-release-scan-input/evidence/receipt.json`
+- `webapp/build/oci-release-scan-input/static-package/`, including `sbom.cdx.json`
+
+From any working directory, invoke the checked-in script with the exact release
+branch and lowercase full source revision:
+
+```bash
+HEXANA_WEBAPP_RELEASE_BRANCH=release/webapp/0.1 \
+HEXANA_SOURCE_REVISION=0123456789abcdef0123456789abcdef01234567 \
+/path/to/Hexana/webapp/scan-webapp-oci-release.sh
+```
+
+The script accepts no arguments or scanner override. It deletes and recreates
+`webapp/build/vulnerability-scan-work` and
+`webapp/build/vulnerability-scan-evidence`, downloads the vulnerability database
+before scanning, then runs the image and SBOM scans without network access. Its
+exit codes are `0` for a validated clean result, `1` for validated HIGH or
+CRITICAL findings, and `2` for an operational or evidence-contract failure. It
+always removes the saved image archive and scanner cache. Validated reports,
+scanner metadata, `summary.json`, and `summary.txt` remain in
+`webapp/build/vulnerability-scan-evidence`.
+
+In TeamCity, the **Scan Webapp OCI Release** chain supplies both environment
+values from its checkout and the fixed input artifacts from **Build Webapp OCI
+Release**. TeamCity publishes the resulting evidence directory.
