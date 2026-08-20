@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import test from "node:test";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 const directory = import.meta.dirname;
 const dockerfile = await readFile(resolve(directory, "Dockerfile"), "utf8");
@@ -49,11 +52,14 @@ test("documents the external publication and blank Console environment boundary"
 
 test("staging hook invokes only the published digest-pinned helper", () => {
     assert.match(skaffold, /command: \["sh", "-ec", "source_root=/);
+    assert.match(skaffold, /revision=\\"\$\(git -C \\"\$\{source_root\}\\" rev-parse --verify HEAD\^\{commit\}\)\\"/);
+    assert.match(skaffold, /printf '%s\\\\n' \\"\$\{revision\}\\" \| grep -Eq '\^\[0-9a-f\]\{40\}\$'/);
     assert.match(skaffold, /exec docker run --rm/);
     assert.match(skaffold, /--user \\"\$\(id -u\):\$\(id -g\)\\"/);
     assert.match(skaffold, /--mount \\"type=bind,src=\$\{source_root\},dst=\/workspace\\"/);
     assert.match(skaffold, /--workdir \/workspace/);
-    assert.match(skaffold, /--env \\"HEXANA_SOURCE_REVISION=\$\{HEXANA_SOURCE_REVISION:-\}\\"/);
+    assert.match(skaffold, /--env \\"HEXANA_SOURCE_REVISION=\$\{revision\}\\"/);
+    assert.doesNotMatch(skaffold, /HEXANA_SOURCE_REVISION=\$\{HEXANA_SOURCE_REVISION:-\}/);
     assert.match(skaffold, /--env \\"GRADLE_USER_HOME=\/tmp\/hexana-webapp-staging-gradle\\"/);
     assert.match(skaffold, new RegExp(publishedHelper.replaceAll(".", "\\.")));
     const helperReferences = [...skaffold.matchAll(/registry\.jetbrains\.team\/p\/hx\/containers\/hexana-webapp-build-environment(?:@sha256:[0-9a-f]+|:[^\s"]+)?/g)].map(match => match[0]);
@@ -61,3 +67,42 @@ test("staging hook invokes only the published digest-pinned helper", () => {
     assert.match(skaffold, /node webapp\/stage-cloud-console-staging-package\.mjs/);
     assert.doesNotMatch(skaffold, /docker\.sock|--privileged|--network(?:=|\s+)host|insecure|tls-verify=false/i);
 });
+
+function stagingHook() {
+    const command = skaffold.split("\n").find(line => line.includes("stage-cloud-console-staging-package.mjs"));
+    return JSON.parse(command.trim().replace(/^- command: /, ""));
+}
+
+function withDockerStub(action) {
+    const root = mkdtempSync(join(tmpdir(), "hexana-webapp-docker-stub-"));
+    const docker = join(root, "docker");
+    const received = join(root, "received");
+    writeFileSync(docker, `#!/bin/sh\nprintf '%s\\n' "$@" > "${received}"\n`);
+    chmodSync(docker, 0o755);
+    try {
+        action({ root, received });
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+}
+
+test("derives the staging revision from the checkout instead of an inherited environment value", () => withDockerStub(({ root, received }) => {
+    const [shell, flags, command] = stagingHook();
+    const checkout = resolve(directory, "../..");
+    const expected = execFileSync("git", ["rev-parse", "--verify", "HEAD^{commit}"], { cwd: checkout, encoding: "utf8" }).trim();
+    execFileSync(shell, [flags, command], {
+        cwd: checkout,
+        env: { ...process.env, PATH: `${root}:${process.env.PATH}`, HEXANA_SOURCE_REVISION: "malformed-operator-override" },
+    });
+    assert.match(readFileSync(received, "utf8"), new RegExp(`^HEXANA_SOURCE_REVISION=${expected}$`, "m"));
+}));
+
+test("fails before Docker staging when the controller is outside a Git checkout", () => withDockerStub(({ root, received }) => {
+    const [shell, flags, command] = stagingHook();
+    assert.throws(() => execFileSync(shell, [flags, command], {
+        cwd: root,
+        env: { ...process.env, PATH: `${root}:${process.env.PATH}` },
+        stdio: "pipe",
+    }));
+    assert.throws(() => readFileSync(received, "utf8"));
+}));
