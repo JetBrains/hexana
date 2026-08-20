@@ -531,6 +531,19 @@ tasks.register<Exec>("testWebappLiveSmoke") {
     commandLine("node", "--test", project.file("live-webapp-smoke.test.mjs").absolutePath)
 }
 
+tasks.register<Exec>("testWebappOciLocalhostBrowserSmoke") {
+    group = "verification"
+    description = "Runs source-owned regression tests for the local OCI browser smoke contract."
+    inputs.files(
+        project.file("oci-localhost-browser-smoke.mjs"),
+        project.file("oci-localhost-browser-smoke.test.mjs"),
+        project.file("live-webapp-smoke.mjs"),
+        project.file("production-package-smoke.mjs"),
+        project.rootProject.file("wasmParser/src/commonTest/resources/snippets/addition.wasm"),
+    )
+    commandLine("node", "--test", project.file("oci-localhost-browser-smoke.test.mjs").absolutePath)
+}
+
 tasks.register<Exec>("testWebappOciEvidenceContract") {
     group = "verification"
     description = "Runs focused regression tests for detached OCI evidence validation."

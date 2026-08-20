@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runParserWorkerFlow } from "./production-package-smoke.mjs";
+import { ParserWorkerSmokeFailure, runParserWorkerFlow } from "./production-package-smoke.mjs";
 
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const approvedLinks = ["https://github.com/JetBrains/hexana", "https://jetbrains.github.io/hexana/"];
@@ -28,6 +28,14 @@ export class SmokeFailure extends Error {
         this.name = "SmokeFailure";
         this.phase = phase;
         this.host = host;
+    }
+}
+
+export class BrowserSmokeFailure extends Error {
+    constructor(phase, message, cause) {
+        super(message, { cause });
+        this.name = "BrowserSmokeFailure";
+        this.phase = phase;
     }
 }
 
@@ -146,7 +154,7 @@ async function verifyEndpoint(endpoint, input, fetchImpl, evidence) {
     return { identity: pages[0].identity, assets };
 }
 
-async function runCdpBrowser({ endpoint, input, wasmBytes }) {
+export async function runCdpBrowser({ endpoint, input, wasmBytes }) {
     const browserLog = [];
     const externalRequests = [];
     let browser, profile, socket, cdp, screenshot;
@@ -199,8 +207,9 @@ async function runCdpBrowser({ endpoint, input, wasmBytes }) {
         for (let attempt = 0; attempt < 120 && !await evaluate("document.readyState === 'complete'"); attempt++) await delay(100);
         if (await evaluate("localStorage.getItem('hexana.webapp.telemetryEnabled')") !== "false") throw new Error("telemetry was not disabled before app startup");
         const about = await evaluate(`(async () => { for (let i=0;i<100&&!document.querySelector('[data-about-trigger]');i++) await new Promise(r=>setTimeout(r,100)); const trigger=document.querySelector('[data-about-trigger]'); if(!trigger)return null; trigger.click(); await new Promise(r=>setTimeout(r,50)); const value=s=>document.querySelector(s)?.textContent?.trim(); return {version:value('[data-about-version]'),revision:value('[data-about-revision]'),links:[...document.querySelectorAll('[data-about-link]')].map(a=>a.href)}; })()`);
-        if (about?.version !== `Version: ${input.version}` || about?.revision !== `Revision: ${input.revision}` || JSON.stringify(about.links) !== JSON.stringify(approvedLinks)) throw new Error(`About identity or links mismatch: ${JSON.stringify(about)}`);
-        await runParserWorkerFlow(evaluate, wasmBytes);
+        if (about?.version !== `Version: ${input.version}` || about?.revision !== `Revision: ${input.revision}` || JSON.stringify(about.links) !== JSON.stringify(approvedLinks)) throw new BrowserSmokeFailure("identity", `About identity or links mismatch: ${JSON.stringify(about)}`);
+        try { await runParserWorkerFlow(evaluate, wasmBytes); }
+        catch (error) { throw new BrowserSmokeFailure(`parser-worker/${error instanceof ParserWorkerSmokeFailure ? error.reason : "operational"}`, error.message, error); }
         if (externalRequests.length) throw new Error(`blocked external requests: ${externalRequests.join(", ")}`);
         screenshot = Buffer.from((await cdp("Page.captureScreenshot", { format: "png" })).data, "base64");
         return { browserLog, screenshot };
@@ -241,7 +250,7 @@ export async function runLiveSmoke(env = process.env, options = {}) {
                 catch (error) {
                     if (error.browserLog) await writeFile(join(directory, "browser-log.json"), JSON.stringify(error.browserLog, null, 2) + "\n");
                     if (error.screenshot) await writeFile(join(directory, "screenshot.png"), error.screenshot);
-                    fail("browser", error.message, endpoint.name, error);
+                    fail(error instanceof BrowserSmokeFailure ? `browser/${error.phase}` : "browser", error.message, endpoint.name, error);
                 }
                 await writeFile(join(directory, "browser-log.json"), JSON.stringify(browser.browserLog || [], null, 2) + "\n");
                 if (!browser.screenshot?.length) fail("browser", "browser runner did not return a screenshot", endpoint.name);

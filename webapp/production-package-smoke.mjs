@@ -9,19 +9,27 @@ const ciChromeFlags = process.env.CI || process.env.TEAMCITY_VERSION
     ? ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
     : [];
 
-export async function runParserWorkerFlow(evaluate, bytes) {
-    for (let attempt = 0; attempt < 100 && !await evaluate("Boolean(document.querySelector('[data-file-drop-zone]'))"); attempt++) await delay(100);
+export class ParserWorkerSmokeFailure extends Error {
+    constructor(reason, message, cause) {
+        super(message, { cause });
+        this.name = "ParserWorkerSmokeFailure";
+        this.reason = reason;
+    }
+}
+
+export async function runParserWorkerFlow(evaluate, bytes, { attempts = 120, delayImpl = delay } = {}) {
+    for (let attempt = 0; attempt < 100 && !await evaluate("Boolean(document.querySelector('[data-file-drop-zone]'))"); attempt++) await delayImpl(100);
     if (!await evaluate(`(() => { const target = document.querySelector('[data-file-drop-zone]'); if (!target) return false; const transfer = new DataTransfer(); transfer.items.add(new File([new Uint8Array(${JSON.stringify([...bytes])})], 'addition.wasm', {type:'application/wasm'})); target.dispatchEvent(new DragEvent('drop', {bubbles:true, cancelable:true, dataTransfer:transfer})); return true; })()`)) throw new Error("packaged app did not expose the file-drop UI");
     let lastState = null;
-    for (let attempt = 0; attempt < 120; attempt++) {
+    for (let attempt = 0; attempt < attempts; attempt++) {
         const state = await evaluate("(() => { const node = document.querySelector('[data-parser-worker-state]'); return node ? { state: node.getAttribute('data-parser-worker-state'), format: node.getAttribute('data-parser-worker-format') } : null; })()");
         lastState = state;
-        if (state?.state === "failed" || state?.state === "timed_out") throw new Error(`parser worker did not parse addition.wasm: ${JSON.stringify(state)}`);
+        if (state?.state === "failed" || state?.state === "timed_out") throw new ParserWorkerSmokeFailure(state.state, `parser worker did not parse addition.wasm: ${JSON.stringify(state)}`);
         if (state?.state === "parsed" && state.format === "core_wasm") return;
-        await delay(100);
+        await delayImpl(100);
     }
     const attributes = await evaluate("JSON.stringify([...document.querySelectorAll('[data-parser-worker-state],[data-file-load-status]')].map(node => ({parser:node.getAttribute('data-parser-worker-state'),load:node.getAttribute('data-file-load-status'),text:node.textContent})))");
-    throw new Error(`timed out waiting for parsed addition.wasm UI: ${JSON.stringify({ state: lastState, attributes })}`);
+    throw new ParserWorkerSmokeFailure("timeout", `timed out waiting for parsed addition.wasm UI: ${JSON.stringify({ state: lastState, attributes })}`);
 }
 
 async function main() {
