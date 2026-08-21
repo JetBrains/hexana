@@ -710,7 +710,8 @@ internal class WasmDwarfVariableResolver private constructor(
          */
         fun create(wasmBytes: ByteArray): WasmDwarfVariableResolver? =
             createFromCoreModule(wasmBytes)
-                ?: WasmDwarfUtil.embeddedCoreModules(wasmBytes.toCommonByteBuffer()).firstNotNullOfOrNull { createFromCoreModule(it) }
+                ?: WasmDwarfUtil.embeddedCoreModules(wasmBytes.toCommonByteBuffer())
+                    .firstNotNullOfOrNull { createFromCoreModule(it.toByteArray()) }
 
         /** [create] for bytes that must already be a core module. */
         private fun createFromCoreModule(wasmBytes: ByteArray): WasmDwarfVariableResolver? {

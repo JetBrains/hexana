@@ -9,13 +9,6 @@ import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 
 internal object WasmDwarfUtil {
 
-    private val DWARF_SECTION_NAMES = setOf(
-        ".debug_info",
-        ".debug_line",
-        ".debug_abbrev",
-        ".debug_str",
-    )
-
     /**
      * Returns `true` when the given Wasm binary contains at least a
      * `.debug_info` custom section, which indicates that DWARF debug
@@ -53,8 +46,7 @@ internal object WasmDwarfUtil {
      */
     private fun hasDwarfInComponent(wasmBytes: CommonByteBuffer): Boolean {
         try {
-            val buffer = wasmBytes
-            val provider = WasmComponentBinaryProvider(buffer)
+            val provider = WasmComponentBinaryProvider(wasmBytes)
             if (!provider.canProvideWasmModule()) return false
 
             // Check top-level component custom sections first
@@ -64,7 +56,7 @@ internal object WasmDwarfUtil {
             }
 
             // Then check embedded core modules
-            return embeddedCoreModules(buffer).any { hasDwarfInCoreModule(it) }
+            return embeddedCoreModules(wasmBytes).any { hasDwarfInCoreModule(it) }
         } catch (_: Exception) {
             // Not a valid component or parsing failed
             return false
@@ -94,23 +86,5 @@ internal object WasmDwarfUtil {
         } catch (_: Exception) {
             emptyList()
         }
-    }
-
-    /**
-     * Returns the set of DWARF custom section names present in the binary
-     * (e.g. `.debug_info`, `.debug_line`).
-     */
-    fun dwarfSectionNames(wasmBytes: ByteArray): Set<String> {
-        val module = try {
-            val provider = WasmBinaryProvider(wasmBytes.toCommonByteBuffer())
-            if (!provider.canProvideWasmModule()) return emptySet()
-            provider.wasmModule
-        } catch (_: Exception) {
-            return emptySet()
-        } ?: return emptySet()
-        return module.customSections
-            .map { it.name }
-            .filter { it in DWARF_SECTION_NAMES }
-            .toSet()
     }
 }

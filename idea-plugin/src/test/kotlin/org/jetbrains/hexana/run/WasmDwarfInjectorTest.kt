@@ -45,7 +45,7 @@ class WasmDwarfInjectorTest : UsefulTestCase() {
         assertTrue("Result should be larger than the original", resultBytes.size > composedWasm.size)
         assertTrue("Result should contain DWARF info", WasmDwarfUtil.hasDwarfInfo(resultBytes))
 
-        val sectionNames = WasmDwarfUtil.dwarfSectionNames(resultBytes)
+        val sectionNames = customSectionNames(resultBytes)
         assertTrue(".debug_info should be present", ".debug_info" in sectionNames)
         assertTrue(".debug_line should be present", ".debug_line" in sectionNames)
     }
@@ -137,7 +137,7 @@ class WasmDwarfInjectorTest : UsefulTestCase() {
 
         assertTrue("Should inject DWARF sections", injected)
 
-        val sectionNames = WasmDwarfUtil.dwarfSectionNames(composedFile.readBytes())
+        val sectionNames = customSectionNames(composedFile.readBytes())
         assertTrue(".debug_info should be present", ".debug_info" in sectionNames)
         assertTrue(".debug_line should be present", ".debug_line" in sectionNames)
     }
@@ -247,6 +247,14 @@ class WasmDwarfInjectorTest : UsefulTestCase() {
         // the module section should be preserved
         assertTrue("Result should contain trailing section marker",
             resultBytes.any { it == 0x04.toByte() }) // type section marker from trailing section
+    }
+
+    /**
+     * The names of every custom section in the given core module, empty when it does not parse.
+     */
+    private fun customSectionNames(wasmBytes: ByteArray): Set<String> {
+        val module = WasmBinaryProvider(wasmBytes.toCommonByteBuffer()).wasmModule ?: return emptySet()
+        return module.customSections.map { it.name }.toSet()
     }
 
     /**
