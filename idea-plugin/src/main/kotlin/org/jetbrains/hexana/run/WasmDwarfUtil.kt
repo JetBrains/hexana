@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.run
 
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
@@ -63,7 +64,7 @@ internal object WasmDwarfUtil {
             }
 
             // Then check embedded core modules
-            return embeddedCoreModules(wasmBytes).any { hasDwarfInCoreModule(it) }
+            return embeddedCoreModules(buffer).any { hasDwarfInCoreModule(it) }
         } catch (_: Exception) {
             // Not a valid component or parsing failed
             return false
@@ -79,9 +80,9 @@ internal object WasmDwarfUtil {
      * be handed to any core-module parser and its offsets line up with the ones the
      * stub reports. Empty when [wasmBytes] is not a parseable component.
      */
-    fun embeddedCoreModules(wasmBytes: ByteArray): List<ByteArray> {
+    fun embeddedCoreModules(wasmBytes: CommonByteBuffer): List<ByteArray> {
         return try {
-            val buffer = wasmBytes.toCommonByteBuffer()
+            val buffer = wasmBytes
             val provider = WasmComponentBinaryProvider(buffer)
             if (!provider.canProvideWasmModule()) return emptyList()
             provider.modules.map { coreModule ->

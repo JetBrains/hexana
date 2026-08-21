@@ -2,6 +2,7 @@ package org.jetbrains.hexana.run
 
 import com.intellij.testFramework.UsefulTestCase
 import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
+import org.jetbrains.hexana.io.toCommonByteBuffer
 
 class WasmDwarfUtilTest : UsefulTestCase() {
 
@@ -67,7 +68,7 @@ class WasmDwarfUtilTest : UsefulTestCase() {
         val second = buildWasmWithCustomSection(".debug_line", byteArrayOf(0x01))
         val component = WasmComponentTestBuilder.component(first, second)
 
-        val embedded = WasmDwarfUtil.embeddedCoreModules(component)
+        val embedded = WasmDwarfUtil.embeddedCoreModules(component.toCommonByteBuffer())
         assertEquals("both module sections must be enumerated, in order", 2, embedded.size)
         assertTrue("the first embedded module must be returned verbatim", first.contentEquals(embedded[0]))
         assertTrue("the second embedded module must be returned verbatim", second.contentEquals(embedded[1]))
@@ -82,7 +83,7 @@ class WasmDwarfUtilTest : UsefulTestCase() {
         val wasm = wat2wasm("(module)")
         assertTrue(
             "a core module embeds nothing — it IS the module",
-            WasmDwarfUtil.embeddedCoreModules(wasm).isEmpty(),
+            WasmDwarfUtil.embeddedCoreModules(wasm.toCommonByteBuffer()).isEmpty(),
         )
     }
 
