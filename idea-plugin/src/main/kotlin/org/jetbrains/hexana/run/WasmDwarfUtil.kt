@@ -27,8 +27,8 @@ internal object WasmDwarfUtil {
     fun hasDwarfInfo(wasmBytes: ByteArray): Boolean {
         val buffer = wasmBytes.toCommonByteBuffer()
         return when (WasmBinaryProviderSelector.select(buffer)) {
-            is BinaryProviderType.Wasm -> hasDwarfInCoreModule(wasmBytes)
-            is BinaryProviderType.WasmComponent -> hasDwarfInComponent(wasmBytes)
+            is BinaryProviderType.Wasm -> hasDwarfInCoreModule(buffer)
+            is BinaryProviderType.WasmComponent -> hasDwarfInComponent(buffer)
             else -> false
         }
     }
@@ -36,9 +36,9 @@ internal object WasmDwarfUtil {
     /**
      * Checks whether a core Wasm module contains a `.debug_info` custom section.
      */
-    private fun hasDwarfInCoreModule(wasmBytes: ByteArray): Boolean {
+    private fun hasDwarfInCoreModule(wasmBytes: CommonByteBuffer): Boolean {
         return try {
-            val provider = WasmBinaryProvider(wasmBytes.toCommonByteBuffer())
+            val provider = WasmBinaryProvider(wasmBytes)
             val module = provider.wasmModule
             module != null && module.customSections.any { it.name == ".debug_info" }
         } catch (_: Exception) {
@@ -51,9 +51,9 @@ internal object WasmDwarfUtil {
      * sections, either at the top-level (component custom sections) or
      * inside any embedded core module.
      */
-    private fun hasDwarfInComponent(wasmBytes: ByteArray): Boolean {
+    private fun hasDwarfInComponent(wasmBytes: CommonByteBuffer): Boolean {
         try {
-            val buffer = wasmBytes.toCommonByteBuffer()
+            val buffer = wasmBytes
             val provider = WasmComponentBinaryProvider(buffer)
             if (!provider.canProvideWasmModule()) return false
 
@@ -80,7 +80,7 @@ internal object WasmDwarfUtil {
      * be handed to any core-module parser and its offsets line up with the ones the
      * stub reports. Empty when [wasmBytes] is not a parseable component.
      */
-    fun embeddedCoreModules(wasmBytes: CommonByteBuffer): List<ByteArray> {
+    fun embeddedCoreModules(wasmBytes: CommonByteBuffer): List<CommonByteBuffer> {
         return try {
             val buffer = wasmBytes
             val provider = WasmComponentBinaryProvider(buffer)
@@ -89,7 +89,7 @@ internal object WasmDwarfUtil {
                 val moduleBytes = ByteArray(coreModule.contentSize)
                 buffer.position(coreModule.contentOffset)
                 buffer.get(moduleBytes, 0, coreModule.contentSize)
-                moduleBytes
+                moduleBytes.toCommonByteBuffer()
             }
         } catch (_: Exception) {
             emptyList()
