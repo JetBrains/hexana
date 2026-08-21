@@ -6,41 +6,6 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 
 class WasmDwarfUtilTest : UsefulTestCase() {
 
-    fun testNoDwarfInfo() {
-        val wasm = wat2wasm("""
-            (module
-              (func (export "main") (result i32)
-                i32.const 42
-              )
-            )
-        """.trimIndent())
-
-        assertFalse("Simple module without DWARF should return false", WasmDwarfUtil.hasDwarfInfo(wasm))
-    }
-
-    fun testHasDwarfInfoWithDebugInfoSection() {
-        val wasm = buildWasmWithCustomSection(".debug_info", byteArrayOf(0x00, 0x01, 0x02))
-
-        assertTrue("Module with .debug_info section should return true", WasmDwarfUtil.hasDwarfInfo(wasm))
-    }
-
-    fun testNonDwarfCustomSectionsIgnored() {
-        val wasm = buildWasmWithCustomSection("name", byteArrayOf(0x00, 0x01))
-
-        assertFalse("Module with only 'name' custom section should return false", WasmDwarfUtil.hasDwarfInfo(wasm))
-    }
-
-    fun testInvalidBinaryReturnsFalse() {
-        val garbage = byteArrayOf(0x00, 0x01, 0x02, 0x03)
-        assertFalse("Invalid binary should return false", WasmDwarfUtil.hasDwarfInfo(garbage))
-    }
-
-    fun testEmptyByteArrayReturnsFalse() {
-        assertFalse("Empty byte array should return false", WasmDwarfUtil.hasDwarfInfo(byteArrayOf()))
-    }
-
-    // ── Component-model binaries ────────────────────────────────────
-
     fun testEmbeddedCoreModulesAreStandaloneModules() {
         val first = buildWasmWithCustomSection("name", byteArrayOf(0x00))
         val second = buildWasmWithCustomSection(".debug_line", byteArrayOf(0x01))
@@ -62,20 +27,6 @@ class WasmDwarfUtilTest : UsefulTestCase() {
         assertTrue(
             "a core module embeds nothing — it IS the module",
             WasmDwarfUtil.embeddedCoreModules(wasm.toCommonByteBuffer()).isEmpty(),
-        )
-    }
-
-    fun testHasDwarfInfoFindsDwarfInsideAnEmbeddedCoreModule() {
-        val plain = buildWasmWithCustomSection("name", byteArrayOf(0x00))
-        val withDwarf = buildWasmWithCustomSection(".debug_info", byteArrayOf(0x00, 0x01))
-
-        assertTrue(
-            "DWARF in any embedded module must count as DWARF in the component",
-            WasmDwarfUtil.hasDwarfInfo(WasmComponentTestBuilder.component(plain, withDwarf)),
-        )
-        assertFalse(
-            "a component whose modules carry no DWARF must not report DWARF",
-            WasmDwarfUtil.hasDwarfInfo(WasmComponentTestBuilder.component(plain)),
         )
     }
 

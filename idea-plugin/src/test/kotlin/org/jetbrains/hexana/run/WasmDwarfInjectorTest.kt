@@ -43,7 +43,6 @@ class WasmDwarfInjectorTest : UsefulTestCase() {
         // Verify the result is still a valid Wasm module and has the DWARF sections
         val resultBytes = composedFile.readBytes()
         assertTrue("Result should be larger than the original", resultBytes.size > composedWasm.size)
-        assertTrue("Result should contain DWARF info", WasmDwarfUtil.hasDwarfInfo(resultBytes))
 
         val sectionNames = customSectionNames(resultBytes)
         assertTrue(".debug_info should be present", ".debug_info" in sectionNames)
@@ -171,10 +170,6 @@ class WasmDwarfInjectorTest : UsefulTestCase() {
         val injected = WasmDwarfInjector.injectDwarfSections(composedFile, listOf(sourceFile))
 
         assertTrue("Should inject large DWARF section", injected)
-        assertTrue(
-            "Result should have DWARF info",
-            WasmDwarfUtil.hasDwarfInfo(composedFile.readBytes()),
-        )
 
         // Verify content is preserved
         val provider = WasmBinaryProvider(composedFile.readBytes().toCommonByteBuffer())
@@ -220,7 +215,10 @@ class WasmDwarfInjectorTest : UsefulTestCase() {
         // extract the core module from the result and check it has DWARF
         val embeddedModule = extractFirstCoreModuleFromComponent(resultBytes)
         assertNotNull("Should have an embedded core module", embeddedModule)
-        assertTrue("Embedded core module should have DWARF info", WasmDwarfUtil.hasDwarfInfo(embeddedModule!!))
+        assertTrue(
+            "Embedded core module should have DWARF info",
+            ".debug_info" in customSectionNames(embeddedModule!!),
+        )
     }
 
     fun testInjectIntoComponentPreservesSectionsAfterModule() {
