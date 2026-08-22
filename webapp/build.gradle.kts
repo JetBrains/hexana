@@ -756,9 +756,8 @@ tasks.register<Exec>("testWebappCloudConsoleStagingContract") {
 
 tasks.register<Exec>("testWebappCloudConsoleBuildEnvironmentContract") {
     group = "verification"
-    description = "Verifies the source-owned Cloud Console build environment definition."
+    description = "Verifies the Cloud Console build-environment consumer contract."
     inputs.files(
-        project.file("cloud-console-build-environment/Dockerfile"),
         project.file("cloud-console-build-environment/README.md"),
         project.file("cloud-console-build-environment/contract.test.mjs"),
         project.file("skaffold.yaml"),
