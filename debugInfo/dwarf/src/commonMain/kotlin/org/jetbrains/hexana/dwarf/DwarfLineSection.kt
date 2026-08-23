@@ -12,14 +12,29 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
         position(contentOffset)
         val units = mutableListOf<DwarfLineUnitHeader<*>>()
         while (position() < contentOffset + contentSize) {
-            val unitHeader = readLineUnitHeader()
-            units.add(unitHeader)
-            val unitSize = when (unitHeader.unitSize) {
-                is UInt -> unitHeader.unitSize.toInt()
-                is ULong -> unitHeader.unitSize.toInt()
-                else -> throw IllegalArgumentException("Unsupported DWARF line: ${unitHeader.unitSize}")
+            val unitOffset = position()
+            // Peek at unit_length to find the boundary for skip-on-error.
+            val rawUnitLength = getIntLE().toUInt()
+            val is64bit = rawUnitLength == 0xFFFFFFFFu
+            // For 32-bit: boundary = unitOffset + 4 (length field) + rawUnitLength
+            // For 64-bit: boundary = unitOffset + 4 (magic) + 8 (length) + actualLength
+            val unitBoundary = if (is64bit) {
+                val actualLength = getLongLE().toULong()
+                unitOffset + 12 + actualLength.toInt()
+            } else {
+                unitOffset + 4 + rawUnitLength.toInt()
             }
-            position(unitHeader.offset + unitSize)
+            // Rewind to let readLineUnitHeader re-read from unitOffset.
+            position(unitOffset)
+            runCatching { readLineUnitHeader() }
+                .onSuccess { header ->
+                    units.add(header)
+                    position(unitBoundary)
+                }
+                .onFailure {
+                    // Skip this unit so later units in the section are still parsed.
+                    position(unitBoundary)
+                }
         }
         return units
     }
@@ -36,16 +51,18 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
         val size = getLongLE().toULong()
         val version = getShortLE().toUShort()
         return when (version.toInt()) {
-            1, 2, 3, 4 -> readDwarfLine64V4Header(unitOffset, size)
+            1 -> throw IllegalArgumentException("Unsupported DWARF line version: $version")
+            2, 3, 4 -> readDwarfLine64V4Header(unitOffset, size, version.toInt())
             5 -> readDwarfLine64V5Header(unitOffset, size)
-            else -> throw IllegalArgumentException("Unsupported DWARF version: $version")
+            else -> throw IllegalArgumentException("Unsupported DWARF line version: $version")
         }
     }
 
-    fun CommonByteBuffer.readDwarfLine64V4Header(unitOffset: Int, size: ULong): DwarfLineUnitHeader<*> {
+    fun CommonByteBuffer.readDwarfLine64V4Header(unitOffset: Int, size: ULong, version: Int = 4): DwarfLineUnitHeader<*> {
         val headerLength = getLongLE().toULong()
         val maximumInstructionsLength = get().toUByte()
-        val maximumOperationsPerInstruction = get().toUByte()
+        // maximum_operations_per_instruction was added in DWARF v4; v2/v3 headers omit it.
+        val maximumOperationsPerInstruction = if (version >= 4) get().toUByte() else 1.toUByte()
         val defaultIsStatement = get().toUByte()
         val lineBase = get()
         val lineRange = get().toUByte()
@@ -110,16 +127,18 @@ class DwarfLineSection(contentOffset: Int, contentSize: Int, accessor: DwarfAcce
     fun CommonByteBuffer.readDwarf32Header(unitOffset: Int, unitSize: UInt): DwarfLineUnitHeader<*> {
         val version = getShortLE().toUShort()
         return when (version.toInt()) {
-            1, 2, 3, 4 -> readDwarfLine32V4Header(unitOffset, unitSize)
+            1 -> throw IllegalArgumentException("Unsupported DWARF line version: $version")
+            2, 3, 4 -> readDwarfLine32V4Header(unitOffset, unitSize, version.toInt())
             5 -> readDwarfLine32V5Header(unitOffset, unitSize)
-            else -> throw IllegalArgumentException("Unsupported DWARF version: $version")
+            else -> throw IllegalArgumentException("Unsupported DWARF line version: $version")
         }
     }
 
-    fun CommonByteBuffer.readDwarfLine32V4Header(unitOffset: Int, unitSize: UInt): DwarfLineUnitHeader<*> {
+    fun CommonByteBuffer.readDwarfLine32V4Header(unitOffset: Int, unitSize: UInt, version: Int = 4): DwarfLineUnitHeader<*> {
         val prologLength = getIntLE().toUInt()
         val maximumInstructionsLength = get().toUByte()
-        val maximumOperationsPerInstruction = get().toUByte()
+        // maximum_operations_per_instruction was added in DWARF v4; v2/v3 headers omit it.
+        val maximumOperationsPerInstruction = if (version >= 4) get().toUByte() else 1.toUByte()
         val defaultIsStatement = get().toUByte()
         val lineBase = get()
         val lineRange = get().toUByte()

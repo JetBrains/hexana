@@ -96,7 +96,7 @@ class DwarfSourceLocationResolver(val dwarfAccessor: DwarfAccessor) {
     fun CommonByteBuffer.resolveState(header: DwarfLineUnitHeader<*>, state: LineRow, compDir: String? = null): SourceLocation? {
         return when(header) {
             is DwarfLineUnitHeader.Dwarf32LineUnitHeader.V4 -> {
-                header.includeFiles[state.file - 1].let { fileEntry ->
+                (header.includeFiles.getOrNull(state.file - 1) ?: return null).let { fileEntry ->
                     val file = fileEntry.fileName
                     val directory = when(val dirIndex = fileEntry.dirIndex) {
                         0 -> compDir ?: ""
@@ -106,7 +106,7 @@ class DwarfSourceLocationResolver(val dwarfAccessor: DwarfAccessor) {
                 }
             }
             is DwarfLineUnitHeader.Dwarf64LineUnitHeader.V4 -> {
-                header.includeFiles[state.file - 1].let { fileEntry ->
+                (header.includeFiles.getOrNull(state.file - 1) ?: return null).let { fileEntry ->
                     val file = fileEntry.fileName
                     val directory = when (val dirIndex = fileEntry.dirIndex) {
                         0 -> compDir ?: ""
