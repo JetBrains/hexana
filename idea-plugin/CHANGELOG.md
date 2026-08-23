@@ -11,6 +11,8 @@
 ### Removed
 
 ### Fixed
+- Cortex-M firmware ELFs (Zephyr, ZMK and similar) now disassemble as Thumb-2. The M profile recorded in `.ARM.attributes` selects the Thumb decoder for the whole file, and bit 0 of Thumb function symbol addresses (the interworking marker, not part of the real address) is stripped, so functions start at their even addresses and 32-bit wide encodings (`bl.w`, `mul.w`) decode exactly as objdump shows. Previously these files decoded as A32 from odd start addresses, producing garbage for every function. A-profile ELFs keep per-symbol mode selection: A32 by default, Thumb for symbols carrying the marker bit.
+- The **Debug Info** tab reported "Debug info present, but Hexana did not resolve any source line rows" for GCC-built ELFs even though `.debug_info` and `.debug_line` were present (every Zephyr/ZMK Cortex-M firmware, DWARF4 and DWARF5 alike). GCC emits DWARF version 2/3 line-program headers even in `-gdwarf-4/5` builds, and the line parser misread them with the version 4 layout, failing on the first such unit and discarding the whole section (clang and rustc emit v4/v5 headers, which always worked). Version 2/3 headers now parse, an unparseable line-table unit is skipped instead of taking the rest of the section down with it, and address-to-line resolution matches addr2line.
 
 ### Security
 
