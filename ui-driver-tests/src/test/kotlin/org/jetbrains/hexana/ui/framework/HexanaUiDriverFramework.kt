@@ -106,6 +106,14 @@ internal class HexanaIde internal constructor(
         driver.closeToolWindow("Structure")
     }
 
+    fun closeAllEditors() {
+        probe.closeAllEditors()
+    }
+
+    fun setClipboardText(text: String) {
+        probe.setClipboardText(text)
+    }
+
     fun openFile(fileName: String): HexanaEditor {
         driver.openFile(fileName, waitForCodeAnalysis = false, isTextEditor = false)
         return HexanaEditor(driver, fileName, context.projectRelativeFileIdentifier(fileName))
@@ -221,6 +229,12 @@ internal class HexanaEditor internal constructor(
     }
 
     fun topSizeState(): List<String> = probe.topSizeState(fileIdentifier)
+
+    fun nativeDisassemblyInstructions(query: String, maxLines: Int): List<String> =
+        probe.nativeDisassemblyInstructions(fileIdentifier, query, maxLines)
+
+    fun nativeDisassemblySummary(maxRanges: Int): List<String> =
+        probe.nativeDisassemblySummary(fileIdentifier, maxRanges)
 
     fun selectTab(tabName: String) {
         probe.selectTab(fileIdentifier, tabName)
@@ -524,4 +538,9 @@ internal interface HexanaEditorUiTestProbeRef {
     fun watState(fileName: String): List<String>
     fun showFindUsagesForComponentDeclaration(fileName: String): List<String>
     fun watFindUsagesCaptureState(): List<String>
+    fun closeAllEditors(): List<String>
+    fun nativeDisassemblyInstructions(fileName: String, query: String, maxLines: Int): List<String>
+
+    fun nativeDisassemblySummary(fileName: String, maxRanges: Int): List<String>
+    fun setClipboardText(text: String): List<String>
 }

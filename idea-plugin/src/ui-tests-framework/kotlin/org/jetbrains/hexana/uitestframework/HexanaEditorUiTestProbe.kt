@@ -5,6 +5,7 @@ import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.vfs.VfsUtil
@@ -15,6 +16,8 @@ import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.SyntaxTraverser
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.usages.UsageViewManager
+import kotlinx.coroutines.runBlocking
+import org.jetbrains.hexana.disassembly.core.Arch
 import org.jetbrains.hexana.HexanaComponentDiffVirtualFile
 import org.jetbrains.hexana.HexanaFileEditor
 import org.jetbrains.hexana.HexanaNativeDiffVirtualFile
@@ -34,11 +37,15 @@ import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.shared.WasmComponentTableTabsProvider
 import org.jetbrains.hexana.ui.ScriptTabSettings
 import org.jetbrains.hexana.ui.WasmFunctionNavTarget
+import org.jetbrains.hexana.ui.panel.DisasmLoadState
+import org.jetbrains.hexana.ui.panel.discoverDisasmRanges
 import org.jetbrains.hexana.ui.panel.enrichComponentTabs
+import org.jetbrains.hexana.ui.panel.loadCapstoneDisassembly
 import org.jetbrains.hexana.ui.panel.WatConversionState
 import org.jetbrains.hexana.wat.LightWatFile
 import org.jetbrains.hexana.wat.WatUsageTarget
 import org.jetbrains.hexana.wat.psi.WatComponentElement
+import java.awt.datatransfer.StringSelection
 import java.nio.file.Path
 
 private const val WIRE_VERSION = "1"
@@ -56,6 +63,15 @@ object HexanaEditorUiTestProbe {
 
     @JvmStatic
     fun ping(): String = "pong"
+
+    @JvmStatic
+    fun closeAllEditors(): List<String> = runOnEdt {
+        ProjectManager.getInstance().openProjects.forEach { project ->
+            val manager = FileEditorManager.getInstance(project)
+            manager.openFiles.toList().forEach { file -> manager.closeFile(file) }
+        }
+        payload("hexana-close-all-editors", listOf("closed=true"))
+    }
 
     @JvmStatic
     fun openAbsoluteFile(path: String): List<String> {
@@ -259,6 +275,112 @@ object HexanaEditorUiTestProbe {
                 "totalSize=${sizeAnalysis?.size ?: 0}",
                 "topLevelCount=${sizeAnalysis?.children?.size ?: 0}",
             ),
+        )
+    }
+
+    @JvmStatic
+    fun setClipboardText(text: String): List<String> = runOnEdt {
+        CopyPasteManager.getInstance().setContents(StringSelection(text))
+        payload("hexana-set-clipboard-text", listOf("length=${text.length}"))
+    }
+
+    @JvmStatic
+    fun nativeDisassemblyInstructions(fileIdentifier: String, query: String, maxLines: Int): List<String> {
+        val editor = requireHexanaEditor(fileIdentifier)
+        val provider = editor.binaryProvider as? NativeBinaryProvider
+            ?: throw IllegalStateException(
+                "Expected a native binary provider for '$fileIdentifier', got ${editor.binaryProvider.kindId()}",
+            )
+        val discovery = discoverDisasmRanges(provider)
+            ?: throw IllegalStateException("No disassembly ranges discovered for '$fileIdentifier'")
+        // The panel search lists ranges whose displayName contains the query, in range
+        // order. Prefer the first non-trivial (>= 16 bytes) match so the drilled body
+        // renders multiple instruction rows; resultIndex is the target's position in
+        // that search result list so the UI can arrow-key to it deterministically.
+        val matches = discovery.ranges.withIndex()
+            .filter { (_, r) -> r.displayName.contains(query, ignoreCase = true) }
+        val targetMatch = matches.firstOrNull { (_, r) -> r.size >= 16 } ?: matches.firstOrNull()
+        val resultIndex = targetMatch?.let { matches.indexOf(it) } ?: -1
+        val rangeIndex = targetMatch?.index
+            ?: discovery.ranges.indexOfFirst { it.size >= 16 }.takeIf { it >= 0 }
+            ?: 0
+        val range = discovery.ranges[rangeIndex]
+        val loadState = runBlocking { loadCapstoneDisassembly(discovery) }
+        val catalog = (loadState as? DisasmLoadState.Loaded)?.catalog
+            ?: throw IllegalStateException(
+                "Capstone load failed for '$fileIdentifier': ${(loadState as? DisasmLoadState.Error)?.message}",
+            )
+        val instructions = runBlocking { catalog.decode(rangeIndex) }
+        return payload(
+            "hexana-native-disasm-instructions",
+            buildList {
+                add("query=$query")
+                add("resolvedName=${range.displayName}")
+                add("rangeIndex=$rangeIndex")
+                add("resultIndex=$resultIndex")
+                add("virtualAddress=0x${range.virtualAddress.toString(16)}")
+                add("sizeBytes=${range.size}")
+                add("arch=${discovery.arch.name}")
+                add("instructionCount=${instructions.size}")
+                instructions.take(maxLines).forEach { insn ->
+                    add("insn=0x${insn.virtualAddress.toString(16)}|${insn.mnemonic}|${insn.operands}")
+                }
+            },
+        )
+    }
+
+    /**
+     * Decodes every discovered range and returns aggregate statistics: total instruction
+     * count, `.byte` fallback count, odd-virtual-address range count (must be zero once
+     * Thumb bit-0 masking works), and per-range worst offenders by fallback count.
+     * Bounded by [maxRanges] to keep a single probe call within the driver call timeout.
+     */
+    @JvmStatic
+    fun nativeDisassemblySummary(fileIdentifier: String, maxRanges: Int): List<String> {
+        val editor = requireHexanaEditor(fileIdentifier)
+        val provider = editor.binaryProvider as? NativeBinaryProvider
+            ?: throw IllegalStateException(
+                "Expected a native binary provider for '$fileIdentifier', got ${editor.binaryProvider.kindId()}",
+            )
+        val discovery = discoverDisasmRanges(provider)
+            ?: throw IllegalStateException("No disassembly ranges discovered for '$fileIdentifier'")
+        val loadState = runBlocking { loadCapstoneDisassembly(discovery) }
+        val catalog = (loadState as? DisasmLoadState.Loaded)?.catalog
+            ?: throw IllegalStateException(
+                "Capstone load failed for '$fileIdentifier': ${(loadState as? DisasmLoadState.Error)?.message}",
+            )
+        val rangeCount = discovery.ranges.size
+        val decodedRangeCount = minOf(rangeCount, maxRanges)
+        var insnCount = 0L
+        var byteFallbackCount = 0L
+        var oddVaRangeCount = 0
+        var thumbOverrideCount = 0
+        val offenders = mutableListOf<Triple<String, Int, Int>>()
+        for (rangeIndex in 0 until decodedRangeCount) {
+            val range = discovery.ranges[rangeIndex]
+            if (range.virtualAddress and 1uL == 1uL) oddVaRangeCount++
+            if (range.archOverride == Arch.THUMB) thumbOverrideCount++
+            val instructions = runBlocking { catalog.decode(rangeIndex) } ?: continue
+            insnCount += instructions.size
+            val bytes = instructions.count { it.mnemonic == ".byte" }
+            byteFallbackCount += bytes
+            if (bytes > 0) offenders += Triple(range.displayName, bytes, instructions.size)
+        }
+        offenders.sortByDescending { it.second }
+        return payload(
+            "hexana-native-disasm-summary",
+            buildList {
+                add("arch=${discovery.arch.name}")
+                add("rangeCount=$rangeCount")
+                add("decodedRangeCount=$decodedRangeCount")
+                add("insnCount=$insnCount")
+                add("byteFallbackCount=$byteFallbackCount")
+                add("oddVaRangeCount=$oddVaRangeCount")
+                add("thumbOverrideCount=$thumbOverrideCount")
+                offenders.take(5).forEach { (name, bytes, insns) ->
+                    add("offender=$name|$bytes/$insns")
+                }
+            },
         )
     }
 
