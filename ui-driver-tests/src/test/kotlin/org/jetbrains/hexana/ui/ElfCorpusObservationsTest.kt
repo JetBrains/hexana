@@ -38,51 +38,51 @@ class ElfCorpusObservationsTest {
 
     private val artifacts: List<Artifact> = listOf(
         Artifact(
-            Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/hello_world/nrf52840dk-debug/zephyr.elf"),
+            HexanaUiDriverTestSupport.corpusElf("apps/hello_world/nrf52840dk-debug/zephyr.elf"),
             "hello_world-nrf52840dk-debug",
         ),
         Artifact(
-            Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/hello_world/nrf52840dk-Os/zephyr.elf"),
+            HexanaUiDriverTestSupport.corpusElf("apps/hello_world/nrf52840dk-Os/zephyr.elf"),
             "hello_world-nrf52840dk-Os",
         ),
         Artifact(
-            Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/hello_world/nrf52840dk-O2/zephyr.elf"),
+            HexanaUiDriverTestSupport.corpusElf("apps/hello_world/nrf52840dk-O2/zephyr.elf"),
             "hello_world-nrf52840dk-O2",
         ),
         Artifact(
-            Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/hello_world/nucleo_f429zi-Os/zephyr.elf"),
+            HexanaUiDriverTestSupport.corpusElf("apps/hello_world/nucleo_f429zi-Os/zephyr.elf"),
             "hello_world-nucleo_f429zi-Os",
         ),
         Artifact(
-            Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/peripheral_hr/nrf52840dk-debug/zephyr.elf"),
+            HexanaUiDriverTestSupport.corpusElf("apps/peripheral_hr/nrf52840dk-debug/zephyr.elf"),
             "peripheral_hr-nrf52840dk-debug",
         ),
         Artifact(
-            Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/peripheral_hr/nrf52840dk-Os/zephyr.elf"),
+            HexanaUiDriverTestSupport.corpusElf("apps/peripheral_hr/nrf52840dk-Os/zephyr.elf"),
             "peripheral_hr-nrf52840dk-Os",
         ),
         Artifact(
-            Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/peripheral_hr/nrf52840dk-size-opt/zephyr.elf"),
+            HexanaUiDriverTestSupport.corpusElf("apps/peripheral_hr/nrf52840dk-size-opt/zephyr.elf"),
             "peripheral_hr-nrf52840dk-size-opt",
         ),
         Artifact(
-            Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/usb_hid-mouse/nrf52840dk-debug/zephyr.elf"),
+            HexanaUiDriverTestSupport.corpusElf("apps/usb_hid-mouse/nrf52840dk-debug/zephyr.elf"),
             "usb_hid-mouse-nrf52840dk-debug",
         ),
         Artifact(
-            Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/usb_hid-mouse/nrf52840dk-Os/zephyr.elf"),
+            HexanaUiDriverTestSupport.corpusElf("apps/usb_hid-mouse/nrf52840dk-Os/zephyr.elf"),
             "usb_hid-mouse-nrf52840dk-Os",
         ),
         Artifact(
-            Path.of("/Users/user/IdeaProjects/zephyr-corpus/external/zmk/xiao-nrf52840-intercom.elf"),
+            HexanaUiDriverTestSupport.corpusElf("external/zmk/xiao-nrf52840-intercom.elf"),
             "external-zmk-intercom",
         ),
         Artifact(
-            Path.of("/Users/user/IdeaProjects/zephyr-corpus/external/zmk/xiao-nrf52840-loa-controller.elf"),
+            HexanaUiDriverTestSupport.corpusElf("external/zmk/xiao-nrf52840-loa-controller.elf"),
             "external-zmk-loa-controller",
         ),
         Artifact(
-            Path.of("/Users/user/IdeaProjects/zephyr-corpus/external/zmk/xiao-nrf52840-loa-receiver.elf"),
+            HexanaUiDriverTestSupport.corpusElf("external/zmk/xiao-nrf52840-loa-receiver.elf"),
             "external-zmk-loa-receiver",
         ),
     )
@@ -115,7 +115,7 @@ class ElfCorpusObservationsTest {
         artifacts.forEach { artifact ->
             require(artifact.path.exists()) { "Missing corpus artifact: ${artifact.path}" }
         }
-        val screenshotDir = Path.of("/Users/user/IdeaProjects/zephyr-corpus/screenshots").createDirectories()
+        val screenshotDir = corpusScreenshotDir()
         val artifactObservations = mutableListOf<ArtifactObservation>()
         val diffObservations = mutableListOf<DiffObservation>()
 
@@ -270,18 +270,18 @@ class ElfCorpusObservationsTest {
             val diffPairs = listOf(
                 Triple(
                     "diff-hello_world-debug-vs-Os",
-                    Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/hello_world/nrf52840dk-debug/zephyr.elf"),
-                    Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/hello_world/nrf52840dk-Os/zephyr.elf"),
+                    HexanaUiDriverTestSupport.corpusElf("apps/hello_world/nrf52840dk-debug/zephyr.elf"),
+                    HexanaUiDriverTestSupport.corpusElf("apps/hello_world/nrf52840dk-Os/zephyr.elf"),
                 ),
                 Triple(
                     "diff-hello_world-Os-vs-O2",
-                    Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/hello_world/nrf52840dk-Os/zephyr.elf"),
-                    Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/hello_world/nrf52840dk-O2/zephyr.elf"),
+                    HexanaUiDriverTestSupport.corpusElf("apps/hello_world/nrf52840dk-Os/zephyr.elf"),
+                    HexanaUiDriverTestSupport.corpusElf("apps/hello_world/nrf52840dk-O2/zephyr.elf"),
                 ),
                 Triple(
                     "diff-peripheral_hr-debug-vs-Os",
-                    Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/peripheral_hr/nrf52840dk-debug/zephyr.elf"),
-                    Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/peripheral_hr/nrf52840dk-Os/zephyr.elf"),
+                    HexanaUiDriverTestSupport.corpusElf("apps/peripheral_hr/nrf52840dk-debug/zephyr.elf"),
+                    HexanaUiDriverTestSupport.corpusElf("apps/peripheral_hr/nrf52840dk-Os/zephyr.elf"),
                 ),
             )
 
@@ -362,23 +362,23 @@ class ElfCorpusObservationsTest {
     fun observeDisassemblyInstructions() {
         val targets = listOf(
             DisasmDrillTarget(
-                Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/hello_world/nrf52840dk-debug/zephyr.elf"),
+                HexanaUiDriverTestSupport.corpusElf("apps/hello_world/nrf52840dk-debug/zephyr.elf"),
                 "hello_world-nrf52840dk-debug",
                 "main",
             ),
             DisasmDrillTarget(
-                Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/peripheral_hr/nrf52840dk-Os/zephyr.elf"),
+                HexanaUiDriverTestSupport.corpusElf("apps/peripheral_hr/nrf52840dk-Os/zephyr.elf"),
                 "peripheral_hr-nrf52840dk-Os",
                 "memcpy",
             ),
             DisasmDrillTarget(
-                Path.of("/Users/user/IdeaProjects/zephyr-corpus/external/zmk/xiao-nrf52840-intercom.elf"),
+                HexanaUiDriverTestSupport.corpusElf("external/zmk/xiao-nrf52840-intercom.elf"),
                 "external-zmk-intercom",
                 "memcpy",
             ),
         )
         targets.forEach { require(it.path.exists()) { "Missing corpus artifact: ${it.path}" } }
-        val screenshotDir = Path.of("/Users/user/IdeaProjects/zephyr-corpus/screenshots").createDirectories()
+        val screenshotDir = corpusScreenshotDir()
         val results = mutableListOf<DisasmDrillResult>()
 
         quitSystemSettingsQuietly()
@@ -463,17 +463,16 @@ class ElfCorpusObservationsTest {
      * per-symbol mode selection working. Asserts exact instruction addresses and mnemonics
      * against arm-zephyr-eabi-objdump ground truth recorded in comments below.
      *
-     * The A-profile fixture is built with the Zephyr SDK gcc:
-     *   arm-zephyr-eabi-gcc -march=armv7-a -marm -O1 -nostdlib -ffreestanding \
-     *     -o mixed-aprofile.elf mixed.c
-     * where mixed.c defines arm_add (A32), thumb_mul (attribute target("thumb")), _start.
+     * The A-profile fixture is bundled at testData/fixtures/aprofile/ together with its
+     * mixed.c source (arm_add is A32, thumb_mul has attribute target("thumb")); the build
+     * command is recorded in testData/fixtures/zephyr-corpus/README.md.
      */
     @Test
     fun thumbDecodeAcceptance() {
-        val aprofileFixture = Path.of("/tmp/aprofile-fixture/mixed-aprofile.elf")
+        val aprofileFixture = HexanaUiDriverTestSupport.aprofileFixture()
         artifacts.forEach { require(it.path.exists()) { "Missing corpus artifact: ${it.path}" } }
         require(aprofileFixture.exists()) {
-            "Missing A-profile fixture $aprofileFixture; rebuild it per the KDoc of this test"
+            "Missing A-profile fixture $aprofileFixture; see testData/fixtures/zephyr-corpus/README.md"
         }
         val rows = mutableListOf<String>()
 
@@ -518,7 +517,7 @@ class ElfCorpusObservationsTest {
                 closeAllEditors()
                 Thread.sleep(500)
                 val editor = openAbsoluteFile(
-                    Path.of("/Users/user/IdeaProjects/zephyr-corpus/apps/hello_world/nrf52840dk-Os/zephyr.elf"),
+                    HexanaUiDriverTestSupport.corpusElf("apps/hello_world/nrf52840dk-Os/zephyr.elf"),
                 )
                 waitForPanelsResolved(editor, 90.seconds)
                 val probe = editor.nativeDisassemblyInstructions("main", 12)
@@ -597,6 +596,16 @@ class ElfCorpusObservationsTest {
             "{\n  \"generatedAt\": \"${java.time.Instant.now()}\",\n  \"rows\": ${rows.toJsonArray()}\n}\n",
         )
         logOutput("Thumb acceptance rows written to /tmp/hexana-thumb-acceptance.json")
+    }
+
+    /**
+     * Screenshot destination: the `HEXANA_CORPUS_SCREENSHOT_DIR` environment variable when
+     * set (local drills point it at a zephyr-corpus checkout), otherwise build/corpus-screenshots.
+     */
+    private fun corpusScreenshotDir(): Path {
+        val override = System.getenv("HEXANA_CORPUS_SCREENSHOT_DIR")?.trim()?.ifBlank { null }
+        val dir = override?.let { Path.of(it) } ?: Path.of("build", "corpus-screenshots")
+        return dir.toAbsolutePath().normalize().createDirectories()
     }
 
     /**

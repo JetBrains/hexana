@@ -24,6 +24,7 @@ internal object HexanaUiDriverTestSupport {
     const val defaultMcpPort = 64342
 
     private const val largeWasmEnv = "HEXANA_LARGE_WASM"
+    private const val zephyrCorpusEnv = "HEXANA_ZEPHYR_CORPUS"
     private const val localPluginZipEnv = "HEXANA_LOCAL_PLUGIN_ZIP"
     private const val useLocalPluginEnv = "HEXANA_USE_LOCAL_PLUGIN"
     private const val downloadPluginEnv = "HEXANA_DOWNLOAD_PLUGIN"
@@ -130,6 +131,45 @@ internal object HexanaUiDriverTestSupport {
             logOutput("Decompressed large wasm fixture to $target")
         }
         return target
+    }
+
+    /**
+     * Zephyr/ZMK corpus ELF for the ELF corpus tests: resolved inside a zephyr-corpus
+     * checkout when the `HEXANA_ZEPHYR_CORPUS` environment variable is set, otherwise
+     * from the bundled gzipped fixtures, decompressed to `build/fixtures/zephyr-corpus/`
+     * on first use. See `testData/fixtures/zephyr-corpus/README.md` for provenance.
+     */
+    fun corpusElf(relativePath: String): Path {
+        val override = System.getenv(zephyrCorpusEnv)?.trim()?.ifBlank { null }
+        if (override != null) {
+            return Path.of(override).resolve(relativePath).toAbsolutePath().normalize()
+        }
+        return decompressedFixture(
+            Path.of("testData", "fixtures", "zephyr-corpus", "$relativePath.gz"),
+            Path.of("build", "fixtures", "zephyr-corpus", relativePath),
+        )
+    }
+
+    /**
+     * A-profile mixed ARM/Thumb regression fixture (always bundled; rebuild recipe in
+     * `testData/fixtures/zephyr-corpus/README.md`).
+     */
+    fun aprofileFixture(): Path = decompressedFixture(
+        Path.of("testData", "fixtures", "aprofile", "mixed-aprofile.elf.gz"),
+        Path.of("build", "fixtures", "aprofile", "mixed-aprofile.elf"),
+    )
+
+    private fun decompressedFixture(bundled: Path, target: Path): Path {
+        val bundledAbs = bundled.toAbsolutePath().normalize()
+        val targetAbs = target.toAbsolutePath().normalize()
+        if (!targetAbs.exists() || Files.size(targetAbs) == 0L) {
+            targetAbs.parent.createDirectories()
+            GZIPInputStream(Files.newInputStream(bundledAbs)).use { input ->
+                Files.copy(input, targetAbs, StandardCopyOption.REPLACE_EXISTING)
+            }
+            logOutput("Decompressed fixture to $targetAbs")
+        }
+        return targetAbs
     }
 
     private fun resolvePluginZip(): Path {
