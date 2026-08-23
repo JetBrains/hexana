@@ -681,7 +681,7 @@ private fun NativeBinaryProvider.virtualAddressToFileOffset(virtualAddress: ULon
 
 private fun NativeBinaryProvider.disassemblyArch(): Arch =
     when (val format = nativeFormat) {
-        is NativeBinaryFormat.Elf -> archFromElfMachine(format.machine, format.wordSize)
+        is NativeBinaryFormat.Elf -> archFromElfMachine(format.machine, format.wordSize, (this as? ElfBinaryProvider)?.armProfile)
         is NativeBinaryFormat.Pe -> archFromPeMachine(format.machine)
         is NativeBinaryFormat.Coff -> archFromPeMachine(format.machine)
         is NativeBinaryFormat.MachO -> archFromMachOCpuType(format.cpuType)
@@ -690,10 +690,13 @@ private fun NativeBinaryProvider.disassemblyArch(): Arch =
         -> Arch.X86_64
     }
 
-private fun archFromElfMachine(machine: Int?, wordSize: NativeBinaryWordSize): Arch =
+private fun archFromElfMachine(machine: Int?, wordSize: NativeBinaryWordSize, armProfile: Char? = null): Arch =
     when (machine) {
         0x03 -> Arch.X86
-        0x28 -> Arch.ARM
+        0x28 -> when (armProfile) {
+            'M' -> Arch.THUMB
+            else -> Arch.ARM
+        }
         0x3E -> Arch.X86_64
         0xB7 -> Arch.ARM64
         0xF3 -> if (wordSize == NativeBinaryWordSize.Bits32) Arch.RISC_V_32 else Arch.RISC_V_64

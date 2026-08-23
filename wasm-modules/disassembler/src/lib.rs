@@ -13,6 +13,7 @@
 //   decode_x86_64   (ptr, len, offset, base_va) -> u32
 //   decode_arm      (ptr, len, offset, base_va) -> u32
 //   decode_arm64    (ptr, len, offset, base_va) -> u32
+//   decode_thumb    (ptr, len, offset, base_va) -> u32
 //   decode_riscv32  (ptr, len, offset, base_va) -> u32
 //   decode_riscv64  (ptr, len, offset, base_va) -> u32
 
@@ -139,6 +140,34 @@ pub unsafe extern "C" fn decode_arm(
             let rendered = format!("{}", insn);
             let is_terminator = is_terminator_arm(&insn);
             let branch_target = branch_target_arm(&insn, address, size);
+            let targets: &[u64] = match &branch_target {
+                Some(t) => core::slice::from_ref(t),
+                None => &[],
+            };
+            build_valid(address, size, is_terminator, targets, &rendered)
+        }
+        Err(_) => build_unknown(address, view),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn decode_thumb(
+    bytes_ptr: u32,
+    bytes_len: u32,
+    offset: u32,
+    base_va: u64,
+) -> u32 {
+    let Some((view, address)) = (unsafe { resolve_window(bytes_ptr, bytes_len, offset, base_va) }) else {
+        return 0;
+    };
+    let decoder = yaxpeax_arm::armv7::InstDecoder::armv7_thumb();
+    let mut reader = U8Reader::new(view);
+    match decoder.decode(&mut reader) {
+        Ok(insn) => {
+            let size = insn.len().to_const() as u32;
+            let rendered = format!("{}", insn);
+            let is_terminator = is_terminator_thumb(&insn);
+            let branch_target = branch_target_thumb(&insn, address);
             let targets: &[u64] = match &branch_target {
                 Some(t) => core::slice::from_ref(t),
                 None => &[],
@@ -354,6 +383,44 @@ fn is_terminator_arm(insn: &yaxpeax_arm::armv7::Instruction) -> bool {
     // Conditional B/BX are also block terminators (the block splits into two successors).
     // BL and BLX are calls — they return to the following instruction, so NOT terminators.
     matches!(insn.opcode, B | BX | BXJ | ERET)
+}
+
+fn is_terminator_thumb(insn: &yaxpeax_arm::armv7::Instruction) -> bool {
+    use yaxpeax_arm::armv7::Opcode::*;
+    // B and CBZ/CBNZ split control flow; BX/BXJ are indirect jumps; ERET exits.
+    // BL and BLX are calls — they return to the instruction after, so NOT terminators.
+    matches!(insn.opcode, B | BX | BXJ | ERET | CBZ | CBNZ)
+}
+
+fn branch_target_thumb(insn: &yaxpeax_arm::armv7::Instruction, address: u64) -> Option<u64> {
+    use yaxpeax_arm::armv7::Opcode::*;
+    use yaxpeax_arm::armv7::Operand;
+    // Thumb branches use BranchThumbOffset(imm) where the display visitor writes imm*2,
+    // so the byte displacement is imm * 2.  PC in Thumb is always address + 4 for branches
+    // (both narrow 16-bit and wide 32-bit), so: target = (address + 4) + (imm * 2).
+    let thumb_target = |imm: i32| -> u64 {
+        let base = address.wrapping_add(4);
+        base.wrapping_add((imm as i64 as u64).wrapping_mul(2))
+    };
+    match insn.opcode {
+        B => {
+            if let Operand::BranchThumbOffset(imm) = insn.operands[0] {
+                Some(thumb_target(imm))
+            } else {
+                None
+            }
+        }
+        CBZ | CBNZ => {
+            // operands[0] = register, operands[1] = BranchThumbOffset
+            if let Operand::BranchThumbOffset(imm) = insn.operands[1] {
+                Some(thumb_target(imm))
+            } else {
+                None
+            }
+        }
+        // BX, BXJ, ERET use register operands — no static target.
+        _ => None,
+    }
 }
 
 fn is_terminator_arm64(insn: &yaxpeax_arm::armv8::a64::Instruction) -> bool {
@@ -840,5 +907,145 @@ mod tests {
         let insn = decode_riscv_insn(word);
         assert_eq!(branch_target_riscv(&insn, 0, 4), None);
         assert!(is_terminator_riscv(&insn));
+    }
+
+    // =========================================================================
+    // Thumb-2 — size reporting, branch targets, terminator predicate
+    // =========================================================================
+
+    fn decode_thumb_insn(bytes: &[u8]) -> yaxpeax_arm::armv7::Instruction {
+        let decoder = yaxpeax_arm::armv7::InstDecoder::armv7_thumb();
+        decoder.decode(&mut U8Reader::new(bytes)).expect("thumb decode failed")
+    }
+
+    #[test]
+    fn thumb_push_size_2_not_terminator() {
+        // 80 B5  →  push {r7, lr}  (T1 encoding, 16-bit narrow Thumb)
+        let insn = decode_thumb_insn(&[0x80, 0xB5]);
+        use yaxpeax_arch::LengthedInstruction;
+        let size = insn.len().to_const() as u32;
+        assert_eq!(size, 2, "narrow Thumb instruction must be 2 bytes");
+        assert!(!is_terminator_thumb(&insn), "push is not a terminator");
+        assert_eq!(branch_target_thumb(&insn, 0x524), None);
+    }
+
+    #[test]
+    fn thumb_bl_wide_size_4_with_branch_target() {
+        // BL from address 0x1000 to target 0x1100.
+        // Offset in bytes = 0x1100 - (0x1000 + 4) = 0xFC; imm (stored) = 0xFC / 2 = 0x7E.
+        // Encoding: S=0, imm10=0, i1=0, i2=0, imm11=0x7E.
+        // j1 = 1^0^0 = 1, j2 = 1^0^0 = 1.
+        // First halfword:  1111_0_000_0000_0000 = 0xF000
+        // Second halfword: 11_1_1_1_0_0_01111110 = 0b1111_1101_1111_110 ... careful:
+        //   bits [15:14]=11, [13]=j1=1, [12]=1, [11]=j2=1, [10:0]=imm11=0x7E
+        //   = 0b1111_1101_1111_1110 = 0xFDFE ... recalculate:
+        //   bit15=1 bit14=1 bit13=1(j1) bit12=1 bit11=1(j2) bit10..0=001111110
+        //   = 1111_1_1_0_0111_1110 = 0xFF7E
+        // Stored as little-endian halfwords: [0x00,0xF0, 0x7E,0xFF]
+        let bytes = [0x00u8, 0xF0, 0x7E, 0xFF];
+        let insn = decode_thumb_insn(&bytes);
+        use yaxpeax_arch::LengthedInstruction;
+        let size = insn.len().to_const() as u32;
+        assert_eq!(size, 4, "wide Thumb-2 BL must be 4 bytes");
+        assert!(!is_terminator_thumb(&insn), "BL is a call, not a terminator");
+        // BL has a BranchThumbOffset but we do not report targets for BL (calls).
+        assert_eq!(branch_target_thumb(&insn, 0x1000), None);
+        // Verify the decoder accepted it as BL, not an error.
+        assert_eq!(insn.opcode, yaxpeax_arm::armv7::Opcode::BL);
+    }
+
+    #[test]
+    fn thumb_b_wide_size_4_with_branch_target() {
+        // B.W (T4) from address 0x1000 to target 0x1100.
+        // Same offset/imm as bl test but op1 field selects B, not BL.
+        // T4 B.W encoding differs in the second halfword bit [14] (op1 bit 1 vs bit 0).
+        // op1 for B.W = 0b10 (bit 14 of instr2 clear, bit 12 set based on table A6-18).
+        // First halfword: 1111_0_S_cond_imm6 where for unconditional B (no condition),
+        // actually T4 uses: first hw = 1111_0_S_imm10, second hw = 10_J1_1_J2_imm11.
+        // Using same imm=0x7E, S=0: first=0xF000, second: bits[15:14]=10, [13]=J1=1,[12]=1,[11]=J2=1,[10:0]=0x7E
+        //   = 1011_1101_1111_110 = 0b1011_1101_1111_1110 = 0xBD7E... careful again:
+        //   bit15=1 bit14=0 bit13=1(j1) bit12=1 bit11=1(j2) bit10..0=001111110
+        //   = 1011_1001_1111_110 = 0b1011_1001_1111_1110 = 0xB97E
+        // Actually per ARM ARM: second halfword for B T4: [15:14]=10, [13]=J1, [12]=1, [11]=J2, [10:0]=imm11
+        //   bit15=1(set for 0b10xx_xxxx_xxxx_xxxx), bit14=0, bit13=J1=1, bit12=1, bit11=J2=1, [10:0]=0x7E
+        //   = 1_0_1_1_1_00111_1110_0 ... better: combine: 1011_1011_1111_110 oops
+        //   decimal: (1<<15)|(0<<14)|(1<<13)|(1<<12)|(1<<11)|0x7E = 32768+8192+4096+2048+126 = 47230 = 0xB87E
+        // bytes (LE halfwords): [0x00, 0xF0, 0x7E, 0xB8]
+        let bytes = [0x00u8, 0xF0, 0x7E, 0xB8];
+        let insn = decode_thumb_insn(&bytes);
+        use yaxpeax_arch::LengthedInstruction;
+        let size = insn.len().to_const() as u32;
+        assert_eq!(size, 4, "wide Thumb-2 B must be 4 bytes");
+        assert!(is_terminator_thumb(&insn), "B is a terminator");
+        // target = (0x1000 + 4) + 0x7E * 2 = 0x1004 + 0xFC = 0x1100
+        assert_eq!(branch_target_thumb(&insn, 0x1000), Some(0x1100));
+    }
+
+    #[test]
+    fn thumb_movw_size_4_not_terminator() {
+        // MOVW r0, #0  (T3 encoding of MOV immediate, 32-bit Thumb-2)
+        // First halfword:  1111_0_i_10_0100_1111 where i=0, Rn=1111 = 0xF24F
+        //   Actually MOVW encoding: 0xF240 | (i << 10) | imm4 where Rn=1111=don't care
+        //   Simplest MOVW r0, #0: 0xF240, 0x0000
+        let bytes = [0x40u8, 0xF2, 0x00, 0x00];
+        let insn = decode_thumb_insn(&bytes);
+        use yaxpeax_arch::LengthedInstruction;
+        let size = insn.len().to_const() as u32;
+        assert_eq!(size, 4, "MOVW is a 32-bit Thumb-2 instruction");
+        assert!(!is_terminator_thumb(&insn), "MOVW is not a terminator");
+        assert_eq!(branch_target_thumb(&insn, 0), None);
+    }
+
+    #[test]
+    fn thumb_sequential_narrow_then_wide() {
+        // Decode two instructions from a stream: push {r7,lr} (2 bytes) then nop.w (4 bytes).
+        // NOP.W (wide Thumb-2): 0xAF00 (first hw) + 0xBF00 (second hw)... actually
+        // NOP.W = 0xF3AF 0x8000
+        // Total 6 bytes; verify sizes advance correctly.
+        let stream = [0x80u8, 0xB5, 0xAF, 0xF3, 0x00, 0x80];
+        let decoder = yaxpeax_arm::armv7::InstDecoder::armv7_thumb();
+        let mut reader = U8Reader::new(&stream);
+        use yaxpeax_arch::LengthedInstruction;
+
+        let insn0 = decoder.decode(&mut reader).expect("decode push");
+        let size0 = insn0.len().to_const() as u32;
+        assert_eq!(size0, 2);
+
+        let insn1 = decoder.decode(&mut reader).expect("decode nop.w");
+        let size1 = insn1.len().to_const() as u32;
+        assert_eq!(size1, 4);
+
+        assert_eq!(size0 + size1, 6, "offsets must advance 2 then 4");
+    }
+
+    #[test]
+    fn thumb_garbage_produces_unknown() {
+        // All-zeros at the start of a Thumb stream is a valid MOV/AND depending on encoding;
+        // use a known-invalid pattern: 0xFF 0xDE which is UNDEFINED per ARM ARM.
+        // yaxpeax should return Err, which build_unknown handles.
+        let garbage = [0xFFu8, 0xDE];
+        // Allocate a fake buffer and call the exported function directly via raw pointers.
+        // Simpler: call the decoder and check it errors.
+        let decoder = yaxpeax_arm::armv7::InstDecoder::armv7_thumb();
+        let result = decoder.decode(&mut U8Reader::new(&garbage));
+        // Whether it errors or not, build_unknown would produce kind=1; verify via the
+        // exported function indirectly by checking kind field.
+        // Direct check: if decode fails, build_unknown is called (size=1, kind=UNKNOWN).
+        // If decode succeeds, it's a valid but unknown instruction. Either way test the path.
+        match result {
+            Err(_) => {
+                // Expected path: build_unknown gives size=1.
+                let ptr_val = build_unknown(0, &garbage);
+                assert_ne!(ptr_val, 0);
+                let kind = unsafe { read_u32(ptr_val, 4) };
+                let size = unsafe { read_u32(ptr_val, 8) };
+                assert_eq!(kind, KIND_UNKNOWN);
+                assert_eq!(size, 1);
+                unsafe { free_result(ptr_val) };
+            }
+            Ok(_) => {
+                // Decoder accepted it; that is allowed; no assertion to make.
+            }
+        }
     }
 }

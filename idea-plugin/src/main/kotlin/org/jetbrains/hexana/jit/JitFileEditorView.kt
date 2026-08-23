@@ -2141,7 +2141,7 @@ private class JitDisasmBundle(
 
     private fun defaultSyntaxFor(arch: Arch): AssemblySyntax = when (arch) {
         Arch.X86, Arch.X86_64 -> AssemblySyntax.INTEL
-        Arch.ARM, Arch.ARM64 -> AssemblySyntax.ARM_GAS
+        Arch.ARM, Arch.THUMB, Arch.ARM64 -> AssemblySyntax.ARM_GAS
         Arch.RISC_V_32, Arch.RISC_V_64 -> AssemblySyntax.RISC_V_GAS
     }
 }

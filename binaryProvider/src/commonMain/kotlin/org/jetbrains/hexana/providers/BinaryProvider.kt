@@ -4,6 +4,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormatDetector
+import org.jetbrains.hexana.providers.elf.ArmAttributesParser
 import org.jetbrains.hexana.providers.elf.ElfDwarfAccessor
 import org.jetbrains.hexana.providers.elf.ElfDynamicEntry
 import org.jetbrains.hexana.providers.elf.ElfHeader
@@ -291,7 +292,7 @@ class ElfBinaryProvider(
         val sym = symbols ?: return@lazy null
         val sec = sections ?: return@lazy null
         val ph = programHeaders ?: return@lazy null
-        NativeFunctionDiscovery.fromElf(sym, sec, ph)
+        NativeFunctionDiscovery.fromElf(sym, sec, ph, machine = nativeFormat.machine)
     }
 
     override val nativeSourceLocationProvider: NativeDwarfSourceLocationProvider? by lazy {
@@ -319,6 +320,18 @@ class ElfBinaryProvider(
         }
         BinarySizeNode(name = "ELF", size = totalSize, offset = 0, children = children)
     }
+
+    /**
+     * CPU arch profile from the aeabi `.ARM.attributes` section, or null if the section is absent,
+     * the file is not EM_ARM, or the section is malformed. See [ArmAttributesParser].
+     * Relevant values: 'M' = Microcontroller (Thumb-2 / Cortex-M), 'A' = Application, 'R' = Real-time.
+     */
+    val armProfile: Char? by lazy {
+        if (nativeFormat.machine != 0x28) return@lazy null
+        val sec = sections?.firstOrNull { it.name == ".ARM.attributes" } ?: return@lazy null
+        ArmAttributesParser.parseCpuArchProfile(bytes, sec)
+    }
+
 
     override val structureRanges: List<StructureRange> by lazy {
         val secs = sections?.takeIf { it.isNotEmpty() } ?: return@lazy emptyList()

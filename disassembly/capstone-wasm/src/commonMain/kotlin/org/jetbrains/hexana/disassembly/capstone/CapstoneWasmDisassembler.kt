@@ -80,6 +80,7 @@ class CapstoneWasmDisassembler internal constructor(private val module: Capstone
         Arch.X86 -> "decode_x86"
         Arch.X86_64 -> "decode_x86_64"
         Arch.ARM -> "decode_arm"
+        Arch.THUMB -> "decode_thumb"
         Arch.ARM64 -> "decode_arm64"
         Arch.RISC_V_32 -> "decode_riscv32"
         Arch.RISC_V_64 -> "decode_riscv64"

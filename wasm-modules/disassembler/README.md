@@ -18,7 +18,7 @@ because it provides a Capstone-shaped surface — the engine itself is
 | ✅      | ARM64        | `yaxpeax-arm` (armv8::a64)      |
 | ✅      | RISC-V 32    | `riscv-decode`                  |
 | ✅      | RISC-V 64    | `riscv-decode`                  |
-| ⏳      | Thumb / T32  | `yaxpeax-arm` (later commit)    |
+| ✅      | Thumb / T32  | `yaxpeax-arm` (armv7_thumb)     |
 
 ## Build
 
@@ -62,7 +62,7 @@ are freed via `free_result(ptr)` — do **not** use `dealloc` on them.
 
 ### Decode entry points
 
-All six decode entry points share the same signature:
+All decode entry points share the same signature:
 
 ```
 decode_<arch>(
@@ -81,6 +81,7 @@ Available entries:
 | `decode_x86_64`  | x86_64 (long mode)  | 1–15 bytes (variable)                    |
 | `decode_arm`     | ARM A32             | 4 bytes                                  |
 | `decode_arm64`   | AArch64             | 4 bytes                                  |
+| `decode_thumb`   | Thumb / T32         | 2 bytes (narrow) or 4 bytes (wide T2)    |
 | `decode_riscv32` | RV32                | 2 bytes (RVC) or 4 bytes (base)          |
 | `decode_riscv64` | RV64                | 2 bytes (RVC) or 4 bytes (base)          |
 

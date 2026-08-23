@@ -149,6 +149,98 @@ class NativeFunctionDiscoveryTest {
         assertEquals(2472L, getIndex.fileOffset)         // 2152 + 320
         assertEquals(773uL, getIndex.size)               // section end (1093) - 320
     }
+
+    @Test
+    fun `strips bit 0 from Thumb symbol addresses on EM_ARM`() {
+        // Symbols with odd st_value are Thumb-mode functions on EM_ARM (ARM IHI0044).
+        // The virtualAddress stored in NativeFunctionRecord must have bit 0 cleared so
+        // that file-offset mapping and size gap arithmetic are correct.
+        val functions = NativeFunctionDiscovery.fromElf(
+            symbols = listOf(
+                symbol(index = 0, name = "thumb_fn", sectionIndex = 3, value = 0x401001uL, size = 0x10uL),
+                symbol(index = 1, name = "arm_fn",   sectionIndex = 3, value = 0x401020uL, size = 0x08uL),
+            ),
+            sections = listOf(
+                section(index = 1, name = ".symtab"),
+                section(index = 3, name = ".text", address = 0x401000uL, fileOffset = 0x1000uL, size = 0x80uL),
+            ),
+            programHeaders = listOf(loadSegment()),
+            machine = 0x28,
+        )
+
+        assertEquals(2, functions.size)
+
+        val thumb = functions[0]
+        assertEquals("thumb_fn", thumb.name)
+        assertTrue(thumb.isThumb)
+        assertEquals(0x401000uL, thumb.virtualAddress)   // bit 0 stripped
+        assertEquals(0x1000L, thumb.fileOffset)          // maps to correct file offset
+
+        val arm = functions[1]
+        assertEquals("arm_fn", arm.name)
+        assertFalse(arm.isThumb)
+        assertEquals(0x401020uL, arm.virtualAddress)     // even address unchanged
+    }
+
+    @Test
+    fun `does not set isThumb for EM_ARM symbols without bit 0`() {
+        val functions = NativeFunctionDiscovery.fromElf(
+            symbols = listOf(
+                symbol(index = 0, name = "arm_fn", sectionIndex = 3, value = 0x401000uL, size = 0x20uL),
+            ),
+            sections = listOf(
+                section(index = 1, name = ".symtab"),
+                section(index = 3, name = ".text", address = 0x401000uL, fileOffset = 0x1000uL, size = 0x80uL),
+            ),
+            programHeaders = listOf(loadSegment()),
+            machine = 0x28,
+        )
+
+        assertFalse(functions[0].isThumb)
+        assertEquals(0x401000uL, functions[0].virtualAddress)
+    }
+
+    @Test
+    fun `does not set isThumb on non-ARM architectures with odd symbol values`() {
+        // Odd st_value on x86-64 is unusual but must not trigger Thumb detection.
+        val functions = NativeFunctionDiscovery.fromElf(
+            symbols = listOf(
+                symbol(index = 0, name = "fn", sectionIndex = 3, value = 0x401001uL, size = 0x10uL),
+            ),
+            sections = listOf(
+                section(index = 1, name = ".symtab"),
+                section(index = 3, name = ".text", address = 0x401000uL, fileOffset = 0x1000uL, size = 0x80uL),
+            ),
+            programHeaders = listOf(loadSegment()),
+            machine = 0x3E,  // EM_X86_64
+        )
+
+        assertFalse(functions[0].isThumb)
+        assertEquals(0x401001uL, functions[0].virtualAddress)  // not stripped
+    }
+
+    @Test
+    fun `computes correct size gap between Thumb symbols with odd addresses`() {
+        // Two consecutive Thumb symbols: gap must be computed using masked addresses.
+        // thumb_a at 0x1001 (masked 0x1000), thumb_b at 0x1021 (masked 0x1020).
+        // Expected size of thumb_a = 0x1020 - 0x1000 = 0x20.
+        val functions = NativeFunctionDiscovery.fromElf(
+            symbols = listOf(
+                symbol(index = 0, name = "thumb_a", sectionIndex = 3, value = 0x401001uL, size = 0uL),
+                symbol(index = 1, name = "thumb_b", sectionIndex = 3, value = 0x401021uL, size = 0uL),
+            ),
+            sections = listOf(
+                section(index = 1, name = ".symtab"),
+                section(index = 3, name = ".text", address = 0x401000uL, fileOffset = 0x1000uL, size = 0x80uL),
+            ),
+            programHeaders = listOf(loadSegment()),
+            machine = 0x28,
+        )
+
+        assertEquals(0x20uL, functions[0].size)
+        assertEquals(0x401000uL, functions[0].virtualAddress)
+        assertEquals(0x401020uL, functions[1].virtualAddress)
+    }
 }
 
 private fun symbol(

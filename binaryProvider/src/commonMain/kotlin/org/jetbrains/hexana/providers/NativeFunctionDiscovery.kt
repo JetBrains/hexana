@@ -25,6 +25,8 @@ data class NativeFunctionRecord(
     val size: ULong?,
     val rangeConfidence: NativeFunctionRangeConfidence,
     val recordRange: NativeByteRange,
+    /** True when the symbol's original st_value had bit 0 set, indicating a Thumb-mode function. */
+    val isThumb: Boolean = false,
 )
 
 enum class NativeFunctionSymbolSource {
@@ -121,7 +123,9 @@ object NativeFunctionDiscovery {
         symbols: List<ElfSymbol>,
         sections: List<ElfSectionHeader>,
         programHeaders: List<ElfProgramHeader>,
+        machine: Int? = null,
     ): List<NativeFunctionRecord> {
+        val isArm = machine == 0x28
         val functionSymbols = symbols
             .filter { symbol -> symbol.type == STT_FUNC && symbol.name.isNotBlank() }
             .sortedWith(compareBy<ElfSymbol> { it.isUndefined }.thenBy { it.sectionIndex }.thenBy { it.value })
@@ -132,7 +136,13 @@ object NativeFunctionDiscovery {
         return functionSymbols.map { symbol ->
             val source = symbol.symbolSource(sections)
             val section = sections.firstOrNull { it.index == symbol.sectionIndex }
-            val size = symbol.resolvedFunctionSize(definedFunctionSymbolsBySection)
+
+            // For EM_ARM STT_FUNC symbols, bit 0 of st_value signals Thumb mode. Strip it for
+            // address arithmetic so file-offset mapping and size gaps are computed correctly.
+            val isThumb = isArm && !symbol.isUndefined && (symbol.value and 1uL) == 1uL
+            val maskedValue = if (isThumb) symbol.value and 1uL.inv() else symbol.value
+
+            val size = symbol.resolvedFunctionSize(definedFunctionSymbolsBySection, maskedValue, maskBit0 = isArm)
             NativeFunctionRecord(
                 name = symbol.name,
                 demangledName = NativeSymbolDemangler.demangle(symbol.name),
@@ -143,7 +153,7 @@ object NativeFunctionDiscovery {
                 sectionName = section?.name?.takeIf { it.isNotBlank() },
                 imported = symbol.isUndefined,
                 thunkLike = symbol.isThunkLike(section),
-                virtualAddress = symbol.value,
+                virtualAddress = maskedValue,
                 fileOffset = if (symbol.isUndefined) {
                     null
                 } else if (section != null && section.address == 0uL) {
@@ -153,17 +163,18 @@ object NativeFunctionDiscovery {
                     // section, not a virtual address. Map it straight through the section's file
                     // offset. (Without this, ElfAddressMapper returns null and the function is
                     // dropped from the disassembly listing.)
-                    (section.fileOffset + symbol.value)
+                    (section.fileOffset + maskedValue)
                         .takeIf { it <= Long.MAX_VALUE.toULong() }
                         ?.toLong()
                 } else {
-                    ElfAddressMapper.virtualAddressToFileOffset(symbol.value, programHeaders, sections)
+                    ElfAddressMapper.virtualAddressToFileOffset(maskedValue, programHeaders, sections)
                         ?.takeIf { it <= Long.MAX_VALUE.toULong() }
                         ?.toLong()
                 },
                 size = size.size,
                 rangeConfidence = size.confidence,
                 recordRange = symbol.recordRange,
+                isThumb = isThumb,
             )
         }
     }
@@ -277,18 +288,22 @@ private fun ElfSymbol.isThunkLike(section: ElfSectionHeader?): Boolean =
 
 private fun ElfSymbol.resolvedFunctionSize(
     definedFunctionSymbolsBySection: Map<Int, List<ElfSymbol>>,
+    maskedValue: ULong = value,
+    maskBit0: Boolean = false,
 ): ResolvedFunctionSize {
     if (size > 0uL) {
         return ResolvedFunctionSize(size, NativeFunctionRangeConfidence.SymbolSize)
     }
 
-    if (isUndefined) {
+    if (isUndefined || sectionIndex <= 0) {
         return ResolvedFunctionSize(null, NativeFunctionRangeConfidence.Unknown)
     }
 
+    // On ARM, use masked addresses for gap computation so bit-0 Thumb markers don't skew sizes.
+    fun ElfSymbol.gapValue(): ULong = if (maskBit0) value and 1uL.inv() else value
     val nextSymbol = definedFunctionSymbolsBySection[sectionIndex]
-        ?.firstOrNull { other -> other.value > value }
-    val nextSize = nextSymbol?.value?.minus(value)?.takeIf { it > 0uL }
+        ?.firstOrNull { other -> other.gapValue() > maskedValue }
+    val nextSize = nextSymbol?.let { it.gapValue() - maskedValue }?.takeIf { it > 0uL }
     return if (nextSize != null) {
         ResolvedFunctionSize(nextSize, NativeFunctionRangeConfidence.NextSymbolInSection)
     } else {

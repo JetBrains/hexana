@@ -109,6 +109,8 @@ internal data class DisasmRange(
     val fileOffset: Long,
     val size: Long,
     val sectionName: String?,
+    /** Per-symbol arch override; non-null when a symbol's mode differs from the file-level arch. */
+    val archOverride: Arch? = null,
 )
 
 /**
@@ -559,7 +561,20 @@ private fun List<Int>.toHexByteText(): String = joinToString(" ") {
 
 private fun NativeBinaryProvider.archForDisasm(): Arch =
     when (val format = nativeFormat) {
-        is NativeBinaryFormat.Elf -> elfArch(format.machine, format.wordSize)
+        is NativeBinaryFormat.Elf -> {
+            val elfProvider = this as? ElfBinaryProvider
+            val profile = elfProvider?.armProfile
+            val baseArch = elfArch(format.machine, format.wordSize, profile)
+            // Fallback heuristic: if the file is EM_ARM and has no .ARM.attributes but the
+            // overwhelming majority of STT_FUNC symbols have odd addresses, treat it as Thumb.
+            if (baseArch == Arch.ARM && profile == null) {
+                val fns = nativeFunctions.orEmpty().filter { !it.imported }
+                if (fns.size >= 2 && fns.count { it.isThumb } > fns.size * 9 / 10) Arch.THUMB
+                else baseArch
+            } else {
+                baseArch
+            }
+        }
         is NativeBinaryFormat.Pe -> peArch(format.machine)
         is NativeBinaryFormat.Coff -> peArch(format.machine)
         is NativeBinaryFormat.MachO -> machOArch(format.cpuType)
@@ -568,9 +583,12 @@ private fun NativeBinaryProvider.archForDisasm(): Arch =
         -> Arch.X86_64
     }
 
-private fun elfArch(machine: Int?, wordSize: NativeBinaryWordSize): Arch = when (machine) {
+private fun elfArch(machine: Int?, wordSize: NativeBinaryWordSize, armProfile: Char?): Arch = when (machine) {
     0x03 -> Arch.X86
-    0x28 -> Arch.ARM
+    0x28 -> when (armProfile) {
+        'M' -> Arch.THUMB
+        else -> Arch.ARM
+    }
     0x3E -> Arch.X86_64
     0xB7 -> Arch.ARM64
     0xF3 -> if (wordSize == NativeBinaryWordSize.Bits32) Arch.RISC_V_32 else Arch.RISC_V_64
@@ -679,18 +697,22 @@ internal suspend fun loadCapstoneDisassembly(
 }
 
 private fun NativeBinaryProvider.collectDisasmRanges(): List<DisasmRange> {
+    val fileArch = archForDisasm()
     val symbolRanges = nativeFunctions
         .orEmpty()
         .filter { !it.imported && it.fileOffset != null && (it.size ?: 0uL) > 0uL && it.name.isNotBlank() }
         .distinctBy { it.virtualAddress }
         .sortedBy { it.virtualAddress }
         .map { fn ->
+            // For EM_ARM files that are not globally M-profile, honour per-symbol Thumb mode.
+            val archOverride = if (fn.isThumb && fileArch == Arch.ARM) Arch.THUMB else null
             DisasmRange(
                 displayName = fn.demangledName?.takeIf { it.isNotBlank() } ?: fn.name,
                 virtualAddress = fn.virtualAddress,
                 fileOffset = fn.fileOffset!!,
                 size = (fn.size ?: 0uL).toLong(),
                 sectionName = fn.sectionName,
+                archOverride = archOverride,
             )
         }
     return if (symbolRanges.isNotEmpty()) symbolRanges else executableSectionRanges()
@@ -790,9 +812,10 @@ private fun decodeRange(
     if (range.size <= 0L || range.fileOffset < 0L) return null
     if (range.fileOffset > Int.MAX_VALUE || range.size > Int.MAX_VALUE) return null
     if (range.fileOffset + range.size > bytesLimit) return null
+    val effectiveArch = range.archOverride ?: arch
     val sliced = bytes.slice(range.fileOffset.toInt(), range.size.toInt())
     return with(disassembler) {
-        sliced.disassemble(baseAddress = range.virtualAddress, arch = arch)
+        sliced.disassemble(baseAddress = range.virtualAddress, arch = effectiveArch)
     }.map { decoded ->
         decodeToDisasmInstruction(decoded, sliced, formatter, range.fileOffset)
     }.toList()
@@ -920,7 +943,7 @@ private fun DisasmSyntaxBar(
 
 private fun defaultSyntaxFor(arch: Arch): AssemblySyntax = when (arch) {
     Arch.X86, Arch.X86_64 -> AssemblySyntax.INTEL
-    Arch.ARM, Arch.ARM64 -> AssemblySyntax.ARM_GAS
+    Arch.ARM, Arch.THUMB, Arch.ARM64 -> AssemblySyntax.ARM_GAS
     Arch.RISC_V_32, Arch.RISC_V_64 -> AssemblySyntax.RISC_V_GAS
 }
 
@@ -930,7 +953,7 @@ private fun defaultSyntaxFor(arch: Arch): AssemblySyntax = when (arch) {
 // single supported display dialect today, so the bar hides itself.
 private fun syntaxChoicesFor(arch: Arch): List<AssemblySyntax> = when (arch) {
     Arch.X86, Arch.X86_64 -> listOf(AssemblySyntax.INTEL, AssemblySyntax.AT_T)
-    Arch.ARM, Arch.ARM64 -> listOf(AssemblySyntax.ARM_GAS)
+    Arch.ARM, Arch.THUMB, Arch.ARM64 -> listOf(AssemblySyntax.ARM_GAS)
     Arch.RISC_V_32, Arch.RISC_V_64 -> listOf(AssemblySyntax.RISC_V_GAS)
 }
 
