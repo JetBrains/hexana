@@ -19,6 +19,16 @@ const approvedParameters = Object.freeze({
     "env.JBCC_GCP_PROJECT": "example-gcp-project",
     "env.JBCC_GCP_REGION": "europe-west1",
 });
+export const deploymentTiming = Object.freeze({
+    buildTimeoutMs: 3_600_000,
+    readinessTimeoutMs: 300_000,
+    pollIntervalMs: 5_000,
+});
+export const productionEndpoints = Object.freeze([
+    "https://hexana-webapp-private.example.invalid/",
+    "https://hexana-webapp.example.invalid/",
+]);
+export const readinessBodyLimits = Object.freeze({ healthBytes: 0, rootBytes: 1_048_576 });
 export const allowedTarget = Object.freeze({
     serverUrl: "https://ci.example.invalid",
     buildTypeId: "HexanaCi_Deploy_HexanaWebapp",
@@ -116,12 +126,13 @@ export function configFromEnv(env) {
     const vcsRootId = required(env, "HEXANA_CLOUD_CONSOLE_VCS_ROOT_ID");
     if (!identifier.test(buildTypeId) || !identifier.test(vcsRootId)) fail("Cloud Console TeamCity identifiers are invalid");
     if (buildTypeId !== allowedTarget.buildTypeId || vcsRootId !== allowedTarget.vcsRootId) fail("Cloud Console target differs from the pinned generated configuration");
-    const timeoutMs = boundedInteger(env.HEXANA_DEPLOY_TIMEOUT_MS, 1_800_000, 1_000, 7_200_000, "HEXANA_DEPLOY_TIMEOUT_MS");
-    const pollIntervalMs = boundedInteger(env.HEXANA_DEPLOY_POLL_INTERVAL_MS, 5_000, 100, 60_000, "HEXANA_DEPLOY_POLL_INTERVAL_MS");
-    if (pollIntervalMs >= timeoutMs) fail("poll interval must be shorter than timeout");
+    const buildTimeoutMs = boundedInteger(env.HEXANA_DEPLOY_TIMEOUT_MS, deploymentTiming.buildTimeoutMs, 1_000, deploymentTiming.buildTimeoutMs, "HEXANA_DEPLOY_TIMEOUT_MS");
+    const readinessTimeoutMs = boundedInteger(env.HEXANA_READINESS_TIMEOUT_MS, deploymentTiming.readinessTimeoutMs, 1_000, deploymentTiming.readinessTimeoutMs, "HEXANA_READINESS_TIMEOUT_MS");
+    const pollIntervalMs = boundedInteger(env.HEXANA_DEPLOY_POLL_INTERVAL_MS, deploymentTiming.pollIntervalMs, 100, 60_000, "HEXANA_DEPLOY_POLL_INTERVAL_MS");
+    if (pollIntervalMs >= buildTimeoutMs || pollIntervalMs >= readinessTimeoutMs) fail("poll interval must be shorter than both timeouts");
     const token = required(env, "HEXANA_CLOUD_CONSOLE_TOKEN");
     if (/[\x00-\x20]/.test(token)) fail("HEXANA_CLOUD_CONSOLE_TOKEN is malformed");
-    return { serverUrl: allowedTarget.serverUrl, token, buildTypeId, vcsRootId, branch: required(env, "HEXANA_RELEASE_BRANCH"), revision: required(env, "HEXANA_RELEASE_REVISION"), timeoutMs, pollIntervalMs, sourceBuilds: { release: optionalBuildId(env, "TEAMCITY_BUILD_ID"), build: optionalBuildId(env, "HEXANA_WEBAPP_BUILD_ID"), scan: optionalBuildId(env, "HEXANA_WEBAPP_SCAN_BUILD_ID") } };
+    return { serverUrl: allowedTarget.serverUrl, token, buildTypeId, vcsRootId, branch: required(env, "HEXANA_RELEASE_BRANCH"), revision: required(env, "HEXANA_RELEASE_REVISION"), buildTimeoutMs, readinessTimeoutMs, pollIntervalMs, sourceBuilds: { release: optionalBuildId(env, "TEAMCITY_BUILD_ID"), build: optionalBuildId(env, "HEXANA_WEBAPP_BUILD_ID"), scan: optionalBuildId(env, "HEXANA_WEBAPP_SCAN_BUILD_ID") } };
 }
 
 export function createVcsRootInstancesRequest(config) {
@@ -217,8 +228,7 @@ function validateBuild(value, config, evidence, vcsRootInstanceId, buildId) {
     const revisions = value.revisions?.revision;
     if (!Array.isArray(revisions) || revisions.length !== 1 || revisions[0]?.version !== evidence.revision || revisions[0]?.["vcs-root-instance"]?.id !== vcsRootInstanceId) fail("Cloud Console build revision differs");
     if (value.id !== buildId || !["queued", "running", "finished"].includes(value.state)) fail("Cloud Console build identity or state is unsupported");
-    if (value.state === "finished" && value.status !== "SUCCESS") fail(`Cloud Console deployment finished with ${value.status ?? "unknown status"}`);
-    return value.state === "finished";
+    return { finished: value.state === "finished", status: value.status };
 }
 
 async function requestJson(fetchImpl, url, init, timeoutMs) {
@@ -230,29 +240,250 @@ async function requestJson(fetchImpl, url, init, timeoutMs) {
 
 const buildStatusUrl = (config, buildId) => `${config.serverUrl}/app/rest/builds/id:${buildId}?fields=id,state,status,branchName,buildType(id),revisions(revision(version,vcs-root-instance(id)))`;
 
-export async function deployRelease({ receipt, scan, config, fetchImpl = fetch, sleep = ms => new Promise(done => setTimeout(done, ms)), now = Date.now }) {
-    validatePinnedTarget(config);
-    const evidence = validateEvidence(receipt, scan, config.branch, config.revision);
-    const deadline = now() + config.timeoutMs;
-    const preflightRequests = createSafetyPreflightRequests(config);
-    const [buildType, vcsRoot] = await Promise.all(preflightRequests.map(request => requestJson(fetchImpl, request.url, request.init, deadline - now())));
-    validateSafetyPreflight(buildType, vcsRoot, config);
-    const rootRequest = createVcsRootInstancesRequest(config);
-    const vcsRootInstanceId = resolveVcsRootInstance(await requestJson(fetchImpl, rootRequest.url, rootRequest.init, deadline - now()), config);
-    const queued = createQueueRequest(config, evidence, vcsRootInstanceId);
-    const queueResponse = await requestJson(fetchImpl, queued.url, queued.init, deadline - now());
-    const buildId = queueResponse?.id;
-    if (!Number.isInteger(buildId) || buildId <= 0) fail("Cloud Console queue response has no positive build ID");
-    if (deadline - now() <= 0) fail("Cloud Console deployment timed out");
-    let build = await requestJson(fetchImpl, buildStatusUrl(config, buildId), { headers: { Accept: "application/json", Authorization: `Bearer ${config.token}` } }, deadline - now());
-    while (!validateBuild(build, config, evidence, vcsRootInstanceId, buildId)) {
-        const remaining = deadline - now();
-        if (remaining <= 0) fail("Cloud Console deployment timed out");
-        await sleep(Math.min(config.pollIntervalMs, remaining));
-        if (deadline - now() <= 0) fail("Cloud Console deployment timed out");
-        build = await requestJson(fetchImpl, buildStatusUrl(config, buildId), { headers: { Accept: "application/json", Authorization: `Bearer ${config.token}` } }, deadline - now());
+const iso = milliseconds => new Date(milliseconds).toISOString();
+const safeMessage = (error, token) => {
+    const original = error instanceof Error ? error.message : "Unexpected deployment failure";
+    return (token ? original.replaceAll(token, "[redacted]") : original).slice(0, 500);
+};
+const readinessFailure = reason => ({ ready: false, reason });
+const expired = (deadline, now) => deadline - now() <= 0;
+
+const cancelReader = reader => {
+    try { reader.cancel().catch(() => {}); } catch {}
+};
+
+async function readBoundedBody(response, limit, deadline, now) {
+    const contentLength = response.headers?.get?.("content-length");
+    if (/^\d+$/.test(contentLength ?? "") && Number(contentLength) > limit) {
+        try { response.body?.cancel?.().catch(() => {}); } catch {}
+        return { error: `body exceeded ${limit}-byte limit` };
     }
-    return { schemaVersion: 1, kind: "hexana-webapp-deployment-evidence", result: "SUCCESS", profile: "deploy-only-production", release: { branch: evidence.branch, version: evidence.version, revision: evidence.revision }, image: { reference: evidence.image, manifestDigest: evidence.digest }, sourceBuilds: Object.fromEntries(Object.entries(config.sourceBuilds).filter(([, value]) => value !== undefined)), cloudConsole: { buildTypeId: config.buildTypeId, vcsRootId: config.vcsRootId, vcsRootInstanceId, buildId, buildUrl: `${config.serverUrl}/viewLog.html?buildId=${buildId}` } };
+    if (!response.body) return { bytes: 0, text: "" };
+    if (typeof response.body.getReader !== "function") return { error: "body stream was unavailable" };
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+        while (true) {
+            const remaining = deadline - now();
+            if (remaining <= 0) {
+                cancelReader(reader);
+                return { error: "shared readiness deadline elapsed" };
+            }
+            let timer;
+            const timeout = new Promise(resolveTimeout => { timer = setTimeout(() => resolveTimeout(null), remaining); });
+            let result;
+            try { result = await Promise.race([reader.read(), timeout]); }
+            catch { cancelReader(reader); return { error: "body could not be read" }; }
+            finally { clearTimeout(timer); }
+            if (!result) {
+                cancelReader(reader);
+                return { error: "shared readiness deadline elapsed" };
+            }
+            if (expired(deadline, now)) {
+                cancelReader(reader);
+                return { error: "shared readiness deadline elapsed" };
+            }
+            if (result.done) break;
+            const chunk = result.value instanceof Uint8Array ? result.value : new Uint8Array(result.value);
+            total += chunk.byteLength;
+            if (total > limit) {
+                cancelReader(reader);
+                return { error: `body exceeded ${limit}-byte limit` };
+            }
+            chunks.push(chunk);
+        }
+    } finally {
+        try { reader.releaseLock(); } catch {}
+    }
+    if (expired(deadline, now)) return { error: "shared readiness deadline elapsed" };
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    try { return { bytes: total, text: new TextDecoder("utf-8", { fatal: true }).decode(bytes) }; }
+    catch { return { error: "body was not valid UTF-8" }; }
+}
+
+async function readinessResponse(fetchImpl, url, deadline, now) {
+    const remaining = deadline - now();
+    if (remaining <= 0) return { error: "shared readiness deadline elapsed" };
+    try {
+        const response = await fetchImpl(url, {
+            redirect: "manual",
+            headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+            signal: AbortSignal.timeout(Math.max(1, Math.min(10_000, remaining))),
+        });
+        if (expired(deadline, now)) return { error: "shared readiness deadline elapsed" };
+        const expectedOrigin = new URL(url).origin;
+        if (!response || (response.status >= 300 && response.status < 400)) return { error: "redirect refused" };
+        if (response.url && new URL(response.url).origin !== expectedOrigin) return { error: "cross-origin response refused" };
+        return { response };
+    } catch {
+        return { error: "request failed" };
+    }
+}
+
+async function probeProductionEndpoint(fetchImpl, endpoint, evidence, attempt, deadline, now) {
+    const healthUrl = new URL("/healthz", endpoint).href;
+    const healthResult = await readinessResponse(fetchImpl, healthUrl, deadline, now);
+    if (healthResult.error) return readinessFailure(`health ${healthResult.error}`);
+    const health = healthResult.response;
+    if (health.status !== 204) return readinessFailure(`health returned HTTP ${health.status}`);
+    if (health.headers?.get?.("cache-control") !== "no-store") return readinessFailure("health Cache-Control was not no-store");
+    const healthBody = await readBoundedBody(health, readinessBodyLimits.healthBytes, deadline, now);
+    if (healthBody.error) return readinessFailure(`health ${healthBody.error}`);
+    if (expired(deadline, now)) return readinessFailure("health shared readiness deadline elapsed");
+
+    const rootUrl = new URL("/", endpoint);
+    rootUrl.searchParams.set("hexana-readiness", `${evidence.revision}-${attempt}`);
+    const rootResult = await readinessResponse(fetchImpl, rootUrl.href, deadline, now);
+    if (rootResult.error) return readinessFailure(`root ${rootResult.error}`);
+    const root = rootResult.response;
+    if (root.status !== 200) return readinessFailure(`root returned HTTP ${root.status}`);
+    const rootBody = await readBoundedBody(root, readinessBodyLimits.rootBytes, deadline, now);
+    if (rootBody.error) return readinessFailure(`root ${rootBody.error}`);
+    if (expired(deadline, now)) return readinessFailure("root shared readiness deadline elapsed");
+    const html = rootBody.text;
+    const match = /<script\b(?=[^>]*\bid=["']hexana-release-info["'])[^>]*>([\s\S]*?)<\/script>/i.exec(html);
+    if (!match) return readinessFailure("release identity was missing");
+    let identity;
+    try { identity = parseJsonStrict(match[1], "release identity"); } catch { return readinessFailure("release identity was invalid"); }
+    if (identity?.schemaVersion !== 1 || identity?.product !== "hexana-webapp" || identity?.version !== evidence.version || identity?.revision !== evidence.revision) return readinessFailure("release identity did not match the approved version and revision");
+    return { ready: true, identity: { version: identity.version, revision: identity.revision } };
+}
+
+export async function writeDeploymentEvidenceAtomic(outputDirectory, evidence) {
+    const output = resolve(outputDirectory, "deployment-evidence.json");
+    await mkdir(outputDirectory, { recursive: true });
+    const temporary = resolve(output + `.${randomUUID()}.tmp`);
+    try {
+        await writeFile(temporary, `${JSON.stringify(evidence)}\n`, { flag: "wx" });
+        await rename(temporary, output);
+    } finally {
+        await rm(temporary, { force: true });
+    }
+}
+
+export async function deployRelease({ receipt, scan, config, outputDirectory, fetchImpl = fetch, sleep = ms => new Promise(done => setTimeout(done, ms)), now = Date.now }) {
+    const startedAtMs = now();
+    let phase = "validation";
+    let queueAttempted = false;
+    let exactBuildFinished = false;
+    let attempt = {
+        schemaVersion: 1,
+        kind: "hexana-webapp-deployment-evidence",
+        result: "FAILURE",
+        phase,
+        profile: "deploy-only-production",
+        digestHttpProven: false,
+        release: { branch: config.branch, version: receipt?.package?.identity?.version, revision: config.revision },
+        image: { reference: receipt?.image?.reference, manifestDigest: receipt?.image?.manifestDigest },
+        sourceBuilds: Object.fromEntries(Object.entries(config.sourceBuilds).filter(([, value]) => value !== undefined)),
+        cloudConsole: { buildTypeId: config.buildTypeId, vcsRootId: config.vcsRootId, queueAttempted: false, queueAmbiguous: false, exactBuildFinished: false, lastExactObservation: null },
+        deadlines: { cloudConsoleBuild: null, productionReadiness: null },
+        readiness: { endpoints: productionEndpoints.map(url => ({ url, ready: false, attempts: 0, lastObservation: null })) },
+        startedAt: iso(startedAtMs),
+        finishedAt: null,
+        failure: null,
+    };
+    try {
+        validatePinnedTarget(config);
+        const evidence = validateEvidence(receipt, scan, config.branch, config.revision);
+        attempt.release = { branch: evidence.branch, version: evidence.version, revision: evidence.revision };
+        attempt.image = { reference: evidence.image, manifestDigest: evidence.digest };
+
+        phase = "preflight";
+        const preflightRequests = createSafetyPreflightRequests(config);
+        const [buildType, vcsRoot] = await Promise.all(preflightRequests.map(request => requestJson(fetchImpl, request.url, request.init, 30_000)));
+        validateSafetyPreflight(buildType, vcsRoot, config);
+        const rootRequest = createVcsRootInstancesRequest(config);
+        const vcsRootInstanceId = resolveVcsRootInstance(await requestJson(fetchImpl, rootRequest.url, rootRequest.init, 30_000), config);
+        attempt.cloudConsole.vcsRootInstanceId = vcsRootInstanceId;
+        const queued = createQueueRequest(config, evidence, vcsRootInstanceId);
+        phase = "queue";
+        queueAttempted = true;
+        attempt.cloudConsole.queueAttempted = true;
+        attempt.cloudConsole.queueAmbiguous = true;
+        const queueResponse = await requestJson(fetchImpl, queued.url, queued.init, 30_000);
+        const buildId = queueResponse?.id;
+        if (!Number.isInteger(buildId) || buildId <= 0) fail("Cloud Console queue response has no positive build ID");
+        attempt.cloudConsole.queueAmbiguous = false;
+        const buildUrl = `${config.serverUrl}/viewLog.html?buildId=${buildId}`;
+        attempt.cloudConsole.buildId = buildId;
+        attempt.cloudConsole.buildUrl = buildUrl;
+        attempt.cloudConsole.pollAttempts = 0;
+
+        phase = "cloud-console-build";
+        const buildStartedAtMs = now();
+        const buildDeadline = buildStartedAtMs + config.buildTimeoutMs;
+        attempt.deadlines.cloudConsoleBuild = { startedAt: iso(buildStartedAtMs), deadlineAt: iso(buildDeadline), timeoutMs: config.buildTimeoutMs };
+        while (true) {
+            const remaining = buildDeadline - now();
+            if (remaining <= 0) {
+                fail(`Cloud Console build ${buildId} timed out after ${config.buildTimeoutMs} ms; it was not canceled and may continue at ${buildUrl}`);
+            }
+            const build = await requestJson(fetchImpl, buildStatusUrl(config, buildId), { headers: { Accept: "application/json", Authorization: `Bearer ${config.token}` } }, remaining);
+            if (expired(buildDeadline, now)) fail(`Cloud Console build ${buildId} timed out after ${config.buildTimeoutMs} ms; it was not canceled and may continue at ${buildUrl}`);
+            attempt.cloudConsole.pollAttempts++;
+            const observation = validateBuild(build, config, evidence, vcsRootInstanceId, buildId);
+            attempt.cloudConsole.lastExactObservation = { at: iso(now()), state: build.state, status: build.status ?? null };
+            if (observation.finished) {
+                exactBuildFinished = true;
+                attempt.cloudConsole.exactBuildFinished = true;
+                if (observation.status !== "SUCCESS") fail(`Cloud Console deployment finished with ${observation.status ?? "unknown status"}`);
+                break;
+            }
+            const afterRequest = buildDeadline - now();
+            if (afterRequest <= 0) {
+                fail(`Cloud Console build ${buildId} timed out after ${config.buildTimeoutMs} ms; it was not canceled and may continue at ${buildUrl}`);
+            }
+            await sleep(Math.min(config.pollIntervalMs, afterRequest));
+        }
+
+        phase = "production-readiness";
+        const readinessStartedAtMs = now();
+        const readinessDeadline = readinessStartedAtMs + config.readinessTimeoutMs;
+        attempt.deadlines.productionReadiness = { startedAt: iso(readinessStartedAtMs), deadlineAt: iso(readinessDeadline), timeoutMs: config.readinessTimeoutMs };
+        while (true) {
+            if (readinessDeadline - now() <= 0) fail(`Production readiness did not converge on both endpoints within ${config.readinessTimeoutMs} ms`);
+            const results = await Promise.all(productionEndpoints.map((endpoint, index) => probeProductionEndpoint(fetchImpl, endpoint, evidence, attempt.readiness.endpoints[index].attempts + 1, readinessDeadline, now)));
+            const observedAt = iso(now());
+            results.forEach((result, index) => {
+                const endpoint = attempt.readiness.endpoints[index];
+                endpoint.attempts++;
+                endpoint.ready = result.ready;
+                endpoint.lastObservation = result.ready ? { at: observedAt, status: "ready", identity: result.identity } : { at: observedAt, status: "retry", reason: result.reason };
+            });
+            if (expired(readinessDeadline, now)) fail(`Production readiness did not converge on both endpoints within ${config.readinessTimeoutMs} ms`);
+            if (results.every(result => result.ready)) break;
+            const remaining = readinessDeadline - now();
+            if (remaining <= 0) fail(`Production readiness did not converge on both endpoints within ${config.readinessTimeoutMs} ms`);
+            await sleep(Math.min(config.pollIntervalMs, remaining));
+        }
+
+        attempt.result = "SUCCESS";
+        attempt.phase = "complete";
+        attempt.finishedAt = iso(now());
+        phase = "evidence";
+        if (outputDirectory) await writeDeploymentEvidenceAtomic(outputDirectory, attempt);
+        return attempt;
+    } catch (error) {
+        const message = safeMessage(error, config.token);
+        attempt.result = "FAILURE";
+        attempt.phase = phase;
+        attempt.finishedAt = iso(now());
+        attempt.failure = { message, buildMayContinue: queueAttempted && !exactBuildFinished };
+        let evidenceWriteFailure;
+        if (outputDirectory) {
+            try { await writeDeploymentEvidenceAtomic(outputDirectory, attempt); }
+            catch (writeError) { evidenceWriteFailure = safeMessage(writeError, config.token); }
+        }
+        if (evidenceWriteFailure) attempt.failure.evidenceWriteFailure = evidenceWriteFailure;
+        const failure = new Error(evidenceWriteFailure ? `${message}; deployment evidence write failed: ${evidenceWriteFailure}` : message);
+        failure.deploymentEvidence = attempt;
+        failure.evidenceWritten = Boolean(outputDirectory) && !evidenceWriteFailure;
+        throw failure;
+    }
 }
 
 function options(args) {
@@ -268,13 +499,37 @@ function options(args) {
 async function main() {
     const input = options(process.argv.slice(2));
     const outputDirectory = resolve(input.get("--output-dir"));
-    const output = resolve(outputDirectory, "deployment-evidence.json");
     await mkdir(outputDirectory, { recursive: true });
-    await rm(output, { force: true });
-    const [receipt, scan] = await Promise.all([readFile(input.get("--receipt"), "utf8").then(value => parseJsonStrict(value, "Build receipt")), readFile(input.get("--scan-summary"), "utf8").then(value => parseJsonStrict(value, "Scan summary"))]);
-    const evidence = await deployRelease({ receipt, scan, config: configFromEnv(process.env) });
-    const temporary = resolve(output + `.${randomUUID()}.tmp`);
-    try { await writeFile(temporary, `${JSON.stringify(evidence)}\n`, { flag: "wx" }); await rename(temporary, output); } finally { await rm(temporary, { force: true }); }
+    const startedAtMs = Date.now();
+    let receipt;
+    try {
+        const config = configFromEnv(process.env);
+        receipt = await readFile(input.get("--receipt"), "utf8").then(value => parseJsonStrict(value, "Build receipt"));
+        const scan = await readFile(input.get("--scan-summary"), "utf8").then(value => parseJsonStrict(value, "Scan summary"));
+        await deployRelease({ receipt, scan, config, outputDirectory });
+    } catch (error) {
+        const message = safeMessage(error, process.env.HEXANA_CLOUD_CONSOLE_TOKEN);
+        if (!error?.evidenceWritten) {
+            await writeDeploymentEvidenceAtomic(outputDirectory, error?.deploymentEvidence ?? {
+                schemaVersion: 1,
+                kind: "hexana-webapp-deployment-evidence",
+                result: "FAILURE",
+                phase: "input",
+                profile: "deploy-only-production",
+                digestHttpProven: false,
+                release: { branch: process.env.HEXANA_RELEASE_BRANCH, version: receipt?.package?.identity?.version, revision: process.env.HEXANA_RELEASE_REVISION },
+                image: { reference: receipt?.image?.reference, manifestDigest: receipt?.image?.manifestDigest },
+                sourceBuilds: {},
+                cloudConsole: { buildTypeId: process.env.HEXANA_CLOUD_CONSOLE_BUILD_TYPE_ID, vcsRootId: process.env.HEXANA_CLOUD_CONSOLE_VCS_ROOT_ID, queueAttempted: false, queueAmbiguous: false, exactBuildFinished: false, lastExactObservation: null },
+                deadlines: { cloudConsoleBuild: null, productionReadiness: null },
+                readiness: { endpoints: productionEndpoints.map(url => ({ url, ready: false, attempts: 0, lastObservation: null })) },
+                startedAt: iso(startedAtMs),
+                finishedAt: iso(Date.now()),
+                failure: { message, buildMayContinue: false },
+            });
+        }
+        throw new Error(message);
+    }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(error.message); process.exitCode = 2; });

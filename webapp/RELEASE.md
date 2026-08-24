@@ -66,3 +66,45 @@ scanner metadata, `summary.json`, and `summary.txt` remain in
 In TeamCity, the **Scan Webapp OCI Release** chain supplies both environment
 values from its checkout and the fixed input artifacts from **Build Webapp OCI
 Release**. TeamCity publishes the resulting evidence directory.
+
+## Production deployment readiness
+
+The release deployment bridge queues the pinned Cloud Console deploy-only build
+only after validating the Build receipt, passing Scan summary, generated build
+configuration, VCS root, branch, revision, and immutable image digest. Its build
+deadline starts after Cloud Console returns a valid build ID. The default and
+maximum build deadline is one hour (`HEXANA_DEPLOY_TIMEOUT_MS=3600000`). A
+timeout does not cancel the remote build; it may continue at the recorded build
+URL.
+
+Production readiness begins only after that exact build finishes with
+`SUCCESS`. It has a separate five-minute default and maximum deadline
+(`HEXANA_READINESS_TIMEOUT_MS=300000`). Every retry round checks both fixed
+hosts concurrently:
+
+- `https://hexana-webapp-private.example.invalid/`
+- `https://hexana-webapp.example.invalid/`
+
+For each host, `GET /healthz` must return exactly `204`, an empty body,
+`Cache-Control: no-store`, and no redirect. Then a cache-busted `GET /` must
+return exactly `200` without redirect and embed `hexana-release-info` with
+schema version `1`, product `hexana-webapp`, and the exact approved semantic
+version and full revision. Network failures, temporary status failures, and an
+old release identity are retried within the single shared readiness deadline.
+Both hosts must pass in the same retry round. Health streaming is canceled on
+its first byte; root bodies are capped at 1 MiB by both `Content-Length` and
+streamed-byte checks, and all body reads remain under the shared deadline.
+
+`HEXANA_DEPLOY_POLL_INTERVAL_MS` defaults to `5000`, accepts `100..60000`, and
+must be shorter than both deadlines. Each deadline accepts a minimum of `1000`;
+the build and readiness maxima are `3600000` and `300000` respectively.
+
+Success and every caught failure atomically replace
+`webapp/build/release-deployment/deployment-evidence.json`. The evidence records
+the source and Cloud Console build identities, deadlines, poll observations,
+per-host readiness, and a concise failure when applicable. The immutable image
+digest remains evidence from the approved build and scan contracts; HTTP does
+not prove it, so deployment evidence always records `digestHttpProven: false`.
+If a queue POST may have created a build that was not conclusively observed
+finished, failure evidence records `buildMayContinue: true`; no timeout or
+ambiguous response is reported as cancellation.
