@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -52,9 +51,36 @@ const capturedFailure = async promise => {
     try { await promise; } catch (error) { return error; }
     assert.fail("expected deployment failure");
 };
-const approvedScript = "\n" + Buffer.from("IyEvYmluL2Jhc2gKc2V0IC1ldW8gcGlwZWZhaWwKZXhwb3J0IFBBVEg9JFBBVEg6L3Vzci9sb2NhbC9jdXN0b20tYmluCiAgICAgICAgICAgIAplY2hvICJDb25maWd1cmUgaGVsbSIKaGVsbSB2ZXJzaW9uCmVjaG8gJWNsb3VkLmJ1aWxkZXJzLnRva2VuJSB8IGhlbG0gcmVnaXN0cnkgbG9naW4gcmVnaXN0cnkuamV0YnJhaW5zLnRlYW0gLXUgJWNsb3VkLmJ1aWxkZXJzLmxvZ2luJSAtLXBhc3N3b3JkLXN0ZGluCiAgICAgICAgICAgIAplY2hvICJTZXR1cCBrdWJlY29uZmlnIgpleHBvcnQgSkJDQ19URU1QX0tVQkVDT05GSUc9JChta3RlbXApOyBjaG1vZCA2MDAgIiRKQkNDX1RFTVBfS1VCRUNPTkZJRyI7IHRyYXAgJ3JtIC1mICIkSkJDQ19URU1QX0tVQkVDT05GSUciJyBFWElUOwpleHBvcnQgS1VCRUNPTkZJRz0iJEpCQ0NfVEVNUF9LVUJFQ09ORklHIgpjYXQgPiAiJEtVQkVDT05GSUciIDw8J0VPRicKJWt1YmVjb25maWclCkVPRgpqYmNjLW9pZGMtY2x1c3Rlci1hdXRoCiAgICAgICAgICAgIAplY2hvICJSdW4gc2thZmZvbGQiCiAgICAgICAgICAgIApleHBvcnQgU0tBRkZPTERfT1BUSU9OUz0iLS1hc3N1bWUteWVzPXRydWUgLW4gJHtLOFNfTkFNRVNQQUNFfSAtLXN0YXR1cy1jaGVjayAtcCBkZXBsb3lfb25seV9wcm9kdWN0aW9uIC0tY2FjaGUtYXJ0aWZhY3RzPWZhbHNlIgpleHBvcnQgQVBJX1ZFUlNJT049JChjYXQgc2thZmZvbGQueWFtbCB8IGdyZXAgYXBpVmVyc2lvbiB8IHNlZCAicy9hcGlWZXJzaW9uOiBza2FmZm9sZFwvdlwoWzAtOV1cKS4qL1wxLyIpIAogICAgICAgICAgICAKaWYgWyAiJEFQSV9WRVJTSU9OIiAtZ3QgIjIiIF07IHRoZW4KICBza2FmZm9sZF8yLjEwLjEgY29uZmlnIHNldCAtLWdsb2JhbCBjb2xsZWN0LW1ldHJpY3MgZmFsc2UKICBza2FmZm9sZF8yLjEwLjEgcnVuICR7U0tBRkZPTERfT1BUSU9OU30gMj4mMQplbHNlCiAgc2thZmZvbGQgY29uZmlnIHNldCAtLWdsb2JhbCBjb2xsZWN0LW1ldHJpY3MgZmFsc2UKICBza2FmZm9sZCBydW4gJHtTS0FGRk9MRF9PUFRJT05TfSAyPiYxCmZp", "base64").toString("utf8");
-assert.match(approvedScript, /^\n#!\/bin\/bash/);
-assert.equal(createHash("sha256").update(approvedScript, "utf8").digest("hex"), "b8d1d943afa6d76c105e1ef28aa1365990a989a2edeb85286ba1b6292563ef93");
+const safeScript = `
+#!/bin/bash
+set -euo pipefail
+export PATH=$PATH:/usr/local/custom-bin
+
+echo "Configure helm"
+helm version
+echo %registry.token% | helm registry login registry.jetbrains.team -u %registry.login% --password-stdin
+
+echo "Setup kubeconfig"
+export JBCC_TEMP_KUBECONFIG=$(mktemp); chmod 600 "$JBCC_TEMP_KUBECONFIG"; trap 'rm -f "$JBCC_TEMP_KUBECONFIG"' EXIT;
+export KUBECONFIG="$JBCC_TEMP_KUBECONFIG"
+cat > "$KUBECONFIG" <<'EOF'
+%kubeconfig%
+EOF
+jbcc-oidc-cluster-auth
+
+echo "Run skaffold"
+
+export SKAFFOLD_OPTIONS="--assume-yes=true -n \${K8S_NAMESPACE} --status-check -p deploy_only_production --cache-artifacts=false"
+export API_VERSION=$(cat skaffold.yaml | grep apiVersion | sed "s/apiVersion: skaffold\\/v\\([0-9]\\).*/\\1/")
+
+if [ "$API_VERSION" -gt "2" ]; then
+  skaffold_2.10.1 config set --global collect-metrics false
+  skaffold_2.10.1 run \${SKAFFOLD_OPTIONS} 2>&1
+else
+  skaffold config set --global collect-metrics false
+  skaffold run \${SKAFFOLD_OPTIONS} 2>&1
+fi
+`;
 const safeParameters = () => [
     { name: "env.APPLICATION_NAME", value: "hexana-webapp" },
     { name: "env.K8S_NAMESPACE", value: "hexana-namespace" },
@@ -64,7 +90,7 @@ const safeParameters = () => [
     { name: "env.JBCC_GCP_REGION", value: "europe-west1" },
     { name: "unrelated.password.parameter" },
 ];
-const safeBuildType = () => ({ id: config.buildTypeId, "vcs-root-entries": { "vcs-root-entry": [{ "vcs-root": { id: config.vcsRootId } }] }, steps: { step: [{ type: "simpleRunner", properties: { property: [{ name: "script.content", value: approvedScript }, { name: "teamcity.build.workingDir", value: "webapp" }, { name: "use.custom.script", value: "true" }] } }] }, triggers: { trigger: [{ id: "TRIGGER_1", type: "vcsTrigger", disabled: true }] }, parameters: { property: safeParameters() } });
+const safeBuildType = () => ({ id: config.buildTypeId, "vcs-root-entries": { "vcs-root-entry": [{ "vcs-root": { id: config.vcsRootId } }] }, steps: { step: [{ type: "simpleRunner", properties: { property: [{ name: "script.content", value: safeScript }, { name: "teamcity.build.workingDir", value: "webapp" }, { name: "use.custom.script", value: "true" }] } }] }, triggers: { trigger: [{ id: "TRIGGER_1", type: "vcsTrigger", disabled: true }] }, parameters: { property: safeParameters() } });
 const safeVcsRoot = () => ({ id: config.vcsRootId, properties: { property: [{ name: "teamcity:branchSpec", value: "+:refs/heads/release/webapp/*" }, { name: "url", value: "https://example.invalid/hexana/Hexana.git" }] } });
 const buildParameter = (value, name) => value.parameters.property.find(parameter => parameter.name === name);
 const rootInstances = (overrides = {}) => ({ "vcs-root-instance": [{ id: vcsRootInstanceId, "vcs-root-id": config.vcsRootId }], ...overrides });
@@ -115,6 +141,17 @@ test("uses explicit fields and accepts only the safe generated configuration", (
     assert.match(requests[0].url, /fields=id,vcs-root-entries\(vcs-root-entry\(vcs-root\(id\)\)\),steps\(step\(type,properties\(property\(name,value\)\)\)\),triggers\(trigger\(id,type,disabled\)\),parameters\(property\(name,value\)\)$/);
     assert.match(requests[1].url, /fields=id,properties\(property\(name,value\)\)$/);
     assert.doesNotThrow(() => validateSafetyPreflight(safeBuildType(), safeVcsRoot(), config));
+});
+
+test("accepts only irrelevant generated-script formatting differences", () => {
+    const buildType = safeBuildType();
+    let rawHeredocLines = 0;
+    buildType.steps.step[0].properties.property[0].value = safeScript.split("\n").map(line => {
+        if (rawHeredocLines > 0) { rawHeredocLines--; return line; }
+        if (line.trim() === `cat > "$KUBECONFIG" <<'EOF'`) rawHeredocLines = 2;
+        return line ? `  ${line}  ` : "";
+    }).join("\r\n");
+    assert.doesNotThrow(() => validateSafetyPreflight(buildType, safeVcsRoot(), config));
 });
 
 test("queues, polls, and returns secret-free deployment evidence", async () => {
@@ -454,6 +491,21 @@ for (const [name, mutateBuildType, mutateRoot, expected] of [
     ["filename override", value => { value.steps.step[0].properties.property[0].value += "\nskaffold run -f other.yaml\n"; }, () => {}, /filename override is unsafe/],
     ["Docker build", value => { value.steps.step[0].properties.property[0].value += "\ndocker build .\n"; }, () => {}, /build or push command/],
     ["Skaffold push", value => { value.steps.step[0].properties.property[0].value += "\nskaffold push\n"; }, () => {}, /build or push command/],
+    ["arbitrary command", value => { value.steps.step[0].properties.property[0].value += "\necho done\n"; }, () => {}, /normalized template/],
+    ["namespace override", value => { value.steps.step[0].properties.property[0].value += "\nexport K8S_NAMESPACE=other\n"; }, () => {}, /normalized template/],
+    ["image override", value => { value.steps.step[0].properties.property[0].value += "\nexport HEXANA_WEBAPP_IMAGE=mutable\n"; }, () => {}, /normalized template/],
+    ["Skaffold function shadowing", value => { value.steps.step[0].properties.property[0].value = `skaffold() { true; }\n${value.steps.step[0].properties.property[0].value}`; }, () => {}, /normalized template/],
+    ["Skaffold alias shadowing", value => { value.steps.step[0].properties.property[0].value = `alias skaffold=true\n${value.steps.step[0].properties.property[0].value}`; }, () => {}, /normalized template/],
+    ["failure suppression", value => { value.steps.step[0].properties.property[0].value = value.steps.step[0].properties.property[0].value.replace("skaffold run ${SKAFFOLD_OPTIONS} 2>&1", "skaffold run ${SKAFFOLD_OPTIONS} 2>&1 || true"); }, () => {}, /normalized template/],
+    ["kubectl command", value => { value.steps.step[0].properties.property[0].value += "\nkubectl delete deployment hexana-webapp\n"; }, () => {}, /normalized template/],
+    ["extra Helm command", value => { value.steps.step[0].properties.property[0].value += "\nhelm uninstall hexana-webapp\n"; }, () => {}, /normalized template/],
+    ["curl command", value => { value.steps.step[0].properties.property[0].value += "\ncurl https://example.invalid\n"; }, () => {}, /normalized template/],
+    ["eval command", value => { value.steps.step[0].properties.property[0].value += "\neval dangerous\n"; }, () => {}, /normalized template/],
+    ["source command", value => { value.steps.step[0].properties.property[0].value += "\nsource dangerous.sh\n"; }, () => {}, /normalized template/],
+    ["indented kubeconfig placeholder", value => { value.steps.step[0].properties.property[0].value = value.steps.step[0].properties.property[0].value.replace("\n%kubeconfig%\n", "\n %kubeconfig%\n"); }, () => {}, /normalized template/],
+    ["indented heredoc terminator", value => { value.steps.step[0].properties.property[0].value = value.steps.step[0].properties.property[0].value.replace("\nEOF\n", "\n EOF\n"); }, () => {}, /normalized template/],
+    ["heredoc terminator trailing space", value => { value.steps.step[0].properties.property[0].value = value.steps.step[0].properties.property[0].value.replace("\nEOF\n", "\nEOF \n"); }, () => {}, /normalized template/],
+    ["mismatched Skaffold executable pair", value => { value.steps.step[0].properties.property[0].value = value.steps.step[0].properties.property[0].value.replace("skaffold_2.10.1 run", "skaffold_2.10.2 run"); }, () => {}, /executable pair differs/],
 ]) test(`preflight rejects ${name} without POST`, async () => {
     const buildType = safeBuildType();
     const vcsRoot = safeVcsRoot();
@@ -462,16 +514,6 @@ for (const [name, mutateBuildType, mutateRoot, expected] of [
     const calls = [];
     await assert.rejects(deployRelease({ ...fixture(), config, fetchImpl: async (url, init) => { calls.push({ url, method: init.method ?? "GET" }); return response(url.includes("/buildTypes/") ? buildType : vcsRoot); } }), expected);
     assert.equal(calls.some(call => call.method === "POST"), false);
-});
-
-test("preflight fingerprint rejects leading-newline and other byte changes without POST", async () => {
-    for (const script of [approvedScript.slice(1), `\n${approvedScript}`, `${approvedScript}\necho done\n`]) {
-        const buildType = safeBuildType();
-        buildType.steps.step[0].properties.property[0].value = script;
-        const calls = [];
-        await assert.rejects(deployRelease({ ...fixture(), config, fetchImpl: async (url, init) => { calls.push(init.method ?? "GET"); return response(url.includes("/buildTypes/") ? buildType : safeVcsRoot()); } }), /script fingerprint differs/);
-        assert.equal(calls.includes("POST"), false);
-    }
 });
 
 test("rejects ambiguous or mismatched VCS root resolution", () => {

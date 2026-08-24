@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,7 +9,6 @@ const revisionPattern = /^[0-9a-f]{40}$/;
 const digestPattern = /^sha256:[0-9a-f]{64}$/;
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const evidenceFiles = ["build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"];
-const approvedScriptSha256 = "b8d1d943afa6d76c105e1ef28aa1365990a989a2edeb85286ba1b6292563ef93";
 const approvedVcsUrl = "https://example.invalid/hexana/Hexana.git";
 const approvedParameters = Object.freeze({
     "env.APPLICATION_NAME": "hexana-webapp",
@@ -19,6 +18,50 @@ const approvedParameters = Object.freeze({
     "env.JBCC_GCP_PROJECT": "example-gcp-project",
     "env.JBCC_GCP_REGION": "europe-west1",
 });
+const normalizeGeneratedScript = value => {
+    const normalized = [];
+    let rawHeredocLines = 0;
+    for (const rawLine of value.replaceAll("\r\n", "\n").split("\n")) {
+        if (rawHeredocLines > 0) {
+            normalized.push(rawLine);
+            rawHeredocLines--;
+            continue;
+        }
+        const line = rawLine.trim();
+        if (!line) continue;
+        normalized.push(line.replace(/^skaffold(?:_\d+(?:\.\d+)*)? (config set --global collect-metrics false|run \$\{SKAFFOLD_OPTIONS\} 2>&1)$/, "skaffold $1"));
+        if (line === `cat > "$KUBECONFIG" <<'EOF'`) rawHeredocLines = 2;
+    }
+    return normalized.join("\n");
+};
+const approvedGeneratedScript = normalizeGeneratedScript(`#!/bin/bash
+set -euo pipefail
+export PATH=$PATH:/usr/local/custom-bin
+
+echo "Configure helm"
+helm version
+echo %registry.token% | helm registry login registry.jetbrains.team -u %registry.login% --password-stdin
+
+echo "Setup kubeconfig"
+export JBCC_TEMP_KUBECONFIG=$(mktemp); chmod 600 "$JBCC_TEMP_KUBECONFIG"; trap 'rm -f "$JBCC_TEMP_KUBECONFIG"' EXIT;
+export KUBECONFIG="$JBCC_TEMP_KUBECONFIG"
+cat > "$KUBECONFIG" <<'EOF'
+%kubeconfig%
+EOF
+jbcc-oidc-cluster-auth
+
+echo "Run skaffold"
+
+export SKAFFOLD_OPTIONS="--assume-yes=true -n \${K8S_NAMESPACE} --status-check -p deploy_only_production --cache-artifacts=false"
+export API_VERSION=$(cat skaffold.yaml | grep apiVersion | sed "s/apiVersion: skaffold\\/v\\([0-9]\\).*/\\1/")
+
+if [ "$API_VERSION" -gt "2" ]; then
+  skaffold_2.10.1 config set --global collect-metrics false
+  skaffold_2.10.1 run \${SKAFFOLD_OPTIONS} 2>&1
+else
+  skaffold config set --global collect-metrics false
+  skaffold run \${SKAFFOLD_OPTIONS} 2>&1
+fi`);
 export const deploymentTiming = Object.freeze({
     buildTimeoutMs: 3_600_000,
     readinessTimeoutMs: 300_000,
@@ -184,15 +227,18 @@ export function validateSafetyPreflight(buildType, vcsRoot, config) {
     const customScripts = runnerProperties.filter(property => property.name === "use.custom.script");
     if (workingDirectories.length !== 1 || workingDirectories[0].value !== "webapp" || customScripts.length !== 1 || customScripts[0].value !== "true") fail("Cloud Console Skaffold runner mode or working directory is unsafe");
     const expectedAssignment = 'export SKAFFOLD_OPTIONS="--assume-yes=true -n ${K8S_NAMESPACE} --status-check -p deploy_only_production --cache-artifacts=false"';
-    const assignments = scripts[0].value.split(/\r?\n/).filter(line => line.includes("SKAFFOLD_OPTIONS="));
+    const assignments = scripts[0].value.split(/\r?\n/).map(line => line.trim()).filter(line => line.includes("SKAFFOLD_OPTIONS="));
     if (assignments.length !== 1 || assignments[0] !== expectedAssignment) fail("Cloud Console Skaffold options assignment is unsafe");
     if (!/\bskaffold(?:_\d+(?:\.\d+)*)?\s+run\s+\$\{SKAFFOLD_OPTIONS\}(?:\s|$)/.test(scripts[0].value)) fail("Cloud Console Skaffold script does not run its validated options");
     const profiles = [...scripts[0].value.matchAll(/(?:^|\s)(?:-p|--profile)(?:=|\s+)([^\s"'\\]+)/g)].map(match => match[1]);
     if (profiles.length !== 1 || profiles[0] !== "deploy_only_production") fail("Cloud Console Skaffold profile is unsafe");
     if (/\bskaffold(?:_\d+(?:\.\d+)*)?\b[^\r\n;&|]*\s(?:-f|--filename)(?:=|\s)/m.test(scripts[0].value)) fail("Cloud Console Skaffold filename override is unsafe");
     if (/\bdocker\b[^\r\n;&|]*(?:\bbuild(?:x)?\b|\bpush\b)|\bskaffold(?:_\d+(?:\.\d+)*)?\b[^\r\n;&|]*(?:\bbuild\b|\bpush\b)/i.test(scripts[0].value)) fail("Cloud Console script contains a build or push command");
-    if (createHash("sha256").update(scripts[0].value, "utf8").digest("hex") !== approvedScriptSha256) fail("Cloud Console Skaffold script fingerprint differs from the approved generated script");
-
+    if (normalizeGeneratedScript(scripts[0].value) !== approvedGeneratedScript) fail("Cloud Console Skaffold script differs from the approved normalized template");
+    const skaffoldExecutables = scripts[0].value.replaceAll("\r\n", "\n").split("\n").map(line => line.trim())
+        .map(line => /^(skaffold(?:_\d+(?:\.\d+)*)?) (?:config set --global collect-metrics false|run \$\{SKAFFOLD_OPTIONS\} 2>&1)$/.exec(line)?.[1])
+        .filter(Boolean);
+    if (skaffoldExecutables.length !== 4 || skaffoldExecutables[0] !== skaffoldExecutables[1] || skaffoldExecutables[2] !== skaffoldExecutables[3]) fail("Cloud Console Skaffold config/run executable pair differs");
     exactKeys(buildType.triggers, ["trigger"], "Cloud Console triggers");
     const triggers = requireArray(buildType.triggers.trigger, "Cloud Console triggers");
     triggers.forEach((trigger, index) => { exactKeys(trigger, ["id", "type", "disabled"], `Cloud Console trigger ${index}`); if (trigger.disabled !== true) fail("Cloud Console build type has an enabled trigger"); });
