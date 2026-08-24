@@ -24,12 +24,34 @@ The module provides:
 - **LLDB output parsing** (`LldbOutputParser.kt`) — pure parsers for LLDB stop events, expression results, frame locations, function names, and WAMR debug support detection; used by both `idea-plugin` and `vscode-plugin:extension-lib`.
 - **DWARF path matching** (`DwarfPathMatcher.kt`) — platform-agnostic utilities for matching DWARF debug-info file paths against IDE/editor breakpoint paths, compilation-unit path heuristics, crate name extraction, and CU hash suffix stripping; used by both `idea-plugin` and `vscode-plugin:extension-lib`.
 - **CDP source location resolver** (`CdpSourceLocationResolver.kt`) — platform-agnostic DWARF-based source file + line ↔ Wasm byte offset resolver for CDP debug adapters; used by both `idea-plugin` and `vscode-plugin` to translate breakpoint positions and stack frame locations.
+- **Scripting API** (`scripting/`) — the single definition of the custom script tab surface. `ScriptValue.kt` is a
+  host-neutral lazy value tree; `ScriptBinaryApi.kt` builds the `binary` global from a `BinaryProvider` (reusing
+  `fileTypeDescription`, `structureRanges`, and `TableTabsProviderRegistry` so `binary.tab(name)` reads the same tables
+  the UIs render); `ScriptOutput.kt` owns `print`/`table`/`row`; `ScriptApiReference.kt` is the source of truth for the
+  documentation. `ScriptValueJs.kt` (jsMain) binds the tree into plain JS objects for the browser hosts; the GraalJS
+  adapter lives in `mcp:scripting`.
+
+## Scripting API Rules
+
+The point of `scripting/` is that the IntelliJ plugin, the VS Code webview, the webapp worker, and the `run-script` CLI
+all bind one definition. Before this existed each host hand-maintained its own wrappers and exposed a different `binary`.
+
+- Add or change a script member in `ScriptBinaryApi.kt` only, then document it in `ScriptApiReference.kt`. Never add one
+  in a host adapter.
+- `ScriptApiReferenceTest` asserts the documented shapes match what `scriptBinaryApi` exposes, in both directions. A new
+  member fails the build until it is documented — that is intentional.
+- Do not claim a curated name that already exists on a `BinaryProvider` (`sections`, `functions`, `imports`, `exports`,
+  `header`, `symbols`). Those resolve through the fall-through to the format-specific provider, and shadowing one would
+  silently change its shape for existing scripts.
+- Keep `Obj` members and `Arr` elements lazy. A `Functions` table can have hundreds of thousands of rows.
 
 ## KMP Targets
 
-- JVM (consumed by `idea-plugin`)
-- JS (consumed by `vscode-plugin:webview`)
+- JVM (consumed by `idea-plugin` and `mcp:scripting`)
+- JS (consumed by `vscode-plugin:webview`, `web-ui`, and the `webapp` parser worker)
 - WasmJS
+
+`src/jsMain` holds the JS-only scripting binder; everything else is `commonMain`.
 
 ## Dependencies
 

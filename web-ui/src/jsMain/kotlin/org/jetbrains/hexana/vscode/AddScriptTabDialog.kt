@@ -2,18 +2,24 @@ package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.*
 import org.jetbrains.compose.web.dom.*
+import org.jetbrains.hexana.shared.scripting.ScriptApiReference
 
 /**
  * Dialog shown when the user clicks the "+" button to add a custom script tab.
  *
- * Explains the concept, documents the available JS APIs (`print`, `binary`),
- * provides an inline file chooser (text field + Browse button) for `.js` files,
- * and a link to open the `.d.ts` API reference.
+ * Besides picking an existing `.js` file it offers a runnable starting point —
+ * the starter template or one of the bundled examples — because the hardest part
+ * of writing a script tab used to be the empty file. The API listing is rendered
+ * from [ScriptApiReference], the same source as the bundled `.d.ts` and the
+ * IntelliJ dialog, so the three cannot drift apart.
  *
  * @param scriptPath the currently picked script file path (empty when nothing is selected yet)
  * @param existingScriptPaths paths of scripts already open as tabs (used for duplicate detection)
  * @param onBrowse called when the user clicks "Browse…" to trigger the host file picker
- * @param onOpenDts called when the user clicks the .d.ts link
+ * @param onCreateFromTemplate called with a file name and optional inline source; a
+ *   null source means the host should copy the bundled example of that name
+ * @param onOpenDts called with `raw = true` for the format-specific `binary.raw` types
+ * @param showExamples whether the host can supply the bundled example scripts
  * @param onConfirm called with the selected path when the user clicks OK
  * @param onCancel called when the user cancels the dialog
  */
@@ -22,7 +28,9 @@ fun AddScriptTabDialog(
     scriptPath: String,
     existingScriptPaths: Set<String>,
     onBrowse: () -> Unit,
-    onOpenDts: () -> Unit,
+    onCreateFromTemplate: (fileName: String, template: String?) -> Unit,
+    onOpenDts: (raw: Boolean) -> Unit,
+    showExamples: Boolean,
     onConfirm: (String) -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -47,9 +55,9 @@ fun AddScriptTabDialog(
             // Body
             Div({ classes("hexana-dialog-body") }) {
                 P {
-                    Text("Create a custom analysis tab by selecting a JavaScript file. ")
-                    Text("The script runs with access to the opened binary and can produce ")
-                    Text("text or tabular (CSV/TSV) output displayed in the tab.")
+                    Text("Create a custom analysis tab from a JavaScript file. ")
+                    Text("The script runs against the open binary and renders text, or a ")
+                    Text("searchable table when it starts with a table(...) header row.")
                 }
 
                 // Script file chooser
@@ -92,7 +100,64 @@ fun AddScriptTabDialog(
                     }
                 }
 
-                // Available APIs
+                // Runnable starting points
+                Div({ style { property("margin-top", "12px") } }) {
+                    Button({
+                        classes("hexana-dialog-btn", "hexana-dialog-btn-cancel")
+                        onClick {
+                            onCreateFromTemplate(
+                                ScriptApiReference.STARTER_FILE_NAME,
+                                ScriptApiReference.starterTemplate(),
+                            )
+                        }
+                    }) {
+                        Text("New Script from Template")
+                    }
+                    Div({
+                        style {
+                            property("margin-top", "4px")
+                            property("opacity", "0.75")
+                            property("font-size", "0.9em")
+                        }
+                    }) {
+                        Text("Writes a runnable script into .hexana/scripts, opens it, and selects it here.")
+                    }
+                }
+
+                if (showExamples) {
+                    Div({
+                        style {
+                            property("margin-top", "12px")
+                            property("margin-bottom", "4px")
+                            property("font-weight", "bold")
+                        }
+                    }) {
+                        Text("Or start from an example")
+                    }
+                    Ul({ style { property("margin", "0") } }) {
+                        for (example in ScriptApiReference.examples) {
+                            Li {
+                                A(href = "#", {
+                                    onClick { event ->
+                                        event.preventDefault()
+                                        onCreateFromTemplate(example.fileName, null)
+                                    }
+                                    style {
+                                        property("color", "var(--vscode-textLink-foreground, #3794ff)")
+                                        property("cursor", "pointer")
+                                    }
+                                }) {
+                                    Text(example.title)
+                                }
+                                Span({ style { property("opacity", "0.75") } }) {
+                                    Text(" — ${example.summary}")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Available APIs, rendered from the shared reference.
                 Div({
                     style {
                         property("margin-top", "20px")
@@ -108,48 +173,25 @@ fun AddScriptTabDialog(
                         property("line-height", "1.6")
                     }
                 }) {
-                    Div {
-                        B { Text("print(text)") }
-                        Text(" — appends a line to the tab output.")
-                    }
-                    Div {
-                        B { Text("binary") }
-                        Text(" — the current file's BinaryProvider object with properties such as:")
-                    }
-                    Div({
-                        style { property("padding-left", "16px") }
-                    }) {
+                    for (line in ScriptApiReference.summaryLines()) {
+                        val separator = line.indexOf(" — ")
                         Div {
-                            B { Text("binary.strings") }
-                            Text(" — list of extracted strings (each has .value)")
-                        }
-                        Div {
-                            B { Text("binary.bytes") }
-                            Text(" — raw byte buffer of the file")
-                        }
-                        Div {
-                            B { Text("binary.sizeAnalysis") }
-                            Text(" — hierarchical size breakdown (if available)")
+                            if (separator < 0) {
+                                Text(line)
+                            } else {
+                                B { Text(line.substring(0, separator)) }
+                                Text(line.substring(separator))
+                            }
                         }
                     }
                 }
 
-                // Link to .d.ts
-                Div({
-                    style { property("margin-top", "8px") }
-                }) {
-                    A(href = "#", {
-                        onClick { e ->
-                            e.preventDefault()
-                            onOpenDts()
-                        }
-                        style {
-                            property("color", "var(--vscode-textLink-foreground, #3794ff)")
-                            property("cursor", "pointer")
-                        }
-                    }) {
-                        Text("Open complete API .d.ts definitions")
-                    }
+                // Links to the generated references
+                Div({ style { property("margin-top", "8px") } }) {
+                    ReferenceLink("Open the scripting API reference") { onOpenDts(false) }
+                }
+                Div({ style { property("margin-top", "4px") } }) {
+                    ReferenceLink("Open the format-specific types behind binary.raw") { onOpenDts(true) }
                 }
             }
 
@@ -170,5 +212,21 @@ fun AddScriptTabDialog(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ReferenceLink(label: String, onClick: () -> Unit) {
+    A(href = "#", {
+        onClick { event ->
+            event.preventDefault()
+            onClick()
+        }
+        style {
+            property("color", "var(--vscode-textLink-foreground, #3794ff)")
+            property("cursor", "pointer")
+        }
+    }) {
+        Text(label)
     }
 }

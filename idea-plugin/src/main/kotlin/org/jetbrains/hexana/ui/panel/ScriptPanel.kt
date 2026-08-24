@@ -12,7 +12,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
@@ -30,10 +31,11 @@ import org.jetbrains.jewel.ui.icons.AllIconsKeys
 class ScriptPanel(
     val scriptPath: String,
     binaryProvider: BinaryProvider,
+    binaryFileName: String? = null,
 ) : Panel(
     description = scriptPath.substringAfterLast('/'),
     render = {
-        ScriptTabContent(scriptPath, binaryProvider)
+        ScriptTabContent(scriptPath, binaryProvider, binaryFileName)
     },
 )
 
@@ -52,7 +54,11 @@ private fun detectDelimiter(lines: List<String>): Char? {
 }
 
 @Composable
-internal fun ScriptTabContent(scriptPath: String, binaryProvider: BinaryProvider) {
+internal fun ScriptTabContent(
+    scriptPath: String,
+    binaryProvider: BinaryProvider,
+    binaryFileName: String? = null,
+) {
     val outputLines = remember(scriptPath) { mutableStateListOf<String>() }
     var isRunning by remember(scriptPath) { mutableStateOf(true) }
     var refreshKey by remember(scriptPath) { mutableIntStateOf(0) }
@@ -60,11 +66,30 @@ internal fun ScriptTabContent(scriptPath: String, binaryProvider: BinaryProvider
     LaunchedEffect(scriptPath, refreshKey) {
         outputLines.clear()
         isRunning = true
-        withContext(Dispatchers.IO) {
-            ScriptExecutor.execute(scriptPath, binaryProvider) { line ->
-                outputLines.add(line)
+
+        // The runner streams from its own worker thread. Lines are buffered and
+        // drained in batches rather than written to the snapshot list one at a
+        // time: a script is allowed up to 200k lines, and per-line snapshot
+        // writes from a background thread would dominate the run.
+        val pending = mutableListOf<String>()
+        fun drain() {
+            val batch = synchronized(pending) {
+                if (pending.isEmpty()) emptyList() else pending.toList().also { pending.clear() }
+            }
+            if (batch.isNotEmpty()) outputLines.addAll(batch)
+        }
+
+        val execution = launch(Dispatchers.IO) {
+            ScriptExecutor.execute(scriptPath, binaryProvider, binaryFileName) { line ->
+                synchronized(pending) { pending.add(line) }
             }
         }
+        while (execution.isActive) {
+            delay(OUTPUT_POLL_MILLIS)
+            drain()
+        }
+        execution.join()
+        drain()
         isRunning = false
     }
 
@@ -173,6 +198,13 @@ private fun ScriptTextView(lines: List<String>, isRunning: Boolean) {
     }
 }
 
-internal fun createScriptPanel(scriptPath: String, binaryProvider: BinaryProvider): ScriptPanel {
-    return ScriptPanel(scriptPath, binaryProvider)
+internal fun createScriptPanel(
+    scriptPath: String,
+    binaryProvider: BinaryProvider,
+    binaryFileName: String? = null,
+): ScriptPanel {
+    return ScriptPanel(scriptPath, binaryProvider, binaryFileName)
 }
+
+/** Interval at which streamed script output is published to the table. */
+private const val OUTPUT_POLL_MILLIS = 50L

@@ -497,10 +497,11 @@ private class WorkerDomHost : Host {
     override fun saveCopy(outputName: String, bytes: ByteArray) = Unit
     override fun openUrl(url: String) = Unit
     override fun openModule(moduleIndex: Int, fileName: String, data: ByteArray) = Unit
-    override fun openDts() = Unit
+    override fun openDts(raw: Boolean) = Unit
     override fun openHttpBody(fileName: String, bodyBytes: ByteArray, httpContentType: String?, httpContentEncoding: String?) = Unit
     override fun openTextFile(fileName: String, content: String) = Unit
     override fun pickScriptFile() = Unit
+    override fun createScriptFromTemplate(fileName: String, template: String?) = Unit
     override fun readScriptFile(scriptPath: String) = Unit
     override fun scriptTabAdded(scriptPath: String) = Unit
     override fun scriptTabRemoved(scriptPath: String) = Unit

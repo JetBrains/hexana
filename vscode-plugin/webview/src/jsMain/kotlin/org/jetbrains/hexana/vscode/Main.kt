@@ -172,6 +172,9 @@ fun BinaryEditorApp() {
                     sbomVulnerabilityCheck = SbomVulnerabilityContribution { sbom, onReportReady ->
                         VulnBar(sbom, onReportReady)
                     },
+                    // The extension bundles examples/scripting/*.js and can copy
+                    // one into the workspace.
+                    bundledScriptExamples = true,
                 ),
                 scriptTabs = scriptTabs,
                 showSemanticHighlighting = showSemanticHighlighting,

@@ -41,6 +41,9 @@ import org.jetbrains.hexana.shared.TableTabChildRows
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsContext
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
+import org.jetbrains.hexana.shared.scripting.ScriptOutput
+import org.jetbrains.hexana.shared.scripting.ScriptValueJsBinder
+import org.jetbrains.hexana.shared.scripting.scriptBinaryApi
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.components.ComponentInstanceExpression
 import org.jetbrains.hexana.wasm.components.InlineInstanceCoreExpression
@@ -195,7 +198,7 @@ private suspend fun runScript(
         var outputLines = 0
         var outputChars = 0
         var truncated = false
-        val print: (dynamic) -> Unit = { value ->
+        val emitLine: (dynamic) -> Unit = { value ->
             val line = runCatching { value.toString() }.getOrElse { "<unprintable>" }
             if (
                 outputLines >= MAX_SCRIPT_OUTPUT_LINES || line.length > MAX_SCRIPT_OUTPUT_LINE_CHARS ||
@@ -208,30 +211,42 @@ private suspend fun runScript(
                 postScriptLine(workerScope, requestId, line)
             }
         }
-        val error = executeWorkerScript(source, scriptValue(provider), print)
+        // Bound from the shared scripting definition so a script behaves the
+        // same here as it does in the IDE, in VS Code, and in the CLI.
+        val binder = ScriptValueJsBinder(::scriptValue)
+        val output = binder.outputBindings(ScriptOutput { line -> emitLine(line) })
+        val error = executeWorkerScript(
+            source = source,
+            binary = binder.toJs(scriptBinaryApi(provider, fileName)),
+            output = output,
+        )
         postScriptDone(workerScope, requestId, if (truncated && error == null) "Script output exceeded the browser limit." else error)
     } catch (_: Throwable) {
         postScriptDone(workerScope, requestId, "Script execution failed.")
     }
 }
 
-private fun executeWorkerScript(source: String, binary: dynamic, print: (dynamic) -> Unit): String? {
+private fun executeWorkerScript(source: String, binary: dynamic, output: Map<String, dynamic>): String? {
     @Suppress("UNUSED_VARIABLE")
     val sourceValue = source
     @Suppress("UNUSED_VARIABLE")
     val binaryValue = binary
     @Suppress("UNUSED_VARIABLE")
-    val printValue = print
+    val printValue = output.getValue("print")
+    @Suppress("UNUSED_VARIABLE")
+    val tableValue = output.getValue("table")
+    @Suppress("UNUSED_VARIABLE")
+    val rowValue = output.getValue("row")
     return js("""
-        (function(source, binary, print) {
+        (function(source, binary, print, table, row) {
             try {
-                new Function('binary', 'print', source)(binary, print);
+                new Function('binary', 'print', 'table', 'row', source)(binary, print, table, row);
                 return null;
             } catch (error) {
                 var message = error && error.message ? String(error.message) : 'Script execution failed.';
                 return message.length > 1024 ? message.substring(0, 1024) : message;
             }
-        })(sourceValue, binaryValue, printValue)
+        })(sourceValue, binaryValue, printValue, tableValue, rowValue)
     """)
 }
 

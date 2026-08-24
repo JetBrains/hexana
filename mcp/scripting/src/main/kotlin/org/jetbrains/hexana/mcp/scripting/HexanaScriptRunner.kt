@@ -4,9 +4,7 @@ import org.graalvm.polyglot.Context
 import org.graalvm.polyglot.HostAccess
 import org.graalvm.polyglot.PolyglotException
 import org.graalvm.polyglot.Source
-import org.graalvm.polyglot.Value
 import org.graalvm.polyglot.io.IOAccess
-import org.graalvm.polyglot.proxy.ProxyExecutable
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.mcp.BinaryInput
 import org.jetbrains.hexana.mcp.BinaryInputLoader
@@ -14,6 +12,8 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.model.binaries.BinaryModuleIdentityResult
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.shared.scripting.ScriptOutput
+import org.jetbrains.hexana.shared.scripting.scriptBinaryApi
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -41,10 +41,21 @@ class HexanaScriptRunner private constructor(
         beforeExecuteInContext,
     )
 
+    /**
+     * Runs [source] over [binaryProvider].
+     *
+     * @param fileName file name of the binary, surfaced to the script as
+     *   `binary.name` and used to resolve file-name-dependent tabs
+     * @param onLine invoked for every accepted output line as it is emitted.
+     *   Interactive hosts use this to stream output into a tab while the script
+     *   is still running; the collected lines are returned regardless.
+     */
     fun run(
         source: HexanaScriptSource,
         binaryProvider: BinaryProvider,
         binaryIdentity: BinaryModuleIdentityResult? = null,
+        fileName: String? = null,
+        onLine: ((String) -> Unit)? = null,
     ): HexanaScriptResult {
         val started = System.nanoTime()
         val loadedScript = when (val script = loadScript(source)) {
@@ -61,6 +72,8 @@ class HexanaScriptRunner private constructor(
             script = loadedScript,
             binaryProvider = binaryProvider,
             binaryIdentity = binaryIdentity,
+            fileName = fileName,
+            onLine = onLine,
             started = started,
         )
     }
@@ -89,21 +102,30 @@ class HexanaScriptRunner private constructor(
             )
         }
 
-        return run(source, loadedBinary.provider, loadedBinary.identity)
+        return run(
+            source = source,
+            binaryProvider = loadedBinary.provider,
+            binaryIdentity = loadedBinary.identity,
+            // The loader knows the input path, so `binary.name` works here too
+            // and does not read as null just because the caller was the CLI.
+            fileName = loadedBinary.identity?.path?.substringAfterLast('/')?.substringAfterLast('\\'),
+        )
     }
 
     private fun runLoadedScript(
         script: LoadedScript,
         binaryProvider: BinaryProvider,
         binaryIdentity: BinaryModuleIdentityResult?,
+        fileName: String?,
+        onLine: ((String) -> Unit)?,
         started: Long,
     ): HexanaScriptResult {
-        val output = ScriptOutputCollector(limits.maxOutputLines, limits.maxOutputBytes)
+        val output = ScriptOutputCollector(limits.maxOutputLines, limits.maxOutputBytes, onLine)
         val contextRef = AtomicReference<Context?>()
         val executor = Executors.newSingleThreadExecutor(scriptThreadFactory)
         val future = executor.submit(Callable {
             beforeExecuteInContext()
-            executeInContext(script, binaryProvider, binaryIdentity, output, contextRef, started)
+            executeInContext(script, binaryProvider, binaryIdentity, fileName, output, contextRef, started)
         })
 
         return try {
@@ -187,6 +209,7 @@ class HexanaScriptRunner private constructor(
         script: LoadedScript,
         binaryProvider: BinaryProvider,
         binaryIdentity: BinaryModuleIdentityResult?,
+        fileName: String?,
         output: ScriptOutputCollector,
         contextRef: AtomicReference<Context?>,
         started: Long,
@@ -209,11 +232,15 @@ class HexanaScriptRunner private constructor(
 
             context.use { ctx ->
                 val bindings = ctx.getBindings("js")
-                bindings.putMember("binary", BinaryProviderProxy(binaryProvider))
-                bindings.putMember("print", ProxyExecutable { args ->
-                    output.print(args.toPrintLine())
-                    null
-                })
+                // The surface itself lives in plugins-shared so that the IDE, the
+                // VS Code webview, and this runtime all bind the same thing.
+                bindings.putMember(
+                    "binary",
+                    ScriptValueGraalProxy.toGuest(scriptBinaryApi(binaryProvider, fileName)),
+                )
+                for ((name, function) in ScriptOutput(output::print).bindings()) {
+                    bindings.putMember(name, ScriptValueGraalProxy.toGuest(function))
+                }
                 ctx.eval(Source.newBuilder("js", script.text, script.name).build())
             }
 
@@ -408,15 +435,6 @@ class HexanaScriptRunner private constructor(
             value.contains("Java.type", ignoreCase = true)
     }
 
-    private fun Array<out Value>.toPrintLine(): String =
-        joinToString(" ") { value ->
-            when {
-                value.isString -> value.asString()
-                value.isNull -> "null"
-                else -> value.toString()
-            }
-        }
-
     private sealed interface ScriptLoadResult {
         data class Loaded(val script: LoadedScript) : ScriptLoadResult
         data class Failed(val result: HexanaScriptResult) : ScriptLoadResult
@@ -476,6 +494,7 @@ private sealed interface ScriptFileReadResult {
 private class ScriptOutputCollector(
     private val maxLines: Int,
     private val maxBytes: Int,
+    private val onLine: ((String) -> Unit)? = null,
 ) {
     private val lines = mutableListOf<String>()
     private var emittedBytes = 0
@@ -500,6 +519,9 @@ private class ScriptOutputCollector(
         if (boundedLine.text.isNotEmpty() || !boundedLine.truncated) {
             lines += boundedLine.text
             emittedBytes += separatorBytes + boundedLine.byteCount
+            // Streamed after the limits are applied, so an interactive tab shows
+            // exactly the lines the result carries.
+            onLine?.invoke(boundedLine.text)
         }
         if (boundedLine.truncated) {
             truncated = true

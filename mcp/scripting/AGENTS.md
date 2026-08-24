@@ -1,7 +1,12 @@
 # AGENTS.md for `mcp/scripting`
 
 This module contains the shared JVM-only Hexana scripting runtime. It executes JavaScript over a loaded
-`BinaryProvider` through GraalJS and exposes the script globals used by the product scripting surface.
+`BinaryProvider` through GraalJS and binds the script globals used by the product scripting surface.
+
+The globals themselves are **not** defined here. `plugins-shared/.../shared/scripting/` owns the API surface
+(`scriptBinaryApi`, `ScriptOutput`, `ScriptApiReference`) as a host-neutral `ScriptValue` tree; this module owns the
+GraalJS adapter for it. That split is what makes a script behave identically in the IntelliJ plugin, the VS Code
+webview, and the `run-script` CLI. The IntelliJ script tab delegates here rather than building its own context.
 
 ## Start Here
 
@@ -9,22 +14,34 @@ Read these files before structural changes:
 
 - `build.gradle.kts`
 - `src/main/kotlin/org/jetbrains/hexana/mcp/scripting/HexanaScriptRunner.kt`
-- `src/main/kotlin/org/jetbrains/hexana/mcp/scripting/BinaryProviderProxy.kt`
+- `src/main/kotlin/org/jetbrains/hexana/mcp/scripting/ScriptValueGraalProxy.kt`
+- `src/main/kotlin/org/jetbrains/hexana/mcp/scripting/HostObjectProxy.kt`
+- `../../plugins-shared/src/commonMain/kotlin/org/jetbrains/hexana/shared/scripting/ScriptBinaryApi.kt`
 - `../core/src/main/kotlin/org/jetbrains/hexana/mcp/BinaryInputLoader.kt`
 - `../../binaryProvider/src/commonMain/kotlin/org/jetbrains/hexana/providers/BinaryProvider.kt`
 
 ## Ownership Boundary
 
-- Keep script execution, script-source loading, sandbox policy, script-output limits, and structured script results here.
+- Keep script execution, script-source loading, sandbox policy, script-output limits, streaming, and structured script
+  results here.
+- Keep the definition of what `binary`, `print`, `table`, and `row` mean in `plugins-shared`. Adding a script member
+  here instead would reintroduce the per-host divergence this split removed.
 - Keep public MCP tool registration, generated CLI command metadata, and transport wiring out of this module.
-- Keep IntelliJ and VS Code UI integration out of this module until a caller-migration ticket intentionally moves it.
 - Reuse `BinaryInputLoader` and `AllowedFilePolicy` for file/binary access decisions instead of adding separate path rules.
 - Expose only deliberate script globals. Do not enable host class lookup, arbitrary host access, process creation, thread
   creation, native access, or GraalJS IO without an explicit product/security decision and focused tests.
+- `HostObjectProxy` backs `binary.raw` and the fall-through for uncurated members. It is deliberate **read-only data**
+  exposure of the binary the caller already supplied — public properties reflected into `ProxyObject`s, no methods, no
+  class handles. It does not relax the sandbox: the context keeps `HostAccess.NONE`, no class lookup, no IO, no process
+  or thread creation. Keep it that way.
 
 ## Testing
 
-- Add focused tests under `src/test/kotlin` for script loading, `binary`/`print` behavior, limits, timeouts, and sandbox
-  denial.
-- Run `./gradlew :mcp:scripting:test` after changes here.
+- Add focused tests under `src/test/kotlin` for script loading, limits, timeouts, streaming, and sandbox denial, and for
+  the Graal binding of the shared surface (`HexanaScriptApiBindingTest`).
+- The shape of the API is covered in `plugins-shared` (`ScriptBinaryApiTest`, `ScriptApiReferenceTest`); do not duplicate
+  those assertions here — cover the adapter and the sandbox instead.
+- `HexanaScriptRunnerTest` is the back-compatibility gate for scripts written against the pre-v1 `binary`. It must keep
+  passing unedited.
+- Run `./gradlew :mcp:scripting:test` and `./gradlew :plugins-shared:allTests` after changes here.
 - When a public caller starts using this module, also run the narrowest affected `mcp/server` or plugin tests.

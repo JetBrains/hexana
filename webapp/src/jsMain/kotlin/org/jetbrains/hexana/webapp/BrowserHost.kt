@@ -143,7 +143,7 @@ internal class BrowserHost(
         openModule.invoke(moduleIndex, fileName, data)
     }
 
-    override fun openDts() {
+    override fun openDts(raw: Boolean) {
         // VS Code-specific (opens in Monaco editor); no-op in the browser.
     }
 
@@ -161,6 +161,15 @@ internal class BrowserHost(
                 loadScriptFile(file) { name, content -> onScriptFilePicked(name, content) }
             }
         }
+    }
+
+    override fun createScriptFromTemplate(fileName: String, template: String?) {
+        // The browser has no filesystem, so the script is fed straight into the
+        // tab under its file name rather than written out. Only the inline
+        // starter template is available here; bundled examples are gated behind
+        // WebUiCapabilities.bundledScriptExamples, which this build leaves off.
+        if (template == null) return
+        onScriptFilePicked(fileName, template)
     }
 
     override fun readScriptFile(scriptPath: String) {

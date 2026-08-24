@@ -111,6 +111,8 @@ dependencies {
     implementation(project(":binaryProvider"))
     implementation(project(":plugins-shared"))
     implementation(project(":mcp:core"))
+    // Script tabs run through the shared sandboxed scripting runtime.
+    implementation(project(":mcp:scripting"))
     implementation(project(":graalwasm:wasmprinter"))
     implementation(project(":graalwasm:common"))
     implementation(project(":graalwasm:wat2wasm"))
@@ -377,8 +379,18 @@ tasks.named("check") {
     dependsOn(tasks.named("verifyHexanaToolsetUpToDate"))
 }
 
+// The example scripts offered by the Add Script Tab dialog live once at the repo
+// root and are bundled by both plugins, so the two dialogs cannot drift apart.
+tasks.named<ProcessResources>("processResources") {
+    from(rootProject.layout.projectDirectory.dir("examples/scripting")) {
+        into("hexana-scripts")
+        include("*.js")
+    }
+}
+
 tasks.register<JavaExec>("generateHexanaScriptingDts") {
-    description = "Generates hexana-scripting.d.ts into idea-plugin resources and vscode-plugin src."
+    description = "Generates the curated and raw scripting .d.ts references into " +
+        "idea-plugin resources and vscode-plugin src."
     group = "generation"
 
     mainClass.set("org.jetbrains.hexana.ui.panel.GenerateScriptingDtsKt")
@@ -391,7 +403,9 @@ tasks.register<JavaExec>("generateHexanaScriptingDts") {
     })
     outputs.files(
         layout.projectDirectory.file("src/main/resources/hexana-scripting.d.ts"),
+        layout.projectDirectory.file("src/main/resources/hexana-scripting-raw.d.ts"),
         rootProject.layout.projectDirectory.file("vscode-plugin/hexana-scripting.d.ts"),
+        rootProject.layout.projectDirectory.file("vscode-plugin/hexana-scripting-raw.d.ts"),
     )
 
     dependsOn(tasks.named("classes"))

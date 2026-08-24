@@ -202,6 +202,7 @@ fun HexanaPanel(
                         provider = provider,
                         onRequestRefresh = { host.readScriptFile(st.path) },
                         scriptExecution = scriptExecution,
+                        binaryFileName = fileName,
                     )
                 })
             }
@@ -355,9 +356,13 @@ fun HexanaPanel(
                 onBrowse = {
                     host.pickScriptFile()
                 },
-                onOpenDts = {
-                    host.openDts()
+                onCreateFromTemplate = { fileName, template ->
+                    host.createScriptFromTemplate(fileName, template)
                 },
+                onOpenDts = { raw ->
+                    host.openDts(raw)
+                },
+                showExamples = capabilities.bundledScriptExamples,
                 onConfirm = { path ->
                     showAddScriptDialog = false
                     onScriptTabConfirmed(path, dialogPickedContent)

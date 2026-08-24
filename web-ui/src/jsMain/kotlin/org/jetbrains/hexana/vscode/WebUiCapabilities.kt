@@ -9,6 +9,13 @@ import org.jetbrains.hexana.providers.sbom.vuln.SbomVulnerabilityReport
  */
 class WebUiCapabilities(
     val sbomVulnerabilityCheck: SbomVulnerabilityContribution? = null,
+    /**
+     * Whether the host can supply the bundled example scripts offered by the
+     * Add Script Tab dialog. False in the browser build, which ships no example
+     * files and cannot read from disk — the starter template still works there,
+     * since its source is compiled in.
+     */
+    val bundledScriptExamples: Boolean = false,
 )
 
 class SbomVulnerabilityContribution(

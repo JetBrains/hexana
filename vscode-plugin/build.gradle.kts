@@ -19,6 +19,21 @@ val syncGraalvmRunner = tasks.register<Sync>("syncGraalvmRunner") {
     into(layout.projectDirectory.dir("graalvm-runner"))
 }
 
+// --- Scripting examples ------------------------------------------------------
+// The example scripts offered by the Add Script Tab dialog live once at the repo
+// root, in `examples/scripting/`, and are bundled by both plugins so that the two
+// dialogs cannot offer different examples.
+
+val syncScriptExamples = tasks.register<Sync>("syncScriptExamples") {
+    group = "distribution"
+    description = "Copies examples/scripting/*.js into hexana-scripts/ for VSIX packaging."
+
+    from(rootProject.layout.projectDirectory.dir("examples/scripting")) {
+        include("*.js")
+    }
+    into(layout.projectDirectory.dir("hexana-scripts"))
+}
+
 tasks.register("assembleExtensionAssets") {
     group = "distribution"
     description = "Builds all generated assets required before packaging the VS Code extension."
@@ -27,5 +42,8 @@ tasks.register("assembleExtensionAssets") {
         ":vscode-plugin:extension-lib:jsBrowserProductionWebpack",
         ":vscode-plugin:webview:jsBrowserProductionWebpack",
         syncGraalvmRunner,
+        syncScriptExamples,
+        // The curated and raw .d.ts references the dialog links to.
+        ":idea-plugin:generateHexanaScriptingDts",
     )
 }

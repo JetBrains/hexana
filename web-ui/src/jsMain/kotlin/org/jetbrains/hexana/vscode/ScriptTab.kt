@@ -5,6 +5,9 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.providers.*
+import org.jetbrains.hexana.shared.scripting.ScriptOutput
+import org.jetbrains.hexana.shared.scripting.ScriptValueJsBinder
+import org.jetbrains.hexana.shared.scripting.scriptBinaryApi
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import kotlin.js.Promise
 
@@ -44,8 +47,14 @@ private fun detectDelimiter(lines: List<String>): Char? {
 }
 
 /**
- * Wraps a Kotlin/JS value into a plain JS object so that user scripts can
- * access properties by their original Kotlin names (e.g. `binary.strings`).
+ * Wraps a format-specific provider value into a plain JS object so that user
+ * scripts can access properties by their original Kotlin names.
+ *
+ * This is the implementation of the `binary.raw` escape hatch and of the
+ * fall-through for members the curated surface does not define — not the primary
+ * script API. The curated, format-agnostic surface comes from
+ * [scriptBinaryApi] via [ScriptValueJsBinder]; only shapes that cannot be
+ * enumerated in common code are wrapped here.
  *
  * Kotlin/JS IR mangles property names to short tokens (e.g. `w3u` for `strings`),
  * so passing the Kotlin object directly to a `new Function(...)` body would fail
@@ -315,7 +324,7 @@ private fun wrapUnknownObject(value: Any?): dynamic {
 }
 
 /**
- * Number of `print()` calls between automatic yields to the browser
+ * Number of output calls between automatic yields to the browser
  * event loop. Keeping this small enough lets the polling coroutine in
  * [ScriptTabContent] drain accumulated lines into the Compose state,
  * so the first rows appear almost immediately while the rest of the
@@ -324,37 +333,47 @@ private fun wrapUnknownObject(value: Any?): dynamic {
 private const val YIELD_EVERY = 100
 
 /**
- * Executes a JavaScript script string with `binary` (BinaryProvider) and
- * `print` (line collector) bindings on the main thread.
+ * Matches a call to one of the output globals so it can be turned into a
+ * `yield`. All three have to be covered: a script that only builds a table with
+ * `table`/`row` would otherwise never yield and would freeze the webview until
+ * it finished.
+ */
+private val OUTPUT_CALL_REGEX = Regex("""(?<!\w)(print|table|row)\s*\(""")
+
+/**
+ * Executes a user script with the shared Hexana scripting globals — `binary`
+ * from [scriptBinaryApi] plus `print`, `table` and `row` from [ScriptOutput] —
+ * on the main thread.
  *
- * The lazily-wrapped binary object is passed directly — no upfront
- * materialization — so only the properties the script accesses are
- * resolved, and the first output lines appear almost immediately.
+ * The globals are built by [ScriptValueJsBinder] from the same definition the
+ * JVM runtime binds, so a script written for the IDE or the CLI behaves the same
+ * here. `binary.raw`, and any member the curated surface does not define, resolve
+ * through [wrapForJs] against the format-specific provider.
  *
- * The user script is wrapped in a JS generator function where every
- * `print(...)` call is replaced with `yield print(...)`. An async
- * driver loop steps through the generator, yielding to the browser
- * event loop every [YIELD_EVERY] steps via `setTimeout(0)`. This
- * lets the polling coroutine drain accumulated lines into the UI
- * while the script is still running.
+ * Nothing is materialized up front: only the properties the script actually
+ * touches are resolved, so the first output lines appear almost immediately.
+ *
+ * The user script is wrapped in a JS generator function where every output call
+ * is replaced with `yield <call>`. An async driver loop steps through the
+ * generator, yielding to the browser event loop every [YIELD_EVERY] steps via
+ * `setTimeout(0)`, which lets the polling coroutine drain accumulated lines into
+ * the UI while the script is still running.
  *
  * Returns a [Promise] that resolves to `null` on success or an error message.
  */
 private fun executeScriptAsync(
     scriptContent: String,
     provider: BinaryProvider,
+    fileName: String?,
     onLine: (String) -> Unit,
 ): Promise<String?> {
     return Promise { resolve, _ ->
-        val wrappedBinary = wrapForJs(provider)
-        val printFn: (dynamic) -> Unit = { text ->
-            onLine(text.toString())
-        }
+        val binder = ScriptValueJsBinder(::wrapForJs)
+        val output = binder.outputBindings(ScriptOutput(onLine))
 
-        // Transform print(...) calls into yield print(...) so the
-        // generator pauses after each print, giving the async driver
-        // a chance to yield to the event loop periodically.
-        val generatorBody = scriptContent.replace(Regex("""(?<!\w)print\s*\("""), "yield print(")
+        val generatorBody = scriptContent.replace(OUTPUT_CALL_REGEX) { match ->
+            "yield ${match.groupValues[1]}("
+        }
 
         @Suppress("UNUSED_VARIABLE")
         val yieldEvery = YIELD_EVERY
@@ -363,10 +382,16 @@ private fun executeScriptAsync(
         val genBody = generatorBody
 
         @Suppress("UNUSED_VARIABLE")
-        val binary = wrappedBinary
+        val binary = binder.toJs(scriptBinaryApi(provider, fileName))
 
         @Suppress("UNUSED_VARIABLE")
-        val print = printFn
+        val print = output.getValue("print")
+
+        @Suppress("UNUSED_VARIABLE")
+        val table = output.getValue("table")
+
+        @Suppress("UNUSED_VARIABLE")
+        val row = output.getValue("row")
 
         // Create a GeneratorFunction, run it, and drive it from an
         // async loop that yields to the event loop every YIELD_EVERY steps.
@@ -375,12 +400,12 @@ private fun executeScriptAsync(
                 var GeneratorFunction = Object.getPrototypeOf(function*(){}).constructor;
                 var gen;
                 try {
-                    gen = new GeneratorFunction('binary', 'print', genBody);
+                    gen = new GeneratorFunction('binary', 'print', 'table', 'row', genBody);
                 } catch(e) {
                     resolve(e.message || 'Script compilation failed');
                     return;
                 }
-                var iter = gen(binary, print);
+                var iter = gen(binary, print, table, row);
                 var count = 0;
                 function step() {
                     try {
@@ -415,6 +440,7 @@ internal fun ScriptTabContent(
     provider: BinaryProvider,
     onRequestRefresh: () -> Unit,
     scriptExecution: ScriptExecution? = null,
+    binaryFileName: String? = null,
 ) {
     val outputLines = remember { mutableStateListOf<String>() }
     var isRunning by remember { mutableStateOf(false) }
@@ -450,7 +476,7 @@ internal fun ScriptTabContent(
         }
         val handle = scriptExecution?.start(scriptContent, ::acceptLine, ::complete)
             ?: run {
-                executeScriptAsync(scriptContent, provider, ::acceptLine).then(::complete)
+                executeScriptAsync(scriptContent, provider, binaryFileName, ::acceptLine).then(::complete)
                 NoopScriptExecutionHandle
             }
 

@@ -314,12 +314,27 @@ fun postOpenHttpBodyToHost(fileName: String, data: ByteArray, contentType: Strin
 }
 
 /**
- * Asks the extension host to open the pre-built `hexana-scripting.d.ts`
- * API reference in a new VS Code editor tab.
+ * Asks the extension host to open a pre-built scripting reference in a new
+ * VS Code editor tab: the curated `hexana-scripting.d.ts`, or with [raw] set the
+ * format-specific `hexana-scripting-raw.d.ts` for `binary.raw`.
  */
-fun postOpenDtsToHost() {
+fun postOpenDtsToHost(raw: Boolean = false) {
     val msg = js("{}")
     msg.type = "open-dts"
+    msg.raw = raw
+    vscodeApi.postMessage(msg)
+}
+
+/**
+ * Asks the extension host to create a runnable script — either from the inline
+ * [template] or by copying the bundled example named [fileName] — open it in an
+ * editor, and reply with `script-file-picked`.
+ */
+fun postCreateScriptFromTemplateToHost(fileName: String, template: String?) {
+    val msg = js("{}")
+    msg.type = "create-script-from-template"
+    msg.fileName = fileName
+    if (template != null) msg.template = template
     vscodeApi.postMessage(msg)
 }
 
@@ -404,11 +419,13 @@ class VscodeHost : Host {
     override fun openUrl(url: String) = postOpenUrlToHost(url)
     override fun openModule(moduleIndex: Int, fileName: String, data: ByteArray) =
         postOpenModuleToHost(moduleIndex, fileName, data)
-    override fun openDts() = postOpenDtsToHost()
+    override fun openDts(raw: Boolean) = postOpenDtsToHost(raw)
     override fun openHttpBody(fileName: String, bodyBytes: ByteArray, httpContentType: String?, httpContentEncoding: String?) =
         postOpenHttpBodyToHost(fileName, bodyBytes, httpContentType, httpContentEncoding)
     override fun openTextFile(fileName: String, content: String) = postOpenTextFileToHost(fileName, content)
     override fun pickScriptFile() = postPickScriptFileToHost()
+    override fun createScriptFromTemplate(fileName: String, template: String?) =
+        postCreateScriptFromTemplateToHost(fileName, template)
     override fun readScriptFile(scriptPath: String) = postReadScriptFileToHost(scriptPath)
     override fun scriptTabAdded(scriptPath: String) = postScriptTabAddedToHost(scriptPath)
     override fun scriptTabRemoved(scriptPath: String) = postScriptTabRemovedToHost(scriptPath)

@@ -30,6 +30,23 @@ data class HexanaScriptLimits(
         require(maxInlineBinaryBytes > 0) { "maxInlineBinaryBytes must be greater than 0" }
         require(maxFileBinaryBytes > 0) { "maxFileBinaryBytes must be greater than 0" }
     }
+
+    companion object {
+        /**
+         * Limits for a script tab the user is watching.
+         *
+         * The 3 s default suits an MCP or CLI call that must answer promptly, but
+         * it is far too short for an interactive analysis script over a large
+         * binary. The output caps are generous rather than absent: the editor
+         * renders every line into a table, so an unbounded script could otherwise
+         * exhaust the IDE's heap.
+         */
+        fun interactive(): HexanaScriptLimits = HexanaScriptLimits(
+            timeoutMillis = 60_000,
+            maxOutputLines = 200_000,
+            maxOutputBytes = 32 * 1024 * 1024,
+        )
+    }
 }
 
 enum class HexanaScriptStatus {

@@ -54,7 +54,19 @@ A tabbed analysis panel with views depending on the binary type. All tables supp
 
 ### Scriptable Info Tabs
 
-Write custom JavaScript analysis scripts that use `binary` to access binary data and `print` to display results. Add a script tab via the "+" button — a dialog with instructions and an API reference is shown. CSV and TSV output is rendered as tables.
+Write custom JavaScript analysis scripts against the open binary. Add one via the "+" button; the dialog can create a runnable script from a template or from a bundled example, so you never start from an empty file.
+
+The API is the same in the VS Code extension, the IntelliJ plugin, and the `run-script` CLI:
+
+- `print(...values)` for text; `table(...columns)` and `row(...cells)` for a searchable table.
+- `binary.format` / `formatName` / `name` / `size` — identity, with a stable format id you can branch on.
+- `binary.bytes` — `at`, `slice`, `hex`, `ascii`, `u8`/`u16`/`u32`, `indexOf`.
+- `binary.structure` — top-level regions (Wasm sections, ELF sections, Mach-O segments, …) with offsets and sizes.
+- `binary.strings`, `binary.sizeAnalysis`.
+- `binary.tabs` and `binary.tab(name)` — read any table the editor itself shows, using the same column names.
+- `binary.raw` — the format-specific provider, for anything the curated surface does not cover.
+
+The dialog links a full reference (`hexana-scripting.d.ts`) and the format-specific types behind `binary.raw`. Plain CSV/TSV output is still rendered as a table.
 
 ### Binary Comparison
 

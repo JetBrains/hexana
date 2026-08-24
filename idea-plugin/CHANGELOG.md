@@ -8,6 +8,8 @@
 - The **Wasm** debugger tab now works for component-model binaries: every embedded core module is indexed on its own, so the current-instruction highlight, per-instruction stepping and operand stack follow the module the runtime reports the stop in instead of assuming a single core module.
 
 ### Changed
+- custom script tabs got a real API. `binary` is now format-agnostic — `format`, `formatName`, `name`, `size`, `structure` (top-level regions of any format), `strings`, `sizeAnalysis`, and `bytes` with `at`/`slice`/`hex`/`ascii`/`u8`/`u16`/`u32`/`indexOf` — plus `binary.tabs` and `binary.tab(name)`, which read any table the editor itself renders using the same column headers. Output adds `table(...columns)` and `row(...cells)` so tables no longer depend on hand-built CSV. The same globals now behave identically in the IntelliJ plugin, the VS Code extension, and the `run-script` CLI, which previously exposed three different `binary` objects. Existing scripts keep working: format-specific members still resolve on `binary`, and `binary.raw` is the explicit escape hatch
+- the Add Script Tab dialog can now create a runnable script for you — from a starter template or one of four bundled examples — instead of requiring you to know the API before writing the first line. The API listing and the bundled `hexana-scripting.d.ts` are generated from one source, and the reference is 8 KB of documented, format-independent members rather than a 275 KB reflection dump of internal types (that dump is still shipped, as `hexana-scripting-raw.d.ts`, for `binary.raw`)
 
 ### Deprecated
 
@@ -18,6 +20,7 @@
 - The **Debug Info** tab reported "Debug info present, but Hexana did not resolve any source line rows" for GCC-built ELFs even though `.debug_info` and `.debug_line` were present (every Zephyr/ZMK Cortex-M firmware, DWARF4 and DWARF5 alike). GCC emits DWARF version 2/3 line-program headers even in `-gdwarf-4/5` builds, and the line parser misread them with the version 4 layout, failing on the first such unit and discarding the whole section (clang and rustc emit v4/v5 headers, which always worked). Version 2/3 headers now parse, an unparseable line-table unit is skipped instead of taking the rest of the section down with it, and address-to-line resolution matches addr2line.
 
 ### Security
+- script tabs now run in the same sandbox as the `run-script` CLI and the MCP tool. Previously the IntelliJ script tab built its own GraalJS context with full host access and host class lookup enabled, so a `.js` file added as a script tab could call arbitrary Java. Script tabs now have no host class lookup, no file IO, no process or thread creation, no native access, a timeout, and bounded output
 
 ## 0.18 - 2026-08-19
 

@@ -654,7 +654,11 @@ private fun Server.registerRunBinaryScriptTool(handlers: HexanaToolHandlers) {
     description = """
   |Run a Hexana JavaScript script over a Wasm or native binary.
   |Use this only in the dedicated scripting profile or explicit CLI command when a small custom script is needed over the loaded `binary` object.
-  |The script runtime exposes the existing globals `binary` and `print(text)`; it does not expose host classes, file IO, process creation, or native access.
+  |The runtime exposes `binary` plus `print(...values)`, and `table(...columns)`/`row(...cells)` for tab-separated tabular output.
+  |`binary` is format-agnostic: `format`, `formatName`, `name`, `size`, `bytes`, `structure`, `strings`, `sizeAnalysis`, `tabs`, `tab(name)`, `raw`.
+  |`binary.tabs` lists every table Hexana renders for the binary and `binary.tab(name)` reads one; `binary.bytes` has `at`, `slice`, `hex`, `ascii`, `u8`/`u16`/`u32`, and `indexOf`.
+  |`binary.raw` is the format-specific provider, and members not listed above resolve against it too.
+  |It does not expose host classes, file IO, process creation, or native access.
   |Pass exactly one binary source and exactly one script source, either `scriptPath` or inline `script`.
   """.trimMargin(),
     inputSchema = ToolSchema(

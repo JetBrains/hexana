@@ -38,7 +38,8 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - `mcp/core/`: JVM-only Wasm MCP query/model library extracted from the plugin. It contains pure MCP-facing Wasm
   analysis logic, not IntelliJ registration or file-system integration.
 - `mcp/scripting/`: JVM-only GraalJS scripting runtime for running Hexana scripts over loaded binary providers. It owns
-  script source loading, script-output limits, sandboxed `binary`/`print` bindings, and structured script results.
+  script source loading, script-output limits, output streaming, structured script results, and the GraalJS adapter for
+  the shared script surface. The surface itself (`binary`, `print`/`table`/`row`) is defined in `plugins-shared`.
 - `mcp/server/`: standalone Kotlin/JVM MCP runtime that exposes `mcp/core` over `stdio` and HTTP transports.
 - `mcp/tools-generator/`: source of truth for Hexana semantic tool contracts, independent IDEA, standalone MCP, and
   CLI surface authorities, plus MCPB inventory derived from the standalone default profile (DSL + KotlinPoet generators
@@ -60,7 +61,7 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - `disassembly/llvm-objdump/`: JVM `llvm-objdump` command construction, candidate discovery, probing, execution result handling, output parsing, and conversion into the core disassembly model.
 - `disassembly/native-fixtures/`: Docker-based generator for committed `llvm-objdump` disassembly snapshots built from `parsing/native-fixtures/test-data`.
 - `binaryProvider/`: thin provider layer that wraps parsed Wasm and native binary data for the UI and navigation features. Native providers are a sealed hierarchy (`ElfBinaryProvider`, `MachOBinaryProvider`, `FatMachOBinaryProvider`, `PeBinaryProvider`, `CoffBinaryProvider`, `ArchiveBinaryProvider`) under `NativeBinaryProvider`; format detection is done by `NativeBinaryFormatDetector` and the factory `nativeOrGenericBinaryProvider`.
-- `plugins-shared/`: Kotlin Multiplatform shared logic (no UI framework) used by both `idea-plugin` and `vscode-plugin:webview` — component description formatting, type labels, signature resolution, WAT text generation.
+- `plugins-shared/`: Kotlin Multiplatform shared logic (no UI framework) used by both `idea-plugin` and `vscode-plugin:webview` — component description formatting, type labels, signature resolution, WAT text generation, table tab descriptors, and the custom-script-tab API surface (`shared/scripting/`) that every host binds.
 - `cli/runtime/`: framework-neutral CLI runtime contracts for input conversion, semantic execution, output format selection, rendered payloads, source selections, and runtime context. It must not depend on MCP SDK, Ktor, Clikt, analytics, IntelliJ APIs, or server modules.
 - `cli/metadata/`: neutral generated CLI catalog and release-product metadata consumed by split CLI products. It depends only on `cli:runtime` and generated metadata must stay free of MCP SDK, Ktor, Clikt, analytics, IntelliJ APIs, and `mcp:server`.
 - `cli/core/`: neutral CLI command orchestration and adapters for the standard `hexana-cli` product.

@@ -570,7 +570,13 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             } else if (message.type === "open-http-body") {
                 this.openHttpBody(document, message as any);
             } else if (message.type === "open-dts") {
-                this.openDtsReference();
+                this.openDtsReference(message.raw === true);
+            } else if (message.type === "create-script-from-template") {
+                this.createScriptFromTemplate(
+                    webviewPanel,
+                    message.fileName as string,
+                    message.template as string | undefined,
+                );
             } else if (message.type === "pick-script-file") {
                 this.pickScriptFile(document, webviewPanel);
             } else if (message.type === "read-script-file") {
@@ -1204,12 +1210,15 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
     // -------------------------------------------------------------------
 
     /**
-     * Opens the pre-built `hexana-scripting.d.ts` API reference in a new
-     * VS Code editor tab.
+     * Opens a pre-built scripting reference in a new VS Code editor tab.
+     *
+     * @param raw when true, opens the format-specific type dump for
+     *   `binary.raw` instead of the curated API reference
      */
-    private async openDtsReference(): Promise<void> {
+    private async openDtsReference(raw: boolean = false): Promise<void> {
         try {
-            const dtsPath = path.join(this.context.extensionPath, "hexana-scripting.d.ts");
+            const fileName = raw ? "hexana-scripting-raw.d.ts" : "hexana-scripting.d.ts";
+            const dtsPath = path.join(this.context.extensionPath, fileName);
             const dtsUri = vscode.Uri.file(dtsPath);
             const bytes = await vscode.workspace.fs.readFile(dtsUri);
             const content = new TextDecoder("utf-8").decode(bytes);
@@ -1225,6 +1234,74 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to open API reference: ${err}`);
         }
+    }
+
+    /**
+     * Creates a runnable script from the starter template or a bundled example,
+     * opens it in an editor, and reports it back to the webview as if the user
+     * had picked it in the file dialog.
+     *
+     * Starting from a blank `.js` file is the main obstacle to writing a script
+     * tab, because it requires knowing the API before typing anything. A file
+     * that already produces output turns that into editing lines that work.
+     *
+     * @param fileName file name to create, e.g. `hexana-script.js`
+     * @param template inline starter source; when omitted, the bundled example
+     *   named [fileName] is copied instead
+     */
+    private async createScriptFromTemplate(
+        webviewPanel: vscode.WebviewPanel,
+        fileName: string,
+        template?: string,
+    ): Promise<void> {
+        try {
+            const content = template ?? await this.readBundledExample(fileName);
+            const folder = vscode.workspace.workspaceFolders?.[0];
+            const directory = folder
+                ? vscode.Uri.joinPath(folder.uri, ".hexana", "scripts")
+                : vscode.Uri.file(path.join(this.context.globalStorageUri.fsPath, "scripts"));
+            await vscode.workspace.fs.createDirectory(directory);
+
+            const target = await this.uniqueScriptUri(directory, fileName);
+            await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(content));
+
+            const doc = await vscode.workspace.openTextDocument(target);
+            await vscode.window.showTextDocument(doc, {
+                viewColumn: vscode.ViewColumn.Beside,
+                preserveFocus: true,
+                preview: false,
+            });
+            webviewPanel.webview.postMessage({
+                type: "script-file-picked",
+                scriptPath: target.fsPath,
+                scriptContent: content,
+            });
+        } catch (err) {
+            vscode.window.showErrorMessage(`Failed to create script: ${err}`);
+        }
+    }
+
+    private async readBundledExample(fileName: string): Promise<string> {
+        const uri = vscode.Uri.file(path.join(this.context.extensionPath, "hexana-scripts", fileName));
+        return new TextDecoder("utf-8").decode(await vscode.workspace.fs.readFile(uri));
+    }
+
+    /** Never clobbers a script the user may have already edited. */
+    private async uniqueScriptUri(directory: vscode.Uri, fileName: string): Promise<vscode.Uri> {
+        const extension = path.extname(fileName) || ".js";
+        const base = path.basename(fileName, extension);
+        for (let index = 1; index < 1000; index++) {
+            const candidate = vscode.Uri.joinPath(
+                directory,
+                index === 1 ? `${base}${extension}` : `${base}-${index}${extension}`,
+            );
+            try {
+                await vscode.workspace.fs.stat(candidate);
+            } catch {
+                return candidate;
+            }
+        }
+        throw new Error(`Could not find an unused name for ${fileName}`);
     }
 
     /**

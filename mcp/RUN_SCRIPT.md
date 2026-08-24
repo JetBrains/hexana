@@ -47,8 +47,45 @@ hexana-cli-script run-script sample.bin \
   --format json
 ```
 
-The script runtime exposes only the Hexana globals `binary` and `print(...)`. `binary.bytes` provides indexed access to
-the loaded bytes, and `print(...)` appends text lines to the captured output.
+## Script API
+
+The runtime exposes the same globals here, in the IntelliJ plugin, and in the VS Code extension, so a script written for
+one runs unchanged in the others. The surface is defined once in
+`plugins-shared/src/commonMain/kotlin/org/jetbrains/hexana/shared/scripting/`.
+
+Output:
+
+- `print(...values)` — appends a line, joining the arguments with a space.
+- `table(...columns)` / `row(...cells)` — tab-separated tabular output. In the plugins this renders as a searchable
+  table; here it is just lines.
+
+`binary` — the loaded binary, with the same members for every format:
+
+| Member | Description |
+| --- | --- |
+| `format`, `formatName`, `name`, `size` | Identity. `format` is a stable id such as `wasm`, `elf`, `macho`, `pe`, `zip`. |
+| `bytes` | `at`, `slice`, `hex`, `ascii`, `u8`/`u16`/`u32`, `indexOf`, plus `size`/`lastIndex`/`indices`/`get`. |
+| `structure` | Top-level regions — Wasm sections, ELF sections, Mach-O segments — as `{name, offset, size, tab}`. |
+| `strings` | Extracted strings as `{value, offset, size, index, tag}`. |
+| `sizeAnalysis` | Size breakdown tree, or `null` for formats without size profiling. |
+| `tabs` / `tab(name)` | Every table the plugins render for the binary, read by name with the same column headers. |
+| `raw` | Escape hatch: the format-specific provider. Members not listed above resolve against it too. |
+
+For the full reference including signatures, see `vscode-plugin/hexana-scripting.d.ts` (curated) and
+`vscode-plugin/hexana-scripting-raw.d.ts` (the format-specific types behind `binary.raw`). Runnable examples live in
+`examples/scripting/`.
+
+The runtime does not expose host classes, file IO, process creation, thread creation, or native access.
+
+Example — the largest regions of a binary, as a table:
+
+```bash
+hexana-cli-script run-script sample.bin --script-text '
+  table("Region", "Offset", "Size");
+  for (const r of binary.structure.slice().sort((a, b) => b.size - a.size)) {
+    row(r.name, r.offset, r.size);
+  }'
+```
 
 ## Path Safety
 
