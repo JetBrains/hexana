@@ -1,0 +1,29 @@
+{
+  "sample": "lld-baremetal",
+  "board": null,
+  "linker": "lld",
+  "builtAt": "2026-08-23T00:00:00Z",
+  "sizeTool": "/Users/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-size",
+  "size": {"text": 116, "data": 256, "bss": 8192, "dec": 8564},
+  "romReport": null,
+  "ramReport": null,
+  "memoryConfiguration": null,
+  "dtsMemoryNodes": null,
+  "lldMapDialect": {
+    "header": "     VMA      LMA     Size Align Out     In      Symbol",
+    "note": "LLD does NOT emit a 'Memory Configuration' block. The map starts directly with a column header line (VMA LMA Size Align Out In Symbol) followed by section and symbol rows. Each section row shows VMA and LMA; for .data the VMA (0x20000000) differs from the LMA (0x08000074), proving LMA-in-FLASH / VMA-in-RAM."
+  },
+  "dataSegmentLmaVma": {
+    "section": ".data",
+    "vma": "0x20000000",
+    "lma": "0x08000074",
+    "sizeBytes": 256,
+    "note": "readelf -l confirms p_vaddr=0x20000000 != p_paddr=0x08000074 for the LOAD segment containing .data"
+  },
+  "linkerScript": "linker.ld",
+  "memoryRegionsFromScript": [
+    {"name": "FLASH", "origin": "0x08000000", "length": "0x00040000", "attributes": "rx"},
+    {"name": "RAM",   "origin": "0x20000000", "length": "0x00010000", "attributes": "rwx"}
+  ],
+  "notes": "LLD dialect sample. Compiled with /Users/user/.swiftly/bin/clang (LLVM 21) --target=armv7em-none-eabi, linked with /Users/user/.swiftly/bin/ld.lld. LLD maps have no 'Memory Configuration' block; memory regions must be parsed from the linker script or inferred from VMA/LMA ranges in the map. The Hexana parser needs to handle this dialect separately from GNU ld. arm-zephyr-eabi-size: text=116 data=256 bss=8192 dec=8564."
+}

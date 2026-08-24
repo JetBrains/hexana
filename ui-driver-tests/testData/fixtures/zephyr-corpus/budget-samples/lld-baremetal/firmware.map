@@ -1,0 +1,31 @@
+     VMA      LMA     Size Align Out     In      Symbol
+ 8000000  8000000       40     4 .vectors
+ 8000000  8000000       40     4         firmware.o:(.vectors)
+ 8000000  8000000       40     1                 vectors
+ 8000040  8000040       18     4 .ARM.exidx
+ 8000040  8000040       18     4         <internal>:(.ARM.exidx)
+ 8000058  8000058       1c     4 .text
+ 8000058  8000058       1c     4         firmware.o:(.text)
+ 8000058  8000058        0     1                 $t
+ 8000059  8000059        e     1                 _start
+ 8000067  8000067        e     1                 compute
+20000000  8000074      100     4 .data
+20000000  8000074        0     1         __data_start = .
+20000000  8000074      100     4         firmware.o:(.data)
+20000000  8000074      100     1                 initialized_data
+20000100  8000174        0     1         __data_end = .
+20000100 20000100     2000     1 .bss
+20000100 20000100        0     1         __bss_start = .
+20000100 20000100     2000     1         firmware.o:(.bss)
+20000100 20000100     2000     1                 zero_buf
+20002100 20002100        0     1         __bss_end = .
+       0        0       e1     1 .comment
+       0        0       e1     1         <internal>:(.comment)
+       0        0       47     1 .ARM.attributes
+       0        0       47     1         firmware.o:(.ARM.attributes)
+       0        0       c0     4 .symtab
+       0        0       c0     4         <internal>:(.symtab)
+       0        0       59     1 .shstrtab
+       0        0       59     1         <internal>:(.shstrtab)
+       0        0       6e     1 .strtab
+       0        0       6e     1         <internal>:(.strtab)

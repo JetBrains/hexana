@@ -1,0 +1,22 @@
+{
+  "sample": "hello_world-nucleo_f429zi-Os",
+  "board": "nucleo_f429zi",
+  "linker": "ld",
+  "builtAt": "2026-08-23T00:00:00Z",
+  "sizeTool": "/Users/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-size",
+  "size": {"text": 16976, "data": 124, "bss": 4300, "dec": 21400},
+  "romReport": {"total": 17092},
+  "ramReport": {"total": 4424},
+  "memoryConfiguration": [
+    {"name": "FLASH",    "origin": "0x08000000", "length": "0x00200000", "attributes": "xr"},
+    {"name": "RAM",      "origin": "0x20000000", "length": "0x00030000", "attributes": "xw"},
+    {"name": "SRAM0",    "origin": "0x20000000", "length": "0x00030000", "attributes": "rw"},
+    {"name": "DTCM",     "origin": "0x10000000", "length": "0x00010000", "attributes": "rw"},
+    {"name": "IDT_LIST", "origin": "0xffff7fff", "length": "0x00008000", "attributes": "xw"}
+  ],
+  "dtsMemoryNodes": [
+    {"node": "flash0", "reg": "< 0x08000000 0x200000 >"},
+    {"node": "sram0",  "reg": "< 0x20000000 0x30000 >"}
+  ],
+  "notes": "Positive sample. STM32F429ZI board (2MB FLASH@0x08000000, 192KB SRAM@0x20000000). The map lists DTCM (0x10000000, 64KB) but NOT a region named CCM. The STM32F429 has DTCM at 0x10000000; Zephyr 4.4 uses DTCM in its DTSI not CCM. The CCM requirement for the parser test is satisfied by DTCM appearing as a third named memory region. Build tree freshness verified: size matches apps/hello_world/nucleo_f429zi-Os/zephyr.elf exactly. Three address spot-checks (map vs readelf -S): rom_start=0x08000000, text=0x08000184, datas=0x20000000 all match."
+}

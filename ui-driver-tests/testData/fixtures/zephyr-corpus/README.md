@@ -31,6 +31,47 @@ case.
 All Zephyr and ZMK sources are Apache-2.0. The binaries are included solely as
 test inputs.
 
+## budget-samples/
+
+Memory-budget test fixtures, used by the `MemoryBudgetCorpusAcceptanceTest`,
+`LinkerMapRegionsTest`, `DtsRegionsTest`, and `FdtRegionsTest` suites in
+`binaryProvider/src/jvmTest/`.
+
+Provenance: corpus `budget-samples/` directory (same west workspace as the
+`apps/` and `external/` ELFs above).  ELFs are gzip-compressed (`.elf.gz`);
+maps, DTS files, and JSON reports are stored raw.
+
+### Positive samples (ELF + map + dts + rom.json + ram.json)
+
+- `hello_world-nrf52840dk-Os/` — Zephyr hello_world for nRF52840 DK at `-Os`.
+  FLASH 1 MB @ 0x0, RAM 256 KB @ 0x20000000.
+  romReport.total=21380, ramReport.total=4578.
+- `peripheral_hr-nrf52840dk-Os/` — Zephyr Bluetooth HRS app, same board.
+  romReport.total=162880, ramReport.total=28473.
+- `hello_world-nucleo_f429zi-Os/` — Zephyr hello_world for STM32F429ZI Nucleo at `-Os`.
+  FLASH 2 MB @ 0x08000000, RAM 192 KB @ 0x20000000, DTCM 64 KB @ 0x10000000.
+  romReport.total=17092, ramReport.total=4424.
+
+### Overlay sample
+
+- `hello_world-nrf52840dk-overlay/` — Two builds of hello_world with the same source:
+  `stock/` has FLASH 1 MB, `overlay/` uses `flash_overlay.overlay` to reduce FLASH to 512 KB.
+  Exercises map/DTS capacity difference detection.
+
+### Negative / edge-case samples
+
+- `no-siblings/` — Bare ELF, no map or DTS.  Tests LOAD_SEGMENTS fallback.
+- `stale-map/` — Os ELF paired with an O2 map.  Tests `linkerMapMatchesElf` returning false.
+- `no-memconfig-map/` — Real map with the `Memory Configuration` block removed.
+  Tests `parseLinkerMapRegions` returning an empty list gracefully.
+- `lld-baremetal/` — LLD-linked baremetal Cortex-M firmware (LLVM 21 ld.lld).
+  LLD emits no `Memory Configuration` block; tests that the parser returns empty and
+  the budget falls back to manually-supplied regions.  Includes `firmware.map`,
+  `firmware.c`, and `linker.ld`.
+- `embedded-fdt/` — Minimal ELF with a hand-crafted FDT blob embedded in `.rodata`
+  at file offset 0x10004.  Tests `findFdtBlob` and `parseFdtMemoryRegions`.
+  Rebuilt via `python3 make_fdt.py`.
+
 ## Sibling fixture directories
 
 - `../aprofile/mixed-aprofile.elf.gz`: A-profile mixed ARM/Thumb regression

@@ -1,0 +1,27 @@
+{
+  "sample": "embedded-fdt",
+  "board": null,
+  "linker": "lld",
+  "builtAt": "2026-08-23T00:00:00Z",
+  "sizeTool": null,
+  "size": null,
+  "romReport": null,
+  "ramReport": null,
+  "memoryConfiguration": null,
+  "dtsMemoryNodes": null,
+  "fdt": {
+    "magicOffsetInElf": 65540,
+    "magicOffsetHex": "0x10004",
+    "blobSizeBytes": 211,
+    "version": 17,
+    "embeddedIn": ".rodata section",
+    "elfSection": ".rodata at addr=0x08000004 (file offset 0x10004)",
+    "memoryNode": "memory@40000000",
+    "memoryOrigin": "0x40000000",
+    "memorySize": "0x8000000",
+    "memorySizeDec": 134217728,
+    "deviceType": "memory",
+    "note": "Blob built by make_fdt.py (no dtc). Header: magic=0xd00dfeed version=17. Root node: #address-cells=1, #size-cells=1. Child: memory@40000000 { device_type='memory'; reg=<0x40000000 0x8000000> }."
+  },
+  "notes": "FDT sample. Minimal hand-crafted FDT blob embedded as a C byte array in .rodata of image.elf. The Hexana heuristic scans for magic 0xd00dfeed anywhere in the ELF binary — it will find the blob at file offset 0x10004. Rebuild: python3 make_fdt.py (regenerates image.elf and fdt-offset.txt from scratch)."
+}

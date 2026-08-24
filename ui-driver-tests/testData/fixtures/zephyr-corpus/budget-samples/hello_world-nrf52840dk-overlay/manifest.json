@@ -1,0 +1,29 @@
+{
+  "sample": "hello_world-nrf52840dk-overlay",
+  "board": "nrf52840dk/nrf52840",
+  "linker": "ld",
+  "builtAt": "2026-08-23T00:00:00Z",
+  "sizeTool": "/Users/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-size",
+  "stock": {
+    "size": {"text": 21168, "data": 212, "bss": 4366, "dec": 25746},
+    "memoryConfiguration": [
+      {"name": "FLASH",    "origin": "0x00000000", "length": "0x00100000", "attributes": "xr"},
+      {"name": "RAM",      "origin": "0x20000000", "length": "0x00040000", "attributes": "xw"},
+      {"name": "IDT_LIST", "origin": "0xffff7fff", "length": "0x00008000", "attributes": "xw"}
+    ],
+    "dtsFlashReg": "< 0x0 0x100000 >"
+  },
+  "overlay": {
+    "dtcOverlayFile": "flash_overlay.overlay",
+    "size": {"text": 21168, "data": 212, "bss": 4366, "dec": 25746},
+    "memoryConfiguration": [
+      {"name": "FLASH",    "origin": "0x00000000", "length": "0x00080000", "attributes": "xr"},
+      {"name": "RAM",      "origin": "0x20000000", "length": "0x00040000", "attributes": "xw"},
+      {"name": "IDT_LIST", "origin": "0xffff7fff", "length": "0x00008000", "attributes": "xw"}
+    ],
+    "dtsFlashReg": "< 0x0 0x80000 >"
+  },
+  "romReport": null,
+  "ramReport": null,
+  "notes": "Overlay sample. Two builds of the same app: stock has FLASH LENGTH=0x00100000 (1MB); overlay uses -DEXTRA_DTC_OVERLAY_FILE=flash_overlay.overlay which sets flash0 reg = < 0x0 0x80000 > (512KB), reducing FLASH LENGTH to 0x00080000 in zephyr.map. Both zephyr.dts files differ in the flash0 reg field. The rom/ram reports were not run for this variant; both can be derived from the per-build.  Point: map Memory Configuration and DTS disagree between stock and overlay builds."
+}

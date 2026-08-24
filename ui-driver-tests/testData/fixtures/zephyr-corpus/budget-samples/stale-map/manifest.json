@@ -1,0 +1,26 @@
+{
+  "sample": "stale-map",
+  "board": "nrf52840dk/nrf52840",
+  "linker": "ld",
+  "builtAt": "2026-08-23T00:00:00Z",
+  "sizeTool": "/Users/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-size",
+  "size": {"text": 21168, "data": 212, "bss": 4366, "dec": 25746},
+  "romReport": null,
+  "ramReport": null,
+  "memoryConfiguration": [
+    {"name": "FLASH",    "origin": "0x00000000", "length": "0x00100000", "attributes": "xr"},
+    {"name": "RAM",      "origin": "0x20000000", "length": "0x00040000", "attributes": "xw"},
+    {"name": "IDT_LIST", "origin": "0xffff7fff", "length": "0x00008000", "attributes": "xw"}
+  ],
+  "dtsMemoryNodes": null,
+  "staleEvidence": {
+    "elfSource": "hello_world nrf52840dk-Os (text=21168 / 0x47b8 bytes)",
+    "mapSource": "hello_world nrf52840dk-O2 (different optimization level)",
+    "mismatches": [
+      {"section": "text",     "elfAddr": "0x00000100", "elfSize": "0x47b8", "mapAddr": "0x00000100", "mapSize": "0x5de4", "note": "ELF text ends at 0x48b8; map text ends at 0x5ee4"},
+      {"section": "rodata",   "elfAddr": "0x00004bb0", "mapAddr": "0x000061d0", "note": "rodata starts 0x1620 bytes later in map than in ELF"},
+      {"section": "datas LMA","elfAddr": "0x000052bc", "mapAddr": "0x00006920", "note": "load address of .data segment: ELF=0x52bc, O2 map=0x6920"}
+    ]
+  },
+  "notes": "Negative sample: ELF is hello_world nrf52840dk-Os but the map is from the -O2 build of the same app. Three section addresses are verifiably inconsistent: text size differs (0x47b8 vs 0x5de4), rodata VMA differs (0x4bb0 vs 0x61d0), data LMA differs (0x52bc vs 0x6920). Purpose: tests that the parser can detect and report map/elf staleness."
+}
