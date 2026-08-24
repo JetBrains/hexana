@@ -1,10 +1,16 @@
 import * as path from 'path';
-import { Workbench, EditorView, WebView, By, VSBrowser, WebDriver } from 'vscode-extension-tester';
+import { Workbench, WebView, By, VSBrowser, WebDriver } from 'vscode-extension-tester';
 import { error as seleniumError } from 'selenium-webdriver';
 import { expect } from 'chai';
 import * as fs from "fs";
 import { waitForFakePostHogEvent } from '../fakePostHogAssertions';
-import { submitQuickInputPath, waitForLaunchOpenedFixture } from './test-utils';
+import {
+    closeAllEditorsQuietly,
+    reenterWebview,
+    returnToWorkbench,
+    submitQuickInputPath,
+    waitForLaunchOpenedFixture,
+} from './test-utils';
 
 /**
  * Basic acceptance integration tests for the Hexana VS Code extension.
@@ -94,12 +100,18 @@ describe('Hexana Wasm Editor – Acceptance Tests', function () {
             if (!webviewInitialized) {
                 return;
             }
-            try {
-                await webview.switchBack();
-            } catch {
-                // already switched back or webview gone
+            await returnToWorkbench(driver, webview);
+            await closeAllEditorsQuietly(driver);
+        });
+
+        beforeEach(async function () {
+            this.timeout(60_000);
+            if (!webviewInitialized) {
+                return;
             }
-            await new EditorView().closeAllEditors();
+            // A VS Code dialog raised between two tests covers the webview
+            // and would otherwise fail this test's first click.
+            await reenterWebview(driver, webview);
         });
 
         it('should render the hex viewer with byte content', async function () {

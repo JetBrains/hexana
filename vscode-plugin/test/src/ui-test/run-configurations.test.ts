@@ -1,7 +1,6 @@
 import * as path from 'path';
 import {
     Workbench,
-    EditorView,
     WebView,
     By,
     VSBrowser,
@@ -16,7 +15,12 @@ import { expect } from 'chai';
 import * as fs from 'fs';
 import * as os from 'os';
 import { execSync } from 'child_process';
-import { submitQuickInputPath } from './test-utils';
+import {
+    closeAllEditorsQuietly,
+    dismissBlockingModal,
+    returnToWorkbench,
+    submitQuickInputPath,
+} from './test-utils';
 
 /**
  * UI tests for running Wasm functions from the Exports panel via the
@@ -161,11 +165,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
 
     afterEach(async function () {
         this.timeout(30_000);
-        try {
-            await new EditorView().closeAllEditors();
-        } catch {
-            // ignore
-        }
+        await closeAllEditorsQuietly(driver);
     });
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -178,6 +178,10 @@ describe('Hexana Run Configurations – Exports Panel', function () {
      * `switchBack()` when done).
      */
     async function openWasmFile(filePath: string): Promise<WebView> {
+        // A leftover VS Code dialog would swallow the command palette and
+        // every later click inside the webview.
+        await dismissBlockingModal(driver);
+
         const workbench = new Workbench();
         await workbench.executeCommand('File: Open File...');
         await driver.sleep(1000);
@@ -347,11 +351,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
 
         after(async function () {
             this.timeout(30_000);
-            try {
-                await webview.switchBack();
-            } catch {
-                // already switched back or webview gone
-            }
+            await returnToWorkbench(driver, webview);
         });
 
         it('should open the component wasm, click run on an export, and launch a terminal', async function () {
@@ -396,11 +396,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
 
         after(async function () {
             this.timeout(30_000);
-            try {
-                await webview.switchBack();
-            } catch {
-                // already switched back or webview gone
-            }
+            await returnToWorkbench(driver, webview);
         });
 
         it('should open the core wasm, click run on the add export, and see output in terminal', async function () {
@@ -435,11 +431,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
 
         after(async function () {
             this.timeout(60_000);
-            try {
-                await webview.switchBack();
-            } catch {
-                // already switched back or webview gone
-            }
+            await returnToWorkbench(driver, webview);
 
             // Stop any active debug session
             try {
@@ -451,11 +443,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
             }
 
             // Close all editors so the next test suite starts clean
-            try {
-                await new EditorView().closeAllEditors();
-            } catch {
-                // ignore
-            }
+            await closeAllEditorsQuietly(driver);
         });
 
         it('should open the core wasm, click debug on the add export, and start a debug session', async function () {
@@ -520,11 +508,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
 
         after(async function () {
             this.timeout(60_000);
-            try {
-                await webview.switchBack();
-            } catch {
-                // already switched back or webview gone
-            }
+            await returnToWorkbench(driver, webview);
 
             // Stop any active debug session
             try {
@@ -536,11 +520,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
             }
 
             // Close all editors to clean up
-            try {
-                await new EditorView().closeAllEditors();
-            } catch {
-                // ignore
-            }
+            await closeAllEditorsQuietly(driver);
         });
 
         it('should hit a breakpoint in the Rust source, inspect local variables, and continue', async function () {
@@ -769,11 +749,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
 
         after(async function () {
             this.timeout(30_000);
-            try {
-                await webview.switchBack();
-            } catch {
-                // already switched back or webview gone
-            }
+            await returnToWorkbench(driver, webview);
         });
 
         it('should open the core wasm, click run on the add export, and see output in terminal', async function () {
@@ -808,11 +784,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
 
         after(async function () {
             this.timeout(60_000);
-            try {
-                await webview.switchBack();
-            } catch {
-                // already switched back or webview gone
-            }
+            await returnToWorkbench(driver, webview);
 
             // Stop any active debug session
             try {
@@ -824,11 +796,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
             }
 
             // Close all editors so the next test suite starts clean
-            try {
-                await new EditorView().closeAllEditors();
-            } catch {
-                // ignore
-            }
+            await closeAllEditorsQuietly(driver);
         });
 
         it('should open the core wasm, click debug on the add export, and start a debug session', async function () {
@@ -893,11 +861,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
 
         after(async function () {
             this.timeout(60_000);
-            try {
-                await webview.switchBack();
-            } catch {
-                // already switched back or webview gone
-            }
+            await returnToWorkbench(driver, webview);
 
             // Stop any active debug session
             try {
@@ -909,11 +873,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
             }
 
             // Close all editors to clean up
-            try {
-                await new EditorView().closeAllEditors();
-            } catch {
-                // ignore
-            }
+            await closeAllEditorsQuietly(driver);
         });
 
         it('should hit a breakpoint in the Rust source, inspect local variables, and continue', async function () {
