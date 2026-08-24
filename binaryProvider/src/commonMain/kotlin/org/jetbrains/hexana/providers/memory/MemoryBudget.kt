@@ -437,6 +437,28 @@ public fun linkerMapMatchesElf(mapText: String, sections: List<ElfSectionHeader>
     return agree.toDouble() / total.toDouble() >= 0.8
 }
 
+/**
+ * Orders the linker-map candidates among an ELF's sibling files, most likely first.
+ *
+ * Order: `<elf-base-name>.map`, then `zephyr.map`, then every other `*.map` sibling in
+ * case-insensitive alphabetical order. Only names present in [siblingFileNames] are
+ * returned, so every returned name resolves to an existing sibling. Callers must still
+ * validate each candidate against the ELF (see [linkerMapMatchesElf]); ordering only
+ * decides which file gets the first attempt.
+ */
+public fun siblingMapCandidates(elfFileName: String, siblingFileNames: Collection<String>): List<String> {
+    val baseName = elfFileName.substringBeforeLast('.', elfFileName)
+    val present = siblingFileNames.toSet()
+    val ordered = listOf("$baseName.map", "zephyr.map").distinct()
+        .filter { it in present && it != elfFileName }
+        .toMutableList()
+    siblingFileNames
+        .filter { it.endsWith(".map", ignoreCase = true) && it != elfFileName && it !in ordered }
+        .sortedBy { it.lowercase() }
+        .forEach { ordered += it }
+    return ordered
+}
+
 // ---------------------------------------------------------------------------
 // Budget computation
 // ---------------------------------------------------------------------------
