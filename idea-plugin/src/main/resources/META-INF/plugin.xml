@@ -331,6 +331,13 @@
              matching the convention used by MemoryBudgetSettings on this branch. -->
         <!-- END firmware LANE-CORE -->
 
+        <!-- BEGIN firmware LANE-ACQ -->
+        <applicationService serviceImplementation="org.jetbrains.hexana.firmware.HexanaFirmwareSettings"/>
+        <applicationConfigurable parentId="build" id="firmware.emulator.settings"
+            instance="org.jetbrains.hexana.firmware.FirmwareEmulatorConfigurable"
+            displayName="Firmware Emulator"/>
+        <!-- END firmware LANE-ACQ -->
+
         <configurationType implementation="org.jetbrains.hexana.run.WasmRunConfigurationType"/>
         <runConfigurationProducer implementation="org.jetbrains.hexana.run.WasmRunConfigurationProducer"/>
         <programRunner implementation="org.jetbrains.hexana.run.WasmDebugRunner"/>
