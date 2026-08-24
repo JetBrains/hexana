@@ -74,7 +74,7 @@ profiles:
               image: "{{.IMAGE_FULLY_QUALIFIED}}"
               imagePullSecret: "{{.IMAGE_PULL_SECRET}}"
               applicationName: "{{.APPLICATION_NAME}}"
-  - name: deploy-only-production
+  - name: deploy_only_production
     patches:
       - op: remove
         path: /build

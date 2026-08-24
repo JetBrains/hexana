@@ -9,7 +9,7 @@ const revisionPattern = /^[0-9a-f]{40}$/;
 const digestPattern = /^sha256:[0-9a-f]{64}$/;
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const evidenceFiles = ["build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"];
-const approvedScriptSha256 = "3ff10df8a28597618c7b83d8b235b158465a0cd262fe4c76495ae6eeefe36afd";
+const approvedScriptSha256 = "43902ac016a6b4f9c281becd89c58bd581f6929030fe7fa723b5748b5017a14a";
 const approvedVcsUrl = "https://example.invalid/hexana/Hexana.git";
 const approvedParameters = Object.freeze({
     "env.APPLICATION_NAME": "hexana-webapp",
@@ -183,12 +183,12 @@ export function validateSafetyPreflight(buildType, vcsRoot, config) {
     const workingDirectories = runnerProperties.filter(property => property.name === "teamcity.build.workingDir");
     const customScripts = runnerProperties.filter(property => property.name === "use.custom.script");
     if (workingDirectories.length !== 1 || workingDirectories[0].value !== "webapp" || customScripts.length !== 1 || customScripts[0].value !== "true") fail("Cloud Console Skaffold runner mode or working directory is unsafe");
-    const expectedAssignment = 'export SKAFFOLD_OPTIONS="--assume-yes=true -n ${K8S_NAMESPACE} --status-check -p deploy-only-production --cache-artifacts=false"';
+    const expectedAssignment = 'export SKAFFOLD_OPTIONS="--assume-yes=true -n ${K8S_NAMESPACE} --status-check -p deploy_only_production --cache-artifacts=false"';
     const assignments = scripts[0].value.split(/\r?\n/).filter(line => line.includes("SKAFFOLD_OPTIONS="));
     if (assignments.length !== 1 || assignments[0] !== expectedAssignment) fail("Cloud Console Skaffold options assignment is unsafe");
     if (!/\bskaffold(?:_\d+(?:\.\d+)*)?\s+run\s+\$\{SKAFFOLD_OPTIONS\}(?:\s|$)/.test(scripts[0].value)) fail("Cloud Console Skaffold script does not run its validated options");
     const profiles = [...scripts[0].value.matchAll(/(?:^|\s)(?:-p|--profile)(?:=|\s+)([^\s"'\\]+)/g)].map(match => match[1]);
-    if (profiles.length !== 1 || profiles[0] !== "deploy-only-production") fail("Cloud Console Skaffold profile is unsafe");
+    if (profiles.length !== 1 || profiles[0] !== "deploy_only_production") fail("Cloud Console Skaffold profile is unsafe");
     if (/\bskaffold(?:_\d+(?:\.\d+)*)?\b[^\r\n;&|]*\s(?:-f|--filename)(?:=|\s)/m.test(scripts[0].value)) fail("Cloud Console Skaffold filename override is unsafe");
     if (/\bdocker\b[^\r\n;&|]*(?:\bbuild(?:x)?\b|\bpush\b)|\bskaffold(?:_\d+(?:\.\d+)*)?\b[^\r\n;&|]*(?:\bbuild\b|\bpush\b)/i.test(scripts[0].value)) fail("Cloud Console script contains a build or push command");
     if (createHash("sha256").update(scripts[0].value, "utf8").digest("hex") !== approvedScriptSha256) fail("Cloud Console Skaffold script fingerprint differs from the approved generated script");
@@ -374,7 +374,7 @@ export async function deployRelease({ receipt, scan, config, outputDirectory, fe
         kind: "hexana-webapp-deployment-evidence",
         result: "FAILURE",
         phase,
-        profile: "deploy-only-production",
+        profile: "deploy_only_production",
         digestHttpProven: false,
         release: { branch: config.branch, version: receipt?.package?.identity?.version, revision: config.revision },
         image: { reference: receipt?.image?.reference, manifestDigest: receipt?.image?.manifestDigest },
@@ -515,7 +515,7 @@ async function main() {
                 kind: "hexana-webapp-deployment-evidence",
                 result: "FAILURE",
                 phase: "input",
-                profile: "deploy-only-production",
+                profile: "deploy_only_production",
                 digestHttpProven: false,
                 release: { branch: process.env.HEXANA_RELEASE_BRANCH, version: receipt?.package?.identity?.version, revision: process.env.HEXANA_RELEASE_REVISION },
                 image: { reference: receipt?.image?.reference, manifestDigest: receipt?.image?.manifestDigest },
