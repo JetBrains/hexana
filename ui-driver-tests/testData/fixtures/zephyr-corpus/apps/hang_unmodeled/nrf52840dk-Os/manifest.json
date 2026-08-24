@@ -1,0 +1,11 @@
+{
+  "sample": "hang_unmodeled-nrf52840dk",
+  "board": "nrf52840dk/nrf52840",
+  "expectedBackend": "Renode",
+  "machineOrPlatform": "nrf52840",
+  "expectedReplSource": "Library",
+  "bootBannerRegex": null,
+  "bannerValidated": false,
+  "bannerValidatedNote": "Renode not installed locally; expected behavior: no banner (infinite loop on unmodeled address 0x4002F000)",
+  "negativeKind": "hangs-on-unmodeled-hw"
+}

@@ -1,0 +1,10 @@
+{
+  "sample": "hello_world-v2m_beetle",
+  "board": "v2m_beetle",
+  "expectedBackend": null,
+  "machineOrPlatform": null,
+  "bootBannerRegex": null,
+  "bannerValidated": false,
+  "bannerValidatedNote": "No emulator support: v2m_beetle has no SUPPORTED_EMU_PLATFORMS in board.cmake",
+  "negativeKind": "unsupported-target"
+}

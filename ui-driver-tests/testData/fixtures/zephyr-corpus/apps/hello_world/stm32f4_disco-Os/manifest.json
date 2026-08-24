@@ -1,0 +1,12 @@
+{
+  "sample": "hello_world-stm32f4_disco",
+  "board": "stm32f4_disco",
+  "expectedBackend": "Renode",
+  "machineOrPlatform": "stm32f4_discovery",
+  "expectedReplSource": "Library",
+  "bootBannerRegex": "\\*\\*\\* Booting Zephyr OS build [^*]*\\*\\*\\*",
+  "helloRegex": "Hello World! stm32f4_disco",
+  "bannerValidated": false,
+  "bannerValidatedNote": "Renode not installed locally; regex from Zephyr source and boot output pattern",
+  "negativeKind": null
+}
