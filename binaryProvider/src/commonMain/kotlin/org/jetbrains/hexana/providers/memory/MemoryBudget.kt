@@ -200,59 +200,92 @@ public fun parseLinkerMapRegions(mapText: String): List<MemoryRegion> {
 /**
  * Parses Zephyr merged devicetree text (zephyr.dts) for memory and flash regions.
  *
- * This is a heuristic text parser, not a full DTS grammar. It recognises nodes whose name starts
- * with "memory", "flash", "sram", or "psram" at any nesting level, and nodes that contain a
- * `device_type = "memory"` property. The `reg` property is parsed as either a 2-cell form
- * (addr, size) or a 4-cell form (addrHi, addrLo, sizeHi, sizeLo). Partition sub-nodes
- * (name containing "partition") are skipped.
+ * This is a heuristic text parser, not a full DTS grammar. It recognises nodes whose name
+ * starts with "memory@" or has `device_type = "memory"` (=> RAM), and nodes whose name
+ * starts with "flash@" or whose `compatible` contains "soc-nv-flash" (=> FLASH), at any
+ * nesting depth. Nodes whose name starts with "flash-controller" or contains "-controller"
+ * are not regions and are descended into rather than consumed as a region. Partition
+ * sub-nodes (name containing "partition") are skipped. Once a node is accepted as a region
+ * its body is not searched further for nested regions.
+ *
+ * The `reg` property is parsed as either a 2-cell form (addr, size) or a 4-cell form
+ * (addrHi, addrLo, sizeHi, sizeLo).
  */
 public fun parseDtsMemoryRegions(dtsText: String): List<MemoryRegion> {
     val regions = mutableListOf<MemoryRegion>()
-    val lines = dtsText.lines()
-    var i = 0
+    parseDtsNodes(dtsText.lines(), 0, regions)
+    return regions
+}
+
+/**
+ * Recursive descent over DTS lines starting at [startLine], appending found regions to [out].
+ * Returns the line index after the closing brace of the current block, or lines.size if EOF.
+ */
+private fun parseDtsNodes(lines: List<String>, startLine: Int, out: MutableList<MemoryRegion>): Int {
+    var i = startLine
     while (i < lines.size) {
         val trimmed = lines[i].trim()
+
+        // Match a DTS node opening: [label:] name@addr {
         val nodeMatch = Regex("""^(?:\w+\s*:\s*)?(\w[\w-]*)@([0-9a-fA-F]+)\s*\{""").find(trimmed)
         if (nodeMatch != null) {
-            val nodeName = nodeMatch.groupValues[1].lowercase()
+            val rawName = nodeMatch.groupValues[1]
+            val nodeName = rawName.lowercase()
             val nodeAddrHex = nodeMatch.groupValues[2]
-            if ("partition" in nodeName) { i++; continue }
 
-            val isMemoryNode = nodeName.startsWith("memory") || nodeName.startsWith("flash") ||
-                nodeName.startsWith("sram") || nodeName.startsWith("psram")
-
-            // Collect the node body until the matching close brace
+            // Collect the node body until the matching close brace.
             val bodyLines = mutableListOf<String>()
             var depth = 1
             var j = i + 1
             while (j < lines.size && depth > 0) {
                 val bl = lines[j].trim()
                 depth += bl.count { it == '{' } - bl.count { it == '}' }
-                if (depth > 0) bodyLines += bl
+                if (depth > 0) bodyLines += lines[j]
                 j++
             }
             val body = bodyLines.joinToString("\n")
-            val hasDeviceTypeMemory = Regex("""device_type\s*=\s*"memory"""").containsMatchIn(body)
 
-            if (isMemoryNode || hasDeviceTypeMemory) {
-                val regMatch = Regex("""reg\s*=\s*<([^>]+)>""").find(body)
-                if (regMatch != null) {
-                    val cellStrings = regMatch.groupValues[1].trim().split(Regex("\\s+"))
-                    val cells = cellStrings.mapNotNull { parseHexOrDecimal(it) }
-                    val pair: Pair<ULong, ULong>? = when (cells.size) {
-                        2 -> Pair(cells[0], cells[1])
-                        4 -> Pair((cells[0] shl 32) or cells[1], (cells[2] shl 32) or cells[3])
-                        else -> null
-                    }
-                    if (pair != null) {
-                        val kind = if (nodeName.startsWith("flash")) MemoryRegionKind.FLASH
-                            else MemoryRegionKind.RAM
-                        regions += MemoryRegion(
-                            name = "${nodeName}@${nodeAddrHex}",
-                            origin = pair.first,
-                            length = pair.second,
-                            kind = kind,
-                        )
+            when {
+                "partition" in nodeName -> {
+                    // Partition sub-nodes are never regions; skip the whole body.
+                }
+                "-controller" in nodeName -> {
+                    // Controller nodes (e.g. flash-controller@4001e000) are not regions.
+                    // Descend into the body to find nested region nodes.
+                    parseDtsNodes(bodyLines, 0, out)
+                }
+                else -> {
+                    val hasDeviceTypeMemory = Regex("""device_type\s*=\s*"memory"""").containsMatchIn(body)
+                    val compatible = Regex("""compatible\s*=([^;]+);""").find(body)?.groupValues?.get(1) ?: ""
+                    val hasSocNvFlash = "soc-nv-flash" in compatible
+                    val isFlash = nodeName.startsWith("flash") || hasSocNvFlash
+                    val isMemory = nodeName.startsWith("memory") || nodeName.startsWith("sram") ||
+                        nodeName.startsWith("psram") || hasDeviceTypeMemory
+
+                    if (isFlash || isMemory) {
+                        val regMatch = Regex("""reg\s*=\s*<([^>]+)>""").find(body)
+                        if (regMatch != null) {
+                            val cellStrings = regMatch.groupValues[1].trim().split(Regex("""\s+"""))
+                            val cells = cellStrings.mapNotNull { parseHexOrDecimal(it) }
+                            val pair: Pair<ULong, ULong>? = when (cells.size) {
+                                2 -> Pair(cells[0], cells[1])
+                                4 -> Pair((cells[0] shl 32) or cells[1], (cells[2] shl 32) or cells[3])
+                                else -> null
+                            }
+                            if (pair != null) {
+                                val kind = if (isFlash) MemoryRegionKind.FLASH else MemoryRegionKind.RAM
+                                out += MemoryRegion(
+                                    name = "${nodeName}@${nodeAddrHex}",
+                                    origin = pair.first,
+                                    length = pair.second,
+                                    kind = kind,
+                                )
+                            }
+                        }
+                        // Do not descend further into an accepted region node.
+                    } else {
+                        // Unknown node: descend to find nested regions.
+                        parseDtsNodes(bodyLines, 0, out)
                     }
                 }
             }
@@ -261,7 +294,7 @@ public fun parseDtsMemoryRegions(dtsText: String): List<MemoryRegion> {
         }
         i++
     }
-    return regions
+    return i
 }
 
 /**
@@ -332,18 +365,32 @@ public fun deriveRegionsFromLoadSegments(programHeaders: List<ElfProgramHeader>)
 /**
  * Returns true when the linker map and ELF section table appear to be in sync.
  *
- * Scans the "Linker script and memory map" section of the map for lines of the form:
- * ```
- *  .section   0x00001000  0x200
- * ```
- * GNU ld also emits a two-line form where the name is on its own line and the address follows.
- * For each map entry matched to an ELF section by name, the map VMA is compared to sh_addr.
+ * Matching is driven by the ELF's own alloc-section names. For each name the function
+ * also checks the dot-toggled form (strip or prepend a leading dot) so that GNU ld maps
+ * with dotted names (.text) match ELFs with undotted names (text), and vice versa.
+ *
+ * Recognised map-line forms (after the "Linker script and memory map" header):
+ * - Single-line: `name   0x<addr>  0x<size>` (with optional trailing fields)
+ * - GNU two-line: `name` alone on one line, then `   0x<addr>  0x<size>` on the next
+ *
+ * A line matches when its first token is in the ELF section-name set (as-is or dot-toggled).
+ * The map VMA is compared to that section's sh_addr.
+ *
  * Returns true when at least 80 % of matched sections agree, or when fewer than 3 match
  * (benefit of the doubt). Requires [sections] to contain SHF_ALLOC sections.
  */
 public fun linkerMapMatchesElf(mapText: String, sections: List<ElfSectionHeader>): Boolean {
-    val sectionByName = sections.filter { it.flags and SHF_ALLOC != 0uL }.associateBy { it.name }
-    if (sectionByName.isEmpty()) return true
+    val allocSections = sections.filter { it.flags and SHF_ALLOC != 0uL }
+    if (allocSections.isEmpty()) return true
+
+    // Build a lookup from both the canonical name and its dot-toggled variant.
+    val sectionByName = buildMap<String, ElfSectionHeader> {
+        for (sec in allocSections) {
+            put(sec.name, sec)
+            val toggled = if (sec.name.startsWith(".")) sec.name.removePrefix(".") else ".${sec.name}"
+            if (!containsKey(toggled)) put(toggled, sec)
+        }
+    }
 
     val lines = mapText.lines()
     val scriptIdx = lines.indexOfFirst { it.trim().startsWith("Linker script and memory map") }
@@ -355,8 +402,9 @@ public fun linkerMapMatchesElf(mapText: String, sections: List<ElfSectionHeader>
 
     for (i in (scriptIdx + 1) until lines.size) {
         val line = lines[i]
-        // Single-line form: " .section   0x<addr>  0x<size>"
-        val singleLine = Regex("""^\s+(\.\S+)\s+(0x[0-9a-fA-F]+)\s+0x[0-9a-fA-F]+""").find(line)
+
+        // Single-line form: "  name   0x<addr>  0x<size>  ..." (leading whitespace optional)
+        val singleLine = Regex("""^\s*(\S+)\s+(0x[0-9a-fA-F]+)\s+0x[0-9a-fA-F]+""").find(line)
         if (singleLine != null) {
             val name = singleLine.groupValues[1]
             val addr = parseHexOrDecimal(singleLine.groupValues[2])
@@ -365,18 +413,20 @@ public fun linkerMapMatchesElf(mapText: String, sections: List<ElfSectionHeader>
             prevName = null
             continue
         }
-        // Two-line form: first line is the section name alone
-        val nameLine = Regex("""^\s+(\.\S+)\s*$""").find(line)
+        // Two-line form: first line is the section name alone (not starting with 0x).
+        val nameLine = Regex("""^\s*([^0\s]\S*)\s*$""").find(line)
         if (nameLine != null) {
-            prevName = nameLine.groupValues[1]
+            val candidate = nameLine.groupValues[1]
+            // Only treat it as a section-name candidate if it appears in the ELF set.
+            prevName = if (sectionByName.containsKey(candidate)) candidate else null
             continue
         }
-        // Second line of the two-line form starts with 0x
+        // Second line of the two-line form: indented address.
         if (prevName != null) {
             val addrLine = Regex("""^\s+(0x[0-9a-fA-F]+)\s+0x[0-9a-fA-F]+""").find(line)
             if (addrLine != null) {
                 val addr = parseHexOrDecimal(addrLine.groupValues[1])
-                val sec = if (addr != null) sectionByName[prevName!!] else null
+                val sec = if (addr != null) sectionByName[prevName] else null
                 if (sec != null) { total++; if (sec.address == addr) agree++ }
             }
             prevName = null
