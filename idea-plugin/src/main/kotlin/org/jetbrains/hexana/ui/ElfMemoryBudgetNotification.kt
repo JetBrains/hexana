@@ -11,6 +11,7 @@ import com.intellij.ui.EditorNotificationPanel
 import com.intellij.ui.EditorNotificationProvider
 import com.intellij.ui.EditorNotifications
 import org.jetbrains.hexana.ElfFileType
+import org.jetbrains.hexana.firmware.ElfSidecarDiscovery
 import java.util.function.Function
 import javax.swing.JComponent
 
@@ -54,18 +55,10 @@ class ElfMemoryBudgetNotification : EditorNotificationProvider, DumbAware {
             if ((entry.linkedFilePath ?: "").isNotEmpty()) return true
             if ((entry.manualFlashOrigin ?: "").isNotEmpty()) return true
         }
-        val parent = file.parent ?: return false
-        val baseName = file.nameWithoutExtension
-        for (name in listOf("$baseName.map", "zephyr.map", "zephyr.dts")) {
-            if (parent.findChild(name) != null) return true
-        }
-        val zephyrDir = parent.findChild("zephyr")
-        if (zephyrDir?.findChild("zephyr.map") != null) return true
-        if (zephyrDir?.findChild("zephyr.dts") != null) return true
-        val parentZephyrDir = parent.parent?.findChild("zephyr")
-        if (parentZephyrDir?.findChild("zephyr.map") != null) return true
-        if (parentZephyrDir?.findChild("zephyr.dts") != null) return true
-        return false
+        // Quick filesystem check via ElfSidecarDiscovery (VFS findChild calls are EDT-safe).
+        // The service's discover() is the canonical walk; here we only need a yes/no answer.
+        val sidecars = project.getService(ElfSidecarDiscovery::class.java).discover(file)
+        return sidecars.mapFile != null || sidecars.dtsFile != null
     }
 
     private fun showCapacityChooser(project: Project, file: VirtualFile) {

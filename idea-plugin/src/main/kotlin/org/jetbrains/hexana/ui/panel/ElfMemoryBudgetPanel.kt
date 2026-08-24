@@ -49,6 +49,7 @@ import org.jetbrains.hexana.providers.memory.MemoryRegionKind
 import org.jetbrains.hexana.providers.memory.RegionUsage
 import org.jetbrains.hexana.providers.memory.SectionTag
 import org.jetbrains.hexana.providers.memory.computeMemoryBudget
+import org.jetbrains.hexana.firmware.ElfSidecarDiscovery
 import org.jetbrains.hexana.providers.memory.linkerMapMatchesElf
 import org.jetbrains.hexana.providers.memory.siblingMapCandidates
 import org.jetbrains.hexana.ui.MemoryBudgetEntry
@@ -136,42 +137,28 @@ fun ElfMemoryBudgetPanel(
                     isManuallyLinked = true
                 }
                 else -> {
-                    // Auto-discovery: only for real filesystem VirtualFiles.
-                    // file == null means an in-memory provider; skip discovery.
+                    // Auto-discovery via ElfSidecarDiscovery (shared service).
+                    // file == null means an in-memory provider; the service short-circuits to
+                    // all-null in that case, so the null-check here is a fast path only.
                     if (file != null) {
-                        val parent = file.parent
-                        if (parent != null) {
-                            // Sibling *.map files first (expected names, then any other map,
-                            // each validated against the ELF), then dts and build-tree layouts.
-                            val expectedMapNames = setOf("${file.nameWithoutExtension}.map", "zephyr.map")
-                            val candidates =
-                                siblingMapCandidates(file.name, parent.children.map { it.name })
-                                    .mapNotNull { parent.findChild(it) } +
-                                    listOfNotNull(
-                                        parent.findChild("zephyr.dts"),
-                                        parent.findChild("zephyr")?.findChild("zephyr.map"),
-                                        parent.findChild("zephyr")?.findChild("zephyr.dts"),
-                                        parent.parent?.findChild("zephyr")?.findChild("zephyr.map"),
-                                        parent.parent?.findChild("zephyr")?.findChild("zephyr.dts"),
-                                    )
-                            for (candidate in candidates) {
-                                if (!candidate.exists()) continue
-                                val text = candidate.contentsToByteArray().decodeToString()
-                                if (candidate.name.endsWith(".dts")) {
-                                    dtsText = text
-                                    sourceLabel = candidate.name
-                                    break
-                                }
+                        val sidecars = project.getService(ElfSidecarDiscovery::class.java).discover(file)
+                        val expectedMapNames = setOf("${file.nameWithoutExtension}.map", "zephyr.map")
+
+                        // Prefer dts over map (dts carries both region and board information).
+                        sidecars.dtsFile?.takeIf { it.exists() }?.let { dtsVf ->
+                            dtsText = dtsVf.contentsToByteArray().decodeToString()
+                            sourceLabel = dtsVf.name
+                        }
+
+                        if (dtsText == null) {
+                            sidecars.mapFile?.takeIf { it.exists() }?.let { mapVf ->
+                                val text = mapVf.contentsToByteArray().decodeToString()
                                 if (linkerMapMatchesElf(text, secs)) {
                                     mapText = text
-                                    sourceLabel = candidate.name
-                                    break
-                                }
-                                // A mismatched map only warrants a stale-build warning when its
-                                // name ties it to this ELF; unrelated maps are skipped silently.
-                                if (candidate.name in expectedMapNames && staleMapWarning == null) {
+                                    sourceLabel = mapVf.name
+                                } else if (mapVf.name in expectedMapNames && staleMapWarning == null) {
                                     staleMapWarning =
-                                        "${candidate.name} does not match this ELF (stale build?) - capacities from it were ignored"
+                                        "${mapVf.name} does not match this ELF (stale build?) - capacities from it were ignored"
                                 }
                             }
                         }

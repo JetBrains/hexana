@@ -324,6 +324,13 @@
         <lang.formatter language="wit" implementationClass="org.jetbrains.hexana.wit.formatter.WitFormattingBuilderModel"/>
         <lang.lineWrapStrategy language="wit" implementationClass="org.jetbrains.hexana.wit.formatter.WitLineWrapPositionStrategy"/>
 
+        <!-- BEGIN firmware LANE-CORE -->
+        <!-- ElfSidecarDiscovery and FirmwareTargetService use @Service(Service.Level.PROJECT)
+             light-service annotations only. IntelliJ Platform 2024.1+ (build 241+) resolves
+             @Service-annotated project services automatically without plugin.xml entries,
+             matching the convention used by MemoryBudgetSettings on this branch. -->
+        <!-- END firmware LANE-CORE -->
+
         <configurationType implementation="org.jetbrains.hexana.run.WasmRunConfigurationType"/>
         <runConfigurationProducer implementation="org.jetbrains.hexana.run.WasmRunConfigurationProducer"/>
         <programRunner implementation="org.jetbrains.hexana.run.WasmDebugRunner"/>
