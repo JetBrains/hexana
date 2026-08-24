@@ -36,8 +36,8 @@ const requireRejected = (policy, source) => {
     throw new Error(`${source} unexpectedly accepted a non-PostHog external endpoint`);
 };
 
-const [dockerignore, dockerfile, nginx, securityHeaders, index, buildScript, skaffold, staging, production, stagingGate] = await Promise.all([
-    read(".dockerignore"), read("webapp/Dockerfile"), read("webapp/nginx.conf"), read("webapp/security-headers.conf"), read("webapp/src/jsMain/resources/index.html"), read("webapp/build.gradle.kts"), read("webapp/skaffold.yaml"), read("webapp/values_staging.yaml"), read("webapp/values_production.yaml"), read("webapp/stage-cloud-console-staging-package.mjs"),
+const [dockerignore, dockerfile, nginx, securityHeaders, index, buildScript, skaffold, staging, production, stagingGate, deployBridge, rollout] = await Promise.all([
+    read(".dockerignore"), read("webapp/Dockerfile"), read("webapp/nginx.conf"), read("webapp/security-headers.conf"), read("webapp/src/jsMain/resources/index.html"), read("webapp/build.gradle.kts"), read("webapp/skaffold.yaml"), read("webapp/values_staging.yaml"), read("webapp/values_production.yaml"), read("webapp/stage-cloud-console-staging-package.mjs"), read("webapp/deploy-webapp-release.mjs"), read("docs/webapp/cloud-console-rollout.md"),
 ]);
 for (const ignored of [".git", "out", "**/build", "**/node_modules", "**/src/*Test", "vscode-plugin/test", "task.txt"]) requireText(dockerignore, ignored, ".dockerignore");
 for (const stagedPackage of ["!webapp/oci-package/production-package/**", "!webapp/oci-package/staging-package/**"]) requireText(dockerignore, stagedPackage, ".dockerignore");
@@ -97,6 +97,31 @@ requireText(skaffold, "value: staging", "skaffold.yaml");
 requireText(buildScript, "stageCloudConsoleStagingPackage", "build.gradle.kts");
 requireText(buildScript, "dependsOn(\"verifyCloudConsoleDeploymentContract\", packageProductionWebapp)", "build.gradle.kts");
 for (const required of ["HEXANA_SOURCE_REVISION must be a lowercase 40-character Git SHA", "HEXANA_SOURCE_REVISION must match the checked-out Git revision", "clean working tree", "verify-staging-package"]) requireText(stagingGate, required, "stage-cloud-console-staging-package.mjs");
+const deployOnlyMarker = "  - name: deploy-only-production\n";
+const deployOnlyOffset = skaffold.indexOf(deployOnlyMarker);
+if (deployOnlyOffset < 0) throw new Error("skaffold.yaml is missing deploy-only-production");
+const deployOnlyProfile = skaffold.slice(deployOnlyOffset);
+const expectedDeployOnlyProfile = `  - name: deploy-only-production
+    patches:
+      - op: remove
+        path: /build
+    deploy:
+      helm:
+        releases:
+          - name: "{{.APPLICATION_NAME}}"
+            remoteChart: oci://registry.jetbrains.team/p/cb/helm-charts/simple-app
+            version: 0.2.1
+            upgradeOnChange: true
+            valuesFiles: [values_production.yaml]
+            setValueTemplates:
+              image: "{{.HEXANA_WEBAPP_IMAGE}}"
+              imagePullSecret: "{{.IMAGE_PULL_SECRET}}"
+              applicationName: "{{.APPLICATION_NAME}}"
+`;
+if (deployOnlyProfile !== expectedDeployOnlyProfile) throw new Error("deploy-only-production must remove /build and deploy exactly one validated production release");
+forbid(deployOnlyProfile, /\{\{\.IMAGE_FULLY_QUALIFIED\}\}|@sha256:|dockerfile:|artifacts:/, "deploy-only-production");
+for (const required of ["--receipt", "--scan-summary", "--output-dir", "https://ci.example.invalid", "HexanaCi_Deploy_HexanaWebapp", "HexanaCi_Deploy_HexanaWebappSshGitGitJetbrainsTeamHxHexanaGit", "TEAMCITY_SERVER_URL", "HEXANA_RELEASE_BRANCH", "HEXANA_RELEASE_REVISION", "HEXANA_CLOUD_CONSOLE_TOKEN", "HEXANA_CLOUD_CONSOLE_BUILD_TYPE_ID", "HEXANA_CLOUD_CONSOLE_VCS_ROOT_ID", "/app/rest/buildTypes", "/app/rest/vcs-roots", "/app/rest/vcs-root-instances", '"vcs-root-instance"', "teamcity:branchSpec", "script.content", "teamcity.build.workingDir", "use.custom.script", "SKAFFOLD_OPTIONS", 'redirect: "error"', "disabled", "/app/rest/buildQueue", "env.HEXANA_WEBAPP_IMAGE", "3ff10df8a28597618c7b83d8b235b158465a0cd262fe4c76495ae6eeefe36afd", "https://example.invalid/hexana/Hexana.git", "env.APPLICATION_NAME", "env.K8S_NAMESPACE", "env.IMAGE_PULL_SECRET", "env.JBCC_GCP_CLUSTER", "env.JBCC_GCP_PROJECT", "env.JBCC_GCP_REGION"]) requireText(deployBridge, required, "deploy-webapp-release.mjs");
+for (const required of ["+:refs/heads/release/webapp/*", "safety preflight", "VCS trigger", "deploy-only-production", "Hexana Publisher", "Release Webapp", "Run Build", "deployment-evidence.json", "3ff10df8a28597618c7b83d8b235b158465a0cd262fe4c76495ae6eeefe36afd", "https://example.invalid/hexana/Hexana.git", "env.APPLICATION_NAME=hexana-webapp", "env.K8S_NAMESPACE=hexana-namespace", "env.IMAGE_PULL_SECRET=registry-pull-secret", "env.JBCC_GCP_CLUSTER=example-cluster", "env.JBCC_GCP_PROJECT=example-gcp-project", "env.JBCC_GCP_REGION=europe-west1"]) requireText(rollout, required, "cloud-console-rollout.md");
 forbid(skaffold, /^\s*(namespace|hostname|secret|password|token):/im, "skaffold.yaml");
 for (const [name, values] of [["values_staging.yaml", staging], ["values_production.yaml", production]]) {
     for (const required of ["replicaCount: 1", "enabled: false", "runAsUser: 101", "containerPort: 8080", "path: /healthz", "type: RollingUpdate", "requests:", "limits:"]) requireText(values, required, name);

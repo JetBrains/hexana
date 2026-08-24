@@ -74,3 +74,19 @@ profiles:
               image: "{{.IMAGE_FULLY_QUALIFIED}}"
               imagePullSecret: "{{.IMAGE_PULL_SECRET}}"
               applicationName: "{{.APPLICATION_NAME}}"
+  - name: deploy-only-production
+    patches:
+      - op: remove
+        path: /build
+    deploy:
+      helm:
+        releases:
+          - name: "{{.APPLICATION_NAME}}"
+            remoteChart: oci://registry.jetbrains.team/p/cb/helm-charts/simple-app
+            version: 0.2.1
+            upgradeOnChange: true
+            valuesFiles: [values_production.yaml]
+            setValueTemplates:
+              image: "{{.HEXANA_WEBAPP_IMAGE}}"
+              imagePullSecret: "{{.IMAGE_PULL_SECRET}}"
+              applicationName: "{{.APPLICATION_NAME}}"
