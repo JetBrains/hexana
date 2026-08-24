@@ -64,6 +64,7 @@ import org.jetbrains.hexana.pcap.PcapDissectedPacket
 import org.jetbrains.hexana.pcap.PcapDissector
 import org.jetbrains.hexana.providers.PcapBinaryProvider
 import org.jetbrains.hexana.providers.TarBinaryProvider
+import org.jetbrains.hexana.providers.memory.isMemoryBudgetEligible
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.shared.RowContextMenuItemDescriptor
 import org.jetbrains.hexana.tar.TarEntry
@@ -996,6 +997,13 @@ private fun BinaryProvider.resolveHardcodedPanels(
     is DexBinaryProvider -> emptyList()
     is GenericBinaryProvider -> emptyList()
     is ArchiveBinaryProvider -> emptyList()
+    is ElfBinaryProvider -> {
+        val elfFile = (this as? BinaryVirtualFileProvider)?.file
+        val memoryPanel = if (isMemoryBudgetEligible(header, sections)) {
+            listOf(Panel("Memory") { ElfMemoryBudgetPanel(this, state, elfFile, state.project) })
+        } else emptyList()
+        commonNativePanels(state) + memoryPanel
+    }
     is NativeBinaryProvider -> commonNativePanels(state)
     is WasmBinaryVirtualFileProvider -> {
         if (canProvideWasmModule()) {
@@ -1551,6 +1559,10 @@ private fun BinaryProvider.discoverHardcodedPanelNames(): List<String> = when (t
     is DexBinaryProvider -> emptyList()
     is GenericBinaryProvider -> emptyList()
     is ArchiveBinaryProvider -> emptyList()
+    is ElfBinaryProvider -> {
+        val base = listOf("Disassembly", "Disassembly (virtualized)")
+        if (isMemoryBudgetEligible(header, sections)) base + "Memory" else base
+    }
     is NativeBinaryProvider -> {
         // SBOM depends on nativeImageInfo which is lazy/expensive — skip it in discovery.
         // The SBOM tab will appear when the full resolution completes.
