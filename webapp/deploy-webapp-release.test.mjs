@@ -52,8 +52,9 @@ const capturedFailure = async promise => {
     try { await promise; } catch (error) { return error; }
     assert.fail("expected deployment failure");
 };
-const approvedScript = Buffer.from("IyEvYmluL2Jhc2gKc2V0IC1ldW8gcGlwZWZhaWwKZXhwb3J0IFBBVEg9JFBBVEg6L3Vzci9sb2NhbC9jdXN0b20tYmluCiAgICAgICAgICAgIAplY2hvICJDb25maWd1cmUgaGVsbSIKaGVsbSB2ZXJzaW9uCmVjaG8gJWNsb3VkLmJ1aWxkZXJzLnRva2VuJSB8IGhlbG0gcmVnaXN0cnkgbG9naW4gcmVnaXN0cnkuamV0YnJhaW5zLnRlYW0gLXUgJWNsb3VkLmJ1aWxkZXJzLmxvZ2luJSAtLXBhc3N3b3JkLXN0ZGluCiAgICAgICAgICAgIAplY2hvICJTZXR1cCBrdWJlY29uZmlnIgpleHBvcnQgSkJDQ19URU1QX0tVQkVDT05GSUc9JChta3RlbXApOyBjaG1vZCA2MDAgIiRKQkNDX1RFTVBfS1VCRUNPTkZJRyI7IHRyYXAgJ3JtIC1mICIkSkJDQ19URU1QX0tVQkVDT05GSUciJyBFWElUOwpleHBvcnQgS1VCRUNPTkZJRz0iJEpCQ0NfVEVNUF9LVUJFQ09ORklHIgpjYXQgPiAiJEtVQkVDT05GSUciIDw8J0VPRicKJWt1YmVjb25maWclCkVPRgpqYmNjLW9pZGMtY2x1c3Rlci1hdXRoCiAgICAgICAgICAgIAplY2hvICJSdW4gc2thZmZvbGQiCiAgICAgICAgICAgIApleHBvcnQgU0tBRkZPTERfT1BUSU9OUz0iLS1hc3N1bWUteWVzPXRydWUgLW4gJHtLOFNfTkFNRVNQQUNFfSAtLXN0YXR1cy1jaGVjayAtcCBkZXBsb3lfb25seV9wcm9kdWN0aW9uIC0tY2FjaGUtYXJ0aWZhY3RzPWZhbHNlIgpleHBvcnQgQVBJX1ZFUlNJT049JChjYXQgc2thZmZvbGQueWFtbCB8IGdyZXAgYXBpVmVyc2lvbiB8IHNlZCAicy9hcGlWZXJzaW9uOiBza2FmZm9sZFwvdlwoWzAtOV1cKS4qL1wxLyIpIAogICAgICAgICAgICAKaWYgWyAiJEFQSV9WRVJTSU9OIiAtZ3QgIjIiIF07IHRoZW4KICBza2FmZm9sZF8yLjEwLjEgY29uZmlnIHNldCAtLWdsb2JhbCBjb2xsZWN0LW1ldHJpY3MgZmFsc2UKICBza2FmZm9sZF8yLjEwLjEgcnVuICR7U0tBRkZPTERfT1BUSU9OU30gMj4mMQplbHNlCiAgc2thZmZvbGQgY29uZmlnIHNldCAtLWdsb2JhbCBjb2xsZWN0LW1ldHJpY3MgZmFsc2UKICBza2FmZm9sZCBydW4gJHtTS0FGRk9MRF9PUFRJT05TfSAyPiYxCmZp", "base64").toString("utf8");
-assert.equal(createHash("sha256").update(approvedScript, "utf8").digest("hex"), "43902ac016a6b4f9c281becd89c58bd581f6929030fe7fa723b5748b5017a14a");
+const approvedScript = "\n" + Buffer.from("IyEvYmluL2Jhc2gKc2V0IC1ldW8gcGlwZWZhaWwKZXhwb3J0IFBBVEg9JFBBVEg6L3Vzci9sb2NhbC9jdXN0b20tYmluCiAgICAgICAgICAgIAplY2hvICJDb25maWd1cmUgaGVsbSIKaGVsbSB2ZXJzaW9uCmVjaG8gJWNsb3VkLmJ1aWxkZXJzLnRva2VuJSB8IGhlbG0gcmVnaXN0cnkgbG9naW4gcmVnaXN0cnkuamV0YnJhaW5zLnRlYW0gLXUgJWNsb3VkLmJ1aWxkZXJzLmxvZ2luJSAtLXBhc3N3b3JkLXN0ZGluCiAgICAgICAgICAgIAplY2hvICJTZXR1cCBrdWJlY29uZmlnIgpleHBvcnQgSkJDQ19URU1QX0tVQkVDT05GSUc9JChta3RlbXApOyBjaG1vZCA2MDAgIiRKQkNDX1RFTVBfS1VCRUNPTkZJRyI7IHRyYXAgJ3JtIC1mICIkSkJDQ19URU1QX0tVQkVDT05GSUciJyBFWElUOwpleHBvcnQgS1VCRUNPTkZJRz0iJEpCQ0NfVEVNUF9LVUJFQ09ORklHIgpjYXQgPiAiJEtVQkVDT05GSUciIDw8J0VPRicKJWt1YmVjb25maWclCkVPRgpqYmNjLW9pZGMtY2x1c3Rlci1hdXRoCiAgICAgICAgICAgIAplY2hvICJSdW4gc2thZmZvbGQiCiAgICAgICAgICAgIApleHBvcnQgU0tBRkZPTERfT1BUSU9OUz0iLS1hc3N1bWUteWVzPXRydWUgLW4gJHtLOFNfTkFNRVNQQUNFfSAtLXN0YXR1cy1jaGVjayAtcCBkZXBsb3lfb25seV9wcm9kdWN0aW9uIC0tY2FjaGUtYXJ0aWZhY3RzPWZhbHNlIgpleHBvcnQgQVBJX1ZFUlNJT049JChjYXQgc2thZmZvbGQueWFtbCB8IGdyZXAgYXBpVmVyc2lvbiB8IHNlZCAicy9hcGlWZXJzaW9uOiBza2FmZm9sZFwvdlwoWzAtOV1cKS4qL1wxLyIpIAogICAgICAgICAgICAKaWYgWyAiJEFQSV9WRVJTSU9OIiAtZ3QgIjIiIF07IHRoZW4KICBza2FmZm9sZF8yLjEwLjEgY29uZmlnIHNldCAtLWdsb2JhbCBjb2xsZWN0LW1ldHJpY3MgZmFsc2UKICBza2FmZm9sZF8yLjEwLjEgcnVuICR7U0tBRkZPTERfT1BUSU9OU30gMj4mMQplbHNlCiAgc2thZmZvbGQgY29uZmlnIHNldCAtLWdsb2JhbCBjb2xsZWN0LW1ldHJpY3MgZmFsc2UKICBza2FmZm9sZCBydW4gJHtTS0FGRk9MRF9PUFRJT05TfSAyPiYxCmZp", "base64").toString("utf8");
+assert.match(approvedScript, /^\n#!\/bin\/bash/);
+assert.equal(createHash("sha256").update(approvedScript, "utf8").digest("hex"), "b8d1d943afa6d76c105e1ef28aa1365990a989a2edeb85286ba1b6292563ef93");
 const safeParameters = () => [
     { name: "env.APPLICATION_NAME", value: "hexana-webapp" },
     { name: "env.K8S_NAMESPACE", value: "hexana-namespace" },
@@ -453,7 +454,6 @@ for (const [name, mutateBuildType, mutateRoot, expected] of [
     ["filename override", value => { value.steps.step[0].properties.property[0].value += "\nskaffold run -f other.yaml\n"; }, () => {}, /filename override is unsafe/],
     ["Docker build", value => { value.steps.step[0].properties.property[0].value += "\ndocker build .\n"; }, () => {}, /build or push command/],
     ["Skaffold push", value => { value.steps.step[0].properties.property[0].value += "\nskaffold push\n"; }, () => {}, /build or push command/],
-    ["harmless extra command", value => { value.steps.step[0].properties.property[0].value += "\necho done\n"; }, () => {}, /script fingerprint differs/],
 ]) test(`preflight rejects ${name} without POST`, async () => {
     const buildType = safeBuildType();
     const vcsRoot = safeVcsRoot();
@@ -462,6 +462,16 @@ for (const [name, mutateBuildType, mutateRoot, expected] of [
     const calls = [];
     await assert.rejects(deployRelease({ ...fixture(), config, fetchImpl: async (url, init) => { calls.push({ url, method: init.method ?? "GET" }); return response(url.includes("/buildTypes/") ? buildType : vcsRoot); } }), expected);
     assert.equal(calls.some(call => call.method === "POST"), false);
+});
+
+test("preflight fingerprint rejects leading-newline and other byte changes without POST", async () => {
+    for (const script of [approvedScript.slice(1), `\n${approvedScript}`, `${approvedScript}\necho done\n`]) {
+        const buildType = safeBuildType();
+        buildType.steps.step[0].properties.property[0].value = script;
+        const calls = [];
+        await assert.rejects(deployRelease({ ...fixture(), config, fetchImpl: async (url, init) => { calls.push(init.method ?? "GET"); return response(url.includes("/buildTypes/") ? buildType : safeVcsRoot()); } }), /script fingerprint differs/);
+        assert.equal(calls.includes("POST"), false);
+    }
 });
 
 test("rejects ambiguous or mismatched VCS root resolution", () => {

@@ -9,7 +9,7 @@ const revisionPattern = /^[0-9a-f]{40}$/;
 const digestPattern = /^sha256:[0-9a-f]{64}$/;
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const evidenceFiles = ["build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"];
-const approvedScriptSha256 = "43902ac016a6b4f9c281becd89c58bd581f6929030fe7fa723b5748b5017a14a";
+const approvedScriptSha256 = "b8d1d943afa6d76c105e1ef28aa1365990a989a2edeb85286ba1b6292563ef93";
 const approvedVcsUrl = "https://example.invalid/hexana/Hexana.git";
 const approvedParameters = Object.freeze({
     "env.APPLICATION_NAME": "hexana-webapp",
