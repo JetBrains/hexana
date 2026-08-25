@@ -25,7 +25,9 @@ accepts only matching schema-v2 master receipt/scan evidence, preflights the
 pinned generated Cloud Console target, queues exactly `refs/heads/master` at the
 approved full revision, and verifies `https://hexana-webapp-master.example.invalid/`
 before recording deployment evidence. The TeamCity nightly chain that supplies
-the bridge inputs and token is not yet configured.
+the bridge inputs and token is defined in the companion
+`ci-configuration` repository; it becomes operational only after
+that DSL is applied and live-validated in TeamCity.
 
 ```bash
 TEAMCITY_SERVER_URL=https://ci.example.invalid \
