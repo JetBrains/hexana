@@ -16,7 +16,7 @@ const imageMediaTypePairs = [
 function fail(message) { throw new Error(`Invalid webapp OCI evidence: ${message}`); }
 function hash(file) { return createHash("sha256").update(readFileSync(file)).digest("hex"); }
 function exactKeys(value, expected, label) {
-  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join() !== expected.slice().sort().join()) fail(`${label} has unsupported fields`);
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join("\0") !== expected.slice().sort().join("\0")) fail(`${label} has unsupported fields`);
 }
 function options(args) {
   const result = new Map();
@@ -98,6 +98,10 @@ export function verifyReceipt(receipt, packageDir) {
   } else if (receipt.schemaVersion === 2) {
     exactKeys(receipt, ["schemaVersion", "kind", "source", "image", "package"], "master receipt");
     exactKeys(receipt.source, ["branch", "revision"], "master receipt source");
+    exactKeys(receipt.image, ["reference", "manifestDigest", "configDigest", "manifestMediaType", "configMediaType", "platform"], "master receipt image");
+    exactKeys(receipt.image.platform, ["os", "architecture"], "master receipt platform");
+    exactKeys(receipt.package, ["identity", "aggregateSha256", "evidence"], "master receipt package");
+    exactKeys(receipt.package.identity, ["schemaVersion", "product", "version", "versionSource", "revision"], "master receipt package identity");
     if (receipt.source.branch !== "master" || !revision.test(receipt.source.revision ?? "")) fail("master receipt source must identify master and a lowercase full revision");
     actual = verifyStagingPackage(packageDir, { revision: receipt.source.revision });
     exactKeys(actual.identity, ["schemaVersion", "product", "version", "versionSource", "revision"], "master package identity");
@@ -107,7 +111,6 @@ export function verifyReceipt(receipt, packageDir) {
   }
   if (!receipt.package || typeof receipt.package !== "object" || Array.isArray(receipt.package)) fail("receipt package must be an object");
   const claimed = receipt.package?.identity;
-  if (receipt.schemaVersion === 2) exactKeys(claimed, ["schemaVersion", "product", "version", "versionSource", "revision"], "master receipt package identity");
   if (!["schemaVersion", "product", "version", "versionSource", "revision"].every(key => claimed?.[key] === actual.identity[key]) || source.revision !== actual.identity.revision || receipt.package.aggregateSha256 !== actual.aggregateSha256) fail("receipt package identity or aggregate differs from the static payload");
   if (Object.keys(receipt.package.evidence ?? {}).sort().join() !== evidenceNames.join() || evidenceNames.some(name => receipt.package.evidence[name] !== actual.evidence[name])) fail("receipt evidence hashes differ from the static payload");
   return source;

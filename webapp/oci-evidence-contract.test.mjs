@@ -85,10 +85,23 @@ test("rejects mixed schemas and release/master substitution", () => {
     assert.throws(() => verifyReceipt(receipt, root), /unsupported receipt schema/);
   }, "master");
 });
-test("rejects extra master source and identity fields", () => withFixture(({ root, receipt }) => {
+test("rejects extra master source, package, image, platform, and identity fields", () => withFixture(({ root, receipt }) => {
   receipt.source.releaseBranch = "release/webapp/0.1";
   assert.throws(() => verifyReceipt(receipt, root), /source has unsupported fields/);
   delete receipt.source.releaseBranch;
+  receipt.package.releaseBranch = "release/webapp/0.1";
+  assert.throws(() => verifyReceipt(receipt, root), /package has unsupported fields/);
+  delete receipt.package.releaseBranch;
+  receipt.image.tag = "master";
+  assert.throws(() => verifyReceipt(receipt, root), /image has unsupported fields/);
+  delete receipt.image.tag;
+  receipt.image.platform.variant = "v1";
+  assert.throws(() => verifyReceipt(receipt, root), /platform has unsupported fields/);
+  delete receipt.image.platform.variant;
   receipt.package.identity.releaseBranch = "release/webapp/0.1";
   assert.throws(() => verifyReceipt(receipt, root), /identity has unsupported fields/);
+}, "master"));
+test("rejects comma-key collisions in exact master shapes", () => withFixture(({ root, receipt }) => {
+  receipt.source = { "branch,revision": `${receipt.source.branch}:${receipt.source.revision}` };
+  assert.throws(() => verifyReceipt(receipt, root), /source has unsupported fields/);
 }, "master"));
