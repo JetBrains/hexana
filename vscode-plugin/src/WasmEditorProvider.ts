@@ -1278,10 +1278,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
     ): Promise<void> {
         try {
             const content = template ?? await this.readBundledExample(fileName);
-            const folder = vscode.workspace.workspaceFolders?.[0];
-            const directory = folder
-                ? vscode.Uri.joinPath(folder.uri, ".hexana", "scripts")
-                : vscode.Uri.file(path.join(this.context.globalStorageUri.fsPath, "scripts"));
+            const directory = this.scriptsDirectory();
             await vscode.workspace.fs.createDirectory(directory);
 
             const target = await this.uniqueScriptUri(directory, fileName);
@@ -1369,6 +1366,29 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         return new TextDecoder("utf-8").decode(await vscode.workspace.fs.readFile(uri));
     }
 
+    /**
+     * Directory the created scripts live in: inside the workspace when there is
+     * one, otherwise the extension's own storage. Defined once so the file picker
+     * can start where the scripts already are.
+     */
+    private scriptsDirectory(): vscode.Uri {
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        return folder
+            ? vscode.Uri.joinPath(folder.uri, ".hexana", "scripts")
+            : vscode.Uri.file(path.join(this.context.globalStorageUri.fsPath, "scripts"));
+    }
+
+    /** The scripts directory, or undefined when it does not exist yet. */
+    private async existingScriptsDirectory(): Promise<vscode.Uri | undefined> {
+        const directory = this.scriptsDirectory();
+        try {
+            const stat = await vscode.workspace.fs.stat(directory);
+            return stat.type === vscode.FileType.Directory ? directory : undefined;
+        } catch {
+            return undefined;
+        }
+    }
+
     private async readBundledExample(fileName: string): Promise<string> {
         const uri = vscode.Uri.file(path.join(this.context.extensionPath, "hexana-scripts", fileName));
         return new TextDecoder("utf-8").decode(await vscode.workspace.fs.readFile(uri));
@@ -1404,6 +1424,9 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             canSelectMany: false,
             filters: { "JavaScript": ["js"] },
             title: "Select Script File",
+            // Start where this dialog's own scripts are; VS Code falls back to the
+            // last used location when the folder does not exist yet.
+            defaultUri: await this.existingScriptsDirectory(),
         });
         if (!uris || uris.length === 0) return;
         const uri = uris[0];

@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.ui.panel
 
+import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
@@ -46,17 +47,18 @@ internal class AddScriptTabDialog(
                 )
             }
             row("Script file:") {
-                val descriptor = FileChooserDescriptorFactory.createSingleFileDescriptor("js")
-                    .withTitle("Select Script File")
-                textFieldWithBrowseButton(descriptor, project).align(AlignX.FILL).applyToComponent {
-                    pathField = textField
-                }.onChanged { field ->
-                    selectFile(field.text)
-                }
+                // Not the DSL's textFieldWithBrowseButton: the chooser has to start
+                // in the scripts folder, and only an explicit FileChooser call takes
+                // a directory to select.
+                textField()
+                    .align(AlignX.FILL)
+                    .applyToComponent { pathField = this }
+                    .onChanged { field -> selectFile(field.text) }
+                button("Browse\u2026") { browseForScript() }
             }
             row {
                 button("New Script from Template") {
-                    ScriptTemplateWriter.createFromTemplate(project)?.let(::useCreatedFile)
+                    ScriptTemplateWriter.createFromTemplate(project)?.let(::useFile)
                 }.comment(
                     "Writes a runnable script into <code>.hexana/scripts</code>, opens it in the " +
                         "editor, and selects it here. The type definitions are placed next to it, " +
@@ -68,7 +70,7 @@ internal class AddScriptTabDialog(
                     row {
                         link(example.title) {
                             ScriptTemplateWriter.createFromExample(project, example.fileName)
-                                ?.let(::useCreatedFile)
+                                ?.let(::useFile)
                         }
                         comment(example.summary)
                     }
@@ -98,7 +100,23 @@ internal class AddScriptTabDialog(
         }
     }
 
-    private fun useCreatedFile(file: VirtualFile) {
+    /**
+     * Shows the file chooser, starting in the scripts folder when it exists so the
+     * scripts this dialog creates are the first thing offered. Falls back to the
+     * chooser's own last-used location otherwise.
+     */
+    private fun browseForScript() {
+        val descriptor = FileChooserDescriptorFactory.createSingleFileDescriptor("js")
+            .withTitle("Select Script File")
+        val chosen = FileChooser.chooseFile(
+            descriptor,
+            project,
+            ScriptTemplateWriter.existingScriptsDirectory(project),
+        ) ?: return
+        useFile(chosen)
+    }
+
+    private fun useFile(file: VirtualFile) {
         selectedFile = file
         pathField?.text = file.path
     }

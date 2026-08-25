@@ -160,30 +160,38 @@ fun AddScriptTabDialog(
                     }
                 }
 
-                // Available APIs, rendered from the shared reference.
+                // Available APIs, rendered from the shared reference. Collapsed by
+                // default: it is reference material, and expanded it makes the
+                // dialog several times taller than the controls that matter.
+                var apisExpanded by remember { mutableStateOf(false) }
                 Div({
                     style {
-                        property("margin-top", "20px")
-                        property("margin-bottom", "8px")
+                        property("margin-top", "16px")
                         property("font-weight", "bold")
+                        property("cursor", "pointer")
+                        property("user-select", "none")
                     }
+                    onClick { apisExpanded = !apisExpanded }
                 }) {
-                    Text("Available APIs")
+                    Text(if (apisExpanded) "\u25BE Available APIs" else "\u25B8 Available APIs")
                 }
-                Div({
-                    style {
-                        property("font-family", "var(--vscode-editor-font-family, monospace)")
-                        property("line-height", "1.6")
-                    }
-                }) {
-                    for (line in ScriptApiReference.summaryLines()) {
-                        val separator = line.indexOf(" — ")
-                        Div {
-                            if (separator < 0) {
-                                Text(line)
-                            } else {
-                                B { Text(line.substring(0, separator)) }
-                                Text(line.substring(separator))
+                if (apisExpanded) {
+                    Div({
+                        style {
+                            property("margin-top", "8px")
+                            property("font-family", "var(--vscode-editor-font-family, monospace)")
+                            property("line-height", "1.6")
+                        }
+                    }) {
+                        for (line in ScriptApiReference.summaryLines()) {
+                            val separator = line.indexOf(" \u2014 ")
+                            Div {
+                                if (separator < 0) {
+                                    Text(line)
+                                } else {
+                                    B { Text(line.substring(0, separator)) }
+                                    Text(line.substring(separator))
+                                }
                             }
                         }
                     }

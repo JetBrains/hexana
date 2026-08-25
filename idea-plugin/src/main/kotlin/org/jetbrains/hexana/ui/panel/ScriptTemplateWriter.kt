@@ -30,6 +30,21 @@ internal object ScriptTemplateWriter {
     /** Plugin-resource directory the bundled examples are packaged into. */
     private const val BUNDLED_EXAMPLES_RESOURCE_DIR = "hexana-scripts"
 
+    /**
+     * The directory created scripts live in, whether or not it exists yet.
+     *
+     * Exposed so the file chooser can start where the scripts already are; the
+     * location is defined once, here.
+     */
+    fun scriptsDirectory(project: Project): File? =
+        project.basePath?.let { basePath -> File(basePath, SCRIPTS_DIRECTORY) }
+
+    /** The scripts directory as a virtual file, when it exists on disk. */
+    fun existingScriptsDirectory(project: Project): VirtualFile? =
+        scriptsDirectory(project)
+            ?.takeIf { it.isDirectory }
+            ?.let { LocalFileSystem.getInstance().refreshAndFindFileByIoFile(it) }
+
     /** Writes [ScriptApiReference.starterTemplate] and opens it. */
     fun createFromTemplate(project: Project): VirtualFile? =
         create(project, ScriptApiReference.STARTER_FILE_NAME, ScriptApiReference.starterTemplate())
@@ -68,12 +83,11 @@ internal object ScriptTemplateWriter {
             ?.readText()
 
     private fun create(project: Project, fileName: String, content: String): VirtualFile? {
-        val basePath = project.basePath
-        if (basePath == null) {
+        val directory = scriptsDirectory(project)
+        if (directory == null) {
             log.warn("Cannot create a script: the project has no base directory")
             return null
         }
-        val directory = File(basePath, SCRIPTS_DIRECTORY)
         if (!directory.isDirectory && !directory.mkdirs()) {
             log.warn("Cannot create the script directory: $directory")
             return null

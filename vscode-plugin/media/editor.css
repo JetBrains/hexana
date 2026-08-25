@@ -266,15 +266,28 @@ html, body {
     display: flex;
     align-items: center;
     justify-content: center;
+    /* Keeps a tall dialog off the viewport edges instead of bleeding past them. */
+    padding: 16px;
+    box-sizing: border-box;
     z-index: 1000;
 }
 
+/*
+ * A dialog is a column of fixed title, scrollable body, fixed buttons. Without
+ * the height cap a long body grows past the centred overlay in both directions,
+ * putting the title and the OK/Cancel buttons off screen with no way to reach
+ * them.
+ */
 .hexana-dialog {
     background: var(--vscode-editorWidget-background, #252526);
     border: 1px solid var(--vscode-editorWidget-border, #454545);
     border-radius: 6px;
     min-width: 320px;
     max-width: 480px;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
@@ -283,11 +296,15 @@ html, body {
     font-weight: 600;
     font-size: 13px;
     border-bottom: 1px solid var(--hexana-border, #333);
+    flex: 0 0 auto;
 }
 
 .hexana-dialog-body {
     padding: 12px 16px;
     font-size: 13px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
 }
 
 .hexana-dialog-field {
@@ -329,6 +346,8 @@ html, body {
     justify-content: flex-end;
     gap: 8px;
     padding: 8px 16px 12px;
+    flex: 0 0 auto;
+    border-top: 1px solid var(--hexana-border, #333);
 }
 
 .hexana-dialog-btn {
