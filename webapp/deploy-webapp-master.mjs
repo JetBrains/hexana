@@ -26,6 +26,7 @@ export const masterDeploymentPolicy = createDeploymentPolicy({
     approvedParameters: parameters,
     branchSpec: "+:<default>",
     defaultBranch: "refs/heads/master",
+    queueBranchName: "<default>",
     sourceBuildName: "nightly",
     readinessLabel: "Master",
     endpointLabel: "master",

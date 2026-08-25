@@ -96,6 +96,7 @@ export const releaseDeploymentPolicy = createDeploymentPolicy({
     approvedParameters,
     branchSpec: "+:refs/heads/(release/webapp/*)",
     defaultBranch: null,
+    queueBranchName: null,
     sourceBuildName: "release",
     readinessLabel: "Production",
     endpointLabel: "release",
@@ -308,8 +309,8 @@ export function resolveVcsRootInstance(value, config) {
 }
 
 const buildFields = "id,state,status,branchName,buildType(id),revisions(revision(version,vcsBranchName,vcs-root-instance(id)))";
-export function createQueueRequest(config, evidence, vcsRootInstanceId) {
-    const payload = { buildType: { id: config.buildTypeId }, branchName: evidence.branch, revisions: { revision: [{ version: evidence.revision, vcsBranchName: `refs/heads/${evidence.branch}`, "vcs-root-instance": { id: vcsRootInstanceId } }] }, properties: { property: [{ name: "env.HEXANA_WEBAPP_IMAGE", value: evidence.image }] } };
+export function createQueueRequest(config, evidence, vcsRootInstanceId, policy = releaseDeploymentPolicy) {
+    const payload = { buildType: { id: config.buildTypeId }, branchName: policy.queueBranchName ?? evidence.branch, revisions: { revision: [{ version: evidence.revision, vcsBranchName: `refs/heads/${evidence.branch}`, "vcs-root-instance": { id: vcsRootInstanceId } }] }, properties: { property: [{ name: "env.HEXANA_WEBAPP_IMAGE", value: evidence.image }] } };
     return { url: `${config.serverUrl}/app/rest/buildQueue?fields=${buildFields}`, init: { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${config.token}` }, body: JSON.stringify(payload) } };
 }
 
@@ -491,7 +492,7 @@ async function deployForPolicy({ receipt, scan, config, outputDirectory, fetchIm
         const rootRequest = createVcsRootInstancesRequest(config);
         const vcsRootInstanceId = resolveVcsRootInstance(await requestJson(fetchImpl, rootRequest.url, rootRequest.init, 30_000), config);
         attempt.cloudConsole.vcsRootInstanceId = vcsRootInstanceId;
-        const queued = createQueueRequest(config, evidence, vcsRootInstanceId);
+        const queued = createQueueRequest(config, evidence, vcsRootInstanceId, policy);
         phase = "queue";
         queueAttempted = true;
         attempt.cloudConsole.queueAttempted = true;
@@ -640,7 +641,7 @@ export function createDeploymentBridge(policy) {
         createSafetyPreflightRequests,
         validateSafetyPreflight: (buildType, vcsRoot, config) => validateSafetyPreflight(buildType, vcsRoot, config, policy),
         resolveVcsRootInstance,
-        createQueueRequest,
+        createQueueRequest: (config, evidence, vcsRootInstanceId) => createQueueRequest(config, evidence, vcsRootInstanceId, policy),
         deploy: input => deployForPolicy(input, policy),
         runCli: (args, env = process.env) => deploymentMain(args, env, policy),
     });

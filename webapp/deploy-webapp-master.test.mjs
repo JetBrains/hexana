@@ -80,12 +80,12 @@ test("pins the master environment, target, branch, and revision", () => {
     assert.throws(() => configFromEnv(validEnvironment({ TEAMCITY_SERVER_URL: "https://evil.example" })), /pinned TeamCity/);
 });
 
-test("queues exactly refs/heads/master and the digest image property", () => {
+test("queues master through TeamCity's explicit default branch and pins refs/heads/master", () => {
     const evidence = validateEvidence(...Object.values(fixture()), "master", revision);
     const request = createQueueRequest(config, evidence, instanceId);
     assert.deepEqual(JSON.parse(request.init.body), {
         buildType: { id: allowedTarget.buildTypeId },
-        branchName: "master",
+        branchName: "<default>",
         revisions: { revision: [{ version: revision, vcsBranchName: "refs/heads/master", "vcs-root-instance": { id: instanceId } }] },
         properties: { property: [{ name: "env.HEXANA_WEBAPP_IMAGE", value: evidence.image }] },
     });
@@ -127,6 +127,7 @@ test("polls the exact build and verifies master readiness", async () => {
     assert.equal(result.readiness.endpoints[0].url, masterEndpoints[0]);
     assert.equal(result.readiness.endpoints[0].ready, true);
     assert.equal(calls.filter(call => call.init.method === "POST").length, 1);
+    assert.equal(JSON.parse(calls.find(call => call.init.method === "POST").init.body).branchName, "<default>");
 });
 
 test("rejects the wrong identity at the master endpoint", async () => {
