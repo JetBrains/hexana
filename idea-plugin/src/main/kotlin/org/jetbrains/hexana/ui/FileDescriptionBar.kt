@@ -432,7 +432,9 @@ private fun NormalModeContent(
                         runFirmwareElfLater(state.project, elfFile!!, fs.target, WasmRunMode.RUN)
                     } else {
                         val sel = fs.target.selection as BackendSelection.Ok
-                        FirmwareAcquisitionPopup.show(state.project, fs.missingBackend ?: sel.backend, sel.qemuBinary)
+                        FirmwareAcquisitionPopup.show(
+                            state.project, fs.missingBackend ?: sel.backend, sel.qemuBinary, fs.target?.profile
+                        )
                     }
                 },
             )
@@ -446,7 +448,9 @@ private fun NormalModeContent(
                         runFirmwareElfLater(state.project, elfFile!!, fs.target, WasmRunMode.DEBUG)
                     } else {
                         val sel = fs.target.selection as BackendSelection.Ok
-                        FirmwareAcquisitionPopup.show(state.project, fs.missingBackend ?: sel.backend, sel.qemuBinary)
+                        FirmwareAcquisitionPopup.show(
+                            state.project, fs.missingBackend ?: sel.backend, sel.qemuBinary, fs.target?.profile
+                        )
                     }
                 },
             )

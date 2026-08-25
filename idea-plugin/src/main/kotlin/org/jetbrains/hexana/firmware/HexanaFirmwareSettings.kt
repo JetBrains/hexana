@@ -150,6 +150,24 @@ final class HexanaFirmwareSettings :
      * (auto-detection via [EmulatorDetection.detectGdb] will run).
      */
     fun effectiveGdbPath(): String? = state.gdbPath?.takeIf { it.isNotBlank() }
+
+    /**
+     * User-configured Zephyr SDK root path for UI binding.
+     *
+     * Points at the SDK root directory that contains the `gnu/` sub-directory
+     * with per-target toolchain trees, e.g. `~/zephyr-sdk-1.0.1`.
+     * When set, [EmulatorDetection.detectGdb] probes this directory before
+     * the `${'$'}ZEPHYR_SDK_INSTALL_DIR` environment variable.
+     */
+    var zephyrSdkPathInUi: String?
+        get() = state.zephyrSdkPath
+        set(value) { state.zephyrSdkPath = value?.takeIf { it.isNotBlank() } }
+
+    /**
+     * Returns the configured Zephyr SDK root, or null if not configured.
+     * The returned path has not been validated for existence.
+     */
+    fun effectiveZephyrSdkPath(): String? = state.zephyrSdkPath?.takeIf { it.isNotBlank() }
 }
 
 /** Persistent state for [HexanaFirmwareSettings]. All fields `by string()` and nullable. */
@@ -162,4 +180,5 @@ class HexanaFirmwareSettingsState : BaseState() {
     var renodeDownloadDir: String? by string()
     var dts2replPath: String? by string()
     var gdbPath: String? by string()
+    var zephyrSdkPath: String? by string()
 }

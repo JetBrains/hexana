@@ -27,6 +27,7 @@ class FirmwareAcquisitionPopup(
     private val project: Project?,
     private val requiredBackend: Backend,
     private val requiredQemuBinary: QemuBinary?,
+    private val targetProfile: org.jetbrains.hexana.providers.firmware.TargetProfile? = null,
 ) : DialogWrapper(project, /* canBeParent = */ true) {
 
     init {
@@ -41,6 +42,7 @@ class FirmwareAcquisitionPopup(
             Backend.Qemu -> buildQemuSection()
             Backend.Renode -> buildRenodeSection()
         }
+        buildGdbSection()
         separator()
         group("Settings") {
             row {
@@ -108,6 +110,41 @@ class FirmwareAcquisitionPopup(
         }
     }
 
+    private fun com.intellij.ui.dsl.builder.Panel.buildGdbSection() {
+        val detected = EmulatorDetection.detectGdb()
+        if (detected != null) return // GDB found; no action needed
+
+        val toolchainTarget = targetProfile?.let {
+            org.jetbrains.hexana.firmware.ZephyrToolchainDownloader.toolchainTargetFor(it)
+        } ?: "arm-zephyr-eabi"
+        val approxMb = when (toolchainTarget) {
+            "aarch64-zephyr-elf" -> "~49"
+            "riscv64-zephyr-elf" -> "~133"
+            else -> "~90"
+        }
+
+        group("GDB (DAP transport)") {
+            row("Status:") {
+                label("Not found — GDB 14+ with Python is required for debugging").align(AlignX.FILL)
+            }
+            row {
+                button(
+                    "Download GDB ($toolchainTarget toolchain, $approxMb MB)…"
+                ) {
+                    org.jetbrains.hexana.firmware.ZephyrToolchainDownloader.downloadWithConsent(
+                        project, toolchainTarget
+                    ) {
+                        // Popup is typically closed after download; re-show or just close.
+                    }
+                }.applyToComponent {
+                    toolTipText = "Download the $toolchainTarget toolchain from Zephyr SDK " +
+                        "${org.jetbrains.hexana.firmware.ZephyrToolchainDownloader.PINNED_ZEPHYR_SDK_VERSION} " +
+                        "(contains GPLv3 GDB with Python support, verified by SHA-256)."
+                }
+            }
+        }
+    }
+
     private fun detectedStatus(
         tool: EmulatorDetection.DetectedTool?,
         minVersion: String,
@@ -127,13 +164,15 @@ class FirmwareAcquisitionPopup(
          * @param project The current project (nullable for application-level context).
          * @param requiredBackend Which backend is needed ([Backend.Qemu] or [Backend.Renode]).
          * @param requiredQemuBinary The specific QEMU binary variant, when [Backend.Qemu] is required.
+         * @param targetProfile Optional profile used to select the best GDB toolchain to download.
          */
         fun show(
             project: Project?,
             requiredBackend: Backend,
             requiredQemuBinary: QemuBinary? = null,
+            targetProfile: org.jetbrains.hexana.providers.firmware.TargetProfile? = null,
         ) {
-            FirmwareAcquisitionPopup(project, requiredBackend, requiredQemuBinary).show()
+            FirmwareAcquisitionPopup(project, requiredBackend, requiredQemuBinary, targetProfile).show()
         }
     }
 }

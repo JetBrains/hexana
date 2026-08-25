@@ -122,8 +122,13 @@ object EmulatorDetection {
      */
     fun detectGdb(): DetectedTool? {
         val candidates = buildList<String> {
-            val override = HexanaFirmwareSettings.getInstance().effectiveGdbPath()
+            val settings = HexanaFirmwareSettings.getInstance()
+            val override = settings.effectiveGdbPath()
             if (override != null) add(override)
+
+            // Explicit Zephyr SDK path from settings (highest-priority SDK probe).
+            val configuredSdkPath = settings.effectiveZephyrSdkPath()
+            if (configuredSdkPath != null) addZephyrSdkGdbCandidates(this, File(configuredSdkPath))
 
             val sdkEnvDir = System.getenv("ZEPHYR_SDK_INSTALL_DIR")
             if (sdkEnvDir != null) addZephyrSdkGdbCandidates(this, File(sdkEnvDir))
@@ -131,6 +136,12 @@ object EmulatorDetection {
             val homeDir = File(System.getProperty("user.home"))
             homeDir.listFiles { f -> f.isDirectory && f.name.startsWith("zephyr-sdk-") }
                 ?.forEach { sdkDir -> addZephyrSdkGdbCandidates(this, sdkDir) }
+
+            // Plugin-managed per-arch toolchain downloads (ZephyrToolchainDownloader installs here).
+            val pluginBase = com.intellij.openapi.application.PathManager.getSystemPath()
+            val pluginToolchainRoot = File("$pluginBase/hexana-firmware")
+            pluginToolchainRoot.listFiles { f -> f.isDirectory && f.name.startsWith("zephyr-toolchain-") }
+                ?.forEach { toolchainDir -> addBareToolchainGdbCandidates(this, toolchainDir) }
 
             add("arm-none-eabi-gdb-py")
             add("arm-none-eabi-gdb")
@@ -166,12 +177,34 @@ object EmulatorDetection {
         return null
     }
 
+    /**
+     * Adds `*-gdb-py` candidates from an SDK root that contains a `gnu/` sub-directory.
+     * Layout: `<sdkDir>/gnu/<target>/bin/<target>-gdb-py`.
+     */
     private fun addZephyrSdkGdbCandidates(list: MutableList<String>, sdkDir: File) {
         val gnuDir = File(sdkDir, "gnu")
         if (!gnuDir.isDirectory) return
         gnuDir.listFiles()?.forEach { archDir ->
-            val bin = File(archDir, "bin")
-            bin.listFiles()?.filter { it.name.endsWith("-gdb-py") }
+            addBareToolchainGdbCandidates(list, archDir)
+        }
+    }
+
+    /**
+     * Adds `*-gdb-py` candidates from a bare per-target toolchain directory.
+     *
+     * Tolerates two extraction layouts observed in Zephyr SDK v1.0.1:
+     * - Flat:   `<toolchainDir>/bin/<target>-gdb-py`
+     * - Nested: `<toolchainDir>/<target>/bin/<target>-gdb-py`
+     *           (seen when the tarball extracts with an extra top-level dir)
+     */
+    private fun addBareToolchainGdbCandidates(list: MutableList<String>, toolchainDir: File) {
+        if (!toolchainDir.isDirectory) return
+        // Flat: bin/ directly under toolchainDir
+        File(toolchainDir, "bin").listFiles()?.filter { it.name.endsWith("-gdb-py") }
+            ?.forEach { list.add(it.absolutePath) }
+        // Nested: one sub-directory level before bin/
+        toolchainDir.listFiles()?.filter { it.isDirectory }?.forEach { subDir ->
+            File(subDir, "bin").listFiles()?.filter { it.name.endsWith("-gdb-py") }
                 ?.forEach { list.add(it.absolutePath) }
         }
     }

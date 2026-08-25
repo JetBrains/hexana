@@ -42,6 +42,7 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
     private var qemuRiscv64Label: JLabel? = null
     private var renodeLabel: JLabel? = null
     private var gdbLabel: JLabel? = null
+    private var downloadGdbButton: javax.swing.JButton? = null
 
     override fun createPanel(): DialogPanel {
         val panel = panel {
@@ -81,6 +82,17 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
                 }
             }
             group("GDB (DAP transport)") {
+                row("Zephyr SDK path:") {
+                    textFieldWithBrowseButton(FileChooserDescriptorFactory.singleDir())
+                        .align(AlignX.FILL)
+                        .applyToComponent {
+                            emptyText.text = "e.g. ~/zephyr-sdk-1.0.1 (optional)"
+                            toolTipText = "Root directory of a pre-installed Zephyr SDK " +
+                                "(the directory containing gnu/<target>/bin). " +
+                                "When set, GDB is probed here before \$ZEPHYR_SDK_INSTALL_DIR."
+                        }
+                        .bindText(settings::zephyrSdkPathInUi.toNonNullableProperty(""))
+                }
                 row("GDB path:") {
                     textFieldWithBrowseButton(FileChooserDescriptorFactory.singleFile())
                         .align(AlignX.FILL)
@@ -101,6 +113,18 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
                         "Zephyr SDK ships arm-zephyr-eabi-gdb-py; " +
                         "Arm GNU Toolchain ≥ 13.3.Rel1 ships arm-none-eabi-gdb-py."
                 )
+                row {
+                    val btn = button("Download GDB toolchain (Zephyr SDK arm-zephyr-eabi, ~90 MB)…") {
+                        ZephyrToolchainDownloader.downloadWithConsent(null, "arm-zephyr-eabi") {
+                            refreshGdbVersion()
+                        }
+                    }.applyToComponent {
+                        toolTipText = "Download the arm-zephyr-eabi toolchain from Zephyr SDK " +
+                            "${ZephyrToolchainDownloader.PINNED_ZEPHYR_SDK_VERSION} " +
+                            "(contains GPLv3 GDB with Python support)."
+                    }.component
+                    downloadGdbButton = btn
+                }
             }
             group("dts2repl") {
                 row("dts2repl directory:") {
@@ -188,6 +212,7 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
                 qemuRiscv64Label?.text = versionStatus(qemuRiscv64)
                 renodeLabel?.text = versionStatus(renode)
                 gdbLabel?.text = versionStatus(gdb)
+                downloadGdbButton?.isEnabled = gdb == null
             }
         }
     }
@@ -196,6 +221,16 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
         CoroutineScope(Dispatchers.IO).launch {
             val renode = EmulatorDetection.detectRenode()
             invokeLater { renodeLabel?.text = versionStatus(renode) }
+        }
+    }
+
+    private fun refreshGdbVersion() {
+        CoroutineScope(Dispatchers.IO).launch {
+            val gdb = EmulatorDetection.detectGdb()
+            invokeLater {
+                gdbLabel?.text = versionStatus(gdb)
+                downloadGdbButton?.isEnabled = gdb == null
+            }
         }
     }
 
