@@ -17,6 +17,7 @@ import org.jetbrains.hexana.firmware.Dts2ReplRunner
 import org.jetbrains.hexana.firmware.EmulatorDetection
 import org.jetbrains.hexana.firmware.HexanaFirmwareSettings
 import org.jetbrains.hexana.firmware.RenodeDownloader
+import org.jetbrains.hexana.firmware.PythonRuntimeDownloader
 import org.jetbrains.hexana.firmware.ZephyrToolchainDownloader
 import javax.swing.DefaultComboBoxModel
 import javax.swing.JButton
@@ -85,6 +86,8 @@ class FirmwareRunSettingsEditor(private val project: Project) : SettingsEditor<F
     private var dts2replFetchButton: JButton? = null
     private var gdbStatusLabel: JLabel? = null
     private var gdbDownloadButton: JButton? = null
+    private var pythonStatusLabel: JLabel? = null
+    private var pythonDownloadButton: JButton? = null
 
     // Tracks whether a download is in progress to disable buttons.
     @Volatile private var downloadInProgress = false
@@ -149,12 +152,23 @@ class FirmwareRunSettingsEditor(private val project: Project) : SettingsEditor<F
             addActionListener { onDownloadGdb() }
         }
 
+        val pythonLabel = JLabel("Checking…")
+        val pythonBtn = JButton(
+            "Download Python runtime (~${PythonRuntimeDownloader.approxSizeMb()} MB)…"
+        ).apply {
+            toolTipText = "Download CPython ${PythonRuntimeDownloader.PINNED_PYTHON_VERSION} " +
+                "(python-build-standalone, PSF license). Required for dts2repl / Renode Generated platform."
+            addActionListener { onDownloadPython() }
+        }
+
         renodeStatusLabel = renodeLabel
         renodeDownloadButton = renodeBtn
         dts2replStatusLabel = dts2replLabel
         dts2replFetchButton = dts2replBtn
         gdbStatusLabel = gdbLabel
         gdbDownloadButton = gdbBtn
+        pythonStatusLabel = pythonLabel
+        pythonDownloadButton = pythonBtn
 
         val editorPanel = panel {
             row("ELF file:") {
@@ -184,6 +198,12 @@ class FirmwareRunSettingsEditor(private val project: Project) : SettingsEditor<F
                 }.comment("Required for Renode with generated platform descriptions.")
                 row {
                     cell(dts2replBtn)
+                }
+                row("Python:") {
+                    cell(pythonLabel)
+                }.comment("Required to run dts2repl for Renode Generated-platform targets.")
+                row {
+                    cell(pythonBtn)
                 }
                 row("GDB (DAP):") {
                     cell(gdbLabel)
@@ -232,6 +252,14 @@ class FirmwareRunSettingsEditor(private val project: Project) : SettingsEditor<F
         }
     }
 
+    private fun onDownloadPython() {
+        setDownloading(true)
+        PythonRuntimeDownloader.downloadWithConsent(project) {
+            setDownloading(false)
+            refreshVersionLabels()
+        }
+    }
+
     private fun onDownloadGdb() {
         val target = resolveGdbToolchainTarget()
         if (target == null) {
@@ -265,6 +293,7 @@ class FirmwareRunSettingsEditor(private val project: Project) : SettingsEditor<F
             renodeDownloadButton?.isEnabled = enabled
             dts2replFetchButton?.isEnabled = enabled
             gdbDownloadButton?.isEnabled = enabled
+            pythonDownloadButton?.isEnabled = enabled
         }
     }
 
@@ -278,7 +307,8 @@ class FirmwareRunSettingsEditor(private val project: Project) : SettingsEditor<F
             val gdb = EmulatorDetection.detectGdb()
             val dts2replOk = Dts2ReplRunner.isInstalled(Dts2ReplRunner.managedInstallDir()) ||
                 HexanaFirmwareSettings.getInstance().effectiveDts2replPath() != null
-            invokeLater { applyProbeResults(renode, gdb, dts2replOk) }
+            val python = Dts2ReplRunner.resolvePython()
+            invokeLater { applyProbeResults(renode, gdb, dts2replOk, python) }
         }
     }
 
@@ -288,7 +318,8 @@ class FirmwareRunSettingsEditor(private val project: Project) : SettingsEditor<F
             val gdb = EmulatorDetection.detectGdb()
             val dts2replOk = Dts2ReplRunner.isInstalled(Dts2ReplRunner.managedInstallDir()) ||
                 HexanaFirmwareSettings.getInstance().effectiveDts2replPath() != null
-            invokeLater { applyProbeResults(renode, gdb, dts2replOk) }
+            val python = Dts2ReplRunner.resolvePython()
+            invokeLater { applyProbeResults(renode, gdb, dts2replOk, python) }
         }
     }
 
@@ -300,6 +331,7 @@ class FirmwareRunSettingsEditor(private val project: Project) : SettingsEditor<F
         renode: EmulatorDetection.DetectedTool?,
         gdb: EmulatorDetection.DetectedTool?,
         dts2replInstalled: Boolean,
+        python: String?,
     ) {
         if (downloadInProgress) return // Don't overwrite while a download is in flight.
 
@@ -308,6 +340,9 @@ class FirmwareRunSettingsEditor(private val project: Project) : SettingsEditor<F
 
         dts2replStatusLabel?.text = if (dts2replInstalled) "Installed" else "Not installed"
         dts2replFetchButton?.isEnabled = !dts2replInstalled
+
+        pythonStatusLabel?.text = if (python != null) "Found: $python" else "Not found"
+        pythonDownloadButton?.isEnabled = (python == null)
 
         gdbStatusLabel?.text = toolStatus(gdb)
         val gdbTarget = resolveGdbToolchainTarget()

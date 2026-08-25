@@ -119,6 +119,24 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
                     comment("dts2repl converts Zephyr DTS files to Renode platform descriptions.")
                 }
             }
+            group("Python Runtime") {
+                row("Python interpreter:") {
+                    textFieldWithBrowseButton(FileChooserDescriptorFactory.singleFile())
+                        .align(AlignX.FILL)
+                        .applyToComponent {
+                            emptyText.text = "auto-detect (system python3 or managed download)"
+                            toolTipText = "Path to a Python 3.9+ interpreter. " +
+                                "Leave blank to use the managed download or system python3."
+                        }
+                        .bindText(settings::pythonPathInUi.toNonNullableProperty(""))
+                }
+                row {
+                    comment(
+                        "Python is required to run dts2repl for Renode Generated-platform targets. " +
+                            "Download via the Hexana Firmware run configuration."
+                    )
+                }
+            }
             group("Download Directory") {
                 row("Firmware tools directory:") {
                     textFieldWithBrowseButton(FileChooserDescriptorFactory.singleDir())

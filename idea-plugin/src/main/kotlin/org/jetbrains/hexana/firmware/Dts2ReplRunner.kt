@@ -2,6 +2,7 @@ package org.jetbrains.hexana.firmware
 
 import com.intellij.openapi.application.invokeLater
 import com.intellij.openapi.diagnostic.Logger
+import java.io.File
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -135,6 +136,54 @@ class Dts2ReplRunner : Dts2ReplConverter {
         fun isInstalled(installDir: Path): Boolean =
             installDir.exists() && installDir.resolve(".sha256").exists()
 
+        /**
+         * Resolves a suitable Python interpreter for running dts2repl.
+         *
+         * Resolution order:
+         * 1. [HexanaFirmwareSettings.effectivePythonPath] — explicit override (settings or managed download).
+         * 2. [PythonRuntimeDownloader.locatePython] over the managed install directory.
+         * 3. System `python3` (or `python3.exe`) on PATH, if it meets the minimum version requirement.
+         * 4. `null` — caller should prompt the user to download or configure Python.
+         *
+         * Must be called off EDT (shells out to verify the PATH entry).
+         */
+        internal fun resolvePython(): String? {
+            // 1. Settings override (explicit path or written by PythonRuntimeDownloader)
+            val configured = HexanaFirmwareSettings.getInstance().effectivePythonPath()
+            if (configured != null && File(configured).isFile) return configured
+
+            // 2. Managed download
+            val installDir = PythonRuntimeDownloader.pythonInstallDir()
+            if (installDir.exists()) {
+                val managed = PythonRuntimeDownloader.locatePython(installDir)
+                if (managed != null) return managed
+            }
+
+            // 3. System PATH probe (>= 3.9)
+            return probePython3Companion()
+        }
+
+        /**
+         * Probes for `python3` on PATH and returns its path if it meets the minimum version.
+         * Companion-object copy so [resolvePython] (a companion function) can call it.
+         * Must be called off EDT.
+         */
+        private fun probePython3Companion(): String? {
+            val exe = if (com.intellij.openapi.util.SystemInfo.isWindows) "python3.exe" else "python3"
+            return try {
+                val p = ProcessBuilder(exe, "--version").start()
+                val out = (p.inputStream.bufferedReader().readText() +
+                    p.errorStream.bufferedReader().readText()).trim()
+                p.waitFor()
+                val m = Regex("""Python (\d+)\.(\d+)""").find(out) ?: return null
+                val major = m.groupValues[1].toIntOrNull() ?: return null
+                val minor = m.groupValues[2].toIntOrNull() ?: return null
+                if (major > PYTHON_MIN_MAJOR || (major == PYTHON_MIN_MAJOR && minor >= PYTHON_MIN_MINOR)) exe else null
+            } catch (e: Exception) {
+                null
+            }
+        }
+
         // -------------------------------------------------------------------------
         // Download implementation — runs off EDT
         // -------------------------------------------------------------------------
@@ -196,8 +245,9 @@ class Dts2ReplRunner : Dts2ReplConverter {
      * Must be called off EDT (runs an external process with a 30-second timeout).
      */
     override fun convert(dtsText: String, boardHint: String?): ReplResult {
-        val python3 = probePython3() ?: return ReplResult.Failed(
-            "python3 not found on PATH. dts2repl requires Python $PYTHON_MIN_MAJOR.$PYTHON_MIN_MINOR+."
+        val python3 = resolvePython() ?: return ReplResult.Failed(
+            "python3 not found. dts2repl requires Python $PYTHON_MIN_MAJOR.$PYTHON_MIN_MINOR+. " +
+                "Install python3 or use the Download Python button in the Tools section of the run configuration."
         )
 
         val scriptDir = resolveScriptDir()
@@ -244,7 +294,8 @@ class Dts2ReplRunner : Dts2ReplConverter {
         // Use `python3 -m dts2repl` with PYTHONPATH set to the scriptDir's parent,
         // which is robust regardless of minor layout variations.
         val pythonPath = (scriptDir.parent ?: scriptDir).absolutePathString()
-        val cmd = listOf(python3, "-m", "dts2repl", dtsFile.absolutePathString())
+        // Pass `-o -` so dts2repl writes the .repl to stdout rather than the default `output.repl` file.
+        val cmd = listOf(python3, "-m", "dts2repl", "-o", "-", dtsFile.absolutePathString())
         return try {
             val pb = ProcessBuilder(cmd)
             pb.environment()["PYTHONPATH"] = pythonPath

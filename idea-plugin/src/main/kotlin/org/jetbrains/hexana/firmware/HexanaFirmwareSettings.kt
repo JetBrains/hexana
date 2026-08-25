@@ -168,6 +168,23 @@ final class HexanaFirmwareSettings :
      * The returned path has not been validated for existence.
      */
     fun effectiveZephyrSdkPath(): String? = state.zephyrSdkPath?.takeIf { it.isNotBlank() }
+
+    /**
+     * User-configured Python interpreter path for UI binding.
+     *
+     * When set, overrides the managed python-build-standalone download and the
+     * system python3 PATH probe. Useful for pointing at a specific venv or conda
+     * interpreter. Leave blank to use the download or system python3.
+     */
+    var pythonPathInUi: String?
+        get() = state.pythonPath
+        set(value) { state.pythonPath = value?.takeIf { it.isNotBlank() } }
+
+    /**
+     * Returns the configured Python interpreter path, or null if not set.
+     * The returned path has not been validated for existence.
+     */
+    fun effectivePythonPath(): String? = state.pythonPath?.takeIf { it.isNotBlank() }
 }
 
 /** Persistent state for [HexanaFirmwareSettings]. All fields `by string()` and nullable. */
@@ -181,4 +198,5 @@ class HexanaFirmwareSettingsState : BaseState() {
     var dts2replPath: String? by string()
     var gdbPath: String? by string()
     var zephyrSdkPath: String? by string()
+    var pythonPath: String? by string()
 }

@@ -11,6 +11,7 @@ import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
 import org.jetbrains.hexana.firmware.Dts2ReplRunner
 import org.jetbrains.hexana.firmware.HexanaFirmwareSettings
+import org.jetbrains.hexana.firmware.PythonRuntimeDownloader
 import org.jetbrains.hexana.providers.firmware.Backend
 import org.jetbrains.hexana.providers.firmware.BackendSelection
 import org.jetbrains.hexana.providers.firmware.ElfHeaderFacts
@@ -171,6 +172,24 @@ class FirmwareRunConfiguration(
                         throw RuntimeConfigurationError(
                             "dts2repl is required to generate a Renode platform from zephyr.dts, " +
                                 "but it is not installed. Use the Fetch button in the Tools section " +
+                                "of this run configuration."
+                        )
+                    }
+                    // Check Python is available for dts2repl.
+                    val pythonAvailable = run {
+                        val configured = settings.effectivePythonPath()
+                        if (configured != null && File(configured).isFile) return@run true
+                        val pyInstallDir = PythonRuntimeDownloader.pythonInstallDir()
+                        if (pyInstallDir.toFile().isDirectory &&
+                            PythonRuntimeDownloader.locatePython(pyInstallDir) != null) {
+                            return@run true
+                        }
+                        false  // PATH probe deferred to runtime; cannot block EDT here
+                    }
+                    if (!pythonAvailable) {
+                        throw RuntimeConfigurationWarning(
+                            "Python 3.9+ is required to generate a Renode platform from zephyr.dts. " +
+                                "Install python3 or use the Download Python button in the Tools section " +
                                 "of this run configuration."
                         )
                     }
