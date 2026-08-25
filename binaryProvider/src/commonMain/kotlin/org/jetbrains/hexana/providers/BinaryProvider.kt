@@ -332,6 +332,16 @@ class ElfBinaryProvider(
         ArmAttributesParser.parseCpuArchProfile(bytes, sec)
     }
 
+    /**
+     * NT_GNU_BUILD_ID from the ELF note section, as a lowercase hex string,
+     * or null when the section is absent or malformed.
+     */
+    val buildId: String? by lazy {
+        val h = header ?: return@lazy null
+        val s = sections ?: return@lazy null
+        ElfParser.parseGnuBuildId(bytes, s, h)
+    }
+
 
     override val structureRanges: List<StructureRange> by lazy {
         val secs = sections?.takeIf { it.isNotEmpty() } ?: return@lazy emptyList()

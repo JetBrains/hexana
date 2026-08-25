@@ -209,6 +209,67 @@ object ElfParser {
         return entries
     }
 
+    /**
+     * Extracts the NT_GNU_BUILD_ID from a note section and returns its bytes as a
+     * lowercase hex string, or null when no build-id is present.
+     *
+     * Scans the section named ".note.gnu.build-id" first, then falls back to any
+     * SHT_NOTE section. Within each section, iterates note entries (namesz:u32,
+     * descsz:u32, type:u32 in file endianness, name bytes padded to 4-byte
+     * alignment, desc bytes padded to 4) and returns the desc of the first entry
+     * where name is "GNU\0" (namesz == 4) and type == 3 (NT_GNU_BUILD_ID).
+     */
+    fun parseGnuBuildId(
+        bytes: CommonByteBuffer,
+        sections: List<ElfSectionHeader>,
+        header: ElfHeader,
+    ): String? {
+        val noteSections = sections.filter { it.type == ElfSectionType.Note && it.contentRange != null }
+        val preferred = noteSections.filter { it.name == ".note.gnu.build-id" }
+        val toScan = preferred.ifEmpty { noteSections }
+        for (section in toScan) {
+            val result = parseGnuBuildIdFromSection(bytes, section, header) ?: continue
+            return result
+        }
+        return null
+    }
+
+    private fun parseGnuBuildIdFromSection(
+        bytes: CommonByteBuffer,
+        section: ElfSectionHeader,
+        header: ElfHeader,
+    ): String? {
+        val range = section.contentRange ?: return null
+        var cursor = range.offset
+        val end = range.offset + range.size
+        while (cursor + 12 <= end) {
+            val namesz = bytes.u32OrNull(cursor, header.endian)?.toInt() ?: return null
+            val descsz = bytes.u32OrNull(cursor + 4, header.endian)?.toInt() ?: return null
+            val type = bytes.u32OrNull(cursor + 8, header.endian)?.toInt() ?: return null
+            cursor += 12
+            val namePadded = (namesz + 3) and -4
+            val descPadded = (descsz + 3) and -4
+            if (cursor + namePadded + descPadded > end) break
+            // NT_GNU_BUILD_ID: name "GNU\0" (namesz == 4), type == 3
+            if (namesz == 4 && type == 3 &&
+                bytes.byteOrNull(cursor) == 'G'.code &&
+                bytes.byteOrNull(cursor + 1) == 'N'.code &&
+                bytes.byteOrNull(cursor + 2) == 'U'.code &&
+                bytes.byteOrNull(cursor + 3) == 0
+            ) {
+                val descOffset = cursor + namePadded
+                val sb = StringBuilder(descsz * 2)
+                for (i in 0 until descsz) {
+                    val b = bytes.byteOrNull(descOffset + i) ?: return null
+                    sb.append(b.toString(16).padStart(2, '0'))
+                }
+                return sb.toString()
+            }
+            cursor += namePadded + descPadded
+        }
+        return null
+    }
+
     private fun parseElf32Header(
         bytes: CommonByteBuffer,
         endian: NativeBinaryEndian,
