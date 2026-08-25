@@ -343,6 +343,10 @@
         <runConfigurationProducer implementation="org.jetbrains.hexana.firmware.run.FirmwareRunConfigurationProducer"/>
         <!-- END firmware LANE-RUN -->
 
+        <!-- BEGIN firmware LANE-DEBUG -->
+        <programRunner implementation="org.jetbrains.hexana.firmware.debug.FirmwareDebugRunner"/>
+        <!-- END firmware LANE-DEBUG -->
+
         <configurationType implementation="org.jetbrains.hexana.run.WasmRunConfigurationType"/>
         <runConfigurationProducer implementation="org.jetbrains.hexana.run.WasmRunConfigurationProducer"/>
         <programRunner implementation="org.jetbrains.hexana.run.WasmDebugRunner"/>

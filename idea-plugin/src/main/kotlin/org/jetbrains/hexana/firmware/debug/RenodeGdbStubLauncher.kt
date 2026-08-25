@@ -1,0 +1,151 @@
+package org.jetbrains.hexana.firmware.debug
+
+import com.intellij.execution.ExecutionException
+import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.process.KillableColoredProcessHandler
+import com.intellij.execution.process.ProcessTerminatedListener
+import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.util.io.FileUtil
+import org.jetbrains.hexana.firmware.Dts2ReplRunner
+import org.jetbrains.hexana.firmware.HexanaFirmwareSettings
+import org.jetbrains.hexana.firmware.run.registerNoOrphan
+import org.jetbrains.hexana.providers.firmware.BackendSelection
+import org.jetbrains.hexana.providers.firmware.ReplResult
+import org.jetbrains.hexana.providers.firmware.ReplSource
+import org.jetbrains.hexana.providers.firmware.buildRescScript
+import java.io.File
+
+/**
+ * Launches Renode with a gdbstub port and frozen start.
+ *
+ * The generated `.resc` calls `machine StartGdbServer <port> true` (the `true` flag
+ * means emulation auto-starts when GDB attaches) and omits the `start` command so the
+ * CPU stays frozen until the debugger connects.
+ *
+ * Readiness is determined by polling the gdb port with TCP connect probes, same as
+ * [QemuGdbStubLauncher].
+ *
+ * @param selection Resolved Renode backend selection.
+ * @param elfPath Absolute path to the ELF binary.
+ * @param dtsPath Path to zephyr.dts (required when replSource is Generated).
+ * @param extraLines Extra Renode monitor commands from the run configuration.
+ * @param port GDB stub port (pre-allocated by the caller).
+ * @param timeoutMs Maximum time to wait for the stub port to accept connections.
+ */
+class RenodeGdbStubLauncher(
+    private val selection: BackendSelection.Ok,
+    private val elfPath: String,
+    private val dtsPath: String,
+    private val extraLines: List<String>,
+    private val port: Int,
+    private val timeoutMs: Long = QemuGdbStubLauncher.STUB_READY_TIMEOUT_MS,
+) : FirmwareDebugBackend {
+
+    private val LOG = Logger.getInstance(RenodeGdbStubLauncher::class.java)
+
+    override fun startFrozen(): StubEndpoint {
+        val settings = HexanaFirmwareSettings.getInstance()
+        val renodePath = settings.effectiveRenodesPath()
+            ?: throw ExecutionException(
+                "Renode executable not found. Set the path in Settings → Build → Firmware Emulator."
+            )
+
+        val replPath: String?
+        val libraryPlatform: String?
+        when (selection.replSource) {
+            ReplSource.Library -> {
+                replPath = null
+                // Extract boardId from the rationale string ("...for 'nrf52840dk'...").
+                // Same logic as the private getLibraryPlatform() in RenodeCommandLineState.
+                val boardId = selection.rationale.substringAfter("'", "").substringBefore("'", "")
+                libraryPlatform = LIBRARY_BOARD_REPL[boardId]
+                    ?: LIBRARY_BOARD_REPL.values.firstOrNull()
+                    ?: throw ExecutionException(
+                        "No Renode library platform found for board '$boardId'. " +
+                            "Use the Generated platform source in the run configuration."
+                    )
+            }
+            ReplSource.Generated, null -> {
+                val dtsText = File(dtsPath).takeIf { it.exists() }?.readText()
+                    ?: throw ExecutionException(
+                        "zephyr.dts is required for Renode platform generation but was not found. " +
+                            "Set the DTS path in the run configuration."
+                    )
+                val result = try {
+                    Dts2ReplRunner().convert(dtsText, boardHint = null)
+                } catch (e: Exception) {
+                    throw ExecutionException("dts2repl conversion failed: ${e.message}", e)
+                }
+                when (result) {
+                    is ReplResult.Failed -> throw ExecutionException(
+                        "dts2repl conversion failed: ${result.message}"
+                    )
+                    is ReplResult.Ok -> {
+                        val replFile = FileUtil.createTempFile("hexana-renode-debug-", ".repl", true)
+                        replFile.writeText(result.replText)
+                        replPath = replFile.absolutePath
+                        libraryPlatform = null
+                    }
+                }
+            }
+        }
+
+        val rescText = buildRescScript(
+            replPath = replPath,
+            libraryPlatform = libraryPlatform,
+            elfPath = elfPath,
+            uartPort = 0, // no UART pumping in the debug path; peripheral default is harmless
+            extraLines = extraLines,
+            gdbPort = port,
+        )
+
+        val rescFile = FileUtil.createTempFile("hexana-renode-debug-", ".resc", true)
+        rescFile.writeText(rescText)
+
+        LOG.info("Renode gdbstub launch (port=$port): $renodePath --disable-xwt --console ${rescFile.absolutePath}")
+        LOG.debug("Generated debug .resc:\n$rescText")
+
+        val cmdLine = GeneralCommandLine().apply {
+            exePath = renodePath
+            addParameter("--disable-xwt")
+            addParameter("--console")
+            addParameter(rescFile.absolutePath)
+            withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+        }
+
+        val handler = KillableColoredProcessHandler(cmdLine)
+        ProcessTerminatedListener.attach(handler)
+        registerNoOrphan(handler)
+        handler.addProcessListener(object : com.intellij.execution.process.ProcessAdapter() {
+            override fun processTerminated(event: com.intellij.execution.process.ProcessEvent) {
+                rescFile.delete()
+                replPath?.let { p -> if (p.contains("hexana-renode-debug-")) File(p).delete() }
+            }
+        })
+        handler.startNotify()
+
+        if (!QemuGdbStubLauncher.waitForPortAccept("127.0.0.1", port, timeoutMs)) {
+            handler.destroyProcess()
+            throw ExecutionException(
+                "Renode gdbstub did not open port $port within ${timeoutMs / 1000}s. " +
+                    "Check the Renode path and the generated platform."
+            )
+        }
+
+        LOG.info("Renode gdbstub ready on port $port")
+        return StubEndpoint(port = port, processHandler = handler)
+    }
+
+    companion object {
+        /**
+         * Known Renode library `.repl` aliases for boards that appear in firmware profiles.
+         * Mirrors the private table in `RenodeCommandLineState` (not accessible cross-package).
+         */
+        private val LIBRARY_BOARD_REPL: Map<String, String> = mapOf(
+            "nrf52840dk_nrf52840" to "platforms/cpus/nrf52840.repl",
+            "nrf52840dk" to "platforms/cpus/nrf52840.repl",
+            "stm32f4_discovery" to "platforms/boards/stm32f4_discovery.repl",
+            "stm32f4_disco" to "platforms/boards/stm32f4_discovery.repl",
+        )
+    }
+}

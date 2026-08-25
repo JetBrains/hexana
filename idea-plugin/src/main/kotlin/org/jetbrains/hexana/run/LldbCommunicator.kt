@@ -196,6 +196,38 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
     }
 
     /**
+     * Connects LLDB to a generic GDB remote stub (not the Wasm process plugin).
+     *
+     * Issues `gdb-remote <host>:<port>` and waits for a stop event that confirms
+     * the connection succeeded. The emulator (QEMU/Renode) must already be frozen
+     * (started with `-S` / `StartGdbServer <port> true`) so that LLDB receives an
+     * immediate stop event upon attach.
+     *
+     * @return `true` when a stop event arrives within [timeoutMs], `false` on timeout.
+     * @throws ExecutionException when the stop event is a process exit (emulator crashed).
+     */
+    fun connectGdbRemote(
+        host: String,
+        port: Int,
+        timeoutMs: Long = 15_000,
+    ): Boolean {
+        LOG.info("LLDB gdb-remote connect: $host:$port")
+        sendCommand("gdb-remote $host:$port")
+        val event = waitForStopEvent(timeoutMs)
+        if (event is StopEvent.ProcessExited) {
+            throw com.intellij.execution.ExecutionException(
+                "The emulator exited (code ${event.exitCode}) before LLDB could attach via gdb-remote $host:$port."
+            )
+        }
+        if (event == null) {
+            LOG.warn("gdb-remote $host:$port: no stop event within ${timeoutMs}ms")
+        } else {
+            LOG.info("gdb-remote connected (event: $event)")
+        }
+        return event != null
+    }
+
+    /**
      * Sends a file/line breakpoint and returns `true` if LLDB resolved
      * it to at least one location (i.e. the output does NOT contain
      * "pending").
