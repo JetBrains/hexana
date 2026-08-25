@@ -77,6 +77,10 @@ internal fun ScriptTabContent(
 
     LaunchedEffect(scriptPath, refreshKey) {
         outputLines.clear()
+        // Re-segment immediately: the parsed blocks are remembered against this
+        // revision, so without it a rerun keeps showing the previous run's output
+        // until the first drain bumps it.
+        outputRevision++
         isRunning = true
 
         // The runner streams from its own worker thread. Lines are buffered and
@@ -256,7 +260,11 @@ private fun ScriptBlocksView(
         }
 
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-            items(items) { item ->
+            // Keyed on the block's position in the unfiltered output: a table
+            // hosts a stateful component, and with positional identity its sort
+            // and selection would jump to a different table as filtering changes
+            // the list around it.
+            items(items, key = { it.key }) { item ->
                 when (item) {
                     is ScriptOutputItem.Blank -> Spacer(modifier = Modifier.height(6.dp))
                     is ScriptOutputItem.TextLine -> ScriptTextLine(item.text)
@@ -329,9 +337,14 @@ private fun RunningNote(isRunning: Boolean) {
 
 /** One item of the flattened output document. */
 private sealed interface ScriptOutputItem {
-    object Blank : ScriptOutputItem
-    class TextLine(val text: String) : ScriptOutputItem
-    class TableBlock(val block: ScriptOutputBlock.Table) : ScriptOutputItem
+    /** Identity that survives filtering, for the virtualized list. */
+    val key: String
+
+    class Blank(override val key: String) : ScriptOutputItem
+    class TextLine(val text: String, override val key: String) : ScriptOutputItem
+    class TableBlock(val block: ScriptOutputBlock.Table) : ScriptOutputItem {
+        override val key: String get() = "table:${block.ordinal}"
+    }
 }
 
 /**
@@ -344,8 +357,13 @@ private fun flattenScriptBlocks(blocks: List<ScriptOutputBlock>): List<ScriptOut
     for (block in blocks) {
         when (block) {
             is ScriptOutputBlock.Text ->
-                block.lines.forEach { line ->
-                    items += if (line.isBlank()) ScriptOutputItem.Blank else ScriptOutputItem.TextLine(line)
+                block.lines.forEachIndexed { lineIndex, line ->
+                    val key = "text:${block.ordinal}:$lineIndex"
+                    items += if (line.isBlank()) {
+                        ScriptOutputItem.Blank(key)
+                    } else {
+                        ScriptOutputItem.TextLine(line, key)
+                    }
                 }
             is ScriptOutputBlock.Table -> items += ScriptOutputItem.TableBlock(block)
         }

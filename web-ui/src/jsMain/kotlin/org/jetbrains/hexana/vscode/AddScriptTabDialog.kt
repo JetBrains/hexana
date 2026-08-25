@@ -121,7 +121,7 @@ fun AddScriptTabDialog(
                         }
                     }) {
                         Text(
-                            "Writes a runnable script into .hexana/scripts, opens it, and selects it here. " +
+                            "Writes a runnable script into the workspace, opens it, and selects it here. " +
                                 "The type definitions are placed next to it, so binary. completes as you edit."
                         )
                     }

@@ -102,8 +102,9 @@ interface HexanaBinary {
   readonly tabs: string[];
 
   /**
-   * Reads one table by name, using the same column names the editor shows.
-   * Throws with the list of available names when there is no such tab.
+   * Reads one table by name, using the same column names the editor shows. A
+   * name from `tabs` that has no content for this binary reads as a table
+   * with no rows; only a name that is not in `tabs` at all is an error.
    *
    * @example const exports = binary.tab("Exports");
    */

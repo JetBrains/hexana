@@ -12,13 +12,24 @@ package org.jetbrains.hexana.shared.scripting
  */
 sealed interface ScriptOutputBlock {
 
+    /**
+     * Position of this block in the unfiltered output.
+     *
+     * Filtering rebuilds blocks, so a renderer cannot use object identity or list
+     * position to tell one from another. This survives filtering, which is what
+     * lets a virtualized list keep a table's sort and selection attached to the
+     * right table when the document around it shrinks.
+     */
+    val ordinal: Int
+
     /** Free-form lines from `print(...)`. Blank lines are kept as spacing. */
-    class Text(val lines: List<String>) : ScriptOutputBlock
+    class Text(val lines: List<String>, override val ordinal: Int = 0) : ScriptOutputBlock
 
     /** A table: the header row from `table(...)` and the rows from `row(...)`. */
     class Table(
         val columns: List<String>,
         val rows: List<List<String>>,
+        override val ordinal: Int = 0,
     ) : ScriptOutputBlock
 }
 
@@ -68,7 +79,7 @@ private fun segmentTabSeparated(lines: List<String>): List<ScriptOutputBlock> {
 
     fun flushText() {
         if (pendingText.isNotEmpty()) {
-            blocks += ScriptOutputBlock.Text(pendingText.toList())
+            blocks += ScriptOutputBlock.Text(pendingText.toList(), ordinal = blocks.size)
             pendingText.clear()
         }
     }
@@ -87,6 +98,7 @@ private fun segmentTabSeparated(lines: List<String>): List<ScriptOutputBlock> {
         blocks += ScriptOutputBlock.Table(
             columns = cells.first().map { it.trim() },
             rows = cells.drop(1),
+            ordinal = blocks.size,
         )
         index += runLength
     }
@@ -150,13 +162,15 @@ fun filterScriptOutputBlocks(
         when (block) {
             is ScriptOutputBlock.Text -> {
                 val matching = block.lines.filter { it.contains(query, ignoreCase = true) }
-                if (matching.isEmpty()) null else ScriptOutputBlock.Text(matching)
+                if (matching.isEmpty()) null else ScriptOutputBlock.Text(matching, block.ordinal)
             }
             is ScriptOutputBlock.Table -> {
                 val matching = block.rows.filter { row ->
                     row.any { cell -> cell.contains(query, ignoreCase = true) }
                 }
-                if (matching.isEmpty()) null else ScriptOutputBlock.Table(block.columns, matching)
+                if (matching.isEmpty()) null else {
+                    ScriptOutputBlock.Table(block.columns, matching, block.ordinal)
+                }
             }
         }
     }

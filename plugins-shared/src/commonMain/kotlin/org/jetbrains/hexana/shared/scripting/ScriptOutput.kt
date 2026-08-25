@@ -20,6 +20,10 @@ class ScriptOutput(private val emit: (String) -> Unit) {
 
     /** Appends a line with the arguments joined by a single space. */
     fun print(values: List<ScriptValue>) {
+        // Text ends the current table: the renderers segment output into blocks,
+        // and a row emitted after this would land outside the table as a stray
+        // tab-separated line rather than being appended to it.
+        columnCount = 0
         emit(values.joinToString(" ") { formatValue(it) })
     }
 
@@ -36,7 +40,8 @@ class ScriptOutput(private val emit: (String) -> Unit) {
     fun row(cells: List<ScriptValue>) {
         if (columnCount == 0) {
             throw IllegalStateException(
-                "row(...) requires a preceding table(...) call that declares the column headers"
+                "row(...) requires a preceding table(...) call that declares the column headers. " +
+                    "Printing text ends the current table, so call table(...) again to start a new one."
             )
         }
         val text = buildString {

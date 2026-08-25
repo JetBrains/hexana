@@ -14,7 +14,8 @@ private val RunBinaryScriptInput = BinaryInputClass.with("RunBinaryScriptInput")
 }
 
 private val RunBinaryScriptOutputResultClass = class_("RunBinaryScriptOutputResult", kotlinPackage = SCRIPTING_MODEL_PACKAGE) {
-    list("lines", of = string()).describe("Lines emitted by `print(text)` in order.")
+    list("lines", of = string())
+        .describe("Lines emitted by `print(...values)`, `table(...columns)` and `row(...cells)` in order. Table lines are tab-separated.")
     boolean("truncated").describe("Whether output was truncated by configured script output limits.")
     int("emittedBytes").describe("UTF-8 bytes emitted before truncation.")
     int("maxLines").describe("Configured maximum output lines.")

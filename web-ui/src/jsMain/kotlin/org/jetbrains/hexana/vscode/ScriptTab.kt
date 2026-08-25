@@ -11,6 +11,7 @@ import org.jetbrains.hexana.shared.scripting.ScriptOutputBlock
 import org.jetbrains.hexana.shared.scripting.filterScriptOutputBlocks
 import org.jetbrains.hexana.shared.scripting.parseScriptOutputBlocks
 import org.jetbrains.hexana.shared.scripting.ScriptValueJsBinder
+import org.jetbrains.hexana.shared.scripting.ScriptYieldTransform
 import org.jetbrains.hexana.shared.scripting.scriptBinaryApi
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import kotlin.js.Promise
@@ -340,14 +341,6 @@ private const val DRAINS_PER_RESEGMENT = 5
 private const val TABLE_BLOCK_MAX_BODY_HEIGHT = "clamp(120px, 45vh, 640px)"
 
 /**
- * Matches a call to one of the output globals so it can be turned into a
- * `yield`. All three have to be covered: a script that only builds a table with
- * `table`/`row` would otherwise never yield and would freeze the webview until
- * it finished.
- */
-private val OUTPUT_CALL_REGEX = Regex("""(?<!\w)(print|table|row)\s*\(""")
-
-/**
  * Executes a user script with the shared Hexana scripting globals — `binary`
  * from [scriptBinaryApi] plus `print`, `table` and `row` from [ScriptOutput] —
  * on the main thread.
@@ -378,9 +371,10 @@ private fun executeScriptAsync(
         val binder = ScriptValueJsBinder(::wrapForJs)
         val output = binder.outputBindings(ScriptOutput(onLine))
 
-        val generatorBody = scriptContent.replace(OUTPUT_CALL_REGEX) { match ->
-            "yield ${match.groupValues[1]}("
-        }
+        // All three output globals are covered, not just print: a script that only
+        // builds a table with table/row would otherwise never yield and would
+        // freeze the webview until it finished.
+        val generatorBody = ScriptYieldTransform.apply(scriptContent)
 
         @Suppress("UNUSED_VARIABLE")
         val yieldEvery = YIELD_EVERY
@@ -472,6 +466,10 @@ internal fun ScriptTabContent(
         if (scriptContent.isBlank()) return@LaunchedEffect
         val runGeneration = ++runScope.generation
         outputLines.clear()
+        // Re-segment immediately: the parsed blocks are remembered against this
+        // revision, so without it a rerun keeps showing the previous run's output
+        // until the first drain bumps it.
+        outputRevision++
         pendingLines.clear()
         error = null
         scriptError = null

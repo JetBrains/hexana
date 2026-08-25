@@ -210,6 +210,25 @@ class ScriptOutputBlocksTest {
     }
 
     @Test
+    fun blocksAreNumberedInDocumentOrder() {
+        val result = blocks("intro", "A\tB", "1\t2", "outro")
+
+        assertEquals(listOf(0, 1, 2), result.map { it.ordinal })
+    }
+
+    @Test
+    fun filteringPreservesBlockOrdinals() {
+        // Renderers key a virtualized list on these, so a table keeps its own sort
+        // and selection when filtering removes blocks around it.
+        val original = blocks("intro", "Name\tSize", "code\t1024", "outro")
+        assertEquals(listOf(0, 1, 2), original.map { it.ordinal })
+
+        val filtered = filterScriptOutputBlocks(original, "code")
+
+        assertEquals(listOf(1), filtered.map { it.ordinal })
+    }
+
+    @Test
     fun filteringDoesNotMatchAgainstColumnHeaders() {
         // Matching the header would keep every row of a table whose column name
         // happens to contain the query, which reads as "the filter did nothing".

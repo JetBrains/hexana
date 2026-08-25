@@ -213,6 +213,35 @@ class ScriptBinaryApiTest {
     }
 
     @Test
+    fun everyAdvertisedTabResolves() {
+        // `binary.tabs` used to advertise names that `binary.tab(name)` rejected —
+        // Problems and Garbage are offered whenever their sources exist, but
+        // resolve to nothing when the module is clean. A loop over `binary.tabs`
+        // must not throw halfway through.
+        val binary = api(wasmProvider())
+        val names = stringList(member(binary, "tabs"))
+        assertTrue(names.isNotEmpty())
+
+        for (name in names) {
+            val tab = callMember(binary, "tab", str(name))
+            assertEquals(name, string(member(tab, "name")), "tab('$name') returned a different tab")
+        }
+    }
+
+    @Test
+    fun anAdvertisedTabWithNoContentReadsAsAnEmptyTable() {
+        val binary = api(wasmProvider())
+        val names = stringList(member(binary, "tabs"))
+        // The fixture module is clean, so its Problems tab has nothing to show.
+        assertTrue(names.contains("Problems"), "expected the fixture to advertise Problems, got $names")
+
+        val problems = callMember(binary, "tab", str("Problems"))
+
+        assertEquals(0, int(member(problems, "rowCount")))
+        assertEquals(emptyList(), stringList(member(problems, "columns")))
+    }
+
+    @Test
     fun unknownTabNameListsWhatIsAvailable() {
         val binary = api(wasmProvider())
         val error = assertFailsWith<IllegalArgumentException> { callMember(binary, "tab", str("Nope")) }

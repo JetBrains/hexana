@@ -306,10 +306,12 @@ class HexanaToolCompatibilityTest {
         .joinToString("") { "%02x".format(it) }
 
     private companion object {
-        // Reviewed: `run_binary_script` guidance now names the scripting globals
-        // and the `binary` members. Prose only — no input, output, default, or
-        // bound changed, so this stays within the current schema version.
-        const val EXPECTED_SEMANTIC = "5a80e102206daace03e402d40076765ebe57b3711321de63b3f91665621bba7e"
+        // Reviewed: `run_binary_script` guidance names the scripting globals and
+        // the `binary` members, and the `lines` field description now covers
+        // `table`/`row` output instead of only `print(text)`. Prose only — no
+        // input, output, default, or bound changed, so this stays within the
+        // current schema version.
+        const val EXPECTED_SEMANTIC = "f4db4cbc26c89dc242558e196da77c6883b8a70cfebb9c3ee3cc2728df09ec2b"
         const val EXPECTED_IDEA = "b3d01605c58323500af1b4e1eeabfa8b6ff2e4fb659bfccac35c9869c379d378"
         const val EXPECTED_STANDALONE = "0395327fb451b08908345ce4e59bd1cf97bb05dd4bb1cb2165679a2744dd8b44"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"

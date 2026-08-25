@@ -61,12 +61,21 @@ fun scriptBinaryApi(
             "tab" to {
                 scriptFunction("binary.tab(name)", minArgs = 1) { args ->
                     val name = args.string(0, "name")
-                    val tab = resolveScriptTab(provider, context, name)
-                        ?: throw IllegalArgumentException(
-                            "binary.tab(\"$name\") — no such tab. Available: " +
-                                scriptTabNames(provider, context).joinToString(", ")
-                        )
-                    scriptTabValue(tab)
+                    resolveScriptTab(provider, context, name)?.let { return@scriptFunction scriptTabValue(it) }
+
+                    // A name `binary.tabs` advertised but that resolves to nothing
+                    // has no content for this binary — Problems on a module with no
+                    // parse problems, Garbage with nothing unreachable. Reporting
+                    // that as an empty table keeps a loop over `binary.tabs` from
+                    // throwing halfway through; only a name that was never
+                    // advertised is an error.
+                    val advertised = scriptTabNames(provider, context)
+                    if (name in advertised) {
+                        return@scriptFunction scriptTabValue(TableTabDescriptor(name, emptyList(), 0))
+                    }
+                    throw IllegalArgumentException(
+                        "binary.tab(\"$name\") — no such tab. Available: " + advertised.joinToString(", ")
+                    )
                 }
             },
             "raw" to { ScriptValue.Host(provider) },

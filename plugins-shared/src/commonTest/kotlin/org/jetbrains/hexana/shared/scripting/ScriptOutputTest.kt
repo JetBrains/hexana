@@ -94,6 +94,34 @@ class ScriptOutputTest {
     }
 
     @Test
+    fun printingTextEndsTheCurrentTable() {
+        // The documented contract: text between tables ends the one before it. Left
+        // unenforced, a row() after a print() emitted a stray tab-separated line
+        // that the renderers show as text — silently broken output rather than an
+        // error the script author can act on.
+        output.table(listOf(str("A"), str("B")))
+        output.row(listOf(num(1), num(2)))
+        output.print(listOf(str("between")))
+
+        val error = assertFailsWith<IllegalStateException> { output.row(listOf(num(3), num(4))) }
+
+        assertTrue(error.message!!.contains("table("), error.message!!)
+        assertTrue(error.message!!.contains("ends the current table"), error.message!!)
+        assertEquals(listOf("A\tB", "1\t2", "between"), lines)
+    }
+
+    @Test
+    fun aNewTableAfterTextStartsCleanly() {
+        output.table(listOf(str("A"), str("B")))
+        output.row(listOf(num(1), num(2)))
+        output.print(listOf(str("between")))
+        output.table(listOf(str("C"), str("D")))
+        output.row(listOf(num(3), num(4)))
+
+        assertEquals(listOf("A\tB", "1\t2", "between", "C\tD", "3\t4"), lines)
+    }
+
+    @Test
     fun rowWithoutATableExplainsWhatIsMissing() {
         val error = assertFailsWith<IllegalStateException> { output.row(listOf(str("x"))) }
 
