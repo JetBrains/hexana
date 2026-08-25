@@ -91,13 +91,11 @@ class BoardMachineTableTest {
 
     @Test
     fun slashQualifierThreeSegments() {
-        // "mps2/an521/cpu0" → all-joined = "mps2_an521_cpu0" (no hit), first = "mps2" (no hit)
-        // No match expected for a 3-segment form not in table.
+        // Prefixes are tried longest-first: "mps2_an521_cpu0" (no hit) → "mps2_an521" (hit).
+        // This is the Zephyr v4 CONFIG_BOARD_TARGET form for the AN521 CPU0 target.
         val entry = lookupBoard("mps2/an521/cpu0")
-        // "mps2" is not in the table; "mps2_an521_cpu0" is not in the table.
-        // This documents the current behavior: exact match fails, first-segment "mps2" fails,
-        // joined "mps2_an521_cpu0" fails → null.
-        assertNull(entry, "3-segment mps2/an521/cpu0 with no exact or joined hit should return null")
+        assertNotNull(entry, "Expected mps2/an521/cpu0 to resolve via its mps2_an521 prefix")
+        assertEquals("mps2-an521", entry.machine)
     }
 
     @Test

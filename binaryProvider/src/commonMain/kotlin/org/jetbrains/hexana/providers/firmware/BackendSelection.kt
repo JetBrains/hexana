@@ -69,12 +69,36 @@ public sealed interface BackendSelection {
  * A board in this set triggers [ReplSource.Library] so dts2repl is not required.
  * The set is data-driven; the corpus / fact-sheet agent refines it.
  */
-internal val RENODE_LIBRARY_BOARDS: Set<String> = setOf(
-    "nrf52840dk_nrf52840",
-    "nrf52840dk",
-    "stm32f4_discovery",
-    "stm32f4_disco",
+/**
+ * Renode library platforms keyed by normalized board id. The value is the path of the
+ * built-in `.repl` inside a Renode installation (referenced as `@<path>` in `.resc`).
+ */
+public val RENODE_LIBRARY_REPL: Map<String, String> = mapOf(
+    "nrf52840dk_nrf52840" to "platforms/cpus/nrf52840.repl",
+    "nrf52840dk" to "platforms/cpus/nrf52840.repl",
+    "stm32f4_discovery" to "platforms/boards/stm32f4_discovery.repl",
+    "stm32f4_disco" to "platforms/boards/stm32f4_discovery.repl",
 )
+
+internal val RENODE_LIBRARY_BOARDS: Set<String> = RENODE_LIBRARY_REPL.keys
+
+/**
+ * Resolves the Renode built-in `.repl` path for [boardId], applying the same
+ * slash-qualifier prefix normalization as [lookupBoard] (e.g. `nrf52840dk/nrf52840`
+ * matches via its underscore-joined form, `stm32f4_disco/stm32f407xg` via its
+ * `stm32f4_disco` prefix). Returns null when the board is not in Renode's library.
+ */
+public fun renodeLibraryReplFor(boardId: String): String? {
+    RENODE_LIBRARY_REPL[boardId]?.let { return it }
+    val segments = boardId.split('/').filter { it.isNotEmpty() }
+    for (take in segments.size downTo 1) {
+        RENODE_LIBRARY_REPL[segments.take(take).joinToString("_")]?.let { return it }
+    }
+    return null
+}
+
+/** True when [boardId] resolves to a Renode library platform via [renodeLibraryReplFor]. */
+internal fun isRenodeLibraryBoard(boardId: String): Boolean = renodeLibraryReplFor(boardId) != null
 
 /**
  * Selects an emulator backend for the given [TargetProfile].
@@ -136,7 +160,7 @@ public fun selectBackend(profile: TargetProfile, forced: Backend? = null): Backe
         // Rule 3: CortexM / RiscV / unknown MCU → Renode.
         profile.archClass == ArchClass.CortexM || profile.archClass == ArchClass.RiscV -> {
             recommended = Backend.Renode
-            val replSource = if (profile.boardId != null && profile.boardId in RENODE_LIBRARY_BOARDS) {
+            val replSource = if (profile.boardId != null && isRenodeLibraryBoard(profile.boardId)) {
                 ReplSource.Library
             } else {
                 ReplSource.Generated
@@ -199,7 +223,7 @@ private fun validateForcedBackend(
         // Forcing Renode on a QEMU-mapped MCU-class board: allow (e.g. user wants Renode for
         // peripheral fidelity). Determine replSource from board library membership.
         forced == Backend.Renode -> {
-            val replSource = if (profile.boardId != null && profile.boardId in RENODE_LIBRARY_BOARDS) {
+            val replSource = if (profile.boardId != null && isRenodeLibraryBoard(profile.boardId)) {
                 ReplSource.Library
             } else {
                 ReplSource.Generated

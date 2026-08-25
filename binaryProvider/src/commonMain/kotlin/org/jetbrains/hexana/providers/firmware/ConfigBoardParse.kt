@@ -10,14 +10,19 @@ package org.jetbrains.hexana.providers.firmware
 /**
  * Extracts the board identifier from a Zephyr `.config` file.
  *
- * Looks for the line `CONFIG_BOARD="<boardId>"` (quoted form). Returns the
- * board identifier string with quotes stripped, or null if the key is absent or
- * has an empty value.
- *
- * Example matching line: `CONFIG_BOARD="qemu_cortex_m3"`
+ * Zephyr v3.7+ hardware model splits the id: `CONFIG_BOARD="mps2"` plus
+ * `CONFIG_BOARD_QUALIFIERS="an521/cpu0"`, with the full id in
+ * `CONFIG_BOARD_TARGET="mps2/an521/cpu0"`. Preference order:
+ * `CONFIG_BOARD_TARGET`, then `CONFIG_BOARD` joined with
+ * `CONFIG_BOARD_QUALIFIERS`, then bare `CONFIG_BOARD`.
+ * Returns null if no board key is present or all values are empty.
  */
-public fun parseConfigBoard(configText: String): String? =
-    parseConfigValue(configText, "CONFIG_BOARD")
+public fun parseConfigBoard(configText: String): String? {
+    parseConfigValue(configText, "CONFIG_BOARD_TARGET")?.let { return it }
+    val board = parseConfigValue(configText, "CONFIG_BOARD") ?: return null
+    val qualifiers = parseConfigValue(configText, "CONFIG_BOARD_QUALIFIERS")
+    return if (qualifiers != null) "$board/$qualifiers" else board
+}
 
 /**
  * Extracts the value of an arbitrary Kconfig key from `.config` text.

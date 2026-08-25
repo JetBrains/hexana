@@ -24,9 +24,41 @@ private val LOG = Logger.getInstance("FirmwareProcessHygiene")
  * - Unhandled write/read to offset
  * - Tried to access bytes at non-existing peripheral
  */
-private val RENODE_UNIMPLEMENTED_PATTERN = Regex(
+internal val RENODE_UNIMPLEMENTED_PATTERN = Regex(
     "\\[WARNING]\\s+(\\w+):\\s+(?:Unhandled|Tried to access|.+non existing peripheral.*)"
 )
+
+/**
+ * Scans a list of log lines and returns the first one matching the
+ * Renode unimplemented-peripheral WARNING pattern.
+ *
+ * Extracted as a top-level internal function so it can be exercised directly
+ * by [FirmwareNegativeTest] without spinning up a process.
+ */
+internal fun scanRenodePeripheralLine(lines: List<String>): String? =
+    lines.firstOrNull { RENODE_UNIMPLEMENTED_PATTERN.containsMatchIn(it) }
+
+/**
+ * Builds the startup-watchdog timeout diagnostic message.
+ *
+ * Extracted as a top-level internal function so the exact message copy is
+ * asserted from tests without duplicating the format string.
+ */
+internal fun buildTimeoutDiagnostic(
+    timeoutSeconds: Int,
+    isRenode: Boolean,
+    peripheralLine: String?,
+): String = if (isRenode && peripheralLine != null) {
+    "Firmware did not reach console output within ${timeoutSeconds}s. " +
+        "It is likely blocking on unmodeled hardware. " +
+        "First unimplemented peripheral access: $peripheralLine"
+} else if (isRenode) {
+    "Firmware did not reach console output within ${timeoutSeconds}s. " +
+        "It is likely blocking on unmodeled hardware. First unimplemented peripheral access: none logged."
+} else {
+    "Firmware did not reach console output within ${timeoutSeconds}s. " +
+        "Check -machine and firmware entry point."
+}
 
 /**
  * Registers a [ProcessHandler] with the IDE shutdown tracker so orphan processes
@@ -79,21 +111,8 @@ fun armStartupWatchdog(
         if (handler.isProcessTerminated || handler.isProcessTerminating) return@schedule
 
         val lines = ringBuffer()
-        val peripheralLine: String? = if (isRenode) {
-            lines.firstOrNull { RENODE_UNIMPLEMENTED_PATTERN.containsMatchIn(it) }
-        } else null
-
-        val msg = if (isRenode && peripheralLine != null) {
-            "Firmware did not reach console output within ${timeoutSeconds}s. " +
-                "It is likely blocking on unmodeled hardware. " +
-                "First unimplemented peripheral access: $peripheralLine"
-        } else if (isRenode) {
-            "Firmware did not reach console output within ${timeoutSeconds}s. " +
-                "It is likely blocking on unmodeled hardware. First unimplemented peripheral access: none logged."
-        } else {
-            "Firmware did not reach console output within ${timeoutSeconds}s. " +
-                "Check -machine and firmware entry point."
-        }
+        val peripheralLine: String? = if (isRenode) scanRenodePeripheralLine(lines) else null
+        val msg = buildTimeoutDiagnostic(timeoutSeconds, isRenode, peripheralLine)
 
         LOG.warn("Firmware startup watchdog triggered: $msg")
         console.print("$msg\n", ConsoleViewContentType.SYSTEM_OUTPUT)

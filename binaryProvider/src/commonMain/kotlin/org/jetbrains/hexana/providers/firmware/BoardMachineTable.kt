@@ -63,13 +63,13 @@ public val BOARD_MACHINE_TABLE: Map<String, QemuBoardEntry> = mapOf(
  * Looks up a [QemuBoardEntry] for the given [boardId], applying qualifier normalization.
  *
  * Zephyr board IDs sometimes appear with slash-delimited qualifiers, e.g.:
- * - `"qemu_cortex_m3/ti_lm3s6965"` → look up `"qemu_cortex_m3"` first.
- * - `"mps2/an521/cpu0"` → try `"mps2/an521/cpu0"`, then `"mps2"`, then `"mps2_an521"`.
+ * - `"qemu_cortex_m3/ti_lm3s6965"` → look up `"qemu_cortex_m3"` first, then `"qemu_cortex_m3_ti_lm3s6965"`.
+ * - `"mps2/an521/cpu0"` → tries, from longest to shortest prefix: `"mps2_an521_cpu0"`,
+ *   `"mps2_an521"`, `"mps2"`.
  *
  * Normalization steps tried in order:
  * 1. Exact match.
- * 2. Part before the first `/`.
- * 3. Underscore-joined form of all slash-separated components (e.g. `mps2/an521` → `mps2_an521`).
+ * 2. All non-empty prefixes of the slash-split parts, joined with underscores, from longest to shortest.
  *
  * Returns null when no entry matches after normalization.
  */
@@ -78,11 +78,11 @@ public fun lookupBoard(boardId: String): QemuBoardEntry? {
 
     val parts = boardId.split('/')
     if (parts.size > 1) {
-        // Try the first segment.
-        BOARD_MACHINE_TABLE[parts.first()]?.let { return it }
-        // Try underscore-joined form of all segments.
-        val joined = parts.joinToString("_")
-        BOARD_MACHINE_TABLE[joined]?.let { return it }
+        // Try all prefix lengths from longest to shortest (e.g. mps2_an521_cpu0, mps2_an521, mps2).
+        for (len in parts.size downTo 1) {
+            val candidate = parts.subList(0, len).joinToString("_")
+            BOARD_MACHINE_TABLE[candidate]?.let { return it }
+        }
     }
     return null
 }

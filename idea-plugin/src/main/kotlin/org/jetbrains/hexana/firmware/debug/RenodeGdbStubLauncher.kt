@@ -13,6 +13,7 @@ import org.jetbrains.hexana.providers.firmware.BackendSelection
 import org.jetbrains.hexana.providers.firmware.ReplResult
 import org.jetbrains.hexana.providers.firmware.ReplSource
 import org.jetbrains.hexana.providers.firmware.buildRescScript
+import org.jetbrains.hexana.providers.firmware.renodeLibraryReplFor
 import java.io.File
 
 /**
@@ -56,10 +57,8 @@ class RenodeGdbStubLauncher(
             ReplSource.Library -> {
                 replPath = null
                 // Extract boardId from the rationale string ("...for 'nrf52840dk'...").
-                // Same logic as the private getLibraryPlatform() in RenodeCommandLineState.
                 val boardId = selection.rationale.substringAfter("'", "").substringBefore("'", "")
-                libraryPlatform = LIBRARY_BOARD_REPL[boardId]
-                    ?: LIBRARY_BOARD_REPL.values.firstOrNull()
+                libraryPlatform = renodeLibraryReplFor(boardId)
                     ?: throw ExecutionException(
                         "No Renode library platform found for board '$boardId'. " +
                             "Use the Generated platform source in the run configuration."
@@ -136,16 +135,4 @@ class RenodeGdbStubLauncher(
         return StubEndpoint(port = port, processHandler = handler)
     }
 
-    companion object {
-        /**
-         * Known Renode library `.repl` aliases for boards that appear in firmware profiles.
-         * Mirrors the private table in `RenodeCommandLineState` (not accessible cross-package).
-         */
-        private val LIBRARY_BOARD_REPL: Map<String, String> = mapOf(
-            "nrf52840dk_nrf52840" to "platforms/cpus/nrf52840.repl",
-            "nrf52840dk" to "platforms/cpus/nrf52840.repl",
-            "stm32f4_discovery" to "platforms/boards/stm32f4_discovery.repl",
-            "stm32f4_disco" to "platforms/boards/stm32f4_discovery.repl",
-        )
-    }
 }

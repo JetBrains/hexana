@@ -150,3 +150,14 @@ public fun parseDtsCpuCompatible(dtsText: String): List<String> {
     }
     return results
 }
+
+/**
+ * Extracts the Zephyr console UART peripheral name from merged DTS text.
+ *
+ * Reads the `chosen` property `zephyr,console = &<label>;` and returns the label
+ * (e.g. `"uart0"` for nRF52840, `"usart2"` for STM32F4 Discovery). The label matches
+ * the Renode sysbus peripheral name for dts2repl-generated and library platforms.
+ * Returns null when the property is absent.
+ */
+public fun parseDtsConsoleUart(dtsText: String): String? =
+    Regex("""zephyr,console\s*=\s*&([A-Za-z0-9_]+)""").find(dtsText)?.groupValues?.get(1)

@@ -21,6 +21,8 @@ import org.jetbrains.hexana.firmware.Dts2ReplRunner
 import org.jetbrains.hexana.firmware.HexanaFirmwareSettings
 import org.jetbrains.hexana.providers.firmware.BackendSelection
 import org.jetbrains.hexana.providers.firmware.DEFAULT_UART_PERIPHERAL
+import org.jetbrains.hexana.providers.firmware.parseDtsConsoleUart
+import org.jetbrains.hexana.providers.firmware.renodeLibraryReplFor
 import org.jetbrains.hexana.providers.firmware.ReplResult
 import org.jetbrains.hexana.providers.firmware.ReplSource
 import org.jetbrains.hexana.providers.firmware.buildRescScript
@@ -32,26 +34,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
-
-/**
- * Known Renode built-in `.repl` paths for library boards.
- *
- * These paths are relative to the Renode installation root and are passed as `@<path>`
- * library aliases in the generated `.resc`. Confirmed from Renode's platform directory.
- *
- * | boardId               | library path |
- * |---|---|
- * | `nrf52840dk_nrf52840` | `platforms/cpus/nrf52840.repl` |
- * | `nrf52840dk`          | `platforms/cpus/nrf52840.repl` |
- * | `stm32f4_discovery`   | `platforms/boards/stm32f4_discovery.repl` |
- * | `stm32f4_disco`       | `platforms/boards/stm32f4_discovery.repl` |
- */
-private val LIBRARY_BOARD_REPL: Map<String, String> = mapOf(
-    "nrf52840dk_nrf52840" to "platforms/cpus/nrf52840.repl",
-    "nrf52840dk" to "platforms/cpus/nrf52840.repl",
-    "stm32f4_discovery" to "platforms/boards/stm32f4_discovery.repl",
-    "stm32f4_disco" to "platforms/boards/stm32f4_discovery.repl",
-)
 
 /** Ring buffer capacity for Renode stdout (used by the watchdog peripheral diagnostic). */
 private const val RING_BUFFER_CAPACITY = 200
@@ -99,21 +81,21 @@ class RenodeCommandLineState(
         val renodePath = settings.effectiveRenodesPath()
             ?: throw ExecutionException("Renode executable not found. Set the path in Settings → Build → Firmware Emulator.")
 
+        // The merged DTS drives both platform generation and the console UART name.
+        val dtsText = configuration.dtsPath.takeIf { it.isNotBlank() }?.let { p ->
+            File(p).takeIf { it.exists() }?.readText()
+        }
+
         // Determine .repl source.
         val replPath: String?
         val libraryPlatform: String?
         when (selection.replSource) {
             ReplSource.Library -> {
-                val boardId = selection.rationale.substringAfter("'").substringBefore("'")
-                    .let { configuration.elfPath } // fallback: use boardId from profile via selection
-                val lib = selection.getLibraryPlatform()
                 replPath = null
-                libraryPlatform = lib
+                libraryPlatform = selection.getLibraryPlatform()
             }
             ReplSource.Generated, null -> {
-                val dtsText = configuration.dtsPath.takeIf { it.isNotBlank() }?.let { p ->
-                    File(p).takeIf { it.exists() }?.readText()
-                } ?: throw ExecutionException(
+                if (dtsText == null) throw ExecutionException(
                     "zephyr.dts is required for Renode platform generation but was not found. " +
                         "Set the DTS path in the run configuration."
                 )
@@ -154,7 +136,7 @@ class RenodeCommandLineState(
             libraryPlatform = libraryPlatform,
             elfPath = configuration.elfPath,
             uartPort = uartPort,
-            uartPeripheral = DEFAULT_UART_PERIPHERAL,
+            uartPeripheral = dtsText?.let(::parseDtsConsoleUart) ?: DEFAULT_UART_PERIPHERAL,
             extraLines = extraLines,
             gdbPort = gdbStubPort,
         )
@@ -302,13 +284,17 @@ class RenodeCommandLineState(
 }
 
 /**
- * Resolves the Renode library platform path from the selection's rationale or the
- * [LIBRARY_BOARD_REPL] table. Returns a bare library alias (no `@` prefix — that
- * is added by [buildRescScript]).
+ * Resolves the Renode library platform path for this selection. Returns a bare library
+ * alias (no `@` prefix — that is added by [buildRescScript]).
+ *
+ * The board id is quoted inside [BackendSelection.Ok.rationale]; resolution goes through
+ * [renodeLibraryReplFor], which applies slash-qualifier normalization. Fails loudly
+ * instead of silently substituting a wrong platform.
  */
 private fun BackendSelection.Ok.getLibraryPlatform(): String {
-    // Extract boardId from rationale ("...for 'nrf52840dk'...").
     val boardId = rationale.substringAfter("'", "").substringBefore("'", "")
-    return LIBRARY_BOARD_REPL[boardId]
-        ?: LIBRARY_BOARD_REPL.values.first() // safe fallback to nrf52840 (should never hit)
+    return renodeLibraryReplFor(boardId) ?: throw ExecutionException(
+        "No Renode library platform found for board '$boardId'. " +
+            "Use the generated platform source (dts2repl) instead."
+    )
 }
