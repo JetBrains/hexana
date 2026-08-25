@@ -15,6 +15,14 @@ Release packages record the checked-in semantic version and the full Git revisio
 Builds without the release-branch property keep the revision as their package version.
 `hexanaWebappVersion` is accepted only when it equals the checked-in authority.
 
+## Master deployment profile
+
+Cloud Console must select `deploy_only_master` when deploying a SHA-pinned
+master image as `hexana-webapp-master`. The profile removes Skaffold's source
+build, consumes only the supplied `HEXANA_WEBAPP_IMAGE`, and uses
+`values_staging.yaml`. It does not itself verify or deliver the image; a master
+deployment bridge and TeamCity chain must provide that gate before rollout.
+
 ## Live deployment smoke
 
 Run the source-owned smoke from the repository root after deployment. Master uses
