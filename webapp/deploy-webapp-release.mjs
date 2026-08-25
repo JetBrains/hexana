@@ -262,9 +262,10 @@ export function resolveVcsRootInstance(value, config) {
     return instanceId;
 }
 
+const buildFields = "id,state,status,branchName,buildType(id),revisions(revision(version,vcsBranchName,vcs-root-instance(id)))";
 export function createQueueRequest(config, evidence, vcsRootInstanceId) {
-    const payload = { buildType: { id: config.buildTypeId }, branchName: evidence.branch, revisions: { revision: [{ version: evidence.revision, "vcs-root-instance": { id: vcsRootInstanceId } }] }, properties: { property: [{ name: "env.HEXANA_WEBAPP_IMAGE", value: evidence.image }] } };
-    return { url: `${config.serverUrl}/app/rest/buildQueue`, init: { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${config.token}` }, body: JSON.stringify(payload) } };
+    const payload = { buildType: { id: config.buildTypeId }, branchName: evidence.branch, revisions: { revision: [{ version: evidence.revision, vcsBranchName: `refs/heads/${evidence.branch}`, "vcs-root-instance": { id: vcsRootInstanceId } }] }, properties: { property: [{ name: "env.HEXANA_WEBAPP_IMAGE", value: evidence.image }] } };
+    return { url: `${config.serverUrl}/app/rest/buildQueue?fields=${buildFields}`, init: { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${config.token}` }, body: JSON.stringify(payload) } };
 }
 
 const normalizeBranch = value => typeof value === "string" && value.startsWith("refs/heads/") ? value.slice(11) : value;
@@ -272,7 +273,7 @@ function validateBuild(value, config, evidence, vcsRootInstanceId, buildId) {
     object(value, "Cloud Console build");
     if (value.buildType?.id !== config.buildTypeId || normalizeBranch(value.branchName) !== evidence.branch) fail("Cloud Console build target or branch differs");
     const revisions = value.revisions?.revision;
-    if (!Array.isArray(revisions) || revisions.length !== 1 || revisions[0]?.version !== evidence.revision || revisions[0]?.["vcs-root-instance"]?.id !== vcsRootInstanceId) fail("Cloud Console build revision differs");
+    if (!Array.isArray(revisions) || revisions.length !== 1 || revisions[0]?.version !== evidence.revision || revisions[0]?.vcsBranchName !== `refs/heads/${evidence.branch}` || revisions[0]?.["vcs-root-instance"]?.id !== vcsRootInstanceId) fail("Cloud Console build revision differs");
     if (value.id !== buildId || !["queued", "running", "finished"].includes(value.state)) fail("Cloud Console build identity or state is unsupported");
     return { finished: value.state === "finished", status: value.status };
 }
@@ -284,7 +285,7 @@ async function requestJson(fetchImpl, url, init, timeoutMs) {
     try { return await response.json(); } catch { fail("TeamCity response is not JSON"); }
 }
 
-const buildStatusUrl = (config, buildId) => `${config.serverUrl}/app/rest/builds/id:${buildId}?fields=id,state,status,branchName,buildType(id),revisions(revision(version,vcs-root-instance(id)))`;
+const buildStatusUrl = (config, buildId) => `${config.serverUrl}/app/rest/builds/id:${buildId}?fields=${buildFields}`;
 
 const iso = milliseconds => new Date(milliseconds).toISOString();
 const safeMessage = (error, token) => {
@@ -453,11 +454,12 @@ export async function deployRelease({ receipt, scan, config, outputDirectory, fe
         const queueResponse = await requestJson(fetchImpl, queued.url, queued.init, 30_000);
         const buildId = queueResponse?.id;
         if (!Number.isInteger(buildId) || buildId <= 0) fail("Cloud Console queue response has no positive build ID");
-        attempt.cloudConsole.queueAmbiguous = false;
         const buildUrl = `${config.serverUrl}/viewLog.html?buildId=${buildId}`;
         attempt.cloudConsole.buildId = buildId;
         attempt.cloudConsole.buildUrl = buildUrl;
         attempt.cloudConsole.pollAttempts = 0;
+        validateBuild(queueResponse, config, evidence, vcsRootInstanceId, buildId);
+        attempt.cloudConsole.queueAmbiguous = false;
 
         phase = "cloud-console-build";
         const buildStartedAtMs = now();

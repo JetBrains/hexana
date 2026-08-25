@@ -94,7 +94,7 @@ const safeBuildType = () => ({ id: config.buildTypeId, "vcs-root-entries": { "vc
 const safeVcsRoot = () => ({ id: config.vcsRootId, properties: { property: [{ name: "teamcity:branchSpec", value: "+:refs/heads/(release/webapp/*)" }, { name: "url", value: "https://example.invalid/hexana/Hexana.git" }] } });
 const buildParameter = (value, name) => value.parameters.property.find(parameter => parameter.name === name);
 const rootInstances = (overrides = {}) => ({ "vcs-root-instance": [{ id: vcsRootInstanceId, "vcs-root-id": config.vcsRootId }], ...overrides });
-const build = (state, overrides = {}) => ({ id: 42, state, status: state === "finished" ? "SUCCESS" : undefined, branchName: `refs/heads/${config.branch}`, buildType: { id: config.buildTypeId }, revisions: { revision: [{ version: revision, "vcs-root-instance": { id: vcsRootInstanceId } }] }, ...overrides });
+const build = (state, overrides = {}) => ({ id: 42, state, status: state === "finished" ? "SUCCESS" : undefined, branchName: `refs/heads/${config.branch}`, buildType: { id: config.buildTypeId }, revisions: { revision: [{ version: revision, vcsBranchName: `refs/heads/${config.branch}`, "vcs-root-instance": { id: vcsRootInstanceId } }] }, ...overrides });
 
 test("validates same-series immutable Build and passing Scan evidence", () => {
     const { receipt, scan } = fixture();
@@ -129,10 +129,11 @@ test("creates the fixed queue request with only the validated image parameter", 
     assert.equal(rootRequest.url, `${allowedTarget.serverUrl}/app/rest/vcs-root-instances?locator=vcsRoot:(id:${allowedTarget.vcsRootId})&fields=vcs-root-instance(id,vcs-root-id)`);
     assert.equal(resolveVcsRootInstance(rootInstances(), config), vcsRootInstanceId);
     const request = createQueueRequest(config, validated, vcsRootInstanceId);
-    assert.equal(request.url, `${allowedTarget.serverUrl}/app/rest/buildQueue`);
+    assert.equal(request.url, `${allowedTarget.serverUrl}/app/rest/buildQueue?fields=id,state,status,branchName,buildType(id),revisions(revision(version,vcsBranchName,vcs-root-instance(id)))`);
     assert.equal(JSON.parse(request.init.body).branchName, "release/webapp/2.7");
     assert.deepEqual(JSON.parse(request.init.body).properties.property, [{ name: "env.HEXANA_WEBAPP_IMAGE", value: validated.image }]);
     assert.equal(JSON.parse(request.init.body).revisions.revision[0].version, revision);
+    assert.equal(JSON.parse(request.init.body).revisions.revision[0].vcsBranchName, "refs/heads/release/webapp/2.7");
     assert.deepEqual(JSON.parse(request.init.body).revisions.revision[0]["vcs-root-instance"], { id: vcsRootInstanceId });
     assert.equal(request.init.headers.Authorization, "Bearer secret");
 });
@@ -156,13 +157,13 @@ test("accepts only irrelevant generated-script formatting differences", () => {
 });
 
 test("queues, polls, and returns secret-free deployment evidence", async () => {
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("running"), build("finished")];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("running"), build("finished")];
     const calls = [];
     let clock = 0;
     const result = await deployRelease({ ...fixture(), config, fetchImpl: deploymentFetch(values, { calls }), sleep: async ms => { clock += ms; }, now: () => clock });
     assert.equal(result.cloudConsole.buildId, 42);
     assert.equal(result.cloudConsole.vcsRootInstanceId, vcsRootInstanceId);
-    assert.match(calls.findLast(call => call.url.includes("/app/rest/builds/"))?.url, /fields=id,state,status,branchName,buildType\(id\),revisions\(revision\(version,vcs-root-instance\(id\)\)\)$/);
+    assert.match(calls.findLast(call => call.url.includes("/app/rest/builds/"))?.url, /fields=id,state,status,branchName,buildType\(id\),revisions\(revision\(version,vcsBranchName,vcs-root-instance\(id\)\)\)$/);
     assert.ok(calls.filter(call => call.url.startsWith(config.serverUrl)).every(call => call.init.redirect === "error"));
     assert.ok(calls.filter(call => !call.url.startsWith(config.serverUrl)).every(call => call.init.redirect === "manual"));
     assert.deepEqual(result.sourceBuilds, config.sourceBuilds);
@@ -176,7 +177,7 @@ test("queues, polls, and returns secret-free deployment evidence", async () => {
 });
 
 test("does not probe production before the exact Cloud Console build succeeds", async () => {
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("queued"), build("running"), build("finished")];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("queued"), build("running"), build("finished")];
     const calls = [];
     let clock = 0;
     await deployRelease({ ...fixture(), config, fetchImpl: deploymentFetch(values, { calls }), sleep: async ms => { clock += ms; }, now: () => clock });
@@ -188,7 +189,7 @@ test("does not probe production before the exact Cloud Console build succeeds", 
 
 test("rejects an otherwise successful Cloud Console poll that completes at the deadline", async () => {
     let clock = 0;
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("finished")];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished")];
     const fetchImpl = async url => {
         const value = values.shift();
         if (url.includes("/app/rest/builds/")) return { ok: true, status: 200, json: async () => { clock = 1_000; return value; } };
@@ -221,7 +222,7 @@ test("rejects an otherwise valid readiness body that completes at the deadline",
         };
     };
     const readiness = url => new URL(url).pathname === "/healthz" ? healthResponse(url) : lateRoot(url);
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("finished")];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished")];
     const error = await capturedFailure(deployRelease({ ...fixture(), config: { ...config, readinessTimeoutMs: 200 }, fetchImpl: deploymentFetch(values, { readiness }), now: () => clock }));
     assert.equal(error.deploymentEvidence.phase, "production-readiness");
     assert.match(error.message, /within 200 ms/);
@@ -229,7 +230,7 @@ test("rejects an otherwise valid readiness body that completes at the deadline",
 });
 
 test("retries network, 5xx, and old identity observations until both hosts recover", async () => {
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("finished")];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished")];
     const healthAttempts = new Map();
     const rootAttempts = new Map();
     const readiness = async url => {
@@ -256,7 +257,7 @@ test("requires both production hosts under one shared readiness deadline", async
     const calls = [];
     let clock = 0;
     const shortConfig = { ...config, readinessTimeoutMs: 200 };
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("finished")];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished")];
     const readiness = url => new URL(url).host.includes("private") ? readinessResponse(url) : healthResponse(url, 503);
     try {
         await assert.rejects(deployRelease({ ...fixture(), config: shortConfig, outputDirectory: directory, fetchImpl: deploymentFetch(values, { readiness, calls }), sleep: async ms => { clock += ms; }, now: () => clock }), /both endpoints/);
@@ -281,7 +282,7 @@ for (const [name, readiness, expectedReason] of [
     ["wrong revision", url => new URL(url).pathname === "/healthz" ? healthResponse(url) : rootResponse(url, "2.7.3", "f".repeat(40)), /identity did not match/],
 ]) test(`readiness rejects ${name}`, async () => {
     let clock = 0;
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("finished")];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished")];
     let failure;
     try {
         await deployRelease({ ...fixture(), config: { ...config, readinessTimeoutMs: 200 }, fetchImpl: deploymentFetch(values, { readiness }), sleep: async ms => { clock += ms; }, now: () => clock });
@@ -300,7 +301,7 @@ test("cancels a health body on its first byte", async () => {
         return { status: 204, url, headers: new Headers({ "Cache-Control": "no-store" }), body };
     };
     let clock = 0;
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("finished")];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished")];
     const error = await capturedFailure(deployRelease({ ...fixture(), config: { ...config, readinessTimeoutMs: 200 }, fetchImpl: deploymentFetch(values, { readiness }), sleep: async ms => { clock += ms; }, now: () => clock }));
     assert.ok(error.deploymentEvidence.readiness.endpoints.every(endpoint => /0-byte limit/.test(endpoint.lastObservation.reason)));
     assert.ok(canceled >= productionEndpoints.length);
@@ -314,7 +315,7 @@ test("rejects oversized root Content-Length before reading and cancels the strea
         return { status: 200, url, headers: new Headers({ "Content-Length": String(readinessBodyLimits.rootBytes + 1) }), body };
     };
     let clock = 0;
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("finished")];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished")];
     const error = await capturedFailure(deployRelease({ ...fixture(), config: { ...config, readinessTimeoutMs: 200 }, fetchImpl: deploymentFetch(values, { readiness }), sleep: async ms => { clock += ms; }, now: () => clock }));
     assert.ok(error.deploymentEvidence.readiness.endpoints.every(endpoint => /1048576-byte limit/.test(endpoint.lastObservation.reason)));
     assert.ok(canceled >= productionEndpoints.length);
@@ -328,7 +329,7 @@ test("cancels a streaming root body as soon as it exceeds one MiB", async () => 
         return { status: 200, url, headers: new Headers(), body };
     };
     let clock = 0;
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("finished")];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished")];
     const error = await capturedFailure(deployRelease({ ...fixture(), config: { ...config, readinessTimeoutMs: 200 }, fetchImpl: deploymentFetch(values, { readiness }), sleep: async ms => { clock += ms; }, now: () => clock }));
     assert.ok(error.deploymentEvidence.readiness.endpoints.every(endpoint => /1048576-byte limit/.test(endpoint.lastObservation.reason)));
     assert.ok(canceled >= productionEndpoints.length);
@@ -341,7 +342,7 @@ test("cancels non-terminating root bodies at the shared readiness deadline", asy
         const body = new ReadableStream({ pull() {}, cancel() { canceled++; } });
         return { status: 200, url, headers: new Headers(), body };
     };
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("finished")];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished")];
     const startedAt = Date.now();
     const error = await capturedFailure(deployRelease({ ...fixture(), config: { ...config, readinessTimeoutMs: 25, pollIntervalMs: 5 }, fetchImpl: deploymentFetch(values, { readiness }) }));
     assert.match(error.message, /within 25 ms/);
@@ -363,7 +364,7 @@ test("writes secret-free atomic evidence for success and every deployment failur
         return { evidence: JSON.parse(raw), error };
     };
     try {
-        const success = await run("success", { fetchImpl: deploymentFetch([safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("finished")]), now: () => 0 });
+        const success = await run("success", { fetchImpl: deploymentFetch([safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished")]), now: () => 0 });
         assert.equal(success.error, undefined);
         assert.equal(success.evidence.result, "SUCCESS");
         assert.equal(success.evidence.phase, "complete");
@@ -379,14 +380,14 @@ test("writes secret-free atomic evidence for success and every deployment failur
         assert.equal(preflight.evidence.phase, "preflight");
 
         const failureCalls = [];
-        const buildFailure = await run("build-failure", { fetchImpl: deploymentFetch([safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("finished", { status: "FAILURE" })], { calls: failureCalls }), now: () => 0 });
+        const buildFailure = await run("build-failure", { fetchImpl: deploymentFetch([safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished", { status: "FAILURE" })], { calls: failureCalls }), now: () => 0 });
         assert.equal(buildFailure.evidence.phase, "cloud-console-build");
         assert.equal(buildFailure.evidence.failure.buildMayContinue, false);
         assert.equal(failureCalls.some(call => productionEndpoints.some(endpoint => call.url.startsWith(endpoint))), false);
 
         let timeoutClock = 0;
         const timeoutCalls = [];
-        const buildTimeout = await run("build-timeout", { fetchImpl: deploymentFetch([safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("running"), build("running")], { calls: timeoutCalls }), sleep: async ms => { timeoutClock += ms; }, now: () => timeoutClock });
+        const buildTimeout = await run("build-timeout", { fetchImpl: deploymentFetch([safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("running"), build("running")], { calls: timeoutCalls }), sleep: async ms => { timeoutClock += ms; }, now: () => timeoutClock });
         assert.equal(buildTimeout.evidence.phase, "cloud-console-build");
         assert.equal(buildTimeout.evidence.failure.buildMayContinue, true);
         assert.match(buildTimeout.evidence.failure.message, /not canceled and may continue/);
@@ -395,7 +396,7 @@ test("writes secret-free atomic evidence for success and every deployment failur
         assert.equal(timeoutCalls.some(call => productionEndpoints.some(endpoint => call.url.startsWith(endpoint))), false);
 
         let readinessClock = 0;
-        const readiness = await run("readiness", { fetchImpl: deploymentFetch([safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("finished")], { readiness: url => healthResponse(url, 503) }), sleep: async ms => { readinessClock += ms; }, now: () => readinessClock });
+        const readiness = await run("readiness", { fetchImpl: deploymentFetch([safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished")], { readiness: url => healthResponse(url, 503) }), sleep: async ms => { readinessClock += ms; }, now: () => readinessClock });
         assert.equal(readiness.evidence.phase, "production-readiness");
         assert.equal(readiness.evidence.digestHttpProven, false);
     } finally {
@@ -461,14 +462,24 @@ test("CLI writes secret-free failure evidence and exits 2 for invalid release ev
 
 for (const [name, changed, expected, buildMayContinue] of [
     ["wrong target", { buildType: { id: "Other" } }, /target or branch/, true],
-    ["wrong response revision", { revisions: { revision: [{ version: "f".repeat(40), "vcs-root-instance": { id: vcsRootInstanceId } }] } }, /revision differs/, true],
+    ["wrong response revision", { revisions: { revision: [{ version: "f".repeat(40), vcsBranchName: `refs/heads/${config.branch}`, "vcs-root-instance": { id: vcsRootInstanceId } }] } }, /revision differs/, true],
+    ["unspecified polled revision branch", { revisions: { revision: [{ version: revision, vcsBranchName: "<unspecified>", "vcs-root-instance": { id: vcsRootInstanceId } }] } }, /revision differs/, true],
+    ["wrong polled revision branch", { revisions: { revision: [{ version: revision, vcsBranchName: "refs/heads/release/webapp/2.8", "vcs-root-instance": { id: vcsRootInstanceId } }] } }, /revision differs/, true],
     ["wrong response build ID", { id: 43 }, /identity or state/, true],
     ["failed deployment", { state: "finished", status: "FAILURE" }, /finished with FAILURE/, false],
 ]) test(`rejects ${name}`, async () => {
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("queued", changed)];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("queued", changed)];
     const error = await capturedFailure(deployRelease({ ...fixture(), config, fetchImpl: async () => response(values.shift()) }));
     assert.match(error.message, expected);
     assert.equal(error.deploymentEvidence.failure.buildMayContinue, buildMayContinue);
+});
+
+for (const vcsBranchName of ["<unspecified>", "refs/heads/release/webapp/2.8"]) test(`rejects queued revision branch ${vcsBranchName}`, async () => {
+    const queued = build("queued");
+    queued.revisions.revision[0].vcsBranchName = vcsBranchName;
+    const error = await capturedFailure(deployRelease({ ...fixture(), config, fetchImpl: deploymentFetch([safeBuildType(), safeVcsRoot(), rootInstances(), queued]) }));
+    assert.match(error.message, /revision differs/);
+    assert.equal(error.deploymentEvidence.phase, "queue");
 });
 
 for (const [name, mutateBuildType, mutateRoot, expected] of [
@@ -526,7 +537,7 @@ test("rejects ambiguous or mismatched VCS root resolution", () => {
 test("marks a thrown queue POST as ambiguous and potentially continuing", async () => {
     let postSeen = false;
     const fetchImpl = async (url, init) => {
-        if (url.endsWith("/app/rest/buildQueue")) { postSeen = init.method === "POST"; throw new Error("connection lost after send"); }
+        if (url.includes("/app/rest/buildQueue?")) { postSeen = init.method === "POST"; throw new Error("connection lost after send"); }
         if (url.includes("/buildTypes/")) return response(safeBuildType());
         if (url.includes("/vcs-roots/")) return response(safeVcsRoot());
         return response(rootInstances());
@@ -552,7 +563,7 @@ test("marks an invalid queue response as ambiguous and potentially continuing", 
 test("retains a known running build when a later poll fails", async () => {
     let clock = 0;
     let poll = 0;
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("running")];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("running")];
     const fetchImpl = async url => {
         if (url.includes("/app/rest/builds/") && ++poll === 2) throw new Error("poll failed");
         return response(values.shift());
@@ -567,7 +578,7 @@ test("retains a known running build when a later poll fails", async () => {
 });
 
 test("records exact finished FAILURE as conclusive and not continuing", async () => {
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }, build("finished", { status: "FAILURE" })];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished", { status: "FAILURE" })];
     const error = await capturedFailure(deployRelease({ ...fixture(), config, fetchImpl: async () => response(values.shift()) }));
     assert.match(error.message, /finished with FAILURE/);
     assert.equal(error.deploymentEvidence.cloudConsole.lastExactObservation.state, "finished");
@@ -578,7 +589,7 @@ test("records exact finished FAILURE as conclusive and not continuing", async ()
 
 test("records timed-out known build as potentially continuing without cancellation", async () => {
     let clock = 0;
-    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), { id: 42 }];
+    const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued")];
     const error = await capturedFailure(deployRelease({ ...fixture(), config, fetchImpl: async () => response(values.shift() ?? build("running")), sleep: async ms => { clock += ms; }, now: () => clock }));
     assert.match(error.message, /not canceled and may continue/);
     assert.equal(error.deploymentEvidence.cloudConsole.buildId, 42);
