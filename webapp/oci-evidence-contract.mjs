@@ -15,6 +15,9 @@ const imageMediaTypePairs = [
 
 function fail(message) { throw new Error(`Invalid webapp OCI evidence: ${message}`); }
 function hash(file) { return createHash("sha256").update(readFileSync(file)).digest("hex"); }
+function exactKeys(value, expected, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join() !== expected.slice().sort().join()) fail(`${label} has unsupported fields`);
+}
 function options(args) {
   const result = new Map();
   for (let i = 0; i < args.length; i += 2) {
@@ -50,6 +53,10 @@ function requireReleaseIdentity(value, expected = {}) {
   if (expected.revision && value.revision !== expected.revision) fail("package revision differs from the expected full revision");
   if (expected.version && value.version !== expected.version) fail("package version differs from checked-in webappVersion");
 }
+function requireStagingIdentity(value, expected = {}) {
+  if (value?.schemaVersion !== 1 || value.product !== "hexana-webapp" || !revision.test(value.version) || value.versionSource !== "git-revision" || !revision.test(value.revision) || value.version !== value.revision) fail("package identity is not a SHA-only staging identity");
+  if (!revision.test(expected.revision ?? "") || value.revision !== expected.revision) fail("staging package revision differs from the expected full revision");
+}
 export function verifyPackage(packageDir, expected = {}) {
   const root = resolve(packageDir);
   if (!statSync(root).isDirectory()) fail("package directory is missing");
@@ -71,8 +78,7 @@ export function verifyStagingPackage(packageDir, expected = {}) {
   for (const [path, value] of entries) if (hash(resolve(root, path)) !== value) fail(`packaged file hash differs for ${path}`);
   if (readFileSync(resolve(root, "package.sha256"), "utf8") !== `${hash(resolve(root, "checksums.sha256"))}\n`) fail("package aggregate checksum differs");
   const packageIdentity = identity(root);
-  if (packageIdentity?.schemaVersion !== 1 || packageIdentity.product !== "hexana-webapp" || !revision.test(packageIdentity.version) || packageIdentity.versionSource !== "git-revision" || !revision.test(packageIdentity.revision) || packageIdentity.version !== packageIdentity.revision) fail("package identity is not a SHA-only staging identity");
-  if (!revision.test(expected.revision ?? "") || packageIdentity.revision !== expected.revision) fail("staging package revision differs from the expected full revision");
+  requireStagingIdentity(packageIdentity, expected);
   return { identity: packageIdentity, aggregateSha256: hash(resolve(root, "checksums.sha256")), evidence: Object.fromEntries(evidenceNames.map(name => [name, hash(resolve(root, name))])) };
 }
 function validateImage(image) {
@@ -81,12 +87,30 @@ function validateImage(image) {
   if (!matchedMediaTypes || image.platform?.os !== "linux" || image.platform?.architecture !== "amd64") fail("image must identify one linux/amd64 OCI or Docker schema-2 manifest and matching config");
 }
 export function verifyReceipt(receipt, packageDir) {
-  if (receipt?.schemaVersion !== 1 || receipt.kind !== "hexana-webapp-oci-evidence" || !branch.test(receipt.releaseBranch ?? "") || !revision.test(receipt.sourceRevision ?? "")) fail("unsupported receipt schema");
+  if (receipt?.kind !== "hexana-webapp-oci-evidence") fail("unsupported receipt schema");
   validateImage(receipt.image);
-  const actual = verifyPackage(packageDir, { releaseBranch: receipt.releaseBranch });
+  let actual;
+  let source;
+  if (receipt.schemaVersion === 1) {
+    if ("source" in receipt || !branch.test(receipt.releaseBranch ?? "") || !revision.test(receipt.sourceRevision ?? "")) fail("unsupported receipt schema");
+    actual = verifyPackage(packageDir, { releaseBranch: receipt.releaseBranch });
+    source = { receiptSchemaVersion: 1, branch: receipt.releaseBranch, revision: receipt.sourceRevision, version: actual.identity.version };
+  } else if (receipt.schemaVersion === 2) {
+    exactKeys(receipt, ["schemaVersion", "kind", "source", "image", "package"], "master receipt");
+    exactKeys(receipt.source, ["branch", "revision"], "master receipt source");
+    if (receipt.source.branch !== "master" || !revision.test(receipt.source.revision ?? "")) fail("master receipt source must identify master and a lowercase full revision");
+    actual = verifyStagingPackage(packageDir, { revision: receipt.source.revision });
+    exactKeys(actual.identity, ["schemaVersion", "product", "version", "versionSource", "revision"], "master package identity");
+    source = { receiptSchemaVersion: 2, branch: receipt.source.branch, revision: receipt.source.revision, version: actual.identity.version };
+  } else {
+    fail("unsupported receipt schema");
+  }
+  if (!receipt.package || typeof receipt.package !== "object" || Array.isArray(receipt.package)) fail("receipt package must be an object");
   const claimed = receipt.package?.identity;
-  if (!["schemaVersion", "product", "version", "versionSource", "revision"].every(key => claimed?.[key] === actual.identity[key]) || receipt.sourceRevision !== actual.identity.revision || receipt.package.aggregateSha256 !== actual.aggregateSha256) fail("receipt package identity or aggregate differs from the static payload");
+  if (receipt.schemaVersion === 2) exactKeys(claimed, ["schemaVersion", "product", "version", "versionSource", "revision"], "master receipt package identity");
+  if (!["schemaVersion", "product", "version", "versionSource", "revision"].every(key => claimed?.[key] === actual.identity[key]) || source.revision !== actual.identity.revision || receipt.package.aggregateSha256 !== actual.aggregateSha256) fail("receipt package identity or aggregate differs from the static payload");
   if (Object.keys(receipt.package.evidence ?? {}).sort().join() !== evidenceNames.join() || evidenceNames.some(name => receipt.package.evidence[name] !== actual.evidence[name])) fail("receipt evidence hashes differ from the static payload");
+  return source;
 }
 function checkedInVersion(file) {
   const match = /^webappVersion=(.+)$/m.exec(readFileSync(file, "utf8"));
@@ -110,8 +134,13 @@ function main() {
     verifyStagingPackage(packageDir, { revision: sourceRevision });
   } else if (command === "verify-receipt") {
     const receipt = input.get("--receipt");
-    if (!receipt || input.size !== 2) fail("verify-receipt requires package-dir and receipt");
-    try { verifyReceipt(JSON.parse(readFileSync(receipt, "utf8")), packageDir); } catch (error) { if (error instanceof SyntaxError) fail("receipt is not JSON"); throw error; }
+    const sourceBranch = input.get("--source-branch");
+    const sourceRevision = input.get("--revision");
+    if (!receipt || ![2, 4].includes(input.size) || (input.size === 4 && (!sourceBranch || !sourceRevision))) fail("verify-receipt requires package-dir and receipt, with optional source-branch and revision");
+    try {
+      const source = verifyReceipt(JSON.parse(readFileSync(receipt, "utf8")), packageDir);
+      if (input.size === 4 && (source.branch !== sourceBranch || source.revision !== sourceRevision)) fail("receipt source identity differs from the expected branch/revision");
+    } catch (error) { if (error instanceof SyntaxError) fail("receipt is not JSON"); throw error; }
   } else fail("expected verify-package or verify-receipt");
 }
 if (process.argv[1] === new URL(import.meta.url).pathname) main();

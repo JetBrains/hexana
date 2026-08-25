@@ -44,8 +44,8 @@ their release identities to match.
 
 ## Vulnerability scan
 
-The source-owned OCI release scan requires Bash, Node.js, a running Docker daemon,
-registry credentials for the Hexana release image, and the repository's
+The source-owned OCI scan requires Bash, Node.js, a running Docker daemon,
+registry credentials for the Hexana image, and the repository's
 Gradle/JDK toolchain. The pinned Trivy image is anonymously readable. Prepare
 these fixed inputs first:
 
@@ -57,6 +57,15 @@ branch and lowercase full source revision:
 
 ```bash
 HEXANA_WEBAPP_RELEASE_BRANCH=release/webapp/0.1 \
+HEXANA_SOURCE_REVISION=0123456789abcdef0123456789abcdef01234567 \
+/path/to/Hexana/webapp/scan-webapp-oci-release.sh
+```
+
+For a SHA-only master image, set the generic source branch instead. The release
+and master branch variables are mutually exclusive:
+
+```bash
+HEXANA_WEBAPP_SOURCE_BRANCH=master \
 HEXANA_SOURCE_REVISION=0123456789abcdef0123456789abcdef01234567 \
 /path/to/Hexana/webapp/scan-webapp-oci-release.sh
 ```

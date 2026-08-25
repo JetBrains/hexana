@@ -5,7 +5,8 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/.." && pwd)"
 cd "$repo_root"
 
-branch="${HEXANA_WEBAPP_RELEASE_BRANCH:-}"
+release_branch="${HEXANA_WEBAPP_RELEASE_BRANCH:-}"
+source_branch="${HEXANA_WEBAPP_SOURCE_BRANCH:-}"
 revision="${HEXANA_SOURCE_REVISION:-}"
 input_dir="$repo_root/webapp/build/oci-release-scan-input"
 receipt="$input_dir/evidence/receipt.json"
@@ -18,12 +19,23 @@ output_dir="$repo_root/webapp/build/vulnerability-scan-evidence"
 [[ "$#" == 0 ]] || { echo "scan-webapp-oci-release.sh does not accept arguments." >&2; exit 2; }
 branch_regex='^release/webapp/(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 revision_regex='^[0-9a-f]{40}$'
-[[ "$branch" =~ $branch_regex ]] || {
-  echo "Scan Webapp OCI Release requires HEXANA_WEBAPP_RELEASE_BRANCH=release/webapp/<numeric-major>.<numeric-minor>; current branch: $branch" >&2
+if [[ -n "$release_branch" && -n "$source_branch" ]]; then
+  echo "Set exactly one of HEXANA_WEBAPP_RELEASE_BRANCH or HEXANA_WEBAPP_SOURCE_BRANCH." >&2
   exit 2
-}
+elif [[ -n "$release_branch" ]]; then
+  [[ "$release_branch" =~ $branch_regex ]] || {
+    echo "Scan Webapp OCI Release requires HEXANA_WEBAPP_RELEASE_BRANCH=release/webapp/<numeric-major>.<numeric-minor>; current branch: $release_branch" >&2
+    exit 2
+  }
+  branch="$release_branch"
+elif [[ "$source_branch" == "master" ]]; then
+  branch="$source_branch"
+else
+  echo "Set HEXANA_WEBAPP_RELEASE_BRANCH=release/webapp/<numeric-major>.<numeric-minor> or HEXANA_WEBAPP_SOURCE_BRANCH=master." >&2
+  exit 2
+fi
 [[ "$revision" =~ $revision_regex ]] || {
-  echo "Scan Webapp OCI Release requires HEXANA_SOURCE_REVISION to be a lowercase full 40-character VCS revision." >&2
+  echo "Webapp OCI scanning requires HEXANA_SOURCE_REVISION to be a lowercase full 40-character VCS revision." >&2
   exit 2
 }
 for command in docker node; do
@@ -36,6 +48,12 @@ scanner="$(node webapp/vulnerability-report-contract.mjs scanner-reference)" || 
 [[ -n "$scanner" ]] || { echo "The approved scanner reference is empty." >&2; exit 2; }
 [[ -f "$receipt" ]] || { echo "Required OCI evidence receipt is missing: $receipt" >&2; exit 2; }
 [[ -f "$package_dir/sbom.cdx.json" ]] || { echo "Required bundled SBOM is missing: $package_dir/sbom.cdx.json" >&2; exit 2; }
+node webapp/oci-evidence-contract.mjs verify-receipt \
+  --package-dir "$package_dir" --receipt "$receipt" \
+  --source-branch "$branch" --revision "$revision" || {
+  echo "Downloaded OCI evidence does not match the requested source identity." >&2
+  exit 2
+}
 
 gate_reached=false
 cleanup() {
@@ -53,13 +71,10 @@ trap finish EXIT
 rm -rf "$work_dir" "$output_dir"
 mkdir -p "$cache_dir" "$output_dir"
 
-image_ref="$(node - "$receipt" "$branch" "$revision" <<'NODE'
+image_ref="$(node - "$receipt" <<'NODE'
 const fs = require("node:fs");
-const [receiptFile, branch, revision] = process.argv.slice(2);
+const [receiptFile] = process.argv.slice(2);
 const receipt = JSON.parse(fs.readFileSync(receiptFile, "utf8"));
-if (receipt.releaseBranch !== branch || receipt.sourceRevision !== revision) {
-  throw new Error("Downloaded receipt branch/revision differs from the requested source identity");
-}
 const digest = /^sha256:[0-9a-f]{64}$/;
 const reference = receipt.image?.reference;
 if (typeof reference !== "string" || reference !== `registry.jetbrains.team/p/hx/containers/hexana-webapp@${receipt.image?.manifestDigest}` ||
@@ -130,10 +145,13 @@ const evidence = JSON.parse(fs.readFileSync(input, "utf8"));
 const severityOrder = ["UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"];
 const total = severityOrder.reduce((sum, severity) => sum + evidence.counts[severity], 0);
 const quoted = value => JSON.stringify(value);
+const sourceLine = evidence.schemaVersion === 1
+  ? `release=${evidence.release.branch} ${evidence.release.version} ${evidence.release.revision}`
+  : `source=${evidence.source.branch} ${evidence.source.version} ${evidence.source.revision}`;
 const lines = [
   `decision=${evidence.decision}`,
   `image=${evidence.image.reference}`,
-  `release=${evidence.release.branch} ${evidence.release.version} ${evidence.release.revision}`,
+  sourceLine,
   `scanner=${evidence.scanner.version} ${evidence.scanner.digest}`,
   `database=schema-${evidence.database.version} updated=${evidence.database.updatedAt} downloaded=${evidence.database.downloadedAt} next-update=${evidence.database.nextUpdate}`,
   `findings=${severityOrder.map(severity => `${severity}:${evidence.counts[severity]}`).join(" ")} TOTAL:${total}`,
