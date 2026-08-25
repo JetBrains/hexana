@@ -338,11 +338,11 @@ object PythonRuntimeDownloader {
     fun pythonInstallDir(): Path =
         Path.of(PathManager.getSystemPath(), "hexana-firmware", "python-$PINNED_PYTHON_VERSION")
 
-    /** Returns a human-readable approximate download size for the current platform. */
+    /** Approximate download size in MB for the current platform (number only; callers prefix "~"). */
     internal fun approxSizeMb(): String = when {
-        SystemInfo.isWindows -> "~22"
-        SystemInfo.isMac -> "~24"
-        else -> "~30"  // Linux variants
+        SystemInfo.isWindows -> "22"
+        SystemInfo.isMac -> "24"
+        else -> "30"  // Linux variants
     }
 
     private fun sha256Hex(path: Path): String {

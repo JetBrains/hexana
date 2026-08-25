@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.firmware
 
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.invokeLater
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.DslConfigurableBase
@@ -199,7 +200,9 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
             val qemuRiscv64 = EmulatorDetection.detectQemu(QemuBinary.SystemRiscv64)
             val renode = EmulatorDetection.detectRenode()
             val gdb = EmulatorDetection.detectGdb()
-            invokeLater {
+            // ModalityState.any(): the Settings dialog is modal; default-modality runnables
+            // would sit queued until it closes, leaving the labels on "Checking...".
+            invokeLater(ModalityState.any()) {
                 qemuArmLabel?.text = versionStatus(qemuArm)
                 qemuAarch64Label?.text = versionStatus(qemuAarch64)
                 qemuRiscv32Label?.text = versionStatus(qemuRiscv32)

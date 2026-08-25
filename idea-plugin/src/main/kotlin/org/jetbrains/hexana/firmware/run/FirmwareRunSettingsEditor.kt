@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.firmware.run
 
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.invokeLater
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.SettingsEditor
@@ -288,7 +289,7 @@ class FirmwareRunSettingsEditor(private val project: Project) : SettingsEditor<F
     /** Disables/re-enables all download buttons while a download modal is running. */
     private fun setDownloading(inProgress: Boolean) {
         downloadInProgress = inProgress
-        invokeLater {
+        invokeLater(ModalityState.any()) {
             val enabled = !inProgress
             renodeDownloadButton?.isEnabled = enabled
             dts2replFetchButton?.isEnabled = enabled
@@ -308,7 +309,7 @@ class FirmwareRunSettingsEditor(private val project: Project) : SettingsEditor<F
             val dts2replOk = Dts2ReplRunner.isInstalled(Dts2ReplRunner.managedInstallDir()) ||
                 HexanaFirmwareSettings.getInstance().effectiveDts2replPath() != null
             val python = Dts2ReplRunner.resolvePython()
-            invokeLater { applyProbeResults(renode, gdb, dts2replOk, python) }
+            invokeLater(ModalityState.any()) { applyProbeResults(renode, gdb, dts2replOk, python) }
         }
     }
 
@@ -319,7 +320,7 @@ class FirmwareRunSettingsEditor(private val project: Project) : SettingsEditor<F
             val dts2replOk = Dts2ReplRunner.isInstalled(Dts2ReplRunner.managedInstallDir()) ||
                 HexanaFirmwareSettings.getInstance().effectiveDts2replPath() != null
             val python = Dts2ReplRunner.resolvePython()
-            invokeLater { applyProbeResults(renode, gdb, dts2replOk, python) }
+            invokeLater(ModalityState.any()) { applyProbeResults(renode, gdb, dts2replOk, python) }
         }
     }
 
