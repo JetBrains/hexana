@@ -1,14 +1,11 @@
 package org.jetbrains.hexana.firmware.ui
 
-import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.panel
 import org.jetbrains.hexana.firmware.Dts2ReplRunner
 import org.jetbrains.hexana.firmware.EmulatorDetection
-import org.jetbrains.hexana.firmware.FirmwareEmulatorConfigurable
-import org.jetbrains.hexana.firmware.RenodeDownloader
 import org.jetbrains.hexana.providers.firmware.Backend
 import org.jetbrains.hexana.providers.firmware.QemuBinary
 import org.jetbrains.hexana.providers.firmware.toCliName
@@ -18,8 +15,9 @@ import javax.swing.JComponent
  * Popup dialog shown when the firmware Run/Debug button is clicked but
  * the required emulator tool is not available.
  *
- * Lists per-backend status: detected path + version (or "not found"), minimum-version
- * result, and action buttons to resolve missing tools.
+ * Shows per-tool status (detected path/version or "not found") and a single primary
+ * action that opens the Hexana Firmware run configuration editor, where download
+ * buttons for the missing tools are available.
  *
  * Call [show] on the EDT.
  */
@@ -28,11 +26,12 @@ class FirmwareAcquisitionPopup(
     private val requiredBackend: Backend,
     private val requiredQemuBinary: QemuBinary?,
     private val targetProfile: org.jetbrains.hexana.providers.firmware.TargetProfile? = null,
+    private val elfFile: com.intellij.openapi.vfs.VirtualFile? = null,
 ) : DialogWrapper(project, /* canBeParent = */ true) {
 
     init {
         title = "Firmware Emulator — Tools Required"
-        setOKButtonText("Close")
+        setOKButtonText("Open Run Configuration…")
         isOKActionEnabled = true
         init()
     }
@@ -44,15 +43,48 @@ class FirmwareAcquisitionPopup(
         }
         buildGdbSection()
         separator()
-        group("Settings") {
-            row {
-                button("Open Firmware Emulator Settings…") {
-                    close(OK_EXIT_CODE)
-                    ShowSettingsUtil.getInstance()
-                        .showSettingsDialog(project, FirmwareEmulatorConfigurable::class.java)
-                }
-            }
+        row {
+            comment(
+                "Use <b>Open Run Configuration…</b> to download missing tools and configure the emulator."
+            )
         }
+    }
+
+    override fun doOKAction() {
+        close(OK_EXIT_CODE)
+        openRunConfiguration()
+    }
+
+    private fun openRunConfiguration() {
+        val proj = project ?: return
+        val runManager = com.intellij.execution.RunManager.getInstance(proj)
+        val configurationType = com.intellij.execution.configurations.ConfigurationTypeUtil
+            .findConfigurationType(
+                org.jetbrains.hexana.firmware.run.FirmwareRunConfigurationType::class.java
+            )
+        val factory = configurationType.configurationFactories.first()
+
+        // Reuse an existing config for this ELF, or create a new one.
+        val settings = if (elfFile != null) {
+            runManager.allSettings.firstOrNull { s ->
+                s.type == configurationType &&
+                    (s.configuration as? org.jetbrains.hexana.firmware.run.FirmwareRunConfiguration)
+                        ?.elfPath == elfFile.path
+            } ?: runManager.createConfiguration(elfFile.nameWithoutExtension, factory).also { newSettings ->
+                (newSettings.configuration as org.jetbrains.hexana.firmware.run.FirmwareRunConfiguration).apply {
+                    elfPath = elfFile.path
+                }
+                runManager.addConfiguration(newSettings)
+            }
+        } else {
+            runManager.allSettings.firstOrNull { it.type == configurationType }
+                ?: runManager.createConfiguration("Firmware", factory).also { runManager.addConfiguration(it) }
+        }
+
+        runManager.selectedConfiguration = settings
+        com.intellij.execution.impl.RunDialog.editConfiguration(
+            proj, settings, "Edit Firmware Run Configuration"
+        )
     }
 
     private fun com.intellij.ui.dsl.builder.Panel.buildQemuSection() {
@@ -79,26 +111,12 @@ class FirmwareAcquisitionPopup(
             row("Status:") {
                 label(detectedStatus(detected, minVersion = "1.15")).align(AlignX.FILL)
             }
-            row {
-                button("Download Renode ${RenodeDownloader.PINNED_RENODE_VERSION}…") {
-                    RenodeDownloader.downloadWithConsent(project) {
-                        // refresh handled by the next button-enabled panel reopen
-                    }
-                }
-            }
         }
         val dts2replInstalled = Dts2ReplRunner.isInstalled(Dts2ReplRunner.managedInstallDir()) ||
             org.jetbrains.hexana.firmware.HexanaFirmwareSettings.getInstance().effectiveDts2replPath() != null
         group("dts2repl (platform description generator)") {
             row("Status:") {
                 label(if (dts2replInstalled) "Installed" else "Not installed").align(AlignX.FILL)
-            }
-            if (!dts2replInstalled) {
-                row {
-                    button("Fetch dts2repl (commit ${Dts2ReplRunner.PINNED_DTS2REPL_COMMIT.take(7)})…") {
-                        Dts2ReplRunner.downloadWithConsent(project) { }
-                    }
-                }
             }
             row {
                 comment(
@@ -117,30 +135,10 @@ class FirmwareAcquisitionPopup(
         val toolchainTarget = targetProfile?.let {
             org.jetbrains.hexana.firmware.ZephyrToolchainDownloader.toolchainTargetFor(it)
         } ?: "arm-zephyr-eabi"
-        val approxMb = when (toolchainTarget) {
-            "aarch64-zephyr-elf" -> "~49"
-            "riscv64-zephyr-elf" -> "~133"
-            else -> "~90"
-        }
 
         group("GDB (DAP transport)") {
             row("Status:") {
-                label("Not found — GDB 14+ with Python is required for debugging").align(AlignX.FILL)
-            }
-            row {
-                button(
-                    "Download GDB ($toolchainTarget toolchain, $approxMb MB)…"
-                ) {
-                    org.jetbrains.hexana.firmware.ZephyrToolchainDownloader.downloadWithConsent(
-                        project, toolchainTarget
-                    ) {
-                        // Popup is typically closed after download; re-show or just close.
-                    }
-                }.applyToComponent {
-                    toolTipText = "Download the $toolchainTarget toolchain from Zephyr SDK " +
-                        "${org.jetbrains.hexana.firmware.ZephyrToolchainDownloader.PINNED_ZEPHYR_SDK_VERSION} " +
-                        "(contains GPLv3 GDB with Python support, verified by SHA-256)."
-                }
+                label("Not found — GDB 14+ with Python is required for debugging ($toolchainTarget)").align(AlignX.FILL)
             }
         }
     }
@@ -164,15 +162,17 @@ class FirmwareAcquisitionPopup(
          * @param project The current project (nullable for application-level context).
          * @param requiredBackend Which backend is needed ([Backend.Qemu] or [Backend.Renode]).
          * @param requiredQemuBinary The specific QEMU binary variant, when [Backend.Qemu] is required.
-         * @param targetProfile Optional profile used to select the best GDB toolchain to download.
+         * @param targetProfile Optional profile used to report the appropriate GDB toolchain.
+         * @param elfFile Optional ELF file used to find or create the matching run configuration.
          */
         fun show(
             project: Project?,
             requiredBackend: Backend,
             requiredQemuBinary: QemuBinary? = null,
             targetProfile: org.jetbrains.hexana.providers.firmware.TargetProfile? = null,
+            elfFile: com.intellij.openapi.vfs.VirtualFile? = null,
         ) {
-            FirmwareAcquisitionPopup(project, requiredBackend, requiredQemuBinary, targetProfile).show()
+            FirmwareAcquisitionPopup(project, requiredBackend, requiredQemuBinary, targetProfile, elfFile).show()
         }
     }
 }

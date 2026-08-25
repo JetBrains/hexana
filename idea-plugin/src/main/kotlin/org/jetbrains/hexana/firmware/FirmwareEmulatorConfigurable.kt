@@ -24,12 +24,12 @@ import javax.swing.JLabel
  * Settings page under **Build, Execution, Deployment | Firmware Emulator**.
  *
  * Lets the user configure QEMU system binary paths (one per architecture variant),
- * the Renode executable path (with a one-click download for the pinned version),
- * the dts2repl directory (with a one-click acquire action), and the download
- * directory for managed installs.
+ * the Renode executable path, the dts2repl directory, and the download directory
+ * for managed installs. Version detection is run off the EDT when the panel opens;
+ * labels are updated via [invokeLater] once detection completes.
  *
- * Version detection is run off the EDT when the panel opens; labels are updated
- * via [invokeLater] once detection completes.
+ * Downloads (Renode, dts2repl, GDB toolchain) are offered in the Hexana Firmware
+ * run configuration editor, not here.
  */
 class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurable {
 
@@ -42,7 +42,6 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
     private var qemuRiscv64Label: JLabel? = null
     private var renodeLabel: JLabel? = null
     private var gdbLabel: JLabel? = null
-    private var downloadGdbButton: javax.swing.JButton? = null
 
     override fun createPanel(): DialogPanel {
         val panel = panel {
@@ -71,15 +70,6 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
                     "Minimum version: ${RenodeDownloader.PINNED_RENODE_VERSION.split(".")[0]}." +
                         "${RenodeDownloader.PINNED_RENODE_VERSION.split(".")[1]}"
                 )
-                row {
-                    button("Download Renode ${RenodeDownloader.PINNED_RENODE_VERSION}…") {
-                        RenodeDownloader.downloadWithConsent(null) {
-                            refreshRenodeVersion()
-                        }
-                    }.applyToComponent {
-                        toolTipText = "Download the Renode ${RenodeDownloader.PINNED_RENODE_VERSION} portable package."
-                    }
-                }
             }
             group("GDB (DAP transport)") {
                 row("Zephyr SDK path:") {
@@ -113,41 +103,21 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
                         "Zephyr SDK ships arm-zephyr-eabi-gdb-py; " +
                         "Arm GNU Toolchain ≥ 13.3.Rel1 ships arm-none-eabi-gdb-py."
                 )
-                row {
-                    val btn = button("Download GDB toolchain (Zephyr SDK arm-zephyr-eabi, ~90 MB)…") {
-                        ZephyrToolchainDownloader.downloadWithConsent(null, "arm-zephyr-eabi") {
-                            refreshGdbVersion()
-                        }
-                    }.applyToComponent {
-                        toolTipText = "Download the arm-zephyr-eabi toolchain from Zephyr SDK " +
-                            "${ZephyrToolchainDownloader.PINNED_ZEPHYR_SDK_VERSION} " +
-                            "(contains GPLv3 GDB with Python support)."
-                    }.component
-                    downloadGdbButton = btn
-                }
             }
             group("dts2repl") {
                 row("dts2repl directory:") {
                     textFieldWithBrowseButton(FileChooserDescriptorFactory.singleDir())
                         .align(AlignX.FILL)
                         .applyToComponent {
-                            emptyText.text = "auto-managed (acquire below)"
+                            emptyText.text = "auto-managed (acquire in run configuration)"
                             toolTipText = "Path to an existing dts2repl checkout or extracted directory. " +
                                 "Leave blank to use the managed download."
                         }
                         .bindText(settings::dts2replPathInUi.toNonNullableProperty(""))
                 }
                 row {
-                    button("Fetch dts2repl (commit ${Dts2ReplRunner.PINNED_DTS2REPL_COMMIT.take(7)})…") {
-                        Dts2ReplRunner.downloadWithConsent(null) { success ->
-                            // nothing extra needed — the managed dir is probed at run time
-                        }
-                    }.applyToComponent {
-                        toolTipText =
-                            "Download the pinned dts2repl snapshot from GitHub (Apache-2.0).\n" +
-                                "Requires Python 3.9+ installed on PATH."
-                    }
-                }.comment("dts2repl converts Zephyr DTS files to Renode platform descriptions.")
+                    comment("dts2repl converts Zephyr DTS files to Renode platform descriptions.")
+                }
             }
             group("Download Directory") {
                 row("Firmware tools directory:") {
@@ -159,6 +129,12 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
                         }
                         .bindText(settings::renodeDownloadDirInUi.toNonNullableProperty(""))
                 }
+            }
+            row {
+                comment(
+                    "Downloads (Renode, dts2repl, GDB toolchain) are offered in the " +
+                        "Hexana Firmware run configuration — open it via Run → Edit Configurations."
+                )
             }
         }
 
@@ -212,24 +188,6 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
                 qemuRiscv64Label?.text = versionStatus(qemuRiscv64)
                 renodeLabel?.text = versionStatus(renode)
                 gdbLabel?.text = versionStatus(gdb)
-                downloadGdbButton?.isEnabled = gdb == null
-            }
-        }
-    }
-
-    private fun refreshRenodeVersion() {
-        CoroutineScope(Dispatchers.IO).launch {
-            val renode = EmulatorDetection.detectRenode()
-            invokeLater { renodeLabel?.text = versionStatus(renode) }
-        }
-    }
-
-    private fun refreshGdbVersion() {
-        CoroutineScope(Dispatchers.IO).launch {
-            val gdb = EmulatorDetection.detectGdb()
-            invokeLater {
-                gdbLabel?.text = versionStatus(gdb)
-                downloadGdbButton?.isEnabled = gdb == null
             }
         }
     }

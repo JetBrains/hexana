@@ -128,8 +128,8 @@ class FirmwareRunConfiguration(
                     // bare name = PATH lookup; warn rather than hard-error
                     if (File(resolved).name == resolved) {
                         throw RuntimeConfigurationWarning(
-                            "${resolved} not found on PATH. Install QEMU or set the path in " +
-                                "Settings → Build → Firmware Emulator."
+                            "${resolved} not found on PATH. Install QEMU via your package manager " +
+                                "or set the path in Settings → Build → Firmware Emulator."
                         )
                     } else {
                         throw RuntimeConfigurationError(
@@ -143,13 +143,14 @@ class FirmwareRunConfiguration(
                 val renode = settings.effectiveRenodesPath()
                 if (renode == null) {
                     throw RuntimeConfigurationError(
-                        "Renode not found. Download it in Settings → Build → Firmware Emulator."
+                        "Renode not found. Use the Download button in the Tools section of this run configuration."
                     )
                 }
                 if (!File(renode).isFile) {
                     throw RuntimeConfigurationError(
                         "Renode not found at configured path: $renode. " +
-                            "Update the path in Settings → Build → Firmware Emulator."
+                            "Update the path in Settings → Build → Firmware Emulator, " +
+                            "or re-download via the Tools section of this run configuration."
                     )
                 }
                 // For Generated .repl, we need dts2repl.
@@ -169,7 +170,8 @@ class FirmwareRunConfiguration(
                     if (!dts2replAvailable) {
                         throw RuntimeConfigurationError(
                             "dts2repl is required to generate a Renode platform from zephyr.dts, " +
-                                "but it is not installed. Acquire it in Settings → Build → Firmware Emulator."
+                                "but it is not installed. Use the Fetch button in the Tools section " +
+                                "of this run configuration."
                         )
                     }
                 }

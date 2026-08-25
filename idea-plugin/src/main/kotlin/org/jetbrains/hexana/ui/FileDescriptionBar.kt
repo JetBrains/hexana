@@ -433,7 +433,7 @@ private fun NormalModeContent(
                     } else {
                         val sel = fs.target.selection as BackendSelection.Ok
                         FirmwareAcquisitionPopup.show(
-                            state.project, fs.missingBackend ?: sel.backend, sel.qemuBinary, fs.target?.profile
+                            state.project, fs.missingBackend ?: sel.backend, sel.qemuBinary, fs.target?.profile, elfFile
                         )
                     }
                 },
@@ -449,7 +449,7 @@ private fun NormalModeContent(
                     } else {
                         val sel = fs.target.selection as BackendSelection.Ok
                         FirmwareAcquisitionPopup.show(
-                            state.project, fs.missingBackend ?: sel.backend, sel.qemuBinary, fs.target?.profile
+                            state.project, fs.missingBackend ?: sel.backend, sel.qemuBinary, fs.target?.profile, elfFile
                         )
                     }
                 },

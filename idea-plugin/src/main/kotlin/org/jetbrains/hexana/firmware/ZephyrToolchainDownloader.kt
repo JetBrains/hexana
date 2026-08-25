@@ -31,7 +31,7 @@ import kotlin.io.path.exists
  *
  * Flow:
  * 1. Show consent dialog naming the download URL, approximate size, and GPLv3 license.
- * 2. Run a [Task.Backgroundable] that fetches the archive with progress.
+ * 2. Run a [Task.Modal] (cancellable) that fetches the archive with a determinate progress bar.
  * 3. Verify the SHA-256 via the per-asset digest from the GitHub Releases API
  *    (or hardcoded digests for known host/target combinations as a fast path).
  *    Abort loudly on mismatch — never proceed with a warning.
@@ -39,8 +39,8 @@ import kotlin.io.path.exists
  * 5. Locate `bin/<target>-gdb-py` at depth 1 or 2 (tolerates flat and nested extraction layouts).
  * 6. Set [HexanaFirmwareSettings.gdbPathInUi] to the located binary.
  *
- * Never auto-triggered. Invoked only from [FirmwareAcquisitionPopup] or
- * [FirmwareEmulatorConfigurable].
+ * Never auto-triggered. Invoked only from [FirmwareRunSettingsEditor] (run-configuration
+ * editor, where a modal progress dialog is required) or [FirmwareEmulatorConfigurable].
  *
  * ---
  * **Asset evidence** — retrieved 2026-08-25 via:
@@ -208,7 +208,7 @@ object ZephyrToolchainDownloader {
         )
         if (consent != Messages.YES) return
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(
+        ProgressManager.getInstance().run(object : Task.Modal(
             project,
             "Downloading Zephyr SDK $PINNED_ZEPHYR_SDK_VERSION toolchain ($target)",
             /* canBeCancelled = */ true,
@@ -264,10 +264,12 @@ object ZephyrToolchainDownloader {
             }
             indicator.fraction = 0.6
 
+            indicator.isIndeterminate = true
             indicator.text = "Extracting Zephyr toolchain $target..."
             installDir.toFile().deleteRecursively()
             Files.createDirectories(installDir)
             Decompressor.Tar(tempFile).extract(installDir)
+            indicator.isIndeterminate = false
             indicator.fraction = 0.9
 
             val gdbPy = locateGdbPy(installDir, target)
@@ -375,7 +377,7 @@ object ZephyrToolchainDownloader {
     private fun toolchainInstallDir(): Path =
         Path.of(PathManager.getSystemPath(), "hexana-firmware", "zephyr-toolchain-$PINNED_ZEPHYR_SDK_VERSION")
 
-    private fun approxSizeMb(target: String): String = when (target) {
+    internal fun approxSizeMb(target: String): String = when (target) {
         "aarch64-zephyr-elf" -> when {
             SystemInfo.isMac -> "~49"
             else -> "~60"

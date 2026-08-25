@@ -24,15 +24,15 @@ import kotlin.io.path.exists
  *
  * Flow:
  * 1. Show consent dialog naming the download URL, size, and MIT license.
- * 2. Run a [Task.Backgroundable] that fetches the archive with progress.
+ * 2. Run a [Task.Modal] (cancellable) that fetches the archive with a determinate progress bar.
  * 3. Verify the SHA-256 from the GitHub Releases API (or ask the user if the
  *    API is unreachable).
  * 4. Unpack: tar.gz / zip via [Decompressor]; DMG via `hdiutil` on macOS.
  * 5. Install under [HexanaFirmwareSettings.effectiveRenodeDownloadDir].
  * 6. Write the resolved executable path into [HexanaFirmwareSettings.renodePathInUi].
  *
- * Never auto-triggered. Invoked only from [FirmwareAcquisitionPopup] or
- * [FirmwareEmulatorConfigurable].
+ * Never auto-triggered. Invoked only from [FirmwareRunSettingsEditor] (run-configuration
+ * editor, where a modal progress dialog is required) or [FirmwareEmulatorConfigurable].
  */
 object RenodeDownloader {
 
@@ -65,8 +65,12 @@ object RenodeDownloader {
     )
 
     /**
-     * Shows a consent dialog and, on confirmation, starts a background download.
-     * Must be called on the EDT. [onSuccess] is called on the EDT after a successful install.
+     * Shows a consent dialog and, on confirmation, starts a modal download with a
+     * determinate progress bar. Must be called on the EDT.
+     *
+     * Uses [Task.Modal] so the progress dialog appears above whatever window (settings
+     * page or run-configuration editor) triggered the download. [onSuccess] is called
+     * on the EDT after a successful install.
      */
     fun downloadWithConsent(project: Project?, onSuccess: () -> Unit) {
         val filename = currentOsFilename() ?: run {
@@ -92,7 +96,7 @@ object RenodeDownloader {
         )
         if (consent != Messages.YES) return
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(
+        ProgressManager.getInstance().run(object : Task.Modal(
             project,
             "Downloading Renode $PINNED_RENODE_VERSION",
             /* canBeCancelled = */ true,
@@ -116,7 +120,7 @@ object RenodeDownloader {
     }
 
     // -------------------------------------------------------------------------
-    // Internal implementation — runs off EDT inside Task.Backgroundable
+    // Internal implementation — runs off EDT inside Task.Modal
     // -------------------------------------------------------------------------
 
     private fun doDownload(filename: String, url: String, indicator: ProgressIndicator) {
@@ -142,8 +146,10 @@ object RenodeDownloader {
             }
             indicator.fraction = 0.6
 
+            indicator.isIndeterminate = true
             indicator.text = "Extracting Renode $PINNED_RENODE_VERSION..."
             extractArchive(filename, tempFile, installDir, indicator)
+            indicator.isIndeterminate = false
             indicator.fraction = 0.95
 
             val exePath = guessInstalledExe(installDir)

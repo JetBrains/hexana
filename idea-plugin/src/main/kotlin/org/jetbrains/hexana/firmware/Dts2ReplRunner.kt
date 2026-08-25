@@ -100,7 +100,7 @@ class Dts2ReplRunner : Dts2ReplConverter {
                 onDone(false)
                 return
             }
-            ProgressManager.getInstance().run(object : Task.Backgroundable(
+            ProgressManager.getInstance().run(object : Task.Modal(
                 project,
                 "Downloading dts2repl",
                 /* canBeCancelled = */ true,
@@ -152,10 +152,12 @@ class Dts2ReplRunner : Dts2ReplConverter {
                 indicator.text = "Verifying dts2repl..."
                 val sha = sha256Hex(tempFile)
 
+                indicator.isIndeterminate = true
                 indicator.text = "Extracting dts2repl..."
                 installDir.toFile().deleteRecursively()
                 Files.createDirectories(installDir)
                 com.intellij.util.io.Decompressor.Tar(tempFile).extract(installDir)
+                indicator.isIndeterminate = false
                 indicator.fraction = 0.9
 
                 // Write the SHA sidecar for later verification
