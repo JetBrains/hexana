@@ -257,7 +257,17 @@ object RenodeDownloader {
                 else -> throw IOException("No Renode directory found in DMG at $mountPoint")
             }
             installDir.toFile().deleteRecursively()
-            sourceDir.toFile().copyRecursively(installDir.toFile())
+            Files.createDirectories(installDir)
+            // cp -Rp preserves POSIX permissions (the executable bit on MacOS/renode);
+            // Kotlin's copyRecursively streams file contents and loses them.
+            val cp = Runtime.getRuntime().exec(
+                arrayOf("cp", "-Rp", "${sourceDir.absolutePathString()}/.", installDir.absolutePathString()),
+            )
+            val cpExit = cp.waitFor()
+            if (cpExit != 0) {
+                val err = cp.errorStream.bufferedReader().readText()
+                throw IOException("Copying Renode from DMG failed (cp exit $cpExit): $err")
+            }
         } finally {
             Runtime.getRuntime().exec(arrayOf("hdiutil", "detach", mountPoint.absolutePathString()))
                 .waitFor()
@@ -265,21 +275,29 @@ object RenodeDownloader {
         }
     }
 
-    private fun guessInstalledExe(installDir: Path): String? {
-        // macOS: .app bundle
-        val macApp = installDir.resolve("Renode.app/Contents/MacOS/Renode")
-        if (macApp.exists()) return macApp.absolutePathString()
-        // Linux / Windows: renode / renode.exe at the root of the install dir
-        val linux = installDir.resolve("renode")
-        if (linux.exists()) return linux.absolutePathString()
-        val win = installDir.resolve("renode.exe")
-        if (win.exists()) return win.absolutePathString()
-        // Some portable builds nest under a version subdirectory
-        installDir.toFile().listFiles()?.forEach { subdir ->
-            if (!subdir.isDirectory) return@forEach
-            listOf("renode", "renode.exe", "Renode.app/Contents/MacOS/Renode").forEach { rel ->
-                val f = File(subdir, rel)
-                if (f.exists()) return f.absolutePath
+    internal fun guessInstalledExe(installDir: Path): String? {
+        // Candidate layouts, in order:
+        // - the DMG app contents copied directly into installDir (Contents/MacOS/renode),
+        // - a preserved .app bundle, Linux/Windows portable roots, and the same
+        //   shapes nested one level down (some archives add a version directory).
+        val relCandidates = listOf(
+            "Contents/MacOS/renode",
+            "Contents/MacOS/Renode",
+            "Renode.app/Contents/MacOS/renode",
+            "Renode.app/Contents/MacOS/Renode",
+            "renode",
+            "renode.exe",
+        )
+        val roots = listOf(installDir.toFile()) +
+            (installDir.toFile().listFiles()?.filter { it.isDirectory } ?: emptyList())
+        for (root in roots) {
+            for (rel in relCandidates) {
+                val f = File(root, rel)
+                if (f.isFile) {
+                    // Stream-based copies (older installs) lose the executable bit; restore it.
+                    if (!f.canExecute()) f.setExecutable(true)
+                    return f.absolutePath
+                }
             }
         }
         return null
