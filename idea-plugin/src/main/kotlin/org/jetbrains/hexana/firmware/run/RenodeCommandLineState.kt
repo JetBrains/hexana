@@ -82,7 +82,8 @@ class RenodeCommandLineState(
             ?: throw ExecutionException("Renode executable not found. Set the path in Settings → Build → Firmware Emulator.")
 
         // The merged DTS drives both platform generation and the console UART name.
-        val dtsText = configuration.dtsPath.takeIf { it.isNotBlank() }?.let { p ->
+        // effectiveDtsPath falls back to the zephyr.dts discovered next to the ELF.
+        val dtsText = configuration.effectiveDtsPath()?.let { p ->
             File(p).takeIf { it.exists() }?.readText()
         }
 

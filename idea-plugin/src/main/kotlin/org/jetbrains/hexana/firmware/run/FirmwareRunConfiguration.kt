@@ -77,6 +77,20 @@ class FirmwareRunConfiguration(
     var resolvedSelection: BackendSelection.Ok? = null
         private set
 
+    /**
+     * The DTS path to use at run time: the configured [dtsPath], or when blank the
+     * `zephyr.dts` discovered next to the ELF (sibling, `zephyr/` subdirectory of the
+     * ELF's directory, or of its parent — the same walk [org.jetbrains.hexana.firmware.ElfSidecarDiscovery]
+     * uses). Null when neither is present. This is what makes the editor's
+     * "Discovered automatically" placeholder true for manually created configurations.
+     */
+    fun effectiveDtsPath(): String? =
+        dtsPath.takeIf { it.isNotBlank() } ?: discoverSidecarPath(elfPath, "zephyr.dts")
+
+    /** The `.config` path to use at run time; same resolution as [effectiveDtsPath]. */
+    fun effectiveConfigPath(): String? =
+        configPath.takeIf { it.isNotBlank() } ?: discoverSidecarPath(elfPath, ".config")
+
     override fun checkConfiguration() {
         val path = elfPath
         if (path.isBlank()) throw RuntimeConfigurationError("ELF path is not specified")
@@ -88,9 +102,9 @@ class FirmwareRunConfiguration(
         val headerFacts = readElfHeaderFactsFromFile(elfFile)
             ?: throw RuntimeConfigurationError("Not a valid ELF file: $path")
 
-        // Read DTS text from configured dtsPath, or the discovered path if blank.
-        val dtsText = readTextIfExists(dtsPath)
-        val configText = readTextIfExists(configPath)
+        // Read DTS text from the configured dtsPath, or the discovered sibling if blank.
+        val dtsText = effectiveDtsPath()?.let { readTextIfExists(it) }
+        val configText = effectiveConfigPath()?.let { readTextIfExists(it) }
 
         val profile = detectTargetProfile(headerFacts, dtsText, configText)
 
@@ -156,11 +170,11 @@ class FirmwareRunConfiguration(
                 }
                 // For Generated .repl, we need dts2repl.
                 if (selection.replSource == ReplSource.Generated) {
-                    val dts = dtsPath.takeIf { it.isNotBlank() } ?: ""
-                    if (dts.isBlank() || !File(dts).exists()) {
+                    val dts = effectiveDtsPath()
+                    if (dts == null || !File(dts).exists()) {
                         throw RuntimeConfigurationError(
-                            "Renode platform generation requires a zephyr.dts file. " +
-                                "Set the DTS path in the run configuration."
+                            "Renode platform generation requires a zephyr.dts file, and none was found " +
+                                "next to the ELF. Set the DTS path in the run configuration."
                         )
                     }
                     // Check dts2repl is available (managed install or override).
@@ -212,6 +226,22 @@ class FirmwareRunConfiguration(
 }
 
 /** Reads up to [maxBytes] of text from a file path, returning null if blank/absent. */
+/**
+ * Finds a sidecar file for the ELF at [elfPath] by name, mirroring the walk of
+ * [org.jetbrains.hexana.firmware.ElfSidecarDiscovery]: sibling of the ELF, then the
+ * `zephyr/` subdirectory of the ELF's directory, then of its parent directory.
+ */
+internal fun discoverSidecarPath(elfPath: String, name: String): String? {
+    if (elfPath.isBlank()) return null
+    val dir = File(elfPath).parentFile ?: return null
+    val candidates = listOf(
+        File(dir, name),
+        File(dir, "zephyr/$name"),
+        dir.parentFile?.let { File(it, "zephyr/$name") },
+    )
+    return candidates.firstOrNull { it != null && it.isFile }?.absolutePath
+}
+
 private fun readTextIfExists(path: String, maxBytes: Int = 256 * 1024): String? {
     if (path.isBlank()) return null
     val f = File(path)

@@ -140,7 +140,7 @@ class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
                         Backend.Renode -> RenodeGdbStubLauncher(
                             selection = selection,
                             elfPath = configuration.elfPath,
-                            dtsPath = configuration.dtsPath,
+                            dtsPath = configuration.effectiveDtsPath() ?: configuration.dtsPath,
                             extraLines = configuration.extraRescLines
                                 .lines().filter { it.isNotBlank() },
                             port = port,
