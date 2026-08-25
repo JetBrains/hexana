@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.onClick
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,18 +31,30 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.ui.Messages
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaBinaryVirtualFile
 import org.jetbrains.hexana.document.EditableBinaryDocument
+import org.jetbrains.hexana.firmware.FirmwareTarget
+import org.jetbrains.hexana.firmware.FirmwareTargetService
+import org.jetbrains.hexana.firmware.HexanaFirmwareSettings
+import org.jetbrains.hexana.firmware.ui.FirmwareAcquisitionPopup
+import org.jetbrains.hexana.firmware.ui.runFirmwareElfLater
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
+import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.NativeImageInfo
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
+import org.jetbrains.hexana.providers.firmware.Backend
+import org.jetbrains.hexana.providers.firmware.BackendSelection
+import org.jetbrains.hexana.providers.firmware.QemuBinary
 import org.jetbrains.hexana.run.PopupMode
 import org.jetbrains.hexana.run.WasmEngine
+import org.jetbrains.hexana.run.WasmRunMode
 import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.run.runWasmFile
 import org.jetbrains.hexana.shared.formatSize
@@ -59,6 +73,13 @@ import org.jetbrains.jewel.ui.component.OutlinedButton
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.Tooltip
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
+
+/** Resolved firmware state for the description bar. null = still resolving (buttons hidden). */
+private data class FirmwareBarState(
+    val target: FirmwareTarget?,
+    val backendAvailable: Boolean,
+    val missingBackend: Backend?,
+)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -348,6 +369,90 @@ private fun NormalModeContent(
         }
     }
 
+    // ELF firmware Run/Debug buttons (QEMU / Renode).
+    // Only shown for on-disk ElfBinaryProvider files that are not submodules.
+    val elfFile = if (!isSubmodule && binaryProvider is ElfBinaryProvider) {
+        (binaryProvider as? BinaryVirtualFileProvider)?.file
+            ?.takeUnless { it.getUserData(HexanaBinaryVirtualFile.BUFFER_KEY) != null }
+    } else {
+        null
+    }
+
+    val firmwareState by produceState<FirmwareBarState?>(initialValue = null, elfFile) {
+        if (elfFile == null) {
+            value = null
+            return@produceState
+        }
+        value = withContext(Dispatchers.IO) {
+            val target = try {
+                FirmwareTargetService.getInstance(state.project).resolve(elfFile)
+            } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
+                org.jetbrains.hexana.HexanaLog.LOG.warn("FirmwareTargetService.resolve failed", t)
+                null
+            }
+            if (target == null) return@withContext FirmwareBarState(null, false, null)
+
+            val selection = target.selection as? BackendSelection.Ok
+                ?: return@withContext FirmwareBarState(null, false, null)
+            val settings = HexanaFirmwareSettings.getInstance()
+            val available: Boolean
+            val missingBackend: Backend?
+            when (selection.backend) {
+                Backend.Qemu -> {
+                    val qemuBin = selection.qemuBinary ?: QemuBinary.SystemArm
+                    val path = settings.effectiveQemuPath(qemuBin)
+                    val exists = java.io.File(path).isFile ||
+                        (java.io.File(path).name == path) // bare name = PATH lookup treated as available
+                    available = exists
+                    missingBackend = if (exists) null else Backend.Qemu
+                }
+                Backend.Renode -> {
+                    val renode = settings.effectiveRenodesPath()
+                    available = renode != null
+                    missingBackend = if (renode != null) null else Backend.Renode
+                }
+            }
+            FirmwareBarState(target, available, missingBackend)
+        }
+    }
+
+    val fs = firmwareState
+    if (fs != null && fs.target != null) {
+        val fwRunBg = if (JewelTheme.isDark) Color(0xFF0E639C) else Color(0xFF007ACC)
+        val fwDbgBg = if (JewelTheme.isDark) Color(0xFF6C3B2A) else Color(0xFFCC6633)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            FirmwareActionButton(
+                icon = AllIconsKeys.Actions.Execute,
+                label = "Run",
+                tooltip = "Run firmware in emulator",
+                buttonBackground = fwRunBg,
+                onClick = {
+                    if (fs.backendAvailable) {
+                        runFirmwareElfLater(state.project, elfFile!!, fs.target, WasmRunMode.RUN)
+                    } else {
+                        val sel = fs.target.selection as BackendSelection.Ok
+                        FirmwareAcquisitionPopup.show(state.project, fs.missingBackend ?: sel.backend, sel.qemuBinary)
+                    }
+                },
+            )
+            FirmwareActionButton(
+                icon = AllIconsKeys.Actions.StartDebugger,
+                label = "Debug",
+                tooltip = "Debug firmware in emulator",
+                buttonBackground = fwDbgBg,
+                onClick = {
+                    if (fs.backendAvailable) {
+                        runFirmwareElfLater(state.project, elfFile!!, fs.target, WasmRunMode.DEBUG)
+                    } else {
+                        val sel = fs.target.selection as BackendSelection.Ok
+                        FirmwareAcquisitionPopup.show(state.project, fs.missingBackend ?: sel.backend, sel.qemuBinary)
+                    }
+                },
+            )
+        }
+    }
+
     val proposals = remember(binaryProvider) {
         try {
             (binaryProvider as? WasmBinaryProvider)?.usedProposals?.sorted() ?: emptyList()
@@ -411,6 +516,47 @@ private fun ToolbarActionButton(
                     fontSize = 11.sp,
                     color = buttonForeground,
                 ),
+            )
+        }
+    }
+}
+
+/**
+ * Compact labelled icon button for the firmware Run/Debug actions.
+ *
+ * Mirrors [ToolbarActionButton] visually but takes a plain [onClick] lambda instead
+ * of the WASM-specific popup-mode dispatch.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FirmwareActionButton(
+    icon: org.jetbrains.jewel.ui.icon.IconKey,
+    label: String,
+    tooltip: String,
+    buttonBackground: Color,
+    onClick: () -> Unit,
+) {
+    val buttonForeground = Color.White
+    Tooltip(tooltip = { Text(tooltip) }) {
+        Row(
+            modifier = Modifier
+                .background(buttonBackground, RoundedCornerShape(4.dp))
+                .onClick { onClick() }
+                .height(20.dp)
+                .padding(horizontal = 8.dp, vertical = 1.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                icon,
+                contentDescription = label,
+                iconClass = AllIcons::class.java,
+                tint = buttonForeground,
+                modifier = Modifier.size(14.dp),
+            )
+            Text(
+                text = label,
+                style = TextStyle(fontSize = 11.sp, color = buttonForeground),
             )
         }
     }
