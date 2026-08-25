@@ -139,6 +139,17 @@ final class HexanaFirmwareSettings :
         val configured = state.dts2replPath
         return configured?.takeIf { it.isNotBlank() && File(it).isDirectory }
     }
+
+    /** User-configured GDB (DAP) path for UI binding. */
+    var gdbPathInUi: String?
+        get() = state.gdbPath
+        set(value) { state.gdbPath = value?.takeIf { it.isNotBlank() } }
+
+    /**
+     * Returns the effective GDB path override, or null if not configured
+     * (auto-detection via [EmulatorDetection.detectGdb] will run).
+     */
+    fun effectiveGdbPath(): String? = state.gdbPath?.takeIf { it.isNotBlank() }
 }
 
 /** Persistent state for [HexanaFirmwareSettings]. All fields `by string()` and nullable. */
@@ -150,4 +161,5 @@ class HexanaFirmwareSettingsState : BaseState() {
     var renodePath: String? by string()
     var renodeDownloadDir: String? by string()
     var dts2replPath: String? by string()
+    var gdbPath: String? by string()
 }

@@ -106,6 +106,76 @@ object EmulatorDetection {
         return null
     }
 
+    /**
+     * Detects a DAP-capable GDB on the host system.
+     *
+     * Probe order:
+     * 1. [HexanaFirmwareSettings.effectiveGdbPath] override.
+     * 2. `${'$'}ZEPHYR_SDK_INSTALL_DIR/gnu/<arch>/bin/arm-zephyr-eabi-gdb-py` (glob).
+     * 3. `~/zephyr-sdk-<ver>/gnu/<arch>/bin/arm-zephyr-eabi-gdb-py` (glob).
+     * 4. `arm-none-eabi-gdb-py`, `arm-none-eabi-gdb`, `gdb-multiarch`, `riscv64-elf-gdb`, `gdb` on PATH.
+     *
+     * Validation: version >= 14 AND `--batch -ex "python print(1)"` exits 0 printing "1".
+     *
+     * Returns `null` if no suitable GDB is found.
+     * Must be called off EDT.
+     */
+    fun detectGdb(): DetectedTool? {
+        val candidates = buildList<String> {
+            val override = HexanaFirmwareSettings.getInstance().effectiveGdbPath()
+            if (override != null) add(override)
+
+            val sdkEnvDir = System.getenv("ZEPHYR_SDK_INSTALL_DIR")
+            if (sdkEnvDir != null) addZephyrSdkGdbCandidates(this, File(sdkEnvDir))
+
+            val homeDir = File(System.getProperty("user.home"))
+            homeDir.listFiles { f -> f.isDirectory && f.name.startsWith("zephyr-sdk-") }
+                ?.forEach { sdkDir -> addZephyrSdkGdbCandidates(this, sdkDir) }
+
+            add("arm-none-eabi-gdb-py")
+            add("arm-none-eabi-gdb")
+            add("gdb-multiarch")
+            add("riscv64-elf-gdb")
+            add("gdb")
+        }
+
+        for (candidate in candidates) {
+            if (File(candidate).isAbsolute && !File(candidate).exists()) continue
+
+            val versionOutput = runVersion(candidate, "--version") ?: continue
+            val firstLine = versionOutput.lines().firstOrNull() ?: continue
+            val parsed = parseGdbVersion(firstLine) ?: continue
+            val (_, versionStr) = parsed
+            val numericVersion = versionStr.split("-").first().split(".").take(2).joinToString(".")
+            if (!meetsGdbMinimum(numericVersion)) continue
+
+            val pythonOk = try {
+                val cmd = GeneralCommandLine(candidate, "--batch", "-ex", "python print(1)")
+                val handler = CapturingProcessHandler(cmd)
+                val result = handler.runProcess(PROBE_TIMEOUT_MS)
+                result.exitCode == 0 && result.stdout.trim().contains("1")
+            } catch (_: Exception) { false }
+
+            if (!pythonOk) {
+                LOG.debug("GDB at $candidate has version $numericVersion >= 14 but Python probe failed; skipping")
+                continue
+            }
+
+            return DetectedTool(path = candidate, version = numericVersion, meetsMinimum = true)
+        }
+        return null
+    }
+
+    private fun addZephyrSdkGdbCandidates(list: MutableList<String>, sdkDir: File) {
+        val gnuDir = File(sdkDir, "gnu")
+        if (!gnuDir.isDirectory) return
+        gnuDir.listFiles()?.forEach { archDir ->
+            val bin = File(archDir, "bin")
+            bin.listFiles()?.filter { it.name.endsWith("-gdb-py") }
+                ?.forEach { list.add(it.absolutePath) }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Pure version parsers (top-level, trivially testable — no process I/O)
     // -------------------------------------------------------------------------

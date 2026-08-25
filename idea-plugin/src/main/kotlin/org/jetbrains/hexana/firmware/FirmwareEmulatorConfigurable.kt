@@ -41,6 +41,7 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
     private var qemuRiscv32Label: JLabel? = null
     private var qemuRiscv64Label: JLabel? = null
     private var renodeLabel: JLabel? = null
+    private var gdbLabel: JLabel? = null
 
     override fun createPanel(): DialogPanel {
         val panel = panel {
@@ -78,6 +79,28 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
                         toolTipText = "Download the Renode ${RenodeDownloader.PINNED_RENODE_VERSION} portable package."
                     }
                 }
+            }
+            group("GDB (DAP transport)") {
+                row("GDB path:") {
+                    textFieldWithBrowseButton(FileChooserDescriptorFactory.singleFile())
+                        .align(AlignX.FILL)
+                        .applyToComponent {
+                            emptyText.text = EmulatorDetection.detectGdb()?.path ?: "auto-detect"
+                            toolTipText = "Path to a GDB 14+ binary with Python support " +
+                                "(arm-zephyr-eabi-gdb-py, arm-none-eabi-gdb-py, gdb-multiarch). " +
+                                "Leave blank to auto-detect."
+                        }
+                        .bindText(settings::gdbPathInUi.toNonNullableProperty(""))
+                }
+                row {
+                    val label = JLabel(versionStatus(null))
+                    cell(label)
+                    gdbLabel = label
+                }.comment(
+                    "Minimum version: 14 with Python. " +
+                        "Zephyr SDK ships arm-zephyr-eabi-gdb-py; " +
+                        "Arm GNU Toolchain ≥ 13.3.Rel1 ships arm-none-eabi-gdb-py."
+                )
             }
             group("dts2repl") {
                 row("dts2repl directory:") {
@@ -157,12 +180,14 @@ class FirmwareEmulatorConfigurable : DslConfigurableBase(), SearchableConfigurab
             val qemuRiscv32 = EmulatorDetection.detectQemu(QemuBinary.SystemRiscv32)
             val qemuRiscv64 = EmulatorDetection.detectQemu(QemuBinary.SystemRiscv64)
             val renode = EmulatorDetection.detectRenode()
+            val gdb = EmulatorDetection.detectGdb()
             invokeLater {
                 qemuArmLabel?.text = versionStatus(qemuArm)
                 qemuAarch64Label?.text = versionStatus(qemuAarch64)
                 qemuRiscv32Label?.text = versionStatus(qemuRiscv32)
                 qemuRiscv64Label?.text = versionStatus(qemuRiscv64)
                 renodeLabel?.text = versionStatus(renode)
+                gdbLabel?.text = versionStatus(gdb)
             }
         }
     }

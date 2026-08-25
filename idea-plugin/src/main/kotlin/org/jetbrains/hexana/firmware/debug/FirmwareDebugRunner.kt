@@ -22,6 +22,9 @@ import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugProcessStarter
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.XDebuggerManager
+import com.intellij.execution.process.KillableProcessHandler
+import kotlinx.serialization.json.*
+import org.jetbrains.hexana.firmware.EmulatorDetection
 import org.jetbrains.hexana.firmware.run.FirmwareRunConfiguration
 import org.jetbrains.hexana.firmware.run.StopAtEntry
 import org.jetbrains.hexana.providers.firmware.Backend
@@ -34,30 +37,28 @@ import java.net.ServerSocket
 /**
  * Debug runner for the Hexana firmware emulator lane.
  *
- * Connects an LLDB instance to the emulator gdbstub (QEMU or Renode) using
- * [LldbCommunicator.connectGdbRemote]. The ELF binary is loaded into LLDB via
- * `target create <elf>` so LLDB resolves DWARF symbols locally, independent of Hexana's
- * own debug-info pipeline.
+ * ### Transport selection
+ * Prefers the GDB-DAP transport when [EmulatorDetection.detectGdb] finds GDB >= 14 with
+ * Python. In that case the session is driven by [GdbDapDebugProcess] via [GdbDapClient].
+ * When no suitable GDB is found the runner falls back to the LLDB transport, connecting
+ * via [LldbCommunicator.connectGdbRemote] and returning [FirmwareDebugProcess].
  *
  * ### Sequence (modal progress, off EDT)
- * 1. Validate the LLDB path.
+ * 1. Detect transport (GDB-DAP preferred, LLDB fallback). Validate the chosen debugger path.
  * 2. Allocate a free TCP port for the gdbstub.
  * 3. Call [checkConfiguration][FirmwareRunConfiguration.checkConfiguration] to obtain
  *    [resolvedSelection][FirmwareRunConfiguration.resolvedSelection].
  * 4. Launch the chosen backend (QEMU or Renode) frozen via [FirmwareDebugBackend.startFrozen].
- * 5. Start LLDB; attach [LldbCommunicator].
- * 6. `target create <elf>` — LLDB reads ELF + DWARF.
- * 7. Probe LLDB architecture support via `target list`.
- * 8. `gdb-remote 127.0.0.1:<port>` via [LldbCommunicator.connectGdbRemote].
- * 9. Apply stop-at-entry policy inside [FirmwareDebugProcess.sessionInitialized].
- * 10. Return [FirmwareDebugProcess] via [XDebugProcessStarter].
+ * 5. (GDB-DAP) Spawn `gdb -i=dap`; wrap in [GdbDapClient]; attach via DAP `attach` request.
+ *    (LLDB fallback) Start LLDB; attach [LldbCommunicator]; connect via `gdb-remote`.
+ * 6. Apply stop-at-entry policy inside `sessionInitialized`.
+ * 7. Return the debug process via [XDebugProcessStarter].
  *
- * Stopping the debug session destroys both the LLDB and emulator process handles.
+ * Stopping the debug session destroys both the debugger and emulator process handles.
  *
- * **Line breakpoints in source files** are not wired this iteration** (no new
- * XBreakpointType registered). Users set breakpoints via the LLDB console in the
- * Threads tab, or rely on stop-at-entry/main. This limitation is documented here and
- * in [FirmwareDebugProcess].
+ * **Line breakpoints in source files** are not wired this iteration (no new XBreakpointType
+ * registered). Users set breakpoints via the debugger console in the Threads tab, or rely on
+ * stop-at-entry/main. This limitation applies to both transports.
  */
 class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
 
@@ -80,14 +81,24 @@ class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
             val selection: BackendSelection.Ok,
             val stubEndpoint: StubEndpoint,
             val lldbExe: String,
+            val gdbTool: EmulatorDetection.DetectedTool?,
         )
 
         val prep = ProgressManager.getInstance()
             .runProcessWithProgressSynchronously(
                 ThrowableComputable<PrepResult, Exception> {
-                    // Step 1: Resolve LLDB.
+                    // Step 1: Detect transport. GDB-DAP preferred; LLDB is the fallback.
+                    val gdbTool = EmulatorDetection.detectGdb()
+                    if (gdbTool != null) {
+                        LOG.info("GDB-DAP transport selected: ${gdbTool.path} ${gdbTool.version}")
+                    } else {
+                        LOG.info("LLDB transport selected: no suitable GDB-DAP found")
+                    }
+
+                    // Resolve LLDB (needed for fallback path only, but validate eagerly so the
+                    // error appears before we launch the emulator).
                     val lldbExe = effectiveLldbExe()
-                    if (!File(lldbExe).exists() && !isOnPath(lldbExe)) {
+                    if (gdbTool == null && !File(lldbExe).exists() && !isOnPath(lldbExe)) {
                         throw ExecutionException(
                             "LLDB not found at '$lldbExe'. " +
                                 "Set a multi-arch LLDB path in Settings → Build → WebAssembly (Debugger).",
@@ -137,7 +148,12 @@ class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     }
                     val stubEndpoint = backend.startFrozen()
 
-                    PrepResult(selection = selection, stubEndpoint = stubEndpoint, lldbExe = lldbExe)
+                    PrepResult(
+                        selection = selection,
+                        stubEndpoint = stubEndpoint,
+                        lldbExe = lldbExe,
+                        gdbTool = gdbTool,
+                    )
                 },
                 "Starting firmware debug session…",
                 true,
@@ -146,7 +162,53 @@ class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
 
         val starter = object : XDebugProcessStarter() {
             override fun start(session: XDebugSession): XDebugProcess {
-                // Step 5: Start LLDB (no inferior; we connect remotely).
+                // GDB-DAP transport (preferred when GDB >= 14 with Python is available).
+                if (prep.gdbTool != null) {
+                    return startGdbDapProcess(session)
+                }
+                // LLDB fallback transport.
+                return startLldbProcess(session)
+            }
+
+            private fun startGdbDapProcess(session: XDebugSession): XDebugProcess {
+                val gdbPath = prep.gdbTool!!.path
+                LOG.info("GdbDapDebugProcess: spawning $gdbPath -i=dap")
+                val gdbCommandLine = GeneralCommandLine().apply {
+                    exePath = gdbPath
+                    addParameter("-i=dap")
+                    withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+                }
+                val gdbHandler = KillableProcessHandler(gdbCommandLine)
+
+                // Create GdbDapClient with raw streams BEFORE startNotify().
+                // startNotify() starts the handler's internal reader threads, which would
+                // compete with the DAP reader for process.inputStream bytes.
+                val client = GdbDapClient(
+                    input = gdbHandler.process.inputStream,
+                    output = gdbHandler.process.outputStream,
+                )
+
+                ProcessTerminatedListener.attach(gdbHandler)
+                gdbHandler.startNotify()
+
+                val gdbConsole = TextConsoleBuilderFactory.getInstance()
+                    .createBuilder(environment.project)
+                    .console
+                    .also { it.attachToProcess(gdbHandler) }
+
+                return GdbDapDebugProcess(
+                    session = session,
+                    console = gdbConsole,
+                    gdbHandler = gdbHandler,
+                    emulatorHandler = prep.stubEndpoint.processHandler,
+                    client = client,
+                    elfPath = configuration.elfPath,
+                    stubPort = prep.stubEndpoint.port,
+                    stopAtEntry = configuration.stopAtEntry,
+                )
+            }
+
+            private fun startLldbProcess(session: XDebugSession): XDebugProcess {
                 LOG.info("Starting LLDB for firmware debug: ${prep.lldbExe}")
                 val lldbCommandLine = GeneralCommandLine().apply {
                     exePath = prep.lldbExe
@@ -164,12 +226,8 @@ class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     .also { it.attachToProcess(lldbHandler) }
 
                 lldb.sendCommand("settings set target.disable-aslr false")
-
-                // Step 6: Load the ELF so LLDB reads DWARF symbols.
                 lldb.sendCommand("target create \"${configuration.elfPath}\"")
 
-                // Step 7: Probe architecture support. If LLDB cannot parse the ELF
-                // machine type it will error in target list output; fail early here.
                 val targetList = lldb.sendCommandAndCollectOutput("target list", timeoutMs = 5_000)
                 val targetText = targetList.joinToString(" ")
                 if (targetText.contains("error", ignoreCase = true) &&
@@ -186,7 +244,6 @@ class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     )
                 }
 
-                // Step 8: Connect to the gdbstub.
                 val connected = lldb.connectGdbRemote("127.0.0.1", prep.stubEndpoint.port)
                 if (!connected) {
                     LOG.warn("gdb-remote did not produce a stop event on port ${prep.stubEndpoint.port}; proceeding")
@@ -197,7 +254,6 @@ class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     )
                 }
 
-                // Step 9 (stop-at-entry policy) runs in FirmwareDebugProcess.sessionInitialized.
                 return FirmwareDebugProcess(
                     session = session,
                     console = console,
@@ -215,6 +271,51 @@ class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
     companion object {
         private val LOG = Logger.getInstance(FirmwareDebugRunner::class.java)
         const val RUNNER_ID = "HexanaFirmwareDebugRunner"
+
+        /**
+         * Produces the ordered DAP (command, argsJson) pairs for a GDB-DAP attach sequence.
+         * Extracted as a pure function so [GdbDapSequenceTest] can golden-test it.
+         *
+         * The sequence does NOT include the wait for the `initialized` event — that is an I/O
+         * concern handled by [GdbDapDebugProcess]. The list encodes only the request order.
+         */
+        fun buildDapAttachRequests(
+            elfPath: String,
+            port: Int,
+            stopAtEntry: StopAtEntry,
+        ): List<Pair<String, String>> = buildList {
+            val initArgs = buildJsonObject {
+                put("adapterId", "hexana-firmware")
+                put("linesStartAt1", true)
+                put("columnsStartAt1", true)
+                put("pathFormat", "path")
+            }
+            add("initialize" to initArgs.toString())
+
+            val attachArgs = buildJsonObject {
+                put("program", elfPath)
+                put("target", "localhost:$port")
+            }
+            add("attach" to attachArgs.toString())
+
+            when (stopAtEntry) {
+                StopAtEntry.MAIN -> {
+                    val bpArgs = buildJsonObject {
+                        putJsonArray("breakpoints") { addJsonObject { put("name", "main") } }
+                    }
+                    add("setFunctionBreakpoints" to bpArgs.toString())
+                    add("configurationDone" to "{}")
+                    add("continue" to buildJsonObject { put("threadId", 1) }.toString())
+                }
+                StopAtEntry.ENTRY -> {
+                    add("configurationDone" to "{}")
+                }
+                StopAtEntry.NONE -> {
+                    add("configurationDone" to "{}")
+                    add("continue" to buildJsonObject { put("threadId", 1) }.toString())
+                }
+            }
+        }
 
         /**
          * Produces the ordered LLDB command list for a given (elfPath, port, stopAtEntry) triple.
