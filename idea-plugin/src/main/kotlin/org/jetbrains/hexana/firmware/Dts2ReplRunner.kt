@@ -290,10 +290,20 @@ class Dts2ReplRunner : Dts2ReplConverter {
         return nested ?: managed
     }
 
+    /**
+     * Directory to put on PYTHONPATH so `python -m dts2repl` resolves: the directory that
+     * directly CONTAINS the `dts2repl` package. [scriptDir] is normally already that
+     * directory (the GitHub archive root); an explicit override may instead point at the
+     * package directory itself, in which case its parent is used.
+     */
+    internal fun pythonPathFor(scriptDir: Path): Path = when {
+        scriptDir.resolve("dts2repl").exists() -> scriptDir
+        scriptDir.fileName?.toString() == "dts2repl" && scriptDir.parent != null -> scriptDir.parent
+        else -> scriptDir
+    }
+
     private fun runDts2repl(python3: String, scriptDir: Path, dtsFile: Path): ReplResult {
-        // Use `python3 -m dts2repl` with PYTHONPATH set to the scriptDir's parent,
-        // which is robust regardless of minor layout variations.
-        val pythonPath = (scriptDir.parent ?: scriptDir).absolutePathString()
+        val pythonPath = pythonPathFor(scriptDir).absolutePathString()
         // Pass `-o -` so dts2repl writes the .repl to stdout rather than the default `output.repl` file.
         val cmd = listOf(python3, "-m", "dts2repl", "-o", "-", dtsFile.absolutePathString())
         return try {
