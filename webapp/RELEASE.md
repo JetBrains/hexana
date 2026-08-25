@@ -20,8 +20,22 @@ Builds without the release-branch property keep the revision as their package ve
 Cloud Console must select `deploy_only_master` when deploying a SHA-pinned
 master image as `hexana-webapp-master`. The profile removes Skaffold's source
 build, consumes only the supplied `HEXANA_WEBAPP_IMAGE`, and uses
-`values_staging.yaml`. It does not itself verify or deliver the image; a master
-deployment bridge and TeamCity chain must provide that gate before rollout.
+`values_staging.yaml`. `deploy-webapp-master.mjs` is the source-owned bridge: it
+accepts only matching schema-v2 master receipt/scan evidence, preflights the
+pinned generated Cloud Console target, queues exactly `refs/heads/master` at the
+approved full revision, and verifies `https://hexana-webapp-master.example.invalid/`
+before recording deployment evidence. The TeamCity nightly chain that supplies
+the bridge inputs and token is not yet configured.
+
+```bash
+TEAMCITY_SERVER_URL=https://ci.example.invalid \
+HEXANA_WEBAPP_SOURCE_BRANCH=master \
+HEXANA_SOURCE_REVISION=0123456789abcdef0123456789abcdef01234567 \
+HEXANA_CLOUD_CONSOLE_BUILD_TYPE_ID=HexanaCi_Deploy_HexanaWebappMaster \
+HEXANA_CLOUD_CONSOLE_VCS_ROOT_ID=HexanaCi_Deploy_HexanaWebappMasterSshGitGitJetbrainsTeamHxHexanaGit \
+HEXANA_CLOUD_CONSOLE_TOKEN=masked \
+node webapp/deploy-webapp-master.mjs --receipt /path/receipt.json --scan-summary /path/summary.json --output-dir webapp/build/master-deployment
+```
 
 ## Live deployment smoke
 

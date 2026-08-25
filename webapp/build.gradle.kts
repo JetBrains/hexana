@@ -563,6 +563,22 @@ tasks.register<Exec>("testWebappVulnerabilityReportContract") {
     }
 }
 
+tasks.register<Exec>("testWebappDeploymentBridge") {
+    group = "verification"
+    description = "Runs guarded release and master Cloud Console deployment bridge contracts."
+    inputs.files(
+        project.file("deploy-webapp-release.mjs"),
+        project.file("deploy-webapp-release.test.mjs"),
+        project.file("deploy-webapp-master.mjs"),
+        project.file("deploy-webapp-master.test.mjs"),
+    )
+    commandLine(
+        "node", "--test",
+        project.file("deploy-webapp-release.test.mjs").absolutePath,
+        project.file("deploy-webapp-master.test.mjs").absolutePath,
+    )
+}
+
 val webappOciReceipt = providers.gradleProperty("hexanaWebappOciReceipt")
 val webappOciPackageDirectory = providers.gradleProperty("hexanaWebappOciPackageDirectory")
     .map { project.file(it) }

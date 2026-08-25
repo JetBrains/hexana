@@ -34,7 +34,7 @@ const normalizeGeneratedScript = value => {
     }
     return normalized.join("\n");
 };
-const approvedGeneratedScript = normalizeGeneratedScript(`#!/bin/bash
+const approvedGeneratedScript = profile => normalizeGeneratedScript(`#!/bin/bash
 set -euo pipefail
 export PATH=$PATH:/usr/local/custom-bin
 
@@ -52,7 +52,7 @@ jbcc-oidc-cluster-auth
 
 echo "Run skaffold"
 
-export SKAFFOLD_OPTIONS="--assume-yes=true -n \${K8S_NAMESPACE} --status-check -p deploy_only_production --cache-artifacts=false"
+export SKAFFOLD_OPTIONS="--assume-yes=true -n \${K8S_NAMESPACE} --status-check -p ${profile} --cache-artifacts=false"
 export API_VERSION=$(cat skaffold.yaml | grep apiVersion | sed "s/apiVersion: skaffold\\/v\\([0-9]\\).*/\\1/")
 
 if [ "$API_VERSION" -gt "2" ]; then
@@ -76,6 +76,32 @@ export const allowedTarget = Object.freeze({
     buildTypeId: "HexanaCi_Deploy_HexanaWebapp",
     vcsRootId: "HexanaCi_Deploy_HexanaWebappSshGitGitJetbrainsTeamHxHexanaGit",
 });
+export function createDeploymentPolicy(specification) {
+    return Object.freeze({
+        ...specification,
+        allowedTarget: Object.freeze({ ...specification.allowedTarget }),
+        endpoints: Object.freeze([...specification.endpoints]),
+        approvedParameters: Object.freeze({ ...specification.approvedParameters }),
+        approvedGeneratedScript: approvedGeneratedScript(specification.profile),
+    });
+}
+export const releaseDeploymentPolicy = createDeploymentPolicy({
+    mode: "release",
+    profile: "deploy_only_production",
+    identityField: "release",
+    branchEnv: "HEXANA_RELEASE_BRANCH",
+    revisionEnv: "HEXANA_RELEASE_REVISION",
+    allowedTarget,
+    endpoints: productionEndpoints,
+    approvedParameters,
+    branchSpec: "+:refs/heads/(release/webapp/*)",
+    defaultBranch: null,
+    sourceBuildName: "release",
+    readinessLabel: "Production",
+    endpointLabel: "release",
+    readinessPhase: "production-readiness",
+    readinessDeadlineField: "productionReadiness",
+});
 const fail = message => { throw new Error(`Webapp deployment refused: ${message}`); };
 const object = (value, label) => value && typeof value === "object" && !Array.isArray(value) ? value : fail(`${label} must be an object`);
 const exactKeys = (value, keys, label) => {
@@ -83,8 +109,8 @@ const exactKeys = (value, keys, label) => {
     if (Object.keys(value).sort().join("\0") !== [...keys].sort().join("\0")) fail(`${label} has an unsupported shape`);
 };
 const required = (env, name) => typeof env[name] === "string" && env[name].trim() ? env[name].trim() : fail(`${name} is required`);
-const validatePinnedTarget = config => {
-    if (config.serverUrl !== allowedTarget.serverUrl || config.buildTypeId !== allowedTarget.buildTypeId || config.vcsRootId !== allowedTarget.vcsRootId) fail("Cloud Console target differs from the source-pinned configuration");
+const validatePinnedTarget = (config, policy = releaseDeploymentPolicy) => {
+    if (config.serverUrl !== policy.allowedTarget.serverUrl || config.buildTypeId !== policy.allowedTarget.buildTypeId || config.vcsRootId !== policy.allowedTarget.vcsRootId) fail("Cloud Console target differs from the source-pinned configuration");
 };
 
 export function parseJsonStrict(source, label) {
@@ -116,11 +142,18 @@ export function parseJsonStrict(source, label) {
     return value;
 }
 
-export function validateEvidence(receipt, scan, selectedBranch, selectedRevision) {
-    const series = branchPattern.exec(selectedBranch ?? "") ?? fail("selected branch must be release/webapp/<numeric-major>.<numeric-minor>");
+export function validateEvidence(receipt, scan, selectedBranch, selectedRevision, policy = releaseDeploymentPolicy) {
+    const series = policy.mode === "release" ? branchPattern.exec(selectedBranch ?? "") ?? fail("selected branch must be release/webapp/<numeric-major>.<numeric-minor>") : null;
+    if (policy.mode === "master" && selectedBranch !== "master") fail("selected branch must be master");
     if (!revisionPattern.test(selectedRevision ?? "")) fail("selected revision must be lowercase full 40-character hex");
-    exactKeys(receipt, ["schemaVersion", "kind", "releaseBranch", "sourceRevision", "image", "package"], "Build receipt");
-    if (receipt.schemaVersion !== 1 || receipt.kind !== "hexana-webapp-oci-evidence" || receipt.releaseBranch !== selectedBranch || receipt.sourceRevision !== selectedRevision) fail("Build receipt schema or source identity differs");
+    const receiptIdentityKeys = policy.mode === "release" ? ["releaseBranch", "sourceRevision"] : ["source"];
+    exactKeys(receipt, ["schemaVersion", "kind", ...receiptIdentityKeys, "image", "package"], "Build receipt");
+    if (policy.mode === "release") {
+        if (receipt.schemaVersion !== 1 || receipt.kind !== "hexana-webapp-oci-evidence" || receipt.releaseBranch !== selectedBranch || receipt.sourceRevision !== selectedRevision) fail("Build receipt schema or source identity differs");
+    } else {
+        exactKeys(receipt.source, ["branch", "revision"], "Build source");
+        if (receipt.schemaVersion !== 2 || receipt.kind !== "hexana-webapp-oci-evidence" || receipt.source.branch !== selectedBranch || receipt.source.revision !== selectedRevision) fail("Build receipt schema or source identity differs");
+    }
     exactKeys(receipt.image, ["reference", "manifestDigest", "configDigest", "manifestMediaType", "configMediaType", "platform"], "Build image");
     exactKeys(receipt.image.platform, ["os", "architecture"], "Build platform");
     if (!digestPattern.test(receipt.image.manifestDigest) || !digestPattern.test(receipt.image.configDigest) || receipt.image.reference !== `${repository}@${receipt.image.manifestDigest}`) fail("Build image is not the canonical immutable digest reference");
@@ -130,19 +163,24 @@ export function validateEvidence(receipt, scan, selectedBranch, selectedRevision
     exactKeys(receipt.package, ["identity", "aggregateSha256", "evidence"], "Build package");
     exactKeys(receipt.package.identity, ["schemaVersion", "product", "version", "versionSource", "revision"], "Build package identity");
     const identity = receipt.package.identity;
-    const version = versionPattern.exec(identity.version ?? "");
-    if (identity.schemaVersion !== 1 || identity.product !== "hexana-webapp" || identity.versionSource !== "webapp/gradle.properties" || identity.revision !== selectedRevision || !version || version[1] !== series[1] || version[2] !== series[2]) fail("Build package identity does not match the selected release series");
+    if (policy.mode === "release") {
+        const version = versionPattern.exec(identity.version ?? "");
+        if (identity.schemaVersion !== 1 || identity.product !== "hexana-webapp" || identity.versionSource !== "webapp/gradle.properties" || identity.revision !== selectedRevision || !version || version[1] !== series[1] || version[2] !== series[2]) fail("Build package identity does not match the selected release series");
+    } else if (identity.schemaVersion !== 1 || identity.product !== "hexana-webapp" || identity.versionSource !== "git-revision" || identity.revision !== selectedRevision || identity.version !== selectedRevision) {
+        fail("Build package identity is not the selected SHA-only master revision");
+    }
     exactKeys(receipt.package.evidence, evidenceFiles, "Build package evidence");
     if (!/^[0-9a-f]{64}$/.test(receipt.package.aggregateSha256 ?? "") || !Object.values(receipt.package.evidence).every(value => /^[0-9a-f]{64}$/.test(value))) fail("Build package hashes are malformed");
 
-    exactKeys(scan, ["schemaVersion", "kind", "decision", "evaluatedAt", "release", "image", "sbomSha256", "scanner", "database", "reports", "counts", "findings"], "Scan summary");
-    if (scan.schemaVersion !== 1 || scan.kind !== "hexana-webapp-vulnerability-evidence" || scan.decision !== "pass") fail("Scan summary is not a passing supported gate");
-    exactKeys(scan.release, ["branch", "revision", "version"], "Scan release");
+    exactKeys(scan, ["schemaVersion", "kind", "decision", "evaluatedAt", policy.identityField, "image", "sbomSha256", "scanner", "database", "reports", "counts", "findings"], "Scan summary");
+    const scanIdentity = scan[policy.identityField];
+    if (scan.schemaVersion !== (policy.mode === "release" ? 1 : 2) || scan.kind !== "hexana-webapp-vulnerability-evidence" || scan.decision !== "pass") fail("Scan summary is not a passing supported gate");
+    exactKeys(scanIdentity, ["branch", "revision", "version"], `Scan ${policy.identityField}`);
     exactKeys(scan.image, ["reference", "manifestDigest", "configDigest", "archiveSha256"], "Scan image");
     exactKeys(scan.counts, ["UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"], "Scan counts");
     for (const [value, label] of [[scan.scanner, "Scan scanner"], [scan.database, "Scan database"], [scan.reports, "Scan reports"]]) object(value, label);
     if (typeof scan.evaluatedAt !== "string" || !scan.evaluatedAt.endsWith("Z") || Number.isNaN(Date.parse(scan.evaluatedAt)) || !/^[0-9a-f]{64}$/.test(scan.sbomSha256 ?? "") || !/^[0-9a-f]{64}$/.test(scan.image.archiveSha256 ?? "")) fail("Scan summary metadata is malformed");
-    if (scan.release.branch !== selectedBranch || scan.release.revision !== selectedRevision || scan.release.version !== identity.version || scan.image.reference !== receipt.image.reference || scan.image.manifestDigest !== receipt.image.manifestDigest || scan.image.configDigest !== receipt.image.configDigest) fail("Scan summary differs from Build evidence");
+    if (scanIdentity.branch !== selectedBranch || scanIdentity.revision !== selectedRevision || scanIdentity.version !== identity.version || scan.image.reference !== receipt.image.reference || scan.image.manifestDigest !== receipt.image.manifestDigest || scan.image.configDigest !== receipt.image.configDigest) fail("Scan summary differs from Build evidence");
     const severities = ["UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"];
     if (!Array.isArray(scan.findings) || !Object.values(scan.counts).every(Number.isInteger) || Object.values(scan.counts).some(count => count < 0) || scan.findings.some(finding => !finding || typeof finding !== "object" || !severities.includes(finding.severity))) fail("Scan findings are malformed");
     if (severities.some(severity => scan.counts[severity] !== scan.findings.filter(finding => finding.severity === severity).length) || scan.counts.HIGH !== 0 || scan.counts.CRITICAL !== 0) fail("Scan summary must contain zero HIGH and CRITICAL findings");
@@ -159,22 +197,26 @@ const optionalBuildId = (env, name) => {
     return Number.isSafeInteger(value) && value > 0 ? value : fail(`${name} must be a positive numeric build ID`);
 };
 
-export function configFromEnv(env) {
+export function configFromEnv(env, policy = releaseDeploymentPolicy) {
     let server;
     try { server = new URL(required(env, "TEAMCITY_SERVER_URL")); } catch { fail("TEAMCITY_SERVER_URL is invalid"); }
-    if (server.origin !== allowedTarget.serverUrl || server.pathname !== "/" || server.username || server.password || server.search || server.hash) fail("TEAMCITY_SERVER_URL differs from the pinned TeamCity origin");
+    if (server.origin !== policy.allowedTarget.serverUrl || server.pathname !== "/" || server.username || server.password || server.search || server.hash) fail("TEAMCITY_SERVER_URL differs from the pinned TeamCity origin");
     const identifier = /^[A-Za-z0-9_.-]+$/;
     const buildTypeId = required(env, "HEXANA_CLOUD_CONSOLE_BUILD_TYPE_ID");
     const vcsRootId = required(env, "HEXANA_CLOUD_CONSOLE_VCS_ROOT_ID");
     if (!identifier.test(buildTypeId) || !identifier.test(vcsRootId)) fail("Cloud Console TeamCity identifiers are invalid");
-    if (buildTypeId !== allowedTarget.buildTypeId || vcsRootId !== allowedTarget.vcsRootId) fail("Cloud Console target differs from the pinned generated configuration");
+    if (buildTypeId !== policy.allowedTarget.buildTypeId || vcsRootId !== policy.allowedTarget.vcsRootId) fail("Cloud Console target differs from the pinned generated configuration");
     const buildTimeoutMs = boundedInteger(env.HEXANA_DEPLOY_TIMEOUT_MS, deploymentTiming.buildTimeoutMs, 1_000, deploymentTiming.buildTimeoutMs, "HEXANA_DEPLOY_TIMEOUT_MS");
     const readinessTimeoutMs = boundedInteger(env.HEXANA_READINESS_TIMEOUT_MS, deploymentTiming.readinessTimeoutMs, 1_000, deploymentTiming.readinessTimeoutMs, "HEXANA_READINESS_TIMEOUT_MS");
     const pollIntervalMs = boundedInteger(env.HEXANA_DEPLOY_POLL_INTERVAL_MS, deploymentTiming.pollIntervalMs, 100, 60_000, "HEXANA_DEPLOY_POLL_INTERVAL_MS");
     if (pollIntervalMs >= buildTimeoutMs || pollIntervalMs >= readinessTimeoutMs) fail("poll interval must be shorter than both timeouts");
     const token = required(env, "HEXANA_CLOUD_CONSOLE_TOKEN");
     if (/[\x00-\x20]/.test(token)) fail("HEXANA_CLOUD_CONSOLE_TOKEN is malformed");
-    return { serverUrl: allowedTarget.serverUrl, token, buildTypeId, vcsRootId, branch: required(env, "HEXANA_RELEASE_BRANCH"), revision: required(env, "HEXANA_RELEASE_REVISION"), buildTimeoutMs, readinessTimeoutMs, pollIntervalMs, sourceBuilds: { release: optionalBuildId(env, "TEAMCITY_BUILD_ID"), build: optionalBuildId(env, "HEXANA_WEBAPP_BUILD_ID"), scan: optionalBuildId(env, "HEXANA_WEBAPP_SCAN_BUILD_ID") } };
+    const branch = required(env, policy.branchEnv);
+    const revision = required(env, policy.revisionEnv);
+    if (policy.mode === "master" && env[policy.branchEnv] !== "master") fail(`${policy.branchEnv} must be master`);
+    if (policy.mode === "master" && !revisionPattern.test(env[policy.revisionEnv])) fail(`${policy.revisionEnv} must be a lowercase full 40-character hex revision`);
+    return { serverUrl: policy.allowedTarget.serverUrl, token, buildTypeId, vcsRootId, branch, revision, buildTimeoutMs, readinessTimeoutMs, pollIntervalMs, sourceBuilds: { [policy.sourceBuildName]: optionalBuildId(env, "TEAMCITY_BUILD_ID"), build: optionalBuildId(env, "HEXANA_WEBAPP_BUILD_ID"), scan: optionalBuildId(env, "HEXANA_WEBAPP_SCAN_BUILD_ID") } };
 }
 
 export function createVcsRootInstancesRequest(config) {
@@ -195,7 +237,7 @@ const properties = (value, label) => {
     return requireArray(value.property, `${label} property`).map((property, index) => { exactKeys(property, ["name", "value"], `${label} property ${index}`); return property; });
 };
 
-export function validateSafetyPreflight(buildType, vcsRoot, config) {
+export function validateSafetyPreflight(buildType, vcsRoot, config, policy = releaseDeploymentPolicy) {
     exactKeys(buildType, ["id", "vcs-root-entries", "steps", "triggers", "parameters"], "Cloud Console build type");
     if (buildType.id !== config.buildTypeId) fail("Cloud Console build type ID differs");
     exactKeys(buildType["vcs-root-entries"], ["vcs-root-entry"], "Cloud Console VCS root entries");
@@ -207,7 +249,7 @@ export function validateSafetyPreflight(buildType, vcsRoot, config) {
 
     exactKeys(buildType.parameters, ["property"], "Cloud Console build parameters");
     const buildParameters = requireArray(buildType.parameters.property, "Cloud Console build parameters property");
-    for (const [name, value] of Object.entries(approvedParameters)) {
+    for (const [name, value] of Object.entries(policy.approvedParameters)) {
         const matches = buildParameters.filter(parameter => parameter && typeof parameter === "object" && !Array.isArray(parameter) && parameter.name === name);
         if (matches.length !== 1) fail("Cloud Console build parameters differ from the fixed deployment target");
         exactKeys(matches[0], ["name", "value"], `Cloud Console build parameter ${name}`);
@@ -225,15 +267,15 @@ export function validateSafetyPreflight(buildType, vcsRoot, config) {
     const workingDirectories = runnerProperties.filter(property => property.name === "teamcity.build.workingDir");
     const customScripts = runnerProperties.filter(property => property.name === "use.custom.script");
     if (workingDirectories.length !== 1 || workingDirectories[0].value !== "webapp" || customScripts.length !== 1 || customScripts[0].value !== "true") fail("Cloud Console Skaffold runner mode or working directory is unsafe");
-    const expectedAssignment = 'export SKAFFOLD_OPTIONS="--assume-yes=true -n ${K8S_NAMESPACE} --status-check -p deploy_only_production --cache-artifacts=false"';
+    const expectedAssignment = `export SKAFFOLD_OPTIONS="--assume-yes=true -n \${K8S_NAMESPACE} --status-check -p ${policy.profile} --cache-artifacts=false"`;
     const assignments = scripts[0].value.split(/\r?\n/).map(line => line.trim()).filter(line => line.includes("SKAFFOLD_OPTIONS="));
     if (assignments.length !== 1 || assignments[0] !== expectedAssignment) fail("Cloud Console Skaffold options assignment is unsafe");
     if (!/\bskaffold(?:_\d+(?:\.\d+)*)?\s+run\s+\$\{SKAFFOLD_OPTIONS\}(?:\s|$)/.test(scripts[0].value)) fail("Cloud Console Skaffold script does not run its validated options");
     const profiles = [...scripts[0].value.matchAll(/(?:^|\s)(?:-p|--profile)(?:=|\s+)([^\s"'\\]+)/g)].map(match => match[1]);
-    if (profiles.length !== 1 || profiles[0] !== "deploy_only_production") fail("Cloud Console Skaffold profile is unsafe");
+    if (profiles.length !== 1 || profiles[0] !== policy.profile) fail("Cloud Console Skaffold profile is unsafe");
     if (/\bskaffold(?:_\d+(?:\.\d+)*)?\b[^\r\n;&|]*\s(?:-f|--filename)(?:=|\s)/m.test(scripts[0].value)) fail("Cloud Console Skaffold filename override is unsafe");
     if (/\bdocker\b[^\r\n;&|]*(?:\bbuild(?:x)?\b|\bpush\b)|\bskaffold(?:_\d+(?:\.\d+)*)?\b[^\r\n;&|]*(?:\bbuild\b|\bpush\b)/i.test(scripts[0].value)) fail("Cloud Console script contains a build or push command");
-    if (normalizeGeneratedScript(scripts[0].value) !== approvedGeneratedScript) fail("Cloud Console Skaffold script differs from the approved normalized template");
+    if (normalizeGeneratedScript(scripts[0].value) !== policy.approvedGeneratedScript) fail("Cloud Console Skaffold script differs from the approved normalized template");
     const skaffoldExecutables = scripts[0].value.replaceAll("\r\n", "\n").split("\n").map(line => line.trim())
         .map(line => /^(skaffold(?:_\d+(?:\.\d+)*)?) (?:config set --global collect-metrics false|run \$\{SKAFFOLD_OPTIONS\} 2>&1)$/.exec(line)?.[1])
         .filter(Boolean);
@@ -246,7 +288,11 @@ export function validateSafetyPreflight(buildType, vcsRoot, config) {
     if (vcsRoot.id !== config.vcsRootId) fail("Cloud Console VCS root ID differs");
     const vcsRootProperties = properties(vcsRoot.properties, "Cloud Console VCS root properties");
     const branchSpecs = vcsRootProperties.filter(property => property.name === "teamcity:branchSpec");
-    if (branchSpecs.length !== 1 || branchSpecs[0].value !== "+:refs/heads/(release/webapp/*)") fail("Cloud Console VCS root branch specification is unsafe");
+    if (branchSpecs.length !== 1 || branchSpecs[0].value !== policy.branchSpec) fail("Cloud Console VCS root branch specification is unsafe");
+    if (policy.defaultBranch) {
+        const defaultBranches = vcsRootProperties.filter(property => property.name === "branch");
+        if (defaultBranches.length !== 1 || defaultBranches[0].value !== policy.defaultBranch) fail("Cloud Console VCS root default branch is unsafe");
+    }
     const urls = vcsRootProperties.filter(property => property.name === "url");
     if (urls.length !== 1 || urls[0].value !== approvedVcsUrl) fail("Cloud Console VCS root URL differs from the approved repository");
 }
@@ -410,38 +456,38 @@ export async function writeDeploymentEvidenceAtomic(outputDirectory, evidence) {
     }
 }
 
-export async function deployRelease({ receipt, scan, config, outputDirectory, fetchImpl = fetch, sleep = ms => new Promise(done => setTimeout(done, ms)), now = Date.now }) {
+async function deployForPolicy({ receipt, scan, config, outputDirectory, fetchImpl = fetch, sleep = ms => new Promise(done => setTimeout(done, ms)), now = Date.now }, policy) {
     const startedAtMs = now();
     let phase = "validation";
     let queueAttempted = false;
     let exactBuildFinished = false;
     let attempt = {
-        schemaVersion: 1,
+        schemaVersion: policy.mode === "release" ? 1 : 2,
         kind: "hexana-webapp-deployment-evidence",
         result: "FAILURE",
         phase,
-        profile: "deploy_only_production",
+        profile: policy.profile,
         digestHttpProven: false,
-        release: { branch: config.branch, version: receipt?.package?.identity?.version, revision: config.revision },
+        [policy.identityField]: { branch: config.branch, version: receipt?.package?.identity?.version, revision: config.revision },
         image: { reference: receipt?.image?.reference, manifestDigest: receipt?.image?.manifestDigest },
         sourceBuilds: Object.fromEntries(Object.entries(config.sourceBuilds).filter(([, value]) => value !== undefined)),
         cloudConsole: { buildTypeId: config.buildTypeId, vcsRootId: config.vcsRootId, queueAttempted: false, queueAmbiguous: false, exactBuildFinished: false, lastExactObservation: null },
-        deadlines: { cloudConsoleBuild: null, productionReadiness: null },
-        readiness: { endpoints: productionEndpoints.map(url => ({ url, ready: false, attempts: 0, lastObservation: null })) },
+        deadlines: { cloudConsoleBuild: null, [policy.readinessDeadlineField]: null },
+        readiness: { endpoints: policy.endpoints.map(url => ({ url, ready: false, attempts: 0, lastObservation: null })) },
         startedAt: iso(startedAtMs),
         finishedAt: null,
         failure: null,
     };
     try {
-        validatePinnedTarget(config);
-        const evidence = validateEvidence(receipt, scan, config.branch, config.revision);
-        attempt.release = { branch: evidence.branch, version: evidence.version, revision: evidence.revision };
+        validatePinnedTarget(config, policy);
+        const evidence = validateEvidence(receipt, scan, config.branch, config.revision, policy);
+        attempt[policy.identityField] = { branch: evidence.branch, version: evidence.version, revision: evidence.revision };
         attempt.image = { reference: evidence.image, manifestDigest: evidence.digest };
 
         phase = "preflight";
         const preflightRequests = createSafetyPreflightRequests(config);
         const [buildType, vcsRoot] = await Promise.all(preflightRequests.map(request => requestJson(fetchImpl, request.url, request.init, 30_000)));
-        validateSafetyPreflight(buildType, vcsRoot, config);
+        validateSafetyPreflight(buildType, vcsRoot, config, policy);
         const rootRequest = createVcsRootInstancesRequest(config);
         const vcsRootInstanceId = resolveVcsRootInstance(await requestJson(fetchImpl, rootRequest.url, rootRequest.init, 30_000), config);
         attempt.cloudConsole.vcsRootInstanceId = vcsRootInstanceId;
@@ -487,13 +533,13 @@ export async function deployRelease({ receipt, scan, config, outputDirectory, fe
             await sleep(Math.min(config.pollIntervalMs, afterRequest));
         }
 
-        phase = "production-readiness";
+        phase = policy.readinessPhase;
         const readinessStartedAtMs = now();
         const readinessDeadline = readinessStartedAtMs + config.readinessTimeoutMs;
-        attempt.deadlines.productionReadiness = { startedAt: iso(readinessStartedAtMs), deadlineAt: iso(readinessDeadline), timeoutMs: config.readinessTimeoutMs };
+        attempt.deadlines[policy.readinessDeadlineField] = { startedAt: iso(readinessStartedAtMs), deadlineAt: iso(readinessDeadline), timeoutMs: config.readinessTimeoutMs };
         while (true) {
-            if (readinessDeadline - now() <= 0) fail(`Production readiness did not converge on the approved release endpoint within ${config.readinessTimeoutMs} ms`);
-            const results = await Promise.all(productionEndpoints.map((endpoint, index) => probeProductionEndpoint(fetchImpl, endpoint, evidence, attempt.readiness.endpoints[index].attempts + 1, readinessDeadline, now)));
+            if (readinessDeadline - now() <= 0) fail(`${policy.readinessLabel} readiness did not converge on the approved ${policy.endpointLabel} endpoint within ${config.readinessTimeoutMs} ms`);
+            const results = await Promise.all(policy.endpoints.map((endpoint, index) => probeProductionEndpoint(fetchImpl, endpoint, evidence, attempt.readiness.endpoints[index].attempts + 1, readinessDeadline, now)));
             const observedAt = iso(now());
             results.forEach((result, index) => {
                 const endpoint = attempt.readiness.endpoints[index];
@@ -501,10 +547,10 @@ export async function deployRelease({ receipt, scan, config, outputDirectory, fe
                 endpoint.ready = result.ready;
                 endpoint.lastObservation = result.ready ? { at: observedAt, status: "ready", identity: result.identity } : { at: observedAt, status: "retry", reason: result.reason };
             });
-            if (expired(readinessDeadline, now)) fail(`Production readiness did not converge on the approved release endpoint within ${config.readinessTimeoutMs} ms`);
+            if (expired(readinessDeadline, now)) fail(`${policy.readinessLabel} readiness did not converge on the approved ${policy.endpointLabel} endpoint within ${config.readinessTimeoutMs} ms`);
             if (results.every(result => result.ready)) break;
             const remaining = readinessDeadline - now();
-            if (remaining <= 0) fail(`Production readiness did not converge on the approved release endpoint within ${config.readinessTimeoutMs} ms`);
+            if (remaining <= 0) fail(`${policy.readinessLabel} readiness did not converge on the approved ${policy.endpointLabel} endpoint within ${config.readinessTimeoutMs} ms`);
             await sleep(Math.min(config.pollIntervalMs, remaining));
         }
 
@@ -533,6 +579,10 @@ export async function deployRelease({ receipt, scan, config, outputDirectory, fe
     }
 }
 
+export function deployRelease(input) {
+    return deployForPolicy(input, releaseDeploymentPolicy);
+}
+
 function options(args) {
     const result = new Map();
     for (let index = 0; index < args.length; index += 2) {
@@ -543,33 +593,33 @@ function options(args) {
     return result;
 }
 
-async function main() {
-    const input = options(process.argv.slice(2));
+async function deploymentMain(args, env, policy) {
+    const input = options(args);
     const outputDirectory = resolve(input.get("--output-dir"));
     await mkdir(outputDirectory, { recursive: true });
     const startedAtMs = Date.now();
     let receipt;
     try {
-        const config = configFromEnv(process.env);
+        const config = configFromEnv(env, policy);
         receipt = await readFile(input.get("--receipt"), "utf8").then(value => parseJsonStrict(value, "Build receipt"));
         const scan = await readFile(input.get("--scan-summary"), "utf8").then(value => parseJsonStrict(value, "Scan summary"));
-        await deployRelease({ receipt, scan, config, outputDirectory });
+        await deployForPolicy({ receipt, scan, config, outputDirectory }, policy);
     } catch (error) {
-        const message = safeMessage(error, process.env.HEXANA_CLOUD_CONSOLE_TOKEN);
+        const message = safeMessage(error, env.HEXANA_CLOUD_CONSOLE_TOKEN);
         if (!error?.evidenceWritten) {
             await writeDeploymentEvidenceAtomic(outputDirectory, error?.deploymentEvidence ?? {
-                schemaVersion: 1,
+                schemaVersion: policy.mode === "release" ? 1 : 2,
                 kind: "hexana-webapp-deployment-evidence",
                 result: "FAILURE",
                 phase: "input",
-                profile: "deploy_only_production",
+                profile: policy.profile,
                 digestHttpProven: false,
-                release: { branch: process.env.HEXANA_RELEASE_BRANCH, version: receipt?.package?.identity?.version, revision: process.env.HEXANA_RELEASE_REVISION },
+                [policy.identityField]: { branch: env[policy.branchEnv], version: receipt?.package?.identity?.version, revision: env[policy.revisionEnv] },
                 image: { reference: receipt?.image?.reference, manifestDigest: receipt?.image?.manifestDigest },
                 sourceBuilds: {},
-                cloudConsole: { buildTypeId: process.env.HEXANA_CLOUD_CONSOLE_BUILD_TYPE_ID, vcsRootId: process.env.HEXANA_CLOUD_CONSOLE_VCS_ROOT_ID, queueAttempted: false, queueAmbiguous: false, exactBuildFinished: false, lastExactObservation: null },
-                deadlines: { cloudConsoleBuild: null, productionReadiness: null },
-                readiness: { endpoints: productionEndpoints.map(url => ({ url, ready: false, attempts: 0, lastObservation: null })) },
+                cloudConsole: { buildTypeId: env.HEXANA_CLOUD_CONSOLE_BUILD_TYPE_ID, vcsRootId: env.HEXANA_CLOUD_CONSOLE_VCS_ROOT_ID, queueAttempted: false, queueAmbiguous: false, exactBuildFinished: false, lastExactObservation: null },
+                deadlines: { cloudConsoleBuild: null, [policy.readinessDeadlineField]: null },
+                readiness: { endpoints: policy.endpoints.map(url => ({ url, ready: false, attempts: 0, lastObservation: null })) },
                 startedAt: iso(startedAtMs),
                 finishedAt: iso(Date.now()),
                 failure: { message, buildMayContinue: false },
@@ -579,4 +629,21 @@ async function main() {
     }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(error.message); process.exitCode = 2; });
+export function createDeploymentBridge(policy) {
+    if (!Object.isFrozen(policy)) fail("deployment policy must be immutable");
+    return Object.freeze({
+        allowedTarget: policy.allowedTarget,
+        endpoints: policy.endpoints,
+        configFromEnv: env => configFromEnv(env, policy),
+        validateEvidence: (receipt, scan, branch, revision) => validateEvidence(receipt, scan, branch, revision, policy),
+        createVcsRootInstancesRequest,
+        createSafetyPreflightRequests,
+        validateSafetyPreflight: (buildType, vcsRoot, config) => validateSafetyPreflight(buildType, vcsRoot, config, policy),
+        resolveVcsRootInstance,
+        createQueueRequest,
+        deploy: input => deployForPolicy(input, policy),
+        runCli: (args, env = process.env) => deploymentMain(args, env, policy),
+    });
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) deploymentMain(process.argv.slice(2), process.env, releaseDeploymentPolicy).catch(error => { console.error(error.message); process.exitCode = 2; });
