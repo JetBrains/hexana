@@ -79,21 +79,21 @@ URL.
 
 Production readiness begins only after that exact build finishes with
 `SUCCESS`. It has a separate five-minute default and maximum deadline
-(`HEXANA_READINESS_TIMEOUT_MS=300000`). Every retry round checks both fixed
-hosts concurrently:
+(`HEXANA_READINESS_TIMEOUT_MS=300000`). Every retry round checks the approved
+release endpoint:
 
-- `https://hexana-webapp-private.example.invalid/`
 - `https://hexana-webapp.example.invalid/`
 
-For each host, `GET /healthz` must return exactly `204`, an empty body,
+`GET /healthz` must return exactly `204`, an empty body,
 `Cache-Control: no-store`, and no redirect. Then a cache-busted `GET /` must
 return exactly `200` without redirect and embed `hexana-release-info` with
 schema version `1`, product `hexana-webapp`, and the exact approved semantic
 version and full revision. Network failures, temporary status failures, and an
-old release identity are retried within the single shared readiness deadline.
-Both hosts must pass in the same retry round. Health streaming is canceled on
-its first byte; root bodies are capped at 1 MiB by both `Content-Length` and
-streamed-byte checks, and all body reads remain under the shared deadline.
+old release identity are retried within the single readiness deadline. The
+endpoint must pass the health and identity probes within one attempt. Health
+streaming is canceled on its first byte; root bodies are capped at 1 MiB by
+both `Content-Length` and streamed-byte checks, and all body reads remain under
+the shared deadline.
 
 `HEXANA_DEPLOY_POLL_INTERVAL_MS` defaults to `5000`, accepts `100..60000`, and
 must be shorter than both deadlines. Each deadline accepts a minimum of `1000`;

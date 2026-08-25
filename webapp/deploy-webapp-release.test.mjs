@@ -104,6 +104,7 @@ test("validates same-series immutable Build and passing Scan evidence", () => {
 });
 
 test("uses one-hour build and five-minute readiness defaults with hard upper bounds", () => {
+    assert.deepEqual(productionEndpoints, ["https://hexana-webapp.example.invalid/"]);
     const parsed = configFromEnv(validEnvironment());
     assert.equal(parsed.buildTimeoutMs, deploymentTiming.buildTimeoutMs);
     assert.equal(parsed.readinessTimeoutMs, deploymentTiming.readinessTimeoutMs);
@@ -229,7 +230,7 @@ test("rejects an otherwise valid readiness body that completes at the deadline",
     assert.ok(error.deploymentEvidence.readiness.endpoints.every(endpoint => /deadline elapsed/.test(endpoint.lastObservation.reason)));
 });
 
-test("retries network, 5xx, and old identity observations until both hosts recover", async () => {
+test("retries network, 5xx, and old identity observations until the release endpoint recovers", async () => {
     const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished")];
     const healthAttempts = new Map();
     const rootAttempts = new Map();
@@ -238,8 +239,8 @@ test("retries network, 5xx, and old identity observations until both hosts recov
         if (parsed.pathname === "/healthz") {
             const attempt = (healthAttempts.get(parsed.host) ?? 0) + 1;
             healthAttempts.set(parsed.host, attempt);
-            if (attempt === 1 && parsed.host.includes("private")) throw new Error("transient DNS failure");
-            if (attempt === 1) return healthResponse(url, 503);
+            if (attempt === 1) throw new Error("transient network failure");
+            if (attempt === 2) return healthResponse(url, 503);
             return healthResponse(url);
         }
         const attempt = (rootAttempts.get(parsed.host) ?? 0) + 1;
@@ -248,24 +249,24 @@ test("retries network, 5xx, and old identity observations until both hosts recov
     };
     let clock = 0;
     const result = await deployRelease({ ...fixture(), config, fetchImpl: deploymentFetch(values, { readiness }), sleep: async ms => { clock += ms; }, now: () => clock });
-    assert.deepEqual(result.readiness.endpoints.map(endpoint => endpoint.attempts), [3, 3]);
+    assert.deepEqual(result.readiness.endpoints.map(endpoint => endpoint.attempts), [4]);
     assert.ok(result.readiness.endpoints.every(endpoint => endpoint.lastObservation.status === "ready"));
 });
 
-test("requires both production hosts under one shared readiness deadline", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "hexana-readiness-both-hosts-"));
+test("requires the approved release endpoint under the readiness deadline", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "hexana-release-readiness-"));
     const calls = [];
     let clock = 0;
     const shortConfig = { ...config, readinessTimeoutMs: 200 };
     const values = [safeBuildType(), safeVcsRoot(), rootInstances(), build("queued"), build("finished")];
-    const readiness = url => new URL(url).host.includes("private") ? readinessResponse(url) : healthResponse(url, 503);
+    const readiness = url => healthResponse(url, 503);
     try {
-        await assert.rejects(deployRelease({ ...fixture(), config: shortConfig, outputDirectory: directory, fetchImpl: deploymentFetch(values, { readiness, calls }), sleep: async ms => { clock += ms; }, now: () => clock }), /both endpoints/);
+        await assert.rejects(deployRelease({ ...fixture(), config: shortConfig, outputDirectory: directory, fetchImpl: deploymentFetch(values, { readiness, calls }), sleep: async ms => { clock += ms; }, now: () => clock }), /approved release endpoint/);
         const evidence = await attemptFile(directory);
         assert.equal(evidence.phase, "production-readiness");
         assert.equal(evidence.deadlines.productionReadiness.timeoutMs, 200);
         assert.equal(Date.parse(evidence.deadlines.productionReadiness.deadlineAt) - Date.parse(evidence.deadlines.productionReadiness.startedAt), 200);
-        assert.deepEqual(evidence.readiness.endpoints.map(endpoint => endpoint.ready), [true, false]);
+        assert.deepEqual(evidence.readiness.endpoints.map(endpoint => endpoint.ready), [false]);
         assert.ok(productionEndpoints.every(endpoint => calls.some(call => call.url.startsWith(endpoint))));
     } finally {
         await rm(directory, { recursive: true, force: true });
@@ -289,7 +290,7 @@ for (const [name, readiness, expectedReason] of [
     } catch (error) {
         failure = error;
     }
-    assert.match(failure?.message ?? "", /both endpoints/);
+    assert.match(failure?.message ?? "", /approved release endpoint/);
     assert.ok(failure.deploymentEvidence.readiness.endpoints.every(endpoint => expectedReason.test(endpoint.lastObservation.reason)));
 });
 

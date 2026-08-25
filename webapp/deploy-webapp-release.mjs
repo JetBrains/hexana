@@ -68,7 +68,6 @@ export const deploymentTiming = Object.freeze({
     pollIntervalMs: 5_000,
 });
 export const productionEndpoints = Object.freeze([
-    "https://hexana-webapp-private.example.invalid/",
     "https://hexana-webapp.example.invalid/",
 ]);
 export const readinessBodyLimits = Object.freeze({ healthBytes: 0, rootBytes: 1_048_576 });
@@ -493,7 +492,7 @@ export async function deployRelease({ receipt, scan, config, outputDirectory, fe
         const readinessDeadline = readinessStartedAtMs + config.readinessTimeoutMs;
         attempt.deadlines.productionReadiness = { startedAt: iso(readinessStartedAtMs), deadlineAt: iso(readinessDeadline), timeoutMs: config.readinessTimeoutMs };
         while (true) {
-            if (readinessDeadline - now() <= 0) fail(`Production readiness did not converge on both endpoints within ${config.readinessTimeoutMs} ms`);
+            if (readinessDeadline - now() <= 0) fail(`Production readiness did not converge on the approved release endpoint within ${config.readinessTimeoutMs} ms`);
             const results = await Promise.all(productionEndpoints.map((endpoint, index) => probeProductionEndpoint(fetchImpl, endpoint, evidence, attempt.readiness.endpoints[index].attempts + 1, readinessDeadline, now)));
             const observedAt = iso(now());
             results.forEach((result, index) => {
@@ -502,10 +501,10 @@ export async function deployRelease({ receipt, scan, config, outputDirectory, fe
                 endpoint.ready = result.ready;
                 endpoint.lastObservation = result.ready ? { at: observedAt, status: "ready", identity: result.identity } : { at: observedAt, status: "retry", reason: result.reason };
             });
-            if (expired(readinessDeadline, now)) fail(`Production readiness did not converge on both endpoints within ${config.readinessTimeoutMs} ms`);
+            if (expired(readinessDeadline, now)) fail(`Production readiness did not converge on the approved release endpoint within ${config.readinessTimeoutMs} ms`);
             if (results.every(result => result.ready)) break;
             const remaining = readinessDeadline - now();
-            if (remaining <= 0) fail(`Production readiness did not converge on both endpoints within ${config.readinessTimeoutMs} ms`);
+            if (remaining <= 0) fail(`Production readiness did not converge on the approved release endpoint within ${config.readinessTimeoutMs} ms`);
             await sleep(Math.min(config.pollIntervalMs, remaining));
         }
 
