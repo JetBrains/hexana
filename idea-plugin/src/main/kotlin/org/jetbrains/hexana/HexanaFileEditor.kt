@@ -34,8 +34,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.hexana.breakpoints.BinaryBreakpointRegistry
+import org.jetbrains.hexana.breakpoints.BinaryIdentityProvider
+import org.jetbrains.hexana.breakpoints.BreakpointMaterializationCoordinator
+import org.jetbrains.hexana.shared.BinaryAnchor
+import org.jetbrains.hexana.ui.panel.GutterMarksModel
 import org.jetbrains.annotations.Nls
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
@@ -173,6 +179,19 @@ class HexanaFileEditor(
      * (called from `init`) launches into [wasmDiffScope] during construction.
      */
     private val wasmDiffScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Separate scope for identity resolution and gutter-model lifetime. Cancelled in [dispose]. */
+    private val editorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Gutter model; null until identity is resolved (async, off-EDT). */
+    val gutterMarksModelFlow: MutableStateFlow<GutterMarksModel?> = MutableStateFlow(null)
+
+    /** Execution position in terms of byte offset (WASM) or VA (native). Driven by [BinaryExecutionNavigator]. */
+    val executionOffsetFlow: MutableStateFlow<Long?> = MutableStateFlow(null)
+
+    @Volatile var cachedIdentity: org.jetbrains.hexana.shared.BinaryIdentity? = null
+        private set
+
     private val wasmSizeDiffFlow = MutableStateFlow<DiffLoadable<SizeReady>>(DiffLoadable.Loading)
     private val wasmEntityDiffFlow = MutableStateFlow<DiffLoadable<WasmEntityDiffResult>>(DiffLoadable.Loading)
     private val wasmDispatchDiffFlow = MutableStateFlow<DiffLoadable<WasmDispatchSurfaceDiffResult>>(DiffLoadable.Loading)
@@ -235,6 +254,27 @@ class HexanaFileEditor(
 
         binaryProvider = resolveProvider(ext, inMemoryBuffer, commonBuffer, sourcePath)
 
+        // Compute binary identity and wire up the gutter model asynchronously.
+        // In-memory buffers (HexanaBinaryVirtualFile) have no backing file to hash.
+        val identityFile = if (inMemoryBuffer == null) myFile else null
+        if (identityFile != null) {
+            editorScope.launch {
+                val elfBuildId = (binaryProvider as? ElfBinaryProvider)?.buildId
+                val identity = BinaryIdentityProvider.identityFor(identityFile, elfBuildId)
+                if (identity != null) {
+                    cachedIdentity = identity
+                    val registry = BinaryBreakpointRegistry.getInstance(myProject)
+                    val coordinator = myProject.getService(BreakpointMaterializationCoordinator::class.java)
+                    gutterMarksModelFlow.value = GutterMarksModel(
+                        breakpointsFlow = registry.breakpoints,
+                        sessionStatesFlow = coordinator.states,
+                        identity = identity,
+                        scope = editorScope,
+                    )
+                }
+            }
+        }
+
         val parentFile = myFile.getUserData(HexanaBinaryVirtualFile.PARENT_FILE_KEY)
 
         val decompPanel = createDecompiledPanel(decompilerFile = resolveDecompilerFile() ?: myFile)
@@ -245,6 +285,7 @@ class HexanaFileEditor(
                 if (stateHolder.showSearchDialog.value) {
                     HexSearchField(binaryProvider!!, stateHolder, hexFocusRequester)
                 }
+                val editor = this@HexanaFileEditor
                 BinaryEditorView(
                     binaryProvider!!, stateHolder, hexFocusRequester,
                     fileName = myFile.name,
@@ -261,6 +302,27 @@ class HexanaFileEditor(
                         openTarEntry(entry, tarBuffer)
                     },
                     decompiledContentPanel = decompPanel,
+                    gutterMarksModelFlow = editor.gutterMarksModelFlow,
+                    executionOffsetFlow = editor.executionOffsetFlow,
+                    onToggleWasmBreakpoint = { funcIdx, byteOffset, instrOrdinal ->
+                        val identity = editor.cachedIdentity ?: return@BinaryEditorView
+                        BinaryBreakpointRegistry.getInstance(myProject).toggle(
+                            identity = identity,
+                            anchor = BinaryAnchor.Wasm(funcIdx, byteOffset, null, instrOrdinal),
+                            filePath = myFile.path,
+                        )
+                    },
+                    onToggleNativeBreakpoint = { va ->
+                        val identity = editor.cachedIdentity ?: return@BinaryEditorView
+                        BinaryBreakpointRegistry.getInstance(myProject).toggle(
+                            identity = identity,
+                            anchor = BinaryAnchor.Native(va.toULong(), null, 0uL),
+                            filePath = myFile.path,
+                        )
+                    },
+                    onDeleteBreakpoint = { id ->
+                        BinaryBreakpointRegistry.getInstance(myProject).remove(id)
+                    },
                 )
             }
         }
@@ -950,6 +1012,7 @@ class HexanaFileEditor(
 
     override fun dispose() {
         wasmDiffScope.cancel()
+        editorScope.cancel()
         disposeClosedEditors()
         myTextEditor?.let {
             Disposer.dispose(it)

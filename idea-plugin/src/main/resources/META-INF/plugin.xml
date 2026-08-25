@@ -124,6 +124,13 @@
 
         <applicationService serviceImplementation="org.jetbrains.hexana.run.WasmRuntimeSettings"/>
 
+        <!-- Binary breakpoint registry: persists breakpoints across IDE restarts. -->
+        <projectService serviceImplementation="org.jetbrains.hexana.breakpoints.BinaryBreakpointRegistry"/>
+        <!-- Coordinates breakpoint materialization across debug sessions. -->
+        <projectService serviceImplementation="org.jetbrains.hexana.breakpoints.BreakpointMaterializationCoordinator"/>
+        <!-- Pushes execution-position updates from the coordinator to open binary editors. -->
+        <projectService serviceImplementation="org.jetbrains.hexana.breakpoints.BinaryExecutionNavigator"/>
+
         <fileType name="wasm"
                   implementationClass="org.jetbrains.hexana.WasmFileType"
                   fieldName="INSTANCE"

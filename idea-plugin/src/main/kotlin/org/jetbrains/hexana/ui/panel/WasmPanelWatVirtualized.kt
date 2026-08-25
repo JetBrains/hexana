@@ -151,6 +151,10 @@ internal fun WasmPanelWatVirtualized(
      */
     navTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
     byteOffsetNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
+    gutterMarks: kotlinx.coroutines.flow.StateFlow<Map<Long, GutterMark>>? = null,
+    executionOffset: kotlinx.coroutines.flow.StateFlow<Long?>? = null,
+    onToggleBreakpoint: ((funcIdx: Int, byteOffset: Long, instrOrdinal: Int) -> Unit)? = null,
+    onDeleteBreakpoint: ((id: String) -> Unit)? = null,
 ) {
     // WAT model build (parse + DWARF symbol resolution + the ~130k-chunk
     // tree) runs OFF the EDT on Dispatchers.IO; a spinner shows on first
@@ -212,6 +216,10 @@ internal fun WasmPanelWatVirtualized(
         navTargetFlow = navTargetFlow,
         byteOffsetNavFlow = byteOffsetNavFlow,
         onOffsetClicked = { offset -> state.scrollHexViewTo(offset, setCursor = true) },
+        gutterMarks = gutterMarks,
+        executionOffset = executionOffset,
+        onToggleBreakpoint = onToggleBreakpoint,
+        onDeleteBreakpoint = onDeleteBreakpoint,
     )
 }
 
@@ -226,6 +234,10 @@ private fun WasmPanelWatVirtualizedContent(
     navTargetFlow: MutableStateFlow<WasmFunctionNavTarget?>,
     byteOffsetNavFlow: MutableStateFlow<Int?> = MutableStateFlow(null),
     onOffsetClicked: ((Long) -> Unit)? = null,
+    gutterMarks: kotlinx.coroutines.flow.StateFlow<Map<Long, GutterMark>>? = null,
+    executionOffset: kotlinx.coroutines.flow.StateFlow<Long?>? = null,
+    onToggleBreakpoint: ((funcIdx: Int, byteOffset: Long, instrOrdinal: Int) -> Unit)? = null,
+    onDeleteBreakpoint: ((id: String) -> Unit)? = null,
 ) {
     // Read provider from the bundle, not from a separate param: it must stay
     // matched to chunkTree/renderer/snapshot through edit-commit swaps.
@@ -238,6 +250,11 @@ private fun WasmPanelWatVirtualizedContent(
     val foldedSectionsState: MutableState<Set<ChunkId>> =
         foldedSectionsExternal ?: remember { mutableStateOf(emptySet<ChunkId>()) }
     var foldedSections by foldedSectionsState
+
+    val currentMarks by (gutterMarks
+        ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap()) }).collectAsState()
+    val currentExecOffset by (executionOffset
+        ?: remember { kotlinx.coroutines.flow.MutableStateFlow(null) }).collectAsState()
 
     // Expanded WasmGC `(rec …)` type groups, keyed by the rec header chunk's
     // id. Empty = all collapsed (the default): a single rec can hold tens of
@@ -759,9 +776,13 @@ private fun WasmPanelWatVirtualizedContent(
                         } else {
                             null
                         }
+                        val row = cachedRows[rowIndex]
+                        val rowByteOffset = row.editable?.opStart
+                            ?: row.tokens.firstOrNull { it.kind == RenderTokenKind.OFFSET_ANNOTATION }?.sourceOffset
+                        val bigFuncIdx = provider.importFuncCount + chunk.indexInSection
                         WatRowItem(
                             chunk = chunk,
-                            row = cachedRows[rowIndex],
+                            row = row,
                             rowIndex = rowIndex,
                             editableIndices = editableIdx,
                             editableDoc = editableDoc,
@@ -789,6 +810,14 @@ private fun WasmPanelWatVirtualizedContent(
                             onIndirectCandidates = onIndirectCandidates,
                             onThrowHandler = onThrowHandler,
                             onOffsetClicked = onOffsetClicked,
+                            gutterMark = if (rowByteOffset != null) currentMarks[rowByteOffset] else null,
+                            isExecutionRow = rowByteOffset != null && rowByteOffset == currentExecOffset,
+                            onToggleBreakpoint = if (onToggleBreakpoint != null && rowByteOffset != null) {
+                                { onToggleBreakpoint(bigFuncIdx, rowByteOffset, rowIndex) }
+                            } else null,
+                            onDeleteBreakpoint = if (onDeleteBreakpoint != null && rowByteOffset != null) {
+                                { currentMarks[rowByteOffset]?.breakpointId?.let(onDeleteBreakpoint) }
+                            } else null,
                         )
                     }
                 } else {
@@ -816,6 +845,10 @@ private fun WasmPanelWatVirtualizedContent(
                             onIndirectCandidates = onIndirectCandidates,
                             onThrowHandler = onThrowHandler,
                             onOffsetClicked = onOffsetClicked,
+                            gutterMarks = currentMarks,
+                            executionOffset = currentExecOffset,
+                            onToggleBreakpoint = onToggleBreakpoint,
+                            onDeleteBreakpoint = onDeleteBreakpoint,
                         )
                     }
                 }
@@ -1079,6 +1112,10 @@ private fun ChunkRow(
     onIndirectCandidates: ((IndirectSiteRequest) -> Unit)? = null,
     onThrowHandler: ((ThrowSiteRequest) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
+    gutterMarks: Map<Long, GutterMark> = emptyMap(),
+    executionOffset: Long? = null,
+    onToggleBreakpoint: ((funcIdx: Int, byteOffset: Long, instrOrdinal: Int) -> Unit)? = null,
+    onDeleteBreakpoint: ((id: String) -> Unit)? = null,
 ) {
     // Re-render whenever the renderer or snapshot changes (i.e. after a
     // commit replaces `liveProvider` and rebuilds `panelState`). Keying on
@@ -1128,12 +1165,17 @@ private fun ChunkRow(
     val isDataExpanded = expandedDataChunks != null && chunk.id in expandedDataChunks.value
     val isImportExpanded = expandedImportChunks != null && chunk.id in expandedImportChunks.value
     val isExportExpanded = expandedExportChunks != null && chunk.id in expandedExportChunks.value
+    val funcIdx = if (chunk.kind == WasmSectionKinds.CODE) {
+        provider.importFuncCount + chunk.indexInSection
+    } else -1
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 1.dp),
     ) {
         rows.forEachIndexed { rowIndex, row ->
+            val rowByteOffset = row.editable?.opStart
+                ?: row.tokens.firstOrNull { it.kind == RenderTokenKind.OFFSET_ANNOTATION }?.sourceOffset
             WatRowItem(
                 chunk = chunk,
                 row = row,
@@ -1164,6 +1206,14 @@ private fun ChunkRow(
                 onIndirectCandidates = onIndirectCandidates,
                 onThrowHandler = onThrowHandler,
                 onOffsetClicked = onOffsetClicked,
+                gutterMark = if (rowByteOffset != null) gutterMarks[rowByteOffset] else null,
+                isExecutionRow = rowByteOffset != null && rowByteOffset == executionOffset,
+                onToggleBreakpoint = if (onToggleBreakpoint != null && rowByteOffset != null && funcIdx >= 0) {
+                    { onToggleBreakpoint(funcIdx, rowByteOffset, rowIndex) }
+                } else null,
+                onDeleteBreakpoint = if (onDeleteBreakpoint != null && rowByteOffset != null) {
+                    { gutterMarks[rowByteOffset]?.breakpointId?.let(onDeleteBreakpoint) }
+                } else null,
             )
         }
     }
@@ -1211,6 +1261,10 @@ private fun WatRowItem(
     onIndirectCandidates: ((IndirectSiteRequest) -> Unit)? = null,
     onThrowHandler: ((ThrowSiteRequest) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
+    gutterMark: GutterMark? = null,
+    isExecutionRow: Boolean = false,
+    onToggleBreakpoint: (() -> Unit)? = null,
+    onDeleteBreakpoint: (() -> Unit)? = null,
 ) {
     // Skip Data body/descriptor rows when collapsed; the header + expander
     // stay visible as a click target.
@@ -1404,8 +1458,43 @@ private fun WatRowItem(
         } else {
             renderedRow
         }
+    // Gutter cell + execution highlight. Only CODE section rows with a known
+    // byte offset get a clickable gutter cell; other rows get a spacer so
+    // indentation stays consistent when a gutter is active.
+    val rowSourceOffset2 = rowSourceOffset
+    val showGutter = chunk.kind == WasmSectionKinds.CODE && rowSourceOffset2 != null &&
+        (gutterMark != null || onToggleBreakpoint != null)
+    val execBg = if (isExecutionRow && showGutter) {
+        androidx.compose.ui.graphics.Color(0xFF2D5A27).copy(alpha = 0.35f)
+    } else {
+        androidx.compose.ui.graphics.Color.Unspecified
+    }
+    val bgMod = if (execBg != androidx.compose.ui.graphics.Color.Unspecified) {
+        Modifier.fillMaxWidth().background(execBg)
+    } else {
+        Modifier.fillMaxWidth()
+    }
     // The "Java" / "Kotlin/Wasm" badge sits inline on the function's header row.
-    if (graalSymbol != null && project != null && rowIndex == 0) {
+    if (showGutter) {
+        Row(modifier = bgMod, verticalAlignment = Alignment.CenterVertically) {
+            BreakpointGutterCell(
+                mark = gutterMark,
+                onToggle = onToggleBreakpoint ?: {},
+                onDelete = if (onDeleteBreakpoint != null) { _ -> onDeleteBreakpoint() } else null,
+            )
+            if (graalSymbol != null && project != null && rowIndex == 0) {
+                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    rowView(); GraalJavaBadge(symbol = graalSymbol, project = project)
+                }
+            } else if (kotlinSymbol != null && project != null && rowIndex == 0) {
+                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    rowView(); KotlinWasmBadge(symbol = kotlinSymbol, project = project)
+                }
+            } else {
+                rowView()
+            }
+        }
+    } else if (graalSymbol != null && project != null && rowIndex == 0) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             rowView()
             GraalJavaBadge(symbol = graalSymbol, project = project)

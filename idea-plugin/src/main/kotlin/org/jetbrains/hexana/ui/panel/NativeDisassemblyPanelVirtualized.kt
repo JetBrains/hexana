@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -866,6 +867,10 @@ private fun decodeToDisasmInstruction(
 internal fun NativeDisassemblyPanelVirtualized(
     provider: NativeBinaryProvider,
     state: HexViewStateHolder,
+    gutterMarksFlow: kotlinx.coroutines.flow.StateFlow<Map<Long, GutterMark>>? = null,
+    executionVaFlow: kotlinx.coroutines.flow.StateFlow<Long?>? = null,
+    onToggleBreakpoint: ((va: Long) -> Unit)? = null,
+    onDeleteBreakpoint: ((id: String) -> Unit)? = null,
 ) {
     var result by remember(provider) { mutableStateOf<DisasmLoadState>(DisasmLoadState.Loading) }
     var syntax by remember(provider) { mutableStateOf(defaultSyntaxFor(provider.archForDisasm())) }
@@ -908,7 +913,10 @@ internal fun NativeDisassemblyPanelVirtualized(
                         )
                     }
                 is DisasmLoadState.Loaded ->
-                    VirtualizedDisasmListing(current.catalog, provider, syntax, state)
+                    VirtualizedDisasmListing(
+                        current.catalog, provider, syntax, state,
+                        gutterMarksFlow, executionVaFlow, onToggleBreakpoint, onDeleteBreakpoint,
+                    )
             }
         }
     }
@@ -1122,7 +1130,18 @@ private fun VirtualizedDisasmListing(
     provider: NativeBinaryProvider,
     syntax: AssemblySyntax,
     state: HexViewStateHolder,
+    gutterMarksFlow: kotlinx.coroutines.flow.StateFlow<Map<Long, GutterMark>>? = null,
+    executionVaFlow: kotlinx.coroutines.flow.StateFlow<Long?>? = null,
+    onToggleBreakpoint: ((va: Long) -> Unit)? = null,
+    onDeleteBreakpoint: ((id: String) -> Unit)? = null,
 ) {
+    val currentMarks by (gutterMarksFlow
+        ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap()) }
+    ).collectAsState()
+    val currentExecVa by (executionVaFlow
+        ?: remember { kotlinx.coroutines.flow.MutableStateFlow(null) }
+    ).collectAsState()
+
     val snapshot = remember(catalog, provider) {
         binaryDocumentOf(provider.bytes).snapshot()
     }
@@ -1198,7 +1217,13 @@ private fun VirtualizedDisasmListing(
         },
         elementContent = { chunk, _ ->
             item(key = chunk.id) {
-                AsyncFunctionBody(chunk, catalog, renderer, snapshot, state.project)
+                AsyncFunctionBody(
+                    chunk, catalog, renderer, snapshot, state.project,
+                    gutterMarks = currentMarks,
+                    executionVa = currentExecVa,
+                    onToggleBreakpoint = onToggleBreakpoint,
+                    onDeleteBreakpoint = onDeleteBreakpoint,
+                )
             }
         },
         showSectionShortcutBar = false,
@@ -1276,9 +1301,15 @@ private fun AsyncFunctionBody(
     renderer: NativeDisasmChunkRenderer,
     snapshot: BinaryDocumentSnapshot,
     project: com.intellij.openapi.project.Project,
+    gutterMarks: Map<Long, GutterMark> = emptyMap(),
+    executionVa: Long? = null,
+    onToggleBreakpoint: ((va: Long) -> Unit)? = null,
+    onDeleteBreakpoint: ((id: String) -> Unit)? = null,
 ) {
-    var lines by remember(chunk.id, renderer) {
-        mutableStateOf<List<List<RenderToken>>?>(null)
+    // Each entry is a rendered line paired with the VA of its instruction (null for
+    // empty trailing windows or header-only chunks with no instructions).
+    var linesWithVa by remember(chunk.id, renderer) {
+        mutableStateOf<List<Pair<List<RenderToken>, Long?>>?>(null)
     }
     LaunchedEffect(chunk.id, renderer) {
         val tracker = DisasmActivityTracker.getInstance(project)
@@ -1288,14 +1319,21 @@ private fun AsyncFunctionBody(
                 "hexana.disassembly.perf.logging",
             )
             val t0 = if (perfTracing) System.nanoTime() else 0L
-            catalog.decode(chunk.indexInSection)
+            val instructions = catalog.decode(chunk.indexInSection)
             val tAfterDecode = if (perfTracing) System.nanoTime() else 0L
+            val name = (chunk.id as? ChunkId.Symbolic)?.name
+            val windowIdx = if (name != null) windowIdxFromName(name) else 0
+            val windowStart = windowIdx * INSTRUCTIONS_PER_WINDOW.toInt()
             val rendered = withContext(Dispatchers.Default) {
                 val tokens = renderer.render(snapshot, chunk).tokens
-                splitTokensIntoLines(tokens)
+                val tokenLines = splitTokensIntoLines(tokens)
+                tokenLines.mapIndexed { i, line ->
+                    val va = instructions.getOrNull(windowStart + i)?.virtualAddress?.toLong()
+                    line to va
+                }
             }
             val tAfterRender = if (perfTracing) System.nanoTime() else 0L
-            lines = rendered
+            linesWithVa = rendered
             if (perfTracing) {
                 org.jetbrains.hexana.HexanaLog.LOG.warn(
                     "[disasm-perf] chunk=${chunk.id} " +
@@ -1308,13 +1346,28 @@ private fun AsyncFunctionBody(
             tracker.end()
         }
     }
-    val current = lines
+    val current = linesWithVa
+    val showGutter = gutterMarks.isNotEmpty() || onToggleBreakpoint != null
     if (current == null) {
         DecodingPlaceholder()
     } else {
         Column {
-            for (line in current) {
-                SelectableTokenRow(tokens = line)
+            for ((line, va) in current) {
+                if (showGutter && va != null) {
+                    val mark = gutterMarks[va]
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        BreakpointGutterCell(
+                            mark = mark,
+                            onToggle = { onToggleBreakpoint?.invoke(va) },
+                            onDelete = if (mark != null && onDeleteBreakpoint != null) {
+                                { onDeleteBreakpoint(mark.breakpointId) }
+                            } else null,
+                        )
+                        SelectableTokenRow(tokens = line)
+                    }
+                } else {
+                    SelectableTokenRow(tokens = line)
+                }
             }
         }
     }

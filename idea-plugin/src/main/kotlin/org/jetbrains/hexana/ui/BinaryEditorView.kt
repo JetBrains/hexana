@@ -40,9 +40,15 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.hexana.ui.panel.GutterMark
+import org.jetbrains.hexana.ui.panel.GutterMarksModel
 import org.jetbrains.hexana.ArchiveMemberTabTitleProvider
 import java.nio.file.Files
 import java.nio.file.Path
@@ -88,6 +94,11 @@ internal fun BinaryEditorView(
     onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
     onOpenTarEntry: ((TarEntry) -> Unit)? = null,
     decompiledContentPanel: Panel? = null,
+    gutterMarksModelFlow: StateFlow<GutterMarksModel?>? = null,
+    executionOffsetFlow: StateFlow<Long?>? = null,
+    onToggleWasmBreakpoint: ((funcIdx: Int, byteOffset: Long, instrOrdinal: Int) -> Unit)? = null,
+    onToggleNativeBreakpoint: ((va: Long) -> Unit)? = null,
+    onDeleteBreakpoint: ((id: String) -> Unit)? = null,
 ) {
     // Phase F: every opened file gets one editable BinaryDocument shared by
     // the editor's lifecycle. Edits land in this doc, but ONLY the WAT
@@ -314,6 +325,11 @@ internal fun BinaryEditorView(
                     wasmByteOffsetNavFlow = wasmOffsetNavFlow,
                     classFileNavTargetFlow = classFileNavTargetFlow,
                     fileName = fileName,
+                    gutterMarksModelFlow = gutterMarksModelFlow,
+                    executionOffsetFlow = executionOffsetFlow,
+                    onToggleWasmBreakpoint = onToggleWasmBreakpoint,
+                    onToggleNativeBreakpoint = onToggleNativeBreakpoint,
+                    onDeleteBreakpoint = onDeleteBreakpoint,
                 )
                 withContext(Dispatchers.Main) {
                     replacePlaceholders(panels, hardcoded)
@@ -903,11 +919,28 @@ internal fun rebuildProviderFromBytes(original: BinaryProvider, newBytes: ByteAr
     }
 }
 
-private fun NativeBinaryProvider.commonNativePanels(state: HexViewStateHolder): List<Panel> {
+private fun NativeBinaryProvider.commonNativePanels(
+    state: HexViewStateHolder,
+    gutterMarksModelFlow: StateFlow<GutterMarksModel?>? = null,
+    executionOffsetFlow: StateFlow<Long?>? = null,
+    onToggleNativeBreakpoint: ((va: Long) -> Unit)? = null,
+    onDeleteBreakpoint: ((id: String) -> Unit)? = null,
+): List<Panel> {
     return listOfNotNull(
         Panel("SBOM") { CycloneDxSbomPanel(this, state) }.takeIf { this.nativeImageInfo?.sbom != null },
         Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
-        Panel("Disassembly (virtualized)") { NativeDisassemblyPanelVirtualized(this, state) }
+        Panel("Disassembly (virtualized)") {
+            val gutterModel by (gutterMarksModelFlow
+                ?: remember { MutableStateFlow(null) }).collectAsState()
+            NativeDisassemblyPanelVirtualized(
+                provider = this,
+                state = state,
+                gutterMarksFlow = gutterModel?.marks,
+                executionVaFlow = executionOffsetFlow,
+                onToggleBreakpoint = onToggleNativeBreakpoint,
+                onDeleteBreakpoint = onDeleteBreakpoint,
+            )
+        },
     )
 }
 
@@ -980,6 +1013,11 @@ private fun BinaryProvider.resolveHardcodedPanels(
     wasmByteOffsetNavFlow: MutableStateFlow<Int?>? = null,
     classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?>? = null,
     fileName: String? = null,
+    gutterMarksModelFlow: StateFlow<GutterMarksModel?>? = null,
+    executionOffsetFlow: StateFlow<Long?>? = null,
+    onToggleWasmBreakpoint: ((funcIdx: Int, byteOffset: Long, instrOrdinal: Int) -> Unit)? = null,
+    onToggleNativeBreakpoint: ((va: Long) -> Unit)? = null,
+    onDeleteBreakpoint: ((id: String) -> Unit)? = null,
 ): List<Panel> = when (this) {
     is ClassFileBinaryProvider -> {
         val parsed = this.parsedClassFile
@@ -1002,9 +1040,13 @@ private fun BinaryProvider.resolveHardcodedPanels(
         val memoryPanel = if (isMemoryBudgetEligible(header, sections)) {
             listOf(Panel("Memory") { ElfMemoryBudgetPanel(this, state, elfFile, state.project) })
         } else emptyList()
-        commonNativePanels(state) + memoryPanel
+        commonNativePanels(
+            state, gutterMarksModelFlow, executionOffsetFlow, onToggleNativeBreakpoint, onDeleteBreakpoint,
+        ) + memoryPanel
     }
-    is NativeBinaryProvider -> commonNativePanels(state)
+    is NativeBinaryProvider -> commonNativePanels(
+        state, gutterMarksModelFlow, executionOffsetFlow, onToggleNativeBreakpoint, onDeleteBreakpoint,
+    )
     is WasmBinaryVirtualFileProvider -> {
         if (canProvideWasmModule()) {
             listOf(
@@ -1012,6 +1054,8 @@ private fun BinaryProvider.resolveHardcodedPanels(
                 Panel("Wat") { WasmPanelWat(this, state, wasmByteOffsetNavFlow ?: remember { MutableStateFlow(null) }) },
                 Panel("WAT (virtualized)") {
                     val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
+                    val gutterModel by (gutterMarksModelFlow
+                        ?: remember { MutableStateFlow(null) }).collectAsState()
                     WasmPanelWatVirtualized(
                         provider = live,
                         state = state,
@@ -1021,7 +1065,11 @@ private fun BinaryProvider.resolveHardcodedPanels(
                         navTargetFlow = wasmFunctionNavTargetFlow
                             ?: remember { MutableStateFlow(null) },
                         byteOffsetNavFlow = wasmByteOffsetNavFlow
-                            ?: remember { MutableStateFlow(null) }
+                            ?: remember { MutableStateFlow(null) },
+                        gutterMarks = gutterModel?.marks,
+                        executionOffset = executionOffsetFlow,
+                        onToggleBreakpoint = onToggleWasmBreakpoint,
+                        onDeleteBreakpoint = onDeleteBreakpoint,
                     )
                 },
             ) + dwarfPanels(this, state)
@@ -1046,6 +1094,8 @@ private fun BinaryProvider.resolveHardcodedPanels(
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                 Panel("WAT (virtualized)") {
                     val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
+                    val gutterModel by (gutterMarksModelFlow
+                        ?: remember { MutableStateFlow(null) }).collectAsState()
                     WasmPanelWatVirtualized(
                         provider = live,
                         state = state,
@@ -1054,6 +1104,10 @@ private fun BinaryProvider.resolveHardcodedPanels(
                         foldedSectionsExternal = watVirtualizedFolded,
                         navTargetFlow = wasmFunctionNavTargetFlow
                             ?: remember { MutableStateFlow(null) },
+                        gutterMarks = gutterModel?.marks,
+                        executionOffset = executionOffsetFlow,
+                        onToggleBreakpoint = onToggleWasmBreakpoint,
+                        onDeleteBreakpoint = onDeleteBreakpoint,
                     )
                 },
             ) + dwarfPanels(this, state)
