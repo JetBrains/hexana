@@ -56,8 +56,12 @@ one runs unchanged in the others. The surface is defined once in
 Output:
 
 - `print(...values)` — appends a line, joining the arguments with a space.
-- `table(...columns)` / `row(...cells)` — tab-separated tabular output. In the plugins this renders as a searchable
-  table; here it is just lines.
+- `table(...columns)` — starts a table and declares its column headers.
+- `row(...cells)` — adds a row to the current table. Cells are escaped and short rows are padded.
+
+A script tab renders these in the order the script produced them: text stays text, a `table(...)` plus its `row(...)`
+calls becomes a table, and printing text again ends the table. So a script can narrate between tables. Over the CLI the
+same output is plain lines, with tables tab-separated.
 
 `binary` — the loaded binary, with the same members for every format:
 

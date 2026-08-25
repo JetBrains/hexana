@@ -78,16 +78,16 @@ object ScriptApiReference {
         ScriptApiEntry(
             name = "table",
             signature = "table(...columns: any[]): void",
-            summary = "Declares the table header. Output that starts with a header row is rendered " +
-                "as a searchable table instead of plain text.",
+            summary = "Starts a table and declares its column headers. Text printed before or " +
+                "after it stays text, so a script can narrate between tables.",
             example = "table(\"Section\", \"Offset\", \"Size\");",
             displayPath = "table(...columns)",
         ),
         ScriptApiEntry(
             name = "row",
             signature = "row(...cells: any[]): void",
-            summary = "Appends one table row. Cells are escaped, and rows shorter than the header " +
-                "are padded. Requires a preceding table() call.",
+            summary = "Appends one row to the current table. Cells are escaped, and rows shorter " +
+                "than the header are padded. Requires a preceding table() call.",
             example = "row(section.name, section.offset, section.size);",
             displayPath = "row(...cells)",
         ),
@@ -377,6 +377,11 @@ object ScriptApiReference {
         appendLine("// This file is generated from ScriptApiReference.kt. Everything here behaves")
         appendLine("// identically in IntelliJ IDEA, in VS Code, and in the `run-script` CLI.")
         appendLine("// For the format-specific shape of `binary.raw`, see hexana-scripting-raw.d.ts.")
+        appendLine("//")
+        appendLine("// Output layout: a script tab renders text and tables in the order the script")
+        appendLine("// produced them. `print(...)` writes text; `table(...)` starts a table and each")
+        appendLine("// following `row(...)` adds a row to it. Printing text again ends the table, so")
+        appendLine("// a script can freely alternate between prose and tables.")
         appendLine()
 
         for (entry in globals) {
@@ -447,11 +452,12 @@ object ScriptApiReference {
         print("Tabs: " + binary.tabs.join(", "));
         print("");
 
-        // Output that starts with a header row is rendered as a table.
+        // table() + row() render a table; print() around them stays text, so a
+        // script can narrate between tables.
         table("Region", "Offset", "Size", "% of file");
         for (const region of binary.structure) {
-            const share = (region.size * 100 / binary.size).toFixed(1);
-            row(region.name, region.offset, region.size, share);
+            const share = (region.size * 100 / binary.size).toFixed(2);
+            row(region.name, "0x" + region.offset.toString(16), region.size, share);
         }
 
         // Try next:

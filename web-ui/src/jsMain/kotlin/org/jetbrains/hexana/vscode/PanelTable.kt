@@ -54,6 +54,25 @@ fun SearchableTable(
     searchBarLeading: (@Composable () -> Unit)? = null,
     footer: (@Composable () -> Unit)? = null,
     onSortToggle: ((columnIndex: Int) -> Unit)? = null,
+    /**
+     * When set, the table sizes itself to its content up to this CSS length
+     * instead of filling the available height.
+     *
+     * A table normally owns its pane and stretches to it, which needs a parent
+     * that gives it a height. Pass this to place several tables one after another
+     * in a document — a script tab interleaving text and tables — where the
+     * parent height comes from the content itself.
+     */
+    maxBodyHeight: String? = null,
+    /**
+     * Whether this table claims Cmd/Ctrl+F to reveal its own search bar.
+     *
+     * The shortcut is bound on the window so it works while focus is on the
+     * surrounding tab, which means several tables in one pane would all open
+     * their search at once. Turn it off for embedded tables whose pane provides
+     * its own filter.
+     */
+    enableFindShortcut: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     var searchVisible by remember { mutableStateOf(alwaysShowSearch) }
@@ -76,10 +95,13 @@ fun SearchableTable(
             display(DisplayStyle.Flex)
             property("flex-direction", "column")
             property("min-height", "0")
-            property("flex", "1")
+            if (maxBodyHeight == null) property("flex", "1")
         }
         ref { container ->
             containerRef = container
+            if (!enableFindShortcut) {
+                return@ref onDispose { containerRef = null }
+            }
             // Listen on window (capture phase) so we receive Cmd+F even when
             // focus is on the parent hexana-tab-content rather than this div.
             val keyListener = EventListener { event ->
@@ -127,7 +149,11 @@ fun SearchableTable(
 
         Div({
             style {
-                property("flex", "1")
+                if (maxBodyHeight != null) {
+                    property("max-height", maxBodyHeight)
+                } else {
+                    property("flex", "1")
+                }
                 property("min-height", "0")
                 property("overflow-y", "auto")
             }

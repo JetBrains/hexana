@@ -5,6 +5,9 @@ import org.jetbrains.hexana.providers.BinaryStringRecord
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.shared.WasmBinaryWriter
+import org.jetbrains.hexana.shared.scripting.ScriptApiReference
+import org.jetbrains.hexana.shared.scripting.ScriptOutputBlock
+import org.jetbrains.hexana.shared.scripting.parseScriptOutputBlocks
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.junit.Test
 import java.util.Collections
@@ -125,6 +128,85 @@ class HexanaScriptApiBindingTest {
     @Test
     fun printAcceptsMultipleArgumentsAndKeepsIntegersIntegral() {
         assertEquals(listOf("a 1 true null", "5"), lines("""print("a", 1, true, null); print(binary.bytes.size);"""))
+    }
+
+    @Test
+    fun narratedOutputSegmentsIntoTextAndTableBlocks() {
+        // The reported bug: a script that prints a heading before its table had
+        // the heading and the tab-separated rows jumbled into one column, because
+        // segmentation looked only at the first two lines.
+        val result = run(
+            """
+            print("Regions");
+            print("");
+            table("Name", "Size");
+            row("code", 1024);
+            row("data", 64);
+            print("");
+            print("done");
+            """.trimIndent()
+        )
+        assertEquals(HexanaScriptStatus.SUCCESS, result.status)
+
+        val blocks = parseScriptOutputBlocks(result.output.lines)
+        assertEquals(3, blocks.size, "expected text, table, text — got ${blocks.map { it::class.simpleName }}")
+
+        assertEquals(listOf("Regions", ""), (blocks[0] as ScriptOutputBlock.Text).lines)
+
+        val table = blocks[1] as ScriptOutputBlock.Table
+        assertEquals(listOf("Name", "Size"), table.columns)
+        assertEquals(listOf(listOf("code", "1024"), listOf("data", "64")), table.rows)
+
+        assertEquals(listOf("", "done"), (blocks[2] as ScriptOutputBlock.Text).lines)
+    }
+
+    @Test
+    fun theStarterTemplateProducesTextFollowedByATable() {
+        // The template ships with the plugins and is the first thing most users
+        // run, so its output has to land in the layout the tab expects.
+        val result = HexanaScriptRunner().run(
+            source = HexanaScriptSource.Inline(ScriptApiReference.starterTemplate()),
+            binaryProvider = wasmProvider(),
+            fileName = "fixture.wasm",
+        )
+        assertEquals(
+            HexanaScriptStatus.SUCCESS,
+            result.status,
+            "starter template failed: ${result.diagnostics.map { it.message }}",
+        )
+
+        val blocks = parseScriptOutputBlocks(result.output.lines)
+        assertTrue(blocks.size >= 2, "expected several blocks, got ${blocks.size}")
+        assertTrue(blocks.first() is ScriptOutputBlock.Text, "the template starts by narrating")
+        val table = blocks.filterIsInstance<ScriptOutputBlock.Table>().singleOrNull()
+        assertTrue(table != null, "the template's region table must be recognised as a table")
+        assertEquals(listOf("Region", "Offset", "Size", "% of file"), table.columns)
+        assertTrue(table.rows.isNotEmpty(), "the fixture has sections, so the table has rows")
+    }
+
+    @Test
+    fun pureTableOutputStaysASingleTableBlock() {
+        // The common case must not regress into a document layout.
+        val result = run(
+            """
+            table("Name", "Size");
+            row("code", 1024);
+            """.trimIndent()
+        )
+
+        val blocks = parseScriptOutputBlocks(result.output.lines)
+        assertEquals(1, blocks.size)
+        assertTrue(blocks.single() is ScriptOutputBlock.Table)
+    }
+
+    @Test
+    fun plainTextOutputIsNotTurnedIntoATable() {
+        // Previously this rendered as a one-column table with an ID column.
+        val result = run("""print("just"); print("some"); print("text");""")
+
+        val blocks = parseScriptOutputBlocks(result.output.lines)
+        assertEquals(1, blocks.size)
+        assertEquals(listOf("just", "some", "text"), (blocks.single() as ScriptOutputBlock.Text).lines)
     }
 
     // -- structure, strings, size -------------------------------------------

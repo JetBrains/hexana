@@ -6,6 +6,9 @@ import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.shared.scripting.ScriptOutput
+import org.jetbrains.hexana.shared.scripting.ScriptOutputBlock
+import org.jetbrains.hexana.shared.scripting.filterScriptOutputBlocks
+import org.jetbrains.hexana.shared.scripting.parseScriptOutputBlocks
 import org.jetbrains.hexana.shared.scripting.ScriptValueJsBinder
 import org.jetbrains.hexana.shared.scripting.scriptBinaryApi
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
@@ -30,20 +33,6 @@ private object NoopScriptExecutionHandle : ScriptExecutionHandle {
 
 private class ScriptRunScope {
     var generation: Int = 0
-}
-
-/**
- * Detects whether the first two lines look like CSV or TSV.
- * Returns the delimiter character if detected, or `null` for plain text.
- */
-private fun detectDelimiter(lines: List<String>): Char? {
-    if (lines.size < 2) return null
-    for (delim in charArrayOf('\t', ',')) {
-        val cols0 = lines[0].split(delim)
-        val cols1 = lines[1].split(delim)
-        if (cols0.size >= 2 && cols0.size == cols1.size) return delim
-    }
-    return null
 }
 
 /**
@@ -332,6 +321,23 @@ private fun wrapUnknownObject(value: Any?): dynamic {
  */
 private const val YIELD_EVERY = 100
 
+/** Interval at which streamed script output is published to the view. */
+private const val OUTPUT_POLL_MILLIS = 50L
+
+/** Drains between re-segmentations while a script is still running. */
+private const val DRAINS_PER_RESEGMENT = 5
+
+/**
+ * Height a table block shows before scrolling within itself.
+ *
+ * Capped against the viewport rather than a fixed pixel height: one table must
+ * not fill the pane and hide the text around it, and a fixed height is too tall
+ * on a short editor and needlessly short on a big display. Tables shorter than
+ * the cap still shrink to their content. The webview fills the editor group, so
+ * `vh` tracks the pane closely enough for a cap.
+ */
+private const val TABLE_BLOCK_MAX_BODY_HEIGHT = "clamp(120px, 45vh, 640px)"
+
 /**
  * Matches a call to one of the output globals so it can be turned into a
  * `yield`. All three have to be covered: a script that only builds a table with
@@ -446,6 +452,11 @@ internal fun ScriptTabContent(
     var isRunning by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var executionKey by remember { mutableStateOf(0) }
+    var filter by remember { mutableStateOf("") }
+    // Segmentation is O(output), so it is re-run on its own slower cadence than
+    // the 50ms line drain: a script streaming many lines would otherwise re-parse
+    // everything twenty times a second.
+    var outputRevision by remember { mutableStateOf(0) }
 
     // Shared buffer: the print callback appends here from the setTimeout,
     // and a polling coroutine drains it into the reactive outputLines list.
@@ -482,18 +493,21 @@ internal fun ScriptTabContent(
 
         try {
             // Poll for new lines until the script finishes.
+            var drains = 0
             while (!scriptDone) {
-                delay(50)
+                delay(OUTPUT_POLL_MILLIS)
                 if (pendingLines.isNotEmpty()) {
                     outputLines.addAll(pendingLines)
                     pendingLines.clear()
                 }
+                if (++drains % DRAINS_PER_RESEGMENT == 0) outputRevision++
             }
             // Drain any remaining lines
             if (pendingLines.isNotEmpty()) {
                 outputLines.addAll(pendingLines)
                 pendingLines.clear()
             }
+            outputRevision++
             error = scriptError
             isRunning = false
         } finally {
@@ -554,6 +568,35 @@ internal fun ScriptTabContent(
             }
         }
 
+        // Re-segmenting on every drain keeps a streaming table growing in place
+        // instead of appearing only once the script finishes.
+        val blocks = remember(outputRevision) { parseScriptOutputBlocks(outputLines.toList()) }
+        // A script whose entire output is one table gets the full table component,
+        // with sorting and its own search — that is the shape most analysis scripts
+        // produce, and nothing about it needs a document layout.
+        val singleTable = blocks.singleOrNull() as? ScriptOutputBlock.Table
+        val visibleBlocks = remember(blocks, filter) { filterScriptOutputBlocks(blocks, filter) }
+
+        if (singleTable == null && blocks.isNotEmpty() && error == null) {
+            // One filter for the whole pane, kept outside the scroll area: the
+            // output is a document of several blocks, so a search box per table
+            // would be both noisy and unable to reach the text between them.
+            Div({
+                style {
+                    property("padding", "4px 8px")
+                    property("flex-shrink", "0")
+                }
+            }) {
+                Input(org.jetbrains.compose.web.attributes.InputType.Text) {
+                    classes("hexana-dialog-input")
+                    value(filter)
+                    attr("placeholder", "Filter output\u2026")
+                    onInput { event -> filter = event.value }
+                    style { property("width", "100%") }
+                }
+            }
+        }
+
         // Content area
         Div({
             style {
@@ -583,14 +626,7 @@ internal fun ScriptTabContent(
                     Text("Running script\u2026")
                 }
             } else if (outputLines.isNotEmpty()) {
-                val delimiter = remember(outputLines.size) {
-                    if (outputLines.size >= 2) detectDelimiter(outputLines) else null
-                }
-                if (delimiter != null) {
-                    ScriptTableOutput(outputLines, delimiter)
-                } else {
-                    ScriptTextOutput(outputLines)
-                }
+                ScriptBlocksOutput(visibleBlocks, singleTable)
             }
 
             if (isRunning && outputLines.isNotEmpty()) {
@@ -608,46 +644,107 @@ internal fun ScriptTabContent(
     }
 }
 
+/**
+ * Renders text and tables in the order the script produced them.
+ *
+ * @param visible blocks after the pane filter has been applied
+ * @param singleTable set when the whole output is one table, which is rendered
+ *   with the full searchable/sortable table component instead
+ */
 @Composable
-private fun ScriptTableOutput(lines: List<String>, delimiter: Char) {
-    val headers = remember(lines.firstOrNull()) {
-        lines.firstOrNull()?.split(delimiter)?.map { it.trim() } ?: emptyList()
-    }
-    val dataRows = remember(lines.size) {
-        if (lines.size > 1) lines.subList(1, lines.size) else emptyList()
+private fun ScriptBlocksOutput(
+    visible: List<ScriptOutputBlock>,
+    singleTable: ScriptOutputBlock.Table?,
+) {
+    if (singleTable != null) {
+        ScriptSingleTableBlock(singleTable)
+        return
     }
 
-    SearchableTable(
-        headers = headers,
-        alwaysShowSearch = true,
-    ) {
-        for (row in dataRows) {
-            val cells = row.split(delimiter)
-            PanelTableRow {
-                for ((i, header) in headers.withIndex()) {
-                    Td({
-                        classes("panel-td")
-                    }) {
-                        Text(cells.getOrElse(i) { "" }.trim())
-                    }
-                }
+    if (visible.isEmpty()) {
+        Div({
+            style {
+                property("padding", "8px 12px")
+                property("font-size", "12px")
+                property("opacity", "0.75")
             }
+        }) {
+            Text("No output matches the filter.")
+        }
+        return
+    }
+
+    for (block in visible) {
+        when (block) {
+            is ScriptOutputBlock.Text -> ScriptTextBlock(block)
+            is ScriptOutputBlock.Table -> ScriptTableBlock(block)
         }
     }
 }
 
 @Composable
-private fun ScriptTextOutput(lines: List<String>) {
+private fun ScriptTextBlock(block: ScriptOutputBlock.Text) {
+    Div({
+        style {
+            property("padding", "4px 12px")
+            property("font-family", "var(--vscode-editor-font-family, monospace)")
+            property("font-size", "12px")
+            property("white-space", "pre-wrap")
+            property("word-break", "break-word")
+        }
+    }) {
+        // Blank lines are the script's own spacing, so they are preserved as
+        // empty rows rather than collapsed away.
+        Text(block.lines.joinToString("\n"))
+    }
+}
+
+/**
+ * A table block inside the document flow.
+ *
+ * Uses the same sortable table component as every other tab, sized to its
+ * content instead of to the pane so that several tables and the text between
+ * them lay out in one scroll region. Its own search bar is left hidden: the pane
+ * has one filter for the whole document, and a search box per table would be
+ * noisy and could not reach the text between them.
+ */
+@Composable
+private fun ScriptTableBlock(block: ScriptOutputBlock.Table) {
+    Div({
+        style {
+            property("padding", "4px 12px 12px 12px")
+        }
+    }) {
+        SearchableTable(
+            headers = block.columns,
+            maxBodyHeight = TABLE_BLOCK_MAX_BODY_HEIGHT,
+            // Several tables share this pane, and the shortcut is bound on the
+            // window, so they would all open their search at once.
+            enableFindShortcut = false,
+        ) {
+            ScriptTableRows(block)
+        }
+    }
+}
+
+/** The whole output is one table: let it fill the pane and show its own search. */
+@Composable
+private fun ScriptSingleTableBlock(block: ScriptOutputBlock.Table) {
     SearchableTable(
-        headers = listOf("Output"),
+        headers = block.columns,
         alwaysShowSearch = true,
     ) {
-        for (line in lines) {
-            PanelTableRow {
-                Td({
-                    classes("panel-td")
-                }) {
-                    Text(line)
+        ScriptTableRows(block)
+    }
+}
+
+@Composable
+private fun ScriptTableRows(block: ScriptOutputBlock.Table) {
+    for (row in block.rows) {
+        PanelTableRow {
+            for (index in block.columns.indices) {
+                Td({ classes("panel-td") }) {
+                    Text(row.getOrElse(index) { "" }.trim())
                 }
             }
         }

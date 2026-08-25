@@ -27,9 +27,10 @@ The module provides:
 - **Scripting API** (`scripting/`) — the single definition of the custom script tab surface. `ScriptValue.kt` is a
   host-neutral lazy value tree; `ScriptBinaryApi.kt` builds the `binary` global from a `BinaryProvider` (reusing
   `fileTypeDescription`, `structureRanges`, and `TableTabsProviderRegistry` so `binary.tab(name)` reads the same tables
-  the UIs render); `ScriptOutput.kt` owns `print`/`table`/`row`; `ScriptApiReference.kt` is the source of truth for the
-  documentation. `ScriptValueJs.kt` (jsMain) binds the tree into plain JS objects for the browser hosts; the GraalJS
-  adapter lives in `mcp:scripting`.
+  the UIs render); `ScriptOutput.kt` owns `print`/`table`/`row`; `ScriptOutputBlocks.kt` segments a script's output
+  lines back into the text and table blocks a script tab renders, and filters them; `ScriptApiReference.kt` is the
+  source of truth for the documentation. `ScriptValueJs.kt` (jsMain) binds the tree into plain JS objects for the
+  browser hosts; the GraalJS adapter lives in `mcp:scripting`.
 
 ## Scripting API Rules
 
@@ -44,6 +45,10 @@ all bind one definition. Before this existed each host hand-maintained its own w
   `header`, `symbols`). Those resolve through the fall-through to the format-specific provider, and shadowing one would
   silently change its shape for existing scripts.
 - Keep `Obj` members and `Arr` elements lazy. A `Functions` table can have hundreds of thousands of rows.
+- Output layout belongs in `ScriptOutputBlocks.kt`, not in a host renderer. Segmentation is derived from the line
+  stream because that stream is all some hosts receive (the webapp worker posts lines over a message channel; the CLI
+  and MCP tool return lines as their documented result shape), so deriving it keeps every host laying output out the
+  same way. Host renderers decide only how a text or table block *looks*.
 
 ## KMP Targets
 

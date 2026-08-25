@@ -66,6 +66,23 @@ fun Table(
     onTableFocusChanged: ((Boolean) -> Unit)? = null,
     onSearchChanged: ((String) -> Unit)? = null,
     externalSelectedIndex: Int? = null,
+    /**
+     * When set, the table sizes itself to at most this many rows instead of
+     * filling the available height.
+     *
+     * A table normally owns its pane and takes all the room, which needs a
+     * bounded parent height. Pass this to place several tables one after another
+     * in a scrolling layout — a script tab interleaving text and tables — where
+     * the parent height is unbounded. Rows stay virtualized either way.
+     */
+    maxVisibleRows: Int? = null,
+    /**
+     * Whether the table grabs keyboard focus when it first appears.
+     *
+     * Turn this off when several tables share a pane; otherwise each one requests
+     * focus as it composes and they take it from each other while scrolling.
+     */
+    requestInitialFocus: Boolean = true,
 ) {
     // Cache cell values lazily per row to avoid computing all cells upfront.
     // Only rows that are actually displayed, filtered, or sorted will be evaluated.
@@ -105,8 +122,10 @@ fun Table(
     }
 
     val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+    LaunchedEffect(requestInitialFocus) {
+        if (requestInitialFocus) {
+            focusRequester.requestFocus()
+        }
     }
     val scope = rememberCoroutineScope()
 
@@ -131,13 +150,19 @@ fun Table(
             if (!sortAsc) indices.reverse()
         } else {
             val comparator = Comparator<Int> { a, b ->
-                val valueA = getCellValues(a)[sortIndex].value
-                val valueB = getCellValues(b)[sortIndex].value
+                val cellA = getCellValues(a)[sortIndex]
+                val cellB = getCellValues(b)[sortIndex]
+                val valueA = cellA.value
+                val valueB = cellB.value
                 when {
                     valueA is Int && valueB is Int -> valueA.compareTo(valueB)
                     valueA is Long && valueB is Long -> valueA.compareTo(valueB)
                     valueA is String && valueB is String -> valueA.compareTo(valueB)
-                    else -> 0
+                    // Mixed or unhandled types: order by what the user sees rather
+                    // than reporting "equal", which would leave those rows in an
+                    // arbitrary order. A column of mostly numbers with a "n/a" in
+                    // it still sorts predictably.
+                    else -> cellA.representation.compareTo(cellB.representation)
                 }
             }
             indices.sortWith(if (sortAsc) comparator else comparator.reversed())
@@ -419,7 +444,15 @@ fun Table(
             }
         }
 
-        Box(modifier = Modifier.weight(1f)) {
+        val rowHeight = rememberTableRowHeight()
+        val bodyModifier = if (maxVisibleRows == null) {
+            Modifier.weight(1f)
+        } else {
+            val visibleRows = maxOf(minOf(viewData.size, maxVisibleRows), 1)
+            Modifier.height(rowHeight * visibleRows + BODY_VERTICAL_PADDING * 2)
+        }
+
+        Box(modifier = bodyModifier) {
             if (viewData.isEmpty()) {
                 Box(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
@@ -436,7 +469,7 @@ fun Table(
 
             LazyColumn(
                 state = lazyListState,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                modifier = Modifier.fillMaxWidth().padding(vertical = BODY_VERTICAL_PADDING)
                     .onPointerEvent(PointerEventType.Exit) { hoveredOriginalIndex = null }) {
                 items(viewData.size) { rowIndex ->
                     val id = viewData[rowIndex]
@@ -455,7 +488,7 @@ fun Table(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(rowBackgroundColor)
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                            .padding(horizontal = 4.dp, vertical = ROW_VERTICAL_PADDING)
                             .onPointerEvent(PointerEventType.Enter) {
                                 hoveredOriginalIndex = id
                             }
@@ -540,6 +573,30 @@ fun Table(
     }
 
 }
+
+/**
+ * Height of one data row.
+ *
+ * Rows are uniform — every cell is a single monospace line — so a row count
+ * converts exactly to a height. Callers that need to decide how many rows a table
+ * may show use this rather than re-deriving it, so the two cannot drift.
+ */
+@Composable
+internal fun rememberTableRowHeight(): Dp {
+    val textMeasurer = rememberTextMeasurer()
+    return with(LocalDensity.current) {
+        textMeasurer.measureMonospaceInt("x").size.height.toDp()
+    } + ROW_VERTICAL_PADDING * 2
+}
+
+/** Chrome around the row list: the body's own vertical padding. */
+internal val TABLE_BODY_CHROME_HEIGHT: Dp get() = BODY_VERTICAL_PADDING * 2
+
+/** Vertical padding on each data row; part of the row-height calculation. */
+private val ROW_VERTICAL_PADDING = 2.dp
+
+/** Vertical padding around the row list; part of the body-height calculation. */
+private val BODY_VERTICAL_PADDING = 8.dp
 
 private fun TableColumn.widthModifier(): Modifier {
     val width = width ?: return Modifier

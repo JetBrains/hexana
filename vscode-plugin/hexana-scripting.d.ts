@@ -3,6 +3,11 @@
 // This file is generated from ScriptApiReference.kt. Everything here behaves
 // identically in IntelliJ IDEA, in VS Code, and in the `run-script` CLI.
 // For the format-specific shape of `binary.raw`, see hexana-scripting-raw.d.ts.
+//
+// Output layout: a script tab renders text and tables in the order the script
+// produced them. `print(...)` writes text; `table(...)` starts a table and each
+// following `row(...)` adds a row to it. Printing text again ends the table, so
+// a script can freely alternate between prose and tables.
 
 /**
  * Appends one line to the tab output, joining the arguments with a space.
@@ -12,16 +17,16 @@
 declare function print(...values: any[]): void;
 
 /**
- * Declares the table header. Output that starts with a header row is
- * rendered as a searchable table instead of plain text.
+ * Starts a table and declares its column headers. Text printed before or
+ * after it stays text, so a script can narrate between tables.
  *
  * @example table("Section", "Offset", "Size");
  */
 declare function table(...columns: any[]): void;
 
 /**
- * Appends one table row. Cells are escaped, and rows shorter than the
- * header are padded. Requires a preceding table() call.
+ * Appends one row to the current table. Cells are escaped, and rows
+ * shorter than the header are padded. Requires a preceding table() call.
  *
  * @example row(section.name, section.offset, section.size);
  */
