@@ -86,6 +86,16 @@ Adapters:
   applies to tabs; applying it to commas would turn any two consecutive prose
   lines that happen to share a comma count into a table. CSV keeps the
   pre-existing "first two lines agree → one table" behavior.
+- **Editor types are the generated reference, copied next to the script.**
+  `ScriptApiReference.dts()` is compiled into both plugins, so attaching types is
+  a write, not a resource copy, and what a user completes against is exactly what
+  the docs describe. The `jsconfig.json` sidecar is the part that actually makes
+  it work in VS Code — a standalone `.js` file has no automatic association with a
+  sibling `.d.ts` — and is only written when the folder has no JavaScript project
+  config of its own. IntelliJ needs no config: it applies global `declare`s from
+  any indexed `.d.ts`. The JSON lives in `ScriptApiReference` rather than in the
+  extension's TypeScript, and the webview passes it over the message bus, so it is
+  defined once.
 - **Docs cannot drift.** `ScriptApiReferenceTest` asserts, in both directions, that
   the documented shapes match what `scriptBinaryApi` exposes. Adding a member fails
   the build until it is documented.

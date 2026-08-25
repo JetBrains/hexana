@@ -21,6 +21,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -35,6 +36,7 @@ import org.jetbrains.hexana.ui.components.TABLE_BODY_CHROME_HEIGHT
 import org.jetbrains.hexana.ui.components.rememberTableRowHeight
 import org.jetbrains.jewel.ui.component.Icon
 import org.jetbrains.jewel.ui.component.IconButton
+import org.jetbrains.jewel.ui.component.Link
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.TextField
 import org.jetbrains.jewel.ui.component.VerticalScrollbar
@@ -49,10 +51,11 @@ class ScriptPanel(
     val scriptPath: String,
     binaryProvider: BinaryProvider,
     binaryFileName: String? = null,
+    project: Project? = null,
 ) : Panel(
     description = scriptPath.substringAfterLast('/'),
     render = {
-        ScriptTabContent(scriptPath, binaryProvider, binaryFileName)
+        ScriptTabContent(scriptPath, binaryProvider, binaryFileName, project)
     },
 )
 
@@ -61,6 +64,7 @@ internal fun ScriptTabContent(
     scriptPath: String,
     binaryProvider: BinaryProvider,
     binaryFileName: String? = null,
+    project: Project? = null,
 ) {
     val outputLines = remember(scriptPath) { mutableStateListOf<String>() }
     var isRunning by remember(scriptPath) { mutableStateOf(true) }
@@ -127,11 +131,21 @@ internal fun ScriptTabContent(
                     iconClass = AllIcons::class.java,
                 )
             }
-            Text(
-                text = scriptPath,
-                modifier = Modifier.padding(start = 4.dp).weight(1f),
-                fontSize = 13.sp,
-            )
+            if (project != null) {
+                // Opening the script from here attaches the type definitions
+                // first, so the editor resolves the scripting globals.
+                Link(
+                    text = scriptPath,
+                    onClick = { ScriptTemplateWriter.openForEditing(project, scriptPath) },
+                    modifier = Modifier.padding(start = 4.dp).weight(1f),
+                )
+            } else {
+                Text(
+                    text = scriptPath,
+                    modifier = Modifier.padding(start = 4.dp).weight(1f),
+                    fontSize = 13.sp,
+                )
+            }
         }
 
         if (isRunning && outputLines.isEmpty()) {
@@ -367,6 +381,7 @@ internal fun createScriptPanel(
     scriptPath: String,
     binaryProvider: BinaryProvider,
     binaryFileName: String? = null,
+    project: Project? = null,
 ): ScriptPanel {
-    return ScriptPanel(scriptPath, binaryProvider, binaryFileName)
+    return ScriptPanel(scriptPath, binaryProvider, binaryFileName, project)
 }

@@ -59,7 +59,8 @@ internal class AddScriptTabDialog(
                     ScriptTemplateWriter.createFromTemplate(project)?.let(::useCreatedFile)
                 }.comment(
                     "Writes a runnable script into <code>.hexana/scripts</code>, opens it in the " +
-                        "editor, and selects it here."
+                        "editor, and selects it here. The type definitions are placed next to it, " +
+                        "so <code>binary.</code> completes as you edit."
                 )
             }
             collapsibleGroup("Start from an Example") {

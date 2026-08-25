@@ -351,6 +351,39 @@ object ScriptApiReference {
     /** File name suggested for a script created from [starterTemplate]. */
     const val STARTER_FILE_NAME: String = "hexana-script.js"
 
+    /**
+     * Name of the type-definition sidecar written next to a script so that an
+     * editor resolves `binary`, `print`, `table` and `row`.
+     *
+     * The content comes from [dts] rather than from a bundled resource, so the
+     * types a user gets completion against are the same ones this reference
+     * documents, with nothing to keep in sync or package.
+     */
+    const val TYPES_FILE_NAME: String = "hexana-scripting.d.ts"
+
+    /** Name of the config sidecar that points a JavaScript editor at [TYPES_FILE_NAME]. */
+    const val JS_CONFIG_FILE_NAME: String = "jsconfig.json"
+
+    /**
+     * Content of the [JS_CONFIG_FILE_NAME] sidecar.
+     *
+     * A standalone `.js` file gets no automatic association with a sibling
+     * `.d.ts`, so VS Code needs this to include the types in the script's
+     * project. `checkJs` stays off: the point is completion and navigation, not
+     * type errors on a scratch script.
+     */
+    fun jsConfig(): String = """
+        {
+          "compilerOptions": {
+            "target": "ES2020",
+            "lib": ["ES2020"],
+            "checkJs": false,
+            "noEmit": true
+          },
+          "include": ["*.js", "$TYPES_FILE_NAME"]
+        }
+    """.trimIndent() + "\n"
+
     fun shape(shape: String): ScriptApiShape =
         shapes.firstOrNull { it.shape == shape } ?: error("Unknown scripting API shape '$shape'")
 

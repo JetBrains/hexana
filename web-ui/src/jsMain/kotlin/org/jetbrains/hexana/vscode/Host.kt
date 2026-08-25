@@ -52,8 +52,17 @@ interface Host {
      *
      * @param template inline starter source; when null the host copies the
      *   bundled example named [fileName]
+     * @param jsConfigContent JavaScript project config to write next to the
+     *   script when its folder has none, so the editor resolves the scripting
+     *   globals
      */
-    fun createScriptFromTemplate(fileName: String, template: String? = null)
+    fun createScriptFromTemplate(fileName: String, template: String? = null, jsConfigContent: String? = null)
+
+    /**
+     * Opens a script for editing, with the scripting type definitions attached so
+     * completion and navigation work.
+     */
+    fun openScriptForEditing(scriptPath: String, jsConfigContent: String? = null)
     fun readScriptFile(scriptPath: String)
     fun scriptTabAdded(scriptPath: String)
     fun scriptTabRemoved(scriptPath: String)

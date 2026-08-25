@@ -5,6 +5,7 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.providers.*
+import org.jetbrains.hexana.shared.scripting.ScriptApiReference
 import org.jetbrains.hexana.shared.scripting.ScriptOutput
 import org.jetbrains.hexana.shared.scripting.ScriptOutputBlock
 import org.jetbrains.hexana.shared.scripting.filterScriptOutputBlocks
@@ -448,6 +449,7 @@ internal fun ScriptTabContent(
     scriptExecution: ScriptExecution? = null,
     binaryFileName: String? = null,
 ) {
+    val host = LocalHost.current
     val outputLines = remember { mutableStateListOf<String>() }
     var isRunning by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -555,10 +557,18 @@ internal fun ScriptTabContent(
             }) {
                 Text("\u21BB") // ↻ refresh symbol
             }
-            Span({
+            // Opening the script from here attaches the type definitions first,
+            // so the editor resolves the scripting globals.
+            A(href = "#", {
+                attr("title", "Open the script for editing")
+                onClick { event ->
+                    event.preventDefault()
+                    host.openScriptForEditing(scriptPath, ScriptApiReference.jsConfig())
+                }
                 style {
                     property("font-size", "12px")
-                    property("color", "var(--hexana-fg)")
+                    property("color", "var(--vscode-textLink-foreground, #3794ff)")
+                    property("cursor", "pointer")
                     property("overflow", "hidden")
                     property("text-overflow", "ellipsis")
                     property("white-space", "nowrap")

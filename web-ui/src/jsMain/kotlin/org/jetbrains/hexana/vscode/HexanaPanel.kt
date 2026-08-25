@@ -21,6 +21,7 @@ import org.jetbrains.hexana.shared.RowContextMenuItemDescriptor
 import org.jetbrains.hexana.shared.buildInvokeOption
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsContext
+import org.jetbrains.hexana.shared.scripting.ScriptApiReference
 import org.jetbrains.hexana.shared.TabPriority
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.w3c.dom.HTMLElement
@@ -357,7 +358,7 @@ fun HexanaPanel(
                     host.pickScriptFile()
                 },
                 onCreateFromTemplate = { fileName, template ->
-                    host.createScriptFromTemplate(fileName, template)
+                    host.createScriptFromTemplate(fileName, template, ScriptApiReference.jsConfig())
                 },
                 onOpenDts = { raw ->
                     host.openDts(raw)

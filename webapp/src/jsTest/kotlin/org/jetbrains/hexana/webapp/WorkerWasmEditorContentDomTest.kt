@@ -501,7 +501,8 @@ private class WorkerDomHost : Host {
     override fun openHttpBody(fileName: String, bodyBytes: ByteArray, httpContentType: String?, httpContentEncoding: String?) = Unit
     override fun openTextFile(fileName: String, content: String) = Unit
     override fun pickScriptFile() = Unit
-    override fun createScriptFromTemplate(fileName: String, template: String?) = Unit
+    override fun createScriptFromTemplate(fileName: String, template: String?, jsConfigContent: String?) = Unit
+    override fun openScriptForEditing(scriptPath: String, jsConfigContent: String?) = Unit
     override fun readScriptFile(scriptPath: String) = Unit
     override fun scriptTabAdded(scriptPath: String) = Unit
     override fun scriptTabRemoved(scriptPath: String) = Unit

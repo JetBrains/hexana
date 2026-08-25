@@ -66,7 +66,7 @@ The API is the same in the VS Code extension, the IntelliJ plugin, and the `run-
 - `binary.tabs` and `binary.tab(name)` — read any table the editor itself shows, using the same column names.
 - `binary.raw` — the format-specific provider, for anything the curated surface does not cover.
 
-The dialog links a full reference (`hexana-scripting.d.ts`) and the format-specific types behind `binary.raw`. Hand-rolled tab-separated and CSV output is still rendered as a table.
+Opening a script from its tab attaches the type definitions next to it (`hexana-scripting.d.ts` plus a `jsconfig.json`, written only when the folder has no JavaScript project config of its own), so completion and navigation work while you edit. The dialog also links the full reference and the format-specific types behind `binary.raw`. Hand-rolled tab-separated and CSV output is still rendered as a table.
 
 ### Binary Comparison
 

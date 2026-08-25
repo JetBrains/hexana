@@ -276,7 +276,7 @@ internal fun BinaryEditorView(
         val panels = remember(binaryProvider, hexEditedSinceOpen) {
             val scriptSettings = ScriptTabSettings.getInstance(state.project)
             val scriptPanels = scriptSettings.getScriptPaths(fileName).map { scriptPath ->
-                createScriptPanel(scriptPath, binaryProvider, fileName)
+                createScriptPanel(scriptPath, binaryProvider, fileName, state.project)
             }
             val placeholders = if (hexEditedSinceOpen) emptyList() else binaryProvider.discoverPanelNames()
                 .map { name -> Panel(name) { LoadingTabContent() } }
@@ -595,7 +595,7 @@ internal fun BinaryEditorView(
                     val scriptPath = dialog.selectedFile?.path ?: return@TabsPanel
                     val scriptSettings = ScriptTabSettings.getInstance(state.project)
                     scriptSettings.addScriptPath(fileName, scriptPath)
-                    val panel = createScriptPanel(scriptPath, binaryProvider, fileName)
+                    val panel = createScriptPanel(scriptPath, binaryProvider, fileName, state.project)
                     panels.add(panel)
                     state.setSelectedTab(panels.size - 1)
                 }

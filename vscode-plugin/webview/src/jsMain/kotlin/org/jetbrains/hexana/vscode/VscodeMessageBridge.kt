@@ -330,11 +330,25 @@ fun postOpenDtsToHost(raw: Boolean = false) {
  * [template] or by copying the bundled example named [fileName] — open it in an
  * editor, and reply with `script-file-picked`.
  */
-fun postCreateScriptFromTemplateToHost(fileName: String, template: String?) {
+fun postCreateScriptFromTemplateToHost(fileName: String, template: String?, jsConfigContent: String?) {
     val msg = js("{}")
     msg.type = "create-script-from-template"
     msg.fileName = fileName
     if (template != null) msg.template = template
+    if (jsConfigContent != null) msg.jsConfigContent = jsConfigContent
+    vscodeApi.postMessage(msg)
+}
+
+/**
+ * Asks the extension host to open a script for editing with the scripting type
+ * definitions attached, writing [jsConfigContent] next to it when its folder has
+ * no JavaScript project config.
+ */
+fun postOpenScriptForEditingToHost(scriptPath: String, jsConfigContent: String?) {
+    val msg = js("{}")
+    msg.type = "open-script-for-editing"
+    msg.scriptPath = scriptPath
+    if (jsConfigContent != null) msg.jsConfigContent = jsConfigContent
     vscodeApi.postMessage(msg)
 }
 
@@ -424,8 +438,10 @@ class VscodeHost : Host {
         postOpenHttpBodyToHost(fileName, bodyBytes, httpContentType, httpContentEncoding)
     override fun openTextFile(fileName: String, content: String) = postOpenTextFileToHost(fileName, content)
     override fun pickScriptFile() = postPickScriptFileToHost()
-    override fun createScriptFromTemplate(fileName: String, template: String?) =
-        postCreateScriptFromTemplateToHost(fileName, template)
+    override fun createScriptFromTemplate(fileName: String, template: String?, jsConfigContent: String?) =
+        postCreateScriptFromTemplateToHost(fileName, template, jsConfigContent)
+    override fun openScriptForEditing(scriptPath: String, jsConfigContent: String?) =
+        postOpenScriptForEditingToHost(scriptPath, jsConfigContent)
     override fun readScriptFile(scriptPath: String) = postReadScriptFileToHost(scriptPath)
     override fun scriptTabAdded(scriptPath: String) = postScriptTabAddedToHost(scriptPath)
     override fun scriptTabRemoved(scriptPath: String) = postScriptTabRemovedToHost(scriptPath)

@@ -16,6 +16,21 @@ import { isNativeBinary } from "./NativeBinaryFileTypeDetector";
 const inMemoryModules = new Map<string, { data: Uint8Array; fileName: string }>();
 
 /**
+ * Type-definition sidecar written next to a script so the editor resolves the
+ * scripting globals. Shipped with the extension and copied into the script's
+ * folder; its content is the curated reference, not a hand-written stub.
+ */
+const HEXANA_SCRIPT_TYPES_FILE = "hexana-scripting.d.ts";
+
+/**
+ * Config sidecar that puts {@link HEXANA_SCRIPT_TYPES_FILE} in scope for a
+ * standalone `.js` file, which otherwise has no association with a sibling
+ * `.d.ts`. Its content comes from the webview so the JSON is defined once,
+ * alongside the rest of the scripting API contract.
+ */
+const HEXANA_SCRIPT_JSCONFIG_FILE = "jsconfig.json";
+
+/**
  * In-memory store for pending diff payloads keyed by a synthetic
  * `hexana-module:` URI.  When the user invokes "Compare WASM With…" we
  * store both byte arrays here and open a new custom editor tab whose URI
@@ -571,11 +586,17 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 this.openHttpBody(document, message as any);
             } else if (message.type === "open-dts") {
                 this.openDtsReference(message.raw === true);
+            } else if (message.type === "open-script-for-editing") {
+                this.openScriptForEditing(
+                    message.scriptPath as string,
+                    message.jsConfigContent as string | undefined,
+                );
             } else if (message.type === "create-script-from-template") {
                 this.createScriptFromTemplate(
                     webviewPanel,
                     message.fileName as string,
                     message.template as string | undefined,
+                    message.jsConfigContent as string | undefined,
                 );
             } else if (message.type === "pick-script-file") {
                 this.pickScriptFile(document, webviewPanel);
@@ -1253,6 +1274,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         webviewPanel: vscode.WebviewPanel,
         fileName: string,
         template?: string,
+        jsConfigContent?: string,
     ): Promise<void> {
         try {
             const content = template ?? await this.readBundledExample(fileName);
@@ -1264,6 +1286,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
             const target = await this.uniqueScriptUri(directory, fileName);
             await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(content));
+            await this.attachScriptTypes(directory, jsConfigContent);
 
             const doc = await vscode.workspace.openTextDocument(target);
             await vscode.window.showTextDocument(doc, {
@@ -1279,6 +1302,71 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to create script: ${err}`);
         }
+    }
+
+    /**
+     * Opens an existing script for editing, attaching the type definitions first,
+     * so the editor resolves `binary`, `print`, `table` and `row`.
+     */
+    private async openScriptForEditing(scriptPath: string, jsConfigContent?: string): Promise<void> {
+        try {
+            const uri = vscode.Uri.file(scriptPath);
+            await this.attachScriptTypes(vscode.Uri.file(path.dirname(scriptPath)), jsConfigContent);
+            const doc = await vscode.workspace.openTextDocument(uri);
+            await vscode.window.showTextDocument(doc, { preview: false });
+        } catch (err) {
+            vscode.window.showErrorMessage(`Failed to open script: ${err}`);
+        }
+    }
+
+    /**
+     * Writes the scripting type definitions into a script's folder.
+     *
+     * A standalone `.js` file gets no automatic association with a sibling
+     * `.d.ts`, so the `jsconfig.json` is what actually puts the types in scope.
+     * It is only created when the folder has no JavaScript project config at all —
+     * an existing one is the user's and already governs how the folder is
+     * analysed. The `.d.ts` itself is rewritten whenever it differs, so it
+     * refreshes when the extension updates.
+     */
+    private async attachScriptTypes(directory: vscode.Uri, jsConfigContent?: string): Promise<void> {
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder("utf-8");
+
+        const typesUri = vscode.Uri.joinPath(directory, HEXANA_SCRIPT_TYPES_FILE);
+        const expected = await this.readBundledTypes();
+        let current: string | undefined;
+        try {
+            current = decoder.decode(await vscode.workspace.fs.readFile(typesUri));
+        } catch {
+            current = undefined;
+        }
+        if (current !== expected) {
+            await vscode.workspace.fs.writeFile(typesUri, encoder.encode(expected));
+        }
+
+        const hasConfig = await Promise.all(
+            [HEXANA_SCRIPT_JSCONFIG_FILE, "tsconfig.json"].map(async (name) => {
+                try {
+                    await vscode.workspace.fs.stat(vscode.Uri.joinPath(directory, name));
+                    return true;
+                } catch {
+                    return false;
+                }
+            }),
+        );
+        if (!hasConfig.some(Boolean) && jsConfigContent) {
+            await vscode.workspace.fs.writeFile(
+                vscode.Uri.joinPath(directory, HEXANA_SCRIPT_JSCONFIG_FILE),
+                encoder.encode(jsConfigContent),
+            );
+        }
+    }
+
+    /** The curated reference shipped with the extension. */
+    private async readBundledTypes(): Promise<string> {
+        const uri = vscode.Uri.file(path.join(this.context.extensionPath, HEXANA_SCRIPT_TYPES_FILE));
+        return new TextDecoder("utf-8").decode(await vscode.workspace.fs.readFile(uri));
     }
 
     private async readBundledExample(fileName: string): Promise<string> {

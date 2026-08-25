@@ -171,6 +171,51 @@ class ScriptApiReferenceTest {
     }
 
     @Test
+    fun theTypesSidecarIsTheGeneratedReference() {
+        // Editors get completion from a copy of this exact content written next to
+        // the script, so it must be the same text the reference renders — not a
+        // separately maintained stub that could describe a different API.
+        assertEquals(ScriptApiReference.TYPES_FILE_NAME, "hexana-scripting.d.ts")
+        assertTrue(ScriptApiReference.dts().contains("declare const binary: HexanaBinary;"))
+    }
+
+    @Test
+    fun jsConfigPutsTheTypesSidecarInScope() {
+        // A standalone .js file has no automatic association with a sibling .d.ts,
+        // so this config is what actually makes completion work in VS Code.
+        val config = ScriptApiReference.jsConfig()
+
+        assertTrue(
+            config.contains("\"${ScriptApiReference.TYPES_FILE_NAME}\""),
+            "the config must include the types file by name: $config",
+        )
+        assertTrue(config.contains("\"*.js\""), "scripts in the folder must be included: $config")
+        // Completion and navigation are the goal; type errors on a scratch script
+        // would just be noise.
+        assertTrue(config.contains("\"checkJs\": false"), config)
+    }
+
+    @Test
+    fun jsConfigIsWellFormedJson() {
+        val config = ScriptApiReference.jsConfig()
+
+        assertEquals(
+            config.count { it == '{' },
+            config.count { it == '}' },
+            "unbalanced braces in the generated jsconfig: $config",
+        )
+        assertEquals(
+            config.count { it == '[' },
+            config.count { it == ']' },
+            "unbalanced brackets in the generated jsconfig: $config",
+        )
+        assertTrue(config.trim().startsWith("{") && config.trim().endsWith("}"), config)
+        // A trailing comma is the classic way to make a hand-written JSON config
+        // silently unreadable to the editor.
+        assertTrue(!config.contains(",\n}") && !config.contains(",\n  }"), "trailing comma: $config")
+    }
+
+    @Test
     fun starterTemplateOnlyUsesDocumentedGlobals() {
         val template = ScriptApiReference.starterTemplate()
         for (global in listOf("print(", "table(", "row(", "binary.")) {

@@ -163,7 +163,11 @@ internal class BrowserHost(
         }
     }
 
-    override fun createScriptFromTemplate(fileName: String, template: String?) {
+    override fun openScriptForEditing(scriptPath: String, jsConfigContent: String?) {
+        // No filesystem and no editor to attach types to in the browser.
+    }
+
+    override fun createScriptFromTemplate(fileName: String, template: String?, jsConfigContent: String?) {
         // The browser has no filesystem, so the script is fed straight into the
         // tab under its file name rather than written out. Only the inline
         // starter template is available here; bundled examples are gated behind
