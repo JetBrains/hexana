@@ -80,6 +80,11 @@ object EmulatorDetection {
     fun detectRenode(): DetectedTool? {
         val exe = if (SystemInfo.isWindows) "renode.exe" else "renode"
         val candidates = buildList {
+            // Explicit setting first — the downloader writes it on success, and the status
+            // probe must agree with the effective resolution the run states use.
+            HexanaFirmwareSettings.getInstance().renodePathInUi
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add(it) }
             add(exe) // PATH
             if (SystemInfo.isMac) {
                 add("/opt/homebrew/bin/renode")
@@ -341,14 +346,8 @@ object EmulatorDetection {
     private fun guessRenodeExeInDir(dir: String): String? {
         val d = File(dir)
         if (!d.isDirectory) return null
-        // macOS portable: Renode.app/Contents/MacOS/Renode inside the extracted dir
-        val macApp = File(d, "Renode.app/Contents/MacOS/Renode")
-        if (macApp.exists()) return macApp.absolutePath
-        // Linux/Windows portable: renode or renode.exe at root
-        val linux = File(d, "renode")
-        if (linux.exists()) return linux.absolutePath
-        val win = File(d, "renode.exe")
-        if (win.exists()) return win.absolutePath
-        return null
+        // Single source of truth for install layouts (Contents/MacOS/renode, preserved
+        // .app bundle, portable roots) — see RenodeInstallLocatorTest.
+        return RenodeDownloader.guessInstalledExe(d.toPath())
     }
 }
