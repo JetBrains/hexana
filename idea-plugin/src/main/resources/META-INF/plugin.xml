@@ -338,6 +338,11 @@
             displayName="Firmware Emulator"/>
         <!-- END firmware LANE-ACQ -->
 
+        <!-- BEGIN firmware LANE-RUN -->
+        <configurationType implementation="org.jetbrains.hexana.firmware.run.FirmwareRunConfigurationType"/>
+        <runConfigurationProducer implementation="org.jetbrains.hexana.firmware.run.FirmwareRunConfigurationProducer"/>
+        <!-- END firmware LANE-RUN -->
+
         <configurationType implementation="org.jetbrains.hexana.run.WasmRunConfigurationType"/>
         <runConfigurationProducer implementation="org.jetbrains.hexana.run.WasmRunConfigurationProducer"/>
         <programRunner implementation="org.jetbrains.hexana.run.WasmDebugRunner"/>
