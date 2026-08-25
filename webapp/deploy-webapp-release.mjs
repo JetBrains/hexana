@@ -247,7 +247,7 @@ export function validateSafetyPreflight(buildType, vcsRoot, config) {
     if (vcsRoot.id !== config.vcsRootId) fail("Cloud Console VCS root ID differs");
     const vcsRootProperties = properties(vcsRoot.properties, "Cloud Console VCS root properties");
     const branchSpecs = vcsRootProperties.filter(property => property.name === "teamcity:branchSpec");
-    if (branchSpecs.length !== 1 || branchSpecs[0].value !== "+:refs/heads/release/webapp/*") fail("Cloud Console VCS root branch specification is unsafe");
+    if (branchSpecs.length !== 1 || branchSpecs[0].value !== "+:refs/heads/(release/webapp/*)") fail("Cloud Console VCS root branch specification is unsafe");
     const urls = vcsRootProperties.filter(property => property.name === "url");
     if (urls.length !== 1 || urls[0].value !== approvedVcsUrl) fail("Cloud Console VCS root URL differs from the approved repository");
 }

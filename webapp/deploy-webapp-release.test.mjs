@@ -91,7 +91,7 @@ const safeParameters = () => [
     { name: "unrelated.password.parameter" },
 ];
 const safeBuildType = () => ({ id: config.buildTypeId, "vcs-root-entries": { "vcs-root-entry": [{ "vcs-root": { id: config.vcsRootId } }] }, steps: { step: [{ type: "simpleRunner", properties: { property: [{ name: "script.content", value: safeScript }, { name: "teamcity.build.workingDir", value: "webapp" }, { name: "use.custom.script", value: "true" }] } }] }, triggers: { trigger: [{ id: "TRIGGER_1", type: "vcsTrigger", disabled: true }] }, parameters: { property: safeParameters() } });
-const safeVcsRoot = () => ({ id: config.vcsRootId, properties: { property: [{ name: "teamcity:branchSpec", value: "+:refs/heads/release/webapp/*" }, { name: "url", value: "https://example.invalid/hexana/Hexana.git" }] } });
+const safeVcsRoot = () => ({ id: config.vcsRootId, properties: { property: [{ name: "teamcity:branchSpec", value: "+:refs/heads/(release/webapp/*)" }, { name: "url", value: "https://example.invalid/hexana/Hexana.git" }] } });
 const buildParameter = (value, name) => value.parameters.property.find(parameter => parameter.name === name);
 const rootInstances = (overrides = {}) => ({ "vcs-root-instance": [{ id: vcsRootInstanceId, "vcs-root-id": config.vcsRootId }], ...overrides });
 const build = (state, overrides = {}) => ({ id: 42, state, status: state === "finished" ? "SUCCESS" : undefined, branchName: `refs/heads/${config.branch}`, buildType: { id: config.buildTypeId }, revisions: { revision: [{ version: revision, "vcs-root-instance": { id: vcsRootInstanceId } }] }, ...overrides });
@@ -130,6 +130,7 @@ test("creates the fixed queue request with only the validated image parameter", 
     assert.equal(resolveVcsRootInstance(rootInstances(), config), vcsRootInstanceId);
     const request = createQueueRequest(config, validated, vcsRootInstanceId);
     assert.equal(request.url, `${allowedTarget.serverUrl}/app/rest/buildQueue`);
+    assert.equal(JSON.parse(request.init.body).branchName, "release/webapp/2.7");
     assert.deepEqual(JSON.parse(request.init.body).properties.property, [{ name: "env.HEXANA_WEBAPP_IMAGE", value: validated.image }]);
     assert.equal(JSON.parse(request.init.body).revisions.revision[0].version, revision);
     assert.deepEqual(JSON.parse(request.init.body).revisions.revision[0]["vcs-root-instance"], { id: vcsRootInstanceId });
@@ -482,6 +483,7 @@ for (const [name, mutateBuildType, mutateRoot, expected] of [
     ["missing approved parameter", value => { value.parameters.property = value.parameters.property.filter(parameter => parameter.name !== "env.JBCC_GCP_REGION"); }, () => {}, /fixed deployment target/],
     ["duplicate approved parameter", value => { value.parameters.property.push({ ...buildParameter(value, "env.APPLICATION_NAME") }); }, () => {}, /fixed deployment target/],
     ["missing branch specification", () => {}, value => { value.properties.property = []; }, /branch specification is unsafe/],
+    ["unparenthesized branch specification", () => {}, value => { value.properties.property[0].value = "+:refs/heads/release/webapp/*"; }, /branch specification is unsafe/],
     ["wrong root URL", () => {}, value => { value.properties.property.find(property => property.name === "url").value = "https://example.invalid/hexana/Other.git"; }, /root URL differs/],
     ["malformed response", value => { delete value.steps; }, () => {}, /unsupported shape/],
     ["unused Skaffold options", value => { value.steps.step[0].properties.property[0].value = value.steps.step[0].properties.property[0].value.replaceAll("run ${SKAFFOLD_OPTIONS}", "run"); }, () => {}, /does not run its validated options/],
