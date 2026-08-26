@@ -616,6 +616,21 @@
       ],
       "doc_candidates": [],
       "image_candidates": []
+    },
+    "zephyr-cortex-m-firmware": {
+      "release": "0.19",
+      "eyebrow": "Zephyr & Cortex-M",
+      "title": "Inspect Zephyr firmware with confidence",
+      "summary": "Hexana now reads Zephyr, ZMK, and similar Cortex-M ELF firmware as Thumb-2, with correct function addresses and GCC source locations.",
+      "recipe": "zephyr-cortex-m-thumb-disassembly",
+      "keywords": [
+        "Cortex-M firmware ELFs",
+        "Debug Info tab reported"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.19/zephyr-cortex-m-firmware.png"
+      ]
     }
   }
 }

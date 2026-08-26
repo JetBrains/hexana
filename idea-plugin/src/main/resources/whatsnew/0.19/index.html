@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What's New in Hexana 0.19</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+  <section class="hero">
+    <p class="eyebrow">Hexana update</p>
+    <h1>What's New in Hexana 0.19</h1>
+    <p class="lead">Hexana 0.19 focuses on Zephyr &amp; Cortex-M while refining binary inspection inside JetBrains IDEs.</p>
+    <div class="actions">
+      <a class="button primary" href="https://plugins.jetbrains.com/plugin/29090-hexana--webassembly--binary-inspector">Open release notes</a>
+      <a class="button" href="https://github.com/JetBrains/hexana">Open GitHub</a>
+    </div>
+  </section>
+
+  <section class="feature">
+    <div>
+      <p class="eyebrow">Zephyr &amp; Cortex-M</p>
+      <h2>Inspect Zephyr firmware with confidence</h2>
+      <p>Hexana now reads Zephyr, ZMK, and similar Cortex-M ELF firmware as Thumb-2, with correct function addresses and GCC source locations.</p>
+        <input class="more-toggle" type="checkbox" id="zephyr-cortex-m-firmware-more">
+        <ul class="note-list">
+          <li>Cortex-M firmware ELFs (Zephyr, ZMK and similar) now disassemble as Thumb-2. <span class="more-continuation">The M profile recorded in <code>.ARM.attributes</code> selects the Thumb decoder for the whole file.</span></li>
+          <li>The <strong>Debug Info</strong> tab reported &quot;Debug info present, but Hexana did not resolve any source line rows&quot; for GCC-built ELFs even though <code>.debug_info</code> and <code>.debug_line</code> were present (every Zephyr/ZMK Cortex-M firmware, DWARF4 and DWARF5 alike). <span class="more-continuation">GCC emits DWARF version 2/3 line-program headers even in <code>-gdwarf-4/5</code> builds.</span></li>
+        </ul>
+        <label class="show-more-link" for="zephyr-cortex-m-firmware-more">Show more</label>
+        <label class="show-less-link" for="zephyr-cortex-m-firmware-more">Show less</label>
+    </div>
+      <img src="screenshots/zephyr-cortex-m-firmware.png" alt="Inspect Zephyr firmware with confidence screenshot">
+  </section>
+
+</main>
+</body>
+</html>
