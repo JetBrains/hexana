@@ -4,6 +4,7 @@ import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.ui.ExecutionConsole
 import com.intellij.execution.ui.RunnerLayoutUi
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileTypes.FileType
@@ -19,14 +20,24 @@ import com.intellij.xdebugger.frame.XExecutionStack
 import com.intellij.xdebugger.frame.XStackFrame
 import com.intellij.xdebugger.frame.XSuspendContext
 import com.intellij.xdebugger.impl.XDebuggerUtilImpl
+import org.jetbrains.hexana.breakpoints.BinaryExecutionPosition
+import org.jetbrains.hexana.shared.BinaryAnchor
+import org.jetbrains.hexana.breakpoints.BinaryIdentityProvider
+import org.jetbrains.hexana.breakpoints.BreakpointMaterializationCoordinator
+import org.jetbrains.hexana.breakpoints.GdbBreakpointOutcome
+import org.jetbrains.hexana.breakpoints.GdbElfMaterializer
+import org.jetbrains.hexana.breakpoints.GdbInstructionBreakpointTransport
+import org.jetbrains.hexana.breakpoints.MaterializationSession
 import org.jetbrains.hexana.firmware.run.StopAtEntry
 import org.jetbrains.hexana.run.ConsoleSessionKind
 import org.jetbrains.hexana.run.DebuggerConsoleTransport
 import org.jetbrains.hexana.run.InterceptAction
 import org.jetbrains.hexana.run.LldbCommunicator
 import org.jetbrains.hexana.run.buildDebuggerConsolePanel
+import org.jetbrains.hexana.shared.BinaryIdentity
 import org.jetbrains.hexana.shared.parseLldbFrameLocation
 import org.jetbrains.hexana.shared.parseLldbFunctionName
+import java.util.UUID
 
 /**
  * Debug process for ELF firmware running under a GDB-stub emulator (QEMU or Renode).
@@ -55,12 +66,22 @@ class FirmwareDebugProcess(
     private val emulatorHandler: ProcessHandler,
     private val lldb: LldbCommunicator,
     private val stopAtEntry: StopAtEntry,
+    private val elfPath: String? = null,
 ) : XDebugProcess(session) {
 
     private val LOG = Logger.getInstance(FirmwareDebugProcess::class.java)
 
     /** Parent [com.intellij.openapi.Disposable] for the debugger console tab's [com.intellij.execution.ui.ConsoleView]. */
     private val consoleDisposable = Disposer.newDisposable("HexanaDebuggerConsole")
+
+    /** Stable id for the binary-breakpoint session; constant for the lifetime of this process. */
+    private val breakpointSessionId: String = UUID.randomUUID().toString()
+
+    /** Set to true once [startBinaryBreakpointSession] has registered with the coordinator. */
+    @Volatile private var binarySessionStarted: Boolean = false
+
+    /** Identity established during [startBinaryBreakpointSession]; used by [notifyBinaryBreakpointHit]. */
+    @Volatile private var binaryIdentity: BinaryIdentity? = null
 
     override fun getEditorsProvider(): XDebuggerEditorsProvider = SimpleEditorsProvider
 
@@ -94,8 +115,49 @@ class FirmwareDebugProcess(
      */
     override fun sessionInitialized() {
         ApplicationManager.getApplication().executeOnPooledThread {
+            startBinaryBreakpointSession()
             applyStopAtEntryPolicy()
             startEventLoop()
+        }
+    }
+
+    /**
+     * Registers a [MaterializationSession] with the project-level
+     * [BreakpointMaterializationCoordinator] so binary-view breakpoints route into
+     * this firmware LLDB session.
+     *
+     * Failure is logged and never breaks existing debugging.
+     */
+    private fun startBinaryBreakpointSession() {
+        val path = elfPath ?: return
+        try {
+            // LldbBreakpointTransport wraps sendAddressBreakpointChecked / removeBreakpointById.
+            val transport = LldbBreakpointTransport()
+            val materializer = GdbElfMaterializer("lldb", transport)
+            val coordinator = session.project.service<BreakpointMaterializationCoordinator>()
+            val vFile = LocalFileSystem.getInstance().findFileByPath(path)
+            val identity = if (vFile != null) {
+                BinaryIdentityProvider.identityFor(vFile, elfBuildId = null)
+            } else null
+            if (identity == null) {
+                LOG.warn("FirmwareDebugProcess: binary identity unavailable for $path — breakpoint session not started")
+                return
+            }
+            // rehomer is null in v1; ElfAnchorRehomer would require a full ELF parse here.
+            coordinator.sessionStarted(
+                MaterializationSession(
+                    sessionId = breakpointSessionId,
+                    identity = identity,
+                    launchedPath = path,
+                    materializer = materializer,
+                    rehomer = null,
+                ),
+            )
+            binaryIdentity = identity
+            binarySessionStarted = true
+            LOG.info("FirmwareDebugProcess: binary breakpoint session started ($breakpointSessionId)")
+        } catch (e: Exception) {
+            LOG.warn("FirmwareDebugProcess: binary breakpoint session start failed", e)
         }
     }
 
@@ -161,6 +223,7 @@ class FirmwareDebugProcess(
                         }
                         is LldbCommunicator.StopEvent.ProcessExited -> {
                             LOG.info("FirmwareDebugProcess: process exited (code=${event.exitCode})")
+                            endBinaryBreakpointSession()
                             ApplicationManager.getApplication().invokeLater {
                                 session.stop()
                             }
@@ -193,9 +256,36 @@ class FirmwareDebugProcess(
         ApplicationManager.getApplication().invokeLater {
             session.positionReached(context)
         }
+        notifyBinaryBreakpointHit(frameLines)
+    }
+
+    /**
+     * Publishes the stopped PC to the binary-view breakpoint coordinator.
+     * Parses the hex address from the LLDB frame line (`frame #0: 0x<addr> ...`).
+     * Best-effort: skips silently when no address is found, never breaks stop handling.
+     */
+    private fun notifyBinaryBreakpointHit(frameLines: List<String>) {
+        val identity = binaryIdentity ?: return
+        try {
+            // LLDB frame line format: "frame #N: 0x<hex> <module>`<func>"
+            val addrStr = frameLines.firstNotNullOfOrNull { line ->
+                LLDB_FRAME_PC_PATTERN.find(line)?.groupValues?.getOrNull(1)
+            } ?: return
+            val pc = addrStr.toULongOrNull(16) ?: return
+            val coordinator = session.project.service<BreakpointMaterializationCoordinator>()
+            coordinator.breakpointHit(
+                BinaryExecutionPosition(
+                    identity,
+                    BinaryAnchor.Native(virtualAddress = pc, symbolName = null, offsetInSymbol = 0u),
+                ),
+            )
+        } catch (e: Exception) {
+            LOG.warn("FirmwareDebugProcess: breakpoint hit notification failed", e)
+        }
     }
 
     override fun resume(context: XSuspendContext?) {
+        notifyExecutionResumed()
         ApplicationManager.getApplication().executeOnPooledThread { lldb.resume() }
     }
 
@@ -204,19 +294,23 @@ class FirmwareDebugProcess(
     }
 
     override fun startStepOver(context: XSuspendContext?) {
+        notifyExecutionResumed()
         ApplicationManager.getApplication().executeOnPooledThread { lldb.stepOver() }
     }
 
     override fun startStepInto(context: XSuspendContext?) {
+        notifyExecutionResumed()
         ApplicationManager.getApplication().executeOnPooledThread { lldb.stepInto() }
     }
 
     override fun startStepOut(context: XSuspendContext?) {
+        notifyExecutionResumed()
         ApplicationManager.getApplication().executeOnPooledThread { lldb.stepOut() }
     }
 
     override fun stop() {
         LOG.info("FirmwareDebugProcess.stop()")
+        endBinaryBreakpointSession()
         lldb.destroy()
         if (!lldbHandler.isProcessTerminated) {
             lldbHandler.destroyProcess()
@@ -225,6 +319,24 @@ class FirmwareDebugProcess(
             emulatorHandler.destroyProcess()
         }
         Disposer.dispose(consoleDisposable)
+    }
+
+    private fun notifyExecutionResumed() {
+        if (!binarySessionStarted) return
+        try {
+            session.project.service<BreakpointMaterializationCoordinator>().executionResumed()
+        } catch (e: Exception) {
+            LOG.warn("FirmwareDebugProcess: executionResumed notification failed", e)
+        }
+    }
+
+    private fun endBinaryBreakpointSession() {
+        if (!binarySessionStarted) return
+        try {
+            session.project.service<BreakpointMaterializationCoordinator>().sessionEnded(breakpointSessionId)
+        } catch (e: Exception) {
+            LOG.warn("FirmwareDebugProcess: sessionEnded failed", e)
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -323,5 +435,55 @@ class FirmwareDebugProcess(
                 ?: com.intellij.openapi.editor.EditorFactory.getInstance()
                     .createDocument(expression.expression)
         }
+    }
+
+    /**
+     * [GdbInstructionBreakpointTransport] backed by [LldbCommunicator].
+     *
+     * Maps [setAddressBreakpoint] to [LldbCommunicator.sendAddressBreakpointChecked] and
+     * [removeAddressBreakpoint] to [LldbCommunicator.removeBreakpointById].
+     * Removal is best-effort: if the breakpoint id was not captured (pending outcome),
+     * the remove is silently skipped.
+     */
+    private inner class LldbBreakpointTransport : GdbInstructionBreakpointTransport {
+        // address → LLDB breakpoint id; populated on Resolved outcomes.
+        private val breakIds = HashMap<ULong, Int>()
+        private val lock = Any()
+
+        override suspend fun setAddressBreakpoint(address: ULong): GdbBreakpointOutcome {
+            return try {
+                val outcome = lldb.sendAddressBreakpointChecked(address)
+                when {
+                    outcome.error != null -> GdbBreakpointOutcome.Rejected(outcome.error)
+                    outcome.breakpointId != null && outcome.resolved -> {
+                        synchronized(lock) { breakIds[address] = outcome.breakpointId }
+                        GdbBreakpointOutcome.Resolved
+                    }
+                    outcome.breakpointId != null -> {
+                        // id exists but not yet resolved (pending symbol load)
+                        synchronized(lock) { breakIds[address] = outcome.breakpointId }
+                        GdbBreakpointOutcome.Pending
+                    }
+                    else -> GdbBreakpointOutcome.Pending
+                }
+            } catch (e: Exception) {
+                LOG.warn("LldbBreakpointTransport: setAddressBreakpoint 0x${address.toString(16)} failed", e)
+                GdbBreakpointOutcome.Rejected("lldb transport error: ${e.message}")
+            }
+        }
+
+        override suspend fun removeAddressBreakpoint(address: ULong) {
+            val id = synchronized(lock) { breakIds.remove(address) } ?: return
+            try {
+                lldb.removeBreakpointById(id)
+            } catch (e: Exception) {
+                LOG.warn("LldbBreakpointTransport: removeBreakpointById $id failed", e)
+            }
+        }
+    }
+
+    companion object {
+        /** Extracts the hex PC from an LLDB frame line: `frame #N: 0x<hex> ...` */
+        internal val LLDB_FRAME_PC_PATTERN = Regex("""frame\s+#\d+:\s+0x([0-9a-fA-F]+)""")
     }
 }

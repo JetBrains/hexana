@@ -261,6 +261,7 @@ class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     emulatorHandler = prep.stubEndpoint.processHandler,
                     lldb = lldb,
                     stopAtEntry = configuration.stopAtEntry,
+                    elfPath = configuration.elfPath,
                 )
             }
         }

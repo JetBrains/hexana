@@ -10,6 +10,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.fileTypes.PlainTextFileType
+import com.intellij.openapi.components.service
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.xdebugger.XDebugProcess
@@ -24,11 +25,19 @@ import com.intellij.xdebugger.frame.XStackFrame
 import com.intellij.xdebugger.frame.XSuspendContext
 import com.intellij.xdebugger.impl.XDebuggerUtilImpl
 import kotlinx.serialization.json.*
+import org.jetbrains.hexana.breakpoints.BinaryExecutionPosition
+import org.jetbrains.hexana.shared.BinaryAnchor
+import org.jetbrains.hexana.breakpoints.BinaryIdentityProvider
+import org.jetbrains.hexana.breakpoints.BreakpointMaterializationCoordinator
+import org.jetbrains.hexana.breakpoints.GdbElfMaterializer
+import org.jetbrains.hexana.breakpoints.MaterializationSession
+import org.jetbrains.hexana.shared.BinaryIdentity
 import org.jetbrains.hexana.firmware.run.StopAtEntry
 import org.jetbrains.hexana.run.ConsoleSessionKind
 import org.jetbrains.hexana.run.DebuggerConsoleTransport
 import org.jetbrains.hexana.run.InterceptAction
 import org.jetbrains.hexana.run.buildDebuggerConsolePanel
+import java.util.UUID
 
 /**
  * Debug process for ELF firmware running under a GDB-stub emulator, using
@@ -80,6 +89,15 @@ class GdbDapDebugProcess(
     /** Parent [com.intellij.openapi.Disposable] for the debugger console tab's [ConsoleView][com.intellij.execution.ui.ConsoleView]. */
     private val consoleDisposable = Disposer.newDisposable("HexanaDebuggerConsole")
 
+    /** Stable id for the binary-breakpoint session; constant for the lifetime of this process. */
+    private val breakpointSessionId: String = UUID.randomUUID().toString()
+
+    /** Set to true once [startBinaryBreakpointSession] has registered with the coordinator. */
+    @Volatile private var binarySessionStarted: Boolean = false
+
+    /** Identity established during [startBinaryBreakpointSession]; used by [notifyBinaryBreakpointHit]. */
+    @Volatile private var binaryIdentity: BinaryIdentity? = null
+
     override fun getEditorsProvider(): XDebuggerEditorsProvider = SimpleEditorsProvider
 
     override fun doGetProcessHandler(): ProcessHandler = gdbHandler
@@ -97,12 +115,14 @@ class GdbDapDebugProcess(
     private fun runSession() {
         try {
             LOG.info("GdbDapDebugProcess: sending initialize")
-            client.request("initialize", buildJsonObject {
+            val initResponse = client.request("initialize", buildJsonObject {
                 put("adapterId", "hexana-firmware")
                 put("linesStartAt1", true)
                 put("columnsStartAt1", true)
                 put("pathFormat", "path")
             })
+            // Capabilities live in the initialize response body (DAP spec §4.1).
+            val capabilities = initResponse["body"]?.jsonObject ?: initResponse
 
             // GDB DAP quirk: the `attach` response is only delivered AFTER `configurationDone`,
             // so we fire attach without blocking, run configuration, then await the future.
@@ -127,11 +147,54 @@ class GdbDapDebugProcess(
                 LOG.warn("GdbDapDebugProcess: attach response not received", e)
             }
 
+            startBinaryBreakpointSession(capabilities)
             startEventLoop()
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
         } catch (e: Exception) {
             LOG.warn("GdbDapDebugProcess session setup failed", e)
+        }
+    }
+
+    /**
+     * Registers a [MaterializationSession] with the project-level
+     * [BreakpointMaterializationCoordinator] so binary-view breakpoints survive
+     * into this firmware debug session.
+     *
+     * Must be called on the pooled session thread, after configuration is complete.
+     * Failure is logged and never breaks existing debugging.
+     */
+    private fun startBinaryBreakpointSession(capabilities: JsonObject) {
+        try {
+            val transport = GdbDapBreakpointTransport(client, capabilities)
+            val runtimeName = "gdb-dap"
+            val materializer = GdbElfMaterializer(runtimeName, transport)
+            val coordinator = session.project.service<BreakpointMaterializationCoordinator>()
+            val vFile = LocalFileSystem.getInstance().findFileByPath(elfPath)
+            val identity = if (vFile != null) {
+                // identityFor must run on Dispatchers.IO; we are already on pooled thread.
+                BinaryIdentityProvider.identityFor(vFile, elfBuildId = null)
+            } else null
+            if (identity == null) {
+                LOG.warn("GdbDapDebugProcess: binary identity unavailable for $elfPath — breakpoint session not started")
+                return
+            }
+            // rehomer is null in v1: constructing ElfBinaryProvider here requires parsing the
+            // full ELF and is deferred to a follow-up.
+            coordinator.sessionStarted(
+                MaterializationSession(
+                    sessionId = breakpointSessionId,
+                    identity = identity,
+                    launchedPath = elfPath,
+                    materializer = materializer,
+                    rehomer = null,
+                ),
+            )
+            binaryIdentity = identity
+            binarySessionStarted = true
+            LOG.info("GdbDapDebugProcess: binary breakpoint session started ($breakpointSessionId)")
+        } catch (e: Exception) {
+            LOG.warn("GdbDapDebugProcess: binary breakpoint session start failed", e)
         }
     }
 
@@ -194,6 +257,7 @@ class GdbDapDebugProcess(
                     "stopped" -> handleStop(event)
                     "terminated", "exited" -> {
                         LOG.info("GdbDapDebugProcess: process $eventName")
+                        endBinaryBreakpointSession()
                         invokeLater { session.stop() }
                         break
                     }
@@ -237,13 +301,42 @@ class GdbDapDebugProcess(
             val frame = GdbStackFrame(position, functionName)
             val context = GdbSuspendContext(frame)
             invokeLater { session.positionReached(context) }
+
+            notifyBinaryBreakpointHit(topFrame)
         } catch (e: Exception) {
             LOG.warn("GdbDapDebugProcess: handleStop failed", e)
         }
     }
 
+    /**
+     * Publishes the stopped PC to the binary-view breakpoint coordinator.
+     * Tries [instructionPointerReference] (set when supportsInstructionBreakpoints is true),
+     * then [address] (non-standard but emitted by some gdb-dap adapters). Skips silently
+     * when no address field is present — best-effort, never breaks stop handling.
+     */
+    private fun notifyBinaryBreakpointHit(topFrame: JsonObject?) {
+        val identity = binaryIdentity ?: return
+        if (topFrame == null) return
+        try {
+            val addrStr = topFrame["instructionPointerReference"]?.jsonPrimitive?.contentOrNull
+                ?: topFrame["address"]?.jsonPrimitive?.contentOrNull
+                ?: return
+            val pc = addrStr.removePrefix("0x").toULongOrNull(16) ?: return
+            val coordinator = session.project.service<BreakpointMaterializationCoordinator>()
+            coordinator.breakpointHit(
+                BinaryExecutionPosition(
+                    identity,
+                    BinaryAnchor.Native(virtualAddress = pc, symbolName = null, offsetInSymbol = 0u),
+                ),
+            )
+        } catch (e: Exception) {
+            LOG.warn("GdbDapDebugProcess: breakpoint hit notification failed", e)
+        }
+    }
+
     override fun resume(context: XSuspendContext?) {
         isStopped = false
+        notifyExecutionResumed()
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 client.request("continue", buildJsonObject { put("threadId", currentThreadId) })
@@ -265,6 +358,7 @@ class GdbDapDebugProcess(
 
     override fun startStepOver(context: XSuspendContext?) {
         isStopped = false
+        notifyExecutionResumed()
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 client.request("next", buildJsonObject { put("threadId", currentThreadId) })
@@ -276,6 +370,7 @@ class GdbDapDebugProcess(
 
     override fun startStepInto(context: XSuspendContext?) {
         isStopped = false
+        notifyExecutionResumed()
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 client.request("stepIn", buildJsonObject { put("threadId", currentThreadId) })
@@ -287,6 +382,7 @@ class GdbDapDebugProcess(
 
     override fun startStepOut(context: XSuspendContext?) {
         isStopped = false
+        notifyExecutionResumed()
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 client.request("stepOut", buildJsonObject { put("threadId", currentThreadId) })
@@ -298,6 +394,7 @@ class GdbDapDebugProcess(
 
     override fun stop() {
         LOG.info("GdbDapDebugProcess.stop()")
+        endBinaryBreakpointSession()
         try {
             client.request("disconnect", buildJsonObject { put("terminateDebuggee", false) })
         } catch (e: Exception) {
@@ -307,6 +404,24 @@ class GdbDapDebugProcess(
         if (!gdbHandler.isProcessTerminated) gdbHandler.destroyProcess()
         if (!emulatorHandler.isProcessTerminated) emulatorHandler.destroyProcess()
         Disposer.dispose(consoleDisposable)
+    }
+
+    private fun notifyExecutionResumed() {
+        if (!binarySessionStarted) return
+        try {
+            session.project.service<BreakpointMaterializationCoordinator>().executionResumed()
+        } catch (e: Exception) {
+            LOG.warn("GdbDapDebugProcess: executionResumed notification failed", e)
+        }
+    }
+
+    private fun endBinaryBreakpointSession() {
+        if (!binarySessionStarted) return
+        try {
+            session.project.service<BreakpointMaterializationCoordinator>().sessionEnded(breakpointSessionId)
+        } catch (e: Exception) {
+            LOG.warn("GdbDapDebugProcess: sessionEnded failed", e)
+        }
     }
 
     override fun createTabLayouter(): XDebugTabLayouter = object : XDebugTabLayouter() {
