@@ -22,6 +22,7 @@ class HexanaPatronusConfigTest {
         val configurationIds = Regex("configurationId: \\\"([^\\\"]+)\\\"").findAll(yaml).map { it.groupValues[1] }.toList()
         assertEquals(
             listOf(
+                "InnoHub_HexFlow_PatronusConfigCheckPatronus",
                 "InnoHub_HexFlow_SafeMergeTests",
                 "InnoHub_HexFlow_UiTestsPatronus",
                 "InnoHub_HexFlow_IntellijPluginTestsPatronus",
@@ -34,6 +35,11 @@ class HexanaPatronusConfigTest {
         )
         assertContains(yaml, "id: \"hexana-product-tests\"")
         assertContains(yaml, "isFallback: true")
+        val patronusConfigCheck = HexanaPatronusConfig.teamCityChecksConfig.checks.single {
+            it.configurationId == "InnoHub_HexFlow_PatronusConfigCheckPatronus"
+        }
+        assertEquals(listOf("*"), patronusConfigCheck.executeOnChanges)
+        assertContains(yaml, "- configurationId: \"InnoHub_HexFlow_PatronusConfigCheckPatronus\"\n- configurationId:")
         assertContains(yaml, "- \"/vscode-plugin/**\"")
         assertContains(yaml, "- \"/webapp/**\"")
         assertEquals(2, Regex("- \"/web-ui/\\*\\*\"").findAll(yaml).count())

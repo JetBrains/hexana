@@ -419,8 +419,8 @@ fun readPatronusChecks(configFile: File): List<PatronusCheck> {
             }
             lineIndex++
         }
-        check(changesSeen && executeOnChanges.isNotEmpty()) {
-            "$configurationId must declare at least one executeOnChanges path"
+        check(!changesSeen || executeOnChanges.isNotEmpty()) {
+            "$configurationId must not declare an empty executeOnChanges list"
         }
         checks += PatronusCheck(configurationId, groupId, isFallback, executeOnChanges)
     }
@@ -433,6 +433,7 @@ tasks.register("verifyPatronusRoutingCoverage") {
     doLast {
         val safeMergeId = "InnoHub_HexFlow_SafeMergeTests"
         val uiId = "InnoHub_HexFlow_UiTestsPatronus"
+        val patronusConfigId = "InnoHub_HexFlow_PatronusConfigCheckPatronus"
         val intellijId = intellijPatronusConfigurationId
         val coreId = corePatronusConfigurationId
         val vscodeId = vscodePatronusConfigurationId
@@ -440,6 +441,7 @@ tasks.register("verifyPatronusRoutingCoverage") {
         val serverCliId = serverCliPatronusConfigurationId
         val productGroupId = "hexana-product-tests"
         val expectedChecks = linkedMapOf(
+            patronusConfigId to PatronusCheck(patronusConfigId, null, false, emptyList()),
             safeMergeId to PatronusCheck(safeMergeId, null, false, listOf("*", "!/README.md")),
             uiId to PatronusCheck(
                 uiId,
@@ -494,6 +496,13 @@ tasks.register("verifyPatronusRoutingCoverage") {
         check(checks.filter(PatronusCheck::isFallback).map { it.configurationId } == listOf(coreId)) {
             "$coreId must be the sole Patronus fallback; found: " +
                 checks.filter(PatronusCheck::isFallback).joinToString { it.configurationId }
+        }
+        val patronusConfigCheck = checksById.getValue(patronusConfigId)
+        check(
+            patronusConfigCheck.groupId == null && !patronusConfigCheck.isFallback &&
+                patronusConfigCheck.executeOnChanges.isEmpty(),
+        ) {
+            "$patronusConfigId must remain an ungrouped, non-fallback, always-on check"
         }
 
         val actualProjects = rootProject.allprojects.filterNot { it == rootProject }.associateBy { it.path }

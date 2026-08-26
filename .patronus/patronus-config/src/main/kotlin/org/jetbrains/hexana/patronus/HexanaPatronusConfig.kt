@@ -54,6 +54,7 @@ object HexanaPatronusConfig : BranchProtectionConfig(init = {
                 "/idea-plugin/src/ui-tests-framework/**",
             ),
         )
+        check(teamCityCheck("InnoHub_HexFlow_PatronusConfigCheckPatronus", "*"))
         checksGroup("hexana-product-tests") {
             primaryCheck(teamCityCheck("InnoHub_HexFlow_IntellijPluginTestsPatronus", "/idea-plugin/**"))
             fallbackCheck(

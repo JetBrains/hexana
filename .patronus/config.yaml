@@ -1,5 +1,6 @@
 version: "1.0"
 checks:
+- configurationId: "InnoHub_HexFlow_PatronusConfigCheckPatronus"
 - configurationId: "InnoHub_HexFlow_SafeMergeTests"
   executeOnChanges:
   - "*"
