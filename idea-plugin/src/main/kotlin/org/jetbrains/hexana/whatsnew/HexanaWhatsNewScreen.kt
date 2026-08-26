@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,9 +41,13 @@ import androidx.compose.ui.unit.sp
 import com.google.gson.Gson
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
+import org.jetbrains.skia.Bitmap
+import org.jetbrains.skia.Codec
+import org.jetbrains.skia.Data
 import org.jetbrains.skia.Image as SkiaImage
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlinx.coroutines.delay
 
 internal data class HexanaWhatsNewUiModel(
     val version: String,
@@ -56,6 +61,24 @@ internal data class HexanaWhatsNewFeature(
     val asset: Path?,
     val entries: List<String>,
 )
+
+internal sealed interface HexanaWhatsNewVisual {
+    data class Static(val bitmap: ImageBitmap) : HexanaWhatsNewVisual
+
+    data class Animated(val frames: List<HexanaWhatsNewAnimationFrame>) : HexanaWhatsNewVisual {
+        init {
+            require(frames.isNotEmpty()) { "An animated What's New asset needs at least one frame" }
+        }
+    }
+}
+
+internal data class HexanaWhatsNewAnimationFrame(
+    val bitmap: ImageBitmap,
+    val durationMillis: Int,
+)
+
+private const val MAX_ANIMATED_FRAME_COUNT = 120
+private const val MAX_ANIMATED_DECODED_BYTES = 48 * 1024 * 1024
 
 private data class WhatsNewSource(
     val version: String = "",
@@ -200,7 +223,7 @@ private fun FeatureCard(
     colors: WhatsNewColors,
 ) {
     var expanded by remember(feature.title) { mutableStateOf(false) }
-    val image = remember(feature.asset) { feature.asset?.let(::loadImage) }
+    val image = remember(feature.asset) { feature.asset?.let(::loadWhatsNewVisual) }
     SurfaceCard(colors, Modifier.fillMaxWidth()) {
         BoxWithConstraints {
             val horizontal = maxWidth >= 760.dp && image != null
@@ -268,13 +291,17 @@ private fun FeatureText(
 
 @Composable
 private fun FeatureImage(
-    image: ImageBitmap,
+    image: HexanaWhatsNewVisual,
     description: String,
     colors: WhatsNewColors,
     modifier: Modifier,
 ) {
+    val bitmap = when (image) {
+        is HexanaWhatsNewVisual.Static -> image.bitmap
+        is HexanaWhatsNewVisual.Animated -> animatedFrame(image)
+    }
     Image(
-        bitmap = image,
+        bitmap = bitmap,
         contentDescription = description,
         contentScale = ContentScale.FillWidth,
         modifier = modifier
@@ -282,6 +309,18 @@ private fun FeatureImage(
             .background(colors.panelSoft)
             .border(1.dp, colors.border, RoundedCornerShape(8.dp)),
     )
+}
+
+@Composable
+private fun animatedFrame(image: HexanaWhatsNewVisual.Animated): ImageBitmap {
+    var frameIndex by remember(image) { mutableStateOf(0) }
+    LaunchedEffect(image) {
+        while (true) {
+            delay(image.frames[frameIndex].durationMillis.toLong())
+            frameIndex = (frameIndex + 1) % image.frames.size
+        }
+    }
+    return image.frames[frameIndex].bitmap
 }
 
 @Composable
@@ -354,6 +393,55 @@ private fun eyebrowStyle(colors: WhatsNewColors): TextStyle = TextStyle(
     letterSpacing = 0.8.sp,
 )
 
-private fun loadImage(path: Path): ImageBitmap? = runCatching {
-    SkiaImage.makeFromEncoded(Files.readAllBytes(path)).toComposeImageBitmap()
+internal fun loadWhatsNewVisual(path: Path): HexanaWhatsNewVisual? = runCatching {
+    if (path.fileName.toString().endsWith(".gif", ignoreCase = true)) {
+        loadAnimatedGif(path)
+    } else {
+        HexanaWhatsNewVisual.Static(SkiaImage.makeFromEncoded(Files.readAllBytes(path)).toComposeImageBitmap())
+    }
 }.getOrNull()
+
+private fun loadAnimatedGif(path: Path): HexanaWhatsNewVisual {
+    Data.makeFromBytes(Files.readAllBytes(path)).use { data ->
+        Codec.makeFromData(data).use { codec ->
+            val frameCount = codec.frameCount
+            require(frameCount in 1..MAX_ANIMATED_FRAME_COUNT) {
+                "Animated GIF has $frameCount frames; the maximum is $MAX_ANIMATED_FRAME_COUNT"
+            }
+            val decodedBytes = frameCount.toLong() * codec.imageInfo.width * codec.imageInfo.height * 4
+            require(decodedBytes <= MAX_ANIMATED_DECODED_BYTES) {
+                "Animated GIF needs $decodedBytes decoded bytes; the maximum is $MAX_ANIMATED_DECODED_BYTES"
+            }
+            if (frameCount == 1) {
+                return HexanaWhatsNewVisual.Static(codec.readPixels().let(SkiaImage::makeFromBitmap).toComposeImageBitmap())
+            }
+
+            val framesInfo = codec.framesInfo
+            val decodedFrames = mutableMapOf<Int, Bitmap>()
+            fun decodeFrame(index: Int): Bitmap {
+                decodedFrames[index]?.let { return it }
+                val frameInfo = framesInfo[index]
+                val bitmap = if (frameInfo.requiredFrame >= 0) {
+                    decodeFrame(frameInfo.requiredFrame).makeClone()
+                } else {
+                    Bitmap().apply {
+                        allocPixels(codec.imageInfo)
+                        erase(0)
+                    }
+                }
+                codec.readPixels(bitmap, index, frameInfo.requiredFrame)
+                return bitmap.also { decodedFrames[index] = it }
+            }
+
+            return HexanaWhatsNewVisual.Animated(
+                framesInfo.indices.map { index ->
+                    val frameInfo = framesInfo[index]
+                    HexanaWhatsNewAnimationFrame(
+                        bitmap = SkiaImage.makeFromBitmap(decodeFrame(index)).toComposeImageBitmap(),
+                        durationMillis = frameInfo.duration.coerceIn(20, 10_000),
+                    )
+                },
+            )
+        }
+    }
+}

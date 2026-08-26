@@ -37,7 +37,7 @@ content_tokens:
 
 ## Purpose
 
-The generated What's New page is an in-IDE release summary for Hexana users. It should explain the most valuable release changes without reading like marketing copy. The page is bundled as static plugin resources and must work in JetBrains IDE embedded browser contexts with no JavaScript and no remote assets.
+The generated What's New page is an in-IDE release summary for Hexana users. It should explain the most valuable release changes without reading like marketing copy. The page is bundled as static plugin resources and rendered by Hexana's native Compose/Jewel screen, with no JavaScript or remote assets.
 
 ## Content Model
 
@@ -45,7 +45,7 @@ Each release page contains:
 
 - A compact hero with the exact Hexana version, a release-focused summary, and stable links.
 - Feature sections derived from the changelog and grouped by user-facing workflow.
-- Screenshot sections for every big visible feature. Prefer real UI-driver captures; use existing repository screenshots only when the release capture policy explicitly allows fallback assets. When fallback is disabled, missing captures make the page incomplete rather than text-only complete.
+- Screenshot sections for every big visible feature. Prefer real UI-driver captures; use existing repository screenshots only when the release capture policy explicitly allows fallback assets. When fallback is disabled, missing captures make the page incomplete rather than text-only complete. A short animated GIF is appropriate when a sequence of semantic UI states is the feature; it must be generated from tagged UI-driver screenshots, not a synthetic animation.
 - A short improvements section for fixed, changed, or lower-visual items that do not need a full card.
 
 Release-specific lead clusters and their presentation mode belong in `assets.yml`. Do not repeat claims from an earlier release as new highlights; keep lower-visual additions in the compact improvements section.
@@ -58,6 +58,7 @@ Use JetBrains-IDE-appropriate density and restraint:
 - Feature cards are bordered sections with 8px radius, not decorative nested cards.
 - Typography uses the system UI stack with JetBrains Mono only for code tokens.
 - Screenshots should be real product captures. For newly marketed visible features, prefer UI-driver capture flows that open the product into the intended semantic state before taking the screenshot.
+- Keep animated GIFs focused: capture only meaningful states, use a modest frame count and timing, and provide surrounding text that explains the feature independently of the motion.
 - Avoid gradients, illustration-only visuals, and one-hue novelty palettes.
 
 ## Generator Contract
@@ -70,7 +71,8 @@ Determinism requirements:
 - Changelog parsing preserves release-note order.
 - Asset selection uses the first existing candidate in `assets.yml`.
 - `manifest.txt` lists generated files in sorted order.
+- Asset filenames keep their extension. The native renderer supports PNG and bounded animated GIF assets; it decodes at most 120 GIF frames and 48 MiB of frame pixels.
 
 ## Accessibility
 
-Screenshots need descriptive alt text from the cluster title. Text must stay readable in both color schemes. Links and buttons must be real anchors so the embedded browser keeps expected navigation behavior.
+Screenshots need descriptive accessible descriptions from the cluster title. Text must stay readable in both color schemes. Links and buttons must retain clear, standard destination actions.

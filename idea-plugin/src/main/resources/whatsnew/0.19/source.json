@@ -27,7 +27,7 @@
     "changelog": "idea-plugin/CHANGELOG.md",
     "changelog_sha256": "05a45fccfde459947c38ac6c8290dd7ca1865c85f9d9bec9da85b34f05e8fdec",
     "design": "docs/whatsnew/DESIGN.md",
-    "design_sha256": "0ceecf26706245b8de840cb18c1907e734d4e265d304d80729b917451b390b99"
+    "design_sha256": "46a170a15744493a36718e673ca921b17c716cb241cea22a9b7e2896f327e05d"
   },
   "version": "0.19"
 }

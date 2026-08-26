@@ -1,6 +1,11 @@
 package org.jetbrains.hexana.whatsnew
 
 import com.intellij.testFramework.UsefulTestCase
+import java.awt.Color
+import java.awt.image.BufferedImage
+import java.nio.file.Files
+import javax.imageio.IIOImage
+import javax.imageio.ImageIO
 import kotlin.io.path.exists
 
 class HexanaWhatsNewTest : UsefulTestCase() {
@@ -15,6 +20,21 @@ class HexanaWhatsNewTest : UsefulTestCase() {
             assertFalse(model.features.first().entries.first().contains("**"))
         } finally {
             content.dispose()
+        }
+    }
+
+    fun testLoadWhatsNewVisualDecodesAnimatedGif() {
+        val gif = Files.createTempFile("hexana-whats-new", ".gif")
+        try {
+            writeTwoFrameGif(gif)
+
+            val visual = loadWhatsNewVisual(gif)
+            assertTrue(visual is HexanaWhatsNewVisual.Animated)
+            val animation = visual as HexanaWhatsNewVisual.Animated
+            assertEquals(2, animation.frames.size)
+            assertTrue(animation.frames.all { it.durationMillis >= 20 })
+        } finally {
+            Files.deleteIfExists(gif)
         }
     }
 
@@ -550,6 +570,24 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         val stream = HexanaWhatsNewTest::class.java.classLoader.getResourceAsStream(path)
         assertNotNull("Missing resource: $path", stream)
         return stream!!.bufferedReader(Charsets.UTF_8).use { it.readText() }
+    }
+
+    private fun writeTwoFrameGif(output: java.nio.file.Path) {
+        val writer = ImageIO.getImageWritersByFormatName("gif").asSequence().first()
+        try {
+            requireNotNull(ImageIO.createImageOutputStream(output.toFile())).use { stream ->
+                writer.output = stream
+                writer.prepareWriteSequence(null)
+                listOf(Color(0x35, 0x73, 0xF0), Color(0x78, 0xC2, 0x57)).forEach { color ->
+                    val image = BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB)
+                    image.setRGB(0, 0, color.rgb)
+                    writer.writeToSequence(IIOImage(image, null, null), writer.defaultWriteParam)
+                }
+                writer.endWriteSequence()
+            }
+        } finally {
+            writer.dispose()
+        }
     }
 
     private fun assertResourceExists(path: String) {
