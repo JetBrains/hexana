@@ -43,7 +43,9 @@ tasks.register("assembleExtensionAssets") {
         ":vscode-plugin:webview:jsBrowserProductionWebpack",
         syncGraalvmRunner,
         syncScriptExamples,
-        // The curated and raw .d.ts references the dialog links to.
-        ":idea-plugin:generateHexanaScriptingDts",
+        // The curated and raw .d.ts references the dialog links to. Generated from
+        // :mcp:scripting rather than :idea-plugin so that packaging the extension
+        // stays on a plain JVM toolchain and never builds the IntelliJ platform.
+        ":mcp:scripting:generateHexanaScriptingDts",
     )
 }

@@ -1,8 +1,5 @@
-package org.jetbrains.hexana.ui.panel
+package org.jetbrains.hexana.mcp.scripting
 
-import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.project.Project
-import com.intellij.testFramework.LightVirtualFile
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.scripting.ScriptApiReference
 import kotlin.reflect.KClass
@@ -22,10 +19,14 @@ import kotlin.reflect.full.memberProperties
  * few kilobytes rather than a few hundred, and documents members that behave the
  * same for every binary format. This dump exists because `binary.raw` genuinely
  * exposes internal shapes that cannot be enumerated by hand.
+ *
+ * Lives here rather than in a plugin module so that generating the references
+ * needs nothing but `binaryProvider` and `plugins-shared` on the classpath. Both
+ * plugins bundle the generated files and only add their own way of showing them.
  */
-internal object BinaryProviderApiSummary {
+object BinaryProviderApiSummary {
 
-    const val CURATED_DTS_NAME: String = "hexana-scripting.d.ts"
+    const val CURATED_DTS_NAME: String = ScriptApiReference.TYPES_FILE_NAME
     const val RAW_DTS_NAME: String = "hexana-scripting-raw.d.ts"
 
     /** Primitive / well-known types that don't need a dedicated type description. */
@@ -34,28 +35,6 @@ internal object BinaryProviderApiSummary {
         "Char", "String", "Unit", "Any", "Number", "UByte", "UShort",
         "UInt", "ULong", "ByteArray", "IntArray", "LongArray",
     )
-
-    /** Opens the curated scripting reference — the one a user should read first. */
-    fun showDtsInEditor(project: Project) {
-        val dts = loadPreBuiltDts(CURATED_DTS_NAME) ?: ScriptApiReference.dts()
-        openReadOnly(project, CURATED_DTS_NAME, dts)
-    }
-
-    /** Opens the reflective `binary.raw` type dump. */
-    fun showRawDtsInEditor(project: Project) {
-        val dts = loadPreBuiltDts(RAW_DTS_NAME) ?: generateRawDts()
-        openReadOnly(project, RAW_DTS_NAME, dts)
-    }
-
-    private fun openReadOnly(project: Project, name: String, content: String) {
-        val vf = LightVirtualFile(name, content).apply { isWritable = false }
-        FileEditorManager.getInstance(project).openFile(vf, true)
-    }
-
-    /** Tries to load a pre-built .d.ts from plugin resources. */
-    private fun loadPreBuiltDts(name: String): String? =
-        BinaryProviderApiSummary::class.java.getResourceAsStream("/$name")
-            ?.bufferedReader()?.readText()
 
     fun generateRawDts(): String {
         val sb = StringBuilder()

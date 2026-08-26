@@ -88,12 +88,12 @@ internal class AddScriptTabDialog(
                 }
                 row {
                     link("Open the scripting API reference") {
-                        BinaryProviderApiSummary.showDtsInEditor(project)
+                        ScriptingApiReferenceEditor.showDts(project)
                     }
                 }
                 row {
                     link("Open the format-specific types behind binary.raw") {
-                        BinaryProviderApiSummary.showRawDtsInEditor(project)
+                        ScriptingApiReferenceEditor.showRawDts(project)
                     }
                 }
             }

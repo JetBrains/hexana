@@ -1,4 +1,4 @@
-package org.jetbrains.hexana.ui.panel
+package org.jetbrains.hexana.mcp.scripting
 
 import org.jetbrains.hexana.shared.scripting.ScriptApiReference
 import java.io.File
@@ -14,6 +14,10 @@ import java.io.File
  *   provider types behind `binary.raw`, from [BinaryProviderApiSummary].
  *
  * Usage: `java … GenerateScriptingDtsKt <outputDir1> [<outputDir2> …]`
+ *
+ * Both plugins bundle the result, so this runs from a module that needs only a
+ * plain JVM toolchain — packaging the VS Code extension must not drag in the
+ * IntelliJ platform build.
  */
 fun main(args: Array<String>) {
     require(args.isNotEmpty()) { "At least one output directory must be specified." }
