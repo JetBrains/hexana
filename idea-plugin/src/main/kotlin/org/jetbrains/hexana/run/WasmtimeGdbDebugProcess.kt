@@ -95,6 +95,7 @@ class WasmtimeGdbDebugProcess(
             }
 
             replayBreakpointsToLldb()
+            startBinaryBreakpointSession()
         }
 
         // Do NOT call super.sessionInitialized(): the parent issues `run`

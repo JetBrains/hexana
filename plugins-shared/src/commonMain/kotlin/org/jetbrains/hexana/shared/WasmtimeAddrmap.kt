@@ -65,7 +65,37 @@ class WasmtimeAddrmap private constructor(
         return if (pos == -1) null else pos
     }
 
+    /**
+     * Returns the native pc of the first addrmap entry whose wasm file
+     * position equals [fileOffset], or null when no entry maps it.
+     *
+     * Reverse direction of [wasmOffsetForPc], used to place address
+     * breakpoints on JIT-compiled code. Entries without a source position
+     * (-1) never match, and a caller passing -1 always gets null.
+     */
+    fun pcForWasmOffset(fileOffset: Int): ULong? {
+        if (fileOffset == -1) return null
+        for (i in filePositions.indices) {
+            if (filePositions[i] == fileOffset) {
+                return textLoadAddress + codeOffsets[i].toUInt().toULong()
+            }
+        }
+        return null
+    }
+
     companion object {
+        /**
+         * Builds an addrmap directly from decoded arrays. [parse] is the
+         * production path; this exists for callers that already hold the
+         * decoded arrays (unit tests of [pcForWasmOffset] consumers).
+         */
+        fun fromArrays(
+            textLoadAddress: ULong,
+            textSize: ULong,
+            codeOffsets: IntArray,
+            filePositions: IntArray,
+        ): WasmtimeAddrmap = WasmtimeAddrmap(textLoadAddress, textSize, codeOffsets, filePositions)
+
         private const val SECTION_NAME = ".wasmtime.addrmap"
         private const val TEXT_SECTION_NAME = ".text"
 

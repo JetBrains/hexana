@@ -22,6 +22,18 @@ import java.util.concurrent.TimeUnit
  * looking for stop events (breakpoint hits, step completions, process
  * exit) and makes them available via [waitForStopEvent].
  */
+/**
+ * Outcome of `breakpoint set --address`: the LLDB breakpoint id parsed from
+ * "Breakpoint N:" when present, whether the location resolved (no "pending"
+ * in the output), and the error line when LLDB rejected the command or
+ * produced no output at all.
+ */
+data class AddressBreakpointOutcome(
+    val breakpointId: Int?,
+    val resolved: Boolean,
+    val error: String?,
+)
+
 class LldbCommunicator(private val processHandler: OSProcessHandler) {
 
     private val writer: BufferedWriter =
@@ -237,6 +249,35 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
             "breakpoint set --file \"$filePath\" --line $line",
         )
         return output.none { "pending" in it }
+    }
+
+    /**
+     * Sets an address breakpoint (`breakpoint set --address 0x<hex>`) and
+     * parses the outcome from LLDB's output: the breakpoint id from
+     * "Breakpoint N:" (for later [removeBreakpointById]) and the same
+     * resolved/pending detection as [sendBreakpointAndCheckResolved].
+     *
+     * Like every collect-output command, calls must not overlap with another
+     * in-flight [sendCommandAndCollectOutput]; callers serialize their use.
+     */
+    fun sendAddressBreakpointChecked(address: ULong): AddressBreakpointOutcome {
+        val output = sendCommandAndCollectOutput("breakpoint set --address 0x${address.toString(16)}")
+        if (output.isEmpty()) {
+            return AddressBreakpointOutcome(breakpointId = null, resolved = false, error = "no response from LLDB")
+        }
+        val errorLine = output.firstOrNull { it.trimStart().startsWith("error:") }
+        if (errorLine != null) {
+            return AddressBreakpointOutcome(breakpointId = null, resolved = false, error = errorLine.trim())
+        }
+        val id = output.firstNotNullOfOrNull { line ->
+            BREAKPOINT_ID_REGEX.find(line)?.groupValues?.get(1)?.toIntOrNull()
+        }
+        return AddressBreakpointOutcome(breakpointId = id, resolved = output.none { "pending" in it }, error = null)
+    }
+
+    /** Deletes one breakpoint by the id parsed from "Breakpoint N:" output. */
+    fun removeBreakpointById(id: Int) {
+        sendCommand("breakpoint delete $id")
     }
 
     /**
@@ -796,5 +837,8 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
          * be filtered out of collected command responses.
          */
         private const val LLDB_PROMPT_PREFIX = "(lldb) "
+
+        /** Matches the breakpoint id LLDB prints when a breakpoint is created. */
+        private val BREAKPOINT_ID_REGEX = Regex("""Breakpoint (\d+):""")
     }
 }

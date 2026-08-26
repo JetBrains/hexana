@@ -31,7 +31,18 @@ import com.intellij.ui.content.ContentFactory
 import com.intellij.ui.content.ContentManagerEvent
 import com.intellij.ui.content.ContentManagerListener
 import com.intellij.xdebugger.ui.XDebugTabLayouter
+import com.intellij.openapi.components.service
+import org.jetbrains.hexana.breakpoints.BinaryExecutionPosition
+import org.jetbrains.hexana.breakpoints.BinaryIdentityProvider
+import org.jetbrains.hexana.breakpoints.BreakpointMaterializationCoordinator
+import org.jetbrains.hexana.breakpoints.CdpOffsetBreakpointResult
+import org.jetbrains.hexana.breakpoints.CdpWasmMaterializer
+import org.jetbrains.hexana.breakpoints.MaterializationSession
+import org.jetbrains.hexana.breakpoints.WasmAnchorRehomer
 import org.jetbrains.hexana.dwarf.DwarfInlineFrame
+import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.shared.BinaryAnchor
+import org.jetbrains.hexana.shared.BinaryIdentity
 import org.jetbrains.hexana.shared.CdpMemoryVariable
 import org.jetbrains.hexana.shared.CdpSourceLocationResolver
 import org.jetbrains.hexana.shared.DwarfMemoryDecoder
@@ -70,6 +81,12 @@ internal class CdpDebugProcess(
 
     private val breakpointHandler = CdpBreakpointHandler(this)
     private val stopping = AtomicBoolean(false)
+
+    // --- Binary-view breakpoints (adapter lane) ---
+    private val binaryBreakpointSessionId = java.util.UUID.randomUUID().toString()
+
+    @Volatile
+    private var binaryBreakpointIdentity: BinaryIdentity? = null
     /** Set to `true` once at least one `wasm://` script has been parsed by V8. */
     private val wasmScriptSeen = AtomicBoolean(false)
 
@@ -295,6 +312,8 @@ internal class CdpDebugProcess(
                 session.stop()
             }
         }
+
+        startBinaryBreakpointSession()
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -535,6 +554,8 @@ internal class CdpDebugProcess(
             }
         }
         frameDepthAtPause = callFrames.size
+
+        notifyBinaryBreakpointHit(callFrames)
 
         val topFrame = callFrames[0]
         // buildStackFrame returns 1+ frames: synthetic inlined frames (innermost first)
@@ -1291,6 +1312,149 @@ internal class CdpDebugProcess(
         return cdp.scripts.values.firstOrNull { it.url.startsWith("wasm://") }?.scriptId
     }
 
+    // --- Binary-view breakpoints (adapter lane) ---
+
+    /**
+     * Sets a breakpoint at a raw wasm byte offset for [CdpWasmMaterializer]:
+     * the scriptId form when a wasm script is already known, the URL-regex
+     * form before that (V8 applies it to scripts it has not parsed yet).
+     * Mirrors [trySetBreakpointsViaDwarf] / [trySetBreakpointsViaDwarfByUrl]
+     * but takes the offset directly instead of resolving it from DWARF.
+     */
+    internal suspend fun setWasmOffsetBreakpoint(byteOffset: Long): CdpOffsetBreakpointResult {
+        return try {
+            val wasmScriptId = if (wasmScriptSeen.get()) findWasmScriptId() else null
+            val result = if (wasmScriptId != null) {
+                cdp.send(
+                    "Debugger.setBreakpoint",
+                    mapOf(
+                        "location" to mapOf(
+                            "scriptId" to wasmScriptId,
+                            "lineNumber" to 0,
+                            "columnNumber" to byteOffset.toInt(),
+                        ),
+                    ),
+                )
+            } else {
+                cdp.send(
+                    "Debugger.setBreakpointByUrl",
+                    mapOf(
+                        "urlRegex" to "^wasm://",
+                        "lineNumber" to 0,
+                        "columnNumber" to byteOffset.toInt(),
+                    ),
+                )
+            }
+            val breakpointId = result["breakpointId"] as? String
+                ?: return CdpOffsetBreakpointResult.Rejected("no breakpointId in CDP response: $result")
+            CdpOffsetBreakpointResult.Set(breakpointId, resolvedWasmColumn(result))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            CdpOffsetBreakpointResult.Rejected(e.message ?: "CDP setBreakpoint failed")
+        }
+    }
+
+    /** Removes a breakpoint set via [setWasmOffsetBreakpoint]. */
+    internal suspend fun removeWasmOffsetBreakpoint(cdpBreakpointId: String) {
+        cdp.send("Debugger.removeBreakpoint", mapOf("breakpointId" to cdpBreakpointId))
+    }
+
+    /**
+     * Extracts the resolved wasm byte offset (columnNumber) from a
+     * setBreakpoint ("actualLocation") or setBreakpointByUrl ("locations")
+     * response, or null when the response carries no location.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun resolvedWasmColumn(result: Map<String, Any?>): Long? {
+        val location = result["actualLocation"] as? Map<String, Any?>
+            ?: (result["locations"] as? List<Map<String, Any?>>)?.firstOrNull()
+            ?: return null
+        return (location["columnNumber"] as? Number)?.toLong()
+    }
+
+    /**
+     * Starts the binary-view breakpoint session for [wasmFilePath]. Guarded:
+     * failures are logged and never break CDP debugging.
+     */
+    private fun startBinaryBreakpointSession() {
+        val path = wasmFilePath ?: return
+        scope.launch {
+            try {
+                val vFile = LocalFileSystem.getInstance().findFileByPath(path) ?: return@launch
+                val identity = BinaryIdentityProvider.identityFor(vFile) ?: return@launch
+                binaryBreakpointIdentity = identity
+                val rehomer = try {
+                    mapWasmFileToBuffer(path)?.let { WasmAnchorRehomer(WasmBinaryProvider(it)) }
+                } catch (e: Exception) {
+                    LOG.warn("CDP: wasm rehomer unavailable: ${e.message}")
+                    null
+                }
+                session.project.service<BreakpointMaterializationCoordinator>().sessionStarted(
+                    MaterializationSession(
+                        sessionId = binaryBreakpointSessionId,
+                        identity = identity,
+                        launchedPath = path,
+                        materializer = CdpWasmMaterializer(this@CdpDebugProcess),
+                        rehomer = rehomer,
+                    ),
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                LOG.warn("CDP: binary breakpoint session start failed", e)
+            }
+        }
+    }
+
+    /**
+     * Publishes the paused wasm byte offset (the top wasm frame's
+     * columnNumber) to the binary breakpoint coordinator. funcIdx is not
+     * cheaply available here, so -1 is sent and the UI navigates by
+     * byteOffset alone. Guarded: never breaks pause handling.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun notifyBinaryBreakpointHit(callFrames: List<Map<String, Any?>>) {
+        val identity = binaryBreakpointIdentity ?: return
+        try {
+            val wasmLocation = callFrames.firstNotNullOfOrNull { frame ->
+                val location = frame["location"] as? Map<String, Any?> ?: return@firstNotNullOfOrNull null
+                val scriptId = location["scriptId"] as? String ?: return@firstNotNullOfOrNull null
+                if (cdp.scripts[scriptId]?.url?.startsWith("wasm://") == true) location else null
+            } ?: return
+            val column = (wasmLocation["columnNumber"] as? Number)?.toLong() ?: return
+            session.project.service<BreakpointMaterializationCoordinator>().breakpointHit(
+                BinaryExecutionPosition(
+                    identity,
+                    BinaryAnchor.Wasm(funcIdx = -1, byteOffset = column, funcName = null, instrOrdinal = -1),
+                ),
+            )
+        } catch (e: Exception) {
+            LOG.warn("CDP: binary breakpoint hit notification failed", e)
+        }
+    }
+
+    /** Clears the coordinator's execution position on resume. Guarded. */
+    private fun notifyBinaryExecutionResumed() {
+        if (binaryBreakpointIdentity == null) return
+        try {
+            session.project.service<BreakpointMaterializationCoordinator>().executionResumed()
+        } catch (e: Exception) {
+            LOG.warn("CDP: binary execution-resumed notification failed", e)
+        }
+    }
+
+    /** Ends the binary breakpoint session. Guarded: never breaks shutdown. */
+    private fun endBinaryBreakpointSession() {
+        if (binaryBreakpointIdentity == null) return
+        try {
+            session.project.service<BreakpointMaterializationCoordinator>()
+                .sessionEnded(binaryBreakpointSessionId)
+        } catch (e: Exception) {
+            LOG.warn("CDP: binary breakpoint session end failed", e)
+        }
+    }
+
     internal fun unregisterBreakpointInCdp(breakpoint: XLineBreakpoint<WasmBreakpointProperties>) {
         allRegisteredBreakpoints.remove(breakpoint)
         val cdpIds = ideBreakpointToCdp.remove(breakpoint) ?: return
@@ -1312,6 +1476,7 @@ internal class CdpDebugProcess(
     // ---- Execution control ----
 
     override fun resume(context: XSuspendContext?) {
+        notifyBinaryExecutionResumed()
         scope.launch {
             try {
                 cdp.send("Debugger.resume")
@@ -1339,6 +1504,7 @@ internal class CdpDebugProcess(
 
     override fun stop() {
         if (!stopping.compareAndSet(false, true)) return
+        endBinaryBreakpointSession()
         runBlocking {
             try {
                 cdp.close()

@@ -6,6 +6,7 @@ import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.ui.ExecutionConsole
 import com.intellij.execution.ui.RunnerLayoutUi
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileTypes.FileType
@@ -30,6 +31,17 @@ import com.intellij.xdebugger.frame.XSuspendContext
 import com.intellij.xdebugger.impl.XDebuggerUtilImpl
 import com.intellij.xdebugger.ui.XDebugTabLayouter
 import org.jetbrains.annotations.TestOnly
+import org.jetbrains.hexana.breakpoints.BinaryExecutionPosition
+import org.jetbrains.hexana.breakpoints.BinaryIdentityProvider
+import org.jetbrains.hexana.breakpoints.BreakpointMaterializationCoordinator
+import org.jetbrains.hexana.breakpoints.GdbstubWasmMaterializer
+import org.jetbrains.hexana.breakpoints.LldbJitWasmMaterializer
+import org.jetbrains.hexana.breakpoints.MaterializationSession
+import org.jetbrains.hexana.breakpoints.WasmAnchorRehomer
+import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.shared.BinaryAnchor
+import org.jetbrains.hexana.shared.BinaryIdentity
+import org.jetbrains.hexana.shared.BreakpointMaterializer
 import org.jetbrains.hexana.shared.JIT_REGISTER_FUNCTION_NAME
 import org.jetbrains.hexana.shared.WasmStackShapeAnalyzer
 import org.jetbrains.hexana.shared.WasmStackShapeResult
@@ -50,6 +62,7 @@ import org.jetbrains.hexana.shared.pathMatchesBreakpointLocation
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.shared.decodeWasmValueHex
 import org.jetbrains.hexana.shared.stripCuHashSuffix
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
@@ -268,6 +281,111 @@ open class WasmDebugProcess(
 
     private val jitImagesDir by lazy { FileUtil.createTempDirectory("hexana-jit-images", null, true) }
 
+    // --- Binary-view breakpoints (adapter lane) ---
+
+    private val binaryBreakpointSessionId = UUID.randomUUID().toString()
+
+    @Volatile
+    private var binaryBreakpointIdentity: BinaryIdentity? = null
+
+    @Volatile
+    private var binaryBreakpointMaterializer: BreakpointMaterializer? = null
+
+    /**
+     * Starts the binary-view breakpoint session: computes the executed
+     * binary's identity, selects the engine's materializer (gdbstub address
+     * breakpoints when [deferBreakpointsToLldb], the JIT addrmap adapter
+     * otherwise) and hands both to the project-level
+     * [BreakpointMaterializationCoordinator].
+     *
+     * Must be called AFTER the LLDB transport accepts breakpoint commands:
+     * after `run` on the legacy JIT path, after `process connect` plus
+     * breakpoint replay on the gdbstub paths. All failures are logged and
+     * never break existing debugging.
+     */
+    protected fun startBinaryBreakpointSession() {
+        val path = executedWasmPath ?: return
+        val communicator = lldb ?: return
+        try {
+            val coordinator = session.project.service<BreakpointMaterializationCoordinator>()
+            session.addSessionListener(object : XDebugSessionListener {
+                override fun sessionResumed() {
+                    coordinator.executionResumed()
+                }
+            })
+            ApplicationManager.getApplication().executeOnPooledThread {
+                try {
+                    val vFile = LocalFileSystem.getInstance().findFileByPath(path)
+                        ?: return@executeOnPooledThread
+                    val identity = BinaryIdentityProvider.identityFor(vFile)
+                        ?: return@executeOnPooledThread
+                    binaryBreakpointIdentity = identity
+                    val materializer = if (deferBreakpointsToLldb) {
+                        GdbstubWasmMaterializer(runtimeName = engine.name.lowercase(), communicator = communicator)
+                    } else {
+                        LldbJitWasmMaterializer(communicator) { jitAddrmaps }
+                    }
+                    binaryBreakpointMaterializer = materializer
+                    val rehomer = try {
+                        executedWasmBuffer?.let { WasmAnchorRehomer(WasmBinaryProvider(it.duplicate())) }
+                    } catch (e: Exception) {
+                        LOG.warn("Wasm rehomer unavailable for $path: ${e.message}")
+                        null
+                    }
+                    coordinator.sessionStarted(
+                        MaterializationSession(
+                            sessionId = binaryBreakpointSessionId,
+                            identity = identity,
+                            launchedPath = path,
+                            materializer = materializer,
+                            rehomer = rehomer,
+                        ),
+                    )
+                } catch (e: Exception) {
+                    LOG.warn("Binary breakpoint session start failed", e)
+                }
+            }
+        } catch (e: Exception) {
+            LOG.warn("Binary breakpoint session start failed", e)
+        }
+    }
+
+    /**
+     * Publishes the stopped wasm offset to the binary breakpoint coordinator.
+     * funcIdx is not cheaply available at the stop site, so -1 is sent and
+     * the UI navigates by byteOffset alone. Guarded: never breaks stop
+     * handling.
+     */
+    private fun notifyBinaryBreakpointHit(location: WasmStopLocation) {
+        val identity = binaryBreakpointIdentity ?: return
+        try {
+            session.project.service<BreakpointMaterializationCoordinator>().breakpointHit(
+                BinaryExecutionPosition(
+                    identity,
+                    BinaryAnchor.Wasm(
+                        funcIdx = -1,
+                        byteOffset = location.offset.toLong(),
+                        funcName = null,
+                        instrOrdinal = -1,
+                    ),
+                ),
+            )
+        } catch (e: Exception) {
+            LOG.warn("Binary breakpoint hit notification failed", e)
+        }
+    }
+
+    /** Ends the binary breakpoint session. Guarded: never breaks shutdown. */
+    private fun endBinaryBreakpointSession() {
+        if (binaryBreakpointIdentity == null) return
+        try {
+            session.project.service<BreakpointMaterializationCoordinator>()
+                .sessionEnded(binaryBreakpointSessionId)
+        } catch (e: Exception) {
+            LOG.warn("Binary breakpoint session end failed", e)
+        }
+    }
+
     /** Provides access to the LLDB communicator for subclasses. */
     internal fun getLldb(): LldbCommunicator? = lldb
 
@@ -454,6 +572,7 @@ open class WasmDebugProcess(
                 lldb.runProcess()
                 startEventLoop()
             }
+            startBinaryBreakpointSession()
         }
     }
 
@@ -873,6 +992,7 @@ open class WasmDebugProcess(
 
     override fun stop() {
         LOG.debug("stop() called, eventLoopThread=${eventLoopThread?.name}, processTerminated=${processHandler.isProcessTerminated}")
+        endBinaryBreakpointSession()
         eventLoopThread?.interrupt()
         lldb?.destroy()
         processHandler.destroyProcess()
@@ -1367,6 +1487,7 @@ open class WasmDebugProcess(
         if (!wasmTabAvailable) return
         val pc = parseLldbFramePc(frameInfoLines)
         val location = pc?.let { lookupWasmLocation(communicator, it) }
+        if (location != null) notifyBinaryBreakpointHit(location)
         // The offset is relative to the core module the stop is in, which for a
         // component is one of its embedded modules rather than the whole file.
         val analysis = location?.let { wasmDisassemblySource.analyse(it.moduleId, it.offset) }
@@ -1517,6 +1638,11 @@ open class WasmDebugProcess(
             mapWasmFileToBuffer(path)?.let { WasmtimeAddrmap.parse(it) }
         }
         LOG.debug("refreshJitAddrmaps: ${jitAddrmaps.size} addrmap(s) decoded")
+        try {
+            (binaryBreakpointMaterializer as? LldbJitWasmMaterializer)?.onJitObjectsLoaded()
+        } catch (e: Exception) {
+            LOG.warn("Binary breakpoint JIT rebind failed", e)
+        }
     }
 
     /**

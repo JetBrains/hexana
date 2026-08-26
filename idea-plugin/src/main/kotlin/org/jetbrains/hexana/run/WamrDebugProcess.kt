@@ -115,6 +115,7 @@ class WamrDebugProcess(
             // proper wasm target/process, replay all breakpoints that
             // were deferred during registerBreakpoint() calls.
             replayBreakpointsToLldb()
+            startBinaryBreakpointSession()
         }
 
         // Do NOT call super.sessionInitialized() — the parent
