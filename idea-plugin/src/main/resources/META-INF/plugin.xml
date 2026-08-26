@@ -130,6 +130,8 @@
         <projectService serviceImplementation="org.jetbrains.hexana.breakpoints.BreakpointMaterializationCoordinator"/>
         <!-- Pushes execution-position updates from the coordinator to open binary editors. -->
         <projectService serviceImplementation="org.jetbrains.hexana.breakpoints.BinaryExecutionNavigator"/>
+        <!-- Mirrors BinaryBreakpointRegistry entries to the IDE Breakpoints dialog. -->
+        <projectService serviceImplementation="org.jetbrains.hexana.breakpoints.XBreakpointMirror"/>
 
         <fileType name="wasm"
                   implementationClass="org.jetbrains.hexana.WasmFileType"
@@ -359,6 +361,7 @@
         <programRunner implementation="org.jetbrains.hexana.run.WasmDebugRunner"/>
         <programRunner implementation="org.jetbrains.hexana.run.CdpDebugRunner"/>
         <xdebugger.breakpointType implementation="org.jetbrains.hexana.run.WasmLineBreakpointType"/>
+        <xdebugger.breakpointType implementation="org.jetbrains.hexana.breakpoints.HexanaBinaryBreakpointType"/>
 
     </extensions>
 
