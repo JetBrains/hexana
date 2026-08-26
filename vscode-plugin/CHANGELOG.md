@@ -1,4 +1,4 @@
-# Unreleased
+# 0.10.0 - 26.08.2026
 - fixed the "Debug Info" tab resolving zero source line rows for GCC-built ELF binaries (Zephyr and similar firmware, DWARF4 and DWARF5 alike): GCC emits DWARF v2/v3 line-program headers even in -gdwarf-4/5 builds and the line parser rejected them; they now parse and address-to-line resolution matches addr2line
 - wasmtime debugging switched to the built-in gdbstub (wasmtime 44+): the module runs under `wasmtime run -g` and LLDB attaches through the wasm process plugin, the same model the IntelliJ plugin uses; DWARF is read directly from the wasm binary, removing the JIT-loader and trap-advance workarounds of the native path; when the resolved wasmtime is older, the extension also checks wasmtime's own installer location (`~/.wasmtime/bin`), and only then falls back to native debugging with a visible warning
 - source-level stepping in wasm debug sessions (nodejs and browser runtimes): a step now repeats V8's per-instruction wasm step until the DWARF source line or stack depth changes, instead of pausing on every instruction of the same line; frames without DWARF info keep single-instruction steps
