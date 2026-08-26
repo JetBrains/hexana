@@ -25,7 +25,7 @@ interface AnchorRehomer {
  * Rehomes a Wasm anchor by name + instruction ordinal.
  *
  * Requires [BinaryAnchor.Wasm.funcName] to be non-null. If multiple functions
- * share that name the rehome FAILS (null) — a symbolic name is not a unique key.
+ * share that name the rehome FAILS (null); a symbolic name is not a unique key.
  */
 final class WasmAnchorRehomer(private val provider: WasmBinaryProvider) : AnchorRehomer {
 

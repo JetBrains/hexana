@@ -124,14 +124,16 @@
 
         <applicationService serviceImplementation="org.jetbrains.hexana.run.WasmRuntimeSettings"/>
 
-        <!-- Binary breakpoint registry: persists breakpoints across IDE restarts. -->
+        <!-- Binary breakpoint registry: persists breakpoints across IDE restarts.
+             @State + SimplePersistentStateComponent requires XML registration for state loading. -->
         <projectService serviceImplementation="org.jetbrains.hexana.breakpoints.BinaryBreakpointRegistry"/>
-        <!-- Coordinates breakpoint materialization across debug sessions. -->
+        <!-- Coordinates breakpoint materialization across debug sessions.
+             Instantiated by debug process classes via project.getService(); XML registration required. -->
         <projectService serviceImplementation="org.jetbrains.hexana.breakpoints.BreakpointMaterializationCoordinator"/>
-        <!-- Pushes execution-position updates from the coordinator to open binary editors. -->
-        <projectService serviceImplementation="org.jetbrains.hexana.breakpoints.BinaryExecutionNavigator"/>
-        <!-- Mirrors BinaryBreakpointRegistry entries to the IDE Breakpoints dialog. -->
-        <projectService serviceImplementation="org.jetbrains.hexana.breakpoints.XBreakpointMirror"/>
+        <!-- XBreakpointMirror and BinaryExecutionNavigator are @Service light services without
+             @State. They are eagerly instantiated by BreakpointsEagerStartup below.
+             No <projectService> entry needed: @Service alone registers them on IJ 252+. -->
+        <postStartupActivity implementation="org.jetbrains.hexana.breakpoints.BreakpointsEagerStartup"/>
 
         <fileType name="wasm"
                   implementationClass="org.jetbrains.hexana.WasmFileType"

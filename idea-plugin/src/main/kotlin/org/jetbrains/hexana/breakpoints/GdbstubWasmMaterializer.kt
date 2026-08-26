@@ -13,7 +13,7 @@ private const val GDBSTUB_PC_BASE = 0x4000000000000000UL
 
 /**
  * Encodes a wasm byte offset as an LLDB wasm-gdbstub code address:
- * `0x4000000000000000 | (moduleId << 32) | byteOffset` — the inverse of
+ * `0x4000000000000000 | (moduleId << 32) | byteOffset`, the inverse of
  * [org.jetbrains.hexana.shared.wasmOffsetForGdbPc] and
  * [org.jetbrains.hexana.shared.wasmModuleIdForGdbPc].
  */
