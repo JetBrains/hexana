@@ -362,16 +362,16 @@ data class PatronusCheck(
 
 fun readPatronusChecks(configFile: File): List<PatronusCheck> {
     val lines = configFile.readLines()
-    check(lines.take(3) == listOf("version: \"1.0\"", "", "checks:")) {
+    check(lines.take(2) == listOf("version: \"1.0\"", "checks:")) {
         "${configFile.path} must start with the supported Patronus version and checks header"
     }
 
-    val configurationPattern = Regex("""  - configurationId: \"([^\"]+)\"""")
-    val groupIdPattern = Regex("""      id: \"([^\"]+)\"""")
-    val fallbackPattern = Regex("""      isFallback: (true|false)""")
-    val changePattern = Regex("""      - \"([^\"]+)\"""")
+    val configurationPattern = Regex("""- configurationId: \"([^\"]+)\"""")
+    val groupIdPattern = Regex("""    id: \"([^\"]+)\"""")
+    val fallbackPattern = Regex("""    isFallback: (true|false)""")
+    val changePattern = Regex("""  - \"([^\"]+)\"""")
     val checks = mutableListOf<PatronusCheck>()
-    var lineIndex = 3
+    var lineIndex = 2
     while (lineIndex < lines.size) {
         if (lines[lineIndex].isBlank()) {
             lineIndex++
@@ -390,7 +390,7 @@ fun readPatronusChecks(configFile: File): List<PatronusCheck> {
             val line = lines[lineIndex]
             when {
                 line.isBlank() -> Unit
-                line == "    group:" -> {
+                line == "  group:" -> {
                     check(!groupSeen) { "$configurationId declares group more than once" }
                     check(!changesSeen) { "$configurationId declares group after executeOnChanges" }
                     groupSeen = true
@@ -406,7 +406,7 @@ fun readPatronusChecks(configFile: File): List<PatronusCheck> {
                     fallbackSeen = true
                     isFallback = fallbackPattern.matchEntire(line)!!.groupValues[1].toBoolean()
                 }
-                line == "    executeOnChanges:" -> {
+                line == "  executeOnChanges:" -> {
                     check(!changesSeen) { "$configurationId declares executeOnChanges more than once" }
                     check(!groupSeen || groupId != null) { "$configurationId group must declare an id" }
                     changesSeen = true
@@ -448,6 +448,16 @@ tasks.register("verifyPatronusRoutingCoverage") {
                 listOf("/ui-driver-tests/**", "/idea-plugin/src/ui-tests-framework/**"),
             ),
             intellijId to PatronusCheck(intellijId, productGroupId, false, listOf("/idea-plugin/**")),
+            serverCliId to PatronusCheck(
+                serverCliId,
+                productGroupId,
+                false,
+                listOf(
+                    "/cli/**", "/mcp/**", "!/mcp/core/**", "!/mcp/scripting/**", "!/mcp/tools-generator/**",
+                ),
+            ),
+            vscodeId to PatronusCheck(vscodeId, productGroupId, false, listOf("/vscode-plugin/**", "/web-ui/**")),
+            webappId to PatronusCheck(webappId, productGroupId, false, listOf("/webapp/**", "/web-ui/**")),
             coreId to PatronusCheck(
                 coreId,
                 productGroupId,
@@ -458,16 +468,6 @@ tasks.register("verifyPatronusRoutingCoverage") {
                     "/disassembly/**", "/encdec/**", "/hexanaDocument/**", "/jvm-jit/**", "/parsing/**",
                     "/plugins-shared/**", "/wasmParser/**", "/graalwasm/**", "/wasm-modules/**",
                     "/mcp/core/**", "/mcp/scripting/**", "/mcp/tools-generator/**",
-                ),
-            ),
-            vscodeId to PatronusCheck(vscodeId, productGroupId, false, listOf("/vscode-plugin/**", "/web-ui/**")),
-            webappId to PatronusCheck(webappId, productGroupId, false, listOf("/webapp/**", "/web-ui/**")),
-            serverCliId to PatronusCheck(
-                serverCliId,
-                productGroupId,
-                false,
-                listOf(
-                    "/cli/**", "/mcp/**", "!/mcp/core/**", "!/mcp/scripting/**", "!/mcp/tools-generator/**",
                 ),
             ),
         )
@@ -534,7 +534,8 @@ tasks.register("verifyPatronusRoutingCoverage") {
 
         actualProjects.values.forEach { project ->
             val relativeDirectory = project.projectDir.relativeTo(rootProject.projectDir).invariantSeparatorsPath
-            val expectedDirectory = project.path.removePrefix(":").replace(':', '/')
+            val expectedDirectory = mapOf(":patronus-config" to ".patronus/patronus-config")[project.path]
+                ?: project.path.removePrefix(":").replace(':', '/')
             check(relativeDirectory == expectedDirectory) {
                 "${project.path} uses unexpected project directory /$relativeDirectory; expected /$expectedDirectory"
             }
@@ -569,6 +570,18 @@ tasks.register("verifyPatronusRoutingCoverage") {
             }
         }
     }
+}
+
+tasks.register("updatePatronusConfig") {
+    group = "build setup"
+    description = "Regenerate .patronus/config.yaml from the Patronus Kotlin DSL."
+    dependsOn(":patronus-config:updatePatronusConfig")
+}
+
+tasks.register("verifyPatronusConfigUpToDate") {
+    group = "verification"
+    description = "Verify that .patronus/config.yaml matches the Patronus Kotlin DSL."
+    dependsOn(":patronus-config:verifyPatronusConfigUpToDate")
 }
 
 tasks.register("verifyTeamcityFallbackCoreTestsCoverage") {

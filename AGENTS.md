@@ -162,6 +162,8 @@ Run the narrowest command that proves your change.
   - `cli/**` and non-shared `mcp/**` paths select `InnoHub_HexFlow_ServerCliTestsPatronus`; `mcp/core/**`,
     `mcp/scripting/**`, and `mcp/tools-generator/**` are excluded there and route through the Core composite
 - Keep `.patronus/config.yaml` and the explicit Gradle-project routing inventory in the root build synchronized.
+  `.patronus/config.yaml` is generated from `.patronus/patronus-config`; update it with
+  `./gradlew updatePatronusConfig` and verify it with `./gradlew verifyPatronusConfigUpToDate`.
   Explicit owners remain exact (no stale, duplicate, or mismatched direct routes); an unlisted non-exempt project
   resolves through Core's sole Patronus fallback. Run `./gradlew verifyPatronusRoutingCoverage` after changing
   Patronus paths or `settings.gradle.kts`; the verifier is also a direct dependency of `teamcityCiTests`.

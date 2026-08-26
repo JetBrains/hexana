@@ -22,6 +22,7 @@ kotlinx-coroutines = "1.10.2"
 kotlinx-serialization = "1.9.0"
 logback = "1.5.32"
 posthog-server = "2.4.0"
+patronusConfig = "2026.08.20-1705"
 mcpKotlinSdk = "0.11.0"
 ktor = "3.4.1"
 slf4j = "2.0.17"
@@ -51,6 +52,7 @@ kotlinpoet-jvm = { module = "com.squareup:kotlinpoet-jvm", version.ref = "kotlin
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 mcp-kotlin-sdk-jvm = { module = "io.modelcontextprotocol:kotlin-sdk-jvm", version.ref = "mcpKotlinSdk" }
 posthog-server = { module = "com.posthog:posthog-server", version.ref = "posthog-server" }
+patronus-config = { module = "org.jetbrains.patronus:patronus-config", version.ref = "patronusConfig" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 graalvm-polyglot = { module = "org.graalvm.polyglot:polyglot", version.ref = "graalvm" }
 graalvm-wasm = { module = "org.graalvm.polyglot:wasm", version.ref = "graalvm" }
