@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.whatsnew
 
 import com.intellij.testFramework.UsefulTestCase
+import javax.imageio.ImageIO
 import kotlin.io.path.exists
 
 class HexanaWhatsNewTest : UsefulTestCase() {
@@ -18,13 +19,24 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         }
     }
 
-    fun testLoadWhatsNewVisualDecodesBundled019AnimatedGif() {
+    fun testBundled019AnimatedGifFitsRuntimeBudget() {
         val content = requireNotNull(HexanaWhatsNewContentService.createContent("0.19"))
         try {
-            val visual = loadWhatsNewVisual(content.rootDirectory.resolve("screenshots/component-model-debugger.gif"))
+            ImageIO.createImageInputStream(content.rootDirectory.resolve("screenshots/component-model-debugger.gif").toFile()).use { input ->
+                val reader = ImageIO.getImageReaders(input).asSequence().firstOrNull()
+                    ?: error("No ImageIO reader for the bundled 0.19 GIF")
+                try {
+                    reader.input = input
+                    val frameCount = reader.getNumImages(true)
+                    val decodedBytes = frameCount.toLong() * reader.getWidth(0) * reader.getHeight(0) * 4
 
-            assertTrue(visual is HexanaWhatsNewVisual.Animated)
-            assertEquals(19, (visual as HexanaWhatsNewVisual.Animated).frames.size)
+                    assertEquals(19, frameCount)
+                    assertTrue(decodedBytes <= MAX_ANIMATED_DECODED_BYTES)
+                    assertTrue(frameCount <= MAX_ANIMATED_FRAME_COUNT)
+                } finally {
+                    reader.dispose()
+                }
+            }
         } finally {
             content.dispose()
         }

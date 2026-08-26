@@ -77,8 +77,8 @@ internal data class HexanaWhatsNewAnimationFrame(
     val durationMillis: Int,
 )
 
-private const val MAX_ANIMATED_FRAME_COUNT = 120
-private const val MAX_ANIMATED_DECODED_BYTES = 48 * 1024 * 1024
+internal const val MAX_ANIMATED_FRAME_COUNT = 120
+internal const val MAX_ANIMATED_DECODED_BYTES = 48 * 1024 * 1024
 
 private data class WhatsNewSource(
     val version: String = "",
