@@ -32,7 +32,10 @@ internal class GdbDapBreakpointTransport(
     override val loadBias: ULong = 0u
 
     private val supportsInstruction: Boolean =
-        capabilities?.get("supportsInstructionBreakpoints")?.jsonPrimitive?.booleanOrNull == true
+        (capabilities?.get("supportsInstructionBreakpoints")?.jsonPrimitive?.booleanOrNull == true).also {
+            LOG.warn("hexana-bp: transport strategy=${if (it) "setInstructionBreakpoints" else "evaluate break"} " +
+                "(capabilities=${capabilities?.keys?.take(30)})")
+        }
 
     // Serializes mutations of activeAddresses and CLI-side breakpoint-id map.
     private val lock = Any()
@@ -78,13 +81,16 @@ internal class GdbDapBreakpointTransport(
             activeAddresses += address
             fullSet = activeAddresses.toList()
         }
-        val response = client.request("setInstructionBreakpoints", buildJsonObject {
+        val request = buildJsonObject {
             putJsonArray("breakpoints") {
                 for (addr in fullSet) {
                     addJsonObject { put("instructionReference", "0x${addr.toString(16)}") }
                 }
             }
-        })
+        }
+        LOG.warn("hexana-bp: setInstructionBreakpoints request=$request")
+        val response = client.request("setInstructionBreakpoints", request)
+        LOG.warn("hexana-bp: setInstructionBreakpoints response=$response")
         return parseInstructionBreakpointOutcome(response, address)
     }
 
@@ -109,10 +115,12 @@ internal class GdbDapBreakpointTransport(
 
     private fun setViaCli(address: ULong): GdbBreakpointOutcome {
         val expr = "break *0x${address.toString(16)}"
+        LOG.warn("hexana-bp: evaluate repl '$expr'")
         val response = client.request("evaluate", buildJsonObject {
             put("expression", expr)
             put("context", "repl")
         })
+        LOG.warn("hexana-bp: evaluate response=$response")
         val resultText = response["body"]?.jsonObject?.get("result")?.jsonPrimitive?.contentOrNull ?: ""
         val bpNumber = parseCliBreakNumber(resultText)
         return if (bpNumber != null) {

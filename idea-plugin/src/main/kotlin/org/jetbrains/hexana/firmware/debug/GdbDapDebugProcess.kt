@@ -334,7 +334,11 @@ class GdbDapDebugProcess(
         try {
             val addrStr = topFrame["instructionPointerReference"]?.jsonPrimitive?.contentOrNull
                 ?: topFrame["address"]?.jsonPrimitive?.contentOrNull
-                ?: return
+                ?: run {
+                    LOG.warn("hexana-bp: stop frame has no address field, keys=${topFrame.keys}")
+                    return
+                }
+            LOG.warn("hexana-bp: stop at pc=$addrStr")
             val pc = addrStr.removePrefix("0x").toULongOrNull(16) ?: return
             val coordinator = session.project.service<BreakpointMaterializationCoordinator>()
             coordinator.breakpointHit(

@@ -173,6 +173,11 @@ final class BreakpointMaterializationCoordinator(private val project: Project) {
 
         // Collect exact-identity breakpoints (after rehoming may have added some).
         val exactBps = registry.forIdentity(session.identity).filter { !it.stale && it.enabled }
+        HexanaLog.LOG.warn(
+            "hexana-bp: session ${session.sessionId.take(8)} identity sha=${session.identity.contentSha256.take(12)} " +
+                "path=${session.launchedPath}: ${exactBps.size} matching enabled breakpoint(s), " +
+                "registry total=${registry.breakpoints.value.size}"
+        )
 
         // Set all to PENDING.
         _states.value = exactBps.associate { it.id to SessionBreakpointState(MaterializationState.PENDING, null) }
@@ -238,25 +243,30 @@ final class BreakpointMaterializationCoordinator(private val project: Project) {
             .launchIn(scope)
     }
 
+    /**
+     * Pushes one breakpoint to the adapter and SUSPENDS until [BreakpointMaterializer.materialize]
+     * returns. Must not fire-and-forget: [runSession]'s initial push completes (and frozen-target
+     * debug processes issue their first continue) only after every materialize call returned, so
+     * an inner launch here would reintroduce the insert-after-continue race.
+     */
     private suspend fun materializeOne(bp: BinaryBreakpoint, materializer: BreakpointMaterializer) {
-        scope.launch {
-            try {
-                materializer.materialize(bp) { result ->
-                    val newState = when (result) {
-                        is MaterializationResult.Verified ->
-                            SessionBreakpointState(MaterializationState.VERIFIED, null)
-                        is MaterializationResult.Degraded ->
-                            SessionBreakpointState(MaterializationState.DEGRADED, result.resolvedDescription)
-                        is MaterializationResult.Failed ->
-                            SessionBreakpointState(MaterializationState.FAILED, result.reason)
-                    }
-                    _states.value = _states.value + (bp.id to newState)
+        try {
+            materializer.materialize(bp) { result ->
+                val newState = when (result) {
+                    is MaterializationResult.Verified ->
+                        SessionBreakpointState(MaterializationState.VERIFIED, null)
+                    is MaterializationResult.Degraded ->
+                        SessionBreakpointState(MaterializationState.DEGRADED, result.resolvedDescription)
+                    is MaterializationResult.Failed ->
+                        SessionBreakpointState(MaterializationState.FAILED, result.reason)
                 }
-            } catch (e: Exception) {
-                _states.value = _states.value + (bp.id to
-                    SessionBreakpointState(MaterializationState.FAILED, e.message ?: "exception during materialize"))
-                HexanaLog.LOG.warn("BreakpointMaterializationCoordinator: materialize threw for ${bp.id}", e)
+                _states.value = _states.value + (bp.id to newState)
+                HexanaLog.LOG.warn("hexana-bp: materialize ${bp.id.take(8)} -> $result")
             }
+        } catch (e: Exception) {
+            _states.value = _states.value + (bp.id to
+                SessionBreakpointState(MaterializationState.FAILED, e.message ?: "exception during materialize"))
+            HexanaLog.LOG.warn("BreakpointMaterializationCoordinator: materialize threw for ${bp.id}", e)
         }
     }
 

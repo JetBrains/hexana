@@ -57,6 +57,9 @@ final class BinaryBreakpointRegistry :
             state.entries = (state.entries + BinaryBreakpointEntry.fromBinaryBreakpoint(bp)).toMutableList()
             _breakpoints.value = state.entries.mapNotNull { it.toBinaryBreakpoint() }
         }
+        org.jetbrains.hexana.HexanaLog.LOG.warn(
+            "hexana-bp: registry.add id=${bp.id.take(8)} anchor=${describeAnchor(anchor)} sha=${identity.contentSha256.take(12)}"
+        )
         return bp
     }
 
@@ -97,6 +100,9 @@ final class BinaryBreakpointRegistry :
             return if (existing != null) {
                 state.entries = state.entries.filter { it.id != existing.id }.toMutableList()
                 _breakpoints.value = state.entries.mapNotNull { it.toBinaryBreakpoint() }
+                org.jetbrains.hexana.HexanaLog.LOG.warn(
+                    "hexana-bp: registry.toggle REMOVED anchor=${describeAnchor(anchor)} sha=${identity.contentSha256.take(12)}"
+                )
                 false
             } else {
                 val bp = BinaryBreakpoint(
@@ -110,9 +116,18 @@ final class BinaryBreakpointRegistry :
                 )
                 state.entries = (state.entries + BinaryBreakpointEntry.fromBinaryBreakpoint(bp)).toMutableList()
                 _breakpoints.value = state.entries.mapNotNull { it.toBinaryBreakpoint() }
+                org.jetbrains.hexana.HexanaLog.LOG.warn(
+                    "hexana-bp: registry.toggle ADDED id=${bp.id.take(8)} anchor=${describeAnchor(anchor)} " +
+                        "sha=${identity.contentSha256.take(12)} path=$filePath"
+                )
                 true
             }
         }
+    }
+
+    private fun describeAnchor(anchor: BinaryAnchor): String = when (anchor) {
+        is BinaryAnchor.Wasm -> "wasm(func=${anchor.funcIdx} off=0x${anchor.byteOffset.toString(16)} ord=${anchor.instrOrdinal})"
+        is BinaryAnchor.Native -> "native(va=0x${anchor.virtualAddress.toString(16)} sym=${anchor.symbolName}+0x${anchor.offsetInSymbol.toString(16)})"
     }
 
     private fun anchorsPositionallyEqual(entry: BinaryBreakpointEntry, anchor: BinaryAnchor): Boolean {

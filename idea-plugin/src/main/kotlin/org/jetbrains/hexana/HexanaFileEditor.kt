@@ -305,7 +305,12 @@ class HexanaFileEditor(
                     gutterMarksModelFlow = editor.gutterMarksModelFlow,
                     executionOffsetFlow = editor.executionOffsetFlow,
                     onToggleWasmBreakpoint = { funcIdx, byteOffset, instrOrdinal ->
-                        val identity = editor.cachedIdentity ?: return@BinaryEditorView
+                        val identity = editor.cachedIdentity ?: run {
+                            org.jetbrains.hexana.HexanaLog.LOG.warn(
+                                "hexana-bp: wasm gutter click IGNORED, identity not computed yet for ${myFile.path}"
+                            )
+                            return@BinaryEditorView
+                        }
                         BinaryBreakpointRegistry.getInstance(myProject).toggle(
                             identity = identity,
                             anchor = BinaryAnchor.Wasm(funcIdx, byteOffset, null, instrOrdinal),
@@ -313,7 +318,12 @@ class HexanaFileEditor(
                         )
                     },
                     onToggleNativeBreakpoint = { va ->
-                        val identity = editor.cachedIdentity ?: return@BinaryEditorView
+                        val identity = editor.cachedIdentity ?: run {
+                            org.jetbrains.hexana.HexanaLog.LOG.warn(
+                                "hexana-bp: native gutter click IGNORED, identity not computed yet for ${myFile.path}"
+                            )
+                            return@BinaryEditorView
+                        }
                         BinaryBreakpointRegistry.getInstance(myProject).toggle(
                             identity = identity,
                             anchor = BinaryAnchor.Native(va.toULong(), null, 0uL),
