@@ -140,11 +140,11 @@ class FirmwareDebugProcess(
                 BinaryIdentityProvider.identityFor(vFile, elfBuildId = null)
             } else null
             if (identity == null) {
-                LOG.warn("FirmwareDebugProcess: binary identity unavailable for $path — breakpoint session not started")
+                LOG.warn("FirmwareDebugProcess: binary identity unavailable for $path, breakpoint session not started")
                 return
             }
             // rehomer is null in v1; ElfAnchorRehomer would require a full ELF parse here.
-            coordinator.sessionStarted(
+            coordinator.sessionStartedAndAwaitInitialPush(
                 MaterializationSession(
                     sessionId = breakpointSessionId,
                     identity = identity,

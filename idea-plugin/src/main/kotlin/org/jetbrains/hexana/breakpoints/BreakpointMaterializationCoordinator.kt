@@ -4,6 +4,7 @@ import com.intellij.notification.Notification
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -16,8 +17,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.hexana.HexanaLog
 import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.shared.BinaryAnchor
@@ -72,10 +75,26 @@ final class BreakpointMaterializationCoordinator(private val project: Project) {
     private var sessionJob: Job? = null
     private var registryObserverJob: Job? = null
 
-    fun sessionStarted(session: MaterializationSession) {
+    fun sessionStarted(session: MaterializationSession): CompletableDeferred<Unit> {
         sessionJob?.cancel()
         registryObserverJob?.cancel()
-        sessionJob = scope.launch { runSession(session) }
+        val initialPushDone = CompletableDeferred<Unit>()
+        sessionJob = scope.launch { runSession(session, initialPushDone) }
+        return initialPushDone
+    }
+
+    /**
+     * Starts the session like [sessionStarted] and blocks until the initial materialization
+     * pass has pushed every eligible breakpoint to the adapter (or [timeoutMs] elapses).
+     *
+     * Debug processes attached to a frozen target MUST use this variant and only resume the
+     * target afterwards; otherwise fast firmware (hello_world reaches idle in well under a
+     * millisecond of emulated time) runs past every breakpoint before it is inserted.
+     * Call from a pooled thread, never the EDT.
+     */
+    fun sessionStartedAndAwaitInitialPush(session: MaterializationSession, timeoutMs: Long = 10_000) {
+        val done = sessionStarted(session)
+        runBlocking { withTimeoutOrNull(timeoutMs) { done.await() } }
     }
 
     fun sessionEnded(sessionId: String) {
@@ -134,7 +153,7 @@ final class BreakpointMaterializationCoordinator(private val project: Project) {
         }
     }
 
-    private suspend fun runSession(session: MaterializationSession) {
+    private suspend fun runSession(session: MaterializationSession, initialPushDone: CompletableDeferred<Unit>? = null) {
         mutex.withLock { activeSession = session }
 
         val registry = BinaryBreakpointRegistry.getInstance(project)
@@ -158,9 +177,14 @@ final class BreakpointMaterializationCoordinator(private val project: Project) {
         // Set all to PENDING.
         _states.value = exactBps.associate { it.id to SessionBreakpointState(MaterializationState.PENDING, null) }
 
-        // Materialize each.
-        for (bp in exactBps) {
-            materializeOne(bp, session.materializer)
+        // Materialize each. The deferred is completed even on failure so a frozen-target
+        // debug process awaiting the initial push never hangs past its timeout needlessly.
+        try {
+            for (bp in exactBps) {
+                materializeOne(bp, session.materializer)
+            }
+        } finally {
+            initialPushDone?.complete(Unit)
         }
 
         // Deadline: any still-PENDING after deadlineMs becomes FAILED.

@@ -138,7 +138,7 @@ class GdbDapDebugProcess(
                 LOG.warn("GdbDapDebugProcess: timeout waiting for initialized event")
             }
 
-            applyStopAtEntryPolicy()
+            applyConfigurationPhase()
 
             // Now the attach response should have arrived.
             try {
@@ -147,7 +147,12 @@ class GdbDapDebugProcess(
                 LOG.warn("GdbDapDebugProcess: attach response not received", e)
             }
 
+            // Materialize binary-view breakpoints WHILE THE TARGET IS STILL FROZEN and only
+            // then issue the initial continue. Fast firmware (hello_world) reaches the idle
+            // loop in under a millisecond of emulated time; a breakpoint inserted after the
+            // continue can never fire.
             startBinaryBreakpointSession(capabilities)
+            startExecutionPolicy()
             startEventLoop()
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -176,12 +181,12 @@ class GdbDapDebugProcess(
                 BinaryIdentityProvider.identityFor(vFile, elfBuildId = null)
             } else null
             if (identity == null) {
-                LOG.warn("GdbDapDebugProcess: binary identity unavailable for $elfPath — breakpoint session not started")
+                LOG.warn("GdbDapDebugProcess: binary identity unavailable for $elfPath, breakpoint session not started")
                 return
             }
             // rehomer is null in v1: constructing ElfBinaryProvider here requires parsing the
             // full ELF and is deferred to a follow-up.
-            coordinator.sessionStarted(
+            coordinator.sessionStartedAndAwaitInitialPush(
                 MaterializationSession(
                     sessionId = breakpointSessionId,
                     identity = identity,
@@ -198,31 +203,40 @@ class GdbDapDebugProcess(
         }
     }
 
-    private fun applyStopAtEntryPolicy() {
+    /**
+     * Configuration phase: function breakpoints (stop-at-main) plus configurationDone.
+     * Deliberately does NOT resume the target; registry breakpoints are materialized
+     * against the still-frozen stub first, then [startExecutionPolicy] resumes.
+     */
+    private fun applyConfigurationPhase() {
         when (stopAtEntry) {
             StopAtEntry.MAIN -> {
-                LOG.info("GdbDapDebugProcess: stopAtEntry=MAIN — setting breakpoint on main")
+                LOG.info("GdbDapDebugProcess: stopAtEntry=MAIN, setting breakpoint on main")
                 client.request("setFunctionBreakpoints", buildJsonObject {
                     putJsonArray("breakpoints") {
                         addJsonObject { put("name", "main") }
                     }
                 })
                 client.request("configurationDone")
+            }
+            StopAtEntry.ENTRY, StopAtEntry.NONE -> {
+                LOG.info("GdbDapDebugProcess: stopAtEntry=$stopAtEntry, configurationDone")
+                client.request("configurationDone")
+            }
+        }
+    }
+
+    /** Execution phase: initial run policy, issued only after breakpoint materialization. */
+    private fun startExecutionPolicy() {
+        when (stopAtEntry) {
+            StopAtEntry.MAIN, StopAtEntry.NONE -> {
                 // QEMU -S delivers a stopped(attach) event immediately on connect.
-                // Drain it before continuing so the event loop sees only the breakpoint stop.
+                // Drain it before continuing so the event loop sees only real stops.
                 drainAttachStop()
                 client.request("continue", buildJsonObject { put("threadId", currentThreadId) })
             }
             StopAtEntry.ENTRY -> {
-                LOG.info("GdbDapDebugProcess: stopAtEntry=ENTRY — configurationDone only (already stopped)")
-                client.request("configurationDone")
-                // stopped(attach) will be handled by the event loop as the initial position.
-            }
-            StopAtEntry.NONE -> {
-                LOG.info("GdbDapDebugProcess: stopAtEntry=NONE — configurationDone then continue")
-                client.request("configurationDone")
-                drainAttachStop()
-                client.request("continue", buildJsonObject { put("threadId", currentThreadId) })
+                // Stay frozen; stopped(attach) is handled by the event loop as the initial position.
             }
         }
     }
@@ -312,7 +326,7 @@ class GdbDapDebugProcess(
      * Publishes the stopped PC to the binary-view breakpoint coordinator.
      * Tries [instructionPointerReference] (set when supportsInstructionBreakpoints is true),
      * then [address] (non-standard but emitted by some gdb-dap adapters). Skips silently
-     * when no address field is present — best-effort, never breaks stop handling.
+     * when no address field is present (best-effort, never breaks stop handling).
      */
     private fun notifyBinaryBreakpointHit(topFrame: JsonObject?) {
         val identity = binaryIdentity ?: return
