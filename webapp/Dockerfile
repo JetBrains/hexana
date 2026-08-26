@@ -30,7 +30,8 @@ ARG HEXANA_SOURCE_REVISION
 LABEL org.opencontainers.image.source="${HEXANA_SOURCE_URL}" \
       org.opencontainers.image.revision="${HEXANA_SOURCE_REVISION}"
 USER root
-RUN rm -rf /usr/share/nginx/html && \
+RUN apk add --no-cache --upgrade 'libcrypto3>=3.5.8-r0' 'libssl3>=3.5.8-r0' && \
+    rm -rf /usr/share/nginx/html && \
     mkdir -p /usr/share/nginx/html
 COPY webapp/nginx.conf /etc/nginx/conf.d/default.conf
 COPY webapp/security-headers.conf /etc/nginx/snippets/security-headers.conf

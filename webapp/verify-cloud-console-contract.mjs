@@ -60,7 +60,8 @@ requireText(dockerfile, "COPY webapp/security-headers.conf /etc/nginx/snippets/s
 const runtimeFrom = dockerfile.match(/^FROM\s+nginxinc\/nginx-unprivileged:\S+$/gm)?.at(-1);
 if (runtimeFrom !== `FROM ${runtimeBase}`) throw new Error(`Dockerfile runtime stage must use ${runtimeBase}`);
 const runtimeStage = dockerfile.slice(dockerfile.lastIndexOf(`FROM ${runtimeBase}`));
-requireOrdered(runtimeStage, ["USER root", "RUN rm -rf /usr/share/nginx/html", "mkdir -p /usr/share/nginx/html", "USER 101", "COPY --from=selected-package-verifier --chown=101:101 /package/"], "Dockerfile runtime stage");
+const opensslRemediation = "apk add --no-cache --upgrade 'libcrypto3>=3.5.8-r0' 'libssl3>=3.5.8-r0'";
+requireOrdered(runtimeStage, ["USER root", opensslRemediation, "rm -rf /usr/share/nginx/html", "mkdir -p /usr/share/nginx/html", "USER 101", "COPY --from=selected-package-verifier --chown=101:101 /package/"], "Dockerfile runtime stage");
 if (runtimeStage.match(/^USER\s+\S+/gm)?.at(-1) !== "USER 101") throw new Error("Dockerfile runtime stage must restore USER 101 as its final user");
 forbid(dockerfile, /\b(latest|stable|mainline)\b/i, "Dockerfile");
 for (const header of ["Content-Security-Policy", "X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy", "X-Frame-Options", "Cross-Origin-Opener-Policy", "Cross-Origin-Embedder-Policy", "Cross-Origin-Resource-Policy"]) requireText(securityHeaders, header, "security-headers.conf");
