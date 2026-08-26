@@ -81,7 +81,7 @@ fun buildDebuggerConsolePanel(
         emptyText.text = "Enter debugger command…"
     }
 
-    // Command history — most-recent at index 0.
+    // Command history -- most-recent at index 0.
     val history = ArrayDeque<String>()
     var historyIndex = -1
 

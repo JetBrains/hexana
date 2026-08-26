@@ -321,6 +321,85 @@ class DebuggerConsoleGuardrailTest : UsefulTestCase() {
     }
 
     // -----------------------------------------------------------------------
+    // M1: LLDB prefix-expansion tests
+    // -----------------------------------------------------------------------
+
+    /** `cont` is a unique prefix of `continue` -> Intercept(RESUME). */
+    fun testLldb_cont_interceptsResume() {
+        assertIntercept(InterceptAction.RESUME, "cont", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    /** `co` is a unique prefix of `continue` -> Intercept(RESUME). */
+    fun testLldb_co_interceptsResume() {
+        assertIntercept(InterceptAction.RESUME, "co", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    /** `proc c` expands to `process continue` -> Intercept(RESUME). */
+    fun testLldb_procC_interceptsResume() {
+        assertIntercept(InterceptAction.RESUME, "proc c", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    /** `process cont` expands to `process continue` -> Intercept(RESUME). */
+    fun testLldb_processCont_interceptsResume() {
+        assertIntercept(InterceptAction.RESUME, "process cont", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    /** `pro int` expands to `process interrupt` -> Intercept(PAUSE). */
+    fun testLldb_proInt_interceptsPause() {
+        assertIntercept(InterceptAction.PAUSE, "pro int", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    /** `fin` is a unique prefix of `finish` -> Intercept(STEP_OUT). */
+    fun testLldb_fin_interceptsStepOut() {
+        assertIntercept(InterceptAction.STEP_OUT, "fin", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    /** `ne` is a unique prefix of `next` -> Intercept(STEP_OVER). */
+    fun testLldb_ne_interceptsStepOver() {
+        assertIntercept(InterceptAction.STEP_OVER, "ne", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    /** `ste` is a unique prefix of `step` -> Intercept(STEP_INTO). */
+    fun testLldb_ste_interceptsStepInto() {
+        assertIntercept(InterceptAction.STEP_INTO, "ste", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    /** `ru` is a unique prefix of `run` -> Block. */
+    fun testLldb_ru_isBlocked() {
+        assertBlock("ru", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    /** `qu` is a unique prefix of `quit` -> Intercept(STOP). */
+    fun testLldb_qu_interceptsStop() {
+        assertIntercept(InterceptAction.STOP, "qu", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    /** `call foo()` must not be caught by a prefix expansion of `c`. */
+    fun testLldb_callFoo_isAllowed() {
+        assertAllow("call foo()", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    /** `st` is ambiguous (step/statistics/settings) -- must not be intercepted. */
+    fun testLldb_st_isAllowed() {
+        assertAllow("st", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    /** `re read` (register read) -- `re` is ambiguous, must not be intercepted. */
+    fun testLldb_reRead_isAllowed() {
+        assertAllow("re read", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    /** `frame select 2` is not an execution-control command -- must be Allow. */
+    fun testLldb_frameSelect_isAllowed() {
+        assertAllow("frame select 2", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    /** `p x` (print) is not an execution-control command -- must be Allow. */
+    fun testLldb_printX_isAllowed() {
+        assertAllow("p x", ConsoleSessionKind.LLDB_WASMTIME_JIT)
+    }
+
+    // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 

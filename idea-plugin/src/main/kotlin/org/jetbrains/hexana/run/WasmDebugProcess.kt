@@ -439,6 +439,15 @@ open class WasmDebugProcess(
     @Volatile
     private var disassemblyTabSelected = false
 
+    /**
+     * True while [handleStopImpl] is executing. The console transport checks
+     * this in [isAcceptingCommands] to prevent commands from interleaving with
+     * the stop-handling sequence (which issues multiple LLDB calls and would
+     * produce corrupted output if interrupted).
+     */
+    @Volatile
+    private var handlingStop: Boolean = false
+
     /** `true` once the "Wasm" tab has been added to the debugger layout. */
     @Volatile
     private var wasmTabRegistered = false
@@ -497,7 +506,7 @@ open class WasmDebugProcess(
                     override fun execute(command: String): List<String> =
                         communicator.sendCommandAndCollectOutput(command, 10_000)
                     override fun isAcceptingCommands(): Boolean =
-                        !communicator.isRunning && !communicator.debuggeeExited
+                        !communicator.isRunning && !communicator.debuggeeExited && !handlingStop
                     override fun performIntercept(action: InterceptAction) {
                         when (action) {
                             InterceptAction.RESUME -> resume(null)
@@ -1162,6 +1171,8 @@ open class WasmDebugProcess(
     }
 
     private fun handleStopImpl(communicator: LldbCommunicator, event: LldbCommunicator.StopEvent) {
+        handlingStop = true
+        try {
         LOG.debug("handleStopImpl: entering, event=$event")
         // On Windows, Exception 0x80000003 stops may fire on system
         // threads (e.g. thread 5 in ntdll.dll!DbgBreakPoint) that are
@@ -1509,6 +1520,9 @@ open class WasmDebugProcess(
         val context = WasmSuspendContext(frame, lldb, this)
         ApplicationManager.getApplication().invokeLater {
             session.positionReached(context)
+        }
+        } finally {
+            handlingStop = false
         }
     }
 

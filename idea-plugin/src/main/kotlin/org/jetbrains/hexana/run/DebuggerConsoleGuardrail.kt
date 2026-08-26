@@ -94,6 +94,87 @@ fun classifyConsoleCommand(command: String, kind: ConsoleSessionKind): ConsoleCo
 // LLDB classification
 // ---------------------------------------------------------------------------
 
+/**
+ * LLDB resolves unique prefixes of top-level commands, so `cont`, `pro c`, etc.
+ * are treated identically to their full forms. This table maps every length->=2
+ * prefix that uniquely identifies an execution-control command (the guardrail's
+ * scope) to the canonical name. Single-character aliases (`c`, `n`, `s`, `r`,
+ * `q`) are already handled as explicit tokens above the expansion step.
+ *
+ * Ambiguous prefixes are left absent from the table: `st` prefixes both `step`
+ * and `statistics`/`settings`, so it is not expanded. `re` prefixes `register`,
+ * `return`, etc. Top-level ambiguity means LLDB would error, so the guardrail
+ * must not intercept.
+ *
+ * For two-word commands the first token is expanded here; the second-token
+ * tables below handle sub-command prefixes for `process` and `thread`.
+ */
+private val LLDB_FIRST_TOKEN_EXPANSIONS: Map<String, String> = mapOf(
+    // continue -- `co` through `continu` are unique prefixes
+    "co" to "continue", "con" to "continue", "cont" to "continue",
+    "conti" to "continue", "contin" to "continue", "continu" to "continue",
+    // finish
+    "fi" to "finish", "fin" to "finish", "fini" to "finish",
+    "finis" to "finish",
+    // next -- `ne` through `nex` are unique (nexti is a separate top-level alias)
+    "ne" to "next", "nex" to "next",
+    // step -- `ste` uniquely prefixes step (statistics = s-t-a, settings = s-e)
+    "ste" to "step", "ste" to "step",
+    // process
+    "pr" to "process", "pro" to "process", "proc" to "process",
+    "proce" to "process", "proces" to "process",
+    // thread
+    "th" to "thread", "thr" to "thread", "thre" to "thread",
+    "threa" to "thread",
+    // quit -- `qu` through `qui` are unique
+    "qu" to "quit", "qui" to "quit",
+    // run -- `ru` is the unique 2-char prefix (`re` is ambiguous)
+    "ru" to "run",
+)
+
+/** Sub-command prefixes for `process <sub>`. */
+private val LLDB_PROCESS_SUB_EXPANSIONS: Map<String, String> = mapOf(
+    // Single-char `c` is the unique prefix of `continue` among process sub-commands.
+    "c" to "continue",
+    "co" to "continue", "con" to "continue", "cont" to "continue",
+    "conti" to "continue", "contin" to "continue", "continu" to "continue",
+    "in" to "interrupt", "int" to "interrupt", "inte" to "interrupt",
+    "inter" to "interrupt", "interr" to "interrupt", "interru" to "interrupt",
+    "interrup" to "interrupt",
+    "ki" to "kill", "kil" to "kill",
+    "de" to "detach", "det" to "detach", "deta" to "detach",
+    "detac" to "detach",
+    "la" to "launch", "lau" to "launch", "laun" to "launch",
+    "launc" to "launch",
+)
+
+/** Sub-command prefixes for `thread <sub>` (hyphenated forms). */
+private val LLDB_THREAD_SUB_EXPANSIONS: Map<String, String> = mapOf(
+    "step-over" to "step-over",
+    "step-in" to "step-in",
+    "step-inst-over" to "step-inst-over",
+    // Unambiguous prefixes of step-over / step-out:
+    // "step-o" is ambiguous (step-over vs step-out), so leave it absent.
+    "step-ov" to "step-over", "step-ove" to "step-over",
+    // step-out unambiguous prefix only from "step-ou":
+    "step-ou" to "step-out",
+    "step-i" to "step-in",
+    // step-inst vs step-inst-over: "step-inst" itself is a valid command,
+    // so "step-inst-" prefixes go to step-inst-over.
+    "step-inst-" to "step-inst-over", "step-inst-o" to "step-inst-over",
+    "step-inst-ov" to "step-inst-over", "step-inst-ove" to "step-inst-over",
+)
+
+/**
+ * Expands [token] via [table] if it is a known unambiguous prefix, otherwise
+ * returns [token] unchanged. Full matches pass through as-is (the table also
+ * contains the canonical forms as identity entries, but checking avoids a map
+ * lookup -- just return the token when its length equals a canonical name's length
+ * and it equals the value).
+ */
+private fun expandToken(token: String, table: Map<String, String>): String =
+    table[token] ?: token
+
 private fun classifyLldbCommand(cmd: String, kind: ConsoleSessionKind): ConsoleCommandRuling {
     // WAMR-specific guard: the qWasmStackValue packet desynchronises WAMR's stub.
     if (kind == ConsoleSessionKind.LLDB_WAMR && "qWasmStackValue" in cmd) {
@@ -104,8 +185,42 @@ private fun classifyLldbCommand(cmd: String, kind: ConsoleSessionKind): ConsoleC
         )
     }
 
+    // Split into first and optional rest (everything after the first space).
+    val spaceIdx = cmd.indexOf(' ')
+    val firstToken = if (spaceIdx < 0) cmd else cmd.substring(0, spaceIdx)
+    val rest = if (spaceIdx < 0) "" else cmd.substring(spaceIdx + 1).trim()
+
+    // Expand the first token if it is a length->=2 unambiguous prefix.
+    // Single-char tokens are handled below as explicit aliases.
+    val expandedFirst = if (firstToken.length >= 2) expandToken(firstToken, LLDB_FIRST_TOKEN_EXPANSIONS)
+    else firstToken
+
+    // Reconstruct a normalised command string for the matching logic below.
+    val normCmd = if (rest.isEmpty()) expandedFirst else "$expandedFirst $rest"
+
+    // For two-word commands (process/thread), also expand the sub-command token.
+    val normCmdFull: String = when (expandedFirst) {
+        "process" -> {
+            val subSpaceIdx = rest.indexOf(' ')
+            val subToken = if (subSpaceIdx < 0) rest else rest.substring(0, subSpaceIdx)
+            val expandedSub = expandToken(subToken, LLDB_PROCESS_SUB_EXPANSIONS)
+            val subRest = if (subSpaceIdx < 0) "" else rest.substring(subSpaceIdx + 1)
+            if (subRest.isEmpty()) "$expandedFirst $expandedSub"
+            else "$expandedFirst $expandedSub $subRest"
+        }
+        "thread" -> {
+            val subSpaceIdx = rest.indexOf(' ')
+            val subToken = if (subSpaceIdx < 0) rest else rest.substring(0, subSpaceIdx)
+            val expandedSub = expandToken(subToken, LLDB_THREAD_SUB_EXPANSIONS)
+            val subRest = if (subSpaceIdx < 0) "" else rest.substring(subSpaceIdx + 1)
+            if (subRest.isEmpty()) "$expandedFirst $expandedSub"
+            else "$expandedFirst $expandedSub $subRest"
+        }
+        else -> normCmd
+    }
+
     // continue / c (but NOT commands whose first token is longer, e.g. "call")
-    if (cmd == "continue" || cmd.startsWithToken("continue") ||
+    if (normCmdFull == "continue" || normCmdFull.startsWithToken("continue") ||
         cmd == "c" || cmd.startsWithToken("c")
     ) {
         return ConsoleCommandRuling.Intercept(
@@ -115,7 +230,7 @@ private fun classifyLldbCommand(cmd: String, kind: ConsoleSessionKind): ConsoleC
     }
 
     // process continue
-    if (cmd == "process continue" || cmd.startsWithToken("process continue")) {
+    if (normCmdFull == "process continue" || normCmdFull.startsWithToken("process continue")) {
         return ConsoleCommandRuling.Intercept(
             InterceptAction.RESUME,
             "Routed to the debugger Resume action so the IDE stays in sync."
@@ -123,9 +238,9 @@ private fun classifyLldbCommand(cmd: String, kind: ConsoleSessionKind): ConsoleC
     }
 
     // next / n / thread step-over
-    if (cmd == "next" || cmd.startsWithToken("next") ||
+    if (normCmdFull == "next" || normCmdFull.startsWithToken("next") ||
         cmd == "n" || cmd.startsWithToken("n") ||
-        cmd == "thread step-over" || cmd.startsWithToken("thread step-over")
+        normCmdFull == "thread step-over" || normCmdFull.startsWithToken("thread step-over")
     ) {
         return ConsoleCommandRuling.Intercept(
             InterceptAction.STEP_OVER,
@@ -134,9 +249,9 @@ private fun classifyLldbCommand(cmd: String, kind: ConsoleSessionKind): ConsoleC
     }
 
     // step / s / thread step-in
-    if (cmd == "step" || cmd.startsWithToken("step") ||
+    if (normCmdFull == "step" || normCmdFull.startsWithToken("step") ||
         cmd == "s" || cmd.startsWithToken("s") ||
-        cmd == "thread step-in" || cmd.startsWithToken("thread step-in")
+        normCmdFull == "thread step-in" || normCmdFull.startsWithToken("thread step-in")
     ) {
         return ConsoleCommandRuling.Intercept(
             InterceptAction.STEP_INTO,
@@ -145,8 +260,8 @@ private fun classifyLldbCommand(cmd: String, kind: ConsoleSessionKind): ConsoleC
     }
 
     // finish / thread step-out
-    if (cmd == "finish" || cmd.startsWithToken("finish") ||
-        cmd == "thread step-out" || cmd.startsWithToken("thread step-out")
+    if (normCmdFull == "finish" || normCmdFull.startsWithToken("finish") ||
+        normCmdFull == "thread step-out" || normCmdFull.startsWithToken("thread step-out")
     ) {
         return ConsoleCommandRuling.Intercept(
             InterceptAction.STEP_OUT,
@@ -155,8 +270,8 @@ private fun classifyLldbCommand(cmd: String, kind: ConsoleSessionKind): ConsoleC
     }
 
     // thread step-inst / thread step-inst-over (instruction stepping)
-    if (cmd == "thread step-inst" || cmd.startsWithToken("thread step-inst") ||
-        cmd == "thread step-inst-over" || cmd.startsWithToken("thread step-inst-over")
+    if (normCmdFull == "thread step-inst" || normCmdFull.startsWithToken("thread step-inst") ||
+        normCmdFull == "thread step-inst-over" || normCmdFull.startsWithToken("thread step-inst-over")
     ) {
         return ConsoleCommandRuling.Intercept(
             InterceptAction.STEP_OVER,
@@ -166,17 +281,17 @@ private fun classifyLldbCommand(cmd: String, kind: ConsoleSessionKind): ConsoleC
     }
 
     // process interrupt
-    if (cmd == "process interrupt" || cmd.startsWithToken("process interrupt")) {
+    if (normCmdFull == "process interrupt" || normCmdFull.startsWithToken("process interrupt")) {
         return ConsoleCommandRuling.Intercept(
             InterceptAction.PAUSE,
             "Routed to the debugger Pause action so the IDE stays in sync."
         )
     }
 
-    // run / r / process launch — blocked because the session is already running
-    if (cmd == "run" || cmd.startsWithToken("run") ||
+    // run / r / process launch -- blocked because the session is already running
+    if (normCmdFull == "run" || normCmdFull.startsWithToken("run") ||
         cmd == "r" || cmd.startsWithToken("r") ||
-        cmd == "process launch" || cmd.startsWithToken("process launch")
+        normCmdFull == "process launch" || normCmdFull.startsWithToken("process launch")
     ) {
         return ConsoleCommandRuling.Block(
             "The session is already running. To relaunch, stop this session " +
@@ -185,11 +300,11 @@ private fun classifyLldbCommand(cmd: String, kind: ConsoleSessionKind): ConsoleC
     }
 
     // quit / q / exit / process kill / process detach
-    if (cmd == "quit" || cmd.startsWithToken("quit") ||
+    if (normCmdFull == "quit" || normCmdFull.startsWithToken("quit") ||
         cmd == "q" || cmd.startsWithToken("q") ||
-        cmd == "exit" || cmd.startsWithToken("exit") ||
-        cmd == "process kill" || cmd.startsWithToken("process kill") ||
-        cmd == "process detach" || cmd.startsWithToken("process detach")
+        normCmdFull == "exit" || normCmdFull.startsWithToken("exit") ||
+        normCmdFull == "process kill" || normCmdFull.startsWithToken("process kill") ||
+        normCmdFull == "process detach" || normCmdFull.startsWithToken("process detach")
     ) {
         return ConsoleCommandRuling.Intercept(
             InterceptAction.STOP,
@@ -249,7 +364,7 @@ private fun classifyGdbDapCommand(cmd: String): ConsoleCommandRuling {
         )
     }
 
-    // run / start — blocked: session already running
+    // run / start -- blocked: session already running
     if (cmd == "run" || cmd.startsWithToken("run") ||
         cmd == "start" || cmd.startsWithToken("start")
     ) {

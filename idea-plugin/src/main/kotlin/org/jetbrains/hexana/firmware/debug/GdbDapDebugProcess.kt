@@ -72,6 +72,8 @@ class GdbDapDebugProcess(
     /**
      * True while the debuggee is stopped (stopped event received, not yet resumed).
      * Used by the console transport's [DebuggerConsoleTransport.isAcceptingCommands].
+     * Every stopped-event path must route through handleStop (or set isStopped)
+     * or the console locks out permanently.
      */
     @Volatile private var isStopped: Boolean = false
 
