@@ -214,6 +214,9 @@ open class WasmDebugProcess(
     @Volatile
     private var eventLoopThread: Thread? = null
 
+    /** Parent [com.intellij.openapi.Disposable] for the debugger console tab's [ConsoleView]. */
+    private val consoleDisposable = com.intellij.openapi.util.Disposer.newDisposable("HexanaDebuggerConsole")
+
     // --- "Wasm" debugger tab (wasmtime only): per-instruction disassembly highlight ---
 
     private val wasmDisassemblyModel = WasmDisassemblyTableModel()
@@ -390,6 +393,15 @@ open class WasmDebugProcess(
     internal fun getLldb(): LldbCommunicator? = lldb
 
     /**
+     * Session kind used by the debugger console guardrail to classify commands.
+     *
+     * Defaults to [ConsoleSessionKind.LLDB_WASMTIME_JIT]. Subclasses override
+     * this to reflect their actual transport (e.g. WAMR or wasmtime gdbstub).
+     */
+    protected open val consoleSessionKind: ConsoleSessionKind
+        get() = ConsoleSessionKind.LLDB_WASMTIME_JIT
+
+    /**
      * When `true`, step actions branch to per-instruction LLDB commands
      * (`thread step-inst` / `thread step-inst-over`) while the Wasm
      * disassembly tab is selected, instead of source-line stepping.
@@ -454,28 +466,59 @@ open class WasmDebugProcess(
 
     override fun createTabLayouter(): XDebugTabLayouter = object : XDebugTabLayouter() {
         override fun registerAdditionalContent(ui: RunnerLayoutUi) {
-            if (!wasmTabAvailable) return
-            val content = ui.createContent(
-                "WasmDisassembly",
-                buildCombinedWasmPanel(wasmStackModel, wasmDisassemblyPanel),
-                "Wasm",
-                null,
-                null,
-            )
-            content.isCloseable = false
-            ui.addContent(content)
-            wasmTabRegistered = true
+            if (wasmTabAvailable) {
+                val wasmContent = ui.createContent(
+                    "WasmDisassembly",
+                    buildCombinedWasmPanel(wasmStackModel, wasmDisassemblyPanel),
+                    "Wasm",
+                    null,
+                    null,
+                )
+                wasmContent.isCloseable = false
+                ui.addContent(wasmContent)
+                wasmTabRegistered = true
 
-            // Track whether the Wasm tab is selected so per-instruction
-            // stepping can be activated when [supportsInstructionStepping]
-            // is true. Mirrors the same pattern in CdpDebugProcess.
-            val contentManager = ui.contentManager
-            disassemblyTabSelected = contentManager.isSelected(content)
-            contentManager.addContentManagerListener(object : ContentManagerListener {
-                override fun selectionChanged(event: ContentManagerEvent) {
-                    disassemblyTabSelected = contentManager.isSelected(content)
+                // Track whether the Wasm tab is selected so per-instruction
+                // stepping can be activated when [supportsInstructionStepping]
+                // is true. Mirrors the same pattern in CdpDebugProcess.
+                val contentManager = ui.contentManager
+                disassemblyTabSelected = contentManager.isSelected(wasmContent)
+                contentManager.addContentManagerListener(object : ContentManagerListener {
+                    override fun selectionChanged(event: ContentManagerEvent) {
+                        disassemblyTabSelected = contentManager.isSelected(wasmContent)
+                    }
+                })
+            }
+
+            val communicator = lldb
+            if (communicator != null) {
+                val transport = object : DebuggerConsoleTransport {
+                    override val sessionKind: ConsoleSessionKind get() = consoleSessionKind
+                    override fun execute(command: String): List<String> =
+                        communicator.sendCommandAndCollectOutput(command, 10_000)
+                    override fun isAcceptingCommands(): Boolean =
+                        !communicator.isRunning && !communicator.debuggeeExited
+                    override fun performIntercept(action: InterceptAction) {
+                        when (action) {
+                            InterceptAction.RESUME -> resume(null)
+                            InterceptAction.PAUSE -> startPausing()
+                            InterceptAction.STEP_OVER -> startStepOver(null)
+                            InterceptAction.STEP_INTO -> startStepInto(null)
+                            InterceptAction.STEP_OUT -> startStepOut(null)
+                            InterceptAction.STOP -> stop()
+                        }
+                    }
                 }
-            })
+                val consoleContent = ui.createContent(
+                    "HexanaDebuggerConsole",
+                    buildDebuggerConsolePanel(session.project, transport, consoleDisposable),
+                    "Debugger Console",
+                    null,
+                    null,
+                )
+                consoleContent.isCloseable = false
+                ui.addContent(consoleContent)
+            }
         }
     }
 
@@ -996,6 +1039,7 @@ open class WasmDebugProcess(
         eventLoopThread?.interrupt()
         lldb?.destroy()
         processHandler.destroyProcess()
+        com.intellij.openapi.util.Disposer.dispose(consoleDisposable)
     }
 
     /** Starts the background event loop that watches for LLDB stop events. */

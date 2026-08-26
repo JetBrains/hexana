@@ -12,6 +12,7 @@ import java.io.OutputStreamWriter
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
 
 /**
  * Manages communication with an LLDB process.
@@ -47,6 +48,18 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
      * lines between the start and end fence markers are captured here.
      */
     private val responseLock = Any()
+
+    /**
+     * Serializes [sendCommandAndCollectOutput] and [sendPythonScriptAndCollectOutput]
+     * so that only one collect-output command is in-flight at a time.
+     *
+     * Reentrant because several helpers (e.g. [sendBreakpointAndCheckResolved],
+     * [sendAddressBreakpointChecked]) delegate to [sendCommandAndCollectOutput]
+     * and may themselves be called from a context that already holds the lock.
+     * (In practice today's callers do not nest, but the reentrant policy avoids
+     * a deadlock if they ever do.)
+     */
+    private val commandLock = ReentrantLock()
     private var responseCollector: MutableList<String>? = null
     private var responseLatch: CountDownLatch? = null
     private var responseEndMarker: String? = null
@@ -257,8 +270,9 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
      * "Breakpoint N:" (for later [removeBreakpointById]) and the same
      * resolved/pending detection as [sendBreakpointAndCheckResolved].
      *
-     * Like every collect-output command, calls must not overlap with another
-     * in-flight [sendCommandAndCollectOutput]; callers serialize their use.
+     * Delegates to [sendCommandAndCollectOutput], which holds [commandLock]
+     * for the duration of the call, so this method is safe to call from any
+     * thread without external serialization.
      */
     fun sendAddressBreakpointChecked(address: ULong): AddressBreakpointOutcome {
         val output = sendCommandAndCollectOutput("breakpoint set --address 0x${address.toString(16)}")
@@ -601,27 +615,92 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
      * This avoids both the semicolon-as-command-separator issue on
      * Windows and the problematic interactive Python REPL exit
      * (`quit()` can kill LLDB on some platforms).
+     *
+     * The [commandLock] is held for the entire send-wait-cleanup cycle,
+     * serializing this with [sendCommandAndCollectOutput].
      */
     fun sendPythonScriptAndCollectOutput(
         pythonLines: List<String>,
         timeoutMs: Long = 5_000,
     ): List<String> {
         if (destroyed || debuggeeExited) return emptyList()
-
-        val marker = "__HEXANA_END_${System.nanoTime()}__"
-
-        // Write the Python script to a temp file, appending the
-        // end-marker print so we know when output is complete.
-        val scriptFile = java.nio.file.Files.createTempFile("hexana_lldb_", ".py")
+        commandLock.lock()
         try {
-            val scriptContent = buildString {
-                for (line in pythonLines) {
-                    appendLine(line)
-                }
-                appendLine("print(\"$marker\")")
-            }
-            scriptFile.toFile().writeText(scriptContent)
+            val marker = "__HEXANA_END_${System.nanoTime()}__"
 
+            // Write the Python script to a temp file, appending the
+            // end-marker print so we know when output is complete.
+            val scriptFile = java.nio.file.Files.createTempFile("hexana_lldb_", ".py")
+            try {
+                val scriptContent = buildString {
+                    for (line in pythonLines) {
+                        appendLine(line)
+                    }
+                    appendLine("print(\"$marker\")")
+                }
+                scriptFile.toFile().writeText(scriptContent)
+
+                val latch = CountDownLatch(1)
+                val collector = mutableListOf<String>()
+
+                synchronized(responseLock) {
+                    responseCollector = collector
+                    responseLatch = latch
+                    responseEndMarker = marker
+                }
+
+                // Execute the script file. Using forward slashes works
+                // on both Windows and Unix LLDB.
+                val path = scriptFile.toAbsolutePath().toString().replace("\\", "/")
+                sendCommand("command script import \"$path\"")
+
+                val completed = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+
+                synchronized(responseLock) {
+                    responseCollector = null
+                    responseLatch = null
+                    responseEndMarker = null
+                }
+
+                if (!completed && !destroyed) {
+                    LOG.warn("Timed out collecting Python script output")
+                }
+                return collector.toList()
+            } finally {
+                try {
+                    java.nio.file.Files.deleteIfExists(scriptFile)
+                } catch (_: Exception) {
+                    // best-effort cleanup
+                }
+            }
+        } finally {
+            commandLock.unlock()
+        }
+    }
+
+    /**
+     * Sends [command] to LLDB and collects all output lines until the
+     * end-fence marker appears or [timeoutMs] elapses.
+     *
+     * The [commandLock] is held for the entire send-wait-cleanup cycle so
+     * that at most one collect-output call is in-flight at a time. Sequences
+     * of related commands (e.g. `frame select` followed by `expression`) are
+     * still caller-composed and must be issued from a single call site or
+     * under external coordination.
+     */
+    fun sendCommandAndCollectOutput(
+        command: String,
+        timeoutMs: Long = 5_000,
+    ): List<String> {
+        if (destroyed || debuggeeExited) {
+            LOG.debug("sendCommandAndCollectOutput: skipped (destroyed=$destroyed, debuggeeExited=$debuggeeExited) cmd=$command")
+            return emptyList()
+        }
+        commandLock.lock()
+        try {
+            LOG.debug("sendCommandAndCollectOutput: cmd=$command, timeoutMs=$timeoutMs")
+
+            val marker = "__HEXANA_END_${System.nanoTime()}__"
             val latch = CountDownLatch(1)
             val collector = mutableListOf<String>()
 
@@ -631,10 +710,11 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
                 responseEndMarker = marker
             }
 
-            // Execute the script file. Using forward slashes works
-            // on both Windows and Unix LLDB.
-            val path = scriptFile.toAbsolutePath().toString().replace("\\", "/")
-            sendCommand("command script import \"$path\"")
+            sendCommand(command)
+            // The marker is printed by LLDB's built-in Python, so it
+            // appears in the normal output stream right after the command
+            // output finishes.
+            sendCommand("script print(\"$marker\")")
 
             val completed = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
 
@@ -645,57 +725,13 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
             }
 
             if (!completed && !destroyed) {
-                LOG.warn("Timed out collecting Python script output")
+                LOG.warn("Timed out collecting output for LLDB command: $command (collected so far: $collector)")
             }
+            LOG.debug("sendCommandAndCollectOutput: result for '$command' = $collector")
             return collector.toList()
         } finally {
-            try {
-                java.nio.file.Files.deleteIfExists(scriptFile)
-            } catch (_: Exception) {
-                // best-effort cleanup
-            }
+            commandLock.unlock()
         }
-    }
-
-    fun sendCommandAndCollectOutput(
-        command: String,
-        timeoutMs: Long = 5_000,
-    ): List<String> {
-        if (destroyed || debuggeeExited) {
-            LOG.debug("sendCommandAndCollectOutput: skipped (destroyed=$destroyed, debuggeeExited=$debuggeeExited) cmd=$command")
-            return emptyList()
-        }
-        LOG.debug("sendCommandAndCollectOutput: cmd=$command, timeoutMs=$timeoutMs")
-
-        val marker = "__HEXANA_END_${System.nanoTime()}__"
-        val latch = CountDownLatch(1)
-        val collector = mutableListOf<String>()
-
-        synchronized(responseLock) {
-            responseCollector = collector
-            responseLatch = latch
-            responseEndMarker = marker
-        }
-
-        sendCommand(command)
-        // The marker is printed by LLDB's built-in Python, so it
-        // appears in the normal output stream right after the command
-        // output finishes.
-        sendCommand("script print(\"$marker\")")
-
-        val completed = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
-
-        synchronized(responseLock) {
-            responseCollector = null
-            responseLatch = null
-            responseEndMarker = null
-        }
-
-        if (!completed && !destroyed) {
-            LOG.warn("Timed out collecting output for LLDB command: $command (collected so far: $collector)")
-        }
-        LOG.debug("sendCommandAndCollectOutput: result for '$command' = $collector")
-        return collector.toList()
     }
 
     /**

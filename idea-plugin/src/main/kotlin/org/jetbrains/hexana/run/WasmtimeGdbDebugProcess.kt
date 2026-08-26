@@ -69,6 +69,10 @@ class WasmtimeGdbDebugProcess(
      */
     override val supportsInstructionStepping: Boolean = true
 
+    /** Wasmtime gdbstub sessions use LLDB connected via the wasm process plugin. */
+    override val consoleSessionKind: ConsoleSessionKind
+        get() = ConsoleSessionKind.LLDB_WASMTIME_GDBSTUB
+
     /** Gdbstub breakpoints live in the stub; there is no JIT trap to skip. */
     override val usesJitTrapWorkaround: Boolean = false
 

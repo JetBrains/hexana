@@ -65,6 +65,10 @@ class WamrDebugProcess(
      */
     override val supportsInstructionStepping: Boolean = true
 
+    /** WAMR sessions use the LLDB-over-wasm-gdbstub transport. */
+    override val consoleSessionKind: ConsoleSessionKind
+        get() = ConsoleSessionKind.LLDB_WAMR
+
     /**
      * PC-to-wasm-location translation for the WAMR gdbstub. Same address
      * scheme as the wasmtime gdbstub: LLDB's wasm process plugin reports
