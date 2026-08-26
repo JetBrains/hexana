@@ -157,7 +157,8 @@ class FirmwareLaunchPlanTest {
     }
 
     // ---------------------------------------------------------------------------
-    // buildRescScript — gdb variant (no `start`, with StartGdbServer true)
+    // buildRescScript — gdb variant (no `start`, StartGdbServer autostart=false: the
+    // debugger materializes breakpoints first, then starts emulation via `monitor start`)
     // ---------------------------------------------------------------------------
 
     @Test
@@ -176,7 +177,7 @@ class FirmwareLaunchPlanTest {
             sysbus LoadELF @/build/zephyr/zephyr.elf
             emulation CreateServerSocketTerminal 5000 "term" false
             connector Connect sysbus.uart0 term
-            machine StartGdbServer 3333 true
+            machine StartGdbServer 3333 false
             """.trimIndent() + "\n",
             script,
         )

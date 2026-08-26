@@ -72,6 +72,13 @@ class GdbDapDebugProcess(
     private val elfPath: String,
     private val stubPort: Int,
     private val stopAtEntry: StopAtEntry,
+    /**
+     * True for Renode: its gdb server is started with autostart=false (a `true` flag would
+     * start emulation at gdb TCP connect, racing breakpoint materialization), so emulation
+     * must be started explicitly with `monitor start` after breakpoints are in place. The
+     * CPU then comes up halted under gdb at the reset vector. False for QEMU (`-S` freezes).
+     */
+    private val requiresMonitorStart: Boolean = false,
 ) : XDebugProcess(session) {
 
     private val LOG = Logger.getInstance(GdbDapDebugProcess::class.java)
@@ -228,6 +235,15 @@ class GdbDapDebugProcess(
 
     /** Execution phase: initial run policy, issued only after breakpoint materialization. */
     private fun startExecutionPolicy() {
+        if (requiresMonitorStart) {
+            // Renode gdbstub with autostart=false: start the emulation now that breakpoints
+            // exist. qRcmd passthrough; the CPU stays halted under gdb until continue.
+            val response = client.request("evaluate", buildJsonObject {
+                put("expression", "monitor start")
+                put("context", "repl")
+            })
+            LOG.warn("hexana-bp: monitor start response=$response")
+        }
         when (stopAtEntry) {
             StopAtEntry.MAIN, StopAtEntry.NONE -> {
                 // QEMU -S delivers a stopped(attach) event immediately on connect.

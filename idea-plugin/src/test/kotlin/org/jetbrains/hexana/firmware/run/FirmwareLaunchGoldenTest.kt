@@ -285,7 +285,7 @@ class FirmwareLaunchGoldenTest : UsefulTestCase() {
             sysbus LoadELF @/build/nrf52840dk/zephyr/zephyr.elf
             emulation CreateServerSocketTerminal 12345 "term" false
             connector Connect sysbus.uart0 term
-            machine StartGdbServer 3333 true
+            machine StartGdbServer 3333 false
         """.trimIndent() + "\n"
 
         assertEquals(expected, resc)
@@ -343,7 +343,7 @@ class FirmwareLaunchGoldenTest : UsefulTestCase() {
             sysbus LoadELF @/build/stm32f4/zephyr/zephyr.elf
             emulation CreateServerSocketTerminal 54321 "term" false
             connector Connect sysbus.uart0 term
-            machine StartGdbServer 3333 true
+            machine StartGdbServer 3333 false
         """.trimIndent() + "\n"
 
         assertEquals(expected, resc)

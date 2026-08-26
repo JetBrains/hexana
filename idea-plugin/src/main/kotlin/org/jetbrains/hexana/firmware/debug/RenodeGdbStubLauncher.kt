@@ -22,9 +22,11 @@ import java.net.ServerSocket
 /**
  * Launches Renode with a gdbstub port and frozen start.
  *
- * The generated `.resc` calls `machine StartGdbServer <port> true` (the `true` flag
- * means emulation auto-starts when GDB attaches) and omits the `start` command so the
- * CPU stays frozen until the debugger connects.
+ * The generated `.resc` calls `machine StartGdbServer <port> false` and omits the
+ * `start` command: the machine stays unstarted through gdb attach and breakpoint
+ * materialization, and the debug process starts emulation with `monitor start`
+ * afterwards (autostart=true would start emulation at gdb TCP connect, letting fast
+ * firmware boot to idle before any breakpoint exists).
  *
  * Readiness is determined by polling the gdb port with TCP connect probes, same as
  * [QemuGdbStubLauncher].

@@ -44,7 +44,11 @@ private fun rescConnectUart(uartPeripheral: String, termName: String) =
  * The `true` argument tells Renode to auto-start emulation on GDB connect.
  * When this is emitted, `start` is NOT emitted (emulation stays frozen until GDB attaches).
  */
-private fun rescStartGdb(gdbPort: Int) = "machine StartGdbServer $gdbPort true"
+// autostart=false: Renode's `true` flag starts EMULATION at gdb TCP connect (which happens at
+// the DAP attach request, before breakpoints exist); fast firmware boots to idle in those
+// milliseconds. With false the machine stays unstarted until the debugger issues `monitor start`
+// after materializing breakpoints; the CPU then comes up halted under gdb at the reset vector.
+private fun rescStartGdb(gdbPort: Int) = "machine StartGdbServer $gdbPort false"
 
 /** Renode command: start emulation. Only emitted when NOT starting GDB (debug mode is frozen). */
 private const val RESC_START = "start"

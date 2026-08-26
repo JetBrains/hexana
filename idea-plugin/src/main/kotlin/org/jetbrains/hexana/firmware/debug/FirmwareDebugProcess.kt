@@ -67,6 +67,8 @@ class FirmwareDebugProcess(
     private val lldb: LldbCommunicator,
     private val stopAtEntry: StopAtEntry,
     private val elfPath: String? = null,
+    /** True for Renode (gdb server started with autostart=false); see [GdbDapDebugProcess]. */
+    private val requiresMonitorStart: Boolean = false,
 ) : XDebugProcess(session) {
 
     private val LOG = Logger.getInstance(FirmwareDebugProcess::class.java)
@@ -163,6 +165,12 @@ class FirmwareDebugProcess(
 
     /** Applies the [stopAtEntry] policy: sets a breakpoint or continues immediately. */
     private fun applyStopAtEntryPolicy() {
+        if (requiresMonitorStart) {
+            // Renode gdbstub with autostart=false: start emulation now that breakpoints are
+            // materialized (qRcmd passthrough). The CPU stays halted under the attached stub.
+            val out = lldb.sendCommandAndCollectOutput("process plugin packet monitor start", timeoutMs = 5_000)
+            org.jetbrains.hexana.HexanaLog.LOG.warn("hexana-bp: monitor start (lldb) -> ${out.joinToString(" | ")}")
+        }
         when (stopAtEntry) {
             StopAtEntry.ENTRY -> {
                 // QEMU -S leaves the CPU at the reset vector. LLDB is already stopped;

@@ -206,6 +206,7 @@ class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     elfPath = configuration.elfPath,
                     stubPort = prep.stubEndpoint.port,
                     stopAtEntry = configuration.stopAtEntry,
+                    requiresMonitorStart = prep.selection.backend == Backend.Renode,
                 )
             }
 
@@ -264,6 +265,7 @@ class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     lldb = lldb,
                     stopAtEntry = configuration.stopAtEntry,
                     elfPath = configuration.elfPath,
+                    requiresMonitorStart = prep.selection.backend == Backend.Renode,
                 )
             }
         }
