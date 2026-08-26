@@ -223,6 +223,9 @@ open class WasmDebugProcess(
     private val wasmDisassemblyPanel = WasmDisassemblyPanel(wasmDisassemblyModel)
     private val wasmStackModel = WasmStackTableModel()
 
+    @Volatile
+    private var selectedWasmModuleId: Int? = null
+
     @TestOnly
     internal fun whatsNewCaptureState(): WasmDebuggerCaptureState {
         val selectedRow = wasmDisassemblyPanel.table.selectedRow
@@ -463,6 +466,7 @@ open class WasmDebugProcess(
         tabSelected = disassemblyTabSelected,
         disassemblyPanel = wasmDisassemblyPanel,
         stackModel = wasmStackModel,
+        selectedModuleId = selectedWasmModuleId,
     )
 
     override fun getEditorsProvider(): XDebuggerEditorsProvider = WasmDebuggerEditorsProvider()
@@ -544,6 +548,7 @@ open class WasmDebugProcess(
                 ApplicationManager.getApplication().invokeLater {
                     wasmDisassemblyModel.clear()
                     wasmStackModel.clear()
+                    selectedWasmModuleId = null
                 }
             }
         })
@@ -1431,7 +1436,9 @@ open class WasmDebugProcess(
         // path could not be mapped to a local file), we must NOT
         // auto-resume — doing so would silently skip every
         // breakpoint the user set.
-        if (event is LldbCommunicator.StopEvent.BreakpointHit && engine == WasmEngine.WASMTIME) {
+        if (event is LldbCommunicator.StopEvent.BreakpointHit && engine == WasmEngine.WASMTIME &&
+            !consumeCaptureBreakpoint(event)
+        ) {
             LOG.info(
                 "No matching IDE breakpoint for stop at " +
                     "${verifiedPath ?: rawDwarfPath}:${rawDwarfLine ?: "?"} " +
@@ -1562,13 +1569,18 @@ open class WasmDebugProcess(
             if (analysis == null || location == null) {
                 wasmDisassemblyModel.clear()
                 wasmStackModel.clear()
+                selectedWasmModuleId = null
             } else {
                 wasmDisassemblyModel.update(analysis.rows)
                 wasmDisassemblyPanel.highlight(location.offset)
                 wasmStackModel.update(stackRows)
+                selectedWasmModuleId = analysis.moduleId
             }
         }
     }
+
+    /** Lets the opt-in screenshot flow present a deliberately installed guest breakpoint. */
+    protected open fun consumeCaptureBreakpoint(event: LldbCommunicator.StopEvent.BreakpointHit): Boolean = false
 
     /**
      * Enriches symbolic stack rows with concrete values from the gdbstub.

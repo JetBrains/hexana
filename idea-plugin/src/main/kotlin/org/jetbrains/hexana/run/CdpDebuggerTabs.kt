@@ -218,6 +218,7 @@ internal data class WasmDebuggerTabState(
     val selectedOffset: Int,
     val selectedInstruction: String,
     val operandStackRowCount: Int,
+    val selectedModuleId: Int?,
 ) {
     companion object {
         /** State for a project without a live debug session. */
@@ -231,6 +232,7 @@ internal data class WasmDebuggerTabState(
             selectedOffset = -1,
             selectedInstruction = "",
             operandStackRowCount = 0,
+            selectedModuleId = null,
         )
     }
 }
@@ -245,6 +247,7 @@ internal fun wasmDebuggerTabStateOf(
     tabSelected: Boolean,
     disassemblyPanel: WasmDisassemblyPanel,
     stackModel: WasmStackTableModel,
+    selectedModuleId: Int? = null,
 ): WasmDebuggerTabState {
     val rowCount = disassemblyPanel.model.rowCount()
     val selectedRow = disassemblyPanel.table.selectedRow
@@ -259,6 +262,7 @@ internal fun wasmDebuggerTabStateOf(
         selectedOffset = if (highlighted) disassemblyPanel.model.offsetAt(selectedRow) else -1,
         selectedInstruction = if (highlighted) disassemblyPanel.model.instructionAt(selectedRow) else "",
         operandStackRowCount = stackModel.rowCount,
+        selectedModuleId = if (highlighted) selectedModuleId else null,
     )
 }
 

@@ -1,4 +1,5 @@
 index.html
+screenshots/component-model-debugger.png
 screenshots/zephyr-cortex-m-firmware.png
 source.json
 style.css

@@ -43,6 +43,7 @@ class WasmtimeGdbDebugProcess(
     private val debugHost: String,
     private val debugPort: Int,
     executedWasmPath: String?,
+    private val captureGdbstubAddress: ULong? = null,
 ) : WasmDebugProcess(
     session,
     console,
@@ -53,6 +54,9 @@ class WasmtimeGdbDebugProcess(
     engine = WasmEngine.WASMTIME,
     executedWasmPath = executedWasmPath,
 ) {
+
+    @Volatile
+    private var captureBreakpointPending = captureGdbstubAddress != null
 
     init {
         // `process connect --plugin wasm` must be the very first LLDB
@@ -100,6 +104,9 @@ class WasmtimeGdbDebugProcess(
 
             replayBreakpointsToLldb()
             startBinaryBreakpointSession()
+            captureGdbstubAddress?.let { address ->
+                communicator.sendCommand("breakpoint set --address 0x${address.toString(16)}")
+            }
         }
 
         // Do NOT call super.sessionInitialized(): the parent issues `run`
@@ -172,6 +179,16 @@ class WasmtimeGdbDebugProcess(
      */
     override fun wasmLocationForPc(communicator: LldbCommunicator, pc: ULong): WasmStopLocation =
         WasmStopLocation(moduleId = wasmModuleIdForGdbPc(pc), offset = wasmOffsetForGdbPc(pc))
+
+    override fun consumeCaptureBreakpoint(event: LldbCommunicator.StopEvent.BreakpointHit): Boolean {
+        // Wasmtime's internal traps have no LLDB breakpoint id. The opt-in
+        // capture helper installs the only address breakpoint in its session,
+        // so accepting an identified hit here cannot mistake a trap for the
+        // requested guest stop.
+        if (!captureBreakpointPending || event.breakpointId.isBlank()) return false
+        captureBreakpointPending = false
+        return true
+    }
 
     /**
      * Attempts to connect LLDB to the Wasmtime gdbstub, retrying up to

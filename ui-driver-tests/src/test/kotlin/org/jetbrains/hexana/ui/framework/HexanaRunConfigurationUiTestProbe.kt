@@ -200,6 +200,23 @@ internal fun Driver.startWasmtimeDebugWithBreakpointForCapture(
     )
 }
 
+internal fun Driver.startWasmtimeComponentDebugPausedForCapture(
+    wasmFileName: String,
+    moduleId: Int,
+    moduleRelativeOffset: Int,
+    wasmtimePath: String,
+    lldbPath: String,
+) {
+    utility(DebugTestHelperRef::class).startWasmtimeComponentDebugPausedForCapture(
+        singleProject(),
+        wasmFileName,
+        moduleId,
+        moduleRelativeOffset,
+        wasmtimePath,
+        lldbPath,
+    )
+}
+
 internal fun Driver.wasmtimeDebuggerCaptureState(): HexanaWasmtimeDebuggerCaptureState =
     HexanaProbePayload.wasmtimeDebuggerCaptureState(
         utility(DebugTestHelperRef::class).wasmtimeDebuggerCaptureState(singleProject()),
@@ -354,6 +371,14 @@ internal interface DebugTestHelperRef {
         wasmtimeOptions: String,
         exportName: String,
         programArgs: String,
+        wasmtimePath: String,
+        lldbPath: String,
+    )
+    fun startWasmtimeComponentDebugPausedForCapture(
+        project: com.intellij.driver.sdk.Project,
+        wasmFileName: String,
+        moduleId: Int,
+        moduleRelativeOffset: Int,
         wasmtimePath: String,
         lldbPath: String,
     )

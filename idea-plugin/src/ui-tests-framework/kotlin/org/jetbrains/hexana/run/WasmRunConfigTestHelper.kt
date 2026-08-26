@@ -467,6 +467,7 @@ object WasmRunConfigTestHelper {
             "selectedOffset=${state.selectedOffset}",
             "selectedInstruction=${state.selectedInstruction}",
             "operandStackRowCount=${state.operandStackRowCount}",
+            "selectedModuleId=${state.selectedModuleId?.toString().orEmpty()}",
         )
     }
 
@@ -586,6 +587,53 @@ object WasmRunConfigTestHelper {
                 settings = settings,
                 timeoutMs = timeoutMs,
             ),
+        )
+    }
+
+    /** Starts a Component Model session paused at a known gdbstub guest address for an opt-in capture. */
+    @JvmStatic
+    fun startWasmtimeComponentDebugPausedForCapture(
+        project: Project,
+        wasmFileName: String,
+        moduleId: Int,
+        moduleRelativeOffset: Int,
+        wasmtimePath: String,
+        lldbPath: String,
+    ) {
+        require(moduleId >= 0) { "moduleId must not be negative: $moduleId" }
+        require(moduleRelativeOffset >= 0) { "moduleRelativeOffset must not be negative: $moduleRelativeOffset" }
+        removeAllBreakpoints(project)
+
+        val basePath = project.basePath ?: error("project basePath is null")
+        val wasmVirtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath("$basePath/$wasmFileName")
+            ?: error("wasm file not found: $wasmFileName")
+        WasmRuntimeSettings.getInstance().lldbPathInUi = lldbPath
+        val captureAddress = 0x4000000000000000uL or
+            (moduleId.toULong() shl 32) or moduleRelativeOffset.toULong()
+        val settings = createAndSelectDebugConfiguration(
+            project = project,
+            wasmVirtualFile = wasmVirtualFile,
+            engine = WasmEngine.WASMTIME,
+            dependencies = resolveDependencies(project, wasmVirtualFile),
+        ) {
+            this.wasmtimePath = wasmtimePath
+            this.gdbstubCaptureAddress = captureAddress
+        }
+
+        onEdt {
+            ProgramRunnerUtil.executeConfiguration(settings, DefaultDebugExecutor.getDebugExecutorInstance())
+        }
+
+        val timeoutMs = if (SystemInfo.isWindows) 200_000L else 60_000L
+        val deadlineMs = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadlineMs) {
+            val session = XDebuggerManager.getInstance(project).currentSession
+            if (session?.isSuspended == true && session.debugProcess is WasmtimeGdbDebugProcess) return
+            Thread.sleep(500)
+        }
+        error(
+            "Timed out waiting for Component Model debugger capture stop at module $moduleId " +
+                "offset 0x${moduleRelativeOffset.toString(16)} after ${timeoutMs}ms",
         )
     }
 

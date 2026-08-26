@@ -287,6 +287,20 @@ internal class HexanaWasmRunDsl internal constructor(
         )
     }
 
+    fun startWasmtimeComponentDebugPausedForCapture(
+        wasmFileName: String,
+        moduleId: Int,
+        moduleRelativeOffset: Int,
+    ) {
+        driver.startWasmtimeComponentDebugPausedForCapture(
+            wasmFileName = wasmFileName,
+            moduleId = moduleId,
+            moduleRelativeOffset = moduleRelativeOffset,
+            wasmtimePath = HexanaRunConfigurationRuntimePreflight.ensureWasmtimeForWhatsNew018Capture(),
+            lldbPath = HexanaRunConfigurationRuntimePreflight.ensureWasmLldbForWhatsNew018Capture(),
+        )
+    }
+
     fun wasmtimeDebuggerCaptureState(): HexanaWasmtimeDebuggerCaptureState =
         driver.wasmtimeDebuggerCaptureState()
 

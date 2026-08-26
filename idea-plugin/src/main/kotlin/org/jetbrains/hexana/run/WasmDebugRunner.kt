@@ -275,6 +275,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     debugHost = prep.debugHost,
                     debugPort = prep.debugPort,
                     executedWasmPath = prep.executedWasmPath,
+                    captureGdbstubAddress = configuration.gdbstubCaptureAddress,
                 ).also {
                     it.dwarfVariableResolver = prep.dwarfResolver
                 }

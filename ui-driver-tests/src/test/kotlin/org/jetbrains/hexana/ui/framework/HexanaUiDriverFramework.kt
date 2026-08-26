@@ -498,6 +498,7 @@ internal data class HexanaWasmDebuggerTabState(
     val selectedOffset: Int,
     val selectedInstruction: String,
     val operandStackRowCount: Int,
+    val selectedModuleId: Int?,
 ) {
     /** True when a wasm instruction is highlighted in a populated disassembly. */
     val hasHighlightedInstruction: Boolean

@@ -128,6 +128,7 @@ internal object HexanaProbePayload {
                 selectedOffset = fields.int("selectedOffset"),
                 selectedInstruction = fields.value("selectedInstruction"),
                 operandStackRowCount = fields.int("operandStackRowCount"),
+                selectedModuleId = fields.optionalInt("selectedModuleId"),
             )
         }
 

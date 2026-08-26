@@ -631,6 +631,54 @@
       "image_candidates": [
         "docs/whatsnew/captures/0.19/zephyr-cortex-m-firmware.png"
       ]
+    },
+    "component-model-debugger": {
+      "release": "0.19",
+      "eyebrow": "Component Model debugging",
+      "title": "Follow Component Model modules in the debugger",
+      "summary": "The Wasm debugger now follows the embedded core module that stopped, keeping the instruction highlight, per-instruction stepping, and operand stack in sync.",
+      "recipe": "component-model-wasm-debugger",
+      "keywords": [
+        "Wasm debugger tab now works for component-model binaries",
+        "embedded core module",
+        "current-instruction highlight",
+        "per-instruction stepping",
+        "operand stack"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.19/component-wasm-debugger.png"
+      ]
+    },
+    "firmware-emulation": {
+      "release": "0.19",
+      "presentation": "text",
+      "eyebrow": "Firmware emulation",
+      "title": "Run and debug firmware with target-aware emulation",
+      "summary": "Run or debug Zephyr-class firmware ELFs with QEMU or Renode, target-aware setup, and clear validation when a target combination cannot run.",
+      "recipe": "zephyr-firmware-qemu-renode",
+      "keywords": [
+        "Run and Debug for firmware ELFs",
+        "QEMU and Renode",
+        "Hexana Firmware run configuration"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "elf-memory-budget": {
+      "release": "0.19",
+      "presentation": "text",
+      "eyebrow": "ELF memory",
+      "title": "See Flash and RAM budgets at a glance",
+      "summary": "The new Memory tab breaks down ELF Flash and RAM by region, explains runtime-copy data, and reads capacities from linker maps or Zephyr devicetrees.",
+      "recipe": "elf-memory-flash-ram-budget",
+      "keywords": [
+        "Memory tab for ELF binaries",
+        "Flash/RAM budget",
+        "Link capacity source"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
     }
   }
 }

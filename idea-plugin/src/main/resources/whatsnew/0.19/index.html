@@ -11,7 +11,7 @@
   <section class="hero">
     <p class="eyebrow">Hexana update</p>
     <h1>What's New in Hexana 0.19</h1>
-    <p class="lead">Hexana 0.19 focuses on Zephyr &amp; Cortex-M while refining binary inspection inside JetBrains IDEs.</p>
+    <p class="lead">Hexana 0.19 focuses on Zephyr &amp; Cortex-M and Component Model debugging while refining binary inspection inside JetBrains IDEs.</p>
     <div class="actions">
       <a class="button primary" href="https://plugins.jetbrains.com/plugin/29090-hexana--webassembly--binary-inspector">Open release notes</a>
       <a class="button" href="https://github.com/JetBrains/hexana">Open GitHub</a>
@@ -32,6 +32,31 @@
         <label class="show-less-link" for="zephyr-cortex-m-firmware-more">Show less</label>
     </div>
       <img src="screenshots/zephyr-cortex-m-firmware.png" alt="Inspect Zephyr firmware with confidence screenshot">
+  </section>
+  <section class="feature reversed">
+    <div>
+      <p class="eyebrow">Component Model debugging</p>
+      <h2>Follow Component Model modules in the debugger</h2>
+      <p>The Wasm debugger now follows the embedded core module that stopped, keeping the instruction highlight, per-instruction stepping, and operand stack in sync.</p>
+        <ul class="note-list">
+          <li>The <strong>Wasm</strong> debugger tab now works for component-model binaries: every embedded core module is indexed on its own, so the current-instruction highlight, per-instruction stepping and operand stack follow the module the runtime reports the stop in instead of assuming a single core module.</li>
+        </ul>
+    </div>
+      <img src="screenshots/component-model-debugger.png" alt="Follow Component Model modules in the debugger screenshot">
+  </section>
+
+  <section class="notes">
+    <h2>Also in 0.19</h2>
+    <ul class="improvements">
+      <li>
+        <strong>Run and debug firmware with target-aware emulation</strong>
+        <span>Run or debug Zephyr-class firmware ELFs with QEMU or Renode, target-aware setup, and clear validation when a target combination cannot run.</span>
+      </li>
+      <li>
+        <strong>See Flash and RAM budgets at a glance</strong>
+        <span>The new Memory tab breaks down ELF Flash and RAM by region, explains runtime-copy data, and reads capacities from linker maps or Zephyr devicetrees.</span>
+      </li>
+    </ul>
   </section>
 
 </main>

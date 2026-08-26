@@ -417,6 +417,7 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         val sourceAssetReferences = sourceAssetReferences(sourceJson)
         val expectedLocalReferences = sortedSetOf(
             "style.css",
+            "screenshots/component-model-debugger.png",
             "screenshots/zephyr-cortex-m-firmware.png",
         )
 
@@ -425,16 +426,20 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         assertTrue(manifestEntries.containsAll(htmlLocalReferences + cssLocalReferences + sourceAssetReferences))
         assertTrue(html.contains("<h1>What's New in Hexana 0.19</h1>"))
         assertTrue(html.contains("<h2>Inspect Zephyr firmware with confidence</h2>"))
+        assertTrue(html.contains("<h2>Follow Component Model modules in the debugger</h2>"))
         assertTrue(html.contains("GCC source locations"))
         assertTrue(sourceJson.contains("\"version\": \"0.19\""))
         assertTrue(sourceJson.contains("Cortex-M firmware ELFs"))
+        assertTrue(sourceJson.contains("component-model binaries"))
 
         val imageTags = Regex("""<img\b[^>]*>""").findAll(html).map { it.value }.toList()
-        assertEquals(1, imageTags.size)
-        assertTrue(
-            "Missing image alt text: ${imageTags.single()}",
-            Regex("""\balt="[^"]*\S[^"]*""").containsMatchIn(imageTags.single()),
-        )
+        assertEquals(2, imageTags.size)
+        imageTags.forEach { imageTag ->
+            assertTrue(
+                "Missing image alt text: $imageTag",
+                Regex("""\balt="[^"]*\S[^"]*""").containsMatchIn(imageTag),
+            )
+        }
     }
 
     fun testGeneratedWhatsNewStaticResourceContract() {

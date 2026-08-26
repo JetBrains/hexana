@@ -8,6 +8,7 @@ import com.intellij.execution.configurations.RuntimeConfigurationError
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
+import org.jetbrains.annotations.TestOnly
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
@@ -18,6 +19,10 @@ class WasmRunConfiguration(
     factory: ConfigurationFactory,
     name: String,
 ) : RunConfigurationBase<WasmRunConfigurationOptions>(project, factory, name) {
+
+    /** A non-persisted guest address used only by the opt-in What's New capture flow. */
+    @TestOnly
+    internal var gdbstubCaptureAddress: ULong? = null
 
     override fun getOptions(): WasmRunConfigurationOptions =
         super.getOptions() as WasmRunConfigurationOptions
