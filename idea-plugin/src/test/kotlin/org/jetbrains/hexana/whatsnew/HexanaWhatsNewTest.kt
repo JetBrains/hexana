@@ -38,6 +38,18 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         }
     }
 
+    fun testLoadWhatsNewVisualDecodesBundled019AnimatedGif() {
+        val content = requireNotNull(HexanaWhatsNewContentService.createContent("0.19"))
+        try {
+            val visual = loadWhatsNewVisual(content.rootDirectory.resolve("screenshots/component-model-debugger.gif"))
+
+            assertTrue(visual is HexanaWhatsNewVisual.Animated)
+            assertEquals(19, (visual as HexanaWhatsNewVisual.Animated).frames.size)
+        } finally {
+            content.dispose()
+        }
+    }
+
     fun testMajorMinorVersion() {
         assertEquals("0.12", majorMinorVersion("0.12-SNAPSHOT"))
         assertEquals("0.12", majorMinorVersion("0.12.34-nightly"))
@@ -417,7 +429,7 @@ class HexanaWhatsNewTest : UsefulTestCase() {
         val sourceAssetReferences = sourceAssetReferences(sourceJson)
         val expectedLocalReferences = sortedSetOf(
             "style.css",
-            "screenshots/component-model-debugger.png",
+            "screenshots/component-model-debugger.gif",
             "screenshots/zephyr-cortex-m-firmware.png",
         )
 

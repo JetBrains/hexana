@@ -19,7 +19,7 @@
       "title": "Inspect Zephyr firmware with confidence"
     },
     {
-      "asset": "screenshots/component-model-debugger.png",
+      "asset": "screenshots/component-model-debugger.gif",
       "entries": [
         {
           "section": "Added",
@@ -65,7 +65,7 @@
   "schema": 1,
   "sources": {
     "assets": "docs/whatsnew/assets.yml",
-    "assets_sha256": "dcaf4e81ad4e9b925e3cbce696b26703f017bc5ed3971410abb6f4778ed0e130",
+    "assets_sha256": "160d3ef9a4b75bc52d843a38678d840771ae58bee28bd136f5397f3253e6c796",
     "changelog": "idea-plugin/CHANGELOG.md",
     "changelog_sha256": "c49fa97155a70445b6ce382712b13165f8c834e820fa23b3ec0a07c36de04196",
     "design": "docs/whatsnew/DESIGN.md",
