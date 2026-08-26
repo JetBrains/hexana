@@ -15,6 +15,8 @@ enum class ConsoleSessionKind {
     LLDB_WASMTIME_GDBSTUB,
     /** Firmware session running over GDB-DAP transport. */
     GDB_DAP,
+    /** Firmware session: LLDB connects to a GDB-stub emulator (QEMU or Renode) via gdb-remote. */
+    LLDB_FIRMWARE,
 }
 
 /**
@@ -61,7 +63,8 @@ enum class InterceptAction { RESUME, PAUSE, STEP_OVER, STEP_INTO, STEP_OUT, STOP
  * and GDB parse their command lines.
  *
  * Rules for LLDB sessions ([ConsoleSessionKind.LLDB_WASMTIME_JIT],
- * [ConsoleSessionKind.LLDB_WAMR], [ConsoleSessionKind.LLDB_WASMTIME_GDBSTUB]):
+ * [ConsoleSessionKind.LLDB_WAMR], [ConsoleSessionKind.LLDB_WASMTIME_GDBSTUB],
+ * [ConsoleSessionKind.LLDB_FIRMWARE]):
  * - Navigation commands (`continue`, `next`, `step`, `finish`, etc.) are
  *   intercepted and routed to the matching [XDebugSession] action.
  * - Session-ending commands (`quit`, `process kill`, etc.) are intercepted
@@ -81,7 +84,8 @@ fun classifyConsoleCommand(command: String, kind: ConsoleSessionKind): ConsoleCo
     return when (kind) {
         ConsoleSessionKind.LLDB_WASMTIME_JIT,
         ConsoleSessionKind.LLDB_WAMR,
-        ConsoleSessionKind.LLDB_WASMTIME_GDBSTUB -> classifyLldbCommand(trimmed, kind)
+        ConsoleSessionKind.LLDB_WASMTIME_GDBSTUB,
+        ConsoleSessionKind.LLDB_FIRMWARE -> classifyLldbCommand(trimmed, kind)
         ConsoleSessionKind.GDB_DAP -> classifyGdbDapCommand(trimmed)
     }
 }

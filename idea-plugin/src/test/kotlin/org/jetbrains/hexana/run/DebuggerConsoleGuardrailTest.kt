@@ -273,6 +273,46 @@ class DebuggerConsoleGuardrailTest : UsefulTestCase() {
     }
 
     // -----------------------------------------------------------------------
+    // LLDB_FIRMWARE — navigation intercepts (same LLDB classifier; no qWasmStackValue guard)
+    // -----------------------------------------------------------------------
+
+    fun testFirmware_continue_interceptsResume() {
+        assertIntercept(InterceptAction.RESUME, "continue", ConsoleSessionKind.LLDB_FIRMWARE)
+    }
+
+    fun testFirmware_next_interceptsStepOver() {
+        assertIntercept(InterceptAction.STEP_OVER, "next", ConsoleSessionKind.LLDB_FIRMWARE)
+    }
+
+    fun testFirmware_step_interceptsStepInto() {
+        assertIntercept(InterceptAction.STEP_INTO, "step", ConsoleSessionKind.LLDB_FIRMWARE)
+    }
+
+    fun testFirmware_finish_interceptsStepOut() {
+        assertIntercept(InterceptAction.STEP_OUT, "finish", ConsoleSessionKind.LLDB_FIRMWARE)
+    }
+
+    fun testFirmware_quit_interceptsStop() {
+        assertIntercept(InterceptAction.STOP, "quit", ConsoleSessionKind.LLDB_FIRMWARE)
+    }
+
+    fun testFirmware_run_isBlocked() {
+        assertBlock("run", ConsoleSessionKind.LLDB_FIRMWARE)
+    }
+
+    /** qWasmStackValue must be ALLOWED for LLDB_FIRMWARE — the WAMR guard does NOT apply here. */
+    fun testFirmware_qWasmStackValue_isAllowed() {
+        assertAllow(
+            "process plugin packet send qWasmStackValue:0;0",
+            ConsoleSessionKind.LLDB_FIRMWARE,
+        )
+    }
+
+    fun testFirmware_unknown_isAllowed() {
+        assertAllow("info threads", ConsoleSessionKind.LLDB_FIRMWARE)
+    }
+
+    // -----------------------------------------------------------------------
     // Whitespace trimming
     // -----------------------------------------------------------------------
 

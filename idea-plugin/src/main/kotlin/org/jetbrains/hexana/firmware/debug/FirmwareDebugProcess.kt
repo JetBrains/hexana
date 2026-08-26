@@ -2,22 +2,29 @@ package org.jetbrains.hexana.firmware.debug
 
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.ui.ExecutionConsole
+import com.intellij.execution.ui.RunnerLayoutUi
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.editor.Document
+import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.fileTypes.PlainTextFileType
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugSession
+import com.intellij.xdebugger.ui.XDebugTabLayouter
 import com.intellij.xdebugger.breakpoints.XBreakpointHandler
 import com.intellij.xdebugger.evaluation.XDebuggerEditorsProvider
 import com.intellij.xdebugger.frame.XExecutionStack
 import com.intellij.xdebugger.frame.XStackFrame
 import com.intellij.xdebugger.frame.XSuspendContext
 import com.intellij.xdebugger.impl.XDebuggerUtilImpl
-import com.intellij.openapi.editor.Document
-import com.intellij.openapi.fileTypes.FileType
 import org.jetbrains.hexana.firmware.run.StopAtEntry
+import org.jetbrains.hexana.run.ConsoleSessionKind
+import org.jetbrains.hexana.run.DebuggerConsoleTransport
+import org.jetbrains.hexana.run.InterceptAction
 import org.jetbrains.hexana.run.LldbCommunicator
+import org.jetbrains.hexana.run.buildDebuggerConsolePanel
 import org.jetbrains.hexana.shared.parseLldbFrameLocation
 import org.jetbrains.hexana.shared.parseLldbFunctionName
 
@@ -52,6 +59,9 @@ class FirmwareDebugProcess(
 
     private val LOG = Logger.getInstance(FirmwareDebugProcess::class.java)
 
+    /** Parent [com.intellij.openapi.Disposable] for the debugger console tab's [com.intellij.execution.ui.ConsoleView]. */
+    private val consoleDisposable = Disposer.newDisposable("HexanaDebuggerConsole")
+
     override fun getEditorsProvider(): XDebuggerEditorsProvider = SimpleEditorsProvider
 
     override fun doGetProcessHandler(): ProcessHandler = lldbHandler
@@ -59,6 +69,21 @@ class FirmwareDebugProcess(
     override fun createConsole(): ExecutionConsole = console
 
     override fun getBreakpointHandlers(): Array<XBreakpointHandler<*>> = emptyArray()
+
+    override fun createTabLayouter(): XDebugTabLayouter = object : XDebugTabLayouter() {
+        override fun registerAdditionalContent(ui: RunnerLayoutUi) {
+            val transport = LldbFirmwareConsoleTransport()
+            val consoleContent = ui.createContent(
+                "HexanaDebuggerConsole",
+                buildDebuggerConsolePanel(session.project, transport, consoleDisposable),
+                "Debugger Console",
+                null,
+                null,
+            )
+            consoleContent.isCloseable = false
+            ui.addContent(consoleContent)
+        }
+    }
 
     /**
      * Called by the platform after the debug session UI is ready. This is where we
@@ -198,6 +223,39 @@ class FirmwareDebugProcess(
         }
         if (!emulatorHandler.isProcessTerminated) {
             emulatorHandler.destroyProcess()
+        }
+        Disposer.dispose(consoleDisposable)
+    }
+
+    // -------------------------------------------------------------------------
+    // Console transport
+    // -------------------------------------------------------------------------
+
+    /**
+     * [DebuggerConsoleTransport] for the LLDB firmware session.
+     *
+     * Commands are forwarded via [LldbCommunicator.sendCommandAndCollectOutput].
+     * Execution-control commands (continue, next, step, finish, quit, etc.) are
+     * intercepted by the guardrail classifier for [ConsoleSessionKind.LLDB_FIRMWARE]
+     * and routed to the matching IDE debugger action, keeping IDE state in sync.
+     */
+    private inner class LldbFirmwareConsoleTransport : DebuggerConsoleTransport {
+        override val sessionKind: ConsoleSessionKind get() = ConsoleSessionKind.LLDB_FIRMWARE
+
+        override fun execute(command: String): List<String> =
+            lldb.sendCommandAndCollectOutput(command, 10_000)
+
+        override fun isAcceptingCommands(): Boolean = !lldb.isRunning && !lldb.debuggeeExited
+
+        override fun performIntercept(action: InterceptAction) {
+            when (action) {
+                InterceptAction.RESUME -> resume(null)
+                InterceptAction.PAUSE -> startPausing()
+                InterceptAction.STEP_OVER -> startStepOver(null)
+                InterceptAction.STEP_INTO -> startStepInto(null)
+                InterceptAction.STEP_OUT -> startStepOut(null)
+                InterceptAction.STOP -> stop()
+            }
         }
     }
 

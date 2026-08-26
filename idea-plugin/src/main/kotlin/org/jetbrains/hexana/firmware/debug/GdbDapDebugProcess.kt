@@ -3,15 +3,18 @@ package org.jetbrains.hexana.firmware.debug
 import com.intellij.execution.process.KillableProcessHandler
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.ui.ExecutionConsole
+import com.intellij.execution.ui.RunnerLayoutUi
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.invokeLater
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.fileTypes.PlainTextFileType
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.xdebugger.XDebugProcess
 import com.intellij.xdebugger.XDebugSession
+import com.intellij.xdebugger.ui.XDebugTabLayouter
 import com.intellij.xdebugger.XSourcePosition
 import com.intellij.xdebugger.breakpoints.XBreakpointHandler
 import com.intellij.xdebugger.evaluation.EvaluationMode
@@ -22,6 +25,10 @@ import com.intellij.xdebugger.frame.XSuspendContext
 import com.intellij.xdebugger.impl.XDebuggerUtilImpl
 import kotlinx.serialization.json.*
 import org.jetbrains.hexana.firmware.run.StopAtEntry
+import org.jetbrains.hexana.run.ConsoleSessionKind
+import org.jetbrains.hexana.run.DebuggerConsoleTransport
+import org.jetbrains.hexana.run.InterceptAction
+import org.jetbrains.hexana.run.buildDebuggerConsolePanel
 
 /**
  * Debug process for ELF firmware running under a GDB-stub emulator, using
@@ -61,6 +68,15 @@ class GdbDapDebugProcess(
     private val LOG = Logger.getInstance(GdbDapDebugProcess::class.java)
 
     @Volatile private var currentThreadId: Int = 1
+
+    /**
+     * True while the debuggee is stopped (stopped event received, not yet resumed).
+     * Used by the console transport's [DebuggerConsoleTransport.isAcceptingCommands].
+     */
+    @Volatile private var isStopped: Boolean = false
+
+    /** Parent [com.intellij.openapi.Disposable] for the debugger console tab's [ConsoleView][com.intellij.execution.ui.ConsoleView]. */
+    private val consoleDisposable = Disposer.newDisposable("HexanaDebuggerConsole")
 
     override fun getEditorsProvider(): XDebuggerEditorsProvider = SimpleEditorsProvider
 
@@ -190,6 +206,7 @@ class GdbDapDebugProcess(
     }
 
     private fun handleStop(stoppedEvent: JsonObject) {
+        isStopped = true
         try {
             // Get the thread ID from the event body, fall back to currentThreadId.
             val body = stoppedEvent["body"]?.jsonObject
@@ -224,6 +241,7 @@ class GdbDapDebugProcess(
     }
 
     override fun resume(context: XSuspendContext?) {
+        isStopped = false
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 client.request("continue", buildJsonObject { put("threadId", currentThreadId) })
@@ -244,6 +262,7 @@ class GdbDapDebugProcess(
     }
 
     override fun startStepOver(context: XSuspendContext?) {
+        isStopped = false
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 client.request("next", buildJsonObject { put("threadId", currentThreadId) })
@@ -254,6 +273,7 @@ class GdbDapDebugProcess(
     }
 
     override fun startStepInto(context: XSuspendContext?) {
+        isStopped = false
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 client.request("stepIn", buildJsonObject { put("threadId", currentThreadId) })
@@ -264,6 +284,7 @@ class GdbDapDebugProcess(
     }
 
     override fun startStepOut(context: XSuspendContext?) {
+        isStopped = false
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 client.request("stepOut", buildJsonObject { put("threadId", currentThreadId) })
@@ -283,6 +304,59 @@ class GdbDapDebugProcess(
         client.close()
         if (!gdbHandler.isProcessTerminated) gdbHandler.destroyProcess()
         if (!emulatorHandler.isProcessTerminated) emulatorHandler.destroyProcess()
+        Disposer.dispose(consoleDisposable)
+    }
+
+    override fun createTabLayouter(): XDebugTabLayouter = object : XDebugTabLayouter() {
+        override fun registerAdditionalContent(ui: RunnerLayoutUi) {
+            val transport = GdbDapConsoleTransport()
+            val consoleContent = ui.createContent(
+                "HexanaDebuggerConsole",
+                buildDebuggerConsolePanel(session.project, transport, consoleDisposable),
+                "Debugger Console",
+                null,
+                null,
+            )
+            consoleContent.isCloseable = false
+            ui.addContent(consoleContent)
+        }
+    }
+
+    /**
+     * [DebuggerConsoleTransport] for the GDB-DAP session.
+     *
+     * Commands are forwarded via the DAP `evaluate` request with context `"repl"`.
+     * GDB's DAP adapter returns the command output in the `result` field of the response body,
+     * so the console output relies solely on the evaluate response body (not the event queue,
+     * which is owned by the session loop).
+     *
+     * LANDMINE: evaluating `continue` or any execution-control command through the GDB -i=dap
+     * REPL wedges the interpreter. The guardrail classifier intercepts those commands for
+     * [ConsoleSessionKind.GDB_DAP] before they reach [execute].
+     */
+    private inner class GdbDapConsoleTransport : DebuggerConsoleTransport {
+        override val sessionKind: ConsoleSessionKind get() = ConsoleSessionKind.GDB_DAP
+
+        override fun execute(command: String): List<String> =
+            renderEvaluateResponse(
+                client.request("evaluate", buildJsonObject {
+                    put("expression", command)
+                    put("context", "repl")
+                })
+            )
+
+        override fun isAcceptingCommands(): Boolean = isStopped
+
+        override fun performIntercept(action: InterceptAction) {
+            when (action) {
+                InterceptAction.RESUME -> resume(null)
+                InterceptAction.PAUSE -> startPausing()
+                InterceptAction.STEP_OVER -> startStepOver(null)
+                InterceptAction.STEP_INTO -> startStepInto(null)
+                InterceptAction.STEP_OUT -> startStepOut(null)
+                InterceptAction.STOP -> stop()
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -334,4 +408,32 @@ class GdbDapDebugProcess(
                     .createDocument(expression.expression)
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// DAP evaluate response rendering
+// ---------------------------------------------------------------------------
+
+/**
+ * Converts a DAP `evaluate` response [body] into output lines for the console.
+ *
+ * On success (`success=true`), the GDB DAP adapter returns the command output
+ * in the `result` string field of the response body. The function splits it on
+ * newlines and drops trailing blank lines.
+ *
+ * On an error response (`success=false`) or a missing/empty `result`, the
+ * `message` field from the top-level response or body is used as a single
+ * error line.
+ */
+internal fun renderEvaluateResponse(body: JsonObject): List<String> {
+    val success = body["success"]?.jsonPrimitive?.booleanOrNull ?: false
+    if (!success) {
+        val msg = body["message"]?.jsonPrimitive?.contentOrNull
+            ?: body["body"]?.jsonObject?.get("error")?.jsonObject?.get("format")?.jsonPrimitive?.contentOrNull
+            ?: "evaluate command failed"
+        return listOf("error: $msg")
+    }
+    val result = body["body"]?.jsonObject?.get("result")?.jsonPrimitive?.contentOrNull ?: ""
+    if (result.isEmpty()) return emptyList()
+    return result.split('\n').dropLastWhile { it.isBlank() }
 }
