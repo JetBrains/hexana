@@ -8,10 +8,13 @@ import com.intellij.execution.process.ProcessHandler
  *
  * @param port TCP port the gdbstub is accepting on.
  * @param processHandler Handle to the running emulator process (QEMU or Renode).
+ * @param uartPort TCP port of the Renode UART server-socket terminal, or null when the
+ *   UART arrives on the emulator's stdout instead (QEMU with `-serial mon:stdio`).
  */
 data class StubEndpoint(
     val port: Int,
     val processHandler: ProcessHandler,
+    val uartPort: Int? = null,
 )
 
 /**

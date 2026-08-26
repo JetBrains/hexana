@@ -10,11 +10,14 @@ import org.jetbrains.hexana.firmware.Dts2ReplRunner
 import org.jetbrains.hexana.firmware.HexanaFirmwareSettings
 import org.jetbrains.hexana.firmware.run.registerNoOrphan
 import org.jetbrains.hexana.providers.firmware.BackendSelection
+import org.jetbrains.hexana.providers.firmware.DEFAULT_UART_PERIPHERAL
 import org.jetbrains.hexana.providers.firmware.ReplResult
 import org.jetbrains.hexana.providers.firmware.ReplSource
 import org.jetbrains.hexana.providers.firmware.buildRescScript
+import org.jetbrains.hexana.providers.firmware.parseDtsConsoleUart
 import org.jetbrains.hexana.providers.firmware.renodeLibraryReplFor
 import java.io.File
+import java.net.ServerSocket
 
 /**
  * Launches Renode with a gdbstub port and frozen start.
@@ -89,11 +92,18 @@ class RenodeGdbStubLauncher(
             }
         }
 
+        // UART bridge mirrors the run path: server-socket terminal on a free port, console
+        // peripheral read from the DTS chosen node (usart2 on STM32F4, uart0 on nRF52840).
+        val uartPort = ServerSocket(0).use { it.localPort }
+        val dtsTextForUart = File(dtsPath).takeIf { it.exists() }?.readText()
+        val uartPeripheral = dtsTextForUart?.let(::parseDtsConsoleUart) ?: DEFAULT_UART_PERIPHERAL
+
         val rescText = buildRescScript(
             replPath = replPath,
             libraryPlatform = libraryPlatform,
             elfPath = elfPath,
-            uartPort = 0, // no UART pumping in the debug path; peripheral default is harmless
+            uartPort = uartPort,
+            uartPeripheral = uartPeripheral,
             extraLines = extraLines,
             gdbPort = port,
         )
@@ -131,8 +141,8 @@ class RenodeGdbStubLauncher(
             )
         }
 
-        LOG.info("Renode gdbstub ready on port $port")
-        return StubEndpoint(port = port, processHandler = handler)
+        LOG.info("Renode gdbstub ready on port $port (uart on $uartPort via $uartPeripheral)")
+        return StubEndpoint(port = port, processHandler = handler, uartPort = uartPort)
     }
 
 }

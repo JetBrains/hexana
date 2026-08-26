@@ -195,6 +195,7 @@ class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     .createBuilder(environment.project)
                     .console
                     .also { it.attachToProcess(gdbHandler) }
+                wireEmulatorOutput(gdbConsole, prep.stubEndpoint)
 
                 return GdbDapDebugProcess(
                     session = session,
@@ -224,6 +225,7 @@ class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     .createBuilder(environment.project)
                     .console
                     .also { it.attachToProcess(lldbHandler) }
+                wireEmulatorOutput(console, prep.stubEndpoint)
 
                 lldb.sendCommand("settings set target.disable-aslr false")
                 lldb.sendCommand("target create \"${configuration.elfPath}\"")
@@ -269,9 +271,66 @@ class FirmwareDebugRunner : GenericProgramRunner<RunnerSettings>() {
         return startDebugSession(environment, starter)
     }
 
+    /**
+     * Routes emulator output into the debug session console. The console is attached to the
+     * debugger process (gdb -i=dap emits only DAP frames, lldb only command echo), so without
+     * this the firmware's UART output is invisible in debug runs.
+     *
+     * QEMU ([StubEndpoint.uartPort] == null): UART arrives on the emulator's stdout
+     * (`-serial mon:stdio`), printed as normal output. Renode: stdout is the monitor log
+     * (printed as system output, it carries unimplemented-peripheral warnings) and the UART
+     * arrives on the server-socket terminal, pumped like the run path's startUartPump.
+     */
+    private fun wireEmulatorOutput(console: com.intellij.execution.ui.ConsoleView, endpoint: StubEndpoint) {
+        val uartOnStdout = endpoint.uartPort == null
+        endpoint.processHandler.addProcessListener(object : com.intellij.execution.process.ProcessAdapter() {
+            override fun onTextAvailable(
+                event: com.intellij.execution.process.ProcessEvent,
+                outputType: com.intellij.openapi.util.Key<*>,
+            ) {
+                val type = if (uartOnStdout) {
+                    com.intellij.execution.ui.ConsoleViewContentType.NORMAL_OUTPUT
+                } else {
+                    com.intellij.execution.ui.ConsoleViewContentType.SYSTEM_OUTPUT
+                }
+                console.print(event.text, type)
+            }
+        })
+        val uartPort = endpoint.uartPort ?: return
+        com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+            val deadline = System.currentTimeMillis() + UART_CONNECT_TIMEOUT_MS
+            var socket: java.net.Socket? = null
+            while (System.currentTimeMillis() < deadline && !endpoint.processHandler.isProcessTerminated) {
+                try {
+                    socket = java.net.Socket("localhost", uartPort)
+                    break
+                } catch (_: java.io.IOException) {
+                    Thread.sleep(500)
+                }
+            }
+            val conn = socket ?: return@executeOnPooledThread
+            try {
+                conn.getInputStream().bufferedReader().use { reader ->
+                    var line = reader.readLine()
+                    while (line != null && !endpoint.processHandler.isProcessTerminated) {
+                        console.print("$line\n", com.intellij.execution.ui.ConsoleViewContentType.NORMAL_OUTPUT)
+                        line = reader.readLine()
+                    }
+                }
+            } catch (_: java.io.IOException) {
+                // Normal on emulator termination.
+            } finally {
+                runCatching { conn.close() }
+            }
+        }
+    }
+
     companion object {
         private val LOG = Logger.getInstance(FirmwareDebugRunner::class.java)
         const val RUNNER_ID = "HexanaFirmwareDebugRunner"
+
+        /** How long the UART pump retries connecting to Renode's server-socket terminal. */
+        private const val UART_CONNECT_TIMEOUT_MS = 30_000L
 
         /**
          * Produces the ordered DAP (command, argsJson) pairs for a GDB-DAP attach sequence.
