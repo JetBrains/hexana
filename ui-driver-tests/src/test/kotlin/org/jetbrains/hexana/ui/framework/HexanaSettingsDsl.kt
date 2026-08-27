@@ -14,6 +14,7 @@ import com.intellij.driver.sdk.ui.components.settings.settingsDialog
 import com.intellij.driver.sdk.ui.should
 import java.awt.event.KeyEvent
 import javax.swing.JScrollBar
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 private const val TOOLS_SETTINGS_GROUP = "Tools"
@@ -152,7 +153,7 @@ private fun SettingsDialogUiComponent.openSettingsPage(page: HexanaSettingsPage)
     repeat(3) {
         runCatching {
             openTreeSettingsSection(*path)
-            content().waitOneText(expectedLabel, timeout = 10.seconds)
+            waitOneTextAtTop(expectedLabel, timeout = 10.seconds)
             return
         }
     }
@@ -161,5 +162,25 @@ private fun SettingsDialogUiComponent.openSettingsPage(page: HexanaSettingsPage)
     searchTextField.keyboard {
         key(KeyEvent.VK_ENTER)
     }
-    content().waitOneText(expectedLabel, timeout = 30.seconds)
+    // Search navigation spotlights matching options, which may scroll the page and
+    // hide the top labels; retry so a spotlight scroll landing after our reset loses.
+    repeat(2) {
+        runCatching {
+            waitOneTextAtTop(expectedLabel, timeout = 10.seconds)
+            return
+        }
+    }
+    waitOneTextAtTop(expectedLabel, timeout = 10.seconds)
+}
+
+/** Scrolls the settings page back to the top, then waits for [expected] to be visible. */
+private fun SettingsDialogUiComponent.waitOneTextAtTop(expected: String, timeout: Duration) {
+    content {
+        scrollBars()
+            .filter { it.getOrientation() == JScrollBar.VERTICAL }
+            .forEach { scrollBar ->
+                scrollBar.driver.cast(scrollBar.component, CaptureScrollBar::class).setValue(0)
+            }
+        waitOneText(expected, timeout = timeout)
+    }
 }
