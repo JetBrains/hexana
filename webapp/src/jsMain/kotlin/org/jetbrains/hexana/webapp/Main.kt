@@ -363,12 +363,7 @@ internal fun LandingView(
     var retainedFile by remember { mutableStateOf<File?>(null) }
     var pendingCoreBytes by remember { mutableStateOf<ByteArray?>(null) }
     var pendingCoreFileName by remember { mutableStateOf("") }
-    var aboutOpen by remember { mutableStateOf(false) }
-    var aboutTrigger by remember { mutableStateOf<HTMLElement?>(null) }
-    var aboutSurface by remember { mutableStateOf<HTMLElement?>(null) }
-    val currentAboutOpen = rememberUpdatedState(aboutOpen)
-    val currentAboutTrigger = rememberUpdatedState(aboutTrigger)
-    val currentAboutSurface = rememberUpdatedState(aboutSurface)
+    var releaseNotesOpen by remember { mutableStateOf(false) }
     val currentOnFileLoaded = rememberUpdatedState(onFileLoaded)
     val parserController = remember(workerFactory, workerScheduler) {
         ParserWorkerController(
@@ -410,22 +405,6 @@ internal fun LandingView(
             loader.dispose()
             parserController.dispose()
         }
-    }
-
-    DisposableEffect(Unit) {
-        val listener: (org.w3c.dom.events.Event) -> Unit = { event ->
-            val target = event.target as? org.w3c.dom.Node
-            if (
-                currentAboutOpen.value &&
-                target != null &&
-                currentAboutSurface.value?.contains(target) != true &&
-                currentAboutTrigger.value?.contains(target) != true
-            ) {
-                aboutOpen = false
-            }
-        }
-        document.addEventListener("mousedown", listener)
-        onDispose { document.removeEventListener("mousedown", listener) }
     }
 
     val selectFile: (File) -> Unit = { file ->
@@ -569,18 +548,10 @@ internal fun LandingView(
         }) { Text("WASM, ELF, Mach-O, PE, class files, ZIP, DEX and more") }
 
         releaseInfo?.let { info ->
-            AboutHexanaControl(
+            ReleaseNotesControl(
                 info = info,
-                open = aboutOpen,
-                onOpenChange = { aboutOpen = it },
-                onTriggerMounted = { aboutTrigger = it },
-                onTriggerDisposed = { element ->
-                    if (currentAboutTrigger.value === element) aboutTrigger = null
-                },
-                onSurfaceMounted = { aboutSurface = it },
-                onSurfaceDisposed = { element ->
-                    if (currentAboutSurface.value === element) aboutSurface = null
-                },
+                open = releaseNotesOpen,
+                onOpenChange = { releaseNotesOpen = it },
             )
         }
 
@@ -592,44 +563,56 @@ internal fun LandingView(
 }
 
 @Composable
-private fun AboutHexanaControl(
+private fun ReleaseNotesControl(
     info: WebappReleaseInfo,
     open: Boolean,
     onOpenChange: (Boolean) -> Unit,
-    onTriggerMounted: (HTMLElement) -> Unit,
-    onTriggerDisposed: (HTMLElement) -> Unit,
-    onSurfaceMounted: (HTMLElement) -> Unit,
-    onSurfaceDisposed: (HTMLElement) -> Unit,
 ) {
     var triggerElement by remember { mutableStateOf<HTMLElement?>(null) }
+    var drawerElement by remember { mutableStateOf<HTMLElement?>(null) }
+    var drawerEntered by remember { mutableStateOf(false) }
     val currentTriggerElement = rememberUpdatedState(triggerElement)
+    val currentDrawerElement = rememberUpdatedState(drawerElement)
     val closeAndFocusTrigger: () -> Unit = {
         onOpenChange(false)
         window.requestAnimationFrame { currentTriggerElement.value?.focus() }
     }
-    val closeOnEscape: (org.jetbrains.compose.web.events.SyntheticKeyboardEvent) -> Unit = { event ->
+    val closeOnKeyboard: (org.jetbrains.compose.web.events.SyntheticKeyboardEvent) -> Unit = { event ->
         val keyboard = event.nativeEvent as? KeyboardEvent
-        if (keyboard?.key == "Escape") {
-            keyboard.preventDefault()
-            closeAndFocusTrigger()
+        when (keyboard?.key) {
+            "Escape" -> {
+                keyboard.preventDefault()
+                closeAndFocusTrigger()
+            }
+            "Tab" -> {
+                currentDrawerElement.value?.let { drawer -> trapDrawerFocus(drawer, keyboard) }
+            }
         }
     }
-    Div({
-        attr("data-about-hexana", "true")
-        style { property("position", "relative") }
-    }) {
+    DisposableEffect(open) {
+        val body = document.body
+        val previousOverflow = body?.style?.getPropertyValue("overflow")
+        if (open) {
+            body?.style?.setProperty("overflow", "hidden")
+            window.requestAnimationFrame { drawerEntered = true }
+        } else {
+            drawerEntered = false
+        }
+        onDispose {
+            if (open) body?.style?.setProperty("overflow", previousOverflow ?: "")
+        }
+    }
+    Div({ attr("data-release-notes", "true") }) {
         Button({
-            id("hexana-about-trigger")
-            attr("data-about-trigger", "true")
-            attr("aria-label", "About Hexana ${info.version}")
+            id("hexana-release-notes-trigger")
+            attr("data-release-notes-trigger", "true")
+            attr("aria-label", "Release notes for Hexana ${info.version}")
             attr("aria-expanded", open.toString())
-            attr("aria-controls", "hexana-about-surface")
+            attr("aria-controls", "hexana-release-notes-drawer")
             ref { element ->
                 triggerElement = element
-                onTriggerMounted(element)
                 onDispose {
                     if (currentTriggerElement.value === element) triggerElement = null
-                    onTriggerDisposed(element)
                 }
             }
             onClick { onOpenChange(!open) }
@@ -646,53 +629,319 @@ private fun AboutHexanaControl(
                     }
                 }
             }
-        }) { Text("About Hexana ${info.version} ▾") }
+            style {
+                property("padding", "8px 12px")
+                property("border", "1px solid var(--vscode-button-secondaryBorder, #6b6b6b)")
+                property("border-radius", "4px")
+                property("background", "transparent")
+                property("color", "var(--vscode-button-secondaryForeground, #ffffff)")
+                property("font-size", "12px")
+                property("font-weight", "600")
+                property("cursor", "pointer")
+            }
+        }) { Text("Release notes") }
         if (open) {
             Div({
-                id("hexana-about-surface")
-                attr("data-about-surface", "true")
-                attr("role", "dialog")
-                attr("aria-label", "About Hexana ${info.version}")
-                attr("tabindex", "-1")
-                ref { element ->
-                    onSurfaceMounted(element)
-                    onDispose { onSurfaceDisposed(element) }
-                }
-                onKeyDown(closeOnEscape)
+                attr("data-release-notes-overlay", "true")
+                attr("aria-hidden", "false")
                 style {
-                    property("position", "absolute")
-                    property("z-index", "1")
-                    property("width", "min(420px, calc(100vw - 32px))")
-                    property("max-height", "320px")
-                    property("overflow", "auto")
-                    property("padding", "12px")
-                    property("margin-top", "6px")
-                    property("text-align", "left")
-                    property("background", "var(--vscode-editorWidget-background, #252526)")
-                    property("border", "1px solid var(--vscode-editorWidget-border, #454545)")
+                    property("position", "fixed")
+                    property("inset", "0")
+                    property("z-index", "1000")
+                    property("display", "flex")
+                    property("justify-content", "flex-end")
+                    property("isolation", "isolate")
                 }
             }) {
-                Div({ attr("data-about-version", "true") }) { Text("Version: ${info.version}") }
-                Div({ attr("data-about-revision", "true") }) { Text("Revision: ${info.revision}") }
-                Div({ style { property("margin-top", "8px") } }) {
-                    A(href = info.repositoryUrl, {
-                        attr("data-about-link", "github")
-                        attr("target", "_blank")
-                        attr("rel", "noopener noreferrer")
-                    }) { Text("GitHub") }
-                    Text(" · ")
-                    A(href = info.websiteUrl, {
-                        attr("data-about-link", "website")
-                        attr("target", "_blank")
-                        attr("rel", "noopener noreferrer")
-                    }) { Text("Hexana website") }
+                Div({
+                    attr("data-release-notes-backdrop", "true")
+                    attr("aria-hidden", "true")
+                    onClick { closeAndFocusTrigger() }
+                    style {
+                        property("position", "absolute")
+                        property("inset", "0")
+                        property("background", "rgba(0, 0, 0, 0.58)")
+                    }
+                })
+                Div({
+                id("hexana-release-notes-drawer")
+                attr("data-release-notes-drawer", "true")
+                attr("role", "dialog")
+                attr("aria-modal", "true")
+                attr("aria-labelledby", "hexana-release-notes-title")
+                attr("tabindex", "-1")
+                ref { element ->
+                    drawerElement = element
+                    window.requestAnimationFrame {
+                        element.querySelector("[data-release-notes-close]")?.unsafeCast<HTMLElement>()?.focus()
+                    }
+                    onDispose {
+                        if (currentDrawerElement.value === element) drawerElement = null
+                    }
                 }
-                Pre({
-                    attr("data-about-changelog", "true")
-                    style { property("white-space", "pre-wrap") }
-                }) { Text(info.changelog) }
+                onKeyDown(closeOnKeyboard)
+                style {
+                    property("position", "relative")
+                    property("width", "min(560px, 100vw)")
+                    property("height", "100dvh")
+                    property("display", "flex")
+                    property("flex-direction", "column")
+                    property("background", "var(--vscode-editorWidget-background, #252526)")
+                    property("border-left", "1px solid var(--vscode-editorWidget-border, #454545)")
+                    property("box-shadow", "-16px 0 36px rgba(0, 0, 0, 0.38)")
+                    property("transform", if (drawerEntered) "translateX(0)" else "translateX(100%)")
+                    property("transition", "transform 180ms ease-out")
+                }
+            }) {
+                Div({
+                    attr("data-release-notes-header", "true")
+                    style {
+                        property("display", "flex")
+                        property("align-items", "flex-start")
+                        property("justify-content", "space-between")
+                        property("gap", "16px")
+                        property("padding", "24px 24px 18px")
+                        property("border-bottom", "1px solid var(--vscode-editorWidget-border, #454545)")
+                    }
+                }) {
+                    Div {
+                        H2({
+                            id("hexana-release-notes-title")
+                            attr("data-release-notes-title", "true")
+                            style { property("margin", "0 0 8px") }
+                        }) { Text("Release notes") }
+                        Div({ attr("data-release-notes-version", "true") }) { Text("Version ${info.version}") }
+                        Div({
+                            attr("data-release-notes-revision", "true")
+                            style { property("font-size", "12px"); property("opacity", "0.7") }
+                        }) { Text("Revision ${info.revision}") }
+                        Div({ style { property("margin-top", "12px") } }) {
+                            ReleaseNotesExternalLink("github", info.repositoryUrl, "GitHub")
+                            Text(" · ")
+                            ReleaseNotesExternalLink("website", info.websiteUrl, "Hexana website")
+                        }
+                    }
+                    Button({
+                        attr("data-release-notes-close", "true")
+                        attr("aria-label", "Close release notes")
+                        onClick { closeAndFocusTrigger() }
+                        style {
+                            property("padding", "6px 9px")
+                            property("border", "1px solid var(--vscode-button-secondaryBorder, #6b6b6b)")
+                            property("border-radius", "4px")
+                            property("background", "transparent")
+                            property("color", "var(--vscode-button-secondaryForeground, #ffffff)")
+                            property("cursor", "pointer")
+                        }
+                    }) { Text("Close") }
+                }
+                Div({
+                    attr("data-release-notes-body", "true")
+                    style {
+                        property("flex", "1")
+                        property("min-height", "0")
+                        property("overflow-y", "auto")
+                        property("overscroll-behavior", "contain")
+                        property("padding", "24px")
+                        property("line-height", "1.55")
+                    }
+                }) {
+                    StructuredChangelog(info.changelog)
+                }
+            }
             }
         }
+    }
+}
+
+@Composable
+private fun ReleaseNotesExternalLink(kind: String, href: String, label: String) {
+    A(href = href, {
+        attr("data-release-notes-link", kind)
+        attr("target", "_blank")
+        attr("rel", "noopener noreferrer")
+    }) { Text(label) }
+}
+
+private sealed interface ChangelogBlock {
+    data class Heading(val level: Int, val text: String) : ChangelogBlock
+    data class Paragraph(val text: String) : ChangelogBlock
+    data class Bullets(val items: List<String>) : ChangelogBlock
+}
+
+private fun parseChangelog(changelog: String): List<ChangelogBlock> {
+    val blocks = mutableListOf<ChangelogBlock>()
+    val paragraph = mutableListOf<String>()
+    val bullets = mutableListOf<String>()
+    fun flushParagraph() {
+        if (paragraph.isNotEmpty()) {
+            blocks += ChangelogBlock.Paragraph(paragraph.joinToString(" "))
+            paragraph.clear()
+        }
+    }
+    fun flushBullets() {
+        if (bullets.isNotEmpty()) {
+            blocks += ChangelogBlock.Bullets(bullets.toList())
+            bullets.clear()
+        }
+    }
+    changelog.lineSequence().forEach { rawLine ->
+        val line = rawLine.trim()
+        when {
+            line.isEmpty() -> {
+                flushParagraph()
+                flushBullets()
+            }
+            line.startsWith("- ") || line.startsWith("* ") -> {
+                flushParagraph()
+                bullets += line.drop(2).trim()
+            }
+            line.startsWith("#") -> {
+                val markerLength = line.takeWhile { it == '#' }.length
+                if (markerLength in 1..6 && line.getOrNull(markerLength) == ' ') {
+                    flushParagraph()
+                    flushBullets()
+                    blocks += ChangelogBlock.Heading(markerLength, line.drop(markerLength + 1).trim())
+                } else {
+                    flushBullets()
+                    paragraph += line
+                }
+            }
+            else -> {
+                flushBullets()
+                paragraph += line
+            }
+        }
+    }
+    flushParagraph()
+    flushBullets()
+    return blocks
+}
+
+@Composable
+private fun StructuredChangelog(changelog: String) {
+    var inReleaseHistory = false
+    parseChangelog(changelog).forEach { block ->
+        if (block is ChangelogBlock.Heading && block.level == 2) {
+            inReleaseHistory = true
+        }
+        if (!inReleaseHistory) return@forEach
+        when (block) {
+            is ChangelogBlock.Heading -> when (block.level) {
+                2 -> ReleaseNotesReleaseHeading(block.text)
+                else -> H5({
+                    attr("data-release-notes-category", "true")
+                    style { property("margin", "18px 0 8px") }
+                }) { ChangelogInlineText(block.text) }
+            }
+            is ChangelogBlock.Paragraph -> P({
+                attr("data-release-notes-paragraph", "true")
+                style { property("margin", "0 0 12px") }
+            }) { ChangelogInlineText(block.text) }
+            is ChangelogBlock.Bullets -> Ul({
+                attr("data-release-notes-list", "true")
+                style { property("margin", "0 0 14px"); property("padding-left", "22px") }
+            }) {
+                block.items.forEach { item ->
+                    Li { ChangelogInlineText(item) }
+                }
+            }
+        }
+    }
+}
+
+private val datedReleaseHeading = Regex("""^\[?(.+?)\]?\s+-\s+(\d{4}-\d{2}-\d{2})$""")
+
+@Composable
+private fun ReleaseNotesReleaseHeading(text: String) {
+    val match = datedReleaseHeading.matchEntire(text)
+    val version = match?.groupValues?.get(1) ?: text
+    val date = match?.groupValues?.get(2)
+    Hr({
+        attr("data-release-notes-release-separator", "true")
+        attr("role", "separator")
+        style {
+            property("margin", "30px 0 18px")
+            property("border", "0")
+            property("border-top", "1px solid var(--vscode-editorWidget-border, #454545)")
+        }
+    })
+    Div({
+        attr("data-release-notes-release", "true")
+        attr("aria-label", date?.let { "$version, released $it" } ?: version)
+        style {
+            property("display", "flex")
+            property("align-items", "baseline")
+            property("justify-content", "space-between")
+            property("gap", "12px")
+            property("flex-wrap", "wrap")
+        }
+    }) {
+        H3({
+            attr("data-release-notes-release-version", "true")
+            style {
+                property("margin", "0")
+                property("font-size", "18px")
+                property("letter-spacing", "-0.01em")
+            }
+        }) { ChangelogInlineText(version) }
+        date?.let {
+            Span({
+                attr("data-release-notes-release-date", "true")
+                attr("aria-label", "Released $it")
+                style {
+                    property("padding", "3px 8px")
+                    property("border-radius", "999px")
+                    property("background", "var(--vscode-badge-background, #4d4d4d)")
+                    property("color", "var(--vscode-badge-foreground, #ffffff)")
+                    property("font-size", "12px")
+                    property("font-weight", "600")
+                    property("white-space", "nowrap")
+                }
+            }) { Text(it) }
+        }
+    }
+}
+
+@Composable
+private fun ChangelogInlineText(text: String) {
+    val linkPattern = Regex("""\[(.+?)\x5D\(([^)\s]+)\)""")
+    var consumed = 0
+    linkPattern.findAll(text).forEach { match ->
+        if (match.range.first > consumed) Text(text.substring(consumed, match.range.first))
+        val label = match.groupValues[1]
+        val href = match.groupValues[2].trim()
+        if (isSafeChangelogLink(href)) {
+            A(href = href, {
+                attr("data-release-notes-changelog-link", "true")
+                attr("target", "_blank")
+                attr("rel", "noopener noreferrer")
+            }) { Text(label) }
+        } else {
+            Span({ attr("data-release-notes-unsafe-link", "true") }) { Text(label) }
+        }
+        consumed = match.range.last + 1
+    }
+    if (consumed < text.length) Text(text.substring(consumed))
+}
+
+private fun isSafeChangelogLink(href: String): Boolean {
+    val normalized = href.lowercase()
+    return !href.any(Char::isWhitespace) && (normalized.startsWith("https://") || normalized.startsWith("http://"))
+}
+
+private fun trapDrawerFocus(drawer: HTMLElement, event: KeyboardEvent) {
+    val focusable = drawer.querySelectorAll("a[href], button:not([disabled])")
+    if (focusable.length == 0) return
+    val first = focusable.item(0).unsafeCast<HTMLElement>()
+    val last = focusable.item(focusable.length - 1).unsafeCast<HTMLElement>()
+    val active = document.activeElement
+    if (event.shiftKey && (active === first || active === drawer)) {
+        event.preventDefault()
+        last.focus()
+    } else if (!event.shiftKey && (active === last || active === drawer)) {
+        event.preventDefault()
+        first.focus()
     }
 }
 

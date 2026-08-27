@@ -21,14 +21,15 @@ private var landingRootSequence = 0
 
 class LandingViewTest {
     @Test
-    fun aboutMenuUsesBundledMetadataWithoutNetworkAccess(): Promise<Unit> {
+    fun releaseNotesDrawerUsesBundledMetadataWithoutNetworkAccess(): Promise<Unit> {
         return Promise { resolve, reject ->
         val root = landingRoot()
         var networkSpies: LandingNetworkSpies? = null
+        val originalBodyOverflow = document.body?.style?.getPropertyValue("overflow")
         val info = WebappReleaseInfo(
             version = "0.1.0",
             revision = "0123456789abcdef",
-            changelog = "# Changelog\n\n## [0.1.0] - 2026-08-14\n\n- Initial public Webapp release.\n",
+            changelog = "# Changelog\n\nAll notable changes to the Hexana Webapp are documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to Semantic Versioning.\n\n## [0.2.0] - 2026-08-21\n\n### Added\n\n- [Release policy](https://keepachangelog.com/en/1.1.0/) follows Keep a Changelog.\n- [Latest public Webapp release.](https://jetbrains.github.io/hexana/)\n- [Unsafe link](javascript:alert(1)) is rendered as text.\n\n## [0.1.0] - 2026-08-14\n\n### Changed\n\n- Initial public Webapp release.",
             repositoryUrl = "https://github.com/JetBrains/hexana",
             websiteUrl = "https://jetbrains.github.io/hexana/",
         )
@@ -58,6 +59,7 @@ class LandingViewTest {
             } catch (cleanupFailure: Throwable) {
                 if (finalFailure == null) finalFailure = cleanupFailure
             }
+            document.body?.style?.setProperty("overflow", originalBodyOverflow ?: "")
             if (finalFailure == null) resolve(Unit) else reject(finalFailure)
         }
         fun awaitCondition(description: String, condition: () -> Boolean, ready: () -> Unit) {
@@ -79,33 +81,88 @@ class LandingViewTest {
             composition = renderComposable(rootElementId = root.id) {
                 LandingView(onFileLoaded = { _, _, _ -> }, releaseInfo = info)
             }
-            val trigger = root.querySelector("[data-about-trigger]")!!.unsafeCast<HTMLElement>()
-            assertEquals("About Hexana 0.1.0", trigger.getAttribute("aria-label"))
+            val trigger = root.querySelector("[data-release-notes-trigger]")!!.unsafeCast<HTMLElement>()
+            assertEquals("Release notes for Hexana 0.1.0", trigger.getAttribute("aria-label"))
             assertEquals("false", trigger.getAttribute("aria-expanded"))
             trigger.focus()
             landingKeyDown(trigger, "Enter")
-            awaitCondition("about menu opening", { root.querySelector("[data-about-surface]") != null }) {
+            awaitCondition("release notes drawer opening and moving focus", {
+                val close = root.querySelector("[data-release-notes-close]") as? HTMLElement
+                root.querySelector("[data-release-notes-drawer]") != null && document.activeElement === close
+            }) {
                 try {
-                    val surface = root.querySelector("[data-about-surface]")!!.unsafeCast<HTMLElement>()
-                    val openTrigger = root.querySelector("[data-about-trigger]")!!
+                    val drawer = root.querySelector("[data-release-notes-drawer]")!!.unsafeCast<HTMLElement>()
+                    val body = root.querySelector("[data-release-notes-body]")!!.unsafeCast<HTMLElement>()
+                    val openTrigger = root.querySelector("[data-release-notes-trigger]")!!
                     assertEquals("true", openTrigger.getAttribute("aria-expanded"))
-                    check(surface.textContent!!.contains(info.version))
-                    check(surface.textContent!!.contains(info.revision))
-                    check(surface.textContent!!.contains(info.changelog.trim()))
-                    val github = root.querySelector("[data-about-link='github']")!!
+                    assertEquals("dialog", drawer.getAttribute("role"))
+                    assertEquals("true", drawer.getAttribute("aria-modal"))
+                    assertEquals("hexana-release-notes-title", drawer.getAttribute("aria-labelledby"))
+                    assertEquals("100dvh", drawer.style.getPropertyValue("height"))
+                    assertEquals("1 1 0%", body.style.getPropertyValue("flex"))
+                    assertEquals("0px", body.style.getPropertyValue("min-height"))
+                    assertEquals("auto", body.style.getPropertyValue("overflow-y"))
+                    assertEquals("hidden", document.body?.style?.getPropertyValue("overflow"))
+                    check(root.querySelector("[data-release-notes-backdrop]") != null)
+                    check(root.querySelector("[data-about-changelog]") == null)
+                    check(root.querySelector("pre") == null)
+                    check(root.querySelector("[data-release-notes-document-heading]") == null)
+                    check(!root.textContent!!.contains("All notable changes to the Hexana Webapp"))
+                    check(!root.textContent!!.contains("The format is based on"))
+                    val releases = root.querySelectorAll("[data-release-notes-release]")
+                    val separators = root.querySelectorAll("[data-release-notes-release-separator]")
+                    val versions = root.querySelectorAll("[data-release-notes-release-version]")
+                    val dates = root.querySelectorAll("[data-release-notes-release-date]")
+                    assertEquals(2, releases.length)
+                    assertEquals(2, separators.length)
+                    assertEquals(2, versions.length)
+                    assertEquals(2, dates.length)
+                    assertEquals("0.2.0", versions.item(0)?.textContent)
+                    assertEquals("0.1.0", versions.item(1)?.textContent)
+                    assertEquals("2026-08-21", dates.item(0)?.textContent)
+                    assertEquals("2026-08-14", dates.item(1)?.textContent)
+                    assertEquals("separator", separators.item(0)?.unsafeCast<Element>()?.getAttribute("role"))
+                    assertEquals("0.2.0, released 2026-08-21", releases.item(0)?.unsafeCast<Element>()?.getAttribute("aria-label"))
+                    check(root.querySelector("[data-release-notes-category]")?.textContent == "Added")
+                    check(root.querySelector("[data-release-notes-list]")?.textContent!!.contains("Latest public Webapp release."))
+                    val github = root.querySelector("[data-release-notes-link='github']")!!
                     assertEquals(info.repositoryUrl, github.getAttribute("href")); assertEquals("_blank", github.getAttribute("target")); assertEquals("noopener noreferrer", github.getAttribute("rel"))
-                    val website = root.querySelector("[data-about-link='website']")!!
+                    val website = root.querySelector("[data-release-notes-link='website']")!!
                     assertEquals(info.websiteUrl, website.getAttribute("href")); assertEquals("noopener noreferrer", website.getAttribute("rel"))
-                    landingKeyDown(surface, "Escape")
-                    awaitCondition("about menu closing with focus restoration", {
-                        val current = root.querySelector("[data-about-trigger]") as? HTMLElement
-                        root.querySelector("[data-about-surface]") == null && current?.getAttribute("aria-expanded") == "false" && document.activeElement === current
+                    val safeLink = root.querySelector("[data-release-notes-changelog-link]")!!
+                    assertEquals("https://keepachangelog.com/en/1.1.0/", safeLink.getAttribute("href"))
+                    assertEquals("noopener noreferrer", safeLink.getAttribute("rel"))
+                    check(root.querySelector("a[href^='javascript:']") == null)
+                    check(root.querySelector("[data-release-notes-unsafe-link]")?.textContent == "Unsafe link")
+                    val close = root.querySelector("[data-release-notes-close]")!!.unsafeCast<HTMLElement>()
+                    assertTrue(document.activeElement === close, "Opening the drawer must move focus inside it")
+                    val focusable = drawer.querySelectorAll("a[href], button:not([disabled])")
+                    val first = focusable.item(0).unsafeCast<HTMLElement>()
+                    val last = focusable.item(focusable.length - 1).unsafeCast<HTMLElement>()
+                    first.focus()
+                    landingKeyDown(first, "Tab", shiftKey = true)
+                    assertTrue(document.activeElement === last, "Shift+Tab must wrap focus inside the drawer")
+                    landingKeyDown(last, "Tab")
+                    assertTrue(document.activeElement === first, "Tab must wrap focus inside the drawer")
+                    close.click()
+                    awaitCondition("close button focus restoration", {
+                        root.querySelector("[data-release-notes-drawer]") == null && document.activeElement === trigger
                     }) {
-                        val current = root.querySelector("[data-about-trigger]")!!.unsafeCast<HTMLElement>()
-                        current.click()
-                        awaitCondition("about menu reopening", { root.querySelector("[data-about-surface]") != null }) {
-                            landingMouseDown(document.body!!)
-                            awaitCondition("outside click closing the about menu", { root.querySelector("[data-about-surface]") == null }) { finish() }
+                        trigger.click()
+                        awaitCondition("release notes reopening", { root.querySelector("[data-release-notes-drawer]") != null }) {
+                            root.querySelector("[data-release-notes-backdrop]")!!.unsafeCast<HTMLElement>().click()
+                            awaitCondition("backdrop closing the drawer", { root.querySelector("[data-release-notes-drawer]") == null && document.activeElement === trigger }) {
+                                trigger.click()
+                                awaitCondition("release notes reopening for Escape", { root.querySelector("[data-release-notes-drawer]") != null }) {
+                                    val currentDrawer = root.querySelector("[data-release-notes-drawer]")!!.unsafeCast<HTMLElement>()
+                                    landingKeyDown(currentDrawer, "Escape")
+                                    awaitCondition("Escape closing the drawer", {
+                                        root.querySelector("[data-release-notes-drawer]") == null &&
+                                            document.activeElement === trigger &&
+                                            document.body?.style?.getPropertyValue("overflow") == (originalBodyOverflow ?: "")
+                                    }) { finish() }
+                                }
+                            }
                         }
                     }
                 } catch (failure: Throwable) { finish(failure) }
@@ -510,8 +567,8 @@ private fun drop(target: Element, file: File) {
     target.dispatchEvent(event.unsafeCast<Event>())
 }
 
-private fun landingKeyDown(target: Element, key: String) {
-    val event = js("new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: key })")
+private fun landingKeyDown(target: Element, key: String, shiftKey: Boolean = false) {
+    val event = js("new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: key, shiftKey: shiftKey })")
     target.dispatchEvent(event.unsafeCast<Event>())
 }
 
