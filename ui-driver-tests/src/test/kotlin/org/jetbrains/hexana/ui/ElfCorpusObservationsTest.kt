@@ -413,24 +413,31 @@ class ElfCorpusObservationsTest {
 
                     // UI drill: search field -> type query -> Enter picks the first result,
                     // which unfolds the function header and navigates to its body chunk.
-                    val resultIndex = probeEntries.entryValue("resultIndex")?.toIntOrNull() ?: -1
-                    check(resultIndex >= 0) { "Probe found no search match for '${target.query}'" }
-                    uiQueryUsed = target.query
-                    // Paste instead of typing: Robot key injection is keyboard-layout dependent
-                    // (a Cyrillic layout turns "memcpy" into garbage); Cmd+V, arrows, Enter are not.
-                    // Arrow down to the probe-reported result index, mirroring the panel's
-                    // range-ordered contains-match list, then Enter unfolds and navigates.
-                    setClipboardText(target.query)
-                    driver.withContext {
-                        val field = ui.x { byText(SEARCH_PLACEHOLDER) }.waitFound(90.seconds)
-                        field.click()
-                        ui.keyboard { hotKey(java.awt.event.KeyEvent.VK_META, java.awt.event.KeyEvent.VK_V) }
-                        Thread.sleep(1_500)
-                        ui.keyboard { repeat(resultIndex) { down() } }
-                        ui.keyboard { enter() }
+                    // The remote driver cannot enumerate Compose text on IDEs before the 261
+                    // driver line (byText on the search placeholder finds nothing on IU-252,
+                    // works on IU-263; verified 2026-08-27, TC build 1043623577 + local A/B).
+                    // On such IDEs skip the drill: the probe capture above already verified the
+                    // instructions, and the screenshot below shows the folded function list.
+                    if (context.ide.isMajorBuildVersionAtLeast(261)) {
+                        val resultIndex = probeEntries.entryValue("resultIndex")?.toIntOrNull() ?: -1
+                        check(resultIndex >= 0) { "Probe found no search match for '${target.query}'" }
+                        uiQueryUsed = target.query
+                        // Paste instead of typing: Robot key injection is keyboard-layout dependent
+                        // (a Cyrillic layout turns "memcpy" into garbage); Cmd+V, arrows, Enter are not.
+                        // Arrow down to the probe-reported result index, mirroring the panel's
+                        // range-ordered contains-match list, then Enter unfolds and navigates.
+                        setClipboardText(target.query)
+                        driver.withContext {
+                            val field = ui.x { byText(SEARCH_PLACEHOLDER) }.waitFound(90.seconds)
+                            field.click()
+                            ui.keyboard { hotKey(java.awt.event.KeyEvent.VK_META, java.awt.event.KeyEvent.VK_V) }
+                            Thread.sleep(1_500)
+                            ui.keyboard { repeat(resultIndex) { down() } }
+                            ui.keyboard { enter() }
+                        }
+                        // Give the AsyncFunctionBody decode + row composition time to land.
+                        Thread.sleep(6_000)
                     }
-                    // Give the AsyncFunctionBody decode + row composition time to land.
-                    Thread.sleep(6_000)
                     quitSystemSettingsQuietly()
                     val name = "${target.prefix}-disasm-instructions"
                     copyScreenshot(driver, name, screenshotDir.resolve("$name.png"))
