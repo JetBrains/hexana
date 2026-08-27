@@ -14,11 +14,17 @@ const tab = binary.tab(TAB);
 print(tab.name + ": " + tab.rowCount + " row(s), " + tab.columns.length + " column(s)");
 print("");
 
-table.apply(null, tab.columns);
-const shown = Math.min(tab.rowCount, MAX_ROWS);
-for (let i = 0; i < shown; i++) {
-    row.apply(null, tab.row(i));
-}
-if (shown < tab.rowCount) {
-    print("… " + (tab.rowCount - shown) + " more row(s) not shown; raise MAX_ROWS to see them");
+// A tab the format advertises can legitimately have nothing to show for this
+// binary — Problems on a module with no parse problems, for instance.
+if (tab.columns.length === 0) {
+    print("This tab has no content for this binary.");
+} else {
+    table.apply(null, tab.columns);
+    const shown = Math.min(tab.rowCount, MAX_ROWS);
+    for (let i = 0; i < shown; i++) {
+        row.apply(null, tab.row(i));
+    }
+    if (shown < tab.rowCount) {
+        print("… " + (tab.rowCount - shown) + " more row(s) not shown; raise MAX_ROWS to see them");
+    }
 }
