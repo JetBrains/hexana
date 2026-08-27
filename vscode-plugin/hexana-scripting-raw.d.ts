@@ -599,6 +599,7 @@ interface CoffBinaryProvider extends NativeBinaryProvider {
 
 interface ElfBinaryProvider extends NativeBinaryProvider {
   armProfile?: string;
+  buildId?: string;
   dynamicEntries?: {
     dynamicSectionIndex: number;
     index: number;
