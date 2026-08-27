@@ -35,44 +35,15 @@ val vscodePatronusConfigurationId = "InnoHub_HexFlow_VscodePluginTestsPatronus"
 val webappPatronusConfigurationId = "InnoHub_HexFlow_WebappTestsPatronus"
 val serverCliPatronusConfigurationId = "InnoHub_HexFlow_ServerCliTestsPatronus"
 
-// Explicit product owners stay strict. Unlisted non-exempt Kotlin/JVM projects use Core as the safe fallback.
-val primaryLaneProjectPaths = linkedMapOf(
-    corePatronusConfigurationId to listOf(
-        ":analytics", ":binaryProvider", ":debugInfo", ":debugInfo:dwarf", ":disassembly",
-        ":disassembly:capstone-wasm", ":disassembly:core", ":disassembly:llvm-objdump", ":encdec",
-        ":graalwasm", ":graalwasm:common", ":graalwasm:wasmprinter", ":graalwasm:wat2wasm",
-        ":hexanaDocument", ":jvm-jit", ":mcp:core", ":mcp:scripting", ":mcp:tools-generator", ":parsing",
-        ":parsing:arrow", ":parsing:codec", ":parsing:common", ":parsing:dex", ":parsing:elf",
-        ":parsing:flatbuffers", ":parsing:javaBytecode", ":parsing:macho", ":parsing:parquet",
-        ":parsing:pcap", ":parsing:pe", ":parsing:protobuf", ":parsing:thrift", ":parsing:zip",
-        ":plugins-shared", ":wasmParser",
-    ),
-    intellijPatronusConfigurationId to listOf(":idea-plugin"),
-    vscodePatronusConfigurationId to listOf(":vscode-plugin", ":vscode-plugin:extension-lib", ":vscode-plugin:webview", ":web-ui"),
-    webappPatronusConfigurationId to listOf(":webapp"),
-    serverCliPatronusConfigurationId to listOf(
-        ":cli", ":cli:core", ":cli:hexana-cli", ":cli:hexana-cli-script", ":cli:integration-tests",
-        ":cli:metadata", ":cli:product", ":cli:runtime", ":cli:scripting", ":mcp", ":mcp:server",
-        ":mcp:vscode-server",
-    ),
-)
-
-val exemptProjectReasons = mapOf(
-    ":ui-driver-tests" to "UI/daily lane",
-    ":jvm-jit-jmh" to "benchmark/Safe-Merge-only",
-)
-
-val explicitlyOwnedProjectPaths = primaryLaneProjectPaths.values.flatten().toSet()
-
-fun Project.isUnclassifiedNonExemptProject(): Boolean =
-    path !in explicitlyOwnedProjectPaths && path !in exemptProjectReasons
-
 abstract class ExportPatronusProjectImpactGraph : DefaultTask() {
     @get:Input
     abstract val projectRecords: ListProperty<String>
 
     @get:Input
     abstract val dependencyRecords: ListProperty<String>
+
+    @get:Input
+    abstract val laneSeedRecords: ListProperty<String>
 
     @get:OutputFile
     abstract val outputFile: RegularFileProperty
@@ -83,9 +54,10 @@ abstract class ExportPatronusProjectImpactGraph : DefaultTask() {
         output.parentFile.mkdirs()
         output.writeText(
             buildString {
-                appendLine("hexana-project-impact-graph\t1")
+                appendLine("hexana-project-impact-graph\t2")
                 projectRecords.get().sorted().forEach { appendLine("project\t$it") }
                 dependencyRecords.get().sorted().forEach { appendLine("dependency\t$it") }
+                laneSeedRecords.get().sorted().forEach { appendLine("lane-seed\t$it") }
             },
         )
     }
@@ -93,7 +65,7 @@ abstract class ExportPatronusProjectImpactGraph : DefaultTask() {
 
 val exportPatronusProjectImpactGraph = tasks.register<ExportPatronusProjectImpactGraph>("exportPatronusProjectImpactGraph") {
     group = "verification"
-    description = "Export the declared Gradle project dependency graph for Patronus shadow analysis."
+    description = "Export declared Gradle project dependencies and TeamCity lane seeds for Patronus routing."
     outputFile.set(layout.buildDirectory.file("patronus/project-impact-graph.tsv"))
 }
 
@@ -377,6 +349,37 @@ val teamcityCliTestTaskPaths = listOf(
     ":mcp:verifyCliR8ReleaseArchives",
 )
 
+fun taskOwningProjectPath(taskPath: String): String =
+    taskPath.substringBeforeLast(':').ifEmpty { ":" }
+
+val patronusLaneTaskPaths = linkedMapOf(
+    corePatronusConfigurationId to teamcityCoreTestTaskPaths,
+    intellijPatronusConfigurationId to teamcityIntellijPluginTestTaskPaths,
+    vscodePatronusConfigurationId to teamcityVscodePluginTestTaskPaths,
+    webappPatronusConfigurationId to teamcityWebappTestTaskPaths,
+    serverCliPatronusConfigurationId to teamcityServerCliTestTaskPaths + teamcityCliTestTaskPaths,
+)
+val patronusLaneSeedProjectPaths = patronusLaneTaskPaths.mapValues { (_, taskPaths) ->
+    taskPaths.map(::taskOwningProjectPath).filterNot { it == ":" }.distinct().sorted()
+}
+val patronusLaneOwnedProjectPaths = patronusLaneSeedProjectPaths.values.flatten().toSet()
+// Dependency-aware selection must not silently change the existing Core aggregate's task membership.
+val fallbackCoreExcludedProjectPaths = setOf(
+    ":graalwasm", ":graalwasm:common", ":graalwasm:wasmprinter", ":graalwasm:wat2wasm",
+    ":jvm-jit-jmh", ":patronus-config", ":ui-driver-tests",
+)
+
+fun Project.isUnclassifiedNonExemptProject(): Boolean =
+    path != ":" && path !in patronusLaneOwnedProjectPaths && path !in fallbackCoreExcludedProjectPaths
+
+exportPatronusProjectImpactGraph.configure {
+    laneSeedRecords.set(
+        patronusLaneSeedProjectPaths.flatMap { (configurationId, projectPaths) ->
+            projectPaths.map { "$configurationId\t$it" }
+        },
+    )
+}
+
 val teamcityFallbackCoreJvmTestTaskPaths = linkedSetOf<String>()
 
 subprojects {
@@ -436,234 +439,15 @@ fun verifyAggregateDirectDependencies(
     verifyExactTaskPaths("$aggregateTaskName direct dependencies", requiredTaskPaths, actualTaskPaths)
 }
 
-data class PatronusCheck(
-    val configurationId: String,
-    val groupId: String?,
-    val isFallback: Boolean,
-    val executeOnChanges: List<String>,
-)
-
-fun readPatronusChecks(configFile: File): List<PatronusCheck> {
-    val lines = configFile.readLines()
-    check(lines.take(2) == listOf("version: \"1.0\"", "checks:")) {
-        "${configFile.path} must start with the supported Patronus version and checks header"
-    }
-
-    val configurationPattern = Regex("""- configurationId: \"([^\"]+)\"""")
-    val groupIdPattern = Regex("""    id: \"([^\"]+)\"""")
-    val fallbackPattern = Regex("""    isFallback: (true|false)""")
-    val changePattern = Regex("""  - \"([^\"]+)\"""")
-    val checks = mutableListOf<PatronusCheck>()
-    var lineIndex = 2
-    while (lineIndex < lines.size) {
-        if (lines[lineIndex].isBlank()) {
-            lineIndex++
-            continue
-        }
-        val configurationId = configurationPattern.matchEntire(lines[lineIndex])?.groupValues?.get(1)
-            ?: error("Unsupported Patronus check syntax at ${configFile.path}:${lineIndex + 1}: ${lines[lineIndex]}")
-        lineIndex++
-        var groupSeen = false
-        var groupId: String? = null
-        var isFallback = false
-        var fallbackSeen = false
-        var changesSeen = false
-        val executeOnChanges = mutableListOf<String>()
-        while (lineIndex < lines.size && configurationPattern.matchEntire(lines[lineIndex]) == null) {
-            val line = lines[lineIndex]
-            when {
-                line.isBlank() -> Unit
-                line == "  group:" -> {
-                    check(!groupSeen) { "$configurationId declares group more than once" }
-                    check(!changesSeen) { "$configurationId declares group after executeOnChanges" }
-                    groupSeen = true
-                }
-                groupIdPattern.matches(line) -> {
-                    check(groupSeen && !changesSeen) { "$configurationId group id must be nested under group" }
-                    check(groupId == null) { "$configurationId declares groupId more than once" }
-                    groupId = groupIdPattern.matchEntire(line)!!.groupValues[1]
-                }
-                fallbackPattern.matches(line) -> {
-                    check(groupSeen && !changesSeen) { "$configurationId isFallback must be nested under group" }
-                    check(!fallbackSeen) { "$configurationId declares isFallback more than once" }
-                    fallbackSeen = true
-                    isFallback = fallbackPattern.matchEntire(line)!!.groupValues[1].toBoolean()
-                }
-                line == "  executeOnChanges:" -> {
-                    check(!changesSeen) { "$configurationId declares executeOnChanges more than once" }
-                    check(!groupSeen || groupId != null) { "$configurationId group must declare an id" }
-                    changesSeen = true
-                }
-                changePattern.matches(line) -> {
-                    check(changesSeen) { "$configurationId has a change path before executeOnChanges" }
-                    executeOnChanges += changePattern.matchEntire(line)!!.groupValues[1]
-                }
-                else -> error("Unsupported Patronus check syntax at ${configFile.path}:${lineIndex + 1}: $line")
-            }
-            lineIndex++
-        }
-        check(!changesSeen || executeOnChanges.isNotEmpty()) {
-            "$configurationId must not declare an empty executeOnChanges list"
-        }
-        checks += PatronusCheck(configurationId, groupId, isFallback, executeOnChanges)
-    }
-    return checks
-}
-
 tasks.register("verifyPatronusRoutingCoverage") {
     group = "verification"
-    description = "Verify Patronus check policy, strict explicit owners, and the Core fallback contract."
-    doLast {
-        val safeMergeId = "InnoHub_HexFlow_SafeMergeTests"
-        val uiId = "InnoHub_HexFlow_UiTestsPatronus"
-        val patronusConfigId = "InnoHub_HexFlow_PatronusConfigCheckPatronus"
-        val intellijId = intellijPatronusConfigurationId
-        val coreId = corePatronusConfigurationId
-        val vscodeId = vscodePatronusConfigurationId
-        val webappId = webappPatronusConfigurationId
-        val serverCliId = serverCliPatronusConfigurationId
-        val productGroupId = "hexana-product-tests"
-        val expectedChecks = linkedMapOf(
-            patronusConfigId to PatronusCheck(patronusConfigId, null, false, emptyList()),
-            safeMergeId to PatronusCheck(safeMergeId, null, false, listOf("*", "!/README.md")),
-            uiId to PatronusCheck(
-                uiId,
-                null,
-                false,
-                listOf("/ui-driver-tests/**", "/idea-plugin/src/ui-tests-framework/**"),
-            ),
-            intellijId to PatronusCheck(intellijId, productGroupId, false, listOf("/idea-plugin/**")),
-            serverCliId to PatronusCheck(
-                serverCliId,
-                productGroupId,
-                false,
-                listOf(
-                    "/cli/**", "/mcp/**", "!/mcp/core/**", "!/mcp/scripting/**", "!/mcp/tools-generator/**",
-                ),
-            ),
-            vscodeId to PatronusCheck(vscodeId, productGroupId, false, listOf("/vscode-plugin/**", "/web-ui/**")),
-            webappId to PatronusCheck(webappId, productGroupId, false, listOf("/webapp/**", "/web-ui/**")),
-            coreId to PatronusCheck(
-                coreId,
-                productGroupId,
-                true,
-                listOf(
-                    "/build.gradle.kts", "/settings.gradle.kts", "/gradle.properties", "/gradle/**", "/gradlew",
-                    "/gradlew.bat", "/karma.config.d/**", "/analytics/**", "/binaryProvider/**", "/debugInfo/**",
-                    "/disassembly/**", "/encdec/**", "/hexanaDocument/**", "/jvm-jit/**", "/parsing/**",
-                    "/plugins-shared/**", "/wasmParser/**", "/graalwasm/**", "/wasm-modules/**",
-                    "/mcp/core/**", "/mcp/scripting/**", "/mcp/tools-generator/**",
-                ),
-            ),
-        )
-        val checks = readPatronusChecks(rootProject.file(".patronus/config.yaml"))
-        val expectedCheckIds = expectedChecks.keys.toList()
-        val actualCheckIds = checks.map { it.configurationId }
-        check(actualCheckIds == expectedCheckIds) {
-            "Patronus check order must be exact; expected: $expectedCheckIds, actual: $actualCheckIds"
-        }
-        val checksById = checks.associateBy { it.configurationId }
-        expectedChecks.forEach { (configurationId, expected) ->
-            val actual = checksById.getValue(configurationId)
-            check(actual.groupId == expected.groupId) {
-                "$configurationId groupId must be ${expected.groupId ?: "unset"}, but was ${actual.groupId ?: "unset"}"
-            }
-            check(actual.isFallback == expected.isFallback) {
-                "$configurationId isFallback must be ${expected.isFallback}, but was ${actual.isFallback}"
-            }
-            check(actual.executeOnChanges == expected.executeOnChanges) {
-                "$configurationId executeOnChanges order must be exact; " +
-                    "expected: ${expected.executeOnChanges}, actual: ${actual.executeOnChanges}"
-            }
-        }
-        check(checks.filter(PatronusCheck::isFallback).map { it.configurationId } == listOf(coreId)) {
-            "$coreId must be the sole Patronus fallback; found: " +
-                checks.filter(PatronusCheck::isFallback).joinToString { it.configurationId }
-        }
-        val patronusConfigCheck = checksById.getValue(patronusConfigId)
-        check(
-            patronusConfigCheck.groupId == null && !patronusConfigCheck.isFallback &&
-                patronusConfigCheck.executeOnChanges.isEmpty(),
-        ) {
-            "$patronusConfigId must remain an ungrouped, non-fallback, always-on check"
-        }
-
-        val actualProjects = rootProject.allprojects.filterNot { it == rootProject }.associateBy { it.path }
-        val classifications =
-            primaryLaneProjectPaths.flatMap { (lane, paths) -> paths.map { it to lane } } +
-                exemptProjectReasons.map { (path, reason) -> path to "exempt: $reason" }
-        val duplicateClassifications = classifications.groupingBy { it.first }.eachCount().filterValues { it > 1 }.keys
-        val classifiedPaths = classifications.map { it.first }.toSet()
-        val staleClassifications = classifiedPaths - actualProjects.keys
-        check(duplicateClassifications.isEmpty() && staleClassifications.isEmpty()) {
-            "Patronus explicit Gradle project inventory must have no duplicate or stale owners; " +
-                "duplicates: ${duplicateClassifications.sorted().joinToString()}, " +
-                "stale classifications: ${staleClassifications.sorted().joinToString()}"
-        }
-        val sharedProjectDirectLanes = mapOf(":web-ui" to listOf(vscodeId, webappId))
-        val staleSharedProjectDirectLanes = sharedProjectDirectLanes.keys - actualProjects.keys
-        val sharedProjectsWithoutPrimaryOwners = sharedProjectDirectLanes.keys - explicitlyOwnedProjectPaths
-        check(staleSharedProjectDirectLanes.isEmpty() && sharedProjectsWithoutPrimaryOwners.isEmpty()) {
-            "Patronus shared direct-route inventory must name existing explicitly owned projects; " +
-                "stale: ${staleSharedProjectDirectLanes.sorted().joinToString()}, " +
-                "without primary owners: ${sharedProjectsWithoutPrimaryOwners.sorted().joinToString()}"
-        }
-
-        fun selectedExplicitLanes(changePath: String): List<String> =
-            primaryLaneProjectPaths.keys.filter { laneId ->
-                val patterns = checksById.getValue(laneId).executeOnChanges
-                fun matches(pattern: String): Boolean =
-                    if (pattern.endsWith("/**")) changePath.startsWith(pattern.removeSuffix("**"))
-                    else changePath == pattern
-                patterns.fold(false) { selected, pattern ->
-                    val excluded = pattern.startsWith("!")
-                    if (matches(pattern.removePrefix("!"))) !excluded else selected
-                }
-            }
-
-        fun effectiveProductLane(changePath: String): List<String> =
-            selectedExplicitLanes(changePath).ifEmpty { listOf(coreId) }
-
-        actualProjects.values.forEach { project ->
-            val relativeDirectory = project.projectDir.relativeTo(rootProject.projectDir).invariantSeparatorsPath
-            val expectedDirectory = mapOf(":patronus-config" to ".patronus/patronus-config")[project.path]
-                ?: project.path.removePrefix(":").replace(':', '/')
-            check(relativeDirectory == expectedDirectory) {
-                "${project.path} uses unexpected project directory /$relativeDirectory; expected /$expectedDirectory"
-            }
-            val explicitClassification = classifications.singleOrNull { it.first == project.path }?.second
-            val directLanes = selectedExplicitLanes("/$relativeDirectory/__routing_probe__")
-            when {
-                explicitClassification == null -> check(effectiveProductLane("/$relativeDirectory/__routing_probe__") == listOf(coreId)) {
-                    "Unclassified non-exempt ${project.path} (/$relativeDirectory/**) must resolve to Core fallback"
-                }
-                explicitClassification.startsWith("exempt:") -> check(directLanes.isEmpty()) {
-                    "Exempt ${project.path} (/$relativeDirectory/**) must not have a direct product lane, but selected $directLanes"
-                }
-                else -> {
-                    val expectedDirectLanes = sharedProjectDirectLanes[project.path] ?: listOf(explicitClassification)
-                    check(directLanes == expectedDirectLanes) {
-                        "${project.path} (/$relativeDirectory/**) must route directly to $expectedDirectLanes, " +
-                            "but selected ${directLanes.ifEmpty { listOf("no direct product lane") }}"
-                    }
-                }
-            }
-        }
-        mapOf(
-            "wasm-modules" to coreId,
-            "karma.config.d" to coreId,
-        ).forEach { (relativeDirectory, expectedLane) ->
-            check(rootProject.file(relativeDirectory).isDirectory) {
-                "Selected non-Gradle product root /$relativeDirectory is missing"
-            }
-            val actualLanes = selectedExplicitLanes("/$relativeDirectory/__routing_probe__")
-            check(actualLanes == listOf(expectedLane)) {
-                "Non-Gradle product root /$relativeDirectory/** must route only to $expectedLane, but selected $actualLanes"
-            }
-        }
-    }
+    description = "Verify generated dependency-aware Patronus routing."
+    dependsOn(
+        ":patronus-config:test",
+        ":patronus-config:verifyPatronusProjectImpactGraph",
+        "verifyPatronusConfigUpToDate",
+    )
 }
-
 tasks.register("updatePatronusConfig") {
     group = "build setup"
     description = "Regenerate .patronus/config.yaml from the Patronus Kotlin DSL."

@@ -38,11 +38,16 @@ class ProjectImpactGraphTest {
             dependency("C", "B", "integrationTestRuntimeOnly"),
             dependency("B", "A", "wasmJsMainImplementation"),
         )
-        val expected = ProjectImpactSnapshot.serialize(ProjectImpactGraph(nodes, dependencies))
+        val laneSeeds = mapOf(CORE_LANE to listOf(":B", ":A"), INTELLIJ_LANE to listOf(":C"))
+        val expected = ProjectImpactSnapshot.serialize(ProjectImpactGraph(nodes, dependencies, laneSeeds))
 
         repeat(10) { seed ->
             val random = Random(seed)
-            val shuffled = ProjectImpactGraph(nodes.shuffled(random), dependencies.shuffled(random))
+            val shuffled = ProjectImpactGraph(
+                nodes.shuffled(random),
+                dependencies.shuffled(random),
+                laneSeeds.mapValues { (_, paths) -> paths.shuffled(random) },
+            )
             assertEquals(expected, ProjectImpactSnapshot.serialize(shuffled))
         }
         val parsed = ProjectImpactSnapshot.parse(expected)
@@ -51,6 +56,7 @@ class ProjectImpactGraphTest {
             listOf("compileOnly", "wasmJsMainImplementation", "jvmTestImplementation", "integrationTestRuntimeOnly"),
             parsed.dependencies.map(DeclaredProjectDependency::configuration),
         )
+        assertEquals(laneSeeds.mapValues { it.value.sorted() }.toSortedMap(), parsed.laneSeeds)
     }
 
     @Test
@@ -82,14 +88,84 @@ class ProjectImpactGraphTest {
     }
 
     @Test
-    fun `shadow policies classify infrastructure and benchmark projects`() {
+    fun `explicit policies cover every exceptional relationship with reasons`() {
         assertEquals(
-            mapOf(
-                ":jvm-jit-jmh" to ShadowImpactPolicy.INTELLIJ_IMMEDIATE,
-                ":patronus-config" to ShadowImpactPolicy.INFRASTRUCTURE_ONLY,
-            ),
-            HexanaShadowImpactPolicies.byProjectPath,
+            RoutingPolicyKind.entries.toSet(),
+            (HexanaRoutingPolicies.projectPolicies.values.map { it.kind } +
+                HexanaRoutingPolicies.pathPolicies.map { it.kind }).toSet(),
         )
+        assertEquals(setOf(INTELLIJ_LANE), HexanaRoutingPolicies.projectPolicies.getValue(":jvm-jit-jmh").forcedLanes)
+        assertEquals(true, HexanaRoutingPolicies.projectPolicies.getValue(":patronus-config").suppressProductRouting)
+        assertEquals(true, HexanaRoutingPolicies.projectPolicies.getValue(":ui-driver-tests").suppressProductRouting)
+        assertEquals(
+            setOf(":graalwasm:wasmprinter", ":graalwasm:wat2wasm"),
+            HexanaRoutingPolicies.pathPolicies.single { it.pattern == "/wasm-modules/**" }.impactProjects,
+        )
+        assertEquals(
+            emptyList(),
+            (HexanaRoutingPolicies.projectPolicies.values.map { it.reason } + HexanaRoutingPolicies.pathPolicies.map { it.reason })
+                .filter(String::isBlank),
+        )
+    }
+
+    @Test
+    fun `dependency fan-out selects owning and transitive consumer lanes`() {
+        val nodes = listOf("A", "B", "C", "D", "E").map(::node)
+        val graph = ProjectImpactGraph(
+            nodes,
+            listOf(dependency("B", "A", "implementation"), dependency("C", "B", "testRuntimeOnly")),
+            mapOf(
+                CORE_LANE to listOf(":A"),
+                INTELLIJ_LANE to listOf(":B"),
+                SERVER_CLI_LANE to listOf(":C"),
+                VSCODE_LANE to listOf(":D"),
+                WEBAPP_LANE to listOf(":E"),
+            ),
+        )
+        val routing = PatronusRouting(graph, emptyMap(), emptyList())
+
+        assertEquals(listOf(CORE_LANE, INTELLIJ_LANE, SERVER_CLI_LANE).sorted(), routing.lanesForProject(":A"))
+        assertEquals(listOf(INTELLIJ_LANE, SERVER_CLI_LANE).sorted(), routing.lanesForProject(":B"))
+        assertEquals(listOf(SERVER_CLI_LANE), routing.lanesForProject(":C"))
+    }
+
+    @Test
+    fun `adding a dependency changes generated lane patterns`() {
+        val nodes = listOf("A", "B", "C", "D", "E").map(::node)
+        val seeds = mapOf(
+            CORE_LANE to listOf(":A"), INTELLIJ_LANE to listOf(":B"), SERVER_CLI_LANE to listOf(":C"),
+            VSCODE_LANE to listOf(":D"), WEBAPP_LANE to listOf(":E"),
+        )
+        val baseline = PatronusRouting(ProjectImpactGraph(nodes, emptyList(), seeds), emptyMap(), emptyList()).patternsByLane()
+        val withDependency = PatronusRouting(
+            ProjectImpactGraph(nodes, listOf(dependency("B", "A", "customIntegrationImplementation")), seeds),
+            emptyMap(),
+            emptyList(),
+        ).patternsByLane()
+
+        assertEquals(false, "/a/**" in baseline.getValue(INTELLIJ_LANE))
+        assertEquals(true, "/a/**" in withDependency.getValue(INTELLIJ_LANE))
+    }
+
+    @Test
+    fun `nested project directories generate canonical path patterns`() {
+        val policyNodes = listOf(
+            ProjectNode(":A", "nested/a"), node("B"), node("C"), node("D"), node("E"),
+        )
+        val routing = PatronusRouting(
+            ProjectImpactGraph(
+                policyNodes,
+                emptyList(),
+                mapOf(
+                    CORE_LANE to listOf(":A"), INTELLIJ_LANE to listOf(":B"), SERVER_CLI_LANE to listOf(":C"),
+                    VSCODE_LANE to listOf(":D"), WEBAPP_LANE to listOf(":E"),
+                ),
+            ),
+            emptyMap(),
+            emptyList(),
+        )
+
+        assertContains(routing.patternsByLane().getValue(CORE_LANE), "/nested/a/**")
     }
 
     @Test
@@ -125,6 +201,11 @@ class ProjectImpactGraphTest {
                 }
                 assertContains(failure.message.orEmpty(), "non-empty ASCII Gradle name")
             }
+        listOf("", "lane id", "lane:id", "lane\tid").forEach { laneId ->
+            assertFailsWith<IllegalArgumentException> {
+                ProjectImpactGraph(listOf(node("A")), emptyList(), mapOf(laneId to listOf(":A")))
+            }
+        }
     }
 
     @Test

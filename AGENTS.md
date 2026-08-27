@@ -154,28 +154,20 @@ Run the narrowest command that proves your change.
   unchanged during rollout and temporarily overlaps with the new core, VS Code, IntelliJ, and server aggregates.
 - Direct `idea-plugin/**` changes select `InnoHub_HexFlow_IntellijPluginTestsPatronus`, which delegates to the regular
   IntelliJ Plugin Tests leaf.
-- Patronus targeted checks use nested `group.id: hexana-product-tests`, with Core's nested `group.isFallback` as the
-  sole fallback; UI and Safe Merge remain ungrouped during rollout:
-  - root Gradle wrapper, catalog, build, and Karma inputs plus shared/core module paths select
-    `InnoHub_HexFlow_CoreTestsPatronus`, which fans out across all product test leaves
-  - `vscode-plugin/**` selects `InnoHub_HexFlow_VscodePluginTestsPatronus`
-  - `webapp/**` selects `InnoHub_HexFlow_WebappTestsPatronus`; shared `web-ui/**` selects both the VS Code and Webapp owners
-  - `cli/**` and non-shared `mcp/**` paths select `InnoHub_HexFlow_ServerCliTestsPatronus`; `mcp/core/**`,
-    `mcp/scripting/**`, and `mcp/tools-generator/**` are excluded there and route through the Core composite
-- Keep `.patronus/config.yaml` and the explicit Gradle-project routing inventory in the root build synchronized.
+- Core, IntelliJ, VS Code, Webapp, and Server/CLI are independent Patronus checks. Their generated path rules come from
+  reverse transitive declared Gradle dependencies and lane seeds derived from the TeamCity aggregate task inventories,
+  so one change can select multiple affected product lanes.
+- Keep `.patronus/config.yaml` synchronized with the generated project-impact graph.
   `.patronus/config.yaml` is generated from `.patronus/patronus-config`; update it with
   `./gradlew updatePatronusConfig` and verify it with `./gradlew verifyPatronusConfigUpToDate`.
   `InnoHub_HexFlow_PatronusConfigCheckPatronus` is an ungrouped wildcard check for validating generated Patronus YAML.
-  Explicit owners remain exact (no stale, duplicate, or mismatched direct routes); an unlisted non-exempt project
-  resolves through Core's sole Patronus fallback. Run `./gradlew verifyPatronusRoutingCoverage` after changing
-  Patronus paths or `settings.gradle.kts`; the verifier is also a direct dependency of `teamcityCiTests`.
-  `ui-driver-tests` is explicitly UI/daily-only, while `jvm-jit-jmh` is benchmark/Safe-Merge-only. Selected existing
-  non-Gradle Core roots are checked as part of the same policy.
+  An unowned non-exempt Gradle project is conservatively assigned to Core. `ui-driver-tests` stays UI-only,
+  `jvm-jit-jmh` selects IntelliJ verification without running benchmarks, and `.patronus/patronus-config` selects only
+  freshness. Run `./gradlew verifyPatronusRoutingCoverage` after changing routing inputs.
 - `./gradlew verifyPatronusProjectImpactGraph` exports and verifies a deterministic snapshot of declared Gradle project dependencies
-  to `build/patronus/project-impact-graph.tsv` for shadow analysis. It inspects every configuration without resolving
-  artifacts and does not alter Patronus routes. The pure reverse-impact model and policy classifications live in
-  `.patronus/patronus-config`. The shadow policy treats Patronus configuration as infrastructure-only and maps
-  `jvm-jit-jmh` changes to immediate IntelliJ verification; current checked-in Patronus routing remains unchanged.
+  and aggregate-derived lane seeds to `build/patronus/project-impact-graph.tsv`. Update, verify, and test tasks regenerate
+  and consume this snapshot without resolving configurations. The routing model and typed overlays live in
+  `.patronus/patronus-config`.
   Snapshot project directories must resolve canonically inside the repository. Gradle project paths and configuration
   names use an explicit ASCII segment policy so TSV delimiters and control characters cannot be emitted.
 - Run native standard CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli:nativeIntegrationTest`

@@ -5,46 +5,85 @@ import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class HexanaPatronusConfigTest {
+    private val repositoryRoot = Path.of(System.getProperty("hexana.repositoryRoot"))
+    private val graph = ProjectImpactSnapshot.parse(Path.of(System.getProperty("hexana.projectImpactGraph")).readText())
+    private val routing = PatronusRouting(graph)
+
     @Test
     fun `generated config matches the checked-in YAML`() {
-        val repositoryRoot = Path.of(System.getProperty("hexana.repositoryRoot"))
         assertEquals(
             repositoryRoot.resolve(".patronus/config.yaml").readText(),
-            HexanaPatronusConfigGenerator.expectedYaml(),
+            HexanaPatronusConfigGenerator.expectedYaml(graph),
         )
     }
 
     @Test
-    fun `generated config preserves the Patronus routing contract`() {
-        val yaml = HexanaPatronusConfigGenerator.expectedYaml()
+    fun `generated config uses independent dependency-derived product checks`() {
+        val yaml = HexanaPatronusConfigGenerator.expectedYaml(graph)
         val configurationIds = Regex("configurationId: \\\"([^\\\"]+)\\\"").findAll(yaml).map { it.groupValues[1] }.toList()
-        assertEquals(
-            listOf(
-                "InnoHub_HexFlow_PatronusConfigCheckPatronus",
-                "InnoHub_HexFlow_SafeMergeTests",
-                "InnoHub_HexFlow_UiTestsPatronus",
-                "InnoHub_HexFlow_IntellijPluginTestsPatronus",
-                "InnoHub_HexFlow_ServerCliTestsPatronus",
-                "InnoHub_HexFlow_VscodePluginTestsPatronus",
-                "InnoHub_HexFlow_WebappTestsPatronus",
-                "InnoHub_HexFlow_CoreTestsPatronus",
-            ),
-            configurationIds,
+        val infrastructureIds = setOf(
+            "InnoHub_HexFlow_PatronusConfigCheckPatronus",
+            "InnoHub_HexFlow_SafeMergeTests",
+            "InnoHub_HexFlow_UiTestsPatronus",
         )
-        assertContains(yaml, "id: \"hexana-product-tests\"")
-        assertContains(yaml, "isFallback: true")
-        val patronusConfigCheck = HexanaPatronusConfig.teamCityChecksConfig.checks.single {
-            it.configurationId == "InnoHub_HexFlow_PatronusConfigCheckPatronus"
+        assertEquals(PRODUCT_LANES + infrastructureIds, configurationIds.toSet())
+        assertEquals(8, configurationIds.distinct().size)
+        assertEquals(false, "  group:" in yaml)
+        assertEquals(false, "isFallback:" in yaml)
+
+        val checks = hexanaPatronusConfig(graph).teamCityChecksConfig.checks
+        val freshness = checks.single { it.configurationId == "InnoHub_HexFlow_PatronusConfigCheckPatronus" }
+        assertEquals(listOf("*"), freshness.executeOnChanges)
+        val safeMerge = checks.single { it.configurationId == "InnoHub_HexFlow_SafeMergeTests" }
+        assertEquals(listOf("*", "!/README.md"), safeMerge.executeOnChanges)
+        val ui = checks.single { it.configurationId == "InnoHub_HexFlow_UiTestsPatronus" }
+        assertEquals(listOf("/ui-driver-tests/**", "/idea-plugin/src/ui-tests-framework/**"), ui.executeOnChanges)
+        PRODUCT_LANES.forEach { lane ->
+            val expectedPatterns = routing.patternsByLane().getValue(lane)
+            assertEquals(expectedPatterns.distinct(), expectedPatterns)
+            assertTrue(expectedPatterns.none { it.startsWith("/.patronus/") })
+            assertEquals(expectedPatterns, checks.single { it.configurationId == lane }.executeOnChanges)
         }
-        assertEquals(listOf("*"), patronusConfigCheck.executeOnChanges)
-        assertContains(yaml, "- configurationId: \"InnoHub_HexFlow_PatronusConfigCheckPatronus\"\n- configurationId:")
-        assertContains(yaml, "- \"/vscode-plugin/**\"")
-        assertContains(yaml, "- \"/webapp/**\"")
-        assertEquals(2, Regex("- \"/web-ui/\\*\\*\"").findAll(yaml).count())
-        assertContains(yaml, "- \"!/mcp/core/**\"")
-        assertContains(yaml, "- \"!/mcp/scripting/**\"")
-        assertContains(yaml, "- \"!/mcp/tools-generator/**\"")
+    }
+
+    @Test
+    fun `live graph routes providers to every consumer lane`() {
+        graph.nodes.filterNot { it.path == ":" }.forEach { project ->
+            val policy = HexanaRoutingPolicies.projectPolicies[project.path]
+            if (policy?.suppressProductRouting != true) assertTrue(routing.lanesForProject(project.path).isNotEmpty())
+        }
+        graph.dependencies.forEach { dependency ->
+            routing.lanesForProject(dependency.consumer.path).forEach { consumerLane ->
+                assertContains(routing.lanesForProject(dependency.provider.path), consumerLane)
+            }
+        }
+        assertEquals(emptyList(), routing.lanesForProject(":patronus-config"))
+        assertEquals(listOf(INTELLIJ_LANE), routing.lanesForProject(":jvm-jit-jmh"))
+        assertEquals(emptyList(), routing.lanesForProject(":ui-driver-tests"))
+    }
+
+    @Test
+    fun `overlays remain explicit and effective`() {
+        val patterns = routing.patternsByLane()
+        PRODUCT_LANES.forEach { lane -> assertContains(patterns.getValue(lane), "/build.gradle.kts") }
+        val converterLanes = setOf(":graalwasm:wasmprinter", ":graalwasm:wat2wasm")
+            .flatMap(routing::lanesForProject).toSet()
+        converterLanes.forEach { lane -> assertContains(patterns.getValue(lane), "/wasm-modules/**") }
+        routing.lanesForProject(":wasmParser").forEach { lane ->
+            assertContains(patterns.getValue(lane), "/karma.config.d/**")
+        }
+        mapOf(
+            "/mcp/tools-generator/src/main/kotlin/Tool.kt" to setOf(INTELLIJ_LANE, SERVER_CLI_LANE),
+            "/examples/scripting/example.js" to setOf(INTELLIJ_LANE),
+            "/parsing/native-fixtures/elf/sample.c" to setOf(CORE_LANE, WEBAPP_LANE),
+            "/graalwasm/wasmprinter/src/main/kotlin/Printer.kt" to
+                setOf(CORE_LANE, INTELLIJ_LANE, SERVER_CLI_LANE, WEBAPP_LANE),
+            "/vscode-plugin/media/editor.css" to setOf(VSCODE_LANE, WEBAPP_LANE),
+        ).forEach { (path, expectedLanes) ->
+            assertEquals(expectedLanes, routing.lanesForPath(path).toSet(), path)
+        }
     }
 }

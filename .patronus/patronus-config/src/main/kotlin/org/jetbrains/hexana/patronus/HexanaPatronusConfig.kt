@@ -11,9 +11,11 @@ import kotlin.io.path.writeText
 object HexanaPatronusConfigGenerator {
     @JvmStatic
     fun main(args: Array<String>) {
-        val verify = args.firstOrNull() == "--verify"
-        val path = Path.of(args.lastOrNull() ?: error("Expected config path"))
-        val expected = expectedYaml()
+        val verify = "--verify" in args
+        val paths = args.filterNot { it == "--verify" }.map(Path::of)
+        require(paths.size == 2) { "Expected config path and project-impact snapshot path" }
+        val (path, graphPath) = paths
+        val expected = expectedYaml(ProjectImpactSnapshot.parse(graphPath.readText()))
         if (verify) {
             val actual = path.readText()
             check(actual == expected) {
@@ -26,7 +28,7 @@ object HexanaPatronusConfigGenerator {
         }
     }
 
-    fun expectedYaml(): String = HexanaPatronusConfig.toModel().toYaml()
+    fun expectedYaml(graph: ProjectImpactGraph): String = hexanaPatronusConfig(graph).toModel().toYaml()
 
     private fun firstDifference(expected: String, actual: String): String {
         val expectedLines = expected.lines()
@@ -38,8 +40,10 @@ object HexanaPatronusConfigGenerator {
     }
 }
 
-object HexanaPatronusConfig : BranchProtectionConfig(init = {
-    checks {
+fun hexanaPatronusConfig(graph: ProjectImpactGraph): BranchProtectionConfig {
+    val patterns = PatronusRouting(graph).patternsByLane()
+    return BranchProtectionConfig(init = {
+        checks {
         check(
             teamCityCheck(
                 "InnoHub_HexFlow_SafeMergeTests",
@@ -55,50 +59,14 @@ object HexanaPatronusConfig : BranchProtectionConfig(init = {
             ),
         )
         check(teamCityCheck("InnoHub_HexFlow_PatronusConfigCheckPatronus", "*"))
-        checksGroup("hexana-product-tests") {
-            primaryCheck(teamCityCheck("InnoHub_HexFlow_IntellijPluginTestsPatronus", "/idea-plugin/**"))
-            fallbackCheck(
-                teamCityCheck(
-                    "InnoHub_HexFlow_CoreTestsPatronus",
-                    "/build.gradle.kts",
-                    "/settings.gradle.kts",
-                    "/gradle.properties",
-                    "/gradle/**",
-                    "/gradlew",
-                    "/gradlew.bat",
-                    "/karma.config.d/**",
-                    "/analytics/**",
-                    "/binaryProvider/**",
-                    "/debugInfo/**",
-                    "/disassembly/**",
-                    "/encdec/**",
-                    "/hexanaDocument/**",
-                    "/jvm-jit/**",
-                    "/parsing/**",
-                    "/plugins-shared/**",
-                    "/wasmParser/**",
-                    "/graalwasm/**",
-                    "/wasm-modules/**",
-                    "/mcp/core/**",
-                    "/mcp/scripting/**",
-                    "/mcp/tools-generator/**",
-                ),
-            )
-            primaryCheck(teamCityCheck("InnoHub_HexFlow_VscodePluginTestsPatronus", "/vscode-plugin/**", "/web-ui/**"))
-            primaryCheck(teamCityCheck("InnoHub_HexFlow_WebappTestsPatronus", "/webapp/**", "/web-ui/**"))
-            primaryCheck(
-                teamCityCheck(
-                    "InnoHub_HexFlow_ServerCliTestsPatronus",
-                    "/cli/**",
-                    "/mcp/**",
-                    "!/mcp/core/**",
-                    "!/mcp/scripting/**",
-                    "!/mcp/tools-generator/**",
-                ),
-            )
+            check(teamCityCheck(INTELLIJ_LANE, *patterns.getValue(INTELLIJ_LANE).toTypedArray()))
+            check(teamCityCheck(CORE_LANE, *patterns.getValue(CORE_LANE).toTypedArray()))
+            check(teamCityCheck(VSCODE_LANE, *patterns.getValue(VSCODE_LANE).toTypedArray()))
+            check(teamCityCheck(WEBAPP_LANE, *patterns.getValue(WEBAPP_LANE).toTypedArray()))
+            check(teamCityCheck(SERVER_CLI_LANE, *patterns.getValue(SERVER_CLI_LANE).toTypedArray()))
         }
-    }
-})
+    })
+}
 
 private fun teamCityCheck(configurationId: String, vararg executeOnChanges: String): TeamCityCheckConfig =
     TeamCityCheckConfig {
