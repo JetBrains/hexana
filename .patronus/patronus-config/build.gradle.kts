@@ -39,3 +39,12 @@ tasks.register<JavaExec>("verifyPatronusConfigUpToDate") {
     inputs.file(patronusConfigFile)
     mustRunAfter(updatePatronusConfig)
 }
+
+tasks.register<JavaExec>("verifyPatronusProjectImpactGraph") {
+    group = "verification"
+    description = "Verify the exported Patronus project-impact graph snapshot."
+    dependsOn(tasks.classes, rootProject.tasks.named("exportPatronusProjectImpactGraph"))
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass = "org.jetbrains.hexana.patronus.ProjectImpactSnapshotVerifier"
+    args(rootProject.layout.buildDirectory.file("patronus/project-impact-graph.tsv").get().asFile.absolutePath)
+}

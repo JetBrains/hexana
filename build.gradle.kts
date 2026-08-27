@@ -8,6 +8,12 @@ import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsEnvSpec
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsPlugin
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsRootPlugin
 import org.jetbrains.kotlin.gradle.testing.internal.KotlinTestReport
+import org.gradle.api.artifacts.ProjectDependency
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.OutputFile
+import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
 
 plugins {
@@ -60,6 +66,83 @@ val explicitlyOwnedProjectPaths = primaryLaneProjectPaths.values.flatten().toSet
 
 fun Project.isUnclassifiedNonExemptProject(): Boolean =
     path !in explicitlyOwnedProjectPaths && path !in exemptProjectReasons
+
+abstract class ExportPatronusProjectImpactGraph : DefaultTask() {
+    @get:Input
+    abstract val projectRecords: ListProperty<String>
+
+    @get:Input
+    abstract val dependencyRecords: ListProperty<String>
+
+    @get:OutputFile
+    abstract val outputFile: RegularFileProperty
+
+    @TaskAction
+    fun export() {
+        val output = outputFile.get().asFile
+        output.parentFile.mkdirs()
+        output.writeText(
+            buildString {
+                appendLine("hexana-project-impact-graph\t1")
+                projectRecords.get().sorted().forEach { appendLine("project\t$it") }
+                dependencyRecords.get().sorted().forEach { appendLine("dependency\t$it") }
+            },
+        )
+    }
+}
+
+val exportPatronusProjectImpactGraph = tasks.register<ExportPatronusProjectImpactGraph>("exportPatronusProjectImpactGraph") {
+    group = "verification"
+    description = "Export the declared Gradle project dependency graph for Patronus shadow analysis."
+    outputFile.set(layout.buildDirectory.file("patronus/project-impact-graph.tsv"))
+}
+
+gradle.projectsEvaluated {
+    val gradleProjectPath = Regex(""":|(?::[A-Za-z0-9][A-Za-z0-9._-]*)+""")
+    val gradleConfigurationName = Regex("""[A-Za-z0-9][A-Za-z0-9._-]*""")
+    val repositoryRoot = rootProject.projectDir.canonicalFile.toPath()
+
+    fun Project.validatedPath(): String = path.also {
+        check(gradleProjectPath.matches(it)) {
+            "Project path must be ':' or colon-separated ASCII Gradle name segments: $it"
+        }
+    }
+
+    fun Project.relativeDirectory(): String {
+        val canonicalProjectDirectory = projectDir.canonicalFile.toPath()
+        check(canonicalProjectDirectory.startsWith(repositoryRoot)) {
+            "$path project directory must be inside repository root $repositoryRoot, but was $canonicalProjectDirectory"
+        }
+        if (canonicalProjectDirectory == repositoryRoot) return "."
+        val relativeDirectory = repositoryRoot.relativize(canonicalProjectDirectory).joinToString("/")
+        check(
+            relativeDirectory.isNotEmpty() && relativeDirectory.split('/').all {
+                it.isNotEmpty() && it != "." && it != ".." && it.none { character ->
+                    character == '\t' || character == '\r' || character == '\n' || character.code < 0x20 || character == '\u007f'
+                }
+            },
+        ) { "$path project directory is not a canonical repository-relative path: $relativeDirectory" }
+        return relativeDirectory
+    }
+
+    val projectRecords = allprojects.map { "${it.validatedPath()}\t${it.relativeDirectory()}" }.sorted()
+    val dependencyRecords = allprojects.flatMap { consumer ->
+        consumer.configurations.flatMap { configuration ->
+            check(gradleConfigurationName.matches(configuration.name)) {
+                "Configuration name must be non-empty ASCII without separators or control characters: ${configuration.name}"
+            }
+            configuration.dependencies.withType(ProjectDependency::class.java).map { dependency ->
+                val provider = project(dependency.path)
+                "${consumer.validatedPath()}\t${consumer.relativeDirectory()}\t" +
+                    "${provider.validatedPath()}\t${provider.relativeDirectory()}\t${configuration.name}"
+            }
+        }
+    }.distinct().sorted()
+    exportPatronusProjectImpactGraph.configure {
+        this.projectRecords.set(projectRecords)
+        this.dependencyRecords.set(dependencyRecords)
+    }
+}
 
 repositories {
     maven("https://www.jetbrains.com/intellij-repository/releases")

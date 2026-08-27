@@ -171,6 +171,13 @@ Run the narrowest command that proves your change.
   Patronus paths or `settings.gradle.kts`; the verifier is also a direct dependency of `teamcityCiTests`.
   `ui-driver-tests` is explicitly UI/daily-only, while `jvm-jit-jmh` is benchmark/Safe-Merge-only. Selected existing
   non-Gradle Core roots are checked as part of the same policy.
+- `./gradlew verifyPatronusProjectImpactGraph` exports and verifies a deterministic snapshot of declared Gradle project dependencies
+  to `build/patronus/project-impact-graph.tsv` for shadow analysis. It inspects every configuration without resolving
+  artifacts and does not alter Patronus routes. The pure reverse-impact model and policy classifications live in
+  `.patronus/patronus-config`. The shadow policy treats Patronus configuration as infrastructure-only and maps
+  `jvm-jit-jmh` changes to immediate IntelliJ verification; current checked-in Patronus routing remains unchanged.
+  Snapshot project directories must resolve canonically inside the repository. Gradle project paths and configuration
+  names use an explicit ASCII segment policy so TSV delimiters and control characters cannot be emitted.
 - Run native standard CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli:nativeIntegrationTest`
 - Run native script CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli-script:nativeIntegrationTest`
 - Run TeamCity native integration surfaces: `./gradlew :mcp:assembleNativeMcpReleaseArtifacts`
