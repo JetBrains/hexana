@@ -221,7 +221,14 @@ private class ProbeFields(private val payload: List<String>) {
     }
 
     fun optionalInt(key: String): Int? {
-        val value = value(key)
+        val values = values(key)
+        if (values.isEmpty()) {
+            return null
+        }
+        if (values.size > 1) {
+            payloadError(payload, "expected one value for key '$key', got ${values.size}")
+        }
+        val value = values.single()
         if (value.isEmpty()) {
             return null
         }

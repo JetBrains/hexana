@@ -122,6 +122,7 @@ class HexanaProbePayloadTest {
         assertEquals(155, state.selectedOffset)
         assertEquals("  local.get 0", state.selectedInstruction)
         assertEquals(2, state.operandStackRowCount)
+        assertNull(state.selectedModuleId)
         assertTrue(state.hasHighlightedInstruction)
     }
 
@@ -144,6 +145,7 @@ class HexanaProbePayloadTest {
         )
 
         assertFalse(state.sessionActive)
+        assertNull(state.selectedModuleId)
         assertFalse(state.hasHighlightedInstruction)
         assertEquals("", state.selectedInstruction)
     }
