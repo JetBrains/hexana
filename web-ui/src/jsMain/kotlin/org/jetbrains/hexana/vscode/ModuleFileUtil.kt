@@ -52,10 +52,19 @@ fun submoduleFileName(
     return "$baseName$infix$index@${contentOffset.toString(16)}.$extension"
 }
 
-/** Copies the content bytes of an embedded core module or nested component out of this component. */
-internal fun WasmComponentBinaryProvider.submoduleBytes(contentOffset: Int, contentSize: Int): ByteArray {
-    val target = ByteArray(contentSize)
+/**
+ * Copies the content bytes of an embedded core module or nested component out
+ * of this component, or returns null when the declared range does not fit.
+ *
+ * Section sizes come from the binary itself, so a truncated component can
+ * declare a submodule larger than the file that holds it; reading such a range
+ * throws. The bound is compared as `offset > limit - size` so a hostile size
+ * cannot overflow the sum.
+ */
+internal fun WasmComponentBinaryProvider.submoduleBytes(contentOffset: Int, contentSize: Int): ByteArray? {
     val buffer = bytes
+    if (contentOffset < 0 || contentSize <= 0 || contentOffset > buffer.limit() - contentSize) return null
+    val target = ByteArray(contentSize)
     buffer.position(contentOffset)
     buffer.get(target, 0, contentSize)
     return target

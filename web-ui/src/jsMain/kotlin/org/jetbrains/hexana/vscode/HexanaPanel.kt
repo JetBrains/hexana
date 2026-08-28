@@ -178,13 +178,20 @@ fun HexanaPanel(
                         when (navigation) {
                             is ComponentGraphNavigation.HexRange ->
                                 sel.selectRange(navigation.offset, navigation.size)
-                            is ComponentGraphNavigation.NestedBinary -> host.openModule(
-                                navigation.index,
-                                submoduleFileName(
-                                    fileName, navigation.index, navigation.contentOffset, navigation.isComponent,
-                                ),
-                                provider.submoduleBytes(navigation.contentOffset, navigation.contentSize),
-                            )
+                            is ComponentGraphNavigation.NestedBinary ->
+                                provider.submoduleBytes(navigation.contentOffset, navigation.contentSize)
+                                    ?.let { nestedBytes ->
+                                        host.openModule(
+                                            navigation.index,
+                                            submoduleFileName(
+                                                fileName,
+                                                navigation.index,
+                                                navigation.contentOffset,
+                                                navigation.isComponent,
+                                            ),
+                                            nestedBytes,
+                                        )
+                                    }
                         }
                     }
                 })

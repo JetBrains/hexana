@@ -365,10 +365,12 @@ private fun enrichComponentModulesTab(
         rowCount = tab.rowCount,
         rowClickAction = { rowIndex ->
             val moduleRecord = modules.getOrNull(rowIndex) ?: return@TableTabDescriptor
+            val moduleBytes = provider.submoduleBytes(moduleRecord.contentOffset, moduleRecord.contentSize)
+                ?: return@TableTabDescriptor
             host.openModule(
                 rowIndex,
                 submoduleFileName(fileName, rowIndex, moduleRecord.contentOffset, isComponent = false),
-                provider.submoduleBytes(moduleRecord.contentOffset, moduleRecord.contentSize),
+                moduleBytes,
             )
         },
     )
@@ -386,10 +388,12 @@ private fun enrichComponentNestedComponentsTab(
         columns = tab.columns,
         rowCount = tab.rowCount,
         rowClickAction = { rowIndex ->
+            val componentBytes = provider.submoduleBytes(section.contentOffset, section.contentSize)
+                ?: return@TableTabDescriptor
             host.openModule(
                 rowIndex,
                 submoduleFileName(fileName, rowIndex, section.contentOffset, isComponent = true),
-                provider.submoduleBytes(section.contentOffset, section.contentSize),
+                componentBytes,
             )
         },
     )
