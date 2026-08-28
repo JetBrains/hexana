@@ -37,7 +37,7 @@ test("rejects a mismatched version family", () => {
 });
 
 test("rejects a missing release section", () => {
-  assert.throws(run({ version: "0.1.1", branch: "release/webapp/0.1" }), /no dated section/);
+  assert.throws(run({ version: "0.1.2", branch: "release/webapp/0.1" }), /no dated section/);
 });
 
 test("rejects malformed and non-chronological dates", () => {
