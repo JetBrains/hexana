@@ -227,7 +227,7 @@ class WebAppTelemetryTest {
 private fun installBundledReleaseInfoFixture(): Element = document.createElement("script").also { fixture ->
     fixture.id = "hexana-release-info"
     fixture.setAttribute("type", "application/json")
-    fixture.textContent = """{"version":"0.1.0","revision":"test","changelog":"","repositoryUrl":"https://github.com/JetBrains/hexana","websiteUrl":"https://jetbrains.github.io/hexana/"}"""
+    fixture.textContent = """{"version":"0.1.0","versionSource":"webapp/gradle.properties","revision":"test","changelog":"","repositoryUrl":"https://github.com/JetBrains/hexana","websiteUrl":"https://jetbrains.github.io/hexana/"}"""
     checkNotNull(document.body).appendChild(fixture)
 }
 

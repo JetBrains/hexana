@@ -28,11 +28,13 @@ class LandingViewTest {
         val originalBodyOverflow = document.body?.style?.getPropertyValue("overflow")
         val info = WebappReleaseInfo(
             version = "0.1.0",
+            versionSource = "webapp/gradle.properties",
             revision = "0123456789abcdef",
-            changelog = "# Changelog\n\nAll notable changes to the Hexana Webapp are documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to Semantic Versioning.\n\n## [0.2.0] - 2026-08-21\n\n### Added\n\n- [Release policy](https://keepachangelog.com/en/1.1.0/) follows Keep a Changelog.\n- [Latest public Webapp release.](https://jetbrains.github.io/hexana/)\n- [Unsafe link](javascript:alert(1)) is rendered as text.\n\n## [0.1.0] - 2026-08-14\n\n### Changed\n\n- Initial public Webapp release.",
+            changelog = "# Changelog\n\nAll notable changes to the Hexana Webapp are documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to Semantic Versioning.\n\n## [Unreleased]\n\n   \n\n## [0.2.0] - 2026-08-21\n\n## [0.1.0] - 2026-08-14\n\n### Changed\n\n- [Release policy](https://keepachangelog.com/en/1.1.0/) follows Keep a Changelog.\n- [Latest public Webapp release.](https://jetbrains.github.io/hexana/)\n- [Unsafe link](javascript:alert(1)) is rendered as text.",
             repositoryUrl = "https://github.com/JetBrains/hexana",
             websiteUrl = "https://jetbrains.github.io/hexana/",
         )
+        assertTrue(info.isReleaseImage)
         var composition: Composition? = null
         var finished = false
         fun finish(failure: Throwable? = null) {
@@ -123,7 +125,7 @@ class LandingViewTest {
                     assertEquals("2026-08-14", dates.item(1)?.textContent)
                     assertEquals("separator", separators.item(0)?.unsafeCast<Element>()?.getAttribute("role"))
                     assertEquals("0.2.0, released 2026-08-21", releases.item(0)?.unsafeCast<Element>()?.getAttribute("aria-label"))
-                    check(root.querySelector("[data-release-notes-category]")?.textContent == "Added")
+                    check(root.querySelector("[data-release-notes-category]")?.textContent == "Changed")
                     check(root.querySelector("[data-release-notes-list]")?.textContent!!.contains("Latest public Webapp release."))
                     val github = root.querySelector("[data-release-notes-link='github']")!!
                     assertEquals(info.repositoryUrl, github.getAttribute("href")); assertEquals("_blank", github.getAttribute("target")); assertEquals("noopener noreferrer", github.getAttribute("rel"))
@@ -169,6 +171,44 @@ class LandingViewTest {
             }
         } catch (failure: Throwable) {
             finish(failure)
+        }
+    }
+
+    @Test
+    fun releaseNotesDrawerShowsPopulatedUnreleasedOnMaster(): Promise<Unit> = Promise { resolve, reject ->
+        val root = landingRoot()
+        val info = WebappReleaseInfo(
+            version = "abcdef",
+            versionSource = "git-revision",
+            revision = "abcdef",
+            changelog = "## [Unreleased]\n\n- Pending master change\n\n## [0.1.0] - 2026-08-14\n\n- Released change",
+            repositoryUrl = "https://github.com/JetBrains/hexana",
+            websiteUrl = "https://jetbrains.github.io/hexana/",
+        )
+        assertTrue(!info.isReleaseImage)
+        try {
+            document.body?.appendChild(root)
+            val composition = renderComposable(rootElementId = root.id) {
+                LandingView(onFileLoaded = { _, _, _ -> }, releaseInfo = info)
+            }
+            root.querySelector("[data-release-notes-trigger]")!!.unsafeCast<HTMLElement>().click()
+            window.requestAnimationFrame {
+                try {
+                    assertEquals(2, root.querySelectorAll("[data-release-notes-release]").length)
+                    assertEquals("Unreleased", root.querySelector("[data-release-notes-release-version]")?.textContent)
+                    check(root.textContent!!.contains("Pending master change"))
+                    composition.dispose()
+                    root.parentNode?.removeChild(root)
+                    resolve(Unit)
+                } catch (failure: Throwable) {
+                    composition.dispose()
+                    root.parentNode?.removeChild(root)
+                    reject(failure)
+                }
+            }
+        } catch (failure: Throwable) {
+            root.parentNode?.removeChild(root)
+            reject(failure)
         }
     }
     }

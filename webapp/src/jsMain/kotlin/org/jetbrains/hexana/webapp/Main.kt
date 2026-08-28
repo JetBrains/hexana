@@ -821,11 +821,17 @@ private fun parseChangelog(changelog: String): List<ChangelogBlock> {
 @Composable
 private fun StructuredChangelog(changelog: String) {
     var inReleaseHistory = false
-    parseChangelog(changelog).forEach { block ->
+    var suppressCurrentRelease = false
+    val blocks = parseChangelog(changelog)
+    blocks.forEachIndexed { index, block ->
         if (block is ChangelogBlock.Heading && block.level == 2) {
             inReleaseHistory = true
+            val nextRelease = (index + 1 until blocks.size).firstOrNull {
+                blocks[it] is ChangelogBlock.Heading && (blocks[it] as ChangelogBlock.Heading).level == 2
+            } ?: blocks.size
+            suppressCurrentRelease = block.text == "[Unreleased]" && blocks.subList(index + 1, nextRelease).isEmpty()
         }
-        if (!inReleaseHistory) return@forEach
+        if (!inReleaseHistory || suppressCurrentRelease) return@forEachIndexed
         when (block) {
             is ChangelogBlock.Heading -> when (block.level) {
                 2 -> ReleaseNotesReleaseHeading(block.text)
