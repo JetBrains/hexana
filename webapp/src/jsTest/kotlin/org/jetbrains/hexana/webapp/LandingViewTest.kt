@@ -177,6 +177,24 @@ class LandingViewTest {
     @Test
     fun releaseNotesDrawerShowsPopulatedUnreleasedOnMaster(): Promise<Unit> = Promise { resolve, reject ->
         val root = landingRoot()
+        var composition: Composition? = null
+        var finished = false
+        fun finish(failure: Throwable? = null) {
+            if (finished) return
+            finished = true
+            var finalFailure = failure
+            try {
+                composition?.dispose()
+            } catch (cleanupFailure: Throwable) {
+                if (finalFailure == null) finalFailure = cleanupFailure
+            }
+            try {
+                root.parentNode?.removeChild(root)
+            } catch (cleanupFailure: Throwable) {
+                if (finalFailure == null) finalFailure = cleanupFailure
+            }
+            if (finalFailure == null) resolve(Unit) else reject(finalFailure)
+        }
         val info = WebappReleaseInfo(
             version = "abcdef",
             versionSource = "git-revision",
@@ -185,10 +203,10 @@ class LandingViewTest {
             repositoryUrl = "https://github.com/JetBrains/hexana",
             websiteUrl = "https://jetbrains.github.io/hexana/",
         )
-        assertTrue(!info.isReleaseImage)
         try {
+            assertTrue(!info.isReleaseImage)
             document.body?.appendChild(root)
-            val composition = renderComposable(rootElementId = root.id) {
+            composition = renderComposable(rootElementId = root.id) {
                 LandingView(onFileLoaded = { _, _, _ -> }, releaseInfo = info)
             }
             root.querySelector("[data-release-notes-trigger]")!!.unsafeCast<HTMLElement>().click()
@@ -197,18 +215,13 @@ class LandingViewTest {
                     assertEquals(2, root.querySelectorAll("[data-release-notes-release]").length)
                     assertEquals("Unreleased", root.querySelector("[data-release-notes-release-version]")?.textContent)
                     check(root.textContent!!.contains("Pending master change"))
-                    composition.dispose()
-                    root.parentNode?.removeChild(root)
-                    resolve(Unit)
+                    finish()
                 } catch (failure: Throwable) {
-                    composition.dispose()
-                    root.parentNode?.removeChild(root)
-                    reject(failure)
+                    finish(failure)
                 }
             }
         } catch (failure: Throwable) {
-            root.parentNode?.removeChild(root)
-            reject(failure)
+            finish(failure)
         }
     }
     }
@@ -235,7 +248,7 @@ class LandingViewTest {
                 }, readerFactory = factory)
             }
             guard = window.setTimeout({
-                composition?.dispose(); root.parentNode?.removeChild(root)
+                composition.dispose(); root.parentNode?.removeChild(root)
                 reject(Throwable("Landing core-Wasm production worker did not complete."))
             }, DOM_WAIT_TIMEOUT_MS.toInt())
             drop(root.querySelector("[data-file-drop-zone]")!!, landingSyntheticFile("addition.wasm", 55.0))
