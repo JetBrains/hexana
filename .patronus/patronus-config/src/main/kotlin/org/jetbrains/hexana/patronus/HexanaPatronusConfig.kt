@@ -44,21 +44,14 @@ fun hexanaPatronusConfig(graph: ProjectImpactGraph): BranchProtectionConfig {
     val patterns = PatronusRouting(graph).patternsByLane()
     return BranchProtectionConfig(init = {
         checks {
-        check(
-            teamCityCheck(
-                "InnoHub_HexFlow_SafeMergeTests",
-                "*",
-                "!/README.md",
-            ),
-        )
-        check(
-            teamCityCheck(
-                "InnoHub_HexFlow_UiTestsPatronus",
-                "/ui-driver-tests/**",
-                "/idea-plugin/src/ui-tests-framework/**",
-            ),
-        )
-        check(teamCityCheck("InnoHub_HexFlow_PatronusConfigCheckPatronus", "*"))
+            check(
+                teamCityCheck(
+                    "InnoHub_HexFlow_UiTestsPatronus",
+                    "/ui-driver-tests/**",
+                    "/idea-plugin/src/ui-tests-framework/**",
+                ),
+            )
+            check(teamCityCheck("InnoHub_HexFlow_PatronusConfigCheckPatronus", "*"))
             check(teamCityCheck(INTELLIJ_LANE, *patterns.getValue(INTELLIJ_LANE).toTypedArray()))
             check(teamCityCheck(CORE_LANE, *patterns.getValue(CORE_LANE).toTypedArray()))
             check(teamCityCheck(VSCODE_LANE, *patterns.getValue(VSCODE_LANE).toTypedArray()))

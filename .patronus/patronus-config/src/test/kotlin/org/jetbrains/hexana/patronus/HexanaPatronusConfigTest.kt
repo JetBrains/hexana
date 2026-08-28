@@ -5,6 +5,7 @@ import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class HexanaPatronusConfigTest {
@@ -26,19 +27,17 @@ class HexanaPatronusConfigTest {
         val configurationIds = Regex("configurationId: \\\"([^\\\"]+)\\\"").findAll(yaml).map { it.groupValues[1] }.toList()
         val infrastructureIds = setOf(
             "InnoHub_HexFlow_PatronusConfigCheckPatronus",
-            "InnoHub_HexFlow_SafeMergeTests",
             "InnoHub_HexFlow_UiTestsPatronus",
         )
         assertEquals(PRODUCT_LANES + infrastructureIds, configurationIds.toSet())
-        assertEquals(8, configurationIds.distinct().size)
+        assertEquals(7, configurationIds.distinct().size)
+        assertFalse("InnoHub_HexFlow_SafeMergeTests" in configurationIds)
         assertEquals(false, "  group:" in yaml)
         assertEquals(false, "isFallback:" in yaml)
 
         val checks = hexanaPatronusConfig(graph).teamCityChecksConfig.checks
         val freshness = checks.single { it.configurationId == "InnoHub_HexFlow_PatronusConfigCheckPatronus" }
         assertEquals(listOf("*"), freshness.executeOnChanges)
-        val safeMerge = checks.single { it.configurationId == "InnoHub_HexFlow_SafeMergeTests" }
-        assertEquals(listOf("*", "!/README.md"), safeMerge.executeOnChanges)
         val ui = checks.single { it.configurationId == "InnoHub_HexFlow_UiTestsPatronus" }
         assertEquals(listOf("/ui-driver-tests/**", "/idea-plugin/src/ui-tests-framework/**"), ui.executeOnChanges)
         PRODUCT_LANES.forEach { lane ->
@@ -46,6 +45,40 @@ class HexanaPatronusConfigTest {
             assertEquals(expectedPatterns.distinct(), expectedPatterns)
             assertTrue(expectedPatterns.none { it.startsWith("/.patronus/") })
             assertEquals(expectedPatterns, checks.single { it.configurationId == lane }.executeOnChanges)
+        }
+    }
+
+    @Test
+    fun `representative paths select exactly their immediate checks`() {
+        val allProductLanes = PRODUCT_LANES.toSet()
+        listOf(
+            RouteCase("/wasmParser/src/commonMain/kotlin/Parser.kt", allProductLanes),
+            RouteCase("/idea-plugin/src/main/kotlin/Plugin.kt", setOf(INTELLIJ_LANE)),
+            RouteCase("/vscode-plugin/extension-lib/src/commonMain/kotlin/Extension.kt", setOf(VSCODE_LANE)),
+            RouteCase("/mcp/server/src/main/kotlin/Server.kt", setOf(SERVER_CLI_LANE)),
+            RouteCase("/webapp/src/jsMain/kotlin/App.kt", setOf(WEBAPP_LANE)),
+            RouteCase("/build.gradle.kts", allProductLanes),
+            RouteCase("/ui-driver-tests/src/test/kotlin/UiTest.kt", emptySet(), ui = true),
+            RouteCase("/.patronus/patronus-config/build.gradle.kts", emptySet()),
+            RouteCase("/README.md", emptySet()),
+            RouteCase("/docs/architecture.md", emptySet()),
+            RouteCase("/doc/reference.md", emptySet()),
+            RouteCase("/tools/check.sh", emptySet()),
+            RouteCase("/plugins/example/plugin.xml", emptySet()),
+            RouteCase("/.space/automation.kts", emptySet()),
+            RouteCase("/CODEOWNERS", emptySet()),
+        ).forEach { case ->
+            val actual = linkedSetOf("InnoHub_HexFlow_PatronusConfigCheckPatronus")
+            actual += routing.lanesForPath(case.path)
+            if (case.ui) actual += "InnoHub_HexFlow_UiTestsPatronus"
+
+            assertEquals(
+                setOf("InnoHub_HexFlow_PatronusConfigCheckPatronus") + case.productLanes +
+                    if (case.ui) setOf("InnoHub_HexFlow_UiTestsPatronus") else emptySet(),
+                actual,
+                case.path,
+            )
+            assertFalse("InnoHub_HexFlow_SafeMergeTests" in actual, case.path)
         }
     }
 
@@ -86,4 +119,10 @@ class HexanaPatronusConfigTest {
             assertEquals(expectedLanes, routing.lanesForPath(path).toSet(), path)
         }
     }
+
+    private data class RouteCase(
+        val path: String,
+        val productLanes: Set<String>,
+        val ui: Boolean = false,
+    )
 }

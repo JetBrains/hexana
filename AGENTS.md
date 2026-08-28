@@ -164,6 +164,14 @@ Run the narrowest command that proves your change.
   An unowned non-exempt Gradle project is conservatively assigned to Core. `ui-driver-tests` stays UI-only,
   `jvm-jit-jmh` selects IntelliJ verification without running benchmarks, and `.patronus/patronus-config` selects only
   freshness. Run `./gradlew verifyPatronusRoutingCoverage` after changing routing inputs.
+- `./gradlew verifyPatronusImmediateNonUiLanePartition` proves the immediate non-UI Gradle partition of the former
+  CI, CLI, and Webapp inventories. UI-driver work remains the `UiTestsPatronus` exception; Build Everything is
+  scheduled-only, and VS Code TypeScript/Mocha is owned by its separate TeamCity composite rather than this Gradle
+  task partition.
+- Safe Merge is intentionally not selected by generated Patronus routing. The ungrouped Core, IntelliJ, VS Code,
+  Webapp, and Server/CLI checks cover immediate non-UI product verification; `UiTestsPatronus` remains an explicit
+  immediate UI exception. Documentation, tools, and other non-product roots are freshness-only before merge and are
+  validated by scheduled Build Everything after merge.
 - `./gradlew verifyPatronusProjectImpactGraph` exports and verifies a deterministic snapshot of declared Gradle project dependencies
   and aggregate-derived lane seeds to `build/patronus/project-impact-graph.tsv`. Update, verify, and test tasks regenerate
   and consume this snapshot without resolving configurations. The routing model and typed overlays live in

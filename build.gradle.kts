@@ -359,6 +359,9 @@ val patronusLaneTaskPaths = linkedMapOf(
     webappPatronusConfigurationId to teamcityWebappTestTaskPaths,
     serverCliPatronusConfigurationId to teamcityServerCliTestTaskPaths + teamcityCliTestTaskPaths,
 )
+val patronusImmediateNonUiTaskPaths = patronusLaneTaskPaths.values.flatten()
+val patronusImmediateUiExcludedTaskPaths = setOf(":ui-driver-tests:teamcityUiDriverTests")
+val patronusScheduledOnlyBuildTaskPaths = setOf(":clean", ":assemble")
 val patronusLaneSeedProjectPaths = patronusLaneTaskPaths.mapValues { (_, taskPaths) ->
     taskPaths.map(::taskOwningProjectPath).filterNot { it == ":" }.distinct().sorted()
 }
@@ -446,6 +449,7 @@ tasks.register("verifyPatronusRoutingCoverage") {
         ":patronus-config:test",
         ":patronus-config:verifyPatronusProjectImpactGraph",
         "verifyPatronusConfigUpToDate",
+        "verifyPatronusImmediateNonUiLanePartition",
     )
 }
 tasks.register("updatePatronusConfig") {
@@ -660,6 +664,50 @@ tasks.register("verifyTeamcityCiTestsPartition") {
         verifyAggregateDirectDependencies(
             "teamcityCiTests",
             teamcityCiTestTaskPaths + listOf(":verifyTeamcityCiTestsPartition", ":verifyPatronusRoutingCoverage"),
+        )
+    }
+}
+
+tasks.register("verifyPatronusImmediateNonUiLanePartition") {
+    group = "verification"
+    description = "Verify immediate non-UI Patronus lanes partition former Gradle tests without UI or scheduled-only work."
+    val laneCoverageTasks = listOf(
+        ":verifyTeamcityCoreTestsCoverage",
+        ":verifyTeamcityVscodePluginTestsCoverage",
+        ":verifyTeamcityIntellijPluginTestsCoverage",
+        ":verifyTeamcityWebappTestsCoverage",
+        ":verifyTeamcityServerCliTestsCoverage",
+    )
+    laneCoverageTasks.forEach { dependsOn(it) }
+    doLast {
+        val formerSafeMergeGradleTaskPaths =
+            teamcityCiTestTaskPaths + teamcityCliTestTaskPaths + teamcityWebappTestTaskPaths
+
+        verifyExactTaskPaths(
+            "Former Safe Merge Gradle test inventory",
+            formerSafeMergeGradleTaskPaths,
+            patronusImmediateNonUiTaskPaths,
+        )
+        check(teamcityWebappTestTaskPaths.all(patronusImmediateNonUiTaskPaths::contains)) {
+            "Every Webapp task must remain in the immediate Webapp Patronus lane"
+        }
+        val duplicateImmediateTaskPaths = patronusImmediateNonUiTaskPaths
+            .groupingBy { it }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
+        check(duplicateImmediateTaskPaths.isEmpty()) {
+            "Immediate non-UI Patronus lanes must not duplicate tasks: ${duplicateImmediateTaskPaths.joinToString()}"
+        }
+        check(patronusImmediateNonUiTaskPaths.none(patronusImmediateUiExcludedTaskPaths::contains)) {
+            "UI driver work remains the UiTestsPatronus exception, not an immediate non-UI lane"
+        }
+        check(patronusImmediateNonUiTaskPaths.none(patronusScheduledOnlyBuildTaskPaths::contains)) {
+            "Build Everything remains scheduled-only, not an immediate Patronus lane"
+        }
+        logger.lifecycle(
+            "VS Code TypeScript/Mocha is intentionally outside this Gradle partition; its immediate ownership is the " +
+                "separate TeamCity VS Code Patronus composite.",
         )
     }
 }

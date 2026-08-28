@@ -67,10 +67,6 @@ checks:
   - "/wasm-modules/**"
   - "/wasmParser/**"
 - configurationId: "InnoHub_HexFlow_PatronusConfigCheckPatronus"
-- configurationId: "InnoHub_HexFlow_SafeMergeTests"
-  executeOnChanges:
-  - "*"
-  - "!/README.md"
 - configurationId: "InnoHub_HexFlow_ServerCliTestsPatronus"
   executeOnChanges:
   - "/analytics/**"
