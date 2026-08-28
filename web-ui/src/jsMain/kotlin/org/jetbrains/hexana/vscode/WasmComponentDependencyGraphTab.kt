@@ -41,7 +41,28 @@ data class ComponentDependencyGraphNodeData(
     val kind: String,
     val label: String,
     val sublabel: String? = null,
+    /**
+     * Byte range of the entity this node stands for, or null when the binary
+     * has none for it. Core and component instances have none: the parser does
+     * not record per-entry offsets for them.
+     */
+    val offset: Int? = null,
+    val size: Int? = null,
 )
+
+/** Where a double-click on a graph node takes the user. */
+sealed interface ComponentGraphNavigation {
+    /** Select the entity's own bytes in the hex view (imports, exports). */
+    data class HexRange(val offset: Int, val size: Int) : ComponentGraphNavigation
+
+    /** Open the embedded binary in its own tab (core modules, nested components). */
+    data class NestedBinary(
+        val index: Int,
+        val isComponent: Boolean,
+        val contentOffset: Int,
+        val contentSize: Int,
+    ) : ComponentGraphNavigation
+}
 
 /** Serializable presentation boundary for dependency-graph edges produced outside the Web UI. */
 data class ComponentDependencyGraphEdgeData(
@@ -56,6 +77,8 @@ private data class GraphNode(
     val label: String,
     val sublabel: String? = null,
     val groupMembers: List<String>? = null,
+    /** Double-click target, or null for nodes without a known byte range. */
+    val navigation: ComponentGraphNavigation? = null,
 )
 
 private data class GraphEdge(
@@ -86,18 +109,32 @@ private fun buildDependencyGraph(provider: WasmComponentBinaryProvider): Depende
             is ComponentExternInstance -> "instance"
         }
         val version = if (imp.version != null) "@${imp.version}" else ""
-        nodes[id] = GraphNode(id, NodeKind.IMPORT, imp.importName + version, kindLabel)
+        nodes[id] = GraphNode(
+            id, NodeKind.IMPORT, imp.importName + version, kindLabel,
+            navigation = ComponentGraphNavigation.HexRange(imp.offset, imp.size),
+        )
     }
 
     provider.modules.forEachIndexed { i, mod ->
         val id = "module:$i"
-        nodes[id] = GraphNode(id, NodeKind.MODULE, "core module $i", "${mod.contentSize} bytes")
+        nodes[id] = GraphNode(
+            id, NodeKind.MODULE, "core module $i", "${mod.contentSize} bytes",
+            navigation = ComponentGraphNavigation.NestedBinary(
+                i, isComponent = false, mod.contentOffset, mod.contentSize,
+            ),
+        )
     }
 
+    val componentSection = provider.wasmModule?.componentSection
     provider.nestedComponents.forEachIndexed { i, _ ->
         val id = "component:$i"
         val exportCount = provider.nestedComponentExports(i).size
-        nodes[id] = GraphNode(id, NodeKind.NESTED_COMPONENT, "component $i", "$exportCount exports")
+        nodes[id] = GraphNode(
+            id, NodeKind.NESTED_COMPONENT, "component $i", "$exportCount exports",
+            navigation = componentSection?.let {
+                ComponentGraphNavigation.NestedBinary(i, isComponent = true, it.contentOffset, it.contentSize)
+            },
+        )
     }
 
     provider.coreInstances.forEachIndexed { i, inst ->
@@ -163,7 +200,10 @@ private fun buildDependencyGraph(provider: WasmComponentBinaryProvider): Depende
             ComponentSort.Instance -> "instance"
         }
         val version = if (exp.version != null) "@${exp.version}" else ""
-        nodes[id] = GraphNode(id, NodeKind.EXPORT, exp.exportName + version, sortLabel)
+        nodes[id] = GraphNode(
+            id, NodeKind.EXPORT, exp.exportName + version, sortLabel,
+            navigation = ComponentGraphNavigation.HexRange(exp.offset, exp.size),
+        )
 
         val sourceId = when (sort) {
             is ComponentSortWithCoreSort -> when (sort.cs) {
@@ -1016,24 +1056,32 @@ private fun roundRect(ctx: CanvasRenderingContext2D, x: Double, y: Double, w: Do
 // --- Composable ---
 
 @Composable
-fun DependencyGraphTabContent(provider: WasmComponentBinaryProvider) {
-    DependencyGraphTabContent(remember(provider) { buildDependencyGraph(provider) })
+fun DependencyGraphTabContent(
+    provider: WasmComponentBinaryProvider,
+    onNavigate: ((ComponentGraphNavigation) -> Unit)? = null,
+) {
+    DependencyGraphTabContent(remember(provider) { buildDependencyGraph(provider) }, onNavigate)
 }
 
 @Composable
 fun DependencyGraphTabContent(
     nodes: List<ComponentDependencyGraphNodeData>,
     edges: List<ComponentDependencyGraphEdgeData>,
+    onNavigate: ((ComponentGraphNavigation) -> Unit)? = null,
 ) {
     val rawGraph = remember(nodes, edges) {
         DependencyGraph(
             nodes.associate { node ->
-                node.id to GraphNode(node.id, checkNotNull(node.kind.toGraphNodeKind()), node.label, node.sublabel)
+                val kind = checkNotNull(node.kind.toGraphNodeKind())
+                node.id to GraphNode(
+                    node.id, kind, node.label, node.sublabel,
+                    navigation = navigationFor(kind, node.id, node.offset, node.size),
+                )
             },
             edges.map { GraphEdge(it.fromId, it.toId, it.label) },
         )
     }
-    DependencyGraphTabContent(rawGraph)
+    DependencyGraphTabContent(rawGraph, onNavigate)
 }
 
 private fun String.toGraphNodeKind(): NodeKind? = when (this) {
@@ -1046,8 +1094,31 @@ private fun String.toGraphNodeKind(): NodeKind? = when (this) {
     else -> null
 }
 
+/**
+ * Rebuilds the double-click target for a node that crossed a serialization
+ * boundary: the kind decides whether the range opens as its own binary or just
+ * selects bytes, and the entity index comes from the node id suffix.
+ */
+private fun navigationFor(kind: NodeKind, id: String, offset: Int?, size: Int?): ComponentGraphNavigation? {
+    if (offset == null || size == null) return null
+    val index = id.substringAfterLast(':').toIntOrNull()
+    return when (kind) {
+        NodeKind.IMPORT, NodeKind.EXPORT -> ComponentGraphNavigation.HexRange(offset, size)
+        NodeKind.MODULE -> index?.let {
+            ComponentGraphNavigation.NestedBinary(it, isComponent = false, offset, size)
+        }
+        NodeKind.NESTED_COMPONENT -> index?.let {
+            ComponentGraphNavigation.NestedBinary(it, isComponent = true, offset, size)
+        }
+        NodeKind.CORE_INSTANCE, NodeKind.INSTANCE -> null
+    }
+}
+
 @Composable
-private fun DependencyGraphTabContent(rawGraph: DependencyGraph) {
+private fun DependencyGraphTabContent(
+    rawGraph: DependencyGraph,
+    onNavigate: ((ComponentGraphNavigation) -> Unit)?,
+) {
 
     if (rawGraph.nodes.isEmpty()) {
         Div({ style { property("padding", "16px") } }) {
@@ -1098,7 +1169,8 @@ private fun DependencyGraphTabContent(rawGraph: DependencyGraph) {
                 }
                 ref { element ->
                     setupCanvas(element, graph, rawGraph, isDark, expandedGroups,
-                        onExpandedGroupsChange = { expandedGroups = it })
+                        onExpandedGroupsChange = { expandedGroups = it },
+                        onNodeDoubleClick = { node -> node.navigation?.let { onNavigate?.invoke(it) } })
                     onDispose { }
                 }
             })
@@ -1156,7 +1228,7 @@ private fun DependencyGraphTabContent(rawGraph: DependencyGraph) {
                         Text("Click group to expand/collapse")
                     }
                     Div({ style { property("color", mutedColor) } }) {
-                        Text("Scroll to zoom, drag to pan")
+                        Text("Scroll to zoom, drag to pan, double-click to open")
                     }
                 }
             }
@@ -1233,6 +1305,7 @@ private fun setupCanvas(
     isDark: Boolean,
     expandedGroups: Set<String>,
     onExpandedGroupsChange: (Set<String>) -> Unit,
+    onNodeDoubleClick: (GraphNode) -> Unit,
 ) {
     val canvas = document.createElement("canvas") as HTMLCanvasElement
     canvas.style.width = "100%"
@@ -1367,6 +1440,17 @@ private fun setupCanvas(
                 }
             }
         }
+    })
+
+    canvas.addEventListener("dblclick", { e ->
+        val me = e as MouseEvent
+        val (gx, gy) = toGraphCoords(me.clientX.toDouble(), me.clientY.toDouble())
+        if (findCollapseButtonAt(gx, gy) != null) return@addEventListener
+        val nodeId = findNodeAt(gx, gy) ?: return@addEventListener
+        // Group nodes expand on single click; only leaf nodes navigate.
+        val node = graph.nodes[nodeId] ?: return@addEventListener
+        if (node.groupMembers != null) return@addEventListener
+        onNodeDoubleClick(node)
     })
 
     canvas.addEventListener("mouseleave", {

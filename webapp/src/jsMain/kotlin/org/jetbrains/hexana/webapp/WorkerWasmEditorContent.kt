@@ -19,12 +19,15 @@ import org.jetbrains.hexana.providers.StructureRange
 import org.jetbrains.hexana.vscode.BinaryEditorContent
 import org.jetbrains.hexana.vscode.ComponentDependencyGraphEdgeData
 import org.jetbrains.hexana.vscode.ComponentDependencyGraphNodeData
+import org.jetbrains.hexana.vscode.ComponentGraphNavigation
 import org.jetbrains.hexana.vscode.DependencyGraphTabContent
 import org.jetbrains.hexana.vscode.HexSelectionState
+import org.jetbrains.hexana.vscode.LocalHost
 import org.jetbrains.hexana.vscode.PanelTab
 import org.jetbrains.hexana.vscode.PanelTableRow
 import org.jetbrains.hexana.vscode.SearchableTable
 import org.jetbrains.hexana.vscode.ScriptTabState
+import org.jetbrains.hexana.vscode.submoduleFileName
 import org.jetbrains.hexana.vscode.TableTabContent
 import org.jetbrains.hexana.vscode.WebUiCapabilities
 import org.jetbrains.hexana.vscode.WorkerNativeImageToolbarPresentation
@@ -66,6 +69,7 @@ internal fun WorkerWasmEditorContent(
         return
     }
     val provider = remember(bytes) { GenericBinaryProvider(bytes.toCommonByteBuffer()) }
+    val host = LocalHost.current
     val scriptExecution = remember(bytes, fileName) { WorkerScriptExecution(bytes, fileName) }
     val ranges = remember(presentation.ranges) {
         presentation.ranges.map { range ->
@@ -93,14 +97,41 @@ internal fun WorkerWasmEditorContent(
             })
         }
         presentation.componentGraph?.let { graph ->
-            add(PanelTab("Dependencies", padding = false) { _ ->
+            add(PanelTab("Dependencies", padding = false) { selection ->
                 WorkerWasmPartialPanel(response.partial) {
                     DependencyGraphTabContent(
                         nodes = graph.nodes.map { node ->
-                            ComponentDependencyGraphNodeData(node.id, node.kind, node.label, node.sublabel)
+                            ComponentDependencyGraphNodeData(
+                                node.id, node.kind, node.label, node.sublabel, node.offset, node.size,
+                            )
                         },
                         edges = graph.edges.map { edge ->
                             ComponentDependencyGraphEdgeData(edge.fromId, edge.toId, edge.label)
+                        },
+                        // Double-click opens embedded binaries in their own tab and
+                        // selects the bytes of every other entity in the hex view.
+                        onNavigate = { navigation ->
+                            when (navigation) {
+                                is ComponentGraphNavigation.HexRange ->
+                                    selection.selectRange(navigation.offset, navigation.size)
+                                is ComponentGraphNavigation.NestedBinary -> {
+                                    // The Worker validated the range against the input length;
+                                    // re-check it here because the slice comes off the Window copy.
+                                    val end = navigation.contentOffset + navigation.contentSize
+                                    if (navigation.contentOffset >= 0 && end <= bytes.size) {
+                                        host.openModule(
+                                            navigation.index,
+                                            submoduleFileName(
+                                                fileName,
+                                                navigation.index,
+                                                navigation.contentOffset,
+                                                navigation.isComponent,
+                                            ),
+                                            bytes.copyOfRange(navigation.contentOffset, end),
+                                        )
+                                    }
+                                }
+                            }
                         },
                     )
                 }

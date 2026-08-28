@@ -146,6 +146,14 @@ class HexSelectionState {
         activeIndex = index
         cursorIndex = index
     }
+
+    /** Selects [size] bytes starting at [offset] and scrolls them into view. */
+    fun selectRange(offset: Int, size: Int) {
+        anchorIndex = offset
+        activeIndex = offset + size.coerceAtLeast(1) - 1
+        cursorIndex = offset
+        scrollHexViewerTo(offset)
+    }
 }
 
 /**

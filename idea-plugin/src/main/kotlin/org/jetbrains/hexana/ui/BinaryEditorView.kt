@@ -1080,7 +1080,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
     is WasmComponentBinaryVirtualFileProvider -> {
         if (canProvideWasmModule()) {
             listOf(
-                Panel("Dependencies") { WasmComponentDependencyGraph(this) },
+                Panel("Dependencies") { WasmComponentDependencyGraph(this, state, file) },
                 Panel("Wat") { WasmPanelWat(this, state) },
                 Panel("WAT (virtualized)") { WasmComponentPanelWatVirtualized(this, state) },
             )
@@ -1116,7 +1116,9 @@ private fun BinaryProvider.resolveHardcodedPanels(
     is WasmComponentBinaryProvider -> {
         if (canProvideWasmModule()) {
             listOf(
-                Panel("Dependencies") { WasmComponentDependencyGraph(this) },
+                Panel("Dependencies") {
+                    WasmComponentDependencyGraph(this, state, (this as? BinaryVirtualFileProvider)?.file)
+                },
                 Panel("WAT (virtualized)") { WasmComponentPanelWatVirtualized(this, state) },
             )
         } else emptyList()

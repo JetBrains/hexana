@@ -41,6 +41,42 @@ class ParserWorkerPresentationProtocolTest {
     }
 
     @Test
+    fun componentGraphNodeRangesRoundTripAndRejectRangesTheInputCannotHold() {
+        val decoded = assertNotNull(
+            decodeParserWorkerSuccess(encodeBoundedParserWorkerSuccess("request", componentPresentation()), "request")
+        )
+        val moduleNode = assertNotNull(decoded.presentation.componentGraph?.nodes?.single { it.id == "module:0" })
+        assertEquals(2, moduleNode.offset)
+        assertEquals(4, moduleNode.size)
+
+        // Past the 10-byte input the summary declares.
+        val outOfBounds = encodeBoundedParserWorkerSuccess("request", componentPresentation())
+        outOfBounds.presentation.componentGraph.nodes[0].offset = 9
+        assertNull(decodeParserWorkerSuccess(outOfBounds, "request"))
+
+        // An offset without a size is not a range.
+        val halfSpecified = encodeBoundedParserWorkerSuccess("request", componentPresentation())
+        halfSpecified.presentation.componentGraph.nodes[0].size = null
+        assertNull(decodeParserWorkerSuccess(halfSpecified, "request"))
+    }
+
+    @Test
+    fun componentGraphNodesWithoutARangeRoundTripAsNull() {
+        val source = componentPresentation().copy(
+            componentGraph = ParserWorkerComponentGraph(
+                nodes = listOf(ParserWorkerComponentGraphNode("core-instance:0", "core_instance", "core instance 0")),
+                edges = emptyList(),
+            ),
+        )
+        val decoded = assertNotNull(
+            decodeParserWorkerSuccess(encodeBoundedParserWorkerSuccess("request", source), "request")
+        )
+        val node = assertNotNull(decoded.presentation.componentGraph?.nodes?.single())
+        assertNull(node.offset)
+        assertNull(node.size)
+    }
+
+    @Test
     fun legacyTabsRoundTripAndRejectsMalformedMetadata() {
         val source = representativePresentation().copy(legacyTabs = listOf("Top", "Wat", "WAT (virtualized)"))
         val wire = encodeBoundedParserWorkerSuccess("request", source)
@@ -591,8 +627,8 @@ class ParserWorkerPresentationProtocolTest {
         diagnostics = emptyList(),
         componentGraph = ParserWorkerComponentGraph(
             nodes = listOf(
-                ParserWorkerComponentGraphNode("module:0", "module", "core module 0"),
-                ParserWorkerComponentGraphNode("export:0", "export", "run"),
+                ParserWorkerComponentGraphNode("module:0", "module", "core module 0", offset = 2, size = 4),
+                ParserWorkerComponentGraphNode("export:0", "export", "run", offset = 6, size = 2),
             ),
             edges = listOf(ParserWorkerComponentGraphEdge("module:0", "export:0")),
         ),

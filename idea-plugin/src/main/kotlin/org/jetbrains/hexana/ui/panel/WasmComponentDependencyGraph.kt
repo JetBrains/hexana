@@ -27,10 +27,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.wasm.components.*
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
+
+/** Maximum gap between two presses on the same node still counted as a double-click. */
+private const val DOUBLE_CLICK_INTERVAL_MS = 400L
 
 /**
  * A visual dependency graph for WebAssembly component models.
@@ -38,10 +43,19 @@ import org.jetbrains.jewel.ui.component.Text
  * Shows how imports, core modules, nested components, core instances,
  * component instances, and exports are wired together via instantiation
  * arguments — similar to the graph in wasmbuilder.app.
+ *
+ * Double-clicking a node navigates to the entity it stands for: core modules
+ * and nested components open in their own editor tab, imports and exports
+ * select their bytes in the hex view. [file] is the editor's file, needed to
+ * name and parent the nested tabs; without it nested binaries cannot be opened.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider) {
+internal fun WasmComponentDependencyGraph(
+    provider: WasmComponentBinaryProvider,
+    state: HexViewStateHolder,
+    file: VirtualFile?,
+) {
     val rawGraph = remember(provider) { buildDependencyGraph(provider) }
 
     if (rawGraph.nodes.isEmpty()) {
@@ -86,6 +100,31 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
     var legendExpanded by remember { mutableStateOf(false) }
     val isDark = JewelTheme.isDark
 
+    // Double-click is tracked by hand: the canvas already owns press events for
+    // group expansion and pan, so a competing tap-gesture detector would have to
+    // consume them.
+    var lastPressedNodeId by remember { mutableStateOf<String?>(null) }
+    var lastPressUptimeMillis by remember { mutableLongStateOf(0L) }
+
+    fun navigate(node: GraphNode) {
+        when (val target = node.navigation) {
+            is GraphNavigation.HexRange -> state.scrollHexViewTo(target.offset, target.size)
+            is GraphNavigation.NestedBinary -> {
+                if (file == null) return
+                openNestedComponentBinary(
+                    project = state.project,
+                    file = file,
+                    bytes = provider.bytes,
+                    index = target.index,
+                    isComponent = target.isComponent,
+                    contentOffset = target.contentOffset,
+                    contentSize = target.contentSize,
+                )
+            }
+            null -> Unit
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
         Canvas(
             modifier = Modifier
@@ -127,6 +166,7 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
                             graphY >= rect.y && graphY <= rect.y + rect.height
                     }?.key
                     if (clickedButton != null) {
+                        lastPressedNodeId = null
                         expandedGroups = expandedGroups - clickedButton
                         return@onPointerEvent
                     }
@@ -135,6 +175,12 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
                         graphX >= rect.x && graphX <= rect.x + rect.width &&
                             graphY >= rect.y && graphY <= rect.y + rect.height
                     }?.key
+                    val pressUptimeMillis = it.changes.firstOrNull()?.uptimeMillis ?: 0L
+                    val isDoubleClick = clickedId != null && clickedId == lastPressedNodeId &&
+                        pressUptimeMillis - lastPressUptimeMillis <= DOUBLE_CLICK_INTERVAL_MS
+                    // Reset after a double-click so a third press starts a new pair.
+                    lastPressedNodeId = if (isDoubleClick) null else clickedId
+                    lastPressUptimeMillis = pressUptimeMillis
                     if (clickedId != null) {
                         val node = graph.nodes[clickedId]
                         if (node?.groupMembers != null) {
@@ -144,6 +190,8 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
                             } else {
                                 expandedGroups + clickedId
                             }
+                        } else if (isDoubleClick && node != null) {
+                            navigate(node)
                         }
                     }
                 }
@@ -377,7 +425,7 @@ internal fun WasmComponentDependencyGraph(provider: WasmComponentBinaryProvider)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Click group to expand/collapse", color = legendMutedColor)
-                Text("Scroll to zoom, drag to pan", color = legendMutedColor)
+                Text("Scroll to zoom, drag to pan, double-click to open", color = legendMutedColor)
             }
         }
     }
@@ -403,6 +451,20 @@ private fun LegendItem(color: Color, label: String) {
 
 private enum class NodeKind { IMPORT, MODULE, NESTED_COMPONENT, CORE_INSTANCE, INSTANCE, EXPORT }
 
+/** Where a double-click on a graph node takes the user. */
+private sealed interface GraphNavigation {
+    /** Select the entity's own bytes in the hex view (imports, exports). */
+    data class HexRange(val offset: Int, val size: Int) : GraphNavigation
+
+    /** Open the embedded binary in its own editor tab (core modules, nested components). */
+    data class NestedBinary(
+        val index: Int,
+        val isComponent: Boolean,
+        val contentOffset: Int,
+        val contentSize: Int,
+    ) : GraphNavigation
+}
+
 private data class GraphNode(
     val id: String,
     val kind: NodeKind,
@@ -410,6 +472,12 @@ private data class GraphNode(
     val sublabel: String? = null,
     /** Non-null for group nodes: the IDs of the member nodes this group replaces. */
     val groupMembers: List<String>? = null,
+    /**
+     * Double-click target, or null for nodes the binary has no byte range for.
+     * Core and component instances have none: the parser does not record
+     * per-entry offsets for them.
+     */
+    val navigation: GraphNavigation? = null,
 )
 
 private data class GraphEdge(
@@ -620,20 +688,32 @@ private fun buildDependencyGraph(provider: WasmComponentBinaryProvider): Depende
             is ComponentExternInstance -> "instance"
         }
         val version = if (imp.version != null) "@${imp.version}" else ""
-        nodes[id] = GraphNode(id, NodeKind.IMPORT, imp.importName + version, kindLabel)
+        nodes[id] = GraphNode(
+            id, NodeKind.IMPORT, imp.importName + version, kindLabel,
+            navigation = GraphNavigation.HexRange(imp.offset, imp.size),
+        )
     }
 
     // Core modules
     provider.modules.forEachIndexed { i, mod ->
         val id = "module:$i"
-        nodes[id] = GraphNode(id, NodeKind.MODULE, "core module $i", "${mod.contentSize} bytes")
+        nodes[id] = GraphNode(
+            id, NodeKind.MODULE, "core module $i", "${mod.contentSize} bytes",
+            navigation = GraphNavigation.NestedBinary(i, isComponent = false, mod.contentOffset, mod.contentSize),
+        )
     }
 
     // Nested components
+    val componentSection = provider.wasmModule?.componentSection
     provider.nestedComponents.forEachIndexed { i, _ ->
         val id = "component:$i"
         val exportCount = provider.nestedComponentExports(i).size
-        nodes[id] = GraphNode(id, NodeKind.NESTED_COMPONENT, "component $i", "$exportCount exports")
+        nodes[id] = GraphNode(
+            id, NodeKind.NESTED_COMPONENT, "component $i", "$exportCount exports",
+            navigation = componentSection?.let {
+                GraphNavigation.NestedBinary(i, isComponent = true, it.contentOffset, it.contentSize)
+            },
+        )
     }
 
     // Core instances
@@ -702,7 +782,10 @@ private fun buildDependencyGraph(provider: WasmComponentBinaryProvider): Depende
             ComponentSort.Instance -> "instance"
         }
         val version = if (exp.version != null) "@${exp.version}" else ""
-        nodes[id] = GraphNode(id, NodeKind.EXPORT, exp.exportName + version, sortLabel)
+        nodes[id] = GraphNode(
+            id, NodeKind.EXPORT, exp.exportName + version, sortLabel,
+            navigation = GraphNavigation.HexRange(exp.offset, exp.size),
+        )
 
         val sourceId = when (sort) {
             is ComponentSortWithCoreSort -> when (sort.cs) {

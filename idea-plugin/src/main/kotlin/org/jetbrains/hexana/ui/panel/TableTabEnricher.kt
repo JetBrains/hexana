@@ -735,21 +735,18 @@ private fun enrichComponentModulesTab(
     project: Project,
 ): TableTabDescriptor {
     val modules = provider.modules
-    // Offsets accumulate across nesting levels so a module opened from an
-    // already-nested view is still labelled with its absolute file offset.
-    val fileBase = file.getUserData(HexanaBinaryVirtualFile.BASE_OFFSET_KEY) ?: 0
     return TableTabDescriptor(
         name = tab.name,
         columns = tab.columns,
         rowCount = tab.rowCount,
         rowClickAction = { rowIndex ->
             val moduleRecord = modules.getOrNull(rowIndex) ?: return@TableTabDescriptor
-            val buffer = provider.bytes.slice(moduleRecord.contentOffset, moduleRecord.contentSize)
-            val absoluteOffset = fileBase + moduleRecord.contentOffset
-            val hexedOffset = absoluteOffset.toHexString()
-            val fileName = "${file.nameWithoutExtension}_${rowIndex}@$hexedOffset.${file.extension}"
-            val virtualFile = HexanaBinaryVirtualFile(fileName, buffer, baseOffset = absoluteOffset, parentFile = file)
-            FileEditorManager.getInstance(project).openFile(virtualFile, true)
+            openNestedComponentBinary(
+                project, file, provider.bytes, rowIndex,
+                isComponent = false,
+                contentOffset = moduleRecord.contentOffset,
+                contentSize = moduleRecord.contentSize,
+            )
         },
     )
 }
@@ -761,18 +758,17 @@ private fun enrichComponentNestedComponentsTab(
     project: Project,
 ): TableTabDescriptor {
     val section = provider.wasmModule?.componentSection ?: return tab
-    val fileBase = file.getUserData(HexanaBinaryVirtualFile.BASE_OFFSET_KEY) ?: 0
     return TableTabDescriptor(
         name = tab.name,
         columns = tab.columns,
         rowCount = tab.rowCount,
         rowClickAction = { rowIndex ->
-            val buffer = provider.bytes.slice(section.contentOffset, section.contentSize)
-            val absoluteOffset = fileBase + section.contentOffset
-            val hexedOffset = absoluteOffset.toHexString()
-            val fileName = "${file.nameWithoutExtension}_component_$rowIndex@$hexedOffset.${file.extension}"
-            val virtualFile = HexanaBinaryVirtualFile(fileName, buffer, baseOffset = absoluteOffset, parentFile = file)
-            FileEditorManager.getInstance(project).openFile(virtualFile, true)
+            openNestedComponentBinary(
+                project, file, provider.bytes, rowIndex,
+                isComponent = true,
+                contentOffset = section.contentOffset,
+                contentSize = section.contentSize,
+            )
         },
     )
 }

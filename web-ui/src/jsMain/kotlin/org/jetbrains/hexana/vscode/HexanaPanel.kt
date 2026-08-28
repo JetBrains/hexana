@@ -169,10 +169,24 @@ fun HexanaPanel(
                 })
             }
 
-            // Dependencies tab (component-model only)
+            // Dependencies tab (component-model only). Double-clicking a node
+            // opens embedded binaries in their own tab and selects the bytes of
+            // every other entity in the hex view.
             if (provider is WasmComponentBinaryProvider) {
-                add(PanelTab(FixedTab.Dependencies.label, padding = false) { _ ->
-                    DependencyGraphTabContent(provider)
+                add(PanelTab(FixedTab.Dependencies.label, padding = false) { sel ->
+                    DependencyGraphTabContent(provider) { navigation ->
+                        when (navigation) {
+                            is ComponentGraphNavigation.HexRange ->
+                                sel.selectRange(navigation.offset, navigation.size)
+                            is ComponentGraphNavigation.NestedBinary -> host.openModule(
+                                navigation.index,
+                                submoduleFileName(
+                                    fileName, navigation.index, navigation.contentOffset, navigation.isComponent,
+                                ),
+                                provider.submoduleBytes(navigation.contentOffset, navigation.contentSize),
+                            )
+                        }
+                    }
                 })
             }
 

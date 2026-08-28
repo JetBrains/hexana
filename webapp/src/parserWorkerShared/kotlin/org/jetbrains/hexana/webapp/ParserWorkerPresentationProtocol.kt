@@ -146,6 +146,13 @@ internal data class ParserWorkerComponentGraphNode(
     val kind: String,
     val label: String,
     val sublabel: String? = null,
+    /**
+     * Byte range of the entity the node stands for, so the Window can navigate
+     * to it without reparsing. Both null when the Worker has none: core and
+     * component instances carry no per-entry offset.
+     */
+    val offset: Int? = null,
+    val size: Int? = null,
 )
 internal data class ParserWorkerComponentGraphEdge(
     val fromId: String,
@@ -422,7 +429,7 @@ internal fun decodeParserWorkerSuccess(
         val ranges = decodeRanges(presentation.ranges, summary.inputBytes) ?: return null
         val tables = decodeTables(presentation.tables, summary.inputBytes) ?: return null
         val diagnostics = decodeDiagnostics(presentation.diagnostics) ?: return null
-        val componentGraph = decodeComponentGraph(presentation.componentGraph) ?: return null
+        val componentGraph = decodeComponentGraph(presentation.componentGraph, summary.inputBytes) ?: return null
         val legacyTabs = decodeLegacyTabs(presentation.legacyTabs, format) ?: return null
         val toolbar = decodeToolbar(presentation.toolbar, format) ?: return null
         val displayLabel = safeString(presentation.displayLabel, MAX_DISPLAY_LABEL_CHARS)?.takeIf { it.isNotBlank() } ?: return null
@@ -509,6 +516,7 @@ internal fun encodeSuccessWire(requestId: String, presentation: ParserWorkerPres
         wire.nodes = graph.nodes.map { node ->
             val item = wireObject()
             item.id = node.id; item.kind = node.kind; item.label = node.label; item.sublabel = node.sublabel
+            item.offset = node.offset; item.size = node.size
             item
         }.toTypedArray()
         wire.edges = graph.edges.map { edge ->
@@ -679,7 +687,7 @@ internal fun sanitizeParserWorkerPresentation(presentation: ParserWorkerPresenta
     }
     val componentGraph = presentation.componentGraph?.let { graph ->
         val nodes = graph.nodes.filter { node ->
-            val valid = isValidComponentGraphNode(node)
+            val valid = isValidComponentGraphNode(node, summary.inputBytes)
             if (!valid) omit()
             valid
         }
@@ -793,7 +801,7 @@ private fun requireValidProducerPresentation(presentation: ParserWorkerPresentat
         require(diagnostic.code.length <= MAX_DIAGNOSTIC_CODE_CHARS) { "Parser-worker diagnostic code is too long." }
         require(diagnostic.message.length <= MAX_DIAGNOSTIC_MESSAGE_CHARS) { "Parser-worker diagnostic message is too long." }
     }
-    presentation.componentGraph?.let(::requireValidComponentGraph)
+    presentation.componentGraph?.let { requireValidComponentGraph(it, presentation.summary.inputBytes) }
 }
 
 private fun isValidFormat(format: String): Boolean = format.length <= MAX_FORMAT_CHARS && format in supportedFormats
@@ -924,8 +932,8 @@ private fun isValidAction(action: ParserWorkerAction, inputBytes: Int): Boolean 
     }
 }
 
-private fun requireValidComponentGraph(graph: ParserWorkerComponentGraph) {
-    require(graph.nodes.all(::isValidComponentGraphNode)) { "Invalid parser-worker component graph node." }
+private fun requireValidComponentGraph(graph: ParserWorkerComponentGraph, inputBytes: Int) {
+    require(graph.nodes.all { isValidComponentGraphNode(it, inputBytes) }) { "Invalid parser-worker component graph node." }
     require(graph.nodes.map { it.id }.distinct().size == graph.nodes.size) { "Duplicate parser-worker component graph node ID." }
     val nodeIds = graph.nodes.mapTo(mutableSetOf()) { it.id }
     require(graph.edges.all { edge ->
@@ -933,11 +941,18 @@ private fun requireValidComponentGraph(graph: ParserWorkerComponentGraph) {
     }) { "Invalid parser-worker component graph edge." }
 }
 
-private fun isValidComponentGraphNode(node: ParserWorkerComponentGraphNode): Boolean =
+private fun isValidComponentGraphNode(node: ParserWorkerComponentGraphNode, inputBytes: Int): Boolean =
     node.id.isNotBlank() && node.id.length <= MAX_GRAPH_NODE_ID_CHARS &&
         node.kind.length <= MAX_GRAPH_NODE_KIND_CHARS && node.kind in supportedGraphNodeKinds &&
         node.label.length <= MAX_GRAPH_NODE_LABEL_CHARS &&
-        (node.sublabel == null || node.sublabel.length <= MAX_GRAPH_NODE_LABEL_CHARS)
+        (node.sublabel == null || node.sublabel.length <= MAX_GRAPH_NODE_LABEL_CHARS) &&
+        isValidComponentGraphNodeRange(node, inputBytes)
+
+private fun isValidComponentGraphNodeRange(node: ParserWorkerComponentGraphNode, inputBytes: Int): Boolean = when {
+    node.offset == null && node.size == null -> true
+    node.offset == null || node.size == null -> false
+    else -> node.offset >= 0 && node.size > 0 && node.size <= inputBytes && node.offset <= inputBytes - node.size
+}
 
 private fun isValidComponentGraphEdge(edge: ParserWorkerComponentGraphEdge): Boolean =
     edge.fromId.isNotBlank() && edge.fromId.length <= MAX_GRAPH_NODE_ID_CHARS &&
@@ -1125,7 +1140,7 @@ private fun decodeActions(value: dynamic, inputBytes: Int): List<ParserWorkerAct
     }
 }
 
-private fun decodeComponentGraph(value: dynamic): ParserWorkerComponentGraph? {
+private fun decodeComponentGraph(value: dynamic, inputBytes: Int): ParserWorkerComponentGraph? {
     if (value == null) return ParserWorkerComponentGraph(emptyList(), emptyList())
     if (!isPlainWireObject(value)) return null
     val nodes = value.nodes as? Array<dynamic> ?: return null
@@ -1138,7 +1153,9 @@ private fun decodeComponentGraph(value: dynamic): ParserWorkerComponentGraph? {
             safeString(node.kind, MAX_GRAPH_NODE_KIND_CHARS) ?: return null,
             safeString(node.label, MAX_GRAPH_NODE_LABEL_CHARS) ?: return null,
             if (node.sublabel == null) null else safeString(node.sublabel, MAX_GRAPH_NODE_LABEL_CHARS) ?: return null,
-        ).takeIf(::isValidComponentGraphNode) ?: return null
+            if (node.offset == null) null else safeWireInt(node.offset) ?: return null,
+            if (node.size == null) null else safeWireInt(node.size) ?: return null,
+        ).takeIf { isValidComponentGraphNode(it, inputBytes) } ?: return null
     }
     val decodedEdges = edges.map { edge ->
         if (!isPlainWireObject(edge)) return null
@@ -1150,7 +1167,7 @@ private fun decodeComponentGraph(value: dynamic): ParserWorkerComponentGraph? {
     }
     val graph = ParserWorkerComponentGraph(decodedNodes, decodedEdges)
     return try {
-        requireValidComponentGraph(graph)
+        requireValidComponentGraph(graph, inputBytes)
         graph
     } catch (_: IllegalArgumentException) {
         null

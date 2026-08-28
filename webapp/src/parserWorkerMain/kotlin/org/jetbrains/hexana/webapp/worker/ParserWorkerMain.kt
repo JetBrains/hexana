@@ -1146,17 +1146,29 @@ private fun componentGraph(provider: WasmComponentBinaryProvider): ParserWorkerC
             "import",
             componentName(item.importName, item.version),
             componentExternDescriptionLabel(item.externDescription),
+            offset = item.offset,
+            size = item.size,
         )
     }
     provider.modules.forEachIndexed { index, item ->
-        nodes += ParserWorkerComponentGraphNode("module:$index", "module", "core module $index", "${item.contentSize} bytes")
+        nodes += ParserWorkerComponentGraphNode(
+            "module:$index",
+            "module",
+            "core module $index",
+            "${item.contentSize} bytes",
+            offset = item.contentOffset,
+            size = item.contentSize,
+        )
     }
+    val componentSection = provider.wasmModule?.componentSection
     provider.nestedComponents.forEachIndexed { index, _ ->
         nodes += ParserWorkerComponentGraphNode(
             "component:$index",
             "nested_component",
             "component $index",
             "${provider.nestedComponentExports(index).size} exports",
+            offset = componentSection?.contentOffset,
+            size = componentSection?.contentSize,
         )
     }
     provider.coreInstances.forEachIndexed { index, instance ->
@@ -1196,6 +1208,8 @@ private fun componentGraph(provider: WasmComponentBinaryProvider): ParserWorkerC
             "export",
             componentName(export.exportName, export.version),
             componentSortIndexLabel(export.sortIndex) ?: "",
+            offset = export.offset,
+            size = export.size,
         )
         componentGraphSourceId(export.sortIndex.sort, export.sortIndex.index.toInt())?.let { source ->
             edges += ParserWorkerComponentGraphEdge(source, id)

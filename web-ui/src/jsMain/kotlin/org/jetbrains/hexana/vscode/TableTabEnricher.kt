@@ -359,32 +359,17 @@ private fun enrichComponentModulesTab(
     host: Host,
 ): TableTabDescriptor {
     val modules = provider.modules
-    val baseName = fileName
-        .substringAfterLast('/')
-        .substringAfterLast('\\')
-        .substringBeforeLast('.')
-    val extension = fileName
-        .substringAfterLast('/')
-        .substringAfterLast('\\')
-        .let { name ->
-            val dot = name.lastIndexOf('.')
-            if (dot >= 0) name.substring(dot + 1) else "wasm"
-        }
-
     return TableTabDescriptor(
         name = tab.name,
         columns = tab.columns,
         rowCount = tab.rowCount,
         rowClickAction = { rowIndex ->
             val moduleRecord = modules.getOrNull(rowIndex) ?: return@TableTabDescriptor
-            val hexOffset = moduleRecord.contentOffset.toString(16)
-            val moduleFileName = "${baseName}_${rowIndex}@${hexOffset}.$extension"
-            val moduleBytes = ByteArray(moduleRecord.contentSize)
-            val buffer = provider.bytes
-            buffer.position(moduleRecord.contentOffset)
-            buffer.get(moduleBytes, 0, moduleRecord.contentSize)
-            buffer.position(0)
-            host.openModule(rowIndex, moduleFileName, moduleBytes)
+            host.openModule(
+                rowIndex,
+                submoduleFileName(fileName, rowIndex, moduleRecord.contentOffset, isComponent = false),
+                provider.submoduleBytes(moduleRecord.contentOffset, moduleRecord.contentSize),
+            )
         },
     )
 }
@@ -396,31 +381,16 @@ private fun enrichComponentNestedComponentsTab(
     host: Host,
 ): TableTabDescriptor {
     val section = provider.wasmModule?.componentSection ?: return tab
-    val baseName = fileName
-        .substringAfterLast('/')
-        .substringAfterLast('\\')
-        .substringBeforeLast('.')
-    val extension = fileName
-        .substringAfterLast('/')
-        .substringAfterLast('\\')
-        .let { name ->
-            val dot = name.lastIndexOf('.')
-            if (dot >= 0) name.substring(dot + 1) else "wasm"
-        }
-
     return TableTabDescriptor(
         name = tab.name,
         columns = tab.columns,
         rowCount = tab.rowCount,
         rowClickAction = { rowIndex ->
-            val hexOffset = section.contentOffset.toString(16)
-            val componentFileName = "${baseName}_component_${rowIndex}@${hexOffset}.$extension"
-            val componentBytes = ByteArray(section.contentSize)
-            val buffer = provider.bytes
-            buffer.position(section.contentOffset)
-            buffer.get(componentBytes, 0, section.contentSize)
-            buffer.position(0)
-            host.openModule(rowIndex, componentFileName, componentBytes)
+            host.openModule(
+                rowIndex,
+                submoduleFileName(fileName, rowIndex, section.contentOffset, isComponent = true),
+                provider.submoduleBytes(section.contentOffset, section.contentSize),
+            )
         },
     )
 }
