@@ -10,7 +10,7 @@ import javax.imageio.ImageIO
 import javax.imageio.metadata.IIOMetadataNode
 import kotlin.io.path.deleteIfExists
 
-class AnimatedGifCaptureTest {
+class AnimatedGifEncodingTest {
     @Test
     fun writesLoopingGifWithEveryCapturedFrame() {
         val output = Files.createTempFile("hexana-whats-new", ".gif")
