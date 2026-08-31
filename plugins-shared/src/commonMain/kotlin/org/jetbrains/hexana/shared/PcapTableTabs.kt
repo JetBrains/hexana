@@ -4,8 +4,6 @@ import org.jetbrains.hexana.pcap.PcapDissectedPacket
 import org.jetbrains.hexana.pcap.PcapDissector
 import org.jetbrains.hexana.pcap.PcapFile
 import org.jetbrains.hexana.pcap.TlsDecryptionContext
-import org.jetbrains.hexana.pcap.TlsDecryptor
-import org.jetbrains.hexana.pcap.TlsKeyDeriver
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.PcapBinaryProvider
 
@@ -21,20 +19,17 @@ class PcapTableTabsProvider : TableTabsProvider {
     }
 
     /**
-     * Builds the packets tab with TLS decryption support. Called when a
-     * [TlsDecryptor] and [TlsKeyDeriver] are available (JVM).
+     * Both tab names are known from the provider type alone, without parsing.
+     * Answering here keeps hosts from calling [tableTabs] just to learn the
+     * names — for a capture that means the parse, the TLS handshake scan and
+     * the key derivation all stay on whatever background thread resolves the
+     * tab, instead of running during composition.
      */
-    fun tableTabsWithDecryption(
-        provider: PcapBinaryProvider,
-        decryptor: TlsDecryptor,
-        keyDeriver: TlsKeyDeriver,
-    ): List<TableTabDescriptor> {
-        val pcap = provider.parsedPcapFile ?: return emptyList()
-        return listOfNotNull(
-            pcapHeaderTab(pcap, provider),
-            pcapPacketsTab(pcap, provider, decryptor, keyDeriver),
-        )
-    }
+    override fun availableTabNames(
+        provider: BinaryProvider,
+        context: TableTabsContext,
+    ): Pair<List<String>, List<String>>? =
+        if (provider is PcapBinaryProvider) listOf("Header", "Packets") to emptyList() else null
 }
 
 private fun pcapHeaderTab(pcap: PcapFile, provider: PcapBinaryProvider): TableTabDescriptor {
@@ -87,8 +82,6 @@ private fun formatRelativeTime(seconds: Double, nsResolution: Boolean): String {
 private fun pcapPacketsTab(
     pcap: PcapFile,
     provider: PcapBinaryProvider,
-    decryptor: TlsDecryptor? = null,
-    keyDeriver: TlsKeyDeriver? = null,
 ): TableTabDescriptor? {
     val packets = pcap.packets
     if (packets.isEmpty()) return null
@@ -99,8 +92,9 @@ private fun pcapPacketsTab(
     val linkType = pcap.header.network
     val hasKeyLog = provider.sslKeyLog.isNotEmpty
 
-    // Build decryption context when key log and crypto support are available
-    val decryptionContext: TlsDecryptionContext? = if (hasKeyLog && decryptor != null && keyDeriver != null) {
+    // Build a decryption context whenever a key log is loaded; which suites it
+    // can actually open is the platform's business, not this tab's.
+    val decryptionContext: TlsDecryptionContext? = if (hasKeyLog) {
         try {
             TlsDecryptionContext.build(
                 buffer = provider.bytes,
@@ -108,8 +102,6 @@ private fun pcapPacketsTab(
                 linkType = linkType,
                 sslKeyLog = provider.sslKeyLog,
                 tlsSessionMap = provider.tlsSessionMap,
-                decryptor = decryptor,
-                keyDeriver = keyDeriver,
             )
         } catch (_: Exception) {
             null
@@ -156,6 +148,10 @@ private fun pcapPacketsTab(
             val decrypted = d.decryptedData
             val text = when {
                 decrypted != null -> "✓ ${decrypted.size} bytes"
+                // Keys were available; the platform's decryption budget ran
+                // out before this record. Distinguished from "encrypted" so
+                // the row does not read as missing key material.
+                decryptionContext?.isBeyondDecryptionBudget(packets[i]) == true -> "🔒 not decrypted"
                 d.protocol.startsWith("TLS") && d.info.contains("Application Data") -> "🔒 encrypted"
                 else -> ""
             }
@@ -164,7 +160,7 @@ private fun pcapPacketsTab(
     }
 
     val prologueText = if (hasKeyLog) {
-        "🔑 SSL key log loaded (${provider.sslKeyLog.sessionCount} sessions)"
+        decryptionPrologue(provider.sslKeyLog.sessionCount, decryptionContext)
     } else {
         null
     }
@@ -186,4 +182,59 @@ private fun pcapPacketsTab(
             RowSelectionData(offset, size)
         },
     )
+}
+
+/**
+ * The Packets tab header once a key log is loaded. Everything after the
+ * session count answers the one question a locked row raises: *why*. A capture
+ * that decrypts nothing otherwise looks exactly like one that decrypts
+ * everything, which is how a cipher suite this build has no entry for reads as
+ * a broken key log.
+ */
+private fun decryptionPrologue(sessionCount: Int, context: TlsDecryptionContext?): String {
+    val parts = mutableListOf("🔑 SSL key log loaded ($sessionCount sessions)")
+
+    // Name the suites this platform cannot open, so rows that stay locked read
+    // as a known limitation rather than a failure to find the keys.
+    val undecryptable = context?.undecryptableCipherSuites.orEmpty()
+    if (undecryptable.isNotEmpty()) {
+        parts += undecryptable.joinToString(", ") { it.displayName } +
+            " cannot be decrypted on this platform"
+    }
+
+    val diagnostics = context?.streamDiagnostics
+    if (diagnostics != null && diagnostics.hasFailures) {
+        val reasons = mutableListOf<String>()
+        if (diagnostics.unsupportedCipherSuiteIds.isNotEmpty()) {
+            val ids = diagnostics.unsupportedCipherSuiteIds.sorted()
+                .joinToString(", ") { "0x" + it.toString(16).padStart(4, '0') }
+            reasons += "cipher suite $ids is not supported"
+        }
+        if (diagnostics.streamsWithoutKeys > 0) {
+            reasons += "${diagnostics.streamsWithoutKeys} sessions are not in the key log"
+        }
+        if (diagnostics.keyDerivationFailures > 0) {
+            reasons += "${diagnostics.keyDerivationFailures} sessions had unusable key material"
+        }
+        if (diagnostics.compressionFailures > 0) {
+            reasons += "${diagnostics.compressionFailures} sessions use a compression method " +
+                "this build cannot undo"
+        }
+        if (diagnostics.unauthenticatedStreams > 0) {
+            reasons += "${diagnostics.unauthenticatedStreams} sessions did not authenticate " +
+                "(the key log may be from a different run)"
+        }
+        parts += "${diagnostics.decryptableStreams} sessions decrypt; " + reasons.joinToString("; ")
+    }
+
+    // Say so when the platform's decryption budget clipped the capture, rather
+    // than leaving a stretch of locked rows unexplained.
+    val skipped = context?.recordsBeyondBudgetCount ?: 0
+    if (skipped > 0) {
+        val total = context?.decryptableRecordCount ?: 0
+        parts += "decrypted the first ${total - skipped} of $total records; " +
+            "the rest were skipped to keep this platform responsive"
+    }
+
+    return parts.joinToString(" — ")
 }

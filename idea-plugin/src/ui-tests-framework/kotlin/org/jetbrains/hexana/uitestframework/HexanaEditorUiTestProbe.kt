@@ -53,6 +53,7 @@ private const val SNAPSHOT_SCHEMA = "hexana-editor-snapshot"
 private const val SEARCH_STATE_SCHEMA = "hexana-editor-search-state"
 private const val WAT_STATE_SCHEMA = "hexana-editor-wat-state"
 private const val NATIVE_DIFF_STATE_SCHEMA = "hexana-native-diff-state"
+private const val TABLE_TAB_STATE_SCHEMA = "hexana-table-tab-state"
 private const val WAT_FIND_USAGES_CAPTURE_STATE_SCHEMA = "hexana-wat-find-usages-capture-state"
 private const val PROJECT_RELATIVE_FILE_IDENTIFIER_PREFIX = "project-relative:"
 private const val ABSOLUTE_FILE_IDENTIFIER_PREFIX = "absolute:"
@@ -445,6 +446,37 @@ object HexanaEditorUiTestProbe {
                 classifications.forEachIndexed { index, (member, cls) ->
                     add("member=$index|${member.name}|${cls.displayName}|${member.size}|openable=${cls.openable}")
                 }
+            },
+        )
+    }
+
+    /**
+     * Reports what the resolved table tab named [tabName] actually rendered:
+     * its column headers and prologue text, as published by
+     * `BinaryEditorView` when the tab replaced its placeholder.
+     *
+     * Deliberately *not* rebuilt from the live provider. A rebuilt descriptor
+     * would reflect the provider's state at probe time, so a tab that resolved
+     * before a late input was applied (e.g. a pcap SSL key log installed after
+     * tab resolution rather than before it) would still look correct.
+     *
+     * `resolved=false` means no tab of that name has been published yet —
+     * either resolution is still running, or the tab resolved to nothing.
+     */
+    @JvmStatic
+    fun tableTabState(fileIdentifier: String, tabName: String): List<String> = runOnEdt {
+        val editor = requireHexanaEditor(fileIdentifier)
+        val columns = editor.stateHolder.tableTabColumns[tabName]
+        val prologue = editor.stateHolder.tableTabPrologues[tabName]
+        payload(
+            TABLE_TAB_STATE_SCHEMA,
+            buildList {
+                add("fileName=${editor.myFile.name}")
+                add("tabName=$tabName")
+                add("resolved=${columns != null}")
+                // Newlines would split a single value across wire entries.
+                add("prologue=${prologue?.replace('\n', '|').orEmpty()}")
+                columns.orEmpty().forEach { add("column=$it") }
             },
         )
     }

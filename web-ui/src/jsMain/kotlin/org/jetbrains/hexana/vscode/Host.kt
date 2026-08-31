@@ -47,6 +47,19 @@ interface Host {
     fun pickScriptFile()
 
     /**
+     * Whether the host can offer a file picker for an SSLKEYLOGFILE. False in
+     * hosts with no file-system access, where the button is not rendered.
+     */
+    val canPickSslKeyLog: Boolean get() = false
+
+    /**
+     * Asks the host to pick an SSLKEYLOGFILE (NSS Key Log Format) for TLS
+     * decryption of a pcap capture. The host replies with `ssl-key-log-picked`,
+     * or stays silent if the user cancels.
+     */
+    fun pickSslKeyLog() {}
+
+    /**
      * Creates a runnable script and selects it, so the user never starts from an
      * empty file. The host replies with `script-file-picked`.
      *

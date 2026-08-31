@@ -66,6 +66,12 @@ fun HexanaPanel(
     onScriptTabConfirmed: (path: String, content: String) -> Unit = { _, _ -> },
     onScriptTabRemoved: (path: String) -> Unit = {},
     scriptExecution: ScriptExecution? = null,
+    /**
+     * Bumped whenever an SSL key log is installed on [provider]. Since
+     * `PcapBinaryProvider.sslKeyLog` is a plain `var`, this counter is what
+     * tells the tab list to rebuild so the "Packets" tab picks up decryption.
+     */
+    sslKeyLogGeneration: Int = 0,
 ) {
     val host = LocalHost.current
     val pendingRun = rememberPendingRunState()
@@ -92,7 +98,10 @@ fun HexanaPanel(
     // -----------------------------------------------------------------------
     // Build the tab list: provider-generated table tabs + fixed tabs
     // -----------------------------------------------------------------------
-    val tabs = remember(provider, fileName, extraTabs, scriptTabs.size, sbomLocator, capabilities.sbomVulnerabilityCheck) {
+    val tabs = remember(
+        provider, fileName, extraTabs, scriptTabs.size, sbomLocator,
+        capabilities.sbomVulnerabilityCheck, sslKeyLogGeneration,
+    ) {
         buildList {
             // Summary is always first
             if (provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider) {

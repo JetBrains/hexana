@@ -146,22 +146,26 @@ object PcapDissector {
         } catch (_: Exception) {
             null
         }
-        return if (decrypted != null) {
-            PcapDissectedPacket(
-                source = base.source,
-                destination = base.destination,
-                protocol = base.protocol,
-                info = base.info,
-                httpBodyFileOffset = base.httpBodyFileOffset,
-                httpBodySize = base.httpBodySize,
-                httpContentType = base.httpContentType,
-                isChunkedTransferEncoding = base.isChunkedTransferEncoding,
-                httpContentEncoding = base.httpContentEncoding,
-                decryptedData = decrypted,
-            )
-        } else {
-            base
-        }
+        if (decrypted == null) return base
+        // Once a record opens, describe what it actually carries rather than the
+        // envelope it arrived in - the same thing Wireshark does when a key log
+        // turns an "Application Data" row into "GET / HTTP/1.0".
+        val http = detectHttpInPlaintext(decrypted)
+        return PcapDissectedPacket(
+            source = base.source,
+            destination = base.destination,
+            protocol = http?.protocol ?: base.protocol,
+            info = http?.info ?: base.info,
+            // The plaintext exists only in memory, so there is no file range to
+            // open; [decryptedData] is how consumers reach the body.
+            httpBodyFileOffset = base.httpBodyFileOffset,
+            httpBodySize = base.httpBodySize,
+            httpContentType = http?.contentType ?: base.httpContentType,
+            isChunkedTransferEncoding = http?.isChunkedTransferEncoding
+                ?: base.isChunkedTransferEncoding,
+            httpContentEncoding = http?.contentEncoding ?: base.httpContentEncoding,
+            decryptedData = decrypted,
+        )
     }
 
     /**
@@ -785,13 +789,34 @@ object PcapDissector {
 
     private val HTTP_METHODS = listOf("GET ", "POST ", "PUT ", "DELETE ", "HEAD ", "OPTIONS ", "PATCH ", "CONNECT ", "TRACE ")
 
+    /** Shortest payload that can hold a request line and a blank line. */
+    private const val MIN_HTTP_PAYLOAD = 16
+
+    /** How much of a payload is read as text to find the end of the headers. */
+    private const val HTTP_PREVIEW_LIMIT = 4096
+
     private fun detectHttp(buffer: CommonByteBuffer, offset: Int, len: Int): HttpInfo? {
-        if (len < 16) return null
+        if (len < MIN_HTTP_PAYLOAD) return null
+        val preview = readAscii(buffer, offset, minOf(len, HTTP_PREVIEW_LIMIT))
+        return parseHttpHead(preview, len, offset.toLong())
+    }
 
-        // Read first line to check for HTTP request or response
-        val previewLen = minOf(len, 4096)
-        val preview = readAscii(buffer, offset, previewLen)
+    /**
+     * The same detection over decrypted TLS plaintext. Those bytes were never in
+     * the capture file, so no body offset can be reported for them.
+     */
+    private fun detectHttpInPlaintext(plaintext: ByteArray): HttpInfo? {
+        if (plaintext.size < MIN_HTTP_PAYLOAD) return null
+        val preview = asciiPreview(plaintext, minOf(plaintext.size, HTTP_PREVIEW_LIMIT))
+        return parseHttpHead(preview, plaintext.size, payloadFileOffset = -1)
+    }
 
+    /**
+     * Parses an HTTP request or response head out of an ASCII [preview] of a
+     * [len]-byte payload. [payloadFileOffset] is where that payload starts in
+     * the capture file, or `-1` when it has no place there.
+     */
+    private fun parseHttpHead(preview: String, len: Int, payloadFileOffset: Long): HttpInfo? {
         val firstLineEnd = preview.indexOf('\n')
         if (firstLineEnd < 0) return null
         val firstLine = preview.substring(0, firstLineEnd).trimEnd('\r')
@@ -813,8 +838,8 @@ object PcapDissector {
 
         val bodyFileOffset: Long
         val bodySize: Int
-        if (bodyStart >= 0 && bodyStart < len) {
-            bodyFileOffset = (offset + bodyStart).toLong()
+        if (bodyStart >= 0 && bodyStart < len && payloadFileOffset >= 0) {
+            bodyFileOffset = payloadFileOffset + bodyStart
             bodySize = len - bodyStart
         } else {
             bodyFileOffset = -1
@@ -864,12 +889,19 @@ object PcapDissector {
     private fun readAscii(buffer: CommonByteBuffer, offset: Int, len: Int): String {
         buffer.position(offset)
         return buildString(len) {
-            for (i in 0 until len) {
-                val b = buffer.get().toInt() and 0xFF
-                append(if (b in 0x20..0x7E || b == 0x0D || b == 0x0A || b == 0x09) b.toChar() else '.')
-            }
+            for (i in 0 until len) append(asciiChar(buffer.get().toInt() and 0xFF))
         }
     }
+
+    private fun asciiPreview(bytes: ByteArray, len: Int): String =
+        buildString(len) {
+            for (i in 0 until len) append(asciiChar(bytes[i].toInt() and 0xFF))
+        }
+
+    /** Printable characters and the whitespace HTTP heads are made of; the rest becomes a dot. */
+    private fun asciiChar(b: Int): Char =
+        if (b in 0x20..0x7E || b == 0x0D || b == 0x0A || b == 0x09) b.toChar() else '.'
+
 
     private fun ipProtocolName(protocol: Int): String = when (protocol) {
         1 -> "ICMP"

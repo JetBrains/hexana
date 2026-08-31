@@ -6,6 +6,7 @@ import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.providers.*
+import org.jetbrains.hexana.pcap.SslKeyLog
 
 /**
  * Extracts nested module bytes from a parent binary at the given member index.
@@ -121,6 +122,9 @@ fun BinaryEditorContent(
     workerSizeTooltip: List<Pair<String, String>>? = null,
     scriptExecution: ScriptExecution? = null,
     isDecompressed: Boolean = false,
+    /** Text of a key log the host just picked, or blank. */
+    sslKeyLogContent: String = "",
+    onSslKeyLogConsumed: () -> Unit = {},
 ) {
     val selection = remember { HexSelectionState() }
     val buffer = remember(provider) { provider.bytes }
@@ -137,6 +141,27 @@ fun BinaryEditorContent(
         HexEditState(buffer.toByteArray())
     }
     var overwriteShadow by remember { mutableStateOf<OverwriteShadow?>(null) }
+
+    // PcapBinaryProvider.sslKeyLog is a plain `var`, invisible to Compose, so a
+    // counter carries the change into the tab list's remember key. Installing
+    // the key log here rather than in the toolbar matters: the toolbar gets
+    // `provider` while HexanaPanel gets `liveProvider`, and the tab that has to
+    // see the keys is the panel's.
+    var sslKeyLogGeneration by remember(provider) { mutableStateOf(0) }
+    var sslKeyLogSessionCount by remember(provider) { mutableStateOf(0) }
+    LaunchedEffect(provider, sslKeyLogContent) {
+        if (sslKeyLogContent.isBlank()) return@LaunchedEffect
+        val pcap = provider as? PcapBinaryProvider
+        if (pcap != null) {
+            val keyLog = SslKeyLog.parse(sslKeyLogContent)
+            if (keyLog.isNotEmpty) {
+                pcap.sslKeyLog = keyLog
+                sslKeyLogSessionCount = keyLog.sessionCount
+                sslKeyLogGeneration++
+            }
+        }
+        onSslKeyLogConsumed()
+    }
 
     // Reparse counter: incremented after overwrite/discard to rebuild the provider.
     var reparseCounter by remember { mutableStateOf(0) }
@@ -186,6 +211,7 @@ fun BinaryEditorContent(
             workerNativeImageToolbarPresentation = workerNativeImageToolbarPresentation,
             workerSizeTooltip = workerSizeTooltip,
             isDecompressed = isDecompressed,
+            sslKeyLogSessionCount = sslKeyLogSessionCount,
         )
         Div({
             style {
@@ -234,6 +260,7 @@ fun BinaryEditorContent(
             onScriptTabConfirmed = onScriptTabConfirmed,
             onScriptTabRemoved = onScriptTabRemoved,
             scriptExecution = scriptExecution,
+            sslKeyLogGeneration = sslKeyLogGeneration,
         )
     }
 }

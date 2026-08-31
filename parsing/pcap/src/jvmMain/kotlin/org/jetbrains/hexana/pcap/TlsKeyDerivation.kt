@@ -50,10 +50,18 @@ object TlsKeyDerivation : TlsKeyDeriver {
             val hashAlg = hashAlgorithm(cipherSuite)
             val seed = serverRandom + clientRandom
             // key_block = PRF(master_secret, "key expansion", server_random + client_random)
-            val needed = 2 * cipherSuite.keyLength + 2 * cipherSuite.ivLength
+            val macLength = cipherSuite.macAlgorithm.macLength
+            val needed = 2 * macLength + 2 * cipherSuite.keyLength + 2 * cipherSuite.ivLength
             val keyBlock = prf(masterSecret, "key expansion", seed, needed, hashAlg)
 
+            // RFC 5246 §6.3 order: MAC keys, then write keys, then write IVs.
+            // The MAC and IV slices are empty for the AEAD suites, which have
+            // no MAC key and take their nonce from the record.
             var offset = 0
+            val clientMacKey = keyBlock.copyOfRange(offset, offset + macLength)
+            offset += macLength
+            val serverMacKey = keyBlock.copyOfRange(offset, offset + macLength)
+            offset += macLength
             val clientWriteKey = keyBlock.copyOfRange(offset, offset + cipherSuite.keyLength)
             offset += cipherSuite.keyLength
             val serverWriteKey = keyBlock.copyOfRange(offset, offset + cipherSuite.keyLength)
@@ -62,7 +70,10 @@ object TlsKeyDerivation : TlsKeyDeriver {
             offset += cipherSuite.ivLength
             val serverWriteIv = keyBlock.copyOfRange(offset, offset + cipherSuite.ivLength)
 
-            Tls12KeyMaterial(clientWriteKey, clientWriteIv, serverWriteKey, serverWriteIv)
+            Tls12KeyMaterial(
+                clientWriteKey, clientWriteIv, serverWriteKey, serverWriteIv,
+                clientMacKey, serverMacKey,
+            )
         } catch (_: Exception) {
             null
         }
@@ -161,11 +172,6 @@ object TlsKeyDerivation : TlsKeyDeriver {
         return result
     }
 
-    private fun hashAlgorithm(cipherSuite: TlsCipherSuite): String = when (cipherSuite) {
-        TlsCipherSuite.AES_256_GCM_SHA384,
-        TlsCipherSuite.TLS_RSA_WITH_AES_256_GCM_SHA384,
-        TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-        -> "HmacSHA384"
-        else -> "HmacSHA256"
-    }
+    private fun hashAlgorithm(cipherSuite: TlsCipherSuite): String =
+        if (cipherSuite.usesSha384) "HmacSHA384" else "HmacSHA256"
 }

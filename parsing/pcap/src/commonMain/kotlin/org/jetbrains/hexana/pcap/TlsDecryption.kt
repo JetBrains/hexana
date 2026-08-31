@@ -131,6 +131,15 @@ interface TlsDecryptor {
         cipherSuite: TlsCipherSuite,
     ): ByteArray?
 
+    /**
+     * Decrypts a whole number of AES-CBC blocks for the MAC-then-encrypt
+     * suites, chaining from [iv] and removing no padding — TLS pads its own
+     * way and checks it together with the record MAC.
+     *
+     * Defaulted so an implementation that only does AEAD stays valid.
+     */
+    fun decryptCbc(ciphertext: ByteArray, key: ByteArray, iv: ByteArray): ByteArray? = null
+
     companion object {
         /** No-op decryptor for platforms without crypto support. */
         val NOOP: TlsDecryptor = object : TlsDecryptor {
@@ -183,21 +192,39 @@ data class Tls12KeyMaterial(
     val clientWriteIv: ByteArray,
     val serverWriteKey: ByteArray,
     val serverWriteIv: ByteArray,
+    /** Empty for the AEAD suites, which authenticate inside the cipher. */
+    val clientMacKey: ByteArray = ByteArray(0),
+    val serverMacKey: ByteArray = ByteArray(0),
 ) {
     override fun equals(other: Any?): Boolean =
         other is Tls12KeyMaterial &&
             clientWriteKey.contentEquals(other.clientWriteKey) &&
             clientWriteIv.contentEquals(other.clientWriteIv) &&
             serverWriteKey.contentEquals(other.serverWriteKey) &&
-            serverWriteIv.contentEquals(other.serverWriteIv)
+            serverWriteIv.contentEquals(other.serverWriteIv) &&
+            clientMacKey.contentEquals(other.clientMacKey) &&
+            serverMacKey.contentEquals(other.serverMacKey)
 
     override fun hashCode(): Int {
         var h = clientWriteKey.contentHashCode()
         h = 31 * h + clientWriteIv.contentHashCode()
         h = 31 * h + serverWriteKey.contentHashCode()
         h = 31 * h + serverWriteIv.contentHashCode()
+        h = 31 * h + clientMacKey.contentHashCode()
+        h = 31 * h + serverMacKey.contentHashCode()
         return h
     }
+}
+
+/**
+ * How a cipher suite authenticates a record. AEAD suites do it inside the
+ * cipher; the older suites append an HMAC to the plaintext before encrypting.
+ */
+enum class TlsMacAlgorithm(val macLength: Int) {
+    AEAD(0),
+    SHA1(20),
+    SHA256(32),
+    SHA384(48),
 }
 
 /**
@@ -209,16 +236,157 @@ enum class TlsCipherSuite(
     val ivLength: Int,
     val tagLength: Int,
     val displayName: String,
+    /**
+     * Whether the suite's key schedule — HKDF in TLS 1.3, the PRF in TLS 1.2 —
+     * runs on SHA-384 instead of SHA-256. Carried here so that adding a suite
+     * is one line rather than an edit to every `when` over the entries.
+     */
+    val usesSha384: Boolean = false,
+    /** Whether records are protected with ChaCha20-Poly1305 rather than AES-GCM. */
+    val isChaCha20Poly1305: Boolean = false,
+    /**
+     * How records are authenticated: [TlsMacAlgorithm.AEAD] for the suites
+     * whose cipher does it, or the HMAC a MAC-then-encrypt suite uses.
+     */
+    val macAlgorithm: TlsMacAlgorithm = TlsMacAlgorithm.AEAD,
 ) {
+
     AES_128_GCM_SHA256(0x1301, 16, 12, 16, "TLS_AES_128_GCM_SHA256"),
-    AES_256_GCM_SHA384(0x1302, 32, 12, 16, "TLS_AES_256_GCM_SHA384"),
-    CHACHA20_POLY1305_SHA256(0x1303, 32, 12, 16, "TLS_CHACHA20_POLY1305_SHA256"),
-    // TLS 1.2 cipher suites
+    AES_256_GCM_SHA384(0x1302, 32, 12, 16, "TLS_AES_256_GCM_SHA384", usesSha384 = true),
+    CHACHA20_POLY1305_SHA256(
+        0x1303, 32, 12, 16, "TLS_CHACHA20_POLY1305_SHA256", isChaCha20Poly1305 = true,
+    ),
+    // TLS 1.2 cipher suites: AES-GCM and AES-CBC. TLS 1.2 ChaCha20-Poly1305 is
+    // absent because it numbers its nonce the TLS 1.3 way (RFC 7905) rather
+    // than with an explicit per-record nonce, so it needs its own record path.
     TLS_RSA_WITH_AES_128_GCM_SHA256(0x009C, 16, 4, 16, "TLS_RSA_WITH_AES_128_GCM_SHA256"),
-    TLS_RSA_WITH_AES_256_GCM_SHA384(0x009D, 32, 4, 16, "TLS_RSA_WITH_AES_256_GCM_SHA384"),
+    TLS_RSA_WITH_AES_256_GCM_SHA384(0x009D, 32, 4, 16, "TLS_RSA_WITH_AES_256_GCM_SHA384", usesSha384 = true),
+    TLS_DHE_RSA_WITH_AES_128_GCM_SHA256(0x009E, 16, 4, 16, "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256"),
+    TLS_DHE_RSA_WITH_AES_256_GCM_SHA384(0x009F, 32, 4, 16, "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384", usesSha384 = true),
+    TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256(0xC02B, 16, 4, 16, "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"),
+    TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384(
+        0xC02C, 32, 4, 16, "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384", usesSha384 = true,
+    ),
     TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256(0xC02F, 16, 4, 16, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"),
-    TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384(0xC030, 32, 4, 16, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"),
+    TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384(
+        0xC030, 32, 4, 16, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384", usesSha384 = true,
+    ),
+
+    // TLS 1.2 AEAD suites. The GCM nonce is the 4-byte implicit write IV from
+    // the key block followed by the record's 8-byte explicit nonce, so
+    // ivLength is 4 here where the TLS 1.3 suites carry a full 12.
+    TLS_DHE_DSS_WITH_AES_128_GCM_SHA256(0x00A2, 16, 4, 16, "TLS_DHE_DSS_WITH_AES_128_GCM_SHA256"),
+    TLS_DHE_DSS_WITH_AES_256_GCM_SHA384(0x00A3, 32, 4, 16, "TLS_DHE_DSS_WITH_AES_256_GCM_SHA384", usesSha384 = true),
+    TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256(0xC02D, 16, 4, 16, "TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256"),
+    TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384(
+        0xC02E, 32, 4, 16, "TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384", usesSha384 = true,
+    ),
+    TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256(0xC031, 16, 4, 16, "TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256"),
+    TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384(
+        0xC032, 32, 4, 16, "TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384", usesSha384 = true,
+    ),
+
+    // TLS 1.2 MAC-then-encrypt suites: AES-CBC with an explicit per-record IV
+    // (TLS 1.1 and later). No fixed IV or AEAD tag in the key block, so both
+    // lengths are zero and the MAC key length comes from [macAlgorithm].
+    // AES only — 3DES, RC4, Camellia, SEED and ARIA are not implemented, and
+    // are named by id in the packet tab header when a capture uses them.
+    TLS_RSA_WITH_AES_128_CBC_SHA(
+        0x002F, 16, 0, 0, "TLS_RSA_WITH_AES_128_CBC_SHA", macAlgorithm = TlsMacAlgorithm.SHA1,
+    ),
+    TLS_DHE_DSS_WITH_AES_128_CBC_SHA(
+        0x0032, 16, 0, 0, "TLS_DHE_DSS_WITH_AES_128_CBC_SHA", macAlgorithm = TlsMacAlgorithm.SHA1,
+    ),
+    TLS_DHE_RSA_WITH_AES_128_CBC_SHA(
+        0x0033, 16, 0, 0, "TLS_DHE_RSA_WITH_AES_128_CBC_SHA", macAlgorithm = TlsMacAlgorithm.SHA1,
+    ),
+    TLS_RSA_WITH_AES_256_CBC_SHA(
+        0x0035, 32, 0, 0, "TLS_RSA_WITH_AES_256_CBC_SHA", macAlgorithm = TlsMacAlgorithm.SHA1,
+    ),
+    TLS_DHE_DSS_WITH_AES_256_CBC_SHA(
+        0x0038, 32, 0, 0, "TLS_DHE_DSS_WITH_AES_256_CBC_SHA", macAlgorithm = TlsMacAlgorithm.SHA1,
+    ),
+    TLS_DHE_RSA_WITH_AES_256_CBC_SHA(
+        0x0039, 32, 0, 0, "TLS_DHE_RSA_WITH_AES_256_CBC_SHA", macAlgorithm = TlsMacAlgorithm.SHA1,
+    ),
+    TLS_RSA_WITH_AES_128_CBC_SHA256(
+        0x003C, 16, 0, 0, "TLS_RSA_WITH_AES_128_CBC_SHA256", macAlgorithm = TlsMacAlgorithm.SHA256,
+    ),
+    TLS_RSA_WITH_AES_256_CBC_SHA256(
+        0x003D, 32, 0, 0, "TLS_RSA_WITH_AES_256_CBC_SHA256", macAlgorithm = TlsMacAlgorithm.SHA256,
+    ),
+    TLS_DHE_DSS_WITH_AES_128_CBC_SHA256(
+        0x0040, 16, 0, 0, "TLS_DHE_DSS_WITH_AES_128_CBC_SHA256", macAlgorithm = TlsMacAlgorithm.SHA256,
+    ),
+    TLS_DHE_RSA_WITH_AES_128_CBC_SHA256(
+        0x0067, 16, 0, 0, "TLS_DHE_RSA_WITH_AES_128_CBC_SHA256", macAlgorithm = TlsMacAlgorithm.SHA256,
+    ),
+    TLS_DHE_DSS_WITH_AES_256_CBC_SHA256(
+        0x006A, 32, 0, 0, "TLS_DHE_DSS_WITH_AES_256_CBC_SHA256", macAlgorithm = TlsMacAlgorithm.SHA256,
+    ),
+    TLS_DHE_RSA_WITH_AES_256_CBC_SHA256(
+        0x006B, 32, 0, 0, "TLS_DHE_RSA_WITH_AES_256_CBC_SHA256", macAlgorithm = TlsMacAlgorithm.SHA256,
+    ),
+    TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA(
+        0xC004, 16, 0, 0, "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA", macAlgorithm = TlsMacAlgorithm.SHA1,
+    ),
+    TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA(
+        0xC005, 32, 0, 0, "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA", macAlgorithm = TlsMacAlgorithm.SHA1,
+    ),
+    TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA(
+        0xC009, 16, 0, 0, "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA", macAlgorithm = TlsMacAlgorithm.SHA1,
+    ),
+    TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA(
+        0xC00A, 32, 0, 0, "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA", macAlgorithm = TlsMacAlgorithm.SHA1,
+    ),
+    TLS_ECDH_RSA_WITH_AES_128_CBC_SHA(
+        0xC00E, 16, 0, 0, "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA", macAlgorithm = TlsMacAlgorithm.SHA1,
+    ),
+    TLS_ECDH_RSA_WITH_AES_256_CBC_SHA(
+        0xC00F, 32, 0, 0, "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA", macAlgorithm = TlsMacAlgorithm.SHA1,
+    ),
+    TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA(
+        0xC013, 16, 0, 0, "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA", macAlgorithm = TlsMacAlgorithm.SHA1,
+    ),
+    TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA(
+        0xC014, 32, 0, 0, "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA", macAlgorithm = TlsMacAlgorithm.SHA1,
+    ),
+    TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256(
+        0xC023, 16, 0, 0, "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256", macAlgorithm = TlsMacAlgorithm.SHA256,
+    ),
+    TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384(
+        0xC024, 32, 0, 0, "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384",
+        usesSha384 = true, macAlgorithm = TlsMacAlgorithm.SHA384,
+    ),
+    TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256(
+        0xC025, 16, 0, 0, "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256", macAlgorithm = TlsMacAlgorithm.SHA256,
+    ),
+    TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384(
+        0xC026, 32, 0, 0, "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384",
+        usesSha384 = true, macAlgorithm = TlsMacAlgorithm.SHA384,
+    ),
+    TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256(
+        0xC027, 16, 0, 0, "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256", macAlgorithm = TlsMacAlgorithm.SHA256,
+    ),
+    TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384(
+        0xC028, 32, 0, 0, "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
+        usesSha384 = true, macAlgorithm = TlsMacAlgorithm.SHA384,
+    ),
+    TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256(
+        0xC029, 16, 0, 0, "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256", macAlgorithm = TlsMacAlgorithm.SHA256,
+    ),
+    TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384(
+        0xC02A, 32, 0, 0, "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384",
+        usesSha384 = true, macAlgorithm = TlsMacAlgorithm.SHA384,
+    ),
     ;
+
+    /**
+     * Whether records are AES-CBC with a separate HMAC rather than AEAD. Such
+     * a record carries its own IV, its plaintext is padded to the block size,
+     * and the MAC is what tells a right key from a wrong one.
+     */
+    val isCbc: Boolean get() = macAlgorithm != TlsMacAlgorithm.AEAD
 
     companion object {
         fun fromId(id: Int): TlsCipherSuite? = entries.firstOrNull { it.id == id }

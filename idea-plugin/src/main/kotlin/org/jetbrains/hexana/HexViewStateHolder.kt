@@ -118,6 +118,35 @@ class HexViewStateHolder(
         _panelsResolved.value = resolved
     }
 
+    // Column headers of the table tabs that actually resolved, keyed by tab
+    // name and published as each tab replaces its placeholder. Grouped
+    // (multi-subtab) tabs are not included — they have no single column list.
+    // Read by the UI-test probe: rebuilding a descriptor from the provider
+    // instead would not notice a tab that resolved *before* a late-arriving
+    // input was applied (e.g. a pcap SSL key log), which is exactly the
+    // ordering these tests exist to pin.
+    private val _tableTabColumns = mutableStateOf<Map<String, List<String>>>(emptyMap())
+    val tableTabColumns: Map<String, List<String>> get() = _tableTabColumns.value
+
+    // Prologue text of the resolved table tabs, keyed by tab name. Same
+    // rationale as [tableTabColumns].
+    private val _tableTabPrologues = mutableStateOf<Map<String, String>>(emptyMap())
+    val tableTabPrologues: Map<String, String> get() = _tableTabPrologues.value
+
+    fun publishResolvedTableTab(tabName: String, columns: List<String>, prologueText: String?) {
+        _tableTabColumns.value = _tableTabColumns.value + (tabName to columns)
+        _tableTabPrologues.value = if (prologueText == null) {
+            _tableTabPrologues.value - tabName
+        } else {
+            _tableTabPrologues.value + (tabName to prologueText)
+        }
+    }
+
+    fun clearResolvedTableTabs() {
+        _tableTabColumns.value = emptyMap()
+        _tableTabPrologues.value = emptyMap()
+    }
+
     private val _cursorPosition = mutableStateOf(HexPosition(-1, -1))
     val cursorPosition: HexPosition get() = _cursorPosition.value
 

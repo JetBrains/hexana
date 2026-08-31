@@ -35,6 +35,8 @@ data class VscodeMessage(
     val settingValue: Boolean = false,
     val parentFileName: String? = null,
     val decompressed: Boolean = false,
+    val keyLogPath: String = "",
+    val keyLogContent: String = "",
 )
 
 /**
@@ -364,6 +366,17 @@ fun postPickScriptFileToHost() {
 }
 
 /**
+ * Asks the extension host to show a file picker for an SSLKEYLOGFILE.
+ * The host will respond with an `ssl-key-log-picked` message carrying the
+ * file path and its text content, or stay silent if the user cancels.
+ */
+fun postPickSslKeyLogToHost() {
+    val msg = js("{}")
+    msg.type = "pick-ssl-key-log"
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to open a text document in a new VS Code editor tab.
  *
  * [fileName] is used as the suggested file name (e.g. "foo.cdx.json").
@@ -438,6 +451,8 @@ class VscodeHost : Host {
         postOpenHttpBodyToHost(fileName, bodyBytes, httpContentType, httpContentEncoding)
     override fun openTextFile(fileName: String, content: String) = postOpenTextFileToHost(fileName, content)
     override fun pickScriptFile() = postPickScriptFileToHost()
+    override val canPickSslKeyLog: Boolean get() = true
+    override fun pickSslKeyLog() = postPickSslKeyLogToHost()
     override fun createScriptFromTemplate(fileName: String, template: String?, jsConfigContent: String?) =
         postCreateScriptFromTemplateToHost(fileName, template, jsConfigContent)
     override fun openScriptForEditing(scriptPath: String, jsConfigContent: String?) =
@@ -541,6 +556,13 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                             type = type,
                             scriptPath = (data.scriptPath as? String) ?: "",
                             scriptContent = (data.scriptContent as? String) ?: "",
+                        )
+                    }
+                    "ssl-key-log-picked" -> {
+                        VscodeMessage(
+                            type = type,
+                            keyLogPath = (data.keyLogPath as? String) ?: "",
+                            keyLogContent = (data.keyLogContent as? String) ?: "",
                         )
                     }
                     "restore-script-tabs" -> {

@@ -2,10 +2,12 @@ package org.jetbrains.hexana.pcap
 
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * JVM implementation of [TlsDecryptor] using javax.crypto for AES-GCM decryption.
+ * JVM implementation of [TlsDecryptor] using javax.crypto: AES-GCM and
+ * ChaCha20-Poly1305 for the AEAD suites, AES-CBC for the older ones.
  */
 object JvmTlsDecryptor : TlsDecryptor {
 
@@ -17,18 +19,21 @@ object JvmTlsDecryptor : TlsDecryptor {
         cipherSuite: TlsCipherSuite,
     ): ByteArray? {
         return try {
-            when (cipherSuite) {
-                TlsCipherSuite.AES_128_GCM_SHA256,
-                TlsCipherSuite.AES_256_GCM_SHA384,
-                TlsCipherSuite.TLS_RSA_WITH_AES_128_GCM_SHA256,
-                TlsCipherSuite.TLS_RSA_WITH_AES_256_GCM_SHA384,
-                TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-                TlsCipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-                -> decryptAesGcm(ciphertext, key, iv, aad, cipherSuite.tagLength)
-
-                TlsCipherSuite.CHACHA20_POLY1305_SHA256 ->
-                    decryptChaCha20Poly1305(ciphertext, key, iv, aad)
+            if (cipherSuite.isChaCha20Poly1305) {
+                decryptChaCha20Poly1305(ciphertext, key, iv, aad)
+            } else {
+                decryptAesGcm(ciphertext, key, iv, aad, cipherSuite.tagLength)
             }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    override fun decryptCbc(ciphertext: ByteArray, key: ByteArray, iv: ByteArray): ByteArray? {
+        return try {
+            val cipher = Cipher.getInstance("AES/CBC/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(iv))
+            cipher.doFinal(ciphertext)
         } catch (_: Exception) {
             null
         }

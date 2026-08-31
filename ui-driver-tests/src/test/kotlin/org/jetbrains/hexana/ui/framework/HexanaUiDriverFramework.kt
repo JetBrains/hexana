@@ -213,6 +213,9 @@ internal class HexanaEditor internal constructor(
     fun archiveState(): HexanaArchiveState =
         HexanaProbePayload.archiveState(probe.archiveState(fileIdentifier))
 
+    fun tableTabState(tabName: String): HexanaTableTabState =
+        HexanaProbePayload.tableTabState(probe.tableTabState(fileIdentifier, tabName))
+
     fun nativeDiffState(): HexanaNativeDiffState =
         HexanaProbePayload.nativeDiffState(probe.nativeDiffState(fileIdentifier))
 
@@ -387,6 +390,20 @@ internal data class HexanaEditorSnapshot(
     val panelsResolved: Boolean,
 )
 
+/**
+ * The column headers and prologue of a table tab as it was actually resolved
+ * and rendered, not as it would be rebuilt from the provider now.
+ *
+ * @param resolved false when no tab of that name has been published yet
+ */
+internal data class HexanaTableTabState(
+    val fileName: String,
+    val tabName: String,
+    val resolved: Boolean,
+    val columns: List<String>,
+    val prologue: String,
+)
+
 internal data class HexanaEditorSearchState(
     val query: String,
     val binaryMode: Boolean,
@@ -533,6 +550,7 @@ internal interface HexanaEditorUiTestProbeRef {
     fun topSizeState(fileName: String): List<String>
     fun componentDiffState(fileName: String): List<String>
     fun archiveState(fileName: String): List<String>
+    fun tableTabState(fileName: String, tabName: String): List<String>
     fun nativeDiffState(fileName: String): List<String>
     fun editorSnapshot(fileName: String): List<String>
     fun searchState(fileName: String): List<String>

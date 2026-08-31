@@ -9,6 +9,7 @@ import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.NativeImageInfo
+import org.jetbrains.hexana.providers.PcapBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.fileTypeDescription
@@ -63,6 +64,12 @@ fun EditorToolbar(
     workerNativeImageToolbarPresentation: WorkerNativeImageToolbarPresentation? = null,
     workerSizeTooltip: List<Pair<String, String>>? = null,
     isDecompressed: Boolean = false,
+    /**
+     * Number of sessions in the key log currently loaded for a pcap capture,
+     * derived by the caller under its key-log generation counter. Read here
+     * only to label the button, never by touching the provider.
+     */
+    sslKeyLogSessionCount: Int = 0,
 ) {
     val isSubmodule = parentFileName != null || isSubmoduleFileName(fileName)
 
@@ -363,6 +370,23 @@ fun EditorToolbar(
             } ?: nativeImageInfo?.takeIf { it.isNativeImage }?.toBadgePresentation()
             if (nativeImageBadge != null) {
                 NativeImageBadges(nativeImageBadge, onOpenSbomTab = onOpenSbomTab)
+            }
+
+            // SSL key log import for pcap captures. Only offered by hosts that
+            // can show a file picker; the browser webapp parses captures in a
+            // worker and has no way to push a key log back into the provider.
+            if (provider is PcapBinaryProvider && host.canPickSslKeyLog) {
+                if (sslKeyLogSessionCount > 0) {
+                    Span({ classes("hexana-badge") }) {
+                        Text("\uD83D\uDD11 SSL keys loaded ($sslKeyLogSessionCount sessions)")
+                    }
+                }
+                EditToolbarButton(
+                    label = if (sslKeyLogSessionCount > 0) "Change Key Log\u2026" else "Load SSL Key Log\u2026",
+                    enabled = true,
+                    primary = false,
+                    onClick = { host.pickSslKeyLog() },
+                )
             }
 
             val proposals = remember(provider, workerWasmToolbarPresentation) {

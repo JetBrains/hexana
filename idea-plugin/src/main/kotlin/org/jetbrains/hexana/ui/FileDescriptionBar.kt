@@ -97,6 +97,8 @@ internal fun FileDescriptionBar(
     onOverwriteShadowRangesChanged: ((OverwriteShadowRanges?) -> Unit)? = null,
     onReparseAfterOverwrite: () -> Unit = {},
     onSslKeyLogLoaded: () -> Unit = {},
+    pcapHasTls: Boolean = false,
+    sslKeyLogGeneration: Int = 0,
 ) {
     val size = binaryProvider.bytes.limit()
 
@@ -159,6 +161,8 @@ internal fun FileDescriptionBar(
                     onNavigateToParent = onNavigateToParent,
                     onSaveAs = onSaveAs,
                     onSslKeyLogLoaded = onSslKeyLogLoaded,
+                    pcapHasTls = pcapHasTls,
+                    sslKeyLogGeneration = sslKeyLogGeneration,
                 )
             }
         } else {
@@ -170,6 +174,8 @@ internal fun FileDescriptionBar(
                 onNavigateToParent = onNavigateToParent,
                 onSaveAs = onSaveAs,
                 onSslKeyLogLoaded = onSslKeyLogLoaded,
+                pcapHasTls = pcapHasTls,
+                sslKeyLogGeneration = sslKeyLogGeneration,
             )
         }
     }
@@ -247,6 +253,8 @@ private fun NormalModeContent(
     onNavigateToParent: (() -> Unit)?,
     onSaveAs: (() -> Unit)? = null,
     onSslKeyLogLoaded: () -> Unit = {},
+    pcapHasTls: Boolean = false,
+    sslKeyLogGeneration: Int = 0,
 ) {
     val moduleType = fileTypeDescription(binaryProvider, fileName)
 
@@ -274,10 +282,17 @@ private fun NormalModeContent(
         )
     }
 
-    // SSL key log button for PCAP files — shown only when encrypted packets are present
-    if (binaryProvider is org.jetbrains.hexana.providers.PcapBinaryProvider &&
-        (binaryProvider.hasEncryptedPackets || binaryProvider.sslKeyLog.isNotEmpty)) {
-        PcapSslKeyLogButton(binaryProvider, state, onSslKeyLogLoaded)
+    // SSL key log button for PCAP files \u2014 shown only when encrypted packets are
+    // present. [pcapHasTls] is computed on a background thread by the caller;
+    // reading PcapBinaryProvider.hasEncryptedPackets here would scan every
+    // packet during composition.
+    if (binaryProvider is org.jetbrains.hexana.providers.PcapBinaryProvider && pcapHasTls) {
+        PcapSslKeyLogButton(
+            provider = binaryProvider,
+            state = state,
+            sslKeyLogGeneration = sslKeyLogGeneration,
+            onSslKeyLogLoaded = onSslKeyLogLoaded,
+        )
     }
 
     if (parentFileName != null) {
@@ -876,55 +891,25 @@ private fun finalizeWriteToSibling(
 
 // ---- PCAP SSL Key Log UI ----
 
-/** Well-known sibling file names for auto-detecting SSL key log files. */
-private val SSL_KEY_LOG_SIBLING_NAMES = listOf(
-    "sslkeylog.txt",
-    "sslkeylog.log",
-    "ssl-key.log",
-    "keylog.txt",
-    "premaster.txt",
-)
-
-/**
- * Attempts to find an SSL key log file next to the PCAP file.
- * Checks for well-known names and files matching `*.sslkeylog` or
- * `<pcapname>.keylog`.
- */
-internal fun autoDetectSslKeyLog(
-    pcapFile: com.intellij.openapi.vfs.VirtualFile,
-): com.intellij.openapi.vfs.VirtualFile? {
-    val parent = pcapFile.parent ?: return null
-    val baseName = pcapFile.nameWithoutExtension.lowercase()
-
-    // Check well-known names
-    for (name in SSL_KEY_LOG_SIBLING_NAMES) {
-        val sibling = parent.findChild(name)
-        if (sibling != null && sibling.isValid && !sibling.isDirectory) return sibling
-    }
-
-    // Check <pcapname>.keylog or <pcapname>.sslkeylog
-    val keylogName = "$baseName.keylog"
-    val sslKeylogName = "$baseName.sslkeylog"
-    for (child in parent.children) {
-        val childName = child.name.lowercase()
-        if (childName == keylogName || childName == sslKeylogName) return child
-    }
-
-    return null
-}
-
 /**
  * Button in the file description bar for PCAP files that allows loading
- * an SSL key log file for TLS decryption. Auto-detects sibling key files
- * on first render.
+ * an SSL key log file for TLS decryption.
+ *
+ * Sibling key logs are auto-detected by the caller before the packet tabs
+ * are built, so this composable only handles explicit imports.
+ * [PcapBinaryProvider.sslKeyLog] is a plain `var`, not Compose state, so
+ * the badge is derived under [sslKeyLogGeneration] \u2014 bumped by whoever
+ * installs a key log \u2014 rather than read directly.
  */
 @Composable
 private fun PcapSslKeyLogButton(
     provider: org.jetbrains.hexana.providers.PcapBinaryProvider,
     state: HexViewStateHolder,
+    sslKeyLogGeneration: Int = 0,
     onSslKeyLogLoaded: () -> Unit = {},
 ) {
-    val hasKeyLog = provider.sslKeyLog.isNotEmpty
+    val sessionCount = remember(provider, sslKeyLogGeneration) { provider.sslKeyLog.sessionCount }
+    val hasKeyLog = sessionCount > 0
     val keyBadgeBg = if (hasKeyLog) {
         if (JewelTheme.isDark) Color(0xFF2E5339) else Color(0xFFE8F5E9)
     } else {
@@ -932,34 +917,9 @@ private fun PcapSslKeyLogButton(
     }
     val keyBadgeFg = if (JewelTheme.isDark) Color.White else Color.Black
 
-    // Auto-detect sibling key log on first composition
-    val sourceFile = (provider as? org.jetbrains.hexana.providers.BinaryVirtualFileProvider)?.file
-    androidx.compose.runtime.LaunchedEffect(provider) {
-        if (provider.sslKeyLog.isNotEmpty) return@LaunchedEffect
-        if (sourceFile == null) return@LaunchedEffect
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val keyFile = autoDetectSslKeyLog(sourceFile) ?: return@withContext
-            try {
-                val content = String(keyFile.contentsToByteArray(), Charsets.UTF_8)
-                val keyLog = org.jetbrains.hexana.pcap.SslKeyLog.parse(content)
-                if (keyLog.isNotEmpty) {
-                    provider.sslKeyLog = keyLog
-                    org.jetbrains.hexana.HexanaLog.LOG.info(
-                        "Auto-detected SSL key log: ${keyFile.name} (${keyLog.sessionCount} sessions)"
-                    )
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        onSslKeyLogLoaded()
-                    }
-                }
-            } catch (t: Throwable) {
-                org.jetbrains.hexana.HexanaLog.LOG.warn("Failed to load auto-detected SSL key log: ${keyFile.name}", t)
-            }
-        }
-    }
-
     if (hasKeyLog) {
         Text(
-            text = "\uD83D\uDD11 SSL keys loaded (${provider.sslKeyLog.sessionCount} sessions)",
+            text = "\uD83D\uDD11 SSL keys loaded ($sessionCount sessions)",
             modifier = Modifier
                 .background(keyBadgeBg, RoundedCornerShape(4.dp))
                 .padding(horizontal = 8.dp, vertical = 2.dp),
@@ -1016,15 +976,6 @@ private fun PcapSslKeyLogButton(
             style = TextStyle(fontSize = 11.sp),
         )
     }
-}
-
-/**
- * Returns `true` when [content] looks like a PEM-encoded private key
- * (RSA, EC, PKCS#8, etc.) rather than an NSS Key Log file.
- */
-private fun looksLikePrivateKey(content: String): Boolean {
-    val trimmed = content.trimStart()
-    return trimmed.startsWith("-----BEGIN") && trimmed.contains("PRIVATE KEY-----")
 }
 
 /**

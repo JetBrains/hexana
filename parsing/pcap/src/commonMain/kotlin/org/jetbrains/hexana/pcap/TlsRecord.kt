@@ -280,6 +280,26 @@ object TlsRecordParser {
     }
 
     /**
+     * Extracts the compression method a ServerHello selected. `0` is null
+     * compression; `1` is DEFLATE (RFC 3749), which puts a connection-long
+     * compressed stream underneath the record protection and so has to be
+     * undone after decryption before the payload means anything.
+     *
+     * Layout is [extractCipherSuite]'s, plus the compression byte that follows
+     * the cipher suite.
+     */
+    fun extractCompressionMethod(buffer: CommonByteBuffer, offset: Int, available: Int): Int? {
+        if (available < 42) return null
+        val hsType = readU8(buffer, offset)
+        if (hsType != TlsHandshakeType.SERVER_HELLO) return null
+        val sessionIdLenOffset = offset + 1 + 3 + 2 + 32
+        val sessionIdLen = readU8(buffer, sessionIdLenOffset)
+        val compressionOffset = sessionIdLenOffset + 1 + sessionIdLen + 2
+        if (compressionOffset + 1 > offset + available) return null
+        return readU8(buffer, compressionOffset)
+    }
+
+    /**
      * Detects whether a ServerHello indicates TLS 1.3 by checking for the
      * `supported_versions` extension with value 0x0304. In TLS 1.3 the
      * record-layer version stays at 0x0303 (TLS 1.2) and the real version

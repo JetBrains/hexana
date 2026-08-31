@@ -7,6 +7,7 @@ private const val WAT_STATE_SCHEMA = "hexana-editor-wat-state"
 private const val COMPONENT_DIFF_STATE_SCHEMA = "hexana-component-diff-state"
 private const val ARCHIVE_STATE_SCHEMA = "hexana-archive-state"
 private const val NATIVE_DIFF_STATE_SCHEMA = "hexana-native-diff-state"
+private const val TABLE_TAB_STATE_SCHEMA = "hexana-table-tab-state"
 private const val CDP_DEBUGGER_CAPTURE_STATE_SCHEMA = "hexana-cdp-debugger-capture-state"
 private const val WASM_DEBUGGER_TAB_STATE_SCHEMA = "hexana-wasm-debugger-tab-state"
 private const val WASMTIME_DEBUGGER_CAPTURE_STATE_SCHEMA = "hexana-wasmtime-debugger-capture-state"
@@ -23,6 +24,17 @@ internal object HexanaProbePayload {
                 selectedTabName = fields.value("selectedTabName").takeIf { it.isNotEmpty() },
                 cursorOffset = fields.optionalInt("cursorOffset"),
                 panelsResolved = fields.boolean("panelsResolved"),
+            )
+        }
+
+    fun tableTabState(payload: List<String>): HexanaTableTabState =
+        parse(payload, TABLE_TAB_STATE_SCHEMA) { fields ->
+            HexanaTableTabState(
+                fileName = fields.value("fileName"),
+                tabName = fields.value("tabName"),
+                resolved = fields.boolean("resolved"),
+                columns = fields.values("column"),
+                prologue = fields.value("prologue"),
             )
         }
 

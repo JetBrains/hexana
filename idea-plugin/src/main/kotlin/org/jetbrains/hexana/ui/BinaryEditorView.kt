@@ -38,6 +38,7 @@ import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.vfs.VirtualFile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -86,6 +87,11 @@ internal fun BinaryEditorView(
     state: HexViewStateHolder,
     hexFocusRequester: FocusRequester,
     fileName: String = "",
+    // The capture/binary's own VirtualFile, when it has one. Only used to
+    // look for sidecar files next to it (currently a pcap SSL key log);
+    // providers cannot supply it because most concrete providers are not
+    // BinaryVirtualFileProvider subclasses.
+    sourceFile: VirtualFile? = null,
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
@@ -284,6 +290,14 @@ internal fun BinaryEditorView(
         // switching IDE editor tabs and back). The flag is keyed to the
         // same inputs as the panels list so it resets on provider change.
         val panelsResolved = remember(binaryProvider, hexEditedSinceOpen) { mutableStateOf(false) }
+        // PcapBinaryProvider.sslKeyLog is a plain `var`, so installing a key log
+        // is invisible to Compose. Bumping this counter is what refreshes the
+        // header badge and the Load/Change button label.
+        var sslKeyLogGeneration by remember(binaryProvider) { mutableStateOf(0) }
+        // Whether the capture contains TLS records at all. The scan walks every
+        // packet, so it runs in the background effect below rather than during
+        // composition.
+        var pcapHasTls by remember(binaryProvider) { mutableStateOf(false) }
         val panels = remember(binaryProvider, hexEditedSinceOpen) {
             val scriptSettings = ScriptTabSettings.getInstance(state.project)
             val scriptPanels = scriptSettings.getScriptPaths(fileName).map { scriptPath ->
@@ -308,7 +322,26 @@ internal fun BinaryEditorView(
                 return@LaunchedEffect
             }
             if (panelsResolved.value) return@LaunchedEffect
+            // Load a sibling key log *before* the tabs are built, so the
+            // "Packets" tab is decrypted on first render. Doing this from the
+            // description bar instead used to race the resolution below, and
+            // replacePlaceholders matches by tab name \u2014 so the decrypted
+            // panel could be clobbered by the non-decrypting one. Sitting after
+            // the panelsResolved early return keeps re-entering composition from
+            // re-scanning the VFS.
+            (binaryProvider as? PcapBinaryProvider)?.let { pcap ->
+                // Both the VFS scan and hasEncryptedPackets (which dissects every
+                // packet) stay off the composition thread; only the state writes
+                // come back to it.
+                val (loaded, hasTls) = withContext(Dispatchers.IO) {
+                    val loaded = autoDetectAndLoadSslKeyLog(pcap, sourceFile)
+                    loaded to (pcap.hasEncryptedPackets || pcap.sslKeyLog.isNotEmpty)
+                }
+                pcapHasTls = hasTls
+                if (loaded) sslKeyLogGeneration++
+            }
             state.setPanelsResolved(false)
+            state.clearResolvedTableTabs()
             // Resolve hardcoded panels (Dominators, WAT, DWARF, etc.) and
             // table-tab panels independently so whichever finishes first
             // replaces its placeholders immediately — the user doesn't wait
@@ -377,6 +410,11 @@ internal fun BinaryEditorView(
                                         onOpenTarEntry = onOpenTarEntry,
                                     )
                                     withContext(Dispatchers.Main) {
+                                        state.publishResolvedTableTab(
+                                            tabName = enriched.name,
+                                            columns = enriched.columns.map { it.name },
+                                            prologueText = enriched.prologueText,
+                                        )
                                         replacePlaceholders(panels, listOf(panel))
                                     }
                                 } catch (c: kotlinx.coroutines.CancellationException) {
@@ -445,6 +483,13 @@ internal fun BinaryEditorView(
                             )
                         }
                         withContext(Dispatchers.Main) {
+                            for (tab in enrichedOrdinary) {
+                                state.publishResolvedTableTab(
+                                    tabName = tab.name,
+                                    columns = tab.columns.map { it.name },
+                                    prologueText = tab.prologueText,
+                                )
+                            }
                             replacePlaceholders(panels, ordinaryPanels + groupedPanels)
                         }
                     }
@@ -540,14 +585,13 @@ internal fun BinaryEditorView(
                             if (rebuilt != null) liveProvider = rebuilt
                         } catch (_: Throwable) { /* keep current */ }
                     },
+                    pcapHasTls = pcapHasTls,
+                    sslKeyLogGeneration = sslKeyLogGeneration,
                     onSslKeyLogLoaded = {
+                        sslKeyLogGeneration++
                         val pcap = liveProvider as? PcapBinaryProvider ?: return@FileDescriptionBar
                         val tabsProvider = PcapTableTabsProvider()
-                        val newTabs = tabsProvider.tableTabsWithDecryption(
-                            pcap,
-                            org.jetbrains.hexana.pcap.JvmTlsDecryptor,
-                            org.jetbrains.hexana.pcap.TlsKeyDerivation,
-                        )
+                        val newTabs = tabsProvider.tableTabs(pcap)
                         val packetsTab = newTabs.firstOrNull { it.name == "Packets" } ?: return@FileDescriptionBar
                         val enriched = pcap.enrichPcapPacketsTab(packetsTab, state.project)
                         val newPanel = enriched.toPanel(state)

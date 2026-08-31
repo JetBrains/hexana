@@ -600,6 +600,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 );
             } else if (message.type === "pick-script-file") {
                 this.pickScriptFile(document, webviewPanel);
+            } else if (message.type === "pick-ssl-key-log") {
+                this.pickSslKeyLog(document, webviewPanel);
             } else if (message.type === "read-script-file") {
                 this.readScriptFile(message.scriptPath as string, webviewPanel);
             } else if (message.type === "script-tab-added") {
@@ -1440,6 +1442,41 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             });
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to read script file: ${err}`);
+        }
+    }
+
+    /**
+     * Shows a file picker for an SSLKEYLOGFILE (NSS Key Log Format) and sends
+     * its text content to the webview for TLS decryption of a pcap capture.
+     * Cancelling posts nothing.
+     */
+    private async pickSslKeyLog(
+        document: WasmDocument,
+        webviewPanel: vscode.WebviewPanel,
+    ): Promise<void> {
+        const uris = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            title: "Select SSL Key Log File",
+            filters: {
+                "SSL key log": ["txt", "log", "keylog", "sslkeylog"],
+                "All files": ["*"],
+            },
+            // A key log usually sits next to the capture it belongs to, so open
+            // there rather than in the last used location.
+            defaultUri: vscode.Uri.joinPath(document.uri, ".."),
+        });
+        if (!uris || uris.length === 0) return;
+        const uri = uris[0];
+        try {
+            const bytes = await vscode.workspace.fs.readFile(uri);
+            const content = new TextDecoder("utf-8").decode(bytes);
+            webviewPanel.webview.postMessage({
+                type: "ssl-key-log-picked",
+                keyLogPath: uri.fsPath,
+                keyLogContent: content,
+            });
+        } catch (err) {
+            vscode.window.showErrorMessage(`Failed to read SSL key log file: ${err}`);
         }
     }
 

@@ -26,6 +26,7 @@ fun BinaryEditorApp() {
     val scriptTabs = remember { mutableStateListOf<ScriptTabState>() }
     var dialogPickedPath by remember { mutableStateOf("") }
     var dialogPickedContent by remember { mutableStateOf("") }
+    var pickedKeyLogContent by remember { mutableStateOf("") }
     var showSemanticHighlighting by remember { mutableStateOf(true) }
     var isDecompressed by remember { mutableStateOf(false) }
 
@@ -95,6 +96,11 @@ fun BinaryEditorApp() {
                         dialogPickedContent = message.scriptContent
                     }
                 }
+                "ssl-key-log-picked" -> {
+                    if (message.keyLogContent.isNotBlank()) {
+                        pickedKeyLogContent = message.keyLogContent
+                    }
+                }
                 "script-file-content" -> {
                     val tab = scriptTabs.find { it.path == message.scriptPath }
                     if (tab != null) {
@@ -147,10 +153,15 @@ fun BinaryEditorApp() {
             }
         } else {
             val bytes = wasmBytes!!
-            val buffer = bytes.toCommonByteBuffer()
+            // Remembered, because a buffer wrapper compares by identity: built
+            // fresh on each recomposition it would be a new key for the
+            // provider below, so any state change here - picking a key log,
+            // toggling highlighting - would silently swap in a newly parsed
+            // provider and drop everything installed on the old one.
+            val buffer = remember(bytes) { bytes.toCommonByteBuffer() }
             buffer.position(0)
 
-            val provider = remember(buffer, filePath) {
+            val provider = remember(bytes, filePath) {
                 when (WasmBinaryProviderSelector.select(buffer)) {
                     BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
                     BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
@@ -158,7 +169,7 @@ fun BinaryEditorApp() {
                 }
             }
 
-            val extraTabs = remember(buffer) {
+            val extraTabs = remember(bytes) {
                 computeExtraTabs(buffer)
             }
 
@@ -184,6 +195,8 @@ fun BinaryEditorApp() {
                     dialogPickedPath = ""
                     dialogPickedContent = ""
                 },
+                sslKeyLogContent = pickedKeyLogContent,
+                onSslKeyLogConsumed = { pickedKeyLogContent = "" },
                 onScriptTabConfirmed = { path, content ->
                     if (scriptTabs.none { it.path == path }) {
                         scriptTabs.add(ScriptTabState(path, content))
