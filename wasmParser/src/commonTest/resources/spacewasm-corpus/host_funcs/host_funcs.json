@@ -1,0 +1,8 @@
+{"source_filename": "tests/regression/host_funcs.wast",
+ "commands": [
+  {"type": "module", "line": 3, "filename": "host_funcs.0.wasm"}, 
+  {"type": "assert_return", "line": 31, "action": {"type": "invoke", "field": "call-all-args", "args": []}, "expected": [{"type": "i32", "value": "4294967284"}]}, 
+  {"type": "assert_return", "line": 32, "action": {"type": "invoke", "field": "call-return-i64", "args": []}, "expected": [{"type": "i64", "value": "4886718345"}]}, 
+  {"type": "assert_return", "line": 33, "action": {"type": "invoke", "field": "call-return-f32", "args": []}, "expected": [{"type": "f32", "value": "1095237632"}]}, 
+  {"type": "assert_return", "line": 34, "action": {"type": "invoke", "field": "call-return-f64", "args": []}, "expected": [{"type": "f64", "value": "4631142976192512000"}]}, 
+  {"type": "assert_return", "line": 35, "action": {"type": "invoke", "field": "call-noop", "args": []}, "expected": []}]}

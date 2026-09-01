@@ -1,0 +1,3 @@
+{"source_filename": "tests/core/test.wast",
+ "commands": [
+  {"type": "assert_invalid", "line": 2, "filename": "test.0.wasm", "text": "type mismatch", "module_type": "binary"}]}

@@ -1,0 +1,9 @@
+{"source_filename": "tests/regression/zero_page_memory_grow.wast",
+ "commands": [
+  {"type": "module", "line": 2, "filename": "zero_page_memory_grow.0.wasm"}, 
+  {"type": "assert_return", "line": 10, "action": {"type": "invoke", "field": "size", "args": []}, "expected": [{"type": "i32", "value": "0"}]}, 
+  {"type": "assert_return", "line": 11, "action": {"type": "invoke", "field": "grow", "args": []}, "expected": [{"type": "i32", "value": "0"}]}, 
+  {"type": "assert_return", "line": 12, "action": {"type": "invoke", "field": "size", "args": []}, "expected": [{"type": "i32", "value": "1"}]}, 
+  {"type": "assert_return", "line": 13, "action": {"type": "invoke", "field": "load", "args": []}, "expected": [{"type": "i32", "value": "0"}]}, 
+  {"type": "assert_return", "line": 14, "action": {"type": "invoke", "field": "store", "args": []}, "expected": []}, 
+  {"type": "assert_return", "line": 15, "action": {"type": "invoke", "field": "load", "args": []}, "expected": [{"type": "i32", "value": "165"}]}]}

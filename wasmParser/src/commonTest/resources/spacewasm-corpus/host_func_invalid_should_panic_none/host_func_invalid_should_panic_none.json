@@ -1,0 +1,4 @@
+{"source_filename": "tests/regression/host_func_invalid_should_panic_none.wast",
+ "commands": [
+  {"type": "module", "line": 1, "filename": "host_func_invalid_should_panic_none.0.wasm"}, 
+  {"type": "assert_return", "line": 10, "action": {"type": "invoke", "field": "call", "args": []}, "expected": [{"type": "i32", "value": "0"}]}]}

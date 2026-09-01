@@ -1,0 +1,11 @@
+{"source_filename": "tests/regression/host_globals.wast",
+ "commands": [
+  {"type": "module", "line": 3, "filename": "host_globals.0.wasm"}, 
+  {"type": "assert_return", "line": 26, "action": {"type": "invoke", "field": "set-i32", "args": [{"type": "i32", "value": "11"}]}, "expected": []}, 
+  {"type": "assert_return", "line": 27, "action": {"type": "invoke", "field": "get-i32", "args": []}, "expected": [{"type": "i32", "value": "11"}]}, 
+  {"type": "assert_return", "line": 29, "action": {"type": "invoke", "field": "set-i64", "args": [{"type": "i64", "value": "22"}]}, "expected": []}, 
+  {"type": "assert_return", "line": 30, "action": {"type": "invoke", "field": "get-i64", "args": []}, "expected": [{"type": "i64", "value": "22"}]}, 
+  {"type": "assert_return", "line": 32, "action": {"type": "invoke", "field": "set-f32", "args": [{"type": "f32", "value": "1107689472"}]}, "expected": []}, 
+  {"type": "assert_return", "line": 33, "action": {"type": "invoke", "field": "get-f32", "args": []}, "expected": [{"type": "f32", "value": "1107689472"}]}, 
+  {"type": "assert_return", "line": 35, "action": {"type": "invoke", "field": "set-f64", "args": [{"type": "f64", "value": "4631424451169222656"}]}, "expected": []}, 
+  {"type": "assert_return", "line": 36, "action": {"type": "invoke", "field": "get-f64", "args": []}, "expected": [{"type": "f64", "value": "4631424451169222656"}]}]}
