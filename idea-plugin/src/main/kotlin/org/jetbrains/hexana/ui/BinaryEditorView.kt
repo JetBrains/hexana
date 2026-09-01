@@ -215,6 +215,15 @@ internal fun BinaryEditorView(
         editableDoc.addListener(listener)
         onDispose { editableDoc.removeListener(listener) }
     }
+    // The state holder outlives the provider, but detail bytes belong to the
+    // one they were dissected from: a decrypted TLS record read out of bytes
+    // that have since been edited (and, once a hex cell commits, out of a
+    // format the live provider no longer even claims) is not something to keep
+    // showing beside the hex view.
+    LaunchedEffect(liveProvider) {
+        state.setRowDetail(null)
+        state.setShowRowDetail(false)
+    }
 
     // State hoisted ABOVE the panel-rebuild boundary so commits don't
     // reset the user's scroll position or fold pattern. The panels array

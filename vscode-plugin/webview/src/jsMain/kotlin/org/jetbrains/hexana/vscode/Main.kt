@@ -173,20 +173,30 @@ fun BinaryEditorApp() {
                 computeExtraTabs(buffer)
             }
 
-            BinaryEditorContent(
-                fileName = fileName,
-                parentFileName = parentFileName,
-                provider = provider,
-                isDecompressed = isDecompressed,
-                extraTabs = extraTabs,
-                capabilities = WebUiCapabilities(
+            // Remembered for the same reason as the buffer above: the panel
+            // keys its whole tab list on `sbomVulnerabilityCheck`, so a fresh
+            // wrapper per recomposition rebuilds every tab from scratch - which
+            // for a capture with a key log means re-deriving the TLS keys and
+            // re-decrypting the records, in composition, on the one thread a
+            // webview has.
+            val capabilities = remember {
+                WebUiCapabilities(
                     sbomVulnerabilityCheck = SbomVulnerabilityContribution { sbom, onReportReady ->
                         VulnBar(sbom, onReportReady)
                     },
                     // The extension bundles examples/scripting/*.js and can copy
                     // one into the workspace.
                     bundledScriptExamples = true,
-                ),
+                )
+            }
+
+            BinaryEditorContent(
+                fileName = fileName,
+                parentFileName = parentFileName,
+                provider = provider,
+                isDecompressed = isDecompressed,
+                extraTabs = extraTabs,
+                capabilities = capabilities,
                 scriptTabs = scriptTabs,
                 showSemanticHighlighting = showSemanticHighlighting,
                 dialogPickedPath = dialogPickedPath,

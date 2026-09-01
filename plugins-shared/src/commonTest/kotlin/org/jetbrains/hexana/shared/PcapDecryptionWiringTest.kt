@@ -83,6 +83,29 @@ class PcapDecryptionWiringTest {
     }
 
     /**
+     * Hosts that resolve tabs one name at a time - the IntelliJ editor gives
+     * each advertised name its own coroutine - must not end up building the
+     * whole tab list per name: for a capture with a key log that repeats the
+     * handshake scan and the key derivation concurrently over one buffer. So
+     * every advertised name has to resolve on its own here.
+     */
+    @Test
+    fun `each advertised name resolves on its own`() {
+        val pcap = pcapProvider()
+        pcap.sslKeyLog = keyLog(sessions = 2)
+        val context = TableTabsContext()
+        val header = assertNotNull(provider.singleTab("Header", pcap, context))
+        assertEquals("Header", header.name)
+        assertEquals("PCAP Capture File", header.prologueText)
+        val packets = assertNotNull(provider.singleTab("Packets", pcap, context))
+        assertEquals("Packets", packets.name)
+        assertTrue(packets.columns.any { it.name == "Decrypted" })
+        assertContains(assertNotNull(packets.prologueText), "2 sessions")
+        assertNull(provider.singleTab("Nonexistent", pcap, context))
+        assertNull(provider.singleTab("Header", GenericBinaryProvider(ByteArray(64).toCommonByteBuffer()), context))
+    }
+
+    /**
      * The detail panel is what makes decrypted plaintext readable at all, since
      * those bytes are nowhere in the file for the hex view to point at. Without
      * a key log there is nothing to open, so the hook stays absent.

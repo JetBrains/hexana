@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.ui.Messages
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaBinaryVirtualFile
@@ -927,6 +929,7 @@ private fun PcapSslKeyLogButton(
         )
     }
 
+    val scope = rememberCoroutineScope()
     OutlinedButton(
         onClick = {
             @Suppress("DEPRECATION")
@@ -934,39 +937,13 @@ private fun PcapSslKeyLogButton(
                 .createSingleFileDescriptor()
                 .withTitle("Select SSL Key Log File")
                 .withDescription("Choose an SSLKEYLOGFILE (NSS Key Log Format) for TLS decryption")
+            // The picker is modal and belongs on the EDT; reading and parsing
+            // what it returns does not - see [loadSslKeyLog].
             val chosen = com.intellij.openapi.fileChooser.FileChooser.chooseFile(
                 descriptor, state.project, null,
             )
             if (chosen != null) {
-                try {
-                    val content = String(chosen.contentsToByteArray(), Charsets.UTF_8)
-                    if (looksLikePrivateKey(content)) {
-                        showPrivateKeyHintDialog(state.project)
-                        return@OutlinedButton
-                    }
-                    val keyLog = org.jetbrains.hexana.pcap.SslKeyLog.parse(content)
-                    if (keyLog.isNotEmpty) {
-                        provider.sslKeyLog = keyLog
-                        org.jetbrains.hexana.HexanaLog.LOG.info(
-                            "Loaded SSL key log: ${chosen.name} (${keyLog.sessionCount} sessions)"
-                        )
-                        onSslKeyLogLoaded()
-                    } else {
-                        Messages.showWarningDialog(
-                            state.project,
-                            "The selected file does not contain any recognised SSL key log entries.\n\n" +
-                                "Expected format: CLIENT_RANDOM <hex> <hex>",
-                            "No Keys Found",
-                        )
-                    }
-                } catch (t: Throwable) {
-                    org.jetbrains.hexana.HexanaLog.LOG.warn("Failed to load SSL key log: ${chosen.name}", t)
-                    Messages.showErrorDialog(
-                        state.project,
-                        "Failed to read the key log file: ${t.message}",
-                        "SSL Key Log Error",
-                    )
-                }
+                scope.launch { loadSslKeyLog(chosen, provider, state.project, onSslKeyLogLoaded) }
             }
         },
         modifier = Modifier.height(24.dp),
@@ -975,6 +952,65 @@ private fun PcapSslKeyLogButton(
             text = if (hasKeyLog) "Change Key Log\u2026" else "Load SSL Key Log\u2026",
             style = TextStyle(fontSize = 11.sp),
         )
+    }
+}
+
+/** What reading a picked key log file produced, decided off the EDT. */
+private sealed interface KeyLogRead {
+    class Parsed(val keyLog: org.jetbrains.hexana.pcap.SslKeyLog) : KeyLogRead
+    object PrivateKey : KeyLogRead
+    class Failed(val error: Throwable) : KeyLogRead
+}
+
+/**
+ * Reads and parses [chosen] off the EDT, then installs it and reports back on
+ * the EDT. Both halves of the read are slow enough to matter:
+ * `contentsToByteArray` can go to disk (or a network mount), and a key log a
+ * browser has been appending to for a session runs to thousands of lines, each
+ * of which [org.jetbrains.hexana.pcap.SslKeyLog.parse] hex-decodes. Freezing
+ * the UI for either is what the IntelliJ threading rules exist to prevent.
+ */
+private suspend fun loadSslKeyLog(
+    chosen: com.intellij.openapi.vfs.VirtualFile,
+    provider: org.jetbrains.hexana.providers.PcapBinaryProvider,
+    project: com.intellij.openapi.project.Project,
+    onSslKeyLogLoaded: () -> Unit,
+) {
+    val read = withContext(Dispatchers.IO) {
+        try {
+            val content = String(chosen.contentsToByteArray(), Charsets.UTF_8)
+            if (looksLikePrivateKey(content)) KeyLogRead.PrivateKey
+            else KeyLogRead.Parsed(org.jetbrains.hexana.pcap.SslKeyLog.parse(content))
+        } catch (t: Throwable) {
+            KeyLogRead.Failed(t)
+        }
+    }
+    withContext(Dispatchers.Main) {
+        when (read) {
+            is KeyLogRead.PrivateKey -> showPrivateKeyHintDialog(project)
+            is KeyLogRead.Failed -> {
+                org.jetbrains.hexana.HexanaLog.LOG.warn("Failed to load SSL key log: ${chosen.name}", read.error)
+                Messages.showErrorDialog(
+                    project,
+                    "Failed to read the key log file: ${read.error.message}",
+                    "SSL Key Log Error",
+                )
+            }
+            is KeyLogRead.Parsed -> if (read.keyLog.isNotEmpty) {
+                provider.sslKeyLog = read.keyLog
+                org.jetbrains.hexana.HexanaLog.LOG.info(
+                    "Loaded SSL key log: ${chosen.name} (${read.keyLog.sessionCount} sessions)",
+                )
+                onSslKeyLogLoaded()
+            } else {
+                Messages.showWarningDialog(
+                    project,
+                    "The selected file does not contain any recognised SSL key log entries.\n\n" +
+                        "Expected format: CLIENT_RANDOM <hex> <hex>",
+                    "No Keys Found",
+                )
+            }
+        }
     }
 }
 

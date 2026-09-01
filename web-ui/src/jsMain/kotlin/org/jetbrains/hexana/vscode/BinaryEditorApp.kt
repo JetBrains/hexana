@@ -183,6 +183,16 @@ fun BinaryEditorContent(
         }
     }
 
+    // `selection` is deliberately unkeyed - the cursor survives a reparse - but
+    // detail bytes belong to the provider they were dissected from, and this one
+    // app instance is reused for whatever the host opens next: a nested module,
+    // or the same file reparsed after an edit. Neither must leave the panel
+    // showing plaintext from a binary that is no longer on screen.
+    LaunchedEffect(liveProvider) {
+        selection.rowDetail = null
+        selection.showRowDetail = false
+    }
+
     Div({
         classes("hexana-editor")
         style {

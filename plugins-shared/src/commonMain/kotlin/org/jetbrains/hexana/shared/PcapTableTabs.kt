@@ -30,6 +30,24 @@ class PcapTableTabsProvider : TableTabsProvider {
         context: TableTabsContext,
     ): Pair<List<String>, List<String>>? =
         if (provider is PcapBinaryProvider) listOf("Header", "Packets") to emptyList() else null
+
+    /**
+     * Resolves one advertised tab. Without this the default implementation
+     * builds *both* tabs to hand back one of them, so a host that resolves
+     * each name on its own coroutine - as the IntelliJ editor does - would
+     * parse the capture twice and, with a key log loaded, derive the TLS keys
+     * and scan the handshakes twice, concurrently, over the one mutable buffer
+     * the provider reads through.
+     */
+    override fun singleTab(name: String, provider: BinaryProvider, context: TableTabsContext): TableTabDescriptor? {
+        if (provider !is PcapBinaryProvider) return null
+        val pcap = provider.parsedPcapFile ?: return null
+        return when (name) {
+            "Header" -> pcapHeaderTab(pcap, provider)
+            "Packets" -> pcapPacketsTab(pcap, provider)
+            else -> null
+        }
+    }
 }
 
 private fun pcapHeaderTab(pcap: PcapFile, provider: PcapBinaryProvider): TableTabDescriptor {
