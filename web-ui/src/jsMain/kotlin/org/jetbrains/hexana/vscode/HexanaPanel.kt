@@ -8,6 +8,7 @@ import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.pcap.PcapDissectedPacket
 import org.jetbrains.hexana.pcap.PcapDissector
+import org.jetbrains.hexana.pcap.PlaintextHttpBody
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
@@ -804,25 +805,48 @@ private fun enrichPcapPacketsTab(
         }
     }
 
+    // Decrypted plaintext was never in the file, so the file-offset path above
+    // cannot reach an HTTPS body. The shared tab hands the record's plaintext
+    // over through its row detail hook - the same bytes the "Decrypted TLS"
+    // panel shows - and the body is split out of that instead.
+    fun decryptedHttpBody(index: Int): PlaintextHttpBody? {
+        val plaintext = tab.rowDetailProvider?.invoke(index)?.bytes ?: return null
+        return PcapDissector.httpBodyInPlaintext(plaintext)
+    }
+
+    // isVisible runs on every menu build, so the answer is cached; the body
+    // itself is not, to keep decrypted copies of rows nobody opens off the heap.
+    val hasDecryptedBodyCache = HashMap<Int, Boolean>()
+    fun hasDecryptedHttpBody(index: Int): Boolean =
+        hasDecryptedBodyCache.getOrPut(index) { decryptedHttpBody(index) != null }
+
+    fun hasCleartextHttpBody(d: PcapDissectedPacket): Boolean =
+        d.httpBodyFileOffset >= 0 && d.httpBodySize > 0
+
     val openBodyItem = RowContextMenuItemDescriptor(
         labelProvider = { "Open HTTP Body" },
         action = { index ->
             val d = dissected(index)
-            if (d.httpBodyFileOffset < 0 || d.httpBodySize <= 0) return@RowContextMenuItemDescriptor
+            val fromFile = hasCleartextHttpBody(d)
+            if (!fromFile && !hasDecryptedHttpBody(index)) return@RowContextMenuItemDescriptor
             try {
-                val bodyBytes = PcapDissector.reassembleHttpBody(
-                    provider.bytes, packets, index, linkType, d,
-                ) ?: return@RowContextMenuItemDescriptor
-                val ext = httpContentTypeToExtension(d.httpContentType)
+                val body = if (fromFile) {
+                    val raw = PcapDissector.reassembleHttpBody(
+                        provider.bytes, packets, index, linkType, d,
+                    ) ?: return@RowContextMenuItemDescriptor
+                    PlaintextHttpBody(raw, d.httpContentType, d.httpContentEncoding)
+                } else {
+                    decryptedHttpBody(index) ?: return@RowContextMenuItemDescriptor
+                }
+                val ext = httpContentTypeToExtension(body.contentType)
                 val fileName = "http-body-packet-${index + 1}$ext"
-                host.openHttpBody(fileName, bodyBytes, d.httpContentType, d.httpContentEncoding)
+                host.openHttpBody(fileName, body.bytes, body.contentType, body.contentEncoding)
             } catch (_: Exception) {
                 // Extraction failed — silently ignore
             }
         },
         isVisible = { index ->
-            val d = dissected(index)
-            d.httpBodyFileOffset >= 0 && d.httpBodySize > 0
+            hasCleartextHttpBody(dissected(index)) || hasDecryptedHttpBody(index)
         },
     )
 

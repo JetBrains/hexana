@@ -161,6 +161,9 @@ private fun pcapPacketsTab(
 
     // Reuses the dissection cache above, so opening the panel costs no extra
     // decryption. Without a key log there is no plaintext to show at all.
+    // Hosts also read this to reach a decrypted HTTP body for "Open HTTP Body",
+    // since a record's plaintext is exactly what they need and building a
+    // second decryption context would repeat the whole scan-and-derive pass.
     val rowDetailProvider: ((Int) -> RowDetailData?)? =
         if (decryptionContext == null) null else ({ i: Int -> decryptedRowDetail(dissected(i), i) })
 

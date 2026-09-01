@@ -556,6 +556,27 @@ object PcapDissector {
     }
 
     /**
+     * The HTTP body carried by a decrypted TLS record, or `null` when the
+     * plaintext is not an HTTP response with a body.
+     *
+     * Decrypted bytes were never in the capture file, so
+     * [PcapDissectedPacket.httpBodyFileOffset] cannot point at them and
+     * [reassembleHttpBody] has no range to slice; this is the plaintext
+     * equivalent. Only what this one record holds comes back - a body split
+     * over several records is not reassembled, and neither is a request body,
+     * matching what the cleartext path offers.
+     */
+    fun httpBodyInPlaintext(plaintext: ByteArray): PlaintextHttpBody? {
+        val http = detectHttpInPlaintext(plaintext) ?: return null
+        val start = http.bodyStart
+        if (start < 0 || start >= plaintext.size) return null
+        val raw = plaintext.copyOfRange(start, plaintext.size)
+        val body = if (http.isChunkedTransferEncoding) decodeChunkedBody(raw) else raw
+        if (body.isEmpty()) return null
+        return PlaintextHttpBody(body, http.contentType, http.contentEncoding)
+    }
+
+    /**
      * Decodes an HTTP chunked transfer-encoded body.
      * Format: `<hex-size>\r\n<data>\r\n` repeated, terminated by `0\r\n\r\n`.
      */
@@ -754,6 +775,12 @@ object PcapDissector {
         val contentType: String?,
         val isChunkedTransferEncoding: Boolean = false,
         val contentEncoding: String? = null,
+        /**
+         * Where the body starts within the payload, or `-1` when there is none.
+         * Payload-relative rather than file-relative, so it is also the answer
+         * for plaintext that was never in the file.
+         */
+        val bodyStart: Int = -1,
     )
 
     /**
@@ -836,9 +863,10 @@ object PcapDissector {
         val isChunked = transferEncoding?.lowercase()?.contains("chunked") == true
         val contentEncoding = parseHeaderValue(preview, "content-encoding")
 
+        val hasBody = bodyStart in 0 until len
         val bodyFileOffset: Long
         val bodySize: Int
-        if (bodyStart >= 0 && bodyStart < len && payloadFileOffset >= 0) {
+        if (hasBody && payloadFileOffset >= 0) {
             bodyFileOffset = payloadFileOffset + bodyStart
             bodySize = len - bodyStart
         } else {
@@ -852,7 +880,10 @@ object PcapDissector {
                 append(firstLine)
                 if (contentType != null) append("  ($contentType)")
             }
-            HttpInfo("HTTP", statusInfo, bodyFileOffset, bodySize, contentType, isChunked, contentEncoding)
+            HttpInfo(
+                "HTTP", statusInfo, bodyFileOffset, bodySize, contentType, isChunked, contentEncoding,
+                bodyStart = if (hasBody) bodyStart else -1,
+            )
         } else {
             // e.g. "GET /index.html HTTP/1.1"
             HttpInfo("HTTP", firstLine, -1, 0, null)
@@ -918,6 +949,19 @@ object PcapDissector {
         else -> "IP Proto $protocol"
     }
 }
+
+/**
+ * An HTTP body read straight out of decrypted TLS plaintext, with the header
+ * values a consumer needs to decompress it and name the file it opens as.
+ */
+class PlaintextHttpBody(
+    /** Body bytes, de-chunked when the head said `Transfer-Encoding: chunked`, still compressed. */
+    val bytes: ByteArray,
+    /** HTTP Content-Type header value, or `null` when the head carried none. */
+    val contentType: String?,
+    /** HTTP Content-Encoding header value (e.g. "gzip"), or `null` when not compressed. */
+    val contentEncoding: String?,
+)
 
 /**
  * Result of dissecting a single packet's captured data.
