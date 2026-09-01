@@ -845,6 +845,9 @@ private fun enrichPcapPacketsTab(
         showIdColumn = tab.showIdColumn,
         priority = tab.priority,
         predefinedFilters = tab.predefinedFilters,
+        // Rebuilt field by field, so anything the shared tab set has to be
+        // carried over by hand - the decrypted-plaintext panel included.
+        rowDetailProvider = tab.rowDetailProvider,
     )
 }
 

@@ -627,6 +627,18 @@ internal fun BinaryEditorView(
                             bytes = liveProvider.bytes,
                         )
                     }
+                    // A second, independent column: the row detail panel shows
+                    // bytes that are not in the file, so it has nothing to do
+                    // with the inspector's view of the cursor and neither one
+                    // closes the other.
+                    if (state.showRowDetail) {
+                        Divider(
+                            orientation = org.jetbrains.jewel.ui.Orientation.Vertical,
+                            thickness = 1.dp,
+                            modifier = Modifier.fillMaxHeight(),
+                        )
+                        RowDetailPanel(state = state)
+                    }
                 }
                 HexViewStatusBar(state = state, totalBytes = liveProvider.bytes.limit())
             }
@@ -1456,6 +1468,9 @@ private fun PcapBinaryProvider.enrichPcapPacketsTab(
         showIdColumn = tab.showIdColumn,
         priority = tab.priority,
         predefinedFilters = tab.predefinedFilters,
+        // Rebuilt field by field, so anything the shared tab set has to be
+        // carried over by hand - the decrypted-plaintext panel included.
+        rowDetailProvider = tab.rowDetailProvider,
     )
 }
 

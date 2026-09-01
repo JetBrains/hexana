@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.jetbrains.hexana.shared.RowDetailData
 import org.jetbrains.hexana.ui.panel.WatConversionState
 
 
@@ -181,6 +182,17 @@ class HexViewStateHolder(
     private val _showDataInspector = mutableStateOf(false)
     val showDataInspector: Boolean get() = _showDataInspector.value
 
+    /**
+     * Bytes of the last clicked table row that exist nowhere in the file - the
+     * decrypted plaintext of a TLS record, for instance. `null` means the row
+     * had none.
+     */
+    private val _rowDetail: MutableState<RowDetailData?> = mutableStateOf(null)
+    val rowDetail: RowDetailData? get() = _rowDetail.value
+
+    private val _showRowDetail = mutableStateOf(false)
+    val showRowDetail: Boolean get() = _showRowDetail.value
+
     val topFraction: Float
         get() = currentState.value.topFraction
 
@@ -265,6 +277,14 @@ class HexViewStateHolder(
 
     fun setShowDataInspector(show: Boolean) {
         _showDataInspector.value = show
+    }
+
+    fun setRowDetail(detail: RowDetailData?) {
+        _rowDetail.value = detail
+    }
+
+    fun setShowRowDetail(show: Boolean) {
+        _showRowDetail.value = show
     }
 
     fun setEditor(editor: Editor?) {

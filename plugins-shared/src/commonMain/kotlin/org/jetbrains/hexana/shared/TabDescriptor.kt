@@ -62,6 +62,18 @@ sealed class ColumnWidth {
  */
 class RowSelectionData(val offset: Int, val size: Int)
 
+/**
+ * Bytes belonging to a single row that exist nowhere in the file being viewed,
+ * so they cannot be shown by selecting a range in the hex view. Decrypted TLS
+ * plaintext is the motivating case: the hex view can only point at ciphertext.
+ * The UI layer renders these in a side panel next to the hex bytes.
+ *
+ * @param title panel heading, e.g. "Decrypted TLS"
+ * @param bytes the row's payload, shown as text or as a hex/ASCII dump
+ * @param subtitle optional line under the heading naming the row and size
+ */
+class RowDetailData(val title: String, val bytes: ByteArray, val subtitle: String? = null)
+
 /** Role of a [HexRange] within a multi-range row highlight. */
 enum class HexRangeRole { PRIMARY, SECONDARY }
 
@@ -168,6 +180,9 @@ class PredefinedFilter(
  *   view on row select (using color determined by [HexRangeRole]) and scrolls to the first
  *   range. An empty list clears the current highlight. When null, the single-range
  *   [rowSelectionProvider] path is used unchanged.
+ * @param rowDetailProvider optional provider of out-of-file bytes for a given row index.
+ *   When non-null, the UI layer shows the returned [RowDetailData] in a side panel beside
+ *   the hex view on row select; `null` for a row means that row has nothing to show.
  */
 class TableTabDescriptor(
     val name: String,
@@ -191,6 +206,7 @@ class TableTabDescriptor(
     val predefinedFilters: List<PredefinedFilter> = emptyList(),
     val defaultFilterShowAll: Boolean = false,
     val treemapData: TreemapData? = null,
+    val rowDetailProvider: ((index: Int) -> RowDetailData?)? = null,
 ) {
     companion object {
         /** Sentinel value for [defaultSortColumn] that targets the implicit ID column. */

@@ -478,6 +478,7 @@ fun TableTabContent(
                         PanelTableRow(
                             isHighlighted = isHighlighted,
                             onClick = {
+                                applyRowDetailVsc(descriptor, index, selection)
                                 val clickAction = descriptor.rowClickAction
                                 if (clickAction != null) {
                                     clickAction(index)
@@ -986,6 +987,21 @@ private fun FilterDropdownVsc(
             },
         ) { Text("Show all") }
     }
+}
+
+/**
+ * Pushes the clicked row's out-of-file bytes to the hex view's detail panel,
+ * opening it the first time a row has any. A tab without a
+ * [TableTabDescriptor.rowDetailProvider] leaves the panel untouched, so
+ * clicking around elsewhere never disturbs what is on show. A row that has no
+ * detail clears the bytes but keeps the panel open: it says so, rather than
+ * flickering shut or leaving the previous row's plaintext up.
+ */
+private fun applyRowDetailVsc(descriptor: TableTabDescriptor, index: Int, selection: HexSelectionState) {
+    val provider = descriptor.rowDetailProvider ?: return
+    val detail = provider(index)
+    selection.rowDetail = detail
+    if (detail != null) selection.showRowDetail = true
 }
 
 /**
@@ -1718,6 +1734,7 @@ private fun TreeTableBody(
                             attrs = if (isHighlighted) mapOf("data-focused" to "") else emptyMap(),
                             onClick = {
                                 onFocusedFlatIndexChange(flatIndex)
+                                if (row.depth == 0) applyRowDetailVsc(descriptor, row.index, selection)
                                 // Single click only selects/highlights; expansion
                                 // is triggered by double-click or keyboard (onActivate).
                                 val highlightProvider = descriptor.rowHighlightRangesProvider
@@ -1735,6 +1752,7 @@ private fun TreeTableBody(
                             } else null,
                             onSelect = {
                                 onFocusedFlatIndexChange(flatIndex)
+                                if (row.depth == 0) applyRowDetailVsc(descriptor, row.index, selection)
                                 val highlightProvider = descriptor.rowHighlightRangesProvider
                                 if (highlightProvider != null && row.depth == 0) {
                                     applyHighlightRangesVsc(highlightProvider(row.index), selection)

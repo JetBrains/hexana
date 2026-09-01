@@ -159,6 +159,11 @@ private fun pcapPacketsTab(
         })
     }
 
+    // Reuses the dissection cache above, so opening the panel costs no extra
+    // decryption. Without a key log there is no plaintext to show at all.
+    val rowDetailProvider: ((Int) -> RowDetailData?)? =
+        if (decryptionContext == null) null else ({ i: Int -> decryptedRowDetail(dissected(i), i) })
+
     val prologueText = if (hasKeyLog) {
         decryptionPrologue(provider.sslKeyLog.sessionCount, decryptionContext)
     } else {
@@ -181,6 +186,21 @@ private fun pcapPacketsTab(
             val size = (PACKET_HEADER_SIZE + p.inclLen).toInt()
             RowSelectionData(offset, size)
         },
+        rowDetailProvider = rowDetailProvider,
+    )
+}
+
+/**
+ * The plaintext of a record that opened, labelled for the hex view's side
+ * panel. Returns `null` for a row that did not decrypt - the panel then says
+ * so rather than showing the previous row's bytes.
+ */
+internal fun decryptedRowDetail(packet: PcapDissectedPacket, index: Int): RowDetailData? {
+    val bytes = packet.decryptedData ?: return null
+    return RowDetailData(
+        title = "Decrypted TLS",
+        bytes = bytes,
+        subtitle = "packet #${index + 1} · ${packet.protocol} · ${bytes.size} bytes",
     )
 }
 

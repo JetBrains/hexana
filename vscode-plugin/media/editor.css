@@ -719,6 +719,28 @@ html, body {
     background: var(--vscode-scrollbarSlider-activeBackground, rgba(191, 191, 191, 0.4));
 }
 
+/* Decrypted row detail body scrollbars, both directions */
+.hexana-row-detail-body::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+.hexana-row-detail-body::-webkit-scrollbar-track {
+    background: var(--vscode-scrollbar-shadow, rgba(0, 0, 0, 0.1));
+}
+.hexana-row-detail-body::-webkit-scrollbar-thumb {
+    background: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, 0.4));
+    border-radius: 4px;
+}
+.hexana-row-detail-body::-webkit-scrollbar-thumb:hover {
+    background: var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, 0.7));
+}
+.hexana-row-detail-body::-webkit-scrollbar-thumb:active {
+    background: var(--vscode-scrollbarSlider-activeBackground, rgba(191, 191, 191, 0.4));
+}
+.hexana-row-detail-body::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
 /* Share Feedback button */
 .hexana-share-feedback-btn {
     display: inline-flex;

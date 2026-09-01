@@ -233,6 +233,12 @@ fun BinaryEditorContent(
             if (showDataInspector) {
                 DataInspectorPanel(bytes = buffer, selection = selection)
             }
+            // A second, independent column: the row detail panel shows bytes
+            // that are not in the file, so it has nothing to do with the
+            // inspector's view of the cursor and neither one closes the other.
+            if (selection.showRowDetail) {
+                RowDetailPanel(selection = selection)
+            }
         }
         SelectionStatusBar(
             selection = selection,

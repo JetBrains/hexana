@@ -8,6 +8,7 @@ import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.StructureRange
+import org.jetbrains.hexana.shared.RowDetailData
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLInputElement
 import org.w3c.dom.events.Event
@@ -120,6 +121,15 @@ class HexSelectionState {
     var anchorIndex by mutableStateOf(-1)
     var activeIndex by mutableStateOf(-1)
     var cursorIndex by mutableStateOf(-1)
+
+    /**
+     * Bytes of the last clicked table row that exist nowhere in the file - the
+     * decrypted plaintext of a TLS record, for instance. Carried here because
+     * this is already the one object shared by the tables and the hex view;
+     * `null` means the clicked row had none.
+     */
+    var rowDetail by mutableStateOf<RowDetailData?>(null)
+    var showRowDetail by mutableStateOf(false)
 
     val hasSelection: Boolean get() = anchorIndex >= 0 && activeIndex >= 0 && anchorIndex != activeIndex
 

@@ -366,6 +366,7 @@ private fun TableTabTable(
         defaultSortAscending = descriptor.defaultSortAscending,
         onRow = { rowIndex ->
             val origIndex = toOriginal(rowIndex)
+            applyRowDetail(descriptor, origIndex, state)
             val clickAction = descriptor.rowClickAction
             if (clickAction != null) {
                 clickAction(origIndex)
@@ -549,6 +550,7 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
 
     val onRowSelect: (Int) -> Unit = { flatIndex ->
         val row = flatRows[flatIndex]
+        if (row.depth == 0) applyRowDetail(descriptor, row.index, state)
         val highlightProvider = descriptor.rowHighlightRangesProvider
         if (highlightProvider != null && row.depth == 0) {
             applyHighlightRanges(highlightProvider(row.index), state)
@@ -562,6 +564,7 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
 
     val onRow: (Int) -> Unit = { flatIndex ->
         val row = flatRows[flatIndex]
+        if (row.depth == 0) applyRowDetail(descriptor, row.index, state)
         if (row.hasChildren) {
             if (row.isExpanded) {
                 expandedPaths.remove(row.treePath)
@@ -751,6 +754,21 @@ private fun VerticalDraggableDivider(onDrag: (deltaX: Float) -> Unit) {
                 .background(JewelTheme.globalColors.borders.normal),
         )
     }
+}
+
+/**
+ * Pushes the clicked row's out-of-file bytes to the hex view's detail panel,
+ * opening it the first time a row has any. A tab without a
+ * [TableTabDescriptor.rowDetailProvider] leaves the panel untouched, so
+ * clicking around elsewhere never disturbs what is on show. A row that has no
+ * detail clears the bytes but keeps the panel open: it says so, rather than
+ * flickering shut or leaving the previous row's plaintext up.
+ */
+private fun applyRowDetail(descriptor: TableTabDescriptor, origIndex: Int, state: HexViewStateHolder) {
+    val provider = descriptor.rowDetailProvider ?: return
+    val detail = provider(origIndex)
+    state.setRowDetail(detail)
+    if (detail != null) state.setShowRowDetail(true)
 }
 
 private fun applyHighlightRanges(ranges: List<HexRange>, state: HexViewStateHolder) {

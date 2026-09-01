@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.pcap.PcapDissectedPacket
 import org.jetbrains.hexana.pcap.SslKeyLog
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.PcapBinaryProvider
@@ -79,6 +80,47 @@ class PcapDecryptionWiringTest {
         val (ordinary, grouped) = assertNotNull(provider.availableTabNames(pcap, TableTabsContext()))
         assertEquals(tabs.map { it.name }, ordinary)
         assertEquals(emptyList(), grouped)
+    }
+
+    /**
+     * The detail panel is what makes decrypted plaintext readable at all, since
+     * those bytes are nowhere in the file for the hex view to point at. Without
+     * a key log there is nothing to open, so the hook stays absent.
+     */
+    @Test
+    fun `the row detail hook appears only once a key log is loaded`() {
+        val pcap = pcapProvider()
+        assertNull(packetsTab(pcap).rowDetailProvider)
+        pcap.sslKeyLog = keyLog(sessions = 1)
+        val provider = assertNotNull(packetsTab(pcap).rowDetailProvider)
+        // These synthetic packets carry no real records, so no row decrypts and
+        // every one of them reports nothing to show rather than stale bytes.
+        assertNull(provider(0))
+    }
+
+    @Test
+    fun `a decrypted row is labelled by its packet number, protocol and size`() {
+        val detail = assertNotNull(
+            decryptedRowDetail(
+                PcapDissectedPacket(
+                    source = "10.0.0.1",
+                    destination = "10.0.0.2",
+                    protocol = "HTTP",
+                    info = "GET / HTTP/1.0",
+                    decryptedData = "GET / HTTP/1.0\r\n\r\n".encodeToByteArray(),
+                ),
+                index = 10,
+            ),
+        )
+        assertEquals("Decrypted TLS", detail.title)
+        assertEquals("packet #11 · HTTP · 18 bytes", detail.subtitle)
+        assertEquals(18, detail.bytes.size)
+    }
+
+    @Test
+    fun `a row that did not decrypt has no detail`() {
+        val packet = PcapDissectedPacket("10.0.0.1", "10.0.0.2", "TLS 1.2", "Application Data")
+        assertNull(decryptedRowDetail(packet, index = 0))
     }
 
     /**
