@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,12 +37,16 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.intellij.openapi.ide.CopyPasteManager
+import kotlinx.coroutines.delay
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.shared.looksLikeText
+import org.jetbrains.hexana.shared.rowDetailClipboardContent
 import org.jetbrains.hexana.shared.rowDetailHexDump
 import org.jetbrains.hexana.shared.rowDetailText
 import org.jetbrains.jewel.ui.component.Text
 import java.awt.Cursor
+import java.awt.datatransfer.StringSelection
 
 /** Width of the panel; enough for a 16-byte hex dump line without wrapping. */
 private val PANEL_WIDTH = 340.dp
@@ -87,7 +92,17 @@ internal fun RowDetailPanel(state: HexViewStateHolder) {
         // exchange is the whole point; remembered per payload so switching to
         // Hex survives a scroll but not a jump to a different row.
         var asText by remember(detail) { mutableStateOf(looksLikeText(detail.bytes)) }
-        ModeSwitch(asText, headerStyle) { asText = it }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            ModeSwitch(asText, headerStyle) { asText = it }
+            // Selecting the body by hand is possible but awkward - it scrolls
+            // both ways and a record runs to thousands of bytes - so the whole
+            // payload is one click away, in whichever mode is showing.
+            CopyControl(headerStyle) { rowDetailClipboardContent(detail.bytes, asText) }
+        }
         Spacer(Modifier.height(8.dp))
 
         val body = remember(detail, asText) {
@@ -156,6 +171,31 @@ private fun RowDetailHeader(title: String, style: TextStyle, onClose: () -> Unit
             modifier = handCursor().then(Modifier.clickable { onClose() }),
         )
     }
+}
+
+/**
+ * Copies what [content] returns, then says so for a moment: a clipboard write
+ * is invisible, and without the acknowledgement there is no telling a click
+ * that landed from one that missed.
+ */
+@Composable
+private fun CopyControl(style: TextStyle, content: () -> String) {
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (!copied) return@LaunchedEffect
+        delay(1500)
+        copied = false
+    }
+    Text(
+        if (copied) "Copied" else "Copy",
+        style = if (copied) style.copy(fontWeight = FontWeight.Bold) else style,
+        modifier = handCursor().then(
+            Modifier.clickable {
+                CopyPasteManager.getInstance().setContents(StringSelection(content()))
+                copied = true
+            },
+        ),
+    )
 }
 
 @Composable

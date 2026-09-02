@@ -61,6 +61,16 @@ fun rowDetailHexDump(bytes: ByteArray, limit: Int = ROW_DETAIL_BYTE_LIMIT): Stri
 }
 
 /**
+ * What the panel's Copy control puts on the clipboard: the rendering the panel
+ * is showing, but whole. [ROW_DETAIL_BYTE_LIMIT] exists to keep the renderer
+ * from laying out a wall of text, and the clipboard has no such problem - a
+ * copy that stopped where the view stops would be a trap, since a record
+ * inflated out of a compressed one can run well past the limit.
+ */
+fun rowDetailClipboardContent(bytes: ByteArray, asText: Boolean): String =
+    if (asText) rowDetailText(bytes, limit = bytes.size) else rowDetailHexDump(bytes, limit = bytes.size)
+
+/**
  * Whether [bytes] reads as text, deciding which mode the panel opens in. Only
  * the start is sniffed, so a payload that is mostly a binary body - an image
  * behind a short HTTP head, say - opens in hex, where its head is still legible

@@ -67,6 +67,27 @@ class RowDetailFormatTest {
         assertEquals(8, rowDetailText(bytes, limit = 8).substringBefore("\n\n").length)
     }
 
+    /**
+     * The view stops at the limit; the clipboard must not, or a copy of a
+     * large payload would silently be a prefix of it.
+     */
+    @Test
+    fun `copying takes the whole payload in the current mode`() {
+        val bytes = ByteArray(ROW_DETAIL_BYTE_LIMIT + 100) { 0x41 }
+        assertContains(rowDetailText(bytes), "more bytes")
+
+        val text = rowDetailClipboardContent(bytes, asText = true)
+        assertEquals(bytes.size, text.length)
+        assertFalse(text.contains("more bytes"))
+
+        val dump = rowDetailClipboardContent(bytes, asText = false)
+        assertFalse(dump.contains("more bytes"))
+        // 16 bytes per line, the last one short: every byte reached the dump.
+        assertEquals((bytes.size + 15) / 16, dump.lines().size)
+        // And what the panel shows is a prefix of what it copies.
+        assertTrue(dump.startsWith(rowDetailHexDump(bytes).substringBefore("\n\n")))
+    }
+
     @Test
     fun `text mode is chosen for a protocol head and hex for binary`() {
         assertTrue(looksLikeText("HTTP/1.0 200 ok\r\n\r\n<html/>".encodeToByteArray()))
