@@ -19,6 +19,13 @@ import org.jetbrains.hexana.pcap.buildTlsSessionMap
  */
 class PcapBinaryProvider(
     sharedBytes: CommonByteBuffer,
+    /**
+     * Path of the capture on disk, when it came from one. Hosts use it to
+     * key per-capture settings - the remembered SSL key log - so it is null
+     * for in-memory captures (an entry unpacked out of an archive), which
+     * have no path to remember anything against.
+     */
+    val sourcePath: String? = null,
 ) : GenericBinaryProvider(sharedBytes) {
 
     /** `true` when the file is PCAP-NG rather than classic PCAP. */

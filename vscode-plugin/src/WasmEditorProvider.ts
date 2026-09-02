@@ -546,6 +546,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 }
                 webviewPanel.webview.postMessage(loadMsg);
                 this.restoreScriptTabs(document, webviewPanel);
+                this.restoreSslKeyLog(document, webviewPanel);
             } else if (message.type === "open-module") {
                 this.openNestedModule(document, message);
             } else if (message.type === "navigate-to-parent") {
@@ -1470,6 +1471,9 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         try {
             const bytes = await vscode.workspace.fs.readFile(uri);
             const content = new TextDecoder("utf-8").decode(bytes);
+            // Remember the pairing so reopening the capture decrypts it without
+            // a second trip through the picker. Only the path is stored.
+            this.context.workspaceState.update(sslKeyLogStateKey(document), uri.toString());
             webviewPanel.webview.postMessage({
                 type: "ssl-key-log-picked",
                 keyLogPath: uri.fsPath,
@@ -1477,6 +1481,32 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             });
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to read SSL key log file: ${err}`);
+        }
+    }
+
+    /**
+     * Re-sends the SSL key log this capture was last paired with, so a
+     * reopened capture decrypts itself. A pairing whose key log has since been
+     * deleted or moved is forgotten rather than reported: the user did not ask
+     * for anything here, so there is nothing to fail.
+     */
+    private async restoreSslKeyLog(
+        document: WasmDocument,
+        webviewPanel: vscode.WebviewPanel,
+    ): Promise<void> {
+        const key = sslKeyLogStateKey(document);
+        const stored = this.context.workspaceState.get<string>(key);
+        if (!stored) return;
+        try {
+            const uri = vscode.Uri.parse(stored);
+            const bytes = await vscode.workspace.fs.readFile(uri);
+            webviewPanel.webview.postMessage({
+                type: "ssl-key-log-picked",
+                keyLogPath: uri.fsPath,
+                keyLogContent: new TextDecoder("utf-8").decode(bytes),
+            });
+        } catch {
+            this.context.workspaceState.update(key, undefined);
         }
     }
 
@@ -1537,6 +1567,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             });
         }
     }
+}
+
+/** Workspace-state key holding the SSL key log paired with a capture. */
+function sslKeyLogStateKey(document: WasmDocument): string {
+    return `hexana.sslKeyLog.${document.uri.toString()}`;
 }
 
 /**

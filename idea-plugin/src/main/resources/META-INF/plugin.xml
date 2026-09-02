@@ -124,6 +124,10 @@
 
         <applicationService serviceImplementation="org.jetbrains.hexana.run.WasmRuntimeSettings"/>
 
+        <!-- Remembers the SSL key log paired with each pcap capture.
+             @State + SimplePersistentStateComponent requires XML registration for state loading. -->
+        <applicationService serviceImplementation="org.jetbrains.hexana.ui.PcapSslKeyLogSettings"/>
+
         <!-- Binary breakpoint registry: persists breakpoints across IDE restarts.
              @State + SimplePersistentStateComponent requires XML registration for state loading. -->
         <projectService serviceImplementation="org.jetbrains.hexana.breakpoints.BinaryBreakpointRegistry"/>

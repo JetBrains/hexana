@@ -326,12 +326,21 @@ internal fun BinaryEditorView(
                 return@LaunchedEffect
             }
             if (panelsResolved.value) return@LaunchedEffect
+            // Reattach the key log this capture was last paired with *before*
+            // the tabs are built, so the "Packets" tab is decrypted on first
+            // render rather than built encrypted and rebuilt a moment later.
+            // Sitting after the panelsResolved early return keeps re-entering
+            // composition from re-reading the key log.
             (binaryProvider as? PcapBinaryProvider)?.let { pcap ->
-                // hasEncryptedPackets dissects every packet, so it stays off the
-                // composition thread; only the state write comes back to it.
-                pcapHasTls = withContext(Dispatchers.IO) {
-                    pcap.hasEncryptedPackets || pcap.sslKeyLog.isNotEmpty
+                // Both the key log read and hasEncryptedPackets (which dissects
+                // every packet) stay off the composition thread; only the state
+                // writes come back to it.
+                val (restored, hasTls) = withContext(Dispatchers.IO) {
+                    val restored = restoreRememberedSslKeyLog(pcap)
+                    restored to (pcap.hasEncryptedPackets || pcap.sslKeyLog.isNotEmpty)
                 }
+                pcapHasTls = hasTls
+                if (restored) sslKeyLogGeneration++
             }
             state.setPanelsResolved(false)
             state.clearResolvedTableTabs()

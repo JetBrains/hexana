@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.vfs.toNioPathOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -1007,6 +1008,13 @@ private suspend fun loadSslKeyLog(
             }
             is KeyLogRead.Parsed -> if (read.keyLog.isNotEmpty) {
                 provider.sslKeyLog = read.keyLog
+                // Remember the pairing so reopening the capture decrypts it
+                // without a second trip through the picker. In-memory captures
+                // (an entry unpacked out of an archive) have no path to pair.
+                val keyLogPath = chosen.toNioPathOrNull()?.toString() ?: chosen.path
+                provider.sourcePath?.let { capturePath ->
+                    PcapSslKeyLogSettings.getInstance().remember(capturePath, keyLogPath)
+                }
                 org.jetbrains.hexana.HexanaLog.LOG.info(
                     "Loaded SSL key log: ${chosen.name} (${read.keyLog.sessionCount} sessions)",
                 )
