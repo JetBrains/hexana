@@ -38,7 +38,6 @@ import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtil
-import com.intellij.openapi.vfs.VirtualFile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -88,11 +87,6 @@ internal fun BinaryEditorView(
     state: HexViewStateHolder,
     hexFocusRequester: FocusRequester,
     fileName: String = "",
-    // The capture/binary's own VirtualFile, when it has one. Only used to
-    // look for sidecar files next to it (currently a pcap SSL key log);
-    // providers cannot supply it because most concrete providers are not
-    // BinaryVirtualFileProvider subclasses.
-    sourceFile: VirtualFile? = null,
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
@@ -332,23 +326,12 @@ internal fun BinaryEditorView(
                 return@LaunchedEffect
             }
             if (panelsResolved.value) return@LaunchedEffect
-            // Load a sibling key log *before* the tabs are built, so the
-            // "Packets" tab is decrypted on first render. Doing this from the
-            // description bar instead used to race the resolution below, and
-            // replacePlaceholders matches by tab name \u2014 so the decrypted
-            // panel could be clobbered by the non-decrypting one. Sitting after
-            // the panelsResolved early return keeps re-entering composition from
-            // re-scanning the VFS.
             (binaryProvider as? PcapBinaryProvider)?.let { pcap ->
-                // Both the VFS scan and hasEncryptedPackets (which dissects every
-                // packet) stay off the composition thread; only the state writes
-                // come back to it.
-                val (loaded, hasTls) = withContext(Dispatchers.IO) {
-                    val loaded = autoDetectAndLoadSslKeyLog(pcap, sourceFile)
-                    loaded to (pcap.hasEncryptedPackets || pcap.sslKeyLog.isNotEmpty)
+                // hasEncryptedPackets dissects every packet, so it stays off the
+                // composition thread; only the state write comes back to it.
+                pcapHasTls = withContext(Dispatchers.IO) {
+                    pcap.hasEncryptedPackets || pcap.sslKeyLog.isNotEmpty
                 }
-                pcapHasTls = hasTls
-                if (loaded) sslKeyLogGeneration++
             }
             state.setPanelsResolved(false)
             state.clearResolvedTableTabs()

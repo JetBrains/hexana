@@ -289,10 +289,6 @@ class HexanaFileEditor(
                 BinaryEditorView(
                     binaryProvider!!, stateHolder, hexFocusRequester,
                     fileName = myFile.name,
-                    // Lets the view look for sidecar files next to the binary
-                    // (a pcap SSL key log). In-memory nested views have no disk
-                    // neighbours, so they pass nothing.
-                    sourceFile = myFile.takeUnless { it is HexanaBinaryVirtualFile },
                     parentFileName = parentFile?.name,
                     onNavigateToParent = parentFile?.let { pf ->
                         { FileEditorManager.getInstance(myProject).openFile(pf, true) }

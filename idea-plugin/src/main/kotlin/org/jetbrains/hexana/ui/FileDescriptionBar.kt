@@ -897,8 +897,8 @@ private fun finalizeWriteToSibling(
  * Button in the file description bar for PCAP files that allows loading
  * an SSL key log file for TLS decryption.
  *
- * Sibling key logs are auto-detected by the caller before the packet tabs
- * are built, so this composable only handles explicit imports.
+ * Importing a key log is always explicit: nothing is picked up off disk on
+ * the user's behalf.
  * [PcapBinaryProvider.sslKeyLog] is a plain `var`, not Compose state, so
  * the badge is derived under [sslKeyLogGeneration] \u2014 bumped by whoever
  * installs a key log \u2014 rather than read directly.
@@ -953,6 +953,15 @@ private fun PcapSslKeyLogButton(
             style = TextStyle(fontSize = 11.sp),
         )
     }
+}
+
+/**
+ * Returns `true` when [content] looks like a PEM-encoded private key
+ * (RSA, EC, PKCS#8, etc.) rather than an NSS Key Log file.
+ */
+internal fun looksLikePrivateKey(content: String): Boolean {
+    val trimmed = content.trimStart()
+    return trimmed.startsWith("-----BEGIN") && trimmed.contains("PRIVATE KEY-----")
 }
 
 /** What reading a picked key log file produced, decided off the EDT. */
