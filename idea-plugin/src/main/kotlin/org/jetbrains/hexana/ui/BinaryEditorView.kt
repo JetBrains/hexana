@@ -58,6 +58,7 @@ import org.jetbrains.hexana.nativebin.JVM_FILE_SYSTEM
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.DexBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.NativeDebugTabData
 import org.jetbrains.hexana.shared.TableTabDescriptor

@@ -38,6 +38,7 @@ import org.jetbrains.hexana.dex.DexFile
 import org.jetbrains.hexana.dex.renderDexClassAccessFlags
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.DexBinaryProvider
+import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.DexSmaliClass
 import org.jetbrains.hexana.shared.DexSmaliRow
 import org.jetbrains.hexana.shared.DexSmaliSearchEntry
@@ -52,12 +53,6 @@ import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.CircularProgressIndicator
 import org.jetbrains.jewel.ui.component.Text
-
-/**
- * Tab name of the smali view. Shared with `discoverHardcodedPanelNames` so the
- * placeholder tab shown while panels resolve is guaranteed to be replaced.
- */
-internal const val DEX_SMALI_TAB_NAME = "Smali"
 
 /**
  * The Dalvik disassembly tab for `.dex` binaries: one foldable section per

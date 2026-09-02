@@ -1383,7 +1383,9 @@ private sealed class WatConversionStatus {
 // that adapt to the VS Code theme.
 // ---------------------------------------------------------------------------
 
-private fun cssColorFor(kind: RenderTokenKind): String = when (kind) {
+/** Maps a token kind to a VS Code themed CSS colour. Shared by every
+ * token-rendering tab in the webview (WAT, DEX smali). */
+internal fun cssColorFor(kind: RenderTokenKind): String = when (kind) {
     RenderTokenKind.KEYWORD -> "var(--vscode-symbolIcon-keywordForeground, #569CD6)"
     RenderTokenKind.IDENTIFIER -> "var(--vscode-symbolIcon-variableForeground, #9CDCFE)"
     RenderTokenKind.NUMBER -> "var(--vscode-debugTokenExpression-number, #B5CEA8)"

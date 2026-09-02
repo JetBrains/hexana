@@ -169,8 +169,8 @@ fun BinaryEditorApp() {
                 }
             }
 
-            val extraTabs = remember(bytes) {
-                computeExtraTabs(buffer)
+            val extraTabs = remember(bytes, provider) {
+                computeExtraTabs(buffer, provider)
             }
 
             // Remembered for the same reason as the buffer above: the panel

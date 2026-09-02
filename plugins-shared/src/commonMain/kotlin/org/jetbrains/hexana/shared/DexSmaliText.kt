@@ -39,6 +39,12 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 // the UI thread, when that class is expanded.
 // ---------------------------------------------------------------------------
 
+/**
+ * Tab label of the smali view. Shared so every host names the tab identically —
+ * the IntelliJ side also matches it against its panel-name discovery.
+ */
+const val DEX_SMALI_TAB_NAME: String = "Smali"
+
 /** Section kinds of the smali view; see [dexSmaliChunkTree]. */
 object DexSmaliSectionKinds {
     /** Foldable per-class header row. */

@@ -4,6 +4,7 @@ import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.dex.DexFileParser
 import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.pcap.SslKeyLog
@@ -84,7 +85,17 @@ class NativeDiffPayload(
     val rightName: String,
 )
 
-fun computeExtraTabs(buffer: org.jetbrains.hexana.io.CommonByteBuffer): List<PanelTab> {
+/**
+ * Extra tabs for formats that have a dedicated view rather than a table.
+ *
+ * [provider] is optional but worth passing: for a DEX it is a
+ * [DexBinaryProvider] that has already parsed the file, so handing it over
+ * avoids decoding the string table a second time.
+ */
+fun computeExtraTabs(
+    buffer: org.jetbrains.hexana.io.CommonByteBuffer,
+    provider: BinaryProvider? = null,
+): List<PanelTab> {
     if (ClassFileBinaryProvider.isClassFile(buffer)) {
         val classFile = try {
             JavaClassFileParser.parse(buffer.duplicate().position(0))
@@ -92,6 +103,15 @@ fun computeExtraTabs(buffer: org.jetbrains.hexana.io.CommonByteBuffer): List<Pan
             null
         }
         return if (classFile != null) classFileExtraTabs(classFile) else emptyList()
+    }
+    if (DexBinaryProvider.isDexFile(buffer)) {
+        val dex = (provider as? DexBinaryProvider)?.parsedDexFile
+            ?: try {
+                DexFileParser.parse(buffer.duplicate().position(0))
+            } catch (_: Exception) {
+                null
+            }
+        return if (dex != null) dexSmaliExtraTabs(dex, buffer) else emptyList()
     }
     return emptyList()
 }

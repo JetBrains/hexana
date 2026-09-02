@@ -3519,6 +3519,7 @@ interface DexBinaryProvider extends GenericBinaryProvider {
       protoIdx: number;
     }[];
     protoIds: {
+      parameterTypeIdx: number[];
       parametersOff: number;
       returnTypeIdx: number;
       shortyIdx: number;
@@ -5178,6 +5179,7 @@ interface DexFile {
     protoIdx: number;
   }[];
   protoIds: {
+    parameterTypeIdx: number[];
     parametersOff: number;
     returnTypeIdx: number;
     shortyIdx: number;
@@ -5223,6 +5225,7 @@ interface DexFile {
     descriptorIdx: number;
   }[];
   component4(): {
+    parameterTypeIdx: number[];
     parametersOff: number;
     returnTypeIdx: number;
     shortyIdx: number;
@@ -5278,6 +5281,7 @@ interface DexFile {
   }[], typeIds: {
     descriptorIdx: number;
   }[], protoIds: {
+    parameterTypeIdx: number[];
     parametersOff: number;
     returnTypeIdx: number;
     shortyIdx: number;
@@ -5346,6 +5350,7 @@ interface DexFile {
       protoIdx: number;
     }[];
     protoIds: {
+      parameterTypeIdx: number[];
       parametersOff: number;
       returnTypeIdx: number;
       shortyIdx: number;
@@ -5358,8 +5363,13 @@ interface DexFile {
       descriptorIdx: number;
     }[];
   };
+  fieldRef(index: number): string;
+  methodRef(index: number): string;
+  protoDescriptor(index: number): string;
   string(index: number): string | null;
+  stringRef(index: number): string;
   typeName(index: number): string | null;
+  typeRef(index: number): string;
 }
 
 interface DexHeader {
@@ -5453,13 +5463,16 @@ interface DexMethodId {
 }
 
 interface DexProtoId {
+  parameterTypeIdx: number[];
   parametersOff: number;
   returnTypeIdx: number;
   shortyIdx: number;
   component1(): number;
   component2(): number;
   component3(): number;
-  copy(shortyIdx: number, returnTypeIdx: number, parametersOff: number): {
+  component4(): number[];
+  copy(shortyIdx: number, returnTypeIdx: number, parametersOff: number, parameterTypeIdx: number[]): {
+    parameterTypeIdx: number[];
     parametersOff: number;
     returnTypeIdx: number;
     shortyIdx: number;
