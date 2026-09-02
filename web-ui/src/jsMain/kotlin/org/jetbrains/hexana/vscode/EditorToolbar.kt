@@ -377,7 +377,16 @@ fun EditorToolbar(
             // worker and has no way to push a key log back into the provider.
             if (provider is PcapBinaryProvider && host.canPickSslKeyLog) {
                 if (sslKeyLogSessionCount > 0) {
-                    Span({ classes("hexana-badge") }) {
+                    Span({
+                        classes("hexana-badge")
+                        // Unstyled it inherits the editor's body size, which
+                        // reads as a headline next to the 11px badges and
+                        // buttons it shares the toolbar with.
+                        style {
+                            property("font-size", "11px")
+                            property("line-height", "1")
+                        }
+                    }) {
                         Text("\uD83D\uDD11 SSL keys loaded ($sslKeyLogSessionCount sessions)")
                     }
                 }
