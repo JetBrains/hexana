@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.State
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -213,18 +214,48 @@ internal fun VirtualizedChunkPanel(
     }
     onNavigatorReady?.invoke(navigator)
 
-    // Precompute a prefix-sum of item counts so that mapping a LazyColumn
-    // item index back to a chunk index is O(log n) instead of O(n).
+    // Precompute a prefix-sum of emitted item counts so that mapping a
+    // LazyColumn item index back to a chunk index is O(log n) instead of O(n).
     // This avoids an O(n) scan on every scroll frame inside derivedStateOf.
-    val chunkItemPrefixSums = remember(chunkTree) {
-        val n = chunkTree.totalChunks
-        val sums = IntArray(n)
-        var acc = 0
-        for (i in 0 until n) {
-            acc += config.itemCountForChunk(chunkTree.chunkAt(i).id)
-            sums[i] = acc
+    //
+    // It has to count what the LazyColumn below actually emits, which means
+    // honouring the same fold rules: a folded section's elements contribute
+    // nothing, and a child header under a folded ancestor is not emitted at
+    // all. Both inputs also change while the panel is open — the reader folds
+    // sections, and formats that decode lazily report a growing item count per
+    // chunk — so this is derived state rather than a plain remember, which
+    // would freeze the mapping at its first value and leave the status bar
+    // naming the wrong chunk. Only the status bar reads it, so scroll frames
+    // still do not recompose this composable.
+    val chunkItemPrefixSums = remember(chunkTree, config) {
+        derivedStateOf {
+            val n = chunkTree.totalChunks
+            val sums = IntArray(n)
+            val folded = foldedSectionsState.value
+            var acc = 0
+            var hidden = false
+            var ancestorHidden = false
+            for (i in 0 until n) {
+                when (val chunk = chunkTree.chunkAt(i)) {
+                    is BinaryChunk.SectionHeader -> {
+                        val parentKind = config.sectionParent[chunk.kind]
+                        if (parentKind == null) {
+                            val selfFolded = chunk.id in folded
+                            ancestorHidden = selfFolded
+                            hidden = selfFolded
+                            acc++
+                        } else if (!ancestorHidden) {
+                            hidden = chunk.id in folded
+                            acc++
+                        }
+                    }
+                    is BinaryChunk.Element ->
+                        if (!hidden && !ancestorHidden) acc += config.itemCountForChunk(chunk.id)
+                }
+                sums[i] = acc
+            }
+            sums
         }
-        sums
     }
 
     // NOTE: firstVisibleChunkIndex is intentionally NOT read at this scope.
@@ -825,7 +856,8 @@ private fun DefaultElementRow(
 private fun ChunkPanelStatusBar(
     chunkTree: ChunkTree,
     listState: LazyListState,
-    chunkItemPrefixSums: IntArray,
+    /** Prefix sums of emitted items per chunk; recomputed as folds and lazy decoding change them. */
+    chunkItemPrefixSums: State<IntArray>,
     sectionDisplayName: (SectionKind) -> String,
     extra: @Composable (() -> Unit)? = null,
 ) {
@@ -836,7 +868,7 @@ private fun ChunkPanelStatusBar(
     val currentIndex by remember(listState, chunkItemPrefixSums) {
         derivedStateOf {
             val targetItem = listState.firstVisibleItemIndex
-            val sums = chunkItemPrefixSums
+            val sums = chunkItemPrefixSums.value
             if (sums.isEmpty()) {
                 0
             } else {

@@ -237,8 +237,8 @@ object DexFileParser {
         val outsSize = buffer.readU2()
         val triesSize = buffer.readU2()
         val debugInfoOff = buffer.readU4()
-        val insnsSize = buffer.readU4().toInt()
-        require(insnsSize >= 0) { "code_item at $codeOff has insns_size $insnsSize" }
+        val insnsSize = buffer.readU4()
+            .requireEntriesFit(buffer, bytesPerEntry = 2, what = "code_item at $codeOff insns")
 
         val insnsFileOffset = buffer.position()
         val insns = ByteArray(insnsSize * 2).also { buffer.get(it, 0, it.size) }
@@ -248,6 +248,7 @@ object DexFileParser {
         } else {
             // A padding code unit keeps try_item[] 4-byte aligned.
             if (insnsSize % 2 != 0) buffer.readU2()
+            triesSize.toLong().requireEntriesFit(buffer, bytesPerEntry = 8, what = "code_item at $codeOff tries")
             List(triesSize) {
                 DexTry(
                     startAddr = buffer.readU4().toInt(),
@@ -279,12 +280,17 @@ object DexFileParser {
      */
     private fun parseCatchHandlers(buffer: CommonByteBuffer): List<DexCatchHandler> {
         val listStart = buffer.position()
-        val size = buffer.readUleb128()
+        val size = buffer.readUleb128().toLong()
+            .requireEntriesFit(buffer, bytesPerEntry = 1, what = "encoded_catch_handler_list")
         return List(size) {
             val offset = buffer.position() - listStart
             // A negative size means |size| typed handlers followed by a catch-all.
+            // The magnitude is taken as a Long, since negating Int.MIN_VALUE —
+            // which a corrupt SLEB128 can encode — would stay negative.
             val encodedSize = buffer.readSleb128()
-            val typeHandlers = List(if (encodedSize < 0) -encodedSize else encodedSize) {
+            val typeHandlerCount = (if (encodedSize < 0) -encodedSize.toLong() else encodedSize.toLong())
+                .requireEntriesFit(buffer, bytesPerEntry = 2, what = "encoded_catch_handler")
+            val typeHandlers = List(typeHandlerCount) {
                 DexTypeAddrPair(typeIdx = buffer.readUleb128(), addr = buffer.readUleb128())
             }
             val catchAllAddr = if (encodedSize <= 0) buffer.readUleb128() else null
@@ -334,6 +340,24 @@ private fun CommonByteBuffer.readUleb128(): Int {
         shift += 7
     }
     return result
+}
+
+/**
+ * Validates a count read from the file against the bytes that are actually
+ * left, and narrows it to [Int].
+ *
+ * Every counted DEX structure occupies at least [bytesPerEntry] bytes, so a
+ * count past the end of the buffer can only come from a corrupt or hostile
+ * file. Checking it here fails with a message naming the structure, instead of
+ * asking for a multi-gigabyte list first and dying in the allocator — DEX files
+ * are untrusted input.
+ */
+private fun Long.requireEntriesFit(buffer: CommonByteBuffer, bytesPerEntry: Int, what: String): Int {
+    val remaining = buffer.remaining()
+    require(this >= 0 && this * bytesPerEntry <= remaining) {
+        "$what declares $this entries, which does not fit in the remaining $remaining bytes"
+    }
+    return toInt()
 }
 
 /**

@@ -669,9 +669,15 @@ private fun formatFileOffset(offset: Long): String = "0x" + offset.toString(16).
 
 private fun formatAddress(address: Int): String = address.toString(16).padStart(4, '0')
 
-/** Literals print as signed hex, the way baksmali and dexdump render them. */
-private fun formatLiteral(value: Long): String = when {
-    value < 0 -> "-0x" + (-value).toString(16)
+/**
+ * Literals print as signed hex, the way baksmali and dexdump render them.
+ *
+ * The magnitude of a negative value is taken in unsigned space: `-value`
+ * overflows back to itself for [Long.MIN_VALUE], which a `const-wide` can
+ * legitimately carry, and `Long.toString(16)` would then emit its own sign.
+ */
+internal fun formatLiteral(value: Long): String = when {
+    value < 0 -> "-0x" + (0uL - value.toULong()).toString(16)
     else -> "0x" + value.toString(16)
 }
 

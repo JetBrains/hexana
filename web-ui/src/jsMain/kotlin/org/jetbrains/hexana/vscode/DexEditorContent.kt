@@ -101,6 +101,18 @@ internal class DexSmaliItemIndex(
     }
 }
 
+/**
+ * Holds the search index, built on first use and then reused.
+ *
+ * Not a `lazy {}` property: the value has to be recreated per opened file, and
+ * the holder makes the deferral explicit at the call site.
+ */
+internal class LazySearchIndex(private val build: () -> List<DexSmaliSearchEntry>) {
+    private var entries: List<DexSmaliSearchEntry>? = null
+
+    fun get(): List<DexSmaliSearchEntry> = entries ?: build().also { entries = it }
+}
+
 /** Classes whose descriptor, or one of whose indexed methods, matches [query]. */
 internal fun filterDexSmaliClasses(
     classes: List<DexSmaliClass>,
@@ -119,7 +131,6 @@ internal fun filterDexSmaliClasses(
 @Composable
 private fun DexSmaliTab(dex: DexFile, bytes: CommonByteBuffer, selection: HexSelectionState) {
     val classes = remember(dex) { dexSmaliClasses(dex) }
-    val searchIndex = remember(dex) { dexSmaliSearchIndex(dex, bytes, classes) }
 
     var searchQuery by remember(dex) { mutableStateOf("") }
     var debouncedQuery by remember(dex) { mutableStateOf("") }
@@ -128,8 +139,15 @@ private fun DexSmaliTab(dex: DexFile, bytes: CommonByteBuffer, selection: HexSel
         debouncedQuery = searchQuery
     }
 
-    val visibleClasses = remember(classes, searchIndex, debouncedQuery) {
-        filterDexSmaliClasses(classes, searchIndex, debouncedQuery)
+    // Indexing method names parses every class_data_item, so it is deferred
+    // until the reader actually searches — otherwise opening the tab pays for a
+    // feature most readers never touch, on the one thread a webview has. Once
+    // built it is kept for the rest of the session.
+    val searchIndexHolder = remember(dex) { LazySearchIndex { dexSmaliSearchIndex(dex, bytes, classes) } }
+
+    val visibleClasses = remember(classes, debouncedQuery) {
+        if (debouncedQuery.isBlank()) classes
+        else filterDexSmaliClasses(classes, searchIndexHolder.get(), debouncedQuery)
     }
 
     // Collapsed initially, so opening the tab reads no class_data_item and no

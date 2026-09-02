@@ -159,6 +159,17 @@ class DexSmaliTextTest {
         )
         assertEquals(ChunkId.Indexed(DexSmaliSectionKinds.CLASS_BODY, 3), dexSmaliClassBodyId(3))
     }
+
+    @Test
+    fun `literals print as signed hex, including the full 64-bit range`() {
+        assertEquals("0x0", formatLiteral(0))
+        assertEquals("0x7b", formatLiteral(123))
+        assertEquals("-0x1", formatLiteral(-1))
+        assertEquals("0x7fffffffffffffff", formatLiteral(Long.MAX_VALUE))
+        // `const-wide v0, #Long.MIN_VALUE` is a valid instruction, and negating
+        // the value to take its magnitude leaves it negative.
+        assertEquals("-0x8000000000000000", formatLiteral(Long.MIN_VALUE))
+    }
 }
 
 /**

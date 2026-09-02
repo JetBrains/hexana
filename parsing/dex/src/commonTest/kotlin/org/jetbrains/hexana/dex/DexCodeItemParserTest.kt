@@ -3,7 +3,9 @@ package org.jetbrains.hexana.dex
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class DexCodeItemParserTest {
 
@@ -83,6 +85,48 @@ class DexCodeItemParserTest {
         assertEquals(listOf(DexTypeAddrPair(typeIdx = 7, addr = 3)), second.typeHandlers)
         assertEquals(4, second.catchAllAddr)
     }
+
+    @Test
+    fun `a handler count past the end of the file is rejected, not allocated`() {
+        // A corrupt encoded_catch_handler_list size. Without a bound this asks
+        // for a list of 2^31 entries before the first read can fail.
+        val code = DexBytes()
+            .bytes(ByteArray(CODE_OFFSET))
+            .u2(1) // registers_size
+            .u2(0) // ins_size
+            .u2(0) // outs_size
+            .u2(1) // tries_size
+            .u4(0) // debug_info_off
+            .u4(2) // insns_size
+            .bytes(insns(0x000E, 0x0000))
+            .u4(0).u2(1).u2(0) // try_item
+            .uleb128(0x7FFFFFFF) // handler count
+            .build()
+
+        val failure = assertFails {
+            DexFileParser.parseCodeItem(code.toCommonByteBuffer(), CODE_OFFSET.toLong())
+        }
+        assertTrue(
+            failure.message?.contains("encoded_catch_handler_list") == true,
+            "unhelpful message: ${failure.message}",
+        )
+    }
+
+    @Test
+    fun `an insns size past the end of the file is rejected`() {
+        val code = DexBytes()
+            .bytes(ByteArray(CODE_OFFSET))
+            .u2(1).u2(0).u2(0).u2(0)
+            .u4(0)
+            .u4(0xFFFFFF) // insns_size, far past the end
+            .build()
+
+        val failure = assertFails {
+            DexFileParser.parseCodeItem(code.toCommonByteBuffer(), CODE_OFFSET.toLong())
+        }
+        assertTrue(failure.message?.contains("insns") == true, "unhelpful message: ${failure.message}")
+    }
+
 }
 
 /** Filler in front of the hand-built `code_item`, so its offset is non-zero. */
