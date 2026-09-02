@@ -21,6 +21,8 @@ kotlin {
                 implementation(project(":wasmParser"))
                 implementation(project(":binaryProvider"))
                 implementation(project(":encdec"))
+                implementation(project(":hexanaDocument"))
+                implementation(project(":parsing:dex"))
                 implementation(project(":debugInfo:dwarf"))
             }
         }

@@ -127,12 +127,17 @@ object DexFileParser {
     private fun parseProtoIds(buffer: CommonByteBuffer, header: DexHeader): List<DexProtoId> {
         if (header.protoIdsSize == 0) return emptyList()
         buffer.position(header.protoIdsOff.toInt())
-        return List(header.protoIdsSize) {
+        val protos = List(header.protoIdsSize) {
             DexProtoId(
                 shortyIdx = buffer.readU4().toInt(),
                 returnTypeIdx = buffer.readU4().toInt(),
                 parametersOff = buffer.readU4(),
             )
+        }
+        // Parameter type lists live in the data section, so they are resolved in
+        // a second pass rather than seeking away mid-table.
+        return protos.map { proto ->
+            proto.copy(parameterTypeIdx = parseTypeList(buffer, proto.parametersOff))
         }
     }
 
@@ -219,6 +224,75 @@ object DexFileParser {
     }
 
     /**
+     * Parses the `code_item` at [codeOff] — one method's register frame,
+     * instruction stream and exception table. Returns `null` when [codeOff] is
+     * zero, which is how abstract and native methods are encoded.
+     */
+    fun parseCodeItem(buffer: CommonByteBuffer, codeOff: Long): DexCodeItem? {
+        if (codeOff == 0L) return null
+        buffer.position(codeOff.toInt())
+
+        val registersSize = buffer.readU2()
+        val insSize = buffer.readU2()
+        val outsSize = buffer.readU2()
+        val triesSize = buffer.readU2()
+        val debugInfoOff = buffer.readU4()
+        val insnsSize = buffer.readU4().toInt()
+        require(insnsSize >= 0) { "code_item at $codeOff has insns_size $insnsSize" }
+
+        val insnsFileOffset = buffer.position()
+        val insns = ByteArray(insnsSize * 2).also { buffer.get(it, 0, it.size) }
+
+        val tries = if (triesSize == 0) {
+            emptyList()
+        } else {
+            // A padding code unit keeps try_item[] 4-byte aligned.
+            if (insnsSize % 2 != 0) buffer.readU2()
+            List(triesSize) {
+                DexTry(
+                    startAddr = buffer.readU4().toInt(),
+                    insnCount = buffer.readU2(),
+                    handlerOff = buffer.readU2(),
+                )
+            }
+        }
+
+        val handlers = if (triesSize == 0) emptyList() else parseCatchHandlers(buffer)
+
+        return DexCodeItem(
+            registersSize = registersSize,
+            insSize = insSize,
+            outsSize = outsSize,
+            debugInfoOff = debugInfoOff,
+            insnsSize = insnsSize,
+            insnsFileOffset = insnsFileOffset,
+            instructions = DexBytecodeDecoder.decode(insns),
+            tries = tries,
+            handlers = handlers,
+        )
+    }
+
+    /**
+     * Parses the `encoded_catch_handler_list` at the buffer's current position.
+     * Handler offsets in `try_item` are byte offsets from the start of this
+     * list, so each handler records its own relative offset.
+     */
+    private fun parseCatchHandlers(buffer: CommonByteBuffer): List<DexCatchHandler> {
+        val listStart = buffer.position()
+        val size = buffer.readUleb128()
+        return List(size) {
+            val offset = buffer.position() - listStart
+            // A negative size means |size| typed handlers followed by a catch-all.
+            val encodedSize = buffer.readSleb128()
+            val typeHandlers = List(if (encodedSize < 0) -encodedSize else encodedSize) {
+                DexTypeAddrPair(typeIdx = buffer.readUleb128(), addr = buffer.readUleb128())
+            }
+            val catchAllAddr = if (encodedSize <= 0) buffer.readUleb128() else null
+            DexCatchHandler(offset, typeHandlers, catchAllAddr)
+        }
+    }
+
+    /**
      * Parses a `type_list` at the given offset (e.g. `interfaces_off` or
      * `parameters_off`). Returns an empty list when [offset] is zero.
      */
@@ -258,6 +332,28 @@ private fun CommonByteBuffer.readUleb128(): Int {
         result = result or ((b and 0x7F) shl shift)
         if (b and 0x80 == 0) break
         shift += 7
+    }
+    return result
+}
+
+/**
+ * Reads a SLEB128-encoded signed integer (used for `encoded_catch_handler`
+ * sizes, where a negative value marks a trailing catch-all handler).
+ */
+private fun CommonByteBuffer.readSleb128(): Int {
+    var result = 0
+    var shift = 0
+    while (true) {
+        val b = readU1()
+        result = result or ((b and 0x7F) shl shift)
+        shift += 7
+        if (b and 0x80 == 0) {
+            // Sign-extend from the last significant bit read.
+            if (shift < 32 && (b and 0x40) != 0) {
+                result = result or (-1 shl shift)
+            }
+            break
+        }
     }
     return result
 }

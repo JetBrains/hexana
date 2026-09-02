@@ -28,6 +28,43 @@ data class DexFile(
         val typeId = typeIds.getOrNull(index) ?: return null
         return string(typeId.descriptorIdx)
     }
+
+    /**
+     * Renders a prototype in descriptor form, e.g. `(ILjava/lang/String;)V`.
+     * Unresolvable indices are rendered as `<#n>` rather than dropped, so a
+     * damaged file still produces readable output.
+     */
+    fun protoDescriptor(index: Int): String {
+        val proto = protoIds.getOrNull(index) ?: return "<#$index>"
+        return buildString {
+            append('(')
+            for (typeIdx in proto.parameterTypeIdx) append(typeRef(typeIdx))
+            append(')')
+            append(typeRef(proto.returnTypeIdx))
+        }
+    }
+
+    /** Renders a method reference in smali form, e.g. `Lcom/Foo;->bar(I)V`. */
+    fun methodRef(index: Int): String {
+        val method = methodIds.getOrNull(index) ?: return "<meth@$index>"
+        return typeRef(method.classIdx) + "->" +
+            (string(method.nameIdx) ?: "<#${method.nameIdx}>") +
+            protoDescriptor(method.protoIdx)
+    }
+
+    /** Renders a field reference in smali form, e.g. `Lcom/Foo;->x:I`. */
+    fun fieldRef(index: Int): String {
+        val field = fieldIds.getOrNull(index) ?: return "<field@$index>"
+        return typeRef(field.classIdx) + "->" +
+            (string(field.nameIdx) ?: "<#${field.nameIdx}>") + ":" +
+            typeRef(field.typeIdx)
+    }
+
+    /** [typeName] with a placeholder instead of `null`, for use inside rendered text. */
+    fun typeRef(index: Int): String = typeName(index) ?: "<type@$index>"
+
+    /** [string] with a placeholder instead of `null`, for use inside rendered text. */
+    fun stringRef(index: Int): String = string(index) ?: "<string@$index>"
 }
 
 data class DexHeader(
@@ -115,6 +152,8 @@ data class DexProtoId(
     val shortyIdx: Int,
     val returnTypeIdx: Int,
     val parametersOff: Long,
+    /** Parameter type indices, resolved from the `type_list` at [parametersOff]. */
+    val parameterTypeIdx: List<Int> = emptyList(),
 )
 
 /** `field_id_item`. */

@@ -1090,7 +1090,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
             })
         }
     }
-    is DexBinaryProvider -> emptyList()
+    is DexBinaryProvider -> dexSmaliPanels(this, state)
     is GenericBinaryProvider -> emptyList()
     is ArchiveBinaryProvider -> emptyList()
     is ElfBinaryProvider -> {
@@ -1696,7 +1696,7 @@ private fun BinaryProvider.discoverPanelNames(): List<String> {
  */
 private fun BinaryProvider.discoverHardcodedPanelNames(): List<String> = when (this) {
     is ClassFileBinaryProvider -> listOf("Header", "Methods")
-    is DexBinaryProvider -> emptyList()
+    is DexBinaryProvider -> listOf(DEX_SMALI_TAB_NAME)
     is GenericBinaryProvider -> emptyList()
     is ArchiveBinaryProvider -> emptyList()
     is ElfBinaryProvider -> {
