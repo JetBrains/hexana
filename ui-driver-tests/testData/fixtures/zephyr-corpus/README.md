@@ -12,7 +12,7 @@ Bundled from the zephyr-corpus repository (commit a30adb9), the ELF-side analog
 of skiko.wasm. Each per-sample directory there has a BUILD.md with the exact
 board, optimization flags, and Kconfig deltas.
 
-- `apps/**` (16 ELFs, DWARF4/5): Zephyr main v4.4.0-12742-g231e3c5c569 sample
+- `apps/**` (17 ELFs, DWARF4/5): Zephyr main v4.4.0-12742-g231e3c5c569 sample
   applications built with Zephyr SDK 1.0.1. Includes:
   - hello_world for nrf52840dk (Renode, nrf52840) and nucleo_f429zi (Renode, generated)
   - hello_world for qemu_cortex_m3 (QEMU lm3s6965evb, Cortex-M3) and mps2/an521/cpu0 (QEMU mps2-an521, Cortex-M33)
@@ -21,6 +21,9 @@ board, optimization flags, and Kconfig deltas.
   - hello_world for stm32f4_disco (Renode, stm32f4_discovery built-in library platform)
   - hello_world for v2m_beetle (unsupported-target: no QEMU/Renode backend, Cortex-M0)
   - hang_unmodeled for nrf52840dk (hangs-on-unmodeled-hw: spins on reserved addr 0x4002F000 before printk)
+  - peripheral_hr nrf52840dk-Os-abi-drift (corpus commit d582bf8): the -Os build with an
+    ABI-drift patch (Partner demo pack), diffed against nrf52840dk-Os by
+    `AbiDriftCaptureTest` and opened by `BreakpointCaptureTest`
   Each variant directory contains `zephyr.elf.gz`, `zephyr.dts`, `.config`, and `manifest.json`
   (emulator backend, machine name, boot-banner regex, negativeKind). Rebuild with the corpus
   repo's `tools/build-all.sh`.
