@@ -17,6 +17,8 @@ import com.intellij.psi.SyntaxTraverser
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.usages.UsageViewManager
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.hexana.breakpoints.BinaryBreakpointRegistry
+import org.jetbrains.hexana.breakpoints.BinaryIdentityProvider
 import org.jetbrains.hexana.disassembly.core.Arch
 import org.jetbrains.hexana.HexanaComponentDiffVirtualFile
 import org.jetbrains.hexana.HexanaFileEditor
@@ -31,6 +33,12 @@ import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.classifyArchiveMember
+import org.jetbrains.hexana.shared.BinaryAnchor
+import org.jetbrains.hexana.wasm.opcodes.OpCodeWithOffset
+import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
+import org.jetbrains.hexana.wasm.sections.WasmSectionCode
+import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
+import org.jetbrains.hexana.wasm.sections.parseCodeEntry
 import org.jetbrains.hexana.providers.format.WasmComponentDiffOrchestrator
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
@@ -283,6 +291,193 @@ object HexanaEditorUiTestProbe {
     fun setClipboardText(text: String): List<String> = runOnEdt {
         CopyPasteManager.getInstance().setContents(StringSelection(text))
         payload("hexana-set-clipboard-text", listOf("length=${text.length}"))
+    }
+
+    /**
+     * Adds a breakpoint on the first instruction of the first function whose name
+     * contains [query] (case-insensitive). Works for both native (ELF/Mach-O/PE)
+     * and WASM files.
+     *
+     * For native files the anchor is [BinaryAnchor.Native] keyed by the first
+     * decoded instruction's virtual address. For WASM files the anchor is
+     * [BinaryAnchor.Wasm] keyed by the global function index and the module-absolute
+     * byte offset of the first opcode in that function's body.
+     *
+     * The file must already be open as a Hexana editor; its identity is computed via
+     * [BinaryIdentityProvider] (SHA-256 of the underlying file bytes). Returns a
+     * payload describing the breakpoint that was added.
+     */
+    @JvmStatic
+    fun toggleBinaryBreakpointOnFirstInstruction(fileIdentifier: String, query: String): List<String> {
+        val candidate = requireHexanaEditorCandidate(fileIdentifier)
+        val editor = candidate.editor
+        val provider = editor.binaryProvider
+            ?: throw IllegalStateException("No binary provider for '$fileIdentifier'")
+        val project = candidate.project
+        val file = editor.myFile
+
+        // Use the editor's already-cached identity so the breakpoint is keyed by the
+        // same identity that GutterMarksModel was constructed with. Fall back to
+        // computing it fresh only when cachedIdentity hasn't been set yet.
+        val elfBuildId = (provider as? org.jetbrains.hexana.providers.ElfBinaryProvider)?.buildId
+        val identity = editor.cachedIdentity
+            ?: BinaryIdentityProvider.identityFor(file, elfBuildId)
+            ?: throw IllegalStateException("Could not compute identity for '$fileIdentifier' (file=${file.url})")
+        val registry = BinaryBreakpointRegistry.getInstance(project)
+        val filePath = if (file.isInLocalFileSystem) file.path else null
+
+        return when (provider) {
+            is NativeBinaryProvider -> {
+                val discovery = discoverDisasmRanges(provider)
+                    ?: throw IllegalStateException("No disassembly ranges for '$fileIdentifier'")
+                val matches = discovery.ranges.withIndex()
+                    .filter { (_, r) -> r.displayName.contains(query, ignoreCase = true) }
+                val targetMatch = (matches.firstOrNull { (_, r) -> r.size >= 16 } ?: matches.firstOrNull())
+                    ?: discovery.ranges.withIndex().firstOrNull { (_, r) -> r.size >= 16 }
+                    ?: throw IllegalStateException("No matching range for query '$query' in '$fileIdentifier'")
+                val range = targetMatch.value
+                val loadState = runBlocking { loadCapstoneDisassembly(discovery) }
+                val catalog = (loadState as? DisasmLoadState.Loaded)?.catalog
+                    ?: throw IllegalStateException(
+                        "Capstone load failed for '$fileIdentifier': ${(loadState as? DisasmLoadState.Error)?.message}",
+                    )
+                val instructions = runBlocking { catalog.decode(targetMatch.index) }
+                val firstInsn = instructions.firstOrNull()
+                    ?: throw IllegalStateException("No decoded instructions in range '${range.displayName}'")
+                // Anchor a few instructions in, NOT on the very first one: the chunk
+                // navigator parks the body's first row exactly under the sticky
+                // function header (ChunkPanelNavigator.scrollTo scrolls past the
+                // header by its height, which the sticky overlay then re-covers), so
+                // a mark on the first instruction is hidden after search navigation.
+                val targetInsn = instructions.getOrNull(3) ?: firstInsn
+                val anchor = BinaryAnchor.Native(
+                    virtualAddress = targetInsn.virtualAddress,
+                    symbolName = range.displayName,
+                    offsetInSymbol = targetInsn.virtualAddress - firstInsn.virtualAddress,
+                )
+                // toggle returns false when it removed an existing breakpoint (idempotent add).
+                if (!registry.toggle(identity, anchor, filePath)) {
+                    registry.add(identity, anchor, filePath)
+                }
+                payload(
+                    "hexana-toggle-breakpoint",
+                    listOf(
+                        "kind=native",
+                        "symbol=${range.displayName}",
+                        "va=0x${targetInsn.virtualAddress.toString(16)}",
+                        "gutterModelReady=${editor.gutterMarksModelFlow.value != null}",
+                        "added=true",
+                    ),
+                )
+            }
+
+            is WasmBinaryProvider -> {
+                val wasmModule = provider.wasmModule
+                    ?: throw IllegalStateException("WASM module parse failed for '$fileIdentifier'")
+                val importFuncCount = wasmModule.importSection
+                    ?.let { sec ->
+                        with(sec) { provider.bytes.getImportRecords() }
+                            .count { it.type is WasmTypeIndexExternalType }
+                    } ?: 0
+                val codeSection = wasmModule.codeSection
+                    ?: throw IllegalStateException("No code section in '$fileIdentifier'")
+                val codeEntryOffsets = with(codeSection) { provider.bytes.scanOffsets() }
+                if (codeEntryOffsets.isEmpty()) {
+                    throw IllegalStateException("Empty code section in '$fileIdentifier'")
+                }
+                val localFuncIdx = 0
+                val globalFuncIdx = importFuncCount + localFuncIdx
+                val entry = with(codeSection) { provider.bytes.parseCodeEntry(codeEntryOffsets[localFuncIdx].offset) }
+                // Use the first opcode with a non-zero module-absolute offset. Singleton opcodes
+                // like Unreachable / Nop carry offset==0 (they are shared objects), so fall back
+                // to the estimateBodyStart formula used by the WAT renderer to derive initialCursor.
+                val byteOffset = entry.opCodes
+                    .filterIsInstance<OpCodeWithOffset>()
+                    .firstOrNull { it.offset > 0 }
+                    ?.offset?.toLong()
+                    ?: (entry.offset.toLong() + 1L + entry.locals.size.toLong() * 4L)
+                val funcName = wasmModule.exportSection?.let { sec ->
+                    with(sec) { provider.bytes.scan() }
+                        .filterIsInstance<WasmFunctionExportRecordEntry>()
+                        .firstOrNull { it.index.toInt() == globalFuncIdx }
+                        ?.name
+                }
+                val anchor = BinaryAnchor.Wasm(
+                    funcIdx = globalFuncIdx,
+                    byteOffset = byteOffset,
+                    funcName = funcName,
+                    instrOrdinal = 0,
+                )
+                // toggle returns false when it removed an existing breakpoint (idempotent add).
+                if (!registry.toggle(identity, anchor, filePath)) {
+                    registry.add(identity, anchor, filePath)
+                }
+                payload(
+                    "hexana-toggle-breakpoint",
+                    listOf(
+                        "kind=wasm",
+                        "funcIdx=$globalFuncIdx",
+                        "byteOffset=0x${byteOffset.toString(16)}",
+                        "funcName=${funcName.orEmpty()}",
+                        "gutterModelReady=${editor.gutterMarksModelFlow.value != null}",
+                        "added=true",
+                    ),
+                )
+            }
+
+            else -> throw IllegalStateException(
+                "toggleBinaryBreakpointOnFirstInstruction: unsupported provider ${provider.kindId()} for '$fileIdentifier'"
+            )
+        }
+    }
+
+    /**
+     * Sets [HexanaFileEditor.wasmByteOffsetNavFlow] to [byteOffset] so the WAT
+     * (virtualized) panel scrolls to the instruction at that module-absolute byte
+     * offset. Must be called after the WAT tab is selected and rendered.
+     */
+    @JvmStatic
+    fun navigateWatToByteOffset(fileIdentifier: String, byteOffset: Int): List<String> {
+        val editor = requireHexanaEditor(fileIdentifier)
+        editor.requestWasmByteOffsetNav(byteOffset)
+        return payload("hexana-navigate-wat-byte-offset", listOf("byteOffset=0x${byteOffset.toString(16)}"))
+    }
+
+    /**
+     * Reads back the breakpoint state the gutter renders from for [fileIdentifier]:
+     * whether the editor's [org.jetbrains.hexana.ui.panel.GutterMarksModel] is wired,
+     * the editor's cached identity, how many registry breakpoints match that identity,
+     * and the keys currently in the marks map. Capture tests gate the screenshot on
+     * the expected mark key being present instead of sleeping and hoping.
+     */
+    @JvmStatic
+    fun binaryGutterMarks(fileIdentifier: String): List<String> {
+        val candidate = requireHexanaEditorCandidate(fileIdentifier)
+        val editor = candidate.editor
+        val identity = editor.cachedIdentity
+        val model = editor.gutterMarksModelFlow.value
+        val marks = model?.marks?.value ?: emptyMap()
+        val registry = BinaryBreakpointRegistry.getInstance(candidate.project)
+        val allBps = registry.breakpoints.value
+        val matching = allBps.filter { bp -> identity != null && identity.matches(bp.identity) }
+        return payload(
+            "hexana-gutter-marks",
+            buildList {
+                add("modelReady=${model != null}")
+                add("identitySha=${identity?.contentSha256?.take(12).orEmpty()}")
+                add("registryTotal=${allBps.size}")
+                add("registryMatching=${matching.size}")
+                matching.take(8).forEach { bp ->
+                    val key = when (val anchor = bp.anchor) {
+                        is BinaryAnchor.Wasm -> anchor.byteOffset
+                        is BinaryAnchor.Native -> anchor.virtualAddress.toLong()
+                    }
+                    add("registryKey=0x${key.toString(16)}")
+                }
+                add("markCount=${marks.size}")
+                marks.keys.sorted().take(16).forEach { add("markKey=0x${it.toString(16)}") }
+            },
+        )
     }
 
     @JvmStatic

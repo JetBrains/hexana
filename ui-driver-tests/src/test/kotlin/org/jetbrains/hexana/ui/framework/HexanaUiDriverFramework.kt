@@ -233,6 +233,15 @@ internal class HexanaEditor internal constructor(
 
     fun topSizeState(): List<String> = probe.topSizeState(fileIdentifier)
 
+    fun toggleBinaryBreakpointOnFirstInstruction(query: String): List<String> =
+        probe.toggleBinaryBreakpointOnFirstInstruction(fileIdentifier, query)
+
+    fun navigateWatToByteOffset(byteOffset: Int): List<String> =
+        probe.navigateWatToByteOffset(fileIdentifier, byteOffset)
+
+    fun binaryGutterMarks(): List<String> =
+        probe.binaryGutterMarks(fileIdentifier)
+
     fun nativeDisassemblyInstructions(query: String, maxLines: Int): List<String> =
         probe.nativeDisassemblyInstructions(fileIdentifier, query, maxLines)
 
@@ -562,4 +571,9 @@ internal interface HexanaEditorUiTestProbeRef {
 
     fun nativeDisassemblySummary(fileName: String, maxRanges: Int): List<String>
     fun setClipboardText(text: String): List<String>
+    fun toggleBinaryBreakpointOnFirstInstruction(fileName: String, query: String): List<String>
+
+    fun navigateWatToByteOffset(fileName: String, byteOffset: Int): List<String>
+
+    fun binaryGutterMarks(fileName: String): List<String>
 }
