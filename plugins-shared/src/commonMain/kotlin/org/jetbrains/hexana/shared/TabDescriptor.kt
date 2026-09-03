@@ -357,6 +357,7 @@ object TableTabsProviderRegistry {
             ProtobufTableTabsProvider(),
             ProtobufMessageTableTabsProvider(),
             DexTableTabsProvider(),
+            ArscTableTabsProvider(),
             PcapTableTabsProvider(),
             StringsTabProvider(),
             SizeTableTabsProvider(),

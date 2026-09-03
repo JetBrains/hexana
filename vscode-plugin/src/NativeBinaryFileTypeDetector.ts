@@ -30,7 +30,7 @@ const COFF_MACHINE_TYPES = new Set([0x014C, 0x01C0, 0x01C4, 0x0200, 0x8664, 0xAA
 /** Extensions already handled by the customEditors filenamePattern in package.json. */
 const KNOWN_EXTENSIONS = new Set([
     ".wasm", ".bin", ".elf", ".exe", ".so", ".o", ".a", ".dll", ".dylib",
-    ".jar", ".zip", ".war", ".apk", ".class", ".dex", ".desc", ".protoset",
+    ".jar", ".zip", ".war", ".apk", ".class", ".dex", ".arsc", ".desc", ".protoset",
     ".pcap", ".cap", ".pcapng",
 ]);
 

@@ -23,6 +23,7 @@ kotlin {
                 implementation(project(":encdec"))
                 implementation(project(":hexanaDocument"))
                 implementation(project(":parsing:dex"))
+                implementation(project(":parsing:arsc"))
                 implementation(project(":debugInfo:dwarf"))
             }
         }

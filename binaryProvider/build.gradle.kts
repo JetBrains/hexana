@@ -31,6 +31,7 @@ kotlin {
                 api(project(":parsing:tar"))
                 api(project(":parsing:javaBytecode"))
                 api(project(":parsing:dex"))
+                api(project(":parsing:arsc"))
                 api(project(":parsing:pcap"))
                 api(project(":parsing:protobuf"))
                 api(project(":parsing:parquet"))

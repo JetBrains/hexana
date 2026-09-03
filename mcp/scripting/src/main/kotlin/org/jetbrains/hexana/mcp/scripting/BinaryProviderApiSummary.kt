@@ -291,6 +291,7 @@ object BinaryProviderApiSummary {
                 "org.jetbrains.hexana.providers.ParquetBinaryProvider",
                 "org.jetbrains.hexana.providers.ClassFileBinaryProvider",
                 "org.jetbrains.hexana.providers.DexBinaryProvider",
+                "org.jetbrains.hexana.providers.ArscBinaryProvider",
             )
             for (name in knownImpls) {
                 try {

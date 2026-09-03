@@ -3541,6 +3541,85 @@ interface DexBinaryProvider extends GenericBinaryProvider {
   }[];
 }
 
+interface ArscBinaryProvider extends GenericBinaryProvider {
+  parsedArscFile?: {
+    packageCount: number;
+    packages: {
+      id: number;
+      keyStrings: {
+        flags: number;
+        isSorted: boolean;
+        isUtf8: boolean;
+        strings: string[];
+      };
+      name: string;
+      typeSpecs: {
+        entryCount: number;
+        typeId: number;
+        typeName: string;
+      }[];
+      typeStrings: {
+        flags: number;
+        isSorted: boolean;
+        isUtf8: boolean;
+        strings: string[];
+      };
+      types: {
+        configuration: {
+          country: string;
+          density: number;
+          language: string;
+          mcc: number;
+          mnc: number;
+          orientation: number;
+          qualifier: string;
+          sdkVersion: number;
+          size: number;
+        };
+        entries: {
+          entryId: number;
+          flags: number;
+          isCompact: boolean;
+          isComplex: boolean;
+          isPublic: boolean;
+          isWeak: boolean;
+          key: string;
+          keyIndex: number;
+          mapValues: {
+            nameRef: number;
+            value: {
+              data: number;
+              dataType: number;
+            };
+          }[];
+          parentRef: number;
+          value?: {
+            data: number;
+            dataType: number;
+          };
+        }[];
+        entryCount: number;
+        typeId: number;
+        typeName: string;
+      }[];
+    }[];
+    resourceCount: number;
+    valueStrings: {
+      flags: number;
+      isSorted: boolean;
+      isUtf8: boolean;
+      strings: string[];
+    };
+  };
+  strings: {
+    index: number;
+    offset: number;
+    size: number;
+    tag?: string;
+    value: string;
+  }[];
+}
+
 interface AddressSourceLocation {
   offset: number;
   sourceLocation: {
@@ -4489,6 +4568,877 @@ interface ArrowStreamContents {
         pos: number;
       };
     };
+  };
+}
+
+interface ArscConfiguration {
+  country: string;
+  density: number;
+  language: string;
+  mcc: number;
+  mnc: number;
+  orientation: number;
+  qualifier: string;
+  sdkVersion: number;
+  size: number;
+  component1(): number;
+  component2(): number;
+  component3(): number;
+  component4(): string;
+  component5(): string;
+  component6(): number;
+  component7(): number;
+  component8(): number;
+  copy(size: number, mcc: number, mnc: number, language: string, country: string, orientation: number, density: number, sdkVersion: number): {
+    country: string;
+    density: number;
+    language: string;
+    mcc: number;
+    mnc: number;
+    orientation: number;
+    qualifier: string;
+    sdkVersion: number;
+    size: number;
+  };
+}
+
+interface ArscEntry {
+  entryId: number;
+  flags: number;
+  isCompact: boolean;
+  isComplex: boolean;
+  isPublic: boolean;
+  isWeak: boolean;
+  key: string;
+  keyIndex: number;
+  mapValues: {
+    nameRef: number;
+    value: {
+      data: number;
+      dataType: number;
+    };
+  }[];
+  parentRef: number;
+  value?: {
+    data: number;
+    dataType: number;
+  };
+  component1(): number;
+  component2(): number;
+  component3(): string;
+  component4(): number;
+  component5(): {
+    data: number;
+    dataType: number;
+  } | null;
+  component6(): number;
+  component7(): {
+    nameRef: number;
+    value: {
+      data: number;
+      dataType: number;
+    };
+  }[];
+  copy(entryId: number, keyIndex: number, key: string, flags: number, value: {
+    data: number;
+    dataType: number;
+  } | null, parentRef: number, mapValues: {
+    nameRef: number;
+    value: {
+      data: number;
+      dataType: number;
+    };
+  }[]): {
+    entryId: number;
+    flags: number;
+    isCompact: boolean;
+    isComplex: boolean;
+    isPublic: boolean;
+    isWeak: boolean;
+    key: string;
+    keyIndex: number;
+    mapValues: {
+      nameRef: number;
+      value: {
+        data: number;
+        dataType: number;
+      };
+    }[];
+    parentRef: number;
+    value?: {
+      data: number;
+      dataType: number;
+    };
+  };
+}
+
+interface ArscFile {
+  packageCount: number;
+  packages: {
+    id: number;
+    keyStrings: {
+      flags: number;
+      isSorted: boolean;
+      isUtf8: boolean;
+      strings: string[];
+    };
+    name: string;
+    typeSpecs: {
+      entryCount: number;
+      typeId: number;
+      typeName: string;
+    }[];
+    typeStrings: {
+      flags: number;
+      isSorted: boolean;
+      isUtf8: boolean;
+      strings: string[];
+    };
+    types: {
+      configuration: {
+        country: string;
+        density: number;
+        language: string;
+        mcc: number;
+        mnc: number;
+        orientation: number;
+        qualifier: string;
+        sdkVersion: number;
+        size: number;
+      };
+      entries: {
+        entryId: number;
+        flags: number;
+        isCompact: boolean;
+        isComplex: boolean;
+        isPublic: boolean;
+        isWeak: boolean;
+        key: string;
+        keyIndex: number;
+        mapValues: {
+          nameRef: number;
+          value: {
+            data: number;
+            dataType: number;
+          };
+        }[];
+        parentRef: number;
+        value?: {
+          data: number;
+          dataType: number;
+        };
+      }[];
+      entryCount: number;
+      typeId: number;
+      typeName: string;
+    }[];
+  }[];
+  resourceCount: number;
+  valueStrings: {
+    flags: number;
+    isSorted: boolean;
+    isUtf8: boolean;
+    strings: string[];
+  };
+  component1(): number;
+  component2(): {
+    flags: number;
+    isSorted: boolean;
+    isUtf8: boolean;
+    strings: string[];
+  };
+  component3(): {
+    id: number;
+    keyStrings: {
+      flags: number;
+      isSorted: boolean;
+      isUtf8: boolean;
+      strings: string[];
+    };
+    name: string;
+    typeSpecs: {
+      entryCount: number;
+      typeId: number;
+      typeName: string;
+    }[];
+    typeStrings: {
+      flags: number;
+      isSorted: boolean;
+      isUtf8: boolean;
+      strings: string[];
+    };
+    types: {
+      configuration: {
+        country: string;
+        density: number;
+        language: string;
+        mcc: number;
+        mnc: number;
+        orientation: number;
+        qualifier: string;
+        sdkVersion: number;
+        size: number;
+      };
+      entries: {
+        entryId: number;
+        flags: number;
+        isCompact: boolean;
+        isComplex: boolean;
+        isPublic: boolean;
+        isWeak: boolean;
+        key: string;
+        keyIndex: number;
+        mapValues: {
+          nameRef: number;
+          value: {
+            data: number;
+            dataType: number;
+          };
+        }[];
+        parentRef: number;
+        value?: {
+          data: number;
+          dataType: number;
+        };
+      }[];
+      entryCount: number;
+      typeId: number;
+      typeName: string;
+    }[];
+  }[];
+  copy(packageCount: number, valueStrings: {
+    flags: number;
+    isSorted: boolean;
+    isUtf8: boolean;
+    strings: string[];
+  }, packages: {
+    id: number;
+    keyStrings: {
+      flags: number;
+      isSorted: boolean;
+      isUtf8: boolean;
+      strings: string[];
+    };
+    name: string;
+    typeSpecs: {
+      entryCount: number;
+      typeId: number;
+      typeName: string;
+    }[];
+    typeStrings: {
+      flags: number;
+      isSorted: boolean;
+      isUtf8: boolean;
+      strings: string[];
+    };
+    types: {
+      configuration: {
+        country: string;
+        density: number;
+        language: string;
+        mcc: number;
+        mnc: number;
+        orientation: number;
+        qualifier: string;
+        sdkVersion: number;
+        size: number;
+      };
+      entries: {
+        entryId: number;
+        flags: number;
+        isCompact: boolean;
+        isComplex: boolean;
+        isPublic: boolean;
+        isWeak: boolean;
+        key: string;
+        keyIndex: number;
+        mapValues: {
+          nameRef: number;
+          value: {
+            data: number;
+            dataType: number;
+          };
+        }[];
+        parentRef: number;
+        value?: {
+          data: number;
+          dataType: number;
+        };
+      }[];
+      entryCount: number;
+      typeId: number;
+      typeName: string;
+    }[];
+  }[]): {
+    packageCount: number;
+    packages: {
+      id: number;
+      keyStrings: {
+        flags: number;
+        isSorted: boolean;
+        isUtf8: boolean;
+        strings: string[];
+      };
+      name: string;
+      typeSpecs: {
+        entryCount: number;
+        typeId: number;
+        typeName: string;
+      }[];
+      typeStrings: {
+        flags: number;
+        isSorted: boolean;
+        isUtf8: boolean;
+        strings: string[];
+      };
+      types: {
+        configuration: {
+          country: string;
+          density: number;
+          language: string;
+          mcc: number;
+          mnc: number;
+          orientation: number;
+          qualifier: string;
+          sdkVersion: number;
+          size: number;
+        };
+        entries: {
+          entryId: number;
+          flags: number;
+          isCompact: boolean;
+          isComplex: boolean;
+          isPublic: boolean;
+          isWeak: boolean;
+          key: string;
+          keyIndex: number;
+          mapValues: {
+            nameRef: number;
+            value: {
+              data: number;
+              dataType: number;
+            };
+          }[];
+          parentRef: number;
+          value?: {
+            data: number;
+            dataType: number;
+          };
+        }[];
+        entryCount: number;
+        typeId: number;
+        typeName: string;
+      }[];
+    }[];
+    resourceCount: number;
+    valueStrings: {
+      flags: number;
+      isSorted: boolean;
+      isUtf8: boolean;
+      strings: string[];
+    };
+  };
+  formatEntryValue(entry: {
+    entryId: number;
+    flags: number;
+    isCompact: boolean;
+    isComplex: boolean;
+    isPublic: boolean;
+    isWeak: boolean;
+    key: string;
+    keyIndex: number;
+    mapValues: {
+      nameRef: number;
+      value: {
+        data: number;
+        dataType: number;
+      };
+    }[];
+    parentRef: number;
+    value?: {
+      data: number;
+      dataType: number;
+    };
+  }): string;
+  formatResourceReference(id: number): string;
+  formatValue(value: {
+    data: number;
+    dataType: number;
+  }): string;
+  resourceName(id: number): string | null;
+  resources(): {
+    configuration: {
+      country: string;
+      density: number;
+      language: string;
+      mcc: number;
+      mnc: number;
+      orientation: number;
+      qualifier: string;
+      sdkVersion: number;
+      size: number;
+    };
+    entry: {
+      entryId: number;
+      flags: number;
+      isCompact: boolean;
+      isComplex: boolean;
+      isPublic: boolean;
+      isWeak: boolean;
+      key: string;
+      keyIndex: number;
+      mapValues: {
+        nameRef: number;
+        value: {
+          data: number;
+          dataType: number;
+        };
+      }[];
+      parentRef: number;
+      value?: {
+        data: number;
+        dataType: number;
+      };
+    };
+    id: number;
+    name: string;
+    packageName: string;
+    typeName: string;
+  }[];
+}
+
+interface ArscMapValue {
+  nameRef: number;
+  value: {
+    data: number;
+    dataType: number;
+  };
+  component1(): number;
+  component2(): {
+    data: number;
+    dataType: number;
+  };
+  copy(nameRef: number, value: {
+    data: number;
+    dataType: number;
+  }): {
+    nameRef: number;
+    value: {
+      data: number;
+      dataType: number;
+    };
+  };
+}
+
+interface ArscPackage {
+  id: number;
+  keyStrings: {
+    flags: number;
+    isSorted: boolean;
+    isUtf8: boolean;
+    strings: string[];
+  };
+  name: string;
+  typeSpecs: {
+    entryCount: number;
+    typeId: number;
+    typeName: string;
+  }[];
+  typeStrings: {
+    flags: number;
+    isSorted: boolean;
+    isUtf8: boolean;
+    strings: string[];
+  };
+  types: {
+    configuration: {
+      country: string;
+      density: number;
+      language: string;
+      mcc: number;
+      mnc: number;
+      orientation: number;
+      qualifier: string;
+      sdkVersion: number;
+      size: number;
+    };
+    entries: {
+      entryId: number;
+      flags: number;
+      isCompact: boolean;
+      isComplex: boolean;
+      isPublic: boolean;
+      isWeak: boolean;
+      key: string;
+      keyIndex: number;
+      mapValues: {
+        nameRef: number;
+        value: {
+          data: number;
+          dataType: number;
+        };
+      }[];
+      parentRef: number;
+      value?: {
+        data: number;
+        dataType: number;
+      };
+    }[];
+    entryCount: number;
+    typeId: number;
+    typeName: string;
+  }[];
+  component1(): number;
+  component2(): string;
+  component3(): {
+    flags: number;
+    isSorted: boolean;
+    isUtf8: boolean;
+    strings: string[];
+  };
+  component4(): {
+    flags: number;
+    isSorted: boolean;
+    isUtf8: boolean;
+    strings: string[];
+  };
+  component5(): {
+    configuration: {
+      country: string;
+      density: number;
+      language: string;
+      mcc: number;
+      mnc: number;
+      orientation: number;
+      qualifier: string;
+      sdkVersion: number;
+      size: number;
+    };
+    entries: {
+      entryId: number;
+      flags: number;
+      isCompact: boolean;
+      isComplex: boolean;
+      isPublic: boolean;
+      isWeak: boolean;
+      key: string;
+      keyIndex: number;
+      mapValues: {
+        nameRef: number;
+        value: {
+          data: number;
+          dataType: number;
+        };
+      }[];
+      parentRef: number;
+      value?: {
+        data: number;
+        dataType: number;
+      };
+    }[];
+    entryCount: number;
+    typeId: number;
+    typeName: string;
+  }[];
+  component6(): {
+    entryCount: number;
+    typeId: number;
+    typeName: string;
+  }[];
+  copy(id: number, name: string, typeStrings: {
+    flags: number;
+    isSorted: boolean;
+    isUtf8: boolean;
+    strings: string[];
+  }, keyStrings: {
+    flags: number;
+    isSorted: boolean;
+    isUtf8: boolean;
+    strings: string[];
+  }, types: {
+    configuration: {
+      country: string;
+      density: number;
+      language: string;
+      mcc: number;
+      mnc: number;
+      orientation: number;
+      qualifier: string;
+      sdkVersion: number;
+      size: number;
+    };
+    entries: {
+      entryId: number;
+      flags: number;
+      isCompact: boolean;
+      isComplex: boolean;
+      isPublic: boolean;
+      isWeak: boolean;
+      key: string;
+      keyIndex: number;
+      mapValues: {
+        nameRef: number;
+        value: {
+          data: number;
+          dataType: number;
+        };
+      }[];
+      parentRef: number;
+      value?: {
+        data: number;
+        dataType: number;
+      };
+    }[];
+    entryCount: number;
+    typeId: number;
+    typeName: string;
+  }[], typeSpecs: {
+    entryCount: number;
+    typeId: number;
+    typeName: string;
+  }[]): {
+    id: number;
+    keyStrings: {
+      flags: number;
+      isSorted: boolean;
+      isUtf8: boolean;
+      strings: string[];
+    };
+    name: string;
+    typeSpecs: {
+      entryCount: number;
+      typeId: number;
+      typeName: string;
+    }[];
+    typeStrings: {
+      flags: number;
+      isSorted: boolean;
+      isUtf8: boolean;
+      strings: string[];
+    };
+    types: {
+      configuration: {
+        country: string;
+        density: number;
+        language: string;
+        mcc: number;
+        mnc: number;
+        orientation: number;
+        qualifier: string;
+        sdkVersion: number;
+        size: number;
+      };
+      entries: {
+        entryId: number;
+        flags: number;
+        isCompact: boolean;
+        isComplex: boolean;
+        isPublic: boolean;
+        isWeak: boolean;
+        key: string;
+        keyIndex: number;
+        mapValues: {
+          nameRef: number;
+          value: {
+            data: number;
+            dataType: number;
+          };
+        }[];
+        parentRef: number;
+        value?: {
+          data: number;
+          dataType: number;
+        };
+      }[];
+      entryCount: number;
+      typeId: number;
+      typeName: string;
+    }[];
+  };
+}
+
+interface ArscStringPool {
+  flags: number;
+  isSorted: boolean;
+  isUtf8: boolean;
+  strings: string[];
+  component1(): number;
+  component2(): string[];
+  copy(flags: number, strings: string[]): {
+    flags: number;
+    isSorted: boolean;
+    isUtf8: boolean;
+    strings: string[];
+  };
+  get(index: number): string | null;
+}
+
+interface ArscTypeChunk {
+  configuration: {
+    country: string;
+    density: number;
+    language: string;
+    mcc: number;
+    mnc: number;
+    orientation: number;
+    qualifier: string;
+    sdkVersion: number;
+    size: number;
+  };
+  entries: {
+    entryId: number;
+    flags: number;
+    isCompact: boolean;
+    isComplex: boolean;
+    isPublic: boolean;
+    isWeak: boolean;
+    key: string;
+    keyIndex: number;
+    mapValues: {
+      nameRef: number;
+      value: {
+        data: number;
+        dataType: number;
+      };
+    }[];
+    parentRef: number;
+    value?: {
+      data: number;
+      dataType: number;
+    };
+  }[];
+  entryCount: number;
+  typeId: number;
+  typeName: string;
+  component1(): number;
+  component2(): string;
+  component3(): {
+    country: string;
+    density: number;
+    language: string;
+    mcc: number;
+    mnc: number;
+    orientation: number;
+    qualifier: string;
+    sdkVersion: number;
+    size: number;
+  };
+  component4(): number;
+  component5(): {
+    entryId: number;
+    flags: number;
+    isCompact: boolean;
+    isComplex: boolean;
+    isPublic: boolean;
+    isWeak: boolean;
+    key: string;
+    keyIndex: number;
+    mapValues: {
+      nameRef: number;
+      value: {
+        data: number;
+        dataType: number;
+      };
+    }[];
+    parentRef: number;
+    value?: {
+      data: number;
+      dataType: number;
+    };
+  }[];
+  copy(typeId: number, typeName: string, configuration: {
+    country: string;
+    density: number;
+    language: string;
+    mcc: number;
+    mnc: number;
+    orientation: number;
+    qualifier: string;
+    sdkVersion: number;
+    size: number;
+  }, entryCount: number, entries: {
+    entryId: number;
+    flags: number;
+    isCompact: boolean;
+    isComplex: boolean;
+    isPublic: boolean;
+    isWeak: boolean;
+    key: string;
+    keyIndex: number;
+    mapValues: {
+      nameRef: number;
+      value: {
+        data: number;
+        dataType: number;
+      };
+    }[];
+    parentRef: number;
+    value?: {
+      data: number;
+      dataType: number;
+    };
+  }[]): {
+    configuration: {
+      country: string;
+      density: number;
+      language: string;
+      mcc: number;
+      mnc: number;
+      orientation: number;
+      qualifier: string;
+      sdkVersion: number;
+      size: number;
+    };
+    entries: {
+      entryId: number;
+      flags: number;
+      isCompact: boolean;
+      isComplex: boolean;
+      isPublic: boolean;
+      isWeak: boolean;
+      key: string;
+      keyIndex: number;
+      mapValues: {
+        nameRef: number;
+        value: {
+          data: number;
+          dataType: number;
+        };
+      }[];
+      parentRef: number;
+      value?: {
+        data: number;
+        dataType: number;
+      };
+    }[];
+    entryCount: number;
+    typeId: number;
+    typeName: string;
+  };
+}
+
+interface ArscTypeSpec {
+  entryCount: number;
+  typeId: number;
+  typeName: string;
+  component1(): number;
+  component2(): string;
+  component3(): number;
+  copy(typeId: number, typeName: string, entryCount: number): {
+    entryCount: number;
+    typeId: number;
+    typeName: string;
+  };
+}
+
+interface ArscValue {
+  data: number;
+  dataType: number;
+  component1(): number;
+  component2(): number;
+  copy(dataType: number, data: number): {
+    data: number;
+    dataType: number;
   };
 }
 

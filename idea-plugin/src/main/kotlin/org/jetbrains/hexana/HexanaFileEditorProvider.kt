@@ -48,6 +48,7 @@ class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
             file.name.endsWith(".tar.gz", ignoreCase = true) ||
             file.extension.equals("jit", ignoreCase = true) ||
             file.extension.equals("dex", ignoreCase = true) ||
+            file.extension.equals("arsc", ignoreCase = true) ||
             file.extension.equals("parquet", ignoreCase = true) ||
             file.extension.equals("arrow", ignoreCase = true) ||
             file.extension.equals("gz", ignoreCase = true)

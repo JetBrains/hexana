@@ -111,8 +111,8 @@ object ScriptApiReference {
                     "readonly format: string",
                     "Stable format id: \"wasm\", \"wasm-component\", \"elf\", \"macho\", " +
                         "\"macho-universal\", \"pe\", \"coff\", \"archive\", \"zip\", \"tar\", " +
-                        "\"class\", \"dex\", \"pcap\", \"pcapng\", \"parquet\", \"arrow\", " +
-                        "\"protobuf\" or \"binary\". Safe to branch on.",
+                        "\"class\", \"dex\", \"arsc\", \"pcap\", \"pcapng\", \"parquet\", " +
+                        "\"arrow\", \"protobuf\" or \"binary\". Safe to branch on.",
                     "if (binary.format === \"elf\") print(binary.raw.header.machine);",
                 ),
                 ScriptApiEntry(

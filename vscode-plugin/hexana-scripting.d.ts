@@ -47,8 +47,8 @@ interface HexanaBinary {
   /**
    * Stable format id: "wasm", "wasm-component", "elf", "macho",
    * "macho-universal", "pe", "coff", "archive", "zip", "tar", "class",
-   * "dex", "pcap", "pcapng", "parquet", "arrow", "protobuf" or "binary".
-   * Safe to branch on.
+   * "dex", "arsc", "pcap", "pcapng", "parquet", "arrow", "protobuf" or
+   * "binary". Safe to branch on.
    *
    * @example if (binary.format === "elf") print(binary.raw.header.machine);
    */

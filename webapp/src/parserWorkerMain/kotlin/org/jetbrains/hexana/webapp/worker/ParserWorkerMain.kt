@@ -9,6 +9,7 @@ import org.jetbrains.hexana.javabytecode.JavaConstantPool
 import org.jetbrains.hexana.javabytecode.JavaConstantPoolEntry
 import org.jetbrains.hexana.javabytecode.JavaMethodAccess
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
+import org.jetbrains.hexana.providers.ArscBinaryProvider
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
@@ -540,6 +541,7 @@ private fun nonWasmFormat(provider: BinaryProvider): String = when (provider) {
     is ZipBinaryProvider -> "zip"
     is ClassFileBinaryProvider -> "class"
     is DexBinaryProvider -> "dex"
+    is ArscBinaryProvider -> "arsc"
     is PcapBinaryProvider -> "pcap"
     is ProtobufBinaryProvider -> "protobuf"
     is ElfBinaryProvider -> "elf"

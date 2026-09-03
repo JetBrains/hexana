@@ -2,6 +2,7 @@ package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.ArrowBinaryProvider
+import org.jetbrains.hexana.providers.ArscBinaryProvider
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.CoffBinaryProvider
@@ -31,6 +32,7 @@ fun fileTypeDescription(
     is TarBinaryProvider -> "Tar Archive"
     is ClassFileBinaryProvider -> "Class File"
     is DexBinaryProvider -> "Android DEX File"
+    is ArscBinaryProvider -> "Android Resource Table"
     is PcapBinaryProvider -> if (binaryProvider.isPcapNg) "PCAP-NG Capture" else "PCAP Capture"
     is ParquetBinaryProvider -> "Apache Parquet"
     is ArrowBinaryProvider -> "Apache Arrow IPC"
@@ -59,6 +61,7 @@ fun binaryFormatId(binaryProvider: BinaryProvider): String = when (binaryProvide
     is TarBinaryProvider -> "tar"
     is ClassFileBinaryProvider -> "class"
     is DexBinaryProvider -> "dex"
+    is ArscBinaryProvider -> "arsc"
     is PcapBinaryProvider -> if (binaryProvider.isPcapNg) "pcapng" else "pcap"
     is ParquetBinaryProvider -> "parquet"
     is ArrowBinaryProvider -> "arrow"
