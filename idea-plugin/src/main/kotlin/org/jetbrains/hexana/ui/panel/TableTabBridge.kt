@@ -45,6 +45,7 @@ import com.intellij.icons.AllIcons
 import androidx.compose.ui.graphics.Color
 import org.jetbrains.hexana.HexHighlightRange
 import org.jetbrains.hexana.HexViewStateHolder
+import org.jetbrains.hexana.shared.RowActionKind
 import org.jetbrains.hexana.shared.CellValue
 import org.jetbrains.hexana.shared.HexRange
 import org.jetbrains.hexana.shared.HexRangeRole
@@ -61,6 +62,7 @@ import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.hexana.ui.components.measureWidthMonospace
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Icon
+import org.jetbrains.jewel.ui.icon.IconKey
 import org.jetbrains.jewel.ui.component.TabData
 import org.jetbrains.jewel.ui.component.TabStrip
 import org.jetbrains.jewel.ui.component.Text
@@ -348,7 +350,7 @@ private fun TableTabTable(
             if (tooltip != null) {
                 Tooltip(tooltip = { Text(tooltip) }) {
                     Icon(
-                        AllIconsKeys.Actions.Execute,
+                        rowActionIconKey(rowAction.kind),
                         contentDescription = rowAction.label,
                         iconClass = AllIcons::class.java,
                         modifier = Modifier.size(16.dp).clickable(
@@ -764,6 +766,13 @@ private fun VerticalDraggableDivider(onDrag: (deltaX: Float) -> Unit) {
  * detail clears the bytes but keeps the panel open: it says so, rather than
  * flickering shut or leaving the previous row's plaintext up.
  */
+/** Maps a UI-free [RowActionKind] to the platform icon that stands for it. */
+private fun rowActionIconKey(kind: RowActionKind): IconKey = when (kind) {
+    RowActionKind.Run -> AllIconsKeys.Actions.Execute
+    // The Documentation tool window's icon: the action opens the row's docs in a browser.
+    RowActionKind.Documentation -> AllIconsKeys.Toolwindows.Documentation
+}
+
 private fun applyRowDetail(descriptor: TableTabDescriptor, origIndex: Int, state: HexViewStateHolder) {
     val provider = descriptor.rowDetailProvider ?: return
     val detail = provider(origIndex)

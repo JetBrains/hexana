@@ -28,6 +28,7 @@ import org.w3c.dom.events.EventListener
 import org.w3c.dom.events.KeyboardEvent
 import org.w3c.dom.events.MouseEvent
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.shared.RowActionKind
 import org.jetbrains.hexana.shared.ColumnDescriptor
 import org.jetbrains.hexana.shared.ColumnWidth
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
@@ -42,13 +43,21 @@ import kotlin.time.DurationUnit
 import kotlin.time.toDuration
 
 /**
- * Small play-arrow button used as a run indicator in table rows.
- * Uses a Unicode play triangle (▶) styled to match VS Code's green run icon.
+ * Small clickable glyph in a table row's action column.
+ *
+ * Uses Unicode glyphs rather than codicons: the webview loads no icon font (its CSP
+ * allowlists no external `font-src`), so a glyph is the only thing guaranteed to render.
  */
 @Composable
-internal fun RunArrowButton(tooltip: String = "Run", onClick: () -> Unit) {
+internal fun RowActionButton(kind: RowActionKind, tooltip: String, onClick: () -> Unit) {
     Span({
-        classes("hexana-run-arrow")
+        classes("hexana-row-action")
+        classes(
+            when (kind) {
+                RowActionKind.Run -> "hexana-row-action-run"
+                RowActionKind.Documentation -> "hexana-row-action-docs"
+            }
+        )
         attr("title", tooltip)
         style {
             property("cursor", "pointer")
@@ -59,14 +68,26 @@ internal fun RunArrowButton(tooltip: String = "Run", onClick: () -> Unit) {
             property("height", "16px")
             property("border-radius", "3px")
             property("font-size", "12px")
-            property("color", "var(--vscode-debugIcon-startForeground, #89d185)")
+            when (kind) {
+                RowActionKind.Run ->
+                    property("color", "var(--vscode-debugIcon-startForeground, #89d185)")
+                // Link-coloured, since the action leaves the editor for a browser.
+                RowActionKind.Documentation ->
+                    property("color", "var(--vscode-textLink-foreground, #3794ff)")
+            }
         }
         onClick { event ->
             event.stopPropagation()
             onClick()
         }
     }) {
-        Text("\u25B6")
+        Text(
+            when (kind) {
+                RowActionKind.Run -> "\u25B6"
+                // North-east arrow: the same "opens elsewhere" affordance VS Code uses.
+                RowActionKind.Documentation -> "\u2197"
+            }
+        )
     }
 }
 
@@ -202,19 +223,19 @@ fun TableTabContent(
 
     val showId = descriptor.showIdColumn
 
+    // Independent of the ID column: a tab can hide row numbers and still offer a row action
+    // (the Compatibility tab's "Docs" is one), and the two used to be rendered together.
+    val showAction = descriptor.rowAction != null
+
     val headers = buildList {
-        if (showId) {
-            add("")
-            add("ID")
-        }
+        if (showAction) add("")
+        if (showId) add("ID")
         descriptor.columns.forEach { add(it.name) }
     }
 
     val aligns = buildList {
-        if (showId) {
-            add("center")
-            add("right")
-        }
+        if (showAction) add("center")
+        if (showId) add("right")
         descriptor.columns.forEach { col ->
             when (col.widthBehavior) {
                 is ColumnWidth.Fill -> add("left")
@@ -227,10 +248,8 @@ fun TableTabContent(
     // Compute column width hints (in `ch` units) for Measured/MeasuredMin columns.
     val idWidthCh = if (showId) maxOf(2, descriptor.rowCount.toString().length) + 2 else 0
     val columnWidthsCh = buildList {
-        if (showId) {
-            add(2) // action column – just enough for the arrow
-            add(idWidthCh) // ID column – sized to fit the largest row number
-        }
+        if (showAction) add(2) // action column – just enough for the glyph
+        if (showId) add(idWidthCh) // ID column – sized to fit the largest row number
         descriptor.columns.forEach { col ->
             when (val w = col.widthBehavior) {
                 is ColumnWidth.Measured -> {
@@ -247,14 +266,14 @@ fun TableTabContent(
     }
 
     // Map descriptor's defaultSortColumn to the header index in the rendered table.
-    // The descriptor uses ID_COLUMN (-1) for the implicit ID column; the rendered
-    // headers always prepend the action column placeholder and then "ID", so we
-    // resolve the actual header index here.
+    // The descriptor uses ID_COLUMN (-1) for the implicit ID column; the rendered headers
+    // prepend an action-column placeholder and/or "ID" independently, so we resolve the
+    // actual header index here.
     // When the descriptor does not specify a default sort column (null), fall back
     // to the ID column so the sorting arrow is always visible — matching the old
     // per-tab behaviour where SearchableTable auto-detected the "ID" header.
     val idHeaderIndex = headers.indexOf("ID").takeIf { it >= 0 }
-    val headerOffset = if (showId) 2 else 0
+    val headerOffset = (if (showAction) 1 else 0) + (if (showId) 1 else 0)
     val resolvedSortColumn = descriptor.defaultSortColumn?.let { col ->
         if (col == TableTabDescriptor.ID_COLUMN) {
             idHeaderIndex
@@ -500,18 +519,20 @@ fun TableTabContent(
                                 contextMenuState = ContextMenuState(index, x, y)
                             } } else null,
                         ) {
-                            if (showId) {
+                            val rowAction = descriptor.rowAction
+                            if (rowAction != null) {
                                 Td({ classes("cell-id"); style { property("width", "12px") } }) {
-                                    if (descriptor.rowAction != null) {
-                                        val tooltip = descriptor.rowAction!!.tooltipProvider(index)
-                                        if (tooltip != null) {
-                                            RunArrowButton(
-                                                tooltip = tooltip,
-                                                onClick = { descriptor.rowAction!!.action(index) },
-                                            )
-                                        }
+                                    val tooltip = rowAction.tooltipProvider(index)
+                                    if (tooltip != null) {
+                                        RowActionButton(
+                                            kind = rowAction.kind,
+                                            tooltip = tooltip,
+                                            onClick = { rowAction.action(index) },
+                                        )
                                     }
                                 }
+                            }
+                            if (showId) {
                                 Td({ classes("cell-id") }) {
                                     Text(index.toString())
                                 }

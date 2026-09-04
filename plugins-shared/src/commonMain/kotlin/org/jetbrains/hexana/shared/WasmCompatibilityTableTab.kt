@@ -92,6 +92,7 @@ internal fun compatibilityTabDescriptor(
             label = "Docs",
             tooltipProvider = { index -> proposals[index].docUrl?.let { "Open the proposal documentation" } },
             action = { index -> proposals[index].docUrl?.let(open) },
+            kind = RowActionKind.Documentation,
         )
     }
 

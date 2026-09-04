@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.shared.features
 
 import org.jetbrains.hexana.shared.ColumnDescriptor
+import org.jetbrains.hexana.shared.RowActionKind
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.compatibilityTabDescriptorForTest
 import org.jetbrains.hexana.wasm.analysis.WasmProposal
@@ -167,6 +168,16 @@ class CompatibilityTabTest {
         val action = assertNotNull(tab.rowAction)
         action.action(0)
         assertEquals(listOf("https://example.invalid/tc"), opened)
+    }
+
+    /**
+     * The action is declared as documentation rather than left on the default, so each host
+     * renders a docs affordance instead of the run arrow every other row action uses.
+     */
+    @Test
+    fun `the docs row action declares the documentation kind`() {
+        val tab = assertNotNull(tab(listOf(RuntimeTarget("Chrome", "137"))))
+        assertEquals(RowActionKind.Documentation, assertNotNull(tab.rowAction).kind)
     }
 
     @Test

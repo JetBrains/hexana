@@ -89,6 +89,21 @@ enum class HexRangeRole { PRIMARY, SECONDARY }
 class HexRange(val offset: Long, val size: Int, val role: HexRangeRole = HexRangeRole.PRIMARY)
 
 /**
+ * What a [RowActionDescriptor] does, so each host can pick its own icon for it.
+ *
+ * Named for the action rather than for a picture, because these descriptors stay free of
+ * UI-framework concepts: IntelliJ resolves a kind to an `AllIcons` key and the web UI to a
+ * glyph, and neither mapping belongs here.
+ */
+enum class RowActionKind {
+    /** Runs or executes the row's subject. Rendered as a play arrow. */
+    Run,
+
+    /** Opens the row's documentation, in a browser. */
+    Documentation,
+}
+
+/**
  * A UI-free description of a per-row action button (e.g. "Run" icon).
  *
  * The UI layer renders this as a small clickable icon in an action column.
@@ -96,11 +111,14 @@ class HexRange(val offset: Long, val size: Int, val role: HexRangeRole = HexRang
  * @param label short identifier for the action (e.g. "Run")
  * @param tooltipProvider returns tooltip text for the given row, or `null` to hide the action for that row
  * @param action callback invoked when the action button is clicked for the given row index
+ * @param kind what the action does; the UI layer maps it to an icon. Defaults to [RowActionKind.Run],
+ *   which is what every action was before kinds existed.
  */
 class RowActionDescriptor(
     val label: String,
     val tooltipProvider: (index: Int) -> String?,
     val action: (index: Int) -> Unit,
+    val kind: RowActionKind = RowActionKind.Run,
 )
 
 /**

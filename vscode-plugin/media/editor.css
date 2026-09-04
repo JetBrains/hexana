@@ -141,7 +141,8 @@ html, body {
 }
 
 /* Run arrow button */
-.hexana-run-arrow:hover {
+/* Row action glyph in a table's action column (run arrow, docs link, ...). */
+.hexana-row-action:hover {
     opacity: 1 !important;
     background: rgba(255, 255, 255, 0.1);
 }
