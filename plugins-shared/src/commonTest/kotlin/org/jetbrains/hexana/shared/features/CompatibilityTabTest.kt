@@ -213,9 +213,36 @@ class CompatibilityTabTest {
 
     // --- prologue: the tab has to explain itself the first time it is opened ---
 
+    /**
+     * The prologue offers a link rather than naming a file path, so the one place that has to
+     * explain the feature can also act on it.
+     */
     @Test
-    fun `with no runtimes configured the prologue points at the settings file`() {
-        val tab = assertNotNull(tab(emptyList()))
+    fun `the prologue offers a link that opens the settings page`() {
+        var opened = 0
+        val tab = assertNotNull(tab(emptyList(), openRuntimeSettings = { opened++ }))
+        val action = assertNotNull(tab.prologueAction)
+
+        assertEquals("Configure target runtimes…", action.label)
+        action.action()
+        assertEquals(1, opened)
+        assertTrue(
+            !assertNotNull(tab.prologueText).contains(RUNTIME_TARGETS_PATH),
+            "the link replaces the path in the prose, got ${tab.prologueText}",
+        )
+    }
+
+    @Test
+    fun `the link reads as a change once runtimes are configured`() {
+        val tab = assertNotNull(tab(listOf(RuntimeTarget("Wasmtime"))))
+        assertEquals("Change target runtimes…", assertNotNull(tab.prologueAction).label)
+    }
+
+    /** A host with no settings page still has to be told where the file lives. */
+    @Test
+    fun `without a settings page the prologue falls back to naming the file`() {
+        val tab = assertNotNull(tab(emptyList(), openRuntimeSettings = null))
+        assertNull(tab.prologueAction)
         assertTrue(
             assertNotNull(tab.prologueText).contains(RUNTIME_TARGETS_PATH),
             "expected the prologue to name the settings file, got ${tab.prologueText}",

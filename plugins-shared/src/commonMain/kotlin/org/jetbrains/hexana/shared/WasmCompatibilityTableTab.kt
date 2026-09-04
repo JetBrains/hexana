@@ -124,7 +124,15 @@ internal fun compatibilityTabDescriptor(
         rowCount = proposals.size,
         rowAction = docsAction,
         contextMenuItems = contextMenuItems,
-        prologueText = prologue(runtimeLabels, warningCount),
+        prologueText = prologue(runtimeLabels, warningCount, canConfigure = openRuntimeSettings != null),
+        // A link rather than a file path in the prose: the prologue is the one place that has
+        // to explain the feature, so it should also be able to act on it.
+        prologueAction = openRuntimeSettings?.let {
+            PrologueActionDescriptor(
+                label = if (runtimeLabels.isEmpty()) "Configure target runtimes…" else "Change target runtimes…",
+                action = it,
+            )
+        },
         showIdColumn = false,
         priority = TabPriority.Medium,
         predefinedFilters = if (warningCount > 0) {
@@ -154,19 +162,29 @@ private fun supportingRuntimesColumn(
     CellValue(entries(index).size, label(index), tooltip = tooltip(index))
 }
 
-private fun prologue(runtimeLabels: List<String>, warningCount: Int): String = when {
-    runtimeLabels.isEmpty() ->
-        "Supported in lists every runtime WebAssembly's feature data knows about. Declare the " +
-            "ones this project targets in $RUNTIME_TARGETS_PATH to narrow it to those and to get " +
-            "a warning when a module uses something they cannot run."
-    warningCount == 0 ->
-        "Every proposal this module uses is supported by ${runtimeLabels.joinToString(", ")}."
-    warningCount == 1 ->
-        "One proposal this module uses is not supported by every configured runtime. " +
-            "Targets come from $RUNTIME_TARGETS_PATH."
-    else ->
-        "$warningCount proposals this module uses are not supported by every configured runtime. " +
-            "Targets come from $RUNTIME_TARGETS_PATH."
+/**
+ * @param canConfigure whether the host offers a settings page, in which case the prologue
+ *   defers to the [PrologueActionDescriptor] link instead of naming the settings file. A
+ *   host without one still needs to be told where the file is.
+ */
+private fun prologue(runtimeLabels: List<String>, warningCount: Int, canConfigure: Boolean): String {
+    val whereTargetsLive = if (canConfigure) "" else " Targets come from $RUNTIME_TARGETS_PATH."
+    return when {
+        runtimeLabels.isEmpty() ->
+            "Supported in lists every runtime WebAssembly's feature data knows about. Declaring the " +
+                "ones this project targets narrows it to those and warns when a module uses " +
+                "something they cannot run." +
+                if (canConfigure) "" else " Declare them in $RUNTIME_TARGETS_PATH."
+        warningCount == 0 ->
+            "Every proposal this module uses is supported by ${runtimeLabels.joinToString(", ")}." +
+                whereTargetsLive
+        warningCount == 1 ->
+            "One proposal this module uses is not supported by every configured runtime." +
+                whereTargetsLive
+        else ->
+            "$warningCount proposals this module uses are not supported by every configured runtime." +
+                whereTargetsLive
+    }
 }
 
 private fun proposalTooltip(entry: ProposalCompatibility): String = buildString {

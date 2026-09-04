@@ -62,6 +62,7 @@ import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.hexana.ui.components.measureWidthMonospace
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Icon
+import org.jetbrains.jewel.ui.component.Link
 import org.jetbrains.jewel.ui.icon.IconKey
 import org.jetbrains.jewel.ui.component.TabData
 import org.jetbrains.jewel.ui.component.TabStrip
@@ -172,10 +173,19 @@ private fun TableTabContent(
         else -> searchBarLeading
     }
 
-    if (descriptor.prologueText != null || (descriptor.rowCount == 0 && descriptor.emptyMessage != null)) {
+    val hasPrologue = descriptor.prologueText != null || descriptor.prologueAction != null
+    if (hasPrologue || (descriptor.rowCount == 0 && descriptor.emptyMessage != null)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            descriptor.prologueText?.let {
-                Text(it, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp), fontSize = 13.sp)
+            if (hasPrologue) {
+                // A column, not a row: prologue text is a wrapping paragraph, and Compose
+                // Text cannot carry an inline link without an AnnotatedString. The link on
+                // its own line matches the paragraph-then-action shape used elsewhere.
+                Column(modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)) {
+                    descriptor.prologueText?.let { Text(it, fontSize = 13.sp) }
+                    descriptor.prologueAction?.let { prologueAction ->
+                        Link(prologueAction.label, onClick = prologueAction.action)
+                    }
+                }
             }
             if (descriptor.rowCount == 0) {
                 descriptor.emptyMessage?.let { Text(it) }

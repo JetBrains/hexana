@@ -153,6 +153,21 @@ class RowMenuEntry(
 )
 
 /**
+ * A UI-free description of a clickable link rendered after [TableTabDescriptor.prologueText].
+ *
+ * Exists so a prologue can point at something the user can act on — a settings page — rather
+ * than naming a file path and leaving them to find it. The UI layer renders it as a link
+ * (Jewel `Link` in IntelliJ, a link-coloured span in the web UI).
+ *
+ * @param label the link text
+ * @param action callback invoked when the link is clicked
+ */
+class PrologueActionDescriptor(
+    val label: String,
+    val action: () -> Unit,
+)
+
+/**
  * A named row filter that can be selected from a dropdown above the table.
  *
  * When [predefinedFilters] is non-empty on a [TableTabDescriptor], the UI
@@ -187,6 +202,7 @@ class PredefinedFilter(
  *   menu entries whose count may vary by row (e.g. one entry per usage site). The UI
  *   layer renders these after [contextMenuItems]; `null` means none.
  * @param prologueText optional text displayed above the table; `null` means no prologue
+ * @param prologueAction optional clickable link rendered after [prologueText]; `null` means none
  * @param emptyMessage optional message shown when [rowCount] is zero; `null` falls back
  *   to the default empty-table behavior of the UI layer
  * @param childrenProvider optional provider of nested child rows for a given row index.
@@ -215,6 +231,7 @@ class TableTabDescriptor(
     val rowClickAction: ((index: Int) -> Unit)? = null,
     val dynamicContextMenuProvider: ((index: Int) -> List<RowMenuEntry>)? = null,
     val prologueText: String? = null,
+    val prologueAction: PrologueActionDescriptor? = null,
     val emptyMessage: String? = null,
     val childrenProvider: ((index: Int) -> TableTabChildRows?)? = null,
     val alwaysShowSearch: Boolean = false,

@@ -98,18 +98,22 @@ class CompatibilityTabWiringTest {
     }
 
     /**
-     * Configuring no runtimes still shows the tab: its prologue is what tells the user where
-     * to configure them, so hiding it would hide the only in-product explanation.
+     * Configuring no runtimes still shows the tab: its prologue is what explains the feature
+     * and links to the settings page, so hiding it would hide the only route in.
      */
     @Test
     fun `the tab appears with no runtimes configured and explains itself`() {
-        val context = TableTabsContext(runtimeCompatibility = compatibility())
+        var opened = 0
+        val context = TableTabsContext(
+            runtimeCompatibility = compatibility(),
+            openRuntimeSettings = { opened++ },
+        )
         val tab = assertNotNull(provider.tableTabs(wasmUsingSignExtension(), context).find { it.name == "Compatibility" })
         assertEquals(listOf("Proposal", "Phase", "Supported in"), tab.columns.map { it.name })
-        assertTrue(
-            assertNotNull(tab.prologueText).contains(".hexana/runtimes.json"),
-            "expected the prologue to name the settings file, got ${tab.prologueText}",
-        )
+        assertNotNull(tab.prologueText)
+
+        assertNotNull(tab.prologueAction).action()
+        assertEquals(1, opened, "expected the prologue link to open the settings page")
     }
 
     @Test

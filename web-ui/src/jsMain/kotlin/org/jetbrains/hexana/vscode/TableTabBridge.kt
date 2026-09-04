@@ -171,12 +171,27 @@ fun TableTabContent(
     selection: HexSelectionState,
     searchBarLeading: (@Composable () -> Unit)? = null,
 ) {
-    descriptor.prologueText?.let { prologue ->
+    if (descriptor.prologueText != null || descriptor.prologueAction != null) {
         Div({ style {
             property("margin-bottom", "8px")
             property("font-size", "12px")
         } }) {
-            Text(prologue)
+            descriptor.prologueText?.let { Text(it) }
+            descriptor.prologueAction?.let { prologueAction ->
+                if (descriptor.prologueText != null) Text(" ")
+                Span({
+                    style {
+                        property("cursor", "pointer")
+                        property("color", "var(--vscode-textLink-foreground, #3794ff)")
+                    }
+                    onClick { event ->
+                        event.stopPropagation()
+                        prologueAction.action()
+                    }
+                }) {
+                    Text(prologueAction.label)
+                }
+            }
         }
     }
 
