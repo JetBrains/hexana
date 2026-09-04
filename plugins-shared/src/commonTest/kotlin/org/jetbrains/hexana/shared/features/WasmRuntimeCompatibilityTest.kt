@@ -39,6 +39,11 @@ class WasmRuntimeCompatibilityTest {
                     "threads": ["flag", "Requires -W threads"],
                     "simd": null
                   }
+                },
+                "Bystander": {
+                  "url": "https://example.invalid",
+                  "category": "Tools",
+                  "features": { "gc": "3.0", "tailCall": true }
                 }
               }
             }
@@ -210,6 +215,146 @@ class WasmRuntimeCompatibilityTest {
             .evaluate(WasmProposal.GarbageCollection)
         assertTrue(result.statuses.isEmpty())
         assertFalse(result.hasWarning)
+    }
+
+    // --- Supported in: where a proposal runs, independent of the version targeted ---
+
+    /**
+     * Always the whole catalog, in catalog order. The table is what narrows it — declaring a
+     * target must not hide the runtimes that are not being targeted.
+     */
+    @Test
+    fun `supported-in is the whole catalog whether or not targets are declared`() {
+        val undeclared = WasmRuntimeCompatibility(catalog, RuntimeTargets.EMPTY)
+            .evaluate(WasmProposal.GarbageCollection)
+        assertEquals(listOf("Versioned", "Absolute", "Bystander"), undeclared.supportedIn.map { it.runtime })
+        assertEquals("Versioned 119+, Absolute, Bystander 3.0+", undeclared.supportedInLabel)
+
+        val declared = compatibility(RuntimeTarget("Versioned", "100"))
+            .evaluate(WasmProposal.GarbageCollection)
+        assertEquals(undeclared.supportedIn.map { it.runtime }, declared.supportedIn.map { it.runtime })
+    }
+
+    // --- Other runtimes: the same list minus whatever already has its own column ---
+
+    @Test
+    fun `other runtimes excludes the declared ones so the table never repeats itself`() {
+        val subject = compatibility(RuntimeTarget("Versioned", "100"), RuntimeTarget("Absolute"))
+        val evaluated = subject.evaluate(WasmProposal.GarbageCollection)
+
+        assertEquals(listOf("Bystander"), evaluated.otherRuntimes.map { it.runtime })
+        assertEquals("Bystander 3.0+", evaluated.otherRuntimesLabel)
+    }
+
+    @Test
+    fun `other runtimes equals supported-in when nothing is declared`() {
+        val evaluated = WasmRuntimeCompatibility(catalog, RuntimeTargets.EMPTY)
+            .evaluate(WasmProposal.GarbageCollection)
+
+        assertEquals(evaluated.supportedIn.map { it.runtime }, evaluated.otherRuntimes.map { it.runtime })
+        assertEquals(evaluated.supportedInLabel, evaluated.otherRuntimesLabel)
+    }
+
+    /** A declared runtime is excluded even when it does not support the proposal. */
+    @Test
+    fun `other runtimes excludes a declared runtime that cannot run the proposal`() {
+        val subject = compatibility(RuntimeTarget("Absolute"))
+        val evaluated = subject.evaluate(WasmProposal.TailCall)
+
+        assertEquals(listOf("Versioned", "Bystander"), evaluated.otherRuntimes.map { it.runtime })
+        assertEquals("Versioned 112+, Bystander", evaluated.otherRuntimesLabel)
+    }
+
+    @Test
+    fun `other runtimes reads as an em dash when every supporting runtime has a column`() {
+        val subject = compatibility(
+            RuntimeTarget("Versioned", "100"),
+            RuntimeTarget("Absolute"),
+            RuntimeTarget("Bystander"),
+        )
+        val evaluated = subject.evaluate(WasmProposal.GarbageCollection)
+
+        assertTrue(evaluated.otherRuntimes.isEmpty())
+        assertEquals("—", evaluated.otherRuntimesLabel)
+        assertNull(evaluated.otherRuntimesTooltip)
+    }
+
+    @Test
+    fun `a version-gated runtime reads as name plus version plus a plus sign`() {
+        val entry = compatibility(RuntimeTarget("Versioned", "137"))
+            .evaluate(WasmProposal.TailCall)
+            .supportedIn
+            .first { it.runtime == "Versioned" }
+
+        assertEquals("Versioned", entry.runtime)
+        assertEquals("112", entry.sinceVersion)
+        assertFalse(entry.requiresFlag)
+        assertEquals("Versioned 112+", entry.label)
+    }
+
+    /** `true` upstream: supported, but no version to name. */
+    @Test
+    fun `a runtime supporting it at an unknown version reads as a bare name`() {
+        val entry = compatibility(RuntimeTarget("Absolute"))
+            .evaluate(WasmProposal.GarbageCollection)
+            .supportedIn
+            .first { it.runtime == "Absolute" }
+
+        assertNull(entry.sinceVersion)
+        assertFalse(entry.requiresFlag)
+        assertEquals("Absolute", entry.label)
+    }
+
+    @Test
+    fun `a flag-gated runtime is listed and marked`() {
+        val entry = compatibility(RuntimeTarget("Absolute"))
+            .evaluate(WasmProposal.Threads)
+            .supportedIn
+            .first { it.runtime == "Absolute" }
+
+        assertTrue(entry.requiresFlag)
+        assertEquals("Absolute (flag)", entry.label)
+    }
+
+    @Test
+    fun `an unsupported runtime is omitted rather than listed as unsupported`() {
+        // "Absolute" records tailCall as false.
+        val supported = compatibility(RuntimeTarget("Absolute")).evaluate(WasmProposal.TailCall).supportedIn
+        assertFalse(supported.any { it.runtime == "Absolute" }, "expected Absolute omitted, got $supported")
+    }
+
+    @Test
+    fun `a not-applicable cell and an absent one are both omitted`() {
+        val subject = WasmRuntimeCompatibility(catalog, RuntimeTargets.EMPTY)
+        // "Absolute" records simd as null; no runtime records threads except "Absolute".
+        assertFalse(subject.evaluate(WasmProposal.SIMD).supportedIn.any { it.runtime == "Absolute" })
+        assertFalse(subject.evaluate(WasmProposal.Threads).supportedIn.any { it.runtime == "Versioned" })
+    }
+
+    @Test
+    fun `a proposal the catalog does not know is supported nowhere`() {
+        val subject = WasmRuntimeCompatibility(catalog, RuntimeTargets.EMPTY)
+        assertEquals("—", subject.evaluate(WasmProposal.BranchHinting).supportedInLabel)
+        assertEquals("—", subject.evaluate(WasmProposal.BranchHinting).otherRuntimesLabel)
+    }
+
+    @Test
+    fun `the tooltip puts one runtime per line`() {
+        val subject = WasmRuntimeCompatibility(catalog, RuntimeTargets.EMPTY)
+        assertEquals(
+            "Versioned 119+\nAbsolute\nBystander 3.0+",
+            subject.evaluate(WasmProposal.GarbageCollection).supportedInTooltip,
+        )
+    }
+
+    /** A declared runtime the catalog has never heard of narrows nothing. */
+    @Test
+    fun `a declared runtime absent from the catalog does not affect other runtimes`() {
+        val subject = compatibility(RuntimeTarget("Not In Catalog"), RuntimeTarget("Absolute"))
+        assertEquals(
+            listOf("Versioned", "Bystander"),
+            subject.evaluate(WasmProposal.GarbageCollection).otherRuntimes.map { it.runtime },
+        )
     }
 
     private fun single(target: RuntimeTarget, proposal: WasmProposal): ProposalRuntimeStatus =

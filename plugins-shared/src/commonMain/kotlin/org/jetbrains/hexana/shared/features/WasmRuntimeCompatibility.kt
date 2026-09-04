@@ -64,18 +64,70 @@ class ProposalRuntimeStatus(
         }
 }
 
+/**
+ * A runtime that supports a proposal at all, and the earliest version that does.
+ *
+ * Unlike [ProposalRuntimeStatus] this says nothing about the version a project targets: it
+ * answers "where does this run, and from which version", which is what the *Supported in*
+ * column shows. Runtimes that do not support the proposal are simply absent.
+ */
+class ProposalRuntimeSupport(
+    val runtime: String,
+    /** Earliest supporting version, or `null` when upstream records support without one. */
+    val sinceVersion: String?,
+    val requiresFlag: Boolean,
+) {
+    /** `Firefox 105+`, `Wasmtime 44+`, `GraalWasm (flag)`, or a bare name. */
+    val label: String
+        get() = when {
+            requiresFlag -> "$runtime (flag)"
+            sinceVersion != null -> "$runtime $sinceVersion+"
+            else -> runtime
+        }
+}
+
 /** A proposal used by the module, with its documentation link and per-target verdicts. */
 class ProposalCompatibility(
     val proposal: WasmProposal,
     val docUrl: String?,
     val phase: String?,
     val statuses: List<ProposalRuntimeStatus>,
+    /** Every runtime in the catalog that supports this proposal, in catalog order. */
+    val supportedIn: List<ProposalRuntimeSupport> = emptyList(),
+    /**
+     * Runtime ids the project declared, and which therefore have a column of their own in
+     * the Compatibility table. Excluded from [otherRuntimes] so the two do not repeat.
+     */
+    private val declaredRuntimes: Set<String> = emptySet(),
 ) {
     /** Whether any declared target cannot run this proposal outright or without a flag. */
     val hasWarning: Boolean get() = statuses.any { it.support.isWarning }
 
     /** Verdicts worth acting on, in the order the targets were declared. */
     val warnings: List<ProposalRuntimeStatus> get() = statuses.filter { it.support.isWarning }
+
+    /**
+     * Supporting runtimes the table does not already give a column to — "where else does
+     * this run". Equal to [supportedIn] when the project declares no targets.
+     */
+    val otherRuntimes: List<ProposalRuntimeSupport>
+        get() = supportedIn.filterNot { it.runtime in declaredRuntimes }
+
+    /** One-line form for a table cell; an em dash when the list is empty. */
+    val supportedInLabel: String get() = joinLabels(supportedIn)
+
+    /** One entry per line, so a list of twenty runtimes stays readable in a tooltip. */
+    val supportedInTooltip: String? get() = tooltipLabels(supportedIn)
+
+    val otherRuntimesLabel: String get() = joinLabels(otherRuntimes)
+
+    val otherRuntimesTooltip: String? get() = tooltipLabels(otherRuntimes)
+
+    private fun joinLabels(entries: List<ProposalRuntimeSupport>): String =
+        if (entries.isEmpty()) "—" else entries.joinToString(", ") { it.label }
+
+    private fun tooltipLabels(entries: List<ProposalRuntimeSupport>): String? =
+        if (entries.isEmpty()) null else entries.joinToString("\n") { it.label }
 }
 
 /**
@@ -102,12 +154,38 @@ class WasmRuntimeCompatibility(
             docUrl = feature?.url,
             phase = feature?.phase,
             statuses = targets.targets.map { status(proposal, it) },
+            supportedIn = supportedIn(proposal),
+            declaredRuntimes = targets.targets.mapTo(mutableSetOf()) { it.runtime },
         )
     }
 
     /** Whether any of [proposals] warns for any declared target. */
     fun hasAnyWarning(proposals: Collection<WasmProposal>): Boolean =
         proposals.any { evaluate(it).hasWarning }
+
+    /**
+     * Every runtime that supports [proposal], with the version each supports it from.
+     *
+     * Always the whole catalog: the table narrows it to the runtimes without a column of
+     * their own ([ProposalCompatibility.otherRuntimes]), and a declared runtime's own
+     * column already says whether the declared version suffices.
+     *
+     * Order follows the catalog's own, which groups browsers before standalone runtimes
+     * before tools.
+     */
+    private fun supportedIn(proposal: WasmProposal): List<ProposalRuntimeSupport> {
+        return catalog.runtimes.keys.mapNotNull { runtimeId ->
+            val cell = catalog.cell(runtimeId, proposal.featureId) ?: return@mapNotNull null
+            when (val status = cell.status) {
+                is FeatureStatus.SinceVersion ->
+                    ProposalRuntimeSupport(runtimeId, status.version, requiresFlag = false)
+                FeatureStatus.Supported -> ProposalRuntimeSupport(runtimeId, null, requiresFlag = false)
+                FeatureStatus.FlagRequired -> ProposalRuntimeSupport(runtimeId, null, requiresFlag = true)
+                // Not supported, or not applicable to this kind of runtime: no entry at all.
+                FeatureStatus.Unsupported, FeatureStatus.NotApplicable -> null
+            }
+        }
+    }
 
     private fun status(proposal: WasmProposal, target: RuntimeTarget): ProposalRuntimeStatus {
         val cell = catalog.cell(target.runtime, proposal.featureId)

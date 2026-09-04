@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.shared.features.ProposalCompatibility
+import org.jetbrains.hexana.shared.features.ProposalRuntimeSupport
 import org.jetbrains.hexana.shared.features.RUNTIME_TARGETS_PATH
 
 /** Tab title, also the key [WasmTableTabsProvider.singleTab] resolves. */
@@ -10,6 +11,14 @@ internal const val COMPATIBILITY_TAB_NAME = "Compatibility"
  * Builds the **Compatibility** tab: one row per proposal the module uses, one column per
  * runtime declared in `.hexana/runtimes.json`, and a documentation link per row taken from
  * `features.json`.
+ *
+ * The column naming supporting runtimes changes role with the configuration, which is why it
+ * has two forms:
+ * - **Nothing declared** — a leading *Supported in* column listing every runtime in the
+ *   catalog. This is what makes the tab worth opening before anything is configured; there
+ *   are no per-runtime columns to read instead.
+ * - **Targets declared** — their own columns lead, and a trailing *Other runtimes* column
+ *   lists the supporting runtimes that do *not* have a column, so the two never repeat.
  *
  * Returns `null` when there is nothing to show — no host-supplied compatibility data, or a
  * module that uses no proposals at all.
@@ -44,6 +53,18 @@ internal fun compatibilityTabDescriptor(
                 CellValue(phase ?: "", phase ?: "—", tooltip = phaseTooltip(phase))
             }
         )
+        // With nothing declared the whole catalog *is* the answer, so it leads. With targets
+        // declared their own columns lead and this becomes a trailing "where else" summary.
+        if (runtimeLabels.isEmpty()) {
+            add(
+                supportingRuntimesColumn(
+                    name = "Supported in",
+                    entries = { index -> proposals[index].supportedIn },
+                    label = { index -> proposals[index].supportedInLabel },
+                    tooltip = { index -> proposals[index].supportedInTooltip },
+                )
+            )
+        }
         runtimeLabels.forEachIndexed { runtimeIndex, label ->
             add(
                 ColumnDescriptor(name = label, widthBehavior = ColumnWidth.MeasuredMin("No (since 000)")) { index ->
@@ -52,6 +73,16 @@ internal fun compatibilityTabDescriptor(
                     // Sort on the verdict so a click groups the failures together.
                     CellValue(status.support.name, status.shortLabel, tooltip = status.note ?: status.describe)
                 }
+            )
+        }
+        if (runtimeLabels.isNotEmpty()) {
+            add(
+                supportingRuntimesColumn(
+                    name = "Other runtimes",
+                    entries = { index -> proposals[index].otherRuntimes },
+                    label = { index -> proposals[index].otherRuntimesLabel },
+                    tooltip = { index -> proposals[index].otherRuntimesTooltip },
+                )
             )
         }
     }
@@ -105,10 +136,28 @@ internal fun compatibilityTabDescriptor(
     )
 }
 
+/**
+ * A column listing supporting runtimes as `Firefox 120+, Wasmtime 47+`.
+ *
+ * Fills the slack, since it is the longest cell in the table by far — with nothing declared
+ * it lists the whole catalog. Sorts on how many runtimes are listed rather than on the text,
+ * which would order by whichever runtime happens to come first; ascending then puts the
+ * narrowly supported proposals — the risky ones — at the top.
+ */
+private fun supportingRuntimesColumn(
+    name: String,
+    entries: (index: Int) -> List<ProposalRuntimeSupport>,
+    label: (index: Int) -> String,
+    tooltip: (index: Int) -> String?,
+): ColumnDescriptor = ColumnDescriptor(name = name, widthBehavior = ColumnWidth.Fill()) { index ->
+    CellValue(entries(index).size, label(index), tooltip = tooltip(index))
+}
+
 private fun prologue(runtimeLabels: List<String>, warningCount: Int): String = when {
     runtimeLabels.isEmpty() ->
-        "No target runtimes are configured. Add them in $RUNTIME_TARGETS_PATH to see whether " +
-            "these proposals are supported where this module runs."
+        "Supported in lists every runtime WebAssembly's feature data knows about. Declare the " +
+            "ones this project targets in $RUNTIME_TARGETS_PATH to narrow it to those and to get " +
+            "a warning when a module uses something they cannot run."
     warningCount == 0 ->
         "Every proposal this module uses is supported by ${runtimeLabels.joinToString(", ")}."
     warningCount == 1 ->

@@ -17,6 +17,12 @@ import kotlin.test.assertTrue
  */
 class CompatibilityTabTest {
 
+    /** Index of the first per-runtime column; only Proposal and Phase precede it. */
+    private val runtimeColumn = 2
+
+    /** Index of the Supported in column, which only exists when nothing is declared. */
+    private val supportedInColumn = 2
+
     private val catalog = assertNotNull(
         WasmFeatureCatalog.parse(
             """
@@ -27,7 +33,8 @@ class CompatibilityTabTest {
               },
               "browsers": {
                 "Chrome":   { "url": "https://example.invalid", "category": "Web Browsers",        "features": { "gc": "119", "tailCall": "112" } },
-                "Wasmtime": { "url": "https://example.invalid", "category": "Standalone Runtimes", "features": { "gc": true, "tailCall": true } }
+                "Wasmtime": { "url": "https://example.invalid", "category": "Standalone Runtimes", "features": { "gc": true, "tailCall": true } },
+                "Bystander": { "url": "https://example.invalid", "category": "Tools",              "features": { "gc": "3.0", "tailCall": true } }
               }
             }
             """.trimIndent()
@@ -57,19 +64,22 @@ class CompatibilityTabTest {
     @Test
     fun `columns are proposal, phase, then one per declared runtime in order`() {
         val tab = assertNotNull(tab(listOf(RuntimeTarget("Chrome", "100"), RuntimeTarget("Wasmtime"))))
-        assertEquals(listOf("Proposal", "Phase", "Chrome 100", "Wasmtime"), tab.columns.map { it.name })
+        assertEquals(
+            listOf("Proposal", "Phase", "Chrome 100", "Wasmtime", "Other runtimes"),
+            tab.columns.map { it.name },
+        )
         assertEquals(2, tab.rowCount)
     }
 
     @Test
     fun `a supported cell reads Yes and an unsupported one names the version to upgrade to`() {
         val supported = assertNotNull(tab(listOf(RuntimeTarget("Wasmtime"))))
-        assertEquals("Yes", supported.cellText(0, 2))
+        assertEquals("Yes", supported.cellText(0, runtimeColumn))
 
         val tab = assertNotNull(tab(listOf(RuntimeTarget("Chrome", "100"))))
         // Rows follow WasmProposal declaration order: TailCall precedes GarbageCollection.
-        assertEquals("No (since 112)", tab.cellText(0, 2))
-        assertEquals("No (since 119)", tab.cellText(1, 2))
+        assertEquals("No (since 112)", tab.cellText(0, runtimeColumn))
+        assertEquals("No (since 119)", tab.cellText(1, runtimeColumn))
     }
 
     @Test
@@ -82,10 +92,63 @@ class CompatibilityTabTest {
         assertTrue(warning.cellText(0, 0).startsWith("⚠"), "expected a marker, got ${warning.cellText(0, 0)}")
     }
 
+    // --- Supported in ---
+
+    /**
+     * With nothing declared the column leads and carries the whole catalog: there are no
+     * per-runtime columns to read instead.
+     */
+    @Test
+    fun `with nothing declared a leading Supported in column lists the whole catalog`() {
+        val tab = assertNotNull(tab(emptyList()))
+        assertEquals(listOf("Proposal", "Phase", "Supported in"), tab.columns.map { it.name })
+        assertEquals("Chrome 112+, Wasmtime, Bystander", tab.cellText(0, supportedInColumn))
+        assertEquals("Chrome 119+, Wasmtime, Bystander 3.0+", tab.cellText(1, supportedInColumn))
+    }
+
+    /** With targets declared the column trails, is renamed, and drops the declared runtimes. */
+    @Test
+    fun `with targets declared a trailing Other runtimes column excludes them`() {
+        val tab = assertNotNull(tab(listOf(RuntimeTarget("Chrome", "100"), RuntimeTarget("Wasmtime"))))
+        assertEquals("Other runtimes", tab.columns.last().name)
+
+        val column = tab.columns.size - 1
+        assertEquals("Bystander", tab.cellText(0, column))
+        assertEquals("Bystander 3.0+", tab.cellText(1, column))
+    }
+
+    @Test
+    fun `the column tooltip puts one runtime per line`() {
+        val tab = assertNotNull(tab(emptyList()))
+        assertEquals("Chrome 112+\nWasmtime\nBystander", tab.cellTooltip(0, supportedInColumn))
+    }
+
+    @Test
+    fun `the column sorts on how many runtimes are listed`() {
+        val tab = assertNotNull(tab(emptyList()))
+        assertEquals(3, tab.columns[supportedInColumn].cellProvider(0).value)
+        assertEquals(3, tab.columns[supportedInColumn].cellProvider(1).value)
+    }
+
+    @Test
+    fun `a proposal the catalog does not know reads as an em dash`() {
+        val tab = assertNotNull(tab(emptyList(), proposals = listOf(WasmProposal.BranchHinting)))
+        assertEquals("—", tab.cellText(0, supportedInColumn))
+        assertNull(tab.cellTooltip(0, supportedInColumn))
+    }
+
+    @Test
+    fun `Other runtimes reads as an em dash when every supporting runtime has a column`() {
+        val tab = assertNotNull(
+            tab(listOf(RuntimeTarget("Chrome"), RuntimeTarget("Wasmtime"), RuntimeTarget("Bystander")))
+        )
+        assertEquals("—", tab.cellText(0, tab.columns.size - 1))
+    }
+
     @Test
     fun `a cell tooltip carries the upstream note or the verdict`() {
         val tab = assertNotNull(tab(listOf(RuntimeTarget("Chrome", "100"))))
-        assertEquals("Chrome 100 — not supported, needs 112", tab.cellTooltip(0, 2))
+        assertEquals("Chrome 100 — not supported, needs 112", tab.cellTooltip(0, runtimeColumn))
     }
 
     @Test

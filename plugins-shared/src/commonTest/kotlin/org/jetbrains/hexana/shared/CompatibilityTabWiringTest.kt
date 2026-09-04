@@ -105,7 +105,7 @@ class CompatibilityTabWiringTest {
     fun `the tab appears with no runtimes configured and explains itself`() {
         val context = TableTabsContext(runtimeCompatibility = compatibility())
         val tab = assertNotNull(provider.tableTabs(wasmUsingSignExtension(), context).find { it.name == "Compatibility" })
-        assertEquals(listOf("Proposal", "Phase"), tab.columns.map { it.name })
+        assertEquals(listOf("Proposal", "Phase", "Supported in"), tab.columns.map { it.name })
         assertTrue(
             assertNotNull(tab.prologueText).contains(".hexana/runtimes.json"),
             "expected the prologue to name the settings file, got ${tab.prologueText}",
@@ -165,7 +165,10 @@ class CompatibilityTabWiringTest {
         val fromBatch = assertNotNull(provider.tableTabs(wasm, context).find { it.name == "Compatibility" })
         val fromSingle = assertNotNull(provider.singleTab("Compatibility", wasm, context))
         assertEquals(fromBatch.columns.map { it.name }, fromSingle.columns.map { it.name })
-        assertEquals(listOf("Proposal", "Phase", "Chrome 120", "Wasmtime"), fromSingle.columns.map { it.name })
+        assertEquals(
+            listOf("Proposal", "Phase", "Chrome 120", "Wasmtime", "Other runtimes"),
+            fromSingle.columns.map { it.name },
+        )
         assertEquals(fromBatch.rowCount, fromSingle.rowCount)
     }
 }

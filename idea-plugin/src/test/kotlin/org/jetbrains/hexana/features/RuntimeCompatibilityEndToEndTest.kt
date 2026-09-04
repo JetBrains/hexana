@@ -112,6 +112,50 @@ class RuntimeCompatibilityEndToEndTest {
         }
     }
 
+    /**
+     * Pins the supporting-runtimes label against the real committed catalog, so a change to
+     * the label format or the runtime ordering has to be deliberate.
+     */
+    @Test
+    fun `supported-in names real runtimes and the versions they need`() {
+        val subject = declare()
+        val label = subject.evaluate(WasmProposal.GarbageCollection).supportedInLabel
+
+        // Browsers first, following the catalog's own order.
+        assertTrue("unexpected label: $label", label.startsWith("Chrome 119+, Firefox 120+, Safari 18.2+"))
+        // A runtime that supports it without naming a version appears bare.
+        assertTrue("expected a bare-name entry in: $label", label.contains(", Binaryen"))
+    }
+
+    @Test
+    fun `supported-in marks a flag-gated runtime`() {
+        val entry = declare()
+            .evaluate(WasmProposal.Memory64)
+            .supportedIn
+            .first { it.runtime == "GraalWasm" }
+
+        assertEquals("GraalWasm (flag)", entry.label)
+    }
+
+    @Test
+    fun `supported-in omits a runtime that does not support the proposal`() {
+        // Safari records no memory64 support, so it contributes no entry.
+        val supported = declare().evaluate(WasmProposal.Memory64).supportedIn
+        assertFalse("expected Safari omitted", supported.any { it.runtime == "Safari" })
+        assertTrue("expected Chrome listed", supported.any { it.label == "Chrome 133+" })
+    }
+
+    /** Declared runtimes get their own column, so they are dropped from *Other runtimes*. */
+    @Test
+    fun `other runtimes drops the declared ones and keeps the rest of the catalog`() {
+        val subject = declare(RuntimeTarget("Chrome", "100"), RuntimeTarget("Firefox", "100"))
+        val label = subject.evaluate(WasmProposal.GarbageCollection).otherRuntimesLabel
+
+        assertFalse("Chrome should have its own column, not appear here: $label", label.contains("Chrome"))
+        assertFalse("Firefox should have its own column, not appear here: $label", label.contains("Firefox"))
+        assertTrue("unexpected label: $label", label.startsWith("Safari 18.2+, Node.js 22.0+"))
+    }
+
     @Test
     fun `declaring no runtimes yields verdicts for nothing and warns about nothing`() {
         val subject = declare()
