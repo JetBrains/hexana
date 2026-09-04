@@ -37,6 +37,10 @@ data class VscodeMessage(
     val decompressed: Boolean = false,
     val keyLogPath: String = "",
     val keyLogContent: String = "",
+    /** Raw `features.json`: the host's ETag-validated cache, or the snapshot it ships. */
+    val featureCatalogJson: String = "",
+    /** Raw `.hexana/runtimes.json`; blank when the workspace declares no runtimes. */
+    val runtimeTargetsJson: String = "",
 )
 
 /**
@@ -377,6 +381,17 @@ fun postPickSslKeyLogToHost() {
 }
 
 /**
+ * Asks the extension host to write [json] to `.hexana/runtimes.json` in the workspace.
+ * The host replies with `runtime-targets-loaded` once the file is on disk.
+ */
+fun postSaveRuntimeTargetsToHost(json: String) {
+    val msg = js("{}")
+    msg.type = "save-runtime-targets"
+    msg.json = json
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to open a text document in a new VS Code editor tab.
  *
  * [fileName] is used as the suggested file name (e.g. "foo.cdx.json").
@@ -453,6 +468,8 @@ class VscodeHost : Host {
     override fun pickScriptFile() = postPickScriptFileToHost()
     override val canPickSslKeyLog: Boolean get() = true
     override fun pickSslKeyLog() = postPickSslKeyLogToHost()
+    override val canEditRuntimeTargets: Boolean get() = true
+    override fun saveRuntimeTargets(json: String) = postSaveRuntimeTargetsToHost(json)
     override fun createScriptFromTemplate(fileName: String, template: String?, jsConfigContent: String?) =
         postCreateScriptFromTemplateToHost(fileName, template, jsConfigContent)
     override fun openScriptForEditing(scriptPath: String, jsConfigContent: String?) =
@@ -494,6 +511,8 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                             showSemanticHighlighting = (data.showSemanticHighlighting as? Boolean),
                             parentFileName = (data.parentFileName as? String),
                             decompressed = (data.decompressed as? Boolean) ?: false,
+                            featureCatalogJson = (data.featureCatalogJson as? String) ?: "",
+                            runtimeTargetsJson = (data.runtimeTargetsJson as? String) ?: "",
                         )
                     }
                     "update-setting" -> {
@@ -565,6 +584,19 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                             keyLogContent = (data.keyLogContent as? String) ?: "",
                         )
                     }
+                    "runtime-targets-loaded" -> {
+                        VscodeMessage(
+                            type = type,
+                            runtimeTargetsJson = (data.runtimeTargetsJson as? String) ?: "",
+                        )
+                    }
+                    "feature-catalog-loaded" -> {
+                        VscodeMessage(
+                            type = type,
+                            featureCatalogJson = (data.featureCatalogJson as? String) ?: "",
+                        )
+                    }
+                    "open-runtime-targets-dialog" -> VscodeMessage(type = type)
                     "restore-script-tabs" -> {
                         val jsPaths = data.scriptPaths
                         val paths = if (jsPaths != null) {

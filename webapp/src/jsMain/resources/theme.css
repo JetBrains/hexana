@@ -32,6 +32,8 @@
     --vscode-input-foreground: #cccccc;
     --vscode-input-border: #3c3c3c;
     --vscode-inputValidation-errorForeground: #f48771;
+    --vscode-inputValidation-warningBackground: #352a05;
+    --vscode-editorWarning-foreground: #cca700;
 
     /* Panels */
     --vscode-panel-border: #80808059;

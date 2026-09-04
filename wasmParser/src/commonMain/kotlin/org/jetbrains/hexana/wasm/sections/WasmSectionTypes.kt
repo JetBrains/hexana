@@ -216,13 +216,21 @@ object StandardTypesParser {
         return if (is64) {
             val min = getULEB128()
             val max = if (hasMax) getULEB128() else null
-            if (hasPageSz) getULEB128() // consume page-size-log2, not modeled
-            if (hasMax) WasmFixedI64Limits(min, max!!, shared) else WasmOpenI64Limits(min, shared)
+            val pageSizeLog2 = if (hasPageSz) getULEB128().toInt() else null
+            if (hasMax) {
+                WasmFixedI64Limits(min, max!!, shared, pageSizeLog2)
+            } else {
+                WasmOpenI64Limits(min, shared, pageSizeLog2)
+            }
         } else {
             val min = getULEB128().toInt()
             val max = if (hasMax) getULEB128().toInt() else null
-            if (hasPageSz) getULEB128() // consume page-size-log2, not modeled
-            if (hasMax) WasmFixedI32Limits(min, max!!, shared) else WasmOpenI32Limits(min, shared)
+            val pageSizeLog2 = if (hasPageSz) getULEB128().toInt() else null
+            if (hasMax) {
+                WasmFixedI32Limits(min, max!!, shared, pageSizeLog2)
+            } else {
+                WasmOpenI32Limits(min, shared, pageSizeLog2)
+            }
         }
     }
 

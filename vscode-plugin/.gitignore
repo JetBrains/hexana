@@ -1,6 +1,8 @@
 node_modules/
 out/
 graalvm-runner/
+# Synced from plugins-shared/features/ by :vscode-plugin:syncWasmFeatures.
+wasm-features/
 server/lib/
 server/bin/
 test/out-unit/

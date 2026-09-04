@@ -22,6 +22,7 @@ import org.jetbrains.hexana.shared.RowContextMenuItemDescriptor
 import org.jetbrains.hexana.shared.buildInvokeOption
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsContext
+import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
 import org.jetbrains.hexana.shared.scripting.ScriptApiReference
 import org.jetbrains.hexana.shared.TabPriority
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
@@ -73,6 +74,14 @@ fun HexanaPanel(
      * tells the tab list to rebuild so the "Packets" tab picks up decryption.
      */
     sslKeyLogGeneration: Int = 0,
+    /**
+     * The feature catalog paired with the project's declared runtime targets, when the host
+     * supplied both. `null` leaves out the Compatibility tab and the runtime settings
+     * dialog, which is how the browser webapp renders (it has no project directory).
+     */
+    runtimeCompatibility: WasmRuntimeCompatibility? = null,
+    /** Opened by the "Configure runtimes…" action; `null` hides the action. */
+    onConfigureRuntimes: (() -> Unit)? = null,
 ) {
     val host = LocalHost.current
     val pendingRun = rememberPendingRunState()
@@ -101,7 +110,7 @@ fun HexanaPanel(
     // -----------------------------------------------------------------------
     val tabs = remember(
         provider, fileName, extraTabs, scriptTabs.size, sbomLocator,
-        capabilities.sbomVulnerabilityCheck, sslKeyLogGeneration,
+        capabilities.sbomVulnerabilityCheck, sslKeyLogGeneration, runtimeCompatibility,
     ) {
         buildList {
             // Summary is always first
@@ -120,7 +129,13 @@ fun HexanaPanel(
             data class TabEntry(val tab: PanelTab, val priority: TabPriority, val providerIndex: Int)
             val tabEntries = mutableListOf<TabEntry>()
             for ((providerIndex, p) in TableTabsProviderRegistry.providers.withIndex()) {
-                val enriched = enricher(p.tableTabs(provider, TableTabsContext(fileName = fileName)), fileName, pendingRun)
+                val tabsContext = TableTabsContext(
+                    fileName = fileName,
+                    runtimeCompatibility = runtimeCompatibility,
+                    openUrl = { url -> host.openUrl(url) },
+                    openRuntimeSettings = onConfigureRuntimes,
+                )
+                val enriched = enricher(p.tableTabs(provider, tabsContext), fileName, pendingRun)
                 for (d in enriched) {
                     val desc = if (d.name == "Entries" && zipProvider != null) {
                         enrichZipEntriesTab(d, zipProvider.displayEntries, host)

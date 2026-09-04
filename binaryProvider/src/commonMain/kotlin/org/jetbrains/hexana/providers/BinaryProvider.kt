@@ -740,6 +740,16 @@ open class WasmComponentBinaryProvider(private val sharedBytes: CommonByteBuffer
     fun canProvideWasmModule() = wasmModule != null
     open val sourceLocationProvider: HexanaSourceLocationProvider = HexanaSourceLocationProvider.EMPTY
 
+    /**
+     * Being a component *is* the component-model proposal, and it is the one proposal
+     * [WasmProposalDetector] cannot report: it takes a core `WasmModule`, which a component
+     * binary never is. Proposals used by the core modules nested inside this component are
+     * reported by their own providers when those modules are opened.
+     */
+    val usedProposals: Set<WasmProposal> by lazy {
+        if (wasmModule == null) emptySet() else setOf(WasmProposal.ComponentModel)
+    }
+
     val imports: List<WasmComponentImport> by lazy {
         val importSections = wasmModule?.importSection ?: return@lazy emptyList()
         importSections.flatMap {

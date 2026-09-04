@@ -8,6 +8,11 @@ import org.jetbrains.hexana.dex.DexFileParser
 import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.pcap.SslKeyLog
+import org.jetbrains.hexana.shared.features.RuntimeTargets
+import org.jetbrains.hexana.shared.features.WasmFeatureCatalog
+import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
+import org.jetbrains.hexana.shared.features.parseRuntimeTargets
+import org.jetbrains.hexana.shared.features.serializeRuntimeTargets
 
 /**
  * Extracts nested module bytes from a parent binary at the given member index.
@@ -145,9 +150,44 @@ fun BinaryEditorContent(
     /** Text of a key log the host just picked, or blank. */
     sslKeyLogContent: String = "",
     onSslKeyLogConsumed: () -> Unit = {},
+    /**
+     * Raw `features.json` pushed by the host (its ETag-validated cache, or the snapshot it
+     * ships). Blank falls back to the snapshot committed in `plugins-shared`.
+     */
+    featureCatalogJson: String = "",
+    /** Raw `.hexana/runtimes.json` pushed by the host; blank means nothing is declared. */
+    runtimeTargetsJson: String = "",
+    /**
+     * Bumped by the host to open the target-runtimes dialog from outside the editor (the
+     * `hexana.configureWasmRuntimes` command). A counter rather than a boolean so repeated
+     * invocations reopen it without the caller having to reset a flag.
+     */
+    openRuntimeTargetsRequest: Int = 0,
 ) {
     val selection = remember { HexSelectionState() }
     val buffer = remember(provider) { provider.bytes }
+
+    val host = LocalHost.current
+
+    // Parsed once per pushed payload rather than per composition: features.json is ~40 KB.
+    val featureCatalog = remember(featureCatalogJson) {
+        featureCatalogJson.takeIf { it.isNotBlank() }?.let(WasmFeatureCatalog::parse)
+            ?: WasmFeatureCatalog.bundled
+    }
+    val runtimeTargets = remember(runtimeTargetsJson) {
+        if (runtimeTargetsJson.isBlank()) RuntimeTargets.EMPTY else parseRuntimeTargets(runtimeTargetsJson)
+    }
+    // Only built where the host can persist the file; the browser webapp cannot, and the
+    // proposals badges and the Compatibility tab then behave as they always have.
+    val runtimeCompatibility = remember(featureCatalog, runtimeTargets, host.canEditRuntimeTargets) {
+        if (host.canEditRuntimeTargets) WasmRuntimeCompatibility(featureCatalog, runtimeTargets) else null
+    }
+    var showRuntimeTargetsDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(openRuntimeTargetsRequest) {
+        if (openRuntimeTargetsRequest > 0 && host.canEditRuntimeTargets) {
+            showRuntimeTargetsDialog = true
+        }
+    }
     var panelHeight by remember { mutableStateOf(DEFAULT_PANEL_HEIGHT) }
     var activeTab by remember(provider, initialActiveTab) { mutableStateOf(initialActiveTab) }
     var showDataInspector by remember { mutableStateOf(false) }
@@ -236,6 +276,12 @@ fun BinaryEditorContent(
                 onLegacyReparseRequested?.invoke(editState.getEditedBytes()) ?: run { reparseCounter++ }
             },
             onOpenSbomTab = { activeTab = "SBOM" },
+            runtimeCompatibility = runtimeCompatibility,
+            onOpenCompatibilityTab = if (runtimeCompatibility != null) {
+                { activeTab = "Compatibility" }
+            } else {
+                null
+            },
             fileTypeLabelOverride = fileTypeLabelOverride,
             workerWasmToolbarPresentation = workerWasmToolbarPresentation,
             workerNativeImageToolbarPresentation = workerNativeImageToolbarPresentation,
@@ -297,6 +343,26 @@ fun BinaryEditorContent(
             onScriptTabRemoved = onScriptTabRemoved,
             scriptExecution = scriptExecution,
             sslKeyLogGeneration = sslKeyLogGeneration,
+            runtimeCompatibility = runtimeCompatibility,
+            onConfigureRuntimes = if (host.canEditRuntimeTargets) {
+                { showRuntimeTargetsDialog = true }
+            } else {
+                null
+            },
+        )
+    }
+
+    if (showRuntimeTargetsDialog) {
+        RuntimeTargetsDialog(
+            catalog = featureCatalog,
+            current = runtimeTargets,
+            onConfirm = { targets ->
+                // The host owns the write and replies with `runtime-targets-loaded`, which is
+                // also how an edit made outside the editor reaches this state.
+                host.saveRuntimeTargets(serializeRuntimeTargets(targets))
+                showRuntimeTargetsDialog = false
+            },
+            onCancel = { showRuntimeTargetsDialog = false },
         )
     }
 }

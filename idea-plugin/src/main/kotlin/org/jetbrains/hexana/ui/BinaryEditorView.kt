@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.actionSystem.IdeActions
 import org.jetbrains.hexana.HexanaBinaryVirtualFile
 import org.jetbrains.hexana.HexanaService
@@ -57,6 +58,8 @@ import org.jetbrains.hexana.HexanaLog
 import org.jetbrains.hexana.nativebin.JVM_FILE_SYSTEM
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.DexBinaryProvider
+import org.jetbrains.hexana.features.RuntimeTargetsService
+import org.jetbrains.hexana.features.WasmRuntimeCompatibilityConfigurable
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
@@ -384,6 +387,16 @@ internal fun BinaryEditorView(
                         nativeDebugData = (binaryProvider as? NativeBinaryProvider)
                             ?.let { NativeDebugTabData.scan(it, JVM_FILE_SYSTEM, state.project.basePath) },
                         fileName = fileName,
+                        // Drives the Compatibility tab. Null for a project with no base path,
+                        // and the tab is then absent rather than empty.
+                        runtimeCompatibility = RuntimeTargetsService.getInstance(state.project).compatibility(),
+                        openUrl = { url -> BrowserUtil.browse(url) },
+                        openRuntimeSettings = {
+                            ShowSettingsUtil.getInstance().showSettingsDialog(
+                                state.project,
+                                WasmRuntimeCompatibilityConfigurable::class.java,
+                            )
+                        },
                     )
                     val availableNames = p.availableTabNames(binaryProvider, tableTabsContext)
                     if (availableNames != null) {

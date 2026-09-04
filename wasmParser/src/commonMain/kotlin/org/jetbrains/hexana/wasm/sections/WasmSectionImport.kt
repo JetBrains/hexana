@@ -114,19 +114,22 @@ class WasmTableExternalType(val referenceType: WasmReferenceType, val limits: Wa
 }
 
 /**
- *
+ * @param pageSizeLog2 the explicit page size, as a base-2 logarithm, when the limits
+ *   carry the custom-page-sizes flag (bit 3); `null` for the default 64 KiB page. Named
+ *   after wasm-tools' `page_size_log2`.
  */
-sealed class WasmLimits<T>(val kind: Byte, val min: T, val max: T?) {
+sealed class WasmLimits<T>(val kind: Byte, val min: T, val max: T?, val pageSizeLog2: Int? = null) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         val b = other as? WasmLimits<*> ?: return false
-        return kind == b.kind && min == b.min && max == b.max
+        return kind == b.kind && min == b.min && max == b.max && pageSizeLog2 == b.pageSizeLog2
     }
 
     override fun hashCode(): Int {
         var result = kind.hashCode()
         result = 31 * result + (min?.hashCode() ?: 0)
         result = 31 * result + (max?.hashCode() ?: 0)
+        result = 31 * result + (pageSizeLog2?.hashCode() ?: 0)
         return result
     }
 }
@@ -134,33 +137,38 @@ sealed class WasmLimits<T>(val kind: Byte, val min: T, val max: T?) {
 /**
  * [min, infinite)
  */
-class WasmOpenI32Limits(min: Int, val shared: Boolean = false): WasmLimits<Int>(0, min, null)
+class WasmOpenI32Limits(min: Int, val shared: Boolean = false, pageSizeLog2: Int? = null):
+    WasmLimits<Int>(0, min, null, pageSizeLog2)
 /**
  * [min, max]
  */
-class WasmFixedI32Limits(min: Int, max: Int, val shared:Boolean = false): WasmLimits<Int>(1, min, max) {
+class WasmFixedI32Limits(min: Int, max: Int, val shared:Boolean = false, pageSizeLog2: Int? = null):
+    WasmLimits<Int>(1, min, max, pageSizeLog2) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         val b = other as? WasmFixedI32Limits ?: return false
-        return min == b.min && max == b.max && shared == b.shared
+        return min == b.min && max == b.max && shared == b.shared && pageSizeLog2 == b.pageSizeLog2
     }
 
     override fun hashCode(): Int {
         var result = min.hashCode()
         result = 31 * result + max.hashCode()
         result = 31 * result + shared.hashCode()
+        result = 31 * result + (pageSizeLog2?.hashCode() ?: 0)
         return result
     }
 }
 /**
  * [min, infinite)
  */
-class WasmOpenI64Limits(min: Long, val shared: Boolean = false): WasmLimits<Long>(4, min, null)
+class WasmOpenI64Limits(min: Long, val shared: Boolean = false, pageSizeLog2: Int? = null):
+    WasmLimits<Long>(4, min, null, pageSizeLog2)
 
 /**
  * [min, max]
  */
-class WasmFixedI64Limits(min: Long, max: Long,val shared: Boolean = false): WasmLimits<Long>(5, min, max)
+class WasmFixedI64Limits(min: Long, max: Long, val shared: Boolean = false, pageSizeLog2: Int? = null):
+    WasmLimits<Long>(5, min, max, pageSizeLog2)
 
 /**
  * spec 5.3.12

@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
 
 /**
  * Priority level for tab ordering.
@@ -340,9 +341,24 @@ class TreemapData(
     val totalSize: Long,
 )
 
+/**
+ * Host-supplied context for tab construction.
+ *
+ * @param runtimeCompatibility the feature catalog paired with the runtime targets declared
+ *   in `.hexana/runtimes.json`, when the host has both. `null` means the host cannot supply
+ *   them (the browser webapp has no project directory), and the Compatibility tab is then
+ *   not produced.
+ * @param openUrl opens a URL in the user's browser. Supplied here rather than attached by a
+ *   host enrichment step so the Compatibility tab's documentation links are built once.
+ * @param openRuntimeSettings opens the host's runtime-targets settings UI; `null` when the
+ *   host has none, in which case the tab omits the action.
+ */
 class TableTabsContext(
     val nativeDebugData: NativeDebugTabData? = null,
     val fileName: String? = null,
+    val runtimeCompatibility: WasmRuntimeCompatibility? = null,
+    val openUrl: ((String) -> Unit)? = null,
+    val openRuntimeSettings: (() -> Unit)? = null,
 )
 
 object TableTabsProviderRegistry {

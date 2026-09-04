@@ -15,7 +15,10 @@ import org.jetbrains.hexana.wasm.sections.ParseProblemKind
  * Produces table-based tabs: Data, Exports, Imports, Functions, Custom.
  */
 class WasmTableTabsProvider : TableTabsProvider {
-    override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> {
+    override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> =
+        tableTabs(provider, TableTabsContext())
+
+    override fun tableTabs(provider: BinaryProvider, context: TableTabsContext): List<TableTabDescriptor> {
         if (provider !is WasmBinaryProvider) return emptyList()
         if (!provider.canProvideWasmModule()) return emptyList()
         return buildList {
@@ -26,6 +29,7 @@ class WasmTableTabsProvider : TableTabsProvider {
             tagsTab(provider)?.let { add(it) }
             exceptionSurfaceTab(provider)?.let { add(it) }
             customTab(provider)?.let { add(it) }
+            compatibilityTab(provider, context)?.let { add(it) }
             problemsTab(provider)?.let { add(it) }
         }
     }
@@ -46,6 +50,9 @@ class WasmTableTabsProvider : TableTabsProvider {
                 add("Exceptions")
             }
             if (module.customSections.isNotEmpty()) add("Custom")
+            // Advertised only when a host supplied the catalog + targets; `singleTab`
+            // resolves to null and the placeholder is dropped when no proposals are used.
+            if (context.runtimeCompatibility != null) add(COMPATIBILITY_TAB_NAME)
             // parseProblems is lazy; avoid forcing it here — advertise the tab
             // whenever any problem source exists (a section whose partial parse
             // can fail, or a recorded section-scan failure). singleTab resolves
@@ -72,6 +79,7 @@ class WasmTableTabsProvider : TableTabsProvider {
             "Tags" -> tagsTab(provider)
             "Exceptions" -> exceptionSurfaceTab(provider)
             "Custom" -> customTab(provider)
+            COMPATIBILITY_TAB_NAME -> compatibilityTab(provider, context)
             "Problems" -> problemsTab(provider)
             else -> null
         }
@@ -298,6 +306,24 @@ private fun exceptionSurfaceTab(provider: WasmBinaryProvider): TableTabDescripto
             val codeIdx = e.funcIdx - importFuncCount
             codeOffsets.getOrNull(codeIdx)?.let { RowSelectionData(it.offset, it.size) }
         },
+    )
+}
+
+/**
+ * The Compatibility tab needs data only a host can supply — the fetched `features.json` and
+ * the project's declared runtime targets — so it is absent whenever
+ * [TableTabsContext.runtimeCompatibility] is `null` (as in the browser webapp, which has no
+ * project directory).
+ */
+private fun compatibilityTab(provider: WasmBinaryProvider, context: TableTabsContext): TableTabDescriptor? {
+    val compatibility = context.runtimeCompatibility ?: return null
+    val proposals = provider.usedProposals
+    if (proposals.isEmpty()) return null
+    return compatibilityTabDescriptor(
+        proposals = compatibility.evaluate(proposals),
+        runtimeLabels = compatibility.runtimeLabels,
+        openUrl = context.openUrl,
+        openRuntimeSettings = context.openRuntimeSettings,
     )
 }
 

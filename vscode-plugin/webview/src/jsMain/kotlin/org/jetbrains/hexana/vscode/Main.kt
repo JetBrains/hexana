@@ -29,6 +29,9 @@ fun BinaryEditorApp() {
     var pickedKeyLogContent by remember { mutableStateOf("") }
     var showSemanticHighlighting by remember { mutableStateOf(true) }
     var isDecompressed by remember { mutableStateOf(false) }
+    var featureCatalogJson by remember { mutableStateOf("") }
+    var runtimeTargetsJson by remember { mutableStateOf("") }
+    var openRuntimeTargetsRequest by remember { mutableStateOf(0) }
 
     // Global arrow-key handler for panel-table rows.  VSCode webviews
     // intercept keydown events before they reach focused DOM elements, so
@@ -50,6 +53,27 @@ fun BinaryEditorApp() {
                     configuredRuntimeId = message.wasmRuntime
                     isDecompressed = message.decompressed
                     message.showSemanticHighlighting?.let { showSemanticHighlighting = it }
+                    // Pushed with the payload so the badges have their verdicts on first paint.
+                    if (message.featureCatalogJson.isNotBlank()) {
+                        featureCatalogJson = message.featureCatalogJson
+                    }
+                    runtimeTargetsJson = message.runtimeTargetsJson
+                }
+                // Sent after a save from the settings dialog, and whenever the file changes
+                // on disk (an edit by hand, a git pull, a teammate's commit).
+                "runtime-targets-loaded" -> {
+                    runtimeTargetsJson = message.runtimeTargetsJson
+                }
+                // The `hexana.configureWasmRuntimes` command, so the settings dialog is
+                // reachable from the command palette and not only from the Compatibility tab.
+                "open-runtime-targets-dialog" -> {
+                    openRuntimeTargetsRequest++
+                }
+                // Sent when a background refresh replaces the host's cached catalog.
+                "feature-catalog-loaded" -> {
+                    if (message.featureCatalogJson.isNotBlank()) {
+                        featureCatalogJson = message.featureCatalogJson
+                    }
                 }
                 "update-setting" -> {
                     if (message.settingKey == "showSemanticHighlighting") {
@@ -216,6 +240,9 @@ fun BinaryEditorApp() {
                 onScriptTabRemoved = { path ->
                     scriptTabs.removeAll { it.path == path }
                 },
+                featureCatalogJson = featureCatalogJson,
+                runtimeTargetsJson = runtimeTargetsJson,
+                openRuntimeTargetsRequest = openRuntimeTargetsRequest,
             )
         }
     }

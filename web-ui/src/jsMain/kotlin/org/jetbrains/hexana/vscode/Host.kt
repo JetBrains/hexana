@@ -60,6 +60,20 @@ interface Host {
     fun pickSslKeyLog() {}
 
     /**
+     * Whether the host can persist target runtimes to `.hexana/runtimes.json`. False where
+     * there is no project directory to hold it — the browser webapp — and the runtime
+     * settings dialog is then not offered.
+     */
+    val canEditRuntimeTargets: Boolean get() = false
+
+    /**
+     * Asks the host to write [json] to `.hexana/runtimes.json` in the project. The host
+     * replies with `runtime-targets-loaded` once the file is on disk, which is also how an
+     * edit made outside the editor reaches the UI.
+     */
+    fun saveRuntimeTargets(json: String) {}
+
+    /**
      * Creates a runnable script and selects it, so the user never starts from an
      * empty file. The host replies with `script-file-picked`.
      *

@@ -104,6 +104,10 @@
       {
         "command": "hexana.wasiSdk.status",
         "title": "Hexana: wasi-sdk Status"
+      },
+      {
+        "command": "hexana.configureWasmRuntimes",
+        "title": "Hexana: Configure Target Runtimes"
       }
     ],
     "menus": {

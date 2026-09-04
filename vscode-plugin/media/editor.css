@@ -803,3 +803,66 @@ html, body {
 .vscode-light .hexana-share-feedback-item:hover {
     background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground, rgba(0, 0, 0, 0.06)));
 }
+
+/* --- Runtime compatibility ------------------------------------------------ */
+
+/*
+ * Warning variant of the proposals badge, shown when a proposal the module uses is not
+ * supported by a runtime declared in .hexana/runtimes.json. The colours are also inlined
+ * as fallbacks by EditorToolbar.ProposalBadge, matching how the base badge already works.
+ */
+.hexana-proposal-badge-warning {
+    --hexana-proposal-badge-warning-bg: var(--vscode-inputValidation-warningBackground, #5a4a2a);
+    --hexana-proposal-badge-warning-fg: var(--vscode-editorWarning-foreground, #e0c070);
+}
+
+/* Wider than the default dialog: one row per runtime, with a version column. */
+.hexana-runtime-targets-dialog {
+    min-width: 460px;
+    max-width: 620px;
+}
+
+.hexana-dialog-hint {
+    font-size: 12px;
+    opacity: 0.75;
+}
+
+.hexana-runtime-targets-list {
+    margin-top: 10px;
+}
+
+.hexana-runtime-targets-category {
+    margin: 12px 0 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.65;
+}
+
+.hexana-runtime-targets-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+}
+
+.hexana-runtime-targets-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+/* Fixed width so the version pickers line up down the list. */
+.hexana-runtime-targets-version {
+    flex: 0 0 auto;
+    width: 140px;
+}
+
+.hexana-runtime-targets-version:disabled {
+    opacity: 0.45;
+}

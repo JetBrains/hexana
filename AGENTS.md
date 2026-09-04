@@ -128,6 +128,7 @@ Run the narrowest command that proves your change.
 - Run browser webapp tests: `./gradlew :webapp:jsBrowserTest -Phx.tests.web.enableChromeOrChromium=1`
 - Run WasmJS browser parser tests: `./gradlew :wasmParser:wasmJsBrowserTest`
 - Build shared module: `./gradlew :plugins-shared:build`
+- Refresh the bundled WebAssembly feature catalog: `./gradlew :plugins-shared:updateBundledWasmFeatures`
 - Build neutral CLI runtime contracts: `./gradlew :cli:runtime:build`
 - Run neutral CLI core tests: `./gradlew :cli:core:test`
 - Run installed standard CLI tests: `./gradlew :cli:hexana-cli:integrationTest`
@@ -225,6 +226,12 @@ Existing IDE run configurations currently include:
 - `mcp/server` generation intentionally emits only `HexanaToolDispatcher.kt`; CLI command construction stays outside
   the MCP server. If you change a semantic contract or CLI binding, edit its owning authority and rerun affected
   generators in the same change.
+- `plugins-shared/src/commonMain/gen/.../BundledWasmFeatures.kt` embeds the committed
+  `plugins-shared/features/features.json` snapshot (the offline fallback for the runtime
+  compatibility table) as a Kotlin constant, because KMP resource loading is awkward on
+  `wasmJs`. Regenerate with `./gradlew :plugins-shared:updateBundledWasmFeatures`; verify with
+  `./gradlew :plugins-shared:verifyBundledWasmFeaturesUpToDate` (wired into `check`). If you
+  replace the JSON snapshot, regenerate in the same change.
 - Embedded converter binaries live here:
   - `graalwasm/wasmprinter/src/main/resources/wasmprinter_wrapper.wasm`
   - `graalwasm/wat2wasm/src/main/resources/wat2wasm_full.wasm`

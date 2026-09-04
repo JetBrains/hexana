@@ -34,6 +34,22 @@ val syncScriptExamples = tasks.register<Sync>("syncScriptExamples") {
     into(layout.projectDirectory.dir("hexana-scripts"))
 }
 
+// --- Bundled WebAssembly feature catalog -------------------------------------
+// The snapshot of WebAssembly's `features.json` lives once in `plugins-shared/features/`
+// and is copied into the VSIX as the offline fallback for the runtime compatibility table.
+// The IntelliJ plugin gets the same snapshot as a generated Kotlin constant; both come from
+// that one file, so the two products cannot disagree about what "bundled" means.
+
+val syncWasmFeatures = tasks.register<Sync>("syncWasmFeatures") {
+    group = "distribution"
+    description = "Copies the features.json snapshot into wasm-features/ for VSIX packaging."
+
+    from(project(":plugins-shared").file("features")) {
+        include("features.json")
+    }
+    into(layout.projectDirectory.dir("wasm-features"))
+}
+
 tasks.register("assembleExtensionAssets") {
     group = "distribution"
     description = "Builds all generated assets required before packaging the VS Code extension."
@@ -43,6 +59,7 @@ tasks.register("assembleExtensionAssets") {
         ":vscode-plugin:webview:jsBrowserProductionWebpack",
         syncGraalvmRunner,
         syncScriptExamples,
+        syncWasmFeatures,
         // The curated and raw .d.ts references the dialog links to. Generated from
         // :mcp:scripting rather than :idea-plugin so that packaging the extension
         // stays on a plain JVM toolchain and never builds the IntelliJ platform.

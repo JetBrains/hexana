@@ -122,6 +122,15 @@
                                  key="wasm.runtime.settings.displayName"
                                  instance="org.jetbrains.hexana.run.WasmRuntimeConfigurable"/>
 
+        <!-- Project-level: the selection is written to .hexana/runtimes.json in the project so
+             the VS Code extension reads the same declaration. Not an applicationConfigurable
+             and not @State-backed, which would land in .idea/ and be IntelliJ-only. -->
+        <projectConfigurable parentId="wasm.runtime.settings"
+                             id="wasm.runtime.compatibility"
+                             bundle="messages.HexanaBundle"
+                             key="wasm.runtime.compatibility.displayName"
+                             instance="org.jetbrains.hexana.features.WasmRuntimeCompatibilityConfigurable"/>
+
         <applicationService serviceImplementation="org.jetbrains.hexana.run.WasmRuntimeSettings"/>
 
         <!-- Remembers the SSL key log paired with each pcap capture.

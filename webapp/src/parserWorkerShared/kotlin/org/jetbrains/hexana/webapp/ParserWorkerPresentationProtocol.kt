@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.webapp
 
+import org.jetbrains.hexana.wasm.analysis.WasmProposal
 import org.jetbrains.hexana.wasm.components.ComponentCoreSort
 import org.jetbrains.hexana.wasm.components.ComponentSort
 import org.jetbrains.hexana.wasm.components.ComponentSortWithCoreSort
@@ -14,7 +15,7 @@ internal const val MAX_PARSER_WORKER_FILE_NAME_CHARS = 1_024
 internal const val MAX_PARSER_WORKER_CAPABILITIES = 32
 internal const val MAX_PARSER_WORKER_TABLES = 32
 internal const val MAX_PARSER_WORKER_LEGACY_TABS = 16
-internal const val PARSER_WORKER_PROTOCOL_VERSION = 9
+internal const val PARSER_WORKER_PROTOCOL_VERSION = 10
 
 private const val MAX_FORMAT_CHARS = 64
 private const val MAX_DISPLAY_LABEL_CHARS = 1_024
@@ -45,7 +46,6 @@ private const val MAX_GRAPH_EDGE_LABEL_CHARS = 1_024
 private const val MAX_LEGACY_TAB_LABEL_CHARS = 64
 private const val MAX_TOOLCHAIN_IMPORT_MODULES = 8
 private const val MAX_TOOLCHAIN_IMPORT_MODULE_CHARS = 64
-private const val MAX_TOOLBAR_PROPOSALS = 16
 private const val MAX_TOOLBAR_PROPOSAL_ID_CHARS = 64
 private const val MAX_TOOLBAR_RUNNABLE_EXPORT_CHARS = 64
 private const val MAX_NATIVE_IMAGE_TEXT_CHARS = 1_024
@@ -56,11 +56,15 @@ private val supportedFormats = setOf(
 )
 private val supportedCapabilities = setOf("summary", "structural_ranges", "tables", "diagnostics", "component_dependency_graph")
 private val supportedGraphNodeKinds = setOf("import", "module", "nested_component", "core_instance", "instance", "export")
-private val supportedToolbarProposalIds = setOf(
-    "SignExtensionOps", "NonTrappingFloatToInt", "MultiValue", "ReferenceTypes", "BulkMemoryOperations", "SIMD",
-    "MutableGlobals", "TailCall", "TypedFunctionReferences", "GarbageCollection", "MultipleMemories", "RelaxedSIMD",
-    "ExceptionHandling", "Memory64", "Threads", "LegacyExceptionHandling",
-)
+/**
+ * Derived from [WasmProposal] rather than transcribed, so adding a proposal to the parser
+ * cannot silently make the worker emit an id the validator rejects - which would discard the
+ * whole presentation, not just the badge. The enum is fixed at compile time, so this is as
+ * bounded as a literal set.
+ */
+private val supportedToolbarProposalIds: Set<String> = WasmProposal.entries.map { it.name }.toSet()
+
+private val MAX_TOOLBAR_PROPOSALS = supportedToolbarProposalIds.size
 private val supportedLegacyTabsByFormat = mapOf(
     "core_wasm" to setOf("Data", "Tags", "Exceptions", "Custom", "Top", "Monos", "Garbage", "Wat", "WAT (virtualized)"),
     "wasm_component" to setOf("Components", "Wat", "WAT (virtualized)"),
@@ -821,7 +825,7 @@ private fun isValidToolbar(format: String, toolbar: ParserWorkerToolbar): Boolea
     toolbar.proposalIds.size <= MAX_TOOLBAR_PROPOSALS &&
         toolbar.proposalIds.all { it.length <= MAX_TOOLBAR_PROPOSAL_ID_CHARS && it in supportedToolbarProposalIds } &&
         toolbar.proposalIds.distinct().size == toolbar.proposalIds.size &&
-        (format == "core_wasm" || toolbar.proposalIds.isEmpty()) &&
+        (format == "core_wasm" || format == "wasm_component" || toolbar.proposalIds.isEmpty()) &&
         when (format) {
             "core_wasm" -> toolbar.runnableExportName == null || toolbar.runnableExportName in setOf("_start", "_initialize")
             "wasm_component" -> toolbar.runnableExportName == null || toolbar.runnableExportName == "wasi:cli/run"

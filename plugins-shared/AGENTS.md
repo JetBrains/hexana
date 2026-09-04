@@ -24,6 +24,17 @@ The module provides:
 - **LLDB output parsing** (`LldbOutputParser.kt`) — pure parsers for LLDB stop events, expression results, frame locations, function names, and WAMR debug support detection; used by both `idea-plugin` and `vscode-plugin:extension-lib`.
 - **DWARF path matching** (`DwarfPathMatcher.kt`) — platform-agnostic utilities for matching DWARF debug-info file paths against IDE/editor breakpoint paths, compilation-unit path heuristics, crate name extraction, and CU hash suffix stripping; used by both `idea-plugin` and `vscode-plugin:extension-lib`.
 - **CDP source location resolver** (`CdpSourceLocationResolver.kt`) — platform-agnostic DWARF-based source file + line ↔ Wasm byte offset resolver for CDP debug adapters; used by both `idea-plugin` and `vscode-plugin` to translate breakpoint positions and stack frame locations.
+- **Runtime compatibility** (`features/`) — the WebAssembly feature catalog and the runtime
+  compatibility model. `WasmFeatureCatalog.kt` parses WebAssembly's `features.json` (the
+  four-way `status` union from its schema, plus the `[status, note]` wrapper) leniently, so
+  an upstream schema addition degrades rather than breaking an installed Hexana;
+  `WasmFeatureVersions.kt` compares the dotted-numeric version strings that file uses;
+  `RuntimeTargets.kt` owns the `.hexana/runtimes.json` format and the `HEXANA_PROJECT_DIR`
+  constant; `FeatureCatalogRefresh.kt` holds the pure TTL/fallback decisions each host's
+  fetcher applies; `WasmRuntimeCompatibility.kt` turns detected `WasmProposal`s plus declared
+  targets into per-runtime verdicts. `WasmCompatibilityTableTab.kt` builds the Compatibility
+  tab from those verdicts. Every proposal maps to an upstream feature key through
+  `WasmProposal.featureId`, pinned in both directions by `WasmFeatureCatalogTest`.
 - **Scripting API** (`scripting/`) — the single definition of the custom script tab surface. `ScriptValue.kt` is a
   host-neutral lazy value tree; `ScriptBinaryApi.kt` builds the `binary` global from a `BinaryProvider` (reusing
   `fileTypeDescription`, `structureRanges`, and `TableTabsProviderRegistry` so `binary.tab(name)` reads the same tables
@@ -64,6 +75,23 @@ all bind one definition. Before this existed each host hand-maintained its own w
 - `:binaryProvider`
 - `:encdec`
 - `:debugInfo:dwarf`
+
+## Runtime Compatibility Rules
+
+- `.hexana/runtimes.json` is read and written by both the IntelliJ plugin and the VS Code
+  extension, and is committed to version control. That is the whole point of it: a project
+  declares its target runtimes once. So `parseRuntimeTargets` stays lenient (a hand-edited or
+  half-merged file must degrade to "nothing declared", never surface an error on file open)
+  and `serializeRuntimeTargets` stays byte-stable (re-saving an unchanged selection must not
+  dirty the file).
+- `features/features.json` is a committed snapshot of upstream, compiled into a checked-in
+  Kotlin constant because `wasmJs` has no convenient resource loader. It is the offline
+  fallback only — at runtime each host prefers its own ETag-validated cache. Refresh it with
+  `./gradlew :plugins-shared:updateBundledWasmFeatures` in the same change that replaces the
+  JSON; `verifyBundledWasmFeaturesUpToDate` runs as part of `check`.
+- Adding a `WasmProposal` requires a `featureId` that exists in that snapshot. It also
+  requires updating nothing in the webapp worker protocol — its allow-list is derived from
+  `WasmProposal.entries` precisely so it cannot drift.
 
 ## Rules
 

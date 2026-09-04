@@ -4,6 +4,7 @@ import * as vscode from "vscode";
 import { getWebviewContent } from "./webviewContent";
 import { extensionLib, getSelectedRuntime, runExport } from "./WasmRunConfigurations";
 import { isNativeBinary } from "./NativeBinaryFileTypeDetector";
+import { WasmFeatureCatalogProvider } from "./wasmFeatureCatalog";
 
 /**
  * In-memory store for nested module byte arrays.
@@ -29,6 +30,39 @@ const HEXANA_SCRIPT_TYPES_FILE = "hexana-scripting.d.ts";
  * alongside the rest of the scripting API contract.
  */
 const HEXANA_SCRIPT_JSCONFIG_FILE = "jsconfig.json";
+
+/**
+ * Project-relative directory Hexana keeps shared, editor-independent state in, and the file
+ * inside it that holds the target runtimes for the compatibility table.
+ *
+ * Mirrors `HEXANA_PROJECT_DIR` / `RUNTIME_TARGETS_FILE` in
+ * `plugins-shared/src/commonMain/kotlin/org/jetbrains/hexana/shared/features/RuntimeTargets.kt`,
+ * which is the source of truth for the format. The IntelliJ plugin reads and writes the same
+ * file, so a selection made in either editor is honoured by the other.
+ */
+const HEXANA_PROJECT_DIR = ".hexana";
+const RUNTIME_TARGETS_FILE = "runtimes.json";
+
+/**
+ * Reads `.hexana/runtimes.json` from the first workspace folder.
+ *
+ * Returns an empty string when there is no workspace, no file, or the file cannot be read.
+ * The webview treats that as "nothing declared" and the compatibility table simply has
+ * nothing to check against - an unreadable settings file is not worth an error popup on
+ * every file open.
+ */
+async function readRuntimeTargetsJson(): Promise<string> {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) {
+        return "";
+    }
+    const file = vscode.Uri.joinPath(folder.uri, HEXANA_PROJECT_DIR, RUNTIME_TARGETS_FILE);
+    try {
+        return new TextDecoder("utf-8").decode(await vscode.workspace.fs.readFile(file));
+    } catch {
+        return "";
+    }
+}
 
 /**
  * In-memory store for pending diff payloads keyed by a synthetic
@@ -167,6 +201,26 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         if (!base.includes(".")) return true; // extensionless → treat as native
         const ext = base.split(".").pop()?.toLowerCase() ?? "";
         return WasmEditorProvider.nativeExtensions.has(ext);
+    }
+
+    /**
+     * Registers `hexana.configureWasmRuntimes`, which opens the target-runtimes dialog in
+     * the active Hexana editor.
+     *
+     * The dialog lives inside the editor webview rather than in VS Code settings because the
+     * selection is written to the project's `.hexana/runtimes.json`, so the command needs a
+     * webview to talk to.
+     */
+    public static registerConfigureRuntimesCommand(provider: WasmEditorProvider): vscode.Disposable {
+        return vscode.commands.registerCommand("hexana.configureWasmRuntimes", () => {
+            if (!provider.openWebviews.size) {
+                void vscode.window.showInformationMessage(
+                    "Open a Wasm or binary file in Hexana first: target runtimes are configured from its editor.",
+                );
+                return;
+            }
+            provider.broadcast({ type: "open-runtime-targets-dialog" });
+        });
     }
 
     /**
@@ -360,9 +414,12 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             vscode.workspace.registerTextDocumentContentProvider("hexana-wat", watContentProvider),
         );
 
+        const provider = new WasmEditorProvider(context);
+        context.subscriptions.push(WasmEditorProvider.registerConfigureRuntimesCommand(provider));
+
         return vscode.window.registerCustomEditorProvider(
             WasmEditorProvider.viewType,
-            new WasmEditorProvider(context),
+            provider,
             {
                 supportsMultipleEditorsPerDocument: true,
                 webviewOptions: { retainContextWhenHidden: true },
@@ -370,7 +427,45 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         );
     }
 
-    constructor(private readonly context: vscode.ExtensionContext) {}
+    /** Shared by every open editor, so N webviews do not each hit the network. */
+    private readonly featureCatalog: WasmFeatureCatalogProvider;
+
+    /** Live webviews, so a settings change or a catalog refresh reaches all of them. */
+    private readonly openWebviews = new Set<vscode.WebviewPanel>();
+
+    constructor(private readonly context: vscode.ExtensionContext) {
+        this.featureCatalog = new WasmFeatureCatalogProvider(context);
+        context.subscriptions.push(this.featureCatalog);
+
+        context.subscriptions.push(
+            this.featureCatalog.onDidChange((json) => {
+                this.broadcast({ type: "feature-catalog-loaded", featureCatalogJson: json });
+            }),
+        );
+
+        // An edit by hand, a git pull, or a teammate's commit must take effect without
+        // reopening the editor - the point of a project file over per-user settings.
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (folder) {
+            const watcher = vscode.workspace.createFileSystemWatcher(
+                new vscode.RelativePattern(folder, `${HEXANA_PROJECT_DIR}/${RUNTIME_TARGETS_FILE}`),
+            );
+            const push = async () => {
+                const json = await readRuntimeTargetsJson();
+                this.broadcast({ type: "runtime-targets-loaded", runtimeTargetsJson: json });
+            };
+            watcher.onDidCreate(push);
+            watcher.onDidChange(push);
+            watcher.onDidDelete(push);
+            context.subscriptions.push(watcher);
+        }
+    }
+
+    private broadcast(message: Record<string, unknown>): void {
+        for (const panel of this.openWebviews) {
+            void panel.webview.postMessage(message);
+        }
+    }
 
     async openCustomDocument(
         uri: vscode.Uri,
@@ -421,6 +516,9 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         };
 
         webviewPanel.webview.html = getWebviewContent(webviewPanel.webview, this.context.extensionUri);
+
+        this.openWebviews.add(webviewPanel);
+        webviewPanel.onDidDispose(() => this.openWebviews.delete(webviewPanel));
 
         // Once the webview signals it is ready, send the binary payload.
         webviewPanel.webview.onDidReceiveMessage(async (message) => {
@@ -536,6 +634,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     data: payload,
                     wasmRuntime: getSelectedRuntime(),
                     showSemanticHighlighting: vscode.workspace.getConfiguration("hexana").get<boolean>("showSemanticHighlighting", true),
+                    featureCatalogJson: this.featureCatalog.get(),
+                    runtimeTargetsJson: await readRuntimeTargetsJson(),
                 };
                 if (document.displayName && document.displayName !== path.basename(document.uri.fsPath)) {
                     loadMsg.decompressed = true;
@@ -572,6 +672,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                         vscode.ConfigurationTarget.Global,
                     );
                 }
+            } else if (message.type === "save-runtime-targets") {
+                await this.saveRuntimeTargets(webviewPanel, message.json as string);
             } else if (message.type === "save-as") {
                 this.saveAs(document);
             } else if (message.type === "overwrite-file") {
@@ -1367,6 +1469,38 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
     private async readBundledTypes(): Promise<string> {
         const uri = vscode.Uri.file(path.join(this.context.extensionPath, HEXANA_SCRIPT_TYPES_FILE));
         return new TextDecoder("utf-8").decode(await vscode.workspace.fs.readFile(uri));
+    }
+
+    /**
+     * Writes the runtime targets edited in the webview to `.hexana/runtimes.json`, then
+     * echoes the stored content back so every open editor agrees on what is on disk.
+     *
+     * Needs a workspace folder: without one there is no project to declare targets for, and
+     * the webview's `canEditRuntimeTargets` capability is what normally keeps the dialog from
+     * being offered at all.
+     */
+    private async saveRuntimeTargets(webviewPanel: vscode.WebviewPanel, json: string): Promise<void> {
+        const folder = vscode.workspace.workspaceFolders?.[0];
+        if (!folder) {
+            void vscode.window.showWarningMessage(
+                "Open a folder before configuring target runtimes: they are saved to " +
+                `${HEXANA_PROJECT_DIR}/${RUNTIME_TARGETS_FILE} in the workspace.`,
+            );
+            return;
+        }
+        try {
+            const directory = vscode.Uri.joinPath(folder.uri, HEXANA_PROJECT_DIR);
+            await vscode.workspace.fs.createDirectory(directory);
+            const file = vscode.Uri.joinPath(directory, RUNTIME_TARGETS_FILE);
+            await vscode.workspace.fs.writeFile(file, new TextEncoder().encode(json));
+            // The file watcher also fires, but echoing here makes the round-trip immediate
+            // for the editor the user is looking at.
+            this.broadcast({ type: "runtime-targets-loaded", runtimeTargetsJson: json });
+        } catch (error) {
+            void vscode.window.showErrorMessage(
+                `Failed to save target runtimes: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
     }
 
     /**

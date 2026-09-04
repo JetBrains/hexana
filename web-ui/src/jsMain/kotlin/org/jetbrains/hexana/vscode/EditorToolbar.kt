@@ -16,6 +16,8 @@ import org.jetbrains.hexana.shared.fileTypeDescription
 import org.jetbrains.hexana.shared.formatSize
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
+import org.jetbrains.hexana.shared.features.ProposalCompatibility
+import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
 import org.jetbrains.hexana.wasm.analysis.WasmProposal
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 
@@ -59,6 +61,14 @@ fun EditorToolbar(
     onOverwriteShadowChanged: ((OverwriteShadow?) -> Unit)? = null,
     onReparseAfterOverwrite: () -> Unit = {},
     onOpenSbomTab: (() -> Unit)? = null,
+    /**
+     * The feature catalog paired with the runtimes declared in `.hexana/runtimes.json`, when
+     * the host has them. `null` leaves the proposals badges purely informational, which is
+     * how the browser webapp renders them.
+     */
+    runtimeCompatibility: WasmRuntimeCompatibility? = null,
+    /** Selects the Compatibility tab, where the matrix and the documentation links live. */
+    onOpenCompatibilityTab: (() -> Unit)? = null,
     fileTypeLabelOverride: String? = null,
     workerWasmToolbarPresentation: WorkerWasmToolbarPresentation? = null,
     workerNativeImageToolbarPresentation: WorkerNativeImageToolbarPresentation? = null,
@@ -404,13 +414,22 @@ fun EditorToolbar(
                         WasmProposal.entries.firstOrNull { it.name == id }
                     }
                 }
+                if (provider is WasmComponentBinaryProvider) {
+                    return@remember if (provider.canProvideWasmModule()) provider.usedProposals.sorted() else emptyList()
+                }
                 if (provider !is WasmBinaryProvider) return@remember emptyList()
                 if (!provider.canProvideWasmModule()) return@remember emptyList()
                 provider.usedProposals.sorted()
             }
 
             if (proposals.isNotEmpty()) {
-                ProposalBadges(proposals)
+                val compatibility = remember(proposals, runtimeCompatibility) {
+                    runtimeCompatibility
+                        ?.takeIf { it.targets.targets.isNotEmpty() }
+                        ?.evaluate(proposals)
+                        .orEmpty()
+                }
+                ProposalBadges(proposals, compatibility, onOpenCompatibilityTab)
             }
         }
 
@@ -492,40 +511,124 @@ private fun ToolbarDebugButton(tooltip: String = "Debug", onClick: () -> Unit) {
 
 private const val MAX_INDIVIDUAL_PROPOSAL_BADGES = 3
 
+/**
+ * The proposals a module uses, as badges, with a warning marker on any proposal a
+ * configured runtime cannot run. Mirrors the IntelliJ implementation in
+ * `FileDescriptionBar.ProposalBadges`; the two must stay in step.
+ */
 @Composable
-private fun ProposalBadges(proposals: List<WasmProposal>) {
+private fun ProposalBadges(
+    proposals: List<WasmProposal>,
+    compatibility: List<ProposalCompatibility>,
+    onOpenCompatibilityTab: (() -> Unit)?,
+) {
+    val byProposal = remember(compatibility) { compatibility.associateBy { it.proposal } }
+
     if (proposals.size <= MAX_INDIVIDUAL_PROPOSAL_BADGES) {
         for (proposal in proposals) {
-            Span({
-                classes("hexana-proposal-badge")
-                attr("title", "Uses ${proposal.displayName} proposal")
-                style {
-                    property("padding", "2px 8px")
-                    property("border-radius", "4px")
-                    property("font-size", "11px")
-                    property("background", "var(--hexana-proposal-badge-bg, #3D5040)")
-                    property("color", "var(--hexana-proposal-badge-fg, #A8D8B0)")
-                }
-            }) {
-                Text(proposal.displayName)
-            }
+            val entry = byProposal[proposal]
+            ProposalBadge(
+                label = proposal.displayName,
+                tooltip = proposalTooltip(proposal, entry, onOpenCompatibilityTab != null),
+                hasWarning = entry?.hasWarning == true,
+                onClick = onOpenCompatibilityTab,
+            )
         }
     } else {
-        val tooltipText = proposals.joinToString("\n") { it.displayName }
-        Span({
-            classes("hexana-proposal-badge")
-            attr("title", tooltipText)
-            style {
-                property("padding", "2px 8px")
-                property("border-radius", "4px")
-                property("font-size", "11px")
+        // Collapsed form: one badge for the count, and a single marker when anything warns.
+        val warned = proposals.mapNotNull { byProposal[it] }.filter { it.hasWarning }
+        ProposalBadge(
+            label = if (warned.isEmpty()) {
+                "${proposals.size} proposals"
+            } else {
+                "${proposals.size} proposals, ${warned.size} unsupported"
+            },
+            tooltip = collapsedProposalTooltip(proposals, byProposal, onOpenCompatibilityTab != null),
+            hasWarning = warned.isNotEmpty(),
+            onClick = onOpenCompatibilityTab,
+        )
+    }
+}
+
+@Composable
+private fun ProposalBadge(
+    label: String,
+    tooltip: String,
+    hasWarning: Boolean,
+    onClick: (() -> Unit)?,
+) {
+    Span({
+        classes("hexana-proposal-badge")
+        if (hasWarning) classes("hexana-proposal-badge-warning")
+        attr("title", tooltip)
+        style {
+            property("padding", "2px 8px")
+            property("border-radius", "4px")
+            property("font-size", "11px")
+            // The CSS classes carry no colours in either host stylesheet today, so the
+            // inline fallbacks are what actually render.
+            if (hasWarning) {
+                property(
+                    "background",
+                    "var(--hexana-proposal-badge-warning-bg, var(--vscode-inputValidation-warningBackground, #5A4A2A))",
+                )
+                property(
+                    "color",
+                    "var(--hexana-proposal-badge-warning-fg, var(--vscode-editorWarning-foreground, #E0C070))",
+                )
+            } else {
                 property("background", "var(--hexana-proposal-badge-bg, #3D5040)")
                 property("color", "var(--hexana-proposal-badge-fg, #A8D8B0)")
             }
-        }) {
-            Text("${proposals.size} proposals")
+            if (onClick != null) property("cursor", "pointer")
+        }
+        if (onClick != null) {
+            onClick { event ->
+                event.stopPropagation()
+                onClick()
+            }
+        }
+    }) {
+        if (hasWarning) {
+            Span({ style { property("margin-right", "4px") } }) { Text("\u26A0") }
+        }
+        Text(label)
+    }
+}
+
+private fun proposalTooltip(
+    proposal: WasmProposal,
+    entry: ProposalCompatibility?,
+    canOpenCompatibilityTab: Boolean,
+): String = buildString {
+    append("Uses ").append(proposal.displayName).append(" proposal")
+    entry?.statuses?.forEach { status ->
+        append('\n')
+        if (status.support.isWarning) append("\u26A0 ")
+        append(status.describe)
+    }
+    if (canOpenCompatibilityTab) append("\n\nClick for the full compatibility table")
+}
+
+private fun collapsedProposalTooltip(
+    proposals: List<WasmProposal>,
+    byProposal: Map<WasmProposal, ProposalCompatibility>,
+    canOpenCompatibilityTab: Boolean,
+): String = buildString {
+    // Warning rows first: with more than three proposals the list is long enough that the
+    // actionable ones would otherwise be buried.
+    val ordered = proposals.sortedByDescending { byProposal[it]?.hasWarning == true }
+    ordered.forEachIndexed { index, proposal ->
+        if (index > 0) append('\n')
+        val entry = byProposal[proposal]
+        if (entry?.hasWarning == true) {
+            append("\u26A0 ").append(proposal.displayName)
+            entry.warnings.forEach { append('\n').append("    ").append(it.describe) }
+        } else {
+            append(proposal.displayName)
         }
     }
+    if (canOpenCompatibilityTab) append("\n\nClick for the full compatibility table")
 }
 
 private fun buildSizeTooltip(provider: BinaryProvider): List<Pair<String, String>>? {

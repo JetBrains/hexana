@@ -596,4 +596,228 @@ class WasmProposalDetectorTest {
         """.trimIndent())
         assertFalse(WasmProposal.MultipleMemories in proposals)
     }
+
+    // ========================================================================
+    // Extended constant expressions
+    // ========================================================================
+
+    @Test
+    fun `extended const — arithmetic in a global initializer`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (global i32 (i32.add (i32.const 1) (i32.const 2)))
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.ExtendedConst)
+    }
+
+    @Test
+    fun `extended const — arithmetic in a data segment offset`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (memory 1)
+              (data (offset (i32.add (i32.const 1) (i32.const 1))) "x")
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.ExtendedConst)
+    }
+
+    @Test
+    fun `extended const — arithmetic in an element segment offset`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (table 4 funcref)
+              (elem (offset (i32.add (i32.const 1) (i32.const 1))) func)
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.ExtendedConst)
+    }
+
+    @Test
+    fun `mvp global initializer does not trigger extended const`() = runTest {
+        val proposals = detectProposals("(module (global i32 (i32.const 1)))")
+        assertFalse(WasmProposal.ExtendedConst in proposals)
+    }
+
+    /**
+     * `global.get` and `ref.func` are MVP/reference-types constant expressions, not
+     * extended ones — the distinction the detector's whitelist exists to make.
+     */
+    @Test
+    fun `global-get and ref-func initializers do not trigger extended const`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (import "env" "base" (global i32))
+              (global i32 (global.get 0))
+              (func ${'$'}f)
+              (global funcref (ref.func ${'$'}f))
+            )
+        """.trimIndent())
+        assertFalse(WasmProposal.ExtendedConst in proposals)
+    }
+
+    // ========================================================================
+    // Custom page sizes
+    // ========================================================================
+
+    @Test
+    fun `custom page sizes — explicit pagesize on a memory`() = runTest {
+        val proposals = detectProposals("(module (memory 1 1 (pagesize 1)))")
+        assertContains(proposals, WasmProposal.CustomPageSizes)
+    }
+
+    @Test
+    fun `custom page sizes — explicit pagesize on an imported memory`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (import "env" "m" (memory 1 1 (pagesize 1)))
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.CustomPageSizes)
+    }
+
+    @Test
+    fun `default page size does not trigger custom page sizes`() = runTest {
+        val proposals = detectProposals("(module (memory 1 1))")
+        assertFalse(WasmProposal.CustomPageSizes in proposals)
+    }
+
+    // ========================================================================
+    // JS string builtins
+    // ========================================================================
+
+    @Test
+    fun `js string builtins — import from the wasm colon js-string module`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (import "wasm:js-string" "length" (func (param externref) (result i32)))
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.JsStringBuiltins)
+    }
+
+    @Test
+    fun `an ordinary import does not trigger js string builtins`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (import "env" "length" (func (param externref) (result i32)))
+            )
+        """.trimIndent())
+        assertFalse(WasmProposal.JsStringBuiltins in proposals)
+    }
+
+    // ========================================================================
+    // Branch hinting
+    // ========================================================================
+
+    @Test
+    fun `branch hinting — the metadata code branch_hint custom section`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (func (param i32) (result i32)
+                local.get 0
+                (@metadata.code.branch_hint "\00") if (result i32) (i32.const 1) else (i32.const 2) end
+              )
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.BranchHinting)
+    }
+
+    @Test
+    fun `an if without a hint does not trigger branch hinting`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (func (param i32) (result i32)
+                local.get 0
+                if (result i32) (i32.const 1) else (i32.const 2) end
+              )
+            )
+        """.trimIndent())
+        assertFalse(WasmProposal.BranchHinting in proposals)
+    }
+
+    // ========================================================================
+    // Extended name section
+    //
+    // Core-spec name subsections are module (0), function (1) and locals (2);
+    // everything above that is the extended-name-section proposal.
+    // ========================================================================
+
+    @Test
+    fun `extended name section — named block label emits the labels subsection`() = runTest {
+        val proposals = detectProposals("(module (func ${'$'}f (block ${'$'}b (br ${'$'}b))))")
+        assertContains(proposals, WasmProposal.ExtendedNameSection)
+    }
+
+    @Test
+    fun `extended name section — named global emits the globals subsection`() = runTest {
+        val proposals = detectProposals("(module (global ${'$'}g i32 (i32.const 1)))")
+        assertContains(proposals, WasmProposal.ExtendedNameSection)
+    }
+
+    @Test
+    fun `extended name section — named tag emits the tags subsection`() = runTest {
+        val proposals = detectProposals("(module (tag ${'$'}t))")
+        assertContains(proposals, WasmProposal.ExtendedNameSection)
+    }
+
+    @Test
+    fun `function and local names alone do not trigger the extended name section`() = runTest {
+        val proposals = detectProposals("(module (func ${'$'}f (local ${'$'}x i32)))")
+        assertFalse(WasmProposal.ExtendedNameSection in proposals)
+    }
+
+    @Test
+    fun `a module without a name section does not trigger the extended name section`() = runTest {
+        val proposals = detectProposals("(module (func))")
+        assertFalse(WasmProposal.ExtendedNameSection in proposals)
+    }
+
+    // ========================================================================
+    // Custom descriptors
+    // ========================================================================
+
+    @Test
+    fun `custom descriptors — exact heap type in a function signature`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (type ${'$'}s (struct))
+              (func (param (ref null (exact ${'$'}s))))
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.CustomDescriptors)
+    }
+
+    @Test
+    fun `custom descriptors — exact heap type in a struct field`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (type ${'$'}s (struct))
+              (type ${'$'}holder (struct (field (ref null (exact ${'$'}s)))))
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.CustomDescriptors)
+    }
+
+    @Test
+    fun `custom descriptors — exact heap type in a code local`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (type ${'$'}s (struct))
+              (func (local (ref null (exact ${'$'}s))))
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.CustomDescriptors)
+    }
+
+    @Test
+    fun `an inexact reference does not trigger custom descriptors`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (type ${'$'}s (struct))
+              (func (param (ref null ${'$'}s)))
+            )
+        """.trimIndent())
+        assertFalse(WasmProposal.CustomDescriptors in proposals)
+    }
 }
