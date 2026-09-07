@@ -39,6 +39,7 @@ import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtil
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -61,6 +62,7 @@ import org.jetbrains.hexana.providers.DexBinaryProvider
 import org.jetbrains.hexana.features.RuntimeTargetsService
 import org.jetbrains.hexana.features.WasmRuntimeCompatibilityConfigurable
 import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.shared.COMPATIBILITY_TAB_NAME
 import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.NativeDebugTabData
@@ -297,6 +299,23 @@ internal fun BinaryEditorView(
         // re-resolve when the composable re-enters composition (e.g.
         // switching IDE editor tabs and back). The flag is keyed to the
         // same inputs as the panels list so it resets on provider change.
+        // Shared by the initial tab resolution and the Compatibility tab's refresh, so the
+        // two cannot drift on the hooks they hand the descriptors.
+        fun buildTableTabsContext(nativeDebugData: NativeDebugTabData?) = TableTabsContext(
+            nativeDebugData = nativeDebugData,
+            fileName = fileName,
+            // Drives the Compatibility tab. Null for a project with no base path, and the
+            // tab is then absent rather than empty.
+            runtimeCompatibility = RuntimeTargetsService.getInstance(state.project).compatibility(),
+            openUrl = { url -> BrowserUtil.browse(url) },
+            openRuntimeSettings = {
+                ShowSettingsUtil.getInstance().showSettingsDialog(
+                    state.project,
+                    WasmRuntimeCompatibilityConfigurable::class.java,
+                )
+            },
+        )
+
         val panelsResolved = remember(binaryProvider, hexEditedSinceOpen) { mutableStateOf(false) }
         // PcapBinaryProvider.sslKeyLog is a plain `var`, so installing a key log
         // is invisible to Compose. Bumping this counter is what refreshes the
@@ -383,20 +402,9 @@ internal fun BinaryEditorView(
             val providers = TableTabsProviderRegistry.providers
             val tableTabJobs = providers.mapIndexed { index, p ->
                 launch(Dispatchers.Default) {
-                    val tableTabsContext = TableTabsContext(
-                        nativeDebugData = (binaryProvider as? NativeBinaryProvider)
+                    val tableTabsContext = buildTableTabsContext(
+                        (binaryProvider as? NativeBinaryProvider)
                             ?.let { NativeDebugTabData.scan(it, JVM_FILE_SYSTEM, state.project.basePath) },
-                        fileName = fileName,
-                        // Drives the Compatibility tab. Null for a project with no base path,
-                        // and the tab is then absent rather than empty.
-                        runtimeCompatibility = RuntimeTargetsService.getInstance(state.project).compatibility(),
-                        openUrl = { url -> BrowserUtil.browse(url) },
-                        openRuntimeSettings = {
-                            ShowSettingsUtil.getInstance().showSettingsDialog(
-                                state.project,
-                                WasmRuntimeCompatibilityConfigurable::class.java,
-                            )
-                        },
                     )
                     val availableNames = p.availableTabNames(binaryProvider, tableTabsContext)
                     if (availableNames != null) {
@@ -528,6 +536,43 @@ internal fun BinaryEditorView(
         LaunchedEffect(panels.size) {
             if (state.currentState.value.tabIndex >= panels.size && panels.isNotEmpty()) {
                 state.setSelectedTab(panels.size - 1)
+            }
+        }
+
+        // Rebuild just the Compatibility tab when .hexana/runtimes.json changes. Only its
+        // columns depend on the declared targets — whether the tab exists at all depends on
+        // the project having a base path and the module using proposals, both fixed for this
+        // editor — so re-resolving every panel would re-run the expensive analyses for
+        // nothing. `drop(1)` skips the current value: the initial resolution already used it.
+        LaunchedEffect(binaryProvider, panels) {
+            RuntimeTargetsService.getInstance(state.project).changes.drop(1).collect {
+                val rebuilt = withContext(Dispatchers.Default) {
+                    runCatching {
+                        val context = buildTableTabsContext(null)
+                        TableTabsProviderRegistry.providers
+                            .firstNotNullOfOrNull { p ->
+                                p.singleTab(COMPATIBILITY_TAB_NAME, binaryProvider, context)
+                            }
+                            ?.let { tab -> binaryProvider.getTabEnricher()(listOf(tab), state, pathsNav).firstOrNull() }
+                    }.getOrNull()
+                }
+                val panel = rebuilt?.let {
+                    binaryProvider.resolveOrdinaryTabPanel(
+                        tab = it,
+                        state = state,
+                        archiveName = fileName,
+                        onOpenZipEntry = onOpenZipEntry,
+                        onOpenTarEntry = onOpenTarEntry,
+                    )
+                }
+                if (rebuilt != null) {
+                    state.publishResolvedTableTab(
+                        tabName = rebuilt.name,
+                        columns = rebuilt.columns.map { it.name },
+                        prologueText = rebuilt.prologueText,
+                    )
+                }
+                replacePlaceholder(panels, COMPATIBILITY_TAB_NAME, panel)
             }
         }
 

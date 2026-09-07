@@ -7,7 +7,9 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
-import org.jetbrains.hexana.shared.features.RUNTIME_TARGETS_FILE
+import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
+import kotlinx.coroutines.flow.StateFlow
+import org.jetbrains.hexana.shared.features.RUNTIME_TARGETS_PATH
 import org.jetbrains.hexana.shared.features.RuntimeTargets
 import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
 
@@ -18,14 +20,22 @@ import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
  * storage lands in `.idea/`, which the VS Code extension cannot read, and the point of this
  * file is that a declaration made in one editor is honoured by the other.
  *
- * The cache is invalidated from a VFS listener so an edit by hand, or a `git pull` that
- * brings in a teammate's targets, takes effect without restarting the IDE.
+ * A file that other tools write has to be watched, not just cached: an edit by hand, a
+ * `git pull`, or a teammate's commit must take effect without restarting the IDE. [changes]
+ * is the signal the UI recomposes on.
  */
 @Service(Service.Level.PROJECT)
 class RuntimeTargetsService(private val project: Project) {
 
-    @Volatile
-    private var cached: RuntimeTargets? = null
+    private val tracker = RuntimeTargetsTracker()
+
+    /**
+     * Increments whenever the declared targets change, whether from this IDE or from outside
+     * it. Read by the proposals badge and the Compatibility tab so both follow the file.
+     *
+     * Only *content* changes count — see [RuntimeTargetsTracker].
+     */
+    val changes: StateFlow<Int> get() = tracker.changes
 
     init {
         // Connected to the project's bus, so the subscription ends with the project.
@@ -33,9 +43,7 @@ class RuntimeTargetsService(private val project: Project) {
             VirtualFileManager.VFS_CHANGES,
             object : BulkFileListener {
                 override fun after(events: List<VFileEvent>) {
-                    if (events.any { it.path.endsWith(RUNTIME_TARGETS_FILE) }) {
-                        cached = null
-                    }
+                    if (events.any(::touchesSettingsFile)) reload()
                 }
             },
         )
@@ -44,9 +52,8 @@ class RuntimeTargetsService(private val project: Project) {
     /** The declared targets, empty when the project has no settings file. */
     val targets: RuntimeTargets
         get() {
-            cached?.let { return it }
             val basePath = project.basePath ?: return RuntimeTargets.EMPTY
-            return RuntimeTargetsStore.read(basePath).also { cached = it }
+            return tracker.get { RuntimeTargetsStore.read(basePath) }
         }
 
     /**
@@ -63,8 +70,25 @@ class RuntimeTargetsService(private val project: Project) {
     fun save(targets: RuntimeTargets) {
         val basePath = project.basePath ?: return
         val file = RuntimeTargetsStore.write(basePath, targets)
-        cached = targets
+        tracker.recordSave(targets)
         LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file)
+    }
+
+    /** Project-relative settings file as an absolute VFS-style path, or `null` without a project dir. */
+    private fun settingsFilePath(): String? = project.basePath?.let { "$it/$RUNTIME_TARGETS_PATH" }
+
+    /** Whether [event] could have changed the settings file. */
+    private fun touchesSettingsFile(event: VFileEvent): Boolean {
+        val settingsPath = settingsFilePath() ?: return false
+        if (runtimeTargetsEventMatches(settingsPath, event.path)) return true
+        // A rename reports the old path in `path`; the new one is a separate property.
+        val renamed = (event as? VFilePropertyChangeEvent)?.newPath as? String
+        return renamed != null && runtimeTargetsEventMatches(settingsPath, renamed)
+    }
+
+    private fun reload() {
+        val basePath = project.basePath ?: return
+        tracker.observe(RuntimeTargetsStore.read(basePath))
     }
 
     companion object {

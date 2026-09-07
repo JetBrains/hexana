@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -66,6 +67,7 @@ import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
 import org.jetbrains.hexana.ui.panel.WasmRunDialog
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.features.RuntimeTargetsService
+import org.jetbrains.hexana.shared.COMPATIBILITY_TAB_NAME
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.features.ProposalCompatibility
 import org.jetbrains.hexana.wasm.analysis.WasmProposal
@@ -487,9 +489,13 @@ private fun NormalModeContent(
         }
     }
 
+    // Recomputed whenever .hexana/runtimes.json changes, so an edit by hand or a git pull
+    // moves the warning markers without reopening the editor.
+    val targetsGeneration by RuntimeTargetsService.getInstance(state.project).changes.collectAsState()
+
     // Evaluated against the runtimes declared in .hexana/runtimes.json. Empty when the
     // project declares none, in which case the badges render exactly as they always have.
-    val compatibility = remember(binaryProvider, proposals) {
+    val compatibility = remember(binaryProvider, proposals, targetsGeneration) {
         if (proposals.isEmpty()) return@remember emptyList()
         try {
             RuntimeTargetsService.getInstance(state.project)
@@ -507,7 +513,7 @@ private fun NormalModeContent(
             proposals = proposals,
             compatibility = compatibility,
             onOpenCompatibility = {
-                state.requestSelectTabByDescription("Compatibility")
+                state.requestSelectTabByDescription(COMPATIBILITY_TAB_NAME)
                 if (state.topFraction > 0.9f) state.setTopFraction(0.5f)
             },
         )

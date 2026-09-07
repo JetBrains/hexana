@@ -4,8 +4,13 @@ import org.jetbrains.hexana.shared.features.ProposalCompatibility
 import org.jetbrains.hexana.shared.features.ProposalRuntimeSupport
 import org.jetbrains.hexana.shared.features.RUNTIME_TARGETS_PATH
 
-/** Tab title, also the key [WasmTableTabsProvider.singleTab] resolves. */
-internal const val COMPATIBILITY_TAB_NAME = "Compatibility"
+/**
+ * Tab title, also the key [WasmTableTabsProvider.singleTab] resolves.
+ *
+ * Public because hosts address the tab by name: the proposals badge selects it on click, and
+ * IntelliJ re-resolves it by name when `.hexana/runtimes.json` changes.
+ */
+const val COMPATIBILITY_TAB_NAME = "Compatibility"
 
 /**
  * Builds the **Compatibility** tab: one row per proposal the module uses, one column per

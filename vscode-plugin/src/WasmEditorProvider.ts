@@ -433,6 +433,9 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
     /** Live webviews, so a settings change or a catalog refresh reaches all of them. */
     private readonly openWebviews = new Set<vscode.WebviewPanel>();
 
+    /** Rebuilt whenever the workspace folders change; see `watchRuntimeTargets`. */
+    private runtimeTargetsWatcher: vscode.FileSystemWatcher | undefined;
+
     constructor(private readonly context: vscode.ExtensionContext) {
         this.featureCatalog = new WasmFeatureCatalogProvider(context);
         context.subscriptions.push(this.featureCatalog);
@@ -445,20 +448,43 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
         // An edit by hand, a git pull, or a teammate's commit must take effect without
         // reopening the editor - the point of a project file over per-user settings.
+        this.watchRuntimeTargets();
+        // The watcher is bound to a specific folder, so it has to be rebuilt when the set of
+        // folders changes - otherwise opening a folder after activation leaves it unwatched.
+        context.subscriptions.push(
+            vscode.workspace.onDidChangeWorkspaceFolders(() => {
+                this.watchRuntimeTargets();
+                void this.pushRuntimeTargets();
+            }),
+        );
+    }
+
+    /** Re-arms the `.hexana/runtimes.json` watcher on the current first workspace folder. */
+    private watchRuntimeTargets(): void {
+        this.runtimeTargetsWatcher?.dispose();
+        this.runtimeTargetsWatcher = undefined;
+
         const folder = vscode.workspace.workspaceFolders?.[0];
-        if (folder) {
-            const watcher = vscode.workspace.createFileSystemWatcher(
-                new vscode.RelativePattern(folder, `${HEXANA_PROJECT_DIR}/${RUNTIME_TARGETS_FILE}`),
-            );
-            const push = async () => {
-                const json = await readRuntimeTargetsJson();
-                this.broadcast({ type: "runtime-targets-loaded", runtimeTargetsJson: json });
-            };
-            watcher.onDidCreate(push);
-            watcher.onDidChange(push);
-            watcher.onDidDelete(push);
-            context.subscriptions.push(watcher);
+        if (!folder) {
+            return;
         }
+        const watcher = vscode.workspace.createFileSystemWatcher(
+            new vscode.RelativePattern(folder, `${HEXANA_PROJECT_DIR}/${RUNTIME_TARGETS_FILE}`),
+        );
+        const push = () => void this.pushRuntimeTargets();
+        watcher.onDidCreate(push);
+        watcher.onDidChange(push);
+        // Deleting the file is a change too: it means "nothing declared", and the webview has
+        // to drop the warnings rather than keep showing the last declaration it saw.
+        watcher.onDidDelete(push);
+        this.runtimeTargetsWatcher = watcher;
+        this.context.subscriptions.push(watcher);
+    }
+
+    /** Sends the current on-disk declaration to every open webview. */
+    private async pushRuntimeTargets(): Promise<void> {
+        const json = await readRuntimeTargetsJson();
+        this.broadcast({ type: "runtime-targets-loaded", runtimeTargetsJson: json });
     }
 
     private broadcast(message: Record<string, unknown>): void {
@@ -1496,6 +1522,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             // The file watcher also fires, but echoing here makes the round-trip immediate
             // for the editor the user is looking at.
             this.broadcast({ type: "runtime-targets-loaded", runtimeTargetsJson: json });
+
         } catch (error) {
             void vscode.window.showErrorMessage(
                 `Failed to save target runtimes: ${error instanceof Error ? error.message : String(error)}`,
