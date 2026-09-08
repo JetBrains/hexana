@@ -234,9 +234,12 @@ describe('Hexana Run Configurations – Exports Panel', function () {
     /**
      * Finds and clicks the run arrow (▶) button on the first function
      * export row that has one.
+     *
+     * The action column now hosts several kinds of row action (run, docs, ...), so the
+     * selector has to name the run variant rather than the column's generic class.
      */
     async function clickFirstRunArrow(): Promise<void> {
-        const arrows = await driver.findElements(By.css('.hexana-run-arrow'));
+        const arrows = await driver.findElements(By.css('.hexana-row-action-run'));
         expect(arrows.length).to.be.greaterThan(0, 'Expected at least one run arrow in the exports table');
         await arrows[0].click();
         await driver.sleep(1000);
