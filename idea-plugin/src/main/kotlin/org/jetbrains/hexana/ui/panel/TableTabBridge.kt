@@ -173,7 +173,7 @@ private fun TableTabContent(
         else -> searchBarLeading
     }
 
-    val hasPrologue = descriptor.prologueText != null || descriptor.prologueAction != null
+    val hasPrologue = descriptor.prologueText != null || descriptor.prologueActions.isNotEmpty()
     if (hasPrologue || (descriptor.rowCount == 0 && descriptor.emptyMessage != null)) {
         Column(modifier = Modifier.fillMaxSize()) {
             if (hasPrologue) {
@@ -182,7 +182,7 @@ private fun TableTabContent(
                 // its own line matches the paragraph-then-action shape used elsewhere.
                 Column(modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)) {
                     descriptor.prologueText?.let { Text(it, fontSize = 13.sp) }
-                    descriptor.prologueAction?.let { prologueAction ->
+                    for (prologueAction in descriptor.prologueActions) {
                         Link(prologueAction.label, onClick = prologueAction.action)
                     }
                 }

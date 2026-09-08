@@ -221,7 +221,7 @@ class CompatibilityTabTest {
     fun `the prologue offers a link that opens the settings page`() {
         var opened = 0
         val tab = assertNotNull(tab(emptyList(), openRuntimeSettings = { opened++ }))
-        val action = assertNotNull(tab.prologueAction)
+        val action = tab.prologueActions.first { it.label.endsWith("target runtimes…") }
 
         assertEquals("Configure target runtimes…", action.label)
         action.action()
@@ -235,17 +235,54 @@ class CompatibilityTabTest {
     @Test
     fun `the link reads as a change once runtimes are configured`() {
         val tab = assertNotNull(tab(listOf(RuntimeTarget("Wasmtime"))))
-        assertEquals("Change target runtimes…", assertNotNull(tab.prologueAction).label)
+        assertEquals("Change target runtimes…", tab.prologueActions.first().label)
     }
 
     /** A host with no settings page still has to be told where the file lives. */
     @Test
     fun `without a settings page the prologue falls back to naming the file`() {
         val tab = assertNotNull(tab(emptyList(), openRuntimeSettings = null))
-        assertNull(tab.prologueAction)
+        assertTrue(
+            tab.prologueActions.none { it.label.endsWith("target runtimes…") },
+            "expected no settings link, got ${tab.prologueActions.map { it.label }}",
+        )
         assertTrue(
             assertNotNull(tab.prologueText).contains(RUNTIME_TARGETS_PATH),
             "expected the prologue to name the settings file, got ${tab.prologueText}",
+        )
+    }
+
+    /**
+     * Every verdict in this table is somebody else's data, so a reader who finds one
+     * surprising has to be able to go and check it.
+     */
+    @Test
+    fun `the prologue links to the upstream feature table`() {
+        val opened = mutableListOf<String>()
+        val tab = assertNotNull(tab(listOf(RuntimeTarget("Wasmtime")), openUrl = { opened += it }))
+        val action = tab.prologueActions.first { it.label.startsWith("Data from") }
+
+        assertEquals("Data from webassembly.org/features", action.label)
+        action.action()
+        assertEquals(listOf("https://webassembly.org/features/"), opened)
+    }
+
+    @Test
+    fun `the settings link comes before the source link`() {
+        val tab = assertNotNull(tab(emptyList()))
+        assertEquals(
+            listOf("Configure target runtimes…", "Data from webassembly.org/features"),
+            tab.prologueActions.map { it.label },
+        )
+    }
+
+    /** No browser hook means no source link, rather than a link that does nothing. */
+    @Test
+    fun `a host without a browser hook gets no source link`() {
+        val tab = assertNotNull(tab(emptyList(), openUrl = null))
+        assertTrue(
+            tab.prologueActions.none { it.label.startsWith("Data from") },
+            "expected no source link, got ${tab.prologueActions.map { it.label }}",
         )
     }
 

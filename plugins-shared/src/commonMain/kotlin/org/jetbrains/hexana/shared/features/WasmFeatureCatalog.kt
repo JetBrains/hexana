@@ -14,6 +14,12 @@ const val WASM_FEATURES_URL: String =
     "https://raw.githubusercontent.com/WebAssembly/website/refs/heads/main/features.json"
 
 /**
+ * The human-readable feature table [WASM_FEATURES_URL] backs. Shown as the Compatibility
+ * tab's source link — a reader chasing a surprising verdict wants the page, not the JSON.
+ */
+const val WASM_FEATURES_PAGE_URL: String = "https://webassembly.org/features/"
+
+/**
  * How a single runtime stands on a single feature, mirroring `#/definitions/status` in
  * WebAssembly's `features.schema.json`.
  */

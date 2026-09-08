@@ -116,10 +116,14 @@ which is a useful spec reference if they are ever added); `bigInt`, `jspi`, `esm
 
 - `plugins-shared/.../features/` — `WasmFeatureCatalog`, `WasmFeatureVersions`,
   `RuntimeTargets`, `FeatureCatalogRefresh`, `WasmRuntimeCompatibility`
-- `plugins-shared/.../shared/TabDescriptor.kt` — `PrologueActionDescriptor` lets a tab's
-  prologue carry a clickable link; the Compatibility tab uses it to open the host's runtime
-  settings instead of naming `.hexana/runtimes.json` in the prose (it falls back to naming
-  the path when the host has no settings page). IntelliJ renders it as a Jewel `Link` on its
+- `plugins-shared/.../shared/TabDescriptor.kt` — `prologueActions: List<PrologueActionDescriptor>`
+  lets a tab's prologue carry clickable links. The Compatibility tab offers two: the host's
+  runtime settings, instead of naming `.hexana/runtimes.json` in the prose (falling back to
+  naming the path when the host has no settings page), and `webassembly.org/features` as the
+  source of every verdict in the table — a reader who finds one surprising has to be able to
+  check it, and the page is more use than the JSON the plugin downloads
+  (`WASM_FEATURES_PAGE_URL`, distinct from `WASM_FEATURES_URL`). A link's label carries the
+  whole meaning because neither host can put a link inside a paragraph. IntelliJ renders it as a Jewel `Link` on its
   own line — Compose `Text` cannot hold an inline link without an `AnnotatedString`, and a
   `Row` would stop the paragraph wrapping — and the web UI inline at the end of the
   paragraph. Also `RowActionKind` (`Run` / `Documentation`)

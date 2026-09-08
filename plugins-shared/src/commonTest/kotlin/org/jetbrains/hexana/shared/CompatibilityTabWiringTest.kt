@@ -112,7 +112,7 @@ class CompatibilityTabWiringTest {
         assertEquals(listOf("Proposal", "Phase", "Supported in"), tab.columns.map { it.name })
         assertNotNull(tab.prologueText)
 
-        assertNotNull(tab.prologueAction).action()
+        tab.prologueActions.first { it.label.endsWith("target runtimes…") }.action()
         assertEquals(1, opened, "expected the prologue link to open the settings page")
     }
 

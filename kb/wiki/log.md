@@ -27,3 +27,5 @@ Append one line per write-back: date, page, what changed.
 - 2026-09-08 — `entities/wasm-runtime-compatibility` — dropped `componentModel` detection
   entirely (upstream has support data for two entries, so every table column read `?`);
   recorded the general lesson that detectability alone does not justify a proposal.
+- 2026-09-08 — `entities/wasm-runtime-compatibility` — Compatibility prologue now links to
+  webassembly.org/features as the data source; `prologueAction` became a list.

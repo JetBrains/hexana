@@ -3,6 +3,7 @@ package org.jetbrains.hexana.shared
 import org.jetbrains.hexana.shared.features.ProposalCompatibility
 import org.jetbrains.hexana.shared.features.ProposalRuntimeSupport
 import org.jetbrains.hexana.shared.features.RUNTIME_TARGETS_PATH
+import org.jetbrains.hexana.shared.features.WASM_FEATURES_PAGE_URL
 
 /**
  * Tab title, also the key [WasmTableTabsProvider.singleTab] resolves.
@@ -130,14 +131,7 @@ internal fun compatibilityTabDescriptor(
         rowAction = docsAction,
         contextMenuItems = contextMenuItems,
         prologueText = prologue(runtimeLabels, warningCount, canConfigure = openRuntimeSettings != null),
-        // A link rather than a file path in the prose: the prologue is the one place that has
-        // to explain the feature, so it should also be able to act on it.
-        prologueAction = openRuntimeSettings?.let {
-            PrologueActionDescriptor(
-                label = if (runtimeLabels.isEmpty()) "Configure target runtimes…" else "Change target runtimes…",
-                action = it,
-            )
-        },
+        prologueActions = prologueActions(runtimeLabels, openUrl, openRuntimeSettings),
         showIdColumn = false,
         priority = TabPriority.Medium,
         predefinedFilters = if (warningCount > 0) {
@@ -165,6 +159,34 @@ private fun supportingRuntimesColumn(
     tooltip: (index: Int) -> String?,
 ): ColumnDescriptor = ColumnDescriptor(name = name, widthBehavior = ColumnWidth.Fill()) { index ->
     CellValue(entries(index).size, label(index), tooltip = tooltip(index))
+}
+
+/**
+ * Links offered under the prologue: the settings page, and the upstream table the verdicts
+ * come from.
+ *
+ * The source link matters because every verdict here is somebody else's data — a reader who
+ * finds one surprising needs to be able to check it, and the page is more use to them than
+ * the JSON the plugin actually downloads.
+ */
+private fun prologueActions(
+    runtimeLabels: List<String>,
+    openUrl: ((String) -> Unit)?,
+    openRuntimeSettings: (() -> Unit)?,
+): List<PrologueActionDescriptor> = buildList {
+    // A link rather than a file path in the prose: the prologue is the one place that has to
+    // explain the feature, so it should also be able to act on it.
+    openRuntimeSettings?.let {
+        add(
+            PrologueActionDescriptor(
+                label = if (runtimeLabels.isEmpty()) "Configure target runtimes…" else "Change target runtimes…",
+                action = it,
+            )
+        )
+    }
+    openUrl?.let { open ->
+        add(PrologueActionDescriptor("Data from webassembly.org/features") { open(WASM_FEATURES_PAGE_URL) })
+    }
 }
 
 /**

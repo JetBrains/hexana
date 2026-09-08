@@ -171,14 +171,15 @@ fun TableTabContent(
     selection: HexSelectionState,
     searchBarLeading: (@Composable () -> Unit)? = null,
 ) {
-    if (descriptor.prologueText != null || descriptor.prologueAction != null) {
+    if (descriptor.prologueText != null || descriptor.prologueActions.isNotEmpty()) {
         Div({ style {
             property("margin-bottom", "8px")
             property("font-size", "12px")
         } }) {
             descriptor.prologueText?.let { Text(it) }
-            descriptor.prologueAction?.let { prologueAction ->
-                if (descriptor.prologueText != null) Text(" ")
+            descriptor.prologueActions.forEachIndexed { index, prologueAction ->
+                // Inline, so the links flow with the prose; a bullet keeps two apart.
+                Text(if (index == 0 && descriptor.prologueText == null) "" else if (index == 0) " " else " \u2022 ")
                 Span({
                     style {
                         property("cursor", "pointer")

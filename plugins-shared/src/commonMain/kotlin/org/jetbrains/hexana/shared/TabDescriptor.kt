@@ -155,9 +155,14 @@ class RowMenuEntry(
 /**
  * A UI-free description of a clickable link rendered after [TableTabDescriptor.prologueText].
  *
- * Exists so a prologue can point at something the user can act on — a settings page — rather
- * than naming a file path and leaving them to find it. The UI layer renders it as a link
- * (Jewel `Link` in IntelliJ, a link-coloured span in the web UI).
+ * Exists so a prologue can point at something the user can act on — a settings page, the
+ * source its data came from — rather than naming a path or a URL and leaving them to find
+ * it. The UI layer renders it as a link (Jewel `Link` in IntelliJ, a link-coloured span in
+ * the web UI).
+ *
+ * The label carries the whole meaning, because neither host can put a link *inside* a
+ * paragraph: Compose `Text` needs an `AnnotatedString` for that, so IntelliJ renders these
+ * on their own lines below the prose.
  *
  * @param label the link text
  * @param action callback invoked when the link is clicked
@@ -202,7 +207,7 @@ class PredefinedFilter(
  *   menu entries whose count may vary by row (e.g. one entry per usage site). The UI
  *   layer renders these after [contextMenuItems]; `null` means none.
  * @param prologueText optional text displayed above the table; `null` means no prologue
- * @param prologueAction optional clickable link rendered after [prologueText]; `null` means none
+ * @param prologueActions clickable links rendered after [prologueText]; empty means none
  * @param emptyMessage optional message shown when [rowCount] is zero; `null` falls back
  *   to the default empty-table behavior of the UI layer
  * @param childrenProvider optional provider of nested child rows for a given row index.
@@ -231,7 +236,7 @@ class TableTabDescriptor(
     val rowClickAction: ((index: Int) -> Unit)? = null,
     val dynamicContextMenuProvider: ((index: Int) -> List<RowMenuEntry>)? = null,
     val prologueText: String? = null,
-    val prologueAction: PrologueActionDescriptor? = null,
+    val prologueActions: List<PrologueActionDescriptor> = emptyList(),
     val emptyMessage: String? = null,
     val childrenProvider: ((index: Int) -> TableTabChildRows?)? = null,
     val alwaysShowSearch: Boolean = false,
