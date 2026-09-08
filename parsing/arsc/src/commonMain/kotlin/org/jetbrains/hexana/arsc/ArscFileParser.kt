@@ -37,6 +37,12 @@ object ArscFileParser {
     /** `ResChunk_header` + id + `name[128]` + the four pool/public offsets. */
     private const val PACKAGE_HEADER_MIN_SIZE = CHUNK_HEADER_SIZE + 4 + PACKAGE_NAME_CHARS * 2 + 16
 
+    /** [PACKAGE_HEADER_MIN_SIZE] plus the `typeIdOffset` appended to the struct later. */
+    private const val PACKAGE_HEADER_TYPE_ID_OFFSET_SIZE = PACKAGE_HEADER_MIN_SIZE + 4
+
+    /** `typeIdOffset` shifts type ids, which are a single byte; a larger value is corrupt. */
+    private const val MAX_TYPE_ID_OFFSET = 0xFF
+
     /** `ResTable_type::flags`: entry offsets are `u16 idx, u16 offset` pairs instead of a dense array. */
     private const val TYPE_FLAG_SPARSE = 0x01
 
@@ -58,6 +64,10 @@ object ArscFileParser {
      * The type word alone (`02 00`) is far too common to be trusted, hence the
      * child-chunk check — every writer emits the global value pool first, even
      * when it is empty.
+     *
+     * A declared size larger than the file is accepted: that is what a
+     * truncated table looks like, and [parse] lists what survived in it, so
+     * rejecting it here would send the file to the plain hex view instead.
      */
     fun isArsc(buffer: CommonByteBuffer): Boolean {
         if (buffer.size < CHUNK_HEADER_SIZE + 4) return false
@@ -68,7 +78,7 @@ object ArscFileParser {
             val headerSize = buffer.readU2()
             val size = buffer.readU4()
             if (headerSize < CHUNK_HEADER_SIZE + 4) return false
-            if (size < headerSize || size > buffer.size) return false
+            if (size < headerSize) return false
             if (headerSize + CHUNK_HEADER_SIZE > buffer.size) return false
             buffer.position(headerSize)
             return buffer.readU2() == RES_STRING_POOL_TYPE
@@ -120,6 +130,7 @@ object ArscFileParser {
         val typeStringsOff = buffer.readU4().toInt()
         buffer.readU4() // lastPublicType — unused, the table lists every entry
         val keyStringsOff = buffer.readU4().toInt()
+        val typeIdOffset = readTypeIdOffset(buffer, chunk)
 
         // The type and key pools are located by offset from the package chunk
         // start; they also appear in the child chunk walk, which skips them.
@@ -130,14 +141,17 @@ object ArscFileParser {
         val typeSpecs = mutableListOf<ArscTypeSpec>()
         forEachChild(buffer, chunk) { child ->
             when (child.type) {
-                RES_TABLE_TYPE_SPEC_TYPE -> parseTypeSpec(buffer, child, typeStrings)?.let(typeSpecs::add)
-                RES_TABLE_TYPE_TYPE -> parseType(buffer, child, typeStrings, keyStrings)?.let(types::add)
+                RES_TABLE_TYPE_SPEC_TYPE ->
+                    parseTypeSpec(buffer, child, typeStrings, typeIdOffset)?.let(typeSpecs::add)
+                RES_TABLE_TYPE_TYPE ->
+                    parseType(buffer, child, typeStrings, keyStrings, typeIdOffset)?.let(types::add)
             }
         }
 
         return ArscPackage(
             id = id,
             name = name,
+            typeIdOffset = typeIdOffset,
             typeStrings = typeStrings,
             keyStrings = keyStrings,
             types = types,
@@ -145,10 +159,28 @@ object ArscFileParser {
         )
     }
 
+    /**
+     * Reads `ResTable_package::typeIdOffset`, expected at the current position
+     * right after `lastPublicKey`.
+     *
+     * The field was appended to the struct after the format shipped, so a
+     * package whose header is too short to hold it simply has none — that is
+     * how the platform loader recognises pre-`typeIdOffset` apps too.
+     */
+    private fun readTypeIdOffset(buffer: CommonByteBuffer, chunk: ArscChunk): Int {
+        if (chunk.headerSize < PACKAGE_HEADER_TYPE_ID_OFFSET_SIZE) return 0
+        buffer.readU4() // lastPublicKey — unused, the table lists every entry
+        val offset = buffer.readU4()
+        // A damaged value would push every type name lookup out of the pool;
+        // ignoring it keeps the common `typeIdOffset == 0` layout readable.
+        return if (offset <= MAX_TYPE_ID_OFFSET) offset.toInt() else 0
+    }
+
     private fun parseTypeSpec(
         buffer: CommonByteBuffer,
         chunk: ArscChunk,
         typeStrings: ArscStringPool,
+        typeIdOffset: Int,
     ): ArscTypeSpec? {
         if (chunk.headerSize < CHUNK_HEADER_SIZE + 8) return null
         buffer.position(chunk.offset + CHUNK_HEADER_SIZE)
@@ -158,7 +190,7 @@ object ArscFileParser {
         val entryCount = buffer.readU4().toInt()
         return ArscTypeSpec(
             typeId = typeId,
-            typeName = typeName(typeStrings, typeId),
+            typeName = typeName(typeStrings, typeId, typeIdOffset),
             entryCount = entryCount,
         )
     }
@@ -168,6 +200,7 @@ object ArscFileParser {
         chunk: ArscChunk,
         typeStrings: ArscStringPool,
         keyStrings: ArscStringPool,
+        typeIdOffset: Int,
     ): ArscTypeChunk? {
         // header = ResChunk_header + id/res0/res1 + entryCount + entriesStart + ResTable_config
         if (chunk.headerSize < CHUNK_HEADER_SIZE + 12 + 4) return null
@@ -229,13 +262,19 @@ object ArscFileParser {
 
         return ArscTypeChunk(
             typeId = typeId,
-            typeName = typeName(typeStrings, typeId),
+            typeName = typeName(typeStrings, typeId, typeIdOffset),
             configuration = configuration,
             entryCount = declaredEntryCount,
             entries = entries,
         )
     }
 
+    /**
+     * Reads one `ResTable_entry` at [offset]. Every read is bounded by [limit],
+     * the end of the type chunk that owns the entry: an entry cut short by a
+     * truncated chunk must degrade, not continue into whatever chunk follows
+     * and report those bytes as a value.
+     */
     private fun parseEntry(
         buffer: CommonByteBuffer,
         offset: Int,
@@ -243,6 +282,8 @@ object ArscFileParser {
         limit: Int,
         keyStrings: ArscStringPool,
     ): ArscEntry? {
+        fun holds(bytes: Int): Boolean = buffer.position() + bytes <= limit
+
         buffer.position(offset)
         val sizeOrKey = buffer.readU2()
         val flags = buffer.readU2()
@@ -251,7 +292,7 @@ object ArscFileParser {
         // size field and pack the value type into the high byte of the flags,
         // which makes the whole entry 8 bytes with no separate Res_value.
         if (flags and ArscEntry.FLAG_COMPACT != 0) {
-            if (buffer.remaining() < 4) return null
+            if (!holds(4)) return null
             val data = buffer.readU4().toInt()
             return ArscEntry(
                 entryId = entryId,
@@ -262,7 +303,7 @@ object ArscFileParser {
             )
         }
 
-        if (buffer.remaining() < 4) return null
+        if (!holds(4)) return null
         val keyIndex = buffer.readU4().toInt()
         val key = keyStrings[keyIndex] ?: "<key@$keyIndex>"
 
@@ -274,11 +315,11 @@ object ArscFileParser {
                 keyIndex = keyIndex,
                 key = key,
                 flags = flags,
-                value = if (buffer.remaining() >= 8) parseValue(buffer) else null,
+                value = if (holds(8)) parseValue(buffer) else null,
             )
         }
 
-        if (buffer.remaining() < 8) return null
+        if (!holds(8)) return null
         val parentRef = buffer.readU4().toInt()
         val declaredCount = buffer.readU4()
         // ResTable_map is a 4-byte name plus an 8-byte Res_value.
@@ -371,9 +412,16 @@ object ArscFileParser {
         return letters.concatToString()
     }
 
-    /** Type names are indexed by `typeId - 1`, and `typeId` is 1-based. */
-    private fun typeName(typeStrings: ArscStringPool, typeId: Int): String =
-        typeStrings[typeId - 1] ?: "<type@$typeId>"
+    /**
+     * Type names are indexed by `typeId - 1`, and `typeId` is 1-based.
+     *
+     * A package with a non-zero [typeIdOffset] numbers its types from
+     * `typeIdOffset + 1` — feature splits are built that way — while its type
+     * pool still starts at the package's own first type, so the offset comes
+     * off the index as well.
+     */
+    private fun typeName(typeStrings: ArscStringPool, typeId: Int, typeIdOffset: Int): String =
+        typeStrings[typeId - 1 - typeIdOffset] ?: "<type@$typeId>"
 
     private fun parseStringPoolAt(
         buffer: CommonByteBuffer,

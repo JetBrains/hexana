@@ -6,6 +6,7 @@ import org.jetbrains.hexana.providers.nativeOrGenericBinaryProvider
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ArscTableTabsTest {
@@ -17,6 +18,18 @@ class ArscTableTabsTest {
         assertEquals("Android Resource Table", fileTypeDescription(provider))
         assertEquals("arsc", binaryFormatId(provider))
         assertEquals(listOf("Hello world", "Bonjour"), provider.strings.map { it.value })
+    }
+
+    @Test
+    fun advertisesTabNamesWithoutParsing() {
+        val provider = nativeOrGenericBinaryProvider(buildSampleArsc().toCommonByteBuffer())
+        val tabsProvider = TableTabsProviderRegistry.providers.filterIsInstance<ArscTableTabsProvider>().single()
+
+        // Hosts show these as placeholders during composition and resolve each
+        // one on a background thread, so they must not require a parse.
+        assertEquals(listOf("Header", "Resources") to emptyList(), tabsProvider.availableTabNames(provider))
+        assertEquals("Resources", tabsProvider.singleTab("Resources", provider)?.name)
+        assertNull(tabsProvider.singleTab("Nope", provider))
     }
 
     @Test

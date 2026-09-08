@@ -20,7 +20,41 @@ class ArscTableTabsProvider : TableTabsProvider {
             arscResourcesTab(arsc),
         )
     }
+
+    /**
+     * Both tab names follow from the provider type alone. Answering here keeps
+     * hosts from calling [tableTabs] just to learn them — for a resource table
+     * that would parse the whole chunk tree and flatten every entry during
+     * composition instead of on the thread that resolves the tab.
+     */
+    override fun availableTabNames(
+        provider: BinaryProvider,
+        context: TableTabsContext,
+    ): Pair<List<String>, List<String>>? =
+        if (provider is ArscBinaryProvider) listOf(HEADER_TAB, RESOURCES_TAB) to emptyList() else null
+
+    /**
+     * Resolves one advertised tab. The default implementation builds both to
+     * hand back one, so a host resolving each name on its own coroutine — as
+     * the IntelliJ editor does — would flatten the resource list twice.
+     */
+    override fun singleTab(
+        name: String,
+        provider: BinaryProvider,
+        context: TableTabsContext,
+    ): TableTabDescriptor? {
+        if (provider !is ArscBinaryProvider) return null
+        val arsc = provider.parsedArscFile ?: return null
+        return when (name) {
+            HEADER_TAB -> arscHeaderTab(arsc)
+            RESOURCES_TAB -> arscResourcesTab(arsc)
+            else -> null
+        }
+    }
 }
+
+private const val HEADER_TAB = "Header"
+private const val RESOURCES_TAB = "Resources"
 
 private fun arscHeaderTab(arsc: ArscFile): TableTabDescriptor {
     val rows = buildList {
@@ -36,7 +70,7 @@ private fun arscHeaderTab(arsc: ArscFile): TableTabDescriptor {
         }
     }
     return TableTabDescriptor(
-        name = "Header",
+        name = HEADER_TAB,
         columns = listOf(
             col("Property", ColumnWidth.MeasuredMin("  Resource types")) { CellValue(rows[it].first) },
             col("Value", ColumnWidth.Fill()) { CellValue(rows[it].second) },
@@ -51,7 +85,7 @@ private fun arscHeaderTab(arsc: ArscFile): TableTabDescriptor {
 private fun arscResourcesTab(arsc: ArscFile): TableTabDescriptor {
     val resources = arsc.resources()
     if (resources.isEmpty()) return TableTabDescriptor(
-        name = "Resources",
+        name = RESOURCES_TAB,
         columns = emptyList(),
         rowCount = 0,
         emptyMessage = "(no resources)",
@@ -60,7 +94,7 @@ private fun arscResourcesTab(arsc: ArscFile): TableTabDescriptor {
     val values = resources.map { arsc.formatEntryValue(it.entry) }
 
     return TableTabDescriptor(
-        name = "Resources",
+        name = RESOURCES_TAB,
         columns = listOf(
             col("ID", ColumnWidth.MeasuredMin("0x7f0f0000")) { CellValue(hexResourceId(resources[it].id)) },
             col("Type", ColumnWidth.MeasuredMin("interpolator")) { CellValue(resources[it].typeName) },

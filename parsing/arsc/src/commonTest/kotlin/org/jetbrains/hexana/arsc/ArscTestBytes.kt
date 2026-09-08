@@ -44,18 +44,25 @@ internal object ArscTestBytes {
      * configurations (default and `fr`), scalar entries of several value types,
      * and one complex `style` entry.
      */
-    fun sampleTable(utf8Strings: Boolean = false): ByteArray = chunk(RES_TABLE_TYPE, header = {
-        u4(1) // packageCount
-    }) {
-        raw(stringPool(VALUE_STRINGS, utf8 = utf8Strings))
-        raw(samplePackage(utf8Strings))
-    }
+    fun sampleTable(utf8Strings: Boolean = false, typeIdOffset: Int = 0): ByteArray =
+        chunk(RES_TABLE_TYPE, header = {
+            u4(1) // packageCount
+        }) {
+            raw(stringPool(VALUE_STRINGS, utf8 = utf8Strings))
+            raw(samplePackage(utf8Strings, typeIdOffset))
+        }
 
-    private fun samplePackage(utf8Strings: Boolean): ByteArray {
+    /**
+     * The sample package. A non-zero [typeIdOffset] shifts every type id by it
+     * and records the field in the header, as a feature split is built; the type
+     * pool is unchanged, so the names only resolve if the reader applies the
+     * offset.
+     */
+    private fun samplePackage(utf8Strings: Boolean, typeIdOffset: Int = 0): ByteArray {
         val typePool = stringPool(TYPE_NAMES, utf8 = utf8Strings)
         val keyPool = stringPool(KEY_NAMES, utf8 = utf8Strings)
         // Offsets to both pools are relative to the start of the package chunk.
-        val headerSize = PACKAGE_HEADER_SIZE
+        val headerSize = if (typeIdOffset == 0) PACKAGE_HEADER_SIZE else PACKAGE_HEADER_SIZE_WITH_TYPE_ID_OFFSET
         return chunk(RES_TABLE_PACKAGE_TYPE, header = {
             u4(PACKAGE_ID)
             utf16Fixed(PACKAGE_NAME, 128)
@@ -63,53 +70,56 @@ internal object ArscTestBytes {
             u4(TYPE_NAMES.size) // lastPublicType
             u4(headerSize + typePool.size) // keyStrings
             u4(KEY_NAMES.size) // lastPublicKey
+            // Written only when the header is long enough to hold it, exactly
+            // as the platform loader expects to find it.
+            if (typeIdOffset != 0) u4(typeIdOffset)
         }) {
             raw(typePool)
             raw(keyPool)
-            raw(typeSpec(TYPE_STRING_ID, entryCount = 2))
+            raw(typeSpec(TYPE_STRING_ID + typeIdOffset, entryCount = 2))
             raw(
-                type(TYPE_STRING_ID, config = defaultConfig()) {
+                type(TYPE_STRING_ID + typeIdOffset, config = defaultConfig()) {
                     entry(key = 0, dataType = ArscValue.TYPE_STRING, data = 0)
                     entry(key = 1, dataType = ArscValue.TYPE_STRING, data = 1)
                 }
             )
             raw(
-                type(TYPE_STRING_ID, config = config(language = "fr")) {
+                type(TYPE_STRING_ID + typeIdOffset, config = config(language = "fr")) {
                     hole()
                     entry(key = 1, dataType = ArscValue.TYPE_STRING, data = 2)
                 }
             )
             raw(
-                type(TYPE_DIMEN_ID, config = defaultConfig()) {
+                type(TYPE_DIMEN_ID + typeIdOffset, config = defaultConfig()) {
                     entry(key = 2, dataType = ArscValue.TYPE_DIMENSION, data = DIMENSION_16DP)
                 }
             )
             raw(
-                type(TYPE_BOOL_ID, config = defaultConfig()) {
+                type(TYPE_BOOL_ID + typeIdOffset, config = defaultConfig()) {
                     entry(key = 3, dataType = ArscValue.TYPE_INT_BOOLEAN, data = -1)
                 }
             )
             raw(
-                type(TYPE_COLOR_ID, config = defaultConfig()) {
+                type(TYPE_COLOR_ID + typeIdOffset, config = defaultConfig()) {
                     entry(key = 4, dataType = ArscValue.TYPE_INT_COLOR_ARGB8, data = COLOR_ACCENT)
                 }
             )
             raw(
                 // Sparse index + compact entries, as written for Android 14+.
-                type(TYPE_BOOL_ID, config = config(language = "fil"), index = EntryIndex.SPARSE) {
+                type(TYPE_BOOL_ID + typeIdOffset, config = config(language = "fil"), index = EntryIndex.SPARSE) {
                     hole()
                     hole()
                     compactEntry(key = 3, dataType = ArscValue.TYPE_INT_BOOLEAN, data = 0)
                 }
             )
             raw(
-                type(TYPE_DIMEN_ID, config = config(density = 240), index = EntryIndex.OFFSET16) {
+                type(TYPE_DIMEN_ID + typeIdOffset, config = config(density = 240), index = EntryIndex.OFFSET16) {
                     hole()
                     entry(key = 2, dataType = ArscValue.TYPE_FRACTION, data = FRACTION_50_PERCENT)
                 }
             )
             raw(
-                type(TYPE_STYLE_ID, config = defaultConfig()) {
+                type(TYPE_STYLE_ID + typeIdOffset, config = defaultConfig()) {
                     bagEntry(
                         key = 5,
                         parent = FRAMEWORK_PARENT,
@@ -122,6 +132,43 @@ internal object ArscTestBytes {
                 }
             )
         }
+    }
+
+    /**
+     * A table whose `bool` type chunk ends right after an entry header, with no
+     * room for that entry's `Res_value`, and which is followed by a `color`
+     * type chunk. A reader that bounds entry reads by the file rather than by
+     * the owning chunk decodes the next chunk's header bytes as the value.
+     */
+    fun tableWithEntryCutOffBeforeValue(): ByteArray = chunk(RES_TABLE_TYPE, header = {
+        u4(1) // packageCount
+    }) {
+        raw(stringPool(VALUE_STRINGS))
+        val typePool = stringPool(TYPE_NAMES)
+        val keyPool = stringPool(KEY_NAMES)
+        raw(
+            chunk(RES_TABLE_PACKAGE_TYPE, header = {
+                u4(PACKAGE_ID)
+                utf16Fixed(PACKAGE_NAME, 128)
+                u4(PACKAGE_HEADER_SIZE) // typeStrings
+                u4(TYPE_NAMES.size) // lastPublicType
+                u4(PACKAGE_HEADER_SIZE + typePool.size) // keyStrings
+                u4(KEY_NAMES.size) // lastPublicKey
+            }) {
+                raw(typePool)
+                raw(keyPool)
+                raw(
+                    type(TYPE_BOOL_ID, config = defaultConfig()) {
+                        entryWithoutValue(key = 3)
+                    }
+                )
+                raw(
+                    type(TYPE_COLOR_ID, config = defaultConfig()) {
+                        entry(key = 4, dataType = ArscValue.TYPE_INT_COLOR_ARGB8, data = COLOR_ACCENT)
+                    }
+                )
+            }
+        )
     }
 
     /** `ResStringPool` with a UTF-16 or UTF-8 data block. */
@@ -267,6 +314,17 @@ internal object ArscTestBytes {
         }
 
         /**
+         * An entry header with its `Res_value` missing, i.e. what the tail of a
+         * chunk truncated mid-entry holds.
+         */
+        fun entryWithoutValue(key: Int) {
+            offsets += this.data.size
+            this.data.u2(8) // entry size
+            this.data.u2(0) // flags
+            this.data.u4(key)
+        }
+
+        /**
          * Android 14+ 8-byte entry: the key index replaces the size field and
          * the value type is packed into the high byte of the flags.
          */
@@ -405,6 +463,9 @@ internal object ArscTestBytes {
 
     /** `ResChunk_header` + id + name[128] + four pool/public offsets. */
     private const val PACKAGE_HEADER_SIZE = CHUNK_HEADER_SIZE + 4 + 256 + 16
+
+    /** [PACKAGE_HEADER_SIZE] plus `typeIdOffset`. */
+    private const val PACKAGE_HEADER_SIZE_WITH_TYPE_ID_OFFSET = PACKAGE_HEADER_SIZE + 4
 
     private const val CONFIG_SIZE = 64
 

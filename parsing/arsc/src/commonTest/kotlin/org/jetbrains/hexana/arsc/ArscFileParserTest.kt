@@ -19,7 +19,7 @@ class ArscFileParserTest {
     fun rejectsNonResourceTables() {
         // Empty, too short to hold a chunk header.
         assertFalse(ArscFileParser.isArsc(ByteArray(4).toCommonByteBuffer()))
-        // Right chunk type, but the declared size runs past the file.
+        // Right chunk type and a plausible size, but no room for a child chunk.
         val oversized = byteArrayOf(0x02, 0x00, 0x0C, 0x00, 0x00, 0x10, 0x00, 0x00, 0x01, 0, 0, 0)
         assertFalse(ArscFileParser.isArsc(oversized.toCommonByteBuffer()))
         // DEX magic.
@@ -29,6 +29,15 @@ class ArscFileParserTest {
         val poolless = byteArrayOf(0x02, 0x00, 0x0C, 0x00, 0x14, 0x00, 0x00, 0x00, 0x01, 0, 0, 0) +
             byteArrayOf(0x02, 0x02, 0x10, 0x00, 0x08, 0x00, 0x00, 0x00)
         assertFalse(ArscFileParser.isArsc(poolless.toCommonByteBuffer()))
+    }
+
+    @Test
+    fun detectsTruncatedResourceTable() {
+        // The declared sizes still describe the whole table, so detection has to
+        // accept it for `parse` to list what survived - see
+        // `parsesTruncatedTablePartially`.
+        val truncated = ArscTestBytes.sampleTable().let { it.copyOf(it.size - 120) }
+        assertTrue(ArscFileParser.isArsc(truncated.toCommonByteBuffer()))
     }
 
     @Test
@@ -210,6 +219,40 @@ class ArscFileParserTest {
             "expected the trailing type chunks to be lost, got ${types.size} of $fullTypeCount",
         )
         assertEquals("Hello world", table.formatEntryValue(types.first().entries.first()))
+    }
+
+    @Test
+    fun resolvesTypeNamesThroughTypeIdOffset() {
+        val offset = 0x20
+        val pkg = ArscFileParser.parse(
+            ArscTestBytes.sampleTable(typeIdOffset = offset).toCommonByteBuffer()
+        ).packages.single()
+
+        assertEquals(offset, pkg.typeIdOffset)
+        assertEquals(ArscTestBytes.TYPE_STRING_ID + offset, pkg.typeSpecs.single().typeId)
+        assertEquals("string", pkg.typeSpecs.single().typeName)
+        assertEquals(
+            listOf("string", "string", "dimen", "bool", "color", "bool", "dimen", "style"),
+            pkg.types.map { it.typeName },
+        )
+    }
+
+    @Test
+    fun doesNotReadEntryValuesPastTheTypeChunk() {
+        val table = ArscFileParser.parse(
+            ArscTestBytes.tableWithEntryCutOffBeforeValue().toCommonByteBuffer()
+        )
+        val cutOff = table.packages.single().types.first { it.typeName == "bool" }.entries.single()
+
+        assertEquals("enabled", cutOff.key)
+        assertNull(cutOff.value, "the value bytes belong to the next chunk, not to this entry")
+        // The chunk that follows must still parse normally.
+        assertEquals(
+            "#ff3ddc84",
+            table.formatEntryValue(
+                table.packages.single().types.first { it.typeName == "color" }.entries.single()
+            ),
+        )
     }
 
     @Test

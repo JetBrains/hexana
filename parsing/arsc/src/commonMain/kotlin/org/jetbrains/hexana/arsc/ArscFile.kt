@@ -146,7 +146,13 @@ data class ArscPackage(
     /** Package ID — the high byte of every resource ID in this package (`0x7f` for an app). */
     val id: Int,
     val name: String,
-    /** Type names, indexed by `typeId - 1`. */
+    /**
+     * `typeIdOffset`: the type id this package's types are numbered from, minus
+     * one. Zero for an ordinary package; feature splits shift their type ids so
+     * they do not collide with the base package's.
+     */
+    val typeIdOffset: Int,
+    /** Type names, indexed by `typeId - 1 - typeIdOffset`. */
     val typeStrings: ArscStringPool,
     /** Entry names, indexed by `ArscEntry.keyIndex`. */
     val keyStrings: ArscStringPool,
