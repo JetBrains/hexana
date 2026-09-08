@@ -84,6 +84,7 @@ val r8OwnedJarNames = setOf(
     "analytics-jvm.jar",
     "api-jvm.jar",
     "arrow-jvm.jar",
+    "arsc-jvm.jar",
     "binaryProvider-jvm.jar",
     "cli-core.jar",
     cliMetadataJarName,
