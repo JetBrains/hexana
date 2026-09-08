@@ -200,13 +200,22 @@ export class WasmFeatureCatalogProvider {
     }
 }
 
+/**
+ * The same top-level shape `WasmFeatureCatalog.parse` in plugins-shared insists on, so the
+ * host never caches a payload the webview would then reject and fall back from.
+ */
 function isParseableCatalog(body: string): boolean {
     try {
         const parsed = JSON.parse(body) as { features?: unknown; browsers?: unknown };
-        return typeof parsed?.features === "object" && typeof parsed?.browsers === "object";
+        return isJsonObject(parsed?.features) && isJsonObject(parsed?.browsers);
     } catch {
         return false;
     }
+}
+
+/** `typeof` reports both `null` and an array as `"object"`, and neither is a catalog. */
+function isJsonObject(value: unknown): boolean {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function writeAtomically(target: string, text: string): void {

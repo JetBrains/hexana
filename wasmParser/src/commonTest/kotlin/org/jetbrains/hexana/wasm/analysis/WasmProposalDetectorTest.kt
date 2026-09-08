@@ -820,4 +820,39 @@ class WasmProposalDetectorTest {
         """.trimIndent())
         assertFalse(WasmProposal.CustomDescriptors in proposals)
     }
+
+    @Test
+    fun `custom descriptors — descriptor and describes clauses without an exact reference`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (type ${'$'}obj (sub (descriptor 1) (struct)))
+              (type ${'$'}desc (sub (describes 0) (struct)))
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.CustomDescriptors)
+    }
+
+    @Test
+    fun `custom descriptors — descriptor clause inside a rec group`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (rec
+                (type ${'$'}obj (sub (descriptor ${'$'}desc) (struct)))
+                (type ${'$'}desc (sub (describes ${'$'}obj) (struct)))
+              )
+            )
+        """.trimIndent())
+        assertContains(proposals, WasmProposal.CustomDescriptors)
+    }
+
+    @Test
+    fun `a plain subtype does not trigger custom descriptors`() = runTest {
+        val proposals = detectProposals("""
+            (module
+              (type ${'$'}base (sub (struct)))
+              (type ${'$'}derived (sub ${'$'}base (struct)))
+            )
+        """.trimIndent())
+        assertFalse(WasmProposal.CustomDescriptors in proposals)
+    }
 }

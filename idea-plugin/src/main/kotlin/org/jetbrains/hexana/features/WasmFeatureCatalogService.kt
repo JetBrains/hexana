@@ -7,6 +7,9 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.util.io.HttpRequests
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.shared.features.CachedCatalog
@@ -43,6 +46,16 @@ class WasmFeatureCatalogService {
 
     @Volatile
     private var resolved: WasmFeatureCatalog? = null
+
+    private val _changes = MutableStateFlow(0)
+
+    /**
+     * Increments whenever a refresh replaces the catalog, so a badge or a Compatibility tab
+     * that is already open re-evaluates against the new support data instead of waiting for
+     * a target change or a reopen. A background download that lands silently would otherwise
+     * leave the verdicts on screen stale.
+     */
+    val changes: StateFlow<Int> = _changes.asStateFlow()
 
     /**
      * The catalog to render right now. Never `null` and never throws: the committed snapshot
@@ -128,6 +141,9 @@ class WasmFeatureCatalogService {
                 val fresh = CachedCatalog(json, newEtag, now)
                 cached = fresh
                 resolved = resolveCatalog(fresh)
+                // Announced only here: a 304 and a discarded download both leave the bytes we
+                // already render, and neither is worth a recomposition.
+                _changes.value++
             }
     }
 

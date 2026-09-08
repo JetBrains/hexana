@@ -67,6 +67,7 @@ import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
 import org.jetbrains.hexana.ui.panel.WasmRunDialog
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.features.RuntimeTargetsService
+import org.jetbrains.hexana.features.WasmFeatureCatalogService
 import org.jetbrains.hexana.shared.COMPATIBILITY_TAB_NAME
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.features.ProposalCompatibility
@@ -491,9 +492,13 @@ private fun NormalModeContent(
     // moves the warning markers without reopening the editor.
     val targetsGeneration by RuntimeTargetsService.getInstance(state.project).changes.collectAsState()
 
+    // And whenever the feature catalog is refreshed from upstream: the verdicts depend on it
+    // just as much as on the declared targets, and the download lands in the background.
+    val catalogGeneration by WasmFeatureCatalogService.getInstance().changes.collectAsState()
+
     // Evaluated against the runtimes declared in .hexana/runtimes.json. Empty when the
     // project declares none, in which case the badges render exactly as they always have.
-    val compatibility = remember(binaryProvider, proposals, targetsGeneration) {
+    val compatibility = remember(binaryProvider, proposals, targetsGeneration, catalogGeneration) {
         if (proposals.isEmpty()) return@remember emptyList()
         try {
             RuntimeTargetsService.getInstance(state.project)

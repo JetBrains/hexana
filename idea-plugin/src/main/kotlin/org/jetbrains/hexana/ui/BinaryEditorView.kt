@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.ui.panel.GutterMark
@@ -60,6 +61,7 @@ import org.jetbrains.hexana.nativebin.JVM_FILE_SYSTEM
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.DexBinaryProvider
 import org.jetbrains.hexana.features.RuntimeTargetsService
+import org.jetbrains.hexana.features.WasmFeatureCatalogService
 import org.jetbrains.hexana.features.WasmRuntimeCompatibilityConfigurable
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.shared.COMPATIBILITY_TAB_NAME
@@ -539,13 +541,17 @@ internal fun BinaryEditorView(
             }
         }
 
-        // Rebuild just the Compatibility tab when .hexana/runtimes.json changes. Only its
-        // columns depend on the declared targets — whether the tab exists at all depends on
-        // the project having a base path and the module using proposals, both fixed for this
-        // editor — so re-resolving every panel would re-run the expensive analyses for
-        // nothing. `drop(1)` skips the current value: the initial resolution already used it.
+        // Rebuild just the Compatibility tab when .hexana/runtimes.json changes, or when a
+        // background refresh replaces the feature catalog the verdicts are read from. Only
+        // its columns depend on either — whether the tab exists at all depends on the project
+        // having a base path and the module using proposals, both fixed for this editor — so
+        // re-resolving every panel would re-run the expensive analyses for nothing. `drop(1)`
+        // skips the current value: the initial resolution already used it.
         LaunchedEffect(binaryProvider, panels) {
-            RuntimeTargetsService.getInstance(state.project).changes.drop(1).collect {
+            merge(
+                RuntimeTargetsService.getInstance(state.project).changes.drop(1),
+                WasmFeatureCatalogService.getInstance().changes.drop(1),
+            ).collect {
                 val rebuilt = withContext(Dispatchers.Default) {
                     runCatching {
                         val context = buildTableTabsContext(null)

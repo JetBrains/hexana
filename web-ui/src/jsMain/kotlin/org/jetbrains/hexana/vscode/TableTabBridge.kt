@@ -181,6 +181,11 @@ fun TableTabContent(
                 // Inline, so the links flow with the prose; a bullet keeps two apart.
                 Text(if (index == 0 && descriptor.prologueText == null) "" else if (index == 0) " " else " \u2022 ")
                 Span({
+                    // A link in everything but markup, so it has to say so and be reachable
+                    // from the keyboard: a Span with an onClick is invisible to Tab and to a
+                    // screen reader.
+                    attr("role", "link")
+                    tabIndex(0)
                     style {
                         property("cursor", "pointer")
                         property("color", "var(--vscode-textLink-foreground, #3794ff)")
@@ -188,6 +193,15 @@ fun TableTabContent(
                     onClick { event ->
                         event.stopPropagation()
                         prologueAction.action()
+                    }
+                    onKeyDown { event ->
+                        val keyboardEvent = event.nativeEvent as? KeyboardEvent ?: return@onKeyDown
+                        // Enter and Space are what a native link and a native button answer to.
+                        if (keyboardEvent.key == "Enter" || keyboardEvent.key == " ") {
+                            keyboardEvent.preventDefault()
+                            keyboardEvent.stopPropagation()
+                            prologueAction.action()
+                        }
                     }
                 }) {
                     Text(prologueAction.label)

@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.features
 
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
@@ -25,7 +26,7 @@ import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
  * is the signal the UI recomposes on.
  */
 @Service(Service.Level.PROJECT)
-class RuntimeTargetsService(private val project: Project) {
+class RuntimeTargetsService(private val project: Project) : Disposable {
 
     private val tracker = RuntimeTargetsTracker()
 
@@ -38,8 +39,10 @@ class RuntimeTargetsService(private val project: Project) {
     val changes: StateFlow<Int> get() = tracker.changes
 
     init {
-        // Connected to the project's bus, so the subscription ends with the project.
-        project.messageBus.connect().subscribe(
+        // Parented on the service, not left to the bus: the service is disposed when the
+        // project closes *and* when the plugin is unloaded, so the listener never outlives
+        // the classes it belongs to.
+        project.messageBus.connect(this).subscribe(
             VirtualFileManager.VFS_CHANGES,
             object : BulkFileListener {
                 override fun after(events: List<VFileEvent>) {
@@ -90,6 +93,9 @@ class RuntimeTargetsService(private val project: Project) {
         val basePath = project.basePath ?: return
         tracker.observe(RuntimeTargetsStore.read(basePath))
     }
+
+    /** Nothing to release beyond the message-bus connection, which disposal handles. */
+    override fun dispose() = Unit
 
     companion object {
         fun getInstance(project: Project): RuntimeTargetsService = project.service()

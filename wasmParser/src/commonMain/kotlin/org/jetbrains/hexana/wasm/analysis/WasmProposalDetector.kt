@@ -29,7 +29,8 @@ import org.jetbrains.hexana.wasm.sections.*
  * - **Custom sections** (`metadata.code.branch_hint` → branch hinting; a name-section
  *   subsection beyond module/function/locals → extended name section).
  * - **Import module names** (`wasm:js-string` → JS string builtins).
- * - **`exact` heap types** in type records or code locals → custom descriptors.
+ * - **`exact` heap types** in type records or code locals, and `descriptor`/`describes`
+ *   subtype clauses → custom descriptors.
  */
 object WasmProposalDetector {
 
@@ -66,6 +67,9 @@ object WasmProposalDetector {
     }
 
     private fun detectFromTypeRecord(type: WasmTypeRecord, result: MutableSet<WasmProposal>) {
+        // The other half of the custom-descriptors proposal; see [detectFromValueType] for
+        // `exact` heap types.
+        if (type.hasDescriptorClause) result.add(WasmProposal.CustomDescriptors)
         when (type) {
             is WasmRecursiveTypeRecord -> {
                 result.add(WasmProposal.GarbageCollection)
@@ -90,11 +94,10 @@ object WasmProposalDetector {
     }
 
     /**
-     * Flags the custom-descriptors proposal on an `exact x` heap type (`0x62 x:u32`), the
-     * one part of that proposal the parser models as a first-class type. The `descriptor`
-     * (0x4D) and `describes` (0x4C) subtype clauses are consumed for alignment by
-     * [org.jetbrains.hexana.wasm.sections.StandardTypesParser] but not recorded, so a
-     * binary that uses only those clauses is not detected.
+     * Flags the custom-descriptors proposal on an `exact x` heap type (`0x62 x:u32`). The
+     * proposal's other marker — a `descriptor` (0x4D) or `describes` (0x4C) subtype clause —
+     * is reported by [detectFromTypeRecord] from
+     * [org.jetbrains.hexana.wasm.sections.WasmTypeRecord.hasDescriptorClause].
      */
     private fun detectFromValueType(type: WasmValueType<*>, result: MutableSet<WasmProposal>) {
         val refType = type as? WasmRefType ?: return

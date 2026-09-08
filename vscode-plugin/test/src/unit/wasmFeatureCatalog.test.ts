@@ -235,6 +235,22 @@ describe('wasmFeatureCatalog', () => {
         }
     });
 
+    it('rejects JSON whose top-level keys are null or arrays', async () => {
+        const cached = catalogJson('cached');
+        writeCache(cached, '"etag-1"', Date.now() - TTL_MS - 1000);
+        const server = await startServer(JSON.stringify({ features: null, browsers: [] }), '"etag-2"');
+        process.env.HEXANA_WASM_FEATURES_URL = server.url;
+        try {
+            const subject = provider();
+            subject.get();
+            await subject.settle();
+            expect(fs.readFileSync(path.join(storageDir, CATALOG_FILE), 'utf8')).to.equal(cached);
+            expect(readMetadata().etag).to.equal('"etag-1"');
+        } finally {
+            await server.close();
+        }
+    });
+
     it('keeps serving the snapshot when the endpoint is unreachable', async () => {
         writeBundled(catalogJson('bundled'));
         const subject = provider();
