@@ -48,7 +48,7 @@ internal class HexanaStdioServerTransport(
     private val inputStream: Source,
     private val outputStream: RawSink,
     private val decodeMessage: (String) -> JSONRPCMessage = {
-        McpJson.decodeFromString<JSONRPCMessage>(it)
+        McpJson.decodeFromString(JSONRPCMessage.serializer(), it)
     },
 ) : AbstractTransport() {
 
