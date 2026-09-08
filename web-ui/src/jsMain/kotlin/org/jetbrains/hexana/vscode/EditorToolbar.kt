@@ -409,17 +409,7 @@ fun EditorToolbar(
             }
 
             val proposals = remember(provider, workerWasmToolbarPresentation) {
-                workerWasmToolbarPresentation?.let { presentation ->
-                    return@remember presentation.proposalIds.mapNotNull { id ->
-                        WasmProposal.entries.firstOrNull { it.name == id }
-                    }
-                }
-                if (provider is WasmComponentBinaryProvider) {
-                    return@remember if (provider.canProvideWasmModule()) provider.usedProposals.sorted() else emptyList()
-                }
-                if (provider !is WasmBinaryProvider) return@remember emptyList()
-                if (!provider.canProvideWasmModule()) return@remember emptyList()
-                provider.usedProposals.sorted()
+                workerProposals(workerWasmToolbarPresentation) ?: providerProposals(provider)
             }
 
             if (proposals.isNotEmpty()) {
@@ -510,6 +500,18 @@ private fun ToolbarDebugButton(tooltip: String = "Debug", onClick: () -> Unit) {
 }
 
 private const val MAX_INDIVIDUAL_PROPOSAL_BADGES = 3
+
+/** Proposals the worker already detected, or `null` when this host has no worker result. */
+private fun workerProposals(presentation: WorkerWasmToolbarPresentation?): List<WasmProposal>? =
+    presentation?.proposalIds?.mapNotNull { id -> WasmProposal.entries.firstOrNull { it.name == id } }
+
+/** Proposals detected from a provider parsed in this window. */
+private fun providerProposals(provider: BinaryProvider): List<WasmProposal> =
+    if (provider is WasmBinaryProvider && provider.canProvideWasmModule()) {
+        provider.usedProposals.sorted()
+    } else {
+        emptyList()
+    }
 
 /**
  * The proposals a module uses, as badges, with a warning marker on any proposal a

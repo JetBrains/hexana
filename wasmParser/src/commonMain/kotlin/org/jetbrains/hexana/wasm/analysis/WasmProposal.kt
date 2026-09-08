@@ -14,15 +14,19 @@ package org.jetbrains.hexana.wasm.analysis
  * Every entry must have one, and it must exist in that file —
  * `WasmProposalFeatureIdTest` pins both directions.
  *
- * Proposals deliberately *not* represented here, because a core binary carries no signal
- * for them or the parser cannot reach it (kept in sync with the inventory in
- * `FinishedProposalsInstructionTest`):
+ * Proposals deliberately *not* represented here — a core binary carries no signal for them,
+ * the parser cannot reach it, or knowing would tell the user nothing (kept in sync with the
+ * inventory in `FinishedProposalsInstructionTest`):
  * - `compactImportSection`, `typeImports`, `sharedEverythingThreads` — their encodings hit
  *   the `error("unknown ...")` paths in the import and type parsers.
  * - `stackSwitching`, `wideArithmetic`, `halfPrecision`, `stringref` — need opcode families
  *   the parser does not decode yet.
  * - `bigInt`, `jspi`, `esmIntegration`, `customAnnotationSyntaxInTheTextFormat` — JS-API or
  *   text-format only, with no binary encoding at all.
+ * - `componentModel` — trivially detectable (a component binary is one), but `features.json`
+ *   records support for it against only two entries, so a compatibility row for it is `?` in
+ *   every column a project is likely to target. Detecting it bought a badge that repeated the
+ *   "Component Model" file-type label and a table row that said nothing.
  */
 enum class WasmProposal(
     val displayName: String,
@@ -104,7 +108,4 @@ enum class WasmProposal(
 
     /** Custom page sizes: a memory whose limits carry an explicit page-size-log2 field. */
     CustomPageSizes("Custom page sizes", "proposal", "customPageSizes"),
-
-    /** Component model: the binary is a component (layer >= 1), not a core module. */
-    ComponentModel("Component model", "proposal", "componentModel"),
 }

@@ -1095,9 +1095,6 @@ private fun componentPresentation(
         },
         toolbar = ParserWorkerToolbar(
             runnableExportName = if (hasWasiCliRunExport(provider)) "wasi:cli/run" else null,
-            // Being a component is the component-model proposal; the core-module detector
-            // never sees a component, so the provider reports it.
-            proposalIds = provider.usedProposals.map { it.name }.sorted(),
         ),
         displayLabel = fileTypeDescription(provider),
     )

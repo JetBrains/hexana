@@ -30,10 +30,6 @@ import org.jetbrains.hexana.wasm.sections.*
  *   subsection beyond module/function/locals → extended name section).
  * - **Import module names** (`wasm:js-string` → JS string builtins).
  * - **`exact` heap types** in type records or code locals → custom descriptors.
- *
- * [WasmProposal.ComponentModel] is intentionally not produced here: this detector takes a
- * core [WasmModule], so a component binary never reaches it. Callers that hold a component
- * report it themselves.
  */
 object WasmProposalDetector {
 

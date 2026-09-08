@@ -825,7 +825,7 @@ private fun isValidToolbar(format: String, toolbar: ParserWorkerToolbar): Boolea
     toolbar.proposalIds.size <= MAX_TOOLBAR_PROPOSALS &&
         toolbar.proposalIds.all { it.length <= MAX_TOOLBAR_PROPOSAL_ID_CHARS && it in supportedToolbarProposalIds } &&
         toolbar.proposalIds.distinct().size == toolbar.proposalIds.size &&
-        (format == "core_wasm" || format == "wasm_component" || toolbar.proposalIds.isEmpty()) &&
+        (format == "core_wasm" || toolbar.proposalIds.isEmpty()) &&
         when (format) {
             "core_wasm" -> toolbar.runnableExportName == null || toolbar.runnableExportName in setOf("_start", "_initialize")
             "wasm_component" -> toolbar.runnableExportName == null || toolbar.runnableExportName == "wasi:cli/run"

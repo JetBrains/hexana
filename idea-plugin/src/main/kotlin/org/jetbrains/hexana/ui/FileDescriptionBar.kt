@@ -481,9 +481,7 @@ private fun NormalModeContent(
 
     val proposals = remember(binaryProvider) {
         try {
-            (binaryProvider as? WasmBinaryProvider)?.usedProposals?.sorted()
-                ?: (binaryProvider as? WasmComponentBinaryProvider)?.usedProposals?.sorted()
-                ?: emptyList()
+            (binaryProvider as? WasmBinaryProvider)?.usedProposals?.sorted() ?: emptyList()
         } catch (_: Exception) {
             emptyList()
         }

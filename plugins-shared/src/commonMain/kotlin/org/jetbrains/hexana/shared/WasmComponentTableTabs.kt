@@ -7,6 +7,10 @@ import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
  * [TableTabsProvider] for component-model Wasm binaries.
  *
  * Produces table-based tabs: Exports, Imports, Modules, Components.
+ *
+ * No Compatibility tab: a component itself uses no detectable proposal, and the proposals of
+ * the core modules nested inside it belong to those modules, which get their own tab when
+ * opened. See the exclusion list in [org.jetbrains.hexana.wasm.analysis.WasmProposal].
  */
 class WasmComponentTableTabsProvider : TableTabsProvider {
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> {

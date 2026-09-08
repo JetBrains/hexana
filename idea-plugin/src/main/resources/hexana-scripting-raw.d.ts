@@ -2193,7 +2193,7 @@ interface WasmBinaryProvider extends BinaryProvider {
     size: number;
     tabName?: string;
   }[];
-  usedProposals: "SignExtensionOps" | "NonTrappingFloatToInt" | "MultiValue" | "ReferenceTypes" | "BulkMemoryOperations" | "SIMD" | "MutableGlobals" | "TailCall" | "TypedFunctionReferences" | "GarbageCollection" | "MultipleMemories" | "RelaxedSIMD" | "ExceptionHandling" | "Memory64" | "Threads" | "LegacyExceptionHandling"[];
+  usedProposals: "SignExtensionOps" | "NonTrappingFloatToInt" | "MultiValue" | "ReferenceTypes" | "BulkMemoryOperations" | "SIMD" | "MutableGlobals" | "TailCall" | "TypedFunctionReferences" | "GarbageCollection" | "MultipleMemories" | "RelaxedSIMD" | "ExceptionHandling" | "Memory64" | "Threads" | "ExtendedConst" | "LegacyExceptionHandling" | "BranchHinting" | "JsStringBuiltins" | "ExtendedNameSection" | "CustomDescriptors" | "CustomPageSizes"[];
   wasmModule?: {
     codeSection?: {
       contentOffset: number;
