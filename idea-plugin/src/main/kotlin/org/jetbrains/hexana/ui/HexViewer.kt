@@ -177,12 +177,13 @@ internal fun HexViewer(
     }
     val structureColors = HexanaTheme.structureColors
 
-    // Map from row index to the index in structureRanges for ranges that
-    // start on that row — used to render section name labels.
-    val structureLabelRows: Map<Int, Int> = remember(structureRanges, state.bytesPerRow) {
+    // Map from row index to the indices in structureRanges of every range that
+    // starts on that row — used to render section name labels. Several sections
+    // can start on the same row, and each of them gets its own label.
+    val structureLabelRows: Map<Int, List<Int>> = remember(structureRanges, state.bytesPerRow) {
         val bpr = state.bytesPerRow.value
-        structureRanges.withIndex().associate { (idx, range) ->
-            (range.offset / bpr).toInt() to idx
+        structureRanges.indices.groupBy { idx ->
+            (structureRanges[idx].offset / bpr).toInt()
         }
     }
 
@@ -967,10 +968,10 @@ internal fun HexViewer(
                                     }
                                 }
 
-                                // Section label on the row where a structure range begins
-                                val labelIdx = structureLabelRows[rowIndex]
-                                if (labelIdx != null) {
-                                    Spacer(Modifier.width(16.dp))
+                                // Section labels on the row where structure ranges begin.
+                                // All sections starting on this row are shown side by side.
+                                structureLabelRows[rowIndex]?.forEachIndexed { position, labelIdx ->
+                                    Spacer(Modifier.width(if (position == 0) 16.dp else 4.dp))
                                     val labelColor = structureColors[labelIdx % structureColors.size]
                                     val range = structureRanges[labelIdx]
                                     val isClickable = onSectionLabelClick != null && range.tabName != null

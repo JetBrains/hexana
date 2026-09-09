@@ -945,11 +945,11 @@ private fun HexRow(
         STRUCTURE_COLORS[offsetStructureIdx % STRUCTURE_COLORS.size]
     } else null
 
-    // Check if this row is the start of a structure range.
-    val labelRange = if (structureRanges.isNotEmpty()) {
-        structureRanges.firstOrNull { (it.offset / BYTES_PER_ROW).toInt() == row }
-    } else null
-    val labelIdx = if (labelRange != null) structureRanges.indexOf(labelRange) else -1
+    // Indices of every structure range that starts on this row. Several sections
+    // can start on the same row, and each of them gets its own label.
+    val labelIndices = if (structureRanges.isNotEmpty()) {
+        structureRanges.indices.filter { (structureRanges[it].offset / BYTES_PER_ROW).toInt() == row }
+    } else emptyList()
 
     Div({
         classes("hex-row")
@@ -1137,13 +1137,15 @@ private fun HexRow(
             }
         }
 
-        // Section label (shown on the row where a structure range begins)
-        if (labelRange != null && labelIdx >= 0) {
+        // Section labels (shown on the row where structure ranges begin).
+        // All sections starting on this row are shown side by side.
+        labelIndices.forEachIndexed { position, labelIdx ->
+            val labelRange = structureRanges[labelIdx]
             val isClickable = onTabChangeRequest != null && labelRange.tabName != null
             Span({
                 classes("hexana-section-label")
                 style {
-                    property("margin-left", "16px")
+                    property("margin-left", if (position == 0) "16px" else "4px")
                     property("padding", "0px 4px")
                     property("border-radius", "3px")
                     property("font-size", "9px")
