@@ -41,7 +41,24 @@ owns only network I/O, file I/O, and its settings UI.
 - **Conditional GET, not HEAD.** The request asked for HEAD probing; `If-None-Match` achieves
   the same "don't re-download unchanged data" in one round-trip instead of two.
 - **`Unknown` never warns.** Upstream leaves many cells `null`; warning on them would put a
-  marker on nearly every module. Only `Unsupported` and `FlagRequired` do.
+  marker on nearly every module. Only `Unsupported` and `FlagRequired` do. A row that is
+  *nothing but* `Unknown` is not shown as a row of `?` either: it collapses to a single
+  `No data` label and sorts below the rows that carry a verdict
+  (`ProposalCompatibility.hasNoData`). No cell spanning exists in `TableTabDescriptor`, so
+  the collapse is the first runtime column carrying the label and the rest rendering empty.
+  The trailing `Other runtimes` cell is left alone — the declared targets can be silent
+  while other runtimes still support the proposal, which is exactly what a reader then
+  wants.
+- **Tools are not compatibility targets.** Upstream keeps assemblers, optimizers and
+  language servers (`Binaryen`, `watr`, `wasm-language-tools`, and Hexana's own entry) in
+  the same `browsers` object as the browsers, distinguished only by `category: "Tools"`.
+  "Does Binaryen support GC" is not a question about where a module runs, so
+  `WasmFeatureCatalog.executionRuntimes` drops them and both the supporting-runtimes
+  columns and the settings UI's runtime list read that instead of `runtimes`. Matched on the
+  category's `queryKey` (`"tools"`), with the display name as the fallback for a catalog that
+  omits the `categories` array. `runtimes` itself stays complete, so a target already
+  declared against a tool keeps resolving to real data instead of turning into `?`. An entry
+  filed under Tools *and* a runtime category (`Owi`) is kept and grouped where it runs.
 - **VS Code fetches host-side.** The webview CSP would block
   `raw.githubusercontent.com`, and fetching in the extension host means no new network origin
   is exposed to webview content at all.
@@ -143,8 +160,9 @@ which is a useful spec reference if they are ever added); `bigInt`, `jspi`, `esm
 
   Both read `Firefox 120+, Wasmtime 47+` — bare name when upstream records support without a
   version, `(flag)` when flag-gated, omitted when unsupported, em dash when the list is
-  empty. `ProposalCompatibility.supportedIn` is always the whole catalog; `otherRuntimes` is
-  that minus the declared ids. The column sorts on how many runtimes are listed rather than
+  empty. `ProposalCompatibility.supportedIn` is always every runtime in
+  `executionRuntimes` (i.e. the catalog minus its tools); `otherRuntimes` is that minus the
+  declared ids. The column sorts on how many runtimes are listed rather than
   on the text, so ascending puts the narrowly supported proposals first.
 - `idea-plugin/.../features/` — `WasmFeatureCatalogService` (+`Store`),
   `RuntimeTargetsService` (+`Store`), `WasmRuntimeCompatibilityConfigurable`

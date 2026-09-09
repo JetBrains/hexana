@@ -92,7 +92,7 @@ class ProposalCompatibility(
     val docUrl: String?,
     val phase: String?,
     val statuses: List<ProposalRuntimeStatus>,
-    /** Every runtime in the catalog that supports this proposal, in catalog order. */
+    /** Every runtime the catalog knows that supports this proposal, in catalog order. */
     val supportedIn: List<ProposalRuntimeSupport> = emptyList(),
     /**
      * Runtime ids the project declared, and which therefore have a column of their own in
@@ -102,6 +102,17 @@ class ProposalCompatibility(
 ) {
     /** Whether any declared target cannot run this proposal outright or without a flag. */
     val hasWarning: Boolean get() = statuses.any { it.support.isWarning }
+
+    /**
+     * Whether every declared target's verdict is [FeatureSupport.Unknown], i.e. the whole
+     * row would read `?`. The table collapses such a row to a single "no data" and sorts it
+     * below the rows that do carry a verdict — repeating `?` per column says nothing, and a
+     * proposal the upstream table is silent about is not what a reader came for.
+     *
+     * `false` when nothing is declared: there are no per-runtime verdicts to be silent.
+     */
+    val hasNoData: Boolean
+        get() = statuses.isNotEmpty() && statuses.all { it.support == FeatureSupport.Unknown }
 
     /** Verdicts worth acting on, in the order the targets were declared. */
     val warnings: List<ProposalRuntimeStatus> get() = statuses.filter { it.support.isWarning }
@@ -166,15 +177,15 @@ class WasmRuntimeCompatibility(
     /**
      * Every runtime that supports [proposal], with the version each supports it from.
      *
-     * Always the whole catalog: the table narrows it to the runtimes without a column of
-     * their own ([ProposalCompatibility.otherRuntimes]), and a declared runtime's own
-     * column already says whether the declared version suffices.
+     * Always every runtime in [WasmFeatureCatalog.executionRuntimes]: the table narrows it
+     * to the ones without a column of their own ([ProposalCompatibility.otherRuntimes]),
+     * and a declared runtime's own column already says whether the declared version
+     * suffices. Tools are left out — they are not places a module runs.
      *
-     * Order follows the catalog's own, which groups browsers before standalone runtimes
-     * before tools.
+     * Order follows the catalog's own, which groups browsers before standalone runtimes.
      */
     private fun supportedIn(proposal: WasmProposal): List<ProposalRuntimeSupport> {
-        return catalog.runtimes.keys.mapNotNull { runtimeId ->
+        return catalog.executionRuntimes.keys.mapNotNull { runtimeId ->
             val cell = catalog.cell(runtimeId, proposal.featureId) ?: return@mapNotNull null
             when (val status = cell.status) {
                 is FeatureStatus.SinceVersion ->

@@ -124,7 +124,21 @@ class RuntimeCompatibilityEndToEndTest {
         // Browsers first, following the catalog's own order.
         assertTrue("unexpected label: $label", label.startsWith("Chrome 119+, Firefox 120+, Safari 18.2+"))
         // A runtime that supports it without naming a version appears bare.
-        assertTrue("expected a bare-name entry in: $label", label.contains(", Binaryen"))
+        assertTrue("expected a bare-name entry in: $label", label.contains(", zwasm"))
+    }
+
+    /**
+     * The catalog files assemblers and language servers next to the browsers; none of them
+     * is a place a module runs, so none of them is reported on.
+     */
+    @Test
+    fun `supported-in leaves out the catalog's tools`() {
+        val label = declare().evaluate(WasmProposal.GarbageCollection).supportedInLabel
+
+        assertFalse("expected Binaryen omitted from: $label", label.contains("Binaryen"))
+        assertFalse("expected our own entry omitted from: $label", label.contains("Hexana"))
+        // Owi is filed under Tools and Standalone Runtimes both, so it stays a runtime.
+        assertTrue("expected Owi kept", "Owi" in WasmFeatureCatalog.bundled.executionRuntimes)
     }
 
     @Test

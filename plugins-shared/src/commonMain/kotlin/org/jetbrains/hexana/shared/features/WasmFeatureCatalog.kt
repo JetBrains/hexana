@@ -60,6 +60,16 @@ class WasmFeature(
 class WasmFeatureCategory(val name: String, val queryKey: String, val isDefault: Boolean)
 
 /**
+ * [WasmFeatureCategory.queryKey] of the category holding entries that are not execution
+ * targets — assemblers, optimizers, language servers. Matched on the query key because that
+ * is upstream's stable identifier; [TOOLS_CATEGORY_NAME] covers a catalog that omits the
+ * `categories` array altogether, which the fixtures do.
+ */
+private const val TOOLS_QUERY_KEY = "tools"
+
+private const val TOOLS_CATEGORY_NAME = "Tools"
+
+/**
  * A runtime, browser or tool. Upstream keeps all of them under the `browsers` object and
  * distinguishes them by [categories]; the first category is the primary one.
  */
@@ -97,6 +107,22 @@ class WasmFeatureCatalog(
     val runtimes: Map<String, WasmRuntimeInfo>,
     val categories: List<WasmFeatureCategory>,
 ) {
+    /** The names under which [TOOLS_QUERY_KEY] appears in a runtime's `category` field. */
+    private val toolCategories: Set<String> =
+        categories.filter { it.queryKey == TOOLS_QUERY_KEY }.mapTo(mutableSetOf(TOOLS_CATEGORY_NAME)) { it.name }
+
+    /**
+     * The runtimes a module can actually be *run* on — the catalog minus its toolchain
+     * entries. Upstream files assemblers, optimizers and language servers under `browsers`
+     * next to the browsers, but "does Binaryen support GC" is not a question about where a
+     * module will run, and Hexana's own entry there is not something to target either.
+     *
+     * An entry filed under Tools *and* a runtime category (`Owi`) is kept, being both.
+     */
+    val executionRuntimes: Map<String, WasmRuntimeInfo> by lazy {
+        runtimes.filterValues { info -> info.categories.isEmpty() || info.categories.any { it !in toolCategories } }
+    }
+
     fun feature(featureId: String): WasmFeature? = features[featureId]
 
     fun runtime(runtimeId: String): WasmRuntimeInfo? = runtimes[runtimeId]
@@ -105,14 +131,16 @@ class WasmFeatureCatalog(
     fun cell(runtimeId: String, featureId: String): FeatureCell? = runtimes[runtimeId]?.cells?.get(featureId)
 
     /**
-     * Runtime ids grouped by category, in upstream category order, with any runtime whose
-     * category is unknown appended under its own name. Drives the settings UI grouping.
+     * [executionRuntimes] grouped by category, in upstream category order, with any runtime
+     * whose category is unknown appended under its own name. Drives the settings UI
+     * grouping, which is why tools are absent: they are not targets to declare.
      */
     fun runtimesByCategory(): List<Pair<String, List<String>>> {
         val grouped = LinkedHashMap<String, MutableList<String>>()
-        for (category in categories) grouped[category.name] = mutableListOf()
-        for (runtime in runtimes.values) {
-            val category = runtime.primaryCategory ?: UNCATEGORIZED
+        for (category in categories) if (category.name !in toolCategories) grouped[category.name] = mutableListOf()
+        for (runtime in executionRuntimes.values) {
+            // Owi lists Tools first but is also a runtime; group it where it can run.
+            val category = runtime.categories.firstOrNull { it !in toolCategories } ?: UNCATEGORIZED
             grouped.getOrPut(category) { mutableListOf() }.add(runtime.id)
         }
         return grouped.entries.filter { it.value.isNotEmpty() }.map { it.key to it.value.toList() }

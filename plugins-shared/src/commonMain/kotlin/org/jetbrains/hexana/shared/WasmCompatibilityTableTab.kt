@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.shared.features.FeatureSupport
 import org.jetbrains.hexana.shared.features.ProposalCompatibility
 import org.jetbrains.hexana.shared.features.ProposalRuntimeSupport
 import org.jetbrains.hexana.shared.features.RUNTIME_TARGETS_PATH
@@ -13,6 +14,9 @@ import org.jetbrains.hexana.shared.features.WASM_FEATURES_PAGE_URL
  */
 const val COMPATIBILITY_TAB_NAME = "Compatibility"
 
+/** What a row whose every per-runtime verdict is `?` reads instead of a row of them. */
+private const val NO_DATA_LABEL = "No data"
+
 /**
  * Builds the **Compatibility** tab: one row per proposal the module uses, one column per
  * runtime declared in `.hexana/runtimes.json`, and a documentation link per row taken from
@@ -25,6 +29,9 @@ const val COMPATIBILITY_TAB_NAME = "Compatibility"
  *   are no per-runtime columns to read instead.
  * - **Targets declared** — their own columns lead, and a trailing *Other runtimes* column
  *   lists the supporting runtimes that do *not* have a column, so the two never repeat.
+ *
+ * Rows the upstream table says nothing about at all are collapsed to a single *No data*
+ * and sorted last, so what is left above them is the part worth reading.
  *
  * Returns `null` when there is nothing to show — no host-supplied compatibility data, or a
  * module that uses no proposals at all.
@@ -40,13 +47,16 @@ internal fun compatibilityTabDescriptor(
 ): TableTabDescriptor? {
     if (proposals.isEmpty()) return null
 
+    // A stable sort, so the proposal order survives within each of the two groups.
+    val rows = proposals.sortedBy { it.hasNoData }
+
     val columns = buildList {
         add(
             ColumnDescriptor(
                 name = "Proposal",
                 widthBehavior = ColumnWidth.MeasuredMin("Non-trapping float-to-int conversions"),
             ) { index ->
-                val entry = proposals[index]
+                val entry = rows[index]
                 // The warning marker is repeated per row so a sorted or filtered table still
                 // shows which rows the badge is warning about.
                 val label = if (entry.hasWarning) "⚠ ${entry.proposal.displayName}" else entry.proposal.displayName
@@ -55,7 +65,7 @@ internal fun compatibilityTabDescriptor(
         )
         add(
             ColumnDescriptor(name = "Phase", widthBehavior = ColumnWidth.Measured("inactive")) { index ->
-                val phase = proposals[index].phase
+                val phase = rows[index].phase
                 CellValue(phase ?: "", phase ?: "—", tooltip = phaseTooltip(phase))
             }
         )
@@ -65,16 +75,27 @@ internal fun compatibilityTabDescriptor(
             add(
                 supportingRuntimesColumn(
                     name = "Supported in",
-                    entries = { index -> proposals[index].supportedIn },
-                    label = { index -> proposals[index].supportedInLabel },
-                    tooltip = { index -> proposals[index].supportedInTooltip },
+                    entries = { index -> rows[index].supportedIn },
+                    label = { index -> rows[index].supportedInLabel },
+                    tooltip = { index -> rows[index].supportedInTooltip },
                 )
             )
         }
         runtimeLabels.forEachIndexed { runtimeIndex, label ->
             add(
                 ColumnDescriptor(name = label, widthBehavior = ColumnWidth.MeasuredMin("No (since 000)")) { index ->
-                    val status = proposals[index].statuses.getOrNull(runtimeIndex)
+                    val entry = rows[index]
+                    // A row of nothing but `?` becomes one label carried by the first column
+                    // and blanks after it, so it reads as a single cell spanning the row.
+                    if (entry.hasNoData) {
+                        val text = if (runtimeIndex == 0) NO_DATA_LABEL else ""
+                        return@ColumnDescriptor CellValue(
+                            FeatureSupport.Unknown.name,
+                            text,
+                            tooltip = noDataTooltip(entry).takeIf { runtimeIndex == 0 },
+                        )
+                    }
+                    val status = entry.statuses.getOrNull(runtimeIndex)
                         ?: return@ColumnDescriptor CellValue("", "—")
                     // Sort on the verdict so a click groups the failures together.
                     CellValue(status.support.name, status.shortLabel, tooltip = status.note ?: status.describe)
@@ -85,9 +106,9 @@ internal fun compatibilityTabDescriptor(
             add(
                 supportingRuntimesColumn(
                     name = "Other runtimes",
-                    entries = { index -> proposals[index].otherRuntimes },
-                    label = { index -> proposals[index].otherRuntimesLabel },
-                    tooltip = { index -> proposals[index].otherRuntimesTooltip },
+                    entries = { index -> rows[index].otherRuntimes },
+                    label = { index -> rows[index].otherRuntimesLabel },
+                    tooltip = { index -> rows[index].otherRuntimesTooltip },
                 )
             )
         }
@@ -96,8 +117,8 @@ internal fun compatibilityTabDescriptor(
     val docsAction = openUrl?.let { open ->
         RowActionDescriptor(
             label = "Docs",
-            tooltipProvider = { index -> proposals[index].docUrl?.let { "Open the proposal documentation" } },
-            action = { index -> proposals[index].docUrl?.let(open) },
+            tooltipProvider = { index -> rows[index].docUrl?.let { "Open the proposal documentation" } },
+            action = { index -> rows[index].docUrl?.let(open) },
             kind = RowActionKind.Documentation,
         )
     }
@@ -107,8 +128,8 @@ internal fun compatibilityTabDescriptor(
             add(
                 RowContextMenuItemDescriptor(
                     labelProvider = { "Open documentation" },
-                    action = { index -> proposals[index].docUrl?.let { openUrl(it) } },
-                    isVisible = { index -> proposals[index].docUrl != null },
+                    action = { index -> rows[index].docUrl?.let { openUrl(it) } },
+                    isVisible = { index -> rows[index].docUrl != null },
                 )
             )
         }
@@ -122,12 +143,12 @@ internal fun compatibilityTabDescriptor(
         }
     }
 
-    val warningCount = proposals.count { it.hasWarning }
+    val warningCount = rows.count { it.hasWarning }
 
     return TableTabDescriptor(
         name = COMPATIBILITY_TAB_NAME,
         columns = columns,
-        rowCount = proposals.size,
+        rowCount = rows.size,
         rowAction = docsAction,
         contextMenuItems = contextMenuItems,
         prologueText = prologue(runtimeLabels, warningCount, canConfigure = openRuntimeSettings != null),
@@ -136,7 +157,7 @@ internal fun compatibilityTabDescriptor(
         priority = TabPriority.Medium,
         predefinedFilters = if (warningCount > 0) {
             // Pre-selected, because the reason to open this tab is usually the badge warning.
-            listOf(PredefinedFilter("Unsupported only") { index -> proposals[index].hasWarning })
+            listOf(PredefinedFilter("Unsupported only") { index -> rows[index].hasWarning })
         } else {
             emptyList()
         },
@@ -210,6 +231,15 @@ private fun prologue(runtimeLabels: List<String>, warningCount: Int, canConfigur
             "$warningCount proposals this module uses are not supported by a configured runtime." +
                 whereTargetsLive
     }
+}
+
+/**
+ * Tooltip for the collapsed cell. Keeps the per-runtime lines the row no longer shows, and
+ * any upstream note — a note on an otherwise-empty cell usually explains why it is empty.
+ */
+private fun noDataTooltip(entry: ProposalCompatibility): String = buildString {
+    append("The feature table records nothing about this proposal for:")
+    entry.statuses.forEach { append('\n').append(it.note ?: it.describe) }
 }
 
 private fun proposalTooltip(entry: ProposalCompatibility): String = buildString {

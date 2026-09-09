@@ -42,8 +42,13 @@ class WasmRuntimeCompatibilityTest {
                 },
                 "Bystander": {
                   "url": "https://example.invalid",
-                  "category": "Tools",
+                  "category": "Embedded Runtimes",
                   "features": { "gc": "3.0", "tailCall": true }
+                },
+                "Toolish": {
+                  "url": "https://example.invalid",
+                  "category": "Tools",
+                  "features": { "gc": true, "tailCall": true }
                 }
               }
             }
@@ -220,11 +225,30 @@ class WasmRuntimeCompatibilityTest {
     // --- Supported in: where a proposal runs, independent of the version targeted ---
 
     /**
-     * Always the whole catalog, in catalog order. The table is what narrows it — declaring a
-     * target must not hide the runtimes that are not being targeted.
+     * A toolchain entry is not a place a module runs, so it is skipped — upstream keeping it
+     * in the same object as the browsers is a detail of the file format.
      */
     @Test
-    fun `supported-in is the whole catalog whether or not targets are declared`() {
+    fun `supported-in leaves out the tools`() {
+        val evaluated = WasmRuntimeCompatibility(catalog, RuntimeTargets.EMPTY)
+            .evaluate(WasmProposal.TailCall)
+
+        assertFalse(
+            evaluated.supportedIn.any { it.runtime == "Toolish" },
+            "expected the tool omitted, got ${evaluated.supportedInLabel}",
+        )
+        assertFalse(
+            evaluated.otherRuntimes.any { it.runtime == "Toolish" },
+            "expected the tool omitted, got ${evaluated.otherRuntimesLabel}",
+        )
+    }
+
+    /**
+     * Always every runtime in the catalog, in catalog order. The table is what narrows it —
+     * declaring a target must not hide the runtimes that are not being targeted.
+     */
+    @Test
+    fun `supported-in is every catalog runtime whether or not targets are declared`() {
         val undeclared = WasmRuntimeCompatibility(catalog, RuntimeTargets.EMPTY)
             .evaluate(WasmProposal.GarbageCollection)
         assertEquals(listOf("Versioned", "Absolute", "Bystander"), undeclared.supportedIn.map { it.runtime })
@@ -355,6 +379,29 @@ class WasmRuntimeCompatibilityTest {
             listOf("Versioned", "Bystander"),
             subject.evaluate(WasmProposal.GarbageCollection).otherRuntimes.map { it.runtime },
         )
+    }
+
+    // --- rows the upstream table is silent about ---
+
+    @Test
+    fun `a proposal with only unknown verdicts reports no data`() {
+        val result = compatibility(RuntimeTarget("Versioned", "137")).evaluate(WasmProposal.Threads)
+        assertTrue(result.hasNoData)
+    }
+
+    @Test
+    fun `one usable verdict among the unknowns is enough to carry the row`() {
+        val result = compatibility(RuntimeTarget("Versioned", "137"), RuntimeTarget("Absolute"))
+            .evaluate(WasmProposal.Threads)
+        assertFalse(result.hasNoData, "Absolute records a flag for threads")
+    }
+
+    /** Nothing declared means no verdicts to be silent, so the row is not a no-data one. */
+    @Test
+    fun `no declared targets is not reported as no data`() {
+        val result = WasmRuntimeCompatibility(catalog, RuntimeTargets.EMPTY)
+            .evaluate(WasmProposal.Threads)
+        assertFalse(result.hasNoData)
     }
 
     private fun single(target: RuntimeTarget, proposal: WasmProposal): ProposalRuntimeStatus =

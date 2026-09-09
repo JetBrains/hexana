@@ -35,7 +35,8 @@ class CompatibilityTabTest {
               "browsers": {
                 "Chrome":   { "url": "https://example.invalid", "category": "Web Browsers",        "features": { "gc": "119", "tailCall": "112" } },
                 "Wasmtime": { "url": "https://example.invalid", "category": "Standalone Runtimes", "features": { "gc": true, "tailCall": true } },
-                "Bystander": { "url": "https://example.invalid", "category": "Tools",              "features": { "gc": "3.0", "tailCall": true } }
+                "Bystander": { "url": "https://example.invalid", "category": "Embedded Runtimes",  "features": { "gc": "3.0", "tailCall": true } },
+                "Toolish":   { "url": "https://example.invalid", "category": "Tools",              "features": { "gc": true, "tailCall": true } }
               }
             }
             """.trimIndent()
@@ -81,6 +82,89 @@ class CompatibilityTabTest {
         // Rows follow WasmProposal declaration order: TailCall precedes GarbageCollection.
         assertEquals("No (since 112)", tab.cellText(0, runtimeColumn))
         assertEquals("No (since 119)", tab.cellText(1, runtimeColumn))
+    }
+
+    /**
+     * A toolchain entry is not a place a module runs, so it is skipped even though upstream
+     * files it next to the browsers.
+     */
+    @Test
+    fun `a tool gets neither a column nor a mention among the supporting runtimes`() {
+        val declared = assertNotNull(tab(listOf(RuntimeTarget("Chrome", "100"))))
+        assertTrue(
+            declared.columns.none { it.name == "Toolish" },
+            "expected no tool column, got ${declared.columns.map { it.name }}",
+        )
+        assertTrue(
+            !declared.cellText(0, declared.columns.size - 1).contains("Toolish"),
+            "expected no tool in Other runtimes, got ${declared.cellText(0, declared.columns.size - 1)}",
+        )
+
+        val undeclared = assertNotNull(tab(emptyList()))
+        assertTrue(
+            !undeclared.cellText(0, supportedInColumn).contains("Toolish"),
+            "expected no tool in Supported in, got ${undeclared.cellText(0, supportedInColumn)}",
+        )
+    }
+
+    // --- rows the upstream table is silent about ---
+
+    /**
+     * A row of nothing but `?` says nothing, so it collapses to one label carried by the
+     * first runtime column, and the columns after it stay blank so the row reads as a
+     * single cell spanning them.
+     */
+    @Test
+    fun `a row with no verdict at all collapses to a single no-data cell`() {
+        val tab = assertNotNull(
+            tab(
+                listOf(RuntimeTarget("Chrome", "137"), RuntimeTarget("Wasmtime")),
+                proposals = listOf(WasmProposal.MultiValue, WasmProposal.GarbageCollection),
+            )
+        )
+        // MultiValue sorts first among the proposals but the catalog knows nothing of it,
+        // so it lands below the row that does carry a verdict.
+        assertEquals(WasmProposal.GarbageCollection.displayName, tab.cellText(0, 0))
+        assertEquals(WasmProposal.MultiValue.displayName, tab.cellText(1, 0))
+
+        assertEquals("No data", tab.cellText(1, runtimeColumn))
+        assertEquals("", tab.cellText(1, runtimeColumn + 1))
+        assertNull(tab.cellTooltip(1, runtimeColumn + 1))
+    }
+
+    @Test
+    fun `the collapsed cell keeps the per-runtime lines in its tooltip`() {
+        val tab = assertNotNull(
+            tab(listOf(RuntimeTarget("Chrome", "137")), proposals = listOf(WasmProposal.MultiValue))
+        )
+        assertEquals(
+            "The feature table records nothing about this proposal for:\nChrome 137 — no data",
+            tab.cellTooltip(0, runtimeColumn),
+        )
+    }
+
+    /** With nothing declared there is no `?` to collapse: the row keeps its Supported in cell. */
+    @Test
+    fun `nothing declared leaves every row as it was`() {
+        val tab = assertNotNull(
+            tab(emptyList(), proposals = listOf(WasmProposal.MultiValue, WasmProposal.GarbageCollection))
+        )
+        assertEquals(WasmProposal.MultiValue.displayName, tab.cellText(0, 0))
+        assertEquals("—", tab.cellText(0, supportedInColumn))
+    }
+
+    /** Unknown still does not warn, so a collapsed row must not be caught by the filter. */
+    @Test
+    fun `a collapsed row is not treated as a warning`() {
+        val tab = assertNotNull(
+            tab(
+                listOf(RuntimeTarget("Chrome", "100")),
+                proposals = listOf(WasmProposal.MultiValue, WasmProposal.GarbageCollection),
+            )
+        )
+        assertTrue(tab.cellText(0, 0).startsWith("⚠"), "expected the warning row first")
+        assertTrue(!tab.cellText(1, 0).startsWith("⚠"), "expected no marker on the collapsed row")
+        assertTrue(!tab.predefinedFilters.single().predicate(1))
     }
 
     @Test
@@ -260,9 +344,12 @@ class CompatibilityTabTest {
     fun `the prologue links to the upstream feature table`() {
         val opened = mutableListOf<String>()
         val tab = assertNotNull(tab(listOf(RuntimeTarget("Wasmtime")), openUrl = { opened += it }))
-        val action = tab.prologueActions.first { it.label.startsWith("Data from") }
+        val action = tab.prologueActions.first { it.label.endsWith("webassembly.org/features") }
 
-        assertEquals("Data from webassembly.org/features", action.label)
+        assertEquals(
+            "See the full list of proposals and runtimes at webassembly.org/features",
+            action.label,
+        )
         action.action()
         assertEquals(listOf("https://webassembly.org/features/"), opened)
     }
@@ -271,7 +358,10 @@ class CompatibilityTabTest {
     fun `the settings link comes before the source link`() {
         val tab = assertNotNull(tab(emptyList()))
         assertEquals(
-            listOf("Configure target runtimes…", "Data from webassembly.org/features"),
+            listOf(
+                "Configure target runtimes…",
+                "See the full list of proposals and runtimes at webassembly.org/features",
+            ),
             tab.prologueActions.map { it.label },
         )
     }
@@ -281,7 +371,7 @@ class CompatibilityTabTest {
     fun `a host without a browser hook gets no source link`() {
         val tab = assertNotNull(tab(emptyList(), openUrl = null))
         assertTrue(
-            tab.prologueActions.none { it.label.startsWith("Data from") },
+            tab.prologueActions.none { it.label.endsWith("webassembly.org/features") },
             "expected no source link, got ${tab.prologueActions.map { it.label }}",
         )
     }

@@ -29,3 +29,10 @@ Append one line per write-back: date, page, what changed.
   recorded the general lesson that detectability alone does not justify a proposal.
 - 2026-09-08 — `entities/wasm-runtime-compatibility` — Compatibility prologue now links to
   webassembly.org/features as the data source; `prologueAction` became a list.
+- 2026-09-09 — `entities/wasm-runtime-compatibility` — compatibility is now reported only
+  against browsers and runtimes; `WasmFeatureCatalog.executionRuntimes` drops the catalog's
+  `Tools` entries (including Hexana's own) from the supporting-runtimes columns and the
+  settings runtime list, while `runtimes` stays complete for already-declared targets.
+- 2026-09-09 — `entities/wasm-runtime-compatibility` — a Compatibility row whose every
+  verdict is `?` collapses to one `No data` label and sorts last; recorded that the collapse
+  is faked column-wise because `TableTabDescriptor` has no cell spanning.

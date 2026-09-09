@@ -162,6 +162,42 @@ class WasmFeatureCatalogTest {
         assertEquals(1, chromeGroups.size, "a runtime must appear under exactly one group")
     }
 
+    /**
+     * Compatibility is only ever reported against places a module runs, so the toolchain
+     * entries upstream keeps in the same object are dropped — including Hexana's own.
+     */
+    @Test
+    fun `execution runtimes drop the tools and keep everything else`() {
+        val catalog = WasmFeatureCatalog.bundled
+        val executable = catalog.executionRuntimes.keys
+
+        assertTrue("Chrome" in executable)
+        assertTrue("Wasmtime" in executable)
+        assertTrue("Binaryen" in catalog.runtimes, "expected the catalog itself to keep the tool")
+        assertTrue("Binaryen" !in executable, "expected a tool dropped")
+        assertTrue("Hexana" !in executable, "expected our own tool entry dropped")
+    }
+
+    /** Owi is filed under Tools *and* Standalone Runtimes; being a runtime is what counts. */
+    @Test
+    fun `a runtime that is also a tool is kept and grouped where it runs`() {
+        val catalog = WasmFeatureCatalog.bundled
+        assertTrue("Owi" in catalog.executionRuntimes)
+        assertEquals(
+            listOf("Standalone Runtimes"),
+            catalog.runtimesByCategory().filter { "Owi" in it.second }.map { it.first },
+        )
+    }
+
+    @Test
+    fun `the settings grouping offers no tools group`() {
+        val grouped = WasmFeatureCatalog.bundled.runtimesByCategory()
+        assertTrue(
+            grouped.none { it.first == "Tools" },
+            "expected no tools group, got ${grouped.map { it.first }}",
+        )
+    }
+
     @Test
     fun `known versions are newest first and free of duplicates`() {
         val versions = assertNotNull(WasmFeatureCatalog.bundled.runtime("Chrome")).knownVersions
