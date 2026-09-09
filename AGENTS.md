@@ -46,10 +46,9 @@ All agents — the main session and every subagent it dispatches — MUST treat 
   for `idea-plugin`'s `HexanaToolset.kt` and `mcp/server`'s standalone generated files).
 - `mcp/vscode-server/`: thin VS Code-facing MCP server distribution that launches the standalone runtime as a separate
   process for the VS Code extension.
-- `mcp/packaging/`: thin Claude/Codex wrapper layouts that point at the standalone runtime from `mcp/server/`.
-  The downloads.jetbrains.com publication helper in this folder prepares independent public MCP and split CLI
-  downloads release bundles and indexes from already verified native ZIP artifacts; it does not build or mutate
-  packaging layouts.
+- `mcp/packaging/`: thin wrapper layouts that point at the standalone runtime from `mcp/server/`.
+- `cli/packaging/`: owns the public CLI downloads release bundle, immutable per-version ledger, and releases index
+  from already verified native CLI ZIP artifacts; it does not build or mutate CLI application layouts.
 - `wasmParser/`: Kotlin Multiplatform parser for core Wasm and component-model binaries.
 - `parsing/`: parent folder for native binary parsing modules.
 - `parsing/common/`: shared native parser primitives such as byte ranges, native word size/endian metadata, checked binary reading, parse diagnostics, unresolved records, and format detection.

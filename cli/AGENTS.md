@@ -22,6 +22,8 @@ This folder contains neutral CLI modules shared by current and future command-li
   script product executor.
 - `integration-tests/`: test-only external-process support shared by product suites. Keep production metadata out of
   it; product behavior contracts belong in each installed product module and process cleanup stays behind its runner.
+- `packaging/`: CLI-only public-download release assembly and publication. It accepts the verified four-native-ZIP,
+  two-identity aggregate and owns its immutable version ledger and release index.
 
 ## Verification
 
