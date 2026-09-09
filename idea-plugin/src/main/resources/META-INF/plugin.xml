@@ -382,6 +382,15 @@
 
     </extensions>
 
+    <applicationListeners>
+        <!-- Delivers queued PostHog events before the IDE exits. PostHog's own
+             close() does not flush, and with flushAt=20 a normal session never
+             reaches the batch threshold, so without this the events from the
+             last <=30s of every session are dropped. Bounded to 2s. -->
+        <listener class="org.jetbrains.hexana.analytics.HexanaAnalyticsLifecycleListener"
+                  topic="com.intellij.ide.AppLifecycleListener"/>
+    </applicationListeners>
+
     <actions>
         <!--
             All Hexana actions are gathered under a single "Hexana" submenu, defined inline so

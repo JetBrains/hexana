@@ -35,11 +35,19 @@
 
 ### 10.8 Analytics opt-out
 **Steps:** Uncheck "Send anonymous usage analytics". Perform various actions (open files, switch tabs).
-**Expected:** No analytics events are sent. (Verify via network monitor or log.)
+**Expected:** No analytics events are sent. (Verify via network monitor or log.) The opt-out takes effect immediately — no IDE restart needed.
 
 ### 10.9 Analytics opt-in
 **Steps:** Check "Send anonymous usage analytics". Perform actions.
-**Expected:** PostHog events are sent with `ide_type`, `ide_build`, and `distinct_id` properties.
+**Expected:** PostHog events are sent with `surface`, `ide_type`, `ide_build`, `plugin_version`, and `distinct_id` properties. `plugin_version` is the Hexana plugin's version, not the IDE's. Re-enabling works without an IDE restart.
+
+### 10.9a Analytics opt-out leaves no client running
+**Steps:** Uncheck "Send anonymous usage analytics", restart the IDE, and take a thread dump (Help | Diagnostic Tools | Analyze Threads, or `jstack`).
+**Expected:** No PostHog flush timer thread exists — with analytics off the SDK is never allocated.
+
+### 10.9b Events survive an immediate quit
+**Steps:** With analytics enabled, start the IDE, open exactly one binary, and quit within a few seconds (well under the 30s flush interval).
+**Expected:** The `binary_opened` event still reaches PostHog — the IDE flushes on exit rather than dropping the queue. Quitting is not visibly delayed (the flush is capped at 2s).
 
 ### 10.10 Settings persistence
 **Steps:** Change settings. Close and reopen the IDE.

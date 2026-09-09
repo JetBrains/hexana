@@ -27,17 +27,29 @@ private fun Double.safeToLong(): Long =
  * Cursor or Windsurf report their own name.
  *
  * [appVersion] is the editor version string (e.g. `vscode.version`).
+ *
+ * [pluginVersion] is the Hexana extension's own version (e.g.
+ * `context.extension.packageJSON.version`) — distinct from [appVersion], which
+ * is the host editor's. Without it, events cannot be segmented by release, so
+ * a shift in the numbers cannot be told apart from a shift in user behaviour.
  */
 @JsExport
-fun initAnalytics(storagePath: String, telemetryEnabled: Boolean, appName: String, appVersion: String) {
+fun initAnalytics(
+    storagePath: String,
+    telemetryEnabled: Boolean,
+    appName: String,
+    appVersion: String,
+    pluginVersion: String,
+) {
     HexanaAnalytics.initialize(
         config = AnalyticsConfig(),
         consentProvider = ConsentProvider { telemetryEnabled },
         distinctIdProvider = NodeDistinctIdProvider(storagePath),
         globalProperties = mapOf(
-            "surface" to "vscode_extension",
+            "surface" to HexanaEvent.Surface.VSCODE_EXTENSION.value,
             "ide_type" to appName,
-            "ide_build" to appVersion
+            "ide_build" to appVersion,
+            "plugin_version" to pluginVersion
         )
     )
 }

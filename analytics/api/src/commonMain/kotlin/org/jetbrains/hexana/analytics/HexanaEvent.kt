@@ -136,7 +136,7 @@ sealed class HexanaEvent {
         override val properties = mapOf(
             "product_id" to productId,
             "command_name" to commandName,
-            "surface" to "cli",
+            "surface" to Surface.CLI.value,
         )
     }
 
@@ -187,6 +187,7 @@ sealed class HexanaEvent {
         VSCODE_EXTENSION("vscode_extension"),
         MCP_SERVER("mcp_server"),
         WEBAPP("webapp"),
+        CLI("cli"),
     }
 
     enum class McpTransport(val value: String) {

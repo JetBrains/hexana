@@ -75,6 +75,12 @@ internal class HexanaIdeConfiguration internal constructor() {
         patchContext { context -> HexanaUiDriverTestSupport.configureSendAnalytics(context, enabled) }
     }
 
+    /** Like [analytics], but with production flush settings. See `configurePostHogWithProductionFlush`. */
+    fun analyticsWithProductionFlush(server: FakePostHogServer, enabled: Boolean) {
+        patchContext { context -> HexanaUiDriverTestSupport.configurePostHogWithProductionFlush(context, server) }
+        patchContext { context -> HexanaUiDriverTestSupport.configureSendAnalytics(context, enabled) }
+    }
+
     fun showWhatsNewOnNewVersion(enabled: Boolean) {
         patchContext { context -> HexanaUiDriverTestSupport.configureShowWhatsNewOnNewVersion(context, enabled) }
     }

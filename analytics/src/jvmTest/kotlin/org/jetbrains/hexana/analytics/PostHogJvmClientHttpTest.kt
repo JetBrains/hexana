@@ -2,7 +2,10 @@ package org.jetbrains.hexana.analytics
 
 import org.jetbrains.hexana.analytics.testing.FakePostHogServer
 import java.time.Duration
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class PostHogJvmClientHttpTest {
     @Test
@@ -153,6 +156,66 @@ class PostHogJvmClientHttpTest {
                 } finally {
                     client.shutdown()
                 }
+            }
+        }
+    }
+
+    @Test
+    fun sdkIsNotAllocatedUntilAConsentedCaptureHappens() {
+        FakePostHogServer.start().use { server ->
+            val consentAllowed = AtomicBoolean(false)
+            val client = PostHogJvmClient(
+                config = AnalyticsConfig(
+                    apiKey = "test-key",
+                    host = server.url,
+                    flushAt = 1,
+                    flushIntervalMs = 1_000,
+                ),
+                consentProvider = ConsentProvider { consentAllowed.get() },
+                distinctIdProvider = DistinctIdProvider { TEST_DISTINCT_ID },
+                globalProperties = emptyMap(),
+            )
+            try {
+                assertFalse(
+                    client.hasSdkClient(),
+                    "Constructing the client must not allocate the PostHog SDK",
+                )
+
+                client.capture(HexanaEvent.WatViewActivated(HexanaEvent.Surface.IDE_PLUGIN))
+                client.flush()
+
+                server.assertNoRequests()
+                assertFalse(
+                    client.hasSdkClient(),
+                    "A capture refused by consent must not allocate the PostHog SDK",
+                )
+
+                // Turning consent on has to start working on its own: nothing
+                // re-initializes the client when the user flips the setting.
+                consentAllowed.set(true)
+                client.capture(HexanaEvent.WatViewActivated(HexanaEvent.Surface.IDE_PLUGIN))
+
+                server.awaitEvent("wat_view_activated").requireDistinctId(TEST_DISTINCT_ID)
+                assertTrue(client.hasSdkClient())
+            } finally {
+                client.shutdown()
+            }
+        }
+    }
+
+    @Test
+    fun flushOnANeverConsentedClientIsANoOp() {
+        FakePostHogServer.start().use { server ->
+            val client = newClient(server, consentAllowed = false)
+            try {
+                // The IDE shutdown path flushes unconditionally; for an
+                // opted-out user that must not build an SDK or hit the network.
+                client.flush()
+
+                server.assertNoRequests()
+                assertFalse(client.hasSdkClient())
+            } finally {
+                client.shutdown()
             }
         }
     }

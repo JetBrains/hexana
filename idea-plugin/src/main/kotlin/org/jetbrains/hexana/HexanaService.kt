@@ -2,7 +2,8 @@ package org.jetbrains.hexana
 
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.util.ExecUtil
-import com.intellij.openapi.application.ApplicationInfo
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
@@ -21,37 +22,28 @@ import java.io.FileInputStream
 @Service
 class HexanaService(
     val coroutineScope : CoroutineScope,
-) {
+) : Disposable {
     private val analyticsInitialization = MutableStateFlow<AnalyticsInitializationState>(
         AnalyticsInitializationState.Pending
     )
 
     init {
         coroutineScope.launch(Dispatchers.IO) {
-            try {
-                val appInfo = ApplicationInfo.getInstance()
-                HexanaAnalytics.initialize(
-                    config = AnalyticsConfig(),
-                    consentProvider = IntellijConsentProvider(),
-                    distinctIdProvider = UuidDistinctIdProvider(),
-                    globalProperties = mapOf(
-                        "ide_type" to appInfo.versionName,
-                        "ide_build" to appInfo.build.asString()
-                    )
-                )
-                analyticsInitialization.value = AnalyticsInitializationState.Ready
-            } catch (error: Throwable) {
-                analyticsInitialization.value = AnalyticsInitializationState.Failed
-                if (error is CancellationException) {
-                    throw error
-                }
-                if (error is VirtualMachineError || error is LinkageError) {
-                    throw error
-                }
-                HexanaLog.LOG.warn("Failed to initialize Hexana analytics", error)
-            }
+            initializeAnalytics()
         }
+        subscribeToAnalyticsConsentChanges()
     }
+
+    /**
+     * Exists so this service can act as the parent disposable for the settings
+     * message-bus connection.
+     *
+     * Deliberately does not flush: dispose can run on the EDT under a write
+     * action, and the flush is a blocking network call. IDE exit — the case
+     * that actually loses events — is handled before this, by
+     * [org.jetbrains.hexana.analytics.HexanaAnalyticsLifecycleListener].
+     */
+    override fun dispose() = Unit
 
     companion object {
         @JvmStatic
@@ -65,6 +57,59 @@ class HexanaService(
     sealed interface WatConversionResult {
         class Success(val wat: String, val warning: String? = null) : WatConversionResult
         class Error(val error: String) : WatConversionResult
+    }
+
+    /**
+     * Rebuilds the analytics client when the user flips the opt-out.
+     *
+     * Turning analytics off has to take effect at once, so the live client is
+     * flushed — delivering only what the user had consented to at capture time
+     * — and then torn down. Turning it back on is free: [PostHogJvmClient] only
+     * allocates the SDK on the first capture that consent allows. This mirrors
+     * `reinitAnalytics()` in the VS Code extension.
+     */
+    private fun subscribeToAnalyticsConsentChanges() {
+        ApplicationManager.getApplication().messageBus.connect(this).subscribe(
+            HexanaSettings.TOPIC,
+            object : HexanaSettingsListener {
+                override fun sendAnalyticsChanged(enabled: Boolean) {
+                    // Set synchronously, while still inside syncPublisher, so
+                    // that by the time the setter returns the service is
+                    // already known to be re-initializing. Doing it inside the
+                    // coroutine instead would leave a window where the stale
+                    // Ready state is observable and captures race the rebuild.
+                    analyticsInitialization.value = AnalyticsInitializationState.Pending
+                    coroutineScope.launch(Dispatchers.IO) {
+                        // Ordered, not concurrent: the old client has to be
+                        // fully retired before the replacement is installed,
+                        // or the retiring thread would reset the new one.
+                        flushAndShutdownAnalytics()
+                        initializeAnalytics()
+                    }
+                }
+            },
+        )
+    }
+
+    private fun initializeAnalytics() {
+        try {
+            HexanaAnalytics.initialize(
+                config = AnalyticsConfig(),
+                consentProvider = IntellijConsentProvider(),
+                distinctIdProvider = UuidDistinctIdProvider(),
+                globalProperties = ideAnalyticsGlobalProperties(),
+            )
+            analyticsInitialization.value = AnalyticsInitializationState.Ready
+        } catch (error: Throwable) {
+            analyticsInitialization.value = AnalyticsInitializationState.Failed
+            if (error is CancellationException) {
+                throw error
+            }
+            if (error is VirtualMachineError || error is LinkageError) {
+                throw error
+            }
+            HexanaLog.LOG.warn("Failed to initialize Hexana analytics", error)
+        }
     }
 
     fun captureAnalytics(event: HexanaEvent): Job = coroutineScope.launch(Dispatchers.IO) {

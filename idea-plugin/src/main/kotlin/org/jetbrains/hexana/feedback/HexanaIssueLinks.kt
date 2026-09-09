@@ -1,9 +1,8 @@
 package org.jetbrains.hexana.feedback
 
-import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.application.ApplicationInfo
-import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.util.SystemInfo
+import org.jetbrains.hexana.HexanaPluginInfo
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.BinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
@@ -15,7 +14,6 @@ import kotlin.math.ln
 import kotlin.math.pow
 
 internal object HexanaIssueLinks {
-    private const val PluginIdValue = "org.jetbrains.hexana"
     private const val NewIssueUrl = "https://github.com/JetBrains/hexana/issues/new"
 
     fun bugReportUrl(binaryProvider: BinaryProvider, isDarkTheme: Boolean): String = buildIssueUrl(
@@ -65,7 +63,7 @@ internal object HexanaIssueLinks {
 
     private fun feedbackContext(binaryProvider: BinaryProvider, isDarkTheme: Boolean): String {
         val appInfo = ApplicationInfo.getInstance()
-        val pluginVersion = PluginManagerCore.getPlugin(PluginId.getId(PluginIdValue))?.version ?: "unknown"
+        val pluginVersion = HexanaPluginInfo.version
 
         return listOf(
             "- IDE: ${appInfo.versionName} ${appInfo.fullVersion}",

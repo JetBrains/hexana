@@ -30,6 +30,7 @@ class VscodeAnalyticsTest {
                     telemetryEnabled = true,
                     appName = "Visual Studio Code",
                     appVersion = "1.102.0",
+                    pluginVersion = "9.9.9",
                 )
 
                 captureBinaryOpened("enabled.wasm", wasmHeader)
@@ -61,6 +62,7 @@ class VscodeAnalyticsTest {
                     telemetryEnabled = true,
                     appName = "Visual Studio Code",
                     appVersion = "1.102.0",
+                    pluginVersion = "9.9.9",
                 )
 
                 // A GGUF model named `.bin`: the container format falls
@@ -94,6 +96,7 @@ class VscodeAnalyticsTest {
                     telemetryEnabled = true,
                     appName = "Visual Studio Code",
                     appVersion = "1.102.0",
+                    pluginVersion = "9.9.9",
                 )
 
                 // One file per newly-supported container magic. Each name has an
@@ -137,6 +140,7 @@ class VscodeAnalyticsTest {
                     telemetryEnabled = false,
                     appName = "Visual Studio Code",
                     appVersion = "1.102.0",
+                    pluginVersion = "9.9.9",
                 )
 
                 captureBinaryOpened("disabled.wasm", wasmHeader)
@@ -158,13 +162,13 @@ class VscodeAnalyticsTest {
         val storagePath = temporaryStoragePath()
         try {
             withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {
-                initAnalytics(storagePath, telemetryEnabled = false, appName = "Cursor", appVersion = "1.2.3")
+                initAnalytics(storagePath, telemetryEnabled = false, appName = "Cursor", appVersion = "1.2.3", pluginVersion = "9.9.9")
                 captureBinaryOpened("a.wasm", wasmHeader)
                 flushAnalytics()
                 server.assertNoRequests()
 
                 shutdownAnalytics()
-                initAnalytics(storagePath, telemetryEnabled = true, appName = "Cursor", appVersion = "1.2.3")
+                initAnalytics(storagePath, telemetryEnabled = true, appName = "Cursor", appVersion = "1.2.3", pluginVersion = "9.9.9")
                 captureBinaryOpened("b.wasm", wasmHeader)
                 flushUntilEvents(server, expectedCount = 1)
 
@@ -174,9 +178,10 @@ class VscodeAnalyticsTest {
                     .assertProperty("surface", "vscode_extension")
                     .assertProperty("ide_type", "Cursor")
                     .assertProperty("ide_build", "1.2.3")
+                    .assertProperty("plugin_version", "9.9.9")
 
                 shutdownAnalytics()
-                initAnalytics(storagePath, telemetryEnabled = true, appName = "Cursor", appVersion = "1.2.3")
+                initAnalytics(storagePath, telemetryEnabled = true, appName = "Cursor", appVersion = "1.2.3", pluginVersion = "9.9.9")
                 captureBinaryOpened("c.wasm", wasmHeader)
                 flushUntilEvents(server, expectedCount = 2)
 

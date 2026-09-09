@@ -1,13 +1,11 @@
 package org.jetbrains.hexana.whatsnew
 
 import com.intellij.icons.AllIcons
-import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
-import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorPolicy
@@ -22,11 +20,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.NonNls
 import org.jetbrains.hexana.HexanaBundle
+import org.jetbrains.hexana.HexanaPluginInfo
 import org.jetbrains.hexana.HexanaSettings
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.Icon
-
-private const val HEXANA_PLUGIN_ID = "org.jetbrains.hexana"
 
 internal class HexanaWhatsNewStartupActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
@@ -87,8 +84,8 @@ internal object HexanaWhatsNewOpener {
 }
 
 internal fun currentHexanaMajorMinorVersion(): String? {
-    val descriptor = PluginManagerCore.getPlugin(PluginId.getId(HEXANA_PLUGIN_ID)) ?: return null
-    return majorMinorVersion(descriptor.version)
+    val version = HexanaPluginInfo.descriptor?.version ?: return null
+    return majorMinorVersion(version)
 }
 
 internal fun shouldShowWhatsNewOnStartup(

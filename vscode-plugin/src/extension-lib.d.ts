@@ -356,7 +356,7 @@ export function shellEscape(arg: string, windows?: boolean): string;
  *   Cursor or Windsurf report their own name here.
  * @param appVersion - Editor version string (`vscode.version`).
  */
-export function initAnalytics(storagePath: string, telemetryEnabled: boolean, appName: string, appVersion: string): void;
+export function initAnalytics(storagePath: string, telemetryEnabled: boolean, appName: string, appVersion: string, pluginVersion: string): void;
 
 /**
  * Captures a `binary_opened` event for a file opened in the custom editor.

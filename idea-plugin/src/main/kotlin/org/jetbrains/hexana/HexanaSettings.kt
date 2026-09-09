@@ -71,7 +71,13 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
     var sendAnalytics: Boolean
         get() = state.sendAnalytics
         set(value) {
+            // Guarded: the settings panel writes bound properties on every
+            // Apply, and each publish rebuilds the analytics client.
+            if (state.sendAnalytics == value) return
             state.sendAnalytics = value
+            ApplicationManager.getApplication().messageBus
+                .syncPublisher(TOPIC)
+                .sendAnalyticsChanged(value)
         }
 
     /** Enables SBOM vulnerability matching against a locally downloaded OSV database. */
@@ -126,6 +132,9 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
 interface HexanaSettingsListener {
     fun feedbackPromptVisibilityChanged(enabled: Boolean) {}
     fun semanticHighlightingChanged(enabled: Boolean) {}
+
+    /** Fired when the analytics opt-out is toggled, so the client can be rebuilt. */
+    fun sendAnalyticsChanged(enabled: Boolean) {}
 }
 
 class HexanaSettingsState : BaseState() {

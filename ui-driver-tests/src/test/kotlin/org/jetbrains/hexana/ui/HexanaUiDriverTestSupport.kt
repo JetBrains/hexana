@@ -78,6 +78,18 @@ internal object HexanaUiDriverTestSupport {
             addSystemProperty(postHogFlushIntervalMsSystemProperty, 1_000)
         }
 
+    /**
+     * Points the IDE at [server] but leaves flushAt and flushInterval at their
+     * production defaults (20 events / 30s). A handful of events then cannot
+     * reach PostHog through either the batch threshold or the timer, so only
+     * the shutdown flush can deliver them — which is what makes the
+     * flush-on-quit regression observable.
+     */
+    fun configurePostHogWithProductionFlush(context: IDETestContext, server: FakePostHogServer): IDETestContext =
+        context.applyVMOptionsPatch {
+            addSystemProperty(postHogHostSystemProperty, server.url)
+        }
+
     fun configureSendAnalytics(context: IDETestContext, enabled: Boolean): IDETestContext {
         val optionsDir = context.paths.configDir.resolve("options").createDirectories()
         optionsDir.resolve("hexana.xml").writeText(

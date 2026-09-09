@@ -65,6 +65,61 @@ class HexanaPluginAnalyticsTest : BasePlatformTestCase() {
         }
     }
 
+    fun testGlobalPropertiesCarrySurfaceAndPluginVersion() {
+        val properties = ideAnalyticsGlobalProperties(pluginVersion = "1.2.3")
+
+        assertEquals("ide_plugin", properties["surface"])
+        assertEquals("1.2.3", properties["plugin_version"])
+        assertTrue("ide_type should be populated", (properties["ide_type"] as String).isNotBlank())
+        assertTrue("ide_build should be populated", (properties["ide_build"] as String).isNotBlank())
+    }
+
+    fun testEventWithoutOwnSurfaceInheritsTheIdeSurface() {
+        FakePostHogServer.start().use { server ->
+            settings.sendAnalytics = true
+            waitForServiceAnalyticsInitialization()
+            initializeAnalytics(server, ideAnalyticsGlobalProperties(pluginVersion = "1.2.3"))
+
+            // wasm_unparsed_opcodes carries no surface of its own; without the
+            // global fallback it would arrive unattributed.
+            HexanaAnalytics.client.capture(
+                HexanaEvent.WasmUnparsedOpcodes(unparsedCount = 2, totalFunctions = 7)
+            )
+
+            server.awaitEvent("wasm_unparsed_opcodes")
+                .assertProperty("surface", "ide_plugin")
+                .assertProperty("plugin_version", "1.2.3")
+                .assertProperty("unparsed_count", 2)
+        }
+    }
+
+    fun testShutdownFlushDeliversEventsBelowTheBatchThreshold() {
+        FakePostHogServer.start().use { server ->
+            settings.sendAnalytics = true
+            waitForServiceAnalyticsInitialization()
+            // Production flush settings: flushAt is 20 and the timer is 30s, so a
+            // lone event can only reach PostHog via the shutdown flush. This is
+            // the regression test for "open IDE, inspect one binary, quit".
+            HexanaAnalytics.initialize(
+                config = AnalyticsConfig(apiKey = "test-key", host = server.url),
+                consentProvider = IntellijConsentProvider(),
+                distinctIdProvider = DistinctIdProvider { TEST_DISTINCT_ID },
+                globalProperties = ideAnalyticsGlobalProperties(),
+            )
+
+            HexanaAnalytics.client.capture(
+                HexanaEvent.HexViewActivated(surface = HexanaEvent.Surface.IDE_PLUGIN)
+            )
+            server.assertNoRequests()
+
+            flushAndShutdownAnalytics()
+
+            server.awaitEvent("hex_view_activated")
+                .requireDistinctId(TEST_DISTINCT_ID)
+                .assertProperty("surface", "ide_plugin")
+        }
+    }
+
     private fun initializeAnalytics(server: FakePostHogServer) {
         HexanaAnalytics.initialize(
             config = AnalyticsConfig(
@@ -79,6 +134,20 @@ class HexanaPluginAnalyticsTest : BasePlatformTestCase() {
                 "ide_type" to "IDEA",
                 "ide_build" to "TEST",
             )
+        )
+    }
+
+    private fun initializeAnalytics(server: FakePostHogServer, globalProperties: Map<String, Any>) {
+        HexanaAnalytics.initialize(
+            config = AnalyticsConfig(
+                apiKey = "test-key",
+                host = server.url,
+                flushAt = 1,
+                flushIntervalMs = 1_000,
+            ),
+            consentProvider = IntellijConsentProvider(),
+            distinctIdProvider = DistinctIdProvider { TEST_DISTINCT_ID },
+            globalProperties = globalProperties,
         )
     }
 

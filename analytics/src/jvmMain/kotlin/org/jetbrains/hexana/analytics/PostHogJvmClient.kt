@@ -2,37 +2,83 @@ package org.jetbrains.hexana.analytics
 
 import com.posthog.server.PostHog
 import com.posthog.server.PostHogConfig
+import com.posthog.server.PostHogInterface
+import java.util.concurrent.atomic.AtomicReference
 
+/**
+ * The underlying PostHog SDK instance is created lazily, on the first capture
+ * that consent actually allows — never at construction time. `PostHog.with`
+ * spins up an executor and a non-daemon `java.util.Timer` that wakes every
+ * `flushIntervalSeconds` for the life of the process, so building it eagerly
+ * costs an always-on thread for users who opted out and would never have sent
+ * anything.
+ *
+ * A consequence worth relying on: flipping consent from denied to allowed needs
+ * no re-initialization, because the next allowed capture creates the client.
+ */
 internal class PostHogJvmClient(
-    config: AnalyticsConfig,
+    private val config: AnalyticsConfig,
     private val consentProvider: ConsentProvider,
     private val distinctIdProvider: DistinctIdProvider,
     private val globalProperties: Map<String, Any>
 ) : AnalyticsClient {
 
-    private val posthog = PostHog.with(
-        PostHogConfig(apiKey = config.apiKey, host = config.resolvedHost()).apply {
-            flushAt = config.resolvedFlushAt()
-            flushIntervalSeconds = config.flushIntervalSeconds()
-        }
-    )
+    private val posthog = AtomicReference<PostHogInterface?>(null)
+    private val creationLock = Any()
 
     override fun capture(event: HexanaEvent) {
         if (!consentProvider.isAnalyticsAllowed()) return
         val mergedProperties = globalProperties + event.properties
-        posthog.capture(
+        postHogOrCreate().capture(
             distinctIdProvider.distinctId(),
             event.name,
             mergedProperties
         )
     }
 
+    /**
+     * Flushes only an already-created client. Must never create one: a flush on
+     * a client that never captured anything would allocate the SDK just to send
+     * an empty batch — and on the IDE shutdown path it would do so for users
+     * who opted out.
+     */
     override fun flush() {
-        posthog.flush()
+        posthog.get()?.flush()
     }
 
+    /**
+     * Note that `close()` does *not* flush — it stops the queue timer and drops
+     * whatever is still queued. Callers that care about pending events must
+     * [flush] first.
+     */
     override fun shutdown() {
-        posthog.close()
+        posthog.getAndSet(null)?.close()
+    }
+
+    /**
+     * Whether the underlying SDK has actually been allocated. Exists so tests
+     * can assert the "nothing is built until a consented capture" contract,
+     * which is otherwise invisible from the outside.
+     */
+    internal fun hasSdkClient(): Boolean = posthog.get() != null
+
+    private fun postHogOrCreate(): PostHogInterface {
+        posthog.get()?.let { return it }
+        synchronized(creationLock) {
+            posthog.get()?.let { return it }
+            val created = PostHog.with(
+                PostHogConfig(apiKey = config.apiKey, host = config.resolvedHost()).apply {
+                    flushAt = config.resolvedFlushAt()
+                    flushIntervalSeconds = config.flushIntervalSeconds()
+                    // Hexana uses neither feature flags nor experiments. Both
+                    // default to true and only add runtime surface for us.
+                    preloadFeatureFlags = false
+                    sendFeatureFlagEvent = false
+                }
+            )
+            posthog.set(created)
+            return created
+        }
     }
 }
 

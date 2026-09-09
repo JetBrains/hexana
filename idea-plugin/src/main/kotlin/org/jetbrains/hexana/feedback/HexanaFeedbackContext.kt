@@ -1,8 +1,6 @@
 package org.jetbrains.hexana.feedback
 
-import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.application.ApplicationInfo
-import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.psi.search.FileTypeIndex
@@ -10,11 +8,12 @@ import com.intellij.psi.search.GlobalSearchScope
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.jetbrains.hexana.HexanaPluginInfo
 import org.jetbrains.hexana.WasmFileType
 
 internal fun createTechnicalContextPreview(project: Project): TechnicalContextPreview {
     val appInfo = ApplicationInfo.getInstance()
-    val pluginVersion = PluginManagerCore.getPlugin(PluginId.getId("org.jetbrains.hexana"))?.version ?: "unknown"
+    val pluginVersion = HexanaPluginInfo.version
     val wasmFileCount = runCatching {
         FileTypeIndex.getFiles(WasmFileType.INSTANCE, GlobalSearchScope.projectScope(project)).size
     }.getOrDefault(0)

@@ -31,13 +31,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // captured during the first file open are not lost.
     if (extensionLib) {
         const storagePath = path.join(context.globalStorageUri.fsPath, "hexana-analytics-id");
-        extensionLib.initAnalytics(storagePath, isHexanaTelemetryEnabled(), vscode.env.appName, vscode.version);
+        // The extension's own version, not vscode.version (which is the host
+        // editor's and feeds ide_build). Same lookup as mcpServerProvider.ts.
+        const pluginVersion = String(context.extension.packageJSON.version ?? "unknown");
+        const initAnalytics = () =>
+            extensionLib.initAnalytics(
+                storagePath,
+                isHexanaTelemetryEnabled(),
+                vscode.env.appName,
+                vscode.version,
+                pluginVersion,
+            );
+        initAnalytics();
 
         const reinitAnalytics = () => {
             // Flush and shut down the previous client before re-initializing
             // so pending events are not lost and connections are released.
             extensionLib.shutdownAnalytics();
-            extensionLib.initAnalytics(storagePath, isHexanaTelemetryEnabled(), vscode.env.appName, vscode.version);
+            initAnalytics();
         };
 
         // Re-evaluate consent when the user toggles VS Code telemetry.
