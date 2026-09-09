@@ -185,7 +185,7 @@ private fun prologueActions(
         )
     }
     openUrl?.let { open ->
-        add(PrologueActionDescriptor("Data from webassembly.org/features") { open(WASM_FEATURES_PAGE_URL) })
+        add(PrologueActionDescriptor("See the full list of proposals and runtimes at webassembly.org/features") { open(WASM_FEATURES_PAGE_URL) })
     }
 }
 
@@ -198,18 +198,16 @@ private fun prologue(runtimeLabels: List<String>, warningCount: Int, canConfigur
     val whereTargetsLive = if (canConfigure) "" else " Targets come from $RUNTIME_TARGETS_PATH."
     return when {
         runtimeLabels.isEmpty() ->
-            "Supported in lists every runtime WebAssembly's feature data knows about. Declaring the " +
-                "ones this project targets narrows it to those and warns when a module uses " +
-                "something they cannot run." +
-                if (canConfigure) "" else " Declare them in $RUNTIME_TARGETS_PATH."
+            "No runtimes specified. Every proposal used by this WASM is shown together with all supported runtimes." +
+                if (canConfigure) "" else " Declare runtimes in $RUNTIME_TARGETS_PATH."
         warningCount == 0 ->
             "Every proposal this module uses is supported by ${runtimeLabels.joinToString(", ")}." +
                 whereTargetsLive
         warningCount == 1 ->
-            "One proposal this module uses is not supported by every configured runtime." +
+            "One proposal this module uses is not supported by a configured runtime." +
                 whereTargetsLive
         else ->
-            "$warningCount proposals this module uses are not supported by every configured runtime." +
+            "$warningCount proposals this module uses are not supported by a configured runtime." +
                 whereTargetsLive
     }
 }
