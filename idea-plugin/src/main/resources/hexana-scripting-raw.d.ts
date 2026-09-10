@@ -1882,6 +1882,7 @@ interface WasmBinaryProvider extends BinaryProvider {
     size: number;
   }[];
   functions: {
+    hasDescriptorClause: boolean;
     offset: number;
     size: number;
   }[];
@@ -3553,6 +3554,7 @@ interface ArscBinaryProvider extends GenericBinaryProvider {
         strings: string[];
       };
       name: string;
+      typeIdOffset: number;
       typeSpecs: {
         entryCount: number;
         typeId: number;
@@ -4683,6 +4685,7 @@ interface ArscFile {
       strings: string[];
     };
     name: string;
+    typeIdOffset: number;
     typeSpecs: {
       entryCount: number;
       typeId: number;
@@ -4756,6 +4759,7 @@ interface ArscFile {
       strings: string[];
     };
     name: string;
+    typeIdOffset: number;
     typeSpecs: {
       entryCount: number;
       typeId: number;
@@ -4820,6 +4824,7 @@ interface ArscFile {
       strings: string[];
     };
     name: string;
+    typeIdOffset: number;
     typeSpecs: {
       entryCount: number;
       typeId: number;
@@ -4880,6 +4885,7 @@ interface ArscFile {
         strings: string[];
       };
       name: string;
+      typeIdOffset: number;
       typeSpecs: {
         entryCount: number;
         typeId: number;
@@ -5039,6 +5045,7 @@ interface ArscPackage {
     strings: string[];
   };
   name: string;
+  typeIdOffset: number;
   typeSpecs: {
     entryCount: number;
     typeId: number;
@@ -5090,12 +5097,7 @@ interface ArscPackage {
   }[];
   component1(): number;
   component2(): string;
-  component3(): {
-    flags: number;
-    isSorted: boolean;
-    isUtf8: boolean;
-    strings: string[];
-  };
+  component3(): number;
   component4(): {
     flags: number;
     isSorted: boolean;
@@ -5103,6 +5105,12 @@ interface ArscPackage {
     strings: string[];
   };
   component5(): {
+    flags: number;
+    isSorted: boolean;
+    isUtf8: boolean;
+    strings: string[];
+  };
+  component6(): {
     configuration: {
       country: string;
       density: number;
@@ -5140,12 +5148,12 @@ interface ArscPackage {
     typeId: number;
     typeName: string;
   }[];
-  component6(): {
+  component7(): {
     entryCount: number;
     typeId: number;
     typeName: string;
   }[];
-  copy(id: number, name: string, typeStrings: {
+  copy(id: number, name: string, typeIdOffset: number, typeStrings: {
     flags: number;
     isSorted: boolean;
     isUtf8: boolean;
@@ -5205,6 +5213,7 @@ interface ArscPackage {
       strings: string[];
     };
     name: string;
+    typeIdOffset: number;
     typeSpecs: {
       entryCount: number;
       typeId: number;
@@ -14075,6 +14084,7 @@ interface WasmTagsNameSection {
 }
 
 interface WasmTypeRecord {
+  hasDescriptorClause: boolean;
   offset: number;
   size: number;
 }
