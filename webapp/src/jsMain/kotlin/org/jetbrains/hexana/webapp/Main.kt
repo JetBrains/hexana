@@ -190,7 +190,7 @@ internal fun WebAppRoot(
                         },
                     )
                 } else {
-                    val extraTabs = remember(provider) { computeExtraTabs(provider.bytes.duplicate().position(0)) }
+                    val extraTabs = remember(provider) { computeExtraTabs(provider.bytes.duplicate().position(0), provider) }
 
                     val parentFileName = navStack.lastOrNull()?.fileName
 
@@ -292,7 +292,7 @@ internal fun WorkerBackedWasmContent(
         )
         return
     }
-    val extraTabs = remember(provider) { computeExtraTabs(provider.bytes.duplicate().position(0)) }
+    val extraTabs = remember(provider) { computeExtraTabs(provider.bytes.duplicate().position(0), provider) }
     BinaryEditorContent(
         fileName = fileName,
         parentFileName = parentFileName,

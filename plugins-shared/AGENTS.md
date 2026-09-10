@@ -23,6 +23,12 @@ The module provides:
 - **Native table tabs** (`NativeTableTabs.kt`, `NativeTableTabFormatting.kt`) — `TableTabsProvider` implementation and shared formatting helpers for ELF (Headers/Sections/Segments/Symbols/Functions/Relocations/Imports/Exports/Strings), Mach-O (Headers/Load Commands/Segments/Sections/Symbols/Dynamic Symbols/Dylibs/Relocations/Strings), Fat Mach-O (Universal/Slices), PE (Headers/Sections/Imports/Exports/Relocations/Debug/Symbols/Strings), COFF (Symbols/Strings), and archive (Strings) structure tabs.
 - **LLDB output parsing** (`LldbOutputParser.kt`) — pure parsers for LLDB stop events, expression results, frame locations, function names, and WAMR debug support detection; used by both `idea-plugin` and `vscode-plugin:extension-lib`.
 - **DWARF path matching** (`DwarfPathMatcher.kt`) — platform-agnostic utilities for matching DWARF debug-info file paths against IDE/editor breakpoint paths, compilation-unit path heuristics, crate name extraction, and CU hash suffix stripping; used by both `idea-plugin` and `vscode-plugin:extension-lib`.
+- **DWARF outline** (`DwarfOutline.kt`) — the row model behind the `.debug_abbrev`, `.debug_info` and
+  `.debug_line` editor tabs: `DwarfOutlineNode` (stable path-derived id, label, hex byte range, deferred
+  children), `dwarfOutlineSections` (a cheap section probe that parses nothing, so naming a tab is free),
+  the three per-section builders, and `dwarfSearchIndex` for whole-tree find-and-jump. The label strings are
+  the contract — both the IntelliJ Jewel tree and the VS Code virtualized tree render exactly these, and
+  `DwarfOutlineTest` pins them. Children providers are pure and un-memoized; hosts cache.
 - **CDP source location resolver** (`CdpSourceLocationResolver.kt`) — platform-agnostic DWARF-based source file + line ↔ Wasm byte offset resolver for CDP debug adapters; used by both `idea-plugin` and `vscode-plugin` to translate breakpoint positions and stack frame locations.
 - **Runtime compatibility** (`features/`) — the WebAssembly feature catalog and the runtime
   compatibility model. `WasmFeatureCatalog.kt` parses WebAssembly's `features.json` (the

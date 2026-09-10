@@ -36,3 +36,7 @@ Append one line per write-back: date, page, what changed.
 - 2026-09-09 — `entities/wasm-runtime-compatibility` — a Compatibility row whose every
   verdict is `?` collapses to one `No data` label and sorts last; recorded that the collapse
   is faked column-wise because `TableTabDescriptor` has no cell spanning.
+- 2026-09-10 — `entities/dwarf-outline-model` — extracted the DWARF tab row model into
+  `plugins-shared` so the VS Code webview could render the same tabs as IntelliJ; recorded the
+  un-memoized-children contract, the `groupPanels` naming rule, and three known gaps (eager
+  `.debug_info`, per-byte JS buffer allocation, the webapp worker route).

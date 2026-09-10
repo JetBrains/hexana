@@ -3,6 +3,7 @@ package org.jetbrains.hexana.vscode
 import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
+import org.w3c.dom.HTMLElement
 import org.w3c.dom.events.Event
 import kotlin.math.max
 import kotlin.math.min
@@ -16,6 +17,8 @@ import kotlin.math.min
  * @param itemCount total number of items in the list.
  * @param itemHeightPx fixed height of each item in pixels.
  * @param overscan number of extra items to render above/below the viewport.
+ * @param revealIndex when non-null, scrolls this row into view; re-scrolls whenever the value
+ *   changes. Rows already on screen are left alone, so find-next does not jerk the viewport.
  * @param content composable that renders a single item at the given index.
  */
 @Composable
@@ -23,6 +26,7 @@ internal fun VirtualizedList(
     itemCount: Int,
     itemHeightPx: Int,
     overscan: Int = 5,
+    revealIndex: Int? = null,
     content: @Composable (index: Int) -> Unit,
 ) {
     val totalHeight = itemCount.toLong() * itemHeightPx
@@ -30,6 +34,21 @@ internal fun VirtualizedList(
     // Default to a reasonable viewport so the first paint shows rows even
     // before the browser has laid out the container.
     var viewportHeight by remember { mutableStateOf(600.0) }
+    // Held so reveal requests can drive the scroll position; the scroll offset itself lives on the
+    // DOM element, not in Compose state.
+    var container by remember { mutableStateOf<HTMLElement?>(null) }
+
+    LaunchedEffect(revealIndex, itemHeightPx) {
+        val target = revealIndex ?: return@LaunchedEffect
+        val element = container ?: return@LaunchedEffect
+        val top = target.toLong() * itemHeightPx
+        val height = element.clientHeight.toDouble().takeIf { it > 0 } ?: viewportHeight
+        val alreadyVisible = top >= element.scrollTop && top + itemHeightPx <= element.scrollTop + height
+        if (!alreadyVisible) {
+            // A third of the way down reads better than flush to the top.
+            element.scrollTop = max(0.0, top - height / 3)
+        }
+    }
 
     Div({
         style {
@@ -39,6 +58,7 @@ internal fun VirtualizedList(
             position(Position.Relative)
         }
         ref { element ->
+            container = element
             // Measure once the element is attached to the DOM.
             val measured = element.clientHeight.toDouble()
             if (measured > 0) viewportHeight = measured
@@ -58,6 +78,7 @@ internal fun VirtualizedList(
             }
 
             onDispose {
+                container = null
                 element.removeEventListener("scroll", scrollListener)
                 kotlinx.browser.window.cancelAnimationFrame(rafId)
             }

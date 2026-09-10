@@ -49,6 +49,17 @@ sealed class Form(val value: UShort) {
     object DW_FORM_addrx8: Form(0x2cu)
     class DW_FORM_Reserved(v: UShort): Form(v)
     class DW_FORM_Unknown(v: UShort): Form(v)
+
+    /**
+     * Mirrors [Attribute.toString]. The hex fallback matters on Kotlin/JS, where `simpleName`
+     * depends on retained class metadata: a minified bundle degrades to `DW_FORM_0xe` rather than
+     * to `Unknown`.
+     */
+    override fun toString(): String = when (this) {
+        is DW_FORM_Reserved -> "DW_FORM_Reserved(0x${value.toString(16)})"
+        is DW_FORM_Unknown -> "DW_FORM_Unknown(0x${value.toString(16)})"
+        else -> this::class.simpleName ?: "DW_FORM_0x${value.toString(16)}"
+    }
 }
 
 fun findForm(v: UShort): Form? = when(v) {

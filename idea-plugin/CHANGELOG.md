@@ -20,6 +20,7 @@
 ### Removed
 
 ### Fixed
+- Rows in the `.debug_line` tab select their bytes in the hex view when clicked; the click handler matched on DIE types that tree never contains, so nothing in it was navigable
 
 ### Security
 - Script tabs now run sandboxed. Up to and including 0.18 the script tab built its own GraalJS context with full host access and host class lookup enabled, so a `.js` file added as a script tab could call arbitrary Java; script tabs now use the same sandbox as the `run-script` CLI and the MCP tool — no host class lookup, no file IO, no process or thread creation, no native access, a timeout, and bounded output

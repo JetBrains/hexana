@@ -95,7 +95,8 @@ class NativeDiffPayload(
  *
  * [provider] is optional but worth passing: for a DEX it is a
  * [DexBinaryProvider] that has already parsed the file, so handing it over
- * avoids decoding the string table a second time.
+ * avoids decoding the string table a second time. The DWARF tabs need it outright - they read
+ * custom sections off an already-parsed wasm module and are skipped without one.
  */
 fun computeExtraTabs(
     buffer: org.jetbrains.hexana.io.CommonByteBuffer,
@@ -118,7 +119,7 @@ fun computeExtraTabs(
             }
         return if (dex != null) dexSmaliExtraTabs(dex, buffer) else emptyList()
     }
-    return emptyList()
+    return dwarfExtraTabs(provider ?: return emptyList())
 }
 
 private const val MIN_PANEL_HEIGHT = 80.0

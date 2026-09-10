@@ -31,7 +31,8 @@ import org.jetbrains.hexana.document.*
 import org.jetbrains.hexana.document.format.ChunkId
 import org.jetbrains.hexana.document.journal.JournalLoadResult
 import org.jetbrains.hexana.document.journal.JournalPersister
-import org.jetbrains.hexana.dwarf.ui.DWARF_GROUP_TAB_NAME
+import org.jetbrains.hexana.dwarf.ui.dwarfOutlineSectionsOf
+import org.jetbrains.hexana.shared.DWARF_GROUP_TAB_NAME
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
@@ -1805,25 +1806,14 @@ private fun BinaryProvider.discoverHardcodedPanelNames(): List<String> = when (t
 }
 
 /**
- * Cheaply discovers which DWARF panels will be available by checking
- * for the presence of custom sections with known DWARF names. Mirrors the grouping
- * [dwarfPanels] applies, so the placeholder tabs match the resolved ones.
+ * Cheaply discovers which DWARF panels will be available. Both the section list and the grouping
+ * rule come from the same places [dwarfPanels] uses, so the placeholder tabs cannot drift from the
+ * resolved ones. Never calls `roots()`, so no section is parsed to name a tab.
  */
-private fun BinaryProvider.discoverDwarfPanelNames(): List<String>? {
-    val module = (this as? WasmBinaryProvider)?.wasmModule
-        ?: (this as? WasmComponentBinaryProvider)?.wasmModule
-        ?: return null
-    val sections = buildList {
-        if (module.getCustomSectionByName(".debug_abbrev") != null) add(".debug_abbrev")
-        if (module.getCustomSectionByName(".debug_info") != null) add(".debug_info")
-        if (module.getCustomSectionByName(".debug_line") != null) add(".debug_line")
-    }
-    return when (sections.size) {
-        0 -> null
-        1 -> sections
-        else -> listOf(DWARF_GROUP_TAB_NAME)
-    }
-}
+private fun BinaryProvider.discoverDwarfPanelNames(): List<String>? =
+    groupPanels(DWARF_GROUP_TAB_NAME, dwarfOutlineSectionsOf(this).map { Panel(it.name) {} })
+        .map { it.description }
+        .ifEmpty { null }
 
 /**
  * A centered loading spinner shown inside tab content while the full

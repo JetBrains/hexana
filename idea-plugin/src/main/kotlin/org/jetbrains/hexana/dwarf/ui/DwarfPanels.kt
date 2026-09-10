@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -15,7 +16,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,30 +36,24 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
 import org.jetbrains.hexana.HexViewStateHolder
-import org.jetbrains.hexana.dwarf.DwarfAbbrevEntry
-import org.jetbrains.hexana.dwarf.DwarfAttribute
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
+import org.jetbrains.hexana.shared.DWARF_GROUP_TAB_NAME
+import org.jetbrains.hexana.shared.DwarfOutlineNode
+import org.jetbrains.hexana.shared.DwarfOutlineSection
+import org.jetbrains.hexana.shared.dwarfOutlineSections
+import org.jetbrains.hexana.shared.dwarfSearchIndex
 import org.jetbrains.hexana.ui.panel.Panel
 import org.jetbrains.hexana.ui.panel.groupPanels
-import org.jetbrains.hexana.wasm.BaseModule
-import org.jetbrains.jewel.foundation.lazy.tree.buildTree
-import org.jetbrains.jewel.foundation.lazy.tree.Tree
-import org.jetbrains.jewel.foundation.lazy.tree.TreeState
-import org.jetbrains.jewel.foundation.lazy.SelectableLazyListState
-import androidx.compose.foundation.lazy.LazyListState
-import org.jetbrains.hexana.dwarf.DebugInformationEntry
-import org.jetbrains.hexana.dwarf.DieField
-import org.jetbrains.hexana.dwarf.DwarfLineUnitHeader
-import org.jetbrains.hexana.dwarf.Form
-import org.jetbrains.hexana.dwarf.LneOpcode
-import org.jetbrains.hexana.dwarf.LnsOpcode
-import org.jetbrains.hexana.dwarf.LnsSpecialOpcode
-import org.jetbrains.hexana.dwarf.StringTableEntry
-import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.ui.panel.scrollHexViewTo
+import org.jetbrains.hexana.wasm.BaseModule
 import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
+import org.jetbrains.jewel.foundation.lazy.SelectableLazyListState
+import org.jetbrains.jewel.foundation.lazy.tree.Tree
 import org.jetbrains.jewel.foundation.lazy.tree.TreeGeneratorScope
+import org.jetbrains.jewel.foundation.lazy.tree.TreeState
+import org.jetbrains.jewel.foundation.lazy.tree.buildTree
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Icon
 import org.jetbrains.jewel.ui.component.IconButton
@@ -70,60 +64,77 @@ import org.jetbrains.jewel.ui.component.VerticalScrollbar
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import org.jetbrains.jewel.ui.theme.searchMatchStyle
 
-/** Name of the parent tab the per-section DWARF tabs are folded into. */
-const val DWARF_GROUP_TAB_NAME = "DWARF"
-
+/**
+ * The DWARF section tabs, folded behind one parent tab.
+ *
+ * Row text, node ids and byte ranges all come from `plugins-shared`'s `DwarfOutline.kt`, which the
+ * VS Code webview renders from too. This file only draws it.
+ */
 fun dwarfPanels(provider: BinaryProvider, state: HexViewStateHolder): List<Panel> =
-    groupPanels(DWARF_GROUP_TAB_NAME, dwarfSectionPanels(provider, state))
+    groupPanels(DWARF_GROUP_TAB_NAME, dwarfOutlineSectionsOf(provider).map { section ->
+        Panel(section.name) { DwarfOutlinePanel(section, state) }
+    })
 
-private fun dwarfSectionPanels(provider: BinaryProvider, state: HexViewStateHolder):List<Panel> {
-    return when (provider) {
-        is WasmBinaryVirtualFileProvider,
-        is WasmBinaryProvider -> {
-            provider.wasmModule?.let { module ->
-                buildList {
-                    WasmDwarfAccessor(module as BaseModule).debugAbbrevSection()?.let {
-                            add(Panel(".debug_abbrev") { DebugAbbrevPanel(provider, state) })
-                    }
-                    WasmDwarfAccessor(module as BaseModule).debugInfoSection()?.let {
-                        add(Panel(".debug_info") { DebugInfoPanel(provider, state) })
-                    }
-                    WasmDwarfAccessor(module as BaseModule).debugLineSection()?.let {
-                        add(Panel(".debug_line") { DebugLinePanel(provider, state) })
-                    }
-                }
-            } ?: emptyList()
-        }
-        else -> emptyList()
+/**
+ * The DWARF sections this provider has an outline for. Cheap - it probes for section presence and
+ * never reads section content, which matters because tab-name discovery calls it too.
+ */
+internal fun dwarfOutlineSectionsOf(provider: BinaryProvider): List<DwarfOutlineSection> {
+    val wasmProvider = calculateProvider(provider) ?: return emptyList()
+    val module = wasmProvider.wasmModule as? BaseModule ?: return emptyList()
+    return dwarfOutlineSections(WasmDwarfAccessor(module), wasmProvider.bytes)
+}
+
+@Composable
+private fun DwarfOutlinePanel(section: DwarfOutlineSection, state: HexViewStateHolder) {
+    val roots = remember(section) { section.roots() }
+    if (roots.isEmpty()) {
+        Text("No entries", modifier = Modifier.padding(2.dp))
+        return
+    }
+
+    val tree = remember(roots) { buildTree { roots.forEach { addDwarfNode(it) } } }
+    val treeState = remember(tree) { TreeState(SelectableLazyListState(LazyListState())) }
+
+    DwarfTree(roots = roots, tree = tree, treeState = treeState) { node ->
+        node.offset?.let { state.scrollHexViewTo(it, node.size) }
+    }
+}
+
+private fun TreeGeneratorScope<DwarfOutlineNode>.addDwarfNode(node: DwarfOutlineNode) {
+    // The id is passed explicitly: Jewel defaults it to the child index, which is unique only among
+    // siblings, so a node would collide with its own first child. Shared ancestor lookup and
+    // visibleIndexOf both key on these ids.
+    if (!node.hasChildren) {
+        addLeaf(node, node.id)
+    } else {
+        addNode(node, node.id) { node.children().forEach { addDwarfNode(it) } }
     }
 }
 
 /**
  * Shared shell for the DWARF trees: a find-and-jump search bar over the whole tree plus a vertical
- * scrollbar. [label] is used both for the row content and as the search haystack, so what the user
- * sees is exactly what they can search for.
+ * scrollbar.
  */
 @Composable
 private fun DwarfTree(
-    tree: Tree<Any>,
+    roots: List<DwarfOutlineNode>,
+    tree: Tree<DwarfOutlineNode>,
     treeState: TreeState,
-    label: (Any) -> String,
-    onElementClick: (Any) -> Unit = {},
+    onElementClick: (DwarfOutlineNode) -> Unit = {},
 ) {
-    val currentLabel by rememberUpdatedState(label)
     // Searching subnodes means labelling every row, including the ones inside collapsed subtrees,
-    // which forces Jewel's lazy children generators for the whole tree. That is why the index is
-    // built on first use rather than when the tab opens: a `.debug_line` program is only parsed if
-    // someone actually searches it. The build runs on the UI thread on purpose — a background build
-    // would race LazyTree over the same lazily-evaluated `children` fields.
-    val searchIndex = remember(tree) { lazy { buildSearchIndex(tree) { currentLabel(it) } } }
+    // which forces the model's lazy children for the whole tree. That is why the index is built on
+    // first use rather than when the tab opens: a `.debug_line` program is only parsed if someone
+    // actually searches it.
+    val searchIndex = remember(roots) { lazy { dwarfSearchIndex(roots) } }
 
     // Held as an explicit State: the derived match list below has to read it from inside its own
     // computation, otherwise it captures the first composition's value and never re-evaluates.
     val queryState = remember(tree) { mutableStateOf(TextFieldValue()) }
     val query = queryState.value.text
     var currentMatch by remember(tree) { mutableIntStateOf(0) }
-    var pendingScrollTo by remember(tree) { mutableStateOf<Any?>(null) }
+    var pendingScrollTo by remember(tree) { mutableStateOf<String?>(null) }
 
     val matches by remember(tree) {
         derivedStateOf {
@@ -179,7 +190,7 @@ private fun DwarfTree(
                 onElementClick = { onElementClick(it.data) },
             ) { element ->
                 Text(
-                    highlightMatches(currentLabel(element.data), query.trim(), matchBackground, matchForeground),
+                    highlightMatches(element.data.label, query.trim(), matchBackground, matchForeground),
                     modifier = Modifier.padding(2.dp),
                     style = TextStyle(fontFamily = FontFamily.Monospace),
                 )
@@ -289,57 +300,19 @@ private fun highlightMatches(text: String, needle: String, background: Color, fo
 }
 
 /**
- * Every row of a tree, collapsed subtrees included, with the parent links needed to reveal a hit.
- * Ids are the ones handed to `addNode`/`addLeaf`, so they address rows in the live tree.
- */
-private class DwarfSearchIndex(
-    private val ids: List<Any>,
-    private val labels: List<String>,
-    private val parents: Map<Any, Any>,
-) {
-    /** Ids of the rows whose label contains [needle], in tree order. */
-    fun idsMatching(needle: String): List<Any> = buildList {
-        for (i in ids.indices) {
-            if (labels[i].contains(needle, ignoreCase = true)) add(ids[i])
-        }
-    }
-
-    fun ancestorsOf(id: Any): List<Any> = generateSequence(parents[id]) { parents[it] }.toList()
-}
-
-private fun buildSearchIndex(tree: Tree<Any>, label: (Any) -> String): DwarfSearchIndex {
-    val ids = ArrayList<Any>()
-    val labels = ArrayList<String>()
-    val parents = HashMap<Any, Any>()
-
-    fun visit(element: Tree.Element<Any>, parentId: Any?) {
-        val id = element.id
-        ids.add(id)
-        labels.add(label(element.data))
-        if (parentId != null) parents[id] = parentId
-        if (element is Tree.Element.Node<Any>) {
-            // `children` stays null until open() runs the generator - reading it is not enough.
-            // Jewel's own walkDepthFirst() would do this, but it drives an insert-at-head queue
-            // that degrades to O(n^2) on wide levels, and a line program is one very wide level.
-            element.open()
-            element.children.orEmpty().forEach { visit(it, id) }
-        }
-    }
-    tree.roots.forEach { visit(it, null) }
-
-    return DwarfSearchIndex(ids, labels, parents)
-}
-
-/**
  * Index of [targetId] in the row list LazyTree renders: depth-first, descending only into open
  * nodes. Mirrors Jewel's own flattening, which is private.
  */
-private fun visibleIndexOf(tree: Tree<Any>, openNodes: Set<Any>, targetId: Any): Int {
+private fun visibleIndexOf(
+    tree: Tree<DwarfOutlineNode>,
+    openNodes: Set<Any>,
+    targetId: String,
+): Int {
     var index = 0
-    fun visit(element: Tree.Element<Any>): Boolean {
+    fun visit(element: Tree.Element<DwarfOutlineNode>): Boolean {
         if (element.id == targetId) return true
         index++
-        if (element is Tree.Element.Node<Any> && element.id in openNodes) {
+        if (element is Tree.Element.Node<DwarfOutlineNode> && element.id in openNodes) {
             for (child in element.children.orEmpty()) {
                 if (visit(child)) return true
             }
@@ -350,251 +323,6 @@ private fun visibleIndexOf(tree: Tree<Any>, openNodes: Set<Any>, targetId: Any):
         if (visit(root)) return index
     }
     return -1
-}
-
-@Composable
-fun DebugAbbrevPanel(provider: BinaryProvider, state: HexViewStateHolder) {
-    val wasmProvider = calculateProvider(provider) ?: return
-    val module = wasmProvider.wasmModule as? BaseModule ?: return
-    val abbrevSection = remember(provider) { WasmDwarfAccessor(module).debugAbbrevSection() } ?: return
-
-    val abbrevTables = remember(provider) {
-        with(abbrevSection) { wasmProvider.bytes.scanDwarfAbbrev() }
-    }
-    if (abbrevTables.isEmpty()) return
-
-    val tree = remember(abbrevTables) {
-        buildTree {
-            for ((tableOffset, entries) in abbrevTables) {
-                val tableLabel = "0x${tableOffset.toString(16)}"
-                addNode(tableLabel, tableLabel) {
-                    for (entry in entries) {
-                        if (entry.attributes.isEmpty()) {
-                            addLeaf(entry, entry)
-                        } else {
-                            addNode(entry, entry) {
-                                for (attr in entry.attributes) {
-                                    addLeaf(attr, attr)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    val treeState = remember(tree) {
-        TreeState(SelectableLazyListState(LazyListState()))
-    }
-
-    DwarfTree(
-        tree = tree,
-        treeState = treeState,
-        label = { data ->
-            when (data) {
-                is String -> "Compilation Unit @ $data"
-                is DwarfAbbrevEntry -> "[${data.number}] ${data.tag.name}  ${if (data.hasChildren) "DW_CHILDREN_yes" else "DW_CHILDREN_no"}"
-                is DwarfAttribute -> "${data.name} ${data.form::class.simpleName}" + (data.value?.let { " = ${it.toHexString()}" } ?: "")
-                else -> data.toString()
-            }
-        },
-        onElementClick = { data ->
-            when (data) {
-                is DwarfAbbrevEntry -> state.scrollHexViewTo(data.offset, data.size)
-                is DwarfAttribute -> state.scrollHexViewTo(data.offset, data.size)
-            }
-        },
-    )
-}
-
-
-@Composable
-fun DebugInfoPanel(provider: BinaryProvider, state: HexViewStateHolder) {
-    val wasmProvider = calculateProvider(provider) ?: return
-    val module = wasmProvider.wasmModule as? BaseModule ?: return
-    val infoSection = remember(provider) { WasmDwarfAccessor(module).debugInfoSection() } ?: return
-
-    val debugInfoHeaders = remember(provider) {
-        with(infoSection) {
-            wasmProvider.bytes.scanDwarfInfo()
-        }
-    }
-    if (debugInfoHeaders.isEmpty()) return
-
-    // Indexed once: the label callback runs for every visible row and for every row in the
-    // speed-search haystack, so a linear scan of the string table per row would be quadratic.
-    val stringEntries: Map<UInt, StringTableEntry> = remember(provider) {
-        if (WasmDwarfAccessor(module).debugStrSection() == null) {
-            emptyMap()
-        } else {
-            with(infoSection) { wasmProvider.bytes.getStringTable() }.associateBy { it.originalOffset }
-        }
-    }
-
-    fun TreeGeneratorScope<Any>.drawEntry(die: DebugInformationEntry) {
-        addNode(die, die) {
-            die.attributes.forEach {
-                addLeaf(it, it)
-            }
-            die.children.forEach { child ->
-                drawEntry(child)
-            }
-        }
-    }
-
-    val tree = remember(debugInfoHeaders) {
-        buildTree {
-            debugInfoHeaders.forEach { header ->
-                drawEntry(header.children[0])
-            }
-        }
-    }
-
-
-    val treeState = remember(tree) {
-        TreeState(SelectableLazyListState(LazyListState()))
-    }
-
-    DwarfTree(
-        tree = tree,
-        treeState = treeState,
-        label = { data ->
-            when (data) {
-                is DebugInformationEntry -> "${data.tag} @ 0x${data.offset.toString(16)}"
-                is DieField -> {
-                    when (data.attribute.form) {
-                        Form.DW_FORM_strp -> {
-                            val value = stringEntries[data.value as? UInt]
-                                ?.run { wasmProvider.bytes.str() }
-                                ?: "Unknown string"
-                            "${data.attribute.name} ${data.attribute.form::class.simpleName} ${data.value}: '$value'"
-                        }
-                        else -> "${data.attribute.name} ${data.attribute.form::class.simpleName}"
-                    }
-                }
-                else -> data.toString()
-            }
-        },
-        onElementClick = { data ->
-            when (data) {
-                is DebugInformationEntry -> state.scrollHexViewTo(data.offset, data.size)
-                is DieField -> state.scrollHexViewTo(data.attribute.offset, data.attribute.size)
-            }
-        },
-    )
-}
-
-@Composable
-fun DebugLinePanel(provider: BinaryProvider, state: HexViewStateHolder) {
-    val wasmProvider = calculateProvider(provider) ?: return
-    val module = wasmProvider.wasmModule as? BaseModule ?: return
-    val lineSection = remember(provider) { WasmDwarfAccessor(module).debugLineSection() } ?: return
-
-    val lineUnitHeaders = remember(provider) {
-        with(lineSection) {
-            wasmProvider.bytes.scanLineTable()
-        }
-    }
-    if (lineUnitHeaders.isEmpty()) return
-
-    // Jewel's default node ids are only unique among siblings, so a node collides with its own
-    // first child, which breaks expansion and speed-search navigation on this tree of plain
-    // strings. Give every row a stable, path-derived id instead.
-    fun TreeGeneratorScope<Any>.drawHeadeEntry(unitHeader: DwarfLineUnitHeader<*>, unitId: String) {
-        addNode("debug line [${(unitHeader.contentOffset - lineSection.contentOffset).toHexString()}]", unitId) {
-            var fieldIndex = 0
-            fun fieldId() = "$unitId/field/${fieldIndex++}"
-            val (version, addressSize) = when (unitHeader){
-                is DwarfLineUnitHeader.Dwarf32LineUnitHeader.V4 -> 4 to 4
-                is DwarfLineUnitHeader.Dwarf64LineUnitHeader.V4  -> 4 to 8
-                is DwarfLineUnitHeader.Dwarf32LineUnitHeader.V5 -> 5 to 4
-                is DwarfLineUnitHeader.Dwarf64LineUnitHeader.V5 -> 5 to 8
-            }
-            val unitSize = when(val v = unitHeader.unitSize) {
-                is UInt -> v.toHexString()
-                is ULong -> v.toHexString()
-                else -> throw IllegalArgumentException("Unsupported DWARF line: $v")
-            }
-            addLeaf("total_length: $unitSize", fieldId())
-            addLeaf("format: ${if (addressSize == 8) "DWARF64" else "DWARF32"}", fieldId())
-            addLeaf("version: $version", fieldId())
-            addLeaf("address size: $addressSize", fieldId())
-
-            val prologLength = when(val v = unitHeader.prologLength) {
-                is UInt -> v.toHexString()
-                is ULong -> v.toHexString()
-                else -> throw IllegalArgumentException("Unsupported DWARF line: $v")
-            }
-            addLeaf("prolog length: $prologLength", fieldId())
-            addLeaf("maximum_operations_per_instruction: ${unitHeader.maximumOperationsPerInstruction}", fieldId())
-            addLeaf("default_is_stmt: ${unitHeader.defaultIsStatement}", fieldId())
-            addLeaf("line_base: ${unitHeader.lineBase}", fieldId())
-            addLeaf("line_range: ${unitHeader.lineRange}", fieldId())
-            addLeaf("program_offset: ${unitHeader.programOffset}", fieldId())
-            addNode("standard_opcode_lengths", "$unitId/opcode_lengths") {
-                unitHeader.standardOpcodeLengths.forEachIndexed { index, value ->
-                    val id = "$unitId/opcode_lengths/$index"
-                    when (index) {
-                        LnsOpcode.DW_LNS_copy.standardOpcodeLengthsEncoding -> addLeaf("DW_LNS_copy: $value", id)
-                        LnsOpcode.DW_LNS_advance_pc.standardOpcodeLengthsEncoding -> addLeaf("DW_LNS_advance_pc: $value", id)
-                        LnsOpcode.DW_LNS_advance_line.standardOpcodeLengthsEncoding -> addLeaf("DW_LNS_advance_line: $value", id)
-                        LnsOpcode.DW_LNS_set_file.standardOpcodeLengthsEncoding -> addLeaf("DW_LNS_set_file: $value", id)
-                        LnsOpcode.DW_LNS_set_column.standardOpcodeLengthsEncoding -> addLeaf("DW_LNS_set_column: $value", id)
-                        LnsOpcode.DW_LNS_negate_stmt.standardOpcodeLengthsEncoding -> addLeaf("DW_LNS_negate_stmt: $value", id)
-                        LnsOpcode.DW_LNS_set_basic_block.standardOpcodeLengthsEncoding -> addLeaf("DW_LNS_set_basic_block: $value", id)
-                        LnsOpcode.DW_LNS_const_add_pc.standardOpcodeLengthsEncoding -> addLeaf("DW_LNS_const_add_pc: $value", id)
-                        LnsOpcode.DW_LNS_fixed_advance_pc.standardOpcodeLengthsEncoding -> addLeaf("DW_LNS_fixed_advance_pc: $value", id)
-                        LnsOpcode.DW_LNS_set_prologue_end.standardOpcodeLengthsEncoding -> addLeaf("DW_LNS_set_prologue_end: $value", id)
-                        LnsOpcode.DW_LNS_set_epilogue_begin.standardOpcodeLengthsEncoding -> addLeaf("DW_LNS_set_epilogue_begin: $value", id)
-                        LnsOpcode.DW_LNS_set_isa.standardOpcodeLengthsEncoding -> addLeaf("DW_LNS_set_isa: $value", id)
-                        else -> addLeaf("opcode $index: $value", id)
-                    }
-                }
-            }
-            addNode("line_program", "$unitId/line_program") {
-                with(unitHeader) {
-                    val opcodes = wasmProvider.bytes.lineProgram()
-                    opcodes.forEachIndexed { index, opcode ->
-                        val id = "$unitId/line_program/$index"
-                        val offset = (opcode.offset - lineSection.offset).toHexString()
-                        when (opcode) {
-                            is LnsSpecialOpcode -> addLeaf("$offset: ${opcode.value.toHexString()}", id)
-                            is LnsOpcode -> {
-                                addLeaf("$offset: ${opcode::class.simpleName}", id)
-                            }
-                            is LneOpcode -> addLeaf("$offset: ${opcode::class.simpleName}", id)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    val tree = remember(lineUnitHeaders) {
-        buildTree {
-            lineUnitHeaders.forEachIndexed { index, header ->
-                drawHeadeEntry(header, "unit/$index")
-            }
-        }
-    }
-
-
-    val treeState = remember(tree) {
-        TreeState(SelectableLazyListState(LazyListState()))
-    }
-
-    DwarfTree(
-        tree = tree,
-        treeState = treeState,
-        label = { data -> data.toString() },
-        onElementClick = { data ->
-            when (data) {
-                is DebugInformationEntry -> state.scrollHexViewTo(data.offset, data.size)
-                is DieField -> state.scrollHexViewTo(data.attribute.offset, data.attribute.size)
-            }
-        },
-    )
 }
 
 private fun calculateProvider(provider: BinaryProvider): WasmBinaryProvider? =

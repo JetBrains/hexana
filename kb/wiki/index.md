@@ -9,6 +9,8 @@ consult-first / write-back rules.
   `table`, `row`) and how each host binds it.
 - [[entities/wasm-runtime-compatibility]] — the Wasm runtime compatibility table: proposal
   detection, `.hexana/runtimes.json`, the badge warning, and the Compatibility tab.
+- [[entities/dwarf-outline-model]] — the shared row model behind the `.debug_*` editor tabs:
+  node ids, deferred children, whole-tree search, and the grouping rule both editors follow.
 
 ## Sources
 
