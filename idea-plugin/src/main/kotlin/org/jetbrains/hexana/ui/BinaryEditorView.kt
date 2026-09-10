@@ -31,6 +31,7 @@ import org.jetbrains.hexana.document.*
 import org.jetbrains.hexana.document.format.ChunkId
 import org.jetbrains.hexana.document.journal.JournalLoadResult
 import org.jetbrains.hexana.document.journal.JournalPersister
+import org.jetbrains.hexana.dwarf.ui.DWARF_GROUP_TAB_NAME
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
@@ -1805,17 +1806,23 @@ private fun BinaryProvider.discoverHardcodedPanelNames(): List<String> = when (t
 
 /**
  * Cheaply discovers which DWARF panels will be available by checking
- * for the presence of custom sections with known DWARF names.
+ * for the presence of custom sections with known DWARF names. Mirrors the grouping
+ * [dwarfPanels] applies, so the placeholder tabs match the resolved ones.
  */
 private fun BinaryProvider.discoverDwarfPanelNames(): List<String>? {
     val module = (this as? WasmBinaryProvider)?.wasmModule
         ?: (this as? WasmComponentBinaryProvider)?.wasmModule
         ?: return null
-    return buildList {
+    val sections = buildList {
         if (module.getCustomSectionByName(".debug_abbrev") != null) add(".debug_abbrev")
         if (module.getCustomSectionByName(".debug_info") != null) add(".debug_info")
         if (module.getCustomSectionByName(".debug_line") != null) add(".debug_line")
-    }.ifEmpty { null }
+    }
+    return when (sections.size) {
+        0 -> null
+        1 -> sections
+        else -> listOf(DWARF_GROUP_TAB_NAME)
+    }
 }
 
 /**

@@ -41,6 +41,7 @@ import org.jetbrains.hexana.dwarf.DwarfAttribute
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.ui.panel.Panel
+import org.jetbrains.hexana.ui.panel.groupPanels
 import org.jetbrains.hexana.wasm.BaseModule
 import org.jetbrains.jewel.foundation.lazy.tree.buildTree
 import org.jetbrains.jewel.foundation.lazy.tree.Tree
@@ -69,7 +70,13 @@ import org.jetbrains.jewel.ui.component.VerticalScrollbar
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import org.jetbrains.jewel.ui.theme.searchMatchStyle
 
-fun dwarfPanels(provider: BinaryProvider, state: HexViewStateHolder):List<Panel> {
+/** Name of the parent tab the per-section DWARF tabs are folded into. */
+const val DWARF_GROUP_TAB_NAME = "DWARF"
+
+fun dwarfPanels(provider: BinaryProvider, state: HexViewStateHolder): List<Panel> =
+    groupPanels(DWARF_GROUP_TAB_NAME, dwarfSectionPanels(provider, state))
+
+private fun dwarfSectionPanels(provider: BinaryProvider, state: HexViewStateHolder):List<Panel> {
     return when (provider) {
         is WasmBinaryVirtualFileProvider,
         is WasmBinaryProvider -> {

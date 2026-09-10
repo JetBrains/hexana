@@ -73,10 +73,15 @@ class HexanaEditorSurfaceSmokeTest {
                     fileName("debug-add.wasm")
                 }
 
-                val dwarfTabs = snapshot().panelNames.filter { it.startsWith(".debug_") }
-                assertTrue(dwarfTabs.isNotEmpty(), "Expected DWARF tabs to be reported")
+                // The per-section tabs live behind one "DWARF" parent tab; only a file with a
+                // single DWARF section shows a `.debug_*` tab at the top level.
+                val panelNames = snapshot().panelNames
+                assertTrue(
+                    "DWARF" in panelNames,
+                    "Expected a DWARF tab, got $panelNames",
+                )
                 expect {
-                    tabsContain(".debug_abbrev", ".debug_info", ".debug_line")
+                    tabsDoNotContain(".debug_abbrev", ".debug_info", ".debug_line")
                 }
             }
         }

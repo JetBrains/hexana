@@ -13,13 +13,13 @@
 - **Runtime compatibility for WebAssembly binaries.** Declare the runtimes and versions a project has to run on under **Settings | Build, Execution, Deployment | WebAssembly | Runtime Compatibility**, and every `.wasm` file is checked against them: the proposals badge in the editor header turns into a warning when a proposal the module uses is unsupported there or needs a flag, and clicking it opens a new **Compatibility** tab with one row per detected proposal and one column per declared runtime. With nothing declared the tab lists the runtimes each proposal is supported in instead, so it also answers "where will this binary run". Verdicts come from WebAssembly's own `features.json`, and the declaration is stored in `.hexana/runtimes.json` in the project — the same file the VS Code extension reads and writes, so a selection made in either editor is honoured by the other.
 
 ### Changed
+- The `.debug_abbrev`, `.debug_info` and `.debug_line` tabs are grouped under a single **DWARF** tab, and now searchable and scrollable
 
 ### Deprecated
 
 ### Removed
 
 ### Fixed
-- The `.debug_abbrev`, `.debug_info` and `.debug_line` tabs are now searchable and scrollable
 
 ### Security
 - Script tabs now run sandboxed. Up to and including 0.18 the script tab built its own GraalJS context with full host access and host class lookup enabled, so a `.js` file added as a script tab could call arbitrary Java; script tabs now use the same sandbox as the `run-script` CLI and the MCP tool — no host class lookup, no file IO, no process or thread creation, no native access, a timeout, and bounded output
