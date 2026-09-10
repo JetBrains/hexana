@@ -53,49 +53,6 @@ data class FieldSpec(
     val itemMinimum: Int? = null,
     val itemMaximum: Int? = null,
 ) {
-    init {
-        if (default != null) {
-            require(type !is FieldType.ClassRef && type != FieldType.JsonObjectT) {
-                "Field '$name': defaults are not supported for embedded classes or JSON object fields."
-            }
-            val expected: Class<*> = when (type) {
-                FieldType.Int32, FieldType.UInt32, FieldType.ByteT -> Int::class.javaObjectType
-                FieldType.Int64 -> Long::class.javaObjectType
-                FieldType.Float64 -> Double::class.javaObjectType
-                FieldType.BooleanT -> Boolean::class.javaObjectType
-                FieldType.StringT -> String::class.java
-                FieldType.ByteArrayT -> ByteArray::class.java
-                is FieldType.ListOf -> List::class.java
-                is FieldType.MapOf -> Map::class.java
-                FieldType.JsonObjectT,
-                is FieldType.ClassRef -> error("unreachable - filtered by require above")
-            }
-            require(expected.isInstance(default)) {
-                "Field '$name': default value `$default` (${default.javaClass.simpleName}) does not match declared type $type."
-            }
-        }
-        if (minimum != null || maximum != null) {
-            require(type.isNumeric()) {
-                "Field '$name': minimum/maximum constraints require a numeric field type, got $type."
-            }
-        }
-        if (maxItems != null || itemMinimum != null || itemMaximum != null) {
-            require(type is FieldType.ListOf) {
-                "Field '$name': maxItems/item constraints require a list field type, got $type."
-            }
-        }
-        if (maxLength != null) {
-            require(type == FieldType.StringT || type == FieldType.ByteArrayT) {
-                "Field '$name': maxLength requires a string-like field type, got $type."
-            }
-        }
-        if (itemMinimum != null || itemMaximum != null) {
-            val element = (type as FieldType.ListOf).element
-            require(element.isNumeric()) {
-                "Field '$name': item minimum/maximum constraints require numeric list items, got $element."
-            }
-        }
-    }
 
     val schemaKey: String get() = serialName ?: name
 }
@@ -106,6 +63,98 @@ private fun FieldType.isNumeric(): Boolean =
         this == FieldType.Float64 ||
         this == FieldType.UInt32 ||
         this == FieldType.ByteT
+
+private fun ClassSpec.validateCompletedSchema(visited: MutableSet<ClassSpec> = java.util.Collections.newSetFromMap(java.util.IdentityHashMap())) {
+    if (!visited.add(this)) return
+    val duplicateKeys = fields.groupBy(FieldSpec::schemaKey).filterValues { it.size > 1 }
+    require(duplicateKeys.isEmpty()) {
+        "Class '$name' has duplicate effective wire keys: " +
+            duplicateKeys.entries.joinToString { (key, duplicates) ->
+                "'$key' for fields ${duplicates.joinToString { "'${it.name}'" }}"
+            }
+    }
+    fields.forEach { field ->
+        field.validateCompletedSchema(name)
+        field.type.validateNestedSchemas(visited)
+    }
+}
+
+private fun FieldType.validateNestedSchemas(visited: MutableSet<ClassSpec>) {
+    when (this) {
+        is FieldType.ClassRef -> clazz.validateCompletedSchema(visited)
+        is FieldType.ListOf -> element.validateNestedSchemas(visited)
+        is FieldType.MapOf -> value.validateNestedSchemas(visited)
+        else -> Unit
+    }
+}
+
+private fun FieldSpec.validateCompletedSchema(className: String) {
+    fun fail(message: String): Nothing = throw IllegalArgumentException("Class '$className', field '$name': $message")
+    if (default != null) {
+        when (type) {
+            FieldType.Int32, FieldType.UInt32, FieldType.ByteT -> if (default !is Int) fail("default value `$default` does not match declared type $type.")
+            FieldType.Int64 -> if (default !is Long) fail("default value `$default` does not match declared type $type.")
+            FieldType.Float64 -> if (default !is Double) fail("default value `$default` does not match declared type $type.")
+            FieldType.BooleanT -> if (default !is Boolean) fail("default value `$default` does not match declared type $type.")
+            FieldType.StringT -> if (default !is String) fail("default value `$default` does not match declared type $type.")
+            else -> fail("defaults are supported only for scalar fields currently emitted by generators, got $type.")
+        }
+    }
+    if (minimum != null || maximum != null) {
+        if (!type.isNumeric()) fail("minimum/maximum constraints require a numeric field type, got $type.")
+        if (minimum != null && maximum != null && minimum > maximum) fail("minimum $minimum exceeds maximum $maximum.")
+        validateNumericDomain(type, minimum, "minimum", ::fail)
+        validateNumericDomain(type, maximum, "maximum", ::fail)
+    }
+    if (maxItems != null || itemMinimum != null || itemMaximum != null) {
+        if (type !is FieldType.ListOf) fail("maxItems/item constraints require a list field type, got $type.")
+        literalValue(maxItems)?.let { if (it < 0) fail("maxItems must not be negative, got $it.") }
+    }
+    if (maxLength != null) {
+        if (type != FieldType.StringT && type != FieldType.ByteArrayT) fail("maxLength requires a string-like field type, got $type.")
+        literalValue(maxLength)?.let { if (it < 0) fail("maxLength must not be negative, got $it.") }
+    }
+    if (itemMinimum != null || itemMaximum != null) {
+        val element = (type as FieldType.ListOf).element
+        if (!element.isNumeric()) fail("item minimum/maximum constraints require numeric list items, got $element.")
+        if (itemMinimum != null && itemMaximum != null && itemMinimum > itemMaximum) fail("item minimum $itemMinimum exceeds item maximum $itemMaximum.")
+        validateNumericDomain(element, itemMinimum, "item minimum", ::fail)
+        validateNumericDomain(element, itemMaximum, "item maximum", ::fail)
+    }
+    when (val value = default) {
+        is Int -> validateNumericDefault(value, type, minimum, maximum, ::fail)
+        is Long -> validateNumericDefault(value, type, minimum, maximum, ::fail)
+        is Double -> {
+            if (!value.isFinite()) fail("Float64 default must be finite, got $value.")
+            validateNumericDefault(value, type, minimum, maximum, ::fail)
+        }
+        is String -> literalValue(maxLength)?.let { maximumLength ->
+            if (value.codePointCount(0, value.length) > maximumLength) fail("default exceeds maxLength $maximumLength.")
+        }
+    }
+}
+
+private fun literalValue(value: SchemaIntValue?): Int? = (value as? SchemaIntValue.Literal)?.value
+
+private fun validateNumericDomain(type: FieldType, value: Int?, label: String, fail: (String) -> Nothing) {
+    value ?: return
+    when (type) {
+        FieldType.UInt32 -> if (value < 0) fail("$label must be nonnegative for UInt32, got $value.")
+        FieldType.ByteT -> if (value !in 0..255) fail("$label must be in 0..255 for Byte, got $value.")
+        else -> Unit
+    }
+}
+
+private fun validateNumericDefault(value: Number, type: FieldType, minimum: Int?, maximum: Int?, fail: (String) -> Nothing) {
+    val numeric = value.toDouble()
+    when (type) {
+        FieldType.UInt32 -> if (numeric < 0) fail("default must be nonnegative for UInt32, got $value.")
+        FieldType.ByteT -> if (numeric !in 0.0..255.0) fail("default must be in 0..255 for Byte, got $value.")
+        else -> Unit
+    }
+    if (minimum != null && numeric < minimum) fail("default $value is below minimum $minimum.")
+    if (maximum != null && numeric > maximum) fail("default $value exceeds maximum $maximum.")
+}
 
 sealed class SchemaIntValue {
     data class Literal(val value: Int) : SchemaIntValue()
@@ -134,15 +183,60 @@ enum class OutputConversionCapability {
     RawBytes,
 }
 
-data class ClassSpec(
+class ClassSpec(
     val name: String,
-    val fields: List<FieldSpec>,
+    fields: List<FieldSpec>,
     /** Exactly one of these field names must be present at runtime. */
     val oneOf: List<String>? = null,
     val kotlinFqn: String? = null,
     val inputCapabilities: Set<InputConversionCapability> = DEFAULT_INPUT_CAPABILITIES,
     val outputCapabilities: Set<OutputConversionCapability> = DEFAULT_OUTPUT_CAPABILITIES,
 ) {
+    val fields: List<FieldSpec> = java.util.Collections.unmodifiableList(java.util.ArrayList(fields))
+
+    init {
+        validateCompletedSchema()
+    }
+
+    operator fun component1(): String = name
+    operator fun component2(): List<FieldSpec> = fields
+    operator fun component3(): List<String>? = oneOf
+    operator fun component4(): String? = kotlinFqn
+    operator fun component5(): Set<InputConversionCapability> = inputCapabilities
+    operator fun component6(): Set<OutputConversionCapability> = outputCapabilities
+
+    fun copy(
+        name: String = this.name,
+        fields: List<FieldSpec> = this.fields,
+        oneOf: List<String>? = this.oneOf,
+        kotlinFqn: String? = this.kotlinFqn,
+        inputCapabilities: Set<InputConversionCapability> = this.inputCapabilities,
+        outputCapabilities: Set<OutputConversionCapability> = this.outputCapabilities,
+    ): ClassSpec = ClassSpec(name, fields, oneOf, kotlinFqn, inputCapabilities, outputCapabilities)
+
+    override fun equals(other: Any?): Boolean =
+        other is ClassSpec &&
+            name == other.name &&
+            fields == other.fields &&
+            oneOf == other.oneOf &&
+            kotlinFqn == other.kotlinFqn &&
+            inputCapabilities == other.inputCapabilities &&
+            outputCapabilities == other.outputCapabilities
+
+    override fun hashCode(): Int {
+        var result = name.hashCode()
+        result = 31 * result + fields.hashCode()
+        result = 31 * result + (oneOf?.hashCode() ?: 0)
+        result = 31 * result + (kotlinFqn?.hashCode() ?: 0)
+        result = 31 * result + inputCapabilities.hashCode()
+        result = 31 * result + outputCapabilities.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "ClassSpec(name=$name, fields=$fields, oneOf=$oneOf, kotlinFqn=$kotlinFqn, " +
+            "inputCapabilities=$inputCapabilities, outputCapabilities=$outputCapabilities)"
+
     /**
      * Returns a new ClassSpec that inherits this one's fields, plus whatever the block adds.
      * Optionally rename the derived class.
