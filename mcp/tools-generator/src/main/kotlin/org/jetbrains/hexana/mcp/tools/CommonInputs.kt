@@ -5,7 +5,7 @@ private const val WASM_INPUT_VALIDATION =
 private const val BINARY_INPUT_VALIDATION =
     "Provide exactly one of `path`, `bytesBase64`, or `bytes`."
 
-val WasmInputClass = class_("WasmInput") {
+private val wasmInput = class_("WasmInput") {
     inputCapabilities(
         InputConversionCapability.JsonObject,
         InputConversionCapability.WasmPath,
@@ -22,10 +22,16 @@ val WasmInputClass = class_("WasmInput") {
         .itemsMinimum(0)
         .itemsMaximum(255)
         .maxItems(SchemaIntValue.MaxInlineWasmBytes)
-    oneOf("path", "bytesBase64", "bytes")
 }
 
-val BinaryInputClass = class_("BinaryInput") {
+val WasmInputClass = wasmInput.withExactOneSourceGroup(
+    "wasm input",
+    pathSource(wasmInput.fieldRef("path")),
+    base64Source(wasmInput.fieldRef("bytesBase64")),
+    bytesSource(wasmInput.fieldRef("bytes")),
+)
+
+private val binaryInput = class_("BinaryInput") {
     inputCapabilities(
         InputConversionCapability.JsonObject,
         InputConversionCapability.BinaryPath,
@@ -41,8 +47,14 @@ val BinaryInputClass = class_("BinaryInput") {
         .itemsMinimum(0)
         .itemsMaximum(255)
         .maxItems(SchemaIntValue.MaxInlineBinaryBytes)
-    oneOf("path", "bytesBase64", "bytes")
 }
+
+val BinaryInputClass = binaryInput.withExactOneSourceGroup(
+    "binary input",
+    pathSource(binaryInput.fieldRef("path")),
+    base64Source(binaryInput.fieldRef("bytesBase64")),
+    bytesSource(binaryInput.fieldRef("bytes")),
+)
 
 internal val ClosedIntRange = class_("ClosedIntRange") {
     int("from").describe("Inclusive zero-based lower bound.").minimum(0)

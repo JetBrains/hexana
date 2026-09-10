@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.direct
 
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
@@ -91,6 +93,25 @@ class HexanaMcpSummaryToolTest : HexanaMcpToolsetDirectTestBase() {
         assertEquals(textJson, structuredContent)
         assertEquals(1, structuredContent.int("functions"))
         assertEquals(1, structuredContent.int("exports"))
+    }
+
+    fun testIdeaAdapterRequiresPathButIgnoresExtraSourceAndUnknownFields() {
+        val fixture = createWasmFixture("fixtures/direct/summary/source-presence.wasm", "(module (func))")
+        val oneSource = callTool("summarize_module", jsonPath(fixture.projectRelativePath))
+        val multipleSources = callTool(
+            "summarize_module",
+            JsonObject(jsonPath(fixture.projectRelativePath) + mapOf(
+                "bytes" to JsonArray(emptyList()),
+                "extra" to JsonPrimitive("ignored"),
+            )),
+        )
+        val noSource = callTool("summarize_module", JsonObject(emptyMap()))
+        val explicitNull = callTool("summarize_module", JsonObject(mapOf("path" to JsonNull)))
+
+        assertFalse(oneSource.isError)
+        assertFalse(multipleSources.isError)
+        assertTrue(noSource.isError)
+        assertTrue(explicitNull.isError)
     }
 
     fun testSummarizeBinaryReturnsCompactWasmIdentityAndCounts() {

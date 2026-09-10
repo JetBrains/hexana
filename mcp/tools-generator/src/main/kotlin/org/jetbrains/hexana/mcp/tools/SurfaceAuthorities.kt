@@ -18,6 +18,7 @@ data class IdeaToolBinding(
     val id: ToolId,
     val inputPattern: ToolInputPattern,
     val handlerFqn: String,
+    val unknownFieldPolicy: UnknownFieldPolicy,
 ) {
     init {
         require(HANDLER_FQN_REGEX.matches(handlerFqn)) {
@@ -37,6 +38,7 @@ data class IdeaTool(
 data class StandaloneToolBinding(
     val id: ToolId,
     val handler: StandaloneHandlerSpec,
+    val unknownFieldPolicy: UnknownFieldPolicy,
 )
 
 data class StandaloneTool(
@@ -103,11 +105,17 @@ data class CliTool(
         get() = binding.inputModel
 }
 
+// These policies characterize the product adapter boundaries.  Generated helper code
+// may read only known keys; this metadata intentionally does not change that behavior.
+internal val HexanaIdeaUnknownFieldPolicy = UnknownFieldPolicy.Ignore
+internal val HexanaStandaloneUnknownFieldPolicy = UnknownFieldPolicy.Ignore
+internal val HexanaCliUnknownFieldPolicy = UnknownFieldPolicy.Reject
+
 private fun idea(id: ToolId, pattern: ToolInputPattern, handlerFqn: String) =
-    IdeaToolBinding(id, pattern, handlerFqn)
+    IdeaToolBinding(id, pattern, handlerFqn, HexanaIdeaUnknownFieldPolicy)
 
 private fun standalone(id: ToolId, handler: String) =
-    StandaloneToolBinding(id, StandaloneHandlerSpec(handler))
+    StandaloneToolBinding(id, StandaloneHandlerSpec(handler), HexanaStandaloneUnknownFieldPolicy)
 
 internal val HexanaIdeaToolBindings = listOf(
     idea(SummarizeBinaryToolId, ToolInputPattern.BinaryOnly, "org.jetbrains.hexana.mcp.query.readBinarySummary"),
@@ -260,7 +268,7 @@ val HexanaMcpbTools: List<ToolSpec> = HexanaToolCatalog.resolve(
 )
 
 private fun todoCli(id: ToolId, command: String, group: ToolGroup) =
-    cliToolBinding(id, command, group, ToolOutputPolicy.ToolDefined)
+    cliToolBinding(id, command, group, ToolOutputPolicy.ToolDefined, unknownFieldPolicy = HexanaCliUnknownFieldPolicy)
 
 private val CLI_TOOL_BINDINGS = listOf(
     cliToolBinding(
@@ -268,6 +276,7 @@ private val CLI_TOOL_BINDINGS = listOf(
         executionStatus = CliExecutionStatus.Executable,
         releaseProducts = setOf(CliReleaseProduct.HexanaCli),
         inputModel = binaryCliInputModel(),
+        unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
     ),
     cliToolBinding(
         RunBinaryScriptToolId, "run-script", ToolGroup.Scripting, ToolOutputPolicy.ToolDefined,
@@ -286,6 +295,7 @@ private val CLI_TOOL_BINDINGS = listOf(
             param(name = "scriptPath", cliOption = "--script")
             param(name = "script", cliOption = "--script-text")
         },
+        unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
     ),
     cliToolBinding(
         WasmToWatToolId, "wasm-to-wat", ToolGroup.Converters, ToolOutputPolicy.ToolDefined,
@@ -293,6 +303,7 @@ private val CLI_TOOL_BINDINGS = listOf(
         defaultOutput = OutputConversionCapability.RawText,
         releaseProducts = setOf(CliReleaseProduct.HexanaCli),
         inputModel = wasmCliInputModel(),
+        unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
     ),
     cliToolBinding(
         SummarizeModuleToolId, "summarize-module", ToolGroup.Module, ToolOutputPolicy.ToolDefined,
@@ -300,6 +311,7 @@ private val CLI_TOOL_BINDINGS = listOf(
         defaultOutput = OutputConversionCapability.Pretty,
         releaseProducts = setOf(CliReleaseProduct.HexanaCli),
         inputModel = wasmCliInputModel(),
+        unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
     ),
     todoCli(ListEnabledFeaturesToolId, "list-enabled-features", ToolGroup.Module),
     todoCli(GetEntrypointPolicyToolId, "get-entrypoint-policy", ToolGroup.EntrypointPolicy),

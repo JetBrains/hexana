@@ -37,6 +37,48 @@ fun map(of: ClassSpec): FieldType = FieldType.MapOf(FieldType.ClassRef(of))
 
 // ---------- Field spec ----------
 
+/**
+ * Semantic wire-field presence.  This is deliberately independent of a consumer's
+ * argument reader: [Optional] is absent by default, while [Defaulted] has a value
+ * when absent.  MCP-196/MCP-198/MCP-199/MCP-200 migrate remaining consumers from
+ * the legacy [FieldSpec.default] bridge.
+ */
+sealed class FieldPresence {
+    object Required : FieldPresence()
+    object Optional : FieldPresence()
+    data class Defaulted(val value: FieldDefaultValue) : FieldPresence()
+}
+
+/** Typed schema default; [Null] is distinct from a field with no default. */
+sealed class FieldDefaultValue {
+    object Null : FieldDefaultValue()
+    data class IntValue(val value: Int) : FieldDefaultValue()
+    data class LongValue(val value: Long) : FieldDefaultValue()
+    data class DoubleValue(val value: Double) : FieldDefaultValue()
+    data class BooleanValue(val value: Boolean) : FieldDefaultValue()
+    data class StringValue(val value: String) : FieldDefaultValue()
+
+    internal fun legacyValue(): Any? = when (this) {
+        Null -> null
+        is IntValue -> value
+        is LongValue -> value
+        is DoubleValue -> value
+        is BooleanValue -> value
+        is StringValue -> value
+    }
+
+    companion object {
+        internal fun fromLegacy(value: Any): FieldDefaultValue = when (value) {
+            is Int -> IntValue(value)
+            is Long -> LongValue(value)
+            is Double -> DoubleValue(value)
+            is Boolean -> BooleanValue(value)
+            is String -> StringValue(value)
+            else -> throw IllegalArgumentException("Unsupported legacy schema default `$value` (${value::class.simpleName}).")
+        }
+    }
+}
+
 data class FieldSpec(
     val name: String,
     val type: FieldType,
@@ -52,6 +94,14 @@ data class FieldSpec(
     val maxLength: SchemaIntValue? = null,
     val itemMinimum: Int? = null,
     val itemMaximum: Int? = null,
+    /** Explicit semantic presence. `default` remains a generator compatibility bridge. */
+    val presence: FieldPresence = if (default != null) {
+        FieldPresence.Defaulted(FieldDefaultValue.fromLegacy(default))
+    } else if (nullable) {
+        FieldPresence.Optional
+    } else {
+        FieldPresence.Required
+    },
 ) {
 
     val schemaKey: String get() = serialName ?: name
@@ -90,15 +140,44 @@ private fun FieldType.validateNestedSchemas(visited: MutableSet<ClassSpec>) {
 
 private fun FieldSpec.validateCompletedSchema(className: String) {
     fun fail(message: String): Nothing = throw IllegalArgumentException("Class '$className', field '$name': $message")
-    if (default != null) {
-        when (type) {
-            FieldType.Int32, FieldType.UInt32, FieldType.ByteT -> if (default !is Int) fail("default value `$default` does not match declared type $type.")
-            FieldType.Int64 -> if (default !is Long) fail("default value `$default` does not match declared type $type.")
-            FieldType.Float64 -> if (default !is Double) fail("default value `$default` does not match declared type $type.")
-            FieldType.BooleanT -> if (default !is Boolean) fail("default value `$default` does not match declared type $type.")
-            FieldType.StringT -> if (default !is String) fail("default value `$default` does not match declared type $type.")
-            else -> fail("defaults are supported only for scalar fields currently emitted by generators, got $type.")
+    val typedDefault = (presence as? FieldPresence.Defaulted)?.value
+    when (presence) {
+        FieldPresence.Required -> {
+            if (nullable) fail("Required presence requires a non-nullable field while the legacy bridge is active.")
+            if (default != null) fail("legacy default bridge requires Defaulted presence.")
         }
+        FieldPresence.Optional -> {
+            if (!nullable) fail("Optional presence requires a nullable field while the legacy bridge is active.")
+            if (default != null) fail("legacy default bridge requires Defaulted presence.")
+        }
+        is FieldPresence.Defaulted -> Unit
+    }
+    if (typedDefault != null) {
+        val bridgeValue = typedDefault.legacyValue()
+        require(default == bridgeValue) {
+            "Class '$className', field '$name': legacy default bridge does not match explicit presence default."
+        }
+        if (typedDefault == FieldDefaultValue.Null) {
+            require(type in setOf(
+                FieldType.Int32,
+                FieldType.Int64,
+                FieldType.Float64,
+                FieldType.UInt32,
+                FieldType.ByteT,
+                FieldType.BooleanT,
+                FieldType.StringT,
+            )) { "Class '$className', field '$name': defaults are supported only for scalar fields currently emitted by generators, got $type." }
+        } else {
+            when (type) {
+                FieldType.Int32, FieldType.UInt32, FieldType.ByteT -> if (typedDefault !is FieldDefaultValue.IntValue) fail("default value `$typedDefault` does not match declared type $type.")
+                FieldType.Int64 -> if (typedDefault !is FieldDefaultValue.LongValue) fail("default value `$typedDefault` does not match declared type $type.")
+                FieldType.Float64 -> if (typedDefault !is FieldDefaultValue.DoubleValue) fail("default value `$typedDefault` does not match declared type $type.")
+                FieldType.BooleanT -> if (typedDefault !is FieldDefaultValue.BooleanValue) fail("default value `$typedDefault` does not match declared type $type.")
+                FieldType.StringT -> if (typedDefault !is FieldDefaultValue.StringValue) fail("default value `$typedDefault` does not match declared type $type.")
+                else -> fail("defaults are supported only for scalar fields currently emitted by generators, got $type.")
+            }
+        }
+        if (typedDefault == FieldDefaultValue.Null && !nullable) fail("a null default requires a nullable field.")
     }
     if (minimum != null || maximum != null) {
         if (!type.isNumeric()) fail("minimum/maximum constraints require a numeric field type, got $type.")
@@ -121,7 +200,7 @@ private fun FieldSpec.validateCompletedSchema(className: String) {
         validateNumericDomain(element, itemMinimum, "item minimum", ::fail)
         validateNumericDomain(element, itemMaximum, "item maximum", ::fail)
     }
-    when (val value = default) {
+    when (val value = typedDefault?.legacyValue()) {
         is Int -> validateNumericDefault(value, type, minimum, maximum, ::fail)
         is Long -> validateNumericDefault(value, type, minimum, maximum, ::fail)
         is Double -> {
@@ -187,15 +266,27 @@ class ClassSpec(
     val name: String,
     fields: List<FieldSpec>,
     /** Exactly one of these field names must be present at runtime. */
-    val oneOf: List<String>? = null,
+    oneOf: List<String>? = null,
     val kotlinFqn: String? = null,
     val inputCapabilities: Set<InputConversionCapability> = DEFAULT_INPUT_CAPABILITIES,
     val outputCapabilities: Set<OutputConversionCapability> = DEFAULT_OUTPUT_CAPABILITIES,
+    exactOneSourceGroups: List<ExactOneSourceGroup> = emptyList(),
+    internal val identity: ClassIdentity = ClassIdentity(),
 ) {
     val fields: List<FieldSpec> = java.util.Collections.unmodifiableList(java.util.ArrayList(fields))
+    val oneOf: List<String>? = oneOf?.let { java.util.Collections.unmodifiableList(java.util.ArrayList(it)) }
+    val exactOneSourceGroups: List<ExactOneSourceGroup> =
+        java.util.Collections.unmodifiableList(java.util.ArrayList(exactOneSourceGroups))
 
     init {
         validateCompletedSchema()
+        this.oneOf?.let { choices ->
+            require(choices.distinct().size == choices.size) { "Class '$name' oneOf contains duplicate fields: $choices." }
+            choices.forEach { choice ->
+                require(fields.any { it.name == choice }) { "Class '$name' oneOf references unknown field '$choice'." }
+            }
+        }
+        this.exactOneSourceGroups.forEach { it.validateFor(this) }
     }
 
     operator fun component1(): String = name
@@ -212,7 +303,14 @@ class ClassSpec(
         kotlinFqn: String? = this.kotlinFqn,
         inputCapabilities: Set<InputConversionCapability> = this.inputCapabilities,
         outputCapabilities: Set<OutputConversionCapability> = this.outputCapabilities,
-    ): ClassSpec = ClassSpec(name, fields, oneOf, kotlinFqn, inputCapabilities, outputCapabilities)
+        exactOneSourceGroups: List<ExactOneSourceGroup> = this.exactOneSourceGroups,
+    ): ClassSpec {
+        val copiedIdentity = ClassIdentity()
+        return ClassSpec(
+            name, fields, oneOf, kotlinFqn, inputCapabilities, outputCapabilities,
+            exactOneSourceGroups.map { it.reboundFor(name, fields, copiedIdentity) }, copiedIdentity,
+        )
+    }
 
     override fun equals(other: Any?): Boolean =
         other is ClassSpec &&
@@ -221,7 +319,8 @@ class ClassSpec(
             oneOf == other.oneOf &&
             kotlinFqn == other.kotlinFqn &&
             inputCapabilities == other.inputCapabilities &&
-            outputCapabilities == other.outputCapabilities
+            outputCapabilities == other.outputCapabilities &&
+            exactOneSourceGroups == other.exactOneSourceGroups
 
     override fun hashCode(): Int {
         var result = name.hashCode()
@@ -230,12 +329,19 @@ class ClassSpec(
         result = 31 * result + (kotlinFqn?.hashCode() ?: 0)
         result = 31 * result + inputCapabilities.hashCode()
         result = 31 * result + outputCapabilities.hashCode()
+        result = 31 * result + exactOneSourceGroups.hashCode()
         return result
     }
 
     override fun toString(): String =
         "ClassSpec(name=$name, fields=$fields, oneOf=$oneOf, kotlinFqn=$kotlinFqn, " +
-            "inputCapabilities=$inputCapabilities, outputCapabilities=$outputCapabilities)"
+        "inputCapabilities=$inputCapabilities, outputCapabilities=$outputCapabilities, exactOneSourceGroups=$exactOneSourceGroups)"
+
+    fun fieldRef(name: String): FieldRef {
+        val field = fields.singleOrNull { it.name == name }
+            ?: throw IllegalArgumentException("Class '${this.name}' has no field `$name` to reference.")
+        return FieldRef.create(identity, this.name, field)
+    }
 
     /**
      * Returns a new ClassSpec that inherits this one's fields, plus whatever the block adds.
@@ -253,10 +359,132 @@ class ClassSpec(
             kotlinFqn = kotlinFqn(renameTo, kotlinPackage),
             seedInputCapabilities = inputCapabilities,
             seedOutputCapabilities = outputCapabilities,
+            seedExactOneSourceGroups = exactOneSourceGroups,
         )
         builder.block()
         return builder.build()
     }
+}
+
+/** A typed field reference, including its owning class and nullable/presence contract. */
+class FieldRef private constructor(
+    internal val owner: ClassIdentity,
+    val ownerName: String,
+    val name: String,
+    val type: FieldType,
+    val nullable: Boolean,
+    val presence: FieldPresence,
+) {
+    override fun equals(other: Any?): Boolean =
+        other is FieldRef && owner === other.owner && name == other.name && type == other.type &&
+            nullable == other.nullable && presence == other.presence
+
+    override fun hashCode(): Int =
+        31 * System.identityHashCode(owner) + 31 * name.hashCode() + type.hashCode() +
+            31 * nullable.hashCode() + presence.hashCode()
+
+    override fun toString(): String = "FieldRef($ownerName.$name: $type${if (nullable) "?" else ""}, $presence)"
+
+    companion object {
+        internal fun create(owner: ClassIdentity, ownerName: String, field: FieldSpec): FieldRef =
+            FieldRef(owner, ownerName, field.name, field.type, field.nullable, field.presence)
+    }
+}
+
+/** Opaque owner token; only [ClassSpec] can create references associated with it. */
+class ClassIdentity internal constructor()
+
+enum class SourceSelectionKind { Path, Base64, Bytes }
+
+data class SourceSelection(val kind: SourceSelectionKind, val field: FieldRef)
+
+/**
+ * An exact-one input source group.  It is semantic metadata only: current MCP
+ * schemas retain their existing shape and do not emit a root `oneOf`.
+ */
+class ExactOneSourceGroup(
+    val name: String,
+    selections: List<SourceSelection>,
+    val required: Boolean = true,
+) {
+    val selections: List<SourceSelection> =
+        java.util.Collections.unmodifiableList(java.util.ArrayList(selections))
+    private val valueShape: List<Pair<SourceSelectionKind, String>> =
+        this.selections.map { it.kind to it.field.name }
+
+    init {
+        require(name.isNotBlank()) { "Exact-one source group name must not be blank." }
+        require(this.selections.isNotEmpty()) { "Exact-one source group '$name' must select at least one field." }
+    }
+
+    override fun equals(other: Any?): Boolean =
+        other is ExactOneSourceGroup &&
+            name == other.name &&
+            required == other.required &&
+            valueShape == other.valueShape
+
+    override fun hashCode(): Int {
+        var result = name.hashCode()
+        result = 31 * result + required.hashCode()
+        result = 31 * result + valueShape.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "ExactOneSourceGroup(name=$name, selections=$valueShape, required=$required)"
+
+    internal fun reboundFor(ownerName: String, fields: List<FieldSpec>, identity: ClassIdentity): ExactOneSourceGroup =
+        ExactOneSourceGroup(name, selections.map { selection ->
+            val field = fields.single { it.name == selection.field.name }
+            selection.copy(field = FieldRef.create(identity, ownerName, field))
+        }, required)
+
+    internal fun validateFor(owner: ClassSpec) {
+        val duplicateKinds = selections.groupBy { it.kind }.filterValues { it.size > 1 }.keys
+        require(duplicateKinds.isEmpty()) { "Exact-one source group '$name' has duplicate kinds: $duplicateKinds." }
+        require(selections.map { it.kind }.toSet() == SourceSelectionKind.entries.toSet()) {
+            "Exact-one source group '$name' must include Path, Base64, and Bytes selections."
+        }
+        val duplicateFields = selections.groupBy { it.field.name }.filterValues { it.size > 1 }.keys
+        require(duplicateFields.isEmpty()) { "Exact-one source group '$name' references duplicate fields: $duplicateFields." }
+        require(required) { "Exact-one source group '$name' must be required; no source is not a valid selection." }
+        selections.forEach { selection ->
+            val reference = selection.field
+            require(reference.owner === owner.identity) {
+                "Exact-one source group '$name' field `${reference.name}` belongs to `${reference.ownerName}` " +
+                    "(a foreign class identity), not `${owner.name}`."
+            }
+            val field = owner.fields.singleOrNull { it.name == reference.name }
+                ?: throw IllegalArgumentException("Exact-one source group '$name' references unknown field `${reference.name}` on `${owner.name}`.")
+            require(owner.fieldRef(field.name) == reference) {
+                "Exact-one source group '$name' field `${reference.name}` no longer matches its typed reference."
+            }
+            require(field.nullable && field.presence == FieldPresence.Optional) {
+                "Exact-one source group '$name' field `${field.name}` must be nullable and optional individually."
+            }
+            val expectedType = when (selection.kind) {
+                SourceSelectionKind.Path, SourceSelectionKind.Base64 -> FieldType.StringT
+                SourceSelectionKind.Bytes -> FieldType.ListOf(FieldType.Int32)
+            }
+            require(field.type == expectedType) {
+                "Exact-one source group '$name' ${selection.kind} field `${field.name}` must be $expectedType, got ${field.type}."
+            }
+        }
+    }
+}
+
+fun pathSource(field: FieldRef) = SourceSelection(SourceSelectionKind.Path, field)
+fun base64Source(field: FieldRef) = SourceSelection(SourceSelectionKind.Base64, field)
+fun bytesSource(field: FieldRef) = SourceSelection(SourceSelectionKind.Bytes, field)
+
+fun ClassSpec.withExactOneSourceGroup(name: String, vararg selections: SourceSelection): ClassSpec {
+    val group = ExactOneSourceGroup(name, selections.toList())
+    group.validateFor(this)
+    val selectionNames = group.selections.map { it.field.name }
+    require(oneOf == null || oneOf == selectionNames) {
+        "Class '${this.name}' legacy oneOf does not match exact-one source group '$name'."
+    }
+    return copy(oneOf = selectionNames, exactOneSourceGroups = exactOneSourceGroups + group)
 }
 
 fun class_(name: String, kotlinPackage: String? = null, block: ClassBuilder.() -> Unit): ClassSpec {
@@ -285,11 +513,13 @@ class ClassBuilder internal constructor(
     private val kotlinFqn: String? = null,
     seedInputCapabilities: Set<InputConversionCapability> = DEFAULT_INPUT_CAPABILITIES,
     seedOutputCapabilities: Set<OutputConversionCapability> = DEFAULT_OUTPUT_CAPABILITIES,
+    seedExactOneSourceGroups: List<ExactOneSourceGroup> = emptyList(),
 ) {
     private val fields = seed.toMutableList()
     private var oneOf: List<String>? = seedOneOf
     private var inputCapabilities = seedInputCapabilities
     private var outputCapabilities = seedOutputCapabilities
+    private var exactOneSourceGroups = seedExactOneSourceGroups
 
     fun int(name: String, default: Int? = null): FieldHandle =
         addField(name, FieldType.Int32, default)
@@ -389,6 +619,7 @@ class ClassBuilder internal constructor(
                 "Class '$name' kotlin FQN must end with the class name, got `$it`."
             }
         }
+        val builtIdentity = ClassIdentity()
         return ClassSpec(
             name = name,
             fields = fields.toList(),
@@ -396,6 +627,8 @@ class ClassBuilder internal constructor(
             kotlinFqn = kotlinFqn,
             inputCapabilities = inputCapabilities,
             outputCapabilities = outputCapabilities,
+            exactOneSourceGroups = exactOneSourceGroups.map { it.reboundFor(name, fields, builtIdentity) },
+            identity = builtIdentity,
         )
     }
 }
@@ -548,6 +781,7 @@ data class CliToolBinding(
     val defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
     val releaseProducts: Set<CliReleaseProduct> = emptySet(),
     val inputModel: ToolInputModel? = null,
+    val unknownFieldPolicy: UnknownFieldPolicy = UnknownFieldPolicy.Reject,
 ) {
     init {
         require(CLI_COMMAND_NAME_REGEX.matches(commandName)) {
@@ -568,6 +802,9 @@ data class CliToolBinding(
         }
     }
 }
+
+/** Actual adapter-boundary handling of JSON/semantic keys not declared by a tool. */
+enum class UnknownFieldPolicy { Reject, Ignore }
 
 enum class CliExecutionStatus {
     Executable,
@@ -608,6 +845,7 @@ fun cliToolBinding(
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
     releaseProducts: Set<CliReleaseProduct> = emptySet(),
     inputModel: ToolInputModel? = null,
+    unknownFieldPolicy: UnknownFieldPolicy = UnknownFieldPolicy.Reject,
 ): CliToolBinding = CliToolBinding(
     id = id,
     commandName = commandName,
@@ -618,6 +856,7 @@ fun cliToolBinding(
     defaultOutput = defaultOutput,
     releaseProducts = releaseProducts,
     inputModel = inputModel,
+    unknownFieldPolicy = unknownFieldPolicy,
 )
 
 val ToolSpec.mcpDescription: String
@@ -647,7 +886,7 @@ data class ToolInputModel(
         }
 
         val duplicateSourceTargets = sources
-            .mapNotNull { source -> (source.target as? SourceTargetSpec.Field)?.name?.let { it to source.name } }
+            .mapNotNull { source -> source.target.fieldNameOrNull()?.let { it to source.name } }
             .groupBy({ it.first }, { it.second })
             .filterValues { it.size > 1 }
         require(duplicateSourceTargets.isEmpty()) {
@@ -713,6 +952,8 @@ data class SourceSlotSpec(
     val target: SourceTargetSpec,
     val required: Boolean = true,
     val cli: CliSourceSpec,
+    /** stdin materializes the existing `bytes` selection; it is not a wire field. */
+    val stdinSelection: SourceSelectionKind? = if (cli.stdinOption != null || cli.autoStdin) SourceSelectionKind.Bytes else null,
 ) {
     init {
         requireInputModelName(name, "Source slot")
@@ -734,6 +975,15 @@ sealed class SourceTargetSpec {
             requireInputModelName(name, "Source target field")
         }
     }
+
+    /** Typed target used by new declarations; [Field] remains a migration bridge. */
+    data class FieldReference(val reference: FieldRef) : SourceTargetSpec()
+}
+
+private fun SourceTargetSpec.fieldNameOrNull(): String? = when (this) {
+    SourceTargetSpec.RootInput -> null
+    is SourceTargetSpec.Field -> name
+    is SourceTargetSpec.FieldReference -> reference.name
 }
 
 data class CliSourceSpec(
@@ -852,11 +1102,18 @@ data class ParamBindingSpec(
     val kind: ParamBindingKind,
     val targetField: String = name,
     val cliOption: String? = null,
+    /** Typed target used by new declarations; `targetField` remains a migration bridge. */
+    val targetReference: FieldRef? = null,
 ) {
     init {
         requireInputModelName(name, "Param")
         requireInputModelName(targetField, "Param target field")
         cliOption?.let { validateCliOption(it, "CLI param option") }
+        targetReference?.let { reference ->
+            require(reference.name == targetField) {
+                "Param '$name' typed target `${reference.name}` does not match target field `$targetField`."
+            }
+        }
     }
 }
 
@@ -904,6 +1161,10 @@ class ToolInputModelBuilder internal constructor() {
         wasmSource(name, SourceTargetSpec.Field(targetField), required, block)
     }
 
+    fun wasmSource(name: String, target: FieldRef, required: Boolean = true, block: SourceSlotBuilder.() -> Unit) {
+        wasmSource(name, SourceTargetSpec.FieldReference(target), required, block)
+    }
+
     fun binarySource(
         name: String,
         target: SourceTargetSpec = SourceTargetSpec.Field(name),
@@ -922,6 +1183,10 @@ class ToolInputModelBuilder internal constructor() {
         binarySource(name, SourceTargetSpec.Field(targetField), required, block)
     }
 
+    fun binarySource(name: String, target: FieldRef, required: Boolean = true, block: SourceSlotBuilder.() -> Unit) {
+        binarySource(name, SourceTargetSpec.FieldReference(target), required, block)
+    }
+
     fun param(
         name: String,
         targetField: String = name,
@@ -935,6 +1200,10 @@ class ToolInputModelBuilder internal constructor() {
         )
     }
 
+    fun param(name: String, target: FieldRef, cliOption: String? = null) {
+        params += ParamBindingSpec(name, ParamBindingKind.Value, target.name, cliOption, target)
+    }
+
     fun jsonParam(
         name: String,
         targetField: String = name,
@@ -946,6 +1215,10 @@ class ToolInputModelBuilder internal constructor() {
             targetField = targetField,
             cliOption = cliOption,
         )
+    }
+
+    fun jsonParam(name: String, target: FieldRef, cliOption: String? = null) {
+        params += ParamBindingSpec(name, ParamBindingKind.Json, target.name, cliOption, target)
     }
 
     private fun sourceSlot(
@@ -1114,17 +1387,75 @@ private fun validateExplicitInputModel(toolName: String, input: ClassSpec, input
     }
 
     inputModel.sources.forEach { source ->
-        when (val target = source.target) {
-            SourceTargetSpec.RootInput -> Unit
+        val sourceInput = sourceInputClass(source.kind)
+        val targetField: FieldSpec?
+        val targetClass = when (val target = source.target) {
+            SourceTargetSpec.RootInput -> {
+                require(input.inputCapabilities.containsAll(source.kind.requiredRootCapabilities())) {
+                    "Tool '$toolName' explicit CLI ${source.kind} root source `${source.name}` requires " +
+                        "${source.kind.requiredRootCapabilities()} on `${input.name}`, got ${input.inputCapabilities}."
+                }
+                require(input.exactOneSourceGroups.singleOrNull()?.selections?.map { it.kind to it.field.name } ==
+                    sourceInput.exactOneSourceGroups.singleOrNull()?.selections?.map { it.kind to it.field.name }) {
+                    "Tool '$toolName' explicit CLI source `${source.name}` of kind ${source.kind} must target " +
+                        "a root input derived from `${sourceInput.name}`, got `${input.name}`."
+                }
+                targetField = null
+                sourceInput
+            }
             is SourceTargetSpec.Field -> {
                 val field = requireInputField(target.name)
                 validateExplicitSourceTargetField(toolName, source, field)
+                targetField = field
+                (field.type as? FieldType.ClassRef)?.clazz ?: error("validated source target is not a class")
+            }
+            is SourceTargetSpec.FieldReference -> {
+                val field = requireInputField(target.reference.name)
+                require(input.fieldRef(field.name) == target.reference) {
+                    "Tool '$toolName' explicit CLI source `${source.name}` references a foreign or stale field `${target.reference.name}`."
+                }
+                validateExplicitSourceTargetField(toolName, source, field)
+                targetField = field
+                (field.type as? FieldType.ClassRef)?.clazz ?: error("validated source target is not a class")
+            }
+        }
+        val group = targetClass.exactOneSourceGroups.singleOrNull()
+            ?: throw IllegalArgumentException(
+                "Tool '$toolName' source `${source.name}` must target an input class with one exact-one source group."
+            )
+        if (targetField == null) {
+            require(source.required == group.required) {
+                "Tool '$toolName' root source `${source.name}` required=${source.required} " +
+                    "does not match exact-one source group '${group.name}' required=${group.required}."
+            }
+        }
+        val hasStdin = source.cli.stdinOption != null || source.cli.autoStdin
+        require((source.stdinSelection != null) == hasStdin) {
+            "Tool '$toolName' source `${source.name}` stdin selection must be absent without stdin metadata and present with it."
+        }
+        if (hasStdin) {
+            require(source.stdinSelection == SourceSelectionKind.Bytes) {
+                "Tool '$toolName' source `${source.name}` stdin must materialize the existing Bytes selection, not ${source.stdinSelection}."
+            }
+            require(group.selections.any { it.kind == source.stdinSelection }) {
+                "Tool '$toolName' source `${source.name}` stdin must map to an existing ${source.stdinSelection} selection."
+            }
+        }
+        targetField?.let { field ->
+            val expectedPresence = if (source.required) FieldPresence.Required else FieldPresence.Optional
+            require(field.presence == expectedPresence) {
+                "Tool '$toolName' source `${source.name}` required=${source.required} does not match target field `${field.name}` presence ${field.presence}."
             }
         }
     }
 
     inputModel.params.forEach { param ->
         val field = requireInputField(param.targetField)
+        param.targetReference?.let { reference ->
+            require(input.fieldRef(field.name) == reference) {
+                "Tool '$toolName' CLI param `${param.name}` references a foreign or stale field `${reference.name}`."
+            }
+        }
         if (param.kind == ParamBindingKind.Json) {
             require(field.type == FieldType.JsonObjectT) {
                 "Tool '$toolName' JSON CLI param `${param.name}` must target a JSON object input field, " +
@@ -1134,13 +1465,20 @@ private fun validateExplicitInputModel(toolName: String, input: ClassSpec, input
     }
 }
 
+private fun sourceInputClass(kind: SourceKind): ClassSpec = when (kind) {
+    SourceKind.Wasm -> WasmInputClass
+    SourceKind.Binary -> BinaryInputClass
+    SourceKind.Text, SourceKind.Json -> throw IllegalArgumentException("Source kind $kind has no declared input class yet.")
+}
+
+private fun SourceKind.requiredRootCapabilities(): Set<InputConversionCapability> = when (this) {
+    SourceKind.Wasm -> setOf(InputConversionCapability.WasmPath, InputConversionCapability.WasmFromString, InputConversionCapability.Stdin)
+    SourceKind.Binary -> setOf(InputConversionCapability.BinaryPath, InputConversionCapability.Stdin)
+    SourceKind.Text, SourceKind.Json -> emptySet()
+}
+
 private fun validateExplicitSourceTargetField(toolName: String, source: SourceSlotSpec, field: FieldSpec) {
-    val expectedClass = when (source.kind) {
-        SourceKind.Wasm -> WasmInputClass
-        SourceKind.Binary -> BinaryInputClass
-        SourceKind.Text,
-        SourceKind.Json -> return
-    }
+    val expectedClass = sourceInputClass(source.kind)
     val actualClass = (field.type as? FieldType.ClassRef)?.clazz
     require(actualClass == expectedClass) {
         "Tool '$toolName' explicit CLI source `${source.name}` of kind ${source.kind} must target " +

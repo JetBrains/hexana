@@ -56,7 +56,17 @@ class ToolCompatibilityDiffTest {
         val tool = HexanaTools.first { it.name == "list_functions" }
         val field = tool.input.fields.first { it.name == "limit" }
         val changedTool = tool.copy(input = tool.input.copy(fields = tool.input.fields.map {
-            if (it.name == field.name) it.copy(nullable = !field.nullable, default = (field.default as Int) + 1, maximum = 500) else it
+            if (it.name == field.name) {
+                val changedDefault = (field.default as Int) + 1
+                it.copy(
+                    nullable = !field.nullable,
+                    default = changedDefault,
+                    maximum = 500,
+                    presence = FieldPresence.Defaulted(FieldDefaultValue.IntValue(changedDefault)),
+                )
+            } else {
+                it
+            }
         }))
         val changed = ResolvedToolCatalogReport(semanticContracts = HexanaTools.map { if (it.id == tool.id) changedTool else it })
         val differences = ToolCompatibilityDiff.between(baseline, changed).differences

@@ -493,6 +493,16 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `consumer authorities declare their characterized unknown field policies`() {
+        assertEquals(UnknownFieldPolicy.Ignore, HexanaIdeaUnknownFieldPolicy)
+        assertEquals(UnknownFieldPolicy.Ignore, HexanaStandaloneUnknownFieldPolicy)
+        assertEquals(UnknownFieldPolicy.Reject, HexanaCliUnknownFieldPolicy)
+        assertTrue(HexanaIdeaToolBindings.all { it.unknownFieldPolicy == HexanaIdeaUnknownFieldPolicy })
+        assertTrue(HexanaStandaloneTools.all { it.binding.unknownFieldPolicy == HexanaStandaloneUnknownFieldPolicy })
+        assertTrue(HexanaCliTools.all { it.binding.unknownFieldPolicy == HexanaCliUnknownFieldPolicy })
+    }
+
+    @Test
     fun `wasm and binary input classes declare conversion capabilities`() {
         assertEquals(
             setOf(

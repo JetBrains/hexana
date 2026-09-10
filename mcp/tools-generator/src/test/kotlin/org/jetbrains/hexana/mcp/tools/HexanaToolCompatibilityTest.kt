@@ -268,6 +268,7 @@ class HexanaToolCompatibilityTest {
     private fun SourceTargetSpec.compatibilityText(): String = when (this) {
         SourceTargetSpec.RootInput -> "root"
         is SourceTargetSpec.Field -> "field:$name"
+        is SourceTargetSpec.FieldReference -> "field:${reference.name}"
     }
 
     private fun FieldType.compatibilityText(): String = when (this) {

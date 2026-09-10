@@ -880,6 +880,27 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun standaloneAdapterIgnoresExtraFieldsWhilePreservingSourceAndDefaultSemantics() {
+        val wasm = wat2wasm("(module (func))")
+        val omittedDefault = handlers.queryBinary(
+            buildJsonObject {
+                put("bytes", buildJsonArray { wasm.forEach { add(JsonPrimitive(it.toInt() and 0xFF)) } })
+                put("extra", JsonPrimitive("ignored"))
+            }
+        )
+        val explicitDefault = handlers.queryBinary(
+            buildJsonObject {
+                put("bytes", buildJsonArray { wasm.forEach { add(JsonPrimitive(it.toInt() and 0xFF)) } })
+                put("operation", JsonPrimitive("overview"))
+            }
+        )
+
+        assertFalse(omittedDefault.isError == true)
+        assertFalse(explicitDefault.isError == true)
+        assertEquals(explicitDefault.structuredContent, omittedDefault.structuredContent)
+    }
+
+    @Test
     fun auditDataPayloadPolicyReadsPolicyPathAndReturnsRecommendedReport() {
         val wasm = createWasmFile(
             "payload-policy.wasm",
