@@ -248,6 +248,23 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `standalone authority rejects registered tools omitted from every profile`() {
+        val registered = HexanaStandaloneTools.first()
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            StandaloneToolAuthority(
+                registrations = listOf(registered),
+                defaultToolIds = emptyList(),
+                advancedToolIds = emptyList(),
+                scriptingToolIds = emptyList(),
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("without a profile selection"))
+        assertTrue(error.message.orEmpty().contains(registered.name))
+    }
+
+    @Test
     fun `CLI release products and executable models preserve approved inventories`() {
         val products = CliReleaseProduct.entries.associateWith { product ->
             HexanaCliTools.filter { product in it.binding.releaseProducts }.map { it.name }

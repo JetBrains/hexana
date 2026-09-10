@@ -87,6 +87,11 @@ data class StandaloneToolAuthority(
                 }
             }
         }
+        val selectedIds = profiles.flatMapTo(mutableSetOf()) { it.second }
+        val unselected = registeredIds - selectedIds
+        require(unselected.isEmpty()) {
+            "Standalone authority contains registered tool IDs without a profile selection: ${unselected.joinToString()}"
+        }
     }
 }
 

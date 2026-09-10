@@ -73,8 +73,10 @@ class HexanaToolCompatibilityTest {
 
     @Test
     fun `standalone default membership mutation also affects MCPB snapshot`() {
+        val moved = baseline.standaloneAuthority.defaultToolIds.last()
         val mutated = baseline.standaloneAuthority.copy(
             defaultToolIds = baseline.standaloneAuthority.defaultToolIds.dropLast(1),
+            advancedToolIds = baseline.standaloneAuthority.advancedToolIds + moved,
         )
 
         assertOnlySnapshotsChanged(
