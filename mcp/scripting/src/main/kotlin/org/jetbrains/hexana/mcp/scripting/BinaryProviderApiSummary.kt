@@ -29,6 +29,13 @@ object BinaryProviderApiSummary {
     const val CURATED_DTS_NAME: String = ScriptApiReference.TYPES_FILE_NAME
     const val RAW_DTS_NAME: String = "hexana-scripting-raw.d.ts"
 
+    /**
+     * Kotlin's generated `component1()`, `component2()`, … destructuring accessors on data
+     * classes. They duplicate the properties emitted right above them and mean nothing in
+     * TypeScript, so they are dropped.
+     */
+    private val COMPONENT_N = Regex("""component\d+""")
+
     /** Primitive / well-known types that don't need a dedicated type description. */
     private val PRIMITIVE_NAMES = setOf(
         "Boolean", "Byte", "Short", "Int", "Long", "Float", "Double",
@@ -166,6 +173,7 @@ object BinaryProviderApiSummary {
             klass.memberFunctions
                 .filter { it.visibility == KVisibility.PUBLIC }
                 .filter { it.name !in setOf("equals", "hashCode", "toString") }
+                .filterNot { COMPONENT_N.matches(it.name) }
                 .sortedBy { it.name }
         } catch (_: Throwable) {
             emptyList()

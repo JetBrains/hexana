@@ -14,6 +14,7 @@
 
 ### Changed
 - The `.debug_abbrev`, `.debug_info` and `.debug_line` tabs are grouped under a single **DWARF** tab, and now searchable and scrollable; a binary carrying only one of them keeps its plain `.debug_*` tab
+- The bundled `hexana-scripting-raw.d.ts` reference no longer lists Kotlin's generated `component1()`, `component2()`, ... destructuring accessors. They carried no information a script can use — each one repeats the property declared right above it, and TypeScript has no destructuring by accessor — while accounting for about 1700 of the file's lines
 
 ### Deprecated
 

@@ -3629,12 +3629,6 @@ interface AddressSourceLocation {
     file: string;
     line: number;
   };
-  component1(): number;
-  component2(): {
-    column: number;
-    file: string;
-    line: number;
-  };
   copy(offset: number, sourceLocation: {
     column: number;
     file: string;
@@ -3708,43 +3702,6 @@ interface ArrowEncapsulatedMessage {
     version: number;
   };
   nextMessageStart: number;
-  component1(): {
-    bodyLength: number;
-    headerTable?: {
-      buf: {
-        indices: {
-          endExclusive: number;
-          endInclusive: number;
-          first: number;
-          last: number;
-          start: number;
-          step: number;
-        };
-        lastIndex: number;
-        size: number;
-      };
-      pos: number;
-    };
-    headerType: "NONE" | "SCHEMA" | "DICTIONARY_BATCH" | "RECORD_BATCH" | "TENSOR" | "SPARSE_TENSOR";
-    t: {
-      buf: {
-        indices: {
-          endExclusive: number;
-          endInclusive: number;
-          first: number;
-          last: number;
-          start: number;
-          step: number;
-        };
-        lastIndex: number;
-        size: number;
-      };
-      pos: number;
-    };
-    version: number;
-  };
-  component2(): number;
-  component3(): number;
   copy(message: {
     bodyLength: number;
     headerTable?: {
@@ -4349,80 +4306,6 @@ interface ArrowStreamContents {
       pos: number;
     };
   };
-  component1(): {
-    endianness: number;
-    fieldCount: number;
-    fieldsVector?: {
-      buf: {
-        indices: {
-          endExclusive: number;
-          endInclusive: number;
-          first: number;
-          last: number;
-          start: number;
-          step: number;
-        };
-        lastIndex: number;
-        size: number;
-      };
-      length: number;
-      pos: number;
-    };
-    t: {
-      buf: {
-        indices: {
-          endExclusive: number;
-          endInclusive: number;
-          first: number;
-          last: number;
-          start: number;
-          step: number;
-        };
-        lastIndex: number;
-        size: number;
-      };
-      pos: number;
-    };
-  };
-  component2(): {
-    bodyStart: number;
-    message: {
-      bodyLength: number;
-      headerTable?: {
-        buf: {
-          indices: {
-            endExclusive: number;
-            endInclusive: number;
-            first: number;
-            last: number;
-            start: number;
-            step: number;
-          };
-          lastIndex: number;
-          size: number;
-        };
-        pos: number;
-      };
-      headerType: "NONE" | "SCHEMA" | "DICTIONARY_BATCH" | "RECORD_BATCH" | "TENSOR" | "SPARSE_TENSOR";
-      t: {
-        buf: {
-          indices: {
-            endExclusive: number;
-            endInclusive: number;
-            first: number;
-            last: number;
-            start: number;
-            step: number;
-          };
-          lastIndex: number;
-          size: number;
-        };
-        pos: number;
-      };
-      version: number;
-    };
-    nextMessageStart: number;
-  }[];
   copy(schema: {
     endianness: number;
     fieldCount: number;
@@ -4583,14 +4466,6 @@ interface ArscConfiguration {
   qualifier: string;
   sdkVersion: number;
   size: number;
-  component1(): number;
-  component2(): number;
-  component3(): number;
-  component4(): string;
-  component5(): string;
-  component6(): number;
-  component7(): number;
-  component8(): number;
   copy(size: number, mcc: number, mnc: number, language: string, country: string, orientation: number, density: number, sdkVersion: number): {
     country: string;
     density: number;
@@ -4625,22 +4500,6 @@ interface ArscEntry {
     data: number;
     dataType: number;
   };
-  component1(): number;
-  component2(): number;
-  component3(): string;
-  component4(): number;
-  component5(): {
-    data: number;
-    dataType: number;
-  } | null;
-  component6(): number;
-  component7(): {
-    nameRef: number;
-    value: {
-      data: number;
-      dataType: number;
-    };
-  }[];
   copy(entryId: number, keyIndex: number, key: string, flags: number, value: {
     data: number;
     dataType: number;
@@ -4743,73 +4602,6 @@ interface ArscFile {
     isUtf8: boolean;
     strings: string[];
   };
-  component1(): number;
-  component2(): {
-    flags: number;
-    isSorted: boolean;
-    isUtf8: boolean;
-    strings: string[];
-  };
-  component3(): {
-    id: number;
-    keyStrings: {
-      flags: number;
-      isSorted: boolean;
-      isUtf8: boolean;
-      strings: string[];
-    };
-    name: string;
-    typeIdOffset: number;
-    typeSpecs: {
-      entryCount: number;
-      typeId: number;
-      typeName: string;
-    }[];
-    typeStrings: {
-      flags: number;
-      isSorted: boolean;
-      isUtf8: boolean;
-      strings: string[];
-    };
-    types: {
-      configuration: {
-        country: string;
-        density: number;
-        language: string;
-        mcc: number;
-        mnc: number;
-        orientation: number;
-        qualifier: string;
-        sdkVersion: number;
-        size: number;
-      };
-      entries: {
-        entryId: number;
-        flags: number;
-        isCompact: boolean;
-        isComplex: boolean;
-        isPublic: boolean;
-        isWeak: boolean;
-        key: string;
-        keyIndex: number;
-        mapValues: {
-          nameRef: number;
-          value: {
-            data: number;
-            dataType: number;
-          };
-        }[];
-        parentRef: number;
-        value?: {
-          data: number;
-          dataType: number;
-        };
-      }[];
-      entryCount: number;
-      typeId: number;
-      typeName: string;
-    }[];
-  }[];
   copy(packageCount: number, valueStrings: {
     flags: number;
     isSorted: boolean;
@@ -5019,11 +4811,6 @@ interface ArscMapValue {
     data: number;
     dataType: number;
   };
-  component1(): number;
-  component2(): {
-    data: number;
-    dataType: number;
-  };
   copy(nameRef: number, value: {
     data: number;
     dataType: number;
@@ -5091,64 +4878,6 @@ interface ArscPackage {
         dataType: number;
       };
     }[];
-    entryCount: number;
-    typeId: number;
-    typeName: string;
-  }[];
-  component1(): number;
-  component2(): string;
-  component3(): number;
-  component4(): {
-    flags: number;
-    isSorted: boolean;
-    isUtf8: boolean;
-    strings: string[];
-  };
-  component5(): {
-    flags: number;
-    isSorted: boolean;
-    isUtf8: boolean;
-    strings: string[];
-  };
-  component6(): {
-    configuration: {
-      country: string;
-      density: number;
-      language: string;
-      mcc: number;
-      mnc: number;
-      orientation: number;
-      qualifier: string;
-      sdkVersion: number;
-      size: number;
-    };
-    entries: {
-      entryId: number;
-      flags: number;
-      isCompact: boolean;
-      isComplex: boolean;
-      isPublic: boolean;
-      isWeak: boolean;
-      key: string;
-      keyIndex: number;
-      mapValues: {
-        nameRef: number;
-        value: {
-          data: number;
-          dataType: number;
-        };
-      }[];
-      parentRef: number;
-      value?: {
-        data: number;
-        dataType: number;
-      };
-    }[];
-    entryCount: number;
-    typeId: number;
-    typeName: string;
-  }[];
-  component7(): {
     entryCount: number;
     typeId: number;
     typeName: string;
@@ -5271,8 +5000,6 @@ interface ArscStringPool {
   isSorted: boolean;
   isUtf8: boolean;
   strings: string[];
-  component1(): number;
-  component2(): string[];
   copy(flags: number, strings: string[]): {
     flags: number;
     isSorted: boolean;
@@ -5319,42 +5046,6 @@ interface ArscTypeChunk {
   entryCount: number;
   typeId: number;
   typeName: string;
-  component1(): number;
-  component2(): string;
-  component3(): {
-    country: string;
-    density: number;
-    language: string;
-    mcc: number;
-    mnc: number;
-    orientation: number;
-    qualifier: string;
-    sdkVersion: number;
-    size: number;
-  };
-  component4(): number;
-  component5(): {
-    entryId: number;
-    flags: number;
-    isCompact: boolean;
-    isComplex: boolean;
-    isPublic: boolean;
-    isWeak: boolean;
-    key: string;
-    keyIndex: number;
-    mapValues: {
-      nameRef: number;
-      value: {
-        data: number;
-        dataType: number;
-      };
-    }[];
-    parentRef: number;
-    value?: {
-      data: number;
-      dataType: number;
-    };
-  }[];
   copy(typeId: number, typeName: string, configuration: {
     country: string;
     density: number;
@@ -5430,9 +5121,6 @@ interface ArscTypeSpec {
   entryCount: number;
   typeId: number;
   typeName: string;
-  component1(): number;
-  component2(): string;
-  component3(): number;
   copy(typeId: number, typeName: string, entryCount: number): {
     entryCount: number;
     typeId: number;
@@ -5443,8 +5131,6 @@ interface ArscTypeSpec {
 interface ArscValue {
   data: number;
   dataType: number;
-  component1(): number;
-  component2(): number;
   copy(dataType: number, data: number): {
     data: number;
     dataType: number;
@@ -5455,9 +5141,6 @@ interface AttributeRecord {
   byteOffset: number;
   info: number[];
   nameIndex: number;
-  component1(): number;
-  component2(): number[];
-  component3(): number;
   copy(nameIndex: number, info: number[], byteOffset: number): {
     byteOffset: number;
     info: number[];
@@ -5484,11 +5167,6 @@ interface BinaryStringRecord {
   size: number;
   tag?: string;
   value: string;
-  component1(): string;
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): string | null;
   copy(value: string, offset: number, size: number, index: number, tag: string | null): {
     index: number;
     offset: number;
@@ -5576,75 +5254,6 @@ interface CallGraphResult {
     };
   };
   nodeMap: Record<number, {
-    id: number;
-    name: string;
-  }>;
-  component1(): {
-    buffer: {
-      indices: {
-        endExclusive: number;
-        endInclusive: number;
-        first: number;
-        last: number;
-        start: number;
-        step: number;
-      };
-      lastIndex: number;
-      size: number;
-    };
-    idOffset: number;
-    idRange: number;
-    idToIndexPos: number;
-    nodeCount: number;
-    nodes: {
-      id: number;
-      label: string;
-    }[];
-    predDataPos: number;
-    predOffsetPos: number;
-    predecessors: {
-      buffer: {
-        indices: {
-          endExclusive: number;
-          endInclusive: number;
-          first: number;
-          last: number;
-          start: number;
-          step: number;
-        };
-        lastIndex: number;
-        size: number;
-      };
-      dataPos: number;
-      idOffset: number;
-      idRange: number;
-      idToIndexPos: number;
-      offsetPos: number;
-    };
-    root: number;
-    succDataPos: number;
-    succOffsetPos: number;
-    successors: {
-      buffer: {
-        indices: {
-          endExclusive: number;
-          endInclusive: number;
-          first: number;
-          last: number;
-          start: number;
-          step: number;
-        };
-        lastIndex: number;
-        size: number;
-      };
-      dataPos: number;
-      idOffset: number;
-      idRange: number;
-      idToIndexPos: number;
-      offsetPos: number;
-    };
-  };
-  component2(): Record<number, {
     id: number;
     name: string;
   }>;
@@ -5791,8 +5400,6 @@ interface CallGraphResult {
 interface CodeEntryOffset {
   offset: number;
   size: number;
-  component1(): number;
-  component2(): number;
   copy(offset: number, size: number): {
     offset: number;
     size: number;
@@ -5803,8 +5410,6 @@ interface Coff {
   displayName: string;
   machine: number;
   sectionCount: number;
-  component1(): number;
-  component2(): number;
   copy(machine: number, sectionCount: number): {
     displayName: string;
     machine: number;
@@ -5827,20 +5432,6 @@ interface ColumnChunk {
     totalUncompressedSize: number;
     type: "BOOLEAN" | "INT32" | "INT64" | "INT96" | "FLOAT" | "DOUBLE" | "BYTE_ARRAY" | "FIXED_LEN_BYTE_ARRAY";
   };
-  component1(): string | null;
-  component2(): number;
-  component3(): {
-    codec: "UNCOMPRESSED" | "SNAPPY" | "GZIP" | "LZO" | "BROTLI" | "LZ4" | "ZSTD" | "LZ4_RAW";
-    dataPageOffset: number;
-    dictionaryPageOffset?: number;
-    encodings: "PLAIN" | "GROUP_VAR_INT" | "PLAIN_DICTIONARY" | "RLE" | "BIT_PACKED" | "DELTA_BINARY_PACKED" | "DELTA_LENGTH_BYTE_ARRAY" | "DELTA_BYTE_ARRAY" | "RLE_DICTIONARY" | "BYTE_STREAM_SPLIT"[];
-    indexPageOffset?: number;
-    numValues: number;
-    pathInSchema: string[];
-    totalCompressedSize: number;
-    totalUncompressedSize: number;
-    type: "BOOLEAN" | "INT32" | "INT64" | "INT96" | "FLOAT" | "DOUBLE" | "BYTE_ARRAY" | "FIXED_LEN_BYTE_ARRAY";
-  } | null;
   copy(filePath: string | null, fileOffset: number, metaData: {
     codec: "UNCOMPRESSED" | "SNAPPY" | "GZIP" | "LZO" | "BROTLI" | "LZ4" | "ZSTD" | "LZ4_RAW";
     dataPageOffset: number;
@@ -5881,16 +5472,6 @@ interface ColumnMetaData {
   totalCompressedSize: number;
   totalUncompressedSize: number;
   type: "BOOLEAN" | "INT32" | "INT64" | "INT96" | "FLOAT" | "DOUBLE" | "BYTE_ARRAY" | "FIXED_LEN_BYTE_ARRAY";
-  component1(): "BOOLEAN" | "INT32" | "INT64" | "INT96" | "FLOAT" | "DOUBLE" | "BYTE_ARRAY" | "FIXED_LEN_BYTE_ARRAY";
-  component10(): number | null;
-  component2(): "PLAIN" | "GROUP_VAR_INT" | "PLAIN_DICTIONARY" | "RLE" | "BIT_PACKED" | "DELTA_BINARY_PACKED" | "DELTA_LENGTH_BYTE_ARRAY" | "DELTA_BYTE_ARRAY" | "RLE_DICTIONARY" | "BYTE_STREAM_SPLIT"[];
-  component3(): string[];
-  component4(): "UNCOMPRESSED" | "SNAPPY" | "GZIP" | "LZO" | "BROTLI" | "LZ4" | "ZSTD" | "LZ4_RAW";
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number;
-  component9(): number | null;
   copy(type: "BOOLEAN" | "INT32" | "INT64" | "INT96" | "FLOAT" | "DOUBLE" | "BYTE_ARRAY" | "FIXED_LEN_BYTE_ARRAY", encodings: "PLAIN" | "GROUP_VAR_INT" | "PLAIN_DICTIONARY" | "RLE" | "BIT_PACKED" | "DELTA_BINARY_PACKED" | "DELTA_LENGTH_BYTE_ARRAY" | "DELTA_BYTE_ARRAY" | "RLE_DICTIONARY" | "BYTE_STREAM_SPLIT"[], pathInSchema: string[], codec: "UNCOMPRESSED" | "SNAPPY" | "GZIP" | "LZO" | "BROTLI" | "LZ4" | "ZSTD" | "LZ4_RAW", numValues: number, totalUncompressedSize: number, totalCompressedSize: number, dataPageOffset: number, indexPageOffset: number | null, dictionaryPageOffset: number | null): {
     codec: "UNCOMPRESSED" | "SNAPPY" | "GZIP" | "LZO" | "BROTLI" | "LZ4" | "ZSTD" | "LZ4_RAW";
     dataPageOffset: number;
@@ -5994,8 +5575,6 @@ interface ComponentSort {
 interface ComponentSortIndex {
   index: number;
   sort: ComponentSort;
-  component1(): ComponentSort;
-  component2(): number;
   copy(sort: ComponentSort, index: number): {
     index: number;
     sort: ComponentSort;
@@ -6056,14 +5635,6 @@ interface DexClassDef {
   sourceFileIdx: number;
   staticValuesOff: number;
   superclassIdx: number;
-  component1(): number;
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number;
   copy(classIdx: number, accessFlags: number, superclassIdx: number, interfacesOff: number, sourceFileIdx: number, annotationsOff: number, classDataOff: number, staticValuesOff: number): {
     accessFlags: number;
     annotationsOff: number;
@@ -6080,9 +5651,6 @@ interface DexFieldId {
   classIdx: number;
   nameIdx: number;
   typeIdx: number;
-  component1(): number;
-  component2(): number;
-  component3(): number;
   copy(classIdx: number, typeIdx: number, nameIdx: number): {
     classIdx: number;
     nameIdx: number;
@@ -6149,65 +5717,6 @@ interface DexFile {
   }[];
   typeIds: {
     descriptorIdx: number;
-  }[];
-  component1(): {
-    checksum: number;
-    classDefsOff: number;
-    classDefsSize: number;
-    dataOff: number;
-    dataSize: number;
-    endianTag: number;
-    fieldIdsOff: number;
-    fieldIdsSize: number;
-    fileSize: number;
-    headerSize: number;
-    linkOff: number;
-    linkSize: number;
-    magic: number[];
-    mapOff: number;
-    methodIdsOff: number;
-    methodIdsSize: number;
-    protoIdsOff: number;
-    protoIdsSize: number;
-    signature: number[];
-    stringIdsOff: number;
-    stringIdsSize: number;
-    typeIdsOff: number;
-    typeIdsSize: number;
-    version: string;
-  };
-  component2(): {
-    stringDataOff: number;
-    value: string;
-  }[];
-  component3(): {
-    descriptorIdx: number;
-  }[];
-  component4(): {
-    parameterTypeIdx: number[];
-    parametersOff: number;
-    returnTypeIdx: number;
-    shortyIdx: number;
-  }[];
-  component5(): {
-    classIdx: number;
-    nameIdx: number;
-    typeIdx: number;
-  }[];
-  component6(): {
-    classIdx: number;
-    nameIdx: number;
-    protoIdx: number;
-  }[];
-  component7(): {
-    accessFlags: number;
-    annotationsOff: number;
-    classDataOff: number;
-    classIdx: number;
-    interfacesOff: number;
-    sourceFileIdx: number;
-    staticValuesOff: number;
-    superclassIdx: number;
   }[];
   copy(header: {
     checksum: number;
@@ -6356,29 +5865,6 @@ interface DexHeader {
   typeIdsOff: number;
   typeIdsSize: number;
   version: string;
-  component1(): number[];
-  component10(): number;
-  component11(): number;
-  component12(): number;
-  component13(): number;
-  component14(): number;
-  component15(): number;
-  component16(): number;
-  component17(): number;
-  component18(): number;
-  component19(): number;
-  component2(): number;
-  component20(): number;
-  component21(): number;
-  component22(): number;
-  component23(): number;
-  component3(): number[];
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number;
-  component9(): number;
   copy(magic: number[], checksum: number, signature: number[], fileSize: number, headerSize: number, endianTag: number, linkSize: number, linkOff: number, mapOff: number, stringIdsSize: number, stringIdsOff: number, typeIdsSize: number, typeIdsOff: number, protoIdsSize: number, protoIdsOff: number, fieldIdsSize: number, fieldIdsOff: number, methodIdsSize: number, methodIdsOff: number, classDefsSize: number, classDefsOff: number, dataSize: number, dataOff: number): {
     checksum: number;
     classDefsOff: number;
@@ -6411,9 +5897,6 @@ interface DexMethodId {
   classIdx: number;
   nameIdx: number;
   protoIdx: number;
-  component1(): number;
-  component2(): number;
-  component3(): number;
   copy(classIdx: number, protoIdx: number, nameIdx: number): {
     classIdx: number;
     nameIdx: number;
@@ -6426,10 +5909,6 @@ interface DexProtoId {
   parametersOff: number;
   returnTypeIdx: number;
   shortyIdx: number;
-  component1(): number;
-  component2(): number;
-  component3(): number;
-  component4(): number[];
   copy(shortyIdx: number, returnTypeIdx: number, parametersOff: number, parameterTypeIdx: number[]): {
     parameterTypeIdx: number[];
     parametersOff: number;
@@ -6441,8 +5920,6 @@ interface DexProtoId {
 interface DexStringId {
   stringDataOff: number;
   value: string;
-  component1(): number;
-  component2(): string;
   copy(stringDataOff: number, value: string): {
     stringDataOff: number;
     value: string;
@@ -6451,7 +5928,6 @@ interface DexStringId {
 
 interface DexTypeId {
   descriptorIdx: number;
-  component1(): number;
   copy(descriptorIdx: number): {
     descriptorIdx: number;
   };
@@ -6574,12 +6050,6 @@ interface DispatchSignature {
     code: T;
   }[];
   results: {
-    code: T;
-  }[];
-  component1(): {
-    code: T;
-  }[];
-  component2(): {
     code: T;
   }[];
   copy(params: {
@@ -6726,10 +6196,6 @@ interface Elf {
   fileType?: number;
   machine?: number;
   wordSize: "Bits32" | "Bits64" | "Unknown";
-  component1(): "Bits32" | "Bits64" | "Unknown";
-  component2(): "Little" | "Big" | "Unknown";
-  component3(): number | null;
-  component4(): number | null;
   copy(wordSize: "Bits32" | "Bits64" | "Unknown", endian: "Little" | "Big" | "Unknown", fileType: number | null, machine: number | null): {
     displayName: string;
     endian: "Little" | "Big" | "Unknown";
@@ -6750,16 +6216,6 @@ interface ElfDynamicEntry {
   };
   tag: number;
   value: number;
-  component1(): number;
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): string | null;
-  component6(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
   copy(index: number, dynamicSectionIndex: number, tag: number, value: number, neededLibrary: string | null, recordRange: {
     endExclusive: number;
     offset: number;
@@ -6889,115 +6345,6 @@ interface ElfHeader {
   sectionNameStringTableIndex: number;
   version: number;
   wordSize: "Bits32" | "Bits64" | "Unknown";
-  component1(): "Bits32" | "Bits64" | "Unknown";
-  component10(): number;
-  component11(): number;
-  component12(): number;
-  component13(): number;
-  component14(): number;
-  component15(): number;
-  component16(): number;
-  component17(): number;
-  component18(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component19(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component2(): "Little" | "Big" | "Unknown";
-  component20(): {
-    abiVersion: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    entryPoint: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    fileType: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    flags: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    headerSize: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    ident: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    machine: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    osAbi: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    programHeaderCount: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    programHeaderEntrySize: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    programHeaderOffset: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    sectionHeaderCount: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    sectionHeaderEntrySize: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    sectionHeaderOffset: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    sectionNameStringTableIndex: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    version: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-  };
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number;
-  component9(): number;
   copy(wordSize: "Bits32" | "Bits64" | "Unknown", endian: "Little" | "Big" | "Unknown", osAbi: number, abiVersion: number, fileType: number, machine: number, version: number, entryPoint: number, programHeaderOffset: number, sectionHeaderOffset: number, flags: number, headerSize: number, programHeaderEntrySize: number, programHeaderCount: number, sectionHeaderEntrySize: number, sectionHeaderCount: number, sectionNameStringTableIndex: number, identRange: {
     endExclusive: number;
     offset: number;
@@ -7282,86 +6629,6 @@ interface ElfHeaderFieldRanges {
     offset: number;
     size: number;
   };
-  component1(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component10(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component11(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component12(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component13(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component14(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component15(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component16(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component2(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component3(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component4(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component5(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component6(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component7(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component8(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component9(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
   copy(ident: {
     endExclusive: number;
     offset: number;
@@ -7530,25 +6797,6 @@ interface ElfProgramHeader {
   physicalAddress: number;
   type: number;
   virtualAddress: number;
-  component1(): number;
-  component10(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component11(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number;
-  component9(): number;
   copy(index: number, type: number, flags: number, fileOffset: number, virtualAddress: number, physicalAddress: number, fileSize: number, memorySize: number, alignment: number, headerRange: {
     endExclusive: number;
     offset: number;
@@ -7613,38 +6861,6 @@ interface ElfRelocation {
   symbolIndex: number;
   targetSectionIndex: number;
   type: number;
-  component1(): number;
-  component10(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number | null;
-  component9(): {
-    binding: number;
-    index: number;
-    info: number;
-    name: string;
-    nameOffset: number;
-    other: number;
-    recordRange: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    sectionIndex: number;
-    size: number;
-    tableSectionIndex: number;
-    type: number;
-    value: number;
-    visibility: number;
-  } | null;
   copy(index: number, relocationSectionIndex: number, targetSectionIndex: number, offset: number, info: number, symbolIndex: number, type: number, addend: number | null, symbol: {
     binding: number;
     index: number;
@@ -7726,28 +6942,6 @@ interface ElfSectionHeader {
   nameOffset: number;
   size: number;
   type: number;
-  component1(): number;
-  component10(): number;
-  component11(): number;
-  component12(): number;
-  component13(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component14(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
-  component2(): number;
-  component3(): string;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number;
-  component9(): number;
   copy(index: number, nameOffset: number, name: string, type: number, flags: number, address: number, fileOffset: number, size: number, link: number, info: number, addressAlignment: number, entrySize: number, headerRange: {
     endExclusive: number;
     offset: number;
@@ -7800,23 +6994,6 @@ interface ElfSymbol {
   type: number;
   value: number;
   visibility: number;
-  component1(): number;
-  component10(): number;
-  component11(): number;
-  component12(): number;
-  component13(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component2(): number;
-  component3(): number;
-  component4(): string;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number;
-  component9(): number;
   copy(index: number, tableSectionIndex: number, nameOffset: number, name: string, info: number, binding: number, type: number, other: number, visibility: number, sectionIndex: number, value: number, size: number, recordRange: {
     endExclusive: number;
     offset: number;
@@ -7871,8 +7048,6 @@ interface FatMachO {
   displayName: string;
   endian: "Little" | "Big" | "Unknown";
   wordSize: "Bits32" | "Bits64" | "Unknown";
-  component1(): "Bits32" | "Bits64" | "Unknown";
-  component2(): "Little" | "Big" | "Unknown";
   copy(wordSize: "Bits32" | "Bits64" | "Unknown", endian: "Little" | "Big" | "Unknown"): {
     displayName: string;
     endian: "Little" | "Big" | "Unknown";
@@ -7892,17 +7067,6 @@ interface FieldInfo {
   byteOffset: number;
   descriptorIndex: number;
   nameIndex: number;
-  component1(): {
-    raw: number;
-  };
-  component2(): number;
-  component3(): number;
-  component4(): {
-    byteOffset: number;
-    info: number[];
-    nameIndex: number;
-  }[];
-  component5(): number;
   copy(accessFlags: {
     raw: number;
   }, nameIndex: number, descriptorIndex: number, attributes: {
@@ -7955,36 +7119,6 @@ interface FileMetaData {
     typeLength?: number;
   }[];
   version: number;
-  component1(): number;
-  component2(): {
-    name: string;
-    numChildren?: number;
-    repetitionType?: "REQUIRED" | "OPTIONAL" | "REPEATED";
-    type?: "BOOLEAN" | "INT32" | "INT64" | "INT96" | "FLOAT" | "DOUBLE" | "BYTE_ARRAY" | "FIXED_LEN_BYTE_ARRAY";
-    typeLength?: number;
-  }[];
-  component3(): number;
-  component4(): {
-    columns: {
-      fileOffset: number;
-      filePath?: string;
-      metaData?: {
-        codec: "UNCOMPRESSED" | "SNAPPY" | "GZIP" | "LZO" | "BROTLI" | "LZ4" | "ZSTD" | "LZ4_RAW";
-        dataPageOffset: number;
-        dictionaryPageOffset?: number;
-        encodings: "PLAIN" | "GROUP_VAR_INT" | "PLAIN_DICTIONARY" | "RLE" | "BIT_PACKED" | "DELTA_BINARY_PACKED" | "DELTA_LENGTH_BYTE_ARRAY" | "DELTA_BYTE_ARRAY" | "RLE_DICTIONARY" | "BYTE_STREAM_SPLIT"[];
-        indexPageOffset?: number;
-        numValues: number;
-        pathInSchema: string[];
-        totalCompressedSize: number;
-        totalUncompressedSize: number;
-        type: "BOOLEAN" | "INT32" | "INT64" | "INT96" | "FLOAT" | "DOUBLE" | "BYTE_ARRAY" | "FIXED_LEN_BYTE_ARRAY";
-      };
-    }[];
-    numRows: number;
-    totalByteSize: number;
-  }[];
-  component5(): string | null;
   copy(version: number, schema: {
     name: string;
     numChildren?: number;
@@ -8144,9 +7278,6 @@ interface GarbageDataSegmentEntry {
   dataSize: number;
   index: number;
   recordSize: number;
-  component1(): number;
-  component2(): number;
-  component3(): number;
   copy(index: number, dataSize: number, recordSize: number): {
     dataSize: number;
     index: number;
@@ -8161,12 +7292,6 @@ interface GarbageEntry {
   nodeId: number;
   reason: "NO_CALLERS" | "CALLERS_UNREACHABLE";
   size: number;
-  component1(): number;
-  component2(): number;
-  component3(): string;
-  component4(): number;
-  component5(): string | null;
-  component6(): "NO_CALLERS" | "CALLERS_UNREACHABLE";
   copy(nodeId: number, funcIndex: number, name: string, size: number, module: string | null, reason: "NO_CALLERS" | "CALLERS_UNREACHABLE"): {
     funcIndex: number;
     module?: string;
@@ -8199,27 +7324,6 @@ interface GarbageResult {
     typeIndex: number;
   }[];
   typeWastedBytes: number;
-  component1(): {
-    funcIndex: number;
-    module?: string;
-    name: string;
-    nodeId: number;
-    reason: "NO_CALLERS" | "CALLERS_UNREACHABLE";
-    size: number;
-  }[];
-  component2(): number;
-  component3(): number;
-  component4(): {
-    size: number;
-    typeIndex: number;
-  }[];
-  component5(): number;
-  component6(): {
-    dataSize: number;
-    index: number;
-    recordSize: number;
-  }[];
-  component7(): number;
   copy(entries: {
     funcIndex: number;
     module?: string;
@@ -8262,8 +7366,6 @@ interface GarbageResult {
 interface GarbageTypeEntry {
   size: number;
   typeIndex: number;
-  component1(): number;
-  component2(): number;
   copy(typeIndex: number, size: number): {
     size: number;
     typeIndex: number;
@@ -8275,9 +7377,6 @@ interface GraalWebImageInfo {
   hasNameSection: boolean;
   isWebImage: boolean;
   matchedImportModules: string[];
-  component1(): boolean;
-  component2(): string[];
-  component3(): boolean;
   copy(isWebImage: boolean, matchedImportModules: string[], hasNameSection: boolean): {
     canResolveSymbols: boolean;
     hasNameSection: boolean;
@@ -8289,8 +7388,6 @@ interface GraalWebImageInfo {
 interface GraphNode {
   id: number;
   label: string;
-  component1(): number;
-  component2(): string;
   copy(id: number, label: string): {
     id: number;
     label: string;
@@ -8406,51 +7503,6 @@ interface JavaClassFile {
   superClassName?: string;
   thisClassIndex: number;
   thisClassName: string;
-  component1(): number;
-  component10(): {
-    byteOffset: number;
-    info: number[];
-    nameIndex: number;
-  }[];
-  component2(): number;
-  component3(): {
-    entries: {
-      tag: number;
-    }[];
-    size: number;
-  };
-  component4(): {
-    raw: number;
-  };
-  component5(): number;
-  component6(): number;
-  component7(): number[];
-  component8(): {
-    accessFlags: {
-      raw: number;
-    };
-    attributes: {
-      byteOffset: number;
-      info: number[];
-      nameIndex: number;
-    }[];
-    byteOffset: number;
-    descriptorIndex: number;
-    nameIndex: number;
-  }[];
-  component9(): {
-    accessFlags: {
-      raw: number;
-    };
-    attributes: {
-      byteOffset: number;
-      info: number[];
-      nameIndex: number;
-    }[];
-    byteOffset: number;
-    descriptorIndex: number;
-    nameIndex: number;
-  }[];
   copy(minorVersion: number, majorVersion: number, constantPool: {
     entries: {
       tag: number;
@@ -8557,8 +7609,6 @@ interface KotlinWasmInfo {
   canResolveSymbols: boolean;
   hasNameSection: boolean;
   isKotlinWasm: boolean;
-  component1(): boolean;
-  component2(): boolean;
   copy(isKotlinWasm: boolean, hasNameSection: boolean): {
     canResolveSymbols: boolean;
     hasNameSection: boolean;
@@ -8571,9 +7621,6 @@ interface MachO {
   displayName: string;
   endian: "Little" | "Big" | "Unknown";
   wordSize: "Bits32" | "Bits64" | "Unknown";
-  component1(): "Bits32" | "Bits64" | "Unknown";
-  component2(): "Little" | "Big" | "Unknown";
-  component3(): number | null;
   copy(wordSize: "Bits32" | "Bits64" | "Unknown", endian: "Little" | "Big" | "Unknown", cpuType: number | null): {
     cpuType?: number;
     displayName: string;
@@ -8600,23 +7647,6 @@ interface MachODylibCommand {
   };
   timestamp: number;
   type: number;
-  component1(): number;
-  component2(): number;
-  component3(): "Load" | "WeakLoad" | "Reexport" | "UpwardLoad" | "LazyLoad" | "Id" | "Other";
-  component4(): string;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component9(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
   copy(index: number, type: number, kind: "Load" | "WeakLoad" | "Reexport" | "UpwardLoad" | "LazyLoad" | "Id" | "Other", name: string, timestamp: number, currentVersion: number, compatibilityVersion: number, commandRange: {
     endExclusive: number;
     offset: number;
@@ -8670,29 +7700,6 @@ interface MachODysymtabCommand {
   tableOfContentsOffset: number;
   undefinedSymbolCount: number;
   undefinedSymbolIndex: number;
-  component1(): number;
-  component10(): number;
-  component11(): number;
-  component12(): number;
-  component13(): number;
-  component14(): number;
-  component15(): number;
-  component16(): number;
-  component17(): number;
-  component18(): number;
-  component19(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number;
-  component9(): number;
   copy(localSymbolIndex: number, localSymbolCount: number, externalDefinedSymbolIndex: number, externalDefinedSymbolCount: number, undefinedSymbolIndex: number, undefinedSymbolCount: number, tableOfContentsOffset: number, tableOfContentsCount: number, moduleTableOffset: number, moduleTableCount: number, externalReferenceSymbolTableOffset: number, externalReferenceSymbolTableCount: number, indirectSymbolTableOffset: number, indirectSymbolTableCount: number, externalRelocationOffset: number, externalRelocationCount: number, localRelocationOffset: number, localRelocationCount: number, commandRange: {
     endExclusive: number;
     offset: number;
@@ -8742,23 +7749,6 @@ interface MachOFatArch {
     offset: number;
     size: number;
   };
-  component1(): number;
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number | null;
-  component8(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component9(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
   copy(index: number, cpuType: number, cpuSubtype: number, offset: number, size: number, alignment: number, reserved: number | null, archRange: {
     endExclusive: number;
     offset: number;
@@ -8802,19 +7792,6 @@ interface MachOFatHeader {
     size: number;
   };
   wordSize: "Bits32" | "Bits64" | "Unknown";
-  component1(): "Bits32" | "Bits64" | "Unknown";
-  component2(): "Little" | "Big" | "Unknown";
-  component3(): number;
-  component4(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component5(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
   copy(wordSize: "Bits32" | "Bits64" | "Unknown", endian: "Little" | "Big" | "Unknown", archCount: number, headerRange: {
     endExclusive: number;
     offset: number;
@@ -8861,26 +7838,6 @@ interface MachOHeader {
   magic: number;
   reserved?: number;
   wordSize: "Bits32" | "Bits64" | "Unknown";
-  component1(): "Bits32" | "Bits64" | "Unknown";
-  component10(): number | null;
-  component11(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component12(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component2(): "Little" | "Big" | "Unknown";
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number;
-  component9(): number;
   copy(wordSize: "Bits32" | "Bits64" | "Unknown", endian: "Little" | "Big" | "Unknown", magic: number, cpuType: number, cpuSubtype: number, fileType: number, loadCommandCount: number, loadCommandsSize: number, flags: number, reserved: number | null, headerRange: {
     endExclusive: number;
     offset: number;
@@ -8922,14 +7879,6 @@ interface MachOLoadCommand {
   };
   size: number;
   type: number;
-  component1(): number;
-  component2(): number;
-  component3(): number;
-  component4(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
   copy(index: number, type: number, size: number, range: {
     endExclusive: number;
     offset: number;
@@ -8977,36 +7926,6 @@ interface MachORelocation {
   symbolOrSectionIndex: number;
   type: number;
   value?: number;
-  component1(): number;
-  component10(): boolean;
-  component11(): number | null;
-  component12(): {
-    description: number;
-    index: number;
-    name: string;
-    nameOffset: number;
-    recordRange: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    sectionIndex: number;
-    type: number;
-    value: number;
-  } | null;
-  component13(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component2(): number;
-  component3(): string;
-  component4(): number;
-  component5(): number;
-  component6(): boolean;
-  component7(): number;
-  component8(): boolean;
-  component9(): number;
   copy(index: number, sectionIndex: number, sectionName: string, address: number, symbolOrSectionIndex: number, pcrel: boolean, length: number, external: boolean, type: number, scattered: boolean, value: number | null, symbol: {
     description: number;
     index: number;
@@ -9080,27 +7999,6 @@ interface MachOSection {
   segmentIndex: number;
   segmentName: string;
   size: number;
-  component1(): number;
-  component10(): number;
-  component11(): number;
-  component12(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component13(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
-  component2(): number;
-  component3(): string;
-  component4(): string;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number;
-  component9(): number;
   copy(index: number, segmentIndex: number, name: string, segmentName: string, address: number, size: number, fileOffset: number, alignment: number, relocationOffset: number, relocationCount: number, flags: number, headerRange: {
     endExclusive: number;
     offset: number;
@@ -9178,49 +8076,6 @@ interface MachOSegment {
   }[];
   virtualAddress: number;
   virtualSize: number;
-  component1(): number;
-  component10(): number;
-  component11(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component12(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
-  component13(): {
-    address: number;
-    alignment: number;
-    contentRange?: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    fileOffset: number;
-    flags: number;
-    headerRange: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    index: number;
-    name: string;
-    relocationCount: number;
-    relocationOffset: number;
-    segmentIndex: number;
-    segmentName: string;
-    size: number;
-  }[];
-  component2(): string;
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number;
-  component9(): number;
   copy(index: number, name: string, virtualAddress: number, virtualSize: number, fileOffset: number, fileSize: number, maxProtection: number, initialProtection: number, sectionCount: number, flags: number, commandRange: {
     endExclusive: number;
     offset: number;
@@ -9311,18 +8166,6 @@ interface MachOSymbol {
   sectionIndex: number;
   type: number;
   value: number;
-  component1(): number;
-  component2(): number;
-  component3(): string;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
   copy(index: number, nameOffset: number, name: string, type: number, sectionIndex: number, description: number, value: number, recordRange: {
     endExclusive: number;
     offset: number;
@@ -9363,25 +8206,6 @@ interface MachOSymtabCommand {
     offset: number;
     size: number;
   };
-  component1(): number;
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component6(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
-  component7(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
   copy(symbolTableOffset: number, symbolCount: number, stringTableOffset: number, stringTableSize: number, commandRange: {
     endExclusive: number;
     offset: number;
@@ -9429,17 +8253,6 @@ interface MachOUuid {
     size: number;
   };
   value: string;
-  component1(): string;
-  component2(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component3(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
   copy(value: string, commandRange: {
     endExclusive: number;
     offset: number;
@@ -9475,17 +8288,6 @@ interface MethodInfo {
   byteOffset: number;
   descriptorIndex: number;
   nameIndex: number;
-  component1(): {
-    raw: number;
-  };
-  component2(): number;
-  component3(): number;
-  component4(): {
-    byteOffset: number;
-    info: number[];
-    nameIndex: number;
-  }[];
-  component5(): number;
   copy(accessFlags: {
     raw: number;
   }, nameIndex: number, descriptorIndex: number, attributes: {
@@ -9511,9 +8313,6 @@ interface MinificationResult {
   confidence: number;
   evidence: string;
   minified: boolean;
-  component1(): boolean;
-  component2(): number;
-  component3(): string;
   copy(minified: boolean, confidence: number, evidence: string): {
     confidence: number;
     evidence: string;
@@ -9540,10 +8339,6 @@ interface MonosGroup {
   count: number;
   funcIndices: number[];
   totalSize: number;
-  component1(): string;
-  component2(): number;
-  component3(): number;
-  component4(): number[];
   copy(baseName: string, count: number, totalSize: number, funcIndices: number[]): {
     avgSize: number;
     baseName: string;
@@ -9562,14 +8357,6 @@ interface MonosResult {
     totalSize: number;
   }[];
   totalBloat: number;
-  component1(): {
-    avgSize: number;
-    baseName: string;
-    count: number;
-    funcIndices: number[];
-    totalSize: number;
-  }[];
-  component2(): number;
   copy(groups: {
     avgSize: number;
     baseName: string;
@@ -9596,8 +8383,6 @@ interface NativeByteRange {
   endExclusive: number;
   offset: number;
   size: number;
-  component1(): number;
-  component2(): number;
   copy(offset: number, size: number): {
     endExclusive: number;
     offset: number;
@@ -9611,11 +8396,6 @@ interface NativeDebugInfoSummary {
   lastAddress?: number;
   lineRowCount: number;
   sampleFiles: string[];
-  component1(): number;
-  component2(): number;
-  component3(): number | null;
-  component4(): number | null;
-  component5(): string[];
   copy(lineRowCount: number, fileCount: number, firstAddress: number | null, lastAddress: number | null, sampleFiles: string[]): {
     fileCount: number;
     firstAddress?: number;
@@ -9700,25 +8480,6 @@ interface NativeFunctionRecord {
   symbolIndex: number;
   thunkLike: boolean;
   virtualAddress: number;
-  component1(): string;
-  component10(): number;
-  component11(): number | null;
-  component12(): number | null;
-  component13(): "SymbolSize" | "NextSymbolInSection" | "BackendProvided" | "Unknown";
-  component14(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component15(): boolean;
-  component2(): string | null;
-  component3(): number;
-  component4(): "Symtab" | "Dynsym" | "ExternalBackend" | "Heuristic" | "Unknown";
-  component5(): number;
-  component6(): number;
-  component7(): string | null;
-  component8(): boolean;
-  component9(): boolean;
   copy(name: string, demangledName: string | null, symbolIndex: number, source: "Symtab" | "Dynsym" | "ExternalBackend" | "Heuristic" | "Unknown", binding: number, sectionIndex: number, sectionName: string | null, imported: boolean, thunkLike: boolean, virtualAddress: number, fileOffset: number | null, size: number | null, rangeConfidence: "SymbolSize" | "NextSymbolInSection" | "BackendProvided" | "Unknown", recordRange: {
     endExclusive: number;
     offset: number;
@@ -9758,17 +8519,6 @@ interface NativeImageInfo {
   };
   svmSections: string[];
   version?: string;
-  component1(): boolean;
-  component2(): "HIGH" | "MEDIUM" | "NONE";
-  component3(): string | null;
-  component4(): "COMMUNITY" | "ENTERPRISE" | "UNKNOWN";
-  component5(): string | null;
-  component6(): string[];
-  component7(): {
-    fileOffset: number;
-    isGzip: boolean;
-    length: number;
-  } | null;
   copy(isNativeImage: boolean, confidence: "HIGH" | "MEDIUM" | "NONE", version: string | null, edition: "COMMUNITY" | "ENTERPRISE" | "UNKNOWN", platform: string | null, svmSections: string[], sbom: {
     fileOffset: number;
     isGzip: boolean;
@@ -9797,14 +8547,6 @@ interface NativeParserDiagnostic {
     size: number;
   };
   severity: "Info" | "Warning" | "Error";
-  component1(): string;
-  component2(): string;
-  component3(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
-  component4(): "Info" | "Warning" | "Error";
   copy(code: string, message: string, range: {
     endExclusive: number;
     offset: number;
@@ -9836,20 +8578,6 @@ interface NativeUnresolvedRecord {
     offset: number;
     size: number;
   };
-  component1(): string;
-  component2(): number | null;
-  component3(): string | null;
-  component4(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component5(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
-  component6(): string | null;
   copy(kind: string, id: number | null, name: string | null, recordRange: {
     endExclusive: number;
     offset: number;
@@ -10253,14 +8981,6 @@ interface ParseProblem {
   sectionId: number;
   sectionName: string;
   typeIdx?: number;
-  component1(): "LOCALS_PARSE_FAILURE" | "UNKNOWN_OPCODE" | "CODE_ENTRY_CORRUPT" | "UNKNOWN_TYPE_BYTE" | "INIT_EXPR_PARSE_FAILURE" | "UNKNOWN_CORE_INSTANCE_TAG" | "CORE_INSTANCE_ENTRY_CORRUPT" | "SECTION_TRUNCATED" | "IMPORT_ENTRY_CORRUPT" | "EXPORT_ENTRY_CORRUPT" | "SECTION_ENTRY_CORRUPT";
-  component2(): number;
-  component3(): string;
-  component4(): number | null;
-  component5(): number | null;
-  component6(): number;
-  component7(): number;
-  component8(): string;
   copy(kind: "LOCALS_PARSE_FAILURE" | "UNKNOWN_OPCODE" | "CODE_ENTRY_CORRUPT" | "UNKNOWN_TYPE_BYTE" | "INIT_EXPR_PARSE_FAILURE" | "UNKNOWN_CORE_INSTANCE_TAG" | "CORE_INSTANCE_ENTRY_CORRUPT" | "SECTION_TRUNCATED" | "IMPORT_ENTRY_CORRUPT" | "EXPORT_ENTRY_CORRUPT" | "SECTION_ENTRY_CORRUPT", sectionId: number, sectionName: string, funcIdx: number | null, typeIdx: number | null, byteOffset: number, byteSize: number, message: string): {
     byteOffset: number;
     byteSize: number;
@@ -10277,8 +8997,6 @@ interface Pe {
   displayName: string;
   machine?: number;
   wordSize: "Bits32" | "Bits64" | "Unknown";
-  component1(): "Bits32" | "Bits64" | "Unknown";
-  component2(): number | null;
   copy(wordSize: "Bits32" | "Bits64" | "Unknown", machine: number | null): {
     displayName: string;
     machine?: number;
@@ -10337,57 +9055,6 @@ interface PeArchiveFile {
       offset: number;
       size: number;
     };
-  }[];
-  component1(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component2(): {
-    contentRange: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    groupId: string;
-    headerRange: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    index: number;
-    isBookkeeping: boolean;
-    mode: string;
-    name: string;
-    ownerId: string;
-    size: number;
-    timestamp: string;
-  }[];
-  component3(): {
-    contentRange?: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    id?: number;
-    kind: string;
-    name?: string;
-    reason?: string;
-    recordRange: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-  }[];
-  component4(): {
-    code: string;
-    message: string;
-    range?: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    severity: "Info" | "Warning" | "Error";
   }[];
   copy(magicRange: {
     endExclusive: number;
@@ -10510,24 +9177,6 @@ interface PeArchiveMember {
   ownerId: string;
   size: number;
   timestamp: string;
-  component1(): number;
-  component10(): boolean;
-  component2(): string;
-  component3(): string;
-  component4(): string;
-  component5(): string;
-  component6(): string;
-  component7(): number;
-  component8(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component9(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
   copy(index: number, name: string, timestamp: string, ownerId: string, groupId: string, mode: string, size: number, headerRange: {
     endExclusive: number;
     offset: number;
@@ -10569,16 +9218,6 @@ interface PeBaseRelocation {
   };
   targetRva: number;
   type: number;
-  component1(): number;
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
   copy(blockIndex: number, entryIndex: number, type: number, pageRva: number, targetRva: number, recordRange: {
     endExclusive: number;
     offset: number;
@@ -10602,10 +9241,6 @@ interface PeCodeViewDebugInfo {
   guid?: string;
   pdbPath?: string;
   signature: string;
-  component1(): string;
-  component2(): string | null;
-  component3(): number | null;
-  component4(): string | null;
   copy(signature: string, guid: string | null, age: number | null, pdbPath: string | null): {
     age?: number;
     guid?: string;
@@ -10627,18 +9262,6 @@ interface PeCoffHeader {
   symbolCount: number;
   symbolTableOffset: number;
   timeDateStamp: number;
-  component1(): number;
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
   copy(machine: number, sectionCount: number, timeDateStamp: number, symbolTableOffset: number, symbolCount: number, optionalHeaderSize: number, characteristics: number, headerRange: {
     endExclusive: number;
     offset: number;
@@ -10672,18 +9295,6 @@ interface PeCoffSymbol {
   storageClass: number;
   type: number;
   value: number;
-  component1(): number;
-  component2(): string;
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
   copy(index: number, name: string, value: number, sectionNumber: number, type: number, storageClass: number, auxiliaryCount: number, recordRange: {
     endExclusive: number;
     offset: number;
@@ -10714,15 +9325,6 @@ interface PeDataDirectory {
   };
   rva: number;
   size: number;
-  component1(): number;
-  component2(): string;
-  component3(): number;
-  component4(): number;
-  component5(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
   copy(index: number, name: string, rva: number, size: number, recordRange: {
     endExclusive: number;
     offset: number;
@@ -10763,28 +9365,6 @@ interface PeDebugEntry {
   sizeOfData: number;
   timeDateStamp: number;
   type: number;
-  component1(): number;
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): {
-    age?: number;
-    guid?: string;
-    pdbPath?: string;
-    signature: string;
-  } | null;
-  component8(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component9(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
   copy(index: number, type: number, timeDateStamp: number, sizeOfData: number, addressOfRawData: number, pointerToRawData: number, codeView: {
     age?: number;
     guid?: string;
@@ -10837,22 +9417,6 @@ interface PeDosHeader {
     size: number;
   };
   peSignatureRange: {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component1(): number;
-  component2(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component3(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component4(): {
     endExclusive: number;
     offset: number;
     size: number;
@@ -10921,37 +9485,6 @@ interface PeExportDirectory {
     size: number;
   };
   ordinalBase: number;
-  component1(): string;
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component6(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
-  component7(): {
-    addressTableRange: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    forwarder?: string;
-    index: number;
-    name?: string;
-    nameRange?: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    ordinal: number;
-    rva: number;
-  }[];
   copy(name: string, ordinalBase: number, functionCount: number, nameCount: number, directoryRange: {
     endExclusive: number;
     offset: number;
@@ -11027,21 +9560,6 @@ interface PeExportEntry {
   };
   ordinal: number;
   rva: number;
-  component1(): number;
-  component2(): string | null;
-  component3(): number;
-  component4(): number;
-  component5(): string | null;
-  component6(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component7(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
   copy(index: number, name: string | null, ordinal: number, rva: number, forwarder: string | null, addressTableRange: {
     endExclusive: number;
     offset: number;
@@ -11085,21 +9603,6 @@ interface PeImportEntry {
     size: number;
   };
   thunkRva: number;
-  component1(): number;
-  component2(): string | null;
-  component3(): number | null;
-  component4(): number | null;
-  component5(): number;
-  component6(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component7(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
   copy(index: number, name: string | null, hint: number | null, ordinal: number | null, thunkRva: number, thunkRange: {
     endExclusive: number;
     offset: number;
@@ -11159,37 +9662,6 @@ interface PeImportLibrary {
     offset: number;
     size: number;
   };
-  component1(): number;
-  component2(): string;
-  component3(): number;
-  component4(): number;
-  component5(): {
-    hint?: number;
-    hintNameRange?: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    index: number;
-    name?: string;
-    ordinal?: number;
-    thunkRange: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    thunkRva: number;
-  }[];
-  component6(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component7(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
   copy(index: number, name: string, importLookupTableRva: number, importAddressTableRva: number, entries: {
     hint?: number;
     hintNameRange?: {
@@ -11277,33 +9749,6 @@ interface PeOptionalHeader {
   sizeOfImage: number;
   subsystem: number;
   wordSize: "Bits32" | "Bits64" | "Unknown";
-  component1(): "Bits32" | "Bits64" | "Unknown";
-  component10(): number;
-  component11(): number;
-  component12(): {
-    index: number;
-    name: string;
-    recordRange: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    rva: number;
-    size: number;
-  }[];
-  component13(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number;
-  component9(): number;
   copy(wordSize: "Bits32" | "Bits64" | "Unknown", magic: number, addressOfEntryPoint: number, imageBase: number, sectionAlignment: number, fileAlignment: number, sizeOfImage: number, sizeOfHeaders: number, subsystem: number, dllCharacteristics: number, dataDirectoryCount: number, dataDirectories: {
     index: number;
     name: string;
@@ -11371,27 +9816,6 @@ interface PeSection {
   relocationPointer: number;
   virtualAddress: number;
   virtualSize: number;
-  component1(): number;
-  component10(): number;
-  component11(): number;
-  component12(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  };
-  component13(): {
-    endExclusive: number;
-    offset: number;
-    size: number;
-  } | null;
-  component2(): string;
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number;
-  component9(): number;
   copy(index: number, name: string, virtualSize: number, virtualAddress: number, rawDataSize: number, rawDataPointer: number, relocationPointer: number, lineNumberPointer: number, relocationCount: number, lineNumberCount: number, characteristics: number, headerRange: {
     endExclusive: number;
     offset: number;
@@ -11444,24 +9868,6 @@ interface RowGroup {
   }[];
   numRows: number;
   totalByteSize: number;
-  component1(): {
-    fileOffset: number;
-    filePath?: string;
-    metaData?: {
-      codec: "UNCOMPRESSED" | "SNAPPY" | "GZIP" | "LZO" | "BROTLI" | "LZ4" | "ZSTD" | "LZ4_RAW";
-      dataPageOffset: number;
-      dictionaryPageOffset?: number;
-      encodings: "PLAIN" | "GROUP_VAR_INT" | "PLAIN_DICTIONARY" | "RLE" | "BIT_PACKED" | "DELTA_BINARY_PACKED" | "DELTA_LENGTH_BYTE_ARRAY" | "DELTA_BYTE_ARRAY" | "RLE_DICTIONARY" | "BYTE_STREAM_SPLIT"[];
-      indexPageOffset?: number;
-      numValues: number;
-      pathInSchema: string[];
-      totalCompressedSize: number;
-      totalUncompressedSize: number;
-      type: "BOOLEAN" | "INT32" | "INT64" | "INT96" | "FLOAT" | "DOUBLE" | "BYTE_ARRAY" | "FIXED_LEN_BYTE_ARRAY";
-    };
-  }[];
-  component2(): number;
-  component3(): number;
   copy(columns: {
     fileOffset: number;
     filePath?: string;
@@ -11503,9 +9909,6 @@ interface SbomLocator {
   fileOffset: number;
   isGzip: boolean;
   length: number;
-  component1(): number;
-  component2(): number;
-  component3(): boolean;
   copy(fileOffset: number, length: number, isGzip: boolean): {
     fileOffset: number;
     isGzip: boolean;
@@ -11519,11 +9922,6 @@ interface SchemaElement {
   repetitionType?: "REQUIRED" | "OPTIONAL" | "REPEATED";
   type?: "BOOLEAN" | "INT32" | "INT64" | "INT96" | "FLOAT" | "DOUBLE" | "BYTE_ARRAY" | "FIXED_LEN_BYTE_ARRAY";
   typeLength?: number;
-  component1(): "BOOLEAN" | "INT32" | "INT64" | "INT96" | "FLOAT" | "DOUBLE" | "BYTE_ARRAY" | "FIXED_LEN_BYTE_ARRAY" | null;
-  component2(): number | null;
-  component3(): "REQUIRED" | "OPTIONAL" | "REPEATED" | null;
-  component4(): string;
-  component5(): number | null;
   copy(type: "BOOLEAN" | "INT32" | "INT64" | "INT96" | "FLOAT" | "DOUBLE" | "BYTE_ARRAY" | "FIXED_LEN_BYTE_ARRAY" | null, typeLength: number | null, repetitionType: "REQUIRED" | "OPTIONAL" | "REPEATED" | null, name: string, numChildren: number | null): {
     name: string;
     numChildren?: number;
@@ -11536,8 +9934,6 @@ interface SchemaElement {
 interface SectionScanFailure {
   byteOffset: number;
   message: string;
-  component1(): number;
-  component2(): string;
   copy(byteOffset: number, message: string): {
     byteOffset: number;
     message: string;
@@ -11719,9 +10115,6 @@ interface SourceLocation {
   column: number;
   file: string;
   line: number;
-  component1(): string;
-  component2(): number;
-  component3(): number;
   copy(file: string, line: number, column: number): {
     column: number;
     file: string;
@@ -11734,10 +10127,6 @@ interface StructureRange {
   offset: number;
   size: number;
   tabName?: string;
-  component1(): number;
-  component2(): number;
-  component3(): string;
-  component4(): string | null;
   copy(offset: number, size: number, label: string, tabName: string | null): {
     label: string;
     offset: number;
@@ -11752,11 +10141,6 @@ interface TagInfo {
   imported: boolean;
   payloadText: string;
   typeIdx: number;
-  component1(): number;
-  component2(): boolean;
-  component3(): number;
-  component4(): number;
-  component5(): string;
   copy(globalIndex: number, imported: boolean, attribute: number, typeIdx: number, payloadText: string): {
     attribute: number;
     globalIndex: number;
@@ -11776,13 +10160,6 @@ interface TarEntry {
   name: string;
   size: number;
   typeFlag: string;
-  component1(): string;
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): string;
-  component7(): string;
   copy(name: string, size: number, dataOffset: number, mode: number, modTime: number, typeFlag: string, linkName: string): {
     dataOffset: number;
     isDirectory: boolean;
@@ -11800,8 +10177,6 @@ interface ThrownSet {
   dynamic: boolean;
   isEmpty: boolean;
   tags: number[];
-  component1(): number[];
-  component2(): boolean;
   copy(tags: number[], dynamic: boolean): {
     dynamic: boolean;
     isEmpty: boolean;
@@ -11898,10 +10273,6 @@ interface WasmCodeLocalRecord {
   type: {
     code: T;
   };
-  component1(): number;
-  component2(): {
-    code: T;
-  };
   copy(local: number, type: {
     code: T;
   }): {
@@ -11922,15 +10293,6 @@ interface WasmCodeRecord {
   offset: number;
   opCodes: OpCode[];
   size: number;
-  component1(): number;
-  component2(): number;
-  component3(): {
-    local: number;
-    type: {
-      code: T;
-    };
-  }[];
-  component4(): OpCode[];
   copy(offset: number, size: number, locals: {
     local: number;
     type: {
@@ -12900,13 +11262,6 @@ interface WasmImportRecord {
   prefix: string;
   size: number;
   type: {
-    type: number;
-  };
-  component1(): number;
-  component2(): number;
-  component3(): string;
-  component4(): string;
-  component5(): {
     type: number;
   };
   copy(offset: number, size: number, prefix: string, name: string, type: {
@@ -14150,14 +12505,6 @@ interface ZipEntry {
   localHeaderOffset: number;
   name: string;
   uncompressedSize: number;
-  component1(): string;
-  component2(): number;
-  component3(): number;
-  component4(): number;
-  component5(): number;
-  component6(): number;
-  component7(): number;
-  component8(): number;
   copy(name: string, compressionMethod: number, compressedSize: number, uncompressedSize: number, crc32: number, flags: number, localHeaderOffset: number, dataOffset: number): {
     compressedSize: number;
     compressionMethod: number;
