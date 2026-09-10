@@ -35,6 +35,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.intellij.icons.AllIcons
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
@@ -42,6 +44,7 @@ import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.shared.DWARF_GROUP_TAB_NAME
 import org.jetbrains.hexana.shared.DwarfOutlineNode
 import org.jetbrains.hexana.shared.DwarfOutlineSection
+import org.jetbrains.hexana.shared.DwarfSearchIndex
 import org.jetbrains.hexana.shared.dwarfOutlineSections
 import org.jetbrains.hexana.shared.dwarfSearchIndex
 import org.jetbrains.hexana.ui.panel.Panel
@@ -124,10 +127,13 @@ private fun DwarfTree(
     onElementClick: (DwarfOutlineNode) -> Unit = {},
 ) {
     // Searching subnodes means labelling every row, including the ones inside collapsed subtrees,
-    // which forces the model's lazy children for the whole tree. That is why the index is built on
-    // first use rather than when the tab opens: a `.debug_line` program is only parsed if someone
-    // actually searches it.
-    val searchIndex = remember(roots) { lazy { dwarfSearchIndex(roots) } }
+    // which forces the model's lazy children for the whole tree - on a debug-heavy binary that is
+    // far too much to do on the EDT. It is built once, off-thread, and only when the user actually
+    // searches, so merely opening `.debug_line` never decodes a line program.
+    //
+    // Safe off-thread because the index walks the shared outline model, not the Jewel tree: the
+    // model's children providers only read, and each duplicates the byte buffer for its own cursor.
+    var searchIndex by remember(roots) { mutableStateOf<DwarfSearchIndex?>(null) }
 
     // Held as an explicit State: the derived match list below has to read it from inside its own
     // computation, otherwise it captures the first composition's value and never re-evaluates.
@@ -136,20 +142,30 @@ private fun DwarfTree(
     var currentMatch by remember(tree) { mutableIntStateOf(0) }
     var pendingScrollTo by remember(tree) { mutableStateOf<String?>(null) }
 
+    val wanted = query.trim().isNotEmpty()
+    LaunchedEffect(roots, wanted) {
+        if (wanted && searchIndex == null) {
+            searchIndex = withContext(Dispatchers.Default) { dwarfSearchIndex(roots) }
+        }
+    }
+    val indexing = wanted && searchIndex == null
+
     val matches by remember(tree) {
         derivedStateOf {
             val needle = queryState.value.text.trim()
-            if (needle.isEmpty()) emptyList() else searchIndex.value.idsMatching(needle)
+            val index = searchIndex
+            if (needle.isEmpty() || index == null) emptyList() else index.idsMatching(needle)
         }
     }
 
     fun goToMatch(target: Int) {
+        val index = searchIndex ?: return
         if (matches.isEmpty()) return
-        val index = target.mod(matches.size)
-        currentMatch = index
-        val id = matches[index]
+        val position = target.mod(matches.size)
+        currentMatch = position
+        val id = matches[position]
         // Reveal the match: a hit inside a collapsed subtree is useless until its ancestors open.
-        treeState.openNodes = treeState.openNodes + searchIndex.value.ancestorsOf(id)
+        treeState.openNodes = treeState.openNodes + index.ancestorsOf(id)
         treeState.selectedKeys = setOf(id)
         pendingScrollTo = id
     }
@@ -179,6 +195,7 @@ private fun DwarfTree(
             onQueryChange = { queryState.value = it },
             matchCount = matches.size,
             currentMatch = currentMatch,
+            indexing = indexing,
             onNavigate = { delta -> goToMatch(currentMatch + delta) },
         )
 
@@ -210,6 +227,7 @@ private fun DwarfSearchBar(
     onQueryChange: (TextFieldValue) -> Unit,
     matchCount: Int,
     currentMatch: Int,
+    indexing: Boolean,
     onNavigate: (Int) -> Unit,
 ) {
     Row(
@@ -247,7 +265,11 @@ private fun DwarfSearchBar(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (query.text.isNotBlank()) {
                         Text(
-                            if (matchCount == 0) "No matches" else "${currentMatch + 1} of $matchCount",
+                            when {
+                                indexing -> "Indexing..."
+                                matchCount == 0 -> "No matches"
+                                else -> "${currentMatch + 1} of $matchCount"
+                            },
                             style = TextStyle(color = Color.Gray),
                         )
                     }

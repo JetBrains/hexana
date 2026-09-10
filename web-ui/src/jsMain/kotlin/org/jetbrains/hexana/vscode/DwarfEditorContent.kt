@@ -110,9 +110,12 @@ private fun DwarfOutlineTab(section: DwarfOutlineSection, selection: HexSelectio
     var query by remember(roots) { mutableStateOf("") }
     var matches by remember(roots) { mutableStateOf(emptyList<String>()) }
     var currentMatch by remember(roots) { mutableStateOf(0) }
-    var revealIndex by remember(roots) { mutableStateOf<Int?>(null) }
+    var reveal by remember(roots) { mutableStateOf<ListReveal?>(null) }
+    var revealRequests by remember(roots) { mutableStateOf(0) }
 
-    val rows = flattenDwarfRows(roots, expanded, childrenCache)
+    // Remembered on the inputs it actually depends on. Recomputing per recomposition would rebuild
+    // a row per visible node on every keystroke, and an expanded `.debug_line` unit is very wide.
+    val rows = remember(roots, expanded) { flattenDwarfRows(roots, expanded, childrenCache) }
 
     fun goToMatch(target: Int) {
         if (matches.isEmpty()) return
@@ -120,11 +123,15 @@ private fun DwarfOutlineTab(section: DwarfOutlineSection, selection: HexSelectio
         currentMatch = index
         val id = matches[index]
         // Reveal the match: a hit inside a collapsed subtree is useless until its ancestors open.
-        expanded = expanded + searchIndex.get().ancestorsOf(id) + id
-        // Recomputed against the newly opened set, because `rows` above is a frame behind.
-        revealIndex = flattenDwarfRows(roots, expanded, childrenCache)
-            .indexOfFirst { it.node.id == id }
+        val opened = expanded + searchIndex.get().ancestorsOf(id) + id
+        // Rows for the newly opened set: `rows` above is a frame behind, and reusing it would
+        // scroll to a stale index. Unchanged expansion means the cached list is already right.
+        val revealed = if (opened == expanded) rows else flattenDwarfRows(roots, opened, childrenCache)
+        expanded = opened
+        revealRequests += 1
+        reveal = revealed.indexOfFirst { it.node.id == id }
             .takeIf { it >= 0 }
+            ?.let { ListReveal(it, revealRequests) }
     }
 
     fun search(text: String) {
@@ -154,7 +161,7 @@ private fun DwarfOutlineTab(section: DwarfOutlineSection, selection: HexSelectio
         VirtualizedList(
             itemCount = rows.size,
             itemHeightPx = DWARF_ROW_HEIGHT_PX,
-            revealIndex = revealIndex,
+            reveal = reveal,
         ) { index ->
             val row = rows.getOrNull(index) ?: return@VirtualizedList
             DwarfOutlineRow(

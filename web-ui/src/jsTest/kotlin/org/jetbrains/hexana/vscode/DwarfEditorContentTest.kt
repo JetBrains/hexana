@@ -101,6 +101,20 @@ class DwarfEditorContentTest {
         assertEquals(0, calls, "opening a section must not decode collapsed subtrees")
     }
 
+    /**
+     * A bare `Int?` reveal target is dropped when it repeats, so scrolling away and pressing
+     * find-next onto the row you were already on did nothing. The request id makes each ask
+     * distinct.
+     */
+    @Test
+    fun repeatedRevealRequestsForTheSameRowAreDistinct() {
+        assertTrue(
+            ListReveal(index = 7, requestId = 1) != ListReveal(index = 7, requestId = 2),
+            "the same row asked for twice must produce two distinct requests",
+        )
+        assertEquals(ListReveal(7, 1), ListReveal(7, 1))
+    }
+
     @Test
     fun searchIndexIsNotBuiltUntilItIsAskedFor() {
         var built = 0

@@ -98,6 +98,48 @@ class DwarfOutlineTest {
         assertTrue(unresolved.isEmpty(), "every strp offset should resolve: ${unresolved.map { it.label }}")
     }
 
+    /**
+     * Regression: these rows used to carry `DieField.attribute.offset`, which is the shared
+     * `.debug_abbrev` declaration - so clicking an attribute jumped into the wrong section, and
+     * every DIE sharing an abbrev code jumped to the same bytes.
+     */
+    @Test
+    fun `info attribute rows address their own bytes inside debug_info`() {
+        val bytes = fixture("../ui-driver-tests/testData/projects/hexana_wasm_project/debug-add.wasm").readBytes()
+        val buffer = bytes.toCommonByteBuffer()
+        val parsed = WasmParser().parse(buffer.duplicate().position(0))
+        val module = assertNotNull(parsed as? WasmParseSuccess, "fixture must parse").wasmModule
+        val accessor = WasmDwarfAccessor(module as BaseModule)
+        val info = assertNotNull(accessor.debugInfoSection(), "fixture must have .debug_info")
+        val abbrev = assertNotNull(accessor.debugAbbrevSection(), "fixture must have .debug_abbrev")
+
+        val infoRange = info.contentOffset until (info.contentOffset + info.contentSize)
+        val abbrevRange = abbrev.contentOffset until (abbrev.contentOffset + abbrev.contentSize)
+
+        val roots = dwarfOutlineSections(accessor, buffer)
+            .first { it.name == DWARF_INFO_TAB_NAME }
+            .roots()
+        val addressable = walk(roots).filter { it.label.startsWith("DW_AT_") && it.offset != null }
+        assertTrue(addressable.isNotEmpty(), "expected navigable attribute rows")
+
+        val outside = addressable.filterNot { it.offset!! in infoRange }
+        assertTrue(outside.isEmpty(), "attribute rows must point inside .debug_info: ${outside.map { it.label to it.offset }}")
+        assertTrue(
+            addressable.none { it.offset!! in abbrevRange },
+            "attribute rows must not point into .debug_abbrev",
+        )
+    }
+
+    /** Distinct DIEs must address distinct bytes; the shared abbrev declaration collapsed them. */
+    @Test
+    fun `attribute rows of different DIEs address different bytes`() {
+        val offsets = walk(section(DWARF_INFO_TAB_NAME))
+            .filter { it.label.startsWith("DW_AT_") }
+            .mapNotNull { it.offset }
+        assertTrue(offsets.size > 1, "need several attribute rows to compare")
+        assertEquals(offsets.size, offsets.toSet().size, "each attribute row must have its own offset")
+    }
+
     @Test
     fun `line units expose their header fields and a line program`() {
         val roots = section(DWARF_LINE_TAB_NAME)

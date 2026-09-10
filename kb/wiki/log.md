@@ -40,3 +40,7 @@ Append one line per write-back: date, page, what changed.
   `plugins-shared` so the VS Code webview could render the same tabs as IntelliJ; recorded the
   un-memoized-children contract, the `groupPanels` naming rule, and three known gaps (eager
   `.debug_info`, per-byte JS buffer allocation, the webapp worker route).
+- 2026-09-10 — `entities/dwarf-outline-model` — code review pass: `.debug_info` attribute rows
+  addressed `.debug_abbrev` (shared abbrev declaration), DWARF64 `strp` never resolved, and the
+  IntelliJ search index was built on the EDT; all three fixed, with regression tests pinning
+  that attribute offsets fall inside `.debug_info` and differ per DIE.

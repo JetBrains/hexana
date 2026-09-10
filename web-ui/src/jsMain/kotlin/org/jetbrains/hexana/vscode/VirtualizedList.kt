@@ -17,8 +17,8 @@ import kotlin.math.min
  * @param itemCount total number of items in the list.
  * @param itemHeightPx fixed height of each item in pixels.
  * @param overscan number of extra items to render above/below the viewport.
- * @param revealIndex when non-null, scrolls this row into view; re-scrolls whenever the value
- *   changes. Rows already on screen are left alone, so find-next does not jerk the viewport.
+ * @param reveal when non-null, scrolls that row into view. Rows already on screen are left alone,
+ *   so find-next does not jerk the viewport.
  * @param content composable that renders a single item at the given index.
  */
 @Composable
@@ -26,7 +26,7 @@ internal fun VirtualizedList(
     itemCount: Int,
     itemHeightPx: Int,
     overscan: Int = 5,
-    revealIndex: Int? = null,
+    reveal: ListReveal? = null,
     content: @Composable (index: Int) -> Unit,
 ) {
     val totalHeight = itemCount.toLong() * itemHeightPx
@@ -38,8 +38,8 @@ internal fun VirtualizedList(
     // DOM element, not in Compose state.
     var container by remember { mutableStateOf<HTMLElement?>(null) }
 
-    LaunchedEffect(revealIndex, itemHeightPx) {
-        val target = revealIndex ?: return@LaunchedEffect
+    LaunchedEffect(reveal, itemHeightPx) {
+        val target = reveal?.index ?: return@LaunchedEffect
         val element = container ?: return@LaunchedEffect
         val top = target.toLong() * itemHeightPx
         val height = element.clientHeight.toDouble().takeIf { it > 0 } ?: viewportHeight
@@ -113,3 +113,12 @@ internal fun VirtualizedList(
         }
     }
 }
+
+/**
+ * A request to scroll row [index] into view.
+ *
+ * [requestId] exists so that asking for the *same* row twice still scrolls: the reveal effect keys
+ * on this value, and a bare `Int?` would be dropped as unchanged when the user scrolls away and
+ * presses find-next onto the row they were already on.
+ */
+internal data class ListReveal(val index: Int, val requestId: Int)

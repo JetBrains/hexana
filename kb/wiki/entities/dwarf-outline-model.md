@@ -53,6 +53,18 @@ DwarfAccessor ──► dwarfOutlineSections(accessor, bytes)   cheap: probes se
   `Attribute.toString()` but with a hex fallback, because `simpleName` depends on retained class
   metadata and a minified Kotlin/JS bundle can lose it — degrading to `DW_FORM_0xe` rather than
   `Unknown`.
+- **`DieField` carries its own `valueOffset`/`valueSize`.** `DieField.attribute` is the
+  `.debug_abbrev` declaration, shared by every DIE using that abbrev code, so its `offset`/`size`
+  address a different section entirely. Attribute rows navigated there until the parser was taught
+  to record where the value was actually read from. Forms occupying no bytes
+  (`DW_FORM_flag_present`, `DW_FORM_implicit_const`) get `valueSize == 0` and stay non-navigable.
+- **DWARF64 `DW_FORM_strp` arrives as a `ULong`.** `readForm` widens by `header.offsetSize`, so a
+  DWARF64 unit yields `ULong` where DWARF32 yields `UInt`; the string table is keyed by `UInt`.
+  Both are accepted and normalized.
+- **Search indexing runs off the EDT in IntelliJ** (`Dispatchers.Default`), with an "Indexing..."
+  counter while it builds. Safe because the walk touches the outline model, not the Jewel tree, and
+  each children provider duplicates the buffer for its own cursor. The webview has no second
+  thread, so it still indexes inline.
 - **Malformed sections degrade to an error row.** The DWARF parsers `error()` on a missing abbrev
   and throw on an unsupported version. On the JVM that is an IDE error; in a webview an uncaught
   throw out of composition kills the editor.

@@ -124,7 +124,9 @@ class DwarfInfoSection(
 
     fun CommonByteBuffer.readAttribute(header: DwarfUnit, attribute: DwarfAttribute): DieField {
         val form = attribute.form
-        return DieField(attribute,  readForm(form, header))
+        val valueOffset = position()
+        val value = readForm(form, header)
+        return DieField(attribute, value, valueOffset, position() - valueOffset)
     }
 
     private fun CommonByteBuffer.readDebugInformationEntry(header: CompilationUnitHeader<*>,  limit: Int): DebugInformationEntry? {
@@ -168,7 +170,21 @@ fun CommonByteBuffer.readStringZ(): String {
     return string
 }
 
-class DieField(val attribute: DwarfAttribute, val value: Any) {
+/**
+ * One attribute of a DIE, as encoded in `.debug_info`.
+ *
+ * [attribute] is the declaration from `.debug_abbrev`, shared by every DIE that uses the same
+ * abbrev code - so its `offset`/`size` describe the declaration, in a different section, not this
+ * value. Use [valueOffset]/[valueSize] to address the bytes this field was actually read from.
+ */
+class DieField(
+    val attribute: DwarfAttribute,
+    val value: Any,
+    /** Offset in `.debug_info` of this field's encoded value. */
+    val valueOffset: Int,
+    /** Encoded size in bytes; `0` for forms that occupy none (`DW_FORM_flag_present`, `DW_FORM_implicit_const`). */
+    val valueSize: Int,
+) {
     val intValue: Int?
         get () = when (value) {
             is Int -> value

@@ -165,8 +165,11 @@ private fun dwarfDieNode(
                         DwarfOutlineNode(
                             id = "$id/a$index",
                             label = dwarfDieFieldLabel(field, bytes, stringEntries),
-                            offset = field.attribute.offset,
-                            size = field.attribute.size,
+                            // The field's own bytes in `.debug_info`, not `field.attribute`, which
+                            // is the shared `.debug_abbrev` declaration and lives in another
+                            // section. Forms that occupy no bytes stay non-navigable.
+                            offset = field.valueOffset.takeIf { field.valueSize > 0 },
+                            size = field.valueSize,
                         )
                     )
                 }
@@ -186,7 +189,14 @@ private fun dwarfDieFieldLabel(
     val attribute = field.attribute
     val base = "${attribute.name} ${attribute.form}"
     if (attribute.form != Form.DW_FORM_strp) return base
-    val resolved = (field.value as? UInt)
+    // A DWARF64 unit encodes strp as 8 bytes, which readForm yields as a ULong. `.debug_str`
+    // offsets are indexed by UInt, matching StringTableEntry.originalOffset.
+    val strpOffset = when (val value = field.value) {
+        is UInt -> value
+        is ULong -> value.toUInt()
+        else -> null
+    }
+    val resolved = strpOffset
         ?.let { stringEntries[it] }
         ?.let { entry -> dwarfOutlineCatching(".debug_str") { with(entry) { bytes.duplicate().str() } } }
         ?: "Unknown string"
