@@ -2,6 +2,11 @@ package org.jetbrains.hexana.mcp.tools
 
 private const val BINARIES_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.binaries"
 
+val SummarizeBinaryToolId = ToolId("summarize_binary")
+val QueryBinaryToolId = ToolId("query_binary")
+val ListBinaryFunctionsToolId = ToolId("list_binary_functions")
+val SearchBinaryFunctionsToolId = ToolId("search_binary_functions")
+
 val BinaryModuleIdentityResultClass = class_("BinaryModuleIdentityResult", kotlinPackage = BINARIES_MODEL_PACKAGE) {
     nullable("path", of = string()).describe("Caller-supplied path label, when the binary came from a path.")
     string("format").describe("Stable format identifier such as `wasm`, `elf`, `mach_o`, `pe`, `coff`, `archive`, or `generic`.")
@@ -158,7 +163,7 @@ private val BinaryFunctionsResultClass = class_("BinaryFunctionsResult", kotlinP
 }
 
 internal val BinaryTools: List<ToolSpec> = tools {
-    tool("summarize_binary") {
+    tool(SummarizeBinaryToolId) {
         summary = "Summarize a Wasm or native binary with compact identity and entity counts."
         guidance = """
             Use this first for an unknown binary before choosing a format-specific follow-up tool.
@@ -170,7 +175,7 @@ internal val BinaryTools: List<ToolSpec> = tools {
         output = BinarySummaryResultClass
     }
 
-    tool("query_binary") {
+    tool(QueryBinaryToolId) {
         summary = "Query Wasm or native binary records with bounded output."
         guidance = """
             Use this when `summarize_binary` shows the format has relevant records and you need a compact, paged lookup across generic binary entities.
@@ -183,7 +188,7 @@ internal val BinaryTools: List<ToolSpec> = tools {
         output = QueryBinaryResultClass
     }
 
-    tool("list_binary_functions") {
+    tool(ListBinaryFunctionsToolId) {
         summary = "List Wasm funcidx or native symbol-backed functions with focused fields."
         guidance = """
             Use this for stack, source, or function inventories after `summarize_binary` shows functions.
@@ -193,7 +198,7 @@ internal val BinaryTools: List<ToolSpec> = tools {
         output = BinaryFunctionsResultClass
     }
 
-    tool("search_binary_functions") {
+    tool(SearchBinaryFunctionsToolId) {
         summary = "Search Wasm funcidx or native symbol-backed functions by focused function fields."
         guidance = """
             Use this when you have a name, import, source, section, address, offset, or range-confidence term.

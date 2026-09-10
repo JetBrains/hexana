@@ -1,5 +1,19 @@
 package org.jetbrains.hexana.mcp.tools
 
+val ListFunctionsToolId = ToolId("list_functions")
+val ListCodeSectionOffsetsToolId = ToolId("list_code_section_offsets")
+val FunctionsForIndicesToolId = ToolId("functions_for_indices")
+val ResolveFunctionSignatureToolId = ToolId("resolve_function_signature")
+val DisassembleFunctionToolId = ToolId("disassemble_function")
+val GetFunctionCallGraphToolId = ToolId("get_function_call_graph")
+val AuditLocalStackBudgetToolId = ToolId("audit_local_stack_budget")
+val SearchFunctionsByNameToolId = ToolId("search_functions_by_name")
+val ResolveWasmFramesToolId = ToolId("resolve_wasm_frames")
+val ResolveFunctionSymbolsToolId = ToolId("resolve_function_symbols")
+val ResolveSourceLocationsToolId = ToolId("resolve_source_locations")
+val GetLocalsForFunctionsToolId = ToolId("get_locals_for_functions")
+val GetInstructionsForFunctionsToolId = ToolId("get_instructions_for_functions")
+
 private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.functions"
 
 val ListFunctionsInput = WasmInputClass.with("ListFunctionsInput") {
@@ -561,7 +575,7 @@ val AuditLocalStackBudgetResultClass = class_("AuditLocalStackBudgetResult", kot
 }
 
 internal val FunctionTools: List<ToolSpec> = tools {
-    tool("list_functions") {
+    tool(ListFunctionsToolId) {
         summary = "List imported and defined functions with offset/limit pagination."
         guidance = """
             List imported and defined functions from a WebAssembly (.wasm) module using offset/limit pagination.
@@ -574,7 +588,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
         output = FunctionsResultClass
     }
 
-    tool("list_code_section_offsets") {
+    tool(ListCodeSectionOffsetsToolId) {
         summary = "List byte offsets and sizes for defined function bodies."
         guidance = """
             List code-section byte ranges for all defined WebAssembly function bodies.
@@ -585,7 +599,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
         output = ListCodeSectionOffsetsResultClass
     }
 
-    tool("functions_for_indices") {
+    tool(FunctionsForIndicesToolId) {
         summary = "Resolve function entries for the given unified function indices."
         guidance = """
             Resolve imported and defined function entries for the requested unified function indices.
@@ -595,7 +609,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
         output = FunctionsResultClass
     }
 
-    tool("resolve_function_signature") {
+    tool(ResolveFunctionSignatureToolId) {
         summary = "Resolve the type index and signature for one function index."
         guidance = """
             Resolve the type index and signature for one unified WebAssembly function index.
@@ -605,7 +619,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
         output = ResolveFunctionSignatureResultClass
     }
 
-    tool("disassemble_function") {
+    tool(DisassembleFunctionToolId) {
         summary = "Disassemble one function by unified function index."
         guidance = """
             Disassemble one WebAssembly function by `funcidx`, returning signature, import/export metadata, locals, decoded instruction records, WAT-style text, and raw code bytes when the function has a body.
@@ -616,7 +630,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
         output = DisassembleFunctionResultClass
     }
 
-    tool("get_function_call_graph") {
+    tool(GetFunctionCallGraphToolId) {
         summary = "Return resolved direct calls and memory write sites for function indices."
         guidance = """
             Return a compact per-function call graph for requested unified WebAssembly `funcidx` values.
@@ -628,7 +642,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
         output = GetFunctionCallGraphResultClass
     }
 
-    tool("audit_local_stack_budget") {
+    tool(AuditLocalStackBudgetToolId) {
         summary = "Audit exported function local counts against a local stack budget policy."
         guidance = """
             Use this as the shortest path for local-variable or stack-budget audits that have a Wasm module and optional `policyPath`.
@@ -639,7 +653,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
         output = AuditLocalStackBudgetResultClass
     }
 
-    tool("search_functions_by_name") {
+    tool(SearchFunctionsByNameToolId) {
         summary = "Search function names across imports, exports, and debug names."
         guidance = """
             Search import names, export names, and WebAssembly name-section function names with a case-insensitive substring query.
@@ -649,7 +663,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
         output = SearchFunctionsByNameResultClass
     }
 
-    tool("resolve_wasm_frames") {
+    tool(ResolveWasmFramesToolId) {
         summary = "Aggregate WebAssembly crash-report and stack-frame triage from function indices, labels, and offsets."
         guidance = """
             Resolve crash-report or stack-frame `funcidx` values, raw labels, and optional code offsets into symbols, signatures, exported names, code ranges, source locations, top application frame, skipped-frame reasons, and report-ready summaries.
@@ -660,7 +674,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
         output = ResolveWasmFramesResultClass
     }
 
-    tool("resolve_function_symbols") {
+    tool(ResolveFunctionSymbolsToolId) {
         summary = "Focused lookup for function indices, symbols, signatures, and metadata."
         guidance = """
             Batch-resolve unified WebAssembly function indices to compact symbol records.
@@ -672,7 +686,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
         output = ResolveFunctionSymbolsResultClass
     }
 
-    tool("resolve_source_locations") {
+    tool(ResolveSourceLocationsToolId) {
         summary = "Focused source lookup for WebAssembly code offsets or function indices."
         guidance = """
             Map absolute WebAssembly code offsets or unified `funcidx` values to source-map or DWARF source locations.
@@ -684,7 +698,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
         output = ResolveSourceLocationsResultClass
     }
 
-    tool("get_locals_for_functions") {
+    tool(GetLocalsForFunctionsToolId) {
         summary = "Return grouped local declarations for the requested function indices."
         guidance = """
             Return grouped local declarations for the requested unified function indices.
@@ -694,7 +708,7 @@ internal val FunctionTools: List<ToolSpec> = tools {
         output = GetLocalsForFunctionsResultClass
     }
 
-    tool("get_instructions_for_functions") {
+    tool(GetInstructionsForFunctionsToolId) {
         summary = "Return decoded instruction text for the requested function indices."
         guidance = """
             Return decoded instruction text for the requested unified function indices.

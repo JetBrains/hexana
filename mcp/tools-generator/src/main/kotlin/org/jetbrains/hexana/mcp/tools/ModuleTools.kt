@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.mcp.tools
 
+val SummarizeModuleToolId = ToolId("summarize_module")
+val ListEnabledFeaturesToolId = ToolId("list_enabled_features")
+val ListCustomSectionsToolId = ToolId("list_custom_sections")
+
 private const val SUMMARY_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.summary"
 private const val SECTIONS_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.sections"
 private const val FEATURES_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.features"
@@ -67,7 +71,7 @@ val ListCustomSectionsResultClass = class_("ListCustomSectionsResult", kotlinPac
 }
 
 internal val ModuleTools: List<ToolSpec> = tools {
-    tool("summarize_module") {
+    tool(SummarizeModuleToolId) {
         summary = "Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types."
         guidance = """
             Summarize a WebAssembly (.wasm) module with high-level counts for its major sections and declarations.
@@ -79,7 +83,7 @@ internal val ModuleTools: List<ToolSpec> = tools {
         output = SummarizeModuleResultClass
     }
 
-    tool("list_enabled_features") {
+    tool(ListEnabledFeaturesToolId) {
         summary = "List enabled or inferred WebAssembly feature flags for a `.wasm` module."
         guidance = """
             Infer WebAssembly feature usage from type declarations, section presence, instructions, and feature-related custom sections.
@@ -89,7 +93,7 @@ internal val ModuleTools: List<ToolSpec> = tools {
         output = ListEnabledFeaturesResultClass
     }
 
-    tool("list_custom_sections") {
+    tool(ListCustomSectionsToolId) {
         summary = "List WebAssembly custom sections with offsets, sizes, and small content previews."
         guidance = """
             List custom sections from a WebAssembly module, including names, full-section byte ranges, and a capped content preview.

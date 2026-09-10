@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.mcp.tools
 
+val ListRequiredProposalsToolId = ToolId("list_required_proposals")
+val DiffRequiredProposalsToolId = ToolId("diff_required_proposals")
+val CheckRuntimeCompatibilityToolId = ToolId("check_runtime_compatibility")
+
 private const val RUNTIME_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.runtime"
 
 val ProposalEvidenceResultClass = class_("ProposalEvidenceResult") {
@@ -88,7 +92,7 @@ val ProposalDiffInputClass = WasmInputClass.with("ProposalDiffInput") {
 }
 
 internal val RuntimeTools: List<ToolSpec> = tools {
-    tool("list_required_proposals") {
+    tool(ListRequiredProposalsToolId) {
         summary = "List required WebAssembly proposals inferred from detected module features."
         guidance = """
             Derive compact required WebAssembly proposals from the same detector used by `list_enabled_features`.
@@ -98,7 +102,7 @@ internal val RuntimeTools: List<ToolSpec> = tools {
         output = ListRequiredProposalsResultClass
     }
 
-    tool("diff_required_proposals") {
+    tool(DiffRequiredProposalsToolId) {
         summary = "Diff required WebAssembly proposals between a current and baseline module."
         guidance = """
             Compare the current module against `baselinePath` and return full plus newly/no-longer-required proposal lists.
@@ -108,7 +112,7 @@ internal val RuntimeTools: List<ToolSpec> = tools {
         output = DiffRequiredProposalsResultClass
     }
 
-    tool("check_runtime_compatibility") {
+    tool(CheckRuntimeCompatibilityToolId) {
         summary = "Check a WebAssembly module's required proposals against a conservative runtime support profile."
         guidance = """
             Compare required proposals with conservative `graalwasm`, `wasmtime`, `v8`, `node`, or `browser` support.

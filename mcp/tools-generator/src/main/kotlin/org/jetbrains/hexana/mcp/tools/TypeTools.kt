@@ -1,5 +1,10 @@
 package org.jetbrains.hexana.mcp.tools
 
+val ListTypesToolId = ToolId("list_types")
+val ListValueTypesToolId = ToolId("list_value_types")
+val ListReferenceTypesToolId = ToolId("list_reference_types")
+val GetTypesForIndicesToolId = ToolId("get_types_for_indices")
+
 private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.types"
 
 val GetTypesForIndicesInput = indicesInput(
@@ -114,7 +119,7 @@ val ListReferenceTypesResultClass = class_("ListReferenceTypesResult", kotlinPac
 }
 
 internal val TypeTools: List<ToolSpec> = tools {
-    tool("list_types") {
+    tool(ListTypesToolId) {
         summary = "List type entries declared by a `.wasm` module."
         guidance = """
             List type entries declared by a WebAssembly (.wasm) module.
@@ -125,7 +130,7 @@ internal val TypeTools: List<ToolSpec> = tools {
         output = TypesResultClass
     }
 
-    tool("list_value_types") {
+    tool(ListValueTypesToolId) {
         summary = "List value types used by a `.wasm` module with counts and feature flags."
         guidance = """
             List scalar, vector, packed, and reference value types observed across declarations, globals, tables, locals, and typed instructions.
@@ -135,7 +140,7 @@ internal val TypeTools: List<ToolSpec> = tools {
         output = ListValueTypesResultClass
     }
 
-    tool("list_reference_types") {
+    tool(ListReferenceTypesToolId) {
         summary = "List reference value types used by a `.wasm` module."
         guidance = """
             List reference value types grouped by function, external, GC, primitive, top-like, and bottom/null families.
@@ -145,7 +150,7 @@ internal val TypeTools: List<ToolSpec> = tools {
         output = ListReferenceTypesResultClass
     }
 
-    tool("get_types_for_indices") {
+    tool(GetTypesForIndicesToolId) {
         summary = "Return type entries for the requested indices from the type index space."
         guidance = """
             Return only the requested type entries from the type index space.

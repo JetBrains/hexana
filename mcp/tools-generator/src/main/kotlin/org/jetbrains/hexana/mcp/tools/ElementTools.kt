@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
+val ListElementSegmentsToolId = ToolId("list_element_segments")
+
 private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.elements"
 
 val ElementSegmentResultClass = class_("ElementSegmentResult") {
@@ -17,7 +19,7 @@ val ListElementSegmentsResultClass = class_("ListElementSegmentsResult", kotlinP
 }
 
 internal val ElementTools: List<ToolSpec> = tools {
-    tool("list_element_segments") {
+    tool(ListElementSegmentsToolId) {
         summary = "List element segments declared by a `.wasm` module."
         guidance = """
             List element segments declared by a WebAssembly (.wasm) module.

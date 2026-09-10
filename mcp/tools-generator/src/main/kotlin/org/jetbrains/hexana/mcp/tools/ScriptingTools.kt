@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
 private const val SCRIPTING_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.scripting"
+val RunBinaryScriptToolId = ToolId("run_binary_script")
 private const val SCRIPT_SOURCE_VALIDATION =
     "Provide exactly one of `scriptPath` or `script`."
 
@@ -49,7 +50,7 @@ private val RunBinaryScriptResultClass = class_("RunBinaryScriptResult", kotlinP
 }
 
 internal val ScriptingTools: List<ToolSpec> = tools {
-    tool("run_binary_script") {
+    tool(RunBinaryScriptToolId) {
         summary = "Run a Hexana JavaScript script over a Wasm or native binary."
         // Keep this in step with the scripting API surface itself, which is
         // defined in `plugins-shared/.../scripting/ScriptBinaryApi.kt` and

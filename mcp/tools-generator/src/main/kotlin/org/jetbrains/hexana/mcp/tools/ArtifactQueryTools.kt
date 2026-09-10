@@ -1,5 +1,8 @@
 package org.jetbrains.hexana.mcp.tools
 
+val PlanAbiBindingRegenerationToolId = ToolId("plan_abi_binding_regeneration")
+val QueryArtifactsToolId = ToolId("query_artifacts")
+
 private const val ARTIFACT_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.artifacts"
 
 private val QueryArtifactsInput = WasmInputClass.with("QueryArtifactsInput") {
@@ -158,7 +161,7 @@ private val PlanAbiBindingRegenerationResultClass = class_(
 }
 
 val ArtifactQueryTools = tools {
-    tool("plan_abi_binding_regeneration") {
+    tool(PlanAbiBindingRegenerationToolId) {
         summary = "Plan report-ready ABI binding regeneration from current Wasm plus a stale binding file."
         guidance = """
             Use this as the shortest path for regenerating host bindings when a current module and stale `bindingPath` are available.
@@ -170,7 +173,7 @@ val ArtifactQueryTools = tools {
         output = PlanAbiBindingRegenerationResultClass
     }
 
-    tool("query_artifacts") {
+    tool(QueryArtifactsToolId) {
         summary = "Query WebAssembly artifact entities, diffs, and function relations with bounded output."
         guidance = """
             Use this as the default Hexana MCP entry point for WebAssembly artifact facts.

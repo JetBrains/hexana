@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.mcp.tools
 
+val ListComponentSurfaceToolId = ToolId("list_component_surface")
+val ResolveComponentDependenciesToolId = ToolId("resolve_component_dependencies")
+val CheckComponentCompatibilityToolId = ToolId("check_component_compatibility")
+
 private const val COMPONENT_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.components"
 
 val ComponentSurfaceEntryResultClass = class_("ComponentSurfaceEntryResult") {
@@ -266,7 +270,7 @@ val ComponentCompatibilityInputClass = WasmInputClass.with("ComponentCompatibili
 }
 
 internal val ComponentTools: List<ToolSpec> = tools {
-    tool("list_component_surface") {
+    tool(ListComponentSurfaceToolId) {
         summary = "Low-level component import/export listing; not for dependency/provider resolution."
         guidance = """
             Use this only for compact component-model surface inspection when provider selection is not needed.
@@ -278,7 +282,7 @@ internal val ComponentTools: List<ToolSpec> = tools {
         output = ListComponentSurfaceResultClass
     }
 
-    tool("resolve_component_dependencies") {
+    tool(ResolveComponentDependenciesToolId) {
         summary = "Resolve component run/link dependencies from a main component and candidate roots into report-ready fields."
         guidance = """
             Search `scanRoots`, `projectRoot`, and the input component directory for component providers of non-runtime imports.
@@ -291,7 +295,7 @@ internal val ComponentTools: List<ToolSpec> = tools {
         output = ResolveComponentDependenciesResultClass
     }
 
-    tool("check_component_compatibility") {
+    tool(CheckComponentCompatibilityToolId) {
         summary = "Compare current/previous component imports against provider candidates and lock/config files."
         guidance = """
             Use this first for component compatibility drift, compose failure logs, provider candidate triage, and dependency lock/config repair.

@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.mcp.tools
 
+val ListMemoryToolId = ToolId("list_memory")
+val GetMemoryForIndicesToolId = ToolId("get_memory_for_indices")
+val CheckMemoryContractToolId = ToolId("check_memory_contract")
+
 private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.memory"
 
 val GetMemoryForIndicesInput = indicesInput(
@@ -96,7 +100,7 @@ val CheckMemoryContractResultClass = class_("CheckMemoryContractResult", kotlinP
 }
 
 internal val MemoryTools: List<ToolSpec> = tools {
-    tool("list_memory") {
+    tool(ListMemoryToolId) {
         summary = "Low-level list of imported and defined memories from a `.wasm` module."
         guidance = """
             List imported and defined memories declared by a WebAssembly (.wasm) module.
@@ -107,7 +111,7 @@ internal val MemoryTools: List<ToolSpec> = tools {
         output = ListMemoryResultClass
     }
 
-    tool("get_memory_for_indices") {
+    tool(GetMemoryForIndicesToolId) {
         summary = "Return memories for the requested indices from the unified memory index space."
         guidance = """
             Return only the requested memories from the unified memory index space.
@@ -117,7 +121,7 @@ internal val MemoryTools: List<ToolSpec> = tools {
         output = ListMemoryResultClass
     }
 
-    tool("check_memory_contract") {
+    tool(CheckMemoryContractToolId) {
         summary = "Check a memory contract with current/baseline Wasm and policy JSON; returns report-ready violations."
         guidance = """
             Use this as the shortest path for memory contract audits that have a current module, `baselinePath`, and `policyPath`.

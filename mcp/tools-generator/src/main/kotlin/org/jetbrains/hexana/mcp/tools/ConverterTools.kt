@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
+val WasmToWatToolId = ToolId("wasm_to_wat")
+
 val WasmToWatResultClass = class_(
     "WasmToWatResult",
     kotlinPackage = "org.jetbrains.hexana.mcp.model.converters",
@@ -10,7 +12,7 @@ val WasmToWatResultClass = class_(
 }
 
 val ConverterTools = tools {
-    tool("wasm_to_wat") {
+    tool(WasmToWatToolId) {
         summary = "Convert a `.wasm` module to WebAssembly text format."
         input = WasmInputClass
         output = WasmToWatResultClass

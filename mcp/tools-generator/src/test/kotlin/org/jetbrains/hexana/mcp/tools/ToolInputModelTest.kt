@@ -451,7 +451,7 @@ class ToolInputModelTest {
 
     private fun futureCompareModulesSpec(inputModel: ToolInputModel): CliTool {
         val contract = tools {
-            tool("compare_modules") {
+            tool(ToolId("compare_modules")) {
                 summary = "Compare two WebAssembly modules."
                 input = futureCompareModulesInput()
                 output = class_("CompareModulesResult") {
@@ -460,7 +460,7 @@ class ToolInputModelTest {
             }
         }.single()
         val binding = cliToolBinding(
-            "compare_modules",
+            ToolId("compare_modules"),
             "compare-modules",
             ToolGroup.Module,
             ToolOutputPolicy.ToolDefined,
@@ -474,7 +474,7 @@ class ToolInputModelTest {
 
     private fun futureCompareBinariesSpec(inputModel: ToolInputModel): CliTool {
         val contract = tools {
-            tool("compare_binaries") {
+            tool(ToolId("compare_binaries")) {
                 summary = "Compare two binaries."
                 input = futureCompareBinariesInput()
                 output = class_("CompareBinariesResult") {
@@ -483,7 +483,7 @@ class ToolInputModelTest {
             }
         }.single()
         val binding = cliToolBinding(
-            "compare_binaries",
+            ToolId("compare_binaries"),
             "compare-binaries",
             ToolGroup.Binary,
             ToolOutputPolicy.ToolDefined,
@@ -513,7 +513,7 @@ class ToolInputModelTest {
 
     private fun futureRunBinaryScriptSpec(inputModel: ToolInputModel): CliTool {
         val contract = tools {
-            tool("run_binary_script") {
+            tool(RunBinaryScriptToolId) {
                 summary = "Run a script over a binary."
                 input = BinaryInputClass.with("RunBinaryScriptInput") {
                     embed("binary", BinaryInputClass).describe("Binary source.")
@@ -527,7 +527,7 @@ class ToolInputModelTest {
             }
         }.single()
         val binding = cliToolBinding(
-            "run_binary_script",
+            RunBinaryScriptToolId,
             "run-script",
             ToolGroup.Binary,
             ToolOutputPolicy.ToolDefined,

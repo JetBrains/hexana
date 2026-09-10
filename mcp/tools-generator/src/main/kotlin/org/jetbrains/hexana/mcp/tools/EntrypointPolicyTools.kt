@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
+val GetEntrypointPolicyToolId = ToolId("get_entrypoint_policy")
+
 private const val ENTRYPOINT_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.entrypoints"
 
 private val EntrypointSignatureResultClass = class_("EntrypointSignatureResult", kotlinPackage = ENTRYPOINT_MODEL_PACKAGE) {
@@ -39,7 +41,7 @@ private val EntrypointPolicyResultClass = class_("EntrypointPolicyResult", kotli
 }
 
 internal val EntrypointPolicyTools: List<ToolSpec> = tools {
-    tool("get_entrypoint_policy") {
+    tool(GetEntrypointPolicyToolId) {
         summary = "Return policy-ready direct host-call facts for exported WebAssembly entrypoints."
         guidance = """
             Use this when repairing or validating entrypoint host-call policy JSON.

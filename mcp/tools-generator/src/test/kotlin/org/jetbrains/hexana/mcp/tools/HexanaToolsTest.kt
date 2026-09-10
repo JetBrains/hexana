@@ -238,6 +238,16 @@ class HexanaToolsTest {
     }
 
     @Test
+    fun `standalone profiles select every registered binding exactly once`() {
+        val selected = HexanaStandaloneDefaultToolIds +
+            HexanaStandaloneAdvancedToolIds +
+            HexanaStandaloneScriptingToolIds
+
+        assertEquals(HexanaStandaloneTools.map { it.id }.toSet(), selected.toSet())
+        assertEquals(selected.size, selected.toSet().size)
+    }
+
+    @Test
     fun `CLI release products and executable models preserve approved inventories`() {
         val products = CliReleaseProduct.entries.associateWith { product ->
             HexanaCliTools.filter { product in it.binding.releaseProducts }.map { it.name }
@@ -279,22 +289,25 @@ class HexanaToolsTest {
         data class Binding(val id: ToolId)
         val selected = HexanaTools.take(2).map { it.id }
         val bindings = selected.map(::Binding)
-        assertFailsWith<IllegalArgumentException> {
+        val duplicate = assertFailsWith<IllegalArgumentException> {
             HexanaToolCatalog.resolveBindings(selected, bindings + bindings.first(), "test", Binding::id) { contract, _ -> contract }
         }
-        assertFailsWith<IllegalArgumentException> {
+        assertTrue(duplicate.message.orEmpty().contains("duplicate bindings"))
+        val missing = assertFailsWith<IllegalArgumentException> {
             HexanaToolCatalog.resolveBindings(selected, bindings.take(1), "test", Binding::id) { contract, _ -> contract }
         }
-        assertFailsWith<IllegalArgumentException> {
+        assertTrue(missing.message.orEmpty().contains("missing bindings"))
+        val unknown = assertFailsWith<IllegalArgumentException> {
             HexanaToolCatalog.resolveBindings(selected, bindings + Binding(ToolId("unknown_tool")), "test", Binding::id) { contract, _ -> contract }
         }
+        assertTrue(unknown.message.orEmpty().contains("bindings for unknown tool IDs"))
     }
 
     @Test
     fun `CLI output selections are validated against semantic capabilities`() {
         val contract = HexanaTools.single { it.name == "summarize_binary" }
         val unsupported = cliToolBinding(
-            "summarize_binary", "summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined,
+            SummarizeBinaryToolId, "summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined,
             outputOverride = OutputConversionCapability.RawBytes,
         )
         val error = assertFailsWith<IllegalArgumentException> { validateCliBinding(contract, unsupported) }
@@ -305,7 +318,7 @@ class HexanaToolsTest {
     fun `tool builder rejects names outside strict snake_case`() {
         assertFailsWith<IllegalArgumentException> {
             tools {
-                tool("queryArtifacts") {
+                tool(ToolId("queryArtifacts")) {
                     summary = "s"
                     input = WasmInputClass
                     output = WasmInputClass
@@ -314,7 +327,7 @@ class HexanaToolsTest {
         }
         assertFailsWith<IllegalArgumentException> {
             tools {
-                tool("query__artifacts") {
+                tool(ToolId("query__artifacts")) {
                     summary = "s"
                     input = WasmInputClass
                     output = WasmInputClass
@@ -327,7 +340,7 @@ class HexanaToolsTest {
     fun `standalone handler and CLI command names validate independently`() {
         assertFailsWith<IllegalArgumentException> { StandaloneHandlerSpec("org.jetbrains.hexana.BadHandler") }
         assertFailsWith<IllegalArgumentException> {
-            cliToolBinding("query_artifacts", "query_artifacts", ToolGroup.ArtifactQuery, ToolOutputPolicy.ToolDefined)
+            cliToolBinding(QueryArtifactsToolId, "query_artifacts", ToolGroup.ArtifactQuery, ToolOutputPolicy.ToolDefined)
         }
         val commands = HexanaCliTools.map { it.binding.commandName }
         assertEquals(commands.toSet().size, commands.size)

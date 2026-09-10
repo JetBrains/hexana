@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.mcp.tools
 
+val ListGlobalsToolId = ToolId("list_globals")
+val AuditGlobalStatePolicyToolId = ToolId("audit_global_state_policy")
+val GetGlobalsForIndicesToolId = ToolId("get_globals_for_indices")
+
 private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.globals"
 
 val GetGlobalsForIndicesInput = indicesInput(
@@ -188,7 +192,7 @@ val AuditGlobalStatePolicyResultClass = class_("AuditGlobalStatePolicyResult", k
 }
 
 internal val GlobalTools: List<ToolSpec> = tools {
-    tool("list_globals") {
+    tool(ListGlobalsToolId) {
         summary = "Low-level list of imported and defined globals from a `.wasm` module."
         guidance = """
             List imported and defined globals declared by a WebAssembly (.wasm) module.
@@ -199,7 +203,7 @@ internal val GlobalTools: List<ToolSpec> = tools {
         output = ListGlobalsResultClass
     }
 
-    tool("audit_global_state_policy") {
+    tool(AuditGlobalStatePolicyToolId) {
         summary = "Audit global-state policy with current/baseline Wasm and policy JSON; returns report-ready violations."
         guidance = """
             Use this as the shortest path for global-state audits that have a current module, `baselinePath`, and `policyPath`.
@@ -212,7 +216,7 @@ internal val GlobalTools: List<ToolSpec> = tools {
         output = AuditGlobalStatePolicyResultClass
     }
 
-    tool("get_globals_for_indices") {
+    tool(GetGlobalsForIndicesToolId) {
         summary = "Return globals for the requested indices from the unified global index space."
         guidance = """
             Return only the requested globals from the unified global index space.

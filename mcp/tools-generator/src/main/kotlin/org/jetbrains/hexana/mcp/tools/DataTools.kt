@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.mcp.tools
 
+val ListDataToolId = ToolId("list_data")
+val ListDataSegmentsToolId = ToolId("list_data_segments")
+val AuditDataPayloadPolicyToolId = ToolId("audit_data_payload_policy")
+
 private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.data"
 
 private val HalfOpenIntRange = class_("HalfOpenIntRange") {
@@ -167,7 +171,7 @@ val AuditDataPayloadPolicyResultClass = class_("AuditDataPayloadPolicyResult", k
 }
 
 internal val DataTools: List<ToolSpec> = tools {
-    tool("list_data") {
+    tool(ListDataToolId) {
         summary = "Return raw data-section entries for a closed data-segment range."
         guidance = """
             Range `entriesRange` is closed: both `from` and `to` are inclusive zero-based segment indices.
@@ -177,7 +181,7 @@ internal val DataTools: List<ToolSpec> = tools {
         output = ListDataSectionsResultClass
     }
 
-    tool("list_data_segments") {
+    tool(ListDataSegmentsToolId) {
         summary = "Return data-segment metadata with range slicing and optional export/global context."
         guidance = """
             Range `segmentRange` is half-open: `from` is inclusive, `to` is exclusive (omit `to` to read to the end).
@@ -187,7 +191,7 @@ internal val DataTools: List<ToolSpec> = tools {
         output = ListDataSegmentsResultClass
     }
 
-    tool("audit_data_payload_policy") {
+    tool(AuditDataPayloadPolicyToolId) {
         summary = "Audit data segments against a payload policy JSON file and return report-ready matches."
         guidance = """
             Use this as the shortest path for embedded payload audits that have a Wasm module and `policyPath`.

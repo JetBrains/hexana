@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.mcp.tools
 
+val ListExportsToolId = ToolId("list_exports")
+val SearchExportsToolId = ToolId("search_exports")
+val ListExportedFunctionsToolId = ToolId("list_exported_functions")
+
 private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.exports"
 
 val ListExportedFunctionsInput = WasmInputClass.with("ListExportedFunctionsInput") {
@@ -86,7 +90,7 @@ val ListExportedFunctionsResultClass = class_("ListExportedFunctionsResult", kot
 }
 
 internal val ExportTools: List<ToolSpec> = tools {
-    tool("list_exports") {
+    tool(ListExportsToolId) {
         summary = "List exports declared by a `.wasm` module."
         guidance = """
             Includes exported functions, tables, memories, and globals; `kind` uses the standard tags 0=function, 1=table, 2=memory, 3=global.
@@ -102,7 +106,7 @@ internal val ExportTools: List<ToolSpec> = tools {
         output = ListExportsResultClass
     }
 
-    tool("search_exports") {
+    tool(SearchExportsToolId) {
         summary = "Search exports by name and resolve common export metadata."
         guidance = """
             Search exported functions, tables, memories, globals, and tags by case-insensitive export-name substrings.
@@ -113,7 +117,7 @@ internal val ExportTools: List<ToolSpec> = tools {
         output = SearchExportsResultClass
     }
 
-    tool("list_exported_functions") {
+    tool(ListExportedFunctionsToolId) {
         summary = "List exported functions within a closed range of the export section."
         guidance = """
             List exported functions from a WebAssembly (.wasm) module using a closed export-range slice.

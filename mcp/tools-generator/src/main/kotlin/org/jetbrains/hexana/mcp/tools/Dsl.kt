@@ -598,7 +598,7 @@ enum class ToolOutputPolicy {
 }
 
 fun cliToolBinding(
-    id: String,
+    id: ToolId,
     commandName: String,
     group: ToolGroup,
     outputPolicy: ToolOutputPolicy,
@@ -609,7 +609,7 @@ fun cliToolBinding(
     releaseProducts: Set<CliReleaseProduct> = emptySet(),
     inputModel: ToolInputModel? = null,
 ): CliToolBinding = CliToolBinding(
-    id = ToolId(id),
+    id = id,
     commandName = commandName,
     groups = setOf(group, *additionalGroups),
     outputPolicy = outputPolicy,
@@ -1036,8 +1036,8 @@ sealed class ToolInputPattern {
 class ToolsBuilder internal constructor() {
     private val specs = mutableListOf<ToolSpec>()
 
-    fun tool(name: String, block: ToolBuilder.() -> Unit) {
-        val builder = ToolBuilder(name).apply(block)
+    fun tool(id: ToolId, block: ToolBuilder.() -> Unit) {
+        val builder = ToolBuilder(id).apply(block)
         specs += builder.build()
     }
 
@@ -1073,22 +1073,20 @@ private fun validateCliOption(option: String, owner: String) {
 }
 
 @HexanaToolsDsl
-class ToolBuilder internal constructor(private val name: String) {
+class ToolBuilder internal constructor(private val id: ToolId) {
+    private val name: String get() = id.value
     var summary: String? = null
     var guidance: String? = null
     var input: ClassSpec? = null
     var output: ClassSpec? = null
 
     internal fun build(): ToolSpec {
-        require(TOOL_NAME_REGEX.matches(name)) {
-            "Tool name '$name' must be strict snake_case."
-        }
         val resolvedSummary = requireNotNull(summary) { "Tool '$name' is missing `summary`." }
         require(resolvedSummary.isNotBlank()) { "Tool '$name' summary must not be blank." }
         val resolvedInput = requireNotNull(input) { "Tool '$name' is missing `input = `." }
         val resolvedOutput = requireNotNull(output) { "Tool '$name' is missing `output = `." }
         return ToolSpec(
-            id = ToolId(name),
+            id = id,
             summary = resolvedSummary.trim(),
             guidance = guidance?.trimIndent()?.trim()?.takeIf { it.isNotEmpty() },
             input = resolvedInput,

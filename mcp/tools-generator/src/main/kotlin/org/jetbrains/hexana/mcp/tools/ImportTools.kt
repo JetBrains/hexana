@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.mcp.tools
 
+val ListImportsToolId = ToolId("list_imports")
+
 private const val MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.imports"
 
 val ImportFunctionSignatureClass = class_("ImportFunctionSignature") {
@@ -24,7 +26,7 @@ val ListImportsResultClass = class_("ListImportsResult", kotlinPackage = MODEL_P
 }
 
 internal val ImportTools: List<ToolSpec> = tools {
-    tool("list_imports") {
+    tool(ListImportsToolId) {
         summary = "List imported functions declared by a `.wasm` module."
         guidance = """
             List imported functions declared by a WebAssembly (.wasm) module.
