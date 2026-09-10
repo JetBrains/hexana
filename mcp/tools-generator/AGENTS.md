@@ -78,6 +78,23 @@ After editing the DSL, run the affected generators and commit their output along
 These generation tasks are not wired into `compileKotlin` automatically — the checked-in outputs are committed and
 reviewed with the DSL change.
 
+`./gradlew :mcp:tools-generator:generateHexanaToolCatalogReport` is a manual, build-only developer report. It writes
+`resolved-tool-catalog.json` and `resolved-tool-catalog.txt` under
+`mcp/tools-generator/build/reports/hexana-tool-catalog/`. Team leads can use it to inspect canonical semantic order,
+schema metadata, and the independent IDEA, standalone, derived MCPB, and CLI selections. It reports static exposure
+only: runtime availability is intentionally not evaluated and requirements remain empty until declared by an authority.
+
+Use root `./gradlew generateHexanaToolArtifacts` to run all independent IDEA, standalone, CLI, MCPB, and report
+generators together for an author workflow; it deliberately does not merge their outputs. Use root
+`./gradlew verifyHexanaToolArtifactsUpToDate` to run the four checked-in artifact drift checks and refresh the
+build-only report for inspection. Neither aggregate is part of `compileKotlin`; individual generator and verifier
+tasks remain the product-owner entrypoints.
+
+To review compatibility, save the previous `resolved-tool-catalog.json`, generate the new report, then run
+`./gradlew :mcp:tools-generator:generateHexanaToolCompatibilityDiff -PhexanaToolCompatibilityBeforeReport=<saved-report> -PhexanaToolCompatibilityAfterReport=<new-report>`.
+It writes `tool-compatibility-diff.json` and `.txt` under `build/reports/hexana-tool-compatibility/`; both are
+deterministic build-only review artifacts, not product CLI commands.
+
 Before sending a catalog change for review, run the generated-artifact drift checks:
 
 - `./gradlew :idea-plugin:verifyHexanaToolsetUpToDate`

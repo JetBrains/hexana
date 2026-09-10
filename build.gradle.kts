@@ -202,6 +202,30 @@ tasks.register("detektCliMcp") {
     detektCliMcpTaskPaths.forEach(::dependsOn)
 }
 
+tasks.register("generateHexanaToolArtifacts") {
+    group = "generation"
+    description = "Generate each independently owned Hexana tool artifact and the build-only resolved catalog report without merging outputs."
+    dependsOn(
+        ":idea-plugin:generateHexanaToolset",
+        ":mcp:server:generateHexanaToolDispatcher",
+        ":cli:metadata:generateHexanaCliMetadata",
+        ":mcp:generateClaudeDesktopMcpbManifestTemplate",
+        ":mcp:tools-generator:generateHexanaToolCatalogReport",
+    )
+}
+
+tasks.register("verifyHexanaToolArtifactsUpToDate") {
+    group = "verification"
+    description = "Verify independent generated tool artifacts are current, then refresh the non-versioned resolved catalog report for review."
+    dependsOn(
+        ":idea-plugin:verifyHexanaToolsetUpToDate",
+        ":mcp:server:verifyHexanaToolDispatcherUpToDate",
+        ":cli:metadata:verifyHexanaCliMetadataUpToDate",
+        ":mcp:verifyClaudeDesktopMcpbManifestTemplateUpToDate",
+        ":mcp:tools-generator:generateHexanaToolCatalogReport",
+    )
+}
+
 // Aggregator lists driven by ci-configuration's build configurations.
 // The lists travel with the code branch so release branches stay self-contained.
 val teamcityCoreTestTaskPaths = listOf(
