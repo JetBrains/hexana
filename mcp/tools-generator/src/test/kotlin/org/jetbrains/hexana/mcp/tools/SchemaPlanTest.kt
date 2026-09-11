@@ -25,7 +25,7 @@ class SchemaPlanTest {
         val firstNested = (first.type as SchemaTypePlan.ClassRef).clazz
         val moreNested = ((more.type as SchemaTypePlan.ListOf).element as SchemaTypePlan.ClassRef).clazz
 
-        assertEquals("Root.first", first.identity.value)
+        assertEquals("class(4:Root)#1.field(5:first)#1", first.identity.value)
         assertSame(plan, compileSchemaPlan(root))
         assertEquals("first", first.wireName)
         assertEquals(SchemaClassIdentity("Nested"), firstNested.identity)
@@ -83,6 +83,8 @@ class SchemaPlanTest {
         val plan = compileSchemaPlan(ClassSpec("Root", listOf(
             FieldSpec("same", int(), serialName = "firstWire"),
             FieldSpec("same", int(), serialName = "secondWire"),
+            FieldSpec("same#2", int(), serialName = "literalOrdinalWire"),
+            FieldSpec("field.#:[]/7", int(), serialName = "delimiterWire"),
             FieldSpec("first", FieldType.ClassRef(firstNested)),
             FieldSpec("again", FieldType.ClassRef(firstNested)),
             FieldSpec("second", FieldType.ClassRef(secondNested)),
@@ -90,16 +92,51 @@ class SchemaPlanTest {
         )))
 
         val fields = plan.root.fields
-        val first = (fields[2].type as SchemaTypePlan.ClassRef).clazz
-        val again = (fields[3].type as SchemaTypePlan.ClassRef).clazz
-        val second = (fields[4].type as SchemaTypePlan.ClassRef).clazz
-        val named = (fields[5].type as SchemaTypePlan.ClassRef).clazz
+        val first = (fields[4].type as SchemaTypePlan.ClassRef).clazz
+        val again = (fields[5].type as SchemaTypePlan.ClassRef).clazz
+        val second = (fields[6].type as SchemaTypePlan.ClassRef).clazz
+        val named = (fields[7].type as SchemaTypePlan.ClassRef).clazz
 
         assertNotEquals(fields[0].identity, fields[1].identity)
+        assertNotEquals(fields[1].identity.value, fields[2].identity.value)
         assertSame(first, again)
         assertNotEquals(first.identity, second.identity)
         assertNotEquals(second.identity, named.identity)
+        assertNotEquals(second.identity.value, named.identity.value)
         assertEquals(SchemaClassIdentity("Nested", 2), second.identity)
         assertEquals(SchemaClassIdentity("Nested#2", 1), named.identity)
+
+        val baseline = compileSchemaPlan(ClassSpec("Insertion", listOf(FieldSpec("existing", int()))))
+        val withUnrelatedPrefix = compileSchemaPlan(ClassSpec("Insertion", listOf(
+            FieldSpec("unrelated", int()),
+            FieldSpec("existing", int()),
+        )))
+        assertEquals(
+            baseline.root.fields.single().identity.value,
+            withUnrelatedPrefix.root.fields.single { it.name == "existing" }.identity.value,
+        )
+    }
+
+    @Test
+    fun `scalar kinds preserve every DSL scalar type`() {
+        val scalarTypes = listOf(
+            int() to SchemaScalarKind.Int32,
+            long() to SchemaScalarKind.Int64,
+            double() to SchemaScalarKind.Float64,
+            uint() to SchemaScalarKind.UInt32,
+            byte() to SchemaScalarKind.Byte,
+            boolean() to SchemaScalarKind.Boolean,
+            string() to SchemaScalarKind.String,
+            bytes() to SchemaScalarKind.ByteArray,
+            jsonObject() to SchemaScalarKind.JsonObject,
+        )
+        val plan = compileSchemaPlan(ClassSpec("AllScalars", scalarTypes.mapIndexed { index, (type, _) ->
+            FieldSpec("field$index", type)
+        }))
+
+        assertEquals(
+            scalarTypes.map { SchemaTypePlan.Scalar(it.second) },
+            plan.root.fields.map(SchemaFieldPlan::type),
+        )
     }
 }

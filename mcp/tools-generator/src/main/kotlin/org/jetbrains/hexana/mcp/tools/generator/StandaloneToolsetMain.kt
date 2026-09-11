@@ -27,6 +27,7 @@ import org.jetbrains.hexana.mcp.tools.OutputConversionCapability
 import org.jetbrains.hexana.mcp.tools.SchemaClassPlan
 import org.jetbrains.hexana.mcp.tools.SchemaFieldPlan
 import org.jetbrains.hexana.mcp.tools.SchemaIntValue
+import org.jetbrains.hexana.mcp.tools.SchemaScalarKind
 import org.jetbrains.hexana.mcp.tools.SchemaTypePlan
 import org.jetbrains.hexana.mcp.tools.SourceKind
 import org.jetbrains.hexana.mcp.tools.SourceSlotSpec
@@ -675,7 +676,7 @@ private fun emitTypeSchema(
     includeNestedClasses: Boolean,
 ) {
     when (type) {
-        is SchemaTypePlan.Scalar -> emitJsonType(builder, indent, type.jsonType, nullable)
+        is SchemaTypePlan.Scalar -> emitJsonType(builder, indent, type.kind.jsonSchemaType(), nullable)
         is SchemaTypePlan.ListOf -> {
             emitJsonType(builder, indent, "array", nullable)
             builder.add("${indent}put(%S, %M {\n", "items", BUILD_JSON_OBJECT)
@@ -746,6 +747,18 @@ private fun emitJsonType(
     builder.add("$indent  add(%T(%S))\n", JSON_PRIMITIVE, jsonType)
     builder.add("$indent  add(%T(%S))\n", JSON_PRIMITIVE, "null")
     builder.add("${indent}})\n")
+}
+
+private fun SchemaScalarKind.jsonSchemaType(): String = when (this) {
+    SchemaScalarKind.Int32,
+    SchemaScalarKind.Int64,
+    SchemaScalarKind.UInt32,
+    SchemaScalarKind.Byte -> "integer"
+    SchemaScalarKind.Float64 -> "number"
+    SchemaScalarKind.Boolean -> "boolean"
+    SchemaScalarKind.String,
+    SchemaScalarKind.ByteArray -> "string"
+    SchemaScalarKind.JsonObject -> "object"
 }
 
 private fun emitFieldConstraints(field: SchemaFieldPlan, builder: CodeBlock.Builder, indent: String) {

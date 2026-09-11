@@ -13,11 +13,11 @@ class SchemaPlan(
 
 /** Stable within a compiled plan, including when the same nested class is used more than once. */
 data class SchemaClassIdentity(val name: String, val ordinal: Int = 1) {
-    val value: String get() = if (ordinal == 1) name else "$name#$ordinal"
+    val value: String get() = "class(${identitySegment(name)})#$ordinal"
 }
 
 data class SchemaFieldIdentity(val owner: SchemaClassIdentity, val name: String, val ordinal: Int = 1) {
-    val value: String get() = "${owner.value}.$name" + if (ordinal == 1) "" else "#$ordinal"
+    val value: String get() = "${owner.value}.field(${identitySegment(name)})#$ordinal"
 }
 
 class SchemaClassPlan(
@@ -62,10 +62,22 @@ class SchemaExactOneSourceGroupPlan(
 }
 
 sealed class SchemaTypePlan {
-    data class Scalar(val jsonType: String) : SchemaTypePlan()
+    data class Scalar(val kind: SchemaScalarKind) : SchemaTypePlan()
     data class ListOf(val element: SchemaTypePlan) : SchemaTypePlan()
     data class MapOf(val value: SchemaTypePlan) : SchemaTypePlan()
     data class ClassRef(val clazz: SchemaClassPlan) : SchemaTypePlan()
+}
+
+enum class SchemaScalarKind {
+    Int32,
+    Int64,
+    Float64,
+    UInt32,
+    Byte,
+    Boolean,
+    String,
+    ByteArray,
+    JsonObject,
 }
 
 class SchemaPath private constructor(private val segments: List<String>) {
@@ -117,8 +129,17 @@ internal class SchemaPlanCompiler {
         }
         clazz.oneOf?.let { choices ->
             if (choices.distinct().size != choices.size) report(path, "oneOf contains duplicate fields: $choices.")
-            choices.filterNot { choice -> clazz.fields.any { it.name == choice } }.forEach { choice ->
-                report(path, "oneOf references unknown field `$choice`.")
+            choices.forEach { choice ->
+                val matchingFields = clazz.fields.filter { it.name == choice }
+                when (matchingFields.size) {
+                    0 -> report(path.field(choice), "oneOf choice `$choice` resolves to no raw field.")
+                    1 -> Unit
+                    else -> report(
+                        path.field(choice),
+                        "oneOf choice `$choice` resolves to ${matchingFields.size} raw fields " +
+                            "with wire keys ${matchingFields.joinToString { "`${it.schemaKey}`" }}; it must resolve to exactly one.",
+                    )
+                }
             }
         }
         clazz.fields.forEach { field ->
@@ -204,9 +225,12 @@ internal class SchemaPlanCompiler {
     private fun compileClass(clazz: ClassSpec): SchemaClassPlan {
         compiled[clazz]?.let { return it }
         val identity = SchemaClassIdentity(clazz.name, nextClassOrdinal(clazz.name))
-        val fields = clazz.fields.mapIndexed { index, field ->
+        val fieldNames = mutableMapOf<String, Int>()
+        val fields = clazz.fields.map { field ->
+            val fieldOrdinal = (fieldNames[field.name] ?: 0) + 1
+            fieldNames[field.name] = fieldOrdinal
             SchemaFieldPlan(
-                identity = SchemaFieldIdentity(identity, field.name, index + 1),
+                identity = SchemaFieldIdentity(identity, field.name, fieldOrdinal),
                 name = field.name,
                 wireName = field.schemaKey,
                 type = compileType(field.type),
@@ -217,22 +241,26 @@ internal class SchemaPlanCompiler {
                 constraints = SchemaConstraints(field.minimum, field.maximum, field.maxItems, field.maxLength, field.itemMinimum, field.itemMaximum),
             )
         }
-        val byName = fields.associateBy(SchemaFieldPlan::name)
+        val fieldsByName = fields.groupBy(SchemaFieldPlan::name)
         val sourceGroups = clazz.exactOneSourceGroups.map { group ->
-            SchemaExactOneSourceGroupPlan(group.name, group.selections.map { byName.getValue(it.field.name).identity }, group.required)
+            SchemaExactOneSourceGroupPlan(group.name, group.selections.map { fieldsByName.getValue(it.field.name).single().identity }, group.required)
         }
-        val plan = SchemaClassPlan(identity, clazz.name, fields, clazz.oneOf?.map { byName.getValue(it).identity }, sourceGroups)
+        val plan = SchemaClassPlan(identity, clazz.name, fields, clazz.oneOf?.map { fieldsByName.getValue(it).single().identity }, sourceGroups)
         compiled[clazz] = plan
         allClasses += plan
         return plan
     }
 
     private fun compileType(type: FieldType): SchemaTypePlan = when (type) {
-        FieldType.Int32, FieldType.Int64, FieldType.UInt32, FieldType.ByteT -> SchemaTypePlan.Scalar("integer")
-        FieldType.Float64 -> SchemaTypePlan.Scalar("number")
-        FieldType.BooleanT -> SchemaTypePlan.Scalar("boolean")
-        FieldType.StringT, FieldType.ByteArrayT -> SchemaTypePlan.Scalar("string")
-        FieldType.JsonObjectT -> SchemaTypePlan.Scalar("object")
+        FieldType.Int32 -> SchemaTypePlan.Scalar(SchemaScalarKind.Int32)
+        FieldType.Int64 -> SchemaTypePlan.Scalar(SchemaScalarKind.Int64)
+        FieldType.Float64 -> SchemaTypePlan.Scalar(SchemaScalarKind.Float64)
+        FieldType.UInt32 -> SchemaTypePlan.Scalar(SchemaScalarKind.UInt32)
+        FieldType.ByteT -> SchemaTypePlan.Scalar(SchemaScalarKind.Byte)
+        FieldType.BooleanT -> SchemaTypePlan.Scalar(SchemaScalarKind.Boolean)
+        FieldType.StringT -> SchemaTypePlan.Scalar(SchemaScalarKind.String)
+        FieldType.ByteArrayT -> SchemaTypePlan.Scalar(SchemaScalarKind.ByteArray)
+        FieldType.JsonObjectT -> SchemaTypePlan.Scalar(SchemaScalarKind.JsonObject)
         is FieldType.ListOf -> SchemaTypePlan.ListOf(compileType(type.element))
         is FieldType.MapOf -> SchemaTypePlan.MapOf(compileType(type.value))
         is FieldType.ClassRef -> SchemaTypePlan.ClassRef(compileClass(type.clazz))
@@ -288,3 +316,5 @@ private fun validateNumericDefault(value: Number, type: FieldType, minimum: Int?
 }
 
 private fun <T> immutableList(values: List<T>): List<T> = Collections.unmodifiableList(ArrayList(values))
+
+private fun identitySegment(value: String): String = "${value.length}:$value"

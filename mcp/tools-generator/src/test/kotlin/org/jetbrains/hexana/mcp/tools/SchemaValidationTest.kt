@@ -104,6 +104,21 @@ class SchemaValidationTest {
     }
 
     @Test
+    fun `legacy oneOf choices require exactly one raw field`() {
+        val error = assertFailsWith<SchemaPlanValidationException> {
+            ClassSpec("Direct", listOf(
+                FieldSpec("source", string(), nullable = true, serialName = "path"),
+                FieldSpec("source", string(), nullable = true, serialName = "bytesBase64"),
+            ), oneOf = listOf("source", "missing"))
+        }
+
+        assertEquals(listOf("Direct.source", "Direct.missing"), error.diagnostics.map { it.path.toString() })
+        assertTrue(error.message.orEmpty().contains("oneOf choice `source` resolves to 2 raw fields"), error.message)
+        assertTrue(error.message.orEmpty().contains("`path`, `bytesBase64`"), error.message)
+        assertTrue(error.message.orEmpty().contains("oneOf choice `missing` resolves to no raw field"), error.message)
+    }
+
+    @Test
     fun `eager nested validation reports the completed nested class path`() {
         assertInvalidNested { nested -> class_("Outer") { embed("embedded", nested) } }
         assertInvalidNested { nested -> class_("Outer") { list("items", nested) } }
