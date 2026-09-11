@@ -25,10 +25,10 @@ class SchemaPlanTest {
         val firstNested = (first.type as SchemaTypePlan.ClassRef).clazz
         val moreNested = ((more.type as SchemaTypePlan.ListOf).element as SchemaTypePlan.ClassRef).clazz
 
-        assertEquals("class(4:Root)#1.field(5:first)#1", first.identity.value)
+        assertTrue(first.identity.value.contains("4:Root"))
         assertSame(plan, compileSchemaPlan(root))
         assertEquals("first", first.wireName)
-        assertEquals(SchemaClassIdentity("Nested"), firstNested.identity)
+        assertEquals("Nested", firstNested.identity.name)
         assertSame(firstNested, moreNested)
         assertEquals(FieldDefaultValue.IntValue(7), firstNested.fields.first().defaultValue)
         assertEquals(FieldPresence.Optional, firstNested.fields.last().presence)
@@ -76,7 +76,7 @@ class SchemaPlanTest {
     }
 
     @Test
-    fun `identities use ordinals for duplicate raw names and colliding display names`() {
+    fun `identities are collision safe and semantic`() {
         val firstNested = class_("Nested") { int("value") }
         val secondNested = class_("Nested") { int("value") }
         val namedLikeAnOrdinal = class_("Nested#2") { int("value") }
@@ -100,11 +100,11 @@ class SchemaPlanTest {
         assertNotEquals(fields[0].identity, fields[1].identity)
         assertNotEquals(fields[1].identity.value, fields[2].identity.value)
         assertSame(first, again)
-        assertNotEquals(first.identity, second.identity)
+        assertEquals(first.identity, second.identity)
         assertNotEquals(second.identity, named.identity)
         assertNotEquals(second.identity.value, named.identity.value)
-        assertEquals(SchemaClassIdentity("Nested", 2), second.identity)
-        assertEquals(SchemaClassIdentity("Nested#2", 1), named.identity)
+        assertEquals("Nested", second.identity.name)
+        assertEquals("Nested#2", named.identity.name)
 
         val baseline = compileSchemaPlan(ClassSpec("Insertion", listOf(FieldSpec("existing", int()))))
         val withUnrelatedPrefix = compileSchemaPlan(ClassSpec("Insertion", listOf(
@@ -115,6 +115,21 @@ class SchemaPlanTest {
             baseline.root.fields.single().identity.value,
             withUnrelatedPrefix.root.fields.single { it.name == "existing" }.identity.value,
         )
+
+        val rootA = compileSchemaPlan(class_("RootA") { embed("existing", firstNested) })
+        val distinctNested = class_("Nested") { string("different") }
+        val rootB = compileSchemaPlan(class_("RootB") {
+            embed("prepended", distinctNested)
+            embed("existing", firstNested)
+        })
+        val existingA = (rootA.root.fields.single().type as SchemaTypePlan.ClassRef).clazz
+        val prependedB = (rootB.root.fields.first().type as SchemaTypePlan.ClassRef).clazz
+        val existingB = (rootB.root.fields.last().type as SchemaTypePlan.ClassRef).clazz
+        assertEquals(existingA.identity, existingB.identity)
+        assertEquals(existingA.identity.value, existingB.identity.value)
+        assertEquals(existingA.fields.single().identity, existingB.fields.single().identity)
+        assertEquals(existingA.fields.single().identity.value, existingB.fields.single().identity.value)
+        assertNotEquals(prependedB.identity, existingB.identity)
     }
 
     @Test

@@ -12,12 +12,23 @@ class SchemaPlan(
 }
 
 /** Stable within a compiled plan, including when the same nested class is used more than once. */
-data class SchemaClassIdentity(val name: String, val ordinal: Int = 1) {
-    val value: String get() = "class(${identitySegment(name)})#$ordinal"
+data class SchemaClassIdentity(val name: String, private val signature: String) {
+    val value: String get() = "class(${identitySegment(name)}${identitySegment(signature)})"
 }
 
-data class SchemaFieldIdentity(val owner: SchemaClassIdentity, val name: String, val ordinal: Int = 1) {
-    val value: String get() = "${owner.value}.field(${identitySegment(name)})#$ordinal"
+class SchemaFieldIdentity(
+    val owner: SchemaClassIdentity,
+    val name: String,
+    val ordinal: Int,
+    private val signature: String,
+) {
+    val value: String get() = "field(${identitySegment(owner.name)}${identitySegment(name)}${identitySegment(ordinal.toString())}${identitySegment(signature)})"
+
+    override fun equals(other: Any?): Boolean =
+        other is SchemaFieldIdentity && owner.name == other.owner.name && name == other.name &&
+            ordinal == other.ordinal && signature == other.signature
+
+    override fun hashCode(): Int = listOf(owner.name, name, ordinal, signature).hashCode()
 }
 
 class SchemaClassPlan(
@@ -109,7 +120,8 @@ internal class SchemaPlanCompiler {
     private val diagnostics = mutableListOf<SchemaDiagnostic>()
     private val validated = Collections.newSetFromMap(IdentityHashMap<ClassSpec, Boolean>())
     private val compiled = IdentityHashMap<ClassSpec, SchemaClassPlan>()
-    private val classNames = mutableMapOf<String, Int>()
+    private val classSignatures = IdentityHashMap<ClassSpec, String>()
+    private val signatureInProgress = Collections.newSetFromMap(IdentityHashMap<ClassSpec, Boolean>())
     private val allClasses = mutableListOf<SchemaClassPlan>()
 
     fun compile(root: ClassSpec): SchemaPlan {
@@ -224,13 +236,13 @@ internal class SchemaPlanCompiler {
 
     private fun compileClass(clazz: ClassSpec): SchemaClassPlan {
         compiled[clazz]?.let { return it }
-        val identity = SchemaClassIdentity(clazz.name, nextClassOrdinal(clazz.name))
+        val identity = SchemaClassIdentity(clazz.name, classSignature(clazz))
         val fieldNames = mutableMapOf<String, Int>()
         val fields = clazz.fields.map { field ->
             val fieldOrdinal = (fieldNames[field.name] ?: 0) + 1
             fieldNames[field.name] = fieldOrdinal
             SchemaFieldPlan(
-                identity = SchemaFieldIdentity(identity, field.name, fieldOrdinal),
+                identity = SchemaFieldIdentity(identity, field.name, fieldOrdinal, fieldSignature(field, ::classSignature)),
                 name = field.name,
                 wireName = field.schemaKey,
                 type = compileType(field.type),
@@ -266,10 +278,25 @@ internal class SchemaPlanCompiler {
         is FieldType.ClassRef -> SchemaTypePlan.ClassRef(compileClass(type.clazz))
     }
 
-    private fun nextClassOrdinal(name: String): Int {
-        val ordinal = (classNames[name] ?: 0) + 1
-        classNames[name] = ordinal
-        return ordinal
+    private fun classSignature(clazz: ClassSpec): String {
+        classSignatures[clazz]?.let { return it }
+        check(signatureInProgress.add(clazz)) { "Cyclic ClassSpec graphs are not supported." }
+        val signature = try {
+            canonicalList(listOf(
+                clazz.name,
+                canonicalList(clazz.fields.map { fieldSignature(it, ::classSignature) }),
+                canonicalOptionalList(clazz.oneOf),
+                canonicalList(clazz.exactOneSourceGroups.map { group ->
+                    canonicalList(listOf(group.name, group.required.toString(), canonicalList(group.selections.map {
+                        canonicalList(listOf(it.kind.name, it.field.name))
+                    })))
+                }),
+            ))
+        } finally {
+            signatureInProgress.remove(clazz)
+        }
+        classSignatures[clazz] = signature
+        return signature
     }
 
     private fun report(path: SchemaPath, message: String) {
@@ -318,3 +345,41 @@ private fun validateNumericDefault(value: Number, type: FieldType, minimum: Int?
 private fun <T> immutableList(values: List<T>): List<T> = Collections.unmodifiableList(ArrayList(values))
 
 private fun identitySegment(value: String): String = "${value.length}:$value"
+
+private fun canonicalList(values: List<String>): String = values.joinToString(prefix = "${values.size}[", postfix = "]", transform = ::identitySegment)
+
+private fun canonicalOptionalList(values: List<String>?): String = values?.let(::canonicalList) ?: "-"
+
+private fun fieldSignature(field: FieldSpec, classSignature: (ClassSpec) -> String): String = canonicalList(listOf(
+    field.name, field.schemaKey, field.type.signature(classSignature), field.nullable.toString(), field.presence.signature(),
+    field.describe?.let(::identitySegment) ?: "-", field.minimum.toString(), field.maximum.toString(),
+    field.maxItems.signature(), field.maxLength.signature(), field.itemMinimum.toString(), field.itemMaximum.toString(),
+))
+
+private fun FieldType.signature(classSignature: (ClassSpec) -> String): String = when (this) {
+    FieldType.Int32 -> "Int32"; FieldType.Int64 -> "Int64"; FieldType.Float64 -> "Float64"
+    FieldType.UInt32 -> "UInt32"; FieldType.ByteT -> "Byte"; FieldType.BooleanT -> "Boolean"
+    FieldType.StringT -> "String"; FieldType.ByteArrayT -> "ByteArray"; FieldType.JsonObjectT -> "JsonObject"
+    is FieldType.ListOf -> "List(${element.signature(classSignature)})"
+    is FieldType.MapOf -> "Map(${value.signature(classSignature)})"
+    is FieldType.ClassRef -> "Class(${classSignature(clazz)})"
+}
+
+private fun FieldPresence.signature(): String = when (this) {
+    FieldPresence.Required -> "Required"; FieldPresence.Optional -> "Optional"
+    is FieldPresence.Defaulted -> "Defaulted(${value.signature()})"
+}
+
+private fun FieldDefaultValue.signature(): String = when (this) {
+    FieldDefaultValue.Null -> "Null"; is FieldDefaultValue.IntValue -> "Int:$value"
+    is FieldDefaultValue.LongValue -> "Long:$value"; is FieldDefaultValue.DoubleValue -> "Double:$value"
+    is FieldDefaultValue.BooleanValue -> "Boolean:$value"; is FieldDefaultValue.StringValue -> "String:${identitySegment(value)}"
+}
+
+private fun SchemaIntValue?.signature(): String = when (this) {
+    null -> "-"; is SchemaIntValue.Literal -> "Literal:$value"
+    SchemaIntValue.MaxInlineWasmBytes -> "MaxInlineWasmBytes"
+    SchemaIntValue.MaxInlineWasmBase64Length -> "MaxInlineWasmBase64Length"
+    SchemaIntValue.MaxInlineBinaryBytes -> "MaxInlineBinaryBytes"
+    SchemaIntValue.MaxInlineBinaryBase64Length -> "MaxInlineBinaryBase64Length"
+}
