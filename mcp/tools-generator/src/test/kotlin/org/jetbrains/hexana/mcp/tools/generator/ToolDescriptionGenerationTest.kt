@@ -1,8 +1,13 @@
 package org.jetbrains.hexana.mcp.tools.generator
 
 import org.jetbrains.hexana.mcp.tools.CliExecutionStatus
+import org.jetbrains.hexana.mcp.tools.ClassSpec
 import org.jetbrains.hexana.mcp.tools.CliProductRegistry
 import org.jetbrains.hexana.mcp.tools.CliProductSpec
+import org.jetbrains.hexana.mcp.tools.FieldDefaultValue
+import org.jetbrains.hexana.mcp.tools.FieldPresence
+import org.jetbrains.hexana.mcp.tools.FieldSpec
+import org.jetbrains.hexana.mcp.tools.FieldType
 import org.jetbrains.hexana.mcp.tools.HexanaCliTools
 import org.jetbrains.hexana.mcp.tools.HexanaCliProductRegistry
 import org.jetbrains.hexana.mcp.tools.HexanaIdeaTools
@@ -16,10 +21,15 @@ import org.jetbrains.hexana.mcp.tools.McpRuntimeBinding
 import org.jetbrains.hexana.mcp.tools.ProfileId
 import org.jetbrains.hexana.mcp.tools.ProductId
 import org.jetbrains.hexana.mcp.tools.StandaloneHandlerSpec
+import org.jetbrains.hexana.mcp.tools.StandaloneTool
+import org.jetbrains.hexana.mcp.tools.StandaloneToolBinding
 import org.jetbrains.hexana.mcp.tools.StandaloneToolAuthority
+import org.jetbrains.hexana.mcp.tools.ToolSpec
+import org.jetbrains.hexana.mcp.tools.compileSchemaPlan
 import org.jetbrains.hexana.mcp.tools.mcpDescription
 import org.jetbrains.hexana.mcp.tools.id
 import org.jetbrains.hexana.mcp.tools.name
+import org.jetbrains.hexana.mcp.tools.SchemaIntValue
 import org.junit.Test
 import java.nio.file.Files
 import kotlin.test.assertEquals
@@ -95,6 +105,46 @@ class ToolDescriptionGenerationTest {
         assertTrue(dispatcher.contains("\"bytes\""))
         assertTrue(dispatcher.contains("buildJsonObject"))
         assertTrue(dispatcher.contains("maxItems"))
+    }
+
+    @Test
+    fun `standalone projection renders normalized presence aliases nested schemas and symbolic limits`() {
+        val nested = ClassSpec("Nested", listOf(
+            FieldSpec("count", FieldType.Int32, serialName = "nestedCount"),
+        ))
+        val input = ClassSpec("ProjectionInput", listOf(
+            FieldSpec("required", FieldType.Int32, serialName = "wireRequired"),
+            FieldSpec(
+                "defaulted", FieldType.Int32, default = 7,
+                presence = FieldPresence.Defaulted(FieldDefaultValue.IntValue(7)),
+            ),
+            FieldSpec(
+                "explicitNull", FieldType.StringT, nullable = true,
+                presence = FieldPresence.Defaulted(FieldDefaultValue.Null),
+            ),
+            FieldSpec(
+                "items", FieldType.ListOf(FieldType.ClassRef(nested)),
+                maxItems = SchemaIntValue.MaxInlineWasmBytes,
+            ),
+            FieldSpec("labels", FieldType.MapOf(FieldType.StringT), nullable = true),
+        ))
+        val tool = StandaloneTool(
+            ToolSpec(org.jetbrains.hexana.mcp.tools.ToolId("schema_plan_fixture"), "Schema fixture.", null, input, nested),
+            StandaloneToolBinding(org.jetbrains.hexana.mcp.tools.ToolId("schema_plan_fixture"), StandaloneHandlerSpec("schemaPlanFixture"), org.jetbrains.hexana.mcp.tools.UnknownFieldPolicy.Ignore),
+        )
+        val source = buildDispatcherFile(standaloneAuthority(listOf(tool), emptyList(), emptyList(), emptyList())).toString()
+
+        assertEquals(
+            FieldDefaultValue.Null,
+            compileSchemaPlan(input).root.fields.single { it.name == "explicitNull" }.defaultValue,
+        )
+        assertTrue(source.contains("put(\"wireRequired\""))
+        assertTrue(Regex("required = listOf\\(\\s*\\\"wireRequired\\\"").containsMatchIn(source), source)
+        assertTrue(source.contains("put(\"default\", JsonPrimitive(7))"), source)
+        assertFalse(source.contains("put(\"default\", JsonNull)"), source)
+        assertTrue(source.contains("put(\"nestedCount\""), source)
+        assertTrue(source.contains("\"maxItems\", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES)"), source)
+        assertTrue(source.contains("put(\"labels\""), source)
     }
 
     @Test

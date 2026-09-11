@@ -830,19 +830,19 @@ class HexanaToolsTest {
     @Test
     fun `schema constraints reject incompatible field types`() {
         assertFailsWith<IllegalArgumentException> {
-            class_("Broken") {
+            compileSchemaPlan(class_("Broken") {
                 string("name").minimum(0)
-            }
+            })
         }
         assertFailsWith<IllegalArgumentException> {
-            class_("Broken") {
+            compileSchemaPlan(class_("Broken") {
                 int("count").maxItems(1)
-            }
+            })
         }
         assertFailsWith<IllegalArgumentException> {
-            class_("Broken") {
+            compileSchemaPlan(class_("Broken") {
                 list("names", of = string()).itemsMinimum(0)
-            }
+            })
         }
     }
 

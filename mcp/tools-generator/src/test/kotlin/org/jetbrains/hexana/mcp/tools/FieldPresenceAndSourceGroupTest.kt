@@ -26,24 +26,24 @@ class FieldPresenceAndSourceGroupTest {
         assertEquals(FieldPresence.Defaulted(FieldDefaultValue.IntValue(7)), FieldSpec("count", int(), default = 7).presence)
 
         assertFailsWith<IllegalArgumentException> {
-            ClassSpec("NullableRequired", listOf(
+            compileSchemaPlan(ClassSpec("NullableRequired", listOf(
                 FieldSpec("value", string(), nullable = true, presence = FieldPresence.Required),
-            ))
+            )))
         }.also { assertTrue(it.message.orEmpty().contains("Required presence requires a non-nullable field")) }
         assertFailsWith<IllegalArgumentException> {
-            ClassSpec("NonNullableOptional", listOf(
+            compileSchemaPlan(ClassSpec("NonNullableOptional", listOf(
                 FieldSpec("value", string(), presence = FieldPresence.Optional),
-            ))
+            )))
         }.also { assertTrue(it.message.orEmpty().contains("Optional presence requires a nullable field")) }
 
         listOf(int(), long(), double(), uint(), byte(), boolean(), string()).forEachIndexed { index, type ->
-            ClassSpec("NullableDefault$index", listOf(
+            compileSchemaPlan(ClassSpec("NullableDefault$index", listOf(
                 FieldSpec("value", type, nullable = true, presence = FieldPresence.Defaulted(FieldDefaultValue.Null)),
-            ))
+            )))
             assertFailsWith<IllegalArgumentException> {
-                ClassSpec("RequiredDefault$index", listOf(
+                compileSchemaPlan(ClassSpec("RequiredDefault$index", listOf(
                     FieldSpec("value", type, presence = FieldPresence.Defaulted(FieldDefaultValue.Null)),
-                ))
+                )))
             }.also { assertTrue(it.message.orEmpty().contains("null default requires a nullable field")) }
         }
     }

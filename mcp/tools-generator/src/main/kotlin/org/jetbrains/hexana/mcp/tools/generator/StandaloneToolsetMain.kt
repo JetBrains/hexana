@@ -12,20 +12,22 @@ import com.squareup.kotlinpoet.TypeAliasSpec
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.asTypeName
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
-import org.jetbrains.hexana.mcp.tools.ClassSpec
 import org.jetbrains.hexana.mcp.tools.CliExecutionStatus
 import org.jetbrains.hexana.mcp.tools.CliProductRegistry
 import org.jetbrains.hexana.mcp.tools.CliProductSpec
 import org.jetbrains.hexana.mcp.tools.CliTool
-import org.jetbrains.hexana.mcp.tools.FieldSpec
-import org.jetbrains.hexana.mcp.tools.FieldType
+import org.jetbrains.hexana.mcp.tools.FieldDefaultValue
+import org.jetbrains.hexana.mcp.tools.FieldPresence
 import org.jetbrains.hexana.mcp.tools.HexanaToolSchemaCompatibility
 import org.jetbrains.hexana.mcp.tools.HexanaCliProductRegistry
 import org.jetbrains.hexana.mcp.tools.HexanaCliTools
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneAuthority
 import org.jetbrains.hexana.mcp.tools.InputConversionCapability
 import org.jetbrains.hexana.mcp.tools.OutputConversionCapability
+import org.jetbrains.hexana.mcp.tools.SchemaClassPlan
+import org.jetbrains.hexana.mcp.tools.SchemaFieldPlan
 import org.jetbrains.hexana.mcp.tools.SchemaIntValue
+import org.jetbrains.hexana.mcp.tools.SchemaTypePlan
 import org.jetbrains.hexana.mcp.tools.SourceKind
 import org.jetbrains.hexana.mcp.tools.SourceSlotSpec
 import org.jetbrains.hexana.mcp.tools.StandaloneTool
@@ -38,6 +40,7 @@ import org.jetbrains.hexana.mcp.tools.mcpDescription
 import org.jetbrains.hexana.mcp.tools.name
 import org.jetbrains.hexana.mcp.tools.output
 import org.jetbrains.hexana.mcp.tools.summary
+import org.jetbrains.hexana.mcp.tools.compileSchemaPlan
 import org.jetbrains.hexana.mcp.tools.validateCliProducts
 import java.nio.file.Files
 import java.nio.file.Path
@@ -522,8 +525,8 @@ private fun buildDefaultProperty(name: String, default: Any): PropertySpec {
 
 private fun renderAddToolCall(spec: StandaloneTool): CodeBlock {
     val handlerMethod = spec.standaloneHandler.methodName
-    val inputSchema = buildToolSchema(spec.input)
-    val outputSchema = buildToolSchema(spec.output, includeDescriptions = false, includeNestedClasses = false)
+    val inputSchema = buildToolSchema(compileSchemaPlan(spec.input).root)
+    val outputSchema = buildToolSchema(compileSchemaPlan(spec.output).root, includeDescriptions = false, includeNestedClasses = false)
 
     return CodeBlock.builder()
         .add(
@@ -552,7 +555,7 @@ private fun renderAddToolCall(spec: StandaloneTool): CodeBlock {
  * but self-contained.
  */
 private fun buildToolSchema(
-    cls: ClassSpec,
+    cls: SchemaClassPlan,
     includeDescriptions: Boolean = true,
     includeNestedClasses: Boolean = true,
 ): CodeBlock {
@@ -560,7 +563,7 @@ private fun buildToolSchema(
     builder.add("%T(\n", TOOL_SCHEMA)
     builder.add("  properties = %M {\n", BUILD_JSON_OBJECT)
     cls.fields.forEach { field ->
-        builder.add("    put(%S, ", field.schemaKey)
+        builder.add("    put(%S, ", field.wireName)
         builder.add(
             fieldSchemaObject(
                 field,
@@ -572,7 +575,7 @@ private fun buildToolSchema(
     }
     builder.add("  },\n")
     builder.add("  required = listOf(")
-    val required = cls.fields.filter { !it.nullable && it.default == null }.map { it.schemaKey }
+    val required = cls.fields.filter { it.presence == FieldPresence.Required }.map { it.wireName }
     required.forEachIndexed { index, key ->
         if (index > 0) builder.add(", ")
         builder.add("%S", key)
@@ -581,12 +584,12 @@ private fun buildToolSchema(
     return builder.build()
 }
 
-private fun fieldSchemaObject(field: FieldSpec): CodeBlock {
+private fun fieldSchemaObject(field: SchemaFieldPlan): CodeBlock {
     return fieldSchemaObject(field, includeDescriptions = true)
 }
 
 private fun fieldSchemaObject(
-    field: FieldSpec,
+    field: SchemaFieldPlan,
     schemaIndent: String = "      ",
     closingIndent: String = "    ",
     includeDescriptions: Boolean,
@@ -601,11 +604,11 @@ private fun fieldSchemaObject(
         includeDescriptions = includeDescriptions,
         includeNestedClasses = includeNestedClasses,
     )
-    if (includeDescriptions) field.describe?.let {
+    if (includeDescriptions) field.description?.let {
         b.add("${schemaIndent}put(%S, %T(%S))\n", "description", JSON_PRIMITIVE, it)
     }
-    field.default?.let {
-        b.add("${schemaIndent}put(%S, %T(%L))\n", "default", JSON_PRIMITIVE, schemaDefaultValue(field))
+    field.defaultValue?.takeUnless { it == FieldDefaultValue.Null }?.let {
+        b.add("${schemaIndent}put(%S, %L)\n", "default", schemaDefaultValue(it))
     }
     emitFieldConstraints(field, b, indent = schemaIndent)
     b.add("$closingIndent}")
@@ -614,14 +617,14 @@ private fun fieldSchemaObject(
 
 /** Emits the JSON Schema properties (`type`, `items`, nested `properties`/`required`) for a field. */
 private fun emitTypeSchema(
-    field: FieldSpec,
+    field: SchemaFieldPlan,
     builder: CodeBlock.Builder,
     indent: String,
     includeDescriptions: Boolean,
     includeNestedClasses: Boolean,
 ) {
     when (val type = field.type) {
-        is FieldType.ListOf -> {
+        is SchemaTypePlan.ListOf -> {
             emitJsonType(builder, indent, "array", nullable = field.nullable)
             builder.add("${indent}put(%S, %M {\n", "items", BUILD_JSON_OBJECT)
             emitTypeSchema(
@@ -631,15 +634,15 @@ private fun emitTypeSchema(
                 includeDescriptions = includeDescriptions,
                 includeNestedClasses = includeNestedClasses,
             )
-            field.itemMinimum?.let {
+            field.constraints.itemMinimum?.let {
                 builder.add("$indent  put(%S, %T(%L))\n", "minimum", JSON_PRIMITIVE, it)
             }
-            field.itemMaximum?.let {
+            field.constraints.itemMaximum?.let {
                 builder.add("$indent  put(%S, %T(%L))\n", "maximum", JSON_PRIMITIVE, it)
             }
             builder.add("${indent}})\n")
         }
-        is FieldType.MapOf -> {
+        is SchemaTypePlan.MapOf -> {
             emitJsonType(builder, indent, "object", nullable = field.nullable)
             builder.add("${indent}put(%S, %M {\n", "additionalProperties", BUILD_JSON_OBJECT)
             emitTypeSchema(
@@ -664,7 +667,7 @@ private fun emitTypeSchema(
 }
 
 private fun emitTypeSchema(
-    type: FieldType,
+    type: SchemaTypePlan,
     builder: CodeBlock.Builder,
     indent: String,
     nullable: Boolean = false,
@@ -672,23 +675,8 @@ private fun emitTypeSchema(
     includeNestedClasses: Boolean,
 ) {
     when (type) {
-        FieldType.Int32,
-        FieldType.Int64,
-        FieldType.UInt32,
-        FieldType.ByteT -> emitJsonType(builder, indent, "integer", nullable)
-
-        FieldType.Float64 -> emitJsonType(builder, indent, "number", nullable)
-
-        FieldType.BooleanT ->
-            emitJsonType(builder, indent, "boolean", nullable)
-
-        FieldType.StringT,
-        FieldType.ByteArrayT ->
-            emitJsonType(builder, indent, "string", nullable)
-
-        FieldType.JsonObjectT -> emitJsonType(builder, indent, "object", nullable)
-
-        is FieldType.ListOf -> {
+        is SchemaTypePlan.Scalar -> emitJsonType(builder, indent, type.jsonType, nullable)
+        is SchemaTypePlan.ListOf -> {
             emitJsonType(builder, indent, "array", nullable)
             builder.add("${indent}put(%S, %M {\n", "items", BUILD_JSON_OBJECT)
             emitTypeSchema(
@@ -700,7 +688,7 @@ private fun emitTypeSchema(
             )
             builder.add("${indent}})\n")
         }
-        is FieldType.MapOf -> {
+        is SchemaTypePlan.MapOf -> {
             emitJsonType(builder, indent, "object", nullable)
             builder.add("${indent}put(%S, %M {\n", "additionalProperties", BUILD_JSON_OBJECT)
             emitTypeSchema(
@@ -713,12 +701,12 @@ private fun emitTypeSchema(
             builder.add("${indent}})\n")
         }
 
-        is FieldType.ClassRef -> {
+        is SchemaTypePlan.ClassRef -> {
             emitJsonType(builder, indent, "object", nullable)
             if (!includeNestedClasses) return
             builder.add("${indent}put(%S, %M {\n", "properties", BUILD_JSON_OBJECT)
             type.clazz.fields.forEach { nested ->
-                builder.add("$indent  put(%S, ", nested.schemaKey)
+                builder.add("$indent  put(%S, ", nested.wireName)
                 builder.add(
                     fieldSchemaObject(
                         nested,
@@ -731,11 +719,11 @@ private fun emitTypeSchema(
                 builder.add(")\n")
             }
             builder.add("${indent}})\n")
-            val requiredFields = type.clazz.fields.filter { !it.nullable && it.default == null }
+            val requiredFields = type.clazz.fields.filter { it.presence == FieldPresence.Required }
             if (requiredFields.isNotEmpty()) {
                 builder.add("${indent}put(%S, %M {\n", "required", BUILD_JSON_ARRAY)
                 requiredFields.forEach { req ->
-                    builder.add("$indent  add(%T(%S))\n", JSON_PRIMITIVE, req.schemaKey)
+                    builder.add("$indent  add(%T(%S))\n", JSON_PRIMITIVE, req.wireName)
                 }
                 builder.add("${indent}})\n")
             }
@@ -760,22 +748,22 @@ private fun emitJsonType(
     builder.add("${indent}})\n")
 }
 
-private fun emitFieldConstraints(field: FieldSpec, builder: CodeBlock.Builder, indent: String) {
-    field.minimum?.let {
+private fun emitFieldConstraints(field: SchemaFieldPlan, builder: CodeBlock.Builder, indent: String) {
+    field.constraints.minimum?.let {
         builder.add("${indent}put(%S, %T(%L))\n", "minimum", JSON_PRIMITIVE, it)
     }
-    field.maximum?.let {
+    field.constraints.maximum?.let {
         builder.add("${indent}put(%S, %T(%L))\n", "maximum", JSON_PRIMITIVE, it)
     }
-    field.maxItems?.let {
+    field.constraints.maxItems?.let {
         builder.add("${indent}put(%S, %T(%L))\n", "maxItems", JSON_PRIMITIVE, schemaIntValue(it))
     }
-    field.maxLength?.let {
+    field.constraints.maxLength?.let {
         builder.add("${indent}put(%S, %T(%L))\n", "maxLength", JSON_PRIMITIVE, schemaIntValue(it))
     }
 }
 
-private fun schemaIntValue(value: SchemaIntValue): CodeBlock {
+private fun schemaIntValue(value: org.jetbrains.hexana.mcp.tools.SchemaIntValue): CodeBlock {
     return when (value) {
         is SchemaIntValue.Literal -> CodeBlock.of("%L", value.value)
         SchemaIntValue.MaxInlineWasmBytes -> CodeBlock.of("%T.MAX_INLINE_WASM_BYTES", HEXANA_ANALYSIS_LIMITS)
@@ -787,14 +775,14 @@ private fun schemaIntValue(value: SchemaIntValue): CodeBlock {
     }
 }
 
-private fun schemaDefaultValue(field: FieldSpec): CodeBlock {
-    return when (val value = field.default) {
-        is Int,
-        is Long,
-        is Double,
-        is Boolean -> CodeBlock.of("%L", value)
-        is String -> CodeBlock.of("%S", value)
-        else -> error("Field '${field.name}' has unsupported schema default value `${field.default}`.")
+private fun schemaDefaultValue(value: FieldDefaultValue): CodeBlock {
+    return when (value) {
+        FieldDefaultValue.Null -> error("Standalone schemas must omit null defaults.")
+        is FieldDefaultValue.IntValue -> CodeBlock.of("%T(%L)", JSON_PRIMITIVE, value.value)
+        is FieldDefaultValue.LongValue -> CodeBlock.of("%T(%L)", JSON_PRIMITIVE, value.value)
+        is FieldDefaultValue.DoubleValue -> CodeBlock.of("%T(%L)", JSON_PRIMITIVE, value.value)
+        is FieldDefaultValue.BooleanValue -> CodeBlock.of("%T(%L)", JSON_PRIMITIVE, value.value)
+        is FieldDefaultValue.StringValue -> CodeBlock.of("%T(%S)", JSON_PRIMITIVE, value.value)
     }
 }
 

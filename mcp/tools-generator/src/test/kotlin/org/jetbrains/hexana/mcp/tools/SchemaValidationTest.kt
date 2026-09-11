@@ -104,25 +104,25 @@ class SchemaValidationTest {
     }
 
     @Test
-    fun `invalid nested specifications fail before an outer schema can use them`() {
+    fun `eager nested validation reports the completed nested class path`() {
         assertInvalidNested { nested -> class_("Outer") { embed("embedded", nested) } }
         assertInvalidNested { nested -> class_("Outer") { list("items", nested) } }
         assertInvalidNested { nested -> class_("Outer") { map("items", nested) } }
         val nested = ClassSpec("Nested", listOf(FieldSpec("value", int())))
-        class_("Outer") {
+        compileSchemaPlan(class_("Outer") {
             embed("embedded", nested)
             list("items", nested)
             map("mapping", nested)
-        }
+        })
     }
 
     @Test
     fun `validation observes final fluent values only`() {
-        class_("Corrected") {
+        compileSchemaPlan(class_("Corrected") {
             int("first").serialName("shared")
             int("second").serialName("shared").serialName("other")
             int("range").minimum(10).maximum(1).maximum(10)
-        }
+        })
     }
 
     @Test
@@ -133,10 +133,10 @@ class SchemaValidationTest {
         assertInvalid("Broken", "maxLength must not be negative") {
             class_("Broken") { string("text").maxLength(-1) }
         }
-        class_("Symbolic") {
+        compileSchemaPlan(class_("Symbolic") {
             list("items", of = int()).maxItems(SchemaIntValue.MaxInlineWasmBytes)
             string("text").maxLength(SchemaIntValue.MaxInlineWasmBase64Length)
-        }
+        })
     }
 
     @Test
@@ -153,12 +153,12 @@ class SchemaValidationTest {
         assertInvalid("Broken", "0..255 for Byte") {
             ClassSpec("Broken", listOf(FieldSpec("value", byte(), maximum = 256)))
         }
-        class_("Signed") {
+        compileSchemaPlan(class_("Signed") {
             int("integer").minimum(-1).maximum(1)
             long("longValue").minimum(-1).maximum(1)
             double("decimal").minimum(-1).maximum(1)
             list("integers", of = int()).itemsMinimum(-1).itemsMaximum(1)
-        }
+        })
     }
 
     @Test
@@ -181,31 +181,30 @@ class SchemaValidationTest {
         assertInvalid("Broken", "0..255 for Byte") {
             ClassSpec("Broken", listOf(FieldSpec("value", byte(), default = 256)))
         }
-        class_("ValidDefaults") {
+        compileSchemaPlan(class_("ValidDefaults") {
             int("integer", default = -1).minimum(-1)
             long("longValue", default = -1).minimum(-1)
             double("decimal", default = -1.0).minimum(-1)
             boolean("flag", default = true)
             string("emoji", default = "😀").maxLength(1)
-        }
+        })
     }
 
-    private fun assertInvalidNested(useNested: (ClassSpec) -> Unit) {
-        var outerReached = false
-        assertInvalid("Nested", "shared", "first", "second") {
+    private fun assertInvalidNested(useNested: (ClassSpec) -> ClassSpec) {
+        val error = assertFailsWith<SchemaPlanValidationException> {
             val nested = ClassSpec("Nested", listOf(
                 FieldSpec("first", int(), serialName = "shared"),
                 FieldSpec("second", int(), serialName = "shared"),
             ))
-            outerReached = true
-            useNested(nested)
+            compileSchemaPlan(useNested(nested))
         }
-        assertFalse(outerReached, "An invalid nested ClassSpec must fail before the outer schema is built.")
+        assertTrue(error.message.orEmpty().contains("Nested.shared"), error.message)
+        assertTrue(error.message.orEmpty().contains("shared"), error.message)
     }
 
-    private fun assertInvalid(className: String, vararg expected: String, block: () -> Unit) {
-        val error = assertFailsWith<IllegalArgumentException>(block = block)
-        assertTrue(error.message.orEmpty().contains("Class '$className'"), error.message)
+    private fun assertInvalid(className: String, vararg expected: String, block: () -> ClassSpec) {
+        val error = assertFailsWith<SchemaPlanValidationException> { compileSchemaPlan(block()) }
+        assertTrue(error.message.orEmpty().contains(className), error.message)
         expected.forEach { assertTrue(error.message.orEmpty().contains(it), error.message) }
     }
 }

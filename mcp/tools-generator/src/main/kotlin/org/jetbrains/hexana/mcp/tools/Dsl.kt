@@ -107,134 +107,6 @@ data class FieldSpec(
     val schemaKey: String get() = serialName ?: name
 }
 
-private fun FieldType.isNumeric(): Boolean =
-    this == FieldType.Int32 ||
-        this == FieldType.Int64 ||
-        this == FieldType.Float64 ||
-        this == FieldType.UInt32 ||
-        this == FieldType.ByteT
-
-private fun ClassSpec.validateCompletedSchema(visited: MutableSet<ClassSpec> = java.util.Collections.newSetFromMap(java.util.IdentityHashMap())) {
-    if (!visited.add(this)) return
-    val duplicateKeys = fields.groupBy(FieldSpec::schemaKey).filterValues { it.size > 1 }
-    require(duplicateKeys.isEmpty()) {
-        "Class '$name' has duplicate effective wire keys: " +
-            duplicateKeys.entries.joinToString { (key, duplicates) ->
-                "'$key' for fields ${duplicates.joinToString { "'${it.name}'" }}"
-            }
-    }
-    fields.forEach { field ->
-        field.validateCompletedSchema(name)
-        field.type.validateNestedSchemas(visited)
-    }
-}
-
-private fun FieldType.validateNestedSchemas(visited: MutableSet<ClassSpec>) {
-    when (this) {
-        is FieldType.ClassRef -> clazz.validateCompletedSchema(visited)
-        is FieldType.ListOf -> element.validateNestedSchemas(visited)
-        is FieldType.MapOf -> value.validateNestedSchemas(visited)
-        else -> Unit
-    }
-}
-
-private fun FieldSpec.validateCompletedSchema(className: String) {
-    fun fail(message: String): Nothing = throw IllegalArgumentException("Class '$className', field '$name': $message")
-    val typedDefault = (presence as? FieldPresence.Defaulted)?.value
-    when (presence) {
-        FieldPresence.Required -> {
-            if (nullable) fail("Required presence requires a non-nullable field while the legacy bridge is active.")
-            if (default != null) fail("legacy default bridge requires Defaulted presence.")
-        }
-        FieldPresence.Optional -> {
-            if (!nullable) fail("Optional presence requires a nullable field while the legacy bridge is active.")
-            if (default != null) fail("legacy default bridge requires Defaulted presence.")
-        }
-        is FieldPresence.Defaulted -> Unit
-    }
-    if (typedDefault != null) {
-        val bridgeValue = typedDefault.legacyValue()
-        require(default == bridgeValue) {
-            "Class '$className', field '$name': legacy default bridge does not match explicit presence default."
-        }
-        if (typedDefault == FieldDefaultValue.Null) {
-            require(type in setOf(
-                FieldType.Int32,
-                FieldType.Int64,
-                FieldType.Float64,
-                FieldType.UInt32,
-                FieldType.ByteT,
-                FieldType.BooleanT,
-                FieldType.StringT,
-            )) { "Class '$className', field '$name': defaults are supported only for scalar fields currently emitted by generators, got $type." }
-        } else {
-            when (type) {
-                FieldType.Int32, FieldType.UInt32, FieldType.ByteT -> if (typedDefault !is FieldDefaultValue.IntValue) fail("default value `$typedDefault` does not match declared type $type.")
-                FieldType.Int64 -> if (typedDefault !is FieldDefaultValue.LongValue) fail("default value `$typedDefault` does not match declared type $type.")
-                FieldType.Float64 -> if (typedDefault !is FieldDefaultValue.DoubleValue) fail("default value `$typedDefault` does not match declared type $type.")
-                FieldType.BooleanT -> if (typedDefault !is FieldDefaultValue.BooleanValue) fail("default value `$typedDefault` does not match declared type $type.")
-                FieldType.StringT -> if (typedDefault !is FieldDefaultValue.StringValue) fail("default value `$typedDefault` does not match declared type $type.")
-                else -> fail("defaults are supported only for scalar fields currently emitted by generators, got $type.")
-            }
-        }
-        if (typedDefault == FieldDefaultValue.Null && !nullable) fail("a null default requires a nullable field.")
-    }
-    if (minimum != null || maximum != null) {
-        if (!type.isNumeric()) fail("minimum/maximum constraints require a numeric field type, got $type.")
-        if (minimum != null && maximum != null && minimum > maximum) fail("minimum $minimum exceeds maximum $maximum.")
-        validateNumericDomain(type, minimum, "minimum", ::fail)
-        validateNumericDomain(type, maximum, "maximum", ::fail)
-    }
-    if (maxItems != null || itemMinimum != null || itemMaximum != null) {
-        if (type !is FieldType.ListOf) fail("maxItems/item constraints require a list field type, got $type.")
-        literalValue(maxItems)?.let { if (it < 0) fail("maxItems must not be negative, got $it.") }
-    }
-    if (maxLength != null) {
-        if (type != FieldType.StringT && type != FieldType.ByteArrayT) fail("maxLength requires a string-like field type, got $type.")
-        literalValue(maxLength)?.let { if (it < 0) fail("maxLength must not be negative, got $it.") }
-    }
-    if (itemMinimum != null || itemMaximum != null) {
-        val element = (type as FieldType.ListOf).element
-        if (!element.isNumeric()) fail("item minimum/maximum constraints require numeric list items, got $element.")
-        if (itemMinimum != null && itemMaximum != null && itemMinimum > itemMaximum) fail("item minimum $itemMinimum exceeds item maximum $itemMaximum.")
-        validateNumericDomain(element, itemMinimum, "item minimum", ::fail)
-        validateNumericDomain(element, itemMaximum, "item maximum", ::fail)
-    }
-    when (val value = typedDefault?.legacyValue()) {
-        is Int -> validateNumericDefault(value, type, minimum, maximum, ::fail)
-        is Long -> validateNumericDefault(value, type, minimum, maximum, ::fail)
-        is Double -> {
-            if (!value.isFinite()) fail("Float64 default must be finite, got $value.")
-            validateNumericDefault(value, type, minimum, maximum, ::fail)
-        }
-        is String -> literalValue(maxLength)?.let { maximumLength ->
-            if (value.codePointCount(0, value.length) > maximumLength) fail("default exceeds maxLength $maximumLength.")
-        }
-    }
-}
-
-private fun literalValue(value: SchemaIntValue?): Int? = (value as? SchemaIntValue.Literal)?.value
-
-private fun validateNumericDomain(type: FieldType, value: Int?, label: String, fail: (String) -> Nothing) {
-    value ?: return
-    when (type) {
-        FieldType.UInt32 -> if (value < 0) fail("$label must be nonnegative for UInt32, got $value.")
-        FieldType.ByteT -> if (value !in 0..255) fail("$label must be in 0..255 for Byte, got $value.")
-        else -> Unit
-    }
-}
-
-private fun validateNumericDefault(value: Number, type: FieldType, minimum: Int?, maximum: Int?, fail: (String) -> Nothing) {
-    val numeric = value.toDouble()
-    when (type) {
-        FieldType.UInt32 -> if (numeric < 0) fail("default must be nonnegative for UInt32, got $value.")
-        FieldType.ByteT -> if (numeric !in 0.0..255.0) fail("default must be in 0..255 for Byte, got $value.")
-        else -> Unit
-    }
-    if (minimum != null && numeric < minimum) fail("default $value is below minimum $minimum.")
-    if (maximum != null && numeric > maximum) fail("default $value exceeds maximum $maximum.")
-}
-
 sealed class SchemaIntValue {
     data class Literal(val value: Int) : SchemaIntValue()
     object MaxInlineWasmBytes : SchemaIntValue()
@@ -277,16 +149,11 @@ class ClassSpec(
     val oneOf: List<String>? = oneOf?.let { java.util.Collections.unmodifiableList(java.util.ArrayList(it)) }
     val exactOneSourceGroups: List<ExactOneSourceGroup> =
         java.util.Collections.unmodifiableList(java.util.ArrayList(exactOneSourceGroups))
+    internal val compiledSchemaPlan: SchemaPlan by lazy { SchemaPlanCompiler().compile(this) }
 
     init {
-        validateCompletedSchema()
-        this.oneOf?.let { choices ->
-            require(choices.distinct().size == choices.size) { "Class '$name' oneOf contains duplicate fields: $choices." }
-            choices.forEach { choice ->
-                require(fields.any { it.name == choice }) { "Class '$name' oneOf references unknown field '$choice'." }
-            }
-        }
         this.exactOneSourceGroups.forEach { it.validateFor(this) }
+        compiledSchemaPlan
     }
 
     operator fun component1(): String = name
@@ -606,11 +473,6 @@ class ClassBuilder internal constructor(
     }
 
     internal fun build(): ClassSpec {
-        oneOf?.forEach { prop ->
-            require(fields.any { it.name == prop }) {
-                "oneOf references unknown field '$prop' in class '$name'."
-            }
-        }
         kotlinFqn?.let {
             require(FQN_REGEX.matches(it)) {
                 "Class '$name' kotlinPackage produced invalid FQN `$it`."
