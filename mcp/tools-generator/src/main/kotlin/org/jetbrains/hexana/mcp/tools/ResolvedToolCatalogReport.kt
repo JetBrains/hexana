@@ -16,6 +16,8 @@ class ResolvedToolCatalogReport(
     private val standaloneAuthority: StandaloneToolAuthority = HexanaStandaloneAuthority,
     private val cliTools: List<CliTool> = HexanaCliTools,
     private val cliProducts: CliProductRegistry = HexanaCliProductRegistry,
+    private val mcpProducts: McpProductRegistry = HexanaMcpProductRegistry,
+    private val mcpbBinding: McpProductProfileBinding = HexanaMcpbProfileBinding,
 ) {
     fun json(): String = JSON.encodeToString(JsonObject.serializer(), document()) + "\n"
 
@@ -27,10 +29,11 @@ class ResolvedToolCatalogReport(
     internal fun document(): JsonObject {
         validate()
         return buildJsonObject {
-            put("formatVersion", JsonPrimitive(1))
+            put("formatVersion", JsonPrimitive(2))
             put("runtimeAvailability", JsonPrimitive("not evaluated"))
             put("requirements", JsonArray(emptyList()))
             put("cliProducts", buildJsonArray { cliProducts.products.forEach { add(cliProductDocument(it)) } })
+            put("mcpProducts", buildJsonArray { mcpProducts.products.forEach { add(mcpProductDocument(it)) } })
             put("tools", buildJsonArray { normalizedContracts.forEach { add(toolDocument(it)) } })
         }
     }
@@ -48,6 +51,7 @@ class ResolvedToolCatalogReport(
         requireKnown("standalone report authority", standaloneAuthority.registrations.map { it.id })
         requireKnown("CLI report authority", cliTools.map { it.id })
         validateCliProducts(cliTools, cliProducts, requireCompleteSelection = false)
+        mcpProducts.resolve(mcpbBinding)
         normalizedContracts.forEach { tool ->
             views(tool).forEach { view ->
                 requireNonBlankProvenance(tool.name, view.name, view.selected, view.provenance)
@@ -85,17 +89,30 @@ class ResolvedToolCatalogReport(
         })
     }
 
+    private fun mcpProductDocument(product: McpProductSpec): JsonObject = buildJsonObject {
+        put("id", JsonPrimitive(product.id.value))
+        put("published", JsonPrimitive(product.published))
+        put("defaultProfile", JsonPrimitive(product.defaultProfileId.value))
+        put("profiles", buildJsonArray {
+            product.profiles.forEach { profile -> add(buildJsonObject {
+                put("id", JsonPrimitive(profile.id.value))
+                put("aliases", strings(profile.aliases.sorted()))
+                put("selections", strings(profile.toolIds.map { it.value }))
+            }) }
+        })
+    }
+
     private fun views(tool: ToolSpec): List<View> {
         val idea = ideaTools.firstOrNull { it.id == tool.id }
         val standalone = standaloneAuthority.registrations.firstOrNull { it.id == tool.id }
         val cli = cliTools.firstOrNull { it.id == tool.id }
-        val mcpbSelected = tool.id in standaloneAuthority.defaultToolIds
+        val mcpbSelected = tool.id in mcpProducts.resolve(mcpbBinding).toolIds
         return listOf(
             View("idea", idea != null, idea?.let { buildJsonObject { put("inputPattern", JsonPrimitive(pattern(it.inputPattern))); put("handlerFqn", JsonPrimitive(it.handlerFqn)) } }, if (idea != null) "IDEA default selection and binding" else "not selected by IDEA default authority"),
             View("standaloneRegistration", standalone != null, standalone?.let { buildJsonObject { put("handler", JsonPrimitive(it.standaloneHandler.methodName)) } }, if (standalone != null) "standalone registration authority" else "not registered by standalone authority"),
-            profileView("standaloneDefault", tool.id, standaloneAuthority.defaultToolIds, "standalone default profile"),
-            profileView("standaloneAdvanced", tool.id, standaloneAuthority.advancedToolIds, "standalone advanced profile"),
-            profileView("standaloneScripting", tool.id, standaloneAuthority.scriptingToolIds, "standalone scripting profile"),
+            profileView("standaloneDefault", tool.id, standaloneAuthority.profile(ProfileId("default")).toolIds, "standalone default profile"),
+            profileView("standaloneAdvanced", tool.id, standaloneAuthority.profile(ProfileId("advanced")).toolIds, "standalone advanced profile"),
+            profileView("standaloneScripting", tool.id, standaloneAuthority.profile(ProfileId("scripting")).toolIds, "standalone scripting profile"),
             View("mcpb", mcpbSelected, null, if (mcpbSelected) "derived exactly from standalone default profile" else "excluded because it is absent from standalone default profile"),
             cliView(cli),
         )

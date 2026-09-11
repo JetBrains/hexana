@@ -83,6 +83,21 @@ class ToolCompatibilityDiff private constructor(
                     }
                 }
             }
+            val beforeMcpProducts = mcpProducts(before)
+            val afterMcpProducts = mcpProducts(after)
+            (beforeMcpProducts.keys + afterMcpProducts.keys).sorted().forEach { id ->
+                compareJson(
+                    changes,
+                    surface = "mcp",
+                    view = "product",
+                    category = Category.Membership,
+                    path = "mcpProduct/$id",
+                    before = beforeMcpProducts[id],
+                    after = afterMcpProducts[id],
+                ) { path ->
+                    if (path.endsWith("/defaultProfile") || path.contains("/aliases/")) Category.Binding else Category.Membership
+                }
+            }
             return ToolCompatibilityDiff(changes)
         }
 
@@ -94,6 +109,12 @@ class ToolCompatibilityDiff private constructor(
 
         private fun cliProducts(document: JsonObject): Map<String, JsonObject> =
             (document["cliProducts"] as? JsonArray).orEmpty().mapNotNull { element ->
+                val product = element as? JsonObject ?: return@mapNotNull null
+                (product["id"] as? JsonPrimitive)?.content?.let { it to product }
+            }.toMap()
+
+        private fun mcpProducts(document: JsonObject): Map<String, JsonObject> =
+            (document["mcpProducts"] as? JsonArray).orEmpty().mapNotNull { element ->
                 val product = element as? JsonObject ?: return@mapNotNull null
                 (product["id"] as? JsonPrimitive)?.content?.let { it to product }
             }.toMap()
@@ -139,8 +160,9 @@ class ToolCompatibilityDiff private constructor(
                     if (oldItem is JsonObject && newItem is JsonObject) {
                         compareJson(changes, surface, view, category, itemPath, oldItem, newItem, categoryAt)
                     } else if (oldItem != newItem) {
+                        val categoryPath = if (path.startsWith("mcpProduct/") && path.endsWith("/aliases")) itemPath else path
                         changes += Difference(
-                            surface, view, categoryAt(path), itemPath, oldItem, newItem,
+                            surface, view, categoryAt(categoryPath), itemPath, oldItem, newItem,
                         )
                     }
                 }
@@ -160,7 +182,8 @@ class ToolCompatibilityDiff private constructor(
             "fields" -> "field"
             "sources" -> "source"
             "params" -> "param"
-            "selections" -> "tool"
+            "selections" -> if (path.startsWith("mcpProduct/")) "member" else "tool"
+            "profiles" -> "profile"
             else -> "member"
         }
 
@@ -169,6 +192,7 @@ class ToolCompatibilityDiff private constructor(
                 "field" -> (element as JsonObject)["wireName"]!!.jsonPrimitive.content
                 "source", "param" -> (element as JsonObject)["name"]!!.jsonPrimitive.content
                 "tool" -> (element as JsonObject)["tool"]!!.jsonPrimitive.content
+                "profile" -> (element as JsonObject)["id"]!!.jsonPrimitive.content
                 else -> (element as JsonPrimitive).content
             }
         }

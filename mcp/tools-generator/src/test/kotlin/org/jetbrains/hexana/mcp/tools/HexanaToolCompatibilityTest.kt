@@ -24,7 +24,12 @@ class HexanaToolCompatibilityTest {
 
     @Test
     fun `MCPB fingerprint follows standalone default membership`() {
-        assertFingerprint("MCPB", mcpbSnapshot(baseline.standaloneAuthority.defaultToolIds), EXPECTED_MCPB)
+        assertFingerprint("MCPB", mcpbSnapshot(baseline.mcpProducts.resolve(baseline.mcpbBinding).toolIds), EXPECTED_MCPB)
+    }
+
+    @Test
+    fun `MCP product metadata fingerprint is reviewed independently`() {
+        assertFingerprint("MCP products", mcpProductsSnapshot(baseline.mcpProducts), EXPECTED_MCP_PRODUCTS)
     }
 
     @Test
@@ -72,18 +77,42 @@ class HexanaToolCompatibilityTest {
     }
 
     @Test
-    fun `standalone default membership mutation also affects MCPB snapshot`() {
-        val moved = baseline.standaloneAuthority.defaultToolIds.last()
-        val mutated = baseline.standaloneAuthority.copy(
-            defaultToolIds = baseline.standaloneAuthority.defaultToolIds.dropLast(1),
-            advancedToolIds = baseline.standaloneAuthority.advancedToolIds + moved,
-        )
-
+    fun `MCPB binding mutation affects only MCPB snapshot`() {
         assertOnlySnapshotsChanged(
-            baseline.copy(standaloneAuthority = mutated),
-            "standalone",
+            baseline.copy(mcpbBinding = McpProductProfileBinding(FixtureMcpProductSpec.id, FixtureMcpProductSpec.defaultProfileId)),
             "MCPB",
         )
+    }
+
+    @Test
+    fun `MCP product metadata mutations affect only MCP product snapshot`() {
+        fun withProduct(product: McpProductSpec) = baseline.copy(
+            mcpProducts = McpProductRegistry(listOf(product, FixtureMcpProductSpec)),
+        )
+        val advanced = HexanaMcpProductSpec.profile(ProfileId("advanced"))!!
+
+        assertOnlySnapshotsChanged(withProduct(HexanaMcpProductSpec.copy(published = false)), "MCP products")
+        assertOnlySnapshotsChanged(withProduct(HexanaMcpProductSpec.copy(defaultProfileId = ProfileId("advanced"))), "MCP products")
+        assertOnlySnapshotsChanged(withProduct(HexanaMcpProductSpec.copy(profiles = HexanaMcpProductSpec.profiles.map { profile ->
+            if (profile.id == advanced.id) profile.copy(id = ProfileId("expert"), aliases = setOf("expert")) else profile
+        })), "MCP products")
+        assertOnlySnapshotsChanged(withProduct(HexanaMcpProductSpec.copy(profiles = HexanaMcpProductSpec.profiles.map { profile ->
+            if (profile.id == advanced.id) profile.copy(aliases = profile.aliases + "expert") else profile
+        })), "MCP products")
+        assertOnlySnapshotsChanged(withProduct(HexanaMcpProductSpec.copy(profiles = HexanaMcpProductSpec.profiles.map { profile ->
+            if (profile.id == advanced.id) profile.copy(toolIds = profile.toolIds.dropLast(1)) else profile
+        })), "MCP products")
+    }
+
+    @Test
+    fun `IDEA and MCPB stay bound to hexana MCP default when runtime default changes`() {
+        val changedProduct = HexanaMcpProductSpec.copy(defaultProfileId = ProfileId("advanced"))
+        val changedProducts = McpProductRegistry(listOf(changedProduct, FixtureMcpProductSpec))
+
+        assertEquals(McpProductProfileBinding(ProductId("hexana-mcp"), ProfileId("default")), HexanaIdeaMcpProfileBinding)
+        assertEquals(McpProductProfileBinding(ProductId("hexana-mcp"), ProfileId("default")), HexanaMcpbProfileBinding)
+        assertEquals(HexanaIdeaTools, resolveIdeaTools(changedProducts))
+        assertEquals(HexanaMcpbTools, mcpbTools(productRegistry = changedProducts))
     }
 
     @Test
@@ -107,6 +136,8 @@ class HexanaToolCompatibilityTest {
         val ideaTools: List<IdeaTool> = HexanaIdeaTools,
         val standaloneAuthority: StandaloneToolAuthority = HexanaStandaloneAuthority,
         val cliTools: List<CliTool> = HexanaCliTools,
+        val mcpProducts: McpProductRegistry = HexanaMcpProductRegistry,
+        val mcpbBinding: McpProductProfileBinding = HexanaMcpbProfileBinding,
     )
 
     private fun assertOnlySnapshotsChanged(
@@ -125,7 +156,8 @@ class HexanaToolCompatibilityTest {
         put("semantic", semanticSnapshot(authorities.semanticContracts).sha256())
         put("IDEA", ideaSnapshot(authorities.ideaTools).sha256())
         put("standalone", standaloneSnapshot(authorities.standaloneAuthority).sha256())
-        put("MCPB", mcpbSnapshot(authorities.standaloneAuthority.defaultToolIds).sha256())
+        put("MCPB", mcpbSnapshot(authorities.mcpProducts.resolve(authorities.mcpbBinding).toolIds).sha256())
+        put("MCP products", mcpProductsSnapshot(authorities.mcpProducts).sha256())
         put("CLI", cliSnapshot(authorities.cliTools).sha256())
         HexanaCliProductRegistry.products.forEach { product ->
             put(product.id.value, productSnapshot(product, authorities.cliTools).sha256())
@@ -154,9 +186,9 @@ class HexanaToolCompatibilityTest {
     }
 
     private fun standaloneSnapshot(authority: StandaloneToolAuthority): String = buildString {
-        appendLine("default=${authority.defaultToolIds.joinToString { it.value }}")
-        appendLine("advanced=${authority.advancedToolIds.joinToString { it.value }}")
-        appendLine("scripting=${authority.scriptingToolIds.joinToString { it.value }}")
+        appendLine("default=${authority.profile(ProfileId("default")).toolIds.joinToString { it.value }}")
+        appendLine("advanced=${authority.profile(ProfileId("advanced")).toolIds.joinToString { it.value }}")
+        appendLine("scripting=${authority.profile(ProfileId("scripting")).toolIds.joinToString { it.value }}")
         authority.registrations.forEachIndexed { index, tool ->
             appendLine("standalone[$index].id=${tool.id.value}")
             appendLine("standalone[$index].handler=${tool.standaloneHandler.methodName}")
@@ -166,6 +198,21 @@ class HexanaToolCompatibilityTest {
     private fun mcpbSnapshot(ids: List<ToolId>): String = buildString {
         ids.forEachIndexed { index, id ->
             appendLine("mcpb[$index].id=${id.value}")
+        }
+    }
+
+    private fun mcpProductsSnapshot(products: McpProductRegistry): String = buildString {
+        products.products.sortedBy { it.id.value }.forEach { product ->
+            val prefix = "mcpProduct[${product.id.value}]"
+            appendLine("$prefix.id=${product.id.value}")
+            appendLine("$prefix.published=${product.published}")
+            appendLine("$prefix.defaultProfileId=${product.defaultProfileId.value}")
+            product.profiles.sortedBy { it.id.value }.forEach { profile ->
+                val profilePrefix = "$prefix.profile[${profile.id.value}]"
+                appendLine("$profilePrefix.id=${profile.id.value}")
+                appendLine("$profilePrefix.aliases=${profile.aliases.sorted().joinToString()}")
+                appendLine("$profilePrefix.selections=${profile.toolIds.joinToString { it.value }}")
+            }
         }
     }
 
@@ -322,6 +369,7 @@ class HexanaToolCompatibilityTest {
         const val EXPECTED_IDEA = "b3d01605c58323500af1b4e1eeabfa8b6ff2e4fb659bfccac35c9869c379d378"
         const val EXPECTED_STANDALONE = "0395327fb451b08908345ce4e59bd1cf97bb05dd4bb1cb2165679a2744dd8b44"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"
+        const val EXPECTED_MCP_PRODUCTS = "13bc46a83aa5707e526842837ab9f0ac472229483024dba827b7cc35014f8903"
         const val EXPECTED_CLI = "098ff1435ae4b6381b7d45560a816957de87aef48fc918156c5e02c7ecf1c78d"
         const val EXPECTED_HEXANA_CLI = "db8dba08f15faf3153d25f51a7cd530ef2fab2aa343964ff00be4450d361150b"
         const val EXPECTED_HEXANA_CLI_SCRIPT = "11c2f56233795f1ee126dd501bea91e4152b56ef57a975a2507b895b72c5cabd"

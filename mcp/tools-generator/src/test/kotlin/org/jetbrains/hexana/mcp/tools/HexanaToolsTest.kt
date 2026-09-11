@@ -199,14 +199,14 @@ class HexanaToolsTest {
         assertEquals(CURRENT_DEFAULT_MCP_TOOL_NAMES, HexanaIdeaTools.map { it.name })
         assertEquals(29, HexanaIdeaTools.size)
         assertEquals(48, HexanaStandaloneTools.size)
-        assertEquals(CURRENT_DEFAULT_MCP_TOOL_NAMES, HexanaStandaloneDefaultToolIds.map { it.value })
-        assertEquals(CURRENT_ADVANCED_MCP_TOOL_NAMES, HexanaStandaloneAdvancedToolIds.map { it.value })
-        assertEquals(listOf("run_binary_script"), HexanaStandaloneScriptingToolIds.map { it.value })
-        assertEquals(29, HexanaStandaloneDefaultToolIds.size)
-        assertEquals(18, HexanaStandaloneAdvancedToolIds.size)
-        assertTrue(HexanaStandaloneDefaultToolIds.intersect(HexanaStandaloneAdvancedToolIds.toSet()).isEmpty())
-        assertTrue(HexanaStandaloneDefaultToolIds.intersect(HexanaStandaloneScriptingToolIds.toSet()).isEmpty())
-        assertTrue(HexanaStandaloneAdvancedToolIds.intersect(HexanaStandaloneScriptingToolIds.toSet()).isEmpty())
+        assertEquals(CURRENT_DEFAULT_MCP_TOOL_NAMES, mcpProfile("default").toolIds.map { it.value })
+        assertEquals(CURRENT_ADVANCED_MCP_TOOL_NAMES, mcpProfile("advanced").toolIds.map { it.value })
+        assertEquals(listOf("run_binary_script"), mcpProfile("scripting").toolIds.map { it.value })
+        assertEquals(29, mcpProfile("default").toolIds.size)
+        assertEquals(18, mcpProfile("advanced").toolIds.size)
+        assertTrue(mcpProfile("default").toolIds.intersect(mcpProfile("advanced").toolIds.toSet()).isEmpty())
+        assertTrue(mcpProfile("default").toolIds.intersect(mcpProfile("scripting").toolIds.toSet()).isEmpty())
+        assertTrue(mcpProfile("advanced").toolIds.intersect(mcpProfile("scripting").toolIds.toSet()).isEmpty())
         assertEquals(31, HexanaCliTools.size)
         assertTrue(HexanaStandaloneTools.all {
             it.standaloneHandler.methodName.matches(Regex("^[A-Za-z_][A-Za-z0-9_]*$"))
@@ -215,7 +215,7 @@ class HexanaToolsTest {
 
     @Test
     fun `MCPB inventory is exactly closed over standalone default membership`() {
-        assertEquals(HexanaStandaloneDefaultToolIds, HexanaMcpbTools.map { it.id })
+        assertEquals(mcpProfile("default").toolIds, HexanaMcpbTools.map { it.id })
         assertEquals(CURRENT_DEFAULT_MCP_TOOL_NAMES, HexanaMcpbTools.map { it.name })
         assertEquals(29, HexanaMcpbTools.size)
     }
@@ -225,23 +225,16 @@ class HexanaToolsTest {
         val registered = HexanaStandaloneTools.first()
 
         val error = assertFailsWith<IllegalArgumentException> {
-            StandaloneToolAuthority(
-                registrations = listOf(registered),
-                defaultToolIds = listOf(registered.id),
-                advancedToolIds = listOf(registered.id),
-                scriptingToolIds = emptyList(),
-            )
+            standaloneAuthority(listOf(registered), listOf(registered.id), listOf(registered.id), emptyList())
         }
 
-        assertTrue(error.message.orEmpty().contains("default and advanced profiles must be disjoint"))
+        assertTrue(error.message.orEmpty().contains("'default' and 'advanced' must be disjoint"))
         assertTrue(error.message.orEmpty().contains(registered.name))
     }
 
     @Test
     fun `standalone profiles select every registered binding exactly once`() {
-        val selected = HexanaStandaloneDefaultToolIds +
-            HexanaStandaloneAdvancedToolIds +
-            HexanaStandaloneScriptingToolIds
+        val selected = mcpProfile("default").toolIds + mcpProfile("advanced").toolIds + mcpProfile("scripting").toolIds
 
         assertEquals(HexanaStandaloneTools.map { it.id }.toSet(), selected.toSet())
         assertEquals(selected.size, selected.toSet().size)
@@ -252,12 +245,7 @@ class HexanaToolsTest {
         val registered = HexanaStandaloneTools.first()
 
         val error = assertFailsWith<IllegalArgumentException> {
-            StandaloneToolAuthority(
-                registrations = listOf(registered),
-                defaultToolIds = emptyList(),
-                advancedToolIds = emptyList(),
-                scriptingToolIds = emptyList(),
-            )
+            standaloneAuthority(listOf(registered), emptyList(), emptyList(), emptyList())
         }
 
         assertTrue(error.message.orEmpty().contains("without a profile selection"))
@@ -279,6 +267,61 @@ class HexanaToolsTest {
         assertEquals(4, executable.size)
         assertTrue(executable.all { it.inputModel != null })
         assertEquals(OutputConversionCapability.Pretty, HexanaCliTools.single { it.name == "summarize_module" }.binding.defaultOutput)
+    }
+
+    @Test
+    fun `MCP product declarations isolate the unpublished fixture from runtime and public bindings`() {
+        assertEquals(HexanaMcpProductSpec, HexanaMcpProductRegistry.product(ProductId("hexana-mcp")))
+        assertFalse(FixtureMcpProductSpec.published)
+        assertEquals(ProfileId("default"), HexanaMcpProductSpec.defaultProfileId)
+        assertEquals(listOf("default", "advanced", "scripting"), HexanaMcpProductSpec.profiles.map { it.id.value })
+        assertFailsWith<IllegalArgumentException> {
+            StandaloneToolAuthority(HexanaStandaloneTools, HexanaMcpProductRegistry, McpRuntimeBinding(FixtureMcpProductSpec.id))
+        }.also { assertTrue(it.message.orEmpty().contains("not published")) }
+    }
+
+    @Test
+    fun `MCP product declarations reject invalid defaults aliases bindings and profile tools`() {
+        assertFailsWith<IllegalArgumentException> { ProfileId("bad_profile") }
+        val duplicate = McpProfileSpec(ProfileId("default"), emptyList())
+        assertFailsWith<IllegalArgumentException> {
+            McpProductSpec(ProductId("fixture-mcp"), listOf(duplicate, duplicate), ProfileId("default"), false)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            McpProductSpec(ProductId("fixture-mcp"), listOf(duplicate), ProfileId("advanced"), false)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            McpProductSpec(
+                ProductId("fixture-mcp"),
+                listOf(McpProfileSpec(ProfileId("default"), emptyList(), setOf("default", "same")), McpProfileSpec(ProfileId("advanced"), emptyList(), setOf("advanced", "same"))),
+                ProfileId("default"), false,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> { HexanaMcpProductRegistry.resolve(null) }
+        assertFailsWith<IllegalArgumentException> {
+            HexanaMcpProductRegistry.resolve(McpProductProfileBinding(ProductId("missing-mcp"), ProfileId("default")))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            HexanaMcpProductRegistry.resolve(McpProductProfileBinding(HexanaMcpProductSpec.id, ProfileId("missing")))
+        }
+        val error = assertFailsWith<IllegalArgumentException> {
+            standaloneAuthority(listOf(HexanaStandaloneTools.first()), listOf(ToolId("missing_tool")), emptyList(), emptyList())
+        }
+        assertTrue(error.message.orEmpty().contains("default"))
+        assertTrue(error.message.orEmpty().contains("missing_tool"))
+    }
+
+    private fun mcpProfile(id: String): McpProfileSpec = HexanaStandaloneAuthority.profile(ProfileId(id))
+
+    private fun standaloneAuthority(
+        registrations: List<StandaloneTool>, default: List<ToolId>, advanced: List<ToolId>, scripting: List<ToolId>,
+    ): StandaloneToolAuthority {
+        val product = McpProductSpec(
+            ProductId("fixture-mcp"),
+            listOf(McpProfileSpec(ProfileId("default"), default), McpProfileSpec(ProfileId("advanced"), advanced), McpProfileSpec(ProfileId("scripting"), scripting)),
+            ProfileId("default"), true,
+        )
+        return StandaloneToolAuthority(registrations, McpProductRegistry(listOf(product)), McpRuntimeBinding(product.id))
     }
 
     @Test

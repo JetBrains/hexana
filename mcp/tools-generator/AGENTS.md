@@ -37,15 +37,15 @@ and refreshes the checked-in packaging template.
 
 - `ToolSpec` is semantic-only: typed ID, summary/guidance, input/output schema/defaults/bounds, and intrinsic conversion
   capabilities. Consumer invocation and membership policy must not be added back to feature contracts.
-- IDEA owns invocation bindings (`ToolInputPattern` plus handler FQN) and selects the canonical standalone default profile. Standalone owns handler method bindings and explicit effective
-  default/advanced/scripting lists. MCPB exactly reuses the standalone default selection. CLI owns command/group/output,
+- IDEA owns invocation bindings (`ToolInputPattern` plus handler FQN) and binds to `hexana-mcp.default`. Standalone owns handler method bindings and its explicitly bound published MCP product;
+  its `default`/`advanced`/`scripting` profile declarations remain disjoint and complete. MCPB binds to `hexana-mcp.default` independently of profile names. CLI owns command/group/output,
   explicit executable input models, and product selections; product runtime validates advertised formats against concrete projections.
 - All authorities resolve typed IDs through `ToolCatalog`; duplicate/unknown selectors and missing/duplicate bindings
   fail before generation, and resolved output follows canonical contract order.
 - CLI release-product membership is CLI authority metadata independent from MCP profiles. Every executable binding
   belongs to exactly one of `hexana-cli` or `hexana-cli-script`; TODO tools stay visible in the global CLI registry but
   belong to neither product. `hexana-mcp` is not a CLI release product.
-- Public MCPB manifest exposure is generated from `HexanaStandaloneDefaultToolIds`; it has no independent membership policy.
+- Public MCPB manifest exposure is generated from the explicitly bound `hexana-mcp.default` declaration; it has no independent membership policy.
 - Top-level tool output classes also declare their `mcp/core` model package here with `kotlinPackage = ...`; the
   idea-plugin generator must not carry a separate result-class package map.
 - Input/output conversion capability symbols are intrinsic reusable metadata on `ClassSpec`. `SemanticJson`, `McpWrapper`,

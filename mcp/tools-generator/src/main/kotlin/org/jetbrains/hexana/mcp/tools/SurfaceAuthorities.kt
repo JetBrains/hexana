@@ -50,10 +50,11 @@ data class StandaloneTool(
 
 data class StandaloneToolAuthority(
     val registrations: List<StandaloneTool>,
-    val defaultToolIds: List<ToolId>,
-    val advancedToolIds: List<ToolId>,
-    val scriptingToolIds: List<ToolId>,
+    val productRegistry: McpProductRegistry,
+    val runtimeBinding: McpRuntimeBinding?,
 ) {
+    val runtimeProduct: McpProductSpec = productRegistry.resolveRuntime(runtimeBinding)
+
     init {
         val duplicateRegistrations = registrations.groupBy { it.id }.filterValues { it.size > 1 }.keys
         require(duplicateRegistrations.isEmpty()) {
@@ -61,40 +62,30 @@ data class StandaloneToolAuthority(
         }
         val registeredIds = registrations.mapTo(mutableSetOf()) { it.id }
 
-        fun validateProfile(profileName: String, ids: List<ToolId>) {
-            val duplicates = ids.groupBy { it }.filterValues { it.size > 1 }.keys
-            require(duplicates.isEmpty()) {
-                "Standalone $profileName profile contains duplicate tool IDs: ${duplicates.joinToString()}"
-            }
-            val unregistered = ids.filterNot(registeredIds::contains)
+        runtimeProduct.profiles.forEach { profile ->
+            val unregistered = profile.toolIds.filterNot(registeredIds::contains)
             require(unregistered.isEmpty()) {
-                "Standalone $profileName profile references unregistered tool IDs: ${unregistered.joinToString()}"
+                "Standalone product '${runtimeProduct.id.value}' profile '${profile.id.value}' references unregistered tool IDs: ${unregistered.joinToString()}"
             }
         }
 
-        validateProfile("default", defaultToolIds)
-        validateProfile("advanced", advancedToolIds)
-        validateProfile("scripting", scriptingToolIds)
-
-        val profiles = listOf(
-            "default" to defaultToolIds,
-            "advanced" to advancedToolIds,
-            "scripting" to scriptingToolIds,
-        )
-        profiles.forEachIndexed { index, (profileName, profileIds) ->
-            profiles.drop(index + 1).forEach { (otherProfileName, otherProfileIds) ->
-                val overlap = profileIds.intersect(otherProfileIds.toSet())
+        runtimeProduct.profiles.forEachIndexed { index, profile ->
+            runtimeProduct.profiles.drop(index + 1).forEach { otherProfile ->
+                val overlap = profile.toolIds.intersect(otherProfile.toolIds.toSet())
                 require(overlap.isEmpty()) {
-                    "Standalone $profileName and $otherProfileName profiles must be disjoint; overlapping tool IDs: ${overlap.joinToString()}"
+                    "Standalone product '${runtimeProduct.id.value}' profiles '${profile.id.value}' and '${otherProfile.id.value}' must be disjoint; overlapping tool IDs: ${overlap.joinToString()}"
                 }
             }
         }
-        val selectedIds = profiles.flatMapTo(mutableSetOf()) { it.second }
+        val selectedIds = runtimeProduct.profiles.flatMapTo(mutableSetOf()) { it.toolIds }
         val unselected = registeredIds - selectedIds
         require(unselected.isEmpty()) {
-            "Standalone authority contains registered tool IDs without a profile selection: ${unselected.joinToString()}"
+            "Standalone product '${runtimeProduct.id.value}' contains registered tool IDs without a profile selection: ${unselected.joinToString()}"
         }
     }
+
+    fun profile(id: ProfileId): McpProfileSpec = runtimeProduct.profile(id)
+        ?: error("Resolved runtime product '${runtimeProduct.id.value}' is missing profile '${id.value}'.")
 }
 
 data class CliTool(
@@ -174,10 +165,14 @@ private val validatedHexanaIdeaToolBindings = HexanaToolCatalog.resolveBindings(
     IdeaToolBinding::id,
 ) { _, binding -> binding }
 
-val HexanaIdeaTools: List<IdeaTool> by lazy {
-    HexanaToolCatalog.resolveBindings(
-        HexanaStandaloneDefaultToolIds,
-        validatedHexanaIdeaToolBindings.filter { it.id in HexanaStandaloneDefaultToolIds.toSet() },
+internal fun resolveIdeaTools(
+    productRegistry: McpProductRegistry = HexanaMcpProductRegistry,
+    binding: McpProductProfileBinding = HexanaIdeaMcpProfileBinding,
+): List<IdeaTool> {
+    val defaultProfile = productRegistry.resolve(binding)
+    return HexanaToolCatalog.resolveBindings(
+        defaultProfile.toolIds,
+        validatedHexanaIdeaToolBindings.filter { it.id in defaultProfile.toolIds.toSet() },
         "IDEA default tool authority",
         IdeaToolBinding::id,
     ) { contract, binding ->
@@ -185,6 +180,8 @@ val HexanaIdeaTools: List<IdeaTool> by lazy {
         IdeaTool(contract, binding)
     }
 }
+
+val HexanaIdeaTools: List<IdeaTool> by lazy(::resolveIdeaTools)
 
 private val STANDALONE_TOOL_BINDINGS = listOf(
     standalone(SummarizeBinaryToolId, "summarizeBinary"), standalone(ListBinaryFunctionsToolId, "listBinaryFunctions"),
@@ -230,7 +227,7 @@ private fun standaloneProfile(ids: List<ToolId>, owner: String): List<ToolId> {
     ) { contract, _ -> contract.id }
 }
 
-val HexanaStandaloneDefaultToolIds: List<ToolId> = standaloneProfile(listOf(
+private val HexanaMcpDefaultProfile = McpProfileSpec(ProfileId("default"), standaloneProfile(listOf(
     SummarizeBinaryToolId, SummarizeModuleToolId, ListEnabledFeaturesToolId, GetEntrypointPolicyToolId,
     ListRequiredProposalsToolId, DiffRequiredProposalsToolId, CheckRuntimeCompatibilityToolId,
     CheckComponentCompatibilityToolId, PlanAbiBindingRegenerationToolId, CheckMemoryContractToolId,
@@ -239,33 +236,57 @@ val HexanaStandaloneDefaultToolIds: List<ToolId> = standaloneProfile(listOf(
     DisassembleFunctionToolId, GetFunctionCallGraphToolId, SearchFunctionsByNameToolId,
     ResolveWasmFramesToolId, ResolveFunctionSymbolsToolId, ResolveSourceLocationsToolId, ListMemoryToolId,
     ListGlobalsToolId, ListElementSegmentsToolId, ListDataSegmentsToolId, AuditDataPayloadPolicyToolId,
-), "standalone default profile")
+), "standalone product hexana-mcp default profile"))
 
-val HexanaStandaloneAdvancedToolIds: List<ToolId> = standaloneProfile(listOf(
+private val HexanaMcpAdvancedProfile = McpProfileSpec(ProfileId("advanced"), standaloneProfile(listOf(
     ListBinaryFunctionsToolId, SearchBinaryFunctionsToolId, QueryBinaryToolId,
     ResolveComponentDependenciesToolId, ListComponentSurfaceToolId, ListCustomSectionsToolId,
     ListCodeSectionOffsetsToolId, FunctionsForIndicesToolId, GetLocalsForFunctionsToolId,
     GetInstructionsForFunctionsToolId, GetMemoryForIndicesToolId, GetGlobalsForIndicesToolId,
     ListTypesToolId, ListValueTypesToolId, ListReferenceTypesToolId, GetTypesForIndicesToolId,
     ListDataToolId, QueryArtifactsToolId,
-), "standalone advanced profile")
+), "standalone product hexana-mcp advanced profile"))
 
-val HexanaStandaloneScriptingToolIds: List<ToolId> = standaloneProfile(
+private val HexanaMcpScriptingProfile = McpProfileSpec(ProfileId("scripting"), standaloneProfile(
     listOf(RunBinaryScriptToolId),
-    "standalone scripting profile",
+    "standalone product hexana-mcp scripting profile",
+))
+
+val HexanaMcpProductSpec = McpProductSpec(
+    id = ProductId("hexana-mcp"),
+    profiles = listOf(HexanaMcpDefaultProfile, HexanaMcpAdvancedProfile, HexanaMcpScriptingProfile),
+    defaultProfileId = ProfileId("default"),
+    published = true,
 )
+
+internal val FixtureMcpProductSpec = McpProductSpec(
+    id = ProductId("fixture-mcp"),
+    profiles = listOf(McpProfileSpec(ProfileId("default"), listOf(QueryArtifactsToolId))),
+    defaultProfileId = ProfileId("default"),
+    published = false,
+)
+
+val HexanaMcpProductRegistry = McpProductRegistry(listOf(HexanaMcpProductSpec, FixtureMcpProductSpec))
+
+val HexanaIdeaMcpProfileBinding = McpProductProfileBinding(ProductId("hexana-mcp"), ProfileId("default"))
+val HexanaMcpbProfileBinding = McpProductProfileBinding(ProductId("hexana-mcp"), ProfileId("default"))
+val HexanaStandaloneRuntimeBinding = McpRuntimeBinding(HexanaMcpProductSpec.id)
 
 val HexanaStandaloneAuthority = StandaloneToolAuthority(
     registrations = HexanaStandaloneTools,
-    defaultToolIds = HexanaStandaloneDefaultToolIds,
-    advancedToolIds = HexanaStandaloneAdvancedToolIds,
-    scriptingToolIds = HexanaStandaloneScriptingToolIds,
+    productRegistry = HexanaMcpProductRegistry,
+    runtimeBinding = HexanaStandaloneRuntimeBinding,
 )
 
-val HexanaMcpbTools: List<ToolSpec> = HexanaToolCatalog.resolve(
-    HexanaStandaloneDefaultToolIds,
-    "MCPB tools derived from standalone default profile",
-)
+fun mcpbTools(
+    binding: McpProductProfileBinding = HexanaMcpbProfileBinding,
+    productRegistry: McpProductRegistry = HexanaMcpProductRegistry,
+): List<ToolSpec> {
+    val profile = productRegistry.resolve(binding)
+    return HexanaToolCatalog.resolve(profile.toolIds, "MCPB tools derived from ${binding.productId.value}.${binding.profileId.value}")
+}
+
+val HexanaMcpbTools: List<ToolSpec> = mcpbTools()
 
 private fun todoCli(id: ToolId, command: String, group: ToolGroup) =
     cliToolBinding(id, command, group, ToolOutputPolicy.ToolDefined, unknownFieldPolicy = HexanaCliUnknownFieldPolicy)

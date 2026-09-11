@@ -10,6 +10,7 @@ import java.nio.file.Path
 import java.util.Comparator
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ResolvedToolCatalogReportTest {
@@ -21,16 +22,19 @@ class ResolvedToolCatalogReportTest {
         assertTrue(IDENTITY_TOKEN.find(report.json()) == null)
         assertTrue(IDENTITY_TOKEN.find(report.text()) == null)
         val tools = Json.parseToJsonElement(report.json()).jsonObject.getValue("tools").jsonArray
+        assertEquals("2", Json.parseToJsonElement(report.json()).jsonObject.getValue("formatVersion").jsonPrimitive.content)
         assertEquals(HexanaTools.map { it.name }, tools.map { it.jsonObject.getValue("id").jsonPrimitive.content })
     }
 
     @Test
     fun `report keeps canonical order when resolved authority inputs are shuffled`() {
+        val shuffledProduct = HexanaMcpProductSpec.copy(
+            profiles = HexanaMcpProductSpec.profiles.reversed().map { it.copy(toolIds = it.toolIds.reversed()) },
+        )
         val shuffledAuthority = StandaloneToolAuthority(
             HexanaStandaloneAuthority.registrations.reversed(),
-            HexanaStandaloneAuthority.defaultToolIds.reversed(),
-            HexanaStandaloneAuthority.advancedToolIds.reversed(),
-            HexanaStandaloneAuthority.scriptingToolIds.reversed(),
+            McpProductRegistry(listOf(shuffledProduct)),
+            McpRuntimeBinding(shuffledProduct.id),
         )
         val shuffled = ResolvedToolCatalogReport(
             ideaTools = HexanaIdeaTools.reversed(),
@@ -126,6 +130,25 @@ class ResolvedToolCatalogReportTest {
                 views.getValue("mcpb").jsonObject.getValue("selected"),
             )
         }
+    }
+
+    @Test
+    fun `MCP product projection includes an unpublished fixture without changing public views`() {
+        val document = Json.parseToJsonElement(ResolvedToolCatalogReport().json()).jsonObject
+        val fixture = document.getValue("mcpProducts").jsonArray.single {
+            it.jsonObject.getValue("id").jsonPrimitive.content == FixtureMcpProductSpec.id.value
+        }.jsonObject
+
+        assertEquals(false, fixture.getValue("published").jsonPrimitive.content.toBoolean())
+        assertEquals("default", fixture.getValue("defaultProfile").jsonPrimitive.content)
+        assertEquals(
+            listOf("query_artifacts"),
+            fixture.getValue("profiles").jsonArray.single().jsonObject.getValue("selections").jsonArray.map { it.jsonPrimitive.content },
+        )
+        val fixtureToolViews = document.getValue("tools").jsonArray.single {
+            it.jsonObject.getValue("id").jsonPrimitive.content == "query_artifacts"
+        }.jsonObject.getValue("views").jsonObject
+        assertFalse(fixtureToolViews.getValue("mcpb").jsonObject.getValue("selected").jsonPrimitive.content.toBoolean())
     }
 
     @Test

@@ -5,7 +5,10 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.hexana.mcp.tools.HexanaMcpbTools
-import org.jetbrains.hexana.mcp.tools.HexanaStandaloneDefaultToolIds
+import org.jetbrains.hexana.mcp.tools.HexanaMcpProductSpec
+import org.jetbrains.hexana.mcp.tools.FixtureMcpProductSpec
+import org.jetbrains.hexana.mcp.tools.McpProductProfileBinding
+import org.jetbrains.hexana.mcp.tools.ProfileId
 import org.junit.Test
 import java.nio.file.Files
 import java.nio.file.Path
@@ -56,10 +59,10 @@ class McpbManifestGenerationTest {
             manifest.getValue("preserved_extension").jsonObject.getValue("enabled").jsonPrimitive.content,
         )
         assertEquals(
-            HexanaStandaloneDefaultToolIds.map { it.value },
+            defaultProfileToolIds().map { it.value },
             tools.map { it.jsonObject.getValue("name").jsonPrimitive.content },
         )
-        assertEquals(HexanaStandaloneDefaultToolIds, mcpbManifestTools().map { it.id })
+        assertEquals(defaultProfileToolIds(), mcpbManifestTools().map { it.id })
         assertEquals(
             HexanaMcpbTools.map { it.summary.trim() },
             tools.map { it.jsonObject.getValue("description").jsonPrimitive.content },
@@ -74,12 +77,21 @@ class McpbManifestGenerationTest {
         val tools = manifest.getValue("tools").jsonArray
         assertEquals("true", manifest.getValue("tools_generated").jsonPrimitive.content)
         assertEquals(
-            HexanaStandaloneDefaultToolIds.map { it.value },
+            defaultProfileToolIds().map { it.value },
             tools.map { it.jsonObject.getValue("name").jsonPrimitive.content },
         )
         assertEquals(
             HexanaMcpbTools.map { it.summary.trim() },
             tools.map { it.jsonObject.getValue("description").jsonPrimitive.content },
+        )
+    }
+
+    @Test
+    fun `MCPB derivation is explicitly bound to the published product default`() {
+        assertEquals(HexanaMcpbTools, mcpbManifestTools())
+        assertEquals(
+            listOf("query_artifacts"),
+            mcpbManifestTools(McpProductProfileBinding(FixtureMcpProductSpec.id, FixtureMcpProductSpec.defaultProfileId)).map { it.name },
         )
     }
 
@@ -93,4 +105,6 @@ class McpbManifestGenerationTest {
             assertTrue(it != null, "Could not find checked-in MCPB manifest from $cwd")
         }!!
     }
+
+    private fun defaultProfileToolIds() = HexanaMcpProductSpec.profile(ProfileId("default"))!!.toolIds
 }

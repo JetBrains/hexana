@@ -67,20 +67,64 @@ class ToolCompatibilityDiffTest {
     }
 
     @Test
-    fun `standalone default to advanced move also changes derived MCPB membership`() {
-        val moved = HexanaStandaloneAuthority.defaultToolIds.last()
-        val authority = HexanaStandaloneAuthority.copy(
-            defaultToolIds = HexanaStandaloneAuthority.defaultToolIds.dropLast(1),
-            advancedToolIds = HexanaStandaloneAuthority.advancedToolIds + moved,
+    fun `bound MCP product profile move changes standalone MCPB and product projection`() {
+        val default = HexanaMcpProductSpec.profile(ProfileId("default"))!!
+        val advanced = HexanaMcpProductSpec.profile(ProfileId("advanced"))!!
+        val moved = default.toolIds.last()
+        val product = HexanaMcpProductSpec.copy(
+            profiles = HexanaMcpProductSpec.profiles.map { profile ->
+                when (profile.id) {
+                    default.id -> profile.copy(toolIds = default.toolIds.dropLast(1))
+                    advanced.id -> profile.copy(toolIds = advanced.toolIds + moved)
+                    else -> profile
+                }
+            },
         )
-        val differences = ToolCompatibilityDiff.between(baseline, ResolvedToolCatalogReport(standaloneAuthority = authority)).differences
+        val products = McpProductRegistry(listOf(product, FixtureMcpProductSpec))
+        val authority = StandaloneToolAuthority(
+            HexanaStandaloneAuthority.registrations, products, McpRuntimeBinding(product.id),
+        )
+        val differences = ToolCompatibilityDiff.between(
+            baseline,
+            ResolvedToolCatalogReport(standaloneAuthority = authority, mcpProducts = products),
+        ).differences
 
-        assertEquals(
-            setOf("standalone/standaloneDefault", "standalone/standaloneAdvanced", "mcpb/mcpb"),
-            differences.map { "${it.surface}/${it.view}" }.toSet(),
-        )
+        assertTrue(differences.any { it.surface == "standalone" && it.view == "standaloneDefault" })
+        assertTrue(differences.any { it.surface == "standalone" && it.view == "standaloneAdvanced" })
+        assertTrue(differences.any { it.surface == "mcpb" && it.view == "mcpb" })
+        assertTrue(differences.any { it.path.startsWith("mcpProduct/${product.id.value}/profile/") })
         assertTrue(differences.all { it.category == ToolCompatibilityDiff.Category.Membership })
-        assertTrue(differences.all { it.path == "tool/${moved.value}/view/${it.view}/selected" })
+    }
+
+    @Test
+    fun `MCP product default binding has a stable compatibility path`() {
+        val changedProduct = HexanaMcpProductSpec.copy(defaultProfileId = ProfileId("advanced"))
+        val products = McpProductRegistry(listOf(changedProduct, FixtureMcpProductSpec))
+        val differences = ToolCompatibilityDiff.between(baseline, ResolvedToolCatalogReport(mcpProducts = products)).differences
+
+        assertTrue(differences.any {
+            it.surface == "mcp" && it.category == ToolCompatibilityDiff.Category.Binding &&
+                it.path == "mcpProduct/${changedProduct.id.value}/defaultProfile"
+        })
+    }
+
+    @Test
+    fun `MCP product profile aliases have binding compatibility paths`() {
+        val changedProduct = HexanaMcpProductSpec.copy(
+            profiles = HexanaMcpProductSpec.profiles.map { profile ->
+                if (profile.id == ProfileId("advanced")) profile.copy(aliases = profile.aliases + "expert") else profile
+            },
+        )
+        val products = McpProductRegistry(listOf(changedProduct, FixtureMcpProductSpec))
+
+        val difference = ToolCompatibilityDiff.between(baseline, ResolvedToolCatalogReport(mcpProducts = products)).differences.single {
+            it.path == "mcpProduct/${changedProduct.id.value}/profile/advanced/aliases/expert"
+        }
+
+        assertDifference(
+            difference, "mcp", "product", ToolCompatibilityDiff.Category.Binding,
+            "mcpProduct/${changedProduct.id.value}/profile/advanced/aliases/expert",
+        )
     }
 
     @Test

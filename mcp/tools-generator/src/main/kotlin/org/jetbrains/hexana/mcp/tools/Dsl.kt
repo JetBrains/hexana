@@ -767,11 +767,107 @@ class ToolSpec(
 value class ProductId(val value: String) {
     init {
         require(CLI_COMMAND_NAME_REGEX.matches(value)) {
-            "CLI product id '$value' must be strict kebab-case."
+            "Product id '$value' must be strict kebab-case."
         }
     }
 
     override fun toString(): String = value
+}
+
+/** Typed local identifier for a profile declared by one MCP product. */
+@JvmInline
+value class ProfileId(val value: String) {
+    init {
+        require(CLI_COMMAND_NAME_REGEX.matches(value)) {
+            "MCP profile id '$value' must be strict kebab-case."
+        }
+    }
+
+    override fun toString(): String = value
+}
+
+data class McpProfileSpec(
+    val id: ProfileId,
+    val toolIds: List<ToolId>,
+    val aliases: Set<String> = setOf(id.value),
+) {
+    init {
+        require(aliases.isNotEmpty()) { "MCP profile '${id.value}' must declare at least one alias." }
+        require(id.value in aliases) { "MCP profile '${id.value}' aliases must include its typed ID." }
+        require(aliases.all(CLI_COMMAND_NAME_REGEX::matches)) {
+            "MCP profile '${id.value}' aliases must be strict kebab-case: ${aliases.filterNot(CLI_COMMAND_NAME_REGEX::matches)}"
+        }
+        val duplicateTools = toolIds.groupBy { it }.filterValues { it.size > 1 }.keys
+        require(duplicateTools.isEmpty()) {
+            "MCP profile '${id.value}' contains duplicate tool IDs: ${duplicateTools.joinToString()}"
+        }
+    }
+}
+
+data class McpProductSpec(
+    val id: ProductId,
+    val profiles: List<McpProfileSpec>,
+    val defaultProfileId: ProfileId,
+    val published: Boolean,
+) {
+    init {
+        require(profiles.isNotEmpty()) { "MCP product '${id.value}' must declare at least one profile." }
+        val duplicateProfiles = profiles.groupBy(McpProfileSpec::id).filterValues { it.size > 1 }.keys
+        require(duplicateProfiles.isEmpty()) {
+            "MCP product '${id.value}' contains duplicate profile IDs: ${duplicateProfiles.joinToString()}"
+        }
+        require(profile(defaultProfileId) != null) {
+            "MCP product '${id.value}' default profile '${defaultProfileId.value}' is not declared."
+        }
+        val duplicateAliases = profiles.flatMap { profile -> profile.aliases.map { it to profile.id } }
+            .groupBy({ it.first }, { it.second })
+            .filterValues { it.size > 1 }
+        require(duplicateAliases.isEmpty()) {
+            "MCP product '${id.value}' contains colliding profile aliases: " +
+                duplicateAliases.entries.joinToString { (alias, profiles) -> "$alias (${profiles.joinToString()})" }
+        }
+    }
+
+    fun profile(id: ProfileId): McpProfileSpec? = profiles.singleOrNull { it.id == id }
+}
+
+data class McpProductProfileBinding(
+    val productId: ProductId,
+    val profileId: ProfileId,
+)
+
+data class McpRuntimeBinding(val productId: ProductId)
+
+class McpProductRegistry(products: List<McpProductSpec>) {
+    val products: List<McpProductSpec> = java.util.Collections.unmodifiableList(java.util.ArrayList(products))
+
+    init {
+        require(this.products.isNotEmpty()) { "MCP product registry must declare at least one product." }
+        val duplicateIds = this.products.groupBy(McpProductSpec::id).filterValues { it.size > 1 }.keys
+        require(duplicateIds.isEmpty()) { "MCP product registry contains duplicate product IDs: ${duplicateIds.joinToString()}" }
+    }
+
+    fun product(id: ProductId): McpProductSpec? = products.singleOrNull { it.id == id }
+
+    fun resolve(binding: McpProductProfileBinding?): McpProfileSpec {
+        requireNotNull(binding) { "MCP product profile binding is required." }
+        val product = product(binding.productId)
+            ?: throw IllegalArgumentException("MCP product binding references unknown product '${binding.productId.value}'.")
+        return product.profile(binding.profileId)
+            ?: throw IllegalArgumentException(
+                "MCP product binding references unknown profile '${binding.profileId.value}' for product '${product.id.value}'.",
+            )
+    }
+
+    fun resolveRuntime(binding: McpRuntimeBinding?): McpProductSpec {
+        requireNotNull(binding) { "MCP runtime product binding is required." }
+        val product = product(binding.productId)
+            ?: throw IllegalArgumentException("MCP runtime binding references unknown product '${binding.productId.value}'.")
+        require(product.published) {
+            "MCP runtime binding product '${product.id.value}' is not published."
+        }
+        return product
+    }
 }
 
 data class CliProductSpec(
