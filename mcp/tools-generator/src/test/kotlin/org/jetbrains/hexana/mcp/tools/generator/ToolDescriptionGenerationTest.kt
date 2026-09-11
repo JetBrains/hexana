@@ -127,6 +127,8 @@ class ToolDescriptionGenerationTest {
         assertTrue(source.contains("DEFAULT_PROFILE_ID: String = \"advanced\""))
         assertTrue(source.contains("\"all-tools\" to \"advanced\""))
         assertTrue(source.contains("\"ADVANCED\" to \"advanced\""))
+        assertTrue(source.contains("profile: HexanaMcpToolProfile = HexanaMcpToolProfile.defaultProfile()"))
+        assertFalse(source.contains("profile: HexanaMcpToolProfile = HexanaMcpToolProfile.DEFAULT"))
         assertTrue(source.contains("\"${tool.name}\""))
     }
 

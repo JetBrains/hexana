@@ -112,7 +112,7 @@ internal fun buildDispatcherFile(authority: StandaloneToolAuthority): FileSpec {
         .addParameter(ParameterSpec.builder("handlers", TOOL_HANDLERS).build())
         .addParameter(
             ParameterSpec.builder("profile", TOOL_PROFILE)
-                .defaultValue("%T.DEFAULT", TOOL_PROFILE)
+                .defaultValue("%T.defaultProfile()", TOOL_PROFILE)
                 .build()
         )
         .addKdoc(

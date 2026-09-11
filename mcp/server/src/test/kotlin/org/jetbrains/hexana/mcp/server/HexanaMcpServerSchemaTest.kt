@@ -86,10 +86,18 @@ class HexanaMcpServerSchemaTest {
         val server = createServerWithDirectGeneratedRegistration()
 
         assertEquals(
-            HexanaGeneratedMcpToolProfiles.DEFAULT_TOOL_NAMES,
+            createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.defaultProfile()).tools.keys.toSet(),
             server.tools.keys.toSet(),
         )
         assertFalse(server.tools.containsKey("query_artifacts"))
+    }
+
+    @Test
+    fun directMcpServerCreationDefaultsToDeclaredProfile() {
+        assertEquals(
+            createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.defaultProfile()).tools.keys.toSet(),
+            createHexanaMcpServer().tools.keys.toSet(),
+        )
     }
 
     @Test
