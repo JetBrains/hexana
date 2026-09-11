@@ -14,14 +14,13 @@
 
 ### Changed
 - The `.debug_abbrev`, `.debug_info` and `.debug_line` tabs are grouped under a single **DWARF** tab, and now searchable and scrollable; a binary carrying only one of them keeps its plain `.debug_*` tab
-- The bundled `hexana-scripting-raw.d.ts` reference no longer lists Kotlin's generated `component1()`, `component2()`, ... destructuring accessors. They carried no information a script can use — each one repeats the property declared right above it, and TypeScript has no destructuring by accessor — while accounting for about 1700 of the file's lines
 
 ### Deprecated
 
 ### Removed
 
 ### Fixed
-- Rows in the `.debug_line` tab select their bytes in the hex view when clicked; the click handler matched on DIE types that tree never contains, so nothing in it was navigable
+- The bundled `hexana-scripting-raw.d.ts` reference no longer lists Kotlin's generated `component1()`, `component2()`, ... destructuring accessors
 
 ### Security
 - Script tabs now run sandboxed. Up to and including 0.18 the script tab built its own GraalJS context with full host access and host class lookup enabled, so a `.js` file added as a script tab could call arbitrary Java; script tabs now use the same sandbox as the `run-script` CLI and the MCP tool — no host class lookup, no file IO, no process or thread creation, no native access, a timeout, and bounded output
