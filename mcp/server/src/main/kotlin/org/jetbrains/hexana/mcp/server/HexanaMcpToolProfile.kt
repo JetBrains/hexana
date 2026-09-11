@@ -5,26 +5,25 @@ enum class HexanaMcpToolProfile {
     ADVANCED,
     SCRIPTING;
 
-    fun cliValue(): String = name.lowercase()
+    fun cliValue(): String = profileId()
 
-    internal fun includesTool(toolName: String): Boolean {
-        return when (this) {
-            DEFAULT -> toolName in HexanaGeneratedMcpToolProfiles.DEFAULT_TOOL_NAMES
-            ADVANCED -> toolName in HexanaGeneratedMcpToolProfiles.ADVANCED_TOOL_NAMES
-            SCRIPTING -> toolName in HexanaGeneratedMcpToolProfiles.SCRIPTING_TOOL_NAMES
-        }
-    }
+    internal fun includesTool(toolName: String): Boolean = toolName in HexanaGeneratedMcpToolProfiles.toolNames(profileId())
+
+    private fun profileId(): String = HexanaGeneratedMcpToolProfiles.PROFILE_ID_BY_COMPATIBILITY_ENUM.getValue(name)
 
     companion object {
-        private val ALIASES = mapOf(
-            "default" to DEFAULT,
-            "advanced" to ADVANCED,
-            "scripting" to SCRIPTING,
-        )
+        fun defaultProfile(): HexanaMcpToolProfile = fromProfileId(HexanaGeneratedMcpToolProfiles.DEFAULT_PROFILE_ID)
 
         fun parseCliValue(value: String): HexanaMcpToolProfile {
-            return ALIASES[value.lowercase()]
-                ?: throw IllegalArgumentException("Unsupported MCP tool profile: $value. Expected default, advanced, or scripting.")
+            return HexanaGeneratedMcpToolProfiles.profileIdForAlias(value)?.let(::fromProfileId)
+                ?: unsupported(value)
         }
+
+        private fun fromProfileId(profileId: String): HexanaMcpToolProfile = entries.singleOrNull {
+            HexanaGeneratedMcpToolProfiles.PROFILE_ID_BY_COMPATIBILITY_ENUM[it.name] == profileId
+        } ?: error("Generated MCP profile '$profileId' has no compatible runtime enum.")
+
+        private fun unsupported(value: String): Nothing =
+            throw IllegalArgumentException("Unsupported MCP tool profile: $value. Expected default, advanced, or scripting.")
     }
 }

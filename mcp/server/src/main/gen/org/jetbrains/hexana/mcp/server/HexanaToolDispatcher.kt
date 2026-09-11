@@ -9,6 +9,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlin.Boolean
 import kotlin.Int
 import kotlin.String
+import kotlin.collections.Map
 import kotlin.collections.Set
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -26,7 +27,7 @@ public object HexanaMcpToolCompatibility {
 }
 
 /**
- * Generated MCP profile membership derived from catalog surface metadata.
+ * Generated MCP profile metadata for the explicitly bound runtime product.
  */
 internal object HexanaGeneratedMcpToolProfiles {
   internal val DEFAULT_TOOL_NAMES: Set<String> = setOf(
@@ -85,6 +86,30 @@ internal object HexanaGeneratedMcpToolProfiles {
   internal val SCRIPTING_TOOL_NAMES: Set<String> = setOf(
         "run_binary_script",
       )
+
+  internal const val DEFAULT_PROFILE_ID: String = "default"
+
+  internal val TOOL_NAMES_BY_PROFILE_ID: Map<String, Set<String>> = mapOf(
+        "default" to DEFAULT_TOOL_NAMES,
+        "advanced" to ADVANCED_TOOL_NAMES,
+        "scripting" to SCRIPTING_TOOL_NAMES,
+      )
+
+  internal val PROFILE_ID_BY_ALIAS: Map<String, String> = mapOf(
+        "default" to "default",
+        "advanced" to "advanced",
+        "scripting" to "scripting",
+      )
+
+  internal val PROFILE_ID_BY_COMPATIBILITY_ENUM: Map<String, String> = mapOf(
+        "DEFAULT" to "default",
+        "ADVANCED" to "advanced",
+        "SCRIPTING" to "scripting",
+      )
+
+  internal fun toolNames(profileId: String): Set<String> = TOOL_NAMES_BY_PROFILE_ID.getValue(profileId)
+
+  internal fun profileIdForAlias(`value`: String): String? = PROFILE_ID_BY_ALIAS[value.lowercase()]
 }
 
 /**

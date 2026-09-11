@@ -786,11 +786,14 @@ value class ProfileId(val value: String) {
     override fun toString(): String = value
 }
 
-data class McpProfileSpec(
+class McpProfileSpec(
     val id: ProfileId,
-    val toolIds: List<ToolId>,
-    val aliases: Set<String> = setOf(id.value),
+    toolIds: List<ToolId>,
+    aliases: Set<String> = setOf(id.value),
 ) {
+    val toolIds: List<ToolId> = java.util.Collections.unmodifiableList(java.util.ArrayList(toolIds))
+    val aliases: Set<String> = java.util.Collections.unmodifiableSet(java.util.LinkedHashSet(aliases))
+
     init {
         require(aliases.isNotEmpty()) { "MCP profile '${id.value}' must declare at least one alias." }
         require(id.value in aliases) { "MCP profile '${id.value}' aliases must include its typed ID." }
@@ -802,14 +805,30 @@ data class McpProfileSpec(
             "MCP profile '${id.value}' contains duplicate tool IDs: ${duplicateTools.joinToString()}"
         }
     }
+
+    fun copy(
+        id: ProfileId = this.id,
+        toolIds: List<ToolId> = this.toolIds,
+        aliases: Set<String> = this.aliases,
+    ) = McpProfileSpec(id, toolIds, aliases)
+
+    override fun equals(other: Any?): Boolean =
+        other is McpProfileSpec && id == other.id && toolIds == other.toolIds && aliases == other.aliases
+
+    override fun hashCode(): Int = 31 * (31 * id.hashCode() + toolIds.hashCode()) + aliases.hashCode()
 }
 
-data class McpProductSpec(
+enum class McpProfileMembershipPolicy { Independent, DisjointAndComplete }
+
+class McpProductSpec(
     val id: ProductId,
-    val profiles: List<McpProfileSpec>,
+    profiles: List<McpProfileSpec>,
     val defaultProfileId: ProfileId,
     val published: Boolean,
+    val membershipPolicy: McpProfileMembershipPolicy = McpProfileMembershipPolicy.Independent,
 ) {
+    val profiles: List<McpProfileSpec> = java.util.Collections.unmodifiableList(java.util.ArrayList(profiles))
+
     init {
         require(profiles.isNotEmpty()) { "MCP product '${id.value}' must declare at least one profile." }
         val duplicateProfiles = profiles.groupBy(McpProfileSpec::id).filterValues { it.size > 1 }.keys
@@ -829,6 +848,20 @@ data class McpProductSpec(
     }
 
     fun profile(id: ProfileId): McpProfileSpec? = profiles.singleOrNull { it.id == id }
+
+    fun copy(
+        id: ProductId = this.id,
+        profiles: List<McpProfileSpec> = this.profiles,
+        defaultProfileId: ProfileId = this.defaultProfileId,
+        published: Boolean = this.published,
+        membershipPolicy: McpProfileMembershipPolicy = this.membershipPolicy,
+    ) = McpProductSpec(id, profiles, defaultProfileId, published, membershipPolicy)
+
+    override fun equals(other: Any?): Boolean =
+        other is McpProductSpec && id == other.id && profiles == other.profiles &&
+            defaultProfileId == other.defaultProfileId && published == other.published && membershipPolicy == other.membershipPolicy
+
+    override fun hashCode(): Int = listOf(id, profiles, defaultProfileId, published, membershipPolicy).hashCode()
 }
 
 data class McpProductProfileBinding(
@@ -838,13 +871,20 @@ data class McpProductProfileBinding(
 
 data class McpRuntimeBinding(val productId: ProductId)
 
-class McpProductRegistry(products: List<McpProductSpec>) {
+class McpProductRegistry(products: List<McpProductSpec>, knownToolIds: Collection<ToolId> = HexanaToolCatalog.contracts.map(ToolSpec::id)) {
     val products: List<McpProductSpec> = java.util.Collections.unmodifiableList(java.util.ArrayList(products))
+    private val knownToolIds: Set<ToolId> = java.util.Collections.unmodifiableSet(java.util.LinkedHashSet(knownToolIds))
 
     init {
         require(this.products.isNotEmpty()) { "MCP product registry must declare at least one product." }
         val duplicateIds = this.products.groupBy(McpProductSpec::id).filterValues { it.size > 1 }.keys
         require(duplicateIds.isEmpty()) { "MCP product registry contains duplicate product IDs: ${duplicateIds.joinToString()}" }
+        this.products.forEach { product -> product.profiles.forEach { profile ->
+            val unknown = profile.toolIds.filterNot(knownToolIds::contains)
+            require(unknown.isEmpty()) {
+                "MCP product '${product.id.value}' profile '${profile.id.value}' references unknown tool IDs: ${unknown.joinToString()}"
+            }
+        } }
     }
 
     fun product(id: ProductId): McpProductSpec? = products.singleOrNull { it.id == id }

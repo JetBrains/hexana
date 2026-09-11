@@ -23,7 +23,6 @@ import org.jetbrains.hexana.mcp.tools.HexanaToolSchemaCompatibility
 import org.jetbrains.hexana.mcp.tools.HexanaCliProductRegistry
 import org.jetbrains.hexana.mcp.tools.HexanaCliTools
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneAuthority
-import org.jetbrains.hexana.mcp.tools.ProfileId
 import org.jetbrains.hexana.mcp.tools.InputConversionCapability
 import org.jetbrains.hexana.mcp.tools.OutputConversionCapability
 import org.jetbrains.hexana.mcp.tools.SchemaIntValue
@@ -262,27 +261,53 @@ private fun buildCompatibilityObject(): TypeSpec {
 private fun buildToolProfilesObject(
     authority: StandaloneToolAuthority,
 ): TypeSpec {
-    val default = authority.profile(ProfileId("default")).toolIds
-    val advanced = authority.profile(ProfileId("advanced")).toolIds
-    val scripting = authority.profile(ProfileId("scripting")).toolIds
+    val product = authority.runtimeProduct
     val setOfString = Set::class.parameterizedBy(String::class)
+    val stringToSet = KOTLIN_MAP.parameterizedBy(String::class.asTypeName(), setOfString)
+    val stringToString = KOTLIN_MAP.parameterizedBy(String::class.asTypeName(), String::class.asTypeName())
+    val profilesById = CodeBlock.builder().add("mapOf(\n").indent().apply {
+        product.profiles.forEach { profile ->
+            add("%S to %L,\n", profile.id.value, "${profile.id.value.uppercase().replace('-', '_')}_TOOL_NAMES")
+        }
+    }.unindent().add(")").build()
+    val aliases = CodeBlock.builder().add("mapOf(\n").indent().apply {
+        product.profiles.flatMap { profile -> profile.aliases.sorted().map { it to profile.id.value } }
+            .forEach { (alias, id) -> add("%S to %S,\n", alias, id) }
+    }.unindent().add(")").build()
+    val enumIds = CodeBlock.builder().add("mapOf(\n").indent().apply {
+        product.profiles.forEach { profile ->
+            add("%S to %S,\n", profile.id.value.uppercase().replace('-', '_'), profile.id.value)
+        }
+    }.unindent().add(")").build()
     return TypeSpec.objectBuilder("HexanaGeneratedMcpToolProfiles")
         .addModifiers(KModifier.INTERNAL)
-        .addKdoc("Generated MCP profile membership derived from catalog surface metadata.\n")
+        .addKdoc("Generated MCP profile metadata for the explicitly bound runtime product.\n")
+        .apply {
+            product.profiles.forEach { profile ->
+                addProperty(
+                    PropertySpec.builder("${profile.id.value.uppercase().replace('-', '_')}_TOOL_NAMES", setOfString, KModifier.INTERNAL)
+                        .initializer(toolNameSetInitializer(profile.toolIds.map(ToolId::value)))
+                        .build(),
+                )
+            }
+        }
         .addProperty(
-            PropertySpec.builder("DEFAULT_TOOL_NAMES", setOfString, KModifier.INTERNAL)
-                .initializer(toolNameSetInitializer(default.map(ToolId::value)))
+            PropertySpec.builder("DEFAULT_PROFILE_ID", String::class, KModifier.INTERNAL, KModifier.CONST)
+                .initializer("%S", product.defaultProfileId.value)
                 .build()
         )
-        .addProperty(
-            PropertySpec.builder("ADVANCED_TOOL_NAMES", setOfString, KModifier.INTERNAL)
-                .initializer(toolNameSetInitializer(advanced.map(ToolId::value)))
-                .build()
+        .addProperty(PropertySpec.builder("TOOL_NAMES_BY_PROFILE_ID", stringToSet, KModifier.INTERNAL).initializer(profilesById).build())
+        .addProperty(PropertySpec.builder("PROFILE_ID_BY_ALIAS", stringToString, KModifier.INTERNAL).initializer(aliases).build())
+        .addProperty(PropertySpec.builder("PROFILE_ID_BY_COMPATIBILITY_ENUM", stringToString, KModifier.INTERNAL).initializer(enumIds).build())
+        .addFunction(
+            FunSpec.builder("toolNames").addModifiers(KModifier.INTERNAL)
+                .addParameter("profileId", String::class).returns(setOfString)
+                .addStatement("return TOOL_NAMES_BY_PROFILE_ID.getValue(profileId)").build()
         )
-        .addProperty(
-            PropertySpec.builder("SCRIPTING_TOOL_NAMES", setOfString, KModifier.INTERNAL)
-                .initializer(toolNameSetInitializer(scripting.map(ToolId::value)))
-                .build()
+        .addFunction(
+            FunSpec.builder("profileIdForAlias").addModifiers(KModifier.INTERNAL)
+                .addParameter("value", String::class).returns(String::class.asTypeName().copy(nullable = true))
+                .addStatement("return PROFILE_ID_BY_ALIAS[value.lowercase()]").build()
         )
         .build()
 }

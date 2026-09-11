@@ -299,7 +299,7 @@ private fun CliktCommand.toolProfileOption() = option(
     "--tool-profile",
     help = "MCP tool inventory: default is compact, advanced exposes investigation tools, scripting exposes dedicated scripting tools when available.",
     envvar = "HEXANA_MCP_TOOL_PROFILE"
-).convert("default|advanced|scripting") { parseToolProfile(it) }.default(HexanaMcpToolProfile.DEFAULT)
+).convert("default|advanced|scripting") { parseToolProfile(it) }.default(HexanaMcpToolProfile.defaultProfile())
 
 internal fun CliktCommand.allowedRootOption() = option(
     "--allowed-root",

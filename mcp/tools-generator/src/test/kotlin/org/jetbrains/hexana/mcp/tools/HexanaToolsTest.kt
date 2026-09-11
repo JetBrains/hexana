@@ -311,6 +311,47 @@ class HexanaToolsTest {
         assertTrue(error.message.orEmpty().contains("missing_tool"))
     }
 
+    @Test
+    fun `MCP product declarations defensively own declared collections`() {
+        val toolIds = mutableListOf(SummarizeBinaryToolId)
+        val aliases = linkedSetOf("default")
+        val profile = McpProfileSpec(ProfileId("default"), toolIds, aliases)
+        toolIds.clear(); aliases += "changed"
+        assertEquals(listOf(SummarizeBinaryToolId), profile.toolIds)
+        assertEquals(setOf("default"), profile.aliases)
+        assertFailsWith<UnsupportedOperationException> { (profile.toolIds as MutableList).clear() }
+        assertFailsWith<UnsupportedOperationException> { (profile.aliases as MutableSet).clear() }
+
+        val profiles = mutableListOf(profile)
+        val product = McpProductSpec(ProductId("fixture-mcp"), profiles, ProfileId("default"), false)
+        profiles.clear()
+        assertEquals(listOf(profile), product.profiles)
+        assertFailsWith<UnsupportedOperationException> { (product.profiles as MutableList).clear() }
+
+        val products = mutableListOf(product)
+        val registry = McpProductRegistry(products)
+        products.clear()
+        assertEquals(product, registry.product(product.id))
+        assertFailsWith<UnsupportedOperationException> { (registry.products as MutableList).clear() }
+        val report = ResolvedToolCatalogReport(
+            mcpProducts = registry,
+            mcpbBinding = McpProductProfileBinding(product.id, product.defaultProfileId),
+        ).json()
+        assertTrue(report.contains("\"fixture-mcp\""))
+    }
+
+    @Test
+    fun `MCP registry validates every product profile against the semantic catalog`() {
+        val error = assertFailsWith<IllegalArgumentException> {
+            McpProductRegistry(listOf(
+                McpProductSpec(ProductId("fixture-mcp"), listOf(McpProfileSpec(ProfileId("default"), listOf(ToolId("missing_tool")))), ProfileId("default"), false),
+            ))
+        }
+        assertTrue(error.message.orEmpty().contains("fixture-mcp"))
+        assertTrue(error.message.orEmpty().contains("default"))
+        assertTrue(error.message.orEmpty().contains("missing_tool"))
+    }
+
     private fun mcpProfile(id: String): McpProfileSpec = HexanaStandaloneAuthority.profile(ProfileId(id))
 
     private fun standaloneAuthority(
@@ -319,7 +360,7 @@ class HexanaToolsTest {
         val product = McpProductSpec(
             ProductId("fixture-mcp"),
             listOf(McpProfileSpec(ProfileId("default"), default), McpProfileSpec(ProfileId("advanced"), advanced), McpProfileSpec(ProfileId("scripting"), scripting)),
-            ProfileId("default"), true,
+            ProfileId("default"), true, McpProfileMembershipPolicy.DisjointAndComplete,
         )
         return StandaloneToolAuthority(registrations, McpProductRegistry(listOf(product)), McpRuntimeBinding(product.id))
     }

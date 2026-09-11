@@ -69,18 +69,20 @@ data class StandaloneToolAuthority(
             }
         }
 
-        runtimeProduct.profiles.forEachIndexed { index, profile ->
-            runtimeProduct.profiles.drop(index + 1).forEach { otherProfile ->
-                val overlap = profile.toolIds.intersect(otherProfile.toolIds.toSet())
-                require(overlap.isEmpty()) {
-                    "Standalone product '${runtimeProduct.id.value}' profiles '${profile.id.value}' and '${otherProfile.id.value}' must be disjoint; overlapping tool IDs: ${overlap.joinToString()}"
+        if (runtimeProduct.membershipPolicy == McpProfileMembershipPolicy.DisjointAndComplete) {
+            runtimeProduct.profiles.forEachIndexed { index, profile ->
+                runtimeProduct.profiles.drop(index + 1).forEach { otherProfile ->
+                    val overlap = profile.toolIds.intersect(otherProfile.toolIds.toSet())
+                    require(overlap.isEmpty()) {
+                        "Standalone product '${runtimeProduct.id.value}' profiles '${profile.id.value}' and '${otherProfile.id.value}' must be disjoint; overlapping tool IDs: ${overlap.joinToString()}"
+                    }
                 }
             }
-        }
-        val selectedIds = runtimeProduct.profiles.flatMapTo(mutableSetOf()) { it.toolIds }
-        val unselected = registeredIds - selectedIds
-        require(unselected.isEmpty()) {
-            "Standalone product '${runtimeProduct.id.value}' contains registered tool IDs without a profile selection: ${unselected.joinToString()}"
+            val selectedIds = runtimeProduct.profiles.flatMapTo(mutableSetOf()) { it.toolIds }
+            val unselected = registeredIds - selectedIds
+            require(unselected.isEmpty()) {
+                "Standalone product '${runtimeProduct.id.value}' contains registered tool IDs without a profile selection: ${unselected.joinToString()}"
+            }
         }
     }
 
@@ -257,6 +259,7 @@ val HexanaMcpProductSpec = McpProductSpec(
     profiles = listOf(HexanaMcpDefaultProfile, HexanaMcpAdvancedProfile, HexanaMcpScriptingProfile),
     defaultProfileId = ProfileId("default"),
     published = true,
+    membershipPolicy = McpProfileMembershipPolicy.DisjointAndComplete,
 )
 
 internal val FixtureMcpProductSpec = McpProductSpec(

@@ -109,6 +109,28 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
+    fun `standalone generated metadata follows declared aliases and default profile`() {
+        val tool = HexanaStandaloneTools.first()
+        val product = McpProductSpec(
+            ProductId("fixture-mcp"),
+            listOf(
+                McpProfileSpec(ProfileId("default"), emptyList()),
+                McpProfileSpec(ProfileId("advanced"), listOf(tool.id), setOf("advanced", "all-tools")),
+                McpProfileSpec(ProfileId("scripting"), emptyList()),
+            ),
+            ProfileId("advanced"), true,
+        )
+        val source = buildDispatcherFile(
+            StandaloneToolAuthority(listOf(tool), McpProductRegistry(listOf(product)), McpRuntimeBinding(product.id)),
+        ).toString()
+
+        assertTrue(source.contains("DEFAULT_PROFILE_ID: String = \"advanced\""))
+        assertTrue(source.contains("\"all-tools\" to \"advanced\""))
+        assertTrue(source.contains("\"ADVANCED\" to \"advanced\""))
+        assertTrue(source.contains("\"${tool.name}\""))
+    }
+
+    @Test
     fun `CLI metadata preserves executable and TODO separation`() {
         val metadata = metadataSource()
 
