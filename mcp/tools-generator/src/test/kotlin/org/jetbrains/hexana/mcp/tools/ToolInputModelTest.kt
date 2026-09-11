@@ -465,7 +465,7 @@ class ToolInputModelTest {
             ToolGroup.Module,
             ToolOutputPolicy.ToolDefined,
             executionStatus = CliExecutionStatus.Executable,
-            releaseProducts = setOf(CliReleaseProduct.HexanaCli),
+            products = setOf(HexanaCliProductSpec.id),
             inputModel = inputModel,
         )
         validateCliBinding(contract, binding)
@@ -488,7 +488,7 @@ class ToolInputModelTest {
             ToolGroup.Binary,
             ToolOutputPolicy.ToolDefined,
             executionStatus = CliExecutionStatus.Executable,
-            releaseProducts = setOf(CliReleaseProduct.HexanaCli),
+            products = setOf(HexanaCliProductSpec.id),
             inputModel = inputModel,
         )
         validateCliBinding(contract, binding)
@@ -532,7 +532,7 @@ class ToolInputModelTest {
             ToolGroup.Binary,
             ToolOutputPolicy.ToolDefined,
             executionStatus = CliExecutionStatus.Executable,
-            releaseProducts = setOf(CliReleaseProduct.HexanaCliScript),
+            products = setOf(HexanaCliScriptProductSpec.id),
             inputModel = inputModel,
         )
         validateCliBinding(contract, binding)

@@ -94,9 +94,9 @@ class ResolvedToolCatalogReportTest {
 
     @Test
     fun `CLI product membership mutation changes only that tool CLI view`() {
-        val target = HexanaCliTools.first { it.binding.releaseProducts.isNotEmpty() }
+        val target = HexanaCliTools.first { it.binding.products.isNotEmpty() }
         val mutated = HexanaCliTools.map {
-            if (it.id == target.id) CliTool(it.contract, it.binding.copy(releaseProducts = emptySet())) else it
+            if (it.id == target.id) CliTool(it.contract, it.binding.copy(products = emptySet())) else it
         }
         val normal = document(ResolvedToolCatalogReport())
         val changed = document(ResolvedToolCatalogReport(cliTools = mutated))
@@ -126,6 +126,31 @@ class ResolvedToolCatalogReportTest {
                 views.getValue("mcpb").jsonObject.getValue("selected"),
             )
         }
+    }
+
+    @Test
+    fun `fixture CLI product appears only in the CLI product projection`() {
+        val fixture = CliProductSpec(ProductId("fixture-cli"), "fixture-cli", "Non-published fixture product.")
+        val products = CliProductRegistry(HexanaCliProductRegistry.products + fixture)
+        val target = HexanaCliTools.first { it.binding.executionStatus == CliExecutionStatus.Executable }
+        val fixtureTools = HexanaCliTools.map { tool ->
+            if (tool.id == target.id) tool.copy(binding = tool.binding.copy(products = setOf(fixture.id))) else tool
+        }
+        val baseline = Json.parseToJsonElement(ResolvedToolCatalogReport().json()).jsonObject
+        val document = Json.parseToJsonElement(
+            ResolvedToolCatalogReport(cliTools = fixtureTools, cliProducts = products).json(),
+        ).jsonObject
+
+        val fixtureProduct = document.getValue("cliProducts").jsonArray.single { it.jsonObject.getValue("id").jsonPrimitive.content == fixture.id.value }
+            .jsonObject
+        assertEquals("fixture-cli", fixtureProduct.getValue("executableName").jsonPrimitive.content)
+        assertEquals(target.name, fixtureProduct.getValue("selections").jsonArray.single().jsonObject.getValue("tool").jsonPrimitive.content)
+        val targetViews = document.getValue("tools").jsonArray.single { it.jsonObject.getValue("id").jsonPrimitive.content == target.name }
+            .jsonObject.getValue("views").jsonObject
+        val baselineViews = baseline.getValue("tools").jsonArray.single { it.jsonObject.getValue("id").jsonPrimitive.content == target.name }
+            .jsonObject.getValue("views").jsonObject
+        assertEquals(baselineViews - "cli", targetViews - "cli")
+        assertEquals(listOf(fixture.id.value), targetViews.getValue("cli").jsonObject.getValue("details").jsonObject.getValue("products").jsonArray.map { it.jsonPrimitive.content })
     }
 
     private fun document(report: ResolvedToolCatalogReport) = Json.parseToJsonElement(report.json()).jsonObject

@@ -19,18 +19,50 @@ class ToolCompatibilityDiffTest {
 
     @Test
     fun `CLI product membership mutation affects only CLI product membership`() {
-        val target = HexanaCliTools.first { CliReleaseProduct.HexanaCli in it.binding.releaseProducts }
+        val target = HexanaCliTools.first { HexanaCliProductSpec.id in it.binding.products }
         val changed = ResolvedToolCatalogReport(
             cliTools = HexanaCliTools.map { tool ->
-                if (tool.id == target.id) tool.copy(binding = tool.binding.copy(releaseProducts = emptySet())) else tool
+                if (tool.id == target.id) tool.copy(binding = tool.binding.copy(products = emptySet())) else tool
             },
         )
 
         val differences = ToolCompatibilityDiff.between(baseline, changed).differences
-        assertEquals(1, differences.size)
+        assertEquals(2, differences.size)
         assertDifference(
-            differences.single(), "cli", "cli", ToolCompatibilityDiff.Category.Membership,
-            "tool/${target.id.value}/view/cli/details/products/${CliReleaseProduct.HexanaCli.productId}",
+            differences[0], "cli", "cli", ToolCompatibilityDiff.Category.Membership,
+            "tool/${target.id.value}/view/cli/details/products/${HexanaCliProductSpec.id.value}",
+        )
+        assertDifference(
+            differences[1], "cli", "product", ToolCompatibilityDiff.Category.Membership,
+            "cliProduct/${HexanaCliProductSpec.id.value}/tool/${target.id.value}",
+        )
+    }
+
+    @Test
+    fun `CLI product descriptor changes have stable binding paths`() {
+        val product = HexanaCliProductRegistry.product(HexanaCliProductSpec.id)!!
+        val changed = ResolvedToolCatalogReport(
+            cliProducts = CliProductRegistry(
+                HexanaCliProductRegistry.products.map {
+                    if (it.id == product.id) {
+                        it.copy(executableName = "hexana-inspect", description = "Changed CLI description.")
+                    } else {
+                        it
+                    }
+                },
+            ),
+        )
+
+        val differences = ToolCompatibilityDiff.between(baseline, changed).differences
+
+        assertEquals(2, differences.size)
+        assertDifference(
+            differences[0], "cli", "product", ToolCompatibilityDiff.Category.Binding,
+            "cliProduct/${product.id.value}/description",
+        )
+        assertDifference(
+            differences[1], "cli", "product", ToolCompatibilityDiff.Category.Binding,
+            "cliProduct/${product.id.value}/executableName",
         )
     }
 
@@ -111,7 +143,7 @@ class ToolCompatibilityDiffTest {
 
     @Test
     fun `diff main writes deterministic JSON and text from real reports`() {
-        val target = HexanaCliTools.first { CliReleaseProduct.HexanaCli in it.binding.releaseProducts }
+        val target = HexanaCliTools.first { HexanaCliProductSpec.id in it.binding.products }
         val before = Files.createTempFile("tool-report-before", ".json")
         val after = Files.createTempFile("tool-report-after", ".json")
         val first = Files.createTempDirectory("tool-diff-first")
@@ -119,7 +151,7 @@ class ToolCompatibilityDiffTest {
         try {
             Files.writeString(before, baseline.json())
             Files.writeString(after, ResolvedToolCatalogReport(cliTools = HexanaCliTools.map {
-                if (it.id == target.id) it.copy(binding = it.binding.copy(releaseProducts = emptySet())) else it
+                if (it.id == target.id) it.copy(binding = it.binding.copy(products = emptySet())) else it
             }).json())
             runDiffMain(before, after, first)
             runDiffMain(before, after, second)
@@ -127,10 +159,12 @@ class ToolCompatibilityDiffTest {
                 assertEquals(Files.readAllBytes(first.resolve(name)).toList(), Files.readAllBytes(second.resolve(name)).toList())
             }
             val difference = Json.parseToJsonElement(Files.readString(first.resolve("tool-compatibility-diff.json"))).jsonObject
-                .getValue("differences").jsonArray.single().jsonObject
+                .getValue("differences").jsonArray.map { it.jsonObject }.single {
+                    it.getValue("path").jsonPrimitive.content == "tool/${target.id.value}/view/cli/details/products/${HexanaCliProductSpec.id.value}"
+                }
             assertEquals("cli", difference.getValue("surface").jsonPrimitive.content)
             assertEquals("membership", difference.getValue("category").jsonPrimitive.content)
-            assertEquals(JsonPrimitive(CliReleaseProduct.HexanaCli.productId), difference.getValue("before"))
+            assertEquals(JsonPrimitive(HexanaCliProductSpec.id.value), difference.getValue("before"))
             assertEquals(JsonNull, difference.getValue("after"))
         } finally {
             listOf(before, after, first, second).forEach { path -> if (Files.isDirectory(path)) deleteRecursively(path) else Files.deleteIfExists(path) }

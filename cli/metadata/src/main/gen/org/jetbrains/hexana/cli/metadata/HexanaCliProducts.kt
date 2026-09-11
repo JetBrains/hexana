@@ -6,16 +6,13 @@ import kotlin.collections.List
 import kotlin.collections.Map
 
 /**
- * Generated identities for the atomically versioned Hexana command-line products.
+ * Generated descriptor for one declared Hexana command-line product.
  */
-public enum class HexanaCliReleaseProduct(
+public class HexanaCliProductDescriptor(
   public val productId: String,
   public val executableName: String,
-) {
-  HEXANA_CLI("hexana-cli", "hexana-cli"),
-  HEXANA_CLI_SCRIPT("hexana-cli-script", "hexana-cli-script"),
-  ;
-}
+  public val description: String,
+)
 
 /**
  * Generated product inventory metadata for one product-selected tool.
@@ -28,16 +25,27 @@ public data class HexanaCliProductToolSelection(
 )
 
 /**
- * Generated release-product selections derived from catalog CLI metadata.
+ * Generated product descriptors and selections derived from catalog CLI metadata.
  */
 public object HexanaGeneratedCliProducts {
-  public val PRODUCTS: Map<HexanaCliReleaseProduct, List<HexanaCliProductToolSelection>> = mapOf(
-        HexanaCliReleaseProduct.HEXANA_CLI to listOf(
+  public val HEXANA_CLI: HexanaCliProductDescriptor =
+      HexanaCliProductDescriptor("hexana-cli", "hexana-cli", "Hexana command-line tools for binary and WebAssembly inspection.")
+
+  public val HEXANA_CLI_SCRIPT: HexanaCliProductDescriptor =
+      HexanaCliProductDescriptor("hexana-cli-script", "hexana-cli-script", "Hexana command-line scripting runtime.")
+
+  public val PRODUCTS: Map<String, HexanaCliProductDescriptor> = mapOf(
+        "hexana-cli" to HEXANA_CLI,
+        "hexana-cli-script" to HEXANA_CLI_SCRIPT,
+      )
+
+  public val SELECTIONS: Map<String, List<HexanaCliProductToolSelection>> = mapOf(
+        "hexana-cli" to listOf(
           HexanaCliProductToolSelection("summarize_binary", "summarize-binary", "ToolDefined", "SemanticJson"),
           HexanaCliProductToolSelection("wasm_to_wat", "wasm-to-wat", "ToolDefined", "RawText"),
           HexanaCliProductToolSelection("summarize_module", "summarize-module", "ToolDefined", "Pretty"),
         ),
-        HexanaCliReleaseProduct.HEXANA_CLI_SCRIPT to listOf(
+        "hexana-cli-script" to listOf(
           HexanaCliProductToolSelection("run_binary_script", "run-script", "ToolDefined", "RawText"),
         ),
       )

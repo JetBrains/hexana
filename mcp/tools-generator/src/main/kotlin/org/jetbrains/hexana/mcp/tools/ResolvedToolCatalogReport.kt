@@ -15,6 +15,7 @@ class ResolvedToolCatalogReport(
     private val ideaTools: List<IdeaTool> = HexanaIdeaTools,
     private val standaloneAuthority: StandaloneToolAuthority = HexanaStandaloneAuthority,
     private val cliTools: List<CliTool> = HexanaCliTools,
+    private val cliProducts: CliProductRegistry = HexanaCliProductRegistry,
 ) {
     fun json(): String = JSON.encodeToString(JsonObject.serializer(), document()) + "\n"
 
@@ -29,6 +30,7 @@ class ResolvedToolCatalogReport(
             put("formatVersion", JsonPrimitive(1))
             put("runtimeAvailability", JsonPrimitive("not evaluated"))
             put("requirements", JsonArray(emptyList()))
+            put("cliProducts", buildJsonArray { cliProducts.products.forEach { add(cliProductDocument(it)) } })
             put("tools", buildJsonArray { normalizedContracts.forEach { add(toolDocument(it)) } })
         }
     }
@@ -45,6 +47,7 @@ class ResolvedToolCatalogReport(
         requireKnown("IDEA report authority", ideaTools.map { it.id })
         requireKnown("standalone report authority", standaloneAuthority.registrations.map { it.id })
         requireKnown("CLI report authority", cliTools.map { it.id })
+        validateCliProducts(cliTools, cliProducts, requireCompleteSelection = false)
         normalizedContracts.forEach { tool ->
             views(tool).forEach { view ->
                 requireNonBlankProvenance(tool.name, view.name, view.selected, view.provenance)
@@ -66,6 +69,20 @@ class ResolvedToolCatalogReport(
         put("runtimeAvailability", JsonPrimitive("not evaluated"))
         put("requirements", JsonArray(emptyList()))
         put("views", buildJsonObject { views(tool).forEach { put(it.name, it.json()) } })
+    }
+
+    private fun cliProductDocument(product: CliProductSpec): JsonObject = buildJsonObject {
+        put("id", JsonPrimitive(product.id.value))
+        put("executableName", JsonPrimitive(product.executableName))
+        put("description", JsonPrimitive(product.description))
+        put("selections", buildJsonArray {
+            normalizedContracts.mapNotNull { contract -> cliTools.singleOrNull { it.id == contract.id } }
+                .filter { product.id in it.binding.products }
+                .forEach { tool -> add(buildJsonObject {
+                    put("tool", JsonPrimitive(tool.id.value))
+                    put("command", JsonPrimitive(tool.binding.commandName))
+                }) }
+        })
     }
 
     private fun views(tool: ToolSpec): List<View> {
@@ -98,7 +115,7 @@ class ResolvedToolCatalogReport(
             put("defaultOutput", JsonPrimitive(cli.binding.defaultOutput.name))
             put("formats", strings(cliFormats(cli).sorted()))
             put("inputBinding", cli.binding.inputModel?.let(::inputBinding) ?: JsonNull)
-            put("products", strings(cli.binding.releaseProducts.map { it.productId }.sorted()))
+            put("products", strings(cli.binding.products.map { it.value }.sorted()))
         }, "CLI binding authority")
 
     private fun inputBinding(model: ToolInputModel): JsonObject = buildJsonObject {

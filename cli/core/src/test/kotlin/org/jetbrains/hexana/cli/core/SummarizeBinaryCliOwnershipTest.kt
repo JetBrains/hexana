@@ -39,7 +39,7 @@ class SummarizeBinaryCliOwnershipTest {
         val selectedStandardTools = root.resolve(
             "cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt"
         ).readText()
-            .productToolNames("HEXANA_CLI")
+            .productToolNames("hexana-cli")
             .filterTo(sortedSetOf()) { it in STANDARD_ANALYSIS_TOOL_NAMES }
 
         assertEquals(STANDARD_ANALYSIS_TOOL_NAMES.toSortedSet(), selectedStandardTools)
@@ -104,7 +104,7 @@ class SummarizeBinaryCliOwnershipTest {
             "cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliToolset.kt"
         ).readText()
 
-        assertTrue(generatedProducts.contains("""HexanaCliReleaseProduct.HEXANA_CLI to listOf("""))
+        assertTrue(generatedProducts.contains(""""hexana-cli" to listOf("""))
         listOf("summarize_binary", "summarize_module", "wasm_to_wat").forEach { toolName ->
             assertTrue(generatedProducts.contains("HexanaCliProductToolSelection(\"$toolName\""))
             assertTrue(STANDARD_ANALYSIS_TOOL_NAMES.contains(toolName))
@@ -137,19 +137,18 @@ class SummarizeBinaryCliOwnershipTest {
     }
 
     private fun String.hexanaCliProductBlock(): String {
-        val start = indexOf("HexanaCliReleaseProduct.HEXANA_CLI to listOf(")
+        val start = indexOf("\"hexana-cli\" to listOf(")
         assertTrue(start >= 0)
-        val end = indexOf("HexanaCliReleaseProduct.HEXANA_CLI_SCRIPT to listOf(", start)
+        val end = indexOf("\n        ),", start)
         assertTrue(end > start)
         return substring(start, end)
     }
 
     private fun String.productToolNames(productName: String): List<String> {
-        val start = indexOf("HexanaCliReleaseProduct.$productName to listOf(")
+        val start = indexOf("\"$productName\" to listOf(")
         assertTrue(start >= 0, "Generated product block $productName must exist")
         val remaining = substring(start)
-        val nextProduct = Regex("""\n\s*HexanaCliReleaseProduct\.""").find(remaining, startIndex = 1)
-        val end = nextProduct?.range?.first ?: remaining.indexOf("\n      )")
+        val end = remaining.indexOf("\n        ),")
         assertTrue(end > 0, "Generated product block $productName must have an end")
         val block = remaining.substring(0, end)
 

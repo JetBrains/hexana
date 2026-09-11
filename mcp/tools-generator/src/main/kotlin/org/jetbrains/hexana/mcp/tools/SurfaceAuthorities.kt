@@ -270,11 +270,27 @@ val HexanaMcpbTools: List<ToolSpec> = HexanaToolCatalog.resolve(
 private fun todoCli(id: ToolId, command: String, group: ToolGroup) =
     cliToolBinding(id, command, group, ToolOutputPolicy.ToolDefined, unknownFieldPolicy = HexanaCliUnknownFieldPolicy)
 
+val HexanaCliProductSpec = CliProductSpec(
+    id = ProductId("hexana-cli"),
+    executableName = "hexana-cli",
+    description = "Hexana command-line tools for binary and WebAssembly inspection.",
+)
+
+val HexanaCliScriptProductSpec = CliProductSpec(
+    id = ProductId("hexana-cli-script"),
+    executableName = "hexana-cli-script",
+    description = "Hexana command-line scripting runtime.",
+)
+
+val HexanaCliProductRegistry = CliProductRegistry(
+    listOf(HexanaCliProductSpec, HexanaCliScriptProductSpec),
+)
+
 private val CLI_TOOL_BINDINGS = listOf(
     cliToolBinding(
         SummarizeBinaryToolId, "summarize-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined,
         executionStatus = CliExecutionStatus.Executable,
-        releaseProducts = setOf(CliReleaseProduct.HexanaCli),
+        products = setOf(HexanaCliProductSpec.id),
         inputModel = binaryCliInputModel(),
         unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
     ),
@@ -282,7 +298,7 @@ private val CLI_TOOL_BINDINGS = listOf(
         RunBinaryScriptToolId, "run-script", ToolGroup.Scripting, ToolOutputPolicy.ToolDefined,
         executionStatus = CliExecutionStatus.Executable,
         defaultOutput = OutputConversionCapability.RawText,
-        releaseProducts = setOf(CliReleaseProduct.HexanaCliScript),
+        products = setOf(HexanaCliScriptProductSpec.id),
         inputModel = toolInputModel {
             binarySource("binary", target = SourceTargetSpec.RootInput) {
                 cli {
@@ -301,7 +317,7 @@ private val CLI_TOOL_BINDINGS = listOf(
         WasmToWatToolId, "wasm-to-wat", ToolGroup.Converters, ToolOutputPolicy.ToolDefined,
         executionStatus = CliExecutionStatus.Executable,
         defaultOutput = OutputConversionCapability.RawText,
-        releaseProducts = setOf(CliReleaseProduct.HexanaCli),
+        products = setOf(HexanaCliProductSpec.id),
         inputModel = wasmCliInputModel(),
         unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
     ),
@@ -309,7 +325,7 @@ private val CLI_TOOL_BINDINGS = listOf(
         SummarizeModuleToolId, "summarize-module", ToolGroup.Module, ToolOutputPolicy.ToolDefined,
         executionStatus = CliExecutionStatus.Executable,
         defaultOutput = OutputConversionCapability.Pretty,
-        releaseProducts = setOf(CliReleaseProduct.HexanaCli),
+        products = setOf(HexanaCliProductSpec.id),
         inputModel = wasmCliInputModel(),
         unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
     ),
@@ -353,5 +369,5 @@ val HexanaCliTools: List<CliTool> = HexanaToolCatalog.resolveBindings(
 }.also { tools ->
     val duplicateCommands = tools.groupBy { it.binding.commandName }.filterValues { it.size > 1 }
     require(duplicateCommands.isEmpty()) { "CLI tool authority contains duplicate commands: ${duplicateCommands.keys}" }
-    validateCliReleaseProducts(tools)
+    validateCliProducts(tools, HexanaCliProductRegistry)
 }

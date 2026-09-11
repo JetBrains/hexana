@@ -763,13 +763,51 @@ class ToolSpec(
         "ToolSpec(name=$name, summary=$summary, guidance=$guidance, input=$input, output=$output)"
 }
 
-enum class CliReleaseProduct(
-    val productId: String,
-    val executableName: String,
-) {
-    HexanaCli(productId = "hexana-cli", executableName = "hexana-cli"),
-    HexanaCliScript(productId = "hexana-cli-script", executableName = "hexana-cli-script"),
+@JvmInline
+value class ProductId(val value: String) {
+    init {
+        require(CLI_COMMAND_NAME_REGEX.matches(value)) {
+            "CLI product id '$value' must be strict kebab-case."
+        }
+    }
+
+    override fun toString(): String = value
 }
+
+data class CliProductSpec(
+    val id: ProductId,
+    val executableName: String,
+    val description: String,
+) {
+    init {
+        require(CLI_COMMAND_NAME_REGEX.matches(executableName)) {
+            "CLI product '${id.value}' executable '$executableName' must be strict kebab-case."
+        }
+        require(description.isNotBlank()) { "CLI product '${id.value}' description must not be blank." }
+    }
+}
+
+class CliProductRegistry(products: List<CliProductSpec>) {
+    val products: List<CliProductSpec> = java.util.Collections.unmodifiableList(java.util.ArrayList(products))
+
+    init {
+        require(this.products.isNotEmpty()) { "CLI product registry must declare at least one product." }
+        val duplicateIds = this.products.groupBy(CliProductSpec::id).filterValues { it.size > 1 }.keys
+        require(duplicateIds.isEmpty()) { "CLI product registry contains duplicate product IDs: ${duplicateIds.joinToString()}" }
+        val duplicateExecutables = this.products.groupBy(CliProductSpec::executableName).filterValues { it.size > 1 }.keys
+        require(duplicateExecutables.isEmpty()) {
+            "CLI product registry contains duplicate executable names: ${duplicateExecutables.joinToString()}"
+        }
+        val reservedGeneratedNames = this.products.map { it.id.value }.filter { it in RESERVED_CLI_PRODUCT_IDS }
+        require(reservedGeneratedNames.isEmpty()) {
+            "CLI product registry contains IDs reserved by generated metadata: ${reservedGeneratedNames.joinToString()}."
+        }
+    }
+
+    fun product(id: ProductId): CliProductSpec? = products.singleOrNull { it.id == id }
+}
+
+private val RESERVED_CLI_PRODUCT_IDS = setOf("products", "selections")
 
 data class CliToolBinding(
     val id: ToolId,
@@ -779,7 +817,7 @@ data class CliToolBinding(
     val executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
     val outputOverride: OutputConversionCapability? = null,
     val defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
-    val releaseProducts: Set<CliReleaseProduct> = emptySet(),
+    val products: Set<ProductId> = emptySet(),
     val inputModel: ToolInputModel? = null,
     val unknownFieldPolicy: UnknownFieldPolicy = UnknownFieldPolicy.Reject,
 ) {
@@ -793,7 +831,7 @@ data class CliToolBinding(
                 "Executable CLI tool '$commandName' must declare an explicit input model."
             }
         } else {
-            require(releaseProducts.isEmpty()) {
+            require(products.isEmpty()) {
                 "TODO CLI tool '$commandName' must not belong to a release product."
             }
             require(inputModel == null) {
@@ -843,7 +881,7 @@ fun cliToolBinding(
     executionStatus: CliExecutionStatus = CliExecutionStatus.Todo,
     outputOverride: OutputConversionCapability? = null,
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
-    releaseProducts: Set<CliReleaseProduct> = emptySet(),
+    products: Set<ProductId> = emptySet(),
     inputModel: ToolInputModel? = null,
     unknownFieldPolicy: UnknownFieldPolicy = UnknownFieldPolicy.Reject,
 ): CliToolBinding = CliToolBinding(
@@ -854,7 +892,7 @@ fun cliToolBinding(
     executionStatus = executionStatus,
     outputOverride = outputOverride,
     defaultOutput = defaultOutput,
-    releaseProducts = releaseProducts,
+    products = products,
     inputModel = inputModel,
     unknownFieldPolicy = unknownFieldPolicy,
 )
@@ -1512,15 +1550,20 @@ internal fun validateToolCollection(specs: List<ToolSpec>) {
     require(duplicateToolNames.isEmpty()) { "Duplicate tool names: $duplicateToolNames" }
 }
 
-internal fun validateCliReleaseProducts(
+internal fun validateCliProducts(
     tools: List<CliTool>,
+    products: CliProductRegistry,
     requireCompleteSelection: Boolean = true,
 ) {
-    val selectedTools = tools.filter { it.binding.releaseProducts.isNotEmpty() }
+    val selectedTools = tools.filter { it.binding.products.isNotEmpty() }
     selectedTools.forEach { tool ->
         val cli = tool.binding
         require(cli.executionStatus == CliExecutionStatus.Executable) {
             "Release product tool '${tool.name}' must be an executable CLI tool."
+        }
+        val unknown = cli.products.filter { products.product(it) == null }
+        require(unknown.isEmpty()) {
+            "CLI tool '${tool.name}' selects unknown products: ${unknown.joinToString()}."
         }
     }
 
@@ -1530,19 +1573,19 @@ internal fun validateCliReleaseProducts(
         selectedTools
     }
     toolsToCheck.forEach { tool ->
-        val products = tool.binding.releaseProducts
-        require(products.size == 1) {
-            "Executable CLI tool '${tool.name}' must select exactly one CLI release product, got $products."
+        val selectedProducts = tool.binding.products
+        require(selectedProducts.size == 1) {
+            "Executable CLI tool '${tool.name}' must select exactly one CLI product, got $selectedProducts."
         }
     }
 
-    CliReleaseProduct.entries.forEach { product ->
+    products.products.forEach { product ->
         val duplicateCommands = selectedTools
-            .filter { product in it.binding.releaseProducts }
+            .filter { product.id in it.binding.products }
             .groupBy { it.binding.commandName }
             .filterValues { it.size > 1 }
         require(duplicateCommands.isEmpty()) {
-            "Duplicate command names in ${product.productId}: " +
+            "Duplicate command names in ${product.id.value}: " +
                 duplicateCommands.entries.joinToString { (command, tools) ->
                     "$command used by ${tools.map { it.name }}"
                 }

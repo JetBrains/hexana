@@ -64,6 +64,25 @@ class ToolCompatibilityDiff private constructor(
                     compareViews(changes, id, oldTool["views"].objectOrEmpty(), newTool["views"].objectOrEmpty())
                 }
             }
+            val beforeProducts = cliProducts(before)
+            val afterProducts = cliProducts(after)
+            (beforeProducts.keys + afterProducts.keys).sorted().forEach { id ->
+                compareJson(
+                    changes,
+                    surface = "cli",
+                    view = "product",
+                    category = Category.Membership,
+                    path = "cliProduct/$id",
+                    before = beforeProducts[id],
+                    after = afterProducts[id],
+                ) { path ->
+                    when {
+                        path.endsWith("/executableName") || path.endsWith("/description") -> Category.Binding
+                        path.contains("/selection/") && path.endsWith("/command") -> Category.Binding
+                        else -> Category.Membership
+                    }
+                }
+            }
             return ToolCompatibilityDiff(changes)
         }
 
@@ -71,6 +90,12 @@ class ToolCompatibilityDiff private constructor(
             (document["tools"] as? JsonArray).orEmpty().mapNotNull { element ->
                 val tool = element as? JsonObject ?: return@mapNotNull null
                 (tool["id"] as? JsonPrimitive)?.content?.let { it to tool }
+            }.toMap()
+
+        private fun cliProducts(document: JsonObject): Map<String, JsonObject> =
+            (document["cliProducts"] as? JsonArray).orEmpty().mapNotNull { element ->
+                val product = element as? JsonObject ?: return@mapNotNull null
+                (product["id"] as? JsonPrimitive)?.content?.let { it to product }
             }.toMap()
 
         private fun compareSchema(changes: MutableList<Difference>, toolId: String, schemaName: String, before: JsonObject, after: JsonObject) {
@@ -135,6 +160,7 @@ class ToolCompatibilityDiff private constructor(
             "fields" -> "field"
             "sources" -> "source"
             "params" -> "param"
+            "selections" -> "tool"
             else -> "member"
         }
 
@@ -142,6 +168,7 @@ class ToolCompatibilityDiff private constructor(
             when (key) {
                 "field" -> (element as JsonObject)["wireName"]!!.jsonPrimitive.content
                 "source", "param" -> (element as JsonObject)["name"]!!.jsonPrimitive.content
+                "tool" -> (element as JsonObject)["tool"]!!.jsonPrimitive.content
                 else -> (element as JsonPrimitive).content
             }
         }

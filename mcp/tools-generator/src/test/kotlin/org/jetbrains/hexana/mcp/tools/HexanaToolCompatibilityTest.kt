@@ -34,10 +34,10 @@ class HexanaToolCompatibilityTest {
 
     @Test
     fun `per-product fingerprints are reviewed independently`() {
-        assertFingerprint("hexana-cli", productSnapshot(CliReleaseProduct.HexanaCli, baseline.cliTools), EXPECTED_HEXANA_CLI)
+        assertFingerprint("hexana-cli", productSnapshot(HexanaCliProductRegistry.product(HexanaCliProductSpec.id)!!, baseline.cliTools), EXPECTED_HEXANA_CLI)
         assertFingerprint(
             "hexana-cli-script",
-            productSnapshot(CliReleaseProduct.HexanaCliScript, baseline.cliTools),
+            productSnapshot(HexanaCliProductRegistry.product(HexanaCliScriptProductSpec.id)!!, baseline.cliTools),
             EXPECTED_HEXANA_CLI_SCRIPT,
         )
     }
@@ -48,7 +48,7 @@ class HexanaToolCompatibilityTest {
             if (tool.name == "summarize_binary") {
                 tool.copy(
                     binding = tool.binding.copy(
-                        releaseProducts = tool.binding.releaseProducts + CliReleaseProduct.HexanaCliScript,
+                        products = tool.binding.products + HexanaCliScriptProductSpec.id,
                     )
                 )
             } else {
@@ -59,7 +59,7 @@ class HexanaToolCompatibilityTest {
         assertOnlySnapshotsChanged(
             baseline.copy(cliTools = mutated),
             "CLI",
-            CliReleaseProduct.HexanaCliScript.productId,
+            HexanaCliScriptProductSpec.id.value,
         )
     }
 
@@ -127,8 +127,8 @@ class HexanaToolCompatibilityTest {
         put("standalone", standaloneSnapshot(authorities.standaloneAuthority).sha256())
         put("MCPB", mcpbSnapshot(authorities.standaloneAuthority.defaultToolIds).sha256())
         put("CLI", cliSnapshot(authorities.cliTools).sha256())
-        CliReleaseProduct.entries.forEach { product ->
-            put(product.productId, productSnapshot(product, authorities.cliTools).sha256())
+        HexanaCliProductRegistry.products.forEach { product ->
+            put(product.id.value, productSnapshot(product, authorities.cliTools).sha256())
         }
     }
 
@@ -180,16 +180,17 @@ class HexanaToolCompatibilityTest {
             appendLine("$prefix.execution=${binding.executionStatus.name}")
             appendLine("$prefix.outputOverride=${binding.outputOverride?.name.orEmpty()}")
             appendLine("$prefix.defaultOutput=${binding.defaultOutput.name}")
-            appendLine("$prefix.products=${binding.releaseProducts.joinToString { it.name }}")
+            appendLine("$prefix.products=${binding.products.joinToString { it.value }}")
             appendInputModel("$prefix.input", binding.inputModel)
         }
     }
 
-    private fun productSnapshot(product: CliReleaseProduct, tools: List<CliTool>): String = buildString {
-        appendLine("product=${product.name}")
-        appendLine("productId=${product.productId}")
+    private fun productSnapshot(product: CliProductSpec, tools: List<CliTool>): String = buildString {
+        appendLine("product=${product.id.value}")
+        appendLine("productId=${product.id.value}")
         appendLine("executableName=${product.executableName}")
-        tools.filter { product in it.binding.releaseProducts }.forEachIndexed { index, tool ->
+        appendLine("description=${product.description.compatibilityText()}")
+        tools.filter { product.id in it.binding.products }.forEachIndexed { index, tool ->
             appendLine("selection[$index].id=${tool.id.value}")
             appendLine("selection[$index].command=${tool.binding.commandName}")
             appendLine("selection[$index].output=${tool.binding.outputPolicy.name}")
@@ -309,7 +310,10 @@ class HexanaToolCompatibilityTest {
         .joinToString("") { "%02x".format(it) }
 
     private companion object {
-        // Reviewed: `run_binary_script` guidance names the scripting globals and
+        // Reviewed: product identity snapshots now serialize declared ProductId values instead of
+        // deleted closed-enum constant names. Existing product IDs, executable names, and tool
+        // inventories remain unchanged; only this internal snapshot representation changed.
+        // `run_binary_script` guidance names the scripting globals and
         // the `binary` members, and the `lines` field description now covers
         // `table`/`row` output instead of only `print(text)`. Prose only — no
         // input, output, default, or bound changed, so this stays within the
@@ -318,8 +322,8 @@ class HexanaToolCompatibilityTest {
         const val EXPECTED_IDEA = "b3d01605c58323500af1b4e1eeabfa8b6ff2e4fb659bfccac35c9869c379d378"
         const val EXPECTED_STANDALONE = "0395327fb451b08908345ce4e59bd1cf97bb05dd4bb1cb2165679a2744dd8b44"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"
-        const val EXPECTED_CLI = "0855459ff37cb4c4df85220c5a9c6c461af1154b13e32ae4d6f3f98c94714e9a"
-        const val EXPECTED_HEXANA_CLI = "35ec773de2d485a7b285a37240d517bbc9c789a37be2725f66d355c7bb9bc6b7"
-        const val EXPECTED_HEXANA_CLI_SCRIPT = "3b97abef096e419f500f3113464664719f08b9554efe50685f7605f785cdb7f1"
+        const val EXPECTED_CLI = "098ff1435ae4b6381b7d45560a816957de87aef48fc918156c5e02c7ecf1c78d"
+        const val EXPECTED_HEXANA_CLI = "db8dba08f15faf3153d25f51a7cd530ef2fab2aa343964ff00be4450d361150b"
+        const val EXPECTED_HEXANA_CLI_SCRIPT = "11c2f56233795f1ee126dd501bea91e4152b56ef57a975a2507b895b72c5cabd"
     }
 }

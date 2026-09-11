@@ -34,8 +34,8 @@ class HexanaProductCliTest {
 
     @Test
     fun generatedProductSelectionsMatchApprovedCommandInventory() {
-        val commands = HexanaCliProduct.entries.associate { product ->
-            product.productId to HexanaGeneratedCliProducts.PRODUCTS.getValue(product.releaseProduct).map { it.commandName }.sorted()
+        val commands = HexanaGeneratedCliProducts.PRODUCTS.values.associate { product ->
+            product.productId to HexanaGeneratedCliProducts.SELECTIONS.getValue(product.productId).map { it.commandName }.sorted()
         }
         assertEquals(
             mapOf(
@@ -48,41 +48,41 @@ class HexanaProductCliTest {
 
     @Test
     fun selectedProductToolsRejectInvalidMetadataAndExecutorBindings() {
-        val selections = HexanaGeneratedCliProducts.PRODUCTS.getValue(HexanaCliProduct.STANDARD.releaseProduct)
+        val selections = HexanaGeneratedCliProducts.SELECTIONS.getValue(HexanaGeneratedCliProducts.HEXANA_CLI.productId)
         val registry = HexanaGeneratedCliToolRegistry.TOOLS
         val bindings = selections.map { testBinding(it.toolName) }
 
         assertFailsWith<IllegalArgumentException> {
-            selectedProductTools(HexanaCliProduct.STANDARD, bindings, selections + selections.first(), registry)
+            selectedProductTools(HexanaGeneratedCliProducts.HEXANA_CLI, bindings, selections + selections.first(), registry)
         }
         assertFailsWith<IllegalArgumentException> {
             selectedProductTools(
-                HexanaCliProduct.STANDARD,
+                HexanaGeneratedCliProducts.HEXANA_CLI,
                 bindings,
                 selections + HexanaCliProductToolSelection("unknown", "unknown", "ToolDefined", "SemanticJson"),
                 registry,
             )
         }
         assertFailsWith<IllegalArgumentException> {
-            selectedProductTools(HexanaCliProduct.STANDARD, bindings, selections, registry + registry.first())
+            selectedProductTools(HexanaGeneratedCliProducts.HEXANA_CLI, bindings, selections, registry + registry.first())
         }
         val todo = registry.first { it.executionStatus == HexanaCliExecutionStatus.TODO }
         assertFailsWith<IllegalArgumentException> {
             selectedProductTools(
-                HexanaCliProduct.STANDARD,
+                HexanaGeneratedCliProducts.HEXANA_CLI,
                 bindings + testBinding(todo.toolName),
                 selections + HexanaCliProductToolSelection(todo.toolName, todo.commandName, "ToolDefined", "SemanticJson"),
                 registry,
             )
         }
         assertFailsWith<IllegalArgumentException> {
-            selectedProductTools(HexanaCliProduct.STANDARD, bindings.dropLast(1), selections, registry)
+            selectedProductTools(HexanaGeneratedCliProducts.HEXANA_CLI, bindings.dropLast(1), selections, registry)
         }
         assertFailsWith<IllegalArgumentException> {
-            selectedProductTools(HexanaCliProduct.STANDARD, bindings + bindings.first(), selections, registry)
+            selectedProductTools(HexanaGeneratedCliProducts.HEXANA_CLI, bindings + bindings.first(), selections, registry)
         }
         assertFailsWith<IllegalArgumentException> {
-            selectedProductTools(HexanaCliProduct.STANDARD, bindings + testBinding("run_binary_script"), selections, registry)
+            selectedProductTools(HexanaGeneratedCliProducts.HEXANA_CLI, bindings + testBinding("run_binary_script"), selections, registry)
         }
     }
 
@@ -93,13 +93,13 @@ class HexanaProductCliTest {
         }
 
         assertFailsWith<IllegalArgumentException> {
-            HexanaProductCli(HexanaCliProduct.STANDARD, incompleteExecutor)
+            HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI, incompleteExecutor)
         }
     }
 
     @Test
     fun advertisedFormatWithoutConcreteProjectionFailsAtConstruction() {
-        val bindings = HexanaGeneratedCliProducts.PRODUCTS.getValue(HexanaCliProduct.STANDARD.releaseProduct).map { selection ->
+        val bindings = HexanaGeneratedCliProducts.SELECTIONS.getValue(HexanaGeneratedCliProducts.HEXANA_CLI.productId).map { selection ->
             val formats = formatsFor(selection.toolName)
             HexanaProductToolExecutorBinding(
                 selection.toolName,
@@ -108,7 +108,7 @@ class HexanaProductCliTest {
         }
 
         val error = assertFailsWith<IllegalArgumentException> {
-            selectedProductTools(HexanaCliProduct.STANDARD, bindings)
+            selectedProductTools(HexanaGeneratedCliProducts.HEXANA_CLI, bindings)
         }
         assertTrue(error.message.orEmpty().contains("summarize_module' output projections"), error.message)
     }
@@ -116,7 +116,7 @@ class HexanaProductCliTest {
     @Test
     fun commandHelpDoesNotReadStdinOrRequireSource() {
         listOf("-h", "--help").forEach { helpFlag ->
-            val result = HexanaProductCli(HexanaCliProduct.STANDARD, FailOnExecuteExecutor).run(
+            val result = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI, FailOnExecuteExecutor).run(
                 args = arrayOf("summarize-binary", helpFlag),
                 stdin = FailOnReadInputStream,
                 env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
@@ -132,7 +132,7 @@ class HexanaProductCliTest {
         val encodedModule = Base64.getEncoder().encodeToString(MINIMAL_WASM_MODULE)
         fun request(args: Array<String>, env: Map<String, String>): HexanaProductToolExecutionRequest {
             val executor = RecordingProductExecutor()
-            val result = HexanaProductCli(HexanaCliProduct.STANDARD, executor).run(args, ByteArrayInputStream(ByteArray(0)), env)
+            val result = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI, executor).run(args, ByteArrayInputStream(ByteArray(0)), env)
             assertEquals(SUCCESS_EXIT_CODE, result.exitCode, result.stderr)
             return executor.singleRequest()
         }
@@ -173,7 +173,7 @@ class HexanaProductCliTest {
             assertEquals(null, ignoredInvalidEnvironment.terminalWidth)
         }
         fun invalidTable(args: Array<String>, env: Map<String, String>): ProductCliResult =
-            HexanaProductCli(HexanaCliProduct.STANDARD, RecordingProductExecutor()).run(args, ByteArrayInputStream(ByteArray(0)), env)
+            HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI, RecordingProductExecutor()).run(args, ByteArrayInputStream(ByteArray(0)), env)
         val invalidOption = invalidTable(
             arrayOf("summarize-module", "--wasm-base64", encodedModule, "--format", "table", "--terminal-width", "invalid"), emptyMap(),
         )
@@ -251,7 +251,7 @@ class HexanaProductCliTest {
     fun implicitStdinPreservesInlineByteLimitFailures() {
         assumeTrue("Implicit stdin is disabled when a console is attached", System.console() == null)
 
-        val result = HexanaProductCli(HexanaCliProduct.STANDARD, FailOnExecuteExecutor).run(
+        val result = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI, FailOnExecuteExecutor).run(
             args = arrayOf("summarize-binary", "--max-inline-bytes", "1"),
             stdin = ZeroAvailableInputStream(MINIMAL_WASM_MODULE),
             env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
@@ -263,7 +263,7 @@ class HexanaProductCliTest {
 
     @Test
     fun missingImplicitStdinSourceReportsUsageWhenStdinIsEmpty() {
-        val result = HexanaProductCli(HexanaCliProduct.STANDARD, FailOnExecuteExecutor).run(
+        val result = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI, FailOnExecuteExecutor).run(
             args = arrayOf("summarize-binary"),
             stdin = ByteArrayInputStream(ByteArray(0)),
             env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
@@ -279,7 +279,7 @@ class HexanaProductCliTest {
 
     @Test
     fun missingRunScriptSourceFailsBeforeReadingBinarySource() {
-        val result = HexanaProductCli(HexanaCliProduct.SCRIPT, FailOnScriptExecuteExecutor).run(
+        val result = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI_SCRIPT, FailOnScriptExecuteExecutor).run(
             args = arrayOf("run-script", "--stdin"),
             stdin = FailOnReadInputStream,
             env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
@@ -295,7 +295,7 @@ class HexanaProductCliTest {
         val home = temporaryFolder.newFolder("telemetry-home")
         withUserHome(home.absolutePath) {
             StreamingTelemetryServer.start().use { server ->
-                val result = HexanaProductCli(HexanaCliProduct.SCRIPT, FailOnScriptExecuteExecutor).run(
+                val result = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI_SCRIPT, FailOnScriptExecuteExecutor).run(
                     args = arrayOf("version"),
                     stdin = ByteArrayInputStream(ByteArray(0)),
                     env = mapOf(
@@ -316,7 +316,7 @@ private fun runStandardSummary(
     stdin: InputStream,
     executor: RecordingProductExecutor,
 ): ProductCliResult =
-    HexanaProductCli(HexanaCliProduct.STANDARD, executor).run(
+    HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI, executor).run(
         args = arrayOf("summarize-binary", "--format", "json"),
         stdin = stdin,
         env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),

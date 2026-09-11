@@ -10,8 +10,8 @@ import org.jetbrains.hexana.analytics.UuidDistinctIdProvider
 import org.jetbrains.hexana.cli.metadata.HexanaCliToolGroup
 import org.jetbrains.hexana.cli.metadata.HexanaCliInputMode
 import org.jetbrains.hexana.cli.metadata.HexanaCliOutputFormat
+import org.jetbrains.hexana.cli.metadata.HexanaCliProductDescriptor
 import org.jetbrains.hexana.cli.metadata.HexanaCliProductToolSelection
-import org.jetbrains.hexana.cli.metadata.HexanaCliReleaseProduct
 import org.jetbrains.hexana.cli.metadata.HexanaCliExecutionStatus
 import org.jetbrains.hexana.cli.metadata.HexanaCliToolSpec
 import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliProducts
@@ -34,25 +34,8 @@ import java.nio.file.Path
 import kotlin.concurrent.thread
 import kotlin.system.exitProcess
 
-public enum class HexanaCliProduct(
-    val releaseProduct: HexanaCliReleaseProduct,
-    val description: String,
-) {
-    STANDARD(
-        releaseProduct = HexanaCliReleaseProduct.HEXANA_CLI,
-        description = "Hexana command-line tools for binary and WebAssembly inspection.",
-    ),
-    SCRIPT(
-        releaseProduct = HexanaCliReleaseProduct.HEXANA_CLI_SCRIPT,
-        description = "Hexana command-line scripting runtime.",
-    );
-
-    val productId: String get() = releaseProduct.productId
-    val executableName: String get() = releaseProduct.executableName
-}
-
 public fun runHexanaProductCli(
-    product: HexanaCliProduct,
+    product: HexanaCliProductDescriptor,
     args: Array<String>,
     executor: HexanaProductToolExecutor,
 ): Nothing {
@@ -68,7 +51,7 @@ public fun runHexanaProductCli(
 }
 
 public class HexanaProductCli(
-    private val product: HexanaCliProduct,
+    private val product: HexanaCliProductDescriptor,
     private val executor: HexanaProductToolExecutor,
 ) {
     private val selectedTools = selectedProductTools(product, executor.bindings)
@@ -557,11 +540,14 @@ private class ScriptSourceOptions {
 }
 
 internal fun selectedProductTools(
-    product: HexanaCliProduct,
+    product: HexanaCliProductDescriptor,
     executorBindings: List<HexanaProductToolExecutorBinding>,
-    selections: List<HexanaCliProductToolSelection> = HexanaGeneratedCliProducts.PRODUCTS[product.releaseProduct].orEmpty(),
+    selections: List<HexanaCliProductToolSelection> = HexanaGeneratedCliProducts.SELECTIONS[product.productId].orEmpty(),
     registry: List<HexanaCliToolSpec> = HexanaGeneratedCliToolRegistry.TOOLS,
 ): Map<String, HexanaCliToolSpec> {
+    require(HexanaGeneratedCliProducts.PRODUCTS[product.productId] == product) {
+        "Unknown generated CLI product '${product.productId}'."
+    }
     val duplicateSelections = selections.groupBy { it.toolName }.filterValues { it.size > 1 }.keys
     require(duplicateSelections.isEmpty()) {
         "Generated ${product.productId} selection contains duplicate tools: ${duplicateSelections.sorted()}."
@@ -710,7 +696,7 @@ private fun parseAnalyticsOptions(args: MutableList<String>, env: Map<String, St
 }
 
 private inline fun withCliAnalytics(
-    product: HexanaCliProduct,
+    product: HexanaCliProductDescriptor,
     settings: CliAnalyticsSettings,
     commandName: String,
     block: () -> ProductCliResult,
@@ -725,7 +711,7 @@ private inline fun withCliAnalytics(
 }
 
 private fun sendCliAnalyticsAsync(
-    product: HexanaCliProduct,
+    product: HexanaCliProductDescriptor,
     settings: CliAnalyticsSettings,
     commandName: String,
 ): Thread = thread(
@@ -759,7 +745,7 @@ private fun joinCliAnalytics(thread: Thread, timeoutMillis: Long) {
 }
 
 private fun sendCliAnalytics(
-    product: HexanaCliProduct,
+    product: HexanaCliProductDescriptor,
     settings: CliAnalyticsSettings,
     commandName: String,
 ) {

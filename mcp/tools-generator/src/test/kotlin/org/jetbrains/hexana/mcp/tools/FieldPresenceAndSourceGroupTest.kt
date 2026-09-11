@@ -251,7 +251,7 @@ class FieldPresenceAndSourceGroupTest {
         ToolGroup.Binary,
         ToolOutputPolicy.ToolDefined,
         executionStatus = CliExecutionStatus.Executable,
-        releaseProducts = setOf(CliReleaseProduct.HexanaCli),
+        products = setOf(HexanaCliProductSpec.id),
         inputModel = model,
     )
 }

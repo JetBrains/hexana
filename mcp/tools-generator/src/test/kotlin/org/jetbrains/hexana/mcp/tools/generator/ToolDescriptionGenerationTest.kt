@@ -1,7 +1,10 @@
 package org.jetbrains.hexana.mcp.tools.generator
 
 import org.jetbrains.hexana.mcp.tools.CliExecutionStatus
+import org.jetbrains.hexana.mcp.tools.CliProductRegistry
+import org.jetbrains.hexana.mcp.tools.CliProductSpec
 import org.jetbrains.hexana.mcp.tools.HexanaCliTools
+import org.jetbrains.hexana.mcp.tools.HexanaCliProductRegistry
 import org.jetbrains.hexana.mcp.tools.HexanaIdeaTools
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneAuthority
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneAdvancedToolIds
@@ -9,9 +12,11 @@ import org.jetbrains.hexana.mcp.tools.HexanaStandaloneDefaultToolIds
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneScriptingToolIds
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneTools
 import org.jetbrains.hexana.mcp.tools.HexanaTools
+import org.jetbrains.hexana.mcp.tools.ProductId
 import org.jetbrains.hexana.mcp.tools.StandaloneHandlerSpec
 import org.jetbrains.hexana.mcp.tools.StandaloneToolAuthority
 import org.jetbrains.hexana.mcp.tools.mcpDescription
+import org.jetbrains.hexana.mcp.tools.id
 import org.jetbrains.hexana.mcp.tools.name
 import org.junit.Test
 import java.nio.file.Files
@@ -174,6 +179,23 @@ class ToolDescriptionGenerationTest {
         assertEquals(setOf("HexanaCliToolset", "HexanaCliProducts"), metadataFiles.map { it.name }.toSet())
         assertTrue(serverFiles.single { it.name == "HexanaToolDispatcher" }.toString().contains("registerHexanaTools"))
         assertFalse(metadataFiles.joinToString().contains("registerHexanaTools"))
+    }
+
+    @Test
+    fun `CLI metadata emits declared fixture products without a closed enum`() {
+        val fixture = CliProductSpec(ProductId("fixture-cli"), "fixture-cli", "Non-published fixture product.")
+        val products = CliProductRegistry(HexanaCliProductRegistry.products + fixture)
+        val target = HexanaCliTools.first { it.binding.executionStatus == CliExecutionStatus.Executable }
+        val tools = HexanaCliTools.map { tool ->
+            if (tool.id == target.id) tool.copy(binding = tool.binding.copy(products = setOf(fixture.id))) else tool
+        }
+
+        val source = buildCliProductSelectionFile(tools, products).toString()
+
+        assertTrue(source.contains("FIXTURE_CLI: HexanaCliProductDescriptor"))
+        assertTrue(source.contains("\"fixture-cli\" to listOf("))
+        assertFalse(source.contains("enum class HexanaCliReleaseProduct"))
+        assertFalse(source.contains("when ("))
     }
 
 }

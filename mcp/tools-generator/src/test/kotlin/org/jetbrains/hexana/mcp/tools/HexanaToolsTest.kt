@@ -265,16 +265,64 @@ class HexanaToolsTest {
     }
 
     @Test
-    fun `CLI release products and executable models preserve approved inventories`() {
-        val products = CliReleaseProduct.entries.associateWith { product ->
-            HexanaCliTools.filter { product in it.binding.releaseProducts }.map { it.name }
+    fun `CLI product declarations and executable models preserve approved inventories`() {
+        assertEquals(
+            listOf(HexanaCliProductSpec, HexanaCliScriptProductSpec),
+            HexanaCliProductRegistry.products,
+        )
+        val products = HexanaCliProductRegistry.products.associate { product ->
+            product.id to HexanaCliTools.filter { product.id in it.binding.products }.map { it.name }
         }
-        assertEquals(listOf("summarize_binary", "wasm_to_wat", "summarize_module"), products.getValue(CliReleaseProduct.HexanaCli))
-        assertEquals(listOf("run_binary_script"), products.getValue(CliReleaseProduct.HexanaCliScript))
+        assertEquals(listOf("summarize_binary", "wasm_to_wat", "summarize_module"), products.getValue(HexanaCliProductSpec.id))
+        assertEquals(listOf("run_binary_script"), products.getValue(HexanaCliScriptProductSpec.id))
         val executable = HexanaCliTools.filter { it.binding.executionStatus == CliExecutionStatus.Executable }
         assertEquals(4, executable.size)
         assertTrue(executable.all { it.inputModel != null })
         assertEquals(OutputConversionCapability.Pretty, HexanaCliTools.single { it.name == "summarize_module" }.binding.defaultOutput)
+    }
+
+    @Test
+    fun `named fixture product spec supplies both registry and binding identity`() {
+        val fixture = CliProductSpec(ProductId("fixture-cli"), "fixture-cli", "Fixture product.")
+        val executable = HexanaCliTools.first { it.binding.executionStatus == CliExecutionStatus.Executable }
+        val tool = executable.copy(binding = executable.binding.copy(products = setOf(fixture.id)))
+
+        val registry = CliProductRegistry(listOf(fixture))
+
+        validateCliProducts(listOf(tool), registry)
+        assertEquals(setOf(fixture.id), tool.binding.products)
+    }
+
+    @Test
+    fun `CLI product declarations reject invalid identities and binding selections`() {
+        assertFailsWith<IllegalArgumentException> { ProductId("hexana_cli") }
+        assertFailsWith<IllegalArgumentException> {
+            CliProductSpec(ProductId("fixture-cli"), "fixture_cli", "Fixture product.")
+        }
+        val duplicate = CliProductSpec(ProductId("fixture-cli"), "fixture-cli", "Fixture product.")
+        assertFailsWith<IllegalArgumentException> { CliProductRegistry(listOf(duplicate, duplicate)) }
+        assertFailsWith<IllegalArgumentException> {
+            CliProductRegistry(listOf(duplicate, duplicate.copy(id = ProductId("other-cli"))))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            CliProductRegistry(listOf(CliProductSpec(ProductId("products"), "fixture-products", "Fixture product.")))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            CliProductRegistry(listOf(CliProductSpec(ProductId("selections"), "fixture-selections", "Fixture product.")))
+        }
+
+        val executable = HexanaCliTools.first { it.binding.executionStatus == CliExecutionStatus.Executable }
+        assertFailsWith<IllegalArgumentException> {
+            validateCliProducts(listOf(executable.copy(binding = executable.binding.copy(products = setOf(ProductId("missing-cli"))))), HexanaCliProductRegistry)
+        }
+        val collision = executable.copy(binding = executable.binding.copy(commandName = "fixture-command"))
+        assertFailsWith<IllegalArgumentException> {
+            validateCliProducts(
+                listOf(collision, executable.copy(binding = executable.binding.copy(commandName = "fixture-command"))),
+                HexanaCliProductRegistry,
+                requireCompleteSelection = false,
+            )
+        }
     }
 
     @Test
