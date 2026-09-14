@@ -25,6 +25,7 @@ object JavaClassFileParser {
         val minor = buffer.readU2()
         val major = buffer.readU2()
         val constantPool = parseConstantPool(buffer)
+        val constantPoolEnd = buffer.position()
         val accessFlags = JavaAccessFlags(buffer.readU2())
         val thisClass = buffer.readU2()
         val superClass = buffer.readU2()
@@ -51,6 +52,7 @@ object JavaClassFileParser {
             fields = fields,
             methods = methods,
             attributes = attributes,
+            constantPoolEndOffset = constantPoolEnd,
         )
     }
 

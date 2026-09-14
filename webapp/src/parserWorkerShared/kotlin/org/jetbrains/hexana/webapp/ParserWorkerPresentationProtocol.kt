@@ -20,7 +20,8 @@ internal const val PARSER_WORKER_PROTOCOL_VERSION = 10
 private const val MAX_FORMAT_CHARS = 64
 private const val MAX_DISPLAY_LABEL_CHARS = 1_024
 private const val MAX_CAPABILITY_CHARS = 64
-private const val MAX_RANGE_LABEL_CHARS = 256
+/** Producers bound their labels to this before building a range; see `toWorkerRange`. */
+internal const val MAX_RANGE_LABEL_CHARS = 256
 private const val MAX_TABLE_ID_CHARS = 64
 private const val MAX_TABLE_COLUMNS = 16
 private const val MAX_TABLE_COLUMN_CHARS = 64

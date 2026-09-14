@@ -30,6 +30,19 @@ data class RawProtoField(
 )
 
 /**
+ * Byte range of one field in a wire-encoded message: the tag, the length prefix when
+ * there is one, and the payload. Produced by [RawWireDecoder.topLevelFieldRanges].
+ */
+data class ProtoFieldRange(
+    val fieldNumber: Int,
+    /** Position of the field's tag in the inspected buffer. */
+    val offset: Int,
+    val size: Int,
+    /** Wire type as [RawProtoField.wireType] spells it, minus the LEN sub-classification. */
+    val wireType: String,
+)
+
+/**
  * Best-effort, schema-less decoder for opaque protobuf (`.pb`) messages.
  *
  * Unlike [FileDescriptorSetParser], this decoder never throws on malformed input:
@@ -53,6 +66,65 @@ object RawWireDecoder {
      */
     fun decode(buf: CommonByteBuffer): List<RawProtoField> =
         decodeLevel(buf, parentPath = "", depth = 0, baseOffset = 0)
+
+    /**
+     * Byte ranges of the outermost fields of [buf], from its current position to its
+     * limit, without recursing into submessages or materializing any payload.
+     *
+     * This is the cheap alternative to [decode] for callers that only need the layout
+     * of the top level — mapping file regions to fields in a hex view, say. [decode]
+     * would classify and format every nested field of a multi-megabyte message to
+     * answer the same question.
+     *
+     * Never throws: like [decode], it stops at the first field it cannot read and
+     * returns the ranges found so far.
+     */
+    fun topLevelFieldRanges(buf: CommonByteBuffer): List<ProtoFieldRange> {
+        val ranges = mutableListOf<ProtoFieldRange>()
+        val baseOffset = buf.position()
+        while (buf.hasRemaining()) {
+            val tagPos = buf.position()
+            val tag = tryReadULEB128(buf) ?: break
+            val fn = fieldNumber(tag)
+            if (fn < 1 || fn > MAX_FIELD_NUMBER) break
+            val skipped = when (wireType(tag)) {
+                WIRETYPE_VARINT -> tryReadULEB128(buf) != null
+                WIRETYPE_I64 -> advance(buf, 8)
+                WIRETYPE_I32 -> advance(buf, 4)
+                WIRETYPE_LEN -> {
+                    val len = tryReadULEB128(buf)
+                    len != null && len >= 0 && len <= buf.remaining() && advance(buf, len.toInt())
+                }
+                else -> false
+            }
+            if (!skipped) break
+            ranges.add(
+                ProtoFieldRange(
+                    fieldNumber = fn,
+                    offset = tagPos,
+                    size = buf.position() - tagPos,
+                    wireType = wireTypeLabel(wireType(tag)),
+                ),
+            )
+        }
+        // Leave the cursor where the caller had it; this is a read-only inspection and
+        // `buf` may be a duplicate the caller keeps using.
+        buf.position(baseOffset)
+        return ranges
+    }
+
+    /**
+     * Names a wire type the way [decode] does. LEN stays `"len"` here: telling a
+     * string from a submessage means reading the payload, which is exactly the work
+     * [topLevelFieldRanges] exists to avoid.
+     */
+    private fun wireTypeLabel(wireType: Int): String = when (wireType) {
+        WIRETYPE_VARINT -> "varint"
+        WIRETYPE_I64 -> "i64"
+        WIRETYPE_I32 -> "i32"
+        WIRETYPE_LEN -> "len"
+        else -> "unknown"
+    }
 
     /**
      * Decodes one nesting level. [baseOffset] is the absolute offset (in the

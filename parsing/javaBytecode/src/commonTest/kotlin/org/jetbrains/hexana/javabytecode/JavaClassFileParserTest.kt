@@ -80,6 +80,58 @@ class JavaClassFileParserTest {
     }
 
     @Test
+    fun `records where the constant pool ends`() {
+        // A class with one field, one method carrying a Code attribute, and one
+        // class-level SourceFile attribute, so every byte after the pool belongs to a
+        // structure whose extent consumers derive from these offsets.
+        //   #1 Utf8 "Hexana"       #2 Class -> #1
+        //   #3 Utf8 "java/lang/Object"  #4 Class -> #3
+        //   #5 "value"  #6 "I"  #7 "main"  #8 "()V"  #9 "Code"
+        //   #10 "SourceFile"  #11 "Hexana.java"
+        val utf8 = listOf(
+            "Hexana", "", "java/lang/Object", "", "value", "I", "main", "()V", "Code",
+            "SourceFile", "Hexana.java",
+        )
+        val bytes = ClassFileBytes().apply {
+            u4(JavaClassFileParser.MAGIC); u2(0); u2(52)
+            u2(12) // constant_pool_count = 11 entries + sentinel
+            utf8.forEachIndexed { index, value ->
+                when (index) {
+                    1 -> { u1(7); u2(1) }   // #2 Class -> #1
+                    3 -> { u1(7); u2(3) }   // #4 Class -> #3
+                    else -> { u1(1); u2(value.length); bytes(value.encodeToByteArray()) }
+                }
+            }
+            u2(JavaClassAccess.PUBLIC or JavaClassAccess.SUPER)
+            u2(2); u2(4); u2(0)             // this_class, super_class, interfaces_count
+            u2(1)                           // fields_count
+            u2(0); u2(5); u2(6); u2(0)      // field `value` with no attributes
+            u2(1)                           // methods_count
+            u2(0); u2(7); u2(8); u2(1)      // method `main` with one attribute
+            u2(9); u4(4); bytes(ByteArray(4))   // its Code attribute
+            u2(1)                           // attributes_count
+            u2(10); u4(2); u2(11)           // SourceFile -> "Hexana.java"
+        }.toByteArray()
+
+        val classFile = JavaClassFileParser.parse(bytes.toCommonByteBuffer())
+
+        // access_flags, this_class, super_class, interfaces_count and fields_count sit
+        // between the end of the pool and the first field_info: 10 bytes.
+        assertEquals(classFile.fields.single().byteOffset - 10, classFile.constantPoolEndOffset)
+        assertEquals("value", classFile.constantPool.utf8(classFile.fields.single().nameIndex))
+
+        // A member's extent is derived from its attributes' own offsets and lengths, so
+        // the method has to end exactly where the class attributes begin.
+        val method = classFile.methods.single()
+        val codeAttribute = method.attributes.single()
+        assertEquals("Code", classFile.constantPool.utf8(codeAttribute.nameIndex))
+        val methodEnd = codeAttribute.byteOffset + 6 + codeAttribute.info.size
+        val classAttribute = classFile.attributes.single()
+        assertEquals(classAttribute.byteOffset - 2, methodEnd) // minus attributes_count
+        assertEquals(bytes.size, classAttribute.byteOffset + 6 + classAttribute.info.size)
+    }
+
+    @Test
     fun `rejects bytes whose magic is not 0xCAFEBABE`() {
         val bytes = ClassFileBytes().apply { u4(0xDEADBEEF.toInt()) }.toByteArray()
         assertFails { JavaClassFileParser.parse(bytes.toCommonByteBuffer()) }

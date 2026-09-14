@@ -120,6 +120,52 @@ object ArscFileParser {
         return ArscFile(packageCount = packageCount, valueStrings = valueStrings, packages = packages)
     }
 
+    /**
+     * Byte ranges of the chunks directly under the resource table root, in file order:
+     * the global value string pool, then one per package.
+     *
+     * [ArscFile] models the table's contents but not its layout, so this is the only
+     * way to map a region of the file back to what lives there. Same best-effort
+     * contract as [parse]: a buffer that is not a resource table, or whose root chunk
+     * is truncated, yields an empty list rather than throwing, and a declared size that
+     * overruns the file is clamped to the bytes present.
+     */
+    fun chunkRanges(buffer: CommonByteBuffer): List<ArscChunkRange> {
+        val table = readChunk(buffer, offset = 0, limit = buffer.size) ?: return emptyList()
+        if (table.type != RES_TABLE_TYPE) return emptyList()
+        val ranges = mutableListOf<ArscChunkRange>()
+        var seenValuePool = false
+        forEachChild(buffer, table) { child ->
+            val (kind, label) = when (child.type) {
+                // The first string pool under the table is the global value pool; any
+                // later one is not something `parse` recognises either.
+                RES_STRING_POOL_TYPE -> if (!seenValuePool) {
+                    seenValuePool = true
+                    ArscChunkKind.VALUE_STRINGS to "Value strings"
+                } else {
+                    ArscChunkKind.OTHER to chunkTypeLabel(child.type)
+                }
+                RES_TABLE_PACKAGE_TYPE -> ArscChunkKind.PACKAGE to packageChunkLabel(buffer, child)
+                else -> ArscChunkKind.OTHER to chunkTypeLabel(child.type)
+            }
+            ranges.add(
+                ArscChunkRange(kind = kind, label = label, offset = child.offset, size = child.size),
+            )
+        }
+        return ranges
+    }
+
+    /** `package <name>` for a package chunk whose header is long enough to hold one. */
+    private fun packageChunkLabel(buffer: CommonByteBuffer, chunk: ArscChunk): String {
+        if (chunk.headerSize < PACKAGE_HEADER_MIN_SIZE) return "package"
+        buffer.position(chunk.offset + CHUNK_HEADER_SIZE + 4) // past the chunk header and `id`
+        val name = readFixedUtf16String(buffer, PACKAGE_NAME_CHARS)
+        return if (name.isEmpty()) "package" else "package $name"
+    }
+
+    private fun chunkTypeLabel(type: Int): String =
+        "chunk 0x${type.toString(16).padStart(4, '0')}"
+
     private fun parsePackage(buffer: CommonByteBuffer, chunk: ArscChunk): ArscPackage? {
         // Newer platform versions append fields to the header, but never fewer
         // than the ones read below.
@@ -514,6 +560,29 @@ object ArscFileParser {
             offset = offset,
         )
     }
+}
+
+/**
+ * A top-level chunk of a resource table: where it starts, how many bytes it spans, and
+ * a human-readable label for it. Produced by [ArscFileParser.chunkRanges].
+ */
+data class ArscChunkRange(
+    val kind: ArscChunkKind,
+    val label: String,
+    val offset: Int,
+    val size: Int,
+)
+
+/** What an [ArscChunkRange] holds, for consumers that treat the kinds differently. */
+enum class ArscChunkKind {
+    /** The table's global value string pool. */
+    VALUE_STRINGS,
+
+    /** A `RES_TABLE_PACKAGE_TYPE` chunk. */
+    PACKAGE,
+
+    /** A chunk type the parser does not model. */
+    OTHER,
 }
 
 /** A validated `ResChunk_header` plus its absolute position in the file. */

@@ -256,6 +256,50 @@ class ArscFileParserTest {
     }
 
     @Test
+    fun reportsTopLevelChunkRanges() {
+        val bytes = ArscTestBytes.sampleTable()
+        val ranges = ArscFileParser.chunkRanges(bytes.toCommonByteBuffer())
+
+        assertEquals(
+            listOf(ArscChunkKind.VALUE_STRINGS, ArscChunkKind.PACKAGE),
+            ranges.map { it.kind },
+        )
+        assertEquals(
+            listOf("Value strings", "package ${ArscTestBytes.PACKAGE_NAME}"),
+            ranges.map { it.label },
+        )
+        // The children start right after the table header and tile the rest of the
+        // file, so their ranges have to be adjacent and reach the end.
+        val pool = ranges.first()
+        val pkg = ranges.last()
+        assertEquals(pool.offset + pool.size, pkg.offset)
+        assertEquals(bytes.size, pkg.offset + pkg.size)
+        // The pool range must cover the pool `parse` reads out of the same bytes.
+        val valueStrings = ArscFileParser.parse(bytes.toCommonByteBuffer()).valueStrings
+        assertEquals(ArscTestBytes.VALUE_STRINGS, valueStrings.strings)
+    }
+
+    @Test
+    fun clampsChunkRangesOfTruncatedTable() {
+        val full = ArscTestBytes.sampleTable()
+        val truncated = full.copyOf(full.size - 120)
+        val ranges = ArscFileParser.chunkRanges(truncated.toCommonByteBuffer())
+
+        assertEquals(2, ranges.size)
+        // The package chunk still declares its original size; the walk clamps it to
+        // the bytes present rather than pointing past the end of the file.
+        assertTrue(ranges.all { it.offset + it.size <= truncated.size })
+        assertEquals(truncated.size, ranges.last().let { it.offset + it.size })
+    }
+
+    @Test
+    fun reportsNoChunkRangesForNonTable() {
+        val pool = ArscTestBytes.stringPool(listOf("a", "b"))
+        assertEquals(emptyList(), ArscFileParser.chunkRanges(pool.toCommonByteBuffer()))
+        assertEquals(emptyList(), ArscFileParser.chunkRanges(ByteArray(4).toCommonByteBuffer()))
+    }
+
+    @Test
     fun failsOnNonTableRootChunk() {
         val pool = ArscTestBytes.stringPool(listOf("a", "b"))
         assertFailsWith<IllegalArgumentException> {

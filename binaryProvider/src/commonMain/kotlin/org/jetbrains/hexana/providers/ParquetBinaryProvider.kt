@@ -35,6 +35,47 @@ class ParquetBinaryProvider(
     }
 
     /**
+     * One range per row group, plus the footer.
+     *
+     * A row group's extent is derived from its column chunks: each starts at its
+     * dictionary page when it has one and at its first data page otherwise, and spans
+     * `totalCompressedSize` bytes. `ColumnChunk.fileOffset` is deliberately not used —
+     * writers are inconsistent about it and some leave it zero. Everything after the
+     * last row group is the footer: the Thrift metadata, its length, and the trailing
+     * `PAR1` magic.
+     */
+    override val structureRanges: List<StructureRange> by lazy {
+        val rowGroups = metadata?.rowGroups?.takeIf { it.isNotEmpty() } ?: return@lazy emptyList()
+        val total = bytes.size
+        buildList {
+            var lastEnd = 0L
+            rowGroups.forEachIndexed { index, rowGroup ->
+                val chunks = rowGroup.columns.mapNotNull { it.metaData }
+                if (chunks.isEmpty()) return@forEachIndexed
+                val start = chunks.minOf { it.dictionaryPageOffset ?: it.dataPageOffset }
+                val end = chunks.maxOf {
+                    (it.dictionaryPageOffset ?: it.dataPageOffset) + it.totalCompressedSize
+                }
+                lastEnd = maxOf(lastEnd, end)
+                structureRangeOrNull(
+                    offset = start,
+                    size = end - start,
+                    label = "Row group $index",
+                    fileSize = total,
+                    tabName = "Row Groups",
+                )?.let { add(it) }
+            }
+            structureRangeOrNull(
+                offset = lastEnd,
+                size = total - lastEnd,
+                label = "Footer",
+                fileSize = total,
+                tabName = "Metadata",
+            )?.let { add(it) }
+        }
+    }
+
+    /**
      * Decoded data table for the first row group, capped at [DEFAULT_ROW_LIMIT] rows.
      * Null when metadata is unavailable or decoding throws unexpectedly.
      */

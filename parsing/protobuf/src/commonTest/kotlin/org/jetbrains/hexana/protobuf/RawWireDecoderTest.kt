@@ -150,6 +150,54 @@ class RawWireDecoderTest {
         )
     }
 
+    // ---- Top-level field ranges ------------------------------------------
+
+    @Test
+    fun topLevelRangesMatchTopLevelDecodedRows() {
+        val inner = buildProtoMessage {
+            varintField(1, 100L)
+            lenField(2, "nested".encodeToByteArray())
+        }
+        val bytes = buildProtoMessage {
+            varintField(1, 42L)
+            lenField(2, "hello".encodeToByteArray())
+            i32Field(3, byteArrayOf(0x78, 0x56, 0x34, 0x12))
+            lenField(4, inner)
+        }
+        val ranges = RawWireDecoder.topLevelFieldRanges(bytes.toCommonByteBuffer())
+        val topRows = RawWireDecoder.decode(bytes.toCommonByteBuffer()).filter { it.depth == 0 }
+
+        assertEquals(listOf(1, 2, 3, 4), ranges.map { it.fieldNumber })
+        assertEquals(topRows.map { it.offset }, ranges.map { it.offset })
+        assertEquals(topRows.map { it.length }, ranges.map { it.size })
+        // LEN fields are not classified further, so field 2 (a string) and field 4 (a
+        // submessage) both read as "len" where `decode` says "string" and "message".
+        assertEquals(listOf("varint", "len", "i32", "len"), ranges.map { it.wireType })
+        // Contiguous, and together they account for every byte of the message.
+        assertEquals(0, ranges.first().offset)
+        assertEquals(bytes.size, ranges.last().let { it.offset + it.size })
+    }
+
+    @Test
+    fun topLevelRangesStopAtTruncatedField() {
+        val valid = buildProtoMessage { varintField(1, 42L) }
+        // A LEN field whose declared length runs past the end of the buffer.
+        val bytes = valid + byteArrayOf(0x12, 0x40, 0x01, 0x02)
+        val ranges = RawWireDecoder.topLevelFieldRanges(bytes.toCommonByteBuffer())
+
+        assertEquals(1, ranges.size)
+        assertEquals(1, ranges.single().fieldNumber)
+        assertEquals(valid.size, ranges.single().size)
+    }
+
+    @Test
+    fun topLevelRangesLeaveCursorUntouched() {
+        val bytes = buildProtoMessage { varintField(1, 42L) }
+        val buf = bytes.toCommonByteBuffer()
+        RawWireDecoder.topLevelFieldRanges(buf)
+        assertEquals(0, buf.position())
+    }
+
     // ---- Long string truncation (STRING_PREVIEW_LIMIT branch) -----------
 
     @Test

@@ -18,6 +18,14 @@ data class JavaClassFile(
     val fields: List<FieldInfo>,
     val methods: List<MethodInfo>,
     val attributes: List<AttributeRecord>,
+    /**
+     * File offset one past the constant pool's last byte, i.e. where `access_flags`
+     * begins. The pool itself starts at offset 10, after the magic, the two version
+     * fields and `constant_pool_count`. Nothing else records the pool's extent —
+     * entries are variable-width — so consumers that need to map the pool back to
+     * bytes (the hex view's structural regions) rely on this.
+     */
+    val constantPoolEndOffset: Int = 0,
 ) {
     /** Convenience: this class's binary name via the constant pool. */
     val thisClassName: String

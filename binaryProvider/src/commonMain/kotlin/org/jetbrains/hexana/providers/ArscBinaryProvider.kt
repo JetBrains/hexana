@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.providers
 
+import org.jetbrains.hexana.arsc.ArscChunkKind
 import org.jetbrains.hexana.arsc.ArscFile
 import org.jetbrains.hexana.arsc.ArscFileParser
 import org.jetbrains.hexana.io.CommonByteBuffer
@@ -34,6 +35,29 @@ class ArscBinaryProvider(
         val arsc = parsedArscFile ?: return@lazy emptyList()
         arsc.valueStrings.strings.mapIndexed { index, value ->
             BinaryStringRecord(value = value, index = index)
+        }
+    }
+
+    /**
+     * The chunks directly under the table root: the global value pool and one per
+     * package. [ArscFileParser.chunkRanges] walks the chunk tree separately from
+     * [parsedArscFile], because the parsed model keeps a table's contents but not the
+     * byte offsets they came from.
+     */
+    override val structureRanges: List<StructureRange> by lazy {
+        val total = bytes.size
+        ArscFileParser.chunkRanges(bytes.position(0)).mapNotNull { chunk ->
+            structureRangeOrNull(
+                offset = chunk.offset.toLong(),
+                size = chunk.size.toLong(),
+                label = chunk.label,
+                fileSize = total,
+                tabName = when (chunk.kind) {
+                    ArscChunkKind.VALUE_STRINGS -> "Strings"
+                    ArscChunkKind.PACKAGE -> "Resources"
+                    ArscChunkKind.OTHER -> null
+                },
+            )
         }
     }
 

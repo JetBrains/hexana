@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.providers
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.javabytecode.AttributeRecord
 import org.jetbrains.hexana.javabytecode.JavaClassFile
 import org.jetbrains.hexana.javabytecode.JavaClassFileParser
 import org.jetbrains.hexana.javabytecode.JavaConstantPool
@@ -35,6 +36,52 @@ class ClassFileBinaryProvider(
                 tag = constantPoolEntryTag(entry),
             )
         }.toList()
+    }
+
+    /**
+     * The constant pool, then one range per field, per method and per class-level
+     * attribute, labelled with its own name.
+     *
+     * A member's extent is exact without re-reading the file: `field_info` and
+     * `method_info` are 8 bytes of metadata followed by their attributes, and each
+     * [AttributeRecord] knows where its header starts and how long its body is.
+     */
+    override val structureRanges: List<StructureRange> by lazy {
+        val cf = parsedClassFile ?: return@lazy emptyList()
+        val total = bytes.size
+        buildList {
+            structureRangeOrNull(
+                offset = CONSTANT_POOL_OFFSET,
+                size = cf.constantPoolEndOffset - CONSTANT_POOL_OFFSET,
+                label = "Constant pool",
+                fileSize = total,
+            )?.let { add(it) }
+            for (field in cf.fields) {
+                structureRangeOrNull(
+                    offset = field.byteOffset.toLong(),
+                    size = memberSize(field.byteOffset, field.attributes),
+                    label = cf.memberLabel(field.nameIndex, "field"),
+                    fileSize = total,
+                )?.let { add(it) }
+            }
+            for (method in cf.methods) {
+                structureRangeOrNull(
+                    offset = method.byteOffset.toLong(),
+                    size = memberSize(method.byteOffset, method.attributes),
+                    label = cf.memberLabel(method.nameIndex, "method"),
+                    fileSize = total,
+                    tabName = "Methods",
+                )?.let { add(it) }
+            }
+            for (attribute in cf.attributes) {
+                structureRangeOrNull(
+                    offset = attribute.byteOffset.toLong(),
+                    size = (ATTRIBUTE_HEADER_SIZE + attribute.info.size).toLong(),
+                    label = cf.memberLabel(attribute.nameIndex, "attribute"),
+                    fileSize = total,
+                )?.let { add(it) }
+            }
+        }
     }
 
     companion object {
@@ -74,6 +121,30 @@ class ClassFileBinaryProvider(
     }
 }
 
+
+/** `magic` + `minor_version` + `major_version` + `constant_pool_count`. */
+private const val CONSTANT_POOL_OFFSET = 10L
+
+/** `attribute_name_index` (u2) + `attribute_length` (u4), ahead of the attribute body. */
+private const val ATTRIBUTE_HEADER_SIZE = 6
+
+/** `access_flags` + `name_index` + `descriptor_index` + `attributes_count`. */
+private const val MEMBER_METADATA_SIZE = 8L
+
+/**
+ * Byte length of a `field_info` / `method_info` starting at [byteOffset]: its fixed
+ * metadata plus everything its attributes span. Attributes are contiguous and in file
+ * order, so the last one's end is the member's end.
+ */
+private fun memberSize(byteOffset: Int, attributes: List<AttributeRecord>): Long {
+    val end = attributes.maxOfOrNull { it.byteOffset + ATTRIBUTE_HEADER_SIZE + it.info.size }
+        ?: return MEMBER_METADATA_SIZE
+    return (end - byteOffset).toLong()
+}
+
+/** Resolves a constant-pool name for a hex-view label, falling back to `<kind #n>`. */
+private fun JavaClassFile.memberLabel(nameIndex: Int, kind: String): String =
+    runCatching { constantPool.utf8(nameIndex) }.getOrNull() ?: "<$kind #$nameIndex>"
 
 private fun constantPoolEntryTag(entry: JavaConstantPoolEntry): String = when (entry) {
     is JavaConstantPoolEntry.Utf8 -> "Utf8"

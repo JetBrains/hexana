@@ -60,6 +60,33 @@ class PcapBinaryProvider(
     }
 
     /**
+     * The file header followed by one range per captured packet.
+     *
+     * The header range runs up to the first packet, which covers the 24-byte global
+     * header of a classic capture and the section header plus interface description
+     * blocks of a PCAP-NG one, without either format's layout being hardcoded here.
+     * For PCAP-NG the per-packet range stops at the end of the captured bytes, so a
+     * block's trailing options are left untinted.
+     */
+    override val structureRanges: List<StructureRange> by lazy {
+        val packets = parsedPcapFile?.packets?.takeIf { it.isNotEmpty() } ?: return@lazy emptyList()
+        val total = bytes.size
+        buildList {
+            structureRangeOrNull(0L, packets.first().fileOffset, "Header", total, tabName = "Header")
+                ?.let { add(it) }
+            packets.forEachIndexed { index, packet ->
+                structureRangeOrNull(
+                    offset = packet.fileOffset,
+                    size = packet.dataOffset - packet.fileOffset + packet.inclLen,
+                    label = "Packet $index",
+                    fileSize = total,
+                    tabName = "Packets",
+                )?.let { add(it) }
+            }
+        }
+    }
+
+    /**
      * SSL key log loaded for this capture. When set, TLS Application Data
      * packets can be decrypted and their plaintext shown in the UI.
      * Updated from the IDE layer when the user loads a key file or one is

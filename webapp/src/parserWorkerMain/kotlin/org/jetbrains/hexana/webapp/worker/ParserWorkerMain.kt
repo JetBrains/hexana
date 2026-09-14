@@ -23,6 +23,7 @@ import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.PcapBinaryProvider
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.ProtobufBinaryProvider
+import org.jetbrains.hexana.providers.StructureRange
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
@@ -52,6 +53,7 @@ import org.jetbrains.hexana.wasm.components.InlineInstanceExpression
 import org.jetbrains.hexana.wasm.components.CorruptInstanceCoreExpression
 import org.jetbrains.hexana.wasm.components.ModuleInstanceCoreExpression
 import org.jetbrains.hexana.wasm.components.UnknownInstanceCoreExpression
+import org.jetbrains.hexana.webapp.MAX_RANGE_LABEL_CHARS
 import org.jetbrains.hexana.webapp.ParserWorkerComponentGraph
 import org.jetbrains.hexana.webapp.ParserWorkerComponentGraphEdge
 import org.jetbrains.hexana.webapp.ParserWorkerComponentGraphNode
@@ -370,9 +372,7 @@ private suspend fun nonWasmPresentation(
             SCOPE_MARKER, true, inputBytes, sourceRanges.size, 0, 0, 0,
             now() - startedAt,
         ),
-        ranges = sourceRanges.take(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION).map { range ->
-            ParserWorkerRange(range.offset.toInt(), range.size.toInt(), range.label)
-        },
+        ranges = sourceRanges.take(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION).map { it.toWorkerRange() },
         tables = tables,
         toolbar = ParserWorkerToolbar(
             nativeImage = nativeImage?.let { info ->
@@ -769,6 +769,16 @@ private fun workerRowActions(
     else -> emptyList()
 }
 
+/**
+ * Wire form of a provider's structural region.
+ *
+ * A label is whatever the format carries — an archive entry path, a Wasm custom
+ * section name, a proto file name — so it has to be bounded here; the protocol
+ * rejects a presentation whose range labels are longer than it can carry.
+ */
+private fun StructureRange.toWorkerRange(): ParserWorkerRange =
+    ParserWorkerRange(offset.toInt(), size.toInt(), label.take(MAX_RANGE_LABEL_CHARS))
+
 private fun boundedInputRange(offset: Long, size: Long, inputBytes: Int): Pair<Int, Int>? =
     if (offset < 0 || size < 0 || offset > inputBytes || size > inputBytes || offset > inputBytes - size) null
     else offset.toInt() to size.toInt()
@@ -1008,9 +1018,7 @@ private fun corePresentation(provider: WasmBinaryProvider, inputBytes: Int, star
             graalWebImage.isWebImage,
             graalWebImage.matchedImportModules.sorted(),
         ),
-        ranges = provider.structureRanges.map { range ->
-            ParserWorkerRange(range.offset.toInt(), range.size.toInt(), range.label)
-        },
+        ranges = provider.structureRanges.map { it.toWorkerRange() },
         tables = buildList {
             addTable("Imports", listOf("Data"), imports.map { item ->
                 row(listOf(if (item.prefix.isEmpty()) item.name else "${item.prefix}.${item.name}"), item.offset, item.size)
@@ -1065,9 +1073,7 @@ private fun componentPresentation(
             modules.size,
             0,
         ),
-        ranges = provider.structureRanges.map { range ->
-            ParserWorkerRange(range.offset.toInt(), range.size.toInt(), range.label)
-        },
+        ranges = provider.structureRanges.map { it.toWorkerRange() },
         tables = buildList {
             addTable("Imports", listOf("Name", "Extern Description"), imports.map { item ->
                 row(listOf(componentName(item.importName, item.version), componentExternDescriptionLabel(item.externDescription)), item.offset, item.size)

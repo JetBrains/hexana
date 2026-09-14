@@ -131,6 +131,26 @@ data class StructureRange(
     val tabName: String? = null,
 )
 
+/**
+ * Builds a [StructureRange] for a region, or `null` when the region is empty or does
+ * not lie inside a [fileSize]-byte file.
+ *
+ * The hex viewers binary-search a sorted list of ranges to find the one covering the
+ * caret, so a region a malformed header declares past the end of the file must never
+ * make it into the list. Formats whose offsets come straight from unvalidated header
+ * fields build their ranges with `mapNotNull { structureRangeOrNull(...) }`.
+ */
+internal fun structureRangeOrNull(
+    offset: Long,
+    size: Long,
+    label: String,
+    fileSize: Int,
+    tabName: String? = null,
+): StructureRange? {
+    if (size <= 0L || offset < 0L || offset + size > fileSize.toLong()) return null
+    return StructureRange(offset = offset, size = size, label = label, tabName = tabName)
+}
+
 object WasmBinaryProviderSelector {
     fun select(bytes: CommonByteBuffer): BinaryProviderType {
         try {
@@ -189,6 +209,23 @@ class ZipBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvi
         zipEntries.filter { !it.isDirectory }
     }
 
+    /**
+     * One range per entry, spanning the local file header and the compressed bytes
+     * that follow it, so the record shows up in the hex view as a single region.
+     */
+    override val structureRanges: List<StructureRange> by lazy {
+        val total = bytes.size
+        zipEntries.mapNotNull { entry ->
+            structureRangeOrNull(
+                offset = entry.localHeaderOffset,
+                size = entry.dataOffset - entry.localHeaderOffset + entry.compressedSize,
+                label = entry.name,
+                fileSize = total,
+                tabName = "Entries",
+            )
+        }
+    }
+
     companion object {
         /** PK\x03\x04 local file header magic. */
         fun isZip(buffer: CommonByteBuffer): Boolean {
@@ -224,11 +261,34 @@ class TarBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvi
         tarEntries.filter { !it.isDirectory }
     }
 
+    /**
+     * One range per entry, spanning its header block and its data. An entry's own
+     * header block always sits immediately before its data — GNU long-name entries
+     * put their extra blocks before that header, not between it and the data — so
+     * `dataOffset - 512` is the start of the record. Trailing block padding is left
+     * out; it belongs to no entry and is zero-filled.
+     */
+    override val structureRanges: List<StructureRange> by lazy {
+        val total = bytes.size
+        tarEntries.mapNotNull { entry ->
+            structureRangeOrNull(
+                offset = entry.dataOffset - TAR_BLOCK_SIZE,
+                size = TAR_BLOCK_SIZE + entry.size,
+                label = entry.name,
+                fileSize = total,
+                tabName = "Entries",
+            )
+        }
+    }
+
     companion object {
         /** Delegates to [TarParser.isTar]. */
         fun isTar(buffer: CommonByteBuffer): Boolean = TarParser.isTar(buffer)
     }
 }
+
+/** Size of a TAR header block; every entry's data starts one block after its header. */
+private const val TAR_BLOCK_SIZE = 512L
 
 sealed class NativeBinaryProvider(
     private val sharedBytes: CommonByteBuffer,
@@ -625,6 +685,19 @@ class CoffBinaryProvider(
         val secs = sections ?: return@lazy null
         NativeFunctionDiscovery.fromCoff(syms, secs)
     }
+
+    override val structureRanges: List<StructureRange> by lazy {
+        val secs = sections?.takeIf { it.isNotEmpty() } ?: return@lazy emptyList()
+        val total = bytes.size
+        secs.mapNotNull { sec ->
+            structureRangeOrNull(
+                offset = sec.rawDataPointer.toLong(),
+                size = sec.rawDataSize.toLong(),
+                label = sec.name.ifBlank { "<unnamed>" },
+                fileSize = total,
+            )
+        }
+    }
 }
 
 class ArchiveBinaryProvider(
@@ -642,6 +715,24 @@ class ArchiveBinaryProvider(
 
     /** All parsed members, including bookkeeping entries (see [PeArchiveMember.isBookkeeping]). */
     val members: List<PeArchiveMember> get() = archiveFile?.members.orEmpty()
+
+    /**
+     * One range per member, spanning its `ar` header and its payload — the two are
+     * adjacent, so each member reads as a single region in the hex view. Bookkeeping
+     * members are kept: they occupy real bytes the user can see.
+     */
+    override val structureRanges: List<StructureRange> by lazy {
+        val total = bytes.size
+        members.mapNotNull { member ->
+            structureRangeOrNull(
+                offset = member.headerRange.offset.toLong(),
+                size = (member.headerRange.size + member.contentRange.size).toLong(),
+                label = member.name,
+                fileSize = total,
+                tabName = "Members",
+            )
+        }
+    }
 }
 
 /** Coarse classification of a static-library member, derived from its leading magic bytes. */

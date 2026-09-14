@@ -278,6 +278,97 @@ class ParquetArrowTabsTest {
         }
     }
 
+    // ------------------------------------------------------------------
+    // structureRanges (hex view structural regions)
+    // ------------------------------------------------------------------
+
+    @Test fun `Parquet structureRanges cover the row group and the footer`() {
+        val rawBytes = loadResource("alltypes_plain.parquet")
+        val provider = ParquetBinaryProvider(rawBytes.toCommonByteBuffer())
+
+        val ranges = provider.structureRanges
+        assertEquals(listOf("Row group 0", "Footer"), ranges.map { it.label })
+        assertEquals(listOf("Row Groups", "Metadata"), ranges.map { it.tabName })
+        assertStructuralRanges(ranges, rawBytes.size)
+        // The footer runs to the end of the file, trailing PAR1 magic included, and
+        // starts where the row group's last column chunk ends.
+        val rowGroup = ranges.first()
+        val footer = ranges.last()
+        assertEquals(rowGroup.offset + rowGroup.size, footer.offset)
+        assertEquals(rawBytes.size.toLong(), footer.offset + footer.size)
+    }
+
+    @Test fun `Arrow file structureRanges cover every block and the footer`() {
+        val rawBytes = loadResource("generated_null_trivial.arrow_file")
+        val provider = ArrowBinaryProvider(rawBytes.toCommonByteBuffer(), ArrowFormat.FILE)
+        val footer = assertNotNull(provider.fileFooter)
+
+        val ranges = provider.structureRanges
+        assertEquals(
+            footer.dictionaryCount + footer.recordBatchBlockCount + 1,
+            ranges.size,
+            "expected one range per block plus the footer",
+        )
+        assertEquals("Footer", ranges.last().label)
+        assertTrue(
+            ranges.dropLast(1).all { it.tabName == "Record Batches" },
+            "block ranges must point at the Record Batches tab",
+        )
+        assertStructuralRanges(ranges, rawBytes.size)
+        assertEquals(rawBytes.size.toLong(), ranges.last().let { it.offset + it.size })
+    }
+
+    @Test fun `Arrow stream structureRanges chain the schema and each message`() {
+        val rawBytes = loadResource("generated_primitive.stream")
+        val provider = ArrowBinaryProvider(rawBytes.toCommonByteBuffer(), ArrowFormat.STREAM)
+        val messages = assertNotNull(provider.streamContents).messages
+
+        val ranges = provider.structureRanges
+        assertEquals(messages.size + 1, ranges.size, "expected the schema plus one range per message")
+        assertEquals("Schema", ranges.first().label)
+        assertTrue(
+            ranges.drop(1).all { it.label.startsWith("Record batch") || it.label.startsWith("Dictionary") },
+            "unexpected message labels: ${ranges.drop(1).map { it.label }}",
+        )
+        assertStructuralRanges(ranges, rawBytes.size)
+        // Messages are chained, so the regions are adjacent with no bytes unaccounted
+        // for between the schema and the last message.
+        assertEquals(0L, ranges.first().offset)
+        ranges.zipWithNext { left, right -> assertEquals(left.offset + left.size, right.offset) }
+    }
+
+    @Test fun `Arrow structureRanges drop blocks pointing outside the file`() {
+        // Same clusterfuzz case as below: the footer's first record batch block points
+        // at a garbage offset, which must not become a range the hex view would search.
+        val rawBytes = loadResource("fuzz_arrow_bad_block_offset.arrow_file")
+        val provider = ArrowBinaryProvider(rawBytes.toCommonByteBuffer(), ArrowFormat.FILE)
+
+        assertStructuralRanges(provider.structureRanges, rawBytes.size, allowEmpty = true)
+    }
+
+    /** Asserts the invariants the hex viewers rely on when searching a range list. */
+    private fun assertStructuralRanges(
+        ranges: List<org.jetbrains.hexana.providers.StructureRange>,
+        fileSize: Int,
+        allowEmpty: Boolean = false,
+    ) {
+        if (!allowEmpty) assertTrue(ranges.isNotEmpty(), "expected at least one range")
+        var previousEnd = 0L
+        for (range in ranges.sortedBy { it.offset }) {
+            assertTrue(range.size > 0L, "${range.label} is empty")
+            assertTrue(range.offset >= 0L, "${range.label} starts before the file")
+            assertTrue(
+                range.offset + range.size <= fileSize.toLong(),
+                "${range.label} ends past the file at ${range.offset + range.size} of $fileSize",
+            )
+            assertTrue(
+                range.offset >= previousEnd,
+                "${range.label} at ${range.offset} overlaps the region ending at $previousEnd",
+            )
+            previousEnd = range.offset + range.size
+        }
+    }
+
     @Test fun `Arrow Data tab shows empty state for malformed file (bad block offset)`() {
         // clusterfuzz case: valid ARROW1 magic at both ends, but the footer points its
         // first record batch at a garbage offset the bounds-checked reader rejects, so

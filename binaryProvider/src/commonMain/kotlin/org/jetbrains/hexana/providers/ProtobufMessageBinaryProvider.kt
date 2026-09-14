@@ -27,4 +27,26 @@ class ProtobufMessageBinaryProvider(
             emptyList()
         }
     }
+
+    /**
+     * One range per outermost field. Submessage fields are left out — they are nested
+     * inside their parent's range, and the hex view tints top-level regions only.
+     *
+     * This walks the wire format directly instead of filtering [decodedFields] to
+     * depth 0: the two produce the same regions, but the full decode also classifies
+     * and formats every nested field, which costs two orders of magnitude more on a
+     * multi-megabyte message for information no region needs.
+     */
+    override val structureRanges: List<StructureRange> by lazy {
+        val total = bytes.size
+        RawWireDecoder.topLevelFieldRanges(bytes.position(0)).mapNotNull { field ->
+            structureRangeOrNull(
+                offset = field.offset.toLong(),
+                size = field.size.toLong(),
+                label = "#${field.fieldNumber} ${field.wireType}",
+                fileSize = total,
+                tabName = "Protobuf Message",
+            )
+        }
+    }
 }

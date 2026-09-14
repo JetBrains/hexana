@@ -8,6 +8,7 @@ import org.jetbrains.hexana.arrow.decodeRecordBatch
 import org.jetbrains.hexana.arrow.readArrowFileFooter
 import org.jetbrains.hexana.arrow.readArrowStream
 import org.jetbrains.hexana.arrow.readEncapsulatedMessage
+import org.jetbrains.hexana.flatbuffers.FlatBufferVector
 import org.jetbrains.hexana.io.ByteProvenance
 import org.jetbrains.hexana.io.ByteProvenanceKind
 import org.jetbrains.hexana.io.CommonByteBuffer
@@ -50,6 +51,73 @@ class ArrowBinaryProvider(
     val schema: ArrowSchema? get() = when (format) {
         ArrowFormat.STREAM -> streamContents?.schema
         ArrowFormat.FILE -> fileFooter?.schema
+    }
+
+    /**
+     * One range per IPC message.
+     *
+     * For the file format the footer's block vectors give each message's offset and
+     * its metadata + body lengths directly, and whatever follows the last block is the
+     * footer itself. For the stream format an encapsulated message only records where
+     * the *next* one starts, so the messages are chained: the schema runs from 0 to the
+     * start of `streamContents.messages[0]`, and each later message starts where its
+     * predecessor ended.
+     */
+    override val structureRanges: List<StructureRange> by lazy {
+        when (format) {
+            ArrowFormat.FILE -> fileStructureRanges()
+            ArrowFormat.STREAM -> streamStructureRanges()
+        }
+    }
+
+    private fun fileStructureRanges(): List<StructureRange> {
+        val footer = fileFooter ?: return emptyList()
+        val total = bytes.size
+        val ranges = mutableListOf<StructureRange>()
+        var lastEnd = 0L
+        val blockVectors = listOf(
+            footer.dictionariesVector to "Dictionary",
+            footer.recordBatchesVector to "Record batch",
+        )
+        for ((vector, label) in blockVectors) {
+            val blocks: FlatBufferVector = vector ?: continue
+            for (index in 0 until blocks.length) {
+                val offset = footer.blockOffset(blocks, index)
+                val size = footer.blockMetaDataLength(blocks, index).toLong() +
+                    footer.blockBodyLength(blocks, index)
+                lastEnd = maxOf(lastEnd, offset + size)
+                structureRangeOrNull(offset, size, "$label $index", total, tabName = "Record Batches")
+                    ?.let { ranges.add(it) }
+            }
+        }
+        ranges.sortBy { it.offset }
+        structureRangeOrNull(lastEnd, total - lastEnd, "Footer", total, tabName = "Metadata")
+            ?.let { ranges.add(it) }
+        return ranges
+    }
+
+    private fun streamStructureRanges(): List<StructureRange> {
+        val messages = streamContents?.messages ?: return emptyList()
+        val total = bytes.size
+        // The schema message is consumed by readArrowStream and not kept, so re-read its
+        // framing to learn where it ends.
+        val schemaEnd = runCatching { readEncapsulatedMessage(bytes, 0)?.nextMessageStart }
+            .getOrNull() ?: return emptyList()
+        val ranges = mutableListOf<StructureRange>()
+        structureRangeOrNull(0L, schemaEnd.toLong(), "Schema", total, tabName = "Schema")
+            ?.let { ranges.add(it) }
+        var start = schemaEnd
+        messages.forEachIndexed { index, message ->
+            structureRangeOrNull(
+                offset = start.toLong(),
+                size = (message.nextMessageStart - start).toLong(),
+                label = "${messageLabel(message.message.headerType)} $index",
+                fileSize = total,
+                tabName = "Messages",
+            )?.let { ranges.add(it) }
+            start = message.nextMessageStart
+        }
+        return ranges
     }
 
     /**
@@ -130,3 +198,7 @@ class ArrowBinaryProvider(
         )
     }
 }
+
+/** Hex-view label for a stream message, e.g. `RECORD_BATCH` -> `"Record batch"`. */
+private fun messageLabel(headerType: MessageHeaderType): String =
+    headerType.name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
