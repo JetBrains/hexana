@@ -60,10 +60,14 @@ class ModuleFileUtilTest {
     fun submoduleBytesRejectsARangeTheBinaryCannotHold() {
         val provider = WasmComponentBinaryProvider(truncatedComponent.toCommonByteBuffer())
         val module = provider.modules.single()
-        // The parser keeps the declared size; reading it would run past the buffer.
         assertEquals(0x40, module.contentSize)
         assertTrue(module.contentOffset + module.contentSize > truncatedComponent.size)
         assertNull(provider.submoduleBytes(module.contentOffset, module.contentSize))
+    }
+
+    @Test
+    fun nestedModuleExtractionRejectsARangeTheBinaryCannotHold() {
+        assertNull(extractNestedModuleBytes(truncatedComponent, moduleIndex = 0))
     }
 
     @Test

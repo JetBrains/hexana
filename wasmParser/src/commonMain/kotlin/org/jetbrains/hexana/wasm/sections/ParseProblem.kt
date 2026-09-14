@@ -42,6 +42,7 @@ enum class ParseProblemKind {
     CORE_INSTANCE_ENTRY_CORRUPT,
     /** A section header or custom-section name could not be read (truncated binary). */
     SECTION_TRUNCATED,
+    SECTION_RESOLVE_FAILURE,
     /** An import-section entry could not be decoded (unknown extern type, truncated entry). */
     IMPORT_ENTRY_CORRUPT,
     /** An export-section entry could not be decoded (truncated name or index). */

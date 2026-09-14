@@ -47,27 +47,16 @@ class WasmSectionTypes(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
      * stops and returns the partial list paired with the byte offset at which
      * parsing failed (null second means the section parsed fully).
      */
-    fun CommonByteBuffer.parseTypesPartial(): Pair<List<WasmTypeRecord>, Int?> {
+    fun CommonByteBuffer.parseTypesPartial(): Pair<List<WasmTypeRecord>, Int?> = run {
         position(contentOffset)
-        val typeRecords = mutableListOf<WasmTypeRecord>()
-        var failedOffset: Int? = null
-
-        val count = getULEB128().toInt()
-        for (i in 0 until count) {
+        consumeArrayPartial(contentOffset + contentSize) {
             val offset = position()
-            try {
-                // Type-group discriminants are S33 SLEB128 values per the GC spec.
-                val typCode = getSLEB128().toInt()
-                when (typCode) {
-                    -0x32 -> typeRecords.add(recType())
-                    else -> typeRecords.add(subtypeFromCode(typCode, offset))
-                }
-            } catch (e: Exception) {
-                failedOffset = offset
-                break
+            // Type-group discriminants are S33 SLEB128 values per the GC spec.
+            when (val typCode = getSLEB128().toInt()) {
+                -0x32 -> recType()
+                else -> subtypeFromCode(typCode, offset)
             }
-        }
-        return typeRecords to failedOffset
+        }.let { it.values to it.failureOffset }
     }
 
 }
@@ -96,7 +85,7 @@ object StandardTypesParser {
                 val isFinal = typCode == -0x31
                 val superTypers = mutableListOf<UInt>()
                 consumeArray {
-                    val idx = getULEB128().toUInt()
+                    val idx = consumeUnsignedUInt()
                     superTypers.add(idx)
                 }
                 // custom-descriptors proposal: optional descriptor clause (0x4D) and/or
@@ -107,7 +96,7 @@ object StandardTypesParser {
                 var peeked = get()
                 while (peeked == 0x4D.toByte() || peeked == 0x4C.toByte()) {
                     hasDescriptorClause = true
-                    getULEB128() // clause type index
+                    consumeUnsignedUInt() // clause type index
                     peeked = get()
                 }
                 position(position() - 1) // un-consume the non-clause byte (comptype prefix)
@@ -230,16 +219,16 @@ object StandardTypesParser {
         return if (is64) {
             val min = getULEB128()
             val max = if (hasMax) getULEB128() else null
-            val pageSizeLog2 = if (hasPageSz) getULEB128().toInt() else null
+            val pageSizeLog2 = if (hasPageSz) consumeUnsignedInt() else null
             if (hasMax) {
                 WasmFixedI64Limits(min, max!!, shared, pageSizeLog2)
             } else {
                 WasmOpenI64Limits(min, shared, pageSizeLog2)
             }
         } else {
-            val min = getULEB128().toInt()
-            val max = if (hasMax) getULEB128().toInt() else null
-            val pageSizeLog2 = if (hasPageSz) getULEB128().toInt() else null
+            val min = consumeUnsignedInt()
+            val max = if (hasMax) consumeUnsignedInt() else null
+            val pageSizeLog2 = if (hasPageSz) consumeUnsignedInt() else null
             if (hasMax) {
                 WasmFixedI32Limits(min, max!!, shared, pageSizeLog2)
             } else {

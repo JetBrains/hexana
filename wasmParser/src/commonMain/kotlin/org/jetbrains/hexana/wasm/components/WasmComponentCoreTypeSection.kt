@@ -9,6 +9,7 @@ import org.jetbrains.hexana.wasm.sections.WasmImportRecord
 import org.jetbrains.hexana.wasm.sections.WasmSection
 import org.jetbrains.hexana.wasm.sections.WasmSectionUnresolved
 import org.jetbrains.hexana.wasm.sections.consumeArray
+import org.jetbrains.hexana.wasm.sections.consumeArrayPartial
 import org.jetbrains.hexana.wasm.sections.exportRecord
 import org.jetbrains.hexana.wasm.sections.importRecord
 
@@ -26,11 +27,18 @@ class WasmComponentCoreTypeSection(sectionSize: Int, sectionOffset: Int, content
     fun CommonByteBuffer.scanTypes(): List<WasmComponentCoreType> {
         val types = mutableListOf<WasmComponentCoreType>()
         position(contentOffset)
-        consumeArray {
+        consumeArray(contentOffset + contentSize) {
             types.add(componentCoreType())
         }
 
         return types
+    }
+
+    /** Returns the decoded core-type prefix and the first unreadable entry offset. */
+    fun CommonByteBuffer.scanTypesPartial(): Pair<List<WasmComponentCoreType>, Int?> = run {
+        position(contentOffset)
+        consumeArrayPartial(contentOffset + contentSize) { componentCoreType() }
+            .let { it.values to it.failureOffset }
     }
 }
 

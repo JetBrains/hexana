@@ -7,6 +7,7 @@ import org.jetbrains.hexana.wasm.sections.WasmSection
 import org.jetbrains.hexana.wasm.sections.WasmSectionUnresolved
 import org.jetbrains.hexana.wasm.sections.consumeArray
 import org.jetbrains.hexana.wasm.sections.consumeString
+import org.jetbrains.hexana.wasm.sections.consumeArrayPartial
 
 class WasmComponentExportSection(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection("ComponentExport", sectionSize,
     sectionOffset,
@@ -19,12 +20,18 @@ class WasmComponentExportSection(sectionSize: Int, sectionOffset: Int, contentSi
     constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
 
     fun CommonByteBuffer.scan(): List<WasmComponentExport> {
-        val list = mutableListOf<WasmComponentExport>()
         position(contentOffset)
-        consumeArray {
+        val list = mutableListOf<WasmComponentExport>()
+        consumeArray(contentOffset + contentSize) {
             list.add(exportRecord())
         }
         return list
+    }
+
+    /** Returns the decoded export prefix and the first unreadable entry offset. */
+    fun CommonByteBuffer.scanPartial(): Pair<List<WasmComponentExport>, Int?> = run {
+        position(contentOffset)
+        consumeArrayPartial(contentOffset + contentSize) { exportRecord() }.let { it.values to it.failureOffset }
     }
 }
 
@@ -65,4 +72,3 @@ class WasmComponentExport(
     val sortIndex: ComponentSortIndex,
     val externDescription: ComponentExternDescription? = null
 )
-

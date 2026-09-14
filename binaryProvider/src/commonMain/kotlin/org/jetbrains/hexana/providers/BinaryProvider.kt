@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.providers
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.containsRange
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormatDetector
@@ -46,6 +47,7 @@ import org.jetbrains.hexana.zip.ZipParser
 import org.jetbrains.hexana.wasm.WasmModule
 import org.jetbrains.hexana.wasm.WasmNamedRange
 import org.jetbrains.hexana.wasm.SectionScanFailure
+import org.jetbrains.hexana.wasm.SectionScanFailureKind
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.customSectionByName
 import org.jetbrains.hexana.wasm.analysis.GraalJavaSymbol
@@ -828,9 +830,16 @@ fun nativeOrGenericBinaryProvider(
 open class WasmComponentBinaryProvider(private val sharedBytes: CommonByteBuffer): BinaryProvider {
     override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
 
-    val wasmModule = when (val parseResult = WasmParser().parse(bytes)) {
+    private val parseResult = WasmParser().parse(bytes)
+
+    val wasmModule = when (parseResult) {
         is WasmParseSuccess -> parseResult.wasmModule as? WasmComponent
         else -> null
+    }
+
+    private val sectionScanFailures: List<SectionScanFailure> = when (parseResult) {
+        is WasmParseSuccess -> parseResult.sectionScanFailures
+        else -> emptyList()
     }
 
     fun canProvideWasmModule() = wasmModule != null
@@ -896,36 +905,63 @@ open class WasmComponentBinaryProvider(private val sharedBytes: CommonByteBuffer
     }
 
     /**
-     * Parse problems found in this component: core-instance entries whose tag
-     * byte is not a known encoding, and section remainders that failed to
-     * decode. Derived from [coreInstances] without an extra parse pass.
+     * Parse problems found in this component, including entries whose decoded
+     * prefix is retained and a nested component whose header is not identified.
+     * Capped to keep malformed inputs from producing an unbounded diagnostic list.
      */
     val parseProblems: List<ParseProblem> by lazy {
-        coreInstances.mapNotNull { instance ->
-            when (instance) {
-                is UnknownInstanceCoreExpression -> ParseProblem(
-                    kind = ParseProblemKind.UNKNOWN_CORE_INSTANCE_TAG,
-                    sectionId = WasmCoreInstanceSection.SECTION_ID.toInt(),
-                    sectionName = "Instance",
-                    funcIdx = null,
-                    typeIdx = null,
-                    byteOffset = instance.offset,
-                    byteSize = 1,
-                    message = "unknown core-instance tag 0x${instance.tag.toHexString()}",
-                )
-                is CorruptInstanceCoreExpression -> ParseProblem(
-                    kind = ParseProblemKind.CORE_INSTANCE_ENTRY_CORRUPT,
-                    sectionId = WasmCoreInstanceSection.SECTION_ID.toInt(),
-                    sectionName = "Instance",
-                    funcIdx = null,
-                    typeIdx = null,
-                    byteOffset = instance.offset,
-                    byteSize = instance.size,
-                    message = instance.message,
-                )
-                else -> null
+        val module = wasmModule ?: return@lazy emptyList()
+        val problems = mutableListOf<ParseProblem>()
+        var nextFailure = 0
+
+        fun addFailuresThrough(offset: Int) {
+            while (nextFailure < sectionScanFailures.size &&
+                sectionScanFailures[nextFailure].byteOffset <= offset &&
+                problems.size < MAX_PARSE_PROBLEMS
+            ) {
+                problems.add(sectionScanFailures[nextFailure++].toParseProblem())
             }
         }
+
+        for (section in module.sections) {
+            addFailuresThrough(section.sectionOffset)
+            if (problems.size >= MAX_PARSE_PROBLEMS) break
+            when (section) {
+                is WasmCoreInstanceSection -> {
+                    val entries = with(section) { bytes.parseCoreInstanceProblems(MAX_PARSE_PROBLEMS - problems.size) }
+                    for (entry in entries) {
+                        entry.toComponentParseProblem()?.let(problems::add)
+                        if (problems.size >= MAX_PARSE_PROBLEMS) break
+                    }
+                }
+                is WasmInstanceSection -> with(section) { bytes.parseInstancesPartial().second }
+                    ?.let { problems.add(section.parseProblemAt(it, "instance entry")) }
+                is WasmComponentTypesSection -> with(section) { bytes.scanTypesPartial().second }
+                    ?.let { problems.add(section.parseProblemAt(it, "type entry")) }
+                is WasmComponentCoreTypeSection -> with(section) { bytes.scanTypesPartial().second }
+                    ?.let { problems.add(section.parseProblemAt(it, "core type entry")) }
+                is WasmAliasSection -> with(section) { bytes.scanAliasesPartial().second }
+                    ?.let { problems.add(section.parseProblemAt(it, "alias entry")) }
+                is WasmComponentImportSection -> with(section) { bytes.scanPartial().second }
+                    ?.let { problems.add(section.parseProblemAt(it, "import entry")) }
+                is WasmComponentExportSection -> with(section) { bytes.scanPartial().second }
+                    ?.let { problems.add(section.parseProblemAt(it, "export entry")) }
+                is WasmComponentSection -> {
+                    if (!sharedBytes.containsRange(section.contentOffset, section.contentSize)) continue
+                    val nested = try {
+                        with(section) { bytes.parseNestedComponent() }
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (nested == null) problems.add(section.parseProblemAt(section.contentOffset, "nested component"))
+                }
+            }
+            if (problems.size >= MAX_PARSE_PROBLEMS) break
+        }
+        while (nextFailure < sectionScanFailures.size && problems.size < MAX_PARSE_PROBLEMS) {
+            problems.add(sectionScanFailures[nextFailure++].toParseProblem())
+        }
+        problems.sortedBy { it.byteOffset }
     }
 
     val nestedComponents: List<NestedComponentData> by lazy {
@@ -958,20 +994,47 @@ open class WasmComponentBinaryProvider(private val sharedBytes: CommonByteBuffer
         val data = nestedComponents.getOrNull(componentIndex) ?: return emptyList()
         return buildComponentTypeIndex(data.component.sections, data.buffer)
     }
+
+    private companion object {
+        const val MAX_PARSE_PROBLEMS = 1000
+    }
 }
 
 class NestedComponentData(val component: WasmComponent, val buffer: CommonByteBuffer)
 
 fun buildComponentTypeIndex(sections: List<WasmSection>, buffer: CommonByteBuffer): List<ComponentDefType> {
+    return buildComponentTypeIndex(
+        sections,
+        { section -> with(section) { buffer.scanTypes() } },
+        { section -> with(section) { buffer.scanAliases() } },
+        { section -> with(section) { buffer.scan() } },
+    )
+}
+
+fun buildComponentTypeIndexPartial(sections: List<WasmSection>, buffer: CommonByteBuffer): List<ComponentDefType> {
+    return buildComponentTypeIndex(
+        sections,
+        { section -> with(section) { buffer.scanTypesPartial().first } },
+        { section -> with(section) { buffer.scanAliasesPartial().first } },
+        { section -> with(section) { buffer.scanPartial().first } },
+    )
+}
+
+private fun buildComponentTypeIndex(
+    sections: List<WasmSection>,
+    scanTypes: (WasmComponentTypesSection) -> List<ComponentDefType>,
+    scanAliases: (WasmAliasSection) -> List<ComponentAliasDef>,
+    scanImports: (WasmComponentImportSection) -> List<WasmComponentImport>,
+): List<ComponentDefType> {
     val types = mutableListOf<ComponentDefType>()
     for (section in sections) {
         when (section) {
             is WasmComponentTypesSection -> {
-                val sectionTypes = with(section) { buffer.scanTypes() }
+                val sectionTypes = scanTypes(section)
                 types.addAll(sectionTypes)
             }
             is WasmAliasSection -> {
-                val aliases = with(section) { buffer.scanAliases() }
+                val aliases = scanAliases(section)
                 for (alias in aliases) {
                     if (alias is ComponentAlias && alias.componentSort is ComponentSort.Type) {
                         types.add(ComponentAliasedType(alias))
@@ -979,7 +1042,7 @@ fun buildComponentTypeIndex(sections: List<WasmSection>, buffer: CommonByteBuffe
                 }
             }
             is WasmComponentImportSection -> {
-                val imports = with(section) { buffer.scan() }
+                val imports = scanImports(section)
                 for (import in imports) {
                     if (import.externDescription is ComponentExternTypeBound) {
                         types.add(ComponentImportedType(import))
@@ -990,6 +1053,69 @@ fun buildComponentTypeIndex(sections: List<WasmSection>, buffer: CommonByteBuffe
         }
     }
     return types
+}
+
+private fun WasmSection.parseProblemAt(offset: Int, entryName: String) = ParseProblem(
+    kind = ParseProblemKind.SECTION_ENTRY_CORRUPT,
+    sectionId = when (this) {
+        is WasmComponentCoreTypeSection -> WasmComponentCoreTypeSection.SECTION_ID.toInt()
+        is WasmComponentTypesSection -> WasmComponentTypesSection.SECTION_ID.toInt()
+        is WasmInstanceSection -> WasmInstanceSection.SECTION_ID.toInt()
+        is WasmAliasSection -> WasmAliasSection.SECTION_ID.toInt()
+        is WasmComponentImportSection -> WasmComponentImportSection.SECTION_ID.toInt()
+        is WasmComponentExportSection -> WasmComponentExportSection.SECTION_ID.toInt()
+        is WasmComponentSection -> WasmComponentSection.SECTION_ID.toInt()
+        else -> 0
+    },
+    sectionName = name,
+    funcIdx = null,
+    typeIdx = null,
+    byteOffset = offset,
+    byteSize = (sectionOffset + sectionSize - offset).coerceAtLeast(1),
+    message = "$entryName could not be decoded at offset $offset",
+)
+
+private fun InstanceCoreExpression.toComponentParseProblem(): ParseProblem? = when (this) {
+    is UnknownInstanceCoreExpression -> ParseProblem(
+        kind = ParseProblemKind.UNKNOWN_CORE_INSTANCE_TAG,
+        sectionId = WasmCoreInstanceSection.SECTION_ID.toInt(),
+        sectionName = "Instance",
+        funcIdx = null,
+        typeIdx = null,
+        byteOffset = offset,
+        byteSize = 1,
+        message = "unknown core-instance tag 0x${tag.toHexString()}",
+    )
+    is CorruptInstanceCoreExpression -> ParseProblem(
+        kind = ParseProblemKind.CORE_INSTANCE_ENTRY_CORRUPT,
+        sectionId = WasmCoreInstanceSection.SECTION_ID.toInt(),
+        sectionName = "Instance",
+        funcIdx = null,
+        typeIdx = null,
+        byteOffset = offset,
+        byteSize = size,
+        message = message,
+    )
+    else -> null
+}
+
+private fun SectionScanFailure.toParseProblem() = ParseProblem(
+    kind = toParseProblemKind(),
+    sectionId = 0,
+    sectionName = when (kind) {
+        SectionScanFailureKind.TRUNCATED -> "Section header"
+        SectionScanFailureKind.RESOLVER_FAILURE -> "Custom section"
+    },
+    funcIdx = null,
+    typeIdx = null,
+    byteOffset = byteOffset,
+    byteSize = 1,
+    message = message,
+)
+
+private fun SectionScanFailure.toParseProblemKind() = when (kind) {
+    SectionScanFailureKind.TRUNCATED -> ParseProblemKind.SECTION_TRUNCATED
+    SectionScanFailureKind.RESOLVER_FAILURE -> ParseProblemKind.SECTION_RESOLVE_FAILURE
 }
 
 open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvider {

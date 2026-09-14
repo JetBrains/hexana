@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.providers.format
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.containsRange
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.wasm.analysis.diff.match.FnvHash
 
@@ -69,12 +70,16 @@ object WasmComponentDiffOrchestrator {
         val buf = provider.bytes // independent cursor; slices are absolute, position-free
         val refs = ArrayList<SubmoduleRef>()
         provider.modules.forEachIndexed { i, module ->
-            refs.add(refOf(buf, SubmoduleKind.CORE_MODULE, module.contentOffset, module.contentSize, "module[$i]"))
+            if (buf.containsRange(module.contentOffset, module.contentSize)) {
+                refs.add(refOf(buf, SubmoduleKind.CORE_MODULE, module.contentOffset, module.contentSize, "module[$i]"))
+            }
         }
         // The parser currently exposes at most one nested component section per level. Drilling
         // into it re-parses the slice fresh, so deeper nesting is still reachable one level at a time.
         provider.wasmModule?.componentSection?.let { section ->
-            refs.add(refOf(buf, SubmoduleKind.COMPONENT, section.contentOffset, section.contentSize, "component[0]"))
+            if (buf.containsRange(section.contentOffset, section.contentSize)) {
+                refs.add(refOf(buf, SubmoduleKind.COMPONENT, section.contentOffset, section.contentSize, "component[0]"))
+            }
         }
         return refs
     }

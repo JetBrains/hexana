@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.run
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.containsRange
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 
@@ -20,7 +21,8 @@ internal object WasmDwarfUtil {
             val buffer = wasmBytes
             val provider = WasmComponentBinaryProvider(buffer)
             if (!provider.canProvideWasmModule()) return emptyList()
-            provider.modules.map { coreModule ->
+            provider.modules.mapNotNull { coreModule ->
+                if (!buffer.containsRange(coreModule.contentOffset, coreModule.contentSize)) return@mapNotNull null
                 val moduleBytes = ByteArray(coreModule.contentSize)
                 buffer.position(coreModule.contentOffset)
                 buffer.get(moduleBytes, 0, coreModule.contentSize)

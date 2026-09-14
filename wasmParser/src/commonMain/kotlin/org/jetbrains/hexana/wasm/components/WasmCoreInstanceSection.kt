@@ -6,6 +6,7 @@ import org.jetbrains.hexana.wasm.sections.WasmSection
 import org.jetbrains.hexana.wasm.sections.WasmSectionUnresolved
 import org.jetbrains.hexana.wasm.sections.consumeArray
 import org.jetbrains.hexana.wasm.sections.consumeString
+import org.jetbrains.hexana.wasm.sections.consumeUnsignedUInt
 
 class WasmCoreInstanceSection(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection("Instance", sectionSize,
     sectionOffset,
@@ -22,7 +23,7 @@ class WasmCoreInstanceSection(sectionSize: Int, sectionOffset: Int, contentSize:
         val instances = mutableListOf<InstanceCoreExpression>()
         var entryOffset = contentOffset
         try {
-            consumeArray {
+            consumeArray(contentOffset + contentSize) {
                 entryOffset = position()
                 instances.add(componentCoreInstance())
             }
@@ -38,7 +39,36 @@ class WasmCoreInstanceSection(sectionSize: Int, sectionOffset: Int, contentSize:
         }
         return instances
     }
+
+    /** Decodes at most [maxProblems] malformed core-instance records. */
+    fun CommonByteBuffer.parseCoreInstanceProblems(maxProblems: Int): List<InstanceCoreExpression> {
+        if (maxProblems <= 0) return emptyList()
+        position(contentOffset)
+        val problems = mutableListOf<InstanceCoreExpression>()
+        var entryOffset = contentOffset
+        try {
+            consumeArray(contentOffset + contentSize) {
+                entryOffset = position()
+                val expression = componentCoreInstance()
+                if (expression is UnknownInstanceCoreExpression) {
+                    problems.add(expression)
+                    if (problems.size == maxProblems) throw CoreInstanceProblemLimitReached
+                }
+            }
+        } catch (_: CoreInstanceProblemLimitReached) {
+            return problems
+        } catch (e: Exception) {
+            problems.add(CorruptInstanceCoreExpression(
+                offset = entryOffset,
+                size = (contentOffset + contentSize - entryOffset).coerceAtLeast(1),
+                message = e.message ?: "core-instance entry could not be decoded",
+            ))
+        }
+        return problems
+    }
 }
+
+private object CoreInstanceProblemLimitReached : RuntimeException()
 
 
 data class InstanceCoreInlineExportDescriptor(
@@ -93,7 +123,7 @@ object ComponentCoreInstance {
         val tagOffset = position()
         return when (val tag = get()) {
             0.toByte() -> {
-                ModuleInstanceCoreExpression(uint32(), consumeInstantiateArgs())
+                ModuleInstanceCoreExpression(consumeUnsignedUInt(), consumeInstantiateArgs())
             }
 
             1.toByte() -> {
@@ -151,7 +181,7 @@ object ComponentCoreInstance {
         consumeArray {
             val name = consumeString()
             get()
-            val instanceIndex = uint32()
+            val instanceIndex = consumeUnsignedUInt()
             instantiateArgs.add(InstantiateArg(name, instanceIndex))
         }
         return instantiateArgs
@@ -182,7 +212,7 @@ object ComponentCoreInstance {
     }
 
     fun CommonByteBuffer.componentCoreSortIndex(): ComponentCoreSortIndex {
-        return ComponentCoreSortIndex(componentCoreSort(), uint32())
+        return ComponentCoreSortIndex(componentCoreSort(), consumeUnsignedUInt())
     }
 
     fun CommonByteBuffer.componentSort(): ComponentSort {
@@ -204,7 +234,7 @@ object ComponentCoreInstance {
 
 
     fun CommonByteBuffer.componentSortWithIndex(): ComponentSortIndex {
-        return ComponentSortIndex(componentSort(), uint32())
+        return ComponentSortIndex(componentSort(), consumeUnsignedUInt())
     }
 }
 

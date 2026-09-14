@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.run
 
 import com.intellij.openapi.diagnostic.Logger
+import org.jetbrains.hexana.io.containsRange
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProvider
@@ -179,6 +180,7 @@ internal object WasmDwarfInjector {
 
             // Check embedded core modules
             for (coreModule in provider.modules) {
+                if (!buffer.containsRange(coreModule.contentOffset, coreModule.contentSize)) continue
                 val moduleBytes = ByteArray(coreModule.contentSize)
                 buffer.position(coreModule.contentOffset)
                 buffer.get(moduleBytes, 0, coreModule.contentSize)

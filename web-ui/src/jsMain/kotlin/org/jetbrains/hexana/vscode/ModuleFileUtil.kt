@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.vscode
 
+import org.jetbrains.hexana.io.containsRange
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 
 /**
@@ -63,7 +64,7 @@ fun submoduleFileName(
  */
 internal fun WasmComponentBinaryProvider.submoduleBytes(contentOffset: Int, contentSize: Int): ByteArray? {
     val buffer = bytes
-    if (contentOffset < 0 || contentSize <= 0 || contentOffset > buffer.limit() - contentSize) return null
+    if (contentSize <= 0 || !buffer.containsRange(contentOffset, contentSize)) return null
     val target = ByteArray(contentSize)
     buffer.position(contentOffset)
     buffer.get(target, 0, contentSize)

@@ -7,6 +7,8 @@ import org.jetbrains.hexana.wasm.sections.WasmSection
 import org.jetbrains.hexana.wasm.sections.WasmSectionUnresolved
 import org.jetbrains.hexana.wasm.sections.consumeArray
 import org.jetbrains.hexana.wasm.sections.consumeString
+import org.jetbrains.hexana.wasm.sections.consumeArrayPartial
+import org.jetbrains.hexana.wasm.sections.consumeUnsignedUInt
 
 class WasmAliasSection(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection("Alias", sectionSize,
     sectionOffset,
@@ -21,10 +23,16 @@ class WasmAliasSection(sectionSize: Int, sectionOffset: Int, contentSize: Int, c
     fun CommonByteBuffer.scanAliases(): List<ComponentAliasDef> {
         position(contentOffset)
         val aliases = mutableListOf<ComponentAliasDef>()
-        consumeArray {
+        consumeArray(contentOffset + contentSize) {
             aliases.add(Alias.run { componentAlias() })
         }
         return aliases
+    }
+
+    /** Returns the decoded alias prefix and the first unreadable entry offset. */
+    fun CommonByteBuffer.scanAliasesPartial(): Pair<List<ComponentAliasDef>, Int?> = run {
+        position(contentOffset)
+        consumeArrayPartial(contentOffset + contentSize) { Alias.run { componentAlias() } }.let { it.values to it.failureOffset }
     }
 }
 
@@ -42,15 +50,15 @@ object Alias {
 
     fun CommonByteBuffer.aliasTarget(): AliasTarget {
         return when (val byte = get()) {
-            0x00.toByte() -> AliasTarget.Export(uint32(), consumeString())
-            0x01.toByte() -> AliasTarget.Core(uint32(), consumeString())
-            0x02.toByte() -> AliasTarget.Outer(uint32(), uint32())
+            0x00.toByte() -> AliasTarget.Export(consumeUnsignedUInt(), consumeString())
+            0x01.toByte() -> AliasTarget.Core(consumeUnsignedUInt(), consumeString())
+            0x02.toByte() -> AliasTarget.Outer(consumeUnsignedUInt(), consumeUnsignedUInt())
             else -> throw IllegalArgumentException("Invalid alias target type: ${byte.toHexString()}")
         }
     }
     fun CommonByteBuffer.aliasCoreTarget(): AliasTarget {
         return when (val byte = get()) {
-             0x01.toByte() -> AliasTarget.CoreOuter(uint32(), uint32())
+            0x01.toByte() -> AliasTarget.CoreOuter(consumeUnsignedUInt(), consumeUnsignedUInt())
             else -> throw IllegalArgumentException("Invalid alias target type: ${byte.toHexString()}")
         }
     }

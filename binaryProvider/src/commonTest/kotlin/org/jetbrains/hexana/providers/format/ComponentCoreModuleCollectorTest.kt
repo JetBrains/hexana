@@ -85,4 +85,12 @@ class ComponentCoreModuleCollectorTest {
     fun `component with no core modules yields empty`() {
         assertEquals(0, collect(componentHeader).size)
     }
+
+    @Test
+    fun `truncated submodule ranges are ignored`() {
+        listOf(1.toByte(), 4.toByte()).forEach { sectionId ->
+            val truncated = componentHeader + byteArrayOf(sectionId, 0x40, 0x00, 0x61, 0x73, 0x6D)
+            assertEquals(emptyList(), collect(truncated))
+        }
+    }
 }

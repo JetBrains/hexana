@@ -70,4 +70,16 @@ class WasmComponentSizeAnalysisTest {
         assertEquals(1, modules.size)
         assertNotNull(modules[0].slice)
     }
+
+    @Test
+    fun `truncated submodule ranges remain visible without expandable slices`() {
+        listOf(1.toByte(), 4.toByte()).forEach { sectionId ->
+            val truncated = componentHeader + byteArrayOf(sectionId, 0x40, 0x00, 0x61, 0x73, 0x6D)
+            val root = sizeTree(truncated)
+
+            assertNotNull(root)
+            assertEquals(1, root.children.filterIsInstance<SizeNode.Section>().size)
+            assertTrue(root.children.none { it is SizeNode.EmbeddedModule || it is SizeNode.EmbeddedComponent })
+        }
+    }
 }

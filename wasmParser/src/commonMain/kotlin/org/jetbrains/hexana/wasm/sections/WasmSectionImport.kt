@@ -40,22 +40,9 @@ class WasmSectionImport(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
      * stops and returns the partial list paired with the byte offset of that
      * entry (null second means the section parsed fully).
      */
-    fun CommonByteBuffer.getImportRecordsPartial(): Pair<MutableList<WasmImportRecord>, Int?> {
+    fun CommonByteBuffer.getImportRecordsPartial(): Pair<MutableList<WasmImportRecord>, Int?> = run {
         position(contentOffset)
-        val records = mutableListOf<WasmImportRecord>()
-        var failedOffset: Int? = null
-
-        val count = getULEB128().toInt()
-        for (i in 0 until count) {
-            val offset = position()
-            try {
-                records.add(importRecord())
-            } catch (e: Exception) {
-                failedOffset = offset
-                break
-            }
-        }
-        return records to failedOffset
+        consumeArrayPartial(contentOffset + contentSize) { importRecord() }.let { it.values to it.failureOffset }
     }
 
 }
@@ -66,7 +53,7 @@ fun CommonByteBuffer.importRecord(): WasmImportRecord {
     val name = consumeString()
     val rawType = get()
     val type = when (rawType) {
-        0x00.toByte() -> WasmTypeIndexExternalType(getULEB128())
+        0x00.toByte() -> WasmTypeIndexExternalType(consumeUnsignedUInt().toLong())
         0x01.toByte() -> {
             val refType = referenceType()!!
             val limits = limits()
@@ -80,7 +67,7 @@ fun CommonByteBuffer.importRecord(): WasmImportRecord {
 
         0x04.toByte() -> {
             get() // 0x00 prefix
-            WasmTagType(WasmTypeIndexExternalType(getULEB128()))
+            WasmTagType(WasmTypeIndexExternalType(consumeUnsignedUInt().toLong()))
         }
 
         else -> error("unknown import type: $rawType")

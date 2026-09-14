@@ -19,20 +19,7 @@ class WasmSectionFunctions(sectionSize: Int, sectionOffset: Int, contentSize: In
      */
     fun CommonByteBuffer.parseFunctionsPartial(): Pair<MutableList<Int>, Int?> {
         position(contentOffset)
-        val typeRefs = mutableListOf<Int>()
-        var failedOffset: Int? = null
-
-        val count = getULEB128().toInt()
-        for (i in 0 until count) {
-            val offset = position()
-            try {
-                typeRefs.add(getULEB128().toInt())
-            } catch (e: Exception) {
-                failedOffset = offset
-                break
-            }
-        }
-        return typeRefs to failedOffset
+        return consumeArrayPartial(contentOffset + contentSize) { consumeUnsignedInt() }.let { it.values to it.failureOffset }
     }
 
     fun CommonByteBuffer.parseFunctions(): List<Int> = parseFunctionsPartial().first
@@ -46,21 +33,11 @@ class WasmSectionFunctions(sectionSize: Int, sectionOffset: Int, contentSize: In
      */
     fun CommonByteBuffer.scanRangesPartial(): Pair<MutableList<FunctionEntryRange>, Int?> {
         position(contentOffset)
-        val count = getULEB128().toInt()
-        val out = ArrayList<FunctionEntryRange>(count)
-        var failedOffset: Int? = null
-        for (i in 0 until count) {
+        return consumeArrayPartial(contentOffset + contentSize) {
             val start = position()
-            try {
-                val typeIdx = getULEB128().toInt()
-                val size = position() - start
-                out.add(FunctionEntryRange(offset = start, size = size, typeIdx = typeIdx))
-            } catch (e: Exception) {
-                failedOffset = start
-                break
-            }
-        }
-        return out to failedOffset
+            val typeIdx = consumeUnsignedInt()
+            FunctionEntryRange(offset = start, size = position() - start, typeIdx = typeIdx)
+        }.let { it.values to it.failureOffset }
     }
 
     fun CommonByteBuffer.scanRanges(): List<FunctionEntryRange> = scanRangesPartial().first

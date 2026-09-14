@@ -28,39 +28,29 @@ class WasmSectionData(sectionSize: Int, sectionOffset: Int, contentSize: Int, co
      * stops and returns the partial list paired with the byte offset of that
      * entry (null second means the section parsed fully).
      */
-    fun CommonByteBuffer.scanPartial(): Pair<MutableList<WasmDataRecord>, Int?> {
+    fun CommonByteBuffer.scanPartial(): Pair<MutableList<WasmDataRecord>, Int?> = run {
         position(contentOffset)
-        val records = mutableListOf<WasmDataRecord>()
-        var failedOffset: Int? = null
-
-        val count = getULEB128().toInt()
-        for (i in 0 until count) {
+        consumeArrayPartial(contentOffset + contentSize) {
             val off = position()
-            try {
-                when (val recordType = getULEB128().toUInt()) {
-                    0u -> {
+            when (val recordType = consumeUnsignedInt()) {
+                    0 -> {
                         val opCodes = parseOpCodes(instructionReadingLimit())
                         val data = fetchDataSlice()
-                        records.add(WasmDataRecordActive(off, sizeFromOffset(off), opCodes, data))
+                        WasmDataRecordActive(off, sizeFromOffset(off), opCodes, data)
                     }
-                    1u -> {
+                    1 -> {
                         val data = fetchDataSlice()
-                        records.add(WasmDataRecordPassive(off, sizeFromOffset(off), data))
+                        WasmDataRecordPassive(off, sizeFromOffset(off), data)
                     }
-                    2u -> {
-                        val index = getULEB128().toUInt()
+                    2 -> {
+                        val index = consumeUnsignedUInt()
                         val opCodes = parseOpCodes(instructionReadingLimit())
                         val data = fetchDataSlice()
-                        records.add(WasmDataRecordActiveWithMemoryIndex(off, sizeFromOffset(off), index, opCodes, data))
+                        WasmDataRecordActiveWithMemoryIndex(off, sizeFromOffset(off), index, opCodes, data)
                     }
                     else -> throw IllegalArgumentException("Unknown data record type: $recordType")
-                }
-            } catch (e: Exception) {
-                failedOffset = off
-                break
             }
-        }
-        return records to failedOffset
+        }.let { it.values to it.failureOffset }
     }
 
     fun CommonByteBuffer.scan(): List<WasmDataRecord> = scanPartial().first
@@ -73,7 +63,7 @@ class WasmSectionData(sectionSize: Int, sectionOffset: Int, contentSize: Int, co
      * offset.
      */
     private fun CommonByteBuffer.fetchDataSlice(): CommonByteBuffer {
-        val length = getULEB128().toInt()
+        val length = consumeUnsignedInt()
         val start = position()
         val view = slice(start, length)
         position(start + length)

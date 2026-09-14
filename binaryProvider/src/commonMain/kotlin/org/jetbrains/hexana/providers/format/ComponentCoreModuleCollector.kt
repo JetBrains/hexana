@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.providers.format
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.containsRange
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.wasm.components.WasmComponentModuleSection
 import org.jetbrains.hexana.wasm.components.WasmComponentSection
@@ -68,24 +69,26 @@ object ComponentCoreModuleCollector {
             if (out.size >= maxModules) return
             when (section) {
                 is WasmComponentModuleSection -> {
+                    val index = moduleIdx++
+                    if (!buffer.containsRange(section.contentOffset, section.contentSize)) continue
                     out.add(
                         EmbeddedCoreModule(
                             bytes = buffer.slice(section.contentOffset, section.contentSize),
-                            path = "${prefix}module[$moduleIdx]",
+                            path = "${prefix}module[$index]",
                             size = section.contentSize,
                         ),
                     )
-                    moduleIdx++
                 }
                 is WasmComponentSection -> {
+                    val index = componentIdx++
+                    if (!buffer.containsRange(section.contentOffset, section.contentSize)) continue
                     collectFrom(
                         buffer = buffer.slice(section.contentOffset, section.contentSize),
-                        prefix = "${prefix}component[$componentIdx]/",
+                        prefix = "${prefix}component[$index]/",
                         depth = depth + 1,
                         out = out,
                         maxModules = maxModules,
                     )
-                    componentIdx++
                 }
                 else -> { /* not a module or component section */ }
             }

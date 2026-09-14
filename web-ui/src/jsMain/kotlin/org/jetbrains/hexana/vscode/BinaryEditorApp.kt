@@ -35,11 +35,7 @@ fun extractNestedModuleBytes(parentData: ByteArray, moduleIndex: Int): ByteArray
         BinaryProviderType.WasmComponent -> {
             val provider = WasmComponentBinaryProvider(buffer)
             val module = provider.modules.getOrNull(moduleIndex) ?: return null
-            val result = ByteArray(module.contentSize)
-            val src = provider.bytes
-            src.position(module.contentOffset)
-            src.get(result, 0, module.contentSize)
-            return result
+            return provider.submoduleBytes(module.contentOffset, module.contentSize)
         }
         else -> {}
     }

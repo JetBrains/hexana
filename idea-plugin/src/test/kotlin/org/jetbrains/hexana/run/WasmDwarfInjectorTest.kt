@@ -119,6 +119,20 @@ class WasmDwarfInjectorTest : UsefulTestCase() {
         assertFalse("Should report no DWARF sections injected", injected)
     }
 
+    fun testTruncatedCoreModuleWithHugeDeclaredSizeIsSkippedWhenExtractingSourceDwarf() {
+        val malformedComponent = byteArrayOf(
+            0x00, 0x61, 0x73, 0x6d, 0x0d, 0x00, 0x01, 0x00,
+            0x01, 0xf1.toByte(), 0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0x07,
+            0x00, 0x61, 0x73, 0x6d,
+        )
+        val sourceFile = File(tempDir, "truncated-component.wasm").also { it.writeBytes(malformedComponent) }
+        val composedWasm = wat2wasm("(module)")
+        val composedFile = File(tempDir, "composed.wasm").also { it.writeBytes(composedWasm) }
+
+        assertFalse(WasmDwarfInjector.injectDwarfSections(composedFile, listOf(sourceFile)))
+        assertTrue(composedWasm.contentEquals(composedFile.readBytes()))
+    }
+
     fun testMultipleSourceFiles() {
         val source1 = buildWasmWithCustomSections(
             ".debug_info" to byteArrayOf(0x01, 0x02),

@@ -27,23 +27,13 @@ class WasmSectionMemory(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
      * stops and returns the partial list paired with the byte offset of that
      * entry (null second means the section parsed fully).
      */
-    fun CommonByteBuffer.scanPartial(): Pair<MutableList<WasmMemoryRecord>, Int?> {
+    fun CommonByteBuffer.scanPartial(): Pair<MutableList<WasmMemoryRecord>, Int?> = run {
         position(contentOffset)
-        val records = mutableListOf<WasmMemoryRecord>()
-        var failedOffset: Int? = null
-
-        val count = getULEB128().toInt()
-        for (memidx in 0 until count) {
+        consumeArrayPartial(contentOffset + contentSize) { memidx ->
             val offset = position()
-            try {
-                val limits = limits()
-                records.add(WasmMemoryRecord(offset, sizeFromOffset(offset), memidx, limits))
-            } catch (e: Exception) {
-                failedOffset = offset
-                break
-            }
-        }
-        return records to failedOffset
+            val limits = limits()
+            WasmMemoryRecord(offset, sizeFromOffset(offset), memidx, limits)
+        }.let { it.values to it.failureOffset }
     }
 
     fun CommonByteBuffer.scan(): List<WasmMemoryRecord> = scanPartial().first

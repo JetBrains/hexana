@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.containsRange
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
@@ -102,6 +103,7 @@ class WasmDebugModules private constructor(
             }
             if (embedded.isEmpty()) return null
             val modules = embedded.mapIndexed { moduleId, coreModule ->
+                if (!shared.containsRange(coreModule.contentOffset, coreModule.contentSize)) return@mapIndexed null
                 val slice = try {
                     // slice() translates coordinates, so offset 0 of the slice is the
                     // embedded module's magic — the base the stub's offsets count from.

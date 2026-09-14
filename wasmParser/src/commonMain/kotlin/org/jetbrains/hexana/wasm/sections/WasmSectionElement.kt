@@ -31,69 +31,58 @@ class WasmSectionElement(sectionSize: Int, sectionOffset: Int, contentSize: Int,
      * captured before decoding the flags LEB128 so that the reported offset points
      * at the first byte of the corrupt entry regardless of its encoding form (0-7).
      */
-    fun CommonByteBuffer.scanElementsPartial(): Pair<MutableList<WasmElementSegment>, Int?> {
+    fun CommonByteBuffer.scanElementsPartial(): Pair<MutableList<WasmElementSegment>, Int?> = run {
         position(contentOffset)
-        val elements = mutableListOf<WasmElementSegment>()
-        var failedOffset: Int? = null
-
-        val count = getULEB128().toInt()
-        for (i in 0 until count) {
-            // Capture entry start BEFORE decoding the flags LEB128.
+        consumeArrayPartial(contentOffset + contentSize) {
             val offset = position()
-            try {
-                val elementType = getULEB128().toInt()
-                when (elementType) {
+            when (consumeUnsignedInt()) {
                     0 -> {
                         val opcodes = parseOpCodes(instructionReadingLimit())
                         val funcidxs = consumeFuncidxs()
-                        elements.add(FuncIdxWasmElementSegment.ActiveDefault(offset, sizeFromOffset(offset), opcodes, funcidxs))
+                        FuncIdxWasmElementSegment.ActiveDefault(offset, sizeFromOffset(offset), opcodes, funcidxs)
                     }
                     1 -> {
                         val elementKind = get().toUByte()
                         val funcindxs = consumeFuncidxs()
-                        elements.add(FuncIdxWasmElementSegment.Passive(offset, sizeFromOffset(offset), elementKind, funcindxs))
+                        FuncIdxWasmElementSegment.Passive(offset, sizeFromOffset(offset), elementKind, funcindxs)
                     }
                     2 -> {
-                        val tableindx = getULEB128().toUInt()
+                        val tableindx = consumeUnsignedUInt()
                         val exprOffset = parseOpCodes(instructionReadingLimit())
                         val elementKind = get().toUByte()
                         val funcindxs = consumeFuncidxs()
-                        elements.add(FuncIdxWasmElementSegment.ActiveExplicit(offset, sizeFromOffset(offset), elementKind, tableindx, exprOffset, funcindxs))
+                        FuncIdxWasmElementSegment.ActiveExplicit(offset, sizeFromOffset(offset), elementKind, tableindx, exprOffset, funcindxs)
                     }
                     3 -> {
                         val elementKind = get().toUByte()
                         val funcindxs = consumeFuncidxs()
-                        elements.add(FuncIdxWasmElementSegment.Declare(offset, sizeFromOffset(offset), elementKind, funcindxs))
+                        FuncIdxWasmElementSegment.Declare(offset, sizeFromOffset(offset), elementKind, funcindxs)
                     }
                     4 -> {
                         val opcodes = parseOpCodes(instructionReadingLimit())
                         val exprList = consumeExpressionList()
-                        elements.add(ExprWasmElementSegment.ActiveDefault(offset, sizeFromOffset(offset), opcodes, exprList))
+                        ExprWasmElementSegment.ActiveDefault(offset, sizeFromOffset(offset), opcodes, exprList)
                     }
                     5 -> {
                         val refType = referenceType()!!
                         val exprList = consumeExpressionList()
-                        elements.add(ExprWasmElementSegment.Passive(offset, sizeFromOffset(offset), refType, exprList))
+                        ExprWasmElementSegment.Passive(offset, sizeFromOffset(offset), refType, exprList)
                     }
                     6 -> {
-                        val tableindx = getULEB128().toUInt()
+                        val tableindx = consumeUnsignedUInt()
                         val expression = parseOpCodes(instructionReadingLimit())
                         val refType = referenceType()!!
                         val exprList = consumeExpressionList()
-                        elements.add(ExprWasmElementSegment.ActiveExplicit(offset, sizeFromOffset(offset), tableindx, expression, refType, exprList))
+                        ExprWasmElementSegment.ActiveExplicit(offset, sizeFromOffset(offset), tableindx, expression, refType, exprList)
                     }
                     7 -> {
                         val refType = referenceType()!!
                         val exprList = consumeExpressionList()
-                        elements.add(ExprWasmElementSegment.Declare(offset, sizeFromOffset(offset), refType, exprList))
+                        ExprWasmElementSegment.Declare(offset, sizeFromOffset(offset), refType, exprList)
                     }
+                    else -> throw IllegalArgumentException("Unknown element segment type")
                 }
-            } catch (e: Exception) {
-                failedOffset = offset
-                break
-            }
-        }
-        return elements to failedOffset
+        }.let { it.values to it.failureOffset }
     }
 
     fun CommonByteBuffer.scanElements(): List<WasmElementSegment> = scanElementsPartial().first
@@ -107,7 +96,7 @@ class WasmSectionElement(sectionSize: Int, sectionOffset: Int, contentSize: Int,
     private fun CommonByteBuffer.consumeFuncidxs(): List<UInt> {
         val funcidxs = mutableListOf<UInt>()
         consumeArray {
-            funcidxs.add(getULEB128().toUInt())
+            funcidxs.add(consumeUnsignedUInt())
         }
         return funcidxs.toList()
     }

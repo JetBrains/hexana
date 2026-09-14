@@ -127,4 +127,15 @@ class WasmComponentDiffOrchestratorTest {
         assertEquals(1, result.pairings.count { it.kind == SubmoduleKind.COMPONENT })
         assertEquals(0, result.differingCount)
     }
+
+    @Test
+    fun `truncated submodule ranges are not hashed`() {
+        listOf(1.toByte(), 4.toByte()).forEach { sectionId ->
+            val truncated = componentHeader + byteArrayOf(sectionId, 0x40, 0x00, 0x61, 0x73, 0x6D)
+            val result = WasmComponentDiffOrchestrator.diff(provider(truncated), provider(truncated))
+
+            assertNotNull(result)
+            assertTrue(result.pairings.isEmpty())
+        }
+    }
 }

@@ -169,6 +169,115 @@ interface CommonByteBuffer {
     fun zigzag64(): Long = getULEB128().let { (it ushr 1) xor -(it and 1) }
 }
 
+/**
+ * Returns a non-copying buffer with an independent cursor and the same absolute
+ * coordinate space, capped at [endExclusive].
+ */
+fun CommonByteBuffer.boundedDuplicate(endExclusive: Int): CommonByteBuffer =
+    BoundedCommonByteBuffer(duplicate(), endExclusive)
+
+/** Returns whether `[offset, offset + size)` fits in this buffer without integer overflow. */
+fun CommonByteBuffer.containsRange(offset: Int, size: Int): Boolean =
+    offset >= 0 && size >= 0 && offset <= limit() - size
+
+private class BoundedCommonByteBuffer(
+    private val delegate: CommonByteBuffer,
+    private val endExclusive: Int,
+) : CommonByteBuffer {
+    init {
+        require(endExclusive in 0..delegate.limit()) { "Invalid buffer boundary: $endExclusive" }
+        require(delegate.position() <= endExclusive) {
+            "Buffer position ${delegate.position()} exceeds boundary $endExclusive"
+        }
+    }
+
+    override fun get(): Byte {
+        requireRemaining(1)
+        return delegate.get()
+    }
+
+    override fun get(dst: ByteArray, offset: Int, size: Int) {
+        requireRemaining(size)
+        delegate.get(dst, offset, size)
+    }
+
+    override fun get(index: Int): Byte {
+        requireIndex(index)
+        return delegate[index]
+    }
+
+    override fun put(value: Byte) {
+        requireRemaining(1)
+        delegate.put(value)
+    }
+
+    override fun put(src: ByteArray, offset: Int, size: Int) {
+        requireRemaining(size)
+        delegate.put(src, offset, size)
+    }
+
+    override fun putIntLE(value: Int) {
+        requireRemaining(Int.SIZE_BYTES)
+        delegate.putIntLE(value)
+    }
+
+    override fun getIntLE(): Int {
+        requireRemaining(Int.SIZE_BYTES)
+        return delegate.getIntLE()
+    }
+
+    override fun position(): Int = delegate.position()
+
+    override fun position(index: Int): CommonByteBuffer {
+        if (index !in 0..endExclusive) {
+            throw IndexOutOfBoundsException("Position $index is outside buffer boundary $endExclusive")
+        }
+        delegate.position(index)
+        return this
+    }
+
+    override fun remaining(): Int = endExclusive - position()
+
+    override fun hasRemaining(): Boolean = position() < endExclusive
+
+    override fun getFloatLE(): Float {
+        requireRemaining(Float.SIZE_BYTES)
+        return delegate.getFloatLE()
+    }
+
+    override fun getDoubleLE(): Double {
+        requireRemaining(Double.SIZE_BYTES)
+        return delegate.getDoubleLE()
+    }
+
+    override fun limit(): Int = endExclusive
+
+    override fun slice(offset: Int, length: Int): CommonByteBuffer {
+        requireRange(offset, length)
+        return delegate.slice(offset, length)
+    }
+
+    override fun duplicate(): CommonByteBuffer = BoundedCommonByteBuffer(delegate.duplicate(), endExclusive)
+
+    private fun requireRemaining(size: Int) {
+        requireRange(position(), size)
+    }
+
+    private fun requireRange(offset: Int, size: Int) {
+        if (offset < 0 || size < 0 || offset > endExclusive || size > endExclusive - offset) {
+            throw IndexOutOfBoundsException(
+                "Range offset=$offset size=$size exceeds buffer boundary $endExclusive"
+            )
+        }
+    }
+
+    private fun requireIndex(index: Int) {
+        if (index < 0 || index >= endExclusive) {
+            throw IndexOutOfBoundsException("Index $index is outside buffer boundary $endExclusive")
+        }
+    }
+}
+
 inline fun <R> CommonByteBuffer.crossSectionOperation(op: () -> R): R {
     val position = position()
     try {
@@ -177,4 +286,3 @@ inline fun <R> CommonByteBuffer.crossSectionOperation(op: () -> R): R {
         position(position)
     }
 }
-

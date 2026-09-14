@@ -33,6 +33,14 @@ class WasmParseHardeningTest {
     private val truncatedSectionHeader: ByteArray =
         HEADER + byteArrayOf(0x00) // section-id only, no size byte
 
+    /** A complete type-section header whose empty payload omits its required vector count. */
+    private val missingTypeVectorCount: ByteArray =
+        HEADER + byteArrayOf(0x01, 0x00)
+
+    /** A complete type vector whose declared section payload has bytes missing at EOF. */
+    private val truncatedTypePayloadAfterCompleteVector: ByteArray =
+        HEADER + byteArrayOf(0x01, 0x07, 0x01, 0x60, 0x00, 0x00)
+
     @Test
     fun truncated_section_header_construction_succeeds() {
         // Pre-fix: this line throws. Post-fix: it completes.
@@ -53,6 +61,64 @@ class WasmParseHardeningTest {
         assertNotNull(problem, "expected exactly one SECTION_TRUNCATED problem, got ${provider.parseProblems}")
         // The bad section starts at offset 8 (right after magic+version).
         assertEquals(0x08, problem.byteOffset, "SECTION_TRUNCATED must point at the section start byte")
+    }
+
+    @Test
+    fun missing_type_vector_count_keeps_identified_module_and_reports_problem() {
+        val provider = WasmBinaryProvider(missingTypeVectorCount.toCommonByteBuffer())
+
+        assertNotNull(provider.wasmModule, "valid header and section header must still identify the module")
+        val problem = provider.parseProblems.singleOrNull { it.kind == ParseProblemKind.UNKNOWN_TYPE_BYTE }
+        assertNotNull(problem, "missing type vector count must remain observable as parse evidence")
+        assertEquals(10, problem.byteOffset, "missing vector count begins at the type payload")
+    }
+
+    @Test
+    fun truncated_type_payload_after_complete_vector_reports_section_truncated() {
+        val provider = WasmBinaryProvider(truncatedTypePayloadAfterCompleteVector.toCommonByteBuffer())
+
+        assertNotNull(provider.wasmModule, "the recognized type section must remain available")
+        assertEquals(listOf(ParseProblemKind.SECTION_TRUNCATED), provider.parseProblems.map { it.kind })
+        assertEquals(8, provider.parseProblems.single().byteOffset)
+    }
+
+    @Test
+    fun overlong_u32_core_entry_fields_report_the_entry_as_corrupt() {
+        val overlongZero = byteArrayOf(
+            0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x00,
+        )
+        val cases = listOf(
+            Triple("function type index", byteArrayOf(0x03, 0x07, 0x01) + overlongZero, ParseProblemKind.SECTION_ENTRY_CORRUPT),
+            Triple("import type index", byteArrayOf(0x02, 0x0a, 0x01, 0x00, 0x00, 0x00) + overlongZero, ParseProblemKind.IMPORT_ENTRY_CORRUPT),
+            Triple("export index", byteArrayOf(0x07, 0x09, 0x01, 0x00, 0x00) + overlongZero, ParseProblemKind.EXPORT_ENTRY_CORRUPT),
+        )
+
+        for ((field, section, expectedKind) in cases) {
+            val problem = WasmBinaryProvider((HEADER + section).toCommonByteBuffer()).parseProblems.single()
+            assertEquals(expectedKind, problem.kind, field)
+            assertEquals(11, problem.byteOffset, field)
+        }
+    }
+
+    @Test
+    fun overlong_u32_component_entries_report_the_entry_as_corrupt() {
+        val componentHeader = byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x0D, 0x00, 0x01, 0x00)
+        val overlongZero = byteArrayOf(
+            0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x00,
+        )
+        val cases = listOf(
+            Triple("type index", byteArrayOf(0x07, 0x08, 0x01, 0x69) + overlongZero, ParseProblemKind.SECTION_ENTRY_CORRUPT),
+            Triple("alias index", byteArrayOf(0x06, 0x09, 0x01, 0x03, 0x02) + overlongZero, ParseProblemKind.SECTION_ENTRY_CORRUPT),
+            Triple("import type index", byteArrayOf(0x0a, 0x0a, 0x01, 0x00, 0x00, 0x01) + overlongZero, ParseProblemKind.SECTION_ENTRY_CORRUPT),
+            Triple("export index", byteArrayOf(0x0b, 0x0a, 0x01, 0x00, 0x00, 0x01) + overlongZero, ParseProblemKind.SECTION_ENTRY_CORRUPT),
+            Triple("core instance module index", byteArrayOf(0x02, 0x09, 0x01, 0x00) + overlongZero + byteArrayOf(0x00), ParseProblemKind.CORE_INSTANCE_ENTRY_CORRUPT),
+        )
+
+        for ((field, section, expectedKind) in cases) {
+            val problem = WasmComponentBinaryProvider((componentHeader + section).toCommonByteBuffer()).parseProblems.single()
+            assertEquals(expectedKind, problem.kind, field)
+            assertEquals(11, problem.byteOffset, field)
+        }
     }
 
     // -------------------------------------------------------------------
@@ -530,5 +596,15 @@ class WasmParseHardeningTest {
         assertNotNull(module, "module must parse despite the corrupt element entry")
         val elements = with(module.elementSection!!) { provider.bytes.scanElements() }
         assertEquals(1, elements.size, "the valid first element entry must be preserved")
+    }
+
+    @Test
+    fun component_parse_problems_include_every_malformed_nested_component_in_byte_order() {
+        val componentHeader = byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x0D, 0x00, 0x01, 0x00)
+        val malformedNestedComponent = byteArrayOf(0x01, 0x02, 0x03, 0x04)
+        val nestedSection = byteArrayOf(0x04, malformedNestedComponent.size.toByte()) + malformedNestedComponent
+        val provider = WasmComponentBinaryProvider((componentHeader + nestedSection + nestedSection).toCommonByteBuffer())
+
+        assertEquals(listOf(10, 16), provider.parseProblems.map { it.byteOffset })
     }
 }

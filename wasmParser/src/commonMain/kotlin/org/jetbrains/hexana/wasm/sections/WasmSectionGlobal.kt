@@ -29,24 +29,14 @@ class WasmSectionGlobal(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
      * stops and returns the partial list paired with the byte offset of that
      * entry (null second means the section parsed fully).
      */
-    fun CommonByteBuffer.scanPartial(): Pair<MutableList<WasmGlobalRecord>, Int?> {
+    fun CommonByteBuffer.scanPartial(): Pair<MutableList<WasmGlobalRecord>, Int?> = run {
         position(contentOffset)
-        val records = mutableListOf<WasmGlobalRecord>()
-        var failedOffset: Int? = null
-
-        val count = getULEB128().toInt()
-        for (i in 0 until count) {
+        consumeArrayPartial(contentOffset + contentSize) {
             val offset = position()
-            try {
-                val globalType = WasmGlobalType(valueType()!!, get() == 0x01.toByte())
-                val expression = parseOpCodes()
-                records.add(WasmGlobalRecord(offset, sizeFromOffset(offset), globalType, expression))
-            } catch (e: Exception) {
-                failedOffset = offset
-                break
-            }
-        }
-        return records to failedOffset
+            val globalType = WasmGlobalType(valueType()!!, get() == 0x01.toByte())
+            val expression = parseOpCodes()
+            WasmGlobalRecord(offset, sizeFromOffset(offset), globalType, expression)
+        }.let { it.values to it.failureOffset }
     }
 
     fun CommonByteBuffer.scan(): List<WasmGlobalRecord> = scanPartial().first

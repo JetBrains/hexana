@@ -38,22 +38,9 @@ class WasmSectionExport(sectionSize: Int, sectionOffset: Int, contentSize: Int, 
      * stops and returns the partial list paired with the byte offset of that
      * entry (null second means the section parsed fully).
      */
-    fun CommonByteBuffer.scanPartial(): Pair<MutableList<WasmExportRecordEntry>, Int?> {
+    fun CommonByteBuffer.scanPartial(): Pair<MutableList<WasmExportRecordEntry>, Int?> = run {
         position(contentOffset)
-        val records = mutableListOf<WasmExportRecordEntry>()
-        var failedOffset: Int? = null
-
-        val count = getULEB128().toInt()
-        for (i in 0 until count) {
-            val offset = position()
-            try {
-                records.add(exportRecord())
-            } catch (e: Exception) {
-                failedOffset = offset
-                break
-            }
-        }
-        return records to failedOffset
+        consumeArrayPartial(contentOffset + contentSize) { exportRecord() }.let { it.values to it.failureOffset }
     }
 }
 
@@ -61,7 +48,7 @@ fun CommonByteBuffer.exportRecord(): WasmExportRecordEntry {
     val offset = position()
     val name = consumeString()
     val externIndex = get()
-    val index = getULEB128().toUInt()
+    val index = consumeUnsignedUInt()
     val entry = when (externIndex.toInt()) {
         0 -> WasmFunctionExportRecordEntry(offset, sizeFromOffset(offset), name, index)
         1 -> WasmTableExportRecordEntry(offset, sizeFromOffset(offset), name, index)

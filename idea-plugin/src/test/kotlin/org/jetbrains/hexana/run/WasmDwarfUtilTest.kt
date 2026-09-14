@@ -30,6 +30,16 @@ class WasmDwarfUtilTest : UsefulTestCase() {
         )
     }
 
+    fun testTruncatedCoreModuleWithHugeDeclaredSizeIsSkipped() {
+        val component = byteArrayOf(
+            0x00, 0x61, 0x73, 0x6d, 0x0d, 0x00, 0x01, 0x00,
+            0x01, 0xf1.toByte(), 0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0x07,
+            0x00, 0x61, 0x73, 0x6d,
+        )
+
+        assertTrue(WasmDwarfUtil.embeddedCoreModules(component.toCommonByteBuffer()).isEmpty())
+    }
+
     /**
      * Builds a minimal Wasm module with one custom section appended.
      */

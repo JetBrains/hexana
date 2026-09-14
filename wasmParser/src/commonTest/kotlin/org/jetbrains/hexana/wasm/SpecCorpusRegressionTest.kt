@@ -224,8 +224,8 @@ class SpecCorpusRegressionTest {
     }
 
     /**
-     * invalid/binary.63.wasm: type section declares size=7 count=2 but the file ends after
-     * the first (complete) functype. parseTypes must degrade to the decoded prefix instead
+     * invalid/binary.63.wasm: type section declares count=2 but the file ends after the
+     * first (complete) functype. parseTypes must degrade to the decoded prefix instead
      * of throwing; parseTypesPartial keeps reporting the failure offset for parseProblems.
      *
      * Pre-fix: parseTypes threw BufferUnderflowException on the second entry, which killed
@@ -235,7 +235,7 @@ class SpecCorpusRegressionTest {
     @Test
     fun `truncated type section degrades parseTypes to the decoded prefix`() = runTest {
         // 00 61 73 6d 01 00 00 00  — magic + version
-        // 01 07 02                 — type section id=1, size=7 (lie: only 4 content bytes), count=2
+        // 01 07 02                 — type section id=1, size=7, count=2
         // 60 00 00                 — entry 0: functype, 0 params, 0 results; entry 1 missing
         val bytes = byteArrayOf(
             0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
@@ -247,6 +247,9 @@ class SpecCorpusRegressionTest {
         assertIs<WasmParseSuccess>(result)
         val module = result.wasmModule as WasmModule
         val typesSection = requireNotNull(module.typesSection) { "type section must be present" }
+        assertEquals(7, typesSection.contentSize, "section metadata must retain the declared payload size")
+        assertEquals(9, typesSection.sectionSize, "section metadata must retain the declared section size")
+        assertTrue(result.sectionScanFailures.isEmpty(), "partial type parsing supplies the specific parse evidence")
 
         val types = with(typesSection) { buffer.parseTypes() }
         assertEquals(1, types.size, "expected the decoded prefix (1 functype) from the truncated section")

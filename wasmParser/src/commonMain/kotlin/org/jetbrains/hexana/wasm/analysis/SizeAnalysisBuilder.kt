@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.wasm.analysis
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.containsRange
 import org.jetbrains.hexana.wasm.components.CoreWasmComponent
 import org.jetbrains.hexana.wasm.components.WasmComponent
 import org.jetbrains.hexana.wasm.components.WasmComponentBase
@@ -145,21 +146,27 @@ class SizeAnalysisBuilder(
         // the LAST one) — a composed component keeps its code in MULTIPLE nested sub-components, so the
         // singular field would drop most of the binary's size (e.g. composed.wasm).
         component.moduleSection.forEach { section ->
-            children.add(
+            val node = if (buffer.containsRange(section.contentOffset, section.contentSize)) {
                 SizeNode.EmbeddedModule(
                     section.name, section.sectionSize, section.sectionOffset,
                     slice = buffer.slice(section.contentOffset, section.contentSize),
-                ),
-            )
+                )
+            } else {
+                SizeNode.Section(section.name, section.sectionSize, section.sectionOffset, null, emptyList())
+            }
+            children.add(node)
         }
 
         component.sections.filterIsInstance<WasmComponentSection>().forEach { section ->
-            children.add(
+            val node = if (buffer.containsRange(section.contentOffset, section.contentSize)) {
                 SizeNode.EmbeddedComponent(
                     section.name, section.sectionSize, section.sectionOffset,
                     slice = buffer.slice(section.contentOffset, section.contentSize),
-                ),
-            )
+                )
+            } else {
+                SizeNode.Section(section.name, section.sectionSize, section.sectionOffset, null, emptyList())
+            }
+            children.add(node)
         }
 
         component.coreInstanceSection.forEach { section ->

@@ -23,23 +23,14 @@ class WasmSectionException(sectionSize: Int, sectionOffset: Int, contentSize: In
      * stops and returns the partial list paired with the byte offset of that
      * entry (null second means the section parsed fully).
      */
-    fun CommonByteBuffer.scanTagsPartial(): Pair<MutableList<WasmTagRecord>, Int?> {
+    fun CommonByteBuffer.scanTagsPartial(): Pair<MutableList<WasmTagRecord>, Int?> = run {
         position(contentOffset)
-        val count = getULEB128().toInt()
-        val out = ArrayList<WasmTagRecord>(count)
-        var failedOffset: Int? = null
-        for (i in 0 until count) {
+        consumeArrayPartial(contentOffset + contentSize) {
             val start = position()
-            try {
-                val attribute = get().toInt() and 0xFF
-                val typeIdx = getULEB128().toInt()
-                out.add(WasmTagRecord(offset = start, size = position() - start, attribute = attribute, typeIdx = typeIdx))
-            } catch (e: Exception) {
-                failedOffset = start
-                break
-            }
-        }
-        return out to failedOffset
+            val attribute = get().toInt() and 0xFF
+            val typeIdx = consumeUnsignedInt()
+            WasmTagRecord(offset = start, size = position() - start, attribute = attribute, typeIdx = typeIdx)
+        }.let { it.values to it.failureOffset }
     }
 
     /** Per-entry byte range + decoded (attribute, typeidx) for each defined tag. */

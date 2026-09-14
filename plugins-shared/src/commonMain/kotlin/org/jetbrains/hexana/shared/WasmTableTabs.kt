@@ -419,6 +419,7 @@ private fun ParseProblemKind.label(): String = when (this) {
     ParseProblemKind.UNKNOWN_CORE_INSTANCE_TAG -> "Unknown instance tag"
     ParseProblemKind.CORE_INSTANCE_ENTRY_CORRUPT -> "Instance entry corrupt"
     ParseProblemKind.SECTION_TRUNCATED -> "Section truncated"
+    ParseProblemKind.SECTION_RESOLVE_FAILURE -> "Malformed section name"
     ParseProblemKind.IMPORT_ENTRY_CORRUPT -> "Import entry corrupt"
     ParseProblemKind.EXPORT_ENTRY_CORRUPT -> "Export entry corrupt"
     ParseProblemKind.SECTION_ENTRY_CORRUPT -> "Section entry corrupt"

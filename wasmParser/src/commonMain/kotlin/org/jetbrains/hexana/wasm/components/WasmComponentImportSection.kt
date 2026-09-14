@@ -6,6 +6,7 @@ import org.jetbrains.hexana.wasm.sections.WasmSection
 import org.jetbrains.hexana.wasm.sections.WasmSectionUnresolved
 import org.jetbrains.hexana.wasm.sections.consumeArray
 import org.jetbrains.hexana.wasm.sections.consumeString
+import org.jetbrains.hexana.wasm.sections.consumeArrayPartial
 
 class WasmComponentImportSection(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection("ComponentImport", sectionSize,
     sectionOffset,
@@ -18,12 +19,18 @@ class WasmComponentImportSection(sectionSize: Int, sectionOffset: Int, contentSi
     constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
 
     fun CommonByteBuffer.scan(): List<WasmComponentImport> {
-        val list = mutableListOf<WasmComponentImport>()
         position(contentOffset)
-        consumeArray {
+        val list = mutableListOf<WasmComponentImport>()
+        consumeArray(contentOffset + contentSize) {
             list.add(importRecord())
         }
         return list
+    }
+
+    /** Returns the decoded import prefix and the first unreadable entry offset. */
+    fun CommonByteBuffer.scanPartial(): Pair<List<WasmComponentImport>, Int?> = run {
+        position(contentOffset)
+        consumeArrayPartial(contentOffset + contentSize) { importRecord() }.let { it.values to it.failureOffset }
     }
 }
 
@@ -54,4 +61,3 @@ class WasmComponentImport(
     val version: String? = null,
     val externDescription: ComponentExternDescription
 )
-

@@ -4,12 +4,79 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 
 private fun createByteBuffer(vararg bytes: Byte = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8, 9)) = bytes.toCommonByteBuffer()
 
 class CommonByteBufferTests {
+
+    @Test
+    fun `bounded duplicate preserves coordinates and shares storage with an independent cursor`() {
+        val source = createByteBuffer(1, 2, 3, 4, 5)
+        source.position(2)
+
+        val view = source.boundedDuplicate(4)
+
+        assertEquals(2, view.position())
+        assertEquals(4, view.limit())
+        assertEquals(3, view.get().toInt())
+        assertEquals(2, source.position())
+
+        view.put(42)
+        assertEquals(42, source[3].toInt())
+
+        val duplicate = view.duplicate()
+        assertEquals(4, duplicate.limit())
+        assertEquals(view.position(), duplicate.position())
+        duplicate.position(1)
+        assertEquals(4, view.position())
+    }
+
+    @Test
+    fun `bounded duplicate rejects reads and writes that cross its boundary`() {
+        val source = createByteBuffer(1, 2, 3, 4, 5, 6, 7, 8)
+        val view = source.boundedDuplicate(4)
+
+        view.position(4)
+        assertFails { view.get() }
+        assertEquals(4, view.position())
+
+        view.position(3)
+        assertFails { view.get(ByteArray(2), 0, 2) }
+        assertEquals(3, view.position())
+        assertFails { view.getIntLE() }
+        assertEquals(3, view.position())
+        assertFails { view.put(byteArrayOf(9, 10), 0, 2) }
+        assertEquals(3, view.position())
+
+        assertFails { view[4] }
+        assertFails { view.position(5) }
+    }
+
+    @Test
+    fun `bounded duplicate accepts exact boundary operations and validates nested ranges`() {
+        val source = createByteBuffer(1, 2, 3, 4, 5)
+        val view = source.boundedDuplicate(4)
+
+        assertEquals(0x04030201, view.getIntLE())
+        assertEquals(4, view.position())
+        assertEquals(2, view.slice(2, 2).limit())
+        assertFails { view.slice(3, 2) }
+        assertFails { source.boundedDuplicate(6) }
+    }
+
+    @Test
+    fun `range containment rejects truncated and overflowing ranges`() {
+        val source = createByteBuffer(1, 2, 3, 4, 5)
+
+        assertTrue(source.containsRange(offset = 1, size = 4))
+        assertTrue(source.containsRange(offset = 5, size = 0))
+        assertFalse(source.containsRange(offset = 2, size = 4))
+        assertFalse(source.containsRange(offset = -1, size = 1))
+        assertFalse(source.containsRange(offset = 1, size = Int.MAX_VALUE))
+    }
 
     @Test
     fun `reading byte affects position`() {

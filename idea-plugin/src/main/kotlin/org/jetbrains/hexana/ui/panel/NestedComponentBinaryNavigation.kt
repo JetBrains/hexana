@@ -6,6 +6,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.HexanaBinaryVirtualFile
 import org.jetbrains.hexana.HexanaLog
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.containsRange
 
 /**
  * The [contentSize] bytes at [contentOffset], or null when that range does not
@@ -17,7 +18,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
  * `offset > limit - size` so a hostile size cannot overflow the sum.
  */
 internal fun CommonByteBuffer.submoduleSlice(contentOffset: Int, contentSize: Int): CommonByteBuffer? {
-    if (contentOffset < 0 || contentSize <= 0 || contentOffset > limit() - contentSize) return null
+    if (contentSize <= 0 || !containsRange(contentOffset, contentSize)) return null
     return slice(contentOffset, contentSize)
 }
 

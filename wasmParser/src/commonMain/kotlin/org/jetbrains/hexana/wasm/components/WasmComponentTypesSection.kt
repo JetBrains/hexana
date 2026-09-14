@@ -3,9 +3,13 @@ package org.jetbrains.hexana.wasm.components
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.wasm.components.Alias.componentAlias
 import org.jetbrains.hexana.wasm.sections.WasmSection
+import org.jetbrains.hexana.wasm.sections.WasmParseException
 import org.jetbrains.hexana.wasm.sections.WasmSectionUnresolved
 import org.jetbrains.hexana.wasm.sections.consumeArray
 import org.jetbrains.hexana.wasm.sections.consumeString
+import org.jetbrains.hexana.wasm.sections.consumeArrayPartial
+import org.jetbrains.hexana.wasm.sections.consumeUnsignedInt
+import org.jetbrains.hexana.wasm.sections.consumeUnsignedUInt
 
 class WasmComponentTypesSection(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection("Types", sectionSize,
     sectionOffset,
@@ -21,10 +25,16 @@ class WasmComponentTypesSection(sectionSize: Int, sectionOffset: Int, contentSiz
     fun CommonByteBuffer.scanTypes(): List<ComponentDefType> {
         position(contentOffset)
         val types = mutableListOf<ComponentDefType>()
-        consumeArray {
+        consumeArray(contentOffset + contentSize) {
             types.add(componentDefType())
         }
         return types
+    }
+
+    /** Returns the decoded type prefix and the first unreadable entry offset. */
+    fun CommonByteBuffer.scanTypesPartial(): Pair<List<ComponentDefType>, Int?> = run {
+        position(contentOffset)
+        consumeArrayPartial(contentOffset + contentSize) { componentDefType() }.let { it.values to it.failureOffset }
     }
 }
 
@@ -133,14 +143,14 @@ fun CommonByteBuffer.componentDefType(): ComponentDefType {
             val subByte = get()
             if (subByte == 0x7f.toByte()) {
                 componentResourceType(0x3e.toByte() == byte)
-            } else TODO()
+            } else throw WasmParseException("Unsupported component resource type discriminator: 0x${subByte.toInt().and(0xff).toString(16)}")
         }
 
         0x40.toByte(), 0x43.toByte() -> {
             componentFunctionType(byte == 0x43.toByte())
         }
 
-        else -> { TODO() }
+        else -> throw WasmParseException("Unsupported component definition type discriminator: 0x${byte.toInt().and(0xff).toString(16)}")
     }
 }
 
@@ -161,13 +171,13 @@ fun CommonByteBuffer.componentDefValType(): ComponentDefValueType {
             if (isNotNull) ComponentStreamType(componentValueType()) else ComponentStreamType()
         }
         0x67.toByte() -> {
-            ComponentArrayType(componentValueType(), uint32())
+            ComponentArrayType(componentValueType(), consumeUnsignedUInt())
         }
         0x68.toByte() -> {
-            ComponentBorrowType(uint32())
+            ComponentBorrowType(consumeUnsignedUInt())
         }
         0x69.toByte() -> {
-            ComponentOwnType(uint32())
+            ComponentOwnType(consumeUnsignedUInt())
         }
         0x6a.toByte() -> {
             val result = if (isNull())
@@ -210,9 +220,12 @@ fun CommonByteBuffer.componentDefValType(): ComponentDefValueType {
         0x71.toByte() -> {
             val variants = mutableListOf<CaseLabelValueType>()
             consumeArray {
-                val labelLength = uint32()
-                val array = ByteArray(labelLength.toInt())
-                get(array, 0, labelLength.toInt())
+                val labelLength = consumeUnsignedInt()
+                if (labelLength > remaining()) {
+                    throw WasmParseException("Invalid variant case label length $labelLength exceeds remaining section bytes (${remaining()})")
+                }
+                val array = ByteArray(labelLength)
+                get(array, 0, labelLength)
                 val labelType = consumeString()
                 val isNotNull = isNull()
                 val caseType = if (isNotNull) CaseLabelValueType(labelType, componentValueType()) else CaseLabelValueType(labelType)
@@ -227,7 +240,7 @@ fun CommonByteBuffer.componentDefValType(): ComponentDefValueType {
             }
             ComponentRecordType(flags)
         }
-        else -> TODO()
+        else -> throw WasmParseException("Unsupported component definition value type discriminator: 0x${byte.toInt().and(0xff).toString(16)}")
     }
 }
 
@@ -236,7 +249,7 @@ private fun CommonByteBuffer.isNull(): Boolean = get() == 0x01.toByte()
 fun CommonByteBuffer.componentValueType(): ComponentValueType {
     return componentPrimitiveType()?.let { ComponentPrimitiveValueType(it) } ?: run {
         position(position() - 1)
-        ComponentValueIdxType(uint32())
+        ComponentValueIdxType(consumeUnsignedUInt())
     }
 }
 
@@ -276,7 +289,7 @@ fun CommonByteBuffer.importDeclaration(): ImportDeclaration {
     return when (get()) {
         0x00.toByte() -> ImportDeclaration(consumeString(), externDescription())
         0x01.toByte() -> ImportDeclaration(consumeString(), externDescription(), consumeString())
-        else -> TODO()
+        else -> throw WasmParseException("Unsupported component import declaration discriminator")
     }
 }
 
@@ -295,7 +308,7 @@ fun CommonByteBuffer.instanceDeclaration(): InstanceDeclaration {
         0x04.toByte() -> {
             exportDeclaration()
         }
-        else -> TODO("type of instance declaration isn't known: 0x${type.toByte().toHexString()}")
+        else -> throw WasmParseException("Unsupported component instance declaration discriminator: 0x${type.toInt().and(0xff).toString(16)}")
     }
 }
 
@@ -303,7 +316,7 @@ fun CommonByteBuffer.exportDeclaration(): ExportDeclaration {
     return when (get()) {
         0x00.toByte() -> ExportDeclaration(consumeString(), externDescription())
         0x01.toByte() -> ExportDeclaration(consumeString(), externDescription(), consumeString())
-        else -> TODO()
+        else -> throw WasmParseException("Unsupported component export declaration discriminator")
     }
 }
 
@@ -325,15 +338,15 @@ fun CommonByteBuffer.componentInstantType(): ComponentInstanceType  {
 
 fun CommonByteBuffer.componentResourceType(isAsync: Boolean): ComponentResourceType {
     return if (isAsync) {
-        val funcIdx = uint32()
+        val funcIdx = consumeUnsignedUInt()
         val isNotNull = get() == 0x01.toByte()
         val callbackIdx = if (isNotNull)
-            uint32()
+            consumeUnsignedUInt()
         else
             null
         ComponentAsyncFuncResourceType(funcIdx, callbackIdx)
     } else {
-        val funcIdx = uint32()
+        val funcIdx = consumeUnsignedUInt()
         ComponentSyncFuncResourceType(funcIdx)
     }
 }
@@ -342,12 +355,12 @@ fun CommonByteBuffer.externDescription(): ComponentExternDescription {
    return when(get()) {
        0x00.toByte() -> {
            if (get() != 0x11.toByte())
-               TODO()
-           val type = uint32()
+               throw WasmParseException("Unsupported component core type discriminator")
+           val type = consumeUnsignedUInt()
            ComponentExternCoreType(type)
        }
        0x01.toByte() -> {
-           val type = uint32()
+           val type = consumeUnsignedUInt()
            ComponentExternType(type)
        }
        0x02.toByte() -> {
@@ -357,18 +370,18 @@ fun CommonByteBuffer.externDescription(): ComponentExternDescription {
            ComponentExternTypeBound(typeBound())
        }
        0x04.toByte() -> {
-           ComponentExternComponent(uint32())
+           ComponentExternComponent(consumeUnsignedUInt())
        }
        0x05.toByte() -> {
-           ComponentExternInstance(uint32())
+           ComponentExternInstance(consumeUnsignedUInt())
        }
-       else -> TODO()
+       else -> throw WasmParseException("Unsupported component extern description discriminator")
    }
 }
 
 fun CommonByteBuffer.typeBound(): TypeBound {
     return when(val bound = get()) {
-        0x00.toByte() -> TypeBoundType(uint32())
+        0x00.toByte() -> TypeBoundType(consumeUnsignedUInt())
         0x01.toByte() -> TypeBoundSubResource()
         else -> error("Invalid type bound discriminant: 0x${bound.toString(16)}")
     }
@@ -376,9 +389,9 @@ fun CommonByteBuffer.typeBound(): TypeBound {
 
 fun CommonByteBuffer.valueBound(): ValueBound {
     return when(get()) {
-        0x00.toByte() -> ValueBoundType(uint32())
+        0x00.toByte() -> ValueBoundType(consumeUnsignedUInt())
         0x01.toByte() -> ValueBoundValue(componentValueType())
-        else -> TODO()
+        else -> throw WasmParseException("Unsupported component value bound discriminator")
     }
 }
 
@@ -391,7 +404,7 @@ fun CommonByteBuffer.componentFunctionType(isAsync: Boolean): ComponentRoutineTy
     val results = when (v) {
         0x00.toByte() -> componentValueType()
         0x01.toByte() -> ComponentVoidType.also { get() /* read 0x00 */ }
-        else -> TODO()
+        else -> throw WasmParseException("Unsupported component function result discriminator")
     }
     return if(isAsync) {
         ComponentAsyncFunctionType(params, results)
