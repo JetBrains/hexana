@@ -32,11 +32,34 @@ class HexanaStructureViewBuilderProvider : StructureViewBuilderProvider {
     ): StructureViewBuilder? {
         val editors = com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project).getEditors(file)
         val hexEditor = editors.filterIsInstance<HexanaFileEditor>().firstOrNull() ?: return null
-        val provider = hexEditor.binaryProvider ?: return null
-        if (provider !is WasmBinaryProvider && provider !is WasmComponentBinaryProvider && provider !is ElfBinaryProvider) return null
-        return HexanaTreeStructureViewBuilder(hexEditor, provider)
+        return hexanaStructureViewBuilder(hexEditor)
     }
 }
+
+/**
+ * The structure view for [editor]'s binary, or `null` when the format has nothing to
+ * show.
+ *
+ * Wasm, Wasm components and ELF have hand-written trees built from their parsed model.
+ * Every other format falls back to its [BinaryProvider.structureRanges] — the same
+ * regions the hex view tints — so the tool window becomes a region navigator instead
+ * of sitting empty. Formats that report no regions still get no structure view, which
+ * is better than a tree holding only the file node.
+ *
+ * Deciding this reads the ranges, which forces the provider's lazy parse. That parse is
+ * already warm here: the editor's table tabs force the same one while composing, well
+ * before a structure view can be requested for the file.
+ */
+internal fun hexanaStructureViewBuilder(editor: HexanaFileEditor): StructureViewBuilder? {
+    val provider = editor.binaryProvider ?: return null
+    if (!providerHasOwnStructureTree(provider) && provider.structureRanges.isEmpty()) return null
+    return HexanaTreeStructureViewBuilder(editor, provider)
+}
+
+private fun providerHasOwnStructureTree(provider: BinaryProvider): Boolean =
+    provider is WasmBinaryProvider ||
+        provider is WasmComponentBinaryProvider ||
+        provider is ElfBinaryProvider
 
 
 internal class HexanaTreeStructureViewBuilder(
@@ -111,7 +134,7 @@ private class HexanaStructureViewModel(
                 is WasmBinaryProvider -> buildWasmElements(binaryProvider, editor)
                 is WasmComponentBinaryProvider -> buildWasmComponentElements(binaryProvider, editor)
                 is ElfBinaryProvider -> buildElfElements(binaryProvider, editor)
-                else -> emptyList()
+                else -> buildStructureRangeElements(binaryProvider, editor)
             }
             rootElement.setResolvedChildren(children)
             com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
@@ -529,6 +552,54 @@ private fun buildElfElements(provider: ElfBinaryProvider, editor: HexanaFileEdit
     }
 
     return result
+}
+
+
+/**
+ * Cap on fallback nodes. A region list is as long as the format makes it — one per ZIP
+ * entry, per capture packet, per top-level protobuf field — and the counts run into six
+ * figures on large files. The hex view can afford that because it binary-searches the
+ * list; a tree that materializes a node per region cannot.
+ */
+private const val MAX_STRUCTURE_RANGE_ELEMENTS = 10_000
+
+/**
+ * Structure elements for a format with no hand-written tree: one leaf per region, in
+ * file order, navigating to the region's bytes.
+ */
+internal fun buildStructureRangeElements(
+    provider: BinaryProvider,
+    editor: HexanaFileEditor?,
+): List<HexanaStructureElement> {
+    val ranges = provider.structureRanges.sortedBy { it.offset }
+    val elements = ranges.asSequence()
+        .take(MAX_STRUCTURE_RANGE_ELEMENTS)
+        .mapNotNull { range ->
+            val intRange = range.toInclusiveIntRange() ?: return@mapNotNull null
+            HexanaStructureElement(
+                name = range.label,
+                range = intRange,
+                icon = AllIcons.Nodes.Property,
+                editor = editor,
+            )
+        }
+        .toList()
+    val omitted = ranges.size - MAX_STRUCTURE_RANGE_ELEMENTS
+    if (omitted <= 0) return elements
+    return elements + HexanaStructureElement(
+        name = "... $omitted more regions",
+        range = IntRange.EMPTY,
+        icon = null,
+    )
+}
+
+/**
+ * A region as an inclusive range of byte indices, or `null` when it falls outside the
+ * Int addressing the hex view uses.
+ */
+private fun StructureRange.toInclusiveIntRange(): IntRange? {
+    if (size <= 0L || offset < 0L || offset + size > Int.MAX_VALUE.toLong()) return null
+    return IntRange(offset.toInt(), (offset + size - 1).toInt())
 }
 
 
