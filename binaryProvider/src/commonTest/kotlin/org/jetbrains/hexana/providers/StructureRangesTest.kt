@@ -46,8 +46,9 @@ class StructureRangesTest {
         val provider = PcapBinaryProvider(bytes.toCommonByteBuffer())
 
         val ranges = provider.structureRanges
+        // Packets are labelled one-based, matching the Packets table's "No." column.
         assertEquals(
-            listOf("Header", "Packet 0", "Packet 1", "Packet 2"),
+            listOf("Header", "Packet 1", "Packet 2", "Packet 3"),
             ranges.map { it.label },
         )
         assertEquals(listOf("Header", "Packets", "Packets", "Packets"), ranges.map { it.tabName })
@@ -73,7 +74,7 @@ class StructureRangesTest {
         val provider = PcapBinaryProvider(bytes.toCommonByteBuffer())
 
         val ranges = provider.structureRanges
-        assertEquals(listOf("Header", "Packet 0"), ranges.map { it.label })
+        assertEquals(listOf("Header", "Packet 1"), ranges.map { it.label })
         assertRangeInvariants(ranges, bytes.size)
     }
 
@@ -98,7 +99,6 @@ class StructureRangesTest {
         val provider = GenericBinaryProvider(ByteArray(64) { it.toByte() }.toCommonByteBuffer())
         assertEquals(emptyList(), provider.structureRanges)
     }
-
 }
 
 /**

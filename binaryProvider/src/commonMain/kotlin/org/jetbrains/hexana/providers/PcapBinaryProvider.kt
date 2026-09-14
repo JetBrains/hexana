@@ -78,7 +78,8 @@ class PcapBinaryProvider(
                 structureRangeOrNull(
                     offset = packet.fileOffset,
                     size = packet.dataOffset - packet.fileOffset + packet.inclLen,
-                    label = "Packet $index",
+                    // One-based, matching the "No." column of the Packets table.
+                    label = "Packet ${index + 1}",
                     fileSize = total,
                     tabName = "Packets",
                 )?.let { add(it) }
