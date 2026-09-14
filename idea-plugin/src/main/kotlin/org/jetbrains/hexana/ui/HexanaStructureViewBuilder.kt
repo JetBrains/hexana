@@ -37,29 +37,25 @@ class HexanaStructureViewBuilderProvider : StructureViewBuilderProvider {
 }
 
 /**
- * The structure view for [editor]'s binary, or `null` when the format has nothing to
- * show.
+ * The structure view for [editor]'s binary, or `null` when the file has not been parsed
+ * into a provider yet.
  *
  * Wasm, Wasm components and ELF have hand-written trees built from their parsed model.
  * Every other format falls back to its [BinaryProvider.structureRanges] — the same
  * regions the hex view tints — so the tool window becomes a region navigator instead
- * of sitting empty. Formats that report no regions still get no structure view, which
- * is better than a tree holding only the file node.
+ * of sitting empty.
  *
- * Deciding this reads the ranges, which forces the provider's lazy parse. That parse is
- * already warm here: the editor's table tabs force the same one while composing, well
- * before a structure view can be requested for the file.
+ * Whether a format has anything to show is deliberately NOT decided here. Answering it
+ * means reading the regions, which forces the provider's lazy parse: measured at 5 ms
+ * for a 50k-entry archive and 24 ms for an 8 MiB protobuf message, and worse for larger
+ * files. The platform may ask for a builder from the UI thread, so the question is left
+ * to [HexanaTreeStructureViewBuilder]'s model, which resolves children on a pooled
+ * thread. A format with no regions therefore shows a tree holding only the file node.
  */
 internal fun hexanaStructureViewBuilder(editor: HexanaFileEditor): StructureViewBuilder? {
     val provider = editor.binaryProvider ?: return null
-    if (!providerHasOwnStructureTree(provider) && provider.structureRanges.isEmpty()) return null
     return HexanaTreeStructureViewBuilder(editor, provider)
 }
-
-private fun providerHasOwnStructureTree(provider: BinaryProvider): Boolean =
-    provider is WasmBinaryProvider ||
-        provider is WasmComponentBinaryProvider ||
-        provider is ElfBinaryProvider
 
 
 internal class HexanaTreeStructureViewBuilder(

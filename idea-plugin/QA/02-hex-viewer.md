@@ -60,3 +60,15 @@
 ### 2.14 Scrolling large files
 **Steps:** Open Skiko WASM (~8 MB). Scroll to the end and back.
 **Expected:** Smooth scrolling without lag. Offset column stays aligned with hex data.
+
+### 2.15 Structural region tinting and labels
+**Steps:** With semantic highlighting on, open one file per family: a `.jar`, a `.tar`, a `.dex`, a `.pcap`, a `.parquet`, a `resources.arsc`, a `.class`, an `.a`.
+**Expected:** Rows carry subtle background bands that change at region boundaries, and the offset column shows the region's name where it starts (entry path, `string_ids`, `Packet 1`, `Row group 0`, `package com.example`, a method name, a member name). Prev/next region navigation steps between region starts.
+
+### 2.16 Region label switches to the matching tab
+**Steps:** Click a region label in the offset column for a `.jar` (`Entries`), a `.pcap` (`Packets`), an `.a` (`Members`), a `.parquet` (`Row Groups`).
+**Expected:** The bottom panel switches to that tab. Labels with no matching tab (COFF sections, DEX `data`, a class file's constant pool) are not clickable.
+
+### 2.17 Structure tool window for non-WASM formats
+**Steps:** Open a `.jar`, then a `.pcap`, then a `.parquet`, and show the **Structure** tool window for each.
+**Expected:** Each lists its regions as a flat tree in file order; selecting a node scrolls and selects those bytes in the hex view. A format with nothing to report (an unrecognised `.bin`) shows only the file node. Files above 10,000 regions end with a `... N more regions` entry.

@@ -28,6 +28,18 @@ class StructureRangesTest {
     }
 
     @Test
+    fun rejectsRegionsWhoseEndOverflows() {
+        // Parquet page offsets and Arrow block lengths are 64-bit values straight out of
+        // the file, so a hostile one can make `offset + size` wrap negative. Checked
+        // naively, that wrapped sum compares as "inside the file".
+        assertNull(structureRangeOrNull(Long.MAX_VALUE, 10L, "wrapping end", fileSize = 100))
+        assertNull(structureRangeOrNull(1L shl 62, 1L shl 62, "wrapping sum", fileSize = 100))
+        assertNull(
+            structureRangeOrNull(Long.MAX_VALUE, Long.MAX_VALUE, "both maxed", fileSize = 100),
+        )
+    }
+
+    @Test
     fun keepsRegionsInsideTheFile() {
         val whole = assertNotNull(structureRangeOrNull(0L, 100L, "whole", fileSize = 100))
         assertEquals(0L, whole.offset)
@@ -75,6 +87,40 @@ class StructureRangesTest {
 
         val ranges = provider.structureRanges
         assertEquals(listOf("Header", "Packet 1"), ranges.map { it.label })
+        assertRangeInvariants(ranges, bytes.size)
+    }
+
+    @Test
+    fun captureWithNoPacketsStillReportsItsHeader() {
+        // A capture whose filter matched nothing is a valid file: 24 bytes of header and
+        // no records. Reporting nothing would leave it with no regions and, in turn, no
+        // structure view at all.
+        val bytes = syntheticPcap(emptyList())
+        assertEquals(PCAP_GLOBAL_HEADER_SIZE, bytes.size)
+
+        val ranges = PcapBinaryProvider(bytes.toCommonByteBuffer()).structureRanges
+
+        assertEquals(listOf("Header"), ranges.map { it.label })
+        assertEquals(PCAP_GLOBAL_HEADER_SIZE.toLong(), ranges.single().size)
+        assertRangeInvariants(ranges, bytes.size)
+    }
+
+    @Test
+    fun parquetWithNoRowGroupsStillReportsItsFooter() {
+        // An empty table is a valid Parquet file: magic, a footer describing no row
+        // groups, and magic again. All of it but the leading magic is footer.
+        val bytes = emptyParquet()
+        val provider = ParquetBinaryProvider(bytes.toCommonByteBuffer())
+        // Fixture self-check - if the hand-written footer stopped decoding, the range
+        // assertions below would pass for the wrong reason.
+        assertEquals(emptyList(), assertNotNull(provider.metadata).rowGroups)
+
+        val ranges = provider.structureRanges
+
+        assertEquals(listOf("Footer"), ranges.map { it.label })
+        val footer = ranges.single()
+        assertEquals(PARQUET_MAGIC_SIZE.toLong(), footer.offset)
+        assertEquals(bytes.size.toLong(), footer.offset + footer.size)
         assertRangeInvariants(ranges, bytes.size)
     }
 
@@ -159,6 +205,20 @@ private fun syntheticDescriptorSet(names: List<String>): ByteArray = leBytes {
         raw(byteArrayOf(0x0A, descriptor.size.toByte()))
         raw(descriptor)
     }
+}
+
+private const val PARQUET_MAGIC_SIZE = 4
+
+/**
+ * The smallest valid Parquet file: `PAR1`, a Thrift-compact `FileMetaData` that is a
+ * lone STOP byte (so every field takes its default and there are no row groups), the
+ * footer length, and `PAR1` again.
+ */
+private fun emptyParquet(): ByteArray = leBytes {
+    raw("PAR1".encodeToByteArray())
+    raw(byteArrayOf(0))    // FileMetaData: STOP
+    u32(1)                 // footer length
+    raw("PAR1".encodeToByteArray())
 }
 
 private fun leBytes(build: LeBytes.() -> Unit): ByteArray = LeBytes().apply(build).toByteArray()

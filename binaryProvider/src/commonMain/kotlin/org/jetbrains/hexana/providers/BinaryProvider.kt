@@ -139,6 +139,11 @@ data class StructureRange(
  * caret, so a region a malformed header declares past the end of the file must never
  * make it into the list. Formats whose offsets come straight from unvalidated header
  * fields build their ranges with `mapNotNull { structureRangeOrNull(...) }`.
+ *
+ * The bound is written as `offset > fileSize - size` rather than
+ * `offset + size > fileSize` on purpose: Parquet page offsets and Arrow block offsets
+ * are 64-bit values read straight out of the file, and summing two of them overflows
+ * into a negative number that would slip past the comparison.
  */
 internal fun structureRangeOrNull(
     offset: Long,
@@ -147,7 +152,7 @@ internal fun structureRangeOrNull(
     fileSize: Int,
     tabName: String? = null,
 ): StructureRange? {
-    if (size <= 0L || offset < 0L || offset + size > fileSize.toLong()) return null
+    if (size <= 0L || offset < 0L || offset > fileSize.toLong() - size) return null
     return StructureRange(offset = offset, size = size, label = label, tabName = tabName)
 }
 

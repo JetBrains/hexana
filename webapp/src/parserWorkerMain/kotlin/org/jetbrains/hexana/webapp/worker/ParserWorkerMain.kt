@@ -372,7 +372,8 @@ private suspend fun nonWasmPresentation(
             SCOPE_MARKER, true, inputBytes, sourceRanges.size, 0, 0, 0,
             now() - startedAt,
         ),
-        ranges = sourceRanges.take(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION).map { it.toWorkerRange() },
+        ranges = sourceRanges.take(MAX_PARSER_WORKER_RECORDS_PER_COLLECTION)
+            .mapNotNull { it.toWorkerRange(inputBytes) },
         tables = tables,
         toolbar = ParserWorkerToolbar(
             nativeImage = nativeImage?.let { info ->
@@ -770,14 +771,23 @@ private fun workerRowActions(
 }
 
 /**
- * Wire form of a provider's structural region.
+ * Wire form of a provider's structural region, or `null` when the region does not fit
+ * the wire contract.
  *
- * A label is whatever the format carries — an archive entry path, a Wasm custom
- * section name, a proto file name — so it has to be bounded here; the protocol
- * rejects a presentation whose range labels are longer than it can carry.
+ * Two things have to be bounded here. A label is whatever the format carries — an
+ * archive entry path, a Wasm custom section name, a proto file name — and the protocol
+ * rejects labels longer than it can carry. And a region has to lie inside the input:
+ * most providers already drop out-of-bounds regions, but a Wasm section size is an
+ * unvalidated LEB128, so a malformed module can declare one past the end of the file.
+ * Truncating that to `Int` would smuggle a bogus region onto the wire, and passing it
+ * through would fail validation for the whole presentation — dropping the one region
+ * keeps the rest of the file readable.
  */
-private fun StructureRange.toWorkerRange(): ParserWorkerRange =
-    ParserWorkerRange(offset.toInt(), size.toInt(), label.take(MAX_RANGE_LABEL_CHARS))
+private fun StructureRange.toWorkerRange(inputBytes: Int): ParserWorkerRange? {
+    val (boundedOffset, boundedSize) = boundedInputRange(offset, size, inputBytes) ?: return null
+    if (boundedSize == 0) return null
+    return ParserWorkerRange(boundedOffset, boundedSize, label.take(MAX_RANGE_LABEL_CHARS))
+}
 
 private fun boundedInputRange(offset: Long, size: Long, inputBytes: Int): Pair<Int, Int>? =
     if (offset < 0 || size < 0 || offset > inputBytes || size > inputBytes || offset > inputBytes - size) null
@@ -1018,7 +1028,7 @@ private fun corePresentation(provider: WasmBinaryProvider, inputBytes: Int, star
             graalWebImage.isWebImage,
             graalWebImage.matchedImportModules.sorted(),
         ),
-        ranges = provider.structureRanges.map { it.toWorkerRange() },
+        ranges = provider.structureRanges.mapNotNull { it.toWorkerRange(inputBytes) },
         tables = buildList {
             addTable("Imports", listOf("Data"), imports.map { item ->
                 row(listOf(if (item.prefix.isEmpty()) item.name else "${item.prefix}.${item.name}"), item.offset, item.size)
@@ -1073,7 +1083,7 @@ private fun componentPresentation(
             modules.size,
             0,
         ),
-        ranges = provider.structureRanges.map { it.toWorkerRange() },
+        ranges = provider.structureRanges.mapNotNull { it.toWorkerRange(inputBytes) },
         tables = buildList {
             addTable("Imports", listOf("Name", "Extern Description"), imports.map { item ->
                 row(listOf(componentName(item.importName, item.version), componentExternDescriptionLabel(item.externDescription)), item.offset, item.size)

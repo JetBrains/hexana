@@ -68,6 +68,30 @@ class StructureRangesJvmTest {
             ranges.last().let { it.offset + it.size } < bytes.size,
             "entry ranges must stop before the central directory",
         )
+
+        // A range covers the local header and the compressed bytes, and stops there.
+        // `ZipOutputStream` knows a STORED entry's sizes upfront and writes no data
+        // descriptor, so that record runs straight into the next one; a DEFLATED entry
+        // gets a 16-byte descriptor after its data, which belongs to no region.
+        val storedIndex = entries.keys.indexOfFirst { it.endsWith(".bin") }
+        val stored = ranges[storedIndex]
+        assertEquals(
+            ranges[storedIndex + 1].offset,
+            stored.offset + stored.size,
+            "a stored entry's record must run up to the next local header",
+        )
+        val deflated = ranges.first()
+        val descriptorStart = (deflated.offset + deflated.size).toInt()
+        assertEquals(
+            listOf(0x50, 0x4B, 0x07, 0x08),
+            (0 until 4).map { bytes[descriptorStart + it].toInt() and 0xFF },
+            "a deflated entry's range must end where its data descriptor begins",
+        )
+        assertEquals(
+            ranges[1].offset,
+            (descriptorStart + DATA_DESCRIPTOR_SIZE).toLong(),
+            "the descriptor is the only gap between consecutive records",
+        )
     }
 
     @Test
@@ -99,3 +123,6 @@ class StructureRangesJvmTest {
         assertEquals(bytes.size.toLong(), ranges.last().let { it.offset + it.size })
     }
 }
+
+/** `PK\x07\x08` signature plus crc32, compressed size and uncompressed size. */
+private const val DATA_DESCRIPTOR_SIZE = 16

@@ -67,12 +67,18 @@ class PcapBinaryProvider(
      * blocks of a PCAP-NG one, without either format's layout being hardcoded here.
      * For PCAP-NG the per-packet range stops at the end of the captured bytes, so a
      * block's trailing options are left untinted.
+     *
+     * A capture that recorded nothing — a filter that matched no traffic — still has a
+     * header, and a classic one declares its size. PCAP-NG does not: its block extents
+     * are only known from the blocks themselves, so such a capture reports no regions.
      */
     override val structureRanges: List<StructureRange> by lazy {
-        val packets = parsedPcapFile?.packets?.takeIf { it.isNotEmpty() } ?: return@lazy emptyList()
+        val packets = parsedPcapFile?.packets ?: return@lazy emptyList()
         val total = bytes.size
+        val headerEnd = packets.firstOrNull()?.fileOffset
+            ?: if (isPcapNg) return@lazy emptyList() else PcapParser.GLOBAL_HEADER_SIZE.toLong()
         buildList {
-            structureRangeOrNull(0L, packets.first().fileOffset, "Header", total, tabName = "Header")
+            structureRangeOrNull(0L, headerEnd, "Header", total, tabName = "Header")
                 ?.let { add(it) }
             packets.forEachIndexed { index, packet ->
                 structureRangeOrNull(

@@ -42,13 +42,15 @@ class ParquetBinaryProvider(
      * `totalCompressedSize` bytes. `ColumnChunk.fileOffset` is deliberately not used —
      * writers are inconsistent about it and some leave it zero. Everything after the
      * last row group is the footer: the Thrift metadata, its length, and the trailing
-     * `PAR1` magic.
+     * `PAR1` magic. A file with no row groups — an empty table — is all footer, and
+     * still gets that one region.
      */
     override val structureRanges: List<StructureRange> by lazy {
-        val rowGroups = metadata?.rowGroups?.takeIf { it.isNotEmpty() } ?: return@lazy emptyList()
+        val rowGroups = metadata?.rowGroups ?: return@lazy emptyList()
         val total = bytes.size
         buildList {
-            var lastEnd = 0L
+            // Regions begin after the leading magic, which belongs to no row group.
+            var lastEnd = PAR1.size.toLong()
             rowGroups.forEachIndexed { index, rowGroup ->
                 val chunks = rowGroup.columns.mapNotNull { it.metaData }
                 if (chunks.isEmpty()) return@forEachIndexed
@@ -56,14 +58,19 @@ class ParquetBinaryProvider(
                 val end = chunks.maxOf {
                     (it.dictionaryPageOffset ?: it.dataPageOffset) + it.totalCompressedSize
                 }
-                lastEnd = maxOf(lastEnd, end)
                 structureRangeOrNull(
                     offset = start,
                     size = end - start,
                     label = "Row group $index",
                     fileSize = total,
                     tabName = "Row Groups",
-                )?.let { add(it) }
+                )?.let {
+                    add(it)
+                    // Advance only past regions that passed the bounds check, so a page
+                    // offset a hostile footer inflated cannot push the footer's start
+                    // out of the file with it.
+                    lastEnd = maxOf(lastEnd, it.offset + it.size)
+                }
             }
             structureRangeOrNull(
                 offset = lastEnd,

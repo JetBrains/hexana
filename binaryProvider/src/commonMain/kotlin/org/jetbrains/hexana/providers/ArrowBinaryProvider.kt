@@ -85,9 +85,13 @@ class ArrowBinaryProvider(
                 val offset = footer.blockOffset(blocks, index)
                 val size = footer.blockMetaDataLength(blocks, index).toLong() +
                     footer.blockBodyLength(blocks, index)
-                lastEnd = maxOf(lastEnd, offset + size)
                 structureRangeOrNull(offset, size, "$label $index", total, tabName = "Record Batches")
-                    ?.let { ranges.add(it) }
+                    ?.let {
+                        ranges.add(it)
+                        // Only validated blocks move the footer boundary; a block length
+                        // a hostile footer inflated would otherwise drag it past the file.
+                        lastEnd = maxOf(lastEnd, it.offset + it.size)
+                    }
             }
         }
         ranges.sortBy { it.offset }

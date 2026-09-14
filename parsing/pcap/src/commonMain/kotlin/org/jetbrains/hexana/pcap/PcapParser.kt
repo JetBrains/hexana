@@ -12,8 +12,11 @@ import org.jetbrains.hexana.io.CommonByteBuffer
  */
 object PcapParser {
 
-    /** Global header size in bytes. */
-    private const val GLOBAL_HEADER_SIZE = 24
+    /**
+     * Global header size in bytes. Public because a capture with no packet records has
+     * no other way to say where its header ends.
+     */
+    const val GLOBAL_HEADER_SIZE = 24
 
     /** Per-packet record header size in bytes. */
     private const val PACKET_HEADER_SIZE = 16
