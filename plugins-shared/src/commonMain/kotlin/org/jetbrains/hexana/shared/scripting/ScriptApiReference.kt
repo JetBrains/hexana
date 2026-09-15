@@ -359,6 +359,12 @@ object ScriptApiReference {
             title = "Header hex dump",
             summary = "Hex and ASCII dump of the first bytes, plus a magic-number check.",
         ),
+        ScriptApiExample(
+            fileName = "compare-binaries.js",
+            title = "Compare two binaries",
+            summary = "Diffs the open file against another one you point `open(path)` at: " +
+                "sizes, per-region deltas, and tab row counts.",
+        ),
     )
 
     /** File name suggested for a script created from [starterTemplate]. */

@@ -149,6 +149,41 @@ class ScriptYieldTransformTest {
     }
 
     @Test
+    fun theCompareBinariesExampleKeepsItsHelpersYieldFree() {
+        // That example's helpers deliberately only compute: a `yield` inside a
+        // nested ordinary function is a syntax error in a generator, so an output
+        // call moved into a helper would stop the whole script from compiling in
+        // the browser host. Nothing here can enforce that for a user's script —
+        // this pins the shape the bundled example is written in.
+        val source = """
+            function regionSizes(target) {
+                const sizes = {};
+                for (const region of target.structure) {
+                    sizes[region.name] = (sizes[region.name] || 0) + region.size;
+                }
+                return sizes;
+            }
+            if (!OTHER) {
+                print("Set OTHER at the top of this script");
+            } else {
+                table("Region", "Open", "Other", "Delta");
+                for (const entry of changed.slice(0, TOP)) {
+                    row(entry.name, entry.mine, entry.theirs, signed(entry.mine - entry.theirs));
+                }
+            }
+        """.trimIndent()
+
+        val result = transform(source)
+
+        val helperEnd = result.indexOf("return sizes;")
+        assertFalse(result.substring(0, helperEnd).contains("yield "), "helper yields: $result")
+        // The top-level calls, inside blocks rather than functions, still yield.
+        assertTrue(result.contains("yield print("), result)
+        assertTrue(result.contains("yield table("), result)
+        assertTrue(result.contains("yield row(entry.name"), result)
+    }
+
+    @Test
     fun theStarterTemplateSurvivesTheTransform() {
         val result = transform(ScriptApiReference.starterTemplate())
 
