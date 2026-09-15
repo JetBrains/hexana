@@ -44,7 +44,8 @@ The module provides:
 - **Scripting API** (`scripting/`) — the single definition of the custom script tab surface. `ScriptValue.kt` is a
   host-neutral lazy value tree; `ScriptBinaryApi.kt` builds the `binary` global from a `BinaryProvider` (reusing
   `fileTypeDescription`, `structureRanges`, and `TableTabsProviderRegistry` so `binary.tab(name)` reads the same tables
-  the UIs render); `ScriptOutput.kt` owns `print`/`table`/`row`; `ScriptOutputBlocks.kt` segments a script's output
+  the UIs render); `ScriptOutput.kt` owns `print`/`table`/`row`; `ScriptGlobals.kt` assembles every global a host binds and defines
+  `open(path)` over the host-supplied `ScriptBinaryOpener`; `ScriptOutputBlocks.kt` segments a script's output
   lines back into the text and table blocks a script tab renders, and filters them; `ScriptApiReference.kt` is the
   source of truth for the documentation. `ScriptValueJs.kt` (jsMain) binds the tree into plain JS objects for the
   browser hosts; the GraalJS adapter lives in `mcp:scripting`.
@@ -56,6 +57,13 @@ all bind one definition. Before this existed each host hand-maintained its own w
 
 - Add or change a script member in `ScriptBinaryApi.kt` only, then document it in `ScriptApiReference.kt`. Never add one
   in a host adapter.
+- Hosts bind exactly what `scriptGlobals` returns, never a global of their own, so a global cannot exist in one host and
+  be missing in another. A global that needs something only the host can do takes a capability parameter, the way
+  `open(path)` takes `ScriptBinaryOpener` — and it stays bound even where that capability is absent, failing with a
+  message that says where it does work. An unbound name is worse than a failing one: in a browser `open` would silently
+  resolve to `window.open`.
+- `ScriptApiReferenceTest` compares the documented globals against `scriptGlobals`, so a new global fails the build until
+  it is documented, exactly as a new `binary` member does.
 - `ScriptApiReferenceTest` asserts the documented shapes match what `scriptBinaryApi` exposes, in both directions. A new
   member fails the build until it is documented — that is intentional.
 - Do not claim a curated name that already exists on a `BinaryProvider` (`sections`, `functions`, `imports`, `exports`,

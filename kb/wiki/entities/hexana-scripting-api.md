@@ -30,6 +30,7 @@ bound by thin per-host adapters:
 | --- | --- |
 | `ScriptValue.kt` | Host-neutral lazy value tree (`Obj`/`Arr`/`Fn`/`Host`), plus `ScriptArgs` coercion. |
 | `ScriptBinaryApi.kt` | Builds the `binary` global from a `BinaryProvider`. |
+| `ScriptGlobals.kt` | Assembles the globals every host binds, and defines `open(path)` over the host's `ScriptBinaryOpener`. |
 | `ScriptOutput.kt` | `print`/`table`/`row`, including TSV encoding and cell escaping. |
 | `ScriptOutputBlocks.kt` | Segments the output line stream back into text/table blocks, and filters them. |
 | `ScriptApiReference.kt` | Source of truth for docs: renders the `.d.ts`, both dialogs' API listing, the starter template, the example list. |
@@ -96,6 +97,27 @@ Adapters:
   any indexed `.d.ts`. The JSON lives in `ScriptApiReference` rather than in the
   extension's TypeScript, and the webview passes it over the message bus, so it is
   defined once.
+- **A host binds `scriptGlobals` and nothing else.** Globals used to be assembled per
+  host (`binary` here, `ScriptOutput.bindings()` there), which is how a host could
+  end up one global short. `scriptGlobals(provider, output, fileName, opener)` is now
+  the single list, and `ScriptApiReferenceTest` compares the documented globals
+  against it.
+- **A host-dependent global stays bound where the host cannot back it.** `open(path)`
+  needs file access, which the VS Code webview and the webapp worker do not have
+  (their script runs over bytes pushed to them, with no synchronous fs). They still
+  bind it, with a `null` `ScriptBinaryOpener`, so it throws a message naming the
+  hosts where it works. Leaving it unbound would be worse than useless: in a browser
+  `open` resolves to `window.open`, so `open("/path/to.wasm")` would try to navigate
+  instead of failing. This is the one documented member that is not uniform across
+  hosts, and the `.d.ts` summary says so.
+- **`open` reuses the caller's own file policy rather than adding one.**
+  `ScriptBinaryFileOpener` (in `mcp:scripting`) loads through `BinaryInputLoader` +
+  `AllowedFilePolicy` — the same pair that decides where the caller's `binary` may
+  come from. So it reaches exactly the files the host would already have loaded:
+  unrestricted in the IDE and by default in the CLI, confined to the configured roots
+  on a restricted MCP server. Results are memoized per path string (comparing in a
+  loop costs one parse) and `HexanaScriptLimits.maxOpenedBinaries` (8) bounds how many
+  distinct binaries one run can hold, since each stays in memory for the whole run.
 - **Docs cannot drift.** `ScriptApiReferenceTest` asserts, in both directions, that
   the documented shapes match what `scriptBinaryApi` exposes. Adding a member fails
   the build until it is documented.
@@ -109,7 +131,17 @@ Adapters:
 
 The IntelliJ script tab previously ran user `.js` with `HostAccess.ALL` and
 `allowHostClassLookup { true }` — arbitrary Java from a script file. Delegating to
-`mcp:scripting` closed that: no host class lookup, no IO, no process or thread
-creation, no native access, a timeout, and bounded output. `binary.raw` is
+`mcp:scripting` closed that: no host class lookup, no GraalJS IO, no process or
+thread creation, no native access, a timeout, and bounded output. `binary.raw` is
 read-only *data* exposure through `ProxyObject`s (public properties only, no
 methods, no class handles), not host access.
+
+`open(path)` is the one deliberate exception to "no file access", and a narrow one:
+GraalJS IO stays off (`read()` and `load()` are still denied, and the sandbox tests
+pin that), the path goes through `AllowedFilePolicy`, and what crosses into the
+script is a parsed `BinaryProvider` — not a file handle, not arbitrary file text.
+It therefore does not widen the trust boundary of any host: `run_binary_script`
+already accepts an arbitrary `path` as its binary source under the same policy, so
+`open` reads the same set of files by a different route. Restating this in the tool
+guidance (which claimed "no file IO") is what moved `EXPECTED_SEMANTIC` in
+`HexanaToolCompatibilityTest`.

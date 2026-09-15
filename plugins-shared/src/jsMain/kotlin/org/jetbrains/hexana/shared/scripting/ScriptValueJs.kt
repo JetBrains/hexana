@@ -35,9 +35,9 @@ class ScriptValueJsBinder(private val wrapHost: (Any) -> dynamic) {
         is ScriptValue.Host -> wrapHost(value.value)
     }
 
-    /** The `print`/`table`/`row` globals of [output], by global name. */
-    fun outputBindings(output: ScriptOutput): Map<String, dynamic> =
-        output.bindings().mapValues { (_, function) -> functionToJs(function) }
+    /** Binds every global from [scriptGlobals], by global name. */
+    fun globalsToJs(globals: Map<String, ScriptValue>): Map<String, dynamic> =
+        globals.mapValues { (_, value) -> toJs(value) }
 
     private fun objectToJs(value: ScriptValue.Obj): dynamic {
         // Uncurated members fall through to the format-specific provider via the

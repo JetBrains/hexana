@@ -13,7 +13,7 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.model.binaries.BinaryModuleIdentityResult
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.scripting.ScriptOutput
-import org.jetbrains.hexana.shared.scripting.scriptBinaryApi
+import org.jetbrains.hexana.shared.scripting.scriptGlobals
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -234,12 +234,16 @@ class HexanaScriptRunner private constructor(
                 val bindings = ctx.getBindings("js")
                 // The surface itself lives in plugins-shared so that the IDE, the
                 // VS Code webview, and this runtime all bind the same thing.
-                bindings.putMember(
-                    "binary",
-                    ScriptValueGraalProxy.toGuest(scriptBinaryApi(binaryProvider, fileName)),
+                val globals = scriptGlobals(
+                    provider = binaryProvider,
+                    output = ScriptOutput(output::print),
+                    fileName = fileName,
+                    // Fresh per run: it memoizes what the script opened, and that
+                    // must not outlive the run holding those binaries in memory.
+                    opener = ScriptBinaryFileOpener(limits, allowedFilePolicy),
                 )
-                for ((name, function) in ScriptOutput(output::print).bindings()) {
-                    bindings.putMember(name, ScriptValueGraalProxy.toGuest(function))
+                for ((name, value) in globals) {
+                    bindings.putMember(name, ScriptValueGraalProxy.toGuest(value))
                 }
                 ctx.eval(Source.newBuilder("js", script.text, script.name).build())
             }

@@ -41,9 +41,11 @@ and `2` for invalid command-line usage.
 
 ## Sandbox and limits
 
-Scripts run in a GraalJS sandbox with no host access, host class lookup, I/O, process creation, thread creation, or
-native access. The script receives only the read-only `binary` API and `print(...)`. Fixed script limits are a
-3-second timeout and at most 1,000 printed lines. Default byte limits are 100 MiB for binary files and inline binary
+Scripts run in a GraalJS sandbox with no host access, host class lookup, GraalJS I/O, process creation, thread
+creation, or native access. The script receives the read-only `binary` API, the `print(...)`/`table(...)`/`row(...)`
+output globals, and `open(path)`, which parses another local binary into the same read-only API and is bound by the same
+allowed-root policy as the binary and script paths. Fixed script limits are a 3-second timeout, at most 1,000 printed
+lines, and at most 8 distinct binaries opened per run. Default byte limits are 100 MiB for binary files and inline binary
 input, 1,000,000 bytes for inline or file scripts, and 60,000 output bytes.
 
 Use `--max-file-bytes`, `--max-inline-bytes`, `--max-text-file-bytes`, and `--max-output-bytes` (or their

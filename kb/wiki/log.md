@@ -44,3 +44,8 @@ Append one line per write-back: date, page, what changed.
   addressed `.debug_abbrev` (shared abbrev declaration), DWARF64 `strp` never resolved, and the
   IntelliJ search index was built on the EDT; all three fixed, with regression tests pinning
   that attribute offsets fall inside `.debug_info` and differ per DIE.
+- 2026-09-15 — `entities/hexana-scripting-api` — added the `open(path)` script global
+  (opens another local binary as the same wrapper object as `binary`); recorded the
+  `scriptGlobals` assembly point, why a host-dependent global stays bound and throws
+  rather than being omitted (`window.open`), and that `open` reuses `BinaryInputLoader`
+  + `AllowedFilePolicy` instead of introducing a file-access path of its own.

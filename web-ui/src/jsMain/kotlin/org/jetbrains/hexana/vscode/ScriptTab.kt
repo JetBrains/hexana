@@ -13,6 +13,7 @@ import org.jetbrains.hexana.shared.scripting.parseScriptOutputBlocks
 import org.jetbrains.hexana.shared.scripting.ScriptValueJsBinder
 import org.jetbrains.hexana.shared.scripting.ScriptYieldTransform
 import org.jetbrains.hexana.shared.scripting.scriptBinaryApi
+import org.jetbrains.hexana.shared.scripting.scriptGlobals
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import kotlin.js.Promise
 
@@ -342,8 +343,9 @@ private const val TABLE_BLOCK_MAX_BODY_HEIGHT = "clamp(120px, 45vh, 640px)"
 
 /**
  * Executes a user script with the shared Hexana scripting globals — `binary`
- * from [scriptBinaryApi] plus `print`, `table` and `row` from [ScriptOutput] —
- * on the main thread.
+ * from [scriptBinaryApi], `print`, `table` and `row` from [ScriptOutput], and
+ * `open` — on the main thread. `open(path)` reports that it is unavailable here:
+ * the webview has no synchronous file access.
  *
  * The globals are built by [ScriptValueJsBinder] from the same definition the
  * JVM runtime binds, so a script written for the IDE or the CLI behaves the same
@@ -369,7 +371,11 @@ private fun executeScriptAsync(
 ): Promise<String?> {
     return Promise { resolve, _ ->
         val binder = ScriptValueJsBinder(::wrapForJs)
-        val output = binder.outputBindings(ScriptOutput(onLine))
+        // `opener = null`: the webview has no synchronous file access, so
+        // `open(path)` reports that rather than resolving to `window.open`.
+        val globals = binder.globalsToJs(
+            scriptGlobals(provider = provider, output = ScriptOutput(onLine), fileName = fileName)
+        )
 
         // All three output globals are covered, not just print: a script that only
         // builds a table with table/row would otherwise never yield and would
@@ -383,16 +389,19 @@ private fun executeScriptAsync(
         val genBody = generatorBody
 
         @Suppress("UNUSED_VARIABLE")
-        val binary = binder.toJs(scriptBinaryApi(provider, fileName))
+        val binary = globals.getValue("binary")
 
         @Suppress("UNUSED_VARIABLE")
-        val print = output.getValue("print")
+        val openBinary = globals.getValue("open")
 
         @Suppress("UNUSED_VARIABLE")
-        val table = output.getValue("table")
+        val print = globals.getValue("print")
 
         @Suppress("UNUSED_VARIABLE")
-        val row = output.getValue("row")
+        val table = globals.getValue("table")
+
+        @Suppress("UNUSED_VARIABLE")
+        val row = globals.getValue("row")
 
         // Create a GeneratorFunction, run it, and drive it from an
         // async loop that yields to the event loop every YIELD_EVERY steps.
@@ -401,12 +410,12 @@ private fun executeScriptAsync(
                 var GeneratorFunction = Object.getPrototypeOf(function*(){}).constructor;
                 var gen;
                 try {
-                    gen = new GeneratorFunction('binary', 'print', 'table', 'row', genBody);
+                    gen = new GeneratorFunction('binary', 'open', 'print', 'table', 'row', genBody);
                 } catch(e) {
                     resolve(e.message || 'Script compilation failed');
                     return;
                 }
-                var iter = gen(binary, print, table, row);
+                var iter = gen(binary, openBinary, print, table, row);
                 var count = 0;
                 function step() {
                     try {

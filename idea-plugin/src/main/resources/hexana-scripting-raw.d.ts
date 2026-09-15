@@ -286,6 +286,12 @@ interface ArrowBinaryProvider extends BinaryProvider {
       };
     };
   };
+  structureRanges: {
+    label: string;
+    offset: number;
+    size: number;
+    tabName?: string;
+  }[];
 }
 
 interface GenericBinaryProvider extends BinaryProvider {
@@ -515,6 +521,12 @@ interface ArchiveBinaryProvider extends NativeBinaryProvider {
   nativeFormat: {
     displayName: string;
   };
+  structureRanges: {
+    label: string;
+    offset: number;
+    size: number;
+    tabName?: string;
+  }[];
 }
 
 interface CoffBinaryProvider extends NativeBinaryProvider {
@@ -594,6 +606,12 @@ interface CoffBinaryProvider extends NativeBinaryProvider {
     relocationPointer: number;
     virtualAddress: number;
     virtualSize: number;
+  }[];
+  structureRanges: {
+    label: string;
+    offset: number;
+    size: number;
+    tabName?: string;
   }[];
 }
 
@@ -1629,6 +1647,12 @@ interface ParquetBinaryProvider extends BinaryProvider {
     size: number;
   };
   sourcePath?: string;
+  structureRanges: {
+    label: string;
+    offset: number;
+    size: number;
+    tabName?: string;
+  }[];
 }
 
 interface TarBinaryProvider extends BinaryProvider {
@@ -1667,6 +1691,12 @@ interface TarBinaryProvider extends BinaryProvider {
     lastIndex: number;
     size: number;
   };
+  structureRanges: {
+    label: string;
+    offset: number;
+    size: number;
+    tabName?: string;
+  }[];
   tarEntries: {
     dataOffset: number;
     isDirectory: boolean;
@@ -3398,6 +3428,12 @@ interface ZipBinaryProvider extends BinaryProvider {
     lastIndex: number;
     size: number;
   };
+  structureRanges: {
+    label: string;
+    offset: number;
+    size: number;
+    tabName?: string;
+  }[];
   zipEntries: {
     compressedSize: number;
     compressionMethod: number;
@@ -3428,6 +3464,7 @@ interface ClassFileBinaryProvider extends GenericBinaryProvider {
       }[];
       size: number;
     };
+    constantPoolEndOffset: number;
     fields: {
       accessFlags: {
         raw: number;
@@ -3468,6 +3505,12 @@ interface ClassFileBinaryProvider extends GenericBinaryProvider {
     size: number;
     tag?: string;
     value: string;
+  }[];
+  structureRanges: {
+    label: string;
+    offset: number;
+    size: number;
+    tabName?: string;
   }[];
 }
 
@@ -3539,6 +3582,12 @@ interface DexBinaryProvider extends GenericBinaryProvider {
     size: number;
     tag?: string;
     value: string;
+  }[];
+  structureRanges: {
+    label: string;
+    offset: number;
+    size: number;
+    tabName?: string;
   }[];
 }
 
@@ -3619,6 +3668,12 @@ interface ArscBinaryProvider extends GenericBinaryProvider {
     size: number;
     tag?: string;
     value: string;
+  }[];
+  structureRanges: {
+    label: string;
+    offset: number;
+    size: number;
+    tabName?: string;
   }[];
 }
 
@@ -7470,6 +7525,7 @@ interface JavaClassFile {
     }[];
     size: number;
   };
+  constantPoolEndOffset: number;
   fields: {
     accessFlags: {
       raw: number;
@@ -7538,7 +7594,7 @@ interface JavaClassFile {
     byteOffset: number;
     info: number[];
     nameIndex: number;
-  }[]): {
+  }[], constantPoolEndOffset: number): {
     accessFlags: {
       raw: number;
     };
@@ -7553,6 +7609,7 @@ interface JavaClassFile {
       }[];
       size: number;
     };
+    constantPoolEndOffset: number;
     fields: {
       accessFlags: {
         raw: number;

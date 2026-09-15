@@ -20,6 +20,14 @@ data class HexanaScriptLimits(
     val maxScriptFileBytes: Int = HexanaAnalysisLimits.MAX_TEXT_FILE_BYTES,
     val maxInlineBinaryBytes: Int = HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES,
     val maxFileBinaryBytes: Int = HexanaAnalysisLimits.MAX_FILE_BINARY_BYTES,
+    /**
+     * How many distinct binaries one run may load through `open(path)`.
+     *
+     * Each one is held for the rest of the run, so this together with
+     * [maxFileBinaryBytes] is what bounds the memory a script can claim. Opening
+     * the same path again is free and does not count.
+     */
+    val maxOpenedBinaries: Int = 8,
 ) {
     init {
         require(timeoutMillis > 0) { "timeoutMillis must be greater than 0" }
@@ -29,6 +37,7 @@ data class HexanaScriptLimits(
         require(maxScriptFileBytes > 0) { "maxScriptFileBytes must be greater than 0" }
         require(maxInlineBinaryBytes > 0) { "maxInlineBinaryBytes must be greater than 0" }
         require(maxFileBinaryBytes > 0) { "maxFileBinaryBytes must be greater than 0" }
+        require(maxOpenedBinaries > 0) { "maxOpenedBinaries must be greater than 0" }
     }
 
     companion object {

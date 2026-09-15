@@ -683,7 +683,8 @@ private fun Server.registerRunBinaryScriptTool(handlers: HexanaToolHandlers) {
   |`binary` is format-agnostic: `format`, `formatName`, `name`, `size`, `bytes`, `structure`, `strings`, `sizeAnalysis`, `tabs`, `tab(name)`, `raw`.
   |`binary.tabs` lists every table Hexana renders for the binary and `binary.tab(name)` reads one; `binary.bytes` has `at`, `slice`, `hex`, `ascii`, `u8`/`u16`/`u32`, and `indexOf`.
   |`binary.raw` is the format-specific provider, and members not listed above resolve against it too.
-  |It does not expose host classes, file IO, process creation, or native access.
+  |`open(path)` loads another local binary and returns the same members as `binary`, for comparing two files; paths obey the configured allowed roots, and one run may open a bounded number of them.
+  |It does not expose host classes, arbitrary file reads, process creation, or native access.
   |Pass exactly one binary source and exactly one script source, either `scriptPath` or inline `script`.
   """.trimMargin(),
     inputSchema = ToolSchema(

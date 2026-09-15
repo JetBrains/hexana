@@ -45,7 +45,7 @@ import org.jetbrains.hexana.shared.TableTabsContext
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.shared.scripting.ScriptOutput
 import org.jetbrains.hexana.shared.scripting.ScriptValueJsBinder
-import org.jetbrains.hexana.shared.scripting.scriptBinaryApi
+import org.jetbrains.hexana.shared.scripting.scriptGlobals
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.components.ComponentInstanceExpression
 import org.jetbrains.hexana.wasm.components.InlineInstanceCoreExpression
@@ -216,40 +216,48 @@ private suspend fun runScript(
         }
         // Bound from the shared scripting definition so a script behaves the
         // same here as it does in the IDE, in VS Code, and in the CLI.
+        //
+        // `opener` stays unset: the worker only ever receives the bytes of the
+        // one binary the page handed it, so `open(path)` reports that it is
+        // unavailable rather than resolving to some global named `open`.
         val binder = ScriptValueJsBinder(::scriptValue)
-        val output = binder.outputBindings(ScriptOutput { line -> emitLine(line) })
-        val error = executeWorkerScript(
-            source = source,
-            binary = binder.toJs(scriptBinaryApi(provider, fileName)),
-            output = output,
+        val globals = binder.globalsToJs(
+            scriptGlobals(
+                provider = provider,
+                output = ScriptOutput { line -> emitLine(line) },
+                fileName = fileName,
+            )
         )
+        val error = executeWorkerScript(source = source, globals = globals)
         postScriptDone(workerScope, requestId, if (truncated && error == null) "Script output exceeded the browser limit." else error)
     } catch (_: Throwable) {
         postScriptDone(workerScope, requestId, "Script execution failed.")
     }
 }
 
-private fun executeWorkerScript(source: String, binary: dynamic, output: Map<String, dynamic>): String? {
+private fun executeWorkerScript(source: String, globals: Map<String, dynamic>): String? {
     @Suppress("UNUSED_VARIABLE")
     val sourceValue = source
     @Suppress("UNUSED_VARIABLE")
-    val binaryValue = binary
+    val binaryValue = globals.getValue("binary")
     @Suppress("UNUSED_VARIABLE")
-    val printValue = output.getValue("print")
+    val openValue = globals.getValue("open")
     @Suppress("UNUSED_VARIABLE")
-    val tableValue = output.getValue("table")
+    val printValue = globals.getValue("print")
     @Suppress("UNUSED_VARIABLE")
-    val rowValue = output.getValue("row")
+    val tableValue = globals.getValue("table")
+    @Suppress("UNUSED_VARIABLE")
+    val rowValue = globals.getValue("row")
     return js("""
-        (function(source, binary, print, table, row) {
+        (function(source, binary, open, print, table, row) {
             try {
-                new Function('binary', 'print', 'table', 'row', source)(binary, print, table, row);
+                new Function('binary', 'open', 'print', 'table', 'row', source)(binary, open, print, table, row);
                 return null;
             } catch (error) {
                 var message = error && error.message ? String(error.message) : 'Script execution failed.';
                 return message.length > 1024 ? message.substring(0, 1024) : message;
             }
-        })(sourceValue, binaryValue, printValue, tableValue, rowValue)
+        })(sourceValue, binaryValue, openValue, printValue, tableValue, rowValue)
     """)
 }
 

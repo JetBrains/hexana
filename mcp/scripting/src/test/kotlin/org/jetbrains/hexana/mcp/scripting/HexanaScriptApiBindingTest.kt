@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp.scripting
 
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.providers.BinaryStringRecord
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
@@ -10,6 +11,8 @@ import org.jetbrains.hexana.shared.scripting.ScriptOutputBlock
 import org.jetbrains.hexana.shared.scripting.parseScriptOutputBlocks
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.junit.Test
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.Collections
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -299,6 +302,100 @@ class HexanaScriptApiBindingTest {
         assertEquals(listOf("binary"), lines)
     }
 
+    // -- open ----------------------------------------------------------------
+
+    @Test
+    fun openReadsASecondBinaryThroughTheSameSurface() {
+        val other = tempFileWith("hexana-open-", ".wasm", wasmBytes())
+
+        val lines = lines(
+            """
+            const other = open("${escaped(other)}");
+            print(other.format, other.name, other.size);
+            const exports = other.tab("Exports");
+            print(exports.cell(0, exports.columnIndex("Name")));
+            print(binary.size, other.size !== binary.size);
+            """.trimIndent()
+        )
+
+        assertEquals("wasm ${other.fileName} ${Files.size(other)}", lines[0])
+        assertEquals("hello", lines[1])
+        assertEquals("5 true", lines[2])
+    }
+
+    @Test
+    fun openedBinariesAreReusedRatherThanReparsed() {
+        // A script comparing in a loop must not pay for a parse per iteration,
+        // and repeating a path must not count against the open limit.
+        val other = tempFileWith("hexana-open-reuse-", ".bin", byteArrayOf(1, 2, 3, 4))
+
+        val lines = lines(
+            """
+            let total = 0;
+            for (let i = 0; i < 40; i++) total += open("${escaped(other)}").size;
+            print(total);
+            """.trimIndent()
+        )
+
+        assertEquals(listOf("160"), lines)
+    }
+
+    @Test
+    fun openingMoreBinariesThanTheLimitAllowsFailsWithTheLimitInTheMessage() {
+        val opens = (0 until 3).joinToString("\n") { index ->
+            val file = tempFileWith("hexana-open-limit-$index-", ".bin", byteArrayOf(index.toByte()))
+            """open("${escaped(file)}");"""
+        }
+
+        val result = HexanaScriptRunner(limits = HexanaScriptLimits(maxOpenedBinaries = 2)).run(
+            source = HexanaScriptSource.Inline(opens),
+            binaryProvider = testProvider(),
+        )
+
+        assertEquals(HexanaScriptStatus.SCRIPT_ERROR, result.status)
+        val message = result.diagnostics.single().message
+        assertTrue(message.contains("at most 2 additional"), message)
+    }
+
+    @Test
+    fun openingAMissingFileIsAScriptErrorNamingThePath() {
+        val result = run("""open("/no/such/hexana-open.bin");""")
+
+        assertEquals(HexanaScriptStatus.SCRIPT_ERROR, result.status)
+        val message = result.diagnostics.single().message
+        assertTrue(message.contains("/no/such/hexana-open.bin"), message)
+        assertTrue(message.contains("File not found"), message)
+    }
+
+    @Test
+    fun openObeysTheAllowedRootPolicyThatGovernsEveryOtherPath() {
+        // `open` must not reach further than the binary and script paths the host
+        // already accepts — that is what keeps it safe on a restricted server.
+        val allowedRoot = Files.createTempDirectory("hexana-open-allowed-")
+        val outside = tempFileWith("hexana-open-outside-", ".bin", byteArrayOf(7, 7, 7))
+
+        val result = HexanaScriptRunner(
+            allowedFilePolicy = AllowedFilePolicy.requiringAllowedRoots(listOf(allowedRoot.toString())),
+        ).run(
+            source = HexanaScriptSource.Inline("""print(open("${escaped(outside)}").size);"""),
+            binaryProvider = testProvider(),
+        )
+
+        assertEquals(HexanaScriptStatus.SCRIPT_ERROR, result.status)
+        assertTrue(result.output.lines.isEmpty(), "bytes outside the allowed roots reached the script")
+        assertTrue(
+            result.diagnostics.single().message.contains("outside allowed roots"),
+            result.diagnostics.single().message,
+        )
+    }
+
+    private fun tempFileWith(prefix: String, suffix: String, bytes: ByteArray): Path =
+        Files.createTempFile(prefix, suffix).also { Files.write(it, bytes) }
+
+    /** A path as a JavaScript string literal body, so Windows separators survive. */
+    private fun escaped(path: Path): String =
+        path.toString().replace("\\", "\\\\").replace("\"", "\\\"")
+
     // -- streaming -----------------------------------------------------------
 
     @Test
@@ -358,8 +455,10 @@ class HexanaScriptApiBindingTest {
             )
     }
 
+    private fun wasmProvider(): WasmBinaryProvider = WasmBinaryProvider(wasmBytes().toCommonByteBuffer())
+
     /** Minimal core Wasm module exporting a single function named `hello`. */
-    private fun wasmProvider(): WasmBinaryProvider {
+    private fun wasmBytes(): ByteArray {
         val writer = WasmBinaryWriter()
         writer.writeBytes(byteArrayOf(0x00, 0x61, 0x73, 0x6D))
         writer.writeBytes(byteArrayOf(0x01, 0x00, 0x00, 0x00))
@@ -392,6 +491,6 @@ class HexanaScriptApiBindingTest {
         code.writeBytes(body.toByteArray())
         writer.writeSection(10, code.toByteArray())
 
-        return WasmBinaryProvider(writer.toByteArray().toCommonByteBuffer())
+        return writer.toByteArray()
     }
 }

@@ -40,6 +40,18 @@ declare function row(...cells: any[]): void;
 declare const binary: HexanaBinary;
 
 /**
+ * Opens another binary from a local file path and returns the same shape
+ * as `binary`, so a script can compare two files. The format is detected
+ * from the content. Needs a host with file access: the IntelliJ IDEA
+ * script tab, the run-script CLI, and the MCP tool have it, the VS Code
+ * webview and the web app do not and report that. Where allowed roots are
+ * configured, the path must be inside one.
+ *
+ * @example const before = open("/tmp/before.wasm"); print(binary.size - before.size);
+ */
+declare function open(path: string): HexanaBinary;
+
+/**
  * The binary open in the editor. Every member below works for every
  * supported format; format-specific data is reachable through `raw`.
  */

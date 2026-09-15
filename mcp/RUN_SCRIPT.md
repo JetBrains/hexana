@@ -75,11 +75,24 @@ same output is plain lines, with tables tab-separated.
 | `tabs` / `tab(name)` | Every table the plugins render for the binary, read by name with the same column headers. |
 | `raw` | Escape hatch: the format-specific provider. Members not listed above resolve against it too. |
 
+`open(path)` loads a second binary from a local path and returns the same members as `binary`, so a script can compare
+two files without a second API:
+
+```bash
+hexana-cli-script run-script new.wasm \
+  --script-text 'const old = open("old.wasm"); print(binary.size - old.size);'
+```
+
+The format is detected from the file content, the path obeys the allowed-root policy below, and one run may open at most
+8 distinct binaries (opening the same path again is free and does not count). In the VS Code webview and the web app —
+neither of which can read files synchronously — `open` reports that instead of doing anything.
+
 For the full reference including signatures, see `vscode-plugin/hexana-scripting.d.ts` (curated) and
 `vscode-plugin/hexana-scripting-raw.d.ts` (the format-specific types behind `binary.raw`). Runnable examples live in
 `examples/scripting/`.
 
-The runtime does not expose host classes, file IO, process creation, thread creation, or native access.
+Apart from `open(path)`, the runtime does not expose host classes, file reads, process creation, thread creation, or
+native access.
 
 Example — the largest regions of a binary, as a table:
 
@@ -94,7 +107,9 @@ hexana-cli-script run-script sample.bin --script-text '
 ## Path Safety
 
 Path inputs are checked against the CLI allowed-root policy. Without an allowed-root restriction, local CLI path input is
-allowed. When allowed roots are configured, every path input must be inside one of those roots.
+allowed. When allowed roots are configured, every path input must be inside one of those roots. This covers the binary,
+the script file, and every path a script passes to `open(...)` — a script cannot reach a file the command itself could
+not have been given.
 
 Pass allowed roots explicitly:
 

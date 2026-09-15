@@ -96,11 +96,14 @@ class ScriptApiReferenceTest {
     }
 
     @Test
-    fun globalsMatchTheOutputBindings() {
-        val bound = ScriptOutput {}.bindings().keys
+    fun documentedGlobalsMatchTheBoundGlobals() {
+        // scriptGlobals is what every host binds, so comparing against it — not
+        // against a hand-listed set — is what makes a new global fail the build
+        // until it is documented.
+        val bound = scriptGlobals(provider = wasmProvider(), output = ScriptOutput {}).keys
         val documented = ScriptApiReference.globals.map { it.name }.toSet()
         assertEquals(
-            (bound + "binary").sorted(),
+            bound.sorted(),
             documented.sorted(),
             "documented globals do not match the bound globals",
         )
@@ -231,5 +234,6 @@ class ScriptApiReferenceTest {
         assertTrue(lines.any { it.startsWith("row(") }, "row is missing from the dialog summary")
         assertTrue(lines.any { it.startsWith("binary.tabs") }, "binary.tabs is missing from the dialog summary")
         assertTrue(lines.any { it.startsWith("binary.raw") }, "binary.raw is missing from the dialog summary")
+        assertTrue(lines.any { it.startsWith("open(") }, "open is missing from the dialog summary")
     }
 }

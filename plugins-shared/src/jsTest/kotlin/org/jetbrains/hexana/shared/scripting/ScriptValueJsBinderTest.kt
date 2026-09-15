@@ -134,16 +134,37 @@ class ScriptValueJsBinderTest {
     }
 
     @Test
-    fun outputBindingsProduceTheSameLinesAsTheJvm() {
+    fun outputGlobalsProduceTheSameLinesAsTheJvm() {
         val lines = mutableListOf<String>()
-        val bindings = binder().outputBindings(ScriptOutput { lines += it })
+        val globals = boundGlobals(ScriptOutput { lines += it })
 
-        callFunction(bindings.getValue("print"), "a", 1, true)
-        callFunction(bindings.getValue("table"), "Name", "Size")
-        callFunction(bindings.getValue("row"), "code", 1024)
+        callFunction(globals.getValue("print"), "a", 1, true)
+        callFunction(globals.getValue("table"), "Name", "Size")
+        callFunction(globals.getValue("row"), "code", 1024)
 
         assertEquals(listOf("a 1 true", "Name\tSize", "code\t1024"), lines)
     }
+
+    @Test
+    fun openIsBoundAndReportsThatTheBrowserCannotReadFiles() {
+        // Left unbound, `open` in a browser is `window.open`, so a script asking
+        // for a file would open a window instead of failing.
+        val globals = boundGlobals()
+
+        val message = captureError { callFunction(globals.getValue("open"), "/tmp/other.wasm") }
+
+        assertTrue(message.contains("/tmp/other.wasm"), message)
+        assertTrue(message.contains("file access"), message)
+    }
+
+    private fun boundGlobals(output: ScriptOutput = ScriptOutput {}): Map<String, dynamic> =
+        binder().globalsToJs(
+            scriptGlobals(
+                provider = GenericBinaryProvider(byteArrayOf(0x48, 0x69, 0x21).toCommonByteBuffer()),
+                output = output,
+                fileName = "greeting.bin",
+            )
+        )
 
     private fun callFunction(function: dynamic, vararg arguments: Any?): dynamic {
         @Suppress("UNUSED_VARIABLE")
