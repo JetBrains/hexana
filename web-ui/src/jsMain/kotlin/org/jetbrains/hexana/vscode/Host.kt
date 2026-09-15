@@ -67,11 +67,15 @@ interface Host {
     val canEditRuntimeTargets: Boolean get() = false
 
     /**
-     * Asks the host to write [json] to `.hexana/runtimes.json` in the project. The host
-     * replies with `runtime-targets-loaded` once the file is on disk, which is also how an
-     * edit made outside the editor reaches the UI.
+     * Asks the host to write [json] to `.hexana/runtimes.json` in the project, and [schema]
+     * to `.hexana/runtimes.schema.json` next to it. The host replies with
+     * `runtime-targets-loaded` once the file is on disk, which is also how an edit made
+     * outside the editor reaches the UI.
+     *
+     * @param schema the generated JSON Schema [json] references, so a hand-edit of the
+     *   settings file gets completion and validation in whatever editor opens it
      */
-    fun saveRuntimeTargets(json: String) {}
+    fun saveRuntimeTargets(json: String, schema: String) {}
 
     /**
      * Creates a runnable script and selects it, so the user never starts from an

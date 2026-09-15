@@ -46,6 +46,14 @@ const HEXANA_PROJECT_DIR = ".hexana";
 const RUNTIME_TARGETS_FILE = "runtimes.json";
 
 /**
+ * Generated JSON Schema written next to [RUNTIME_TARGETS_FILE], which references it. It is
+ * what makes the settings file hand-editable: with it present, VS Code completes the keys
+ * and the runtime names and flags a typo. The webview generates the content, since the
+ * runtime names come from the feature catalog it already holds.
+ */
+const RUNTIME_TARGETS_SCHEMA_FILE = "runtimes.schema.json";
+
+/**
  * The workspace folder whose `.hexana/runtimes.json` governs the binary at [scope].
  *
  * A multi-root workspace holds one settings file per folder, so the folder the *file* lives
@@ -762,7 +770,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     );
                 }
             } else if (message.type === "save-runtime-targets") {
-                await this.saveRuntimeTargets(webviewPanel, message.json as string);
+                await this.saveRuntimeTargets(
+                    webviewPanel,
+                    message.json as string,
+                    message.schema as string | undefined,
+                );
             } else if (message.type === "save-as") {
                 this.saveAs(document);
             } else if (message.type === "overwrite-file") {
@@ -1572,7 +1584,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
      * the webview's `canEditRuntimeTargets` capability is what normally keeps the dialog from
      * being offered at all.
      */
-    private async saveRuntimeTargets(webviewPanel: vscode.WebviewPanel, json: string): Promise<void> {
+    private async saveRuntimeTargets(
+        webviewPanel: vscode.WebviewPanel,
+        json: string,
+        schema?: string,
+    ): Promise<void> {
         const folder = runtimeTargetsFolder(this.openWebviews.get(webviewPanel));
         if (!folder) {
             void vscode.window.showWarningMessage(
@@ -1584,8 +1600,22 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         try {
             const directory = vscode.Uri.joinPath(folder.uri, HEXANA_PROJECT_DIR);
             await vscode.workspace.fs.createDirectory(directory);
+            const encoder = new TextEncoder();
+            // Both files are written only when they differ: they are committed to version
+            // control, and confirming the dialog without changing anything should leave them
+            // alone. (The same read-compare-write discipline `RuntimeTargetsStore` uses.)
+            // The schema goes first, so the reference the settings file carries never points
+            // at a file that is not there yet.
+            if (schema) {
+                const schemaFile = vscode.Uri.joinPath(directory, RUNTIME_TARGETS_SCHEMA_FILE);
+                if (await this.needsWrite(schemaFile, schema)) {
+                    await vscode.workspace.fs.writeFile(schemaFile, encoder.encode(schema));
+                }
+            }
             const file = vscode.Uri.joinPath(directory, RUNTIME_TARGETS_FILE);
-            await vscode.workspace.fs.writeFile(file, new TextEncoder().encode(json));
+            if (await this.needsWrite(file, json)) {
+                await vscode.workspace.fs.writeFile(file, encoder.encode(json));
+            }
             // The file watcher also fires, but pushing here makes the round-trip immediate for
             // the editor the user is looking at; editors on other folders keep their own.
             await this.pushRuntimeTargets();
@@ -1594,6 +1624,15 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             void vscode.window.showErrorMessage(
                 `Failed to save target runtimes: ${error instanceof Error ? error.message : String(error)}`,
             );
+        }
+    }
+
+    /** Whether [file] is missing or holds something other than [content]. */
+    private async needsWrite(file: vscode.Uri, content: string): Promise<boolean> {
+        try {
+            return new TextDecoder("utf-8").decode(await vscode.workspace.fs.readFile(file)) !== content;
+        } catch {
+            return true;
         }
     }
 

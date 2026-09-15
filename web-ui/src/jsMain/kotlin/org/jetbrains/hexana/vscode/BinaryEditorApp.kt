@@ -13,6 +13,7 @@ import org.jetbrains.hexana.shared.features.WasmFeatureCatalog
 import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
 import org.jetbrains.hexana.shared.features.parseRuntimeTargets
 import org.jetbrains.hexana.shared.features.serializeRuntimeTargets
+import org.jetbrains.hexana.shared.features.serializeRuntimeTargetsSchema
 
 /**
  * Extracts nested module bytes from a parent binary at the given member index.
@@ -360,7 +361,12 @@ fun BinaryEditorContent(
             onConfirm = { targets ->
                 // The host owns the write and replies with `runtime-targets-loaded`, which is
                 // also how an edit made outside the editor reaches this state.
-                host.saveRuntimeTargets(serializeRuntimeTargets(targets))
+                // The schema is generated from the same catalog the dialog offered, so the
+                // names it completes on a later hand-edit match what was picked here.
+                host.saveRuntimeTargets(
+                    serializeRuntimeTargets(targets),
+                    serializeRuntimeTargetsSchema(featureCatalog),
+                )
                 showRuntimeTargetsDialog = false
             },
             onCancel = { showRuntimeTargetsDialog = false },

@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.hexana.shared.features.RUNTIME_TARGETS_PATH
 import org.jetbrains.hexana.shared.features.RuntimeTargets
 import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
+import org.jetbrains.hexana.shared.features.serializeRuntimeTargetsSchema
 
 /**
  * The runtime targets declared for this project in `.hexana/runtimes.json`.
@@ -69,12 +70,20 @@ class RuntimeTargetsService(private val project: Project) : Disposable {
         return WasmRuntimeCompatibility(WasmFeatureCatalogService.getInstance().catalog, targets)
     }
 
-    /** Persists [targets] and refreshes VFS so the new file is visible in the project tree. */
+    /**
+     * Persists [targets] and refreshes VFS so the new files are visible in the project tree.
+     *
+     * The JSON Schema sibling is regenerated from the current catalog on every save, so the
+     * runtime names it completes are the ones this Hexana knows about.
+     */
     fun save(targets: RuntimeTargets) {
         val basePath = project.basePath ?: return
-        val file = RuntimeTargetsStore.write(basePath, targets)
+        val schema = serializeRuntimeTargetsSchema(WasmFeatureCatalogService.getInstance().catalog)
+        val file = RuntimeTargetsStore.write(basePath, targets, schema)
         tracker.recordSave(targets)
-        LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file)
+        val vfs = LocalFileSystem.getInstance()
+        vfs.refreshAndFindFileByIoFile(RuntimeTargetsStore.schemaFile(basePath))
+        vfs.refreshAndFindFileByIoFile(file)
     }
 
     /** Project-relative settings file as an absolute VFS-style path, or `null` without a project dir. */

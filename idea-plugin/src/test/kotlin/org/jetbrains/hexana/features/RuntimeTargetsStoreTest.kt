@@ -77,6 +77,38 @@ class RuntimeTargetsStoreTest {
         assertTrue(RuntimeTargetsStore.read(basePath).isEmpty)
     }
 
+    @Test
+    fun `the schema is written next to the settings file when one is supplied`() {
+        RuntimeTargetsStore.write(basePath, RuntimeTargets(listOf(RuntimeTarget("Chrome"))), "{\"schema\": true}")
+
+        val schema = RuntimeTargetsStore.schemaFile(basePath)
+        assertEquals(File(File(basePath, ".hexana"), "runtimes.schema.json"), schema)
+        assertEquals("{\"schema\": true}", schema.readText())
+        // The reference in the settings file has to resolve to what was just written.
+        assertTrue("runtimes.schema.json" in RuntimeTargetsStore.file(basePath).readText())
+    }
+
+    @Test
+    fun `an unchanged schema is left untouched while the declaration is rewritten`() {
+        val schemaText = "{\"schema\": true}"
+        RuntimeTargetsStore.write(basePath, RuntimeTargets(listOf(RuntimeTarget("Chrome"))), schemaText)
+        val schema = RuntimeTargetsStore.schemaFile(basePath)
+        schema.setLastModified(schema.lastModified() - 10_000)
+        val staleModified = schema.lastModified()
+
+        RuntimeTargetsStore.write(basePath, RuntimeTargets(listOf(RuntimeTarget("Deno"))), schemaText)
+
+        assertEquals("expected no rewrite for identical schema", staleModified, schema.lastModified())
+        assertEquals(listOf(RuntimeTarget("Deno")), RuntimeTargetsStore.read(basePath).targets)
+    }
+
+    /** A project that predates the schema, or one whose catalog failed to load, still works. */
+    @Test
+    fun `no schema is written when none is supplied`() {
+        RuntimeTargetsStore.write(basePath, RuntimeTargets(listOf(RuntimeTarget("Chrome"))))
+        assertFalse(RuntimeTargetsStore.schemaFile(basePath).exists())
+    }
+
     /** A hand-edited or half-merged file must not surface an error on every file open. */
     @Test
     fun `a corrupt file reads as empty`() {

@@ -381,13 +381,15 @@ fun postPickSslKeyLogToHost() {
 }
 
 /**
- * Asks the extension host to write [json] to `.hexana/runtimes.json` in the workspace.
+ * Asks the extension host to write [json] to `.hexana/runtimes.json` in the workspace, and
+ * [schema] to `.hexana/runtimes.schema.json` next to it.
  * The host replies with `runtime-targets-loaded` once the file is on disk.
  */
-fun postSaveRuntimeTargetsToHost(json: String) {
+fun postSaveRuntimeTargetsToHost(json: String, schema: String) {
     val msg = js("{}")
     msg.type = "save-runtime-targets"
     msg.json = json
+    msg.schema = schema
     vscodeApi.postMessage(msg)
 }
 
@@ -469,7 +471,8 @@ class VscodeHost : Host {
     override val canPickSslKeyLog: Boolean get() = true
     override fun pickSslKeyLog() = postPickSslKeyLogToHost()
     override val canEditRuntimeTargets: Boolean get() = true
-    override fun saveRuntimeTargets(json: String) = postSaveRuntimeTargetsToHost(json)
+    override fun saveRuntimeTargets(json: String, schema: String) =
+        postSaveRuntimeTargetsToHost(json, schema)
     override fun createScriptFromTemplate(fileName: String, template: String?, jsConfigContent: String?) =
         postCreateScriptFromTemplateToHost(fileName, template, jsConfigContent)
     override fun openScriptForEditing(scriptPath: String, jsConfigContent: String?) =
