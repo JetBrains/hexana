@@ -23,8 +23,15 @@ const TOP = 30;
 // Regions are summed per name: several can share one (multiple custom sections,
 // repeated archive entries), and a total is comparable where a single arbitrary
 // match is not.
+//
+// Object.create(null), not {}: region names come out of the file, and a Wasm
+// custom section or an archive entry may legitimately be called "constructor"
+// or "__proto__". On a plain object those collide with Object.prototype —
+// `sizes["constructor"] || 0` reads back a function, so the running total turns
+// into a string, and `"toString" in sizes` is true for a region that is not
+// there at all.
 function regionSizes(target) {
-    const sizes = {};
+    const sizes = Object.create(null);
     for (const region of target.structure) {
         sizes[region.name] = (sizes[region.name] || 0) + region.size;
     }

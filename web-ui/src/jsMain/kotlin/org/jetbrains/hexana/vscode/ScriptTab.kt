@@ -381,8 +381,9 @@ private fun executeScriptAsync(
                 fileName = fileName,
                 // The extension sends the fsPath with the payload, so `binary.path`
                 // and `binary.dir` read the same here as in the IDE — even though
-                // `open(path)` itself cannot work in a webview.
-                filePath = filePath?.takeIf { it.isNotBlank() },
+                // `open(path)` itself cannot work in a webview. Blank (no file
+                // behind this binary) is normalized to null by the surface.
+                filePath = filePath,
             )
         )
 
@@ -480,8 +481,14 @@ internal fun ScriptTabContent(
     var scriptError by remember { mutableStateOf<String?>(null) }
     val runScope = remember { ScriptRunScope() }
 
-    // Re-execute whenever scriptContent or executionKey changes
-    LaunchedEffect(scriptContent, executionKey, scriptExecution) {
+    // Re-execute whenever the script changes — or the binary under it does. This
+    // one webview instance is reused for whatever the host opens next (a nested
+    // module replaces the bytes in place while the script tabs stay), and the
+    // provider is also rebuilt when the file is reparsed after an edit. Without
+    // the binary inputs as keys the tab keeps showing the previous binary's
+    // output, attributed to the new one; the panel next door clears its stale
+    // row detail on `LaunchedEffect(liveProvider)` for the same reason.
+    LaunchedEffect(scriptContent, executionKey, scriptExecution, provider, binaryFileName, binaryFilePath) {
         if (scriptContent.isBlank()) return@LaunchedEffect
         val runGeneration = ++runScope.generation
         outputLines.clear()

@@ -1,7 +1,9 @@
 // Hexana scripting API — the globals available in a custom script tab.
 //
 // This file is generated from ScriptApiReference.kt. Everything here behaves
-// identically in IntelliJ IDEA, in VS Code, and in the `run-script` CLI.
+// identically in IntelliJ IDEA, in VS Code, and in the `run-script` CLI, except
+// `open(path)`: it needs local file access, so it reports that it is unavailable
+// in the VS Code webview and the web app. Each member says what it needs.
 // For the format-specific shape of `binary.raw`, see hexana-scripting-raw.d.ts.
 //
 // Output layout: a script tab renders text and tables in the order the script

@@ -11,8 +11,8 @@ import org.jetbrains.hexana.providers.BinaryProvider
  * to [execute]'s callback as it is produced.
  *
  * Execution is delegated to `mcp:scripting`, the same runtime the `run-script`
- * CLI and the MCP tool use, so a script written for a tab behaves identically
- * everywhere. That shared runtime also owns the sandbox: no host classes, no file
+ * CLI and the MCP tool use, so a script written for a tab behaves the same in
+ * all three — including `open(path)`, which the browser hosts cannot offer. That shared runtime also owns the sandbox: no host classes, no file
  * IO, no process or thread creation, and a timeout. This tab used to build its
  * own GraalJS context with `HostAccess.ALL` and host class lookup enabled, which
  * meant a `.js` file dropped into a script tab could call arbitrary Java.

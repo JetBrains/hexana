@@ -49,9 +49,10 @@ hexana-cli-script run-script sample.bin \
 
 ## Script API
 
-The runtime exposes the same globals here, in the IntelliJ plugin, and in the VS Code extension, so a script written for
-one runs unchanged in the others. The surface is defined once in
-`plugins-shared/src/commonMain/kotlin/org/jetbrains/hexana/shared/scripting/`.
+The runtime exposes the same globals here, in the IntelliJ plugin, and in the VS Code extension. The surface is defined
+once in `plugins-shared/src/commonMain/kotlin/org/jetbrains/hexana/shared/scripting/`, so a script written for one host
+runs unchanged in the others — with one exception, `open(path)`, which needs local file access and therefore reports
+that it is unavailable in the VS Code webview and the web app.
 
 Output:
 

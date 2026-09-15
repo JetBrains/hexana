@@ -116,6 +116,14 @@ class ScriptBinaryApiTest {
     }
 
     @Test
+    fun aBlankNameOrPathReadsAsAbsentRatherThanEmpty() {
+        // Both UI hosts default these to "" before a file is loaded, and a script
+        // must not have to tell an empty name from a missing one.
+        assertEquals(Triple(null, null, null), location(fileName = "", filePath = ""))
+        assertEquals(Triple("app.wasm", null, null), location(fileName = "app.wasm", filePath = "  "))
+    }
+
+    @Test
     fun aBareFileNameAsAPathHasNoDir() {
         assertEquals(Triple("app.wasm", "app.wasm", null), location(filePath = "app.wasm"))
     }

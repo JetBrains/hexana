@@ -48,7 +48,14 @@ fun scriptBinaryApi(
     // whichever it gave, so every host reports the same thing for one file.
     // Before this, VS Code passed a full fsPath as the name and reported it
     // as `binary.name` while the IDE and the CLI reported a bare name.
-    val name = (fileName ?: filePath)?.let(::scriptFileBaseName)
+    //
+    // Blank is treated as absent, here rather than at each call site: both UI
+    // hosts default these to "" before a file is loaded, and a script must not
+    // have to tell an empty name from a missing one.
+    val path = filePath?.takeIf { it.isNotBlank() }
+    val name = (fileName?.takeIf { it.isNotBlank() } ?: path)
+        ?.let(::scriptFileBaseName)
+        ?.takeIf { it.isNotEmpty() }
     val context = TableTabsContext(fileName = name)
     val bytes = ScriptBytes(provider)
 
@@ -57,8 +64,8 @@ fun scriptBinaryApi(
             "format" to { ScriptValue.Str(binaryFormatId(provider)) },
             "formatName" to { ScriptValue.Str(fileTypeDescription(provider, name)) },
             "name" to { ScriptValue.of(name) },
-            "path" to { ScriptValue.of(filePath) },
-            "dir" to { ScriptValue.of(filePath?.let(::scriptFileDirectory)) },
+            "path" to { ScriptValue.of(path) },
+            "dir" to { ScriptValue.of(path?.let(::scriptFileDirectory)) },
             "size" to { ScriptValue.Num(bytes.buffer.size) },
             "bytes" to { bytes.toScriptValue() },
             "structure" to {
