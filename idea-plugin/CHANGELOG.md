@@ -5,8 +5,7 @@
 ### Added
 - **Breakpoints in binary views**, set without a debug session and materialized when one starts. Click the gutter in the **WAT (virtualized)** or native **Disassembly** view; the breakpoint is anchored to the binary's content hash (not its path) and survives restarts. The gutter icon reports what the runtime did with it: registered, instruction-precise, degraded, or stale after a rebuild. Supported for GraalWasm/Node.js/browser, wasmtime, WAMR and firmware ELF (QEMU/Renode) sessions. Listed under "Hexana Binary Breakpoints" in the Breakpoints dialog; conditions and hit counts are not supported yet.
 - **Debugger Console** tab: an interactive command line to the underlying debugger — LLDB commands for wasmtime/WAMR/wasmtime-gdbstub sessions, GDB commands for firmware QEMU/Renode. Execution-control commands are routed through the IDE's own actions so the console cannot desync it. Not available for GraalWasm/CDP sessions.
-- Custom script tabs: format-agnostic `binary` API (`format`, `size`, `structure`, `strings`, `sizeAnalysis`, `binary.tabs`/`binary.tab(name)`) plus `table(...)`/`row(...)` output, identical across the IntelliJ plugin, the VS Code extension and the `run-script` CLI; existing scripts keep working
-- Custom script tabs can compare two binaries: `open(path)` parses another file and returns the same members as `binary`, so `open("old.wasm").size` reads exactly like `binary.size`. The format comes from the file's content, not its extension, and a script may open up to 8 distinct files per run
+- Custom script tabs: format-agnostic `binary` API (`format`, `size`, `structure`, `strings`, `sizeAnalysis`, `binary.tabs`/`binary.tab(name)`) plus `table(...)`/`row(...)` output, and `open(path)` parses another file and returns the same members as `binary`
 - Nodes in the WASM component **Dependencies** graph are navigable: double-click a core module or nested component to open it in its own tab, an import or export to select its bytes in the hex view
 - PCAP: support for TLS decryption based on a user-provided SSL key log file
 - **Smali** tab for Android `.dex` files showing baksmali-style Dalvik bytecode with resolved operands and decoded switch/fill-array payloads; clicking an instruction row moves the hex view to that code unit
@@ -23,6 +22,7 @@
 
 ### Fixed
 - The bundled `hexana-scripting-raw.d.ts` reference no longer lists Kotlin's generated `component1()`, `component2()`, ... destructuring accessors
+- `binary.name` in a script tab is now the file name in every host. The VS Code extension passed the full filesystem path where the IntelliJ plugin and the `run-script` CLI passed a bare name, so one script reported two different things for the same file depending on where it ran
 
 ### Security
 - Script tabs now run sandboxed. Up to and including 0.18 a script tab ran with full host access and could call arbitrary Java; it now uses the same sandbox as the `run-script` CLI and the MCP tool — no host classes, file IO, processes, threads or native access, plus a timeout and bounded output

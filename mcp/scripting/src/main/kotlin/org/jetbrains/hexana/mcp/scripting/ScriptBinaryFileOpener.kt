@@ -58,12 +58,12 @@ internal class ScriptBinaryFileOpener(
 
         val result = ScriptOpenedBinary(
             provider = loaded.provider,
-            fileName = loaded.identity.path?.binaryFileName(),
+            // The resolved path, not the argument: a script that opens
+            // "previous/app.wasm" and then joins that binary's own `dir` with a
+            // sibling name has to end up somewhere real.
+            filePath = loaded.resolvedPath,
         )
         opened[path] = result
         return result
     }
 }
-
-/** Last segment of a path, for either separator, so `open(...).name` reads as a file name. */
-private fun String.binaryFileName(): String = substringAfterLast('/').substringAfterLast('\\')

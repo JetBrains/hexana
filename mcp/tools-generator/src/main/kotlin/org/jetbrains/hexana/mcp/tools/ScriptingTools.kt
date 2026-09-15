@@ -60,7 +60,8 @@ internal val ScriptingTools: List<ToolSpec> = tools {
         guidance = """
             Use this only in the dedicated scripting profile or explicit CLI command when a small custom script is needed over the loaded `binary` object.
             The runtime exposes `binary` plus `print(...values)`, and `table(...columns)`/`row(...cells)` for tab-separated tabular output.
-            `binary` is format-agnostic: `format`, `formatName`, `name`, `size`, `bytes`, `structure`, `strings`, `sizeAnalysis`, `tabs`, `tab(name)`, `raw`.
+            `binary` is format-agnostic: `format`, `formatName`, `name`, `path`, `dir`, `size`, `bytes`, `structure`, `strings`, `sizeAnalysis`, `tabs`, `tab(name)`, `raw`.
+            `binary.path` and `binary.dir` locate the file when it was loaded from one and are null otherwise, so `open(binary.dir + "/sibling.bin")` reaches a file next to it without hardcoding a directory.
             `binary.tabs` lists every table Hexana renders for the binary and `binary.tab(name)` reads one; `binary.bytes` has `at`, `slice`, `hex`, `ascii`, `u8`/`u16`/`u32`, and `indexOf`.
             `binary.raw` is the format-specific provider, and members not listed above resolve against it too.
             `open(path)` loads another local binary and returns the same members as `binary`, for comparing two files; paths obey the configured allowed roots, and one run may open a bounded number of them.

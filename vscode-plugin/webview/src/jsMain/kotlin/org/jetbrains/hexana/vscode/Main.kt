@@ -216,6 +216,7 @@ fun BinaryEditorApp() {
 
             BinaryEditorContent(
                 fileName = fileName,
+                filePath = filePath,
                 parentFileName = parentFileName,
                 provider = provider,
                 isDecompressed = isDecompressed,

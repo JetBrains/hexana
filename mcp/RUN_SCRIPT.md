@@ -67,7 +67,8 @@ same output is plain lines, with tables tab-separated.
 
 | Member | Description |
 | --- | --- |
-| `format`, `formatName`, `name`, `size` | Identity. `format` is a stable id such as `wasm`, `elf`, `macho`, `pe`, `zip`. |
+| `format`, `formatName`, `name`, `size` | Identity. `format` is a stable id such as `wasm`, `elf`, `macho`, `pe`, `zip`. `name` is the file name without its directory. |
+| `path`, `dir` | Where the file is, or `null` when the binary came from bytes rather than a file. `dir` has no trailing separator; join with `/` on any platform. |
 | `bytes` | `at`, `slice`, `hex`, `ascii`, `u8`/`u16`/`u32`, `indexOf`, plus `size`/`lastIndex`/`indices`/`get`. |
 | `structure` | Top-level regions — Wasm sections, ELF sections, Mach-O segments — as `{name, offset, size, tab}`. |
 | `strings` | Extracted strings as `{value, offset, size, index, tag}`. |
@@ -83,8 +84,17 @@ hexana-cli-script run-script new.wasm \
   --script-text 'const old = open("old.wasm"); print(binary.size - old.size);'
 ```
 
-The format is detected from the file content, the path obeys the allowed-root policy below, and one run may open at most
-8 distinct binaries (opening the same path again is free and does not count). In the VS Code webview and the web app —
+Combined with `binary.dir` it reaches a file next to the one being analyzed, without the script knowing where either
+lives — the sidecar pattern, e.g. the linker map beside an ELF:
+
+```bash
+hexana-cli-script run-script build/app.elf \
+  --script-text 'const map = open(binary.dir + "/app.map"); print(map.size);'
+```
+
+`binary.path` and `binary.dir` report the *resolved* location, so a relative `--binary ./app.elf` still yields a path a
+later `open(...)` can build on. The format is detected from the file content, the path obeys the allowed-root policy
+below, and one run may open at most 8 distinct binaries (opening the same path again is free and does not count). In the VS Code webview and the web app —
 neither of which can read files synchronously — `open` reports that instead of doing anything.
 
 For the full reference including signatures, see `vscode-plugin/hexana-scripting.d.ts` (curated) and

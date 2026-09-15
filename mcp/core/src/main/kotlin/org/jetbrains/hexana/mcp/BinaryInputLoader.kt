@@ -21,6 +21,16 @@ import java.util.Base64
 data class LoadedBinary(
     val provider: BinaryProvider,
     val identity: BinaryModuleIdentityResult,
+    /**
+     * The path this binary was actually read from, resolved against the allowed
+     * file policy, or null when it came from bytes.
+     *
+     * [identity] deliberately keeps the caller's own path string, because that is
+     * what a caller matches its request against. A consumer that has to *use* the
+     * location — to reach a sibling file, say — needs the resolved one instead: a
+     * relative path is meaningless once it leaves the process that supplied it.
+     */
+    val resolvedPath: String? = null,
 )
 
 class BinaryInputLoader(
@@ -67,7 +77,7 @@ class BinaryInputLoader(
             is BoundedFileReadResult.Bytes -> readResult.bytes
             is BoundedFileReadResult.TooLarge -> throw fileTooLarge()
         }
-        return loadFromBytes(bytes, pathLabel = rawPath)
+        return loadFromBytes(bytes, pathLabel = rawPath, resolvedPath = path.toString())
     }
 
     private fun loadFromInlineBytes(base64: String): LoadedBinary {
@@ -94,11 +104,16 @@ class BinaryInputLoader(
         return loadFromBytes(bytes, pathLabel = null)
     }
 
-    private fun loadFromBytes(bytes: ByteArray, pathLabel: String?): LoadedBinary {
+    private fun loadFromBytes(
+        bytes: ByteArray,
+        pathLabel: String?,
+        resolvedPath: String? = null,
+    ): LoadedBinary {
         val provider = bytes.toCommonByteBuffer().toBinaryProvider(pathLabel)
         return LoadedBinary(
             provider = provider,
-            identity = provider.toModuleIdentity(pathLabel)
+            identity = provider.toModuleIdentity(pathLabel),
+            resolvedPath = resolvedPath,
         )
     }
 

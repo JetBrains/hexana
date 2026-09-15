@@ -60,6 +60,7 @@ The API is the same in the VS Code extension, the IntelliJ plugin, and the `run-
 
 - `print(...values)` for text; `table(...columns)` and `row(...cells)` for a table. A tab renders text and tables in the order the script produced them, so a script can narrate between tables.
 - `binary.format` / `formatName` / `name` / `size` — identity, with a stable format id you can branch on.
+- `binary.path` / `binary.dir` — where the file is, or `null` for a binary with no file behind it (a ZIP entry, a nested module).
 - `binary.bytes` — `at`, `slice`, `hex`, `ascii`, `u8`/`u16`/`u32`, `indexOf`.
 - `binary.structure` — top-level regions (Wasm sections, ELF sections, Mach-O segments, …) with offsets and sizes.
 - `binary.strings`, `binary.sizeAnalysis`.

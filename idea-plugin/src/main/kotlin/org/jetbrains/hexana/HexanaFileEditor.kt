@@ -109,6 +109,9 @@ class HexanaFileEditor(
 
     private var myTextEditor: TextEditor? = null
 
+    /** Path of the open file, or null when it has no file on disk. */
+    private var binarySourcePath: String? = null
+
     private val myClosedTextEditors = CopyOnWriteArrayList<TextEditor>()
 
     /**
@@ -251,6 +254,10 @@ class HexanaFileEditor(
         }
 
         val sourcePath = if (inMemoryBuffer == null) myFile.toNioPathOrNull()?.toString() else null
+        // Kept for the script tabs, which are built later in the Compose content:
+        // `binary.path` must be null for an in-memory file exactly as it is here,
+        // because there is no file for a script to reach a sibling of.
+        binarySourcePath = sourcePath
 
         binaryProvider = resolveProvider(ext, inMemoryBuffer, commonBuffer, sourcePath)
 
@@ -289,6 +296,7 @@ class HexanaFileEditor(
                 BinaryEditorView(
                     binaryProvider!!, stateHolder, hexFocusRequester,
                     fileName = myFile.name,
+                    filePath = binarySourcePath,
                     parentFileName = parentFile?.name,
                     onNavigateToParent = parentFile?.let { pf ->
                         { FileEditorManager.getInstance(myProject).openFile(pf, true) }

@@ -129,6 +129,12 @@ private const val DEFAULT_PANEL_HEIGHT = 250.0
 @Composable
 fun BinaryEditorContent(
     fileName: String,
+    /**
+     * Path of the open file, or blank when it has none — a nested module
+     * extracted from a parent, or a payload the host only pushed bytes for.
+     * Script tabs surface it as `binary.path`.
+     */
+    filePath: String = "",
     parentFileName: String? = null,
     provider: BinaryProvider,
     extraTabs: List<PanelTab> = emptyList(),
@@ -332,6 +338,7 @@ fun BinaryEditorContent(
             provider = liveProvider,
             selection = selection,
             fileName = fileName,
+            filePath = filePath,
             heightPx = panelHeight,
             activeTab = activeTab,
             onActiveTabChange = { activeTab = it },

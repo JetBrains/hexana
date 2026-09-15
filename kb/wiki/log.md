@@ -49,3 +49,8 @@ Append one line per write-back: date, page, what changed.
   `scriptGlobals` assembly point, why a host-dependent global stays bound and throws
   rather than being omitted (`window.open`), and that `open` reuses `BinaryInputLoader`
   + `AllowedFilePolicy` instead of introducing a file-access path of its own.
+- 2026-09-15 — `entities/hexana-scripting-api` — added `binary.path`/`binary.dir`
+  (members, not globals, so they compose with `open(...)`); recorded that null means
+  "no file behind this binary", that the CLI/MCP path is the resolved one via the new
+  `LoadedBinary.resolvedPath`, and that `binary.name` is now derived from whichever of
+  name/path the host supplied — which fixed VS Code reporting a full fsPath as the name.

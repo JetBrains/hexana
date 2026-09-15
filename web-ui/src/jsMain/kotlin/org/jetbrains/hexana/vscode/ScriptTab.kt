@@ -367,6 +367,7 @@ private fun executeScriptAsync(
     scriptContent: String,
     provider: BinaryProvider,
     fileName: String?,
+    filePath: String?,
     onLine: (String) -> Unit,
 ): Promise<String?> {
     return Promise { resolve, _ ->
@@ -374,7 +375,15 @@ private fun executeScriptAsync(
         // `opener = null`: the webview has no synchronous file access, so
         // `open(path)` reports that rather than resolving to `window.open`.
         val globals = binder.globalsToJs(
-            scriptGlobals(provider = provider, output = ScriptOutput(onLine), fileName = fileName)
+            scriptGlobals(
+                provider = provider,
+                output = ScriptOutput(onLine),
+                fileName = fileName,
+                // The extension sends the fsPath with the payload, so `binary.path`
+                // and `binary.dir` read the same here as in the IDE — even though
+                // `open(path)` itself cannot work in a webview.
+                filePath = filePath?.takeIf { it.isNotBlank() },
+            )
         )
 
         // All three output globals are covered, not just print: a script that only
@@ -451,6 +460,7 @@ internal fun ScriptTabContent(
     onRequestRefresh: () -> Unit,
     scriptExecution: ScriptExecution? = null,
     binaryFileName: String? = null,
+    binaryFilePath: String? = null,
 ) {
     val host = LocalHost.current
     val outputLines = remember { mutableStateListOf<String>() }
@@ -496,7 +506,9 @@ internal fun ScriptTabContent(
         }
         val handle = scriptExecution?.start(scriptContent, ::acceptLine, ::complete)
             ?: run {
-                executeScriptAsync(scriptContent, provider, binaryFileName, ::acceptLine).then(::complete)
+                executeScriptAsync(
+                    scriptContent, provider, binaryFileName, binaryFilePath, ::acceptLine,
+                ).then(::complete)
                 NoopScriptExecutionHandle
             }
 

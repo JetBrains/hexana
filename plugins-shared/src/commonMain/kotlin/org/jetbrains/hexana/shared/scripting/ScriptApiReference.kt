@@ -135,7 +135,22 @@ object ScriptApiReference {
                 ScriptApiEntry(
                     "name",
                     "readonly name: string | null",
-                    "File name, when the host knows it.",
+                    "File name without its directory, when the host knows it.",
+                ),
+                ScriptApiEntry(
+                    "path",
+                    "readonly path: string | null",
+                    "Full path of the file, or null when there is no file behind the binary — a " +
+                        "ZIP entry, a module opened from a table, anything in a browser.",
+                    "if (binary.path) print(binary.path);",
+                ),
+                ScriptApiEntry(
+                    "dir",
+                    "readonly dir: string | null",
+                    "Directory containing the file, without a trailing separator, or null when " +
+                        "`path` is null. Join with \"/\", which works on every platform Hexana " +
+                        "runs on, to reach a file next to this one.",
+                    "const map = open(binary.dir + \"/zephyr.map\");",
                 ),
                 ScriptApiEntry(
                     "size",
@@ -410,7 +425,7 @@ object ScriptApiReference {
     fun highlights(): List<ScriptApiEntry> {
         val binary = shape(BINARY_SHAPE)
         return globals.filter { it.name != "binary" } +
-            listOf("format", "size", "structure", "strings", "tabs", "tab", "raw")
+            listOf("format", "size", "path", "structure", "strings", "tabs", "tab", "raw")
                 .map { name -> binary.members.first { it.name == name } }
     }
 

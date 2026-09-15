@@ -73,9 +73,26 @@ interface HexanaBinary {
   readonly formatName: string;
 
   /**
-   * File name, when the host knows it.
+   * File name without its directory, when the host knows it.
    */
   readonly name: string | null;
+
+  /**
+   * Full path of the file, or null when there is no file behind the binary —
+   * a ZIP entry, a module opened from a table, anything in a browser.
+   *
+   * @example if (binary.path) print(binary.path);
+   */
+  readonly path: string | null;
+
+  /**
+   * Directory containing the file, without a trailing separator, or null
+   * when `path` is null. Join with "/", which works on every platform Hexana
+   * runs on, to reach a file next to this one.
+   *
+   * @example const map = open(binary.dir + "/zephyr.map");
+   */
+  readonly dir: string | null;
 
   /**
    * File size in bytes.

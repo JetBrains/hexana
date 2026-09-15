@@ -32,20 +32,33 @@ import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
  * resolving one table does not compute the others.
  *
  * @param provider the parsed binary
- * @param fileName file name for `binary.name`, when the host knows it
+ * @param fileName display name for `binary.name`, when the host knows it. Only
+ *   its last path segment is used, so a host that has nothing but a full path may
+ *   pass that.
+ * @param filePath absolute path of the file for `binary.path`, when the host has
+ *   one. Null is the honest answer for a binary with no file behind it — a ZIP
+ *   entry or a nested module opened from a table, or anything in the browser.
  */
 fun scriptBinaryApi(
     provider: BinaryProvider,
     fileName: String? = null,
+    filePath: String? = null,
 ): ScriptValue.Obj {
-    val context = TableTabsContext(fileName = fileName)
+    // A host may know the name, the path, or both; `name` is derived from
+    // whichever it gave, so every host reports the same thing for one file.
+    // Before this, VS Code passed a full fsPath as the name and reported it
+    // as `binary.name` while the IDE and the CLI reported a bare name.
+    val name = (fileName ?: filePath)?.let(::scriptFileBaseName)
+    val context = TableTabsContext(fileName = name)
     val bytes = ScriptBytes(provider)
 
     return ScriptValue.Obj(
         members = linkedMapOf(
             "format" to { ScriptValue.Str(binaryFormatId(provider)) },
-            "formatName" to { ScriptValue.Str(fileTypeDescription(provider, fileName)) },
-            "name" to { ScriptValue.of(fileName) },
+            "formatName" to { ScriptValue.Str(fileTypeDescription(provider, name)) },
+            "name" to { ScriptValue.of(name) },
+            "path" to { ScriptValue.of(filePath) },
+            "dir" to { ScriptValue.of(filePath?.let(::scriptFileDirectory)) },
             "size" to { ScriptValue.Num(bytes.buffer.size) },
             "bytes" to { bytes.toScriptValue() },
             "structure" to {
@@ -82,6 +95,32 @@ fun scriptBinaryApi(
         ),
         hostFallback = provider,
     )
+}
+
+/**
+ * Last path segment of [value], for either separator.
+ *
+ * Both are handled unconditionally rather than per platform: a path can reach a
+ * script from a host running on the other kind of system (an MCP client, a
+ * capture taken elsewhere), and a name with no separator is returned unchanged.
+ */
+internal fun scriptFileBaseName(value: String): String =
+    value.substringAfterLast('/').substringAfterLast('\\')
+
+/**
+ * Directory containing [path], without a trailing separator, or null when [path]
+ * names no directory at all.
+ *
+ * A root keeps its separator, because dropping it would turn `/app.wasm` into the
+ * empty string and `C:\app.wasm` into the drive-relative `C:` — which names a
+ * different place.
+ */
+internal fun scriptFileDirectory(path: String): String? {
+    val separator = maxOf(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+    if (separator < 0) return null
+    if (separator == 0) return path.substring(0, 1)
+    if (separator == 2 && path[1] == ':') return path.substring(0, 3)
+    return path.substring(0, separator)
 }
 
 /** Names of every table tab the product can render for [provider]. */

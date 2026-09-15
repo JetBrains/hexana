@@ -110,6 +110,26 @@ Adapters:
   `open` resolves to `window.open`, so `open("/path/to.wasm")` would try to navigate
   instead of failing. This is the one documented member that is not uniform across
   hosts, and the `.d.ts` summary says so.
+- **Where the file is, is the host's answer — and `name` is derived, not passed
+  through.** `binary.path`/`binary.dir` are null whenever the binary has no file
+  behind it (a ZIP entry, a module opened from a table, anything in a browser),
+  because a plausible-looking path that resolves to nothing is worse than an
+  admitted absence. The IDE already computed exactly this distinction for its
+  providers (`if (inMemoryBuffer == null) myFile.toNioPathOrNull()`), the VS Code
+  load message already carried `filePath`, and the CLI/MCP loader now returns
+  `LoadedBinary.resolvedPath` — the *resolved* path, not the caller's string, so
+  `--binary ./app.wasm` still yields a `dir` that `open(...)` can build on
+  (`identity.path` keeps the caller's own spelling, which is what a caller matches
+  its request against). `binary.name` is computed as the last segment of whichever
+  of the two the host supplied, which also fixed a live divergence: VS Code passed
+  `document.uri.fsPath` as the name, so one script reported a full path there and
+  a bare name in the IDE and the CLI.
+- **`dir` exists so scripts do not do separator arithmetic.** The sidecar pattern
+  — the linker map beside an ELF, the previous build beside this one — is the
+  reason `open` and these members ship together. A root keeps its separator
+  (`/app.wasm` → `/`, `C:\app.wasm` → `C:\`), because trimming it would name a
+  different directory, and `/` works as a join separator on every platform Hexana
+  runs on.
 - **`open` reuses the caller's own file policy rather than adding one.**
   `ScriptBinaryFileOpener` (in `mcp:scripting`) loads through `BinaryInputLoader` +
   `AllowedFilePolicy` — the same pair that decides where the caller's `binary` may

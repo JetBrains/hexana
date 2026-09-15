@@ -7,10 +7,14 @@ import org.jetbrains.hexana.providers.BinaryProvider
  *
  * @param provider the parsed binary
  * @param fileName file name for `open(path).name`, when the host knows it
+ * @param filePath resolved path for `open(path).path`. Hosts report the path they
+ *   actually read, not the string the script passed, so that a relative argument
+ *   still yields a `path`/`dir` a later `open(...)` can build on.
  */
 class ScriptOpenedBinary(
     val provider: BinaryProvider,
     val fileName: String? = null,
+    val filePath: String? = null,
 )
 
 /**
@@ -59,6 +63,7 @@ const val SCRIPT_OPEN_UNSUPPORTED: String =
  * @param provider the binary open in the editor, surfaced as `binary`
  * @param output receives `print`/`table`/`row`
  * @param fileName file name of [provider], when the host knows it
+ * @param filePath path of [provider], when the host has one
  * @param opener loads the binaries `open(path)` asks for; `null` in a host
  *   without file access, which makes `open(path)` fail with a message saying so
  */
@@ -66,10 +71,11 @@ fun scriptGlobals(
     provider: BinaryProvider,
     output: ScriptOutput,
     fileName: String? = null,
+    filePath: String? = null,
     opener: ScriptBinaryOpener? = null,
 ): Map<String, ScriptValue> {
     val globals = LinkedHashMap<String, ScriptValue>()
-    globals[SCRIPT_BINARY_GLOBAL] = scriptBinaryApi(provider, fileName)
+    globals[SCRIPT_BINARY_GLOBAL] = scriptBinaryApi(provider, fileName, filePath)
     globals[SCRIPT_OPEN_GLOBAL] = scriptOpenBinding(opener)
     globals.putAll(output.bindings())
     return globals
@@ -88,5 +94,5 @@ internal fun scriptOpenBinding(opener: ScriptBinaryOpener?): ScriptValue.Fn =
         val resolved = opener
             ?: throw UnsupportedOperationException("open(\"$path\") — $SCRIPT_OPEN_UNSUPPORTED")
         val opened = resolved.open(path)
-        scriptBinaryApi(opened.provider, opened.fileName)
+        scriptBinaryApi(opened.provider, opened.fileName, opened.filePath)
     }

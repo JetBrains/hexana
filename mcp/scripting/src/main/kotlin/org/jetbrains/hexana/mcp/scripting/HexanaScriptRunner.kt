@@ -46,6 +46,9 @@ class HexanaScriptRunner private constructor(
      *
      * @param fileName file name of the binary, surfaced to the script as
      *   `binary.name` and used to resolve file-name-dependent tabs
+     * @param filePath path of the binary on disk, surfaced as `binary.path` and
+     *   `binary.dir`. Null when the binary has no file behind it — a ZIP entry or
+     *   a module opened from a table — which is what the script then reads.
      * @param onLine invoked for every accepted output line as it is emitted.
      *   Interactive hosts use this to stream output into a tab while the script
      *   is still running; the collected lines are returned regardless.
@@ -55,6 +58,7 @@ class HexanaScriptRunner private constructor(
         binaryProvider: BinaryProvider,
         binaryIdentity: BinaryModuleIdentityResult? = null,
         fileName: String? = null,
+        filePath: String? = null,
         onLine: ((String) -> Unit)? = null,
     ): HexanaScriptResult {
         val started = System.nanoTime()
@@ -73,6 +77,7 @@ class HexanaScriptRunner private constructor(
             binaryProvider = binaryProvider,
             binaryIdentity = binaryIdentity,
             fileName = fileName,
+            filePath = filePath,
             onLine = onLine,
             started = started,
         )
@@ -106,9 +111,12 @@ class HexanaScriptRunner private constructor(
             source = source,
             binaryProvider = loadedBinary.provider,
             binaryIdentity = loadedBinary.identity,
-            // The loader knows the input path, so `binary.name` works here too
-            // and does not read as null just because the caller was the CLI.
-            fileName = loadedBinary.identity?.path?.substringAfterLast('/')?.substringAfterLast('\\'),
+            // The loader knows the input path, so `binary.name`/`path`/`dir` work
+            // here too and do not read as null just because the caller was the
+            // CLI. The resolved path is the one worth reporting: a script that
+            // joins `binary.dir` with a sibling name must get somewhere real even
+            // when the command line said `./app.wasm`.
+            filePath = loadedBinary.resolvedPath,
         )
     }
 
@@ -117,6 +125,7 @@ class HexanaScriptRunner private constructor(
         binaryProvider: BinaryProvider,
         binaryIdentity: BinaryModuleIdentityResult?,
         fileName: String?,
+        filePath: String?,
         onLine: ((String) -> Unit)?,
         started: Long,
     ): HexanaScriptResult {
@@ -125,7 +134,9 @@ class HexanaScriptRunner private constructor(
         val executor = Executors.newSingleThreadExecutor(scriptThreadFactory)
         val future = executor.submit(Callable {
             beforeExecuteInContext()
-            executeInContext(script, binaryProvider, binaryIdentity, fileName, output, contextRef, started)
+            executeInContext(
+                script, binaryProvider, binaryIdentity, fileName, filePath, output, contextRef, started,
+            )
         })
 
         return try {
@@ -210,6 +221,7 @@ class HexanaScriptRunner private constructor(
         binaryProvider: BinaryProvider,
         binaryIdentity: BinaryModuleIdentityResult?,
         fileName: String?,
+        filePath: String?,
         output: ScriptOutputCollector,
         contextRef: AtomicReference<Context?>,
         started: Long,
@@ -238,6 +250,7 @@ class HexanaScriptRunner private constructor(
                     provider = binaryProvider,
                     output = ScriptOutput(output::print),
                     fileName = fileName,
+                    filePath = filePath,
                     // Fresh per run: it memoizes what the script opened, and that
                     // must not outlive the run holding those binaries in memory.
                     opener = ScriptBinaryFileOpener(limits, allowedFilePolicy),

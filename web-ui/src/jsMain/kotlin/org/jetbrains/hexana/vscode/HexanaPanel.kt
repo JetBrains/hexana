@@ -56,6 +56,8 @@ fun HexanaPanel(
     provider: BinaryProvider,
     selection: HexSelectionState,
     fileName: String,
+    /** Path of the open file, or blank when it has none. */
+    filePath: String = "",
     heightPx: Double = 250.0,
     activeTab: String = FixedTab.Summary.label,
     onActiveTabChange: (String) -> Unit = {},
@@ -250,6 +252,7 @@ fun HexanaPanel(
                         onRequestRefresh = { host.readScriptFile(st.path) },
                         scriptExecution = scriptExecution,
                         binaryFileName = fileName,
+                        binaryFilePath = filePath,
                     )
                 })
             }

@@ -71,8 +71,14 @@ internal object ScriptApiTestSupport {
     fun genericProvider(bytes: ByteArray): GenericBinaryProvider =
         GenericBinaryProvider(bytes.toCommonByteBuffer())
 
-    fun api(provider: BinaryProvider, fileName: String? = null): ScriptValue.Obj =
-        scriptBinaryApi(provider, fileName)
+    fun api(
+        provider: BinaryProvider,
+        fileName: String? = null,
+        filePath: String? = null,
+    ): ScriptValue.Obj = scriptBinaryApi(provider, fileName, filePath)
+
+    fun stringOrNull(value: ScriptValue): String? =
+        if (value is ScriptValue.Null) null else string(value)
 
     // -- ScriptValue navigation ---------------------------------------------
 

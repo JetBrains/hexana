@@ -97,6 +97,12 @@ internal fun BinaryEditorView(
     state: HexViewStateHolder,
     hexFocusRequester: FocusRequester,
     fileName: String = "",
+    /**
+     * Path of the open file, or null for a binary with no file on disk (a ZIP
+     * entry, a nested module opened from a table). Script tabs surface it as
+     * `binary.path`.
+     */
+    filePath: String? = null,
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
@@ -332,7 +338,7 @@ internal fun BinaryEditorView(
         val panels = remember(binaryProvider, hexEditedSinceOpen) {
             val scriptSettings = ScriptTabSettings.getInstance(state.project)
             val scriptPanels = scriptSettings.getScriptPaths(fileName).map { scriptPath ->
-                createScriptPanel(scriptPath, binaryProvider, fileName, state.project)
+                createScriptPanel(scriptPath, binaryProvider, fileName, filePath, state.project)
             }
             val placeholders = if (hexEditedSinceOpen) emptyList() else binaryProvider.discoverPanelNames()
                 .map { name -> Panel(name) { LoadingTabContent() } }
@@ -736,7 +742,7 @@ internal fun BinaryEditorView(
                     val scriptPath = dialog.selectedFile?.path ?: return@TabsPanel
                     val scriptSettings = ScriptTabSettings.getInstance(state.project)
                     scriptSettings.addScriptPath(fileName, scriptPath)
-                    val panel = createScriptPanel(scriptPath, binaryProvider, fileName, state.project)
+                    val panel = createScriptPanel(scriptPath, binaryProvider, fileName, filePath, state.project)
                     panels.add(panel)
                     state.setSelectedTab(panels.size - 1)
                 }

@@ -23,12 +23,14 @@ internal object ScriptExecutor {
         scriptPath: String,
         binaryProvider: BinaryProvider,
         fileName: String? = null,
+        filePath: String? = null,
         onLine: (String) -> Unit,
     ) {
         val result = HexanaScriptRunner(limits = HexanaScriptLimits.interactive()).run(
             source = HexanaScriptSource.FilePath(scriptPath),
             binaryProvider = binaryProvider,
             fileName = fileName,
+            filePath = filePath,
             onLine = onLine,
         )
 

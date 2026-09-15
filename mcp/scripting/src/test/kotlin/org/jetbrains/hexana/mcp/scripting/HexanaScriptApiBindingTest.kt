@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.scripting
 
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
+import org.jetbrains.hexana.mcp.BinaryInput
 import org.jetbrains.hexana.providers.BinaryStringRecord
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
@@ -72,6 +73,63 @@ class HexanaScriptApiBindingTest {
         )
 
         assertEquals(listOf("sample.bin"), result.output.lines)
+    }
+
+    // -- location ------------------------------------------------------------
+
+    @Test
+    fun pathAndDirAreBoundFromTheHostSuppliedPath() {
+        val result = HexanaScriptRunner().run(
+            source = HexanaScriptSource.Inline("print(binary.name, binary.path, binary.dir);"),
+            binaryProvider = testProvider(),
+            fileName = "sample.bin",
+            filePath = "/home/me/build/sample.bin",
+        )
+
+        assertEquals(listOf("sample.bin /home/me/build/sample.bin /home/me/build"), result.output.lines)
+    }
+
+    @Test
+    fun pathAndDirReadAsNullForABinaryWithNoFile() {
+        // The in-memory case: a ZIP entry or a module opened from a table. A
+        // script has to be able to tell there is nowhere to look.
+        assertEquals(
+            listOf("null null"),
+            lines("print(binary.path, binary.dir);"),
+        )
+    }
+
+    @Test
+    fun loadingFromAPathReportsTheResolvedLocation() {
+        // What the CLI and the MCP tool do. The resolved path is what a script
+        // can build on: `--binary ./app.bin` must still yield a usable `dir`.
+        val binary = tempFileWith("hexana-located-", ".bin", byteArrayOf(1, 2, 3))
+        val expected = binary.toRealPath()
+
+        val result = HexanaScriptRunner().run(
+            BinaryInput.FilePath(binary.toString()),
+            HexanaScriptSource.Inline("print(binary.name); print(binary.path); print(binary.dir);"),
+        )
+
+        assertEquals(HexanaScriptStatus.SUCCESS, result.status)
+        assertEquals(
+            listOf(expected.fileName.toString(), expected.toString(), expected.parent.toString()),
+            result.output.lines,
+        )
+    }
+
+    @Test
+    fun aRelativeBinaryPathStillYieldsAnAbsoluteDir() {
+        val binary = tempFileWith("hexana-relative-", ".bin", byteArrayOf(4, 5))
+        val viaDots = binary.parent.resolve("..").resolve(binary.parent.fileName).resolve(binary.fileName)
+
+        val result = HexanaScriptRunner().run(
+            BinaryInput.FilePath(viaDots.toString()),
+            HexanaScriptSource.Inline("print(binary.dir);"),
+        )
+
+        assertEquals(HexanaScriptStatus.SUCCESS, result.status)
+        assertEquals(listOf(binary.toRealPath().parent.toString()), result.output.lines)
     }
 
     // -- bytes ---------------------------------------------------------------
@@ -355,6 +413,47 @@ class HexanaScriptApiBindingTest {
         assertEquals(HexanaScriptStatus.SCRIPT_ERROR, result.status)
         val message = result.diagnostics.single().message
         assertTrue(message.contains("at most 2 additional"), message)
+    }
+
+    @Test
+    fun anOpenedBinaryReportsItsOwnLocation() {
+        // `open(...)` returns `binary`'s shape, so it has to answer the location
+        // questions too — that is what makes walking from one file to its sibling
+        // and then to that one's sibling work.
+        val other = tempFileWith("hexana-open-located-", ".bin", byteArrayOf(1, 2))
+
+        val lines = lines(
+            """
+            const other = open("${escaped(other)}");
+            print(other.name);
+            print(other.path);
+            print(other.dir);
+            """.trimIndent()
+        )
+
+        val expected = other.toRealPath()
+        assertEquals(
+            listOf(expected.fileName.toString(), expected.toString(), expected.parent.toString()),
+            lines,
+        )
+    }
+
+    @Test
+    fun aSiblingCanBeOpenedByJoiningDir() {
+        // The pattern this exists for: reach the file next to the open one
+        // without the script knowing where either of them lives.
+        val sibling = tempFileWith("hexana-sibling-", ".bin", byteArrayOf(7, 7, 7, 7))
+        val main = tempFileWith("hexana-main-", ".bin", byteArrayOf(1))
+
+        val result = HexanaScriptRunner().run(
+            BinaryInput.FilePath(main.toString()),
+            HexanaScriptSource.Inline(
+                """print(open(binary.dir + "/" + "${sibling.fileName}").size);"""
+            ),
+        )
+
+        assertEquals(HexanaScriptStatus.SUCCESS, result.status, result.diagnostics.toString())
+        assertEquals(listOf("4"), result.output.lines)
     }
 
     @Test

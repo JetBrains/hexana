@@ -366,9 +366,11 @@ class HexanaToolCompatibilityTest {
         // the `open(path)` global and restates the sandbox accordingly: a script
         // can now load a second binary through the same allowed-roots policy that
         // governs the binary and script paths, so "no file IO" would misdescribe
-        // it. Prose only — no input, output, default, or bound changed, so this
-        // stays within the current schema version.
-        const val EXPECTED_SEMANTIC = "d0b980edad8f8784728131f6dc443c489a0288ad3ac74771b2e1e63afb30ade9"
+        // it. The member list now also names `binary.path`/`binary.dir` and how
+        // they combine with `open(...)` to reach a file beside the analyzed one.
+        // Prose only — no input, output, default, or bound changed, so this stays
+        // within the current schema version.
+        const val EXPECTED_SEMANTIC = "887d1a7efa53d0dc3a698be1ea3777aabef328d3b5046d3ff00844a57ab3bf38"
         const val EXPECTED_IDEA = "b3d01605c58323500af1b4e1eeabfa8b6ff2e4fb659bfccac35c9869c379d378"
         const val EXPECTED_STANDALONE = "0395327fb451b08908345ce4e59bd1cf97bb05dd4bb1cb2165679a2744dd8b44"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"

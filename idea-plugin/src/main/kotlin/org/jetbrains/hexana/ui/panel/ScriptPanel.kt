@@ -51,11 +51,12 @@ class ScriptPanel(
     val scriptPath: String,
     binaryProvider: BinaryProvider,
     binaryFileName: String? = null,
+    binaryFilePath: String? = null,
     project: Project? = null,
 ) : Panel(
     description = scriptPath.substringAfterLast('/'),
     render = {
-        ScriptTabContent(scriptPath, binaryProvider, binaryFileName, project)
+        ScriptTabContent(scriptPath, binaryProvider, binaryFileName, binaryFilePath, project)
     },
 )
 
@@ -64,6 +65,7 @@ internal fun ScriptTabContent(
     scriptPath: String,
     binaryProvider: BinaryProvider,
     binaryFileName: String? = null,
+    binaryFilePath: String? = null,
     project: Project? = null,
 ) {
     val outputLines = remember(scriptPath) { mutableStateListOf<String>() }
@@ -96,7 +98,7 @@ internal fun ScriptTabContent(
         }
 
         val execution = launch(Dispatchers.IO) {
-            ScriptExecutor.execute(scriptPath, binaryProvider, binaryFileName) { line ->
+            ScriptExecutor.execute(scriptPath, binaryProvider, binaryFileName, binaryFilePath) { line ->
                 synchronized(pending) { pending.add(line) }
             }
         }
@@ -399,7 +401,8 @@ internal fun createScriptPanel(
     scriptPath: String,
     binaryProvider: BinaryProvider,
     binaryFileName: String? = null,
+    binaryFilePath: String? = null,
     project: Project? = null,
 ): ScriptPanel {
-    return ScriptPanel(scriptPath, binaryProvider, binaryFileName, project)
+    return ScriptPanel(scriptPath, binaryProvider, binaryFileName, binaryFilePath, project)
 }

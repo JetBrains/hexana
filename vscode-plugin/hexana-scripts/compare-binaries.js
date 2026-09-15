@@ -7,6 +7,9 @@
 // it works for two Wasm modules, two ELF objects, or a JAR against the JAR it
 // replaced.
 //
+// `binary.dir` is the directory of the open file, so a nearby file can be named
+// without hardcoding a path: `binary.dir + "/previous/app.wasm"`.
+//
 // `open(path)` needs a host that can read local files. It works in the IntelliJ
 // script tab and in the `run-script` CLI; in the VS Code webview and the web app
 // it reports that it is unavailable there.
@@ -49,6 +52,11 @@ if (!OTHER) {
     print("Set OTHER at the top of this script to the path of the file to compare against,");
     print("then re-run this tab. A previous build of " + (binary.name || "this binary") +
           " is the usual choice.");
+    if (binary.dir) {
+        print("");
+        print("This file lives in " + binary.dir + ", so a nearby one can be written as:");
+        print("    const OTHER = binary.dir + \"/previous/" + (binary.name || "binary") + "\";");
+    }
 } else if (other === null) {
     print("Could not open " + OTHER);
     print(failure);

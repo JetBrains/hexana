@@ -18,6 +18,7 @@ import org.jetbrains.hexana.shared.scripting.ScriptApiTestSupport.obj
 import org.jetbrains.hexana.shared.scripting.ScriptApiTestSupport.str
 import org.jetbrains.hexana.shared.scripting.ScriptApiTestSupport.string
 import org.jetbrains.hexana.shared.scripting.ScriptApiTestSupport.stringList
+import org.jetbrains.hexana.shared.scripting.ScriptApiTestSupport.stringOrNull
 import org.jetbrains.hexana.shared.scripting.ScriptApiTestSupport.wasmBytes
 import org.jetbrains.hexana.shared.scripting.ScriptApiTestSupport.wasmProvider
 import kotlin.test.Test
@@ -48,6 +49,75 @@ class ScriptBinaryApiTest {
     @Test
     fun nameIsNullWhenTheHostDoesNotKnowIt() {
         assertEquals(ScriptValue.Null, member(api(wasmProvider()), "name"))
+    }
+
+    // -- location ------------------------------------------------------------
+
+    private fun location(fileName: String? = null, filePath: String? = null): Triple<String?, String?, String?> {
+        val binary = api(wasmProvider(), fileName, filePath)
+        return Triple(
+            stringOrNull(member(binary, "name")),
+            stringOrNull(member(binary, "path")),
+            stringOrNull(member(binary, "dir")),
+        )
+    }
+
+    @Test
+    fun pathAndDirComeFromTheHostSuppliedPath() {
+        assertEquals(
+            Triple("app.wasm", "/home/me/build/app.wasm", "/home/me/build"),
+            location(filePath = "/home/me/build/app.wasm"),
+        )
+    }
+
+    @Test
+    fun pathAndDirAreNullWhenTheBinaryHasNoFile() {
+        // A ZIP entry, a module opened from a table, anything in a browser: the
+        // script has to be able to tell that there is nowhere to look, rather
+        // than being handed a plausible-looking path that resolves to nothing.
+        assertEquals(Triple("entry.wasm", null, null), location(fileName = "entry.wasm"))
+    }
+
+    @Test
+    fun nameIsTheLastSegmentEvenWhenTheHostOnlyHasAPath() {
+        // What VS Code does: its load message carries the fsPath, and it used to
+        // surface that whole path as `binary.name` while the IDE and the CLI
+        // reported a bare name for the same file.
+        assertEquals(
+            Triple("app.wasm", null, null),
+            location(fileName = "/home/me/build/app.wasm"),
+        )
+    }
+
+    @Test
+    fun anExplicitNameWinsOverThePathsOwn() {
+        // The decompressed case: VS Code shows `app.wasm` for `app.wasm.gz`, and
+        // the path still points at the file that is really on disk.
+        assertEquals(
+            Triple("app.wasm", "/home/me/app.wasm.gz", "/home/me"),
+            location(fileName = "app.wasm", filePath = "/home/me/app.wasm.gz"),
+        )
+    }
+
+    @Test
+    fun windowsPathsKeepTheirSeparator() {
+        assertEquals(
+            Triple("app.exe", "C:\\builds\\app.exe", "C:\\builds"),
+            location(filePath = "C:\\builds\\app.exe"),
+        )
+    }
+
+    @Test
+    fun aRootLevelFileKeepsTheRootAsItsDir() {
+        // Trimming the separator would leave "" on POSIX and the drive-relative
+        // "C:" on Windows, which names a different directory entirely.
+        assertEquals("/", location(filePath = "/app.wasm").third)
+        assertEquals("C:\\", location(filePath = "C:\\app.exe").third)
+    }
+
+    @Test
+    fun aBareFileNameAsAPathHasNoDir() {
+        assertEquals(Triple("app.wasm", "app.wasm", null), location(filePath = "app.wasm"))
     }
 
     // -- bytes ---------------------------------------------------------------
