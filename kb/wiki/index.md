@@ -14,5 +14,7 @@ consult-first / write-back rules.
 
 ## Sources
 
+- [[sources/hexana-0-20-whatsnew]] — 0.20 card selection, validated claims,
+  capture policy, and generated-page runtime contract.
 - [[sources/webassembly-features-json]] — WebAssembly's `features.json`: shape, the four-way
   `status` union, version-string quirks, and its HTTP/ETag characteristics.

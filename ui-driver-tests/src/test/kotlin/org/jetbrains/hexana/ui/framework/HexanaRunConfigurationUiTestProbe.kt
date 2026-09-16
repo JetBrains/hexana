@@ -222,6 +222,24 @@ internal fun Driver.wasmtimeDebuggerCaptureState(): HexanaWasmtimeDebuggerCaptur
         utility(DebugTestHelperRef::class).wasmtimeDebuggerCaptureState(singleProject()),
     )
 
+internal fun Driver.selectDebuggerConsoleForCapture() {
+    utility(DebugTestHelperRef::class).selectDebuggerConsoleForCapture(singleProject())
+}
+
+internal fun Driver.enterDebuggerConsoleCommandForCapture(command: String) {
+    utility(DebugTestHelperRef::class).enterDebuggerConsoleCommandForCapture(
+        singleProject(),
+        command,
+    )
+}
+
+internal fun Driver.submitDebuggerConsoleCommandForCapture(expectedOutput: String) {
+    utility(DebugTestHelperRef::class).submitDebuggerConsoleCommandForCapture(
+        singleProject(),
+        expectedOutput,
+    )
+}
+
 internal fun Driver.terminateDebuggerForCapture() {
     utility(DebugTestHelperRef::class).terminateDebuggerForCapture(singleProject())
 }
@@ -383,6 +401,12 @@ internal interface DebugTestHelperRef {
         lldbPath: String,
     )
     fun wasmtimeDebuggerCaptureState(project: com.intellij.driver.sdk.Project): List<String>
+    fun selectDebuggerConsoleForCapture(project: com.intellij.driver.sdk.Project)
+    fun enterDebuggerConsoleCommandForCapture(project: com.intellij.driver.sdk.Project, command: String)
+    fun submitDebuggerConsoleCommandForCapture(
+        project: com.intellij.driver.sdk.Project,
+        expectedOutput: String,
+    )
     fun terminateDebuggerForCapture(project: com.intellij.driver.sdk.Project)
     fun cdpDebuggerCaptureState(project: com.intellij.driver.sdk.Project): List<String>
     fun resumeDebuggerForCapture(project: com.intellij.driver.sdk.Project)

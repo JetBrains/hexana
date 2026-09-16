@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What's New in Hexana 0.20</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+  <section class="hero">
+    <p class="eyebrow">Hexana update</p>
+    <h1>What's New in Hexana 0.20</h1>
+    <p class="lead">Hexana 0.20 focuses on Debugging, WebAssembly, and Android DEX while refining binary inspection inside JetBrains IDEs.</p>
+    <div class="actions">
+      <a class="button primary" href="https://plugins.jetbrains.com/plugin/29090-hexana--webassembly--binary-inspector">Open release notes</a>
+      <a class="button" href="https://github.com/JetBrains/hexana">Open GitHub</a>
+    </div>
+  </section>
+
+  <section class="feature">
+    <div>
+      <p class="eyebrow">Debugging</p>
+      <h2>Keep breakpoints with the binary</h2>
+      <p>Set a breakpoint directly in virtualized WAT or native disassembly before a debug session starts, then carry it with the binary across file moves and IDE restarts.</p>
+        <input class="more-toggle" type="checkbox" id="binary-view-breakpoints-more">
+        <ul class="note-list">
+          <li><strong>Breakpoints in binary views</strong>, set without a debug session and materialized when one starts. <span class="more-continuation">Click the gutter in the <strong>WAT (virtualized)</strong> or native <strong>Disassembly</strong> view; the breakpoint is anchored to the binary&#x27;s content hash (not its path) and survives restarts.</span></li>
+        </ul>
+        <label class="show-more-link" for="binary-view-breakpoints-more">Show more</label>
+        <label class="show-less-link" for="binary-view-breakpoints-more">Show less</label>
+    </div>
+      <img src="screenshots/binary-view-breakpoints.png" alt="Keep breakpoints with the binary screenshot">
+  </section>
+  <section class="feature reversed">
+    <div>
+      <p class="eyebrow">Debugging</p>
+      <h2>Send debugger commands without losing IDE control</h2>
+      <p>Use an interactive LLDB or GDB console alongside a paused supported debug session, while Hexana keeps execution commands synchronized with the IDE.</p>
+        <input class="more-toggle" type="checkbox" id="debugger-console-more">
+        <ul class="note-list">
+          <li><strong>Debugger Console</strong> tab: an interactive command line to the underlying debugger — LLDB commands for wasmtime/WAMR/wasmtime-gdbstub sessions, GDB commands for firmware QEMU/Renode. <span class="more-continuation">Execution-control commands are routed through the IDE&#x27;s own actions so the console cannot desync it.</span></li>
+        </ul>
+        <label class="show-more-link" for="debugger-console-more">Show more</label>
+        <label class="show-less-link" for="debugger-console-more">Show less</label>
+    </div>
+      <img src="screenshots/debugger-console.gif" alt="Send debugger commands without losing IDE control screenshot">
+  </section>
+  <section class="feature">
+    <div>
+      <p class="eyebrow">WebAssembly</p>
+      <h2>Check the runtimes your WASM targets</h2>
+      <p>Declare the runtimes a project targets and inspect proposal-level compatibility directly from a WASM file.</p>
+        <input class="more-toggle" type="checkbox" id="wasm-runtime-compatibility-more">
+        <ul class="note-list">
+          <li><strong>Runtime compatibility for WebAssembly binaries.</strong> Declare target runtimes under <strong>Settings | Build, Execution, Deployment | WebAssembly | Runtime Compatibility</strong> and every <code>.wasm</code> file is checked against them: the proposals badge turns into a warning for unsupported proposals and opens a new <strong>Compatibility</strong> tab. <span class="more-continuation">With nothing declared the tab lists which runtimes support each proposal.</span></li>
+        </ul>
+        <label class="show-more-link" for="wasm-runtime-compatibility-more">Show more</label>
+        <label class="show-less-link" for="wasm-runtime-compatibility-more">Show less</label>
+    </div>
+      <img src="screenshots/wasm-runtime-compatibility.png" alt="Check the runtimes your WASM targets screenshot">
+  </section>
+  <section class="feature reversed">
+    <div>
+      <p class="eyebrow">Android DEX</p>
+      <h2>Read Android DEX as Smali</h2>
+      <p>Open Android DEX files in a baksmali-style view with resolved operands and byte-linked instruction rows.</p>
+        <ul class="note-list">
+          <li><strong>Smali</strong> tab for Android <code>.dex</code> files showing baksmali-style Dalvik bytecode with resolved operands and decoded switch/fill-array payloads; clicking an instruction row moves the hex view to that code unit.</li>
+        </ul>
+    </div>
+      <img src="screenshots/dex-smali.png" alt="Read Android DEX as Smali screenshot">
+  </section>
+  <section class="feature">
+    <div>
+      <p class="eyebrow">Binary structure</p>
+      <h2>See structure across binary formats</h2>
+      <p>Navigate named binary regions in the hex view and the Structure tool window for formats beyond WebAssembly and ELF.</p>
+        <input class="more-toggle" type="checkbox" id="structural-regions-more">
+        <ul class="note-list">
+          <li><strong>Structural regions in the hex view for every format Hexana parses</strong> — previously WebAssembly and ELF only. <span class="more-continuation">Region tinting, labels, prev/next navigation and the <strong>Structure</strong> tool window now also cover ZIP/JAR and TAR entries, <code>ar</code> members, COFF sections, DEX id tables, PCAP/PCAP-NG.</span></li>
+        </ul>
+        <label class="show-more-link" for="structural-regions-more">Show more</label>
+        <label class="show-less-link" for="structural-regions-more">Show less</label>
+    </div>
+      <img src="screenshots/structural-regions.png" alt="See structure across binary formats screenshot">
+  </section>
+
+</main>
+</body>
+</html>

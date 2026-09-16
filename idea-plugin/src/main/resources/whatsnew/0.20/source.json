@@ -1,0 +1,85 @@
+{
+  "clusters": [
+    {
+      "asset": "screenshots/binary-view-breakpoints.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Breakpoints in binary views**, set without a debug session and materialized when one starts. Click the gutter in the **WAT (virtualized)** or native **Disassembly** view; the breakpoint is anchored to the binary's content hash (not its path) and survives restarts. The gutter icon reports what the runtime did with it: registered, instruction-precise, degraded, or stale after a rebuild. Supported for GraalWasm/Node.js/browser, wasmtime, WAMR and firmware ELF (QEMU/Renode) sessions. Listed under \"Hexana Binary Breakpoints\" in the Breakpoints dialog; conditions and hit counts are not supported yet."
+        }
+      ],
+      "eyebrow": "Debugging",
+      "id": "binary-view-breakpoints",
+      "recipe": "binary-view-breakpoints-wat-gutter",
+      "summary": "Set a breakpoint directly in virtualized WAT or native disassembly before a debug session starts, then carry it with the binary across file moves and IDE restarts.",
+      "title": "Keep breakpoints with the binary"
+    },
+    {
+      "asset": "screenshots/debugger-console.gif",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Debugger Console** tab: an interactive command line to the underlying debugger \u2014 LLDB commands for wasmtime/WAMR/wasmtime-gdbstub sessions, GDB commands for firmware QEMU/Renode. Execution-control commands are routed through the IDE's own actions so the console cannot desync it. Not available for GraalWasm/CDP sessions."
+        }
+      ],
+      "eyebrow": "Debugging",
+      "id": "debugger-console",
+      "recipe": "wasmtime-debugger-console-frame-info",
+      "summary": "Use an interactive LLDB or GDB console alongside a paused supported debug session, while Hexana keeps execution commands synchronized with the IDE.",
+      "title": "Send debugger commands without losing IDE control"
+    },
+    {
+      "asset": "screenshots/wasm-runtime-compatibility.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Runtime compatibility for WebAssembly binaries.** Declare target runtimes under **Settings | Build, Execution, Deployment | WebAssembly | Runtime Compatibility** and every `.wasm` file is checked against them: the proposals badge turns into a warning for unsupported proposals and opens a new **Compatibility** tab. With nothing declared the tab lists which runtimes support each proposal. Verdicts come from WebAssembly's `features.json`; the declaration lives in `.hexana/runtimes.json`, shared with the VS Code extension."
+        }
+      ],
+      "eyebrow": "WebAssembly",
+      "id": "wasm-runtime-compatibility",
+      "recipe": "bulk-memory-chrome-60-compatibility",
+      "summary": "Declare the runtimes a project targets and inspect proposal-level compatibility directly from a WASM file.",
+      "title": "Check the runtimes your WASM targets"
+    },
+    {
+      "asset": "screenshots/dex-smali.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Smali** tab for Android `.dex` files showing baksmali-style Dalvik bytecode with resolved operands and decoded switch/fill-array payloads; clicking an instruction row moves the hex view to that code unit"
+        }
+      ],
+      "eyebrow": "Android DEX",
+      "id": "dex-smali",
+      "recipe": "dex-smali-expanded-class",
+      "summary": "Open Android DEX files in a baksmali-style view with resolved operands and byte-linked instruction rows.",
+      "title": "Read Android DEX as Smali"
+    },
+    {
+      "asset": "screenshots/structural-regions.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Structural regions in the hex view for every format Hexana parses** \u2014 previously WebAssembly and ELF only. Region tinting, labels, prev/next navigation and the **Structure** tool window now also cover ZIP/JAR and TAR entries, `ar` members, COFF sections, DEX id tables, PCAP/PCAP-NG packets, Parquet row groups, Arrow batches, `resources.arsc` packages, class files and protobuf descriptors. Where a region matches a table the editor renders, its label switches to that tab."
+        }
+      ],
+      "eyebrow": "Binary structure",
+      "id": "structural-regions",
+      "recipe": "zip-structural-regions-and-structure-window",
+      "summary": "Navigate named binary regions in the hex view and the Structure tool window for formats beyond WebAssembly and ELF.",
+      "title": "See structure across binary formats"
+    }
+  ],
+  "date": "2026-09-16",
+  "schema": 1,
+  "sources": {
+    "assets": "docs/whatsnew/assets.yml",
+    "assets_sha256": "bbe35200c0d9b66603457dce8782e6aa8c2f48f7a970cd4a4d3f9e464e8948f3",
+    "changelog": "idea-plugin/CHANGELOG.md",
+    "changelog_sha256": "01de295191b23e4b712d0641610232bfef91efc41ece722ae6463ec9fc5698e6",
+    "design": "docs/whatsnew/DESIGN.md",
+    "design_sha256": "46a170a15744493a36718e673ca921b17c716cb241cea22a9b7e2896f327e05d"
+  },
+  "version": "0.20"
+}

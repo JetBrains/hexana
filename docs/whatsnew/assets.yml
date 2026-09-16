@@ -679,6 +679,91 @@
       ],
       "doc_candidates": [],
       "image_candidates": []
+    },
+    "binary-view-breakpoints": {
+      "release": "0.20",
+      "eyebrow": "Debugging",
+      "title": "Keep breakpoints with the binary",
+      "summary": "Set a breakpoint directly in virtualized WAT or native disassembly before a debug session starts, then carry it with the binary across file moves and IDE restarts.",
+      "recipe": "binary-view-breakpoints-wat-gutter",
+      "keywords": [
+        "Breakpoints in binary views",
+        "WAT (virtualized)",
+        "Disassembly view",
+        "Hexana Binary Breakpoints"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.20/binary-view-breakpoints.png"
+      ]
+    },
+    "debugger-console": {
+      "release": "0.20",
+      "eyebrow": "Debugging",
+      "title": "Send debugger commands without losing IDE control",
+      "summary": "Use an interactive LLDB or GDB console alongside a paused supported debug session, while Hexana keeps execution commands synchronized with the IDE.",
+      "recipe": "wasmtime-debugger-console-frame-info",
+      "keywords": [
+        "Debugger Console",
+        "LLDB commands",
+        "GDB commands",
+        "Execution-control commands"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.20/debugger-console.gif"
+      ]
+    },
+    "wasm-runtime-compatibility": {
+      "release": "0.20",
+      "eyebrow": "WebAssembly",
+      "title": "Check the runtimes your WASM targets",
+      "summary": "Declare the runtimes a project targets and inspect proposal-level compatibility directly from a WASM file.",
+      "recipe": "bulk-memory-chrome-60-compatibility",
+      "keywords": [
+        "Runtime compatibility for WebAssembly binaries",
+        "Runtime Compatibility",
+        "runtimes.json",
+        "Compatibility tab"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.20/wasm-runtime-compatibility.png"
+      ]
+    },
+    "dex-smali": {
+      "release": "0.20",
+      "eyebrow": "Android DEX",
+      "title": "Read Android DEX as Smali",
+      "summary": "Open Android DEX files in a baksmali-style view with resolved operands and byte-linked instruction rows.",
+      "recipe": "dex-smali-expanded-class",
+      "keywords": [
+        "Smali tab",
+        "Android .dex",
+        "baksmali-style Dalvik bytecode",
+        "decoded switch/fill-array payloads"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.20/dex-smali.png"
+      ]
+    },
+    "structural-regions": {
+      "release": "0.20",
+      "eyebrow": "Binary structure",
+      "title": "See structure across binary formats",
+      "summary": "Navigate named binary regions in the hex view and the Structure tool window for formats beyond WebAssembly and ELF.",
+      "recipe": "zip-structural-regions-and-structure-window",
+      "keywords": [
+        "Structural regions in the hex view",
+        "Region tinting",
+        "Structure tool window",
+        "ZIP/JAR and TAR entries"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.20/structural-regions-zip.png"
+      ]
     }
   }
 }

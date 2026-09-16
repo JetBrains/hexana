@@ -25,6 +25,7 @@ private val defaultIndicatorTimeout = 5.minutes
 
 internal fun hexanaIde(
     testName: String,
+    projectDir: Path? = null,
     runTimeout: Duration = defaultRunTimeout,
     indicatorTimeout: Duration = defaultIndicatorTimeout,
     configureContext: (IDETestContext) -> IDETestContext = { it },
@@ -32,7 +33,12 @@ internal fun hexanaIde(
     action: HexanaIde.() -> Unit,
 ) {
     val configuration = HexanaIdeConfiguration().apply(configure)
-    val context = configuration.applyToContext(configureContext(HexanaUiDriverTestSupport.newContext(testName)))
+    val baseContext = if (projectDir == null) {
+        HexanaUiDriverTestSupport.newContext(testName)
+    } else {
+        HexanaUiDriverTestSupport.newContext(testName, projectDir)
+    }
+    val context = configuration.applyToContext(configureContext(baseContext))
     context.runIdeWithDriver(runTimeout = configuration.runTimeoutOverride ?: runTimeout) { withScreenRecording() }
         .useDriverAndCloseIde {
             waitForIndicators(configuration.indicatorTimeoutOverride ?: indicatorTimeout)

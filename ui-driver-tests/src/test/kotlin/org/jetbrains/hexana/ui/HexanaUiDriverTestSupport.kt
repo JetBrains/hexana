@@ -42,12 +42,15 @@ internal object HexanaUiDriverTestSupport {
     private val ideVersion = resolveConfigValue(ideVersionSystemProperty, ideVersionEnv)
     private val ideBuildNumber = System.getenv(ideBuildNumberEnv)?.trim()?.ifBlank { null }
 
-    fun newContext(testName: String): IDETestContext {
+    fun newContext(
+        testName: String,
+        projectDir: Path = resolveProjectDir(),
+    ): IDETestContext {
         val context = Starter.newContext(
             ideInfo = resolveIdeInfo(),
             testName = testName,
         ) {
-            project = LocalProjectInfo(projectDir = resolveProjectDir(), isReusable = true)
+            project = LocalProjectInfo(projectDir = projectDir.toAbsolutePath().normalize(), isReusable = true)
         }
         context.pluginConfigurator.installPluginFromPath(resolvePluginZip())
         return context

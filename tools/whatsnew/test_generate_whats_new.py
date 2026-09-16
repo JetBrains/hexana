@@ -227,6 +227,26 @@ class GenerateWhatsNewTest(unittest.TestCase):
             self.assertEqual("0.13", source["version"])
             self.assertEqual("columnar", source["clusters"][0]["id"])
 
+    def test_release_summary_uses_distinct_feature_categories(self):
+        release = gen.ReleaseNotes(version="0.20", date=None, entries=())
+        clusters = tuple(
+            gen.FeatureCluster(
+                cluster_id=str(index),
+                eyebrow=eyebrow,
+                title=eyebrow,
+                summary="Summary",
+                recipe="capture",
+                entries=(),
+                asset=gen.SelectedAsset(Path("capture.png"), "screenshots/capture.png", "capture"),
+            )
+            for index, eyebrow in enumerate(("Debugging", "Debugging", "WebAssembly", "Binary formats"))
+        )
+
+        summary = gen.release_summary(release, clusters)
+
+        self.assertIn("Debugging, WebAssembly, and Binary formats", summary)
+        self.assertNotIn("Debugging, Debugging", summary)
+
     def test_render_inline_markdown_escapes_input_and_allows_static_inline_tags(self):
         rendered = gen.render_inline_markdown("Use **Size Impact**, `Entities`, and *moved* <script>")
 

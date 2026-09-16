@@ -366,7 +366,7 @@ def release_summary(release: ReleaseNotes, clusters: Sequence[FeatureCluster]) -
     featured = [cluster for cluster in clusters if cluster.asset]
     focus_clusters = featured or list(clusters)
     if focus_clusters:
-        titles = [cluster.eyebrow for cluster in focus_clusters[:3]]
+        titles = list(dict.fromkeys(cluster.eyebrow for cluster in focus_clusters))[:3]
         if len(titles) == 1:
             focus = titles[0]
         elif len(titles) == 2:

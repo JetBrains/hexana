@@ -378,6 +378,21 @@ internal class HexanaWasmRunDsl internal constructor(
         }
     }
 
+    /** Selects the LLDB-backed debugger console through the active debugger layout. */
+    fun selectDebuggerConsoleTab() {
+        driver.selectDebuggerConsoleForCapture()
+    }
+
+    /** Enters a non-mutating LLDB command into the visible Debugger Console field. */
+    fun enterDebuggerConsoleCommand(command: String) {
+        driver.enterDebuggerConsoleCommandForCapture(command)
+    }
+
+    /** Submits the entered command and semantically awaits its visible console output. */
+    fun submitDebuggerConsoleCommand(expectedOutput: String) {
+        driver.submitDebuggerConsoleCommandForCapture(expectedOutput)
+    }
+
     fun wasmDebuggerTabState(): HexanaWasmDebuggerTabState = driver.wasmDebuggerTabState()
 
     /**

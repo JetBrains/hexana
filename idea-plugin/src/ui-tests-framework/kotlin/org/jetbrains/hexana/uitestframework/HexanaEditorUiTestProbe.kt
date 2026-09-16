@@ -28,6 +28,7 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
@@ -626,21 +627,27 @@ object HexanaEditorUiTestProbe {
     @JvmStatic
     fun archiveState(fileIdentifier: String): List<String> = runOnEdt {
         val editor = requireHexanaEditor(fileIdentifier)
-        val provider = editor.binaryProvider as? ArchiveBinaryProvider
-            ?: throw IllegalStateException("Expected archive provider for '$fileIdentifier', got ${editor.binaryProvider.kindId()}")
-        val members = provider.members.filterNot { it.isBookkeeping }
-        val classifications = members.map { member ->
-            member to classifyArchiveMember(provider.bytes, member.contentRange)
+        val memberEntries = when (val provider = editor.binaryProvider) {
+            is ArchiveBinaryProvider -> provider.members
+                .filterNot { it.isBookkeeping }
+                .mapIndexed { index, member ->
+                    val classification = classifyArchiveMember(provider.bytes, member.contentRange)
+                    "member=$index|${member.name}|${classification.displayName}|${member.size}|openable=${classification.openable}" to classification.openable
+                }
+            is ZipBinaryProvider -> provider.displayEntries.mapIndexed { index, entry ->
+                "member=$index|${entry.name}|ZIP entry|${entry.uncompressedSize}|openable=false" to false
+            }
+            else -> throw IllegalStateException(
+                "Expected archive provider for '$fileIdentifier', got ${editor.binaryProvider.kindId()}",
+            )
         }
         payload(
             "hexana-archive-state",
             buildList {
                 add("fileName=${editor.myFile.name}")
-                add("memberCount=${members.size}")
-                add("openableCount=${classifications.count { it.second.openable }}")
-                classifications.forEachIndexed { index, (member, cls) ->
-                    add("member=$index|${member.name}|${cls.displayName}|${member.size}|openable=${cls.openable}")
-                }
+                add("memberCount=${memberEntries.size}")
+                add("openableCount=${memberEntries.count { it.second }}")
+                memberEntries.forEach { add(it.first) }
             },
         )
     }

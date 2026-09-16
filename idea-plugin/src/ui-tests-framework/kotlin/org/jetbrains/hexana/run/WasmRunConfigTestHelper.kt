@@ -5,16 +5,21 @@ import com.intellij.execution.RunManager
 import com.intellij.execution.RunnerAndConfigurationSettings
 import com.intellij.execution.configurations.ConfigurationTypeUtil
 import com.intellij.execution.executors.DefaultDebugExecutor
+import com.intellij.execution.impl.ConsoleViewImpl
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.platform.debugger.impl.shared.proxy.XDebugManagerProxy
+import com.intellij.ui.components.JBTextField
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.frame.*
 import com.intellij.xdebugger.frame.presentation.XValuePresentation
 import org.jetbrains.hexana.toCommonByteBuffer
+import java.awt.Component
+import java.awt.Container
 
 object WasmRunConfigTestHelper {
 
@@ -662,10 +667,108 @@ object WasmRunConfigTestHelper {
     }
 
     @JvmStatic
+    fun selectDebuggerConsoleForCapture(project: Project) {
+        val (ui, content) = onEdt {
+            val ui = XDebugManagerProxy.getInstance()
+                .getCurrentSessionProxy(project)
+                ?.sessionTab
+                ?.ui
+                ?: error("No UI-visible debugger session for Debugger Console What's New capture")
+            val content = ui.findContent("HexanaDebuggerConsole")
+                ?: error("Debugger Console content is not registered in the visible debugger layout")
+            ui.selectAndFocus(content, true, true)
+            ui to content
+        }
+
+        val deadlineMs = System.currentTimeMillis() + 30_000
+        while (System.currentTimeMillis() < deadlineMs) {
+            val isVisibleAndSelected = onEdt {
+                ui.contentManager.selectedContent === content && content.component.isShowing
+            }
+            if (isVisibleAndSelected) return
+            Thread.sleep(50)
+        }
+        error("Debugger Console did not become visible after selection")
+    }
+
+    @JvmStatic
+    fun enterDebuggerConsoleCommandForCapture(project: Project, command: String) {
+        onEdt {
+            val ui = XDebugManagerProxy.getInstance()
+                .getCurrentSessionProxy(project)
+                ?.sessionTab
+                ?.ui
+                ?: error("No UI-visible debugger session for Debugger Console What's New capture")
+            val content = ui.findContent("HexanaDebuggerConsole")
+                ?: error("Debugger Console content is not registered in the visible debugger layout")
+            check(ui.contentManager.selectedContent === content && content.component.isShowing) {
+                "Debugger Console is not visible before command entry"
+            }
+            val input = findDescendant(content.component, JBTextField::class.java)
+                ?: error("Debugger Console input field is not present")
+            input.text = command
+            input.requestFocusInWindow()
+            input.revalidate()
+            input.repaint()
+            content.component.revalidate()
+            content.component.repaint()
+        }
+    }
+
+    @JvmStatic
+    fun submitDebuggerConsoleCommandForCapture(project: Project, expectedOutput: String) {
+        val console = onEdt {
+            val ui = XDebugManagerProxy.getInstance()
+                .getCurrentSessionProxy(project)
+                ?.sessionTab
+                ?.ui
+                ?: error("No UI-visible debugger session for Debugger Console What's New capture")
+            val content = ui.findContent("HexanaDebuggerConsole")
+                ?: error("Debugger Console content is not registered in the visible debugger layout")
+            check(ui.contentManager.selectedContent === content && content.component.isShowing) {
+                "Debugger Console is not visible before command submission"
+            }
+            val input = findDescendant(content.component, JBTextField::class.java)
+                ?: error("Debugger Console input field is not present")
+            val console = findDescendant(content.component, ConsoleViewImpl::class.java)
+                ?: error("Debugger Console output view is not present")
+            check(input.text.isNotBlank()) { "Debugger Console command is empty before submission" }
+            input.postActionEvent()
+            console
+        }
+
+        val deadlineMs = System.currentTimeMillis() + 30_000
+        while (System.currentTimeMillis() < deadlineMs) {
+            val hasOutput = onEdt { console.editor?.document?.text?.contains(expectedOutput) == true }
+            if (hasOutput) {
+                onEdt {
+                    console.flushDeferredText()
+                    console.scrollToEnd()
+                    console.component.revalidate()
+                    console.component.repaint()
+                }
+                return
+            }
+            Thread.sleep(50)
+        }
+        error("Debugger Console did not render expected output: $expectedOutput")
+    }
+
+    @JvmStatic
     fun terminateDebuggerForCapture(project: Project) {
         onEdt {
             XDebuggerManager.getInstance(project).currentSession?.stop()
         }
+    }
+
+    private fun <T : Component> findDescendant(root: Component, type: Class<T>): T? {
+        if (type.isInstance(root)) return type.cast(root)
+        if (root is Container) {
+            for (child in root.components) {
+                findDescendant(child, type)?.let { return it }
+            }
+        }
+        return null
     }
 
     @JvmStatic

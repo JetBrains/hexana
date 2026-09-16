@@ -9,6 +9,7 @@ import com.intellij.tools.ide.util.common.logOutput
 import org.jetbrains.hexana.ui.framework.HexanaEditor
 import org.jetbrains.hexana.ui.framework.HexanaEditorSnapshot
 import org.jetbrains.hexana.ui.framework.hexanaIde
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
@@ -18,17 +19,17 @@ import kotlin.io.path.exists
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Captures two light-theme screenshots showing binary-view breakpoint gutter markers:
+ * Captures two dark-theme screenshots showing binary-view breakpoint gutter markers:
  *
- *  1. breakpoint-disasm-elf.png — Zephyr ELF in the Disassembly (virtualized) tab,
+ *  1. binary-view-breakpoints-elf.png — Zephyr ELF in the Disassembly (virtualized) tab,
  *     breakpoint set on the first instruction of bt_hrs_notify_rate (or main as
  *     fallback).
- *  2. breakpoint-wat-wasm.png — hello.wasm in the WAT (virtualized) tab, breakpoint
+ *  2. binary-view-breakpoints.png — hello.wasm in the WAT (virtualized) tab, breakpoint
  *     set on the first instruction of the first defined function.
  *
- * Screenshots land in HEXANA_CORPUS_SCREENSHOT_DIR (default ui-driver-tests/build/
- * corpus-screenshots/).
+ * Screenshots land in docs/whatsnew/captures/0.20 unless HEXANA_CORPUS_SCREENSHOT_DIR overrides it.
  */
+@Tag("screenshot")
 class BreakpointCaptureTest {
 
     private companion object {
@@ -50,29 +51,13 @@ class BreakpointCaptureTest {
         require(wasmPath.exists()) { "Missing wasm fixture: $wasmPath" }
 
         val screenshotDir = resolveScreenshotDir()
-        val elfTarget = screenshotDir.resolve("breakpoint-disasm-elf.png")
-        val watTarget = screenshotDir.resolve("breakpoint-wat-wasm.png")
+        val elfTarget = screenshotDir.resolve("binary-view-breakpoints-elf.png")
+        val watTarget = screenshotDir.resolve("binary-view-breakpoints.png")
 
         quitSystemSettingsQuietly()
         hexanaIde(
             testName = "breakpoint-capture",
-            configure = {
-                showWhatsNewOnNewVersion(false)
-                patchContext { context ->
-                    val optionsDir = context.paths.configDir.resolve("options").createDirectories()
-                    Files.writeString(
-                        optionsDir.resolve("laf.xml"),
-                        """
-                        <application>
-                          <component name="LafManager" autodetect="false">
-                            <laf themeId="ExperimentalLight" />
-                          </component>
-                        </application>
-                        """.trimIndent()
-                    )
-                    context
-                }
-            },
+            configure = { showWhatsNewOnNewVersion(false) },
         ) {
             maximizeWindow()
             closeProjectToolWindow()
@@ -205,12 +190,18 @@ class BreakpointCaptureTest {
                     val watByteOffset = watBpPayload
                         ?.firstOrNull { it.startsWith("byteOffset=0x") }
                         ?.substringAfter("byteOffset=0x")
+                        ?.removePrefix("0x")
                         ?.toLongOrNull(16)
                         ?.toInt()
                     if (watByteOffset != null && watByteOffset > 0) {
+                        waitForGutterCondition(watEditor, 15.seconds, "markKey=0x${watByteOffset.toString(16)}") { p ->
+                            p.any { it == "markKey=0x${watByteOffset.toString(16)}" }
+                        }
                         runCatching { watEditor.navigateWatToByteOffset(watByteOffset) }
                             .onSuccess { logOutput("[bp-capture] WAT nav: offset=0x${watByteOffset.toString(16)}") }
                             .onFailure { logOutput("[bp-capture] WAT nav failed: ${it.message}") }
+                    } else {
+                        error("WASM breakpoint capture did not return a valid byte offset: $watBpPayload")
                     }
                     Thread.sleep(10_000) // let WAT view scroll + GutterMarksModel emit + Compose recompose
 
@@ -234,8 +225,14 @@ class BreakpointCaptureTest {
     private fun resolveScreenshotDir(): Path {
         val override = System.getenv("HEXANA_CORPUS_SCREENSHOT_DIR")?.trim()?.ifBlank { null }
         val dir = override?.let { Path.of(it) }
-            ?: Path.of("build", "corpus-screenshots")
+            ?: repoRoot().resolve("docs", "whatsnew", "captures", "0.20")
         return dir.toAbsolutePath().normalize().createDirectories()
+    }
+
+    private fun repoRoot(): Path {
+        var path = Path.of("").toAbsolutePath().normalize()
+        while (!path.resolve("settings.gradle.kts").exists()) path = path.parent ?: error("Could not locate repository root")
+        return path
     }
 
     /**
