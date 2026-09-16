@@ -12,6 +12,7 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.model.binaries.BinaryModuleIdentityResult
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.shared.scripting.ScriptOpenPolicy
 import org.jetbrains.hexana.shared.scripting.ScriptOutput
 import org.jetbrains.hexana.shared.scripting.scriptGlobals
 import java.nio.ByteBuffer
@@ -251,9 +252,10 @@ class HexanaScriptRunner private constructor(
                     output = ScriptOutput(output::print),
                     fileName = fileName,
                     filePath = filePath,
-                    // Fresh per run: it memoizes what the script opened, and that
-                    // must not outlive the run holding those binaries in memory.
-                    opener = ScriptBinaryFileOpener(limits, allowedFilePolicy),
+                    // Inline: this runtime reads the file within the call. Fresh
+                    // per run, because the opener memoizes what the script opened
+                    // and that must not outlive the run holding it in memory.
+                    open = ScriptOpenPolicy.Inline(ScriptBinaryFileOpener(limits, allowedFilePolicy)),
                 )
                 for ((name, value) in globals) {
                     bindings.putMember(name, ScriptValueGraalProxy.toGuest(value))

@@ -4,9 +4,13 @@ import androidx.compose.runtime.*
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.shared.scripting.ScriptApiReference
 import org.jetbrains.hexana.shared.scripting.ScriptOutput
+import org.jetbrains.hexana.shared.scripting.SCRIPT_OPEN_REQUEST_MEMBER
+import org.jetbrains.hexana.shared.scripting.ScriptOpenRequestBlocked
+import org.jetbrains.hexana.shared.scripting.ScriptOpenPolicy
 import org.jetbrains.hexana.shared.scripting.ScriptOutputBlock
 import org.jetbrains.hexana.shared.scripting.filterScriptOutputBlocks
 import org.jetbrains.hexana.shared.scripting.parseScriptOutputBlocks
@@ -16,6 +20,21 @@ import org.jetbrains.hexana.shared.scripting.scriptBinaryApi
 import org.jetbrains.hexana.shared.scripting.scriptGlobals
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import kotlin.js.Promise
+
+/**
+ * Parses [bytes] the way the editor parses the file it was opened with, so a
+ * binary a script reached through `open(path)` reports the same `format`,
+ * `structure` and tabs as it would if the user had opened it themselves.
+ */
+internal fun scriptBinaryProvider(bytes: ByteArray, sourcePath: String?): BinaryProvider {
+    val buffer = bytes.toCommonByteBuffer()
+    buffer.position(0)
+    return when (WasmBinaryProviderSelector.select(buffer)) {
+        BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
+        BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
+        else -> nativeOrGenericBinaryProvider(buffer, sourcePath)
+    }
+}
 
 /** Executes a user script outside the Compose UI thread. */
 interface ScriptExecution {
@@ -60,6 +79,9 @@ private fun wrapForJs(value: Any?): dynamic {
     if (value is List<*>) {
         return wrapListLazy(value)
     }
+    // A deferred `open(path)` whose request never reached the script driver: make
+    // every read off it report what to fix instead of returning undefined.
+    if (value is ScriptOpenRequestBlocked) return blockedOpenRequestProxy(value.message)
     // For known types, build a plain JS object with explicit property mappings
     val obj = js("({})")
     when (value) {
@@ -82,6 +104,24 @@ private fun wrapForJs(value: Any?): dynamic {
         else -> return wrapUnknownObject(value)
     }
     return obj
+}
+
+/**
+ * An object that throws [message] on any property read.
+ *
+ * Used as the prototype of a blocked `open(path)` request, so the request member
+ * the driver looks for still resolves as an own property while everything the
+ * script might read — `size`, `format`, even a string conversion — reports the
+ * problem.
+ */
+private fun blockedOpenRequestProxy(message: String): dynamic {
+    @Suppress("UNUSED_VARIABLE")
+    val text = message
+    return js(
+        """
+        new Proxy({}, { get: function() { throw new Error(text); } })
+        """
+    )
 }
 
 /**
@@ -344,8 +384,12 @@ private const val TABLE_BLOCK_MAX_BODY_HEIGHT = "clamp(120px, 45vh, 640px)"
 /**
  * Executes a user script with the shared Hexana scripting globals — `binary`
  * from [scriptBinaryApi], `print`, `table` and `row` from [ScriptOutput], and
- * `open` — on the main thread. `open(path)` reports that it is unavailable here:
- * the webview has no synchronous file access.
+ * `open` — on the main thread.
+ *
+ * `open(path)` suspends the script: the call evaluates to a request, the step
+ * loop below has [readBinaryFile] answer it, parses the bytes here, and resumes
+ * the generator with the binary. That is why the webview needs no file access of
+ * its own, and why the script never receives anything but parsed data.
  *
  * The globals are built by [ScriptValueJsBinder] from the same definition the
  * JVM runtime binds, so a script written for the IDE or the CLI behaves the same
@@ -362,35 +406,51 @@ private const val TABLE_BLOCK_MAX_BODY_HEIGHT = "clamp(120px, 45vh, 640px)"
  * the UI while the script is still running.
  *
  * Returns a [Promise] that resolves to `null` on success or an error message.
+ *
+ * @param readBinaryFile reads a file for `open(path)`, or null in a host with no
+ *   file access, which also leaves `open` out of the yield rewrite
  */
-private fun executeScriptAsync(
+internal fun executeScriptAsync(
     scriptContent: String,
     provider: BinaryProvider,
     fileName: String?,
     filePath: String?,
+    readBinaryFile: ((String) -> Promise<ByteArray>)?,
     onLine: (String) -> Unit,
 ): Promise<String?> {
     return Promise { resolve, _ ->
         val binder = ScriptValueJsBinder(::wrapForJs)
-        // `opener = null`: the webview has no synchronous file access, so
-        // `open(path)` reports that rather than resolving to `window.open`.
+        // Deferred, not inline: reading a file here is a round-trip to the host
+        // that owns file access, so `open(path)` evaluates to a request the step
+        // loop below answers and feeds back. Where the host cannot read files at
+        // all — the browser web app — the policy stays Unsupported and
+        // `open(path)` says so rather than resolving to `window.open`.
         val globals = binder.globalsToJs(
             scriptGlobals(
                 provider = provider,
                 output = ScriptOutput(onLine),
                 fileName = fileName,
                 // The extension sends the fsPath with the payload, so `binary.path`
-                // and `binary.dir` read the same here as in the IDE — even though
-                // `open(path)` itself cannot work in a webview. Blank (no file
+                // and `binary.dir` read the same here as in the IDE. Blank (no file
                 // behind this binary) is normalized to null by the surface.
                 filePath = filePath,
+                open = if (readBinaryFile != null) ScriptOpenPolicy.Deferred else ScriptOpenPolicy.Unsupported,
             )
         )
 
         // All three output globals are covered, not just print: a script that only
         // builds a table with table/row would otherwise never yield and would
-        // freeze the webview until it finished.
-        val generatorBody = ScriptYieldTransform.apply(scriptContent)
+        // freeze the webview until it finished. `open` is included when this host
+        // can answer it, because suspending the script at the call is how an async
+        // read becomes a synchronous-looking return value.
+        val generatorBody = ScriptYieldTransform.apply(
+            scriptContent,
+            suspending = if (readBinaryFile != null) {
+                ScriptYieldTransform.SUSPENDING_GLOBALS
+            } else {
+                emptySet()
+            },
+        )
 
         @Suppress("UNUSED_VARIABLE")
         val yieldEvery = YIELD_EVERY
@@ -402,7 +462,7 @@ private fun executeScriptAsync(
         val binary = globals.getValue("binary")
 
         @Suppress("UNUSED_VARIABLE")
-        val openBinary = globals.getValue("open")
+        val openGlobal = globals.getValue("open")
 
         @Suppress("UNUSED_VARIABLE")
         val print = globals.getValue("print")
@@ -412,6 +472,19 @@ private fun executeScriptAsync(
 
         @Suppress("UNUSED_VARIABLE")
         val row = globals.getValue("row")
+
+        @Suppress("UNUSED_VARIABLE")
+        val openRequestMember = SCRIPT_OPEN_REQUEST_MEMBER
+
+        // Answers one `open(path)`: reads the file through the host, parses it
+        // here, and binds the same shape as `binary`. Parsing stays inside the
+        // webview on purpose — what crosses the bus is bytes, never a provider.
+        @Suppress("UNUSED_VARIABLE")
+        val answerOpenRequest: (String) -> Promise<dynamic> = { path ->
+            (readBinaryFile ?: error("open(path) is not available in this host"))(path).then { bytes ->
+                binder.toJs(scriptBinaryApi(scriptBinaryProvider(bytes, path), filePath = path))
+            }
+        }
 
         // Create a GeneratorFunction, run it, and drive it from an
         // async loop that yields to the event loop every YIELD_EVERY steps.
@@ -425,24 +498,58 @@ private fun executeScriptAsync(
                     resolve(e.message || 'Script compilation failed');
                     return;
                 }
-                var iter = gen(binary, openBinary, print, table, row);
+                var iter = gen(binary, openGlobal, print, table, row);
                 var count = 0;
-                function step() {
-                    try {
-                        while (true) {
-                            var r = iter.next();
-                            if (r.done) { resolve(null); return; }
-                            count++;
-                            if (count % yieldEvery === 0) {
-                                setTimeout(step, 0);
-                                return;
-                            }
+
+                // Every generator result goes through pump, whichever call
+                // produced it: next(), next(binary) after an open, or throw()
+                // when one failed. A result that skipped it would swallow the
+                // next `open` request, since that request IS a yielded value.
+                function pump(r) {
+                    for (;;) {
+                        if (r.done) { resolve(null); return; }
+                        var requestedPath = r.value == null ? null : r.value[openRequestMember];
+                        if (typeof requestedPath === 'string') {
+                            answerOpenRequest(requestedPath).then(function(opened) {
+                                // The bound binary becomes the value of the
+                                // `yield`, so `open(path)` reads as a plain call.
+                                resume(function() { return iter.next(opened); });
+                            }, function(error) {
+                                // Thrown *into* the script, so its own try/catch
+                                // around open() sees it, as it does on the JVM.
+                                var message = (error && error.message) || String(error);
+                                resume(function() { return iter.throw(new Error(message)); });
+                            });
+                            return;
                         }
-                    } catch(e) {
-                        resolve(e.message || 'Script execution failed');
+                        count++;
+                        if (count % yieldEvery === 0) {
+                            setTimeout(function() { resume(function() { return iter.next(); }); }, 0);
+                            return;
+                        }
+                        try {
+                            r = iter.next();
+                        } catch(e) {
+                            resolve(e.message || 'Script execution failed');
+                            return;
+                        }
                     }
                 }
-                setTimeout(step, 0);
+
+                // Advances the generator and hands the result to pump. An error
+                // the script did not catch surfaces here as the run's failure.
+                function resume(advance) {
+                    var r;
+                    try {
+                        r = advance();
+                    } catch(e) {
+                        resolve(e.message || 'Script execution failed');
+                        return;
+                    }
+                    pump(r);
+                }
+
+                setTimeout(function() { resume(function() { return iter.next(); }); }, 0);
             })()
         """)
     }
@@ -514,7 +621,25 @@ internal fun ScriptTabContent(
         val handle = scriptExecution?.start(scriptContent, ::acceptLine, ::complete)
             ?: run {
                 executeScriptAsync(
-                    scriptContent, provider, binaryFileName, binaryFilePath, ::acceptLine,
+                    scriptContent,
+                    provider,
+                    binaryFileName,
+                    binaryFilePath,
+                    // Only offered while this run is the current one: a run that
+                    // has been superseded must not resume from a file read and
+                    // start producing output again.
+                    readBinaryFile = if (host.canOpenBinaryFile) {
+                        { path ->
+                            if (runScope.generation == runGeneration) {
+                                host.readBinaryFile(path)
+                            } else {
+                                Promise.reject(RuntimeException("This script run was replaced."))
+                            }
+                        }
+                    } else {
+                        null
+                    },
+                    onLine = ::acceptLine,
                 ).then(::complete)
                 NoopScriptExecutionHandle
             }

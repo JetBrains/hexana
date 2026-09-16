@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.staticCompositionLocalOf
+import kotlin.js.Promise
 
 /**
  * Abstracts the boundary between the host environment (e.g. VS Code extension)
@@ -95,6 +96,24 @@ interface Host {
      */
     fun openScriptForEditing(scriptPath: String, jsConfigContent: String? = null)
     fun readScriptFile(scriptPath: String)
+
+    /**
+     * Whether the host can read an arbitrary local binary, which is what a script
+     * tab's `open(path)` needs. False where there is no file system to reach —
+     * the browser webapp — and `open(path)` then reports that.
+     */
+    val canOpenBinaryFile: Boolean get() = false
+
+    /**
+     * Reads the binary at [path] for a running script's `open(path)`.
+     *
+     * Returns a promise rather than the bytes because the hosts that can do this
+     * do it out of process: the VS Code webview asks the extension host, which
+     * owns file access. The promise rejects with a message meant for the user,
+     * since the script sees it as the error its own `try/catch` receives.
+     */
+    fun readBinaryFile(path: String): Promise<ByteArray> =
+        Promise.reject(UnsupportedOperationException("This host cannot read local files."))
     fun scriptTabAdded(scriptPath: String)
     fun scriptTabRemoved(scriptPath: String)
     fun ready()

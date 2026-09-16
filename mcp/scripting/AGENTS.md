@@ -6,8 +6,9 @@ This module contains the shared JVM-only Hexana scripting runtime. It executes J
 The globals themselves are **not** defined here. `plugins-shared/.../shared/scripting/` owns the API surface
 (`scriptBinaryApi`, `ScriptOutput`, `ScriptApiReference`) as a host-neutral `ScriptValue` tree; this module owns the
 GraalJS adapter for it. That split is what makes a script behave identically in the IntelliJ plugin, the VS Code
-webview, and the `run-script` CLI — except where a global needs a host capability the host does not have, which is
-`open(path)` and nothing else so far. The IntelliJ script tab delegates here rather than building its own context.
+webview, and the `run-script` CLI. A global that needs a host capability declares it through a policy instead of being
+absent in some hosts — `open(path)` is the only one, and this module supplies `ScriptOpenPolicy.Inline`, the variant
+that reads the file inside the call. The IntelliJ script tab delegates here rather than building its own context.
 
 ## Start Here
 

@@ -14,15 +14,18 @@ import kotlin.test.assertTrue
 /** Covers the global assembly every host binds, and the `open(path)` global in it. */
 class ScriptGlobalsTest {
 
-    private fun openFunction(opener: ScriptBinaryOpener? = null): ScriptValue.Fn =
-        globals(opener)[SCRIPT_OPEN_GLOBAL] as ScriptValue.Fn
+    private fun openFunction(policy: ScriptOpenPolicy = ScriptOpenPolicy.Unsupported): ScriptValue.Fn =
+        globals(policy)[SCRIPT_OPEN_GLOBAL] as ScriptValue.Fn
 
-    private fun globals(opener: ScriptBinaryOpener? = null): Map<String, ScriptValue> =
+    private fun inlineOpen(opener: ScriptBinaryOpener): ScriptValue.Fn =
+        openFunction(ScriptOpenPolicy.Inline(opener))
+
+    private fun globals(policy: ScriptOpenPolicy = ScriptOpenPolicy.Unsupported): Map<String, ScriptValue> =
         scriptGlobals(
             provider = genericProvider(byteArrayOf(1, 2, 3)),
             output = ScriptOutput {},
             fileName = "open.bin",
-            opener = opener,
+            open = policy,
         )
 
     @Test
@@ -34,7 +37,7 @@ class ScriptGlobalsTest {
     fun openReturnsTheSameShapeAsBinary() {
         // Returning `binary`'s shape is the point: a comparison script needs no
         // second API to learn. This must not drift into a smaller object.
-        val opened = openFunction { ScriptOpenedBinary(wasmProvider(), "other.wasm") }
+        val opened = inlineOpen { ScriptOpenedBinary(wasmProvider(), "other.wasm") }
             .invoke(listOf(str("/tmp/other.wasm")))
 
         assertEquals(
@@ -50,7 +53,7 @@ class ScriptGlobalsTest {
         // Resolving a path is the host's decision, together with whether it is
         // allowed at all, so nothing here may normalize it first.
         val requested = mutableListOf<String>()
-        val open = openFunction { path ->
+        val open = inlineOpen { path ->
             requested += path
             ScriptOpenedBinary(genericProvider(byteArrayOf(9)))
         }
@@ -74,8 +77,47 @@ class ScriptGlobalsTest {
     }
 
     @Test
+    fun aDeferredHostGetsTheRequestToFulfilRatherThanABinary() {
+        // The VS Code webview: it cannot read a file inside the call, so `open`
+        // evaluates to the request its script driver answers and feeds back.
+        val requested = openFunction(ScriptOpenPolicy.Deferred).invoke(listOf(str("/tmp/other.wasm")))
+
+        assertEquals(
+            "/tmp/other.wasm",
+            string(member(requested, SCRIPT_OPEN_REQUEST_MEMBER)),
+        )
+    }
+
+    @Test
+    fun aDeferredRequestThatNeverReachedADriverExplainsItself() {
+        // Reading anything else off the request means the call sat where the
+        // script could not pause for it, and saying so beats handing the script
+        // an object with no members.
+        val requested = obj(openFunction(ScriptOpenPolicy.Deferred).invoke(listOf(str("/tmp/other.wasm"))))
+        val blocked = requested.hostFallback as ScriptOpenRequestBlocked
+
+        assertEquals("/tmp/other.wasm", blocked.path)
+        assertTrue(blocked.message.contains("top level"), blocked.message)
+        assertTrue(blocked.message.contains("/tmp/other.wasm"), blocked.message)
+    }
+
+    @Test
+    fun everyPolicyValidatesTheArgumentTheSameWay() {
+        // The failure text is shared so a bad call reads the same in every host.
+        for (policy in listOf(
+            ScriptOpenPolicy.Unsupported,
+            ScriptOpenPolicy.Deferred,
+            ScriptOpenPolicy.Inline { ScriptOpenedBinary(genericProvider(byteArrayOf(1))) },
+        )) {
+            assertFailsWith<IllegalArgumentException>("policy ${policy::class.simpleName}") {
+                openFunction(policy).invoke(emptyList())
+            }
+        }
+    }
+
+    @Test
     fun openRequiresExactlyOnePathArgument() {
-        val open = openFunction { ScriptOpenedBinary(genericProvider(byteArrayOf(1))) }
+        val open = inlineOpen { ScriptOpenedBinary(genericProvider(byteArrayOf(1))) }
 
         assertFailsWith<IllegalArgumentException> { open.invoke(emptyList()) }
         assertFailsWith<IllegalArgumentException> { open.invoke(listOf(str("a"), str("b"))) }

@@ -30,7 +30,7 @@ bound by thin per-host adapters:
 | --- | --- |
 | `ScriptValue.kt` | Host-neutral lazy value tree (`Obj`/`Arr`/`Fn`/`Host`), plus `ScriptArgs` coercion. |
 | `ScriptBinaryApi.kt` | Builds the `binary` global from a `BinaryProvider`. |
-| `ScriptGlobals.kt` | Assembles the globals every host binds, and defines `open(path)` over the host's `ScriptBinaryOpener`. |
+| `ScriptGlobals.kt` | Assembles the globals every host binds; defines `open(path)` over `ScriptOpenPolicy`. |
 | `ScriptOutput.kt` | `print`/`table`/`row`, including TSV encoding and cell escaping. |
 | `ScriptOutputBlocks.kt` | Segments the output line stream back into text/table blocks, and filters them. |
 | `ScriptApiReference.kt` | Source of truth for docs: renders the `.d.ts`, both dialogs' API listing, the starter template, the example list. |
@@ -102,14 +102,34 @@ Adapters:
   end up one global short. `scriptGlobals(provider, output, fileName, opener)` is now
   the single list, and `ScriptApiReferenceTest` compares the documented globals
   against it.
-- **A host-dependent global stays bound where the host cannot back it.** `open(path)`
-  needs file access, which the VS Code webview and the webapp worker do not have
-  (their script runs over bytes pushed to them, with no synchronous fs). They still
-  bind it, with a `null` `ScriptBinaryOpener`, so it throws a message naming the
-  hosts where it works. Leaving it unbound would be worse than useless: in a browser
-  `open` resolves to `window.open`, so `open("/path/to.wasm")` would try to navigate
-  instead of failing. This is the one documented member that is not uniform across
-  hosts, and the `.d.ts` summary says so.
+- **A host-dependent global declares a policy instead of being absent.**
+  `ScriptOpenPolicy` has three cases and `open(path)` is the only member that needs
+  it: `Inline` (the JVM reads the file inside the call), `Deferred` (the VS Code
+  webview asks the extension host and the value is fed back), `Unsupported` (the
+  browser web app, which only ever has the bytes the page pushed it). Even
+  `Unsupported` keeps `open` *bound*: an unbound `open` in a browser resolves to
+  `window.open`, so `open("/path/to.wasm")` would try to navigate instead of
+  failing.
+- **Deferred open works by suspending the script's generator.** The browser host
+  already ran user scripts as a generator so output could stream; that same
+  machinery is what makes an async file read look like a synchronous call.
+  `open(path)` evaluates to a request object carrying `__hexanaOpenRequest`; the
+  driver in `web-ui/.../ScriptTab.kt` recognises it as a yielded value, has the
+  host read the bytes, parses them *in the webview* (bytes cross the message bus,
+  never a provider), and resumes with `iter.next(binary)`. A failed read comes back
+  as `iter.throw(...)`, so the script's own `try/catch` sees it exactly as on the
+  JVM — which is what keeps the bundled comparison example working unchanged in
+  every editor. Two things that are easy to get wrong here:
+  - **The rewrite must parenthesise the call.** `yield` binds looser than member
+    access, so `yield open(p).size` reads `.size` off the *request* and yields
+    `undefined` — the host is never asked and the script silently sees nothing.
+    Suspending calls are emitted as `(yield open(p))`; output calls keep the bare
+    prefix, because their value is unused.
+  - **`yield` is illegal inside a nested function**, so the transform now tracks
+    function bodies and skips them. That also fixed a standing bug where a script
+    printing from a helper failed to *compile* in the webview. An `open` inside a
+    helper therefore cannot suspend, and its request object reports "call it at the
+    top level" rather than reading as an empty object.
 - **Where the file is, is the host's answer — and `name` is derived, not passed
   through.** `binary.path`/`binary.dir` are null whenever the binary has no file
   behind it (a ZIP entry, a module opened from a table, anything in a browser),

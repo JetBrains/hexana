@@ -58,10 +58,15 @@ all bind one definition. Before this existed each host hand-maintained its own w
 - Add or change a script member in `ScriptBinaryApi.kt` only, then document it in `ScriptApiReference.kt`. Never add one
   in a host adapter.
 - Hosts bind exactly what `scriptGlobals` returns, never a global of their own, so a global cannot exist in one host and
-  be missing in another. A global that needs something only the host can do takes a capability parameter, the way
-  `open(path)` takes `ScriptBinaryOpener` — and it stays bound even where that capability is absent, failing with a
-  message that says where it does work. An unbound name is worse than a failing one: in a browser `open` would silently
-  resolve to `window.open`.
+  be missing in another. A global that needs something only the host can do takes a policy, the way `open(path)` takes
+  `ScriptOpenPolicy`: `Inline` where the host reads the file inside the call (JVM), `Deferred` where it answers out of
+  band and the value is fed back (the VS Code webview, whose driver resumes the script's generator), `Unsupported` where
+  it cannot at all (the web app) — and there it stays *bound* and fails with a message, because an unbound `open` in a
+  browser resolves to `window.open`.
+- `ScriptYieldTransform` distinguishes the two rewrite kinds for a reason: an output call only needs a `yield` prefix,
+  but a suspending call's *value* is the point, and `yield` binds looser than member access — `yield open(p).size` reads
+  `.size` off the request. Suspending calls are wrapped, `(yield open(p))`. It also skips rewriting inside nested
+  function bodies, since `yield` is illegal there.
 - `ScriptApiReferenceTest` compares the documented globals against `scriptGlobals`, so a new global fails the build until
   it is documented, exactly as a new `binary` member does.
 - `ScriptApiReferenceTest` asserts the documented shapes match what `scriptBinaryApi` exposes, in both directions. A new

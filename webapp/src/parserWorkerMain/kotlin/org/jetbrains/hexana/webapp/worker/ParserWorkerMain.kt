@@ -217,9 +217,10 @@ private suspend fun runScript(
         // Bound from the shared scripting definition so a script behaves the
         // same here as it does in the IDE, in VS Code, and in the CLI.
         //
-        // `opener` stays unset: the worker only ever receives the bytes of the
-        // one binary the page handed it, so `open(path)` reports that it is
-        // unavailable rather than resolving to some global named `open`.
+        // The open policy stays at its default, Unsupported: the worker only ever
+        // receives the bytes of the one binary the page handed it, and has no
+        // channel to ask for another. `open(path)` reports that rather than
+        // resolving to some global named `open`.
         val binder = ScriptValueJsBinder(::scriptValue)
         val globals = binder.globalsToJs(
             scriptGlobals(

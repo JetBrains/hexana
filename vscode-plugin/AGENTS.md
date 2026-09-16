@@ -65,6 +65,13 @@ update `TableTabEnricher.kt`.
 - Keep the TypeScript host as thin as possible; all Wasm logic belongs in Kotlin.
 - Binary analysis, dependency resolution, and utility functions belong in `extension-lib/` (Kotlin/JS), not duplicated in TypeScript.
 - The webview communicates with the extension host exclusively via `postMessage` / `onDidReceiveMessage`.
+- Post every byte payload to the webview through `toWebviewBytes` in `src/scriptBinaryRead.ts`.
+  `vscode.workspace.fs.readFile` returns a Node `Buffer`, and `Buffer.toJSON()` runs before VS Code's
+  typed-array replacer, so a `Buffer` posted unchanged arrives as `{type:"Buffer",data:[...]}` with no
+  numeric `length` and the webview cannot decode it. This is what made `open(path)` hang forever.
+- A webview request that keeps a script suspended must be answered on every path, including failures.
+  `readBinaryFile` posts exactly one `binary-file-content` per `read-binary-file`; a dropped reply is a
+  script that never finishes.
 - Follow the `org.jetbrains.hexana.vscode` package prefix for Kotlin sources in this module.
 - Do not duplicate parsing or analysis logic that already exists in `wasmParser` or `binaryProvider`.
 - Keep the generated webview JavaScript and Wasm printer embedded in `webview.html` and reconstructed as Blob URLs.

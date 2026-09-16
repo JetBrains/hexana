@@ -114,6 +114,14 @@ fun BinaryEditorApp() {
                         }
                     }
                 }
+                "binary-file-content" -> {
+                    // A script tab is suspended on `open(path)` waiting for this.
+                    completeScriptBinaryRead(
+                        message.requestId,
+                        message.data,
+                        message.message.takeIf { it.isNotBlank() },
+                    )
+                }
                 "script-file-picked" -> {
                     if (message.scriptPath.isNotBlank()) {
                         dialogPickedPath = message.scriptPath

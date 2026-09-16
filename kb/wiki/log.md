@@ -54,3 +54,9 @@ Append one line per write-back: date, page, what changed.
   "no file behind this binary", that the CLI/MCP path is the resolved one via the new
   `LoadedBinary.resolvedPath`, and that `binary.name` is now derived from whichever of
   name/path the host supplied — which fixed VS Code reporting a full fsPath as the name.
+- 2026-09-15 — `entities/hexana-scripting-api` — `open(path)` now works in the VS Code
+  webview: the script's generator suspends at the call, the extension host reads the file,
+  and the driver resumes with the parsed binary (a failure arrives as `iter.throw`, so the
+  script's own catch still sees it). Recorded `ScriptOpenPolicy`, the `(yield open(p))`
+  precedence trap, and the transform's new function-body skip — which also fixed printing
+  from a helper failing to compile in the browser host.

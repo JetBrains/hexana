@@ -1,9 +1,9 @@
 // Hexana scripting API — the globals available in a custom script tab.
 //
 // This file is generated from ScriptApiReference.kt. Everything here behaves
-// identically in IntelliJ IDEA, in VS Code, and in the `run-script` CLI, except
-// `open(path)`: it needs local file access, so it reports that it is unavailable
-// in the VS Code webview and the web app. Each member says what it needs.
+// identically in IntelliJ IDEA, in VS Code, and in the `run-script` CLI.
+// `open(path)` additionally needs local file access, which every editor has and
+// the browser web app does not; in VS Code it must be called at the top level.
 // For the format-specific shape of `binary.raw`, see hexana-scripting-raw.d.ts.
 //
 // Output layout: a script tab renders text and tables in the order the script
@@ -44,10 +44,11 @@ declare const binary: HexanaBinary;
 /**
  * Opens another binary from a local file path and returns the same shape
  * as `binary`, so a script can compare two files. The format is detected
- * from the content. Needs a host with file access: the IntelliJ IDEA
- * script tab, the run-script CLI, and the MCP tool have it, the VS Code
- * webview and the web app do not and report that. Where allowed roots are
- * configured, the path must be inside one.
+ * from the content. Needs a host with local file access — every editor has
+ * it; the web app does not and reports that. Where allowed roots are
+ * configured, the path must be inside one. In a VS Code script tab, call
+ * it at the top level of the script: the script pauses there while the
+ * file is read, which it cannot do inside a function or a callback.
  *
  * @example const before = open("/tmp/before.wasm"); print(binary.size - before.size);
  */

@@ -10,9 +10,10 @@
 // `binary.dir` is the directory of the open file, so a nearby file can be named
 // without hardcoding a path: `binary.dir + "/previous/app.wasm"`.
 //
-// `open(path)` needs a host that can read local files. It works in the IntelliJ
-// script tab and in the `run-script` CLI; in the VS Code webview and the web app
-// it reports that it is unavailable there.
+// `open(path)` needs a host that can read local files: every editor has it, the
+// browser web app does not and says so. In a VS Code script tab the call has to
+// sit at the top level, as it does below — the script pauses there while the
+// extension reads the file, which it cannot do from inside a function.
 
 const OTHER = "";
 const TOP = 30;
@@ -47,7 +48,9 @@ let failure = null;
 if (OTHER) {
     // One try/catch covers every way a path can fail — no such file, a path
     // outside the configured allowed roots, or a host that cannot read files at
-    // all — and turns it into a line in the tab instead of a stack trace.
+    // all — and turns it into a line in the tab instead of a stack trace. It
+    // works the same in every editor: where the read happens elsewhere, the
+    // failure is thrown back in at the call.
     try {
         other = open(OTHER);
     } catch (error) {

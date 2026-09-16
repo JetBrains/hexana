@@ -24,12 +24,40 @@ object ScriptYieldTransform {
     val OUTPUT_GLOBALS: Set<String> = setOf("print", "table", "row")
 
     /**
+     * Globals whose call must *evaluate* to what the host sends back, so the
+     * script suspends at the call and resumes with its result.
+     *
+     * Only `open(path)` works this way, and only in a host that answers it out of
+     * band. Unlike an output call, the value matters, so the rewrite has to be
+     * `(yield open(...))` rather than a bare `yield` prefix: `yield` binds looser
+     * than member access, so `yield open(p).size` would read `.size` off the
+     * request and hand the host nothing.
+     */
+    val SUSPENDING_GLOBALS: Set<String> = setOf(SCRIPT_OPEN_GLOBAL)
+
+    /**
      * Keywords after which an identifier is being declared, not called.
      * `function row(...)` must not become `function yield row(...)`.
      */
     private val DECLARATION_KEYWORDS = setOf("function", "class", "var", "let", "const", "new")
 
-    fun apply(source: String, globals: Set<String> = OUTPUT_GLOBALS): String {
+    /**
+     * Keywords whose `(...)` is a control-flow head, not a parameter list, so the
+     * `{` that follows opens a block rather than a function body.
+     */
+    private val CONTROL_FLOW_KEYWORDS = setOf("if", "for", "while", "switch", "catch", "with")
+
+    /**
+     * @param globals calls rewritten to `yield <call>`, for their preemption
+     *   value only
+     * @param suspending calls rewritten to `(yield <call>)`, whose result the
+     *   host substitutes; see [SUSPENDING_GLOBALS]
+     */
+    fun apply(
+        source: String,
+        globals: Set<String> = OUTPUT_GLOBALS,
+        suspending: Set<String> = emptySet(),
+    ): String {
         val out = StringBuilder(source.length + 64)
         // Nesting of template literals and the `${}` holes inside them, so that
         // code in a hole is scanned as code and text around it as text.
@@ -38,6 +66,17 @@ object ScriptYieldTransform {
         var previousSignificant: Char? = null
         var previousIdentifier: String? = null
         var index = 0
+        // Depths at which a nested function body was opened. A `yield` inside one
+        // is a syntax error — that body is not the generator — so a call there is
+        // left alone. See [functionBodyOpensHere].
+        val functionBodyDepths = ArrayDeque<Int>()
+        var parenDepth = 0
+        val controlFlowParenDepths = ArrayDeque<Int>()
+        var lastParenWasControlFlow = false
+        var pendingArrowBody = false
+        // Paren depths of suspending calls awaiting their closing `)`, which is
+        // where the wrapping parenthesis has to be emitted.
+        val suspendingCloseDepths = ArrayDeque<Int>()
 
         while (index < source.length) {
             val char = source[index]
@@ -105,11 +144,19 @@ object ScriptYieldTransform {
                     while (end < source.length && source[end].isIdentifierPart()) end++
                     val identifier = source.substring(index, end)
 
-                    val isCall = identifier in globals &&
+                    val isCall = (identifier in globals || identifier in suspending) &&
                         previousSignificant != '.' &&
                         previousIdentifier !in DECLARATION_KEYWORDS &&
-                        nextSignificant(source, end) == '('
-                    if (isCall) out.append("yield ")
+                        nextSignificant(source, end) == '(' &&
+                        functionBodyDepths.isEmpty()
+                    if (isCall) {
+                        if (identifier in suspending) {
+                            out.append("(yield ")
+                            suspendingCloseDepths.addLast(parenDepth + 1)
+                        } else {
+                            out.append("yield ")
+                        }
+                    }
                     out.append(identifier)
 
                     index = end
@@ -118,9 +165,39 @@ object ScriptYieldTransform {
                 }
 
                 else -> {
-                    if (char == '{') braceDepth++
-                    if (char == '}') braceDepth--
+                    var closesSuspendingCall = false
+                    when (char) {
+                        '(' -> {
+                            parenDepth++
+                            if (previousIdentifier in CONTROL_FLOW_KEYWORDS) {
+                                controlFlowParenDepths.addLast(parenDepth)
+                            }
+                        }
+                        ')' -> {
+                            lastParenWasControlFlow = controlFlowParenDepths.lastOrNull() == parenDepth
+                            if (lastParenWasControlFlow) controlFlowParenDepths.removeLast()
+                            if (suspendingCloseDepths.lastOrNull() == parenDepth) {
+                                suspendingCloseDepths.removeLast()
+                                closesSuspendingCall = true
+                            }
+                            parenDepth--
+                        }
+                        '=' -> if (next == '>') pendingArrowBody = true
+                        '{' -> {
+                            braceDepth++
+                            if (functionBodyOpensHere(previousSignificant, lastParenWasControlFlow, pendingArrowBody)) {
+                                functionBodyDepths.addLast(braceDepth)
+                            }
+                            pendingArrowBody = false
+                        }
+                        '}' -> {
+                            if (functionBodyDepths.lastOrNull() == braceDepth) functionBodyDepths.removeLast()
+                            braceDepth--
+                        }
+                        ';' -> pendingArrowBody = false
+                    }
                     out.append(char)
+                    if (closesSuspendingCall) out.append(')')
                     if (!char.isWhitespace()) {
                         previousSignificant = char
                         previousIdentifier = null
@@ -154,6 +231,28 @@ object ScriptYieldTransform {
             index++
         }
         return index
+    }
+
+    /**
+     * Whether the `{` just reached opens a function body rather than a block.
+     *
+     * A scanner cannot parse, so this is a heuristic on the token before it: a
+     * `{` after `)` is a body unless that `)` closed a control-flow head, and a
+     * `{` after `=>` is always one. That covers `function f() {}`, a method
+     * (`foo() {}` in a class or an object literal), and both arrow forms.
+     *
+     * It is built to fail safe. Deciding "function" wrongly only costs a yield
+     * point — the call still runs, the script just pauses less often. Deciding
+     * "block" wrongly re-creates the behaviour that existed before this tracking:
+     * an illegal `yield` that the host reports as a compilation error.
+     */
+    private fun functionBodyOpensHere(
+        previousSignificant: Char?,
+        lastParenWasControlFlow: Boolean,
+        pendingArrowBody: Boolean,
+    ): Boolean {
+        if (pendingArrowBody) return true
+        return previousSignificant == ')' && !lastParenWasControlFlow
     }
 
     private fun endOfQuoted(source: String, start: Int, quote: Char): Int {

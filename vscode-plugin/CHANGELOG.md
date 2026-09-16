@@ -1,7 +1,7 @@
 # Unreleased
 - `.debug_abbrev`, `.debug_info` and `.debug_line` grouped under a single "DWARF" tab with search; clicking a row selects its bytes
 - WASM component "Dependencies" graph is navigable: double-click a module or nested component to open it, an import/export to select its bytes
-- custom script tabs: format-agnostic `binary` API (`format`, `size`, `path`, `dir`, `structure`, `strings`, `sizeAnalysis`, `binary.tabs`/`binary.tab(name)`) plus `table(...)`/`row(...)` output. `open(path)`, which parses another file into the same members as `binary`, needs local file access and reports that it is unavailable inside the webview; it works in the IntelliJ plugin and the `run-script` CLI
+- custom script tabs: format-agnostic `binary` API (`format`, `size`, `path`, `dir`, `structure`, `strings`, `sizeAnalysis`, `binary.tabs`/`binary.tab(name)`) plus `table(...)`/`row(...)` output. `open(path)` parses another file into the same members as `binary`, so a script can compare two files — the extension host reads it and the script resumes with it, so call `open` at the top level of the script rather than inside a function
 - PCAP: support for TLS decryption based on a user-provided SSL key log file
 - "Smali" tab for Android `.dex` files showing baksmali-style Dalvik bytecode with resolved operands; clicking a row selects the code unit in the hex view
 - basic support for viewing Android binary resource tables (`resources.arsc`)

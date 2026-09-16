@@ -16,7 +16,8 @@
     "../src/mcpServerTelemetry.ts",
     "../src/wasiSdkManager.ts",
     "../src/webviewContent.ts",
-    "../src/wasmFeatureCatalog.ts"
+    "../src/wasmFeatureCatalog.ts",
+    "../src/scriptBinaryRead.ts"
   ],
   "exclude": [
     "node_modules",

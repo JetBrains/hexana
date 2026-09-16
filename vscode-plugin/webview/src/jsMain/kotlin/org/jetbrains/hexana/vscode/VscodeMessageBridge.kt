@@ -10,6 +10,7 @@ import org.jetbrains.hexana.shared.componentImportNames
 import org.jetbrains.hexana.shared.isRuntimeImport
 import org.w3c.dom.MessageEvent
 import org.w3c.dom.events.Event
+import kotlin.js.Promise
 
 /**
  * Decoded message received from the VS Code extension host via `postMessage`.
@@ -18,6 +19,8 @@ data class VscodeMessage(
     val type: String,
     val fileName: String = "",
     val filePath: String = "",
+    /** Correlates a reply with the request that asked for it. */
+    val requestId: String = "",
     val data: ByteArray? = null,
     val wasmRuntime: String? = null,
     val scriptPath: String = "",
@@ -408,6 +411,119 @@ fun postOpenTextFileToHost(fileName: String, content: String) {
 }
 
 /**
+ * [payload] as bytes, or null when it is absent or is not the array-like the
+ * extension host is supposed to post.
+ *
+ * The message bus is untyped, so a wrong payload shape can only be caught here.
+ * This reports it by returning null instead of throwing, because it runs inside
+ * the inbound message listener: an exception here escapes the listener, and
+ * anything waiting on that message — an `open(path)` holding a script
+ * suspended, for one — would wait forever.
+ */
+internal fun messageBytesOrNull(payload: dynamic): ByteArray? {
+    if (payload == null) return null
+    val length = (payload.length as? Number)?.toInt() ?: return null
+    if (length < 0) return null
+    val bytes = ByteArray(length)
+    for (index in 0 until length) {
+        val element = (payload[index] as? Number) ?: return null
+        bytes[index] = element.toByte()
+    }
+    return bytes
+}
+
+/**
+ * How long a script waits for one `open(path)` before it gives up.
+ *
+ * A script tab shows "Running script" for as long as the run is unfinished, and
+ * a suspended `open` keeps the run unfinished, so a reply that never comes is a
+ * spinner that never stops. Deadline included, the worst case is an error the
+ * script author can act on. It is generous because the budget covers reading up
+ * to 100 MiB off a disk that may be a network mount.
+ */
+private const val SCRIPT_OPEN_TIMEOUT_MS = 120_000
+
+/**
+ * Pending `open(path)` reads a script tab is waiting on.
+ *
+ * The webview cannot read files, so `open(path)` becomes a round-trip to the
+ * extension host: this holds the resolver for each in-flight request until
+ * `binary-file-content` comes back. Ids are local and monotonic, and the reply is
+ * matched on the request rather than on the path, because a script may open the
+ * same path more than once.
+ */
+private object ScriptBinaryReads {
+    /** One read waiting for its reply, and the deadline that gives up on it. */
+    private class PendingRead(val answer: (Result<ByteArray>) -> Unit) {
+        var deadline: Int = -1
+    }
+
+    private var nextId = 0
+    private val pending = mutableMapOf<String, PendingRead>()
+
+    fun request(path: String): Promise<ByteArray> {
+        val requestId = "script-open-${nextId++}"
+        return Promise { resolve, reject ->
+            val read = PendingRead { result ->
+                result.fold({ bytes -> resolve(bytes) }, { error -> reject(error) })
+            }
+            pending[requestId] = read
+            val msg = js("({})")
+            msg.type = "read-binary-file"
+            msg.requestId = requestId
+            msg.path = path
+            vscodeApi.postMessage(msg)
+            read.deadline = window.setTimeout({
+                settle(
+                    requestId,
+                    Result.failure(RuntimeException(
+                        "open(\"$path\") — the editor did not answer within " +
+                            "${SCRIPT_OPEN_TIMEOUT_MS / 1000} seconds.",
+                    )),
+                )
+            }, SCRIPT_OPEN_TIMEOUT_MS)
+        }
+    }
+
+    /** Answers the request [requestId], if it is still waiting. */
+    fun complete(requestId: String, bytes: ByteArray?, error: String?) {
+        val reason = error?.takeIf { it.isNotBlank() }
+        settle(
+            requestId,
+            if (bytes != null && reason == null) {
+                Result.success(bytes)
+            } else {
+                Result.failure(RuntimeException(reason ?: "The file could not be read."))
+            },
+        )
+    }
+
+    /**
+     * Fails every waiting read with [reason]. Called when a reply arrives that
+     * cannot be decoded: the request id may be the unreadable part, so there is
+     * no safe way to tell which read it belonged to, and failing all of them is
+     * the only answer that cannot leave a script suspended forever.
+     */
+    fun failAll(reason: String) {
+        val waiting = pending.keys.toList()
+        for (requestId in waiting) {
+            settle(requestId, Result.failure(RuntimeException(reason)))
+        }
+    }
+
+    /** Answers [requestId] once; later answers, including the deadline, are dropped. */
+    private fun settle(requestId: String, result: Result<ByteArray>) {
+        val read = pending.remove(requestId) ?: return
+        if (read.deadline >= 0) window.clearTimeout(read.deadline)
+        read.answer(result)
+    }
+}
+
+/** Answers a pending `open(path)`; called from the inbound message listener. */
+internal fun completeScriptBinaryRead(requestId: String, bytes: ByteArray?, error: String?) =
+    ScriptBinaryReads.complete(requestId, bytes, error)
+
+/**
  * Asks the extension host to re-read a script file's content.
  * The host will respond with a `script-file-content` message.
  */
@@ -478,10 +594,137 @@ class VscodeHost : Host {
     override fun openScriptForEditing(scriptPath: String, jsConfigContent: String?) =
         postOpenScriptForEditingToHost(scriptPath, jsConfigContent)
     override fun readScriptFile(scriptPath: String) = postReadScriptFileToHost(scriptPath)
+    override val canOpenBinaryFile: Boolean get() = true
+    override fun readBinaryFile(path: String): Promise<ByteArray> = ScriptBinaryReads.request(path)
     override fun scriptTabAdded(scriptPath: String) = postScriptTabAddedToHost(scriptPath)
     override fun scriptTabRemoved(scriptPath: String) = postScriptTabRemovedToHost(scriptPath)
     override fun ready() = postMessageToHost("ready")
 }
+
+/**
+ * The [VscodeMessage] an inbound message from the extension host stands for.
+ *
+ * The bus is untyped in both directions, so every field name the host posts is
+ * read here and nowhere else.
+ */
+internal fun decodeVscodeMessage(type: String, data: dynamic): VscodeMessage =
+    when (type) {
+        "load-wasm" -> {
+            val byteArray = messageBytesOrNull(data.data)
+            VscodeMessage(
+                type = type,
+                fileName = (data.fileName as? String) ?: "",
+                filePath = (data.filePath as? String) ?: "",
+                data = byteArray,
+                wasmRuntime = (data.wasmRuntime as? String),
+                showSemanticHighlighting = (data.showSemanticHighlighting as? Boolean),
+                parentFileName = (data.parentFileName as? String),
+                decompressed = (data.decompressed as? Boolean) ?: false,
+                featureCatalogJson = (data.featureCatalogJson as? String) ?: "",
+                runtimeTargetsJson = (data.runtimeTargetsJson as? String) ?: "",
+            )
+        }
+        "update-setting" -> {
+            VscodeMessage(
+                type = type,
+                settingKey = (data.key as? String) ?: "",
+                settingValue = (data.value as? Boolean) ?: false,
+            )
+        }
+        "load-diff" -> {
+            VscodeMessage(
+                type = type,
+                leftData = messageBytesOrNull(data.leftData),
+                leftName = (data.leftName as? String) ?: "",
+                rightData = messageBytesOrNull(data.rightData),
+                rightName = (data.rightName as? String) ?: "",
+            )
+        }
+        "load-native-diff" -> {
+            VscodeMessage(
+                type = type,
+                leftData = messageBytesOrNull(data.leftData),
+                leftName = (data.leftName as? String) ?: "",
+                rightData = messageBytesOrNull(data.rightData),
+                rightName = (data.rightName as? String) ?: "",
+            )
+        }
+        "load-expired" -> {
+            VscodeMessage(
+                type = type,
+                message = (data.message as? String) ?: "",
+            )
+        }
+        "load-nested-module" -> {
+            VscodeMessage(
+                type = type,
+                parentData = messageBytesOrNull(data.parentData),
+                moduleIndex = (data.moduleIndex as? Number)?.toInt() ?: -1,
+                fileName = (data.fileName as? String) ?: "",
+                wasmRuntime = (data.wasmRuntime as? String),
+            )
+        }
+        "script-file-picked", "script-file-content" -> {
+            VscodeMessage(
+                type = type,
+                scriptPath = (data.scriptPath as? String) ?: "",
+                scriptContent = (data.scriptContent as? String) ?: "",
+            )
+        }
+        "binary-file-content" -> {
+            val payload = data.data
+            val bytes = messageBytesOrNull(payload)
+            val reported = (data.error as? String)?.takeIf { it.isNotBlank() }
+            // A payload that arrived but did not decode has to become
+            // an error the script can see. Reporting nothing would
+            // leave the `open(path)` that asked for it suspended.
+            val undecodable = payload != null && bytes == null
+            VscodeMessage(
+                type = type,
+                requestId = (data.requestId as? String) ?: "",
+                filePath = (data.path as? String) ?: "",
+                data = bytes,
+                message = reported
+                    ?: if (undecodable) {
+                        "the editor sent the file in a form this view cannot read."
+                    } else {
+                        ""
+                    },
+            )
+        }
+        "ssl-key-log-picked" -> {
+            VscodeMessage(
+                type = type,
+                keyLogPath = (data.keyLogPath as? String) ?: "",
+                keyLogContent = (data.keyLogContent as? String) ?: "",
+            )
+        }
+        "runtime-targets-loaded" -> {
+            VscodeMessage(
+                type = type,
+                runtimeTargetsJson = (data.runtimeTargetsJson as? String) ?: "",
+            )
+        }
+        "feature-catalog-loaded" -> {
+            VscodeMessage(
+                type = type,
+                featureCatalogJson = (data.featureCatalogJson as? String) ?: "",
+            )
+        }
+        "open-runtime-targets-dialog" -> VscodeMessage(type = type)
+        "restore-script-tabs" -> {
+            val jsPaths = data.scriptPaths
+            val paths = if (jsPaths != null) {
+                val len = jsPaths.length as Int
+                (0 until len).map { i -> jsPaths[i] as String }
+            } else emptyList()
+            VscodeMessage(
+                type = type,
+                scriptPaths = paths,
+            )
+        }
+        else -> VscodeMessage(type = type)
+    }
 
 /**
  * Composable side-effect that listens for messages from the VS Code extension
@@ -498,120 +741,18 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
             val data = messageEvent?.data?.asDynamic()
             if (data != null && data.type != undefined) {
                 val type = data.type as String
-                val msg = when (type) {
-                    "load-wasm" -> {
-                        val jsArray = data.data
-                        val byteArray = if (jsArray != null) {
-                            val length = jsArray.length as Int
-                            ByteArray(length) { i -> (jsArray[i] as Number).toByte() }
-                        } else null
-                        VscodeMessage(
-                            type = type,
-                            fileName = (data.fileName as? String) ?: "",
-                            filePath = (data.filePath as? String) ?: "",
-                            data = byteArray,
-                            wasmRuntime = (data.wasmRuntime as? String),
-                            showSemanticHighlighting = (data.showSemanticHighlighting as? Boolean),
-                            parentFileName = (data.parentFileName as? String),
-                            decompressed = (data.decompressed as? Boolean) ?: false,
-                            featureCatalogJson = (data.featureCatalogJson as? String) ?: "",
-                            runtimeTargetsJson = (data.runtimeTargetsJson as? String) ?: "",
-                        )
-                    }
-                    "update-setting" -> {
-                        VscodeMessage(
-                            type = type,
-                            settingKey = (data.key as? String) ?: "",
-                            settingValue = (data.value as? Boolean) ?: false,
-                        )
-                    }
-                    "load-diff" -> {
-                        fun toByteArray(jsArr: dynamic): ByteArray? {
-                            if (jsArr == null) return null
-                            val len = jsArr.length as Int
-                            return ByteArray(len) { i -> (jsArr[i] as Number).toByte() }
-                        }
-                        VscodeMessage(
-                            type = type,
-                            leftData = toByteArray(data.leftData),
-                            leftName = (data.leftName as? String) ?: "",
-                            rightData = toByteArray(data.rightData),
-                            rightName = (data.rightName as? String) ?: "",
-                        )
-                    }
-                    "load-native-diff" -> {
-                        fun toByteArray(jsArr: dynamic): ByteArray? {
-                            if (jsArr == null) return null
-                            val len = jsArr.length as Int
-                            return ByteArray(len) { i -> (jsArr[i] as Number).toByte() }
-                        }
-                        VscodeMessage(
-                            type = type,
-                            leftData = toByteArray(data.leftData),
-                            leftName = (data.leftName as? String) ?: "",
-                            rightData = toByteArray(data.rightData),
-                            rightName = (data.rightName as? String) ?: "",
-                        )
-                    }
-                    "load-expired" -> {
-                        VscodeMessage(
-                            type = type,
-                            message = (data.message as? String) ?: "",
-                        )
-                    }
-                    "load-nested-module" -> {
-                        fun toByteArray(jsArr: dynamic): ByteArray? {
-                            if (jsArr == null) return null
-                            val len = jsArr.length as Int
-                            return ByteArray(len) { i -> (jsArr[i] as Number).toByte() }
-                        }
-                        VscodeMessage(
-                            type = type,
-                            parentData = toByteArray(data.parentData),
-                            moduleIndex = (data.moduleIndex as? Number)?.toInt() ?: -1,
-                            fileName = (data.fileName as? String) ?: "",
-                            wasmRuntime = (data.wasmRuntime as? String),
-                        )
-                    }
-                    "script-file-picked", "script-file-content" -> {
-                        VscodeMessage(
-                            type = type,
-                            scriptPath = (data.scriptPath as? String) ?: "",
-                            scriptContent = (data.scriptContent as? String) ?: "",
-                        )
-                    }
-                    "ssl-key-log-picked" -> {
-                        VscodeMessage(
-                            type = type,
-                            keyLogPath = (data.keyLogPath as? String) ?: "",
-                            keyLogContent = (data.keyLogContent as? String) ?: "",
-                        )
-                    }
-                    "runtime-targets-loaded" -> {
-                        VscodeMessage(
-                            type = type,
-                            runtimeTargetsJson = (data.runtimeTargetsJson as? String) ?: "",
-                        )
-                    }
-                    "feature-catalog-loaded" -> {
-                        VscodeMessage(
-                            type = type,
-                            featureCatalogJson = (data.featureCatalogJson as? String) ?: "",
-                        )
-                    }
-                    "open-runtime-targets-dialog" -> VscodeMessage(type = type)
-                    "restore-script-tabs" -> {
-                        val jsPaths = data.scriptPaths
-                        val paths = if (jsPaths != null) {
-                            val len = jsPaths.length as Int
-                            (0 until len).map { i -> jsPaths[i] as String }
-                        } else emptyList()
-                        VscodeMessage(
-                            type = type,
-                            scriptPaths = paths,
-                        )
-                    }
-                    else -> VscodeMessage(type = type)
+                // A message whose payload we did not expect can fail to
+                // decode. Whatever that costs, it must not cost a script its
+                // answer: an `open(path)` waiting on a reply whose handler
+                // threw would hold the script suspended for good.
+                val msg = try {
+                    decodeVscodeMessage(type, data)
+                } catch (failure: Throwable) {
+                    ScriptBinaryReads.failAll(
+                        "the editor's reply could not be read " +
+                            "(${failure.message ?: "unknown error"}).",
+                    )
+                    throw failure
                 }
                 onMessage(msg)
             }

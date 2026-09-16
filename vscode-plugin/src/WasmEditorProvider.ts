@@ -5,6 +5,14 @@ import { getWebviewContent } from "./webviewContent";
 import { extensionLib, getSelectedRuntime, runExport } from "./WasmRunConfigurations";
 import { isNativeBinary } from "./NativeBinaryFileTypeDetector";
 import { WasmFeatureCatalogProvider } from "./wasmFeatureCatalog";
+import {
+    binaryFileContent,
+    binaryFileReadFailure,
+    errorMessageText,
+    fileReadFailureReason,
+    MAX_SCRIPT_OPEN_BYTES,
+    toWebviewBytes,
+} from "./scriptBinaryRead";
 
 /**
  * In-memory store for nested module byte arrays.
@@ -626,15 +634,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 if (diff) {
                     pendingDiffs.delete(diffKey);
                     const isNativeDiff = document.uri.query.includes("native=true");
-                    const toPayload = (d: Uint8Array) =>
-                        d instanceof Buffer
-                            ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength)
-                            : d;
                     webviewPanel.webview.postMessage({
                         type: isNativeDiff ? "load-native-diff" : "load-diff",
-                        leftData: toPayload(diff.leftData),
+                        leftData: toWebviewBytes(diff.leftData),
                         leftName: diff.leftName,
-                        rightData: toPayload(diff.rightData),
+                        rightData: toWebviewBytes(diff.rightData),
                         rightName: diff.rightName,
                     });
                     return;
@@ -653,15 +657,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                             const rightUri = vscode.Uri.parse(rightUriStr);
                             const leftData = await vscode.workspace.fs.readFile(leftUri);
                             const rightData = await vscode.workspace.fs.readFile(rightUri);
-                            const toPayload = (d: Uint8Array) =>
-                                d instanceof Buffer
-                                    ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength)
-                                    : d;
                             webviewPanel.webview.postMessage({
                                 type: isNativeDiff ? "load-native-diff" : "load-diff",
-                                leftData: toPayload(leftData),
+                                leftData: toWebviewBytes(leftData),
                                 leftName: path.basename(leftUri.fsPath),
-                                rightData: toPayload(rightData),
+                                rightData: toWebviewBytes(rightData),
                                 rightName: path.basename(rightUri.fsPath),
                             });
                             return;
@@ -686,15 +686,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                         const key = document.uri.toString();
                         const displayName = document.displayName ?? document.uri.path.replace(/^\//, "");
                         inMemoryModules.set(key, { data: reloaded, fileName: displayName });
-                        const toPayload = (d: Uint8Array) =>
-                            d instanceof Buffer
-                                ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength)
-                                : d;
                         const reloadMsg: Record<string, unknown> = {
                             type: "load-wasm",
                             fileName: displayName,
                             filePath: document.uri.fsPath,
-                            data: toPayload(reloaded),
+                            data: toWebviewBytes(reloaded),
                             wasmRuntime: getSelectedRuntime(),
                             showSemanticHighlighting: vscode.workspace.getConfiguration("hexana").get<boolean>("showSemanticHighlighting", true),
                         };
@@ -721,9 +717,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     return;
                 }
 
-                const payload = document.data instanceof Buffer
-                    ? new Uint8Array(document.data.buffer, document.data.byteOffset, document.data.byteLength)
-                    : document.data;
+                const payload = toWebviewBytes(document.data);
                 const loadMsg: Record<string, unknown> = {
                     type: "load-wasm",
                     fileName: document.displayName ?? document.uri.fsPath,
@@ -808,6 +802,12 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 this.pickSslKeyLog(document, webviewPanel);
             } else if (message.type === "read-script-file") {
                 this.readScriptFile(message.scriptPath as string, webviewPanel);
+            } else if (message.type === "read-binary-file") {
+                this.readBinaryFile(
+                    message.requestId as string,
+                    message.path as string,
+                    webviewPanel,
+                );
             } else if (message.type === "script-tab-added") {
                 this.addScriptTabToState(document, message.scriptPath as string);
             } else if (message.type === "script-tab-removed") {
@@ -1003,13 +1003,9 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         }
 
         const displayName = uri.path.replace(/^\//, "");
-        const toPayload = (d: Uint8Array) =>
-            d instanceof Buffer
-                ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength)
-                : d;
         webviewPanel.webview.postMessage({
             type: "load-nested-module",
-            parentData: toPayload(parentBytes),
+            parentData: toWebviewBytes(parentBytes),
             moduleIndex,
             fileName: displayName,
             wasmRuntime: getSelectedRuntime(),
@@ -1795,6 +1791,46 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             });
         } catch (err) {
             vscode.window.showErrorMessage(`Failed to read script file: ${err}`);
+        }
+    }
+
+    /**
+     * Reads a binary a running script asked for with `open(path)` and posts it
+     * back to the webview, which parses it there.
+     *
+     * The webview cannot touch the file system, so this is the only way its
+     * scripts reach a second file — deliberately: the script stays sandboxed and
+     * receives parsed bytes, never a file handle. Failures are posted rather than
+     * only shown as notifications, because the script's own `try/catch` is
+     * supposed to see them, exactly as it does in the IntelliJ plugin and the CLI.
+     */
+    private async readBinaryFile(
+        requestId: string,
+        binaryPath: string,
+        webviewPanel: vscode.WebviewPanel,
+    ): Promise<void> {
+        // Exactly one reply per request, on every path. The webview keeps the
+        // script suspended until one arrives, so a request answered with nothing
+        // is a script that never finishes.
+        try {
+            const uri = vscode.Uri.file(binaryPath);
+            const stat = await vscode.workspace.fs.stat(uri);
+            if (stat.size > MAX_SCRIPT_OPEN_BYTES) {
+                void webviewPanel.webview.postMessage(binaryFileReadFailure(
+                    requestId,
+                    binaryPath,
+                    `File exceeds maximum size of ${MAX_SCRIPT_OPEN_BYTES} bytes`,
+                ));
+                return;
+            }
+            const bytes = await vscode.workspace.fs.readFile(uri);
+            void webviewPanel.webview.postMessage(binaryFileContent(requestId, binaryPath, bytes));
+        } catch (err) {
+            void webviewPanel.webview.postMessage(binaryFileReadFailure(
+                requestId,
+                binaryPath,
+                fileReadFailureReason(err),
+            ));
         }
     }
 

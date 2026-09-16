@@ -148,13 +148,171 @@ class ScriptYieldTransformTest {
         assertEquals(2, Regex("yield print\\(").findAll(result).count(), result)
     }
 
+    // -- function bodies ------------------------------------------------------
+
+    private fun openTransform(source: String) =
+        ScriptYieldTransform.apply(source, suspending = ScriptYieldTransform.SUSPENDING_GLOBALS)
+
+    @Test
+    fun aCallInsideAFunctionDeclarationIsLeftAlone() {
+        // `yield` inside a nested ordinary function is a syntax error, so this
+        // used to make the whole script fail to compile in the browser host.
+        val result = transform(
+            """
+            function report(name) {
+                print(name);
+            }
+            report("a");
+            """.trimIndent()
+        )
+
+        assertFalse(result.contains("yield print("), result)
+    }
+
+    @Test
+    fun aCallInsideACallbackIsLeftAlone() {
+        val classic = transform("""[1, 2].forEach(function(v) { print(v); });""")
+        assertFalse(classic.contains("yield print("), classic)
+
+        val arrow = transform("""[1, 2].forEach(v => { print(v); });""")
+        assertFalse(arrow.contains("yield print("), arrow)
+
+        val parenthesizedArrow = transform("""[1, 2].forEach((v) => { print(v); });""")
+        assertFalse(parenthesizedArrow.contains("yield print("), parenthesizedArrow)
+    }
+
+    @Test
+    fun aCallInsideAMethodIsLeftAlone() {
+        val result = transform(
+            """
+            const reporter = {
+                report(name) { print(name); }
+            };
+            reporter.report("a");
+            """.trimIndent()
+        )
+
+        assertFalse(result.contains("yield print("), result)
+    }
+
+    @Test
+    fun controlFlowBlocksStillYield() {
+        // A control-flow head is parenthesised too, but its block is part of the
+        // generator, so calls inside it must keep yielding.
+        val result = transform(
+            """
+            if (binary.size > 0) { print("a"); }
+            for (const r of binary.structure) { print(r.name); }
+            while (false) { print("never"); }
+            try { print("b"); } catch (error) { print("c"); }
+            """.trimIndent()
+        )
+
+        assertEquals(5, Regex("yield print\\(").findAll(result).count(), result)
+    }
+
+    @Test
+    fun aFunctionBodyDoesNotSilenceTheRestOfTheScript() {
+        // The skip has to end with the body: a call after it is back in the
+        // generator and must yield again.
+        val result = transform(
+            """
+            function helper() { print("inner"); }
+            print("outer");
+            """.trimIndent()
+        )
+
+        assertEquals(1, Regex("yield print\\(").findAll(result).count(), result)
+        assertTrue(result.contains("yield print(\"outer\")"), result)
+    }
+
+    // -- open -----------------------------------------------------------------
+
+    @Test
+    fun openIsYieldedOnlyWhenTheHostAsksForIt() {
+        val source = """const other = open("/tmp/b.wasm");"""
+
+        assertTrue(openTransform(source).contains("= (yield open(\"/tmp/b.wasm\"))"), openTransform(source))
+        // A host that reads the file inside the call must not have it rewritten.
+        assertFalse(transform(source).contains("yield open("), transform(source))
+    }
+
+    @Test
+    fun aSuspendingCallIsParenthesizedSoMemberAccessReadsTheResult() {
+        // `yield` binds looser than member access. Without the wrapping parens
+        // `yield open(p).size` reads `.size` off the request object and yields
+        // undefined, so the host is never asked and the script sees nothing.
+        val result = openTransform("""print(open("/b.wasm").size);""")
+
+        assertTrue(result.contains("""(yield open("/b.wasm")).size"""), result)
+    }
+
+    @Test
+    fun aSuspendingCallInsideAnotherCallIsStillParenthesized() {
+        val result = openTransform("""print(open("/a.wasm").size, open("/b.wasm").size);""")
+
+        assertEquals(2, Regex("""\(yield open\(""").findAll(result).count(), result)
+        assertEquals(2, Regex("""\)\)\.size""").findAll(result).count(), result)
+    }
+
+    @Test
+    fun nestedSuspendingCallsCloseInTheRightOrder() {
+        val result = openTransform("""print(open(open("/a.wasm").path).size);""")
+
+        // Both calls wrapped, and the wrapping parens balance.
+        assertEquals(2, Regex("""\(yield open\(""").findAll(result).count(), result)
+        assertEquals(result.count { it == '(' }, result.count { it == ')' }, result)
+    }
+
+    @Test
+    fun argumentsOfASuspendingCallKeepTheirOwnParens() {
+        val result = openTransform("""const o = open(binary.dir + "/" + (1 + 2) + ".bin");""")
+
+        assertTrue(result.contains("""(yield open(binary.dir + "/" + (1 + 2) + ".bin"))"""), result)
+    }
+
+    @Test
+    fun openInsideAFunctionIsLeftAloneRatherThanBreakingCompilation() {
+        val result = openTransform(
+            """
+            function sizeOf(path) {
+                return open(path).size;
+            }
+            print(sizeOf("/tmp/b.wasm"));
+            """.trimIndent()
+        )
+
+        assertFalse(result.contains("yield open("), result)
+        assertTrue(result.contains("yield print("), result)
+    }
+
+    @Test
+    fun aMemberCalledOpenIsNotRewritten() {
+        val result = openTransform("""binary.open("x");""")
+
+        assertFalse(result.contains("yield open("), result)
+    }
+
+    @Test
+    fun aScriptDeclaringItsOwnOpenKeepsItsDeclaration() {
+        // Shadowing the global is the user's business; the declaration must not
+        // turn into `function yield open(...)`.
+        val result = openTransform(
+            """
+            function open(path) { return path; }
+            const p = open("/tmp/b.wasm");
+            """.trimIndent()
+        )
+
+        assertTrue(result.contains("function open(path)"), result)
+    }
+
     @Test
     fun theCompareBinariesExampleKeepsItsHelpersYieldFree() {
-        // That example's helpers deliberately only compute: a `yield` inside a
-        // nested ordinary function is a syntax error in a generator, so an output
-        // call moved into a helper would stop the whole script from compiling in
-        // the browser host. Nothing here can enforce that for a user's script —
-        // this pins the shape the bundled example is written in.
+        // That example's helpers deliberately only compute. An output call inside
+        // one is now left alone rather than breaking compilation, but it would
+        // still cost the tab its streaming, and an `open` there cannot suspend at
+        // all — so this pins the shape the bundled example is written in.
         val source = """
             function regionSizes(target) {
                 const sizes = {};

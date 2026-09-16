@@ -51,8 +51,9 @@ hexana-cli-script run-script sample.bin \
 
 The runtime exposes the same globals here, in the IntelliJ plugin, and in the VS Code extension. The surface is defined
 once in `plugins-shared/src/commonMain/kotlin/org/jetbrains/hexana/shared/scripting/`, so a script written for one host
-runs unchanged in the others — with one exception, `open(path)`, which needs local file access and therefore reports
-that it is unavailable in the VS Code webview and the web app.
+runs unchanged in the others. `open(path)` additionally needs local file access: every editor has it, the browser web
+app does not and reports that, and in the VS Code webview it must be called at the top level of the script (the script
+pauses there while the extension reads the file, which it cannot do inside a function).
 
 Output:
 
@@ -95,7 +96,8 @@ hexana-cli-script run-script build/app.elf \
 
 `binary.path` and `binary.dir` report the *resolved* location, so a relative `--binary ./app.elf` still yields a path a
 later `open(...)` can build on. The format is detected from the file content, the path obeys the allowed-root policy
-below, and one run may open at most 8 distinct binaries (opening the same path again is free and does not count). In the VS Code webview and the web app —
+below, and one run may open at most 8 distinct binaries (opening the same path again is free and does not count). Those
+limits are this runtime's; a VS Code script tab reads through the extension host, which caps a single `open` at 100 MiB. In the VS Code webview and the web app —
 neither of which can read files synchronously — `open` reports that instead of doing anything.
 
 For the full reference including signatures, see `vscode-plugin/hexana-scripting.d.ts` (curated) and
