@@ -163,6 +163,13 @@ describe('Hexana Run Configurations – Exports Panel', function () {
         await driver.sleep(5000);
     });
 
+    beforeEach(async function () {
+        // A preceding scenario can leave Selenium focused on a webview iframe.
+        // Reset before constructing workbench page objects, which only exist in
+        // the top-level document.
+        await driver.switchTo().defaultContent();
+    });
+
     afterEach(async function () {
         this.timeout(30_000);
         await closeAllEditorsQuietly(driver);
