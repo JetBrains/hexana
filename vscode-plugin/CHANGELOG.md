@@ -1,4 +1,4 @@
-# Unreleased
+# 0.11.0 - 16.09.2026
 - `.debug_abbrev`, `.debug_info` and `.debug_line` grouped under a single "DWARF" tab with search; clicking a row selects its bytes
 - WASM component "Dependencies" graph is navigable: double-click a module or nested component to open it, an import/export to select its bytes
 - custom script tabs: format-agnostic `binary` API (`format`, `size`, `path`, `dir`, `structure`, `strings`, `sizeAnalysis`, `binary.tabs`/`binary.tab(name)`) plus `table(...)`/`row(...)` output. `open(path)` parses another file into the same members as `binary`, so a script can compare two files — the extension host reads it and the script resumes with it, so call `open` at the top level of the script rather than inside a function
