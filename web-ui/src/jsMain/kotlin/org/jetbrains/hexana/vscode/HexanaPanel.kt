@@ -245,15 +245,21 @@ fun HexanaPanel(
             for (st in scriptTabs) {
                 val label = st.path.substringAfterLast('/').substringAfterLast('\\')
                 add(PanelTab(label, padding = false) { _ ->
-                    ScriptTabContent(
-                        scriptPath = st.path,
-                        scriptContent = st.content,
-                        provider = provider,
-                        onRequestRefresh = { host.readScriptFile(st.path) },
-                        scriptExecution = scriptExecution,
-                        binaryFileName = fileName,
-                        binaryFilePath = filePath,
-                    )
+                    // Every script tab renders from this one call site, so without a
+                    // key they all share one identity: the output, the error and the
+                    // "running" flag of the tab shown before would stay on screen for
+                    // a tab whose own script has not produced any yet.
+                    key(st.path) {
+                        ScriptTabContent(
+                            scriptPath = st.path,
+                            scriptContent = st.content,
+                            provider = provider,
+                            onRequestRefresh = { host.readScriptFile(st.path) },
+                            scriptExecution = scriptExecution,
+                            binaryFileName = fileName,
+                            binaryFilePath = filePath,
+                        )
+                    }
                 })
             }
         }

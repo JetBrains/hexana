@@ -10,7 +10,7 @@ import {
     binaryFileReadFailure,
     errorMessageText,
     fileReadFailureReason,
-    MAX_SCRIPT_OPEN_BYTES,
+    scriptOpenOversizeReason,
     toWebviewBytes,
 } from "./scriptBinaryRead";
 
@@ -1815,15 +1815,28 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         try {
             const uri = vscode.Uri.file(binaryPath);
             const stat = await vscode.workspace.fs.stat(uri);
-            if (stat.size > MAX_SCRIPT_OPEN_BYTES) {
+            const statedOversize = scriptOpenOversizeReason(stat.size);
+            if (statedOversize) {
                 void webviewPanel.webview.postMessage(binaryFileReadFailure(
                     requestId,
                     binaryPath,
-                    `File exceeds maximum size of ${MAX_SCRIPT_OPEN_BYTES} bytes`,
+                    statedOversize,
                 ));
                 return;
             }
             const bytes = await vscode.workspace.fs.readFile(uri);
+            // The bytes are what the cap has to hold: the file can grow between
+            // the stat above and this read, and posting the payload is what costs
+            // the memory.
+            const readOversize = scriptOpenOversizeReason(bytes.byteLength);
+            if (readOversize) {
+                void webviewPanel.webview.postMessage(binaryFileReadFailure(
+                    requestId,
+                    binaryPath,
+                    readOversize,
+                ));
+                return;
+            }
             void webviewPanel.webview.postMessage(binaryFileContent(requestId, binaryPath, bytes));
         } catch (err) {
             void webviewPanel.webview.postMessage(binaryFileReadFailure(

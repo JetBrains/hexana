@@ -3,6 +3,8 @@ import {
     binaryFileContent,
     binaryFileReadFailure,
     fileReadFailureReason,
+    MAX_SCRIPT_OPEN_BYTES,
+    scriptOpenOversizeReason,
     toWebviewBytes,
 } from '../../../src/scriptBinaryRead';
 
@@ -78,6 +80,29 @@ describe('script binary read', function () {
             expect(message.requestId).to.equal('script-open-5');
             expect(message.data).to.equal(undefined);
             expect(message.error).to.equal('open("/tmp/missing.wasm") — File not found');
+        });
+    });
+
+    describe('scriptOpenOversizeReason', function () {
+        it('passes a file at the cap and rejects the first byte past it', function () {
+            expect(scriptOpenOversizeReason(0)).to.equal(null);
+            expect(scriptOpenOversizeReason(MAX_SCRIPT_OPEN_BYTES)).to.equal(null);
+            expect(scriptOpenOversizeReason(MAX_SCRIPT_OPEN_BYTES + 1)).to.equal(
+                `File exceeds maximum size of ${MAX_SCRIPT_OPEN_BYTES} bytes`,
+            );
+        });
+
+        it('reads as one failure whether the stat or the bytes tripped it', function () {
+            // The read is checked as well as the stat, because the file can grow
+            // between the two and the payload is what crosses the bus. A script
+            // must not be able to tell which check caught it.
+            const reason = scriptOpenOversizeReason(MAX_SCRIPT_OPEN_BYTES + 4096) ?? '';
+            const message = binaryFileReadFailure('script-open-6', '/tmp/huge.wasm', reason);
+
+            expect(message.data).to.equal(undefined);
+            expect(message.error).to.equal(
+                `open("/tmp/huge.wasm") — File exceeds maximum size of ${MAX_SCRIPT_OPEN_BYTES} bytes`,
+            );
         });
     });
 

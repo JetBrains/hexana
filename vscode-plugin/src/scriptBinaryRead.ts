@@ -15,6 +15,20 @@
  */
 export const MAX_SCRIPT_OPEN_BYTES = 100 * 1024 * 1024;
 
+/**
+ * Why [byteLength] is too large to hand to a script, or null when it fits.
+ *
+ * Both the `stat` and the bytes themselves are checked against this. The `stat`
+ * keeps the extension from reading a huge file at all; the byte count is what
+ * actually bounds the message, because the file can grow between the two calls
+ * and a file-system provider's `stat` need not agree with what it hands back.
+ */
+export function scriptOpenOversizeReason(byteLength: number): string | null {
+    return byteLength > MAX_SCRIPT_OPEN_BYTES
+        ? `File exceeds maximum size of ${MAX_SCRIPT_OPEN_BYTES} bytes`
+        : null;
+}
+
 /** Message of [err] as a user would read it. */
 export function errorMessageText(err: unknown): string {
     return err instanceof Error ? err.message : String(err);

@@ -488,6 +488,26 @@ class HexanaScriptApiBindingTest {
         )
     }
 
+    @Test
+    fun openReadsAFileInsideAnAllowedRoot() {
+        // The other half of the policy. On its own the denial above is also what
+        // a check wired up backwards, or one that refused everything, would
+        // produce — every other `open` test here runs with the policy that
+        // allows all files, so nothing else exercises the allowing branch.
+        val allowedRoot = Files.createTempDirectory("hexana-open-allowed-")
+        val inside = Files.write(allowedRoot.resolve("inside.bin"), byteArrayOf(9, 9, 9, 9, 9))
+
+        val result = HexanaScriptRunner(
+            allowedFilePolicy = AllowedFilePolicy.requiringAllowedRoots(listOf(allowedRoot.toString())),
+        ).run(
+            source = HexanaScriptSource.Inline("""print(open("${escaped(inside)}").size);"""),
+            binaryProvider = testProvider(),
+        )
+
+        assertEquals(HexanaScriptStatus.SUCCESS, result.status, result.diagnostics.toString())
+        assertEquals(listOf("5"), result.output.lines)
+    }
+
     private fun tempFileWith(prefix: String, suffix: String, bytes: ByteArray): Path =
         Files.createTempFile(prefix, suffix).also { Files.write(it, bytes) }
 

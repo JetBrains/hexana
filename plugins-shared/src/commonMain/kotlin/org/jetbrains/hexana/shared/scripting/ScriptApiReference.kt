@@ -148,9 +148,11 @@ object ScriptApiReference {
                 ScriptApiEntry(
                     "dir",
                     "readonly dir: string | null",
-                    "Directory containing the file, without a trailing separator, or null when " +
-                        "`path` is null. Join with \"/\", which works on every platform Hexana " +
-                        "runs on, to reach a file next to this one.",
+                    "Directory containing the file, or null when `path` is null. It has no " +
+                        "trailing separator, except for a root such as `/` or `C:\\`, which keeps " +
+                        "one because dropping it would name a different place. Join with \"/\", " +
+                        "which works on every platform Hexana runs on, to reach a file next to " +
+                        "this one.",
                     "const map = open(binary.dir + \"/zephyr.map\");",
                 ),
                 ScriptApiEntry(

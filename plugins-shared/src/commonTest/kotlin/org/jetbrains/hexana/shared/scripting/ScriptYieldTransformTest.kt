@@ -182,6 +182,57 @@ class ScriptYieldTransformTest {
     }
 
     @Test
+    fun aCallInsideAConciseArrowBodyIsLeftAlone() {
+        // A braceless arrow body is a function body too, so a `yield` in it is
+        // the same syntax error as in a braced one.
+        val single = transform("""[1, 2].forEach(v => print(v));""")
+        assertFalse(single.contains("yield print("), single)
+
+        val parenthesized = transform("""[1, 2].forEach((v) => print(v));""")
+        assertFalse(parenthesized.contains("yield print("), parenthesized)
+
+        val nested = transform("""[[1]].forEach(xs => xs.forEach(v => print(v)));""")
+        assertFalse(nested.contains("yield print("), nested)
+
+        val opened = openTransform("""["a"].map(p => open(p).size);""")
+        assertFalse(opened.contains("yield open("), opened)
+    }
+
+    @Test
+    fun aConciseArrowBodyDoesNotSilenceTheRestOfTheScript() {
+        val semicolon = transform(
+            """
+            const twice = v => v * 2;
+            print(twice(2));
+            """.trimIndent()
+        )
+        assertEquals(1, Regex("yield print\\(").findAll(semicolon).count(), semicolon)
+
+        // No semicolon: the body ends at the line break, as it does for the
+        // parser, so the statement after it still yields.
+        val newline = transform(
+            """
+            const twice = v => v * 2
+            print(twice(2))
+            """.trimIndent()
+        )
+        assertEquals(1, Regex("yield print\\(").findAll(newline).count(), newline)
+
+        val afterCallback = transform("""[1].forEach(v => v * 2); print("outer");""")
+        assertEquals(1, Regex("yield print\\(").findAll(afterCallback).count(), afterCallback)
+
+        // An `open` after a concise arrow must still suspend: silencing it would
+        // turn a working call into the nested-call error.
+        val openAfter = openTransform(
+            """
+            const twice = v => v * 2
+            const other = open("/tmp/b.wasm");
+            """.trimIndent()
+        )
+        assertTrue(openAfter.contains("(yield open(\"/tmp/b.wasm\"))"), openAfter)
+    }
+
+    @Test
     fun aCallInsideAMethodIsLeftAlone() {
         val result = transform(
             """

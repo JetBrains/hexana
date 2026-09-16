@@ -409,6 +409,9 @@ private const val TABLE_BLOCK_MAX_BODY_HEIGHT = "clamp(120px, 45vh, 640px)"
  *
  * @param readBinaryFile reads a file for `open(path)`, or null in a host with no
  *   file access, which also leaves `open` out of the yield rewrite
+ * @param isCancelled asked whenever the driver regains control, so a run nobody
+ *   is listening to any more stops stepping the generator instead of burning the
+ *   event loop to the end of the script. A cancelled run resolves to `null`.
  */
 internal fun executeScriptAsync(
     scriptContent: String,
@@ -417,6 +420,7 @@ internal fun executeScriptAsync(
     filePath: String?,
     readBinaryFile: ((String) -> Promise<ByteArray>)?,
     onLine: (String) -> Unit,
+    isCancelled: () -> Boolean = { false },
 ): Promise<String?> {
     return Promise { resolve, _ ->
         val binder = ScriptValueJsBinder(::wrapForJs)
@@ -475,6 +479,9 @@ internal fun executeScriptAsync(
 
         @Suppress("UNUSED_VARIABLE")
         val openRequestMember = SCRIPT_OPEN_REQUEST_MEMBER
+
+        @Suppress("UNUSED_VARIABLE")
+        val cancelled = isCancelled
 
         // Answers one `open(path)`: reads the file through the host, parses it
         // here, and binds the same shape as `binary`. Parsing stays inside the
@@ -539,6 +546,10 @@ internal fun executeScriptAsync(
                 // Advances the generator and hands the result to pump. An error
                 // the script did not catch surfaces here as the run's failure.
                 function resume(advance) {
+                    // The one place the run re-enters from the event loop, so
+                    // asking here is enough: a cancelled run still finishes the
+                    // yieldEvery steps it was in the middle of, and no more.
+                    if (cancelled()) { resolve(null); return; }
                     var r;
                     try {
                         r = advance();
@@ -640,6 +651,11 @@ internal fun ScriptTabContent(
                         null
                     },
                     onLine = ::acceptLine,
+                    // This path has no handle to cancel through — the driver
+                    // lives in a `js(...)` loop, not a coroutine — so a
+                    // superseded or closed run is stopped by the same generation
+                    // that already silences its output.
+                    isCancelled = { runScope.generation != runGeneration },
                 ).then(::complete)
                 NoopScriptExecutionHandle
             }

@@ -97,8 +97,9 @@ hexana-cli-script run-script build/app.elf \
 `binary.path` and `binary.dir` report the *resolved* location, so a relative `--binary ./app.elf` still yields a path a
 later `open(...)` can build on. The format is detected from the file content, the path obeys the allowed-root policy
 below, and one run may open at most 8 distinct binaries (opening the same path again is free and does not count). Those
-limits are this runtime's; a VS Code script tab reads through the extension host, which caps a single `open` at 100 MiB. In the VS Code webview and the web app —
-neither of which can read files synchronously — `open` reports that instead of doing anything.
+limits are this runtime's: a VS Code script tab reads through the extension host instead, which caps a single `open` at
+100 MiB and does not bound how many files one run opens. The browser web app has no file access at all, so there `open`
+reports that rather than doing anything.
 
 For the full reference including signatures, see `vscode-plugin/hexana-scripting.d.ts` (curated) and
 `vscode-plugin/hexana-scripting-raw.d.ts` (the format-specific types behind `binary.raw`). Runnable examples live in

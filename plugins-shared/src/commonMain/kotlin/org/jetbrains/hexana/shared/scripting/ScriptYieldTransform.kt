@@ -74,6 +74,10 @@ object ScriptYieldTransform {
         val controlFlowParenDepths = ArrayDeque<Int>()
         var lastParenWasControlFlow = false
         var pendingArrowBody = false
+        var bracketDepth = 0
+        // Braceless arrow bodies, which are function bodies with no `{` to track.
+        // See [conciseArrowBodyEndsHere].
+        val conciseArrowBodies = ArrayDeque<ConciseArrowBody>()
         // Paren depths of suspending calls awaiting their closing `)`, which is
         // where the wrapping parenthesis has to be emitted.
         val suspendingCloseDepths = ArrayDeque<Int>()
@@ -148,7 +152,8 @@ object ScriptYieldTransform {
                         previousSignificant != '.' &&
                         previousIdentifier !in DECLARATION_KEYWORDS &&
                         nextSignificant(source, end) == '(' &&
-                        functionBodyDepths.isEmpty()
+                        functionBodyDepths.isEmpty() &&
+                        conciseArrowBodies.isEmpty()
                     if (isCall) {
                         if (identifier in suspending) {
                             out.append("(yield ")
@@ -182,7 +187,20 @@ object ScriptYieldTransform {
                             }
                             parenDepth--
                         }
-                        '=' -> if (next == '>') pendingArrowBody = true
+                        '[' -> bracketDepth++
+                        ']' -> bracketDepth--
+                        '=' -> if (next == '>') {
+                            // Which arrow form this is decides how its body is
+                            // tracked, and only the token after `=>` tells them
+                            // apart.
+                            if (nextSignificant(source, index + 2) == '{') {
+                                pendingArrowBody = true
+                            } else {
+                                conciseArrowBodies.addLast(
+                                    ConciseArrowBody(parenDepth, braceDepth, bracketDepth),
+                                )
+                            }
+                        }
                         '{' -> {
                             braceDepth++
                             if (functionBodyOpensHere(previousSignificant, lastParenWasControlFlow, pendingArrowBody)) {
@@ -195,6 +213,19 @@ object ScriptYieldTransform {
                             braceDepth--
                         }
                         ';' -> pendingArrowBody = false
+                    }
+                    while (
+                        conciseArrowBodies.isNotEmpty() &&
+                        conciseArrowBodyEndsHere(
+                            conciseArrowBodies.last(),
+                            char,
+                            previousSignificant,
+                            parenDepth,
+                            braceDepth,
+                            bracketDepth,
+                        )
+                    ) {
+                        conciseArrowBodies.removeLast()
                     }
                     out.append(char)
                     if (closesSuspendingCall) out.append(')')
@@ -241,10 +272,12 @@ object ScriptYieldTransform {
      * `{` after `=>` is always one. That covers `function f() {}`, a method
      * (`foo() {}` in a class or an object literal), and both arrow forms.
      *
-     * It is built to fail safe. Deciding "function" wrongly only costs a yield
-     * point — the call still runs, the script just pauses less often. Deciding
-     * "block" wrongly re-creates the behaviour that existed before this tracking:
-     * an illegal `yield` that the host reports as a compilation error.
+     * It is built to fail safe. Deciding "function" wrongly costs an output call
+     * its yield point — the call still runs, the script just pauses less often —
+     * and makes an `open` there report the nested-call restriction instead of
+     * reading the file. Deciding "block" wrongly re-creates the behaviour that
+     * existed before this tracking: an illegal `yield` that the host reports as a
+     * compilation error.
      */
     private fun functionBodyOpensHere(
         previousSignificant: Char?,
@@ -254,6 +287,59 @@ object ScriptYieldTransform {
         if (pendingArrowBody) return true
         return previousSignificant == ')' && !lastParenWasControlFlow
     }
+
+    /** Nesting a braceless arrow body started at, which is where it also ends. */
+    private class ConciseArrowBody(
+        val parenDepth: Int,
+        val braceDepth: Int,
+        val bracketDepth: Int,
+    )
+
+    /**
+     * Whether the token just consumed ended the braceless arrow body [body].
+     *
+     * `v => print(v)` has no `{` to match, so the body ends where its expression
+     * does: a bracket that closes past the nesting the arrow started at, a `;` or
+     * `,` at that nesting, or a line break that is not obviously a continuation —
+     * the same places the parser would end it.
+     *
+     * Both mistakes are contained. Ending too early re-creates the old behaviour
+     * for whatever follows on that line. Ending too late costs the rest of the
+     * statement its yields, and — since `open` is rewritten the same way — makes
+     * an `open` there report the nested-call restriction instead of reading the
+     * file, which is what a genuinely nested `open` already does.
+     */
+    private fun conciseArrowBodyEndsHere(
+        body: ConciseArrowBody,
+        char: Char,
+        previousSignificant: Char?,
+        parenDepth: Int,
+        braceDepth: Int,
+        bracketDepth: Int,
+    ): Boolean = when (char) {
+        ')' -> parenDepth < body.parenDepth
+        ']' -> bracketDepth < body.bracketDepth
+        '}' -> braceDepth < body.braceDepth
+        ';' -> parenDepth <= body.parenDepth
+        ',' -> parenDepth <= body.parenDepth &&
+            braceDepth <= body.braceDepth &&
+            bracketDepth <= body.bracketDepth
+
+        '\n' -> parenDepth <= body.parenDepth &&
+            braceDepth <= body.braceDepth &&
+            bracketDepth <= body.bracketDepth &&
+            (previousSignificant == null || previousSignificant !in EXPRESSION_CONTINUING_CHARS)
+
+        else -> false
+    }
+
+    /**
+     * Characters after which a line break cannot end an expression, so a
+     * braceless arrow body written across lines is not cut in half.
+     */
+    private val EXPRESSION_CONTINUING_CHARS = setOf(
+        ',', '+', '-', '*', '/', '%', '&', '|', '^', '=', '<', '>', '?', ':', '(', '[', '{', '.', '!', '~',
+    )
 
     private fun endOfQuoted(source: String, start: Int, quote: Char): Int {
         var index = start + 1
