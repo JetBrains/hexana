@@ -76,29 +76,32 @@ fun buildDebuggerConsolePanel(
         .createBuilder(project)
         .console
     Disposer.register(parentDisposable, consoleView)
+    consoleView.component.accessibleContext.accessibleName = "Debugger console output"
 
     val inputField = JBTextField().apply {
         emptyText.text = "Enter debugger command…"
+        accessibleContext.accessibleName = "Debugger command input"
     }
 
     // Command history -- most-recent at index 0.
     val history = ArrayDeque<String>()
     var historyIndex = -1
 
+    inputField.addActionListener {
+        val raw = inputField.text.trim()
+        if (raw.isEmpty()) return@addActionListener
+        inputField.text = ""
+        historyIndex = -1
+        if (history.isEmpty() || history.first() != raw) {
+            history.addFirst(raw)
+            if (history.size > HISTORY_LIMIT) history.removeLast()
+        }
+        handleConsoleInput(raw, transport, consoleView)
+    }
+
     inputField.addKeyListener(object : KeyAdapter() {
         override fun keyPressed(e: KeyEvent) {
             when (e.keyCode) {
-                KeyEvent.VK_ENTER -> {
-                    val raw = inputField.text.trim()
-                    if (raw.isEmpty()) return
-                    inputField.text = ""
-                    historyIndex = -1
-                    if (history.isEmpty() || history.first() != raw) {
-                        history.addFirst(raw)
-                        if (history.size > HISTORY_LIMIT) history.removeLast()
-                    }
-                    handleConsoleInput(raw, transport, consoleView)
-                }
                 KeyEvent.VK_UP -> {
                     if (history.isEmpty()) return
                     historyIndex = (historyIndex + 1).coerceAtMost(history.size - 1)
