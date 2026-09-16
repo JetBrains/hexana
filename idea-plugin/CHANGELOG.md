@@ -3,6 +3,20 @@
 ## Unreleased
 
 ### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## 0.20 - 2026-09-16
+
+### Added
 - **Breakpoints in binary views**, set without a debug session and materialized when one starts. Click the gutter in the **WAT (virtualized)** or native **Disassembly** view; the breakpoint is anchored to the binary's content hash (not its path) and survives restarts. The gutter icon reports what the runtime did with it: registered, instruction-precise, degraded, or stale after a rebuild. Supported for GraalWasm/Node.js/browser, wasmtime, WAMR and firmware ELF (QEMU/Renode) sessions. Listed under "Hexana Binary Breakpoints" in the Breakpoints dialog; conditions and hit counts are not supported yet.
 - **Debugger Console** tab: an interactive command line to the underlying debugger — LLDB commands for wasmtime/WAMR/wasmtime-gdbstub sessions, GDB commands for firmware QEMU/Renode. Execution-control commands are routed through the IDE's own actions so the console cannot desync it. Not available for GraalWasm/CDP sessions.
 - Custom script tabs: format-agnostic `binary` API (`format`, `size`, `path`, `dir`, `structure`, `strings`, `sizeAnalysis`, `binary.tabs`/`binary.tab(name)`) plus `table(...)`/`row(...)` output, and `open(path)` parses another file and returns the same members as `binary`
