@@ -2,7 +2,8 @@ import { strict as assert } from 'assert';
 import fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { isSameFile } from '../ui-test/test-utils';
+import { error as webdriverError } from 'selenium-webdriver';
+import { retryCommandPaletteInteraction, isSameFile } from '../ui-test/test-utils';
 
 describe('DWARF source file identity', () => {
     let tempRoot: string;
@@ -110,5 +111,69 @@ describe('DWARF source file identity', () => {
         } finally {
             Object.defineProperty(fs, 'statSync', { value: originalStat });
         }
+    });
+});
+
+describe('DWARF command-palette retry', () => {
+    const command = 'View: Show Run and Debug';
+
+    it('does not reset or repeat a successful interaction', async () => {
+        let attempts = 0;
+        await retryCommandPaletteInteraction(command,
+            async () => { attempts++; },
+            async () => { assert.fail('Unexpected palette reset'); },
+        );
+        assert.equal(attempts, 1);
+    });
+
+    for (const ErrorType of [
+        webdriverError.TimeoutError,
+        webdriverError.ElementNotInteractableError,
+        webdriverError.StaleElementReferenceError,
+    ]) {
+        it(`resets the palette before retrying ${ErrorType.name}`, async () => {
+            const events: string[] = [];
+            let attempts = 0;
+            await retryCommandPaletteInteraction(command, async () => {
+                events.push('execute');
+                if (++attempts < 3) {
+                    throw new ErrorType('Palette disappeared');
+                }
+            }, async () => { events.push('reset'); });
+            assert.deepEqual(events, ['execute', 'reset', 'execute', 'reset', 'execute']);
+        });
+
+        it(`fails after three attempts on persistent ${ErrorType.name}`, async () => {
+            let attempts = 0;
+            let resets = 0;
+            const failures = [1, 2, 3].map(attempt => new ErrorType(`Attempt ${attempt}`));
+            await assert.rejects(() => retryCommandPaletteInteraction(command,
+                async () => { throw failures[attempts++]; },
+                async () => { resets++; },
+            ), error => error === failures[2]);
+            assert.equal(attempts, 3);
+            assert.equal(resets, 2);
+        });
+    }
+
+    it('does not retry assertions or unexpected errors', async () => {
+        for (const failure of [new assert.AssertionError({ message: 'Wrong variable value' }), new Error('Unexpected')]) {
+            let attempts = 0;
+            await assert.rejects(() => retryCommandPaletteInteraction(command,
+                async () => { attempts++; throw failure; },
+                async () => { assert.fail('Unexpected palette reset'); },
+            ), error => error === failure);
+            assert.equal(attempts, 1);
+        }
+    });
+
+    it('propagates reset failures without another attempt', async () => {
+        let attempts = 0;
+        const failure = new webdriverError.TimeoutError('Could not reset palette');
+        await assert.rejects(() => retryCommandPaletteInteraction(command,
+            async () => { attempts++; throw new webdriverError.TimeoutError('Palette disappeared'); },
+            async () => { throw failure; },
+        ), error => error === failure);
+        assert.equal(attempts, 1);
     });
 });

@@ -19,6 +19,7 @@ import { execSync } from 'child_process';
 import {
     closeAllEditorsQuietly,
     dismissBlockingModal,
+    executeViewCommandFromPalette,
     returnToWorkbench,
     isSameFile,
     submitQuickInputPath,
@@ -613,7 +614,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
                 // ── Step 4: Inspect local variables ──
 
                 // Open the Debug view sidebar to access the Variables section
-                await workbench.executeCommand('View: Show Run and Debug');
+                await executeViewCommandFromPalette(driver, 'View: Show Run and Debug');
                 await driver.sleep(2000);
 
                 const debugView = new DebugView();

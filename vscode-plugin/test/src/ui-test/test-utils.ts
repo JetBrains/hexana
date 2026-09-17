@@ -1,5 +1,5 @@
 import { By, EditorView, Key, WebView, Workbench } from 'vscode-extension-tester';
-import { Locator, WebDriver } from 'selenium-webdriver';
+import { error as webdriverError, Locator, WebDriver } from 'selenium-webdriver';
 import * as fs from 'fs';
 
 /**
@@ -14,6 +14,54 @@ export function isSameFile(actual: string, expected: string): boolean {
         throw new Error('Filesystem did not provide a usable file identity');
     }
     return actualStat.dev === expectedStat.dev && actualStat.ino === expectedStat.ino;
+}
+
+/** Retry only palette interactions, not debug assertions or commands with non-idempotent effects. */
+export async function retryCommandPaletteInteraction(
+    command: string,
+    execute: () => Promise<void>,
+    reset: () => Promise<void>,
+): Promise<void> {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            await execute();
+            return;
+        } catch (error) {
+            const transient = error instanceof webdriverError.TimeoutError
+                || error instanceof webdriverError.ElementNotInteractableError
+                || error instanceof webdriverError.StaleElementReferenceError;
+            if (!transient || attempt === 3) {
+                throw error;
+            }
+            console.log(`[ui-test] Retrying palette command "${command}" (${attempt}/3 failed): ${error}`);
+        }
+        await reset();
+    }
+}
+
+/** Only use for idempotent view commands: a lost palette may require replaying the command. */
+export async function executeViewCommandFromPalette(driver: WebDriver, command: string): Promise<void> {
+    await retryCommandPaletteInteraction(command, async () => {
+        const prompt = await new Workbench().openCommandPrompt();
+        await prompt.setText(`>${command}`);
+        // Never confirm an empty/stale result list: require the exact command first.
+        await driver.wait(async () => {
+            for (const pick of await prompt.getQuickPicks()) {
+                if (await pick.getLabel() === command) {
+                    await pick.select();
+                    return true;
+                }
+            }
+            return false;
+        }, 5_000, `Command palette did not offer "${command}"`);
+        await driver.wait(async () => !(await prompt.isDisplayed()), 5_000,
+            `Command palette did not close after "${command}"`);
+    }, async () => {
+        await driver.switchTo().defaultContent();
+        await driver.actions().clear();
+        await driver.actions().sendKeys(Key.ESCAPE).perform();
+        await driver.sleep(250);
+    });
 }
 
 /**
