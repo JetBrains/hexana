@@ -20,6 +20,7 @@ import {
     closeAllEditorsQuietly,
     dismissBlockingModal,
     returnToWorkbench,
+    isSameFile,
     submitQuickInputPath,
 } from './test-utils';
 
@@ -806,11 +807,10 @@ describe('Hexana Run Configurations – Exports Panel', function () {
 
             // A paused toolbar alone does not prove source navigation worked:
             // LLDB can report an absolute path from the fixture author's machine.
-            const expectedSource = fs.realpathSync(DEBUG_RUST_SOURCE);
             await driver.wait(async () => {
                 try {
                     const openedSource = await new TextEditor().getFilePath();
-                    return fs.realpathSync(openedSource) === expectedSource;
+                    return isSameFile(openedSource, DEBUG_RUST_SOURCE);
                 } catch {
                     return false;
                 }

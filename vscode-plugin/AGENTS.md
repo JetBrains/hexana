@@ -84,5 +84,9 @@ update `TableTabEnricher.kt`.
   Clean up debug sessions and breakpoints after each case so toggling a breakpoint cannot disable a prior one.
 - The strict Wasmtime DWARF regression must verify local source navigation and parameter values after pausing; a visible
   toolbar or generic debug UI is not sufficient. Value assertions must not be swallowed by retry catches.
+  Use the test utility `isSameFile` to compare the opened source with the fixture by filesystem identity
+  (`statSync` with BigInt device/file IDs), not path casing or contents. Case sensitivity belongs to the
+  filesystem/directory, not just the host OS.
+  Unavailable file IDs must fail the assertion rather than make unrelated files compare equal.
   Compile the extension before running adapter unit regressions: `cd vscode-plugin && npm run compile`, then
   `cd test && npm run unit`.

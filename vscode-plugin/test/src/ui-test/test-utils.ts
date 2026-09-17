@@ -1,5 +1,20 @@
 import { By, EditorView, Key, WebView, Workbench } from 'vscode-extension-tester';
 import { Locator, WebDriver } from 'selenium-webdriver';
+import * as fs from 'fs';
+
+/**
+ * Compare two existing paths by filesystem identity, following symbolic links.
+ * Missing paths or unusable identity metadata throw; there is no path-casing fallback.
+ */
+export function isSameFile(actual: string, expected: string): boolean {
+    // BigInt preserves file IDs that exceed Number.MAX_SAFE_INTEGER (including Windows file IDs).
+    const actualStat = fs.statSync(actual, { bigint: true });
+    const expectedStat = fs.statSync(expected, { bigint: true });
+    if ([actualStat, expectedStat].some(stat => stat.dev === 0n || stat.ino === 0n)) {
+        throw new Error('Filesystem did not provide a usable file identity');
+    }
+    return actualStat.dev === expectedStat.dev && actualStat.ino === expectedStat.ino;
+}
 
 /**
  * Types a file path into the VS Code quick-input dialog by pasting from
