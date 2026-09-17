@@ -756,7 +756,7 @@ export class LldbDapProxy implements vscode.DebugAdapter {
 
     /**
      * Patches source paths in all stack frames of a `stackTrace`
-     * response, resolving DWARF-relative paths to full local
+     * response, resolving DWARF build-machine paths to full local
      * paths so VS Code can open the correct source files.
      */
     private patchSourcePathsInStackTrace(msg: DapMessage): void {
@@ -770,17 +770,15 @@ export class LldbDapProxy implements vscode.DebugAdapter {
 
             const sourcePath = (source.path as string) || "";
             if (!sourcePath) continue;
-            // Skip absolute paths that look like real local files
-            // (non-Wasm frames like system libraries).  lldb-dap
-            // uses synthetic paths like "/usr/lib/dyld`_dyld_start"
-            // for frames without source — those contain a backtick
-            // and should be left as-is (they won't resolve anyway).
-            if (sourcePath.startsWith("/") && !sourcePath.includes("`")) {
+            // DWARF may contain absolute paths from another machine.
+            // Preserve existing local files and synthetic LLDB locations
+            // such as "/usr/lib/dyld`_dyld_start", not all absolute paths.
+            if (sourcePath.includes("`") || (path.isAbsolute(sourcePath) && fs.existsSync(sourcePath))) {
                 continue;
             }
 
             const resolved = this.resolveSourcePath(sourcePath);
-            if (resolved) {
+            if (resolved && fs.existsSync(resolved)) {
                 this.log.appendLine(
                     `[Hexana] Resolved stackTrace source path ` +
                     `'${sourcePath}' → '${resolved}'`,

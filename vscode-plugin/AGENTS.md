@@ -77,3 +77,12 @@ update `TableTabEnricher.kt`.
 - Keep the generated webview JavaScript and Wasm printer embedded in `webview.html` and reconstructed as Blob URLs.
   VS Code 1.131 on Windows can corrupt multi-chunk files loaded through `asWebviewUri`; the detailed compatibility
   rationale and upstream fix are documented next to the bootstrap in `src/webviewContent.ts`.
+- LLDB stack frames can contain absolute DWARF paths from another build machine. Preserve existing local files
+  and synthetic LLDB locations, but resolve missing paths through unambiguous registered breakpoint sources.
+  Only replace a source path with an existing local file, clearing `sourceReference` when doing so.
+- Keep the original Wasmtime DWARF command-palette test alongside the strict source-remapping regression.
+  Clean up debug sessions and breakpoints after each case so toggling a breakpoint cannot disable a prior one.
+- The strict Wasmtime DWARF regression must verify local source navigation and parameter values after pausing; a visible
+  toolbar or generic debug UI is not sufficient. Value assertions must not be swallowed by retry catches.
+  Compile the extension before running adapter unit regressions: `cd vscode-plugin && npm run compile`, then
+  `cd test && npm run unit`.

@@ -10,6 +10,7 @@ import {
     DebugToolbar,
     TextEditor,
     DebugView,
+    ActivityBar,
 } from 'vscode-extension-tester';
 import { expect } from 'chai';
 import * as fs from 'fs';
@@ -516,7 +517,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
     describe('DWARF Wasm with Wasmtime – breakpoint debugging with variable inspection', function () {
         let webview: WebView;
 
-        after(async function () {
+        afterEach(async function () {
             this.timeout(60_000);
             await returnToWorkbench(driver, webview);
 
@@ -531,6 +532,7 @@ describe('Hexana Run Configurations – Exports Panel', function () {
 
             // Close all editors to clean up
             await closeAllEditorsQuietly(driver);
+            await new Workbench().executeCommand('Debug: Remove All Breakpoints');
         });
 
         it('should hit a breakpoint in the Rust source, inspect local variables, and continue', async function () {
@@ -720,10 +722,10 @@ describe('Hexana Run Configurations – Exports Panel', function () {
 
                     expect(varValues['a']).to.equal('3',
                         `Expected variable 'a' to have value 3, got ${varValues['a']}`);
-                                
+
                     expect(varValues['b']).to.equal('7',
                         `Expected variable 'b' to have value 7, got ${varValues['b']}`);
-                
+
                 } catch {
                     // Value inspection is best-effort — some LLDB/wasmtime
                     // versions may not expose values in the expected format.
@@ -749,6 +751,117 @@ describe('Hexana Run Configurations – Exports Panel', function () {
                 expect(debugElements.length).to.be.greaterThan(0,
                     'Expected debug session to be initiated (debug toolbar or debug-related UI element)');
             }
+        });
+
+        it('should open the local Rust source and verify exact parameter values at the breakpoint', async function () {
+            this.timeout(180_000);
+
+            // ── Step 1: Open the Rust source file and set a breakpoint ──
+
+            const workbench = new Workbench();
+            await workbench.executeCommand('File: Open File...');
+            await driver.sleep(1000);
+            await submitQuickInputPath(driver, DEBUG_RUST_SOURCE);
+            await driver.sleep(3000);
+
+            // Set a breakpoint on line 10: `let sum = a + b;`
+            const rustEditor = new TextEditor();
+            await rustEditor.toggleBreakpoint(10);
+            await driver.sleep(1000);
+            await screenshot('dwarf-source-remapping-breakpoint-set');
+
+            // ── Step 2: Open the DWARF wasm file and start a debug session ──
+
+            webview = await openWasmFile(DEBUG_DWARF_WASM);
+            await switchToExportsTab();
+            await screenshot('dwarf-source-remapping-exports-tab');
+
+            await clickFirstRunArrow();
+            await waitForDialog();
+            await screenshot('dwarf-source-remapping-debug-dialog');
+
+            await selectWasmtimeRuntime();
+
+            // Fill in argument fields for add(a, b) — two i32 params
+            const argInputs = await driver.findElements(By.css('.hexana-dialog-input'));
+            if (argInputs.length >= 2) {
+                await argInputs[0].clear();
+                await argInputs[0].sendKeys('3');
+                await argInputs[1].clear();
+                await argInputs[1].sendKeys('7');
+            }
+
+            await clickDialogDebug();
+            await driver.sleep(2000);
+
+            // Switch back from webview to interact with the debug UI
+            await webview.switchBack();
+
+            await screenshot('dwarf-source-remapping-after-debug-launch');
+
+            // ── Step 3: Wait for the breakpoint to be hit ──
+
+            const toolbar = await DebugToolbar.create(30_000);
+            await toolbar.waitForBreakPoint(30_000);
+
+            // A paused toolbar alone does not prove source navigation worked:
+            // LLDB can report an absolute path from the fixture author's machine.
+            const expectedSource = fs.realpathSync(DEBUG_RUST_SOURCE);
+            await driver.wait(async () => {
+                try {
+                    const openedSource = await new TextEditor().getFilePath();
+                    return fs.realpathSync(openedSource) === expectedSource;
+                } catch {
+                    return false;
+                }
+            }, 15_000, 'Debugger did not open the local Rust source at the breakpoint');
+            await screenshot('dwarf-source-remapping-breakpoint-hit');
+
+            // ── Step 4: Inspect local variables ──
+
+            const debugControl = await new ActivityBar().getViewControl('Run and Debug');
+            expect(debugControl, 'Run and Debug view control is missing').to.not.equal(undefined);
+            await debugControl!.openView();
+            const debugView = new DebugView();
+            let varValues: Record<string, string> = {};
+
+            await driver.wait(async () => {
+                try {
+                    const variablesSection = await debugView.getVariablesSection();
+                    const topItems = await variablesSection.getVisibleItems();
+                    for (const item of topItems) {
+                        if (await item.isExpandable() && !(await item.isExpanded())) {
+                            await item.expand();
+                        }
+                    }
+
+                    const values: Record<string, string> = {};
+                    for (const item of await variablesSection.getVisibleItems()) {
+                        try {
+                            const name = (await item.getVariableName()).replace(/\s*=$/, '').trim();
+                            if (name === 'a' || name === 'b') {
+                                values[name] = await item.getVariableValue();
+                            }
+                        } catch {
+                            // Scope headers do not have a variable name/value.
+                        }
+                    }
+                    varValues = values;
+                    return values['a'] !== undefined && values['b'] !== undefined;
+                } catch {
+                    return false;
+                }
+            }, 15_000, 'Expected local variables a and b at the Rust breakpoint');
+            await screenshot('dwarf-source-remapping-variable-values');
+
+            expect(varValues['a']).to.equal('3');
+            expect(varValues['b']).to.equal('7');
+
+            // ── Step 5: Continue execution ──
+
+            await toolbar.continue();
+            await driver.sleep(2000);
+            await screenshot('dwarf-source-remapping-after-continue');
         });
     });
 
