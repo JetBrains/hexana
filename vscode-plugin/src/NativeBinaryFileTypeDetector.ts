@@ -1,8 +1,8 @@
 import * as vscode from "vscode";
 
 /**
- * Magic-byte detector that identifies extensionless (or ambiguously-named) native
- * binary files and re-opens them with the Hexana custom editor.
+ * Magic-byte detector that identifies extensionless (or ambiguously-named) binary
+ * files and re-opens them with the Hexana custom editor.
  *
  * This is the VS Code equivalent of the IntelliJ `NativeBinaryFileTypeDetector`.
  * VS Code does not have a built-in content-based file-type detection API for custom
@@ -31,13 +31,14 @@ const COFF_MACHINE_TYPES = new Set([0x014C, 0x01C0, 0x01C4, 0x0200, 0x8664, 0xAA
 const KNOWN_EXTENSIONS = new Set([
     ".wasm", ".bin", ".elf", ".exe", ".so", ".o", ".a", ".dll", ".dylib",
     ".jar", ".zip", ".war", ".apk", ".class", ".dex", ".arsc", ".desc", ".protoset",
-    ".pcap", ".cap", ".pcapng",
+    ".pcap", ".cap", ".pcapng", ".parquet", ".arrow", ".arrows", ".pb",
+    ".tar", ".tgz", ".gz",
 ]);
 
 /**
- * Detects whether the given byte prefix matches a known native binary format.
+ * Detects whether the given byte prefix matches a binary format Hexana can open.
  * Returns true for ELF, Mach-O (thin and fat/universal), PE, static-library
- * archive, and COFF object files.
+ * archive, COFF object files, WebAssembly, pcap/pcapng, Parquet and Arrow IPC files.
  */
 export function isNativeBinary(bytes: Uint8Array): boolean {
     const len = bytes.length;
@@ -127,6 +128,23 @@ export function isNativeBinary(bytes: Uint8Array): boolean {
         if (bom === 0x1A2B3C4D || bom === 0x4D3C2B1A) {
             return true;
         }
+    }
+
+    // Parquet: "PAR1" (50 41 52 31). The magic also repeats at the tail, but this
+    // detector only ever receives a head prefix, so the head check stands alone —
+    // same call the IntelliJ `ColumnarBinaryFileTypeDetector` makes.
+    if (b0 === 0x50 && b1 === 0x41 && b2 === 0x52 && b3 === 0x31) {
+        return true;
+    }
+
+    // Arrow IPC file: "ARROW1" (41 52 52 4F 57 31). The Arrow *stream* format is
+    // deliberately not detected: its only marker is a 0xFFFFFFFF continuation word at
+    // offset 0, which any all-0xFF prefix would match. Streams reach the editor
+    // through the .arrow / .arrows extension instead.
+    if (len >= 6 &&
+        b0 === 0x41 && b1 === 0x52 && b2 === 0x52 && b3 === 0x4F &&
+        bytes[4] === 0x57 && bytes[5] === 0x31) {
+        return true;
     }
 
     return false;

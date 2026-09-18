@@ -9,9 +9,9 @@ import org.jetbrains.hexana.javabytecode.JavaConstantPool
 import org.jetbrains.hexana.javabytecode.JavaConstantPoolEntry
 import org.jetbrains.hexana.javabytecode.JavaMethodAccess
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
+import org.jetbrains.hexana.providers.ArrowBinaryProvider
 import org.jetbrains.hexana.providers.ArscBinaryProvider
 import org.jetbrains.hexana.providers.BinaryProvider
-import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.CoffBinaryProvider
 import org.jetbrains.hexana.providers.DexBinaryProvider
@@ -20,16 +20,16 @@ import org.jetbrains.hexana.providers.FatMachOBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.providers.ParquetBinaryProvider
 import org.jetbrains.hexana.providers.PcapBinaryProvider
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.ProtobufBinaryProvider
 import org.jetbrains.hexana.providers.StructureRange
 import org.jetbrains.hexana.providers.WasmBinaryProvider
-import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.providers.classifyArchiveMember
-import org.jetbrains.hexana.providers.nativeOrGenericBinaryProvider
+import org.jetbrains.hexana.providers.createBinaryProvider
 import org.jetbrains.hexana.pcap.PcapDissector
 import org.jetbrains.hexana.providers.NativeImageInfo
 import org.jetbrains.hexana.providers.sbom.CycloneDxParser
@@ -165,10 +165,12 @@ private suspend fun parse(workerScope: dynamic, requestId: String, input: ArrayB
     val startedAt = now()
     try {
         val bytes = input.toCommonByteBuffer()
-        val result = when (WasmBinaryProviderSelector.select(bytes.duplicate())) {
-            BinaryProviderType.Wasm -> corePresentation(WasmBinaryProvider(bytes), input.byteLength, startedAt)?.let(::WorkerPresentationResult)
-            BinaryProviderType.WasmComponent -> componentPresentation(WasmComponentBinaryProvider(bytes), input.byteLength, startedAt)?.let(::WorkerPresentationResult)
-            BinaryProviderType.Generic -> nonWasmPresentation(nativeOrGenericBinaryProvider(bytes, fileName), input.byteLength, startedAt, fileName)
+        // The shared factory picks the provider; the presentation is then chosen from
+        // what it built, so the worker never re-decides the format itself.
+        val result = when (val provider = createBinaryProvider(bytes, fileName)) {
+            is WasmBinaryProvider -> corePresentation(provider, input.byteLength, startedAt)?.let(::WorkerPresentationResult)
+            is WasmComponentBinaryProvider -> componentPresentation(provider, input.byteLength, startedAt)?.let(::WorkerPresentationResult)
+            else -> nonWasmPresentation(provider, input.byteLength, startedAt, fileName)
         } ?: return postError(workerScope, requestId, "PARSE_FAILED", "The input could not be parsed safely.")
         val sanitized = sanitizeParserWorkerPresentation(result.presentation)
         workerScope.postMessage(
@@ -193,11 +195,7 @@ private suspend fun runScript(
 ) {
     try {
         val bytes = input.toCommonByteBuffer()
-        val provider = when (WasmBinaryProviderSelector.select(bytes.duplicate())) {
-            BinaryProviderType.Wasm -> WasmBinaryProvider(bytes)
-            BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(bytes)
-            BinaryProviderType.Generic -> nativeOrGenericBinaryProvider(bytes, fileName)
-        }
+        val provider = createBinaryProvider(bytes, fileName)
         var outputLines = 0
         var outputChars = 0
         var truncated = false
@@ -560,6 +558,8 @@ private fun nonWasmFormat(provider: BinaryProvider): String = when (provider) {
     is PeBinaryProvider -> "pe"
     is CoffBinaryProvider -> "coff"
     is ArchiveBinaryProvider -> "archive"
+    is ParquetBinaryProvider -> "parquet"
+    is ArrowBinaryProvider -> "arrow"
     else -> "generic"
 }
 

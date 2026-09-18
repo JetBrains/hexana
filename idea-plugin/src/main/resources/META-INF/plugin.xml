@@ -210,10 +210,12 @@
                   fieldName="INSTANCE"
                   extensions="parquet"/>
 
+        <!-- `arrows` is the conventional extension for the Arrow IPC *stream*
+             format; the `arrow` file magic detector only matches IPC *files*. -->
         <fileType name="arrow"
                   implementationClass="org.jetbrains.hexana.ArrowFileType"
                   fieldName="INSTANCE"
-                  extensions="arrow"/>
+                  extensions="arrow;arrows"/>
 
         <fileType name="tar"
                   implementationClass="org.jetbrains.hexana.TarFileType"

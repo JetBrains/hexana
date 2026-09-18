@@ -259,7 +259,7 @@ class HexanaFileEditor(
         // because there is no file for a script to reach a sibling of.
         binarySourcePath = sourcePath
 
-        binaryProvider = resolveProvider(ext, inMemoryBuffer, commonBuffer, sourcePath)
+        binaryProvider = resolveProvider(myFile.name, inMemoryBuffer, commonBuffer, sourcePath)
 
         // Compute binary identity and wire up the gutter model asynchronously.
         // In-memory buffers (HexanaBinaryVirtualFile) have no backing file to hash.
@@ -626,25 +626,37 @@ class HexanaFileEditor(
         }
     }
 
+    /**
+     * Chooses the [BinaryProvider] this editor is built on.
+     *
+     * The format decision itself belongs to [resolveBinaryProviderKind], which every
+     * Hexana host shares, so a format the provider layer supports shows the same tabs
+     * in the IDE, in VS Code and in the browser. What stays here is the part that is
+     * genuinely IntelliJ's: gzip inflation (which has to be stashed on the
+     * [VirtualFile] so the WAT view reads the inflated bytes too), and the
+     * `VirtualFile`-backed provider subclasses the WAT side view needs.
+     *
+     * [fileName] is the name the extension is taken from. It is a parameter rather
+     * than `myFile.name` because the `.gz` branch recurses with the stripped name, so
+     * `foo.parquet.gz` resolves by the inner `parquet`.
+     */
     private fun resolveProvider(
-        ext: String?,
+        fileName: String,
         inMemoryBuffer: CommonByteBuffer?,
         commonBuffer: CommonByteBuffer,
         sourcePath: String?
     ): BinaryProvider {
+        val ext = fileName.substringAfterLast('.', "").lowercase().ifEmpty { null }
+
+        // The "Open As Protobuf Message" action hands the editor an in-memory file
+        // whose *file type* says Protobuf Message; a wire message has no magic and
+        // that file has no `.pb` name either, so this one cannot be expressed as bytes
+        // plus a name the way the shared factory needs.
         if (myFile.fileType is ProtobufMessageFileType) {
             return ProtobufMessageBinaryProvider(commonBuffer)
         }
 
-        if (ext == "parquet" || myFile.fileType is ParquetFileType || (ext == null && isParquetMagic(commonBuffer))) {
-            return ParquetBinaryProvider(commonBuffer, sourcePath)
-        }
-
-        if (ext == "arrow" || myFile.fileType is ArrowFileType || (ext == null && isArrowFileMagic(commonBuffer))) {
-            return ArrowBinaryProvider(commonBuffer, ArrowFormat.FILE, sourcePath)
-        }
-
-        if (ext == "tgz" || myFile.name.endsWith(".tar.gz", ignoreCase = true)) {
+        if (ext == "tgz" || fileName.endsWith(".tar.gz", ignoreCase = true)) {
             val decompressed = decompressGzip(commonBuffer)
             return if (decompressed != null) {
                 TarBinaryProvider(decompressed)
@@ -662,28 +674,14 @@ class HexanaFileEditor(
             // VirtualFile-backed providers (WasmBinaryVirtualFileProvider etc.)
             // read the decompressed content instead of the raw gzip stream.
             myFile.putUserData(HexanaBinaryVirtualFile.BUFFER_KEY, decompressed)
-            val innerName = myFile.name.removeSuffix(".gz").removeSuffix(".GZ")
-            val innerExt = innerName.substringAfterLast('.', "").lowercase().ifEmpty { null }
-            return resolveProvider(innerExt, decompressed, decompressed, sourcePath)
-        }
-
-        if (ext != "wasm") {
-            return nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
-        }
-
-        // In-memory files (nested modules/components opened from a table tab)
-        // take the same virtual-file-provider path as disk files below —
-        // toCommonByteBuffer() serves their BUFFER_KEY bytes — so their own
-        // tabs get enriched too and nesting opens recursively. Only the
-        // unparseable case keeps the plain-provider fallback.
-        if (inMemoryBuffer != null && WasmBinaryProviderSelector.select(commonBuffer) == BinaryProviderType.Generic) {
-            return nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
+            val innerName = fileName.removeSuffix(".gz").removeSuffix(".GZ")
+            return resolveProvider(innerName, decompressed, decompressed, sourcePath)
         }
 
         val ref = AtomicReference(HexanaSourceLocationProvider.EMPTY)
 
-        return when (WasmBinaryProviderSelector.select(commonBuffer)) {
-            BinaryProviderType.Wasm -> {
+        return when (resolveBinaryProviderKind(commonBuffer, fileName)) {
+            BinaryProviderKind.Wasm -> {
                 object : WasmBinaryVirtualFileProvider(myFile) {
                     override suspend fun createTextEditor(file: VirtualFile): TextEditor {
                         return withContext(Dispatchers.EDT) {
@@ -732,7 +730,7 @@ class HexanaFileEditor(
                 }.also { initSourceLocationProvider(ref, it) }
             }
 
-            BinaryProviderType.WasmComponent -> {
+            BinaryProviderKind.WasmComponent -> {
                 object : WasmComponentBinaryVirtualFileProvider(myFile) {
                     override suspend fun createTextEditor(file: VirtualFile): TextEditor {
                         return withContext(Dispatchers.EDT) {
@@ -758,7 +756,19 @@ class HexanaFileEditor(
                 }.also { initSourceLocationProvider(ref, null) }
             }
 
-            BinaryProviderType.Generic -> GenericBinaryVirtualFileProvider(myFile)
+            else -> {
+                val provider = createBinaryProvider(commonBuffer, sourcePath, fileName)
+                // A file nothing recognized keeps its VirtualFile: the description bar's
+                // reveal-in-files action and the structure view read it back off the
+                // provider, and a plain GenericBinaryProvider has nowhere to carry one.
+                // In-memory buffers (a nested module sliced out of a parent) are excluded
+                // — there is no file of their own to point at.
+                if (inMemoryBuffer == null && provider.javaClass == GenericBinaryProvider::class.java) {
+                    GenericBinaryVirtualFileProvider(myFile)
+                } else {
+                    provider
+                }
+            }
         }
     }
 

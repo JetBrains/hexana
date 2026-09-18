@@ -118,6 +118,46 @@ async function readRuntimeTargetsJson(scope?: vscode.Uri): Promise<string> {
 }
 
 /**
+ * Extensions an archive entry may carry for Hexana to open it in a tab of its own.
+ *
+ * Only a hint: an entry whose bytes carry a recognizable magic is opened regardless
+ * (see `isNativeBinary`). This list exists for the formats magic alone cannot
+ * identify — a tar has its `ustar` marker 257 bytes in, a Protobuf wire message has
+ * no marker at all — and it deliberately mirrors the `customEditors`
+ * `filenamePattern` in `package.json`, so an entry opens exactly when the same file
+ * on disk would.
+ */
+const OPENABLE_ENTRY_EXTENSIONS = new Set([
+    "wasm", "class", "dex", "arsc", "jar", "zip", "war", "apk", "bin",
+    "elf", "exe", "so", "o", "a", "dll", "dylib",
+    "tar", "tgz", "desc", "protoset", "pcap", "cap", "pcapng",
+    "parquet", "arrow", "arrows", "pb",
+]);
+
+/**
+ * Name the contents of a gzipped `fileName` should be presented under, or `null`
+ * when the file is not gzipped and must be passed through untouched.
+ *
+ * The webview picks a `BinaryProvider` from the bytes plus this name, so the name
+ * has to describe the *inflated* content: `module.wasm.gz` carries a `module.wasm`,
+ * and both `bundle.tgz` and `bundle.tar.gz` carry a `bundle.tar`, which is what makes
+ * the shared factory build a `TarBinaryProvider` and the Entries tab appear.
+ *
+ * Mirrors the `.gz` / `.tgz` / `.tar.gz` branches of the IntelliJ plugin's
+ * `HexanaFileEditor.resolveProvider`.
+ */
+function gzipInflatedName(fileName: string): string | null {
+    const lower = fileName.toLowerCase();
+    if (lower.endsWith(".tgz")) {
+        return `${fileName.substring(0, fileName.length - 4)}.tar`;
+    }
+    if (lower.endsWith(".gz")) {
+        return fileName.substring(0, fileName.length - 3);
+    }
+    return null;
+}
+
+/**
  * In-memory store for pending diff payloads keyed by a synthetic
  * `hexana-module:` URI.  When the user invokes "Compare WASM With…" we
  * store both byte arrays here and open a new custom editor tab whose URI
@@ -592,12 +632,13 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         let displayName: string | undefined = undefined;
 
         const fileName = path.basename(uri.fsPath);
-        if (fileName.toLowerCase().endsWith(".gz") && !fileName.toLowerCase().endsWith(".tar.gz")) {
+        const inflatedName = gzipInflatedName(fileName);
+        if (inflatedName !== null) {
             try {
                 data = zlib.gunzipSync(data);
-                displayName = fileName.substring(0, fileName.length - 3);
+                displayName = inflatedName;
             } catch (err) {
-                console.error("[Hexana] Failed to decompress .gz file:", err);
+                console.error("[Hexana] Failed to decompress gzipped file:", err);
             }
         }
 
@@ -1087,9 +1128,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const bytes = document.data.slice(dataOffset, dataOffset + size);
 
         const ext = childName.includes(".") ? childName.substring(childName.lastIndexOf(".") + 1).toLowerCase() : "";
-        const binaryExtensions = new Set(["wasm", "class", "dex", "jar", "zip", "war", "apk", "bin", "elf", "exe", "so", "o", "a", "dll", "dylib", "tar", "tgz"]);
 
-        if (binaryExtensions.has(ext) || isNativeBinary(bytes)) {
+        if (OPENABLE_ENTRY_EXTENSIONS.has(ext) || isNativeBinary(bytes)) {
             const parentKey = document.uri.toString();
             const moduleUri = vscode.Uri.parse(
                 `hexana-module:/${childName}?parent=${encodeURIComponent(parentKey)}&entry=${encodeURIComponent(name)}`,
@@ -1157,9 +1197,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
         // Check if the entry is a binary format we handle (wasm, class, jar, etc.)
         const ext = childName.includes(".") ? childName.substring(childName.lastIndexOf(".") + 1).toLowerCase() : "";
-        const binaryExtensions = new Set(["wasm", "class", "dex", "jar", "zip", "war", "apk", "bin", "elf", "exe", "so", "o", "a", "dll", "dylib"]);
 
-        if (binaryExtensions.has(ext) || isNativeBinary(bytes)) {
+        if (OPENABLE_ENTRY_EXTENSIONS.has(ext) || isNativeBinary(bytes)) {
             // Open as a binary in our custom editor.
             const parentKey = document.uri.toString();
             const moduleUri = vscode.Uri.parse(

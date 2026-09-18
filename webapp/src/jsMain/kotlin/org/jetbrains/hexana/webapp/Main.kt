@@ -33,13 +33,7 @@ internal fun interface LegacyWasmProviderFactory {
 }
 
 internal val defaultLegacyWasmProviderFactory = LegacyWasmProviderFactory { bytes, fileName ->
-    val buffer = bytes.toCommonByteBuffer()
-    buffer.position(0)
-    when (WasmBinaryProviderSelector.select(buffer)) {
-        BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
-        BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
-        else -> nativeOrGenericBinaryProvider(buffer, fileName)
-    }
+    createBinaryProvider(bytes.toCommonByteBuffer(), fileName)
 }
 
 @Composable

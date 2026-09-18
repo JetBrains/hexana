@@ -26,15 +26,8 @@ import kotlin.js.Promise
  * binary a script reached through `open(path)` reports the same `format`,
  * `structure` and tabs as it would if the user had opened it themselves.
  */
-internal fun scriptBinaryProvider(bytes: ByteArray, sourcePath: String?): BinaryProvider {
-    val buffer = bytes.toCommonByteBuffer()
-    buffer.position(0)
-    return when (WasmBinaryProviderSelector.select(buffer)) {
-        BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
-        BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
-        else -> nativeOrGenericBinaryProvider(buffer, sourcePath)
-    }
-}
+internal fun scriptBinaryProvider(bytes: ByteArray, sourcePath: String?): BinaryProvider =
+    createBinaryProvider(bytes.toCommonByteBuffer(), sourcePath)
 
 /** Executes a user script outside the Compose UI thread. */
 interface ScriptExecution {

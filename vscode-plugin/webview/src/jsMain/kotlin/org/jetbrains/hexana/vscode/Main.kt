@@ -193,12 +193,12 @@ fun BinaryEditorApp() {
             val buffer = remember(bytes) { bytes.toCommonByteBuffer() }
             buffer.position(0)
 
-            val provider = remember(bytes, filePath) {
-                when (WasmBinaryProviderSelector.select(buffer)) {
-                    BinaryProviderType.Wasm -> WasmBinaryProvider(buffer)
-                    BinaryProviderType.WasmComponent -> WasmComponentBinaryProvider(buffer)
-                    else -> nativeOrGenericBinaryProvider(buffer, filePath)
-                }
+            // `fileName` rather than `filePath` drives the extension-based half of the
+            // format decision: the host inflates a `.gz` before pushing it and reports
+            // the stripped name there, while `filePath` still points at the compressed
+            // file on disk.
+            val provider = remember(bytes, filePath, fileName) {
+                createBinaryProvider(buffer, sourcePath = filePath, fileName = fileName)
             }
 
             val extraTabs = remember(bytes, provider) {

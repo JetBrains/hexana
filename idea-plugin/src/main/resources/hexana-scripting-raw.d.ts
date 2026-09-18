@@ -2018,7 +2018,7 @@ interface WasmBinaryProvider extends BinaryProvider {
     byteOffset: number;
     byteSize: number;
     funcIdx?: number;
-    kind: "LOCALS_PARSE_FAILURE" | "UNKNOWN_OPCODE" | "CODE_ENTRY_CORRUPT" | "UNKNOWN_TYPE_BYTE" | "INIT_EXPR_PARSE_FAILURE" | "UNKNOWN_CORE_INSTANCE_TAG" | "CORE_INSTANCE_ENTRY_CORRUPT" | "SECTION_TRUNCATED" | "IMPORT_ENTRY_CORRUPT" | "EXPORT_ENTRY_CORRUPT" | "SECTION_ENTRY_CORRUPT";
+    kind: "LOCALS_PARSE_FAILURE" | "UNKNOWN_OPCODE" | "CODE_ENTRY_CORRUPT" | "UNKNOWN_TYPE_BYTE" | "INIT_EXPR_PARSE_FAILURE" | "UNKNOWN_CORE_INSTANCE_TAG" | "CORE_INSTANCE_ENTRY_CORRUPT" | "SECTION_TRUNCATED" | "SECTION_RESOLVE_FAILURE" | "IMPORT_ENTRY_CORRUPT" | "EXPORT_ENTRY_CORRUPT" | "SECTION_ENTRY_CORRUPT";
     message: string;
     sectionId: number;
     sectionName: string;
@@ -2102,6 +2102,7 @@ interface WasmBinaryProvider extends BinaryProvider {
   };
   sectionScanFailures: {
     byteOffset: number;
+    kind: "TRUNCATED" | "RESOLVER_FAILURE";
     message: string;
   }[];
   sharedBytes: {
@@ -3003,11 +3004,17 @@ interface WasmComponentBinaryProvider extends BinaryProvider {
     byteOffset: number;
     byteSize: number;
     funcIdx?: number;
-    kind: "LOCALS_PARSE_FAILURE" | "UNKNOWN_OPCODE" | "CODE_ENTRY_CORRUPT" | "UNKNOWN_TYPE_BYTE" | "INIT_EXPR_PARSE_FAILURE" | "UNKNOWN_CORE_INSTANCE_TAG" | "CORE_INSTANCE_ENTRY_CORRUPT" | "SECTION_TRUNCATED" | "IMPORT_ENTRY_CORRUPT" | "EXPORT_ENTRY_CORRUPT" | "SECTION_ENTRY_CORRUPT";
+    kind: "LOCALS_PARSE_FAILURE" | "UNKNOWN_OPCODE" | "CODE_ENTRY_CORRUPT" | "UNKNOWN_TYPE_BYTE" | "INIT_EXPR_PARSE_FAILURE" | "UNKNOWN_CORE_INSTANCE_TAG" | "CORE_INSTANCE_ENTRY_CORRUPT" | "SECTION_TRUNCATED" | "SECTION_RESOLVE_FAILURE" | "IMPORT_ENTRY_CORRUPT" | "EXPORT_ENTRY_CORRUPT" | "SECTION_ENTRY_CORRUPT";
     message: string;
     sectionId: number;
     sectionName: string;
     typeIdx?: number;
+  }[];
+  parseResult: WasmParseResult;
+  sectionScanFailures: {
+    byteOffset: number;
+    kind: "TRUNCATED" | "RESOLVER_FAILURE";
+    message: string;
   }[];
   sharedBytes: {
     indices: {
@@ -9033,16 +9040,16 @@ interface ParseProblem {
   byteOffset: number;
   byteSize: number;
   funcIdx?: number;
-  kind: "LOCALS_PARSE_FAILURE" | "UNKNOWN_OPCODE" | "CODE_ENTRY_CORRUPT" | "UNKNOWN_TYPE_BYTE" | "INIT_EXPR_PARSE_FAILURE" | "UNKNOWN_CORE_INSTANCE_TAG" | "CORE_INSTANCE_ENTRY_CORRUPT" | "SECTION_TRUNCATED" | "IMPORT_ENTRY_CORRUPT" | "EXPORT_ENTRY_CORRUPT" | "SECTION_ENTRY_CORRUPT";
+  kind: "LOCALS_PARSE_FAILURE" | "UNKNOWN_OPCODE" | "CODE_ENTRY_CORRUPT" | "UNKNOWN_TYPE_BYTE" | "INIT_EXPR_PARSE_FAILURE" | "UNKNOWN_CORE_INSTANCE_TAG" | "CORE_INSTANCE_ENTRY_CORRUPT" | "SECTION_TRUNCATED" | "SECTION_RESOLVE_FAILURE" | "IMPORT_ENTRY_CORRUPT" | "EXPORT_ENTRY_CORRUPT" | "SECTION_ENTRY_CORRUPT";
   message: string;
   sectionId: number;
   sectionName: string;
   typeIdx?: number;
-  copy(kind: "LOCALS_PARSE_FAILURE" | "UNKNOWN_OPCODE" | "CODE_ENTRY_CORRUPT" | "UNKNOWN_TYPE_BYTE" | "INIT_EXPR_PARSE_FAILURE" | "UNKNOWN_CORE_INSTANCE_TAG" | "CORE_INSTANCE_ENTRY_CORRUPT" | "SECTION_TRUNCATED" | "IMPORT_ENTRY_CORRUPT" | "EXPORT_ENTRY_CORRUPT" | "SECTION_ENTRY_CORRUPT", sectionId: number, sectionName: string, funcIdx: number | null, typeIdx: number | null, byteOffset: number, byteSize: number, message: string): {
+  copy(kind: "LOCALS_PARSE_FAILURE" | "UNKNOWN_OPCODE" | "CODE_ENTRY_CORRUPT" | "UNKNOWN_TYPE_BYTE" | "INIT_EXPR_PARSE_FAILURE" | "UNKNOWN_CORE_INSTANCE_TAG" | "CORE_INSTANCE_ENTRY_CORRUPT" | "SECTION_TRUNCATED" | "SECTION_RESOLVE_FAILURE" | "IMPORT_ENTRY_CORRUPT" | "EXPORT_ENTRY_CORRUPT" | "SECTION_ENTRY_CORRUPT", sectionId: number, sectionName: string, funcIdx: number | null, typeIdx: number | null, byteOffset: number, byteSize: number, message: string): {
     byteOffset: number;
     byteSize: number;
     funcIdx?: number;
-    kind: "LOCALS_PARSE_FAILURE" | "UNKNOWN_OPCODE" | "CODE_ENTRY_CORRUPT" | "UNKNOWN_TYPE_BYTE" | "INIT_EXPR_PARSE_FAILURE" | "UNKNOWN_CORE_INSTANCE_TAG" | "CORE_INSTANCE_ENTRY_CORRUPT" | "SECTION_TRUNCATED" | "IMPORT_ENTRY_CORRUPT" | "EXPORT_ENTRY_CORRUPT" | "SECTION_ENTRY_CORRUPT";
+    kind: "LOCALS_PARSE_FAILURE" | "UNKNOWN_OPCODE" | "CODE_ENTRY_CORRUPT" | "UNKNOWN_TYPE_BYTE" | "INIT_EXPR_PARSE_FAILURE" | "UNKNOWN_CORE_INSTANCE_TAG" | "CORE_INSTANCE_ENTRY_CORRUPT" | "SECTION_TRUNCATED" | "SECTION_RESOLVE_FAILURE" | "IMPORT_ENTRY_CORRUPT" | "EXPORT_ENTRY_CORRUPT" | "SECTION_ENTRY_CORRUPT";
     message: string;
     sectionId: number;
     sectionName: string;
@@ -9990,9 +9997,11 @@ interface SchemaElement {
 
 interface SectionScanFailure {
   byteOffset: number;
+  kind: "TRUNCATED" | "RESOLVER_FAILURE";
   message: string;
-  copy(byteOffset: number, message: string): {
+  copy(byteOffset: number, message: string, kind: "TRUNCATED" | "RESOLVER_FAILURE"): {
     byteOffset: number;
+    kind: "TRUNCATED" | "RESOLVER_FAILURE";
     message: string;
   };
 }

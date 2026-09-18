@@ -51,6 +51,7 @@ class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
             file.extension.equals("arsc", ignoreCase = true) ||
             file.extension.equals("parquet", ignoreCase = true) ||
             file.extension.equals("arrow", ignoreCase = true) ||
+            file.extension.equals("arrows", ignoreCase = true) ||
             file.extension.equals("gz", ignoreCase = true)
     }
 

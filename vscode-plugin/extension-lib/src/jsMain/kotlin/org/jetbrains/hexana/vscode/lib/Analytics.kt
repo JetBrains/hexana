@@ -6,9 +6,9 @@ import org.jetbrains.hexana.analytics.*
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormatDetector
-import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.BinaryProviderKind
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
-import org.jetbrains.hexana.shared.detectBinaryType
+import org.jetbrains.hexana.providers.resolveBinaryProviderKind
 
 /** Safely converts a JS [Double] to [Long], clamping NaN, Infinity, and negative values to 0. */
 private fun Double.safeToLong(): Long =
@@ -82,17 +82,24 @@ fun captureBinaryOpened(fileName: String, bytes: ByteArray) {
 
 /**
  * Resolves the analytics [HexanaEvent.BinaryFormat] from file content,
- * mirroring the IDE plugin's `binaryFormatOf`: Wasm magic first, then Java
- * class by content magic, then native formats, then archive by extension,
- * else GENERIC. `.a` static
+ * mirroring the IDE plugin's `binaryFormatOf`: whatever the shared provider factory
+ * resolves the bytes to first, then Java class by content magic, then native formats,
+ * then archive by extension, else GENERIC. `.a` static
  * archives ([NativeBinaryFormat.Archive]) fall through to GENERIC, matching
  * the IDE.
  */
 private fun resolveBinaryFormat(fileName: String, bytes: ByteArray): HexanaEvent.BinaryFormat {
-    when (detectBinaryType(bytes)) {
-        BinaryProviderType.Wasm -> return HexanaEvent.BinaryFormat.WASM
-        BinaryProviderType.WasmComponent -> return HexanaEvent.BinaryFormat.WASM_COMPONENT
-        BinaryProviderType.Generic -> Unit
+    // The same call the editor makes, so the reported format is the one the user is
+    // actually looking at rather than a second, drifting classification.
+    when (resolveBinaryProviderKind(bytes.toCommonByteBuffer(), fileName)) {
+        BinaryProviderKind.Wasm -> return HexanaEvent.BinaryFormat.WASM
+        BinaryProviderKind.WasmComponent -> return HexanaEvent.BinaryFormat.WASM_COMPONENT
+        BinaryProviderKind.Parquet -> return HexanaEvent.BinaryFormat.PARQUET
+        is BinaryProviderKind.Arrow -> return HexanaEvent.BinaryFormat.ARROW_IPC
+        // A Protobuf message is only ever reached through an explicit `.pb` open, not
+        // auto-detected, so it reports GENERIC exactly as it does in the IDE.
+        BinaryProviderKind.ProtobufMessage,
+        BinaryProviderKind.NativeOrGeneric -> Unit
     }
     // Class check must precede the native detector: both key off 0xCAFEBABE
     // (Java class file vs Mach-O universal), and the editor's provider
