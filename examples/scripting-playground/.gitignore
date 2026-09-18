@@ -1,0 +1,4 @@
+# The repo-root .gitignore excludes **/build/ (Gradle output dirs).
+# This build/ holds checked-in fixture build scripts, so re-include it.
+!build/
+!build/**
