@@ -21,10 +21,18 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.scripting.ScriptOutputBlock
 import org.jetbrains.hexana.shared.scripting.filterScriptOutputBlocks
@@ -53,10 +61,11 @@ class ScriptPanel(
     binaryFileName: String? = null,
     binaryFilePath: String? = null,
     project: Project? = null,
+    hexViewState: HexViewStateHolder? = null,
 ) : Panel(
     description = scriptPath.substringAfterLast('/'),
     render = {
-        ScriptTabContent(scriptPath, binaryProvider, binaryFileName, binaryFilePath, project)
+        ScriptTabContent(scriptPath, binaryProvider, binaryFileName, binaryFilePath, project, hexViewState)
     },
 )
 
@@ -67,6 +76,7 @@ internal fun ScriptTabContent(
     binaryFileName: String? = null,
     binaryFilePath: String? = null,
     project: Project? = null,
+    hexViewState: HexViewStateHolder? = null,
 ) {
     val outputLines = remember(scriptPath) { mutableStateListOf<String>() }
     var isRunning by remember(scriptPath) { mutableStateOf(true) }
@@ -77,6 +87,38 @@ internal fun ScriptTabContent(
     // and re-flatten everything twenty times a second.
     var outputRevision by remember(scriptPath) { mutableIntStateOf(0) }
 
+    // Script-file version counter: incremented on every VFS change to the script file.
+    var scriptVersion by remember(scriptPath) { mutableIntStateOf(0) }
+
+    // Register a VFS listener on the script file for staleness tracking.
+    // Removed in DisposableEffect onDispose.
+    DisposableEffect(scriptPath) {
+        val connection = ApplicationManager.getApplication().messageBus.connect()
+        connection.subscribe(
+            VirtualFileManager.VFS_CHANGES,
+            object : BulkFileListener {
+                override fun after(events: List<VFileEvent>) {
+                    val scriptUrl = LocalFileSystem.getInstance()
+                        .findFileByPath(scriptPath)?.url
+                    if (events.any { it.file?.url == scriptUrl }) {
+                        scriptVersion++
+                    }
+                }
+            },
+        )
+        onDispose { connection.disconnect() }
+    }
+
+    // Current script text hash, used for staleness detection in the compound view.
+    var scriptTextHash by remember(scriptPath) { mutableStateOf("") }
+
+    // Result from the session-based executor: switches between legacy and compound mode.
+    var sessionResult by remember(scriptPath, refreshKey) {
+        mutableStateOf<ScriptSessionRunResult?>(null)
+    }
+    // Stamp: version+hash at the time of the last successful run.
+    var stamp by remember(scriptPath) { mutableStateOf<ScriptRunStamp?>(null) }
+
     LaunchedEffect(scriptPath, refreshKey) {
         outputLines.clear()
         // Re-segment immediately: the parsed blocks are remembered against this
@@ -84,6 +126,13 @@ internal fun ScriptTabContent(
         // until the first drain bumps it.
         outputRevision++
         isRunning = true
+        sessionResult = null
+
+        // Compute the current script text hash before running.
+        val currentHash = kotlinx.coroutines.withContext(Dispatchers.IO) { hashScriptFile(scriptPath) }
+        scriptTextHash = currentHash
+        // Stamp the run with the current version and hash.
+        stamp = ScriptRunStamp(version = scriptVersion, textHash = currentHash)
 
         // The runner streams from its own worker thread. Lines are buffered and
         // drained in batches rather than written to the snapshot list one at a
@@ -98,8 +147,19 @@ internal fun ScriptTabContent(
         }
 
         val execution = launch(Dispatchers.IO) {
-            ScriptExecutor.execute(scriptPath, binaryProvider, binaryFileName, binaryFilePath) { line ->
-                synchronized(pending) { pending.add(line) }
+            val result = openScriptSession(
+                scriptPath = scriptPath,
+                binaryProvider = binaryProvider,
+                binaryFileName = binaryFileName,
+                binaryFilePath = binaryFilePath,
+                onLine = { line -> synchronized(pending) { pending.add(line) } },
+            )
+            // If the panel was disposed while eval ran, nothing will ever
+            // compose the session, so close it here instead of leaking it.
+            if (!isActive) {
+                result.session?.close()
+            } else {
+                sessionResult = result
             }
         }
         var drains = 0
@@ -114,45 +174,40 @@ internal fun ScriptTabContent(
         isRunning = false
     }
 
-    // Re-segmenting as output arrives keeps a streaming table growing in place
-    // instead of appearing only once the script finishes.
+    // Current script text hash for staleness comparison (updated while running and on version bump).
+    LaunchedEffect(scriptVersion) {
+        scriptTextHash = kotlinx.coroutines.withContext(Dispatchers.IO) { hashScriptFile(scriptPath) }
+    }
+
+    val currentResult = sessionResult
+
+    // Compound path: script registered at least one slice.
+    if (currentResult != null && currentResult.mode == ScriptRenderMode.Compound) {
+        val session = currentResult.session
+        if (session != null) {
+            val stampSnapshot = stamp
+            Column(modifier = Modifier.fillMaxSize()) {
+                ScriptHeader(scriptPath, project, isRunning, onRefresh = { refreshKey++ })
+                ScriptCompoundView(
+                    session = session,
+                    scriptTextHash = scriptTextHash,
+                    stampHash = stampSnapshot?.textHash ?: "",
+                    onRecompute = { refreshKey++ },
+                    hexState = hexViewState,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            return
+        }
+    }
+
+    // Legacy path: no slices, or still running.
     val blocks = remember(outputRevision) { parseScriptOutputBlocks(outputLines.toList()) }
     val visibleBlocks = remember(blocks, filter.text) { filterScriptOutputBlocks(blocks, filter.text) }
-
-    // A script whose entire output is one table gets the full table component,
-    // with sorting, an ID column and its own search — that is the shape most
-    // analysis scripts produce, and nothing about it needs a document layout.
     val singleTable = blocks.singleOrNull() as? ScriptOutputBlock.Table
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(
-                onClick = { refreshKey++ },
-                modifier = Modifier.size(24.dp),
-                enabled = !isRunning,
-            ) {
-                Icon(
-                    AllIconsKeys.Actions.Refresh,
-                    contentDescription = "Refresh",
-                    iconClass = AllIcons::class.java,
-                )
-            }
-            if (project != null) {
-                // Opening the script from here attaches the type definitions
-                // first, so the editor resolves the scripting globals.
-                Link(
-                    text = scriptPath,
-                    onClick = { ScriptTemplateWriter.openForEditing(project, scriptPath) },
-                    modifier = Modifier.padding(start = 4.dp).weight(1f),
-                )
-            } else {
-                Text(
-                    text = scriptPath,
-                    modifier = Modifier.padding(start = 4.dp).weight(1f),
-                    fontSize = 13.sp,
-                )
-            }
-        }
+        ScriptHeader(scriptPath, project, isRunning, onRefresh = { refreshKey++ })
 
         if (isRunning && outputLines.isEmpty()) {
             Text(
@@ -190,6 +245,44 @@ internal fun ScriptTabContent(
             // Outside the scrolling document, so it stays visible while output is
             // still arriving.
             RunningNote(isRunning)
+        }
+    }
+}
+
+/** Common header row: refresh button + script path link. */
+@Composable
+private fun ScriptHeader(
+    scriptPath: String,
+    project: Project?,
+    isRunning: Boolean,
+    onRefresh: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(
+            onClick = onRefresh,
+            modifier = Modifier.size(24.dp),
+            enabled = !isRunning,
+        ) {
+            Icon(
+                AllIconsKeys.Actions.Refresh,
+                contentDescription = "Refresh",
+                iconClass = AllIcons::class.java,
+            )
+        }
+        if (project != null) {
+            // Opening the script from here attaches the type definitions
+            // first, so the editor resolves the scripting globals.
+            Link(
+                text = scriptPath,
+                onClick = { ScriptTemplateWriter.openForEditing(project, scriptPath) },
+                modifier = Modifier.padding(start = 4.dp).weight(1f),
+            )
+        } else {
+            Text(
+                text = scriptPath,
+                modifier = Modifier.padding(start = 4.dp).weight(1f),
+                fontSize = 13.sp,
+            )
         }
     }
 }
@@ -403,6 +496,7 @@ internal fun createScriptPanel(
     binaryFileName: String? = null,
     binaryFilePath: String? = null,
     project: Project? = null,
+    hexViewState: HexViewStateHolder? = null,
 ): ScriptPanel {
-    return ScriptPanel(scriptPath, binaryProvider, binaryFileName, binaryFilePath, project)
+    return ScriptPanel(scriptPath, binaryProvider, binaryFileName, binaryFilePath, project, hexViewState)
 }
