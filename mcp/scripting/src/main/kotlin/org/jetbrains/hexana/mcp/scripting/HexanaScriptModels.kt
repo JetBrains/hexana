@@ -2,6 +2,8 @@ package org.jetbrains.hexana.mcp.scripting
 
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.model.binaries.BinaryModuleIdentityResult
+import org.jetbrains.hexana.shared.scripting.ScriptConsoleEntry
+import org.jetbrains.hexana.shared.scripting.SliceRegistrationInfo
 
 sealed interface HexanaScriptSource {
     data class Inline(
@@ -97,6 +99,10 @@ data class HexanaScriptResult(
     val sourceName: String,
     val sourcePath: String?,
     val durationMillis: Long,
+    /** Static metadata for slices registered via `hexana.defineSlice(...)`. */
+    val slices: List<SliceRegistrationInfo> = emptyList(),
+    /** Console entries emitted via `console.log/error/debug` during the run. */
+    val console: List<ScriptConsoleEntry> = emptyList(),
 ) {
     val success: Boolean
         get() = status == HexanaScriptStatus.SUCCESS

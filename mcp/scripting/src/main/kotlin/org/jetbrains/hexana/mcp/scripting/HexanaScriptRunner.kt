@@ -14,7 +14,10 @@ import org.jetbrains.hexana.mcp.model.binaries.BinaryModuleIdentityResult
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.scripting.ScriptOpenPolicy
 import org.jetbrains.hexana.shared.scripting.ScriptOutput
+import org.jetbrains.hexana.shared.scripting.SCRIPT_CONSOLE_GLOBAL
+import org.jetbrains.hexana.shared.scripting.SCRIPT_HEXANA_GLOBAL
 import org.jetbrains.hexana.shared.scripting.scriptGlobals
+import org.jetbrains.hexana.shared.scripting.toInfo
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -227,20 +230,11 @@ class HexanaScriptRunner private constructor(
         contextRef: AtomicReference<Context?>,
         started: Long,
     ): HexanaScriptResult {
+        val contributions = GraalScriptContributionCollector()
         val previousClassLoader = Thread.currentThread().contextClassLoader
         return try {
             Thread.currentThread().contextClassLoader = HexanaScriptRunner::class.java.classLoader
-            val context = Context.newBuilder("js")
-                .allowAllAccess(false)
-                .allowHostAccess(HostAccess.NONE)
-                .allowHostClassLookup { false }
-                .allowIO(IOAccess.NONE)
-                .allowCreateProcess(false)
-                .allowCreateThread(false)
-                .allowNativeAccess(false)
-                .allowExperimentalOptions(true)
-                .option("engine.WarnInterpreterOnly", "false")
-                .build()
+            val context = buildScriptContext()
             contextRef.set(context)
 
             context.use { ctx ->
@@ -260,7 +254,12 @@ class HexanaScriptRunner private constructor(
                 for ((name, value) in globals) {
                     bindings.putMember(name, ScriptValueGraalProxy.toGuest(value))
                 }
-                ctx.eval(Source.newBuilder("js", script.text, script.name).build())
+                // The v2 globals are host-bound on top of the pinned v1 set:
+                // Graal-native proxies receive raw Values for defineSlice and console.
+                bindings.putMember(SCRIPT_HEXANA_GLOBAL, contributions.buildGraalHexanaProxy())
+                bindings.putMember(SCRIPT_CONSOLE_GLOBAL, contributions.buildGraalConsoleProxy())
+                val evalResult = ctx.eval(Source.newBuilder("js", script.text, script.name).build())
+                detectAsyncOutputLost(evalResult, output)
             }
 
             HexanaScriptResult(
@@ -271,6 +270,8 @@ class HexanaScriptRunner private constructor(
                 sourceName = script.name,
                 sourcePath = script.path,
                 durationMillis = elapsedMillis(started),
+                slices = contributions.slices.map { it.toInfo() },
+                console = contributions.console.toList(),
             )
         } catch (error: PolyglotException) {
             val diagnostic = error.toScriptDiagnostic()
@@ -282,6 +283,8 @@ class HexanaScriptRunner private constructor(
                 sourceName = script.name,
                 sourcePath = script.path,
                 durationMillis = elapsedMillis(started),
+                slices = contributions.slices.map { it.toInfo() },
+                console = contributions.console.toList(),
             )
         } catch (error: Exception) {
             internalErrorResult(
@@ -295,6 +298,51 @@ class HexanaScriptRunner private constructor(
         } finally {
             contextRef.set(null)
             Thread.currentThread().contextClassLoader = previousClassLoader
+        }
+    }
+
+    /**
+     * Builds a sandboxed GraalJS [Context]. Extracted so [executeInContext] and
+     * session mode share identical sandbox settings.
+     */
+    internal fun buildScriptContext(): Context = Context.newBuilder("js")
+        .allowAllAccess(false)
+        .allowHostAccess(HostAccess.NONE)
+        .allowHostClassLookup { false }
+        .allowIO(IOAccess.NONE)
+        .allowCreateProcess(false)
+        .allowCreateThread(false)
+        .allowNativeAccess(false)
+        .allowExperimentalOptions(true)
+        .option("engine.WarnInterpreterOnly", "false")
+        .build()
+
+    /**
+     * If [value] looks like a thenable whose then-callback has not yet fired,
+     * emits an ASYNC_OUTPUT_LOST warning diagnostic.
+     *
+     * GraalJS does not drain microtasks after [Context.eval] in this sandbox
+     * configuration (no event loop, no explicit microtask pump), so an
+     * immediately-resolved promise also appears as un-settled from the Kotlin
+     * side. The detection therefore fires on any thenable — including
+     * `Promise.resolve(...)` — which is intentional and documented in the tests.
+     *
+     * The check is wrapped in a broad try/catch so it can never fail a run.
+     */
+    internal fun detectAsyncOutputLost(value: org.graalvm.polyglot.Value?, output: ScriptOutputCollector) {
+        try {
+            if (value != null && value.hasMembers() && value.hasMember("then") && value.canInvokeMember("then")) {
+                output.addDiagnostic(
+                    HexanaScriptDiagnostic(
+                        code = "ASYNC_OUTPUT_LOST",
+                        message = "Script returned a Promise or thenable. " +
+                            "Async output will not be captured; move async work into a synchronous top-level call.",
+                        severity = HexanaScriptDiagnosticSeverity.WARNING,
+                    )
+                )
+            }
+        } catch (_: Exception) {
+            // Detection must never fail the run.
         }
     }
 
@@ -454,12 +502,50 @@ class HexanaScriptRunner private constructor(
             value.contains("Java.type", ignoreCase = true)
     }
 
+    /**
+     * Opens a persistent script session, keeping the GraalJS context alive so
+     * that registered slice [rows] functions can be called after the initial eval.
+     *
+     * @param source script to evaluate
+     * @param binaryProvider binary to expose as `binary`
+     * @param fileName file name of the binary, surfaced as `binary.name`
+     * @param filePath path of the binary on disk, surfaced as `binary.path`
+     * @param onLine invoked for every output line as it is emitted during eval
+     */
+    fun openSession(
+        source: HexanaScriptSource,
+        binaryProvider: BinaryProvider,
+        fileName: String? = null,
+        filePath: String? = null,
+        onLine: ((String) -> Unit)? = null,
+    ): HexanaScriptSession {
+        val loadedScript = when (val script = loadScript(source)) {
+            is ScriptLoadResult.Loaded -> script.script
+            is ScriptLoadResult.Failed -> return HexanaScriptSession.dead(script.result)
+        }
+        return HexanaScriptSession.start(
+            runner = this,
+            script = loadedScript,
+            binaryProvider = binaryProvider,
+            fileName = fileName,
+            filePath = filePath,
+            limits = limits,
+            allowedFilePolicy = allowedFilePolicy,
+            onLine = onLine,
+        )
+    }
+
+    // Internal helpers exposed to HexanaScriptSession
+
+    internal fun PolyglotException.mapToScriptDiagnostic(): HexanaScriptDiagnostic =
+        toScriptDiagnostic()
+
     private sealed interface ScriptLoadResult {
         data class Loaded(val script: LoadedScript) : ScriptLoadResult
         data class Failed(val result: HexanaScriptResult) : ScriptLoadResult
     }
 
-    private data class LoadedScript(
+    internal data class LoadedScript(
         val text: String,
         val name: String,
         val path: String?,
@@ -510,7 +596,7 @@ private sealed interface ScriptFileReadResult {
     data object TooLarge : ScriptFileReadResult
 }
 
-private class ScriptOutputCollector(
+internal class ScriptOutputCollector(
     private val maxLines: Int,
     private val maxBytes: Int,
     private val onLine: ((String) -> Unit)? = null,
@@ -558,8 +644,13 @@ private class ScriptOutputCollector(
         )
 
     @Synchronized
-    fun diagnostics(): List<HexanaScriptDiagnostic> =
-        if (truncated) {
+    fun addDiagnostic(diagnostic: HexanaScriptDiagnostic) {
+        extraDiagnostics += diagnostic
+    }
+
+    @Synchronized
+    fun diagnostics(): List<HexanaScriptDiagnostic> {
+        val truncationDiag = if (truncated) {
             listOf(
                 HexanaScriptDiagnostic(
                     code = "OUTPUT_TRUNCATED",
@@ -570,6 +661,10 @@ private class ScriptOutputCollector(
         } else {
             emptyList()
         }
+        return truncationDiag + extraDiagnostics
+    }
+
+    private val extraDiagnostics = mutableListOf<HexanaScriptDiagnostic>()
 }
 
 private data class Utf8Prefix(
