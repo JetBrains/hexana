@@ -129,6 +129,7 @@ describe('DWARF command-palette retry', () => {
     for (const ErrorType of [
         webdriverError.TimeoutError,
         webdriverError.ElementNotInteractableError,
+        webdriverError.ElementClickInterceptedError,
         webdriverError.StaleElementReferenceError,
     ]) {
         it(`resets the palette before retrying ${ErrorType.name}`, async () => {

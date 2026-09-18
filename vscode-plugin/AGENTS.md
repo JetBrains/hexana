@@ -82,8 +82,9 @@ update `TableTabEnricher.kt`.
   Only replace a source path with an existing local file, clearing `sourceReference` when doing so.
 - Keep the original Wasmtime DWARF command-palette test alongside the strict source-remapping regression.
   Clean up debug sessions and breakpoints after each case so toggling a breakpoint cannot disable a prior one.
-  Its Run and Debug palette interaction makes at most three attempts for transient WebDriver failures and requires
-  the exact command; persistent failures must still fail the test. Do not retry debug assertions.
+  Its Run and Debug palette interaction requires the exact command and makes at most three attempts for transient
+  WebDriver failures, including clicks intercepted while the palette closes. Persistent failures must still fail
+  the test. Do not retry debug assertions.
 - The strict Wasmtime DWARF regression must verify local source navigation and parameter values after pausing; a visible
   toolbar or generic debug UI is not sufficient. Value assertions must not be swallowed by retry catches.
   Use the test utility `isSameFile` to compare the opened source with the fixture by filesystem identity

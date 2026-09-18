@@ -29,6 +29,7 @@ export async function retryCommandPaletteInteraction(
         } catch (error) {
             const transient = error instanceof webdriverError.TimeoutError
                 || error instanceof webdriverError.ElementNotInteractableError
+                || error instanceof webdriverError.ElementClickInterceptedError
                 || error instanceof webdriverError.StaleElementReferenceError;
             if (!transient || attempt === 3) {
                 throw error;
