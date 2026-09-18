@@ -17,6 +17,7 @@ class ScriptApiEntry(
     val summary: String,
     val example: String? = null,
     val displayPath: String? = null,
+    val deprecated: String? = null,
 )
 
 /**
@@ -74,6 +75,8 @@ object ScriptApiReference {
             summary = "Appends one line to the tab output, joining the arguments with a space.",
             example = "print(\"format:\", binary.format);",
             displayPath = "print(...values)",
+            deprecated = "Use console.log, console.error, or console.debug for diagnostics. " +
+                "Use table/row or hexana.defineSlice for tabular data.",
         ),
         ScriptApiEntry(
             name = "table",
@@ -440,6 +443,112 @@ object ScriptApiReference {
     /** The runnable starter script offered by "New script from template". */
     fun starterTemplate(): String = STARTER_TEMPLATE
 
+    /**
+     * Additional declarations for the v2 scripting globals (hexana, console) and slice types.
+     * These are host-bound globals not part of scriptGlobals(), so they live outside [globals] and [shapes].
+     * The [dts] function appends this block after the core declarations.
+     */
+    val v2Declarations: String = """
+        /** Column value type accepted by a slice definition. */
+        type SliceColumnType = "string" | "int" | "offset" | "funcidx" | "bool";
+
+        /** One column in a slice definition. */
+        interface SliceColumn {
+          /** Column header shown in the editor. */
+          name: string;
+          /** Data type for rendering and sorting. */
+          type: SliceColumnType;
+        }
+
+        /** One user-supplied parameter in a slice definition. */
+        interface SliceParam {
+          /** Parameter name used as a key in the params record passed to rows(). */
+          name: string;
+          /** Expected value type. */
+          type: SliceColumnType;
+          /** Default value applied when the user does not supply one. */
+          default?: string | number | boolean;
+        }
+
+        /** One row returned by a slice rows() callback. */
+        interface SliceRowData {
+          /** Byte offset used to highlight the row in the hex view. */
+          anchor?: number;
+          /** Cell values in column order. */
+          cells: (string | number | boolean | null)[];
+        }
+
+        /** Return value of a slice rows() callback. */
+        interface SliceRowsResult {
+          /** Rows for the current page. */
+          rows: SliceRowData[];
+          /** Offset to pass as paging.offset for the next page, or absent when done. */
+          nextOffset?: number;
+          /** Total row count across all pages, when known. */
+          total?: number;
+        }
+
+        /** Full specification passed to hexana.defineSlice(). */
+        interface SliceSpec {
+          /**
+           * Unique tab name. Must start with "user:". Registering the same name twice
+           * in one script is an error.
+           */
+          name: string;
+          /** Binary format ids this slice applies to. Absent means all formats. */
+          formats?: string[];
+          /** User-configurable parameters shown in the tab toolbar. */
+          params?: SliceParam[];
+          /** Column definitions, in the order they appear in the table. */
+          columns: SliceColumn[];
+          /**
+           * Callback that produces one page of rows. Called each time the user
+           * scrolls or changes a parameter.
+           */
+          rows(
+            binary: HexanaBinary,
+            params: Record<string, unknown>,
+            paging: { offset: number; limit: number },
+          ): SliceRowsResult;
+        }
+
+        /** The hexana host API available in every script tab. */
+        interface HexanaApi {
+          /**
+           * Registers a typed, paginated table tab. The name must start with "user:".
+           * Registering the same name twice in one script is an error.
+           */
+          defineSlice(spec: SliceSpec): void;
+          /** API version. Currently 2. */
+          readonly api: number;
+          /**
+           * Returns true when the named feature is available.
+           * Recognised values: "slices".
+           */
+          has(feature: string): boolean;
+        }
+
+        /** Diagnostics console available in every script tab. */
+        interface HexanaConsole {
+          /** Writes an info-level message to the diagnostics stream. */
+          log(...values: unknown[]): void;
+          /** Writes an error-level message to the diagnostics stream. */
+          error(...values: unknown[]): void;
+          /** Writes a debug-level message to the diagnostics stream. */
+          debug(...values: unknown[]): void;
+        }
+
+        /** The Hexana host API. Use hexana.defineSlice() to register custom table tabs. */
+        declare const hexana: HexanaApi;
+
+        /**
+         * Diagnostics console. Output here goes to a separate stream, not to the
+         * tab output that print() writes. Use console.log/error/debug for
+         * diagnostic messages; use table/row or hexana.defineSlice for tabular data.
+         */
+        declare const console: HexanaConsole;
+    """.trimIndent() + "\n"
+
     /** Renders the curated `hexana-scripting.d.ts`. */
     fun dts(): String = buildString {
         appendLine("// Hexana scripting API — the globals available in a custom script tab.")
@@ -479,11 +588,17 @@ object ScriptApiReference {
             appendLine("}")
             appendLine()
         }
+
+        append(v2Declarations)
     }
 
     private fun StringBuilder.appendDoc(entry: ScriptApiEntry, indent: String = "") {
         appendLine("$indent/**")
         appendWrapped(entry.summary, indent)
+        entry.deprecated?.let {
+            appendLine("$indent *")
+            appendLine("$indent * @deprecated $it")
+        }
         entry.example?.let {
             appendLine("$indent *")
             appendLine("$indent * @example $it")
