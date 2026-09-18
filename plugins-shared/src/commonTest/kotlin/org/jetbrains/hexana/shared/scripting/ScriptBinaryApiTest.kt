@@ -405,20 +405,23 @@ class ScriptBinaryApiTest {
     @Test
     fun unknownMembersFallThroughToTheProvider() {
         // This is what keeps scripts written against the pre-v1 surface working:
-        // `binary.exports` is not curated, so it resolves against the provider.
+        // members not on the curated list resolve against the provider.
+        // "sections" is still a fall-through; "exports" is now curated (v2 facade).
         val provider: BinaryProvider = wasmProvider()
         val binary = api(provider)
 
         assertSame(provider, binary.hostFallback)
-        assertTrue("exports" !in obj(binary).members, "'exports' must stay a fall-through member")
+        assertTrue("sections" !in obj(binary).members, "'sections' must stay a fall-through member")
     }
 
     @Test
     fun curatedNamesNeverShadowAProviderMemberSilently() {
         // Provider members that the curated surface would reshape are deliberately
         // left out; `structure` and `tab*` are the curated equivalents.
+        // "functions", "imports", and "exports" are now claimed by the v2 facade
+        // deliberately; the curated versions normalize the shape and add filtering.
         val curated = obj(api(wasmProvider())).members.keys
-        for (reserved in listOf("sections", "functions", "imports", "exports", "header", "symbols")) {
+        for (reserved in listOf("sections", "header", "symbols")) {
             assertTrue(
                 reserved !in curated,
                 "'$reserved' exists on providers and must not be claimed by the curated surface",

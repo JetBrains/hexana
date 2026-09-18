@@ -209,6 +209,32 @@ object ScriptApiReference {
                         "also resolved against it directly, so older scripts keep working.",
                     "if (binary.format === \"elf\") print(binary.raw.programHeaders.length);",
                 ),
+                ScriptApiEntry(
+                    "functions",
+                    "functions(options?: FunctionsQuery): FunctionsPage",
+                    "Paginated, filterable list of functions (Wasm only; other formats return an empty page). " +
+                        "Options: name (substring, case-insensitive), unnamed (boolean, only unresolved names), " +
+                        "minBodySize (number, code functions only), offset (number), limit (number, default 1000). " +
+                        "Returns { items, total, nextOffset? }.",
+                    "const page = binary.functions({ name: \"malloc\", limit: 50 });",
+                    displayPath = "binary.functions(options?)",
+                ),
+                ScriptApiEntry(
+                    "imports",
+                    "imports(): WasmImportEntry[]",
+                    "All import entries for Wasm binaries; other formats return an empty array. " +
+                        "Each entry: { module, name, kind, index }.",
+                    "binary.imports().filter(i => i.kind === \"func\").forEach(i => print(i.module, i.name));",
+                    displayPath = "binary.imports()",
+                ),
+                ScriptApiEntry(
+                    "exports",
+                    "exports(): WasmExportEntry[]",
+                    "All export entries for Wasm binaries; other formats return an empty array. " +
+                        "Each entry: { name, kind, index }.",
+                    "binary.exports().filter(e => e.kind === \"func\").forEach(e => print(e.name, e.index));",
+                    displayPath = "binary.exports()",
+                ),
             ),
         ),
         ScriptApiShape(
@@ -547,6 +573,70 @@ object ScriptApiReference {
          * diagnostic messages; use table/row or hexana.defineSlice for tabular data.
          */
         declare const console: HexanaConsole;
+
+        /** One function entry returned by binary.functions(). */
+        interface WasmFunctionItem {
+          /** Global function index (imports first, then code functions). */
+          funcidx: number;
+          /** Resolved name from the name section, or null when unnamed. */
+          name: string | null;
+          /** "import" for imported functions, "code" for locally defined ones. */
+          source: "import" | "code";
+          /** Import module name (imports only). */
+          importModule?: string;
+          /** Import field name (imports only). */
+          importName?: string;
+          /** Byte offset of the code body in the file (code functions only). */
+          codeOffset?: number;
+          /** Byte size of the code body (code functions only). */
+          codeSize?: number;
+        }
+
+        /** Paginated result returned by binary.functions(). */
+        interface FunctionsPage {
+          /** Functions in the current page. */
+          items: WasmFunctionItem[];
+          /** Total number of functions matching the query across all pages. */
+          total: number;
+          /** Pass as offset to get the next page; absent when this is the last page. */
+          nextOffset?: number;
+        }
+
+        /** Options accepted by binary.functions(). All fields are optional. */
+        interface FunctionsQuery {
+          /** Case-insensitive substring match on the resolved function name. */
+          name?: string;
+          /** When true, only functions without a resolved name are returned. */
+          unnamed?: boolean;
+          /** Only code functions whose body is at least this many bytes are returned. */
+          minBodySize?: number;
+          /** Zero-based start index into the filtered list. Default 0. */
+          offset?: number;
+          /** Maximum number of items to return. Default 1000. */
+          limit?: number;
+        }
+
+        /** One import entry returned by binary.imports(). */
+        interface WasmImportEntry {
+          /** Import module name. */
+          module: string;
+          /** Import field name. */
+          name: string;
+          /** Import kind: "func", "table", "memory", "global", "tag", or "extern". */
+          kind: string;
+          /** Index in the kind's index space (funcidx for "func" imports). */
+          index: number;
+        }
+
+        /** One export entry returned by binary.exports(). */
+        interface WasmExportEntry {
+          /** Export name. */
+          name: string;
+          /** Export kind: "func", "table", "memory", "global", "tag", or "extern". */
+          kind: string;
+          /** The index of the exported entity in its respective index space. */
+          index: number;
+        }
     """.trimIndent() + "\n"
 
     /** Renders the curated `hexana-scripting.d.ts`. */

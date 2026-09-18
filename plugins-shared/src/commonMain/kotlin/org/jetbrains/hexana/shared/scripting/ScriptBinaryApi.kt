@@ -98,6 +98,12 @@ fun scriptBinaryApi(
                     )
                 }
             },
+            // v2 facade: curated members that shadow the raw provider properties.
+            // scripts written against the pre-v1 surface used provider fall-through;
+            // these curated versions normalize the shape across hosts and add filtering.
+            "functions" to { scriptFunctionsValue(provider) },
+            "imports" to { scriptImportsValue(provider) },
+            "exports" to { scriptExportsValue(provider) },
             "raw" to { ScriptValue.Host(provider) },
         ),
         hostFallback = provider,
