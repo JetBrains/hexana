@@ -27,6 +27,7 @@ mcpKotlinSdk = "0.11.0"
 ktor = "3.4.1"
 slf4j = "2.0.17"
 r8 = "9.1.31"
+json-schema-validator = "1.5.6"
 
 [libraries]
 aircompressor = { module = "io.airlift:aircompressor", version.ref = "aircompressor" }
@@ -68,6 +69,7 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 r8 = { module = "com.android.tools:r8", version.ref = "r8" }
+networknt-json-schema-validator = { module = "com.networknt:json-schema-validator", version.ref = "json-schema-validator" }
 
 [bundles]
 graalvm = [

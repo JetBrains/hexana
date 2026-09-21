@@ -4,6 +4,7 @@ enum class ToolOutputFormat(val cliName: String) {
     JSON("json"),
     PRETTY("pretty"),
     RAW("raw"),
+    SARIF("sarif"),
     TABLE("table"),
     ;
 

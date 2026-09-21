@@ -866,6 +866,7 @@ private fun OutputConversionCapability.generatedCliOutputFormatNameOrNull(): Str
     when (this) {
         OutputConversionCapability.SemanticJson -> "JSON"
         OutputConversionCapability.Pretty -> "PRETTY"
+        OutputConversionCapability.Sarif -> "SARIF"
         OutputConversionCapability.Table -> "TABLE"
         OutputConversionCapability.RawText,
         OutputConversionCapability.RawBytes -> "RAW"

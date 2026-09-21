@@ -37,6 +37,7 @@ private val RunBinaryScriptResultClass = class_("RunBinaryScriptResult", kotlinP
     outputCapabilities(
         OutputConversionCapability.SemanticJson,
         OutputConversionCapability.McpWrapper,
+        OutputConversionCapability.Sarif,
         OutputConversionCapability.RawText,
     )
     string("status").describe("Script execution status.")

@@ -19,8 +19,14 @@ import org.jetbrains.hexana.cli.runtime.ToolOutputRenderRequest
 import org.jetbrains.hexana.cli.runtime.ToolOutputRenderer
 import org.jetbrains.hexana.cli.runtime.ToolRenderOptions
 import org.jetbrains.hexana.cli.runtime.ToolRuntimeContext
+import org.jetbrains.hexana.cli.scripting.sarif.BaselineStore
+import org.jetbrains.hexana.cli.scripting.sarif.SarifSourceResolver
+import org.jetbrains.hexana.cli.scripting.sarif.renderSarif
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.mcp.BinaryInput
+import org.jetbrains.hexana.mcp.BinaryInputLoader
+import org.jetbrains.hexana.mcp.HexanaAnalysisException
+import org.jetbrains.hexana.mcp.LoadedBinary
 import org.jetbrains.hexana.mcp.HexanaJson
 import org.jetbrains.hexana.mcp.model.scripting.RunBinaryScriptDiagnosticResult
 import org.jetbrains.hexana.mcp.model.scripting.RunBinaryScriptOutputResult
@@ -31,7 +37,15 @@ import org.jetbrains.hexana.mcp.scripting.HexanaScriptOutput
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptResult
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptRunner
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptSource
+import org.jetbrains.hexana.shared.scripting.CheckSeverity
+import org.jetbrains.hexana.shared.scripting.ConsoleSeverity
+import org.jetbrains.hexana.shared.scripting.FlagType
+import org.jetbrains.hexana.shared.scripting.ScriptConsoleEntry
+import org.jetbrains.hexana.shared.scripting.ScriptInvocation
+import org.jetbrains.hexana.shared.scripting.ScriptUsageError
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
 
 public const val RUN_BINARY_SCRIPT_TOOL_NAME: String = "run_binary_script"
 public const val RUN_SCRIPT_COMMAND_NAME: String = "run-script"
@@ -43,6 +57,21 @@ public data class RunScriptCliRequest(
     val limits: HexanaScriptLimits = HexanaScriptLimits(),
     val allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
     val toolName: String = RUN_BINARY_SCRIPT_TOOL_NAME,
+    /** Script argv tokens (after the script path); passed verbatim into [ScriptInvocation.argv]. */
+    val scriptArgs: List<String> = emptyList(),
+    /** Extra input binary file paths; passed as [ScriptInvocation.extraInputPaths]. */
+    val extraInputPaths: List<String> = emptyList(),
+    /** Directory used by [BaselineStore] for classify/update. Missing dir = all NEW. */
+    val baselinesDir: Path = Path.of(".hexana/baselines"),
+    /** When true, update baseline files from the current run and exit 0 (unless script/usage error). */
+    val updateBaselines: Boolean = false,
+    /**
+     * Path to write a SARIF 2.1.0 document alongside any [format].
+     * Null means no SARIF side file is written.
+     */
+    val sarifOut: Path? = null,
+    /** Version string embedded in the SARIF tool.driver.version field. */
+    val toolVersion: String = "0.0.0",
 )
 
 public data class RunScriptCliOutput(
@@ -55,7 +84,10 @@ internal data class ScriptCliRuntimeBinding(
     val converter: ToolInputConverter,
     val executor: ToolExecutor,
     val renderer: ToolOutputRenderer,
-)
+) {
+    /** Typed accessor to the side-channel fields; null when the executor is not a [RunScriptExecutor]. */
+    val scriptExecutor: RunScriptExecutor? get() = executor as? RunScriptExecutor
+}
 
 internal class ScriptCliRuntimeContribution private constructor(
     val toolNames: Set<String>,
@@ -112,32 +144,120 @@ internal class RunScriptInputConverter : ToolInputConverter {
     }
 }
 
+/**
+ * Carries the script invocation context (argv, extra input paths) through the execute path.
+ * Stored on the executor rather than threaded through the standard
+ * [ToolExecutionRequest] to avoid touching mcp/core wire models.
+ */
+internal data class RunScriptInvocationContext(
+    val scriptArgs: List<String> = emptyList(),
+    val extraInputPaths: List<String> = emptyList(),
+)
+
 internal class RunScriptExecutor(
     private val limits: HexanaScriptLimits,
     private val allowedFilePolicy: AllowedFilePolicy,
-    private val runScript: (BinaryInput, HexanaScriptSource) -> RunBinaryScriptResult = { input, source ->
+    private val invocationContext: RunScriptInvocationContext = RunScriptInvocationContext(),
+    private val runScript: (LoadedBinary, HexanaScriptSource, ScriptInvocation) -> HexanaScriptResult = { loaded, source, invocation ->
         HexanaScriptRunner(limits = limits, allowedFilePolicy = allowedFilePolicy)
-            .run(input, source)
-            .toRunBinaryScriptResult()
+            .run(source = source, binaryProvider = loaded.provider, binaryIdentity = loaded.identity, invocation = invocation)
     },
 ) : ToolExecutor {
+    /**
+     * Captures the last raw [HexanaScriptResult] produced by this executor.
+     * Set immediately before returning from [execute]; the caller (runScriptCli)
+     * reads it right after [execute] returns to access findings/console/usageErrors
+     * that are not representable in the wire [RunBinaryScriptResult].
+     */
+    @Volatile
+    var lastScriptResult: HexanaScriptResult? = null
+        private set
+
+    /**
+     * Captures the primary [org.jetbrains.hexana.providers.BinaryProvider] loaded during
+     * [execute]. Used by [runScriptCli] to build [SarifSourceResolver] for SARIF output
+     * without reloading the binary a second time. Null when loading failed or the source
+     * was invalid.
+     */
+    @Volatile
+    var lastPrimaryProvider: org.jetbrains.hexana.providers.BinaryProvider? = null
+        private set
+
     override fun execute(request: ToolExecutionRequest): ToolExecutionResult {
         require(request.context.toolName == RUN_BINARY_SCRIPT_TOOL_NAME)
-        val result = when (val source = request.arguments.scriptSourceSelection()) {
-            is ScriptSourceSelection.Valid -> runScript(request.sources.singleBinaryInput(), source.source)
-            is ScriptSourceSelection.Invalid -> invalidRunBinaryScriptResult(source.message, limits.maxOutputBytes)
+        val rawResult: HexanaScriptResult
+        val wireResult = when (val source = request.arguments.scriptSourceSelection()) {
+            is ScriptSourceSelection.Valid -> {
+                rawResult = executeValid(source, request.sources.singleBinaryInput())
+                rawResult.toRunBinaryScriptResult()
+            }
+            is ScriptSourceSelection.Invalid -> {
+                rawResult = HexanaScriptResult(
+                    status = org.jetbrains.hexana.mcp.scripting.HexanaScriptStatus.INVALID_INPUT,
+                    output = emptyOutput(),
+                    diagnostics = emptyList(),
+                    binary = null,
+                    sourceName = "<script>",
+                    sourcePath = null,
+                    durationMillis = 0,
+                )
+                invalidRunBinaryScriptResult(source.message, limits.maxOutputBytes)
+            }
         }
+        lastScriptResult = rawResult
         return ToolExecutionResult(
-            HexanaJson.compact.encodeToJsonElement(RunBinaryScriptResult.serializer(), result)
+            HexanaJson.compact.encodeToJsonElement(RunBinaryScriptResult.serializer(), wireResult)
         )
     }
+
+    private fun executeValid(source: ScriptSourceSelection.Valid, input: BinaryInput): HexanaScriptResult {
+        val scriptName = when (val s = source.source) {
+            is HexanaScriptSource.FilePath -> s.path
+            is HexanaScriptSource.Inline -> s.name
+        }
+        val invocation = ScriptInvocation(
+            argv = listOf(scriptName) + invocationContext.scriptArgs,
+            extraInputPaths = invocationContext.extraInputPaths,
+        )
+        val loaded = try {
+            BinaryInputLoader(
+                maxInlineInputBytes = limits.maxInlineBinaryBytes,
+                maxFileInputBytes = limits.maxFileBinaryBytes,
+                allowedFilePolicy = allowedFilePolicy,
+            ).load(input)
+        } catch (error: HexanaAnalysisException) {
+            return HexanaScriptResult(
+                status = org.jetbrains.hexana.mcp.scripting.HexanaScriptStatus.INVALID_INPUT,
+                output = emptyOutput(),
+                diagnostics = listOf(
+                    org.jetbrains.hexana.mcp.scripting.HexanaScriptDiagnostic(
+                        code = error.code.name,
+                        message = error.message,
+                        exceptionClass = error::class.java.name,
+                    )
+                ),
+                binary = null,
+                sourceName = scriptName,
+                sourcePath = (source.source as? HexanaScriptSource.FilePath)?.path,
+                durationMillis = 0,
+            )
+        }
+        lastPrimaryProvider = loaded.provider
+        return runScript(loaded, source.source, invocation)
+    }
+
+    private fun emptyOutput() = org.jetbrains.hexana.mcp.scripting.HexanaScriptOutput(
+        lines = emptyList(), truncated = false, emittedBytes = 0,
+        maxLines = limits.maxOutputLines, maxBytes = limits.maxOutputBytes,
+    )
 }
 
 internal object RunScriptOutputRenderer : FormatAwareToolOutputRenderer {
     const val JSON_CONTENT_TYPE = "application/json; charset=utf-8"
     const val RAW_CONTENT_TYPE = "text/plain; charset=utf-8"
 
-    override val supportedFormats: Set<ToolOutputFormat> = setOf(ToolOutputFormat.JSON, ToolOutputFormat.RAW)
+    override val supportedFormats: Set<ToolOutputFormat> =
+        setOf(ToolOutputFormat.JSON, ToolOutputFormat.RAW, ToolOutputFormat.SARIF)
 
     override fun render(request: ToolOutputRenderRequest): RenderedToolOutput {
         require(request.context.toolName == RUN_BINARY_SCRIPT_TOOL_NAME)
@@ -152,6 +272,7 @@ internal object RunScriptOutputRenderer : FormatAwareToolOutputRenderer {
                     .takeUtf8Prefix(result.rawStdoutBudget()),
                 contentType = RAW_CONTENT_TYPE,
             )
+            ToolOutputFormat.SARIF -> error("run-script sarif output is assembled in runScriptCli, not the renderer pipeline")
             ToolOutputFormat.PRETTY -> error("run-script does not support pretty output")
             ToolOutputFormat.TABLE -> error("run-script does not support table output")
         }
@@ -162,7 +283,15 @@ public fun runScriptSupportedOutputFormats(): Set<ToolOutputFormat> = RunScriptO
 
 public fun runScriptCli(request: RunScriptCliRequest): RunScriptCliOutput {
     val context = ToolRuntimeContext(toolName = request.toolName)
-    val contribution = runScriptRuntimeContribution(request.limits, request.allowedFilePolicy)
+
+    val contribution = runScriptRuntimeContribution(
+        limits = request.limits,
+        allowedFilePolicy = request.allowedFilePolicy,
+        invocationContext = RunScriptInvocationContext(
+            scriptArgs = request.scriptArgs,
+            extraInputPaths = request.extraInputPaths,
+        ),
+    )
     val binding = contribution.binding(context.toolName)
     val sources = ToolInputSources(sourceSelections = request.sourceSelections)
     val arguments = binding.converter.convert(
@@ -173,44 +302,139 @@ public fun runScriptCli(request: RunScriptCliRequest): RunScriptCliOutput {
         )
     )
     val execution = binding.executor.execute(ToolExecutionRequest(context, arguments, sources))
-    val result = execution.semanticResult.toRunBinaryScriptResult()
-    val rendered = binding.renderer.render(
-        ToolOutputRenderRequest(
-            context = context,
-            arguments = arguments,
-            result = execution.semanticResult,
-            options = ToolRenderOptions(format = request.format),
+
+    // Obtain the rich HexanaScriptResult from the executor side-channel.
+    val richResult: HexanaScriptResult? = binding.scriptExecutor?.lastScriptResult
+    val wireResult = execution.semanticResult.toRunBinaryScriptResult()
+
+    // Console entries always go to stderr, every mode, level-prefixed.
+    val consoleStderr = richResult?.console?.toConsoleStderr() ?: ""
+
+    // Usage errors from the script (undeclared flags, etc.) exit 2.
+    val usageErrors = richResult?.usageErrors ?: emptyList()
+    if (usageErrors.isNotEmpty()) {
+        val usageStderr = usageErrors.joinToString(separator = "\n", postfix = "\n") { err ->
+            err.toHumanReadableString().asSingleLine()
+        }
+        return RunScriptCliOutput(stdout = "", stderr = consoleStderr + usageStderr, exitCode = 2)
+    }
+
+    // Classify findings from the rich result against the baseline store.
+    val store = BaselineStore(request.baselinesDir)
+    val findings = richResult?.findings ?: emptyList()
+    val classified = store.classify(findings)
+
+    if (request.updateBaselines) {
+        store.update(findings)
+    }
+
+    // Retrieve the primary binary provider captured by the executor during binary load.
+    val primaryProvider = binding.scriptExecutor?.lastPrimaryProvider
+
+    // Assemble SARIF when requested (--format sarif or --sarif-out).
+    fun assembleSarif(): String {
+        val resolver = primaryProvider?.let { SarifSourceResolver.from(it) }
+        return renderSarif(
+            checks = richResult?.checks ?: emptyList(),
+            findings = classified,
+            toolVersion = request.toolVersion,
+            functionName = resolver?.let { r -> { funcidx: Long -> r.functionName(funcidx) } },
+            sourceLocation = resolver?.let { r -> { funcidx: Long -> r.sourceLocation(funcidx) } },
         )
-    )
-    val stdout = when (rendered) {
-        is RenderedToolOutput.Text -> rendered.text
-        is RenderedToolOutput.Binary -> error("run-script does not support binary output")
     }
-    val stderr = if (request.format == ToolOutputFormat.RAW) {
-        result.diagnostics.toRunScriptDiagnosticsStderr()
+
+    // Side-file SARIF output (written regardless of stdout format).
+    if (request.sarifOut != null) {
+        val sarifText = assembleSarif()
+        val parent = request.sarifOut.toAbsolutePath().parent
+        if (parent != null) Files.createDirectories(parent)
+        val sarifWithNewline = if (sarifText.endsWith("\n")) sarifText else sarifText + "\n"
+        Files.writeString(request.sarifOut, sarifWithNewline)
+    }
+
+    val stdout: String
+    val diagnosticsStderr: String
+    if (request.format == ToolOutputFormat.SARIF) {
+        stdout = assembleSarif()
+        diagnosticsStderr = ""
     } else {
-        ""
+        val rendered = binding.renderer.render(
+            ToolOutputRenderRequest(
+                context = context,
+                arguments = arguments,
+                result = execution.semanticResult,
+                options = ToolRenderOptions(format = request.format),
+            )
+        )
+        stdout = when (rendered) {
+            is RenderedToolOutput.Text -> rendered.text
+            is RenderedToolOutput.Binary -> error("run-script does not support binary output")
+        }
+        // Diagnostics go to stderr in RAW mode only (existing behavior).
+        diagnosticsStderr = if (request.format == ToolOutputFormat.RAW) {
+            wireResult.diagnostics.toRunScriptDiagnosticsStderr()
+        } else {
+            ""
+        }
     }
+    val stderr = consoleStderr + diagnosticsStderr
+
+    // Exit 1 iff --update-baselines=false AND any ERROR-severity finding is NEW,
+    // OR the script itself failed (existing result.success=false behavior stays).
+    val exitCode = when {
+        request.updateBaselines -> if (wireResult.success) 0 else 1
+        !wireResult.success -> 1
+        classified.any {
+            it.finding.severity == CheckSeverity.ERROR &&
+                it.baselineState == org.jetbrains.hexana.cli.scripting.sarif.BaselineState.NEW
+        } -> 1
+        else -> 0
+    }
+
     return RunScriptCliOutput(
         stdout = stdout,
         stderr = stderr,
-        exitCode = if (result.success) 0 else 1,
+        exitCode = exitCode,
     )
 }
+
 
 internal fun runScriptRuntimeContribution(
     limits: HexanaScriptLimits = HexanaScriptLimits(),
     allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
+    invocationContext: RunScriptInvocationContext = RunScriptInvocationContext(),
 ): ScriptCliRuntimeContribution =
     ScriptCliRuntimeContribution.create(
         expectedTools = setOf(RUN_BINARY_SCRIPT_TOOL_NAME),
         converters = mapOf(RUN_BINARY_SCRIPT_TOOL_NAME to RunScriptInputConverter()),
-        executors = mapOf(RUN_BINARY_SCRIPT_TOOL_NAME to RunScriptExecutor(limits, allowedFilePolicy)),
+        executors = mapOf(RUN_BINARY_SCRIPT_TOOL_NAME to RunScriptExecutor(limits, allowedFilePolicy, invocationContext)),
         renderers = mapOf(RUN_BINARY_SCRIPT_TOOL_NAME to RunScriptOutputRenderer),
     )
 
 private fun JsonElement.toRunBinaryScriptResult(): RunBinaryScriptResult =
     HexanaJson.compact.decodeFromJsonElement(RunBinaryScriptResult.serializer(), this)
+
+// ---------------------------------------------------------------------------
+// Console / usage-error helpers operating on domain types from plugins-shared
+// ---------------------------------------------------------------------------
+
+private fun List<ScriptConsoleEntry>.toConsoleStderr(): String {
+    if (isEmpty()) return ""
+    return joinToString(separator = "") { entry ->
+        val prefix = when (entry.severity) {
+            ConsoleSeverity.LOG -> "[log] "
+            ConsoleSeverity.ERROR -> "[error] "
+            ConsoleSeverity.DEBUG -> "[debug] "
+        }
+        "$prefix${entry.text}\n"
+    }
+}
+
+private fun ScriptUsageError.toHumanReadableString(): String = when (this) {
+    is ScriptUsageError.UndeclaredFlag -> "Undeclared flag: $key"
+    is ScriptUsageError.InvalidFlagValue -> "Invalid value '$value' for flag $key. Allowed: ${allowed.joinToString()}"
+    is ScriptUsageError.FlagTypeMismatch -> "Flag $key expects type $type, got '$value'"
+}
 
 private sealed interface ScriptSourceSelection {
     data class Valid(val source: HexanaScriptSource) : ScriptSourceSelection

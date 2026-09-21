@@ -364,20 +364,14 @@ class HexanaToolCompatibilityTest {
         .joinToString("") { "%02x".format(it) }
 
     private companion object {
-        // Reviewed: product identity snapshots now serialize declared ProductId values instead of
-        // deleted closed-enum constant names. Existing product IDs, executable names, and tool
-        // inventories remain unchanged; only this internal snapshot representation changed.
-        // `run_binary_script` guidance names the scripting globals and
-        // the `binary` members, and the `lines` field description now covers
-        // `table`/`row` output instead of only `print(text)`. It also documents
-        // the `open(path)` global and restates the sandbox accordingly: a script
-        // can now load a second binary through the same allowed-roots policy that
-        // governs the binary and script paths, so "no file IO" would misdescribe
-        // it. The member list now also names `binary.path`/`binary.dir` and how
-        // they combine with `open(...)` to reach a file beside the analyzed one.
-        // The semantic snapshot now includes field presence, so required-nullable
-        // output fields cannot silently drift back to ordinary optional fields.
-        const val EXPECTED_SEMANTIC = "7337904c24d3083d92e3bdfcda584fe5efdd1420c9ee770da7e7520ee9a029e8"
+        // Reviewed: two independent changes combine here. The semantic snapshot now
+        // includes field presence, so required-nullable output fields cannot silently
+        // drift back to ordinary optional fields (master). On top of that,
+        // `run_binary_script` gains the check/invocation surface: repeatable extra
+        // inputs and script argv, baseline flags (--baselines-dir, --update-baselines),
+        // --sarif-out, and the sarif output capability. All additions are additive with
+        // defaults; existing inputs, outputs, and bounds are unchanged.
+        const val EXPECTED_SEMANTIC = "971d6ac9784aa8c9f19b0fe0ec5797f7f205d6d2c27c7f7bdcd5bcc4e0cc920d"
         const val EXPECTED_IDEA = "b3d01605c58323500af1b4e1eeabfa8b6ff2e4fb659bfccac35c9869c379d378"
         const val EXPECTED_STANDALONE = "0395327fb451b08908345ce4e59bd1cf97bb05dd4bb1cb2165679a2744dd8b44"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"

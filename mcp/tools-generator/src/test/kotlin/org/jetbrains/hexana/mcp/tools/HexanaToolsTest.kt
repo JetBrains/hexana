@@ -685,6 +685,7 @@ class HexanaToolsTest {
                     OutputConversionCapability.SemanticJson,
                     OutputConversionCapability.McpWrapper,
                     OutputConversionCapability.RawText,
+                    OutputConversionCapability.Sarif,
                 )
                 else -> setOf(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper)
             }

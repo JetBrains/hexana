@@ -38,9 +38,16 @@ dependencies {
     api(project(":mcp:core"))
     api(project(":mcp:scripting"))
     api(libs.kotlinx.serialization.json)
+    // Shared scripting engine types (CheckFinding, ScriptAnchor, ...) appear in the
+    // public SARIF signatures; api so the CLI consumer sees them.
+    api(project(":plugins-shared"))
+    // WasmBinaryProvider appears in SarifSourceResolver's public signature; mcp:core
+    // keeps binaryProvider as implementation, so it is not transitive.
+    api(project(":binaryProvider"))
 
     testImplementation(libs.junit4)
     testImplementation(libs.kotlin.test)
+    testImplementation(libs.networknt.json.schema.validator)
 }
 
 kotlin {

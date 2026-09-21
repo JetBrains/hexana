@@ -96,7 +96,7 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Run a Hexana JavaScript script over a Wasm or native binary.",
           groups = setOf(HexanaCliToolGroup.SCRIPTING),
           inputModes = setOf(HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN),
-          outputFormats = setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.RAW),
+          outputFormats = setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.SARIF, HexanaCliOutputFormat.RAW),
           defaultOutputFormat = HexanaCliOutputFormat.RAW,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
           executionStatus = HexanaCliExecutionStatus.EXECUTABLE,

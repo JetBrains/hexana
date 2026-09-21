@@ -10,6 +10,7 @@ import org.jetbrains.hexana.cli.scripting.runScriptCli
 import org.jetbrains.hexana.cli.scripting.runScriptSupportedOutputFormats
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
+import java.nio.file.Path
 
 internal object HexanaScriptProductExecutor : HexanaProductToolExecutor {
     override val bindings: List<HexanaProductToolExecutorBinding> = listOf(
@@ -31,6 +32,12 @@ internal object HexanaScriptProductExecutor : HexanaProductToolExecutor {
                 ),
                 allowedFilePolicy = allowedFilePolicy(request.allowedRoots),
                 toolName = request.spec.toolName,
+                scriptArgs = request.scriptArgs,
+                extraInputPaths = request.extraInputPaths,
+                baselinesDir = request.baselinesDir ?: Path.of(".hexana/baselines"),
+                updateBaselines = request.updateBaselines,
+                sarifOut = request.sarifOut,
+                toolVersion = HEXANA_CLI_SCRIPT_VERSION,
             )
         )
         return ProductCliResult(stdout = rendered.stdout, stderr = rendered.stderr, exitCode = rendered.exitCode)

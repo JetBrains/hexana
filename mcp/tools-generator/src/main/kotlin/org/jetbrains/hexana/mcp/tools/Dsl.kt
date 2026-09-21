@@ -129,6 +129,7 @@ enum class OutputConversionCapability {
     SemanticJson,
     McpWrapper,
     Pretty,
+    Sarif,
     Table,
     RawText,
     RawBytes,

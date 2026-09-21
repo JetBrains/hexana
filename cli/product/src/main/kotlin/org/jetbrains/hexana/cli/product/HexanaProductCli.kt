@@ -165,6 +165,12 @@ public class HexanaProductCli(
         var base64Source: String? = null
         var outputPath: Path? = null
         var format = spec.defaultOutputFormat
+        // Scripting flags
+        val scriptArgs = mutableListOf<String>()
+        val extraInputPaths = mutableListOf<String>()
+        var baselinesDir: Path? = null
+        var updateBaselines = false
+        var sarifOut: Path? = null
 
         while (args.isNotEmpty()) {
             val arg = args.removeAt(0)
@@ -209,6 +215,18 @@ public class HexanaProductCli(
                 "--telemetry-enabled" -> analytics.enabled = parseBoolean("--telemetry-enabled", args.requireValue(arg))
                 "--telemetry-key" -> analytics.key = args.requireValue(arg)
                 "--telemetry-host" -> analytics.host = args.requireValue(arg)
+                // Scripting flags (accepted silently for non-scripting tools too;
+                // they are ignored by non-scripting executors)
+                "--input" -> extraInputPaths += args.requireValue(arg)
+                "--script-arg" -> scriptArgs += args.requireValue(arg)
+                "--baselines-dir" -> baselinesDir = Path.of(args.requireValue(arg))
+                "--update-baselines" -> updateBaselines = true
+                "--sarif-out" -> sarifOut = Path.of(args.requireValue(arg))
+                "--" -> {
+                    // Everything after "--" is passed verbatim as script argv tokens.
+                    scriptArgs += args.toList()
+                    args.clear()
+                }
                 else -> {
                     if (arg.startsWith("--")) {
                         throw ProductUsageException("Unknown ${spec.commandName} option: $arg")
@@ -244,6 +262,11 @@ public class HexanaProductCli(
             allowedRoots = options.effectiveAllowedRoots,
             terminalWidth = options.terminalWidthFor(format),
             analytics = analytics,
+            scriptArgs = scriptArgs,
+            extraInputPaths = extraInputPaths,
+            baselinesDir = baselinesDir,
+            updateBaselines = updateBaselines,
+            sarifOut = sarifOut,
         )
     }
 
@@ -396,6 +419,12 @@ public data class HexanaProductToolExecutionRequest(
     val resourceLimits: HexanaResourceLimits,
     val allowedRoots: List<String>,
     val terminalWidth: Int? = null,
+    // Scripting-only fields; ignored by non-scripting executors.
+    val scriptArgs: List<String> = emptyList(),
+    val extraInputPaths: List<String> = emptyList(),
+    val baselinesDir: Path? = null,
+    val updateBaselines: Boolean = false,
+    val sarifOut: Path? = null,
 )
 
 private sealed class ParsedCommand(
@@ -426,6 +455,12 @@ private sealed class ParsedCommand(
         val allowedRoots: List<String>,
         val terminalWidth: Int?,
         override val analytics: CliAnalyticsSettings,
+        // Scripting-only fields; ignored by non-scripting executors.
+        val scriptArgs: List<String> = emptyList(),
+        val extraInputPaths: List<String> = emptyList(),
+        val baselinesDir: Path? = null,
+        val updateBaselines: Boolean = false,
+        val sarifOut: Path? = null,
     ) : ParsedCommand(spec.commandName, analytics)
 }
 
@@ -438,6 +473,11 @@ private fun ParsedCommand.Executable.toExecutionRequest(): HexanaProductToolExec
         resourceLimits = resourceLimits,
         allowedRoots = allowedRoots,
         terminalWidth = terminalWidth,
+        scriptArgs = scriptArgs,
+        extraInputPaths = extraInputPaths,
+        baselinesDir = baselinesDir,
+        updateBaselines = updateBaselines,
+        sarifOut = sarifOut,
     )
 
 private data class CliAnalyticsSettings(
