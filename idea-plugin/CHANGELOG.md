@@ -3,8 +3,11 @@
 ## Unreleased
 
 ### Added
+- Arrow IPC **streams** open as streams. Previously every `.arrow` file was read as an IPC *file*, so a stream (conventionally `.arrows`) showed no Schema or Messages tabs; both extensions are now accepted and the format is resolved from the content.
+- Binaries whose name says nothing about their format open by content: a WebAssembly module written without a `.wasm` extension gets the full Wasm editor instead of a raw hex view, and so does a Parquet or Arrow export a tool dumped extensionless.
 
 ### Changed
+- Provider selection moved to one shared factory (`createBinaryProvider` in `binaryProvider`) that the IDE, the VS Code extension and the browser app all call. The two copies had drifted: Parquet, Arrow and `.pb` Protobuf-message files resolved only in the IDE, and tar archives only in the IDE once gzipped. Every host now supports every format the provider layer does.
 
 ### Deprecated
 

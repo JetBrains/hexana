@@ -4,12 +4,14 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.ArrowBinaryProvider
 import org.jetbrains.hexana.providers.ArrowFormat
 import org.jetbrains.hexana.providers.ParquetBinaryProvider
+import org.jetbrains.hexana.providers.createBinaryProvider
 import org.jetbrains.hexana.providers.isArrowFileMagic
 import org.jetbrains.hexana.providers.isArrowStreamMagic
 import org.jetbrains.hexana.providers.isParquetMagic
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.assertNull
@@ -382,5 +384,41 @@ class ParquetArrowTabsTest {
         )
         assertEquals(0, data.rowCount)
         assertNotNull(data.emptyMessage)
+    }
+
+    // ------------------------------------------------------------------
+    // The path a host actually takes: shared factory -> tab registry
+    // ------------------------------------------------------------------
+
+    @Test fun `every host reaches the columnar tabs through the shared provider factory`() {
+        // The providers and the tab providers above were always there; what was missing
+        // was the wiring. Only the IntelliJ editor built a Parquet or Arrow provider, so
+        // in VS Code and the browser these fixtures opened as raw hex with the tab
+        // implementations sitting unreachable behind them. This asserts the whole chain
+        // a host runs: bytes plus a name -> createBinaryProvider -> the registry -> tabs.
+        val cases = listOf(
+            Triple("alltypes_plain.parquet", "alltypes_plain.parquet", listOf("Schema", "Row Groups", "Metadata", "Data")),
+            Triple("generated_null_trivial.arrow_file", "table.arrow", listOf("Schema", "Record Batches", "Metadata", "Data")),
+            Triple("generated_null_trivial.stream", "batches.arrows", listOf("Schema", "Messages", "Data")),
+        )
+        for ((resource, fileName, expectedTabs) in cases) {
+            val provider = createBinaryProvider(loadResource(resource).toCommonByteBuffer(), fileName)
+            val tabs = TableTabsProviderRegistry.providers.flatMap { it.tableTabs(provider) }.map { it.name }
+            assertTrue(
+                tabs.containsAll(expectedTabs),
+                "$fileName resolved to ${provider::class.simpleName} with tabs $tabs, expected $expectedTabs",
+            )
+        }
+    }
+
+    @Test fun `an arrow stream is resolved as a stream, not as a file`() {
+        // Both hosts used to hardcode ArrowFormat.FILE, so a stream parsed to nothing.
+        val provider = createBinaryProvider(
+            loadResource("generated_null_trivial.stream").toCommonByteBuffer(),
+            "batches.arrows",
+        )
+        val arrow = assertIs<ArrowBinaryProvider>(provider)
+        assertEquals(ArrowFormat.STREAM, arrow.format)
+        assertNotNull(arrow.schema)
     }
 }

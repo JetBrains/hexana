@@ -14,6 +14,7 @@
   "include": [
     "src/unit/**/*.ts",
     "../src/mcpServerTelemetry.ts",
+    "../src/NativeBinaryFileTypeDetector.ts",
     "../src/wasiSdkManager.ts",
     "../src/webviewContent.ts",
     "../src/wasmFeatureCatalog.ts",

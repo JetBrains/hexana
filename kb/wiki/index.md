@@ -11,6 +11,9 @@ consult-first / write-back rules.
   detection, `.hexana/runtimes.json`, the badge warning, and the Compatibility tab.
 - [[entities/dwarf-outline-model]] — the shared row model behind the `.debug_*` editor tabs:
   node ids, deferred children, whole-tree search, and the grouping rule both editors follow.
+- [[entities/binary-provider-selection]] — the one factory that turns bytes plus a name into a
+  `BinaryProvider`, why gzip stays outside it, and the per-host lists that decide which files
+  reach the editor in the first place.
 
 ## Sources
 

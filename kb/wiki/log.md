@@ -64,3 +64,13 @@ Append one line per write-back: date, page, what changed.
   script's own catch still sees it). Recorded `ScriptOpenPolicy`, the `(yield open(p))`
   precedence trap, and the transform's new function-body skip — which also fixed printing
   from a helper failing to compile in the browser host.
+- 2026-09-18 — `entities/binary-provider-selection` — new page. Provider selection was
+  implemented twice (IntelliJ's `HexanaFileEditor.resolveProvider` vs the `select` +
+  `nativeOrGenericBinaryProvider` pair everyone else ran) and had drifted: Parquet, Arrow
+  and `.pb` resolved only in the IDE because they key off the file name, which
+  `nativeOrGenericBinaryProvider` never sees. Recorded the new shared
+  `createBinaryProvider` / `resolveBinaryProviderKind`, why gzip stays host-side (the
+  factory is sync, common-code gunzip is `suspend` and absent on wasmJs), why Arrow stream
+  magic is gated behind the extension, the `sourcePath` vs `fileName` split, and the three
+  separate VS Code routing lists that have to move with it.
+
