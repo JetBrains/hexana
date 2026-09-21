@@ -232,6 +232,7 @@ internal object WasmToWatRenderer : FormatAwareToolOutputRenderer {
                 contentType = JSON_CONTENT_TYPE,
             )
             ToolOutputFormat.RAW -> RenderedToolOutput.Text(result.wat)
+            ToolOutputFormat.SARIF -> error("wasm-to-wat does not support sarif output")
             ToolOutputFormat.PRETTY -> error("wasm-to-wat does not support pretty output")
             ToolOutputFormat.TABLE -> error("wasm-to-wat does not support table output")
         }
