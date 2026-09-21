@@ -40,10 +40,14 @@ sealed interface BinaryProviderKind {
  * format the provider layer supports is supported everywhere rather than in
  * whichever host happened to add it.
  *
- * [fileName] may be a bare name or a full path; only its extension is consulted, and
- * only for the three formats that magic bytes cannot identify on their own. Pass
- * `null` when the bytes have no name (an archive member, a payload pushed over a
- * wire) — resolution then falls back to content alone.
+ * Content is asked first: Parquet, Arrow IPC files and WebAssembly all carry magic
+ * strong enough to be believed over whatever the file happens to be called. Only when
+ * none of them matches does [fileName] get a say, and only for the three formats no
+ * magic identifies — a Protobuf wire message has none at all, and a Parquet or Arrow
+ * file truncated past its trailing magic has lost its. Pass `null` when the bytes have
+ * no name (an archive member, a payload pushed over a wire); resolution then rests on
+ * content alone. Anything the name does not claim falls through to
+ * [nativeOrGenericBinaryProvider], which is magic-only.
  *
  * gzip is deliberately not handled here: this function is synchronous (callers
  * invoke it from Compose `remember {}`) while the only common-code gunzip is
@@ -55,35 +59,36 @@ fun resolveBinaryProviderKind(
     bytes: CommonByteBuffer,
     fileName: String? = null,
 ): BinaryProviderKind {
-    val ext = extensionOf(fileName)
-
-    // Never auto-detected from content — a Protobuf message has no magic at all, so
-    // the `.pb` extension (or the IDE's explicit "Open As Protobuf Message" action)
-    // is the only signal there is.
-    if (ext == "pb") return BinaryProviderKind.ProtobufMessage
-
-    if (ext == "parquet" || isParquetMagic(bytes.duplicate().position(0))) {
-        return BinaryProviderKind.Parquet
+    // Content first. These three signatures are long and anchored, so a file carrying
+    // one is that format whatever a build step named it.
+    if (isParquetMagic(bytes.duplicate().position(0))) return BinaryProviderKind.Parquet
+    if (isArrowFileMagic(bytes.duplicate().position(0))) return BinaryProviderKind.Arrow(ArrowFormat.FILE)
+    when (WasmBinaryProviderSelector.select(bytes.duplicate().position(0))) {
+        BinaryProviderType.Wasm -> return BinaryProviderKind.Wasm
+        BinaryProviderType.WasmComponent -> return BinaryProviderKind.WasmComponent
+        BinaryProviderType.Generic -> Unit
     }
 
-    val isArrowFile = isArrowFileMagic(bytes.duplicate().position(0))
-    if (isArrowFile || ext in ARROW_EXTENSIONS) {
-        // The stream format's only marker is a 0xFFFFFFFF continuation word at offset
-        // 0, which is far too weak to detect on its own — any file starting with four
-        // 0xFF bytes would match. So it is only consulted once the extension has
-        // already said "Arrow" and the much stronger file magic has said "not a file".
-        val format = if (!isArrowFile && isArrowStreamMagic(bytes.duplicate().position(0))) {
-            ArrowFormat.STREAM
-        } else {
-            ArrowFormat.FILE
+    // Then the name, for the formats nothing above could have recognized.
+    val ext = extensionOf(fileName) ?: return BinaryProviderKind.NativeOrGeneric
+    return when (ext) {
+        // A Protobuf wire message has no magic whatsoever, so the `.pb` name (or the
+        // IDE's explicit "Open As Protobuf Message" action) is the only signal there is.
+        "pb" -> BinaryProviderKind.ProtobufMessage
+        "parquet" -> BinaryProviderKind.Parquet
+        in ARROW_EXTENSIONS -> {
+            // An Arrow stream's only marker is a 0xFFFFFFFF continuation word at offset
+            // 0, far too weak to detect on its own — any file starting with four 0xFF
+            // bytes would match. It counts only here, where the name has already said
+            // Arrow and the much stronger file magic has already said "not a file".
+            val format = if (isArrowStreamMagic(bytes.duplicate().position(0))) {
+                ArrowFormat.STREAM
+            } else {
+                ArrowFormat.FILE
+            }
+            BinaryProviderKind.Arrow(format)
         }
-        return BinaryProviderKind.Arrow(format)
-    }
-
-    return when (WasmBinaryProviderSelector.select(bytes.duplicate().position(0))) {
-        BinaryProviderType.Wasm -> BinaryProviderKind.Wasm
-        BinaryProviderType.WasmComponent -> BinaryProviderKind.WasmComponent
-        BinaryProviderType.Generic -> BinaryProviderKind.NativeOrGeneric
+        else -> BinaryProviderKind.NativeOrGeneric
     }
 }
 

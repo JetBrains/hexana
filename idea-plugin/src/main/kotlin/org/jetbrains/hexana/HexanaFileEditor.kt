@@ -1331,8 +1331,19 @@ private fun extractTarEntry(
 }
 
 /**
+ * Hard cap on an inflated gzip payload, mirroring `MAX_SBOM_INFLATED_BYTES` in
+ * `binaryProvider`'s SBOM extraction and `MAX_INFLATED_BYTES` in the VS Code host.
+ *
+ * A gzip stream declares nothing about its output size, so a few kilobytes on disk can
+ * inflate to gigabytes — and this runs in the IDE's own heap. Past the cap the file is
+ * shown as the compressed bytes it is rather than taking the IDE down with it.
+ */
+private const val MAX_INFLATED_BYTES = 128 * 1024 * 1024
+
+/**
  * Decompresses a gzip-compressed [CommonByteBuffer] into a new buffer.
- * Returns `null` on failure (not gzip, corrupt data, etc.).
+ * Returns `null` on failure (not gzip, corrupt data, or an inflated payload that would
+ * exceed [MAX_INFLATED_BYTES]).
  */
 private fun decompressGzip(buffer: CommonByteBuffer): CommonByteBuffer? = try {
     val size = buffer.size
@@ -1342,11 +1353,25 @@ private fun decompressGzip(buffer: CommonByteBuffer): CommonByteBuffer? = try {
     val baos = java.io.ByteArrayOutputStream(size * 2)
     val tmp = ByteArray(8192)
     var n: Int
+    var inflated = 0L
+    var overflowed = false
     while (gzis.read(tmp).also { n = it } >= 0) {
+        inflated += n
+        if (inflated > MAX_INFLATED_BYTES) {
+            // Stop reading rather than finish and then reject: the point of the cap is
+            // to never hold the oversized payload in the first place.
+            overflowed = true
+            break
+        }
         baos.write(tmp, 0, n)
     }
     gzis.close()
-    baos.toByteArray().toCommonByteBuffer()
+    if (overflowed) {
+        HexanaLog.LOG.warn("Gzip payload exceeds $MAX_INFLATED_BYTES bytes inflated; showing the compressed bytes")
+        null
+    } else {
+        baos.toByteArray().toCommonByteBuffer()
+    }
 } catch (_: Throwable) {
     null
 }

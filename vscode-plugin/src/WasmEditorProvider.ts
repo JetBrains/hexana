@@ -130,9 +130,20 @@ async function readRuntimeTargetsJson(scope?: vscode.Uri): Promise<string> {
 const OPENABLE_ENTRY_EXTENSIONS = new Set([
     "wasm", "class", "dex", "arsc", "jar", "zip", "war", "apk", "bin",
     "elf", "exe", "so", "o", "a", "dll", "dylib",
-    "tar", "tgz", "desc", "protoset", "pcap", "cap", "pcapng",
+    "tar", "tgz", "gz", "desc", "protoset", "pcap", "cap", "pcapng",
     "parquet", "arrow", "arrows", "pb",
 ]);
+
+/**
+ * Hard cap on an inflated gzip payload, mirroring `MAX_SBOM_INFLATED_BYTES` in
+ * `binaryProvider`'s SBOM extraction.
+ *
+ * A gzip stream declares nothing about its output size, so a few kilobytes on disk can
+ * inflate to gigabytes. `zlib.gunzipSync` allocates that unbounded, in the extension
+ * host process, which would take the whole window down. Past the cap zlib throws and
+ * the file is shown as the compressed bytes it is.
+ */
+const MAX_INFLATED_BYTES = 128 * 1024 * 1024;
 
 /**
  * Name the contents of a gzipped `fileName` should be presented under, or `null`
@@ -155,6 +166,35 @@ function gzipInflatedName(fileName: string): string | null {
         return fileName.substring(0, fileName.length - 3);
     }
     return null;
+}
+
+/**
+ * Inflates `data` when `fileName` says it is gzipped, returning the bytes to show and
+ * the name to show them under (`null` when nothing was inflated).
+ *
+ * Shared by the two ways a payload reaches the editor — a file opened from disk, and an
+ * entry extracted from a ZIP or TAR — because the second used to skip inflation
+ * entirely: entries are stashed in `inMemoryModules` and served from a branch that
+ * returned before the `.gz` handling, so a `module.wasm.gz` inside an archive opened as
+ * a hex dump of the gzip stream.
+ *
+ * Inflation failure is not fatal: the original bytes are returned and the file opens as
+ * whatever it actually is.
+ */
+function inflateIfGzipped(fileName: string, data: Uint8Array): { data: Uint8Array; displayName?: string } {
+    const inflatedName = gzipInflatedName(fileName);
+    if (inflatedName === null) {
+        return { data };
+    }
+    try {
+        return {
+            data: zlib.gunzipSync(data, { maxOutputLength: MAX_INFLATED_BYTES }),
+            displayName: inflatedName,
+        };
+    } catch (err) {
+        console.error("[Hexana] Failed to decompress gzipped file:", err);
+        return { data };
+    }
 }
 
 /**
@@ -620,27 +660,23 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const key = uri.toString();
         const inMemory = inMemoryModules.get(key);
         if (inMemory) {
-            const d = inMemory.data;
+            // An archive entry can itself be gzipped, so it goes through the same
+            // inflation as a file opened from disk; without it the webview would be
+            // handed a gzip stream and resolve it to a plain hex view.
+            const entry = inflateIfGzipped(inMemory.fileName, inMemory.data);
+            const d = entry.data;
+            const entryName = entry.displayName ?? inMemory.fileName;
             extensionLib?.captureBinaryOpened(
-                inMemory.fileName,
+                entryName,
                 new Int8Array(d.buffer, d.byteOffset, d.byteLength),
             );
-            return new WasmDocument(uri, inMemory.data, inMemory.fileName);
+            return new WasmDocument(uri, d, entryName);
         }
 
-        let data = await vscode.workspace.fs.readFile(uri);
-        let displayName: string | undefined = undefined;
-
-        const fileName = path.basename(uri.fsPath);
-        const inflatedName = gzipInflatedName(fileName);
-        if (inflatedName !== null) {
-            try {
-                data = zlib.gunzipSync(data);
-                displayName = inflatedName;
-            } catch (err) {
-                console.error("[Hexana] Failed to decompress gzipped file:", err);
-            }
-        }
+        const raw = await vscode.workspace.fs.readFile(uri);
+        const inflated = inflateIfGzipped(path.basename(uri.fsPath), raw);
+        const data = inflated.data;
+        const displayName = inflated.displayName;
 
         extensionLib?.captureBinaryOpened(
             displayName ?? path.basename(uri.fsPath),

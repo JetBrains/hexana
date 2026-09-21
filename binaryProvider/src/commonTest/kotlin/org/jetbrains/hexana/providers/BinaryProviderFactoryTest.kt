@@ -92,12 +92,28 @@ class BinaryProviderFactoryTest {
 
     @Test
     fun contentWinsOverAMisleadingExtension() {
-        // A wasm module a build step named `.arrow` is a wasm module. Only the three
-        // magic-less formats above trust the name over the bytes.
+        // Parquet, Arrow-file and Wasm magic are all long and anchored, so a file
+        // carrying one is that format whatever a build step named it — including named
+        // as one of the other two, and including the `.pb` name that is otherwise the
+        // only signal a Protobuf message has.
         val module = byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00)
+        val component = byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x0D, 0x00, 0x01, 0x00)
+
+        for (name in listOf("x.parquet", "x.arrow", "x.arrows", "x.pb", "x.wasm")) {
+            assertEquals(BinaryProviderKind.Wasm, resolveBinaryProviderKind(module.buffer(), name), name)
+            assertEquals(BinaryProviderKind.WasmComponent, resolveBinaryProviderKind(component.buffer(), name), name)
+        }
+        for (name in listOf("x.arrow", "x.arrows", "x.pb")) {
+            assertEquals(BinaryProviderKind.Parquet, resolveBinaryProviderKind(emptyParquetBytes().buffer(), name), name)
+        }
+        for (name in listOf("x.parquet", "x.pb")) {
+            assertEquals(
+                BinaryProviderKind.Arrow(ArrowFormat.FILE),
+                resolveBinaryProviderKind(arrowFileBytes().buffer(), name),
+                name,
+            )
+        }
         assertIs<ParquetBinaryProvider>(createBinaryProvider(emptyParquetBytes().buffer(), "x.arrow"))
-        assertEquals(BinaryProviderKind.Parquet, resolveBinaryProviderKind(emptyParquetBytes().buffer(), "x.arrow"))
-        assertEquals(BinaryProviderKind.Wasm, resolveBinaryProviderKind(module.buffer(), "x.wasm"))
     }
 
     // ------------------------------------------------------------------

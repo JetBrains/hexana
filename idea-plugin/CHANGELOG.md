@@ -16,6 +16,7 @@
 ### Fixed
 
 ### Security
+- Opening a gzipped file no longer inflates it without a bound: a payload over 128 MiB inflated is refused and the file is shown as the compressed bytes it is, instead of a small archive being able to exhaust the IDE's heap.
 
 ## 0.20 - 2026-09-16
 

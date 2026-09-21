@@ -1,3 +1,10 @@
+# Unreleased
+- support for Apache Parquet and Apache Arrow IPC files: Schema, Row Groups / Record Batches, Metadata and Data tabs, the same ones the IntelliJ plugin shows
+- support for `.tar` archives, and for gzipped ones (`.tar.gz`, `.tgz`) — entries are listed and can be opened in their own tab, including entries that are themselves gzipped
+- support for opaque Protobuf wire messages (`.pb`) decoded without a schema
+- Arrow IPC *streams* open as streams (conventionally `.arrows`); previously every `.arrow` file was read as an IPC file, so a stream showed no tabs
+- binaries whose name says nothing about their format open by content: an extensionless WebAssembly module, Parquet or Arrow export gets its full editor instead of a hex dump
+
 # 0.11.0 - 16.09.2026
 - `.debug_abbrev`, `.debug_info` and `.debug_line` grouped under a single "DWARF" tab with search; clicking a row selects its bytes
 - WASM component "Dependencies" graph is navigable: double-click a module or nested component to open it, an import/export to select its bytes

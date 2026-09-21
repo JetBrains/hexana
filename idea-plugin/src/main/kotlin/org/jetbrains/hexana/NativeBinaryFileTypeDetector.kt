@@ -9,7 +9,8 @@ import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 
 /**
  * Magic-byte detector that routes extensionless (or ambiguously-named) binaries to the
- * correct [NativeBinaryFileType] subtype without relying on file extensions alone.
+ * correct [NativeBinaryFileType] subtype — or to [WasmFileType] — without relying on
+ * file extensions alone.
  *
  * Disambiguation note — fat Mach-O vs Java `.class`:
  *   Both begin with `CA FE BA BE`. Java `.class` files store their major version number
@@ -66,6 +67,25 @@ class NativeBinaryFileTypeDetector : FileTypeRegistry.FileTypeDetector {
                 (bom0 == 0x4D && bom1 == 0x3C && bom2 == 0x2B && bom3 == 0x1A)
             ) {
                 return PcapFileType.INSTANCE
+            }
+        }
+
+        // WebAssembly: "\0asm" (00 61 73 6D) followed by a version word this plugin
+        // knows — 01 00 for a core module, 0D 00 for a component. The version is part
+        // of the test so that the file type and the provider agree: `WasmFileType`
+        // here and `WasmBinaryProviderSelector` in the editor accept exactly the same
+        // bytes, and a `\0asm` blob of some future version falls to the hex view via
+        // both rather than being typed as Wasm and then shown as generic.
+        //
+        // Without this, an extensionless module never reached the editor at all:
+        // `HexanaFileEditorProvider.accept` has no magic of its own, so a file with
+        // neither a `.wasm` name nor a Hexana file type was left to the platform's
+        // "binary file not shown" stub.
+        if (b0 == 0x00 && b1 == 0x61 && b2 == 0x73 && b3 == 0x6D && len >= 6) {
+            val version0 = firstBytes.byteAt(4).toInt() and 0xFF
+            val version1 = firstBytes.byteAt(5).toInt() and 0xFF
+            if (version1 == 0x00 && (version0 == 0x01 || version0 == 0x0D)) {
+                return WasmFileType.INSTANCE
             }
         }
 

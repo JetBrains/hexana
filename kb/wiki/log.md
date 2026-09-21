@@ -73,4 +73,12 @@ Append one line per write-back: date, page, what changed.
   factory is sync, common-code gunzip is `suspend` and absent on wasmJs), why Arrow stream
   magic is gated behind the extension, the `sourcePath` vs `fileName` split, and the three
   separate VS Code routing lists that have to move with it.
+- 2026-09-21 — `entities/binary-provider-selection` — corrected after review. The
+  extension checks ran *before* the Wasm selector, so real Wasm named `.parquet`,
+  `.arrow` or `.pb` was misclassified; content now decides first and the name is a
+  fallback only. Also recorded that `HexanaFileEditorProvider.accept` carries no magic
+  of its own, so extensionless Wasm was unreachable until `\0asm` went into
+  `NativeBinaryFileTypeDetector`; that VS Code's `inMemoryModules` branch returns before
+  gzip handling, so archive entries needed the same inflation as files from disk; and
+  that both hosts now cap inflation at 128 MiB.
 

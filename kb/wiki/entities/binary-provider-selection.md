@@ -29,11 +29,15 @@ behind it.
 createBinaryProvider(bytes, sourcePath, fileName)          ← what hosts call
         │
         ├─► resolveBinaryProviderKind(bytes, fileName) : BinaryProviderKind
-        │      ext "pb"                         → ProtobufMessage    ) name only; no magic exists
-        │      ext "parquet" | PAR1 magic       → Parquet            )
-        │      ext "arrow"/"arrows" | ARROW1    → Arrow(FILE|STREAM) )
-        │      \0asm + version                  → Wasm | WasmComponent
-        │      else                             → NativeOrGeneric
+        │    1. content, believed over any name:
+        │      PAR1 magic (both ends)           → Parquet
+        │      ARROW1 magic (both ends)         → Arrow(FILE)
+        │      \0asm + version 01 00 / 0d 00    → Wasm | WasmComponent
+        │    2. then the name, for what nothing above could recognize:
+        │      ext "pb"                         → ProtobufMessage    ) no magic exists,
+        │      ext "parquet"                    → Parquet            ) or it was truncated
+        │      ext "arrow" / "arrows"           → Arrow(STREAM|FILE) ) away
+        │    3. else                            → NativeOrGeneric
         │                                              └─► nativeOrGenericBinaryProvider
         └─► the matching provider, over bytes.duplicate().position(0)
 ```
@@ -46,8 +50,11 @@ over. It takes the kind and builds its own.
 ## Decisions worth remembering
 
 - **Content beats the name, except for the three magic-less formats.** A wasm module a build step
-  named `.arrow` is a wasm module. Only `pb` / `parquet` / `arrow` trust the extension, and only
-  because there is nothing else to trust.
+  named `.arrow` is a wasm module. Only `pb` / `parquet` / `arrow` fall back to the extension, and
+  only because there is nothing else to fall back on — a Protobuf wire message has no magic at all,
+  and a Parquet or Arrow file truncated past its trailing magic has lost its. The first cut of this
+  factory had the extension checks *before* the Wasm selector, which quietly misclassified any of
+  the three names holding real Wasm; the order is load-bearing, not incidental.
 - **Arrow stream detection is gated behind the extension.** A stream's only marker is a `0xFFFFFFFF`
   continuation word at offset 0, which any all-`0xFF` prefix matches — a padded ROM image, a
   corrupted binary. So `isArrowStreamMagic` is consulted only after the name has already said Arrow
@@ -60,6 +67,14 @@ over. It takes the kind and builds its own.
   IntelliJ stashes the inflated bytes in `HexanaBinaryVirtualFile.BUFFER_KEY` so the WAT view reads
   them too; the VS Code host sets `displayName` and the `decompressed` flag. Hosts inflate, strip
   the `.gz`, and pass the result in.
+- **Inflation is capped at 128 MiB on both hosts** (`MAX_INFLATED_BYTES` in `HexanaFileEditor.kt`
+  and in `WasmEditorProvider.ts`, matching `MAX_SBOM_INFLATED_BYTES`). A gzip stream declares
+  nothing about its output size, and both inflate into a process the user cannot afford to lose —
+  the IDE's heap, the extension host. Over the cap the file opens as the compressed bytes it is.
+- **An archive entry is inflated on the same path as a file from disk.** VS Code stashes extracted
+  ZIP/TAR entries in `inMemoryModules`, which `openCustomDocument` serves from a branch that
+  returns early — so `inflateIfGzipped` has to run in *both* branches, or a `module.wasm.gz` inside
+  an archive opens as a hex dump of the gzip stream.
 - **`sourcePath` and `fileName` are separate parameters** (the second defaults to the first). A host
   that inflated `part-0.parquet.gz` holds bytes named `part-0.parquet` while the path on disk still
   ends `.gz`: resolution needs the former, and the Parquet/Arrow/pcap/native providers record the
@@ -78,7 +93,12 @@ Resolving the provider only matters once the file is routed to the Hexana editor
 gates that independently:
 
 - IntelliJ — `HexanaFileEditorProvider.accept` (extensions and file types) plus the content
-  detectors `NativeBinaryFileTypeDetector` and `ColumnarBinaryFileTypeDetector`.
+  detectors `NativeBinaryFileTypeDetector` and `ColumnarBinaryFileTypeDetector`. `accept` has no
+  magic of its own, so a format is only reachable by content if one of those two detectors returns
+  a Hexana file type for it: teaching the factory to resolve extensionless Wasm did nothing until
+  `\0asm` was added to `NativeBinaryFileTypeDetector`. Keep its Wasm test and
+  `WasmBinaryProviderSelector` accepting the same bytes, or a tab gets typed Wasm and then shows a
+  generic hex view.
 - VS Code — the `customEditors` `filenamePattern` in `package.json`, plus `isNativeBinary` in
   `src/NativeBinaryFileTypeDetector.ts`, which intercepts an extensionless file's tab and reopens
   it (and persists a `workbench.editorAssociations` entry so later opens are direct). A third list,
