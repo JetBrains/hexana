@@ -81,4 +81,12 @@ Append one line per write-back: date, page, what changed.
   `NativeBinaryFileTypeDetector`; that VS Code's `inMemoryModules` branch returns before
   gzip handling, so archive entries needed the same inflation as files from disk; and
   that both hosts now cap inflation at 128 MiB.
+- 2026-09-21 — `entities/binary-provider-selection` — restored the IntelliJ file-type
+  checks the factory refactor had dropped. `is ParquetFileType` / `is ArrowFileType`
+  were removed as redundant with magic detection, which ignored that the registry is
+  also where Settings | Editor | File Types associations live, and where a truncated
+  Parquet with no trailing magic is still typed. Now `resolveIdeBinaryProviderKind`
+  consults it after content and name; "Open As Protobuf Message" split off to match on
+  its synthetic virtual file so the action stays forced while a plain `.pb` stays a
+  hint.
 

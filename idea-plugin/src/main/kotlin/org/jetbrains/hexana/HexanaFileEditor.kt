@@ -22,6 +22,7 @@ import com.intellij.openapi.fileEditor.FileEditorStateLevel
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
 import com.intellij.openapi.fileTypes.BinaryFileTypeDecompilers
+import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
@@ -632,9 +633,12 @@ class HexanaFileEditor(
      * The format decision itself belongs to [resolveBinaryProviderKind], which every
      * Hexana host shares, so a format the provider layer supports shows the same tabs
      * in the IDE, in VS Code and in the browser. What stays here is the part that is
-     * genuinely IntelliJ's: gzip inflation (which has to be stashed on the
-     * [VirtualFile] so the WAT view reads the inflated bytes too), and the
-     * `VirtualFile`-backed provider subclasses the WAT side view needs.
+     * genuinely IntelliJ's: the "Open As" actions that force a provider outright, the
+     * IDE file type registry as a last-resort hint ([resolveIdeBinaryProviderKind]),
+     * gzip inflation
+     * (which has to be stashed on the [VirtualFile] so the WAT view reads the inflated
+     * bytes too), and the `VirtualFile`-backed provider subclasses the WAT side view
+     * needs.
      *
      * [fileName] is the name the extension is taken from. It is a parameter rather
      * than `myFile.name` because the `.gz` branch recurses with the stripped name, so
@@ -648,11 +652,13 @@ class HexanaFileEditor(
     ): BinaryProvider {
         val ext = fileName.substringAfterLast('.', "").lowercase().ifEmpty { null }
 
-        // The "Open As Protobuf Message" action hands the editor an in-memory file
-        // whose *file type* says Protobuf Message; a wire message has no magic and
-        // that file has no `.pb` name either, so this one cannot be expressed as bytes
-        // plus a name the way the shared factory needs.
-        if (myFile.fileType is ProtobufMessageFileType) {
+        // "Open As Protobuf Message" is the user saying what this file is, so it beats
+        // every other signal including the content — the whole point of the action is
+        // to decode bytes that look like something else as a wire message. Matched on
+        // the synthetic file the action creates rather than on the file *type*, which
+        // a plain `.pb` on disk also carries and which belongs in [fileTypeKind] with
+        // the other passive hints.
+        if (myFile is HexanaProtobufMessageVirtualFile) {
             return ProtobufMessageBinaryProvider(commonBuffer)
         }
 
@@ -680,7 +686,9 @@ class HexanaFileEditor(
 
         val ref = AtomicReference(HexanaSourceLocationProvider.EMPTY)
 
-        return when (resolveBinaryProviderKind(commonBuffer, fileName)) {
+        val kind = resolveIdeBinaryProviderKind(commonBuffer, fileName, myFile.fileType)
+
+        return when (kind) {
             BinaryProviderKind.Wasm -> {
                 object : WasmBinaryVirtualFileProvider(myFile) {
                     override suspend fun createTextEditor(file: VirtualFile): TextEditor {
@@ -757,7 +765,7 @@ class HexanaFileEditor(
             }
 
             else -> {
-                val provider = createBinaryProvider(commonBuffer, sourcePath, fileName)
+                val provider = createBinaryProvider(kind, commonBuffer, sourcePath)
                 // A file nothing recognized keeps its VirtualFile: the description bar's
                 // reveal-in-files action and the structure view read it back off the
                 // provider, and a plain GenericBinaryProvider has nowhere to carry one.
@@ -771,6 +779,7 @@ class HexanaFileEditor(
             }
         }
     }
+
 
 
     private fun initWasmDiffPanel(file: HexanaWasmDiffVirtualFile) {
@@ -1328,6 +1337,44 @@ private fun extractTarEntry(
 } catch (t: Throwable) {
     HexanaLog.LOG.warn("Failed to extract tar entry ${entry.name}", t)
     null
+}
+
+/**
+ * The shared [resolveBinaryProviderKind] decision, refined with the one signal only the
+ * IDE has.
+ *
+ * The shared resolution knows the bytes and the name. [fileType] additionally carries
+ * what the *user* declared under Settings | Editor | File Types, where any pattern can
+ * be bound to a registered type — someone whose pipeline writes `*.pq` can map it to
+ * Parquet, and that file has to open as Parquet. It also carries whatever
+ * [ColumnarBinaryFileTypeDetector] concluded, which matters for a file whose trailing
+ * magic is missing because it was truncated or is still being written: exactly the file
+ * someone reaches for a hex viewer to look at.
+ *
+ * The file type is consulted only once content and name have both come up empty, so a
+ * declared association can never override a format the bytes themselves prove. It
+ * covers the three types the name alone identifies; everything else the registry knows
+ * (ELF, PE, pcap, tar, descriptor sets) is content-detected by
+ * [nativeOrGenericBinaryProvider] anyway.
+ */
+internal fun resolveIdeBinaryProviderKind(
+    bytes: CommonByteBuffer,
+    fileName: String,
+    fileType: FileType,
+): BinaryProviderKind {
+    val contentKind = resolveBinaryProviderKind(bytes, fileName)
+    if (contentKind != BinaryProviderKind.NativeOrGeneric) return contentKind
+    return when (fileType) {
+        is ParquetFileType -> BinaryProviderKind.Parquet
+        // Same rule the shared factory applies once a name has said "Arrow": the
+        // continuation word is only trustworthy after something else already narrowed
+        // the format down to Arrow.
+        is ArrowFileType -> BinaryProviderKind.Arrow(
+            if (isArrowStreamMagic(bytes.duplicate().position(0))) ArrowFormat.STREAM else ArrowFormat.FILE,
+        )
+        is ProtobufMessageFileType -> BinaryProviderKind.ProtobufMessage
+        else -> contentKind
+    }
 }
 
 /**

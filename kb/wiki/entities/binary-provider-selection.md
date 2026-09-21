@@ -45,7 +45,22 @@ createBinaryProvider(bytes, sourcePath, fileName)          ← what hosts call
 `resolveBinaryProviderKind` is exposed separately because IntelliJ cannot use the providers this
 module builds for two of the kinds: the WAT side view needs `WasmBinaryVirtualFileProvider` /
 `WasmComponentBinaryVirtualFileProvider`, which carry the `VirtualFile` a text document is opened
-over. It takes the kind and builds its own.
+over. It takes the kind and builds its own, or hands an adjusted one back to the
+`createBinaryProvider(kind, bytes, sourcePath)` overload.
+
+IntelliJ layers one more signal on top, in `resolveIdeBinaryProviderKind`:
+
+```
+HexanaProtobufMessageVirtualFile          → ProtobufMessage    forced: the user said so
+        │
+resolveBinaryProviderKind(bytes, name)    → content, then name
+        │  (NativeOrGeneric only)
+        ▼
+myFile.fileType: Parquet | Arrow | ProtobufMessage             the IDE's registry
+        │  (still nothing)
+        ▼
+NativeOrGeneric
+```
 
 ## Decisions worth remembering
 
@@ -82,6 +97,18 @@ over. It takes the kind and builds its own.
 - **The factory normalizes the buffer to position 0 once.** Providers read through
   `sharedBytes.duplicate()` and a duplicate inherits the source cursor, so a buffer handed over
   mid-read would have every provider parsing from the middle of the file.
+- **The IDE file type registry is a real signal, and the shared factory cannot see it.** Under
+  Settings | Editor | File Types a user binds arbitrary patterns to a registered type, and
+  `ColumnarBinaryFileTypeDetector`'s verdict lands there too — so `*.pq` mapped to Parquet, or a
+  Parquet file truncated past its trailing magic, is only resolvable from `myFile.fileType`. The
+  first cut of the factory deleted those `is ParquetFileType` / `is ArrowFileType` checks on the
+  grounds that the detector behind them is magic-based and the factory now does magic itself; that
+  reasoning silently discarded every association configured by hand. The type is consulted last, so
+  a declaration can never override a format the bytes prove.
+- **"Open As Protobuf Message" is forced, a `.pb` name is not.** The action beats even the content —
+  decoding bytes that look like something else is the whole point of it — so it is matched on the
+  synthetic `HexanaProtobufMessageVirtualFile` it creates. Matching on `ProtobufMessageFileType`
+  instead would sweep in every plain `.pb` on disk and let the name beat the bytes for it.
 - **A file nothing recognizes keeps its `VirtualFile` in the IDE.** `resolveProvider` swaps a plain
   `GenericBinaryProvider` for `GenericBinaryVirtualFileProvider` when there is a real file behind
   it, because `FileDescriptionBar`'s reveal action and `HexanaStructureViewBuilder` read the file

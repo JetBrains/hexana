@@ -106,13 +106,26 @@ fun createBinaryProvider(
     bytes: CommonByteBuffer,
     sourcePath: String? = null,
     fileName: String? = sourcePath,
+): BinaryProvider = createBinaryProvider(resolveBinaryProviderKind(bytes, fileName), bytes, sourcePath)
+
+/**
+ * Builds the provider for an already-decided [kind].
+ *
+ * For hosts that resolve the kind themselves, or adjust the one
+ * [resolveBinaryProviderKind] returned: the IntelliJ editor also has the IDE's file
+ * type registry to consult, which the shared resolution cannot see.
+ */
+fun createBinaryProvider(
+    kind: BinaryProviderKind,
+    bytes: CommonByteBuffer,
+    sourcePath: String? = null,
 ): BinaryProvider {
     // Every provider below reads through `sharedBytes.duplicate()`, and a duplicate
     // inherits the source cursor — so a buffer handed over mid-read would have each
     // provider parsing from the middle of the file. Normalizing once here means
     // callers do not each have to remember to rewind.
     val shared = bytes.duplicate().position(0)
-    return when (val kind = resolveBinaryProviderKind(shared, fileName)) {
+    return when (kind) {
         BinaryProviderKind.ProtobufMessage -> ProtobufMessageBinaryProvider(shared)
         BinaryProviderKind.Parquet -> ParquetBinaryProvider(shared, sourcePath)
         is BinaryProviderKind.Arrow -> ArrowBinaryProvider(shared, kind.format, sourcePath)
