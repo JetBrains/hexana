@@ -240,6 +240,16 @@
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "hexana.binaryEditor",
+        "displayName": "Hexana Binary Editor",
+        "selector": [
+          {
+            "filenamePattern": "*"
+          }
+        ],
+        "priority": "option"
       }
     ],
     "languages": [

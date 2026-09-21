@@ -319,6 +319,25 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
     private static readonly viewType = "hexana.wasmEditor";
 
+    /**
+     * A second view type contributed against `*` at `priority: "option"`, so Hexana is
+     * offered under "Reopen Editor With…" for a file whose name none of the default
+     * patterns claim — an Arrow IPC stream written as `.stream`, a firmware image as
+     * `.dat`, a payload with no extension at all. Magic-byte interception
+     * (`isNativeBinary`) covers the formats that announce themselves; this covers the
+     * rest, where only the user knows what the bytes are.
+     *
+     * `"option"` and not `"default"` for two reasons: VS Code must not start opening
+     * every text file in the workspace as hex, and two *default* editors matching one
+     * file suppress auto-opening altogether and force the picker instead — which would
+     * mean a `.wasm` no longer opens in Hexana on its own.
+     *
+     * Internal `openWith` calls and the `workbench.editorAssociations` entries the
+     * detector persists all keep using [viewType], so nothing Hexana already claims
+     * starts going through the picker.
+     */
+    private static readonly anyFileViewType = "hexana.binaryEditor";
+
     private static readonly nativeExtensions = new Set([
         "o", "obj", "so", "dylib", "dll", "exe", "elf", "a", "lib",
         "ko", "sys", "axf", "bin", "out",
@@ -550,13 +569,20 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const provider = new WasmEditorProvider(context);
         context.subscriptions.push(WasmEditorProvider.registerConfigureRuntimesCommand(provider));
 
-        return vscode.window.registerCustomEditorProvider(
-            WasmEditorProvider.viewType,
-            provider,
-            {
-                supportsMultipleEditorsPerDocument: true,
-                webviewOptions: { retainContextWhenHidden: true },
-            },
+        // One provider instance behind both view types: which one VS Code resolved
+        // through only decides whether the editor was picked automatically or by hand,
+        // and the provider behaves identically either way.
+        return vscode.Disposable.from(
+            ...[WasmEditorProvider.viewType, WasmEditorProvider.anyFileViewType].map((viewType) =>
+                vscode.window.registerCustomEditorProvider(
+                    viewType,
+                    provider,
+                    {
+                        supportsMultipleEditorsPerDocument: true,
+                        webviewOptions: { retainContextWhenHidden: true },
+                    },
+                ),
+            ),
         );
     }
 

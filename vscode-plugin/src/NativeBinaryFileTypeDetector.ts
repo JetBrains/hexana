@@ -27,7 +27,13 @@ const DESIRED_PREFIX_LENGTH = 0x100;
 /** COFF machine types that mark a real COFF object header. */
 const COFF_MACHINE_TYPES = new Set([0x014C, 0x01C0, 0x01C4, 0x0200, 0x8664, 0xAA64]);
 
-/** Extensions already handled by the customEditors filenamePattern in package.json. */
+/**
+ * Extensions the `default`-priority customEditors selector in package.json already
+ * claims, so VS Code opens them in Hexana on its own and this detector has nothing to
+ * do. The second, `option`-priority contribution matches `*`, but only to offer Hexana
+ * under "Reopen Editor With…" — it never opens anything by itself, so it does not make
+ * this list redundant.
+ */
 const KNOWN_EXTENSIONS = new Set([
     ".wasm", ".bin", ".elf", ".exe", ".so", ".o", ".a", ".dll", ".dylib",
     ".jar", ".zip", ".war", ".apk", ".class", ".dex", ".arsc", ".desc", ".protoset",

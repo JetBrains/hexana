@@ -126,11 +126,21 @@ gates that independently:
   `\0asm` was added to `NativeBinaryFileTypeDetector`. Keep its Wasm test and
   `WasmBinaryProviderSelector` accepting the same bytes, or a tab gets typed Wasm and then shows a
   generic hex view.
-- VS Code — the `customEditors` `filenamePattern` in `package.json`, plus `isNativeBinary` in
-  `src/NativeBinaryFileTypeDetector.ts`, which intercepts an extensionless file's tab and reopens
-  it (and persists a `workbench.editorAssociations` entry so later opens are direct). A third list,
-  `OPENABLE_ENTRY_EXTENSIONS` in `WasmEditorProvider.ts`, decides which archive *entries* open in
-  a tab of their own.
+- VS Code — three surfaces, and a fourth for archive entries:
+  - `customEditors` in `package.json` contributes **two** entries. `hexana.wasmEditor` lists the
+    formats Hexana claims at `priority: "default"` and opens them on its own.
+    `hexana.binaryEditor` matches `*` at `priority: "option"`, which puts "Hexana Binary Editor"
+    in the "Reopen Editor With…" picker for every file without ever being chosen automatically —
+    the only way to open a binary whose extension nothing claims (an Arrow stream written
+    `.stream`, a firmware image `.dat`). Both resolve to one `WasmEditorProvider` instance,
+    registered twice. The priorities are load-bearing: `default` on `*` would open every text
+    file as hex, and two *default* editors matching one file make VS Code suppress auto-opening
+    and show the picker instead, so a `.wasm` would stop opening in Hexana by itself.
+  - `isNativeBinary` in `src/NativeBinaryFileTypeDetector.ts` intercepts an unclaimed file's tab
+    when its magic is recognizable and reopens it (persisting a `workbench.editorAssociations`
+    entry so later opens are direct). Its `KNOWN_EXTENSIONS` mirrors the *default* selector only.
+  - `OPENABLE_ENTRY_EXTENSIONS` in `WasmEditorProvider.ts` decides which archive *entries* open in
+    a tab of their own.
 
-These three VS Code lists and the IntelliJ ones have to be extended together with the factory —
+These VS Code lists and the IntelliJ ones have to be extended together with the factory —
 teaching the factory a format it can never be handed changes nothing.

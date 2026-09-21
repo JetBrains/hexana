@@ -89,4 +89,11 @@ Append one line per write-back: date, page, what changed.
   consults it after content and name; "Open As Protobuf Message" split off to match on
   its synthetic virtual file so the action stays forced while a plain `.pb` stays a
   hint.
+- 2026-09-21 — `entities/binary-provider-selection` — VS Code now contributes two
+  `customEditors` entries: the claimed formats at `default`, and `*` at `option` so
+  "Hexana Binary Editor" appears under "Reopen Editor With…" for any file. Prompted by
+  an Arrow stream named `.stream`, which no pattern matched and whose magic is too weak
+  to sniff. Recorded why the priorities cannot be merged — `default` on `*` would open
+  every text file as hex, and two matching `default` editors suppress auto-opening
+  entirely.
 
