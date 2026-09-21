@@ -289,4 +289,76 @@ correctly.
 
 Estimated time: under 15 minutes for the v1 and CLI portions. v2 walkthrough requires
 the `feature/scripting-v2-phase1` branch. Phase 2A walkthrough requires
-`user/scripting-v2-phase2a`.
+`user/scripting-v2-phase2a`. Phase 2B (IDE run configurations) requires
+`user/scripting-v2-phase2b`.
+
+## Walkthrough part 5: run configurations (IDE)
+
+Requires `user/scripting-v2-phase2b` and a running IDE sandbox (`./gradlew runIde`).
+
+### Creating a run configuration from a script file
+
+1. Open IntelliJ IDEA with the Hexana plugin loaded (via `./gradlew runIde` or from
+   the installed plugin).
+2. Open `examples/scripting-playground/` as a project (or add it as a content root).
+3. In the Project tree, right-click `hexana-script/scripts/check-demo.js` and choose
+   **Run "check-demo"**. A Hexana Script run configuration is created automatically
+   with the script path pre-filled.
+4. The Run tool window opens. The first run has no input binary, so the console prints
+   a usage diagnostic and exits.
+
+### Configuring inputs
+
+1. Open **Run > Edit Configurations**.
+2. Select the "check-demo" Hexana Script configuration.
+3. In the **Input binaries (first = primary)** list, click **+** and choose
+   `examples/scripting-playground/bin/app-debug.wasm`.
+4. Optionally add `bin/hello.wasm` as a second input with **+** again.
+5. The **Flags** section should show no flags (check-demo.js declares none). The table
+   remains empty.
+6. Click **Run**. The console prints:
+
+   ```
+   [log] user:no-trivial-functions: scanned 8 functions
+   [log] user:debug-sections-present: found 6 debug section(s)
+   ```
+
+   Followed by two finding lines. Exit code 1 (the ERROR finding fires).
+
+7. The finding for `user:no-trivial-functions` contains a clickable function link.
+   Click it to navigate to the function in the WAT (virtualized) tab.
+
+### Flags table (flags-demo.js)
+
+1. Create a new Hexana Script run configuration manually via **Run > Edit Configurations > +**.
+2. Set the script path to `hexana-script/scripts/flags-demo.js`.
+3. After a brief pause, the **Flags** table populates with three rows:
+   `mode` (values: fast/slow/auto, default auto), `limit` (int, default 10),
+   `file` (path, no default).
+4. Set `mode` to `fast` and `limit` to `42` in the Value column.
+5. Add `bin/hello.wasm` as the primary input.
+6. Click **Copy CLI Command** and verify the clipboard contains:
+
+   ```
+   hexana-cli-script run-script bin/hello.wasm --script hexana-script/scripts/flags-demo.js -- --mode fast --limit 42
+   ```
+
+7. Click **Run**. Expected stdout:
+
+   ```
+   flags.mode  = fast
+   flags.limit = 42
+   flags.file  = null
+   inputs.length = 1
+   ```
+
+### QA checklist additions (Phase 2B)
+
+- [ ] Right-click check-demo.js: "Run check-demo" creates a run configuration automatically
+- [ ] Run configuration dialog opens without errors; script path is pre-filled
+- [ ] Adding app-debug.wasm as primary input and running: exit code 1, console shows [log] lines
+- [ ] Clicking the funcidx finding link navigates to the WAT (virtualized) tab at the correct function
+- [ ] flags-demo.js: Flags table populates with mode/limit/file rows after script path is entered
+- [ ] Editing limit=42 in the table, running: stdout shows "flags.limit = 42"
+- [ ] Copy CLI Command produces a valid hexana-cli-script invocation with the -- separator
+- [ ] No input binary: run still starts, engine receives the stub wasm, console may show errors or empty findings
