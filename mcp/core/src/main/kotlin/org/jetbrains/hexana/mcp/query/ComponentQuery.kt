@@ -253,64 +253,7 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
             candidateProviders = candidateProviders,
         )
     }?.let(::ComponentCompatibilityEvidenceResult)
-    val issues = mutableListOf<ComponentCompatibilityIssueResult>()
-    issues += resolved.unresolved.map {
-        ComponentCompatibilityIssueResult(
-            importName = it.importRef.fullName,
-            dependencyPath = null,
-            severity = "error",
-            reason = "missing_import",
-            expected = it.importRef.externDescription,
-            actual = null,
-        )
-    }
-    issues += resolved.conflicts.map {
-        ComponentCompatibilityIssueResult(
-            importName = it.importRef.fullName,
-            dependencyPath = null,
-            severity = "error",
-            reason = "ambiguous_provider",
-            expected = it.importRef.fullName,
-            actual = it.candidates.joinToString(", ") { candidate -> candidate.dependency.path.toString() },
-        )
-    }
-    for (match in matches) {
-        if (!match.exactVersionMatch) {
-            issues += ComponentCompatibilityIssueResult(
-                importName = match.importRef.fullName,
-                dependencyPath = match.dependency.path.toString(),
-                severity = "warning",
-                reason = "version_drift",
-                expected = match.importRef.version.ifBlank { null },
-                actual = match.export.version.ifBlank { null },
-            )
-        }
-        val expectedShape = expectedProviderShape(match.importRef)
-        val actualShape = actualProviderShape(match.export)
-        if (!isProviderShapeCompatible(match.importRef, match.export)) {
-            issues += ComponentCompatibilityIssueResult(
-                importName = match.importRef.fullName,
-                dependencyPath = match.dependency.path.toString(),
-                severity = "error",
-                reason = "sort_mismatch",
-                expected = expectedShape,
-                actual = actualShape,
-            )
-            continue
-        }
-        val expectedDesc = match.importRef.externDescription
-        val actualDesc = match.export.externDescription
-        if (expectedDesc != null && actualDesc != null && expectedDesc != actualDesc) {
-            issues += ComponentCompatibilityIssueResult(
-                importName = match.importRef.fullName,
-                dependencyPath = match.dependency.path.toString(),
-                severity = "error",
-                reason = "extern_description_mismatch",
-                expected = expectedDesc,
-                actual = actualDesc,
-            )
-        }
-    }
+    val issues = compatibilityIssues(resolved, candidateProviders)
 
     val missing = resolved.unresolved.map { it.importRef.toUnresolvedResult() }
     val versionDriftCount = issues.count { it.reason == "version_drift" }
@@ -371,6 +314,200 @@ fun WasmComponentBinaryProvider.checkComponentCompatibility(
         ),
     )
 }
+
+fun WasmComponentBinaryProvider.checkComponentCompatibilityExplicit(
+    path: String?,
+    dependencyPaths: List<String>,
+    allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
+    limits: HexanaResourceLimits = HexanaResourceLimits(),
+): CheckComponentCompatibilityExplicitResult {
+    requireCandidateCount(dependencyPaths.size, limits, "dependency paths")
+    val classified = dependencyPaths.map {
+        classifyExplicitComponentProvider(it, allowedFilePolicy, limits)
+    }
+    val components = classified.mapNotNull { it.component }
+    val required = imports
+        .filterNot { isRuntimeImport(it.fullName()) }
+        .map { it.importRef() }
+    val index = ComponentScanIndex(
+        components = components,
+        rejectedCandidates = emptyList(),
+        scannedFileCount = 0,
+        truncated = false,
+    )
+    val resolved = resolveImports(required, index)
+    val candidateProviders = buildProviderVerdicts(required, components)
+    val issues = compatibilityIssues(resolved, candidateProviders)
+    val matches = resolved.matches.map {
+        ComponentCompatibilityMatchResult(
+            importName = it.importRef.fullName,
+            dependencyPath = it.dependency.path.toString(),
+            exportName = it.export.fullName,
+            exactVersionMatch = it.exactVersionMatch,
+        )
+    }
+    return CheckComponentCompatibilityExplicitResult(
+        path = path,
+        compatible = issues.none { it.severity == "error" || it.reason == "version_drift" },
+        matches = matches.take(limits.maxCandidateCount),
+        missingImports = resolved.unresolved.map { it.importRef.toUnresolvedResult() }
+            .take(limits.maxCandidateCount),
+        issues = issues.take(limits.maxCandidateCount),
+        candidateProviders = candidateProviders.map { it.toResult() }
+            .sortedBy { it.dependencyPath }
+            .take(limits.maxCandidateCount),
+        acceptedProviders = classified.mapNotNull { it.acceptedProvider }
+            .take(limits.maxCandidateCount),
+        rejectedDependencies = classified.mapNotNull { it.rejection }
+            .take(limits.maxCandidateCount),
+        directoryScanCount = 0,
+    )
+}
+
+private fun compatibilityIssues(
+    resolved: ResolveResult,
+    candidateProviders: List<ProviderVerdict>,
+): List<ComponentCompatibilityIssueResult> {
+    val issues = mutableListOf<ComponentCompatibilityIssueResult>()
+    issues += resolved.unresolved.map {
+        ComponentCompatibilityIssueResult(
+            importName = it.importRef.fullName,
+            dependencyPath = null,
+            severity = "error",
+            reason = "missing_import",
+            expected = it.importRef.externDescription,
+            actual = null,
+        )
+    }
+    issues += resolved.conflicts.map {
+        ComponentCompatibilityIssueResult(
+            importName = it.importRef.fullName,
+            dependencyPath = null,
+            severity = "error",
+            reason = "ambiguous_provider",
+            expected = it.importRef.fullName,
+            actual = it.candidates.joinToString(", ") { candidate -> candidate.dependency.path.toString() },
+        )
+    }
+    for (match in resolved.matches) {
+        if (!match.exactVersionMatch) {
+            issues += ComponentCompatibilityIssueResult(
+                importName = match.importRef.fullName,
+                dependencyPath = match.dependency.path.toString(),
+                severity = "warning",
+                reason = "version_drift",
+                expected = match.importRef.version.ifBlank { null },
+                actual = match.export.version.ifBlank { null },
+            )
+        }
+        val expectedShape = expectedProviderShape(match.importRef)
+        val actualShape = actualProviderShape(match.export)
+        if (!isProviderShapeCompatible(match.importRef, match.export)) {
+            issues += ComponentCompatibilityIssueResult(
+                importName = match.importRef.fullName,
+                dependencyPath = match.dependency.path.toString(),
+                severity = "error",
+                reason = "sort_mismatch",
+                expected = expectedShape,
+                actual = actualShape,
+            )
+            continue
+        }
+        val expectedDesc = match.importRef.externDescription
+        val actualDesc = match.export.externDescription
+        if (expectedDesc != null && actualDesc != null && expectedDesc != actualDesc) {
+            issues += ComponentCompatibilityIssueResult(
+                importName = match.importRef.fullName,
+                dependencyPath = match.dependency.path.toString(),
+                severity = "error",
+                reason = "extern_description_mismatch",
+                expected = expectedDesc,
+                actual = actualDesc,
+            )
+        }
+    }
+    return issues
+}
+
+private data class ExplicitProviderClassification(
+    val component: ScannedComponent? = null,
+    val acceptedProvider: ExplicitComponentProviderResult? = null,
+    val rejection: ExplicitComponentDependencyRejectionResult? = null,
+)
+
+private fun classifyExplicitComponentProvider(
+    dependencyPath: String,
+    allowedFilePolicy: AllowedFilePolicy,
+    limits: HexanaResourceLimits,
+): ExplicitProviderClassification {
+    if (dependencyPath.isBlank()) return explicitProviderRejection(
+        dependencyPath,
+        "invalid_path",
+        "Dependency path must not be blank",
+    )
+    val path = try {
+        Path.of(dependencyPath).normalize()
+    } catch (_: Exception) {
+        return explicitProviderRejection(dependencyPath, "invalid_path", "Dependency path is invalid")
+    }
+    val allowedPath = try {
+        allowedFilePolicy.resolveAllowedRegularFile(path.toString(), "Component provider")
+    } catch (_: Exception) {
+        return explicitProviderRejection(dependencyPath, "unreadable", "Dependency path is not a readable regular file")
+    }
+    val size = ComponentProviderFileAccessOverride.fileSizeOrNull(allowedPath)
+    if (size != null && size > limits.maxFileWasmBytes) {
+        return explicitProviderRejection(
+            dependencyPath,
+            "oversized",
+            componentProviderRejectedReason(size, limits),
+        )
+    }
+    val bytes = try {
+        when (val readResult = ComponentProviderFileAccessOverride.readBounded(allowedPath, limits.maxFileWasmBytes)) {
+            is BoundedFileReadResult.Bytes -> readResult.bytes
+            is BoundedFileReadResult.TooLarge -> return explicitProviderRejection(
+                dependencyPath,
+                "oversized",
+                componentProviderRejectedReason(readResult.atLeastBytes, limits),
+            )
+        }
+    } catch (_: Exception) {
+        return explicitProviderRejection(dependencyPath, "unreadable", "Dependency path could not be read")
+    }
+    val buffer = bytes.toCommonByteBuffer()
+    if (WasmBinaryProviderSelector.select(buffer) != BinaryProviderType.WasmComponent) {
+        return explicitProviderRejection(
+            dependencyPath,
+            "not_component",
+            "Dependency is not a WebAssembly component",
+        )
+    }
+    val provider = WasmComponentBinaryProvider(buffer)
+    if (!provider.canProvideWasmModule() || provider.parseProblems.isNotEmpty()) {
+        return explicitProviderRejection(
+            dependencyPath,
+            "malformed",
+            "Dependency component could not be parsed",
+        )
+    }
+    val component = ScannedComponent(
+        allowedPath,
+        provider.exports.map { it.exportRef(allowedPath.toString()) },
+    )
+    return ExplicitProviderClassification(
+        component = component,
+        acceptedProvider = ExplicitComponentProviderResult(dependencyPath),
+    )
+}
+
+private fun explicitProviderRejection(
+    dependencyPath: String,
+    reason: String,
+    message: String,
+): ExplicitProviderClassification = ExplicitProviderClassification(
+    rejection = ExplicitComponentDependencyRejectionResult(dependencyPath, reason, message),
+)
 
 private fun WasmComponentImport.surfaceEntry(): ComponentSurfaceEntryResult {
     val ref = importRef()
@@ -544,6 +681,28 @@ internal object ComponentDependencyLockFileAccessOverride {
     )
 }
 
+internal object ComponentDirectoryScanGuard {
+    private val scanGuard = ThreadLocal<(() -> Unit)?>()
+
+    fun <T> withFailingGuard(block: () -> T): T {
+        val previous = scanGuard.get()
+        scanGuard.set { error("Component directory scan was invoked") }
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                scanGuard.remove()
+            } else {
+                scanGuard.set(previous)
+            }
+        }
+    }
+
+    fun beforeScan() {
+        scanGuard.get()?.invoke()
+    }
+}
+
 private data class ComponentScanIndex(
     val components: List<ScannedComponent>,
     val rejectedCandidates: List<RejectedScannedCandidate>,
@@ -557,6 +716,7 @@ private data class ComponentScanIndex(
             allowedFilePolicy: AllowedFilePolicy,
             limits: HexanaResourceLimits = HexanaResourceLimits(),
         ): ComponentScanIndex {
+            ComponentDirectoryScanGuard.beforeScan()
             val components = mutableListOf<ScannedComponent>()
             val rejectedCandidates = mutableListOf<RejectedScannedCandidate>()
             var scanned = 0

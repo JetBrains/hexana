@@ -3,6 +3,7 @@ package org.jetbrains.hexana.mcp
 import org.jetbrains.hexana.graalwasm.wat2wasm.wat2wasm
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.mcp.query.ComponentDependencyLockFileAccessOverride
+import org.jetbrains.hexana.mcp.query.ComponentDirectoryScanGuard
 import org.jetbrains.hexana.mcp.query.ComponentProviderFileAccessOverride
 import org.jetbrains.hexana.mcp.query.resolveComponentDependencies
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
@@ -323,6 +324,134 @@ class ComponentAnalysisServiceTest {
         assertTrue(result.matches.any { it.importName.contains("component:adder/add") })
         assertTrue(result.missingImports.any { it.baseName.contains("component:subtractor/subtract") })
         assertEquals(result.compatible, result.summary.compatible)
+    }
+
+    @Test
+    fun explicitCompatibilityUsesOnlyAcceptedProvidersAndKeepsCompatibilityEvidence() {
+        val root = temporaryFolder.newFolder("explicit-compatibility").toPath()
+        val current = writeComponentEntries(
+            root.resolve("current.component.wasm"),
+            imports = listOf(
+                componentImport("acme:pricing/calculate@2.0.0"),
+                componentImport("acme:missing/required@1.0.0"),
+                componentImport("acme:shape/value@1.0.0"),
+                componentImport("acme:description/value@1.0.0"),
+            ),
+            exports = emptyList(),
+        )
+        val drift = writeComponentEntries(
+            root.resolve("deps/drift.component.wasm"),
+            imports = emptyList(),
+            exports = listOf(componentExport("acme:pricing/calculate@1.0.0")),
+        )
+        val ambiguous = writeComponentEntries(
+            root.resolve("deps/ambiguous.component.wasm"),
+            imports = emptyList(),
+            exports = listOf(componentExport("acme:pricing/calculate@1.0.0")),
+        )
+        val wrongSort = writeComponentEntries(
+            root.resolve("deps/wrong-sort.component.wasm"),
+            imports = emptyList(),
+            exports = listOf(componentExport("acme:shape/value@1.0.0", sortKind = "value")),
+        )
+        val wrongDescription = writeComponentEntries(
+            root.resolve("deps/wrong-description.component.wasm"),
+            imports = emptyList(),
+            exports = listOf(
+                componentExport(
+                    "acme:description/value@1.0.0",
+                    sortKind = "func",
+                    externKind = "component",
+                )
+            ),
+        )
+
+        val result = ComponentDirectoryScanGuard.withFailingGuard {
+            service.checkComponentCompatibilityExplicit(
+                input = WasmInput.FilePath(current.toString()),
+                dependencyPaths = listOf(drift.toString(), ambiguous.toString(), wrongSort.toString(), wrongDescription.toString()),
+            )
+        }
+
+        assertEquals(0, result.directoryScanCount)
+        assertEquals(4, result.acceptedProviders.size)
+        assertTrue(result.issues.any { it.reason == "ambiguous_provider" })
+        assertTrue(result.issues.any { it.reason == "missing_import" })
+        assertEquals(
+            setOf("version_drift", "sort_mismatch", "extern_description_mismatch"),
+            result.candidateProviders.map { it.verdict }.toSet(),
+        )
+        assertTrue(result.rejectedDependencies.isEmpty())
+    }
+
+    @Test
+    fun explicitCompatibilityEmptyDependencyListNeverScansOrDiscoversProviders() {
+        val current = writeComponentEntries(
+            temporaryFolder.newFile("empty-dependencies.component.wasm").toPath(),
+            imports = emptyList(),
+            exports = emptyList(),
+        )
+
+        val result = ComponentDirectoryScanGuard.withFailingGuard {
+            service.checkComponentCompatibilityExplicit(
+                input = WasmInput.FilePath(current.toString()),
+                dependencyPaths = emptyList(),
+            )
+        }
+
+        assertEquals(0, result.directoryScanCount)
+        assertTrue(result.compatible)
+        assertTrue(result.matches.isEmpty())
+        assertTrue(result.missingImports.isEmpty())
+        assertTrue(result.candidateProviders.isEmpty())
+        assertTrue(result.acceptedProviders.isEmpty())
+        assertTrue(result.rejectedDependencies.isEmpty())
+    }
+
+    @Test
+    fun explicitCompatibilityClassifiesEveryRejectedPathWithoutDirectoryScanning() {
+        val root = temporaryFolder.newFolder("explicit-rejections").toPath()
+        val current = writeComponentEntries(
+            root.resolve("current.component.wasm"),
+            imports = emptyList(),
+            exports = emptyList(),
+        )
+        val oversized = root.resolve("deps/oversized.component.wasm")
+        Files.createDirectories(oversized.parent)
+        val maxFileBytes = 1_024
+        Files.write(oversized, ByteArray(maxFileBytes + 1))
+        val malformed = root.resolve("deps/malformed.component.wasm")
+        Files.write(malformed, byteArrayOf(0x00, 0x61, 0x73, 0x6d, 0x0d, 0x00, 0x01, 0x00, 0x0a, 0x01, 0x80.toByte()))
+        val core = root.resolve("deps/core.wasm")
+        Files.write(core, wat2wasm("(module (func))"))
+        val missing = root.resolve("deps/missing.component.wasm")
+        val dependencyPaths = listOf("", missing.toString(), oversized.toString(), malformed.toString(), core.toString())
+
+        val result = ComponentDirectoryScanGuard.withFailingGuard {
+            DefaultHexanaAnalysisService(
+                limits = HexanaResourceLimits(maxFileWasmBytes = maxFileBytes),
+            ).checkComponentCompatibilityExplicit(
+                input = WasmInput.FilePath(current.toString()),
+                dependencyPaths = dependencyPaths,
+            )
+        }
+
+        assertEquals(0, result.directoryScanCount)
+        assertEquals(
+            dependencyPaths.size,
+            result.rejectedDependencies.size,
+        )
+        assertEquals(
+            listOf(
+                "" to "invalid_path",
+                missing.toString() to "unreadable",
+                oversized.toString() to "oversized",
+                malformed.toString() to "malformed",
+                core.toString() to "not_component",
+            ),
+            result.rejectedDependencies.map { it.dependencyPath to it.reason },
+        )
+        assertTrue(result.acceptedProviders.isEmpty())
     }
 
     @Test

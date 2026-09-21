@@ -14,6 +14,7 @@ import org.jetbrains.hexana.mcp.model.binaries.BinaryFunctionsResult
 import org.jetbrains.hexana.mcp.model.binaries.BinarySummaryResult
 import org.jetbrains.hexana.mcp.model.binaries.QueryBinaryResult
 import org.jetbrains.hexana.mcp.model.components.CheckComponentCompatibilityResult
+import org.jetbrains.hexana.mcp.model.components.CheckComponentCompatibilityExplicitResult
 import org.jetbrains.hexana.mcp.model.components.ListComponentSurfaceResult
 import org.jetbrains.hexana.mcp.model.components.ResolveComponentDependenciesResult
 import org.jetbrains.hexana.mcp.model.exports.ListExportedFunctionsResult
@@ -156,6 +157,12 @@ interface HexanaAnalysisService {
         dependencyLockPath: String?
     ): CheckComponentCompatibilityResult {
         throw UnsupportedOperationException("checkComponentCompatibility is not implemented")
+    }
+    fun checkComponentCompatibilityExplicit(
+        input: WasmInput,
+        dependencyPaths: List<String>,
+    ): CheckComponentCompatibilityExplicitResult {
+        throw UnsupportedOperationException("checkComponentCompatibilityExplicit is not implemented")
     }
     fun listCustomSections(input: WasmInput): ListCustomSectionsResult
     fun listImports(input: WasmInput): ListImportsResult
@@ -490,6 +497,19 @@ class DefaultHexanaAnalysisService(
             projectRoot = projectRoot,
             previousPath = previousPath,
             dependencyLockPath = dependencyLockPath,
+            allowedFilePolicy = allowedFilePolicy,
+            limits = limits,
+        )
+    }
+
+    override fun checkComponentCompatibilityExplicit(
+        input: WasmInput,
+        dependencyPaths: List<String>,
+    ): CheckComponentCompatibilityExplicitResult {
+        val wasm = loadComponent(input)
+        return wasm.provider.checkComponentCompatibilityExplicit(
+            path = input.artifactPathLabel(),
+            dependencyPaths = dependencyPaths,
             allowedFilePolicy = allowedFilePolicy,
             limits = limits,
         )

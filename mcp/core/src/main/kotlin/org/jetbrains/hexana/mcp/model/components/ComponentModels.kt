@@ -297,3 +297,34 @@ data class CheckComponentCompatibilityResult(
     val recommendation: String?,
     val summary: ComponentCompatibilitySummaryResult,
 )
+
+/**
+ * A component provider accepted from an explicitly supplied dependency path.
+ *
+ * The explicit-only compatibility API reports one of these or a rejection for
+ * every path it receives; it never supplements the list through discovery.
+ */
+@Serializable
+data class ExplicitComponentProviderResult(
+    val dependencyPath: String,
+)
+
+@Serializable
+data class ExplicitComponentDependencyRejectionResult(
+    val dependencyPath: String,
+    val reason: String,
+    val message: String,
+)
+
+@Serializable
+data class CheckComponentCompatibilityExplicitResult(
+    val path: String?,
+    val compatible: Boolean,
+    val matches: List<ComponentCompatibilityMatchResult>,
+    val missingImports: List<ComponentUnresolvedImportResult>,
+    val issues: List<ComponentCompatibilityIssueResult>,
+    val candidateProviders: List<ComponentProviderVerdictResult>,
+    val acceptedProviders: List<ExplicitComponentProviderResult>,
+    val rejectedDependencies: List<ExplicitComponentDependencyRejectionResult>,
+    val directoryScanCount: Int,
+)
