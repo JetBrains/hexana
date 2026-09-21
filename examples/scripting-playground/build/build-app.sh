@@ -23,7 +23,10 @@ CLANG="$WASI_SDK/bin/clang"
 OBJCOPY="$WASI_SDK/bin/llvm-objcopy"
 WASM_TOOLS="${WASM_TOOLS:-/Users/user/.cargo/bin/wasm-tools}"
 
-CFLAGS="-target wasm32-wasi -mexec-model=reactor -O1 -g \
+# --no-wasm-opt: the wasi-sdk driver runs binaryen wasm-opt after the link, and
+# wasm-opt's DWARF rewriting drops every .debug_line program (prologue-only units
+# survive). Skipping it keeps the full line tables that source-location tests need.
+CFLAGS="-target wasm32-wasi -mexec-model=reactor -O1 -g --no-wasm-opt \
   -ffile-prefix-map=${ROOT}=. \
   -Wl,--export=greeting_len \
   -Wl,--export=greeting_byte \
@@ -52,14 +55,17 @@ echo "==> Validating sidecar (wasm-tools print -- wasm-tools validate may reject
   echo "    Sidecar: wasm-tools print failed (known: debug-only wasm may lack required sections)"
 
 echo "==> Building app-release.wasm (stripped)"
+# --remove-section=name: with --no-wasm-opt the debug build keeps its name section,
+# so --strip-debug alone no longer yields a fully symbol-stripped release.
 "$OBJCOPY" \
   --strip-debug \
+  --remove-section=name \
   "$BIN/app-debug.wasm" \
   "$BIN/app-release.wasm"
 echo "    Release size: $(wc -c < "$BIN/app-release.wasm") bytes"
 
 echo "==> Verifying stripped: no name/DWARF sections"
-if "$WASM_TOOLS" print "$BIN/app-release.wasm" | grep -E '(custom "\.(debug|name))' > /dev/null 2>&1; then
+if "$WASM_TOOLS" objdump "$BIN/app-release.wasm" | grep -E 'custom "(\.debug|name)"' > /dev/null 2>&1; then
   echo "    WARNING: stripped binary still has debug/name sections"
 else
   echo "    OK: no debug/name sections in app-release.wasm"

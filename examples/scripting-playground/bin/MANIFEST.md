@@ -1,7 +1,7 @@
 # Binary Manifest
 
 Ground-truth facts for the committed binaries. All measurements taken from
-actual build output on 2026-09-18 using the toolchain versions below.
+actual build output on 2026-09-21 using the toolchain versions below.
 
 ## Toolchain
 
@@ -42,11 +42,11 @@ Ground-truth facts (from wasm-tools objdump and print):
 
 | Field | Value |
 |-------|-------|
-| Size | 3933 bytes |
-| SHA-256 | 8f3e1fe46156c64cd3595fe221b1118905bcc1c6038fdf0cbc70bae5b9f1afb9 |
+| Size | 4703 bytes |
+| SHA-256 | 7fb4f42dd824da542fa21b22b471e95b5db2c3b1a2ab51d7bbf5911ae7d9bebd |
 | Source | src/app/main.c, src/app/fib.c, src/app/strings.c |
 | Build script | build/build-app.sh |
-| Build command | clang -target wasm32-wasi -mexec-model=reactor -O1 -g -ffile-prefix-map=ROOT=. -Wl,--export=greeting_len,--export=greeting_byte,--export=compute_fib,--no-entry src/app/main.c src/app/fib.c src/app/strings.c -o bin/app-debug.wasm |
+| Build command | clang -target wasm32-wasi -mexec-model=reactor -O1 -g --no-wasm-opt -ffile-prefix-map=ROOT=. -Wl,--export=greeting_len,--export=greeting_byte,--export=compute_fib,--no-entry src/app/main.c src/app/fib.c src/app/strings.c -o bin/app-debug.wasm |
 | Tool | wasi-sdk 27.0 clang 20.1.8 |
 
 Ground-truth facts:
@@ -56,8 +56,9 @@ Ground-truth facts:
 - Defined functions: 8 (code section count, includes wasi-libc reactor init and musl strlen)
 - Total functions: 8
 - Data segments: 1 (strings: "Hello from Hexana scripting playground" + "app-debug: wasm32-wasi reactor built with wasi-sdk 27.0")
-- Custom sections: `.debug_abbrev`, `.debug_info`, `.debug_str`, `.debug_line`, `.debug_loc`, `.debug_ranges`, `producers`, `target_features`
-- Name section: none (stripped by LLVM linker at O1; names in DWARF .debug_str only)
+- Custom sections: `.debug_abbrev`, `.debug_info`, `.debug_str`, `.debug_line`, `.debug_loc`, `.debug_ranges`, `name`, `producers`, `target_features`
+- Name section: present (190 bytes; kept because --no-wasm-opt skips binaryen, which previously removed it)
+- Line table: full line programs, 99 rows across 5 units (--no-wasm-opt; binaryen wasm-opt used to drop all line-program rows, leaving prologue-only units)
 - DWARF custom sections: present (.debug_abbrev, .debug_info, .debug_str, .debug_line, .debug_loc, .debug_ranges)
 - Validation: passes wasm-tools validate
 - Reproducibility: deterministic when built with `cd examples/scripting-playground && clang ...` (so DW_AT_comp_dir resolves to `.`). Building from a different cwd changes DW_AT_comp_dir and breaks reproducibility. The build script enforces `cd $ROOT` before invoking clang.
@@ -67,11 +68,11 @@ Ground-truth facts:
 
 | Field | Value |
 |-------|-------|
-| Size | 855 bytes |
-| SHA-256 | 1c4f6f03d834b76a7901406b5c235af87fc95dd837e4b4e11af3f7ca7793fd32 |
+| Size | 935 bytes |
+| SHA-256 | 84b60601d0cf43ac463afb48b08f94a87571f42534ad91b74ad1a4c5d6b6abc9 |
 | Source | derived from app-debug.wasm |
 | Build script | build/build-app.sh |
-| Build command | llvm-objcopy --strip-debug bin/app-debug.wasm bin/app-release.wasm |
+| Build command | llvm-objcopy --strip-debug --remove-section=name bin/app-debug.wasm bin/app-release.wasm |
 | Tool | wasi-sdk 27.0 llvm-objcopy |
 
 Ground-truth facts:
@@ -91,8 +92,8 @@ Ground-truth facts:
 
 | Field | Value |
 |-------|-------|
-| Size | 3086 bytes |
-| SHA-256 | ea5db77cfc730294d6df074c34e89fc4bf7503f1e696add2b3421954e75ddcf0 |
+| Size | 3578 bytes |
+| SHA-256 | 45ced72159c1a238bcb6e02899019ffd384e756a565cb8e78bc9a0454d7fc95d |
 | Source | derived from app-debug.wasm |
 | Build script | build/build-app.sh |
 | Build command | llvm-objcopy --only-keep-debug bin/app-debug.wasm bin/app-release.debug.wasm |
@@ -126,8 +127,8 @@ Ground-truth facts:
 
 | Field | Value |
 |-------|-------|
-| Size | 1112 bytes |
-| SHA-256 | 9ee864363e4a4d9a43120ccd52e1cf61b970606bc2f529cb752b50ae9703b1af |
+| Size | 1192 bytes |
+| SHA-256 | 7aa12690fa7db17c5f57f50723c84a98dd8a90f9210395c9728827ceb631b697 |
 | Source | derived from app-release.wasm |
 | Build script | build/build-component.sh |
 | Build command | wasm-tools component new bin/app-release.wasm -o bin/component.wasm |
