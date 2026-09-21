@@ -313,6 +313,7 @@ class HexanaScriptRunner private constructor(
                 checks = contributions.checks.map { it.toInfo() },
                 findings = findings,
                 usageErrors = contributions.usageErrors.distinct(),
+                flagDeclarations = contributions.flagDeclarations.toMap(),
             )
         } catch (error: PolyglotException) {
             val diagnostic = error.toScriptDiagnostic()
@@ -329,6 +330,7 @@ class HexanaScriptRunner private constructor(
                 checks = contributions.checks.map { it.toInfo() },
                 findings = emptyList(),
                 usageErrors = contributions.usageErrors.distinct(),
+                flagDeclarations = contributions.flagDeclarations.toMap(),
             )
         } catch (error: Exception) {
             internalErrorResult(

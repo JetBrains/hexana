@@ -4,6 +4,7 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.model.binaries.BinaryModuleIdentityResult
 import org.jetbrains.hexana.shared.scripting.CheckFinding
 import org.jetbrains.hexana.shared.scripting.CheckRegistrationInfo
+import org.jetbrains.hexana.shared.scripting.FlagSpec
 import org.jetbrains.hexana.shared.scripting.ScriptConsoleEntry
 import org.jetbrains.hexana.shared.scripting.ScriptUsageError
 import org.jetbrains.hexana.shared.scripting.SliceRegistrationInfo
@@ -116,6 +117,8 @@ data class HexanaScriptResult(
      * exit code 2; the tab shape never produces them.
      */
     val usageErrors: List<ScriptUsageError> = emptyList(),
+    /** Flag declarations registered via hexana.defineFlags, keyed by flag name. */
+    val flagDeclarations: Map<String, FlagSpec> = emptyMap(),
 ) {
     val success: Boolean
         get() = status == HexanaScriptStatus.SUCCESS

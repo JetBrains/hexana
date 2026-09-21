@@ -6,6 +6,8 @@ import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.Value
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.shared.scripting.CheckFinding
+import org.jetbrains.hexana.shared.scripting.CheckSeverity
 import org.jetbrains.hexana.shared.scripting.EmptyScriptInvocation
 import org.jetbrains.hexana.shared.scripting.ScriptConsoleEntry
 import org.jetbrains.hexana.shared.scripting.ScriptInvocation
@@ -170,6 +172,70 @@ class HexanaScriptSession private constructor(
                             message = cause.message ?: cause::class.java.name,
                             exceptionClass = cause::class.java.name,
                         )
+                    )
+                )
+            }
+        }
+    }
+
+    /**
+     * Runs all registered checks against the session's primary binary and returns the findings.
+     *
+     * Each call is a fresh run — findings are not accumulated across calls. Returns
+     * [emptyList] immediately when no checks are registered (without touching the executor).
+     *
+     * Mirrors the per-call timeout regime of [fetchPage]: a timeout kills the session.
+     * A check that throws yields one error-severity finding; the other checks still run.
+     *
+     * @throws IllegalStateException when the session is already closed
+     */
+    fun runChecks(): List<CheckFinding> {
+        val c = contributions ?: return emptyList()
+        if (c.checks.isEmpty()) return emptyList()
+        check(isAlive) { "Session is closed" }
+
+        val future = executor!!.submit(Callable {
+            val primaryGraalBinary = contextRef.get()
+                ?.getBindings("js")
+                ?.getMember(SCRIPT_BINARY_GLOBAL)
+            if (primaryGraalBinary != null) {
+                c.runChecks(primaryGraalBinary)
+            } else {
+                emptyList()
+            }
+        })
+
+        return try {
+            future.get(limits.timeoutMillis, TimeUnit.MILLISECONDS)
+        } catch (_: TimeoutException) {
+            killSession()
+            listOf(
+                CheckFinding(
+                    checkId = "<session>",
+                    severity = CheckSeverity.ERROR,
+                    message = "runChecks timed out after ${limits.timeoutMillis} ms",
+                )
+            )
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            killSession()
+            listOf(
+                CheckFinding(
+                    checkId = "<session>",
+                    severity = CheckSeverity.ERROR,
+                    message = "runChecks was interrupted",
+                )
+            )
+        } catch (error: ExecutionException) {
+            val cause = error.cause ?: error
+            when (cause) {
+                is VirtualMachineError -> throw cause
+                is LinkageError -> throw cause
+                else -> listOf(
+                    CheckFinding(
+                        checkId = "<session>",
+                        severity = CheckSeverity.ERROR,
+                        message = cause.message ?: cause::class.java.name,
                     )
                 )
             }
@@ -524,6 +590,7 @@ class HexanaScriptSession private constructor(
                     console = contributions.console.toList(),
                     checks = contributions.checks.map { it.toInfo() },
                     findings = emptyList(), // Session mode: checks run on demand, not during eval
+                    flagDeclarations = contributions.flagDeclarations.toMap(),
                 )
             } catch (error: PolyglotException) {
                 // On eval error the context is closed; session will be dead.

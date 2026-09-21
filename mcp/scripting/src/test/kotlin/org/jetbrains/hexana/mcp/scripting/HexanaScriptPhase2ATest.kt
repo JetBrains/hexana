@@ -4,6 +4,8 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.shared.scripting.CheckSeverity
+import org.jetbrains.hexana.shared.scripting.FlagSpec
+import org.jetbrains.hexana.shared.scripting.FlagType
 import org.jetbrains.hexana.shared.scripting.ScriptAnchor
 import org.jetbrains.hexana.shared.scripting.ScriptInvocation
 import org.jetbrains.hexana.shared.scripting.ScriptUsageError
@@ -720,5 +722,221 @@ class HexanaScriptPhase2ATest {
         assertEquals(setOf("user:c1", "user:c2"), result.checks.map { it.id }.toSet())
         assertEquals(2, result.findings.size)
         assertEquals(setOf("user:c1", "user:c2"), result.findings.map { it.checkId }.toSet())
+    }
+
+    // -------------------------------------------------------------------------
+    // flagDeclarations on HexanaScriptResult (run mode and session initialResult)
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun flagDeclarationsCarriesExactFlagSpecInRunMode() {
+        val result = runner().run(
+            HexanaScriptSource.Inline(
+                """
+                hexana.defineFlags({
+                    mode:    { short: "m", long: "mode",    values: ["fast", "slow", "auto"], default: "auto" },
+                    count:   {            long: "count",   type: "int",    default: 10 },
+                    verbose: { short: "v", long: "verbose", type: "bool",   default: false }
+                });
+                """.trimIndent()
+            ),
+            testProvider(),
+        )
+
+        assertEquals(HexanaScriptStatus.SUCCESS, result.status, "status: ${result.diagnostics}")
+        assertEquals(3, result.flagDeclarations.size, "expected exactly 3 flag declarations")
+
+        val mode = result.flagDeclarations["mode"]
+        assertNotNull(mode, "mode declaration must be present")
+        assertEquals("m", mode.short)
+        assertEquals("mode", mode.long)
+        assertEquals(FlagType.VALUES, mode.type)
+        assertEquals(listOf("fast", "slow", "auto"), mode.values)
+        assertEquals("auto", mode.default)
+
+        val count = result.flagDeclarations["count"]
+        assertNotNull(count, "count declaration must be present")
+        assertNull(count.short)
+        assertEquals("count", count.long)
+        assertEquals(FlagType.INT, count.type)
+        assertEquals(emptyList<String>(), count.values)
+        assertEquals("10", count.default)
+
+        val verbose = result.flagDeclarations["verbose"]
+        assertNotNull(verbose, "verbose declaration must be present")
+        assertEquals("v", verbose.short)
+        assertEquals("verbose", verbose.long)
+        assertEquals(FlagType.BOOL, verbose.type)
+        assertEquals("false", verbose.default)
+    }
+
+    @Test
+    fun flagDeclarationsIsEmptyMapWhenNoDefineFlags() {
+        val result = runner().run(
+            HexanaScriptSource.Inline("print('no flags');"),
+            testProvider(),
+        )
+
+        assertEquals(HexanaScriptStatus.SUCCESS, result.status)
+        assertEquals(emptyMap<String, FlagSpec>(), result.flagDeclarations)
+    }
+
+    @Test
+    fun flagDeclarationsPopulatedInSessionInitialResult() {
+        runner().openSession(
+            HexanaScriptSource.Inline(
+                """
+                hexana.defineFlags({
+                    limit: { short: "l", long: "limit", type: "int", default: 100 }
+                });
+                """.trimIndent()
+            ),
+            testProvider(),
+        ).use { session ->
+            assertEquals(HexanaScriptStatus.SUCCESS, session.initialResult.status,
+                "session eval status: ${session.initialResult.diagnostics}")
+
+            val decls = session.initialResult.flagDeclarations
+            assertEquals(1, decls.size, "expected exactly 1 flag declaration in session initialResult")
+
+            val limit = decls["limit"]
+            assertNotNull(limit, "limit declaration must be present")
+            assertEquals("l", limit.short)
+            assertEquals("limit", limit.long)
+            assertEquals(FlagType.INT, limit.type)
+            assertEquals(emptyList<String>(), limit.values)
+            assertEquals("100", limit.default)
+        }
+    }
+
+    @Test
+    fun flagDeclarationsEmptyMapInSessionInitialResultWhenNoDefineFlags() {
+        runner().openSession(
+            HexanaScriptSource.Inline("print('hi');"),
+            testProvider(),
+        ).use { session ->
+            assertEquals(HexanaScriptStatus.SUCCESS, session.initialResult.status)
+            assertEquals(emptyMap<String, FlagSpec>(), session.initialResult.flagDeclarations)
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // session.runChecks()
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun sessionRunChecksReturnsFindingsForTwoChecks() {
+        runner().openSession(
+            HexanaScriptSource.Inline(
+                """
+                hexana.defineCheck({
+                    id: "user:clean",
+                    severity: "info",
+                    run: function(binary, report) { report.info("all good"); }
+                });
+                hexana.defineCheck({
+                    id: "user:failing",
+                    severity: "error",
+                    run: function(binary, report) {
+                        report.fail("bad thing found", { at: { funcidx: 7 } });
+                    }
+                });
+                """.trimIndent()
+            ),
+            testProvider(),
+        ).use { session ->
+            assertEquals(HexanaScriptStatus.SUCCESS, session.initialResult.status,
+                "session eval status: ${session.initialResult.diagnostics}")
+            assertTrue(session.isAlive)
+
+            val findings = session.runChecks()
+            assertEquals(2, findings.size, "expected exactly 2 findings from 2 checks")
+
+            val cleanFindings = findings.filter { it.checkId == "user:clean" }
+            assertEquals(1, cleanFindings.size)
+            assertEquals(CheckSeverity.INFO, cleanFindings[0].severity)
+            assertEquals("all good", cleanFindings[0].message)
+            assertNull(cleanFindings[0].anchor)
+
+            val failFindings = findings.filter { it.checkId == "user:failing" }
+            assertEquals(1, failFindings.size)
+            assertEquals(CheckSeverity.ERROR, failFindings[0].severity)
+            assertEquals("bad thing found", failFindings[0].message)
+            val anchor = failFindings[0].anchor
+            assertTrue(anchor is ScriptAnchor.Function, "expected Function anchor, got $anchor")
+            assertEquals(7L, (anchor as ScriptAnchor.Function).funcidx)
+        }
+    }
+
+    @Test
+    fun sessionRunChecksSecondInvocationReturnsSameFindings() {
+        runner().openSession(
+            HexanaScriptSource.Inline(
+                """
+                hexana.defineCheck({
+                    id: "user:stable",
+                    severity: "warning",
+                    run: function(binary, report) { report.warn("repeated finding"); }
+                });
+                """.trimIndent()
+            ),
+            testProvider(),
+        ).use { session ->
+            val first = session.runChecks()
+            val second = session.runChecks()
+
+            assertEquals(1, first.size, "first invocation must return 1 finding")
+            assertEquals(1, second.size, "second invocation must return 1 finding")
+            assertEquals(first[0].message, second[0].message, "message must be identical across calls")
+            assertEquals(first[0].checkId, second[0].checkId)
+            assertEquals(first[0].severity, second[0].severity)
+        }
+    }
+
+    @Test
+    fun sessionRunChecksThrowingCheckYieldsErrorFindingAndOtherCheckStillRuns() {
+        runner().openSession(
+            HexanaScriptSource.Inline(
+                """
+                hexana.defineCheck({
+                    id: "user:thrower",
+                    severity: "error",
+                    run: function(binary, report) { throw new Error("session boom"); }
+                });
+                hexana.defineCheck({
+                    id: "user:survivor",
+                    severity: "info",
+                    run: function(binary, report) { report.info("still alive"); }
+                });
+                """.trimIndent()
+            ),
+            testProvider(),
+        ).use { session ->
+            val findings = session.runChecks()
+            assertEquals(2, findings.size, "expected exactly 2 findings")
+
+            val throwerFindings = findings.filter { it.checkId == "user:thrower" }
+            assertEquals(1, throwerFindings.size)
+            assertEquals(CheckSeverity.ERROR, throwerFindings[0].severity)
+            assertTrue(throwerFindings[0].message.contains("session boom"),
+                "finding message must contain the exception message")
+
+            val survivorFindings = findings.filter { it.checkId == "user:survivor" }
+            assertEquals(1, survivorFindings.size)
+            assertEquals(CheckSeverity.INFO, survivorFindings[0].severity)
+            assertEquals("still alive", survivorFindings[0].message)
+        }
+    }
+
+    @Test
+    fun sessionRunChecksReturnsEmptyListWhenNoChecksRegistered() {
+        runner().openSession(
+            HexanaScriptSource.Inline("print('no checks');"),
+            testProvider(),
+        ).use { session ->
+            val findings = session.runChecks()
+            assertEquals(emptyList<org.jetbrains.hexana.shared.scripting.CheckFinding>(), findings,
+                "runChecks must return emptyList when no checks are registered")
+        }
     }
 }
