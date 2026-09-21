@@ -195,6 +195,8 @@ internal fun ScriptTabContent(
                     onRecompute = { refreshKey++ },
                     hexState = hexViewState,
                     modifier = Modifier.weight(1f),
+                    binaryFilePath = binaryFilePath,
+                    scriptName = scriptPath.substringAfterLast('/'),
                 )
             }
             return

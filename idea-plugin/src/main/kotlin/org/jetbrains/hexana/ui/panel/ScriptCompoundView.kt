@@ -26,15 +26,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.vfs.LocalFileSystem
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptSession
 import org.jetbrains.hexana.mcp.scripting.SlicePageResult
+import org.jetbrains.hexana.shared.scripting.CheckFinding
 import org.jetbrains.hexana.shared.scripting.ConsoleSeverity
+import org.jetbrains.hexana.shared.scripting.ScriptAnchor
 import org.jetbrains.hexana.shared.scripting.ScriptConsoleEntry
 import org.jetbrains.hexana.shared.scripting.SliceRegistrationInfo
 import org.jetbrains.hexana.ui.components.Table
+import org.jetbrains.hexana.ui.components.TableCellValue
+import org.jetbrains.hexana.ui.components.TableColumn
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Icon
 import org.jetbrains.jewel.ui.component.IconButton
@@ -45,9 +51,11 @@ import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import org.jetbrains.jewel.ui.theme.defaultTabStyle
 
 private const val LOG_TAB_NAME = "Log"
+private const val CHECKS_TAB_NAME = "Checks"
 
 /**
- * Compound view showing one inner tab per registered slice plus a Log tab.
+ * Compound view showing one inner tab per registered slice, an optional Checks
+ * tab when checks are registered, and a Log tab.
  *
  * Drives page fetching lazily: the first page loads when a tab is first shown,
  * and further pages load on demand when the user clicks "Load more".
@@ -56,6 +64,9 @@ private const val LOG_TAB_NAME = "Log"
  * Staleness is decided by the text hash alone: the version counter triggers a
  * hash recompute on every save, and an undo back to the computed-from text
  * clears the badge even though the version moved on.
+ *
+ * @param binaryFilePath path to the primary binary (used to push findings to the
+ *   ScriptFindingsStore). Null in tests or when no file is known.
  */
 @Composable
 internal fun ScriptCompoundView(
@@ -65,12 +76,28 @@ internal fun ScriptCompoundView(
     onRecompute: () -> Unit,
     hexState: HexViewStateHolder?,
     modifier: Modifier = Modifier,
+    binaryFilePath: String? = null,
+    scriptName: String = "",
 ) {
     val slices = remember(session) { session.initialResult.slices }
-    val tabNames = remember(slices) { slices.map { it.displayName() } + LOG_TAB_NAME }
+    val checks = remember(session) { session.initialResult.checks }
+    val hasChecks = checks.isNotEmpty()
+
+    // Tab names: slices first, then Checks (if any), then Log.
+    val tabNames = remember(slices, hasChecks) {
+        slices.map { it.displayName() } + (if (hasChecks) listOf(CHECKS_TAB_NAME) else emptyList()) + LOG_TAB_NAME
+    }
+    val checksTabIndex = if (hasChecks) slices.size else -1
+    val logTabIndex = if (hasChecks) slices.size + 1 else slices.size
+
     var selectedIndex by remember(session) { mutableIntStateOf(0) }
 
     val sliceModels = remember(session) { slices.map { SliceTabModel(it) } }
+    val checksModel = remember(session) { if (hasChecks) CheckTabModel(checks) else null }
+
+    // Compose-observable findings state: null while loading, list when done.
+    var checkFindings by remember(session) { mutableStateOf<List<CheckFinding>?>(null) }
+
     // Seeded with the entries the eval itself produced; page fetches refresh it.
     val consoleEntries = remember(session) {
         mutableStateListOf<ScriptConsoleEntry>().apply { addAll(session.consoleSnapshot()) }
@@ -78,6 +105,26 @@ internal fun ScriptCompoundView(
 
     DisposableEffect(session) {
         onDispose { session.close() }
+    }
+
+    // Run checks on Dispatchers.IO right after the session opens.
+    LaunchedEffect(session) {
+        if (!hasChecks) return@LaunchedEffect
+        val findings = withContext(Dispatchers.IO) { runInterruptible { session.runChecks() } }
+        checkFindings = findings
+        // Keep the plain model in sync for test-only use.
+        checksModel?.findings = findings
+        // Push to the store so the Problems tab can also reflect them.
+        val project = hexState?.project
+        if (project != null && binaryFilePath != null && binaryFilePath.isNotEmpty()) {
+            val vf = withContext(Dispatchers.IO) {
+                LocalFileSystem.getInstance().findFileByPath(binaryFilePath)
+            }
+            if (vf != null) {
+                ScriptFindingsStore.getInstance(project)
+                    .replaceFindings(vf, scriptName, findings)
+            }
+        }
     }
 
     val isStale = isScriptStale(currentHash = scriptTextHash, stampHash = stampHash)
@@ -120,8 +167,8 @@ internal fun ScriptCompoundView(
 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             val idx = selectedIndex
-            if (idx < slices.size) {
-                SliceTabContent(
+            when {
+                idx < slices.size -> SliceTabContent(
                     session = session,
                     model = sliceModels[idx],
                     sliceInfo = slices[idx],
@@ -131,8 +178,12 @@ internal fun ScriptCompoundView(
                         consoleEntries.addAll(entries)
                     },
                 )
-            } else {
-                LogTabContent(entries = consoleEntries)
+                idx == checksTabIndex && checksModel != null -> ChecksTabContent(
+                    findings = checkFindings,
+                    hexState = hexState,
+                    binaryFilePath = binaryFilePath,
+                )
+                else -> LogTabContent(entries = consoleEntries)
             }
         }
     }
@@ -275,6 +326,93 @@ private suspend fun fetchAndApply(
                 is SlicePageResult.Err -> model.applyError(result.error.diagnostic)
             }
             onDone(entries)
+        }
+    }
+}
+
+/**
+ * Renders the Checks inner tab.
+ *
+ * Columns: Severity, Check (id), Message, Anchor.
+ * Row click: Function anchor -> WAT nav; ByteRange anchor -> hex scroll.
+ * Empty state: shows a clean-run message with a hint about run configurations.
+ *
+ * @param findings null while checks are still running, empty list for a clean run,
+ *   non-empty when there are findings to display.
+ */
+@Composable
+private fun ChecksTabContent(
+    findings: List<CheckFinding>?,
+    hexState: HexViewStateHolder?,
+    binaryFilePath: String?,
+) {
+    val rows = remember(findings) { findings?.map { it.toRow() } ?: emptyList() }
+
+    when {
+        findings == null -> {
+            Text(
+                text = "Running checks…",
+                modifier = Modifier.padding(8.dp),
+                fontSize = 12.sp,
+            )
+        }
+        rows.isEmpty() -> {
+            Column(modifier = Modifier.padding(8.dp)) {
+                Text(
+                    text = "No findings. Checks ran clean.",
+                    fontSize = 12.sp,
+                )
+                Text(
+                    text = "Create a run configuration to run this script with inputs and flags.",
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 4.dp),
+                    color = JewelTheme.globalColors.text.normal.copy(alpha = 0.7f),
+                )
+            }
+        }
+        else -> {
+            val columns: List<TableColumn> = remember(rows) {
+                listOf(
+                    TableColumn("Severity", weight = 0.5f) { rowIndex ->
+                        val row = rows.getOrNull(rowIndex)
+                        TableCellValue(row?.severity ?: "")
+                    },
+                    TableColumn("Check", weight = 1f) { rowIndex ->
+                        val row = rows.getOrNull(rowIndex)
+                        TableCellValue(row?.checkId ?: "")
+                    },
+                    TableColumn("Message", weight = 2f) { rowIndex ->
+                        val row = rows.getOrNull(rowIndex)
+                        TableCellValue(row?.message ?: "")
+                    },
+                    TableColumn("Anchor", weight = 0.8f) { rowIndex ->
+                        val row = rows.getOrNull(rowIndex)
+                        TableCellValue(row?.anchorText ?: "")
+                    },
+                )
+            }
+            Table(
+                columns = columns,
+                dataCount = rows.size,
+                showIdColumn = false,
+                alwaysShowSearch = true,
+                onRow = { rowIndex ->
+                    val finding = findings.getOrNull(rowIndex) ?: return@Table
+                    when (val a = finding.anchor) {
+                        is ScriptAnchor.Function -> {
+                            val project = hexState?.project ?: return@Table
+                            val vf = binaryFilePath?.let {
+                                LocalFileSystem.getInstance().findFileByPath(it)
+                            } ?: return@Table
+                            navigateToFunctionInWat(vf, project, a.funcidx.toInt())
+                        }
+                        is ScriptAnchor.ByteRange -> {
+                            hexState?.scrollHexViewTo(a.offset, setCursor = true)
+                        }
+                        null -> {}
+                    }
+                },
+            )
         }
     }
 }

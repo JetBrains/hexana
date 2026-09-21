@@ -65,9 +65,10 @@ internal fun openScriptSession(
         onLine("$prefix ${diagnostic.location()}${diagnostic.message}")
     }
 
-    return if (result.slices.isEmpty()) {
-        // Legacy path: no slice API used. Close the session immediately
-        // (it was a one-shot run and we consumed the line stream above).
+    val mode = renderModeFor(result.slices, result.checks)
+
+    return if (mode == ScriptRenderMode.Legacy) {
+        // Legacy path: no slice or check API used. Close the session immediately.
         session.close()
         ScriptSessionRunResult(
             mode = ScriptRenderMode.Legacy,

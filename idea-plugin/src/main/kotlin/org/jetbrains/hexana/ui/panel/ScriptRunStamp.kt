@@ -4,6 +4,10 @@ import org.jetbrains.hexana.mcp.scripting.HexanaScriptDiagnostic
 import org.jetbrains.hexana.mcp.scripting.SliceCellValue
 import org.jetbrains.hexana.mcp.scripting.SlicePageResult
 import org.jetbrains.hexana.mcp.scripting.SliceRow
+import org.jetbrains.hexana.shared.scripting.CheckFinding
+import org.jetbrains.hexana.shared.scripting.CheckRegistrationInfo
+import org.jetbrains.hexana.shared.scripting.CheckSeverity
+import org.jetbrains.hexana.shared.scripting.ScriptAnchor
 import org.jetbrains.hexana.shared.scripting.SliceColumnType
 import org.jetbrains.hexana.shared.scripting.SliceRegistrationInfo
 import java.security.MessageDigest
@@ -185,3 +189,140 @@ internal fun SliceRegistrationInfo.firstOffsetColumnIndex(): Int? =
 /** Returns the display name for a slice (strips the "user:" prefix if present). */
 internal fun SliceRegistrationInfo.displayName(): String =
     if (name.startsWith("user:")) name.removePrefix("user:") else name
+
+// -------------------------------------------------------------------------
+// Mode decision (pure, testable)
+// -------------------------------------------------------------------------
+
+/**
+ * Chooses [ScriptRenderMode] from the initial result metadata.
+ *
+ * [Compound] when at least one slice or one check was registered. [Legacy]
+ * when neither was registered (v1 scripts with pure print output).
+ */
+internal fun renderModeFor(
+    slices: List<SliceRegistrationInfo>,
+    checks: List<CheckRegistrationInfo>,
+): ScriptRenderMode = if (slices.isNotEmpty() || checks.isNotEmpty()) {
+    ScriptRenderMode.Compound
+} else {
+    ScriptRenderMode.Legacy
+}
+
+// -------------------------------------------------------------------------
+// Checks tab model (pure, testable)
+// -------------------------------------------------------------------------
+
+/**
+ * Column rendering of a [CheckFinding] in the Checks inner tab.
+ *
+ * @property severity severity label: "ERROR", "WARNING", or "INFO"
+ * @property checkId the check id string (e.g. "user:no-imports")
+ * @property message the finding message
+ * @property anchorText rendered anchor: "func[N]", "0xOFFSET+LEN", or "" for file-level
+ */
+internal data class CheckFindingRow(
+    val severity: String,
+    val checkId: String,
+    val message: String,
+    val anchorText: String,
+)
+
+/** Converts a [CheckFinding] to its display row. */
+internal fun CheckFinding.toRow(): CheckFindingRow = CheckFindingRow(
+    severity = severity.name,
+    checkId = checkId,
+    message = message,
+    anchorText = anchor?.renderAnchor() ?: "",
+)
+
+/** Renders a [ScriptAnchor] to a compact string for the Checks tab Anchor column. */
+internal fun ScriptAnchor.renderAnchor(): String = when (this) {
+    is ScriptAnchor.Function -> "func[$funcidx]"
+    is ScriptAnchor.ByteRange -> "0x${offset.toString(16)}+$length"
+}
+
+// -------------------------------------------------------------------------
+// Problems-tab row model (pure, testable)
+// -------------------------------------------------------------------------
+
+/**
+ * Columns produced for a [CheckFinding] row merged into the Problems tab.
+ *
+ * Mirrors the Problems tab column schema: Kind, Location, Offset, Size, Message.
+ *
+ * @property kind "check:error", "check:warning", or "check:info"
+ * @property location the check id (e.g. "user:no-imports")
+ * @property offsetText hex offset for ByteRange anchors, "" otherwise
+ * @property offsetValue raw offset value for numeric sorting, -1L for non-range rows
+ * @property sizeText hex size for ByteRange anchors, "" otherwise
+ * @property sizeValue raw size value for numeric sorting, -1L for non-range rows
+ * @property message the finding message
+ */
+internal data class FindingProblemsRow(
+    val kind: String,
+    val location: String,
+    val offsetText: String,
+    val offsetValue: Long,
+    val sizeText: String,
+    val sizeValue: Long,
+    val message: String,
+)
+
+/** Converts a [CheckFinding] to its Problems-tab row. */
+internal fun CheckFinding.toProblemsRow(): FindingProblemsRow {
+    val kindLabel = "check:${severity.name.lowercase()}"
+    return when (val a = anchor) {
+        is ScriptAnchor.Function -> FindingProblemsRow(
+            kind = kindLabel,
+            location = "func[${a.funcidx}]",
+            offsetText = "",
+            offsetValue = -1L,
+            sizeText = "",
+            sizeValue = -1L,
+            message = message,
+        )
+        is ScriptAnchor.ByteRange -> FindingProblemsRow(
+            kind = kindLabel,
+            location = checkId,
+            offsetText = "0x${a.offset.toString(16)}",
+            offsetValue = a.offset,
+            sizeText = "0x${a.length.toString(16)}",
+            sizeValue = a.length,
+            message = message,
+        )
+        null -> FindingProblemsRow(
+            kind = kindLabel,
+            location = checkId,
+            offsetText = "",
+            offsetValue = -1L,
+            sizeText = "",
+            sizeValue = -1L,
+            message = message,
+        )
+    }
+}
+
+/**
+ * Model for the Checks tab state.
+ *
+ * Kept as a plain class so tests can drive it without Compose.
+ *
+ * @param checks static check registration info from [HexanaScriptResult.checks]
+ * @param findings findings from [HexanaScriptSession.runChecks], or null while loading
+ */
+internal class CheckTabModel(
+    val checks: List<CheckRegistrationInfo>,
+) {
+    /** True when this model has checks to show (determines whether the tab is rendered). */
+    val hasChecks: Boolean get() = checks.isNotEmpty()
+
+    /** Current findings (null = still loading). */
+    var findings: List<CheckFinding>? = null
+
+    /** True when findings have been loaded and are empty (clean run). */
+    val isClean: Boolean get() = findings?.isEmpty() == true
+
+    /** Rows derived from the current findings list (empty until loaded). */
+    val rows: List<CheckFindingRow> get() = findings?.map { it.toRow() } ?: emptyList()
+}

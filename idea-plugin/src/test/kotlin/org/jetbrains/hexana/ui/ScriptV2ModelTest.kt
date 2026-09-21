@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.ui
 
+import com.intellij.testFramework.LightVirtualFile
 import com.intellij.testFramework.UsefulTestCase
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptDiagnostic
 import org.jetbrains.hexana.mcp.scripting.SliceCellValue
@@ -7,15 +8,26 @@ import org.jetbrains.hexana.mcp.scripting.SlicePage
 import org.jetbrains.hexana.mcp.scripting.SlicePageError
 import org.jetbrains.hexana.mcp.scripting.SlicePageResult
 import org.jetbrains.hexana.mcp.scripting.SliceRow
+import org.jetbrains.hexana.shared.scripting.CheckFinding
+import org.jetbrains.hexana.shared.scripting.CheckRegistrationInfo
+import org.jetbrains.hexana.shared.scripting.CheckSeverity
+import org.jetbrains.hexana.shared.scripting.ScriptAnchor
 import org.jetbrains.hexana.shared.scripting.SliceColumn
 import org.jetbrains.hexana.shared.scripting.SliceColumnType
 import org.jetbrains.hexana.shared.scripting.SliceRegistrationInfo
+import org.jetbrains.hexana.ui.panel.CheckFindingRow
+import org.jetbrains.hexana.ui.panel.CheckTabModel
+import org.jetbrains.hexana.ui.panel.ScriptFindingsStore
 import org.jetbrains.hexana.ui.panel.ScriptRenderMode
 import org.jetbrains.hexana.ui.panel.ScriptRunStamp
 import org.jetbrains.hexana.ui.panel.SORT_CAP_ROW_COUNT
 import org.jetbrains.hexana.ui.panel.SliceTabModel
 import org.jetbrains.hexana.ui.panel.isScriptStale
+import org.jetbrains.hexana.ui.panel.renderModeFor
+import org.jetbrains.hexana.ui.panel.renderAnchor
 import org.jetbrains.hexana.ui.panel.sha256Hex
+import org.jetbrains.hexana.ui.panel.toProblemsRow
+import org.jetbrains.hexana.ui.panel.toRow
 
 /**
  * Pure-logic tests for the v2 scripting model classes.
@@ -224,5 +236,220 @@ class ScriptV2ModelTest : UsefulTestCase() {
             SliceRow(anchor = i.toLong(), cells = listOf(SliceCellValue(text = "row$i")))
         }
         return SlicePage(rows = rows, nextOffset = nextOffset, total = rowCount)
+    }
+
+    // -------------------------------------------------------------------------
+    // Mode decision (renderModeFor)
+    // -------------------------------------------------------------------------
+
+    fun testRenderModeSlicesOnly() {
+        val slices = listOf(sliceInfo())
+        val mode = renderModeFor(slices, emptyList())
+        assertEquals("slices-only -> Compound", ScriptRenderMode.Compound, mode)
+    }
+
+    fun testRenderModeChecksOnly() {
+        val checks = listOf(CheckRegistrationInfo(id = "user:a", severity = CheckSeverity.ERROR, description = null))
+        val mode = renderModeFor(emptyList(), checks)
+        assertEquals("checks-only -> Compound", ScriptRenderMode.Compound, mode)
+    }
+
+    fun testRenderModeBoth() {
+        val slices = listOf(sliceInfo())
+        val checks = listOf(CheckRegistrationInfo(id = "user:a", severity = CheckSeverity.WARNING, description = null))
+        val mode = renderModeFor(slices, checks)
+        assertEquals("slices + checks -> Compound", ScriptRenderMode.Compound, mode)
+    }
+
+    fun testRenderModeNeither() {
+        val mode = renderModeFor(emptyList(), emptyList())
+        assertEquals("neither -> Legacy", ScriptRenderMode.Legacy, mode)
+    }
+
+    // -------------------------------------------------------------------------
+    // ScriptFindingsStore
+    // -------------------------------------------------------------------------
+
+    fun testStoreReplaceSemantics() {
+        val store = ScriptFindingsStore()
+        val file = LightVirtualFile("a.wasm")
+
+        val firstFindings = listOf(
+            CheckFinding("user:c1", CheckSeverity.ERROR, "first finding"),
+        )
+        store.replaceFindings(file, "script1.mjs", firstFindings)
+        assertEquals("first run stored", 1, store.findingsFor(file).size)
+        assertEquals("first finding message", "first finding", store.findingsFor(file)[0].message)
+
+        val secondFindings = listOf(
+            CheckFinding("user:c2", CheckSeverity.WARNING, "second a"),
+            CheckFinding("user:c3", CheckSeverity.INFO, "second b"),
+        )
+        store.replaceFindings(file, "script1.mjs", secondFindings)
+        assertEquals("second run replaces first: 2 findings", 2, store.findingsFor(file).size)
+        assertEquals("second run first message", "second a", store.findingsFor(file)[0].message)
+    }
+
+    fun testStorePerFileIsolation() {
+        val store = ScriptFindingsStore()
+        val fileA = LightVirtualFile("a.wasm")
+        val fileB = LightVirtualFile("b.wasm")
+
+        store.replaceFindings(fileA, "s.mjs", listOf(CheckFinding("user:x", CheckSeverity.ERROR, "for a")))
+
+        assertTrue("b has no findings", store.findingsFor(fileB).isEmpty())
+        assertEquals("a still has its finding", 1, store.findingsFor(fileA).size)
+    }
+
+    fun testStoreClearAll() {
+        val store = ScriptFindingsStore()
+        val file = LightVirtualFile("c.wasm")
+        store.replaceFindings(file, "s.mjs", listOf(CheckFinding("user:x", CheckSeverity.ERROR, "msg")))
+        store.clearAll()
+        assertTrue("after clearAll, no findings", store.findingsFor(file).isEmpty())
+    }
+
+    fun testStoreEmptyFindingsRemovesEntry() {
+        val store = ScriptFindingsStore()
+        val file = LightVirtualFile("d.wasm")
+        store.replaceFindings(file, "s.mjs", listOf(CheckFinding("user:x", CheckSeverity.ERROR, "msg")))
+        store.replaceFindings(file, "s.mjs", emptyList())
+        assertNull("empty findings removes entry", store.getEntry(file))
+    }
+
+    // -------------------------------------------------------------------------
+    // CheckTabModel
+    // -------------------------------------------------------------------------
+
+    fun testCheckTabModelPresentWhenChecksNonEmpty() {
+        val checks = listOf(
+            CheckRegistrationInfo(id = "user:no-imports", severity = CheckSeverity.ERROR, description = null),
+        )
+        val model = CheckTabModel(checks)
+        assertTrue("hasChecks when checks non-empty", model.hasChecks)
+    }
+
+    fun testCheckTabModelAbsentWhenChecksEmpty() {
+        val model = CheckTabModel(emptyList())
+        assertFalse("hasChecks false when checks empty", model.hasChecks)
+    }
+
+    fun testCheckTabModelEmptyStateWhenFindingsEmpty() {
+        val checks = listOf(CheckRegistrationInfo(id = "user:c", severity = CheckSeverity.WARNING, description = null))
+        val model = CheckTabModel(checks)
+        model.findings = emptyList()
+        assertTrue("isClean when findings empty", model.isClean)
+        assertTrue("rows empty when findings empty", model.rows.isEmpty())
+    }
+
+    fun testCheckTabModelNotCleanWhenFindingsNull() {
+        val model = CheckTabModel(listOf(CheckRegistrationInfo("user:c", CheckSeverity.INFO, null)))
+        assertFalse("not isClean when findings == null (still loading)", model.isClean)
+    }
+
+    // -------------------------------------------------------------------------
+    // Anchor rendering
+    // -------------------------------------------------------------------------
+
+    fun testRenderAnchorFunction() {
+        val anchor = ScriptAnchor.Function(funcidx = 3L)
+        assertEquals("func[3]", anchor.renderAnchor())
+    }
+
+    fun testRenderAnchorByteRange() {
+        val anchor = ScriptAnchor.ByteRange(offset = 0x10L, length = 8L)
+        assertEquals("0x10+8", anchor.renderAnchor())
+    }
+
+    // -------------------------------------------------------------------------
+    // CheckFinding -> CheckFindingRow (Checks tab)
+    // -------------------------------------------------------------------------
+
+    fun testCheckFindingToRowFunctionAnchorError() {
+        val finding = CheckFinding(
+            checkId = "user:no-imports",
+            severity = CheckSeverity.ERROR,
+            message = "too many imports",
+            anchor = ScriptAnchor.Function(funcidx = 42L),
+        )
+        val row = finding.toRow()
+        assertEquals("ERROR", row.severity)
+        assertEquals("user:no-imports", row.checkId)
+        assertEquals("too many imports", row.message)
+        assertEquals("func[42]", row.anchorText)
+    }
+
+    fun testCheckFindingToRowByteRangeWarning() {
+        val finding = CheckFinding(
+            checkId = "user:large-section",
+            severity = CheckSeverity.WARNING,
+            message = "section too large",
+            anchor = ScriptAnchor.ByteRange(offset = 256L, length = 1024L),
+        )
+        val row = finding.toRow()
+        assertEquals("WARNING", row.severity)
+        assertEquals("0x100+1024", row.anchorText)
+    }
+
+    fun testCheckFindingToRowNoAnchorInfo() {
+        val finding = CheckFinding(
+            checkId = "user:file-check",
+            severity = CheckSeverity.INFO,
+            message = "informational",
+            anchor = null,
+        )
+        val row = finding.toRow()
+        assertEquals("INFO", row.severity)
+        assertEquals("", row.anchorText)
+    }
+
+    // -------------------------------------------------------------------------
+    // CheckFinding -> FindingProblemsRow (Problems tab injection)
+    // -------------------------------------------------------------------------
+
+    fun testProblemsRowFunctionAnchor() {
+        val finding = CheckFinding(
+            checkId = "user:c",
+            severity = CheckSeverity.ERROR,
+            message = "bad function",
+            anchor = ScriptAnchor.Function(funcidx = 7L),
+        )
+        val row = finding.toProblemsRow()
+        assertEquals("check:error", row.kind)
+        assertEquals("func[7]", row.location)
+        assertEquals("", row.offsetText)
+        assertEquals(-1L, row.offsetValue)
+        assertEquals("bad function", row.message)
+    }
+
+    fun testProblemsRowByteRangeAnchor() {
+        val finding = CheckFinding(
+            checkId = "user:size",
+            severity = CheckSeverity.WARNING,
+            message = "too big",
+            anchor = ScriptAnchor.ByteRange(offset = 0x20L, length = 0x40L),
+        )
+        val row = finding.toProblemsRow()
+        assertEquals("check:warning", row.kind)
+        assertEquals("user:size", row.location)
+        assertEquals("0x20", row.offsetText)
+        assertEquals(0x20L, row.offsetValue)
+        assertEquals("0x40", row.sizeText)
+        assertEquals(0x40L, row.sizeValue)
+    }
+
+    fun testProblemsRowNoAnchor() {
+        val finding = CheckFinding(
+            checkId = "user:global",
+            severity = CheckSeverity.INFO,
+            message = "global note",
+            anchor = null,
+        )
+        val row = finding.toProblemsRow()
+        assertEquals("check:info", row.kind)
+        assertEquals("user:global", row.location)
+        assertEquals("", row.offsetText)
+        assertEquals(-1L, row.offsetValue)
+        assertEquals("", row.sizeText)
     }
 }
