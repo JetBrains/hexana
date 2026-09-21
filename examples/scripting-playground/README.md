@@ -24,11 +24,11 @@ The build scripts accept override env vars: `WAT2WASM`, `WASI_SDK`, `WASM_TOOLS`
 | File | Size | Built by | Purpose |
 |------|------|----------|---------|
 | bin/hello.wasm | 276 bytes | build/build-hello.sh (wabt 1.0.36) | Hand-written WAT: 4 exports, 1 import (env.log), 1 data segment, name section |
-| bin/app-debug.wasm | 3933 bytes | build/build-app.sh (wasi-sdk 27.0) | C reactor (3 files), 5 exports, embedded DWARF + name section |
-| bin/app-release.wasm | 855 bytes | build/build-app.sh | Stripped version of app-debug: no DWARF, no name section |
-| bin/app-release.debug.wasm | 3086 bytes | build/build-app.sh | DWARF sidecar only (llvm-objcopy --only-keep-debug) |
+| bin/app-debug.wasm | 4703 bytes | build/build-app.sh (wasi-sdk 27.0) | C reactor (3 files), 5 exports, embedded DWARF + name section |
+| bin/app-release.wasm | 935 bytes | build/build-app.sh | Stripped version of app-debug: no DWARF, no name section |
+| bin/app-release.debug.wasm | 3578 bytes | build/build-app.sh | DWARF sidecar only (llvm-objcopy --only-keep-debug) |
 | bin/broken.wasm | 276 bytes | build/gen-broken.sh | hello.wasm with byte 0x14 -> 0xFF: fails wasm-tools validate |
-| bin/component.wasm | 1112 bytes | build/build-component.sh (wasm-tools 1.245.1) | Component wrapping app-release.wasm |
+| bin/component.wasm | 1192 bytes | build/build-component.sh (wasm-tools 1.245.1) | Component wrapping app-release.wasm |
 | bin/many-functions.wasm | not committed | build/gen-many-functions.sh | 15000 functions; 413593 bytes at N=15000 |
 
 ## Regenerating
@@ -63,8 +63,8 @@ They run on the current master branch.
    `hexana-script/scripts/v1-overview.js`.
 3. Run `v1-overview.js` against `hello.wasm`. Expected: a structure table (8 regions)
    and a tab list (9 tabs including Data, Exports, Imports, Functions, Custom, Problems,
-   Top, Monos, Garbage).
-4. Switch to `bin/app-debug.wasm`. Run `v1-strings.js`. Expected: a table of 63 strings
+   Top, Monos, Garbage). Switch to `app-debug.wasm` and rerun: 17 regions, 8 tabs.
+4. Switch to `bin/app-debug.wasm`. Run `v1-strings.js`. Expected: a table of 74 strings
    found by the script's byte scan, led by the clang/wasi-sdk DWARF producer strings.
    Note: `binary.strings` is only filled by the native providers (ELF, Mach-O); the Wasm
    provider does not implement the strings capability in v1, so the script scans
@@ -72,7 +72,7 @@ They run on the current master branch.
    including the data segment greeting "Hello, Hexana!" at 0xbe.
 5. Run `v1-open-sibling.js` with `app-debug.wasm` open. Expected: opens
    `app-release.wasm` from the same directory, prints a size comparison table
-   (3933 bytes debug vs 855 bytes release, delta 3078 bytes).
+   (4703 bytes debug vs 935 bytes release, delta 3768 bytes).
 6. Run `v1-slow.js` against any binary. Expected: prints the startup line, then hits the
    timeout after 3 seconds (CLI) or 60 seconds (IDE). Diagnostic code: `TIMEOUT`.
 7. Run `v1-denied.js` against any binary. Expected: exit code 1, diagnostic code
@@ -107,6 +107,138 @@ These scripts use `hexana.defineSlice()`, `binary.functions()`, `binary.imports(
    unnamed functions (odd-indexed). Load-more loads subsequent pages. Note scrolling
    latency at 15000 functions total.
 
+## Walkthrough part 4: checks, baselines, and flags (Phase 2A)
+
+These scripts require branch `user/scripting-v2-phase2a`. They use
+`hexana.defineCheck`, `hexana.defineFlags`, `hexana.args`, `hexana.inputs`,
+and `hexana.flags`.
+
+### check-demo.js
+
+Runs two checks against `bin/app-debug.wasm`.
+
+1. Raw mode (exit 1 expected because of the ERROR check):
+
+   ```sh
+   hexana-cli-script run-script bin/app-debug.wasm \
+     --script hexana-script/scripts/check-demo.js \
+     --format raw --telemetry-enabled false \
+     --baselines-dir .hexana/baselines
+   ```
+
+   Expected stdout: empty (no `print()` calls in the script).
+   Expected stderr:
+
+   ```
+   [log] user:no-trivial-functions: scanned 8 functions
+   [log] user:debug-sections-present: found 6 debug section(s)
+   ```
+
+   Expected exit code: 1 (the `user:no-trivial-functions` ERROR finding fires on
+   `__wasm_call_ctors` at funcidx 0, whose code body is 3 bytes).
+
+2. SARIF mode (spot-check ruleId, level, baselineState):
+
+   ```sh
+   hexana-cli-script run-script bin/app-debug.wasm \
+     --script hexana-script/scripts/check-demo.js \
+     --format sarif --telemetry-enabled false \
+     --baselines-dir .hexana/baselines
+   ```
+
+   Expected: SARIF JSON on stdout with two results:
+   - `ruleId: user:debug-sections-present`, `level: note`, `baselineState: new`
+   - `ruleId: user:no-trivial-functions`, `level: error`, `baselineState: new`
+
+   Exit code: 1.
+
+### check-baseline-demo.js
+
+Demonstrates the triage loop: a check that always emits one ERROR finding.
+
+1. First run. No baseline file yet. Exit 1, `baselineState: new`:
+
+   ```sh
+   hexana-cli-script run-script bin/app-debug.wasm \
+     --script hexana-script/scripts/check-baseline-demo.js \
+     --format sarif --telemetry-enabled false \
+     --baselines-dir .hexana/baselines
+   ```
+
+   Exit code: 1. SARIF shows `baselineState: new`.
+
+2. Baseline the finding. Exit 0, baseline file appears:
+
+   ```sh
+   hexana-cli-script run-script bin/app-debug.wasm \
+     --script hexana-script/scripts/check-baseline-demo.js \
+     --format sarif --telemetry-enabled false \
+     --baselines-dir .hexana/baselines --update-baselines
+   ```
+
+   Exit code: 0. The file `.hexana/baselines/user:always-fails.json` is created.
+
+3. Re-run without `--update-baselines`. Exit 0, `baselineState: unchanged`:
+
+   ```sh
+   hexana-cli-script run-script bin/app-debug.wasm \
+     --script hexana-script/scripts/check-baseline-demo.js \
+     --format sarif --telemetry-enabled false \
+     --baselines-dir .hexana/baselines
+   ```
+
+   Exit code: 0. SARIF shows `baselineState: unchanged`.
+
+### flags-demo.js
+
+1. Defaults only (exit 0):
+
+   ```sh
+   hexana-cli-script run-script bin/hello.wasm \
+     --script hexana-script/scripts/flags-demo.js \
+     --format raw --telemetry-enabled false
+   ```
+
+   Expected stdout:
+   ```
+   flags.mode  = auto
+   flags.limit = 10
+   flags.file  = null
+   inputs.length = 1
+   ```
+
+   Expected stderr: `[log] hexana.args: ["/path/to/flags-demo.js"]`
+
+2. Flags set, extra input (exit 0):
+
+   ```sh
+   hexana-cli-script run-script bin/hello.wasm \
+     --script hexana-script/scripts/flags-demo.js \
+     --format raw --telemetry-enabled false \
+     --input bin/hello.wasm \
+     -- --mode fast --limit 42 --file bin/hello.wasm
+   ```
+
+   Expected stdout:
+   ```
+   flags.mode  = fast
+   flags.limit = 42
+   flags.file  = bin/hello.wasm
+   inputs.length = 2
+   file.size = 276 bytes  format = Core Wasm
+   ```
+
+3. Undeclared flag (exit 2 expected):
+
+   ```sh
+   hexana-cli-script run-script bin/hello.wasm \
+     --script hexana-script/scripts/flags-demo.js \
+     --format raw --telemetry-enabled false \
+     -- --undeclared-flag value
+   ```
+
+   Expected exit code: 2. Stderr: `Undeclared flag: undeclared-flag`.
+
 ## Broken binary
 
 Open `bin/broken.wasm` in the IDE. Hexana must parse it without crashing. The Problems
@@ -133,9 +265,9 @@ correctly.
 - [ ] `wasm-tools validate` fails for app-release.debug.wasm (expected: no function sections)
 - [ ] `wasm-tools print` succeeds for app-release.debug.wasm
 - [ ] v1-overview.js runs on hello.wasm via CLI: exit 0, 8 structure regions, 9 tabs
-- [ ] v1-overview.js runs on app-debug.wasm via CLI: exit 0, 15 regions, 7 tabs
-- [ ] v1-strings.js runs on app-debug.wasm via CLI: exit 0, 63 strings via byte scan
-- [ ] v1-open-sibling.js on app-debug.wasm via CLI: exit 0, prints size comparison
+- [ ] v1-overview.js runs on app-debug.wasm via CLI: exit 0, 17 regions, 8 tabs
+- [ ] v1-strings.js runs on app-debug.wasm via CLI: exit 0, 74 strings via byte scan
+- [ ] v1-open-sibling.js on app-debug.wasm via CLI: exit 0, prints size comparison (4703 vs 935 bytes)
 - [ ] v1-slow.js via CLI: exit 1, diagnostic code TIMEOUT within 3 seconds
 - [ ] v1-denied.js via CLI: exit 1, diagnostic code SANDBOX_DENIED
 - [ ] gen-many-functions.sh at N=15000: completes in under 5 seconds, output 413593 bytes
@@ -145,6 +277,16 @@ correctly.
 - [ ] async-trap.js on master: prints "sync output visible", exits cleanly (no diagnostic)
 - [ ] Open broken.wasm in IDE: no crash, Problems tab shows error
 - [ ] Open app-release.wasm with sidecar next to it: DWARF info visible in IDE
+- [ ] check-demo.js on app-debug.wasm (raw): exit 1, stderr has [log] lines for both checks
+- [ ] check-demo.js on app-debug.wasm (sarif): SARIF stdout with ruleId/level/baselineState present
+- [ ] check-baseline-demo.js step 1 (no baselines): exit 1, baselineState new in SARIF
+- [ ] check-baseline-demo.js step 2 (--update-baselines): exit 0, .hexana/baselines/user:always-fails.json created
+- [ ] check-baseline-demo.js step 3 (re-run): exit 0, baselineState unchanged in SARIF
+- [ ] flags-demo.js defaults only: exit 0, mode=auto limit=10 file=null inputs.length=1
+- [ ] flags-demo.js with --mode fast --limit 42 --file bin/hello.wasm --input bin/hello.wasm: exit 0, file.size=276
+- [ ] flags-demo.js with undeclared flag: exit 2, stderr contains "Undeclared flag"
+- [ ] .hexana/ appears in .gitignore (baselines dir is not tracked)
 
 Estimated time: under 15 minutes for the v1 and CLI portions. v2 walkthrough requires
-the `feature/scripting-v2-phase1` branch.
+the `feature/scripting-v2-phase1` branch. Phase 2A walkthrough requires
+`user/scripting-v2-phase2a`.

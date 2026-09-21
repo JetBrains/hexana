@@ -2,3 +2,6 @@
 # This build/ holds checked-in fixture build scripts, so re-include it.
 !build/
 !build/**
+
+# Hexana baseline store (created by check scripts with --baselines-dir .hexana/baselines).
+.hexana/
