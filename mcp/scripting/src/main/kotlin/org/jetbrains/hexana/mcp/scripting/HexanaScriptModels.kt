@@ -2,7 +2,10 @@ package org.jetbrains.hexana.mcp.scripting
 
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.model.binaries.BinaryModuleIdentityResult
+import org.jetbrains.hexana.shared.scripting.CheckFinding
+import org.jetbrains.hexana.shared.scripting.CheckRegistrationInfo
 import org.jetbrains.hexana.shared.scripting.ScriptConsoleEntry
+import org.jetbrains.hexana.shared.scripting.ScriptUsageError
 import org.jetbrains.hexana.shared.scripting.SliceRegistrationInfo
 
 sealed interface HexanaScriptSource {
@@ -103,6 +106,16 @@ data class HexanaScriptResult(
     val slices: List<SliceRegistrationInfo> = emptyList(),
     /** Console entries emitted via `console.log/error/debug` during the run. */
     val console: List<ScriptConsoleEntry> = emptyList(),
+    /** Static metadata for checks registered via `hexana.defineCheck(...)`. */
+    val checks: List<CheckRegistrationInfo> = emptyList(),
+    /** Findings produced by running all registered checks against the primary binary. */
+    val findings: List<CheckFinding> = emptyList(),
+    /**
+     * Invocation usage errors detected while resolving argv against `hexana.defineFlags`
+     * declarations (for example an undeclared flag). The CLI maps a non-empty list to
+     * exit code 2; the tab shape never produces them.
+     */
+    val usageErrors: List<ScriptUsageError> = emptyList(),
 ) {
     val success: Boolean
         get() = status == HexanaScriptStatus.SUCCESS

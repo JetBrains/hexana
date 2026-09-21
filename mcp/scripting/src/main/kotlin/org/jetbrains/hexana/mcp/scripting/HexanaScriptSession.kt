@@ -6,7 +6,9 @@ import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.Value
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.shared.scripting.EmptyScriptInvocation
 import org.jetbrains.hexana.shared.scripting.ScriptConsoleEntry
+import org.jetbrains.hexana.shared.scripting.ScriptInvocation
 import org.jetbrains.hexana.shared.scripting.ScriptOpenPolicy
 import org.jetbrains.hexana.shared.scripting.ScriptValue
 import org.jetbrains.hexana.shared.scripting.ScriptOutput
@@ -368,6 +370,7 @@ class HexanaScriptSession private constructor(
             limits: HexanaScriptLimits,
             allowedFilePolicy: AllowedFilePolicy,
             onLine: ((String) -> Unit)?,
+            invocation: ScriptInvocation = EmptyScriptInvocation,
         ): HexanaScriptSession {
             val started = System.nanoTime()
             val contributions = GraalScriptContributionCollector()
@@ -383,6 +386,7 @@ class HexanaScriptSession private constructor(
                     evalInSession(
                         runner, script, binaryProvider, fileName, filePath,
                         limits, allowedFilePolicy, contributions, output, contextRef, binaryValueRef, started,
+                        invocation,
                     )
                 }).get(limits.timeoutMillis, TimeUnit.MILLISECONDS)
             } catch (_: TimeoutException) {
@@ -477,7 +481,9 @@ class HexanaScriptSession private constructor(
             contextRef: AtomicReference<Context?>,
             binaryValueRef: AtomicReference<ScriptValue>,
             started: Long,
+            invocation: ScriptInvocation = EmptyScriptInvocation,
         ): HexanaScriptResult {
+            contributions.invocation = invocation
             val previousClassLoader = Thread.currentThread().contextClassLoader
             return try {
                 Thread.currentThread().contextClassLoader = HexanaScriptSession::class.java.classLoader
@@ -496,8 +502,10 @@ class HexanaScriptSession private constructor(
                 for ((name, value) in globals) {
                     bindings.putMember(name, ScriptValueGraalProxy.toGuest(value))
                 }
-                // Capture the binary ScriptValue for use in session page calls.
-                binaryValueRef.set(globals[SCRIPT_BINARY_GLOBAL] ?: ScriptValue.Null)
+                // Capture the binary ScriptValue for use in session page calls and inputs[0].
+                val primaryBinary = globals[SCRIPT_BINARY_GLOBAL] ?: ScriptValue.Null
+                binaryValueRef.set(primaryBinary)
+                contributions.primaryBinaryValue = primaryBinary
                 // The v2 globals are host-bound on top of the pinned v1 set.
                 bindings.putMember(SCRIPT_HEXANA_GLOBAL, contributions.buildGraalHexanaProxy())
                 bindings.putMember(SCRIPT_CONSOLE_GLOBAL, contributions.buildGraalConsoleProxy())
@@ -514,6 +522,8 @@ class HexanaScriptSession private constructor(
                     durationMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started),
                     slices = contributions.slices.map { it.toInfo() },
                     console = contributions.console.toList(),
+                    checks = contributions.checks.map { it.toInfo() },
+                    findings = emptyList(), // Session mode: checks run on demand, not during eval
                 )
             } catch (error: PolyglotException) {
                 // On eval error the context is closed; session will be dead.

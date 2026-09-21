@@ -428,6 +428,59 @@ interface HexanaTab {
   rows(): string[][];
 }
 
+/**
+ * Report object passed to a check's run() callback. Call fail/warn/info to
+ * emit findings. The method's severity overrides the check's declared
+ * severity.
+ */
+interface CheckReport {
+  /**
+   * Emits an error-severity finding.
+   *
+   * @example report.fail("Import count too high", { at: { funcidx: 0 } });
+   */
+  fail(message: string, options?: CheckFindingOptions): void;
+
+  /**
+   * Emits a warning-severity finding.
+   */
+  warn(message: string, options?: CheckFindingOptions): void;
+
+  /**
+   * Emits an info-severity finding.
+   */
+  info(message: string, options?: CheckFindingOptions): void;
+}
+
+/**
+ * Specification passed to hexana.defineCheck(). The id must start with
+ * "user:".
+ */
+interface CheckSpec {
+  /**
+   * Unique check identifier, must start with "user:".
+   */
+  id: string;
+
+  /**
+   * Default severity: "error", "warning", or "info".
+   */
+  severity: CheckSeverity;
+
+  /**
+   * Optional human-readable description.
+   */
+  description?: string;
+
+  /**
+   * Called once after the collection pass to analyse the binary and emit
+   * findings.
+   *
+   * @example run(binary, report) { if (binary.size > 1_000_000) report.warn("Large binary"); }
+   */
+  run(binary: HexanaBinary, report: CheckReport): void;
+}
+
 /** Column value type accepted by a slice definition. */
 type SliceColumnType = "string" | "int" | "offset" | "funcidx" | "bool";
 
@@ -491,6 +544,70 @@ interface SliceSpec {
   ): SliceRowsResult;
 }
 
+/** Severity for a check finding emitted by report.fail/warn/info. */
+type CheckSeverity = "error" | "warning" | "info";
+
+/** Options accepted by report.fail/warn/info. */
+interface CheckFindingOptions {
+  /**
+   * Location in the binary. Use { funcidx: number } for a WebAssembly function,
+   * { offset: number, length: number } for a byte range, or a bare number for a byte offset.
+   */
+  at?: { funcidx: number } | { offset: number; length?: number } | number;
+}
+
+/**
+ * Report object passed to a check's run() function. Use fail/warn/info to emit findings.
+ * The severity of the method used takes precedence over the check's declared severity.
+ */
+interface CheckReport {
+  /** Emits an error-severity finding. */
+  fail(message: string, options?: CheckFindingOptions): void;
+  /** Emits a warning-severity finding. */
+  warn(message: string, options?: CheckFindingOptions): void;
+  /** Emits an info-severity finding. */
+  info(message: string, options?: CheckFindingOptions): void;
+}
+
+/** Full specification passed to hexana.defineCheck(). */
+interface CheckSpec {
+  /**
+   * Unique check identifier. Must start with "user:". Registering the same id twice
+   * in one script is an error.
+   */
+  id: string;
+  /** Default severity for findings this check emits. */
+  severity: CheckSeverity;
+  /** Optional human-readable description shown in the UI. */
+  description?: string;
+  /**
+   * Callback that analyses the binary and emits findings via the report object.
+   * Called once per run, after the collection pass. If it throws, a single error
+   * finding with the exception message is recorded; other checks still run.
+   */
+  run(binary: HexanaBinary, report: CheckReport): void;
+}
+
+/** Value type for a flag declared via hexana.defineFlags(). */
+type FlagType = "string" | "int" | "bool" | "path";
+
+/** One flag declared via hexana.defineFlags(). */
+interface FlagDeclaration {
+  /** Optional single-character short form (without leading -). */
+  short?: string;
+  /** Long form (without leading --). Defaults to the declaration key name. */
+  long?: string;
+  /**
+   * Value type. Use "path" for file paths: the file is opened as a binary handle
+   * via hexana.inputs. Omit when using values.
+   */
+  type?: FlagType;
+  /** Allowed string values (mutually exclusive with type). */
+  values?: string[];
+  /** Default value. null means no default (flag is absent when not supplied). */
+  default?: string | number | boolean | null;
+}
+
 /** The hexana host API available in every script tab. */
 interface HexanaApi {
   /**
@@ -498,13 +615,44 @@ interface HexanaApi {
    * Registering the same name twice in one script is an error.
    */
   defineSlice(spec: SliceSpec): void;
+  /**
+   * Registers a binary check. The id must start with "user:". Registering the same
+   * id twice in one script is an error. The run() callback is called after the
+   * collection pass and receives a report object for emitting findings.
+   */
+  defineCheck(spec: CheckSpec): void;
+  /**
+   * Declares the flags this script accepts. Call before accessing hexana.flags.
+   * Keys are logical flag names; values are flag declarations.
+   *
+   * @example
+   * hexana.defineFlags({ verbose: { long: "verbose", type: "bool", default: false } });
+   */
+  defineFlags(declarations: Record<string, FlagDeclaration>): void;
   /** API version. Currently 2. */
   readonly api: number;
   /**
    * Returns true when the named feature is available.
-   * Recognised values: "slices".
+   * Recognised values: "slices", "checks".
    */
   has(feature: string): boolean;
+  /**
+   * Raw argument vector. args[0] is the script path; subsequent elements are
+   * positional and flag arguments as given on the command line. In a tab context
+   * args is [scriptPath].
+   */
+  readonly args: string[];
+  /**
+   * Positional file arguments as binary handles. inputs[0] is the primary binary
+   * (same as the global binary). In a tab context inputs is [binary].
+   */
+  readonly inputs: HexanaBinary[];
+  /**
+   * Resolved flag values, keyed by the logical flag name declared in defineFlags().
+   * Undeclared flags passed on the command line are a usage error (exit code 2).
+   * In a tab context, every declared flag equals its default; undeclared flags are null.
+   */
+  readonly flags: Record<string, string | number | boolean | null>;
 }
 
 /** Diagnostics console available in every script tab. */

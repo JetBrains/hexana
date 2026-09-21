@@ -82,6 +82,20 @@ class AllowedFilePolicy private constructor(
         )
     }
 
+    /**
+     * Returns a new policy that additionally allows the exact resolved [paths].
+     *
+     * Used by script flag resolution: when a flag has type=path, its resolved
+     * file is added to the allowed set so the script can open it via `open()`.
+     * The base policy's rules are unchanged; this extends them with an explicit
+     * file list. If [allowAllFiles] is already true, the additional paths are a no-op.
+     */
+    fun withAdditionalAllowedFiles(paths: List<java.nio.file.Path>): AllowedFilePolicy {
+        if (allowAllFiles || paths.isEmpty()) return this
+        val combinedRoots = allowedRoots + paths
+        return AllowedFilePolicy(allowAllFiles = false, allowedRoots = combinedRoots)
+    }
+
     companion object {
         val allowAll: AllowedFilePolicy = AllowedFilePolicy(allowAllFiles = true, allowedRoots = emptyList())
 

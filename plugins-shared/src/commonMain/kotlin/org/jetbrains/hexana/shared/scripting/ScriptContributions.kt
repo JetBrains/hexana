@@ -62,6 +62,151 @@ data class SliceRegistration(
     val rows: ScriptValue.Fn,
 )
 
+// -------------------------------------------------------------------------
+// Anchor model — shared with both slices and checks.
+// -------------------------------------------------------------------------
+
+/**
+ * An anchor that ties a slice row or check finding to a location in the binary.
+ *
+ * Gives both [SliceRow] and [CheckFinding] a typed anchor rather than a bare
+ * [Long]. Keep this minimal: add variants only when a new location kind is needed.
+ */
+sealed class ScriptAnchor {
+    /** A single WebAssembly function, identified by its global function index. */
+    data class Function(val funcidx: Long) : ScriptAnchor()
+
+    /** A contiguous byte range in the binary file. */
+    data class ByteRange(val offset: Long, val length: Long) : ScriptAnchor()
+}
+
+// -------------------------------------------------------------------------
+// Check model
+// -------------------------------------------------------------------------
+
+/** Severity for a check definition and for individual findings. */
+enum class CheckSeverity { ERROR, WARNING, INFO }
+
+/**
+ * A user-defined check registered via `hexana.defineCheck(...)`.
+ *
+ * The live [run] function is a JS callable; it must not be serialized or
+ * returned after the GraalJS context that owns it is closed. Use
+ * [CheckRegistrationInfo] for the serializable metadata form.
+ *
+ * @param id unique check identifier; must start with "user:"
+ * @param severity default severity for findings emitted without an override
+ * @param description optional human-readable description
+ * @param run JS function to invoke as run(binary, report)
+ */
+data class CheckRegistration(
+    val id: String,
+    val severity: CheckSeverity,
+    val description: String?,
+    val run: ScriptValue.Fn,
+)
+
+/**
+ * Static check metadata included in [org.jetbrains.hexana.mcp.scripting.HexanaScriptResult].
+ *
+ * The run function is not included; it is only available while the GraalJS context is alive.
+ */
+data class CheckRegistrationInfo(
+    val id: String,
+    val severity: CheckSeverity,
+    val description: String?,
+)
+
+/** Converts a live [CheckRegistration] to its serializable metadata form. */
+fun CheckRegistration.toInfo(): CheckRegistrationInfo =
+    CheckRegistrationInfo(id = id, severity = severity, description = description)
+
+/**
+ * One finding emitted by a check via `report.fail(...)`, `report.warn(...)`, or `report.info(...)`.
+ *
+ * @param checkId the id of the check that emitted this finding
+ * @param severity the severity at which the finding was reported
+ * @param message human-readable description of the finding
+ * @param anchor optional location in the binary; null means the finding is file-level
+ */
+data class CheckFinding(
+    val checkId: String,
+    val severity: CheckSeverity,
+    val message: String,
+    val anchor: ScriptAnchor? = null,
+)
+
+// -------------------------------------------------------------------------
+// Flag model
+// -------------------------------------------------------------------------
+
+/**
+ * The declared type for a flag value.
+ *
+ * - [STRING]: any string value
+ * - [INT]: parsed as a long integer
+ * - [BOOL]: "true"/"false" (case-insensitive) or presence flag
+ * - [PATH]: a file path; the file is loaded as a binary handle and its path
+ *   is added to the host's allowed file set
+ * - [VALUES]: an enumerated set of string values declared via [FlagSpec.values]
+ */
+enum class FlagType { STRING, INT, BOOL, PATH, VALUES }
+
+/**
+ * One flag declared via `hexana.defineFlags({name: {short?, long, type | values, default}})`.
+ *
+ * @param short optional single-char short form (without leading `-`)
+ * @param long the long form (without leading `--`)
+ * @param type the value type; [FlagType.VALUES] requires [values] to be non-empty
+ * @param values allowed string values for [FlagType.VALUES] flags
+ * @param default raw default value as a string, or null
+ */
+data class FlagSpec(
+    val short: String?,
+    val long: String,
+    val type: FlagType,
+    val values: List<String>,
+    val default: String?,
+)
+
+/**
+ * A usage error detected during invocation parsing.
+ *
+ * The CLI maps these to exit code 2; the IDE tab shape uses defaults and
+ * treats undeclared flags as null without error.
+ */
+sealed class ScriptUsageError {
+    /** A flag key was present in argv but not declared via `hexana.defineFlags`. */
+    data class UndeclaredFlag(val key: String) : ScriptUsageError()
+
+    /** A flag value was not a member of the declared [FlagSpec.values] set. */
+    data class InvalidFlagValue(val key: String, val value: String, val allowed: List<String>) : ScriptUsageError()
+
+    /** A flag value could not be parsed as the declared type. */
+    data class FlagTypeMismatch(val key: String, val value: String, val type: FlagType) : ScriptUsageError()
+}
+
+/**
+ * The invocation context passed from the host to the script engine.
+ *
+ * [argv] is the raw argument vector (args[0] = script path).
+ * [extraInputPaths] are the positional file arguments after the script path.
+ *
+ * In a tab context (IDE/VS Code): argv = [scriptPath], extraInputPaths = [] (the
+ * primary binary is bound as `binary` by the host, not counted as an extra input).
+ */
+data class ScriptInvocation(
+    val argv: List<String> = emptyList(),
+    val extraInputPaths: List<String> = emptyList(),
+)
+
+/** Companion value for the empty/tab-like invocation. */
+val EmptyScriptInvocation: ScriptInvocation = ScriptInvocation()
+
+// -------------------------------------------------------------------------
+// Severity of a console entry emitted by `console.log/error/debug`.
+// -------------------------------------------------------------------------
+
 /** Severity of a console entry emitted by `console.log/error/debug`. */
 enum class ConsoleSeverity { LOG, ERROR, DEBUG }
 
@@ -87,10 +232,14 @@ data class ScriptConsoleEntry(
 open class ScriptContributionCollector {
 
     private val _slices = mutableListOf<SliceRegistration>()
+    private val _checks = mutableListOf<CheckRegistration>()
     private val _console = mutableListOf<ScriptConsoleEntry>()
 
-    /** All registrations collected so far, in registration order. */
+    /** All slice registrations collected so far, in registration order. */
     val slices: List<SliceRegistration> get() = _slices
+
+    /** All check registrations collected so far, in registration order. */
+    val checks: List<CheckRegistration> get() = _checks
 
     /** All console entries collected so far, in emission order. */
     val console: List<ScriptConsoleEntry> get() = _console
@@ -113,6 +262,24 @@ open class ScriptContributionCollector {
             )
         }
         _slices += registration
+    }
+
+    /**
+     * Registers a check. Called by host-layer code after validating the JS spec object.
+     *
+     * @throws IllegalArgumentException on duplicate id or missing "user:" prefix
+     */
+    fun registerCheck(registration: CheckRegistration) {
+        require(registration.id.startsWith("user:")) {
+            "hexana.defineCheck: check id must start with \"user:\", got \"${registration.id}\""
+        }
+        val duplicate = _checks.find { it.id == registration.id }
+        if (duplicate != null) {
+            throw IllegalArgumentException(
+                "hexana.defineCheck: duplicate check id \"${registration.id}\""
+            )
+        }
+        _checks += registration
     }
 
     /**

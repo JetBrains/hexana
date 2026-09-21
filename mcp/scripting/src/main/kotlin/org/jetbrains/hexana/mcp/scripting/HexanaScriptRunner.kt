@@ -12,10 +12,17 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.mcp.model.binaries.BinaryModuleIdentityResult
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.shared.scripting.CheckFinding
+import org.jetbrains.hexana.shared.scripting.EmptyScriptInvocation
+import org.jetbrains.hexana.shared.scripting.FlagType
+import org.jetbrains.hexana.shared.scripting.SCRIPT_BINARY_GLOBAL
+import org.jetbrains.hexana.shared.scripting.ScriptInvocation
 import org.jetbrains.hexana.shared.scripting.ScriptOpenPolicy
 import org.jetbrains.hexana.shared.scripting.ScriptOutput
+import org.jetbrains.hexana.shared.scripting.ScriptValue
 import org.jetbrains.hexana.shared.scripting.SCRIPT_CONSOLE_GLOBAL
 import org.jetbrains.hexana.shared.scripting.SCRIPT_HEXANA_GLOBAL
+import org.jetbrains.hexana.shared.scripting.scriptBinaryApi
 import org.jetbrains.hexana.shared.scripting.scriptGlobals
 import org.jetbrains.hexana.shared.scripting.toInfo
 import java.nio.ByteBuffer
@@ -64,6 +71,7 @@ class HexanaScriptRunner private constructor(
         fileName: String? = null,
         filePath: String? = null,
         onLine: ((String) -> Unit)? = null,
+        invocation: ScriptInvocation = EmptyScriptInvocation,
     ): HexanaScriptResult {
         val started = System.nanoTime()
         val loadedScript = when (val script = loadScript(source)) {
@@ -84,10 +92,15 @@ class HexanaScriptRunner private constructor(
             filePath = filePath,
             onLine = onLine,
             started = started,
+            invocation = invocation,
         )
     }
 
-    fun run(input: BinaryInput, source: HexanaScriptSource): HexanaScriptResult {
+    fun run(
+        input: BinaryInput,
+        source: HexanaScriptSource,
+        invocation: ScriptInvocation = EmptyScriptInvocation,
+    ): HexanaScriptResult {
         val started = System.nanoTime()
         val loadedBinary = try {
             BinaryInputLoader(
@@ -121,6 +134,7 @@ class HexanaScriptRunner private constructor(
             // joins `binary.dir` with a sibling name must get somewhere real even
             // when the command line said `./app.wasm`.
             filePath = loadedBinary.resolvedPath,
+            invocation = invocation,
         )
     }
 
@@ -132,6 +146,7 @@ class HexanaScriptRunner private constructor(
         filePath: String?,
         onLine: ((String) -> Unit)?,
         started: Long,
+        invocation: ScriptInvocation = EmptyScriptInvocation,
     ): HexanaScriptResult {
         val output = ScriptOutputCollector(limits.maxOutputLines, limits.maxOutputBytes, onLine)
         val contextRef = AtomicReference<Context?>()
@@ -139,7 +154,7 @@ class HexanaScriptRunner private constructor(
         val future = executor.submit(Callable {
             beforeExecuteInContext()
             executeInContext(
-                script, binaryProvider, binaryIdentity, fileName, filePath, output, contextRef, started,
+                script, binaryProvider, binaryIdentity, fileName, filePath, output, contextRef, started, invocation,
             )
         })
 
@@ -229,14 +244,24 @@ class HexanaScriptRunner private constructor(
         output: ScriptOutputCollector,
         contextRef: AtomicReference<Context?>,
         started: Long,
+        invocation: ScriptInvocation = EmptyScriptInvocation,
     ): HexanaScriptResult {
         val contributions = GraalScriptContributionCollector()
+        contributions.invocation = invocation
         val previousClassLoader = Thread.currentThread().contextClassLoader
+
+        // Load extra input binaries (inputs[1..n]) and extend allowed policy with any
+        // path-typed flag values. Done before eval so the policy is ready when the
+        // script accesses hexana.inputs or hexana.flags.
+        val (extraBinaryValues, effectivePolicy) = loadExtraInputsAndBuildPolicy(invocation, allowedFilePolicy)
+        contributions.inputBinaryValues = extraBinaryValues
+
         return try {
             Thread.currentThread().contextClassLoader = HexanaScriptRunner::class.java.classLoader
             val context = buildScriptContext()
             contextRef.set(context)
 
+            val findings: List<CheckFinding>
             context.use { ctx ->
                 val bindings = ctx.getBindings("js")
                 // The surface itself lives in plugins-shared so that the IDE, the
@@ -249,17 +274,30 @@ class HexanaScriptRunner private constructor(
                     // Inline: this runtime reads the file within the call. Fresh
                     // per run, because the opener memoizes what the script opened
                     // and that must not outlive the run holding it in memory.
-                    open = ScriptOpenPolicy.Inline(ScriptBinaryFileOpener(limits, allowedFilePolicy)),
+                    open = ScriptOpenPolicy.Inline(ScriptBinaryFileOpener(limits, effectivePolicy)),
                 )
                 for ((name, value) in globals) {
                     bindings.putMember(name, ScriptValueGraalProxy.toGuest(value))
                 }
+                // Capture the primary binary ScriptValue for inputs[0].
+                contributions.primaryBinaryValue = globals[SCRIPT_BINARY_GLOBAL] ?: ScriptValue.Null
                 // The v2 globals are host-bound on top of the pinned v1 set:
                 // Graal-native proxies receive raw Values for defineSlice and console.
                 bindings.putMember(SCRIPT_HEXANA_GLOBAL, contributions.buildGraalHexanaProxy())
                 bindings.putMember(SCRIPT_CONSOLE_GLOBAL, contributions.buildGraalConsoleProxy())
                 val evalResult = ctx.eval(Source.newBuilder("js", script.text, script.name).build())
                 detectAsyncOutputLost(evalResult, output)
+
+                // Resolve flags against the final declarations so usage errors
+                // (undeclared flags etc.) are detected even if the script never
+                // read hexana.flags.
+                contributions.resolveInvocationFlags()
+
+                // Run checks against the primary binary (using the raw Graal binary value).
+                val primaryGraalBinary = bindings.getMember(SCRIPT_BINARY_GLOBAL)
+                findings = if (contributions.checks.isNotEmpty() && primaryGraalBinary != null) {
+                    contributions.runChecks(primaryGraalBinary)
+                } else emptyList()
             }
 
             HexanaScriptResult(
@@ -272,6 +310,9 @@ class HexanaScriptRunner private constructor(
                 durationMillis = elapsedMillis(started),
                 slices = contributions.slices.map { it.toInfo() },
                 console = contributions.console.toList(),
+                checks = contributions.checks.map { it.toInfo() },
+                findings = findings,
+                usageErrors = contributions.usageErrors.distinct(),
             )
         } catch (error: PolyglotException) {
             val diagnostic = error.toScriptDiagnostic()
@@ -285,6 +326,9 @@ class HexanaScriptRunner private constructor(
                 durationMillis = elapsedMillis(started),
                 slices = contributions.slices.map { it.toInfo() },
                 console = contributions.console.toList(),
+                checks = contributions.checks.map { it.toInfo() },
+                findings = emptyList(),
+                usageErrors = contributions.usageErrors.distinct(),
             )
         } catch (error: Exception) {
             internalErrorResult(
@@ -511,6 +555,7 @@ class HexanaScriptRunner private constructor(
      * @param fileName file name of the binary, surfaced as `binary.name`
      * @param filePath path of the binary on disk, surfaced as `binary.path`
      * @param onLine invoked for every output line as it is emitted during eval
+     * @param invocation host invocation context (args/inputs/flags); defaults to the empty/tab shape
      */
     fun openSession(
         source: HexanaScriptSource,
@@ -518,6 +563,7 @@ class HexanaScriptRunner private constructor(
         fileName: String? = null,
         filePath: String? = null,
         onLine: ((String) -> Unit)? = null,
+        invocation: ScriptInvocation = EmptyScriptInvocation,
     ): HexanaScriptSession {
         val loadedScript = when (val script = loadScript(source)) {
             is ScriptLoadResult.Loaded -> script.script
@@ -532,7 +578,43 @@ class HexanaScriptRunner private constructor(
             limits = limits,
             allowedFilePolicy = allowedFilePolicy,
             onLine = onLine,
+            invocation = invocation,
         )
+    }
+
+    /**
+     * Loads extra input binaries from [invocation.extraInputPaths] through the existing
+     * [BinaryInputLoader]/[AllowedFilePolicy] path. Returns the list of binary [ScriptValue]s
+     * and an extended policy that also allows any path-typed flag values.
+     *
+     * Each unique path is loaded once. Extra inputs share the [limits.maxOpenedBinaries] quota
+     * with scripts opened via `open()`.
+     */
+    private fun loadExtraInputsAndBuildPolicy(
+        invocation: ScriptInvocation,
+        basePolicy: AllowedFilePolicy,
+    ): Pair<List<ScriptValue>, AllowedFilePolicy> {
+        if (invocation.extraInputPaths.isEmpty()) return emptyList<ScriptValue>() to basePolicy
+        val loader = BinaryInputLoader(
+            maxInlineInputBytes = limits.maxInlineBinaryBytes,
+            maxFileInputBytes = limits.maxFileBinaryBytes,
+            allowedFilePolicy = basePolicy,
+        )
+        val values = mutableListOf<ScriptValue>()
+        val resolvedPaths = mutableListOf<java.nio.file.Path>()
+        for (path in invocation.extraInputPaths) {
+            try {
+                val loaded = loader.load(BinaryInput.FilePath(path))
+                val fileName = loaded.resolvedPath?.let { java.nio.file.Path.of(it).fileName?.toString() }
+                val sv = scriptBinaryApi(loaded.provider, fileName, loaded.resolvedPath)
+                values.add(sv)
+                loaded.resolvedPath?.let { resolvedPaths.add(java.nio.file.Path.of(it)) }
+            } catch (error: HexanaAnalysisException) {
+                throw IllegalArgumentException("inputs: ${error.message}", error)
+            }
+        }
+        val extendedPolicy = if (resolvedPaths.isNotEmpty()) basePolicy.withAdditionalAllowedFiles(resolvedPaths) else basePolicy
+        return values to extendedPolicy
     }
 
     // Internal helpers exposed to HexanaScriptSession
