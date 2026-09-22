@@ -497,3 +497,171 @@ artifact content, so it stays stable as long as neither changes.
 - [ ] `--seed aabbccdd` twice: stderr rng line identical both runs
 - [ ] `--seed 00112233` (different seed): rng line differs from aabbccdd run
 - [ ] `node_modules/` absent from git status (covered by .gitignore)
+
+## Walkthrough part 7: IDE suite runner (Phase 3B)
+
+Requires `user/scripting-v2-phase3b` and a running IDE sandbox (`./gradlew runIde`).
+GraalJS cannot initialize inside the idea-plugin test harness, so IDE outputs below are
+stated as expected values derived from the pinned CLI behavior and unit tests rather
+than observed IDE outputs.
+
+### Step 1: create a suite run configuration
+
+1. Open IntelliJ IDEA with the Hexana plugin loaded.
+2. Open `examples/scripting-playground/` as a project.
+3. In the Project tree, right-click `hexana-script/tests/app.test.js`. When the JavaScript
+   plugin is enabled, Run gutter icons appear on each `test()` and `describe()` line; the
+   context menu also works regardless of that plugin.
+4. Choose **Run "app"** from the context menu. A "Hexana Suite" run configuration
+   is created automatically with the suite path pre-filled. The configuration name is
+   the file name with `.test.js` removed (so `app.test.js` becomes `app`).
+
+   The configuration type is named **Hexana Suite** (source:
+   `HexanaSuiteRunConfigurationType.kt`).
+
+### Step 2: fill the artifact table
+
+1. The run configuration editor opens (or open it via **Run > Edit Configurations**).
+2. The editor runs a collection pass on `app.test.js` off the EDT. The status label
+   (field "Artifacts:") shows **1 artifact declaration(s)** once the pass completes
+   (source: `HexanaSuiteRunSettingsEditor.kt`).
+3. The artifact table has four columns: **Role**, **Formats**, **Optional**, **Path**
+   (source: `HexanaSuiteRunSettingsEditor.kt`). The table shows one row with
+   Role = `app` and Formats = `wasm`.
+4. Click the **Path** cell for the `app` row and enter the absolute path to
+   `bin/app-debug.wasm`, or use the browse button.
+5. For a directory suite path the editor cannot run the collection pass and falls back
+   to a free-form text area (source: `HexanaSuiteRunSettingsEditor.kt`). In
+   that mode, enter `app=bin/app-debug.wasm` as one line per artifact.
+
+   Expected after entering the path: the suite field shows
+   `hexana-script/tests/app.test.js`, the artifact table Path cell shows the
+   `app-debug.wasm` path.
+
+### Step 3: run and inspect the test tree
+
+1. Click **Run**. The IDE launches the suite runner.
+2. The Run tool window shows a test tree. Expected structure:
+
+   ```
+   app.test.js
+     app-debug.wasm shape
+       size is exactly 4703 bytes
+       format is wasm
+       name is app-debug.wasm
+       exports
+         exactly 5 exports
+         export names match MANIFEST
+         memory export has kind memory
+         func exports have kind func
+     imports
+       no imports (wasi-libc is statically linked)
+     functions
+       total function count is 8
+       all functions are code (no imports)
+       functions have non-negative funcidx
+     async crypto
+       SHA-256 digest of file header completes and has 32 bytes
+       setTimeout resolves in async test
+   ```
+
+   13 tests, all green. Nested `describe` blocks appear as tree nodes. Durations
+   are shown per test.
+3. Click any test node. Expected: the editor navigates to the corresponding `test()`
+   call in `app.test.js` at the matching line.
+
+### Step 4: introduce a failure
+
+Two options:
+
+**Option A:** rename the disabled fixture.
+
+```sh
+mv hexana-script/tests/deliberate-failure.test.js.disabled \
+   hexana-script/tests/deliberate-failure.test.js
+```
+
+Point the suite field at `hexana-script/tests/` (the directory) and run.
+
+**Option B:** edit `app.test.js` to break one assertion, then restore it after.
+
+After running with the failure enabled:
+
+Expected test tree: 13 green tests from `app.test.js`, plus from
+`deliberate-failure.test.js`:
+
+```
+deliberate
+  this test always fails   [FAIL]
+  this test always passes  [PASS]
+```
+
+The detail pane for the failing test shows:
+
+```
+Error: deliberate failure: rename to .disabled after the demo
+```
+
+The stack line points to `deliberate-failure.test.js:18`.
+
+### Step 5: rerun failed
+
+1. In the Run tool window, click the **Rerun Failed Tests** button.
+2. Expected: only the one failing test executes again. The 13 passing tests from
+   `app.test.js` show as skipped (not re-executed). The failure message is the same.
+
+### Step 6: copy CLI command
+
+1. In the run configuration editor, click **Copy CLI Command**
+   (source: `HexanaSuiteRunSettingsEditor.kt`).
+2. The clipboard contains a command of the form:
+
+   ```sh
+   hexana-cli-script test hexana-script/tests/ --artifact app=/absolute/path/to/bin/app-debug.wasm
+   ```
+
+   `--telemetry-enabled false` is not included by the builder; append it manually
+   for clean runs that should not send telemetry.
+
+3. Paste into a terminal (from `examples/scripting-playground/`) and run. Observed
+   output with `deliberate-failure.test.js` present:
+
+   ```
+   Suite: app.test.js
+   [PASS] app-debug.wasm shape > size is exactly 4703 bytes (2 ms)
+   ...
+   13 passed, 0 failed, 0 skipped (87 ms)
+
+   Suite: deliberate-failure.test.js
+   [FAIL] deliberate > this test always fails (10 ms)
+          Error: deliberate failure: rename to .disabled after the demo
+   [PASS] deliberate > this test always passes (0 ms)
+
+   14 passed, 1 failed, 0 skipped (78 ms)
+   ```
+
+   Exit code: 1. (CLI run verified on this branch; exit 1 confirmed.)
+
+### Step 7: restore the passing state
+
+```sh
+mv hexana-script/tests/deliberate-failure.test.js \
+   hexana-script/tests/deliberate-failure.test.js.disabled
+```
+
+Rerun the CLI or IDE configuration. Expected: `app.test.js` only, 13 passed, exit 0.
+
+### QA checklist additions (Phase 3B)
+
+- [ ] Right-click app.test.js: "Run app" creates a "Hexana Suite" run configuration
+- [ ] Artifact table populates with one row: Role=app, Formats=wasm, after collection pass
+- [ ] Status label shows "1 artifact declaration(s)"
+- [ ] Entering app-debug.wasm path in the Path column and running: 13 green tests, tree matches describe nesting
+- [ ] Clicking a test node navigates to its `test()` line in app.test.js
+- [ ] Directory suite path: editor switches to free-form text area (no table)
+- [ ] Rename deliberate-failure.test.js.disabled to .test.js, run directory config: 1 failure shown, detail pane shows error message and stack line
+- [ ] Rerun Failed: only the 1 failing test re-executes, others show as skipped
+- [ ] Copy CLI Command button produces a valid hexana-cli-script invocation
+- [ ] Pasting CLI command in terminal with deliberate failure present: exit 1, "[FAIL] deliberate > this test always fails"
+- [ ] Rename back to .disabled, rerun: exit 0, 13 passed
+- [ ] "Run Suites for This Binary" action visible in binary editor when app-debug.wasm is open (source: HexanaRunSuitesForBinaryAction.kt line 37)
