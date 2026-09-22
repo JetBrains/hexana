@@ -26,10 +26,23 @@ internal class PostHogJvmClient(
     private val posthog = AtomicReference<PostHogInterface?>(null)
     private val creationLock = Any()
 
+    /**
+     * Set by [shutdown], and never cleared: retirement is terminal.
+     *
+     * A capture that passed the consent check just before a concurrent
+     * [shutdown] would otherwise reach [postHogOrCreate] afterwards and
+     * allocate a *fresh* SDK on a client nothing points at any more — one with
+     * a live flush timer that nobody will ever close, since
+     * [HexanaAnalytics.initialize] builds a new [PostHogJvmClient] rather than
+     * reviving this one. Every consent toggle could leak such an instance.
+     */
+    @Volatile
+    private var retired = false
+
     override fun capture(event: HexanaEvent) {
         if (!consentProvider.isAnalyticsAllowed()) return
         val mergedProperties = globalProperties + event.properties
-        postHogOrCreate().capture(
+        postHogOrCreate()?.capture(
             distinctIdProvider.distinctId(),
             event.name,
             mergedProperties
@@ -50,9 +63,15 @@ internal class PostHogJvmClient(
      * Note that `close()` does *not* flush — it stops the queue timer and drops
      * whatever is still queued. Callers that care about pending events must
      * [flush] first.
+     *
+     * Terminal: this client captures nothing afterwards, so a capture racing
+     * the teardown cannot resurrect the SDK behind it.
      */
     override fun shutdown() {
-        posthog.getAndSet(null)?.close()
+        synchronized(creationLock) {
+            retired = true
+            posthog.getAndSet(null)?.close()
+        }
     }
 
     /**
@@ -62,10 +81,12 @@ internal class PostHogJvmClient(
      */
     internal fun hasSdkClient(): Boolean = posthog.get() != null
 
-    private fun postHogOrCreate(): PostHogInterface {
+    /** Returns `null` once [shutdown] has retired this client. */
+    private fun postHogOrCreate(): PostHogInterface? {
         posthog.get()?.let { return it }
         synchronized(creationLock) {
             posthog.get()?.let { return it }
+            if (retired) return null
             val created = PostHog.with(
                 PostHogConfig(apiKey = config.apiKey, host = config.resolvedHost()).apply {
                     flushAt = config.resolvedFlushAt()

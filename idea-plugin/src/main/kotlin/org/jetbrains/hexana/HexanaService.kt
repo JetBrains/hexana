@@ -8,8 +8,10 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.util.concurrency.annotations.RequiresBackgroundThread
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -27,8 +29,33 @@ class HexanaService(
         AnalyticsInitializationState.Pending
     )
 
+    /**
+     * Single-slot dispatcher that every transition of the global analytics
+     * client runs on — the initial build and each consent-driven rebuild.
+     *
+     * [HexanaAnalytics] holds one process-wide client, so two rebuilds running
+     * at once interleave their retire/install steps: the loser's client is
+     * installed and then never torn down, and for a moment the service reports
+     * Ready against a client that is about to be retired. Rapid toggling is the
+     * obvious way in, but a rebuild whose flush takes its full timeout widens
+     * the window enough that a second toggle need not be rapid at all.
+     *
+     * Serialised by dispatcher rather than by lock, because the work inside is
+     * blocking: [flushAndShutdownAnalytics] joins a flush thread for up to two
+     * seconds. A lock would be the wrong shape either way round — a coroutine
+     * `Mutex` would be a suspending primitive held across a blocking call, and
+     * a JVM monitor would park a second IO thread for as long as the first
+     * one's flush runs. With parallelism 1 the queued rebuild is simply not
+     * dispatched until the running one returns, and holds no thread while it
+     * waits. Captures stay on plain [Dispatchers.IO] so they never queue behind
+     * a flush. Same primitive, and the same reasoning, as `capstoneDispatcher`
+     * in `NativeDisassemblyPanelVirtualized`.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val analyticsLifecycleDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(1)
+
     init {
-        coroutineScope.launch(Dispatchers.IO) {
+        coroutineScope.launch(analyticsLifecycleDispatcher) {
             initializeAnalytics()
         }
         subscribeToAnalyticsConsentChanges()
@@ -79,10 +106,12 @@ class HexanaService(
                     // coroutine instead would leave a window where the stale
                     // Ready state is observable and captures race the rebuild.
                     analyticsInitialization.value = AnalyticsInitializationState.Pending
-                    coroutineScope.launch(Dispatchers.IO) {
-                        // Ordered, not concurrent: the old client has to be
-                        // fully retired before the replacement is installed,
-                        // or the retiring thread would reset the new one.
+                    // Ordered, not concurrent, in both directions: the old
+                    // client is fully retired before the replacement is
+                    // installed, and the pair is serialised against every other
+                    // rebuild by [analyticsLifecycleDispatcher], which also
+                    // preserves the order the toggles arrived in.
+                    coroutineScope.launch(analyticsLifecycleDispatcher) {
                         flushAndShutdownAnalytics()
                         initializeAnalytics()
                     }

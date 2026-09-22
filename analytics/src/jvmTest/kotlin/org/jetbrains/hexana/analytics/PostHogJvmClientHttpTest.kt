@@ -255,6 +255,55 @@ class PostHogJvmClientHttpTest {
         server.awaitEvents(expectedCount, timeout = Duration.ZERO)
     }
 
+    @Test
+    fun captureAfterShutdownDoesNotRebuildTheSdk() {
+        // A capture that passed the consent check just before a concurrent
+        // shutdown used to land in the lazy-creation path afterwards and
+        // allocate a fresh SDK on a client nothing points at any more — one
+        // whose flush timer nobody would ever close, leaked once per consent
+        // toggle. Retirement has to be terminal.
+        FakePostHogServer.start().use { server ->
+            val client = newClient(server, consentAllowed = true)
+
+            client.shutdown()
+            client.capture(
+                HexanaEvent.BinaryOpened(
+                    format = HexanaEvent.BinaryFormat.WASM,
+                    fileSizeBytes = 512,
+                    surface = HexanaEvent.Surface.IDE_PLUGIN,
+                )
+            )
+
+            assertFalse(
+                client.hasSdkClient(),
+                "a retired client must stay retired rather than allocate a new SDK",
+            )
+        }
+    }
+
+    @Test
+    fun shutdownIsIdempotentAndFlushAfterwardsIsANoOp() {
+        // Both are reachable on the IDE exit path, where the lifecycle listener
+        // can run while a consent rebuild is still in flight.
+        FakePostHogServer.start().use { server ->
+            val client = newClient(server, consentAllowed = true)
+            client.capture(
+                HexanaEvent.BinaryOpened(
+                    format = HexanaEvent.BinaryFormat.WASM,
+                    fileSizeBytes = 512,
+                    surface = HexanaEvent.Surface.IDE_PLUGIN,
+                )
+            )
+            assertTrue(client.hasSdkClient(), "a consented capture should have allocated the SDK")
+
+            client.shutdown()
+            client.shutdown()
+            client.flush()
+
+            assertFalse(client.hasSdkClient())
+        }
+    }
+
     private fun withSystemProperty(key: String, value: String, block: () -> Unit) {
         withSystemProperties(mapOf(key to value), block)
     }

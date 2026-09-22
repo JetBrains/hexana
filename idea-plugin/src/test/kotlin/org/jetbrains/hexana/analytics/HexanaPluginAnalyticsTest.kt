@@ -11,6 +11,7 @@ import org.jetbrains.hexana.HexanaFileEditorProvider
 import org.jetbrains.hexana.HexanaService
 import org.jetbrains.hexana.HexanaSettings
 import org.jetbrains.hexana.WasmFileType
+import java.net.ServerSocket
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -117,6 +118,57 @@ class HexanaPluginAnalyticsTest : BasePlatformTestCase() {
             server.awaitEvent("hex_view_activated")
                 .requireDistinctId(TEST_DISTINCT_ID)
                 .assertProperty("surface", "ide_plugin")
+        }
+    }
+
+    fun testShutdownRetiresTheClientBeforeReturningEvenWhileTheFlushIsStillRunning() {
+        // The flush is bounded by a timeout, so it can still be in flight when
+        // the call returns. Retirement must not be left to that thread: it
+        // resets HexanaAnalytics.client, and on the consent-change path the
+        // caller installs a replacement the moment this returns. A worker that
+        // reset the client afterwards left the service reporting Ready while
+        // every capture went to the no-op client — analytics silently dead for
+        // the rest of the session, triggered by the user *enabling* it.
+        //
+        // A listening socket that never accepts holds the connection in the
+        // kernel backlog: OkHttp connects and then blocks on read for its
+        // 10s default, far beyond the timeout used here.
+        val blackHole = ServerSocket(0, /* backlog = */ 1)
+        try {
+            settings.sendAnalytics = true
+            waitForServiceAnalyticsInitialization()
+            HexanaAnalytics.initialize(
+                config = AnalyticsConfig(
+                    apiKey = "test-key",
+                    host = "http://127.0.0.1:${blackHole.localPort}",
+                    flushAt = 1_000,
+                    flushIntervalMs = 600_000,
+                ),
+                consentProvider = IntellijConsentProvider(),
+                distinctIdProvider = DistinctIdProvider { TEST_DISTINCT_ID },
+                globalProperties = ideAnalyticsGlobalProperties(),
+            )
+            val retiring = HexanaAnalytics.client
+            // Queued, not sent: flushAt is far above one event, so the flush
+            // below is what tries to deliver it — and hangs.
+            retiring.capture(HexanaEvent.HexViewActivated(surface = HexanaEvent.Surface.IDE_PLUGIN))
+
+            val startedAt = System.nanoTime()
+            flushAndShutdownAnalytics(timeoutMillis = 200)
+            val elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000
+
+            assertTrue(
+                "the flush must stay bounded by its timeout, took ${elapsedMillis}ms",
+                elapsedMillis < 5_000,
+            )
+            assertNotSame(
+                "the client must be retired by the time the call returns, " +
+                    "not whenever the flush thread happens to finish",
+                retiring,
+                HexanaAnalytics.client,
+            )
+        } finally {
+            blackHole.close()
         }
     }
 
