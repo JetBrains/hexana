@@ -22,6 +22,23 @@ import org.jetbrains.hexana.shared.scripting.SliceParam
 import org.jetbrains.hexana.shared.scripting.SliceRegistration
 
 /**
+ * Formats a single GraalJS [Value] argument for console output.
+ *
+ * Mirrors the basic-type branch of [ScriptOutput.formatValue]: null renders as
+ * `"null"`, strings are taken as-is, booleans and numbers use their Kotlin
+ * [toString], and everything else falls back to Graal's own [Value.toString].
+ * Shared by [GraalScriptContributionCollector.buildGraalConsoleProxy] and
+ * [SuiteConsole.proxy].
+ */
+internal fun formatConsoleArg(v: Value): String = when {
+    v.isNull -> "null"
+    v.isString -> v.asString()
+    v.isBoolean -> v.asBoolean().toString()
+    v.isNumber -> ScriptOutput.formatNumber(v.asDouble())
+    else -> v.toString()
+}
+
+/**
  * GraalJS-aware contribution collector.
  *
  * Provides [buildGraalHexanaProxy] and [buildGraalConsoleProxy] which return
@@ -376,16 +393,7 @@ internal class GraalScriptContributionCollector : ScriptContributionCollector() 
 
     private fun consoleFnExecutable(severity: ConsoleSeverity): ProxyExecutable =
         ProxyExecutable { args ->
-            val text = args.joinToString(" ") { v ->
-                // Mirror what ScriptOutput.formatValue does for the basic types.
-                when {
-                    v.isNull -> "null"
-                    v.isString -> v.asString()
-                    v.isBoolean -> v.asBoolean().toString()
-                    v.isNumber -> ScriptOutput.formatNumber(v.asDouble())
-                    else -> v.toString()
-                }
-            }
+            val text = args.joinToString(" ") { v -> formatConsoleArg(v) }
             addConsoleEntry(severity, text)
             null
         }

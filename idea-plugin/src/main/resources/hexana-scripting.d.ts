@@ -633,7 +633,9 @@ interface HexanaApi {
   readonly api: number;
   /**
    * Returns true when the named feature is available.
-   * Recognised values: "slices", "checks".
+   * Recognised values: "slices", "checks"; in the test-suite profile
+   * (see the suite declarations below) has("suite") is true, and it is
+   * false everywhere else.
    */
   has(feature: string): boolean;
   /**
@@ -737,4 +739,74 @@ interface WasmExportEntry {
   kind: string;
   /** The index of the exported entity in its respective index space. */
   index: number;
+}
+
+// ---- Test-suite profile ------------------------------------------------
+// The globals below exist only when the script runs as a test suite
+// (hexana.has("suite") === true). The suite profile additionally provides
+// TextEncoder/TextDecoder, URL/URLSearchParams, atob/btoa, structuredClone,
+// queueMicrotask, setTimeout/clearTimeout, and a seeded deterministic
+// crypto: getRandomValues, randomUUID, and
+// subtle.digest("SHA-256" | "SHA-384" | "SHA-512").
+
+/** Options accepted by test(name, options, fn). */
+interface TestOptions {
+  /** Per-test timeout in milliseconds; overrides the runner default. */
+  timeout?: number;
+}
+
+/** Options accepted by hexana.artifact(role, options). */
+interface ArtifactOptions {
+  /** Accepted format ids, e.g. ["wasm"]. The mapped file must match one. */
+  formats?: string[];
+  /** Single accepted format id; shorthand for a one-entry formats list. */
+  type?: string;
+  /** When true, an unmapped role resolves to null instead of failing the run. */
+  optional?: boolean;
+}
+
+/**
+ * Declares a group of tests. The callback runs immediately during the
+ * collection pass; nest describe/test/beforeEach/afterEach inside it.
+ */
+declare function describe(name: string, fn: () => void): void;
+
+/** Registers a test. The body may be async; it runs after the module loaded. */
+declare function test(name: string, fn: () => void | Promise<void>): void;
+declare function test(name: string, options: TestOptions, fn: () => void | Promise<void>): void;
+
+/** Registers a test that is always skipped; the body is never executed. */
+declare namespace test {
+  function skip(name: string, fn: () => void | Promise<void>): void;
+  function skip(name: string, options: TestOptions, fn: () => void | Promise<void>): void;
+}
+
+/** Runs before each test in the enclosing describe. Outer hooks run first. */
+declare function beforeEach(fn: () => void | Promise<void>): void;
+
+/**
+ * Runs after each test in the enclosing describe, even when the test
+ * failed. Inner hooks run first.
+ */
+declare function afterEach(fn: () => void | Promise<void>): void;
+
+/** Suite-profile extras available on the hexana global. */
+interface HexanaSuiteApi {
+  /**
+   * Binds the file mapped for a role (--artifact role=path) as a binary
+   * handle with the same shape as the `binary` global. A required role
+   * with no mapping fails the run before any test executes; with
+   * { optional: true } an unmapped role resolves to null instead.
+   */
+  artifact(role: string, options?: ArtifactOptions): HexanaBinary | null;
+}
+
+/**
+ * Extends the hexana global with the suite-profile artifact() method via
+ * interface merging. TypeScript merges this declaration with the HexanaApi
+ * interface from the base declarations, so hexana.artifact(...) type-checks
+ * in suite scripts without a separate cast.
+ */
+interface HexanaApi {
+  artifact(role: string, options?: ArtifactOptions): HexanaBinary | null;
 }

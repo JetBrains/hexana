@@ -8,6 +8,7 @@ import org.jetbrains.hexana.shared.scripting.FlagSpec
 import org.jetbrains.hexana.shared.scripting.ScriptConsoleEntry
 import org.jetbrains.hexana.shared.scripting.ScriptUsageError
 import org.jetbrains.hexana.shared.scripting.SliceRegistrationInfo
+import org.jetbrains.hexana.shared.scripting.SuiteNodeResult
 
 sealed interface HexanaScriptSource {
     data class Inline(
@@ -119,6 +120,12 @@ data class HexanaScriptResult(
     val usageErrors: List<ScriptUsageError> = emptyList(),
     /** Flag declarations registered via hexana.defineFlags, keyed by flag name. */
     val flagDeclarations: Map<String, FlagSpec> = emptyMap(),
+    /**
+     * Result tree of a test-suite run started via
+     * [org.jetbrains.hexana.mcp.scripting.HexanaSuiteRunner.runSuite].
+     * Null for every non-suite run.
+     */
+    val suite: SuiteNodeResult? = null,
 ) {
     val success: Boolean
         get() = status == HexanaScriptStatus.SUCCESS
