@@ -62,6 +62,9 @@
 
     <dependencies>
         <plugin id="com.intellij.mcpServer"/>
+        <!-- SM test-runner console and rerun-failed action for the Hexana Suite run configuration -->
+        <module name="intellij.platform.smRunner"/>
+        <module name="intellij.platform.testRunner"/>
         <module name="intellij.libraries.skiko"/>
         <module name="intellij.libraries.compose.foundation.desktop"/>
 
@@ -379,6 +382,10 @@
         <!-- Hexana Script run configuration -->
         <configurationType implementation="org.jetbrains.hexana.run.HexanaScriptRunConfigurationType"/>
         <runConfigurationProducer implementation="org.jetbrains.hexana.run.HexanaScriptRunConfigurationProducer"/>
+
+        <!-- Hexana Suite run configuration (*.test.js, SM test runner console) -->
+        <configurationType implementation="org.jetbrains.hexana.run.HexanaSuiteRunConfigurationType"/>
+        <runConfigurationProducer implementation="org.jetbrains.hexana.run.HexanaSuiteRunConfigurationProducer"/>
         <programRunner implementation="org.jetbrains.hexana.run.WasmDebugRunner"/>
         <programRunner implementation="org.jetbrains.hexana.run.CdpDebugRunner"/>
         <xdebugger.breakpointType implementation="org.jetbrains.hexana.run.WasmLineBreakpointType"/>
@@ -430,6 +437,10 @@
                     class="org.jetbrains.hexana.actions.OpenAsProtobufMessageAction"
                     text="Open As Protobuf Message"
                     description="Decode this file as a raw Protobuf wire-encoded message"/>
+            <action id="hexana.runSuitesForBinary"
+                    class="org.jetbrains.hexana.actions.HexanaRunSuitesForBinaryAction"
+                    text="Run Suites for This Binary"
+                    description="Run Hexana test suites whose declared artifacts match this binary's format"/>
             <separator/>
             <action id="hexana.showElementInHexView" class="org.jetbrains.hexana.actions.ShowElementInHexViewAction"/>
             <action id="hexana.goToOffset" class="org.jetbrains.hexana.actions.GoToOffsetAction"

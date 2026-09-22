@@ -19,7 +19,7 @@ class HexanaScriptRunConfigurationProducer : LazyRunConfigurationProducer<Hexana
         context: ConfigurationContext,
     ): Boolean {
         val file = context.location?.virtualFile ?: return false
-        return file.extension == "js" && configuration.scriptPath == file.path
+        return file.extension == "js" && !file.name.endsWith(".test.js") && configuration.scriptPath == file.path
     }
 
     override fun setupConfigurationFromContext(
@@ -28,7 +28,7 @@ class HexanaScriptRunConfigurationProducer : LazyRunConfigurationProducer<Hexana
         sourceElement: Ref<PsiElement>,
     ): Boolean {
         val file = context.location?.virtualFile ?: return false
-        if (file.extension != "js" || !file.isFile) return false
+        if (file.extension != "js" || file.name.endsWith(".test.js") || !file.isFile) return false
         configuration.scriptPath = file.path
         configuration.name = file.nameWithoutExtension
         return true

@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.run
 
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.ide.CopyPasteManager
@@ -18,8 +19,6 @@ import org.jetbrains.hexana.mcp.scripting.HexanaScriptSource
 import org.jetbrains.hexana.shared.scripting.FlagSpec
 import org.jetbrains.hexana.shared.scripting.FlagType
 import java.awt.datatransfer.StringSelection
-import java.security.MessageDigest
-import java.util.concurrent.ConcurrentHashMap
 import javax.swing.DefaultListModel
 import javax.swing.JButton
 import javax.swing.JComponent
@@ -29,8 +28,7 @@ import javax.swing.JTable
 import javax.swing.JTextField
 import javax.swing.table.AbstractTableModel
 
-/** Caches collected flagDeclarations by script sha-256, so re-opening the editor is instant. */
-private val flagDeclCache = ConcurrentHashMap<String, Map<String, FlagSpec>>()
+private val flagDeclCache = CollectionPassCache<Map<String, FlagSpec>>()
 
 class HexanaScriptRunSettingsEditor(
     private val project: Project,
@@ -89,9 +87,8 @@ class HexanaScriptRunSettingsEditor(
     private fun triggerFlagsCollection(scriptPath: String) {
         com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
             val declarations = collectFlagDeclarations(scriptPath)
-            com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
-                applyFlagDeclarations(declarations)
-            }
+            com.intellij.openapi.application.ApplicationManager.getApplication()
+                .invokeLater({ applyFlagDeclarations(declarations) }, ModalityState.any())
         }
     }
 
@@ -281,41 +278,23 @@ private class FlagTableModel(val rows: MutableList<FlagRow>) : AbstractTableMode
 
 /**
  * Runs the script against a stub wasm binary (magic+version) to collect flagDeclarations.
- * Returns null on any failure. Results are cached by sha-256.
+ * Returns null on any failure. Results are cached by SHA-256.
  */
 internal fun collectFlagDeclarations(scriptPath: String): Map<String, FlagSpec>? {
-    return try {
-        val file = java.io.File(scriptPath)
-        if (!file.exists()) return null
-        val cacheKey = sha256Hex(file.readBytes())
-        flagDeclCache[cacheKey]?.let { return it }
-
+    val file = java.io.File(scriptPath)
+    return flagDeclCache.compute(file) { _ ->
         val runner = HexanaScriptRunner(
             limits = HexanaScriptLimits(),
             allowedFilePolicy = AllowedFilePolicy.allowAll,
         )
         val stubWasm = byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00)
-        val result = runner.run(BinaryInput.RawBytes(stubWasm), HexanaScriptSource.FilePath(scriptPath))
-        val decls = result.flagDeclarations
-        flagDeclCache[cacheKey] = decls
-        decls
-    } catch (_: Exception) {
-        null
+        runCatching {
+            runner.run(BinaryInput.RawBytes(stubWasm), HexanaScriptSource.FilePath(scriptPath))
+                .flagDeclarations
+        }.getOrNull()
     }
 }
 
 private fun tryGetCachedDeclarations(scriptPath: String): Map<String, FlagSpec>? {
-    return try {
-        val file = java.io.File(scriptPath)
-        if (!file.exists()) return null
-        val key = sha256Hex(file.readBytes())
-        flagDeclCache[key]
-    } catch (_: Exception) {
-        null
-    }
-}
-
-private fun sha256Hex(bytes: ByteArray): String {
-    val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
-    return digest.joinToString("") { "%02x".format(it) }
+    return flagDeclCache.tryGet(java.io.File(scriptPath))
 }

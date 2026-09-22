@@ -76,6 +76,10 @@ dependencies {
         testBundledPlugins("JavaScript", "com.intellij.css", "com.intellij.modules.json")
 
         bundledPlugins("com.intellij.mcpServer")
+        // SM test-runner console (SMTestRunnerConnectionUtil, SMTRunnerConsoleProperties,
+        // AbstractRerunFailedTestsAction) lives in the testRunner plugin's content modules,
+        // which are not on the default compile classpath.
+        bundledModules("intellij.platform.smRunner", "intellij.platform.testRunner")
         // Java / Maven / Gradle / JavaScript ship only in IntelliJ IDEA. Other IDEs (CLion,
         // RustRover via -PtestIdeType) don't bundle them, and `bundledPlugins` has no
         // "optional" form — requesting them there fails intellijPlatformRuntimeClasspath
