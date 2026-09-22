@@ -8,6 +8,7 @@ import org.jetbrains.hexana.shared.scripting.SuiteNodeStatus
 import org.junit.Test
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
@@ -556,6 +557,184 @@ class HexanaSuitePhase3ATest {
         assertEquals(HexanaScriptStatus.SUCCESS, result.status)
         val test = assertNotNull(result.suite).children.single()
         assertEquals(SuiteNodeStatus.PASS, test.status, "profile test failed: ${test.failureMessage}")
+    }
+
+    // ----- Amendment 1: test path filter -----
+
+    /**
+     * A 2-describe/4-test suite run with a filter selecting one nested test:
+     * the selected test PASS + executed (side-effect via console), the other
+     * three SKIP with duration 0, tree shape identical to the unfiltered run
+     * (compare normalized trees modulo status), and excluded bodies did NOT run.
+     */
+    @Test
+    fun filterSelectsOneNestedTestAndSkipsOthers() {
+        val suite = writeSuite(
+            """
+            describe("math", () => {
+              test("adds", () => { console.log("ran:math/adds"); });
+              test("subs", () => { console.log("ran:math/subs"); });
+            });
+            describe("str", () => {
+              test("length", () => { console.log("ran:str/length"); });
+            });
+            test("top", () => { console.log("ran:top"); });
+            """.trimIndent()
+        )
+        val filter = setOf(listOf("math", "adds"))
+        val filtered = runner().runSuite(suite.toString(), testPathFilter = filter)
+        val unfiltered = runner().runSuite(suite.toString())
+
+        assertEquals(HexanaScriptStatus.SUCCESS, filtered.status)
+        val root = assertNotNull(filtered.suite)
+
+        // Selected test passed and actually ran
+        val mathGroup = root.children[0]
+        assertEquals("math", mathGroup.name)
+        val adds = mathGroup.children[0]
+        val subs = mathGroup.children[1]
+        assertEquals(SuiteNodeStatus.PASS, adds.status, "adds must PASS")
+        assertEquals(SuiteNodeStatus.SKIP, subs.status, "subs must SKIP")
+        assertEquals(0L, subs.durationMillis, "filtered test durationMillis must be 0")
+
+        val strGroup = root.children[1]
+        val length = strGroup.children[0]
+        assertEquals(SuiteNodeStatus.SKIP, length.status, "str/length must SKIP")
+        assertEquals(0L, length.durationMillis)
+
+        val topTest = root.children[2]
+        assertEquals(SuiteNodeStatus.SKIP, topTest.status, "top must SKIP")
+        assertEquals(0L, topTest.durationMillis)
+
+        // Only adds ran
+        assertEquals(listOf("ran:math/adds"), consoleTexts(filtered), "only the selected test must run")
+
+        // Tree shape: same names + kinds as unfiltered, modulo status
+        val filteredNorm = root.normalizedForDeterminism()
+        val unfilteredNorm = assertNotNull(unfiltered.suite).normalizedForDeterminism()
+        assertEquals(unfilteredNorm.name, filteredNorm.name)
+        assertEquals(unfilteredNorm.children.map { it.name }, filteredNorm.children.map { it.name })
+        assertEquals(unfilteredNorm.children.map { it.kind }, filteredNorm.children.map { it.kind })
+        assertEquals(
+            unfilteredNorm.children.flatMap { g -> g.children.map { it.name } },
+            filteredNorm.children.flatMap { g -> g.children.map { it.name } },
+        )
+    }
+
+    /** Filter of a failing test: rerun with filter containing only the failing path; it fails again; siblings SKIP. */
+    @Test
+    fun filterOfFailingTestRerunsAndFails() {
+        val suite = writeSuite(
+            """
+            describe("group", () => {
+              test("fails", () => { throw new Error("intentional"); });
+              test("passes", () => { console.log("ran:passes"); });
+            });
+            """.trimIndent()
+        )
+        // First: run unfiltered to confirm fail
+        val unfiltered = runner().runSuite(suite.toString())
+        assertEquals(SuiteNodeStatus.FAIL, assertNotNull(unfiltered.suite).children[0].children[0].status)
+
+        // Rerun with filter selecting only the failing test
+        val filtered = runner().runSuite(suite.toString(), testPathFilter = setOf(listOf("group", "fails")))
+        assertEquals(HexanaScriptStatus.SUCCESS, filtered.status)
+        val root = assertNotNull(filtered.suite)
+        val fails = root.children[0].children[0]
+        val passes = root.children[0].children[1]
+        assertEquals(SuiteNodeStatus.FAIL, fails.status, "failing test must fail again")
+        assertTrue(fails.failureMessage!!.contains("intentional"), "failure message must carry the error")
+        assertEquals(SuiteNodeStatus.SKIP, passes.status, "sibling must SKIP")
+        assertEquals(0L, passes.durationMillis)
+        // passes body must not have run
+        assertFalse(consoleTexts(filtered).contains("ran:passes"), "passes body must not have run")
+    }
+
+    // ----- Amendment 2: call-site capture -----
+
+    /**
+     * Fixture suite with known line numbers; asserts exact sourceFile and sourceLine
+     * for a top-level test, a nested test, and a describe.
+     *
+     * File content (trimIndent, 1-based):
+     *   1: describe("grp", () => {
+     *   2:   test("nested", () => {});
+     *   3: });
+     *   4: test("top", () => {});
+     */
+    @Test
+    fun callSiteCapturedForTopLevelNestedAndDescribe() {
+        val dir = Files.createTempDirectory("hexana-callsite-test")
+        val file = dir.resolve("callsite.test.mjs")
+        // Write with explicit newlines so line numbers are known and stable
+        val content = "describe(\"grp\", () => {\n" +
+            "  test(\"nested\", () => {});\n" +
+            "});\n" +
+            "test(\"top\", () => {});\n"
+        Files.writeString(file, content)
+
+        val result = runner().runSuite(file.toString())
+        assertEquals(HexanaScriptStatus.SUCCESS, result.status)
+        val root = assertNotNull(result.suite)
+
+        val grp = root.children[0]
+        assertEquals("grp", grp.name)
+        assertNotNull(grp.sourceFile, "describe must have sourceFile")
+        assertTrue(grp.sourceFile!!.endsWith("callsite.test.mjs"), "sourceFile must end with fixture name: ${grp.sourceFile}")
+        assertTrue(Paths.get(grp.sourceFile!!).isAbsolute, "sourceFile must be absolute: ${grp.sourceFile}")
+        assertEquals(1, grp.sourceLine, "describe is on line 1: ${grp.sourceLine}")
+
+        val nested = grp.children[0]
+        assertEquals("nested", nested.name)
+        assertNotNull(nested.sourceFile, "nested test must have sourceFile")
+        assertTrue(nested.sourceFile!!.endsWith("callsite.test.mjs"))
+        assertEquals(2, nested.sourceLine, "nested test is on line 2: ${nested.sourceLine}")
+
+        val top = root.children[1]
+        assertEquals("top", top.name)
+        assertNotNull(top.sourceFile, "top test must have sourceFile")
+        assertTrue(top.sourceFile!!.endsWith("callsite.test.mjs"))
+        assertEquals(4, top.sourceLine, "top test is on line 4: ${top.sourceLine}")
+    }
+
+    /**
+     * A test registered from an imported helper module captures the call site in
+     * that helper (not in the main suite file). Pins the observed value; no nulls.
+     */
+    @Test
+    fun callSiteFromImportedModuleIsNonNull() {
+        val dir = Files.createTempDirectory("hexana-callsite-import")
+        // helper.mjs: test() call is on line 2 (1-based)
+        val helperContent = "// helper\n" +
+            "export function registerTest(testFn) { testFn(\"from-helper\", () => {}); }\n"
+        Files.writeString(dir.resolve("helper.mjs"), helperContent)
+
+        val suiteContent = "import { registerTest } from \"./helper.mjs\";\n" +
+            "registerTest(test);\n"
+        val file = dir.resolve("imported.test.mjs")
+        Files.writeString(file, suiteContent)
+
+        val result = runner().runSuite(file.toString())
+        assertEquals(HexanaScriptStatus.SUCCESS, result.status)
+        val root = assertNotNull(result.suite)
+        val fromHelper = root.children.single()
+        assertEquals("from-helper", fromHelper.name)
+
+        // The prelude wraps `test` so `new Error().stack` is captured when
+        // `registerTest(test)` calls testFn(...). The first non-prelude frame
+        // in the stack is inside helper.mjs (the registerTest body).
+        // Pin: sourceFile is non-null and sourceLine is non-null.
+        assertNotNull(fromHelper.sourceFile,
+            "test registered from an imported module must have a non-null sourceFile")
+        assertNotNull(fromHelper.sourceLine,
+            "test registered from an imported module must have a non-null sourceLine")
+        // The call site is in helper.mjs line 2 (where testFn(...) is called)
+        assertTrue(
+            fromHelper.sourceFile!!.endsWith("helper.mjs"),
+            "sourceFile must end with helper.mjs (actual call site), got: ${fromHelper.sourceFile}"
+        )
+        assertEquals(2, fromHelper.sourceLine,
+            "call site in helper.mjs is on line 2, got: ${fromHelper.sourceLine}")
     }
 
     // ----- Base-profile pins: the v1 runner must be unaffected -----

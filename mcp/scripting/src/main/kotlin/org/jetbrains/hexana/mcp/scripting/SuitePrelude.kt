@@ -220,6 +220,36 @@ internal object SuitePrelude {
   globalThis.URLSearchParams = URLSearchParams;
   globalThis.URL = URL;
 
+  // ---- describe / test / test.skip: call-site capture ---------------------
+  // Wrap the host-registered globals so each JS call captures `new Error().stack`
+  // and passes it as an extra trailing string argument to the host function.
+  // The host parses the stack to extract (file, line) for navigation.
+  (function wrapSuiteRegistrations() {
+    const _describe = globalThis.describe;
+    const _test = globalThis.test;
+    const _testSkip = globalThis.test.skip;
+
+    function capture() { return new Error().stack || ""; }
+
+    globalThis.describe = function describe(name, fn) {
+      return _describe(name, fn, capture());
+    };
+
+    const testWrapped = function test(name, fnOrOptions, fn) {
+      if (arguments.length <= 2) {
+        return _test(name, fnOrOptions, capture());
+      }
+      return _test(name, fnOrOptions, fn, capture());
+    };
+    testWrapped.skip = function skip(name, fnOrOptions, fn) {
+      if (arguments.length <= 2) {
+        return _testSkip(name, fnOrOptions, capture());
+      }
+      return _testSkip(name, fnOrOptions, fn, capture());
+    };
+    globalThis.test = testWrapped;
+  })();
+
   // ---- crypto (seeded, deterministic) --------------------------------------
   function fillBytes(view) {
     const bytes = host.randomBytes(view.length);

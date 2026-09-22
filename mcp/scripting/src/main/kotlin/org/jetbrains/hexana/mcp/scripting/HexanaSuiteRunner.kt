@@ -65,6 +65,13 @@ class HexanaSuiteRunner(
      *   from the script text and the artifact file contents
      * @param testTimeoutMillis default per-test timeout, overridable per test via
      *   `test(name, {timeout}, fn)`
+     * @param testPathFilter when non-null, only the tests whose full path (list of
+     *   describe names + test name) appears in this set are executed. Filtered-out
+     *   tests appear in the result tree as SKIP with duration 0 so the tree shape
+     *   is identical to an unfiltered run. `test.skip` nodes remain SKIP regardless.
+     *   Each entry is a list of strings, e.g. `listOf("math", "adds")` for a test
+     *   named "adds" inside `describe("math", ...)`. Top-level tests have a
+     *   single-element path. null means run all tests (existing callers unchanged).
      * @param onConsole invoked for every console entry as it is emitted
      * @return result with [HexanaScriptResult.suite] carrying the test tree; test
      *   failures keep status SUCCESS, while a collection-time error is SCRIPT_ERROR
@@ -75,6 +82,7 @@ class HexanaSuiteRunner(
         libRoot: String? = null,
         seed: String? = null,
         testTimeoutMillis: Long = DEFAULT_TEST_TIMEOUT_MILLIS,
+        testPathFilter: Set<List<String>>? = null,
         onConsole: ((ScriptConsoleEntry) -> Unit)? = null,
     ): HexanaScriptResult {
         val started = System.nanoTime()
@@ -135,7 +143,7 @@ class HexanaSuiteRunner(
         val future = executor.submit(Callable {
             executeSuite(
                 suitePath, scriptText, artifacts, libRootPath, seedBytes,
-                testTimeoutMillis, console, contextRef, started,
+                testTimeoutMillis, testPathFilter, console, contextRef, started,
             )
         })
         return try {
@@ -183,6 +191,7 @@ class HexanaSuiteRunner(
         libRootPath: Path?,
         seedBytes: ByteArray,
         testTimeoutMillis: Long,
+        testPathFilter: Set<List<String>>?,
         console: SuiteConsole,
         contextRef: AtomicReference<Context?>,
         started: Long,
@@ -227,7 +236,7 @@ class HexanaSuiteRunner(
                 }
                 registry.collecting = false
 
-                val suiteTree = SuiteExecutor(ctx, timers, testTimeoutMillis).executeRoot(registry.root)
+                val suiteTree = SuiteExecutor(ctx, timers, testTimeoutMillis, testPathFilter).executeRoot(registry.root)
                 return HexanaScriptResult(
                     status = HexanaScriptStatus.SUCCESS,
                     output = emptyOutput(),
@@ -442,12 +451,64 @@ internal class SuiteConsole(private val onEntry: ((ScriptConsoleEntry) -> Unit)?
 }
 
 // -----------------------------------------------------------------------------
+// Call-site stack parser
+// -----------------------------------------------------------------------------
+
+/**
+ * Result of parsing one GraalJS `Error.stack` frame for navigation.
+ *
+ * Observed GraalJS 25 format (two variants):
+ *   Anonymous/top-level: `    at /abs/path/to/file.mjs:line:col`
+ *   Named function:      `    at funcName (/abs/path/to/file.mjs:line:col)`
+ *
+ * The first line of the stack string is `Error: <message>` (skipped).
+ * Prelude-internal frames have source name `hexana:suite-prelude`; they are skipped.
+ * Returns null when the string is empty or unparseable.
+ */
+internal fun parseGraalJSCallSite(stack: String?): Pair<String, Int>? {
+    if (stack.isNullOrBlank()) return null
+    // Each frame line starts with "    at " (4 spaces + "at ")
+    val framePrefix = "    at "
+    for (line in stack.lineSequence().drop(1)) {
+        if (!line.startsWith(framePrefix)) continue
+        val body = line.removePrefix(framePrefix)
+        // Skip prelude-internal frames
+        if (body.startsWith(SuitePrelude.SOURCE_NAME) || body.contains("(${SuitePrelude.SOURCE_NAME}")) continue
+
+        // Named: "funcName (/path:line:col)" or "funcName (path:line:col)"
+        // Anonymous: "/path:line:col"
+        val location = if (body.endsWith(")") && body.contains("(")) {
+            body.substringAfterLast("(").removeSuffix(")")
+        } else {
+            body
+        }
+        // location is "path:line:col"; line and col are decimal integers
+        val lastColon = location.lastIndexOf(':')
+        if (lastColon < 0) continue
+        val beforeCol = location.substring(0, lastColon)
+        val secondLastColon = beforeCol.lastIndexOf(':')
+        if (secondLastColon < 0) continue
+        val filePath = beforeCol.substring(0, secondLastColon)
+        val lineStr = beforeCol.substring(secondLastColon + 1)
+        val lineNum = lineStr.toIntOrNull() ?: continue
+        if (filePath.isBlank()) continue
+        return filePath to lineNum
+    }
+    return null
+}
+
+// -----------------------------------------------------------------------------
 // Registration (collection pass)
 // -----------------------------------------------------------------------------
 
 internal sealed interface SuiteChild
 
-internal class SuiteGroupNode(val name: String, val parent: SuiteGroupNode?) : SuiteChild {
+internal class SuiteGroupNode(
+    val name: String,
+    val parent: SuiteGroupNode?,
+    val sourceFile: String? = null,
+    val sourceLine: Int? = null,
+) : SuiteChild {
     val beforeEach = mutableListOf<Value>()
     val afterEach = mutableListOf<Value>()
     val children = mutableListOf<SuiteChild>()
@@ -459,6 +520,8 @@ internal class SuiteTestNode(
     val timeoutMillis: Long?,
     val owner: SuiteGroupNode,
     val skipped: Boolean = false,
+    val sourceFile: String? = null,
+    val sourceLine: Int? = null,
 ) : SuiteChild
 
 /**
@@ -508,7 +571,9 @@ internal class SuiteRegistry(rootName: String) {
             ?: throw IllegalArgumentException("describe(name, fn): name must be a string")
         val fn = args.getOrNull(1)?.takeIf { it.canExecute() }
             ?: throw IllegalArgumentException("describe(name, fn): fn must be a function")
-        val group = SuiteGroupNode(name, current)
+        // args[2] is the captured stack string injected by the prelude wrapper (optional)
+        val callSite = parseGraalJSCallSite(args.getOrNull(2)?.takeIf { it.isString }?.asString())
+        val group = SuiteGroupNode(name, current, sourceFile = callSite?.first, sourceLine = callSite?.second)
         current.children += group
         val previous = current
         current = group
@@ -526,10 +591,14 @@ internal class SuiteRegistry(rootName: String) {
             ?: throw IllegalArgumentException("test(name, [options,] fn): name must be a string")
         val second = args.getOrNull(1)
         val third = args.getOrNull(2)
+        val fourth = args.getOrNull(3)
         val body: Value
         var timeout: Long? = null
-        if (second != null && second.canExecute() && third == null) {
+        val stackStr: String?
+        if (second != null && second.canExecute() && (third == null || third.isString)) {
+            // test(name, fn) or test(name, fn, capturedStack)
             body = second
+            stackStr = third?.takeIf { it.isString }?.asString()
         } else {
             val options = second?.takeIf { it.hasMembers() }
                 ?: throw IllegalArgumentException("test(name, [options,] fn): expected an options object or a function")
@@ -537,8 +606,12 @@ internal class SuiteRegistry(rootName: String) {
                 ?.takeIf { it.isNumber }?.asLong()
             body = third?.takeIf { it.canExecute() }
                 ?: throw IllegalArgumentException("test(name, options, fn): fn must be a function")
+            // fourth is the captured stack string (optional)
+            stackStr = fourth?.takeIf { it.isString }?.asString()
         }
-        current.children += SuiteTestNode(name, body, timeout, current)
+        val callSite = parseGraalJSCallSite(stackStr)
+        current.children += SuiteTestNode(name, body, timeout, current,
+            sourceFile = callSite?.first, sourceLine = callSite?.second)
         null
     }
 
@@ -549,16 +622,22 @@ internal class SuiteRegistry(rootName: String) {
             ?: throw IllegalArgumentException("test.skip(name, [options,] fn): name must be a string")
         val second = args.getOrNull(1)
         val third = args.getOrNull(2)
+        val fourth = args.getOrNull(3)
         val body: Value
-        if (second != null && second.canExecute() && third == null) {
+        val stackStr: String?
+        if (second != null && second.canExecute() && (third == null || third.isString)) {
             body = second
+            stackStr = third?.takeIf { it.isString }?.asString()
         } else {
             val options = second?.takeIf { it.hasMembers() }
                 ?: throw IllegalArgumentException("test.skip(name, [options,] fn): expected an options object or a function")
             body = third?.takeIf { it.canExecute() }
                 ?: throw IllegalArgumentException("test.skip(name, options, fn): fn must be a function")
+            stackStr = fourth?.takeIf { it.isString }?.asString()
         }
-        current.children += SuiteTestNode(name, body, timeoutMillis = null, owner = current, skipped = true)
+        val callSite = parseGraalJSCallSite(stackStr)
+        current.children += SuiteTestNode(name, body, timeoutMillis = null, owner = current, skipped = true,
+            sourceFile = callSite?.first, sourceLine = callSite?.second)
         null
     }
 
@@ -643,21 +722,33 @@ private class SuiteTestFailure(
 /**
  * Executes the collected suite tree. All calls happen on the suite executor
  * thread that owns the GraalJS context.
+ *
+ * @param testPathFilter when non-null, only tests whose full name path is in this
+ *   set are executed; others appear as SKIP with duration 0. Each element is a
+ *   list of describe names + test name (root group name excluded).
  */
 internal class SuiteExecutor(
     private val context: Context,
     private val timers: SuiteTimers,
     private val defaultTimeoutMillis: Long,
+    private val testPathFilter: Set<List<String>>? = null,
 ) {
 
-    fun executeRoot(root: SuiteGroupNode): SuiteNodeResult = executeGroup(root)
+    fun executeRoot(root: SuiteGroupNode): SuiteNodeResult = executeGroup(root, emptyList())
 
-    private fun executeGroup(group: SuiteGroupNode): SuiteNodeResult {
+    private fun executeGroup(group: SuiteGroupNode, path: List<String>): SuiteNodeResult {
         val started = System.nanoTime()
         val children = group.children.map { child ->
             when (child) {
-                is SuiteGroupNode -> executeGroup(child)
-                is SuiteTestNode -> if (child.skipped) skipResult(child) else executeTest(child)
+                is SuiteGroupNode -> executeGroup(child, path + child.name)
+                is SuiteTestNode -> {
+                    val testPath = path + child.name
+                    val filtered = testPathFilter != null && testPath !in testPathFilter
+                    when {
+                        child.skipped || filtered -> skipResult(child)
+                        else -> executeTest(child)
+                    }
+                }
             }
         }
         val status = if (children.any { it.status == SuiteNodeStatus.FAIL }) {
@@ -671,6 +762,8 @@ internal class SuiteExecutor(
             status = status,
             durationMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started),
             children = children,
+            sourceFile = group.sourceFile,
+            sourceLine = group.sourceLine,
         )
     }
 
@@ -679,6 +772,8 @@ internal class SuiteExecutor(
         kind = SuiteNodeKind.TEST,
         status = SuiteNodeStatus.SKIP,
         durationMillis = 0,
+        sourceFile = test.sourceFile,
+        sourceLine = test.sourceLine,
     )
 
     private fun executeTest(test: SuiteTestNode): SuiteNodeResult {
@@ -713,6 +808,8 @@ internal class SuiteExecutor(
             durationMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started),
             failureMessage = failure?.message,
             failureStackLine = failure?.stackLine,
+            sourceFile = test.sourceFile,
+            sourceLine = test.sourceLine,
         )
     }
 
