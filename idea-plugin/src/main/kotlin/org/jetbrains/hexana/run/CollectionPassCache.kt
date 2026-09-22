@@ -4,6 +4,9 @@ import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
+/** Minimal valid WebAssembly module: 4-byte magic + 4-byte version. */
+internal val MINIMAL_WASM_STUB: ByteArray = byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00)
+
 /**
  * Generic content-keyed cache for collection passes: keyed by the SHA-256 hex of
  * the file bytes so results survive file renames but invalidate on content change.

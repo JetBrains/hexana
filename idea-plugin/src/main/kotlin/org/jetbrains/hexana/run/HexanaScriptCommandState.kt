@@ -77,6 +77,9 @@ internal fun runScript(
     }
     val invocation = ScriptInvocation(argv = argv, extraInputPaths = extraPaths)
 
+    // allowAll: runs are user-initiated with user-picked files; the sandbox still blocks host
+    // access, processes, threads, and writes. The script may open() files the invoking user
+    // can already read.
     val runner = HexanaScriptRunner(
         limits = HexanaScriptLimits.interactive(),
         allowedFilePolicy = AllowedFilePolicy.allowAll,
@@ -86,8 +89,7 @@ internal fun runScript(
     val input: BinaryInput = if (primaryPath.isNotEmpty()) {
         BinaryInput.FilePath(primaryPath)
     } else {
-        // Minimal valid wasm: magic (4 bytes) + version (4 bytes)
-        BinaryInput.RawBytes(byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00))
+        BinaryInput.RawBytes(MINIMAL_WASM_STUB)
     }
 
     val result: HexanaScriptResult = runner.run(input, source, invocation)
@@ -195,6 +197,10 @@ private fun navigateToAnchor(
  * - 2 when there are usage errors (undeclared flags, etc.), matching the CLI.
  * - 1 when the script itself failed or any ERROR finding is present.
  * - 0 otherwise.
+ *
+ * Note: IDE runs do not apply baselines, so exit code 1 fires on ANY ERROR finding.
+ * The CLI with --baselines-dir exits 1 only on NEW findings not covered by the baseline.
+ * The "Copy CLI Command" button includes the baselines directory for that behavior.
  */
 internal fun exitCodeFor(result: HexanaScriptResult): Int {
     if (result.usageErrors.isNotEmpty()) return 2

@@ -87,5 +87,5 @@ internal fun openScriptSession(
 private fun org.jetbrains.hexana.mcp.scripting.HexanaScriptDiagnostic.location(): String {
     val line = line ?: return ""
     val column = column
-    return if (column != null) "$sourceName:$line:$column — " else "$sourceName:$line — "
+    return if (column != null) "$sourceName:$line:$column: " else "$sourceName:$line: "
 }

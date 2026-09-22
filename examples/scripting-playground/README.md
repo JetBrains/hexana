@@ -1,11 +1,11 @@
 # Hexana Scripting Playground
 
 A self-contained sample project for exploring the Hexana scripting API. It includes a
-binary corpus, build scripts that reproduce every committed file, and ten annotated
+binary corpus, build scripts that reproduce every committed file, and thirteen annotated
 scripts covering both the v1 API (runs on master) and the v2 slice API (requires
 the `feature/scripting-v2-phase1` branch).
 
-Total committed binary size: about 9.3 KB (7 files under 4 KB each; 1 MB budget is not
+Total committed binary size: about 10.7 KB (6 files; 1 MB budget is not
 approached). The `many-functions.wasm` scale module (413 KB at N=15000) is not committed;
 generate it locally with `build/gen-many-functions.sh`.
 
@@ -23,7 +23,7 @@ The build scripts accept override env vars: `WAT2WASM`, `WASI_SDK`, `WASM_TOOLS`
 
 | File | Size | Built by | Purpose |
 |------|------|----------|---------|
-| bin/hello.wasm | 276 bytes | build/build-hello.sh (wabt 1.0.36) | Hand-written WAT: 4 exports, 1 import (env.log), 1 data segment, name section |
+| bin/hello.wasm | 276 bytes | build/build-hello.sh (wabt 1.0.36) | Hand-written WAT: 5 exports, 1 import (env.log), 1 data segment, name section |
 | bin/app-debug.wasm | 4703 bytes | build/build-app.sh (wasi-sdk 27.0) | C reactor (3 files), 5 exports, embedded DWARF + name section |
 | bin/app-release.wasm | 935 bytes | build/build-app.sh | Stripped version of app-debug: no DWARF, no name section |
 | bin/app-release.debug.wasm | 3578 bytes | build/build-app.sh | DWARF sidecar only (llvm-objcopy --only-keep-debug) |

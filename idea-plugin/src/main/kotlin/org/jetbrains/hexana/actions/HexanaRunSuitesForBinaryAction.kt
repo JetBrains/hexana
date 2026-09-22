@@ -5,6 +5,7 @@ import com.intellij.execution.ProgramRunnerUtil
 import com.intellij.execution.RunManager
 import com.intellij.execution.RunnerAndConfigurationSettings
 import com.intellij.execution.configurations.ConfigurationTypeUtil
+import com.intellij.ide.trustedProjects.TrustedProjects
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -33,6 +34,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * A suite matches when it has exactly one required (non-optional) declaration whose
  * formats list either is empty (any format) or includes the open binary's format id.
+ *
+ * The background cache fill is skipped for untrusted projects: script top-level code
+ * must not execute until the user has confirmed project trust.
  */
 class HexanaRunSuitesForBinaryAction : AnAction(
     "Run Suites for This Binary",
@@ -68,7 +72,8 @@ class HexanaRunSuitesForBinaryAction : AnAction(
 
         if (suiteFiles.isNotEmpty() && suiteFiles.all { tryGetCachedSuiteDeclarations(it.path) == null }) {
             // Nothing is cached yet: kick background warm-up and hide.
-            triggerBackgroundCacheFill(suiteFiles)
+            // Guard on project trust so untrusted-project code is never evaluated silently.
+            if (TrustedProjects.isProjectTrusted(project)) triggerBackgroundCacheFill(suiteFiles)
             e.presentation.isEnabledAndVisible = false
             return
         }

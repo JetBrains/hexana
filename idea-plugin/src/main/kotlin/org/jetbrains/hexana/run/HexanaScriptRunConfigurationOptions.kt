@@ -30,6 +30,10 @@ class HexanaScriptRunConfigurationOptions : RunConfigurationOptions() {
     fun getFreeFormFlags(): String = freeFormFlags.getValue(this) ?: ""
     fun setFreeFormFlags(value: String) { freeFormFlags.setValue(this, value) }
 
+    /**
+     * Baselines directory path. IDE runs do not apply baselines; the copied CLI command does.
+     * This field is persisted so the "Copy CLI Command" button can include it.
+     */
     fun getBaselinesDir(): String = baselinesDir.getValue(this) ?: ""
     fun setBaselinesDir(value: String) { baselinesDir.setValue(this, value) }
 }

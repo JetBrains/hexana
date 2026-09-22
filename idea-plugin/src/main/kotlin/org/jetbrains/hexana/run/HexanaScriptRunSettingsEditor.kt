@@ -232,7 +232,7 @@ class HexanaScriptRunSettingsEditor(
             row {
                 cell(inputsDecorator).align(AlignX.FILL)
             }
-            row("Baselines dir:") {
+            row("Baselines dir (used by Copy CLI Command only):") {
                 cell(baseDirField).align(AlignX.FILL)
             }
             row("Flags:") {
@@ -287,9 +287,8 @@ internal fun collectFlagDeclarations(scriptPath: String): Map<String, FlagSpec>?
             limits = HexanaScriptLimits(),
             allowedFilePolicy = AllowedFilePolicy.allowAll,
         )
-        val stubWasm = byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00)
         runCatching {
-            runner.run(BinaryInput.RawBytes(stubWasm), HexanaScriptSource.FilePath(scriptPath))
+            runner.run(BinaryInput.RawBytes(MINIMAL_WASM_STUB), HexanaScriptSource.FilePath(scriptPath))
                 .flagDeclarations
         }.getOrNull()
     }

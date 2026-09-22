@@ -83,6 +83,9 @@ internal fun runSuiteConfiguration(
         ?: HexanaSuiteRunner.DEFAULT_TEST_TIMEOUT_MILLIS
     val testPathFilter = configuration.testPathFilter
 
+    // allowAll: runs are user-initiated with user-picked files; the sandbox still blocks host
+    // access, processes, threads, and writes. For suite runs, artifacts are host-mapped paths
+    // and the module filesystem stays rooted, so no script-chosen path reaches the host.
     val runner = HexanaSuiteRunner(
         limits = HexanaScriptLimits.interactive(),
         allowedFilePolicy = AllowedFilePolicy.allowAll,

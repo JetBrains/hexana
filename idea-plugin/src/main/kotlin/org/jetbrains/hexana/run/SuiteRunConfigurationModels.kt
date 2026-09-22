@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.run
 
+import org.jetbrains.hexana.shared.scripting.SUITE_COLLECTION_ERROR_TEST_NAME
 import org.jetbrains.hexana.shared.scripting.SuiteArtifactDeclaration
 import org.jetbrains.hexana.shared.scripting.SuiteNodeKind
 import org.jetbrains.hexana.shared.scripting.SuiteNodeResult
@@ -126,9 +127,9 @@ private fun attrs(name: String, locationHint: String?): List<Pair<String, String
  */
 internal fun collectionErrorServiceMessages(fileName: String, message: String): List<String> = listOf(
     tcMessage("testSuiteStarted", listOf("name" to fileName)),
-    tcMessage("testStarted", listOf("name" to "(collection)")),
-    tcMessage("testFailed", listOf("name" to "(collection)", "message" to message)),
-    tcMessage("testFinished", listOf("name" to "(collection)", "duration" to "0")),
+    tcMessage("testStarted", listOf("name" to SUITE_COLLECTION_ERROR_TEST_NAME)),
+    tcMessage("testFailed", listOf("name" to SUITE_COLLECTION_ERROR_TEST_NAME, "message" to message)),
+    tcMessage("testFinished", listOf("name" to SUITE_COLLECTION_ERROR_TEST_NAME, "duration" to "0")),
     tcMessage("testSuiteFinished", listOf("name" to fileName)),
 )
 

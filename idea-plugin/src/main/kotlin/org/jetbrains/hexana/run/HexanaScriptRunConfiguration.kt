@@ -10,7 +10,7 @@ import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
 import java.io.File
 
-final class HexanaScriptRunConfiguration(
+class HexanaScriptRunConfiguration(
     project: Project,
     factory: ConfigurationFactory,
     name: String,
