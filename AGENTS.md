@@ -140,7 +140,9 @@ Run the narrowest command that proves your change.
   native, browser-specific, packaging, and custom test tasks are never discovered automatically. Unclassified
   Kotlin Multiplatform projects remain explicit Core-topology debt until their `allTests` task is proven safe in
   the Core Docker lane.
-- Run the TeamCity-ready VS Code plugin aggregate intended for the next rollout step: `./gradlew teamcityVscodePluginTests`
+- Run the TeamCity-ready VS Code plugin aggregate intended for the next rollout step: `./gradlew teamcityVscodePluginTests`.
+  It runs both `:vscode-plugin:extension-lib:allTests` and `:vscode-plugin:webview:allTests`; do not replace the
+  webview test surface with a compile-only task.
 - Run the TeamCity-ready Webapp aggregate with production packaging and Chrome-backed browser tests:
   `./gradlew teamcityWebappTests`
 - Run the dedicated TeamCity IntelliJ plugin test lane: `./gradlew teamcityIntellijPluginTests`

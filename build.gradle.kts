@@ -262,7 +262,7 @@ val teamcityCoreTestTaskPaths = listOf(
 
 val teamcityVscodePluginTestTaskPaths = listOf(
     ":vscode-plugin:extension-lib:allTests",
-    ":vscode-plugin:webview:compileKotlinJs",
+    ":vscode-plugin:webview:allTests",
 )
 
 val teamcityWebappTestTaskPaths = listOf(
@@ -340,7 +340,7 @@ val teamcityCiTestTaskOrder = listOf(
     ":plugins-shared:allTests",
     ":plugins-shared:verifyBundledWasmFeaturesUpToDate",
     ":vscode-plugin:extension-lib:allTests",
-    ":vscode-plugin:webview:compileKotlinJs",
+    ":vscode-plugin:webview:allTests",
     ":wasmParser:allTests",
     ":idea-plugin:test",
     ":mcp:core:build",
@@ -584,7 +584,7 @@ tasks.register("verifyTeamcityVscodePluginTestsCoverage") {
     doLast {
         val requiredTaskPaths = listOf(
             ":vscode-plugin:extension-lib:allTests",
-            ":vscode-plugin:webview:compileKotlinJs",
+            ":vscode-plugin:webview:allTests",
         )
         verifyExactTaskPaths(
             "teamcityVscodePluginTests inventory",
