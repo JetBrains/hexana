@@ -171,7 +171,7 @@ class OutputSchemaConformanceTest {
         out(GetFunctionCallGraphResult.serializer()), out(GetInstructionsForFunctionsResult.serializer()), out(GetLocalsForFunctionsResult.serializer()), out(ListCodeSectionOffsetsResult.serializer()), out(ResolveFunctionSignatureResult.serializer()), out(ResolveFunctionSymbolsResult.serializer()),
         out(ResolveSourceLocationsResult.serializer()), out(ResolveWasmFramesResult.serializer()), out(SearchFunctionsByNameResult.serializer()), out(AuditGlobalStatePolicyResult.serializer()), out(ListGlobalsResult.serializer()), out(ListImportsResult.serializer()),
         out(CheckMemoryContractResult.serializer()), out(ListMemoryResult.serializer()), out(ListCustomSectionsResult.serializer()), out(ListEnabledFeaturesResult.serializer()), out(SummarizeModuleResult.serializer()), out(CheckRuntimeCompatibilityResult.serializer()),
-        out(DiffRequiredProposalsResult.serializer()), out(ListRequiredProposalsResult.serializer()), out(RunBinaryScriptResult.serializer()), out(ListReferenceTypesResult.serializer()), out(ListValueTypesResult.serializer()), out(TypesResult.serializer()),
+        out(DiffRequiredProposalsResult.serializer()), out(ListRequiredProposalsResult.serializer()), out(RunBinaryScriptResult.serializer()), out(RunScriptSuiteResult.serializer()), out(ListReferenceTypesResult.serializer()), out(ListValueTypesResult.serializer()), out(TypesResult.serializer()),
     )
 
     private fun out(serializer: KSerializer<*>): Pair<String, KSerializer<*>> = serializer.descriptor.serialName to serializer
