@@ -11,6 +11,7 @@ class FieldPresenceAndSourceGroupTest {
         val schema = class_("Presence") {
             string("required")
             nullable("optional", string())
+            requiredNullable("requiredNullable", string())
         }
         val explicitNull = FieldSpec(
             name = "nullableDefault",
@@ -21,15 +22,17 @@ class FieldPresenceAndSourceGroupTest {
 
         assertEquals(FieldPresence.Required, schema.fieldRef("required").presence)
         assertEquals(FieldPresence.Optional, schema.fieldRef("optional").presence)
+        assertEquals(FieldPresence.Required, schema.fieldRef("requiredNullable").presence)
+        assertTrue(schema.fieldRef("requiredNullable").nullable)
         assertEquals(FieldPresence.Defaulted(FieldDefaultValue.Null), explicitNull.presence)
         assertEquals(null, explicitNull.default, "legacy bridge must not confuse null default with no default")
         assertEquals(FieldPresence.Defaulted(FieldDefaultValue.IntValue(7)), FieldSpec("count", int(), default = 7).presence)
 
-        assertFailsWith<IllegalArgumentException> {
-            compileSchemaPlan(ClassSpec("NullableRequired", listOf(
-                FieldSpec("value", string(), nullable = true, presence = FieldPresence.Required),
-            )))
-        }.also { assertTrue(it.message.orEmpty().contains("Required presence requires a non-nullable field")) }
+        val requiredNullablePlan = compileSchemaPlan(ClassSpec("NullableRequired", listOf(
+            FieldSpec("value", string(), nullable = true, presence = FieldPresence.Required),
+        )))
+        assertEquals(FieldPresence.Required, requiredNullablePlan.root.fields.single().presence)
+        assertTrue(requiredNullablePlan.root.fields.single().nullable)
         assertFailsWith<IllegalArgumentException> {
             compileSchemaPlan(ClassSpec("NonNullableOptional", listOf(
                 FieldSpec("value", string(), presence = FieldPresence.Optional),
@@ -60,6 +63,24 @@ class FieldPresenceAndSourceGroupTest {
         assertEquals("WasmInput", group.selections.first().field.ownerName)
         assertEquals(listOf("path", "bytesBase64", "bytes"), group.selections.map { it.field.name })
         assertEquals(listOf("path", "bytesBase64", "bytes"), WasmInputClass.oneOf, "legacy schema bridge")
+    }
+
+    @Test
+    fun `exact one source group still rejects required nullable source fields`() {
+        val source = class_("RequiredNullableSource") {
+            requiredNullable("path", string())
+            nullable("bytesBase64", string())
+            nullable("bytes", list(int()))
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            source.withExactOneSourceGroup(
+                "source",
+                pathSource(source.fieldRef("path")),
+                base64Source(source.fieldRef("bytesBase64")),
+                bytesSource(source.fieldRef("bytes")),
+            )
+        }.also { assertTrue(it.message.orEmpty().contains("must be nullable and optional individually")) }
     }
 
     @Test

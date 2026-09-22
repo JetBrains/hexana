@@ -284,6 +284,7 @@ class HexanaToolCompatibilityTest {
         appendLine("$prefix.schemaKey=${field.schemaKey}")
         appendLine("$prefix.type=${field.type.compatibilityText()}")
         appendLine("$prefix.nullable=${field.nullable}")
+        appendLine("$prefix.presence=${field.presence.compatibilityText()}")
         appendLine("$prefix.default=${field.default.compatibilityValueText()}")
         appendLine("$prefix.description=${field.describe.orEmpty().compatibilityText()}")
         appendLine("$prefix.serializer=${field.serializerFqn.orEmpty()}")
@@ -334,6 +335,12 @@ class HexanaToolCompatibilityTest {
         is FieldType.ClassRef -> "Class<${clazz.name}>"
     }
 
+    private fun FieldPresence.compatibilityText(): String = when (this) {
+        FieldPresence.Required -> "Required"
+        FieldPresence.Optional -> "Optional"
+        is FieldPresence.Defaulted -> "Defaulted($value)"
+    }
+
     private fun Any?.compatibilityValueText(): String = when (this) {
         null -> ""
         is ByteArray -> contentToString()
@@ -368,9 +375,9 @@ class HexanaToolCompatibilityTest {
         // governs the binary and script paths, so "no file IO" would misdescribe
         // it. The member list now also names `binary.path`/`binary.dir` and how
         // they combine with `open(...)` to reach a file beside the analyzed one.
-        // Prose only — no input, output, default, or bound changed, so this stays
-        // within the current schema version.
-        const val EXPECTED_SEMANTIC = "887d1a7efa53d0dc3a698be1ea3777aabef328d3b5046d3ff00844a57ab3bf38"
+        // The semantic snapshot now includes field presence, so required-nullable
+        // output fields cannot silently drift back to ordinary optional fields.
+        const val EXPECTED_SEMANTIC = "7337904c24d3083d92e3bdfcda584fe5efdd1420c9ee770da7e7520ee9a029e8"
         const val EXPECTED_IDEA = "b3d01605c58323500af1b4e1eeabfa8b6ff2e4fb659bfccac35c9869c379d378"
         const val EXPECTED_STANDALONE = "0395327fb451b08908345ce4e59bd1cf97bb05dd4bb1cb2165679a2744dd8b44"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"

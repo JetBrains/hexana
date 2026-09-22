@@ -175,7 +175,6 @@ internal class SchemaPlanCompiler {
         val default = (field.presence as? FieldPresence.Defaulted)?.value
         when (field.presence) {
             FieldPresence.Required -> {
-                if (field.nullable) report("Required presence requires a non-nullable field while the legacy bridge is active.")
                 if (field.default != null) report("legacy default bridge requires Defaulted presence.")
             }
             FieldPresence.Optional -> {

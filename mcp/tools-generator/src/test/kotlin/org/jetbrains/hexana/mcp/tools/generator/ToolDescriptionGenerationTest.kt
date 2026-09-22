@@ -30,6 +30,7 @@ import org.jetbrains.hexana.mcp.tools.ToolSpec
 import org.jetbrains.hexana.mcp.tools.ToolInputPattern
 import org.jetbrains.hexana.mcp.tools.UnknownFieldPolicy
 import org.jetbrains.hexana.mcp.tools.compileSchemaPlan
+import org.jetbrains.hexana.mcp.tools.class_
 import org.jetbrains.hexana.mcp.tools.mcpDescription
 import org.jetbrains.hexana.mcp.tools.id
 import org.jetbrains.hexana.mcp.tools.name
@@ -177,6 +178,41 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
+    fun `IDEA and standalone output schemas require nullable scalar and class fields`() {
+        val nested = ClassSpec("RequiredNullableNested", listOf(FieldSpec("value", FieldType.StringT)))
+        val output = class_("RequiredNullableOutput") {
+            requiredNullable("requiredNullableInt", FieldType.Int32)
+            requiredNullable("requiredNullableNested", nested)
+            nullable("optionalNullable", FieldType.StringT)
+        }
+        val fixtureId = HexanaStandaloneTools.first().contract.id
+        val contract = ToolSpec(
+            fixtureId,
+            "Required nullable schema fixture.",
+            null,
+            HexanaIdeaTools.first().contract.input,
+            output,
+        )
+        val ideaTool = HexanaIdeaTools.first().copy(
+            contract = contract,
+            binding = HexanaIdeaTools.first().binding.copy(id = contract.id),
+        )
+        val standaloneTool = StandaloneTool(
+            contract,
+            HexanaStandaloneTools.first().binding.copy(id = contract.id),
+        )
+
+        assertRequiredNullableOutput(
+            buildToolsetFile(listOf(ideaTool)).toString(),
+            "requiredProperties = setOf",
+        )
+        assertRequiredNullableOutput(
+            buildDispatcherFile(standaloneAuthority(listOf(standaloneTool), listOf(contract.id), emptyList(), emptyList())).toString(),
+            "required = listOf",
+        )
+    }
+
+    @Test
     fun `standalone profiles preserve explicit disjoint membership`() {
         val source = dispatcherSource()
         assertTrue(source.contains("DEFAULT_TOOL_NAMES"))
@@ -292,6 +328,19 @@ class ToolDescriptionGenerationTest {
     }
 
     private fun profile(id: String) = HexanaStandaloneAuthority.profile(ProfileId(id))
+
+    private fun assertRequiredNullableOutput(source: String, requiredMarker: String) {
+        val output = source.substringAfter("outputSchema =")
+        val required = output.substringAfter(requiredMarker).substringBefore(")")
+
+        assertTrue(required.contains("\"requiredNullableInt\""), "output required keys: $required")
+        assertTrue(required.contains("\"requiredNullableNested\""), "output required keys: $required")
+        assertFalse(required.contains("\"optionalNullable\""), "output required keys: $required")
+        assertTrue(output.substringAfter("put(\"requiredNullableInt\"").take(240).contains("\"integer\""), output)
+        assertTrue(output.substringAfter("put(\"requiredNullableInt\"").take(240).contains("\"null\""), output)
+        assertTrue(output.substringAfter("put(\"requiredNullableNested\"").take(240).contains("\"object\""), output)
+        assertTrue(output.substringAfter("put(\"requiredNullableNested\"").take(240).contains("\"null\""), output)
+    }
 
     private fun standaloneAuthority(
         registrations: List<org.jetbrains.hexana.mcp.tools.StandaloneTool>, default: List<org.jetbrains.hexana.mcp.tools.ToolId>,

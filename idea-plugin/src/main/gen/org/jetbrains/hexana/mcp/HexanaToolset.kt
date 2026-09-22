@@ -630,13 +630,31 @@ public class HexanaToolset : McpToolsProvider {
       ),
       outputSchema = McpToolSchema.ofPropertiesSchema(
       properties = buildJsonObject {
+        put("path", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+        })
         put("component_path", buildJsonObject {
           put("type", buildJsonArray {
             add(JsonPrimitive("string"))
             add(JsonPrimitive("null"))
           })
         })
+        put("previousPath", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+        })
         put("previous_component_path", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
+          })
+        })
+        put("dependencyLockPath", buildJsonObject {
           put("type", buildJsonArray {
             add(JsonPrimitive("string"))
             add(JsonPrimitive("null"))
@@ -669,6 +687,12 @@ public class HexanaToolset : McpToolsProvider {
             put("type", JsonPrimitive("object"))
           })
         })
+        put("failingImport", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("object"))
+            add(JsonPrimitive("null"))
+          })
+        })
         put("failing_import", buildJsonObject {
           put("type", buildJsonArray {
             add(JsonPrimitive("object"))
@@ -681,10 +705,22 @@ public class HexanaToolset : McpToolsProvider {
             put("type", JsonPrimitive("object"))
           })
         })
+        put("candidateProviders", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+          })
+        })
         put("candidate_providers_inspected", buildJsonObject {
           put("type", JsonPrimitive("array"))
           put("items", buildJsonObject {
             put("type", JsonPrimitive("object"))
+          })
+        })
+        put("selectedIncompatibilityReason", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("string"))
+            add(JsonPrimitive("null"))
           })
         })
         put("selected_incompatibility_reason", buildJsonObject {
@@ -693,10 +729,22 @@ public class HexanaToolset : McpToolsProvider {
             add(JsonPrimitive("null"))
           })
         })
+        put("providerPathsInvolved", buildJsonObject {
+          put("type", JsonPrimitive("array"))
+          put("items", buildJsonObject {
+            put("type", JsonPrimitive("string"))
+          })
+        })
         put("provider_paths_involved", buildJsonObject {
           put("type", JsonPrimitive("array"))
           put("items", buildJsonObject {
             put("type", JsonPrimitive("string"))
+          })
+        })
+        put("minimalDependencyLockFix", buildJsonObject {
+          put("type", buildJsonArray {
+            add(JsonPrimitive("object"))
+            add(JsonPrimitive("null"))
           })
         })
         put("minimal_dependency_lock_fix", buildJsonObject {
@@ -721,7 +769,7 @@ public class HexanaToolset : McpToolsProvider {
           put("type", JsonPrimitive("object"))
         })
       },
-      requiredProperties = setOf("compatible", "matches", "missingImports", "issues", "configuredProviders", "candidate_providers_inspected", "provider_paths_involved", "summary"),
+      requiredProperties = setOf("compatible", "matches", "missingImports", "issues", "configuredProviders", "candidateProviders", "candidate_providers_inspected", "providerPathsInvolved", "provider_paths_involved", "summary"),
       definitions = emptyMap<String, JsonElement>(),
       ),
     )

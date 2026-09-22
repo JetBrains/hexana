@@ -1372,13 +1372,31 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
   ),
     outputSchema = ToolSchema(
     properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+      })
       put("component_path", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
         })
       })
+      put("previousPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+      })
       put("previous_component_path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+      })
+      put("dependencyLockPath", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("string"))
           add(JsonPrimitive("null"))
@@ -1411,6 +1429,12 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
           put("type", JsonPrimitive("object"))
         })
       })
+      put("failingImport", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("object"))
+          add(JsonPrimitive("null"))
+        })
+      })
       put("failing_import", buildJsonObject {
         put("type", buildJsonArray {
           add(JsonPrimitive("object"))
@@ -1423,10 +1447,22 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
           put("type", JsonPrimitive("object"))
         })
       })
+      put("candidateProviders", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
       put("candidate_providers_inspected", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("object"))
+        })
+      })
+      put("selectedIncompatibilityReason", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
         })
       })
       put("selected_incompatibility_reason", buildJsonObject {
@@ -1435,10 +1471,22 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
           add(JsonPrimitive("null"))
         })
       })
+      put("providerPathsInvolved", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+      })
       put("provider_paths_involved", buildJsonObject {
         put("type", JsonPrimitive("array"))
         put("items", buildJsonObject {
           put("type", JsonPrimitive("string"))
+        })
+      })
+      put("minimalDependencyLockFix", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("object"))
+          add(JsonPrimitive("null"))
         })
       })
       put("minimal_dependency_lock_fix", buildJsonObject {
@@ -1463,7 +1511,7 @@ private fun Server.registerCheckComponentCompatibilityTool(handlers: HexanaToolH
         put("type", JsonPrimitive("object"))
       })
     },
-    required = listOf("compatible", "matches", "missingImports", "issues", "configuredProviders", "candidate_providers_inspected", "provider_paths_involved", "summary")
+    required = listOf("compatible", "matches", "missingImports", "issues", "configuredProviders", "candidateProviders", "candidate_providers_inspected", "providerPathsInvolved", "provider_paths_involved", "summary")
   ),
     annotations = ToolAnnotations(
       readOnlyHint = true,

@@ -175,6 +175,7 @@ dependencies {
     implementation(libs.slf4j.api)
 
     testImplementation(project(":graalwasm:wat2wasm"))
+    testImplementation(project(":mcp:tools-generator"))
     testImplementation(libs.gson)
     testImplementation(libs.junit4)
     testImplementation(libs.kotlin.test)

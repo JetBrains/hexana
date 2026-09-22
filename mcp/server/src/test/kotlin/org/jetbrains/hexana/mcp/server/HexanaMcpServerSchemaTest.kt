@@ -158,8 +158,8 @@ class HexanaMcpServerSchemaTest {
         val estimatedTokens = (schemaBytes + 3) / 4
 
         assertTrue(
-            estimatedTokens <= 13_885,
-            "Default MCP schema estimate is $estimatedTokens tokens ($schemaBytes bytes), expected <= 13885",
+            estimatedTokens <= 14_000,
+            "Default MCP schema estimate is $estimatedTokens tokens ($schemaBytes bytes), expected <= 14000",
         )
     }
 
@@ -287,6 +287,40 @@ class HexanaMcpServerSchemaTest {
         assertTrue("crashReport" in output)
         assertTrue("topApplicationFrame" in output)
         assertTrue("skippedFrames" in output)
+    }
+
+    @Test
+    fun componentCompatibilitySchemaAdvertisesLegacyAndReportFields() {
+        val tool = createHexanaMcpServer()
+            .tools
+            .getValue("check_component_compatibility")
+            .tool
+
+        val output = tool.outputSchema?.properties?.jsonObject ?: error("Missing component compatibility output schema")
+        setOf(
+            "path",
+            "previousPath",
+            "dependencyLockPath",
+            "failingImport",
+            "candidateProviders",
+            "selectedIncompatibilityReason",
+            "providerPathsInvolved",
+            "minimalDependencyLockFix",
+        ).forEach { field ->
+            assertTrue(field in output, "Missing legacy component compatibility output wire key `$field`")
+        }
+        setOf(
+            "component_path",
+            "previous_component_path",
+            "dependency_lock_path",
+            "failing_import",
+            "candidate_providers_inspected",
+            "selected_incompatibility_reason",
+            "provider_paths_involved",
+            "minimal_dependency_lock_fix",
+        ).forEach { field ->
+            assertTrue(field in output, "Missing report component compatibility output wire key `$field`")
+        }
     }
 
     @Test

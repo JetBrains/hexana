@@ -436,6 +436,14 @@ class ClassBuilder internal constructor(
     fun nullable(name: String, of: ClassSpec): FieldHandle =
         addField(name, FieldType.ClassRef(of), nullable = true)
 
+    /** A field that must be present on the wire, but whose value may be null. */
+    fun requiredNullable(name: String, of: FieldType): FieldHandle =
+        addField(name, of, nullable = true, presence = FieldPresence.Required)
+
+    /** A field that must be present on the wire, but whose value may be null. */
+    fun requiredNullable(name: String, of: ClassSpec): FieldHandle =
+        addField(name, FieldType.ClassRef(of), nullable = true, presence = FieldPresence.Required)
+
     fun oneOf(vararg props: String) {
         val choices = props.toList()
         require(choices.isNotEmpty()) { "oneOf in class '$name' must declare at least one field." }
@@ -459,12 +467,17 @@ class ClassBuilder internal constructor(
         type: FieldType,
         default: Any? = null,
         nullable: Boolean = false,
+        presence: FieldPresence? = null,
     ): FieldHandle {
         require(FIELD_NAME_REGEX.matches(name)) {
             "Field name '$name' in class '${this.name}' must be lowerCamelCase."
         }
         require(fields.none { it.name == name }) { "Duplicate field '$name' in class '${this.name}'." }
-        fields += FieldSpec(name, type, nullable, default)
+        fields += if (presence == null) {
+            FieldSpec(name, type, nullable, default)
+        } else {
+            FieldSpec(name, type, nullable, default, presence = presence)
+        }
         return FieldHandle(this, fields.lastIndex)
     }
 
