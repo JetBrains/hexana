@@ -37,6 +37,7 @@ import org.jetbrains.hexana.mcp.scripting.HexanaScriptOutput
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptResult
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptRunner
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptSource
+import org.jetbrains.hexana.mcp.scripting.HexanaScriptStatus
 import org.jetbrains.hexana.shared.scripting.CheckSeverity
 import org.jetbrains.hexana.shared.scripting.ConsoleSeverity
 import org.jetbrains.hexana.shared.scripting.FlagType
@@ -193,7 +194,7 @@ internal class RunScriptExecutor(
             }
             is ScriptSourceSelection.Invalid -> {
                 rawResult = HexanaScriptResult(
-                    status = org.jetbrains.hexana.mcp.scripting.HexanaScriptStatus.INVALID_INPUT,
+                    status = HexanaScriptStatus.INVALID_INPUT,
                     output = emptyOutput(),
                     diagnostics = emptyList(),
                     binary = null,
@@ -227,10 +228,10 @@ internal class RunScriptExecutor(
             ).load(input)
         } catch (error: HexanaAnalysisException) {
             return HexanaScriptResult(
-                status = org.jetbrains.hexana.mcp.scripting.HexanaScriptStatus.INVALID_INPUT,
+                status = HexanaScriptStatus.INVALID_INPUT,
                 output = emptyOutput(),
                 diagnostics = listOf(
-                    org.jetbrains.hexana.mcp.scripting.HexanaScriptDiagnostic(
+                    HexanaScriptDiagnostic(
                         code = error.code.name,
                         message = error.message,
                         exceptionClass = error::class.java.name,
@@ -246,7 +247,7 @@ internal class RunScriptExecutor(
         return runScript(loaded, source.source, invocation)
     }
 
-    private fun emptyOutput() = org.jetbrains.hexana.mcp.scripting.HexanaScriptOutput(
+    private fun emptyOutput() = HexanaScriptOutput(
         lines = emptyList(), truncated = false, emittedBytes = 0,
         maxLines = limits.maxOutputLines, maxBytes = limits.maxOutputBytes,
     )

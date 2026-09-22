@@ -832,6 +832,91 @@ class HexanaSuitePhase3ATest {
         )
     }
 
+    // ----- Final-review security and coherence fixes -----
+
+    /**
+     * A symlink inside the lib root pointing at a package directory outside the
+     * roots must not resolve: the package.json existence probe and read follow
+     * real paths, so the specifier resolves as module-not-found, not by reading
+     * the out-of-root manifest.
+     */
+    @Test
+    fun symlinkedPackageDirEscapingRootsIsRejected() {
+        val outside = Files.createTempDirectory("hexana-suite-symlink-outside")
+        val realPkg = Files.createDirectories(outside.resolve("sneaky"))
+        Files.writeString(
+            realPkg.resolve("package.json"),
+            """{"name": "sneaky", "exports": {".": {"import": "./index.mjs"}}}""",
+        )
+        Files.writeString(realPkg.resolve("index.mjs"), "export const leaked = 1;\n")
+
+        val dir = Files.createTempDirectory("hexana-suite-symlink")
+        val nodeModules = Files.createDirectories(dir.resolve("node_modules"))
+        Files.createSymbolicLink(nodeModules.resolve("sneaky"), realPkg)
+
+        val suite = writeSuite("import { leaked } from \"sneaky\";\ntest(\"t\", () => {});\n", dir)
+        val result = runner().runSuite(suite.toString(), libRoot = nodeModules.toString())
+        assertEquals(HexanaScriptStatus.SCRIPT_ERROR, result.status)
+        val message = result.diagnostics.joinToString { it.message }
+        assertTrue(
+            message.contains("package \"sneaky\" not found under the suite library root"),
+            "symlink escape must resolve as module-not-found: $message",
+        )
+    }
+
+    /**
+     * An out-of-root artifact path must fail the run BEFORE the seed derivation
+     * streams the file bytes. The suite never calls hexana.artifact, so before
+     * the fix this run would SUCCEED after silently reading the out-of-root file
+     * into the seed (a content oracle under a rooted policy). The error must be
+     * the policy's message, not file-not-found: the file exists, just outside.
+     */
+    @Test
+    fun outOfRootArtifactFailsFastBeforeSeedDerivationReadsIt() {
+        val allowedDir = Files.createTempDirectory("hexana-suite-seed-allowed")
+        val restrictivePolicy = AllowedFilePolicy.requiringAllowedRoots(listOf(allowedDir.toString()))
+        val outsideFile = Files.createTempFile("hexana-suite-seed-outside", ".bin")
+        Files.write(outsideFile, byteArrayOf(1, 2, 3, 4))
+
+        val suite = writeSuite("test(\"t\", () => {});\n", dir = allowedDir)
+        val result = HexanaSuiteRunner(
+            limits = HexanaScriptLimits.interactive(),
+            allowedFilePolicy = restrictivePolicy,
+        ).runSuite(suite.toString(), artifacts = mapOf("app" to outsideFile.toString()))
+
+        assertEquals(HexanaScriptStatus.SCRIPT_ERROR, result.status)
+        assertNull(result.suite, "run must fail before any test executes")
+        val message = result.diagnostics.joinToString { it.message }
+        assertTrue(message.contains("Artifact \"app\""), "message must name the role: $message")
+        assertTrue(
+            message.contains("outside allowed roots"),
+            "must be the policy error, not file-not-found: $message",
+        )
+        assertFalse(message.contains("File not found"), "must not be a file-not-found error: $message")
+    }
+
+    /**
+     * A sandbox violation during the collection pass maps to SANDBOX_DENIED,
+     * same as the script profile, not to a generic RUNTIME_ERROR.
+     */
+    @Test
+    fun sandboxDenialInSuiteReportsSandboxDeniedDiagnostic() {
+        val suite = writeSuite(
+            """
+            const runtime = Java.type("java.lang.Runtime");
+            test("never", () => { console.log("SHOULD_NOT_RUN"); });
+            """.trimIndent()
+        )
+        val result = runner().runSuite(suite.toString())
+        assertEquals(HexanaScriptStatus.SCRIPT_ERROR, result.status)
+        val diagnostic = result.diagnostics.single()
+        assertEquals(
+            "SANDBOX_DENIED", diagnostic.code,
+            "sandbox violation must map to SANDBOX_DENIED like the script profile: $diagnostic",
+        )
+        assertFalse(consoleTexts(result).contains("SHOULD_NOT_RUN"))
+    }
+
     // ----- Base-profile pins: the v1 runner must be unaffected -----
 
     @Test

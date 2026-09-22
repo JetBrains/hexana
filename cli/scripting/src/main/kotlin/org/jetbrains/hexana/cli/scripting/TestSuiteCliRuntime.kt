@@ -1,10 +1,12 @@
 package org.jetbrains.hexana.cli.scripting
 
+import org.jetbrains.hexana.cli.runtime.ToolOutputFormat
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptStatus
 import org.jetbrains.hexana.mcp.scripting.HexanaSuiteRunner
 import org.jetbrains.hexana.shared.scripting.ConsoleSeverity
+import org.jetbrains.hexana.shared.scripting.SUITE_COLLECTION_ERROR_TEST_NAME
 import org.jetbrains.hexana.shared.scripting.SuiteNodeKind
 import org.jetbrains.hexana.shared.scripting.SuiteNodeResult
 import org.jetbrains.hexana.shared.scripting.SuiteNodeStatus
@@ -32,8 +34,8 @@ public data class RunSuiteCliOutput(
 )
 
 /** Supported output formats for the suite tool; always RAW. */
-public fun suiteSupportedOutputFormats(): Set<org.jetbrains.hexana.cli.runtime.ToolOutputFormat> =
-    setOf(org.jetbrains.hexana.cli.runtime.ToolOutputFormat.RAW)
+public fun suiteSupportedOutputFormats(): Set<ToolOutputFormat> =
+    setOf(ToolOutputFormat.RAW)
 
 /**
  * Top-level entry point for the `hexana-cli-script test` command.
@@ -94,7 +96,7 @@ public fun runSuiteCli(request: RunSuiteCliRequest): RunSuiteCliOutput {
             val fileName = File(filePath).name
             val diagnostic = scriptResult.diagnostics.firstOrNull()?.message ?: scriptResult.status.name
             val syntheticTest = SuiteNodeResult(
-                name = "(collection)",
+                name = SUITE_COLLECTION_ERROR_TEST_NAME,
                 kind = SuiteNodeKind.TEST,
                 status = SuiteNodeStatus.FAIL,
                 durationMillis = 0,

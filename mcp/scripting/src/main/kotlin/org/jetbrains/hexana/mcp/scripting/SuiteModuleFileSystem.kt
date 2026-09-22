@@ -123,12 +123,19 @@ internal class SuiteModuleFileSystem(
             throw IllegalArgumentException("Cannot resolve \"$specifier\": escapes the library root")
         }
         val packageJson = packageDir.resolve("package.json")
-        if (!Files.isRegularFile(packageJson)) {
+        val packageJsonReal = try {
+            requireInRoots(packageJson)
+        } catch (_: Exception) {
             throw IllegalArgumentException(
                 "Cannot resolve \"$specifier\": package \"$packageName\" not found under the suite library root"
             )
         }
-        val manifest = MiniJson.parse(Files.readString(packageJson)) as? Map<*, *>
+        if (!Files.isRegularFile(packageJsonReal)) {
+            throw IllegalArgumentException(
+                "Cannot resolve \"$specifier\": package \"$packageName\" not found under the suite library root"
+            )
+        }
+        val manifest = MiniJson.parse(Files.readString(packageJsonReal)) as? Map<*, *>
             ?: throw IllegalArgumentException("Cannot resolve \"$specifier\": malformed package.json")
 
         val entry = resolveEntry(manifest, packageName, subpath)
@@ -205,6 +212,10 @@ internal class SuiteModuleFileSystem(
  *
  * The deliberate choice to keep this local avoids adding a serialization library
  * dependency to `mcp/scripting` for the single package.json use case.
+ *
+ * Intentional deviations from strict JSON: a leading plus sign on numbers is
+ * accepted (never present in real package.json, harmless), and surrogate-pair
+ * unicode escapes are not joined (package entry paths are ASCII in practice).
  */
 internal object MiniJson {
 

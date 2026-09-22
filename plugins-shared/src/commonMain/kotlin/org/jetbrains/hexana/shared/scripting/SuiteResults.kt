@@ -1,5 +1,8 @@
 package org.jetbrains.hexana.shared.scripting
 
+/** Synthetic test name used when the collection pass fails before any test runs. */
+const val SUITE_COLLECTION_ERROR_TEST_NAME = "(collection)"
+
 /** Kind of a node in a test-suite result tree. */
 enum class SuiteNodeKind { SUITE, TEST }
 

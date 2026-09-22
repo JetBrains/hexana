@@ -7,6 +7,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.nio.file.Files
+import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -240,6 +241,31 @@ class TestSuiteCliRuntimeTest {
         // Double-escaped form must NOT appear.
         assertTrue(!xml.contains("&amp;lt;"), "double-escaped &amp;lt; must not appear: $xml")
         assertTrue(!xml.contains("&amp;amp;"), "double-escaped &amp;amp; must not appear: $xml")
+    }
+
+    @Test
+    fun junitXmlWriterReplacesXmlInvalidCodePointsWithReplacementChar() {
+        val fail = SuiteNodeResult(
+            name = "nul \u0000 bell \u0007 test",
+            kind = SuiteNodeKind.TEST,
+            status = SuiteNodeStatus.FAIL,
+            durationMillis = 0,
+            failureMessage = "boom \u0000\u000B\u001F end",
+        )
+        val root = SuiteNodeResult("s.test.js", SuiteNodeKind.SUITE, SuiteNodeStatus.FAIL, 0, children = listOf(fail))
+        val output = tmp.root.toPath().resolve("invalid-cp.xml")
+        JUnitXmlWriter.write(listOf("s.test.js" to root), output)
+        val xml = Files.readString(output)
+
+        // Invalid code points are replaced with U+FFFD, never emitted raw.
+        assertTrue(xml.contains("nul \uFFFD bell \uFFFD test"), "invalid chars must become U+FFFD: " + xml)
+        assertTrue(xml.contains("boom \uFFFD\uFFFD\uFFFD end"), xml)
+        assertTrue(!xml.contains('\u0000'), "raw NUL must not appear in the report")
+        assertTrue(!xml.contains('\u0007'), "raw BEL must not appear in the report")
+
+        // The resulting document parses as valid XML under a strict parser.
+        val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(output.toFile())
+        assertEquals("testsuites", doc.documentElement.tagName)
     }
 
     @Test

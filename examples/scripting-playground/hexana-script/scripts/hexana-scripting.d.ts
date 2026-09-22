@@ -1,4 +1,4 @@
-// Hexana scripting API — the globals available in a custom script tab.
+// Hexana scripting API: the globals available in a custom script tab.
 //
 // This file is generated from ScriptApiReference.kt. Everything here behaves
 // identically in IntelliJ IDEA, in VS Code, and in the `run-script` CLI.
@@ -46,7 +46,7 @@ declare const binary: HexanaBinary;
 /**
  * Opens another binary from a local file path and returns the same shape
  * as `binary`, so a script can compare two files. The format is detected
- * from the content. Needs a host with local file access — every editor has
+ * from the content. Needs a host with local file access: every editor has
  * it; the web app does not and reports that. Where allowed roots are
  * configured, the path must be inside one. In a VS Code script tab, call
  * it at the top level of the script: the script pauses there while the
@@ -83,7 +83,7 @@ interface HexanaBinary {
   readonly name: string | null;
 
   /**
-   * Full path of the file, or null when there is no file behind the binary —
+   * Full path of the file, or null when there is no file behind the binary:
    * a ZIP entry, a module opened from a table, anything in a browser.
    *
    * @example if (binary.path) print(binary.path);
@@ -112,8 +112,8 @@ interface HexanaBinary {
   readonly bytes: HexanaBytes;
 
   /**
-   * Top-level regions of the binary — Wasm sections, ELF sections, Mach-O
-   * segments, and so on — in file order.
+   * Top-level regions of the binary (Wasm sections, ELF sections, Mach-O
+   * segments, and so on) in file order.
    *
    * @example for (const r of binary.structure) print(r.name, r.size);
    */
@@ -148,9 +148,9 @@ interface HexanaBinary {
 
   /**
    * Escape hatch: the format-specific provider, unfiltered. Its shape
-   * depends on the format — see hexana-scripting-raw.d.ts. Members not
-   * listed above are also resolved against it directly, so older scripts
-   * keep working.
+   * depends on the format: see hexana-scripting-raw.d.ts. Members not listed
+   * above are also resolved against it directly, so older scripts keep
+   * working.
    *
    * @example if (binary.format === "elf") print(binary.raw.programHeaders.length);
    */
@@ -412,8 +412,8 @@ interface HexanaTab {
   cell(row: number, column: number): string;
 
   /**
-   * Underlying cell value when it is a primitive — useful for sorting and
-   * arithmetic — otherwise the displayed text.
+   * Underlying cell value when it is a primitive (useful for sorting and
+   * arithmetic), otherwise the displayed text.
    */
   value(row: number, column: number): string | number | boolean | null;
 

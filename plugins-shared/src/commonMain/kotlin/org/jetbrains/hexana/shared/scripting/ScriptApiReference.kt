@@ -107,7 +107,7 @@ object ScriptApiReference {
             signature = "open(path: string): HexanaBinary",
             summary = "Opens another binary from a local file path and returns the same shape as " +
                 "`binary`, so a script can compare two files. The format is detected from the " +
-                "content. Needs a host with local file access — every editor has it; the web app " +
+                "content. Needs a host with local file access: every editor has it; the web app " +
                 "does not and reports that. Where allowed roots are configured, the path must be " +
                 "inside one. In a VS Code script tab, call it at the top level of the script: the " +
                 "script pauses there while the file is read, which it cannot do inside a " +
@@ -146,7 +146,7 @@ object ScriptApiReference {
                 ScriptApiEntry(
                     "path",
                     "readonly path: string | null",
-                    "Full path of the file, or null when there is no file behind the binary — a " +
+                    "Full path of the file, or null when there is no file behind the binary: a " +
                         "ZIP entry, a module opened from a table, anything in a browser.",
                     "if (binary.path) print(binary.path);",
                 ),
@@ -173,8 +173,8 @@ object ScriptApiReference {
                 ScriptApiEntry(
                     "structure",
                     "readonly structure: HexanaStructureRange[]",
-                    "Top-level regions of the binary — Wasm sections, ELF sections, Mach-O " +
-                        "segments, and so on — in file order.",
+                    "Top-level regions of the binary (Wasm sections, ELF sections, Mach-O " +
+                        "segments, and so on) in file order.",
                     "for (const r of binary.structure) print(r.name, r.size);",
                 ),
                 ScriptApiEntry(
@@ -207,7 +207,7 @@ object ScriptApiReference {
                     "raw",
                     "readonly raw: any",
                     "Escape hatch: the format-specific provider, unfiltered. Its shape depends on " +
-                        "the format — see hexana-scripting-raw.d.ts. Members not listed above are " +
+                        "the format: see hexana-scripting-raw.d.ts. Members not listed above are " +
                         "also resolved against it directly, so older scripts keep working.",
                     "if (binary.format === \"elf\") print(binary.raw.programHeaders.length);",
                 ),
@@ -374,8 +374,8 @@ object ScriptApiReference {
                 ScriptApiEntry(
                     "value",
                     "value(row: number, column: number): string | number | boolean | null",
-                    "Underlying cell value when it is a primitive — useful for sorting and " +
-                        "arithmetic — otherwise the displayed text.",
+                    "Underlying cell value when it is a primitive (useful for sorting and " +
+                        "arithmetic), otherwise the displayed text.",
                 ),
                 ScriptApiEntry("row", "row(row: number): string[]", "One row as an array of cell texts."),
                 ScriptApiEntry("rows", "rows(): string[][]", "All rows as arrays of cell texts."),
@@ -863,7 +863,7 @@ object ScriptApiReference {
 
     /** Renders the curated `hexana-scripting.d.ts`. */
     fun dts(): String = buildString {
-        appendLine("// Hexana scripting API — the globals available in a custom script tab.")
+        appendLine("// Hexana scripting API: the globals available in a custom script tab.")
         appendLine("//")
         appendLine("// This file is generated from ScriptApiReference.kt. Everything here behaves")
         appendLine("// identically in IntelliJ IDEA, in VS Code, and in the `run-script` CLI.")

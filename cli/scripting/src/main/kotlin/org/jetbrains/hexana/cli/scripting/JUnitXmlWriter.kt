@@ -113,10 +113,39 @@ internal object JUnitXmlWriter {
         return "${seconds}.${frac.toString().padStart(3, '0')}"
     }
 
-    private fun escapeXml(value: String): String = value
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace("\"", "&quot;")
-        .replace("'", "&apos;")
+    /**
+     * Escapes [value] for safe inclusion in XML 1.0 text and attribute values.
+     *
+     * Replaces the five XML special characters with their named entities, then
+     * substitutes XML-1.0-invalid code points (U+0000-U+0008, U+000B, U+000C,
+     * U+000E-U+001F, and lone surrogates) with U+FFFD so hostile failure text
+     * cannot make strict JUnit consumers reject the report.
+     *
+     * Hand-rolled because the Ant/Surefire dialect is a small stable surface
+     * (five elements, three attributes); a DOM/StAX writer adds a dependency
+     * with no benefit at this size.
+     */
+    internal fun escapeXml(value: String): String {
+        val sb = StringBuilder(value.length + 16)
+        for (ch in value) {
+            when (ch) {
+                '&' -> sb.append("&amp;")
+                '<' -> sb.append("&lt;")
+                '>' -> sb.append("&gt;")
+                '"' -> sb.append("&quot;")
+                '\u0027' -> sb.append("&apos;")
+                else -> {
+                    val cp = ch.code
+                    val invalid = cp == 0x0000 ||
+                        cp in 0x0001..0x0008 ||
+                        cp == 0x000B ||
+                        cp == 0x000C ||
+                        cp in 0x000E..0x001F ||
+                        (cp in 0xD800..0xDFFF) // lone surrogate
+                    if (invalid) sb.append('\uFFFD') else sb.append(ch)
+                }
+            }
+        }
+        return sb.toString()
+    }
 }

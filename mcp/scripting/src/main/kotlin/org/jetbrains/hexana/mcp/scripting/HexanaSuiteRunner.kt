@@ -12,6 +12,7 @@ import org.graalvm.polyglot.proxy.ProxyObject
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.mcp.BinaryInput
 import org.jetbrains.hexana.mcp.BinaryInputLoader
+import org.jetbrains.hexana.mcp.HexanaAnalysisErrorCode
 import org.jetbrains.hexana.mcp.HexanaAnalysisException
 import org.jetbrains.hexana.shared.binaryFormatId
 import org.jetbrains.hexana.shared.scripting.ConsoleSeverity
@@ -49,7 +50,7 @@ import java.util.concurrent.atomic.AtomicReference
  * setup instead of widening [HexanaScriptRunner.buildScriptContext].
  */
 class HexanaSuiteRunner(
-    private val limits: HexanaScriptLimits = HexanaScriptLimits.interactive(),
+    private val limits: HexanaScriptLimits = HexanaScriptLimits(),
     private val allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
 ) {
 
@@ -119,16 +120,36 @@ class HexanaSuiteRunner(
             return internalError(suiteFilePath, error, started)
         }
 
+        // Validate every artifact path against the policy BEFORE the seed
+        // derivation streams file bytes: without this, deriveSeed is a content
+        // oracle for files outside the allowed roots. Missing files are skipped
+        // here exactly as before (the binder reports them when the role is used).
+        val validatedArtifacts = mutableMapOf<String, Path>()
+        for ((role, rawArtifactPath) in artifacts) {
+            val resolved = try {
+                allowedFilePolicy.resolveAllowedRegularFile(rawArtifactPath, "Artifact")
+            } catch (error: HexanaAnalysisException) {
+                if (error.code == HexanaAnalysisErrorCode.FILE_NOT_FOUND) {
+                    continue
+                }
+                return failureResult(
+                    HexanaScriptStatus.SCRIPT_ERROR,
+                    HexanaScriptDiagnostic(
+                        code = "RUNTIME_ERROR",
+                        message = "Artifact \"$role\" ($rawArtifactPath): ${error.message}",
+                        exceptionClass = error::class.java.name,
+                    ),
+                    suiteFilePath, started,
+                )
+            }
+            validatedArtifacts[role] = resolved
+        }
+
         val seedBytes = try {
             if (seed != null) {
                 Sha256CounterDrbg.decodeHexSeed(seed)
             } else {
-                Sha256CounterDrbg.deriveSeed(
-                    scriptText,
-                    artifacts.mapNotNull { (role, path) ->
-                        Path.of(path).takeIf(Files::isRegularFile)?.let { role to it }
-                    }.toMap(),
-                )
+                Sha256CounterDrbg.deriveSeed(scriptText, validatedArtifacts)
             }
         } catch (error: IllegalArgumentException) {
             return failureResult(
@@ -628,6 +649,7 @@ class HexanaSuiteRunner(
             code = when {
                 isCancelled -> "TIMEOUT"
                 isSyntaxError -> "SYNTAX_ERROR"
+                isSandboxDeniedMessage(message) -> "SANDBOX_DENIED"
                 else -> "RUNTIME_ERROR"
             },
             message = message ?: "Script error",
@@ -636,6 +658,17 @@ class HexanaSuiteRunner(
             line = location?.startLine?.takeIf { it > 0 },
             column = location?.startColumn?.takeIf { it > 0 },
         )
+    }
+
+    /**
+     * Mirrors HexanaScriptRunner.isSandboxDeniedMessage so a sandbox violation
+     * in a suite run reports SANDBOX_DENIED, same as the script profile.
+     */
+    private fun isSandboxDeniedMessage(message: String?): Boolean {
+        val value = message ?: return false
+        return value.contains("host class", ignoreCase = true) ||
+            value.contains("Java is not defined", ignoreCase = true) ||
+            value.contains("Java.type", ignoreCase = true)
     }
 
     private fun elapsedMillis(started: Long): Long =
@@ -1121,7 +1154,7 @@ internal class SuiteExecutor(
                     throw error.toFailure()
                 }
             } else {
-                Thread.sleep(1)
+                Thread.sleep(1) // timer not yet due; yield to reduce CPU spin
             }
         }
 
@@ -1173,6 +1206,12 @@ internal class SuiteExecutor(
     }
 
     private companion object {
+        /**
+         * The no-op eval re-entry drains the GraalJS microtask queue (Promise
+         * continuations, queueMicrotask) before returning control;
+         * undocumented-but-stable engine behavior, also used by the GraalJS
+         * test harness; "(0)" is a side-effect-free expression.
+         */
         val PUMP_SOURCE: Source = Source.newBuilder("js", "(0)", "hexana:suite-pump").buildLiteral()
     }
 }
