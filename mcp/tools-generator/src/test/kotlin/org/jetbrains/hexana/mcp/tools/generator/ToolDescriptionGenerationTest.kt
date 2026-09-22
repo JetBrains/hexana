@@ -14,6 +14,8 @@ import org.jetbrains.hexana.mcp.tools.HexanaIdeaTools
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneAuthority
 import org.jetbrains.hexana.mcp.tools.HexanaStandaloneTools
 import org.jetbrains.hexana.mcp.tools.HexanaTools
+import org.jetbrains.hexana.mcp.tools.IdeaTool
+import org.jetbrains.hexana.mcp.tools.IdeaToolBinding
 import org.jetbrains.hexana.mcp.tools.McpProductRegistry
 import org.jetbrains.hexana.mcp.tools.McpProductSpec
 import org.jetbrains.hexana.mcp.tools.McpProfileSpec
@@ -25,26 +27,21 @@ import org.jetbrains.hexana.mcp.tools.StandaloneTool
 import org.jetbrains.hexana.mcp.tools.StandaloneToolBinding
 import org.jetbrains.hexana.mcp.tools.StandaloneToolAuthority
 import org.jetbrains.hexana.mcp.tools.ToolSpec
+import org.jetbrains.hexana.mcp.tools.ToolInputPattern
+import org.jetbrains.hexana.mcp.tools.UnknownFieldPolicy
 import org.jetbrains.hexana.mcp.tools.compileSchemaPlan
 import org.jetbrains.hexana.mcp.tools.mcpDescription
 import org.jetbrains.hexana.mcp.tools.id
 import org.jetbrains.hexana.mcp.tools.name
 import org.jetbrains.hexana.mcp.tools.SchemaIntValue
 import org.junit.Test
-import java.nio.file.Files
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ToolDescriptionGenerationTest {
-    private fun ideaSource(): String {
-        val output = Files.createTempDirectory("hexana-idea-generator")
-        val method = Class.forName("org.jetbrains.hexana.mcp.tools.generator.IdeaToolsetMainKt")
-            .getDeclaredMethod("main", Array<String>::class.java)
-        method.invoke(null, arrayOf(output.toString()))
-        return Files.readString(output.resolve("org/jetbrains/hexana/mcp/HexanaToolset.kt"))
-    }
+    private fun ideaSource(tools: List<IdeaTool> = HexanaIdeaTools): String = buildToolsetFile(tools).toString()
 
     private fun dispatcherSource(): String = buildDispatcherFile(HexanaStandaloneAuthority).toString()
     private fun metadataSource(): String = buildCliMetadataToolsetFile(HexanaCliTools).toString()
@@ -108,43 +105,75 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
-    fun `standalone projection renders normalized presence aliases nested schemas and symbolic limits`() {
+    fun `IDEA and standalone projections render normalized schema facets with explicit target differences`() {
         val nested = ClassSpec("Nested", listOf(
-            FieldSpec("count", FieldType.Int32, serialName = "nestedCount"),
+            FieldSpec("count", FieldType.Int32, serialName = "nestedCount", describe = "Nested count.", minimum = 0, maximum = 99),
+            FieldSpec(
+                "samples", FieldType.ListOf(FieldType.Int32), describe = "Nested samples.",
+                maxItems = SchemaIntValue.MaxInlineWasmBytes, itemMinimum = 1, itemMaximum = 9,
+            ),
+            FieldSpec("label", FieldType.StringT, nullable = true, describe = "Nested label.", maxLength = SchemaIntValue.Literal(12)),
         ))
         val input = ClassSpec("ProjectionInput", listOf(
-            FieldSpec("required", FieldType.Int32, serialName = "wireRequired"),
             FieldSpec(
-                "defaulted", FieldType.Int32, default = 7,
-                presence = FieldPresence.Defaulted(FieldDefaultValue.IntValue(7)),
+                "frames", FieldType.MapOf(FieldType.ClassRef(nested)), serialName = "wireRange",
+                describe = "Selected ranges.",
             ),
             FieldSpec(
-                "explicitNull", FieldType.StringT, nullable = true,
+                "crashReportPath", FieldType.BooleanT, serialName = "wireDefault", default = true,
+                describe = "Whether exports are included.", presence = FieldPresence.Defaulted(FieldDefaultValue.BooleanValue(true)),
+            ),
+            FieldSpec(
+                "sourceMapPath", FieldType.StringT, serialName = "wireNull", nullable = true,
+                describe = "Optional globals mode.",
                 presence = FieldPresence.Defaulted(FieldDefaultValue.Null),
             ),
             FieldSpec(
-                "items", FieldType.ListOf(FieldType.ClassRef(nested)),
-                maxItems = SchemaIntValue.MaxInlineWasmBytes,
+                "unselected", FieldType.StringT, serialName = "standaloneOnly", default = "hidden",
+                presence = FieldPresence.Defaulted(FieldDefaultValue.StringValue("hidden")),
             ),
-            FieldSpec("labels", FieldType.MapOf(FieldType.StringT), nullable = true),
         ))
-        val tool = StandaloneTool(
-            ToolSpec(org.jetbrains.hexana.mcp.tools.ToolId("schema_plan_fixture"), "Schema fixture.", null, input, nested),
-            StandaloneToolBinding(org.jetbrains.hexana.mcp.tools.ToolId("schema_plan_fixture"), StandaloneHandlerSpec("schemaPlanFixture"), org.jetbrains.hexana.mcp.tools.UnknownFieldPolicy.Ignore),
+        val contract = ToolSpec(org.jetbrains.hexana.mcp.tools.ToolId("schema_plan_fixture"), "Schema fixture.", null, input, nested)
+        val standaloneTool = StandaloneTool(
+            contract,
+            StandaloneToolBinding(contract.id, StandaloneHandlerSpec("schemaPlanFixture"), UnknownFieldPolicy.Ignore),
         )
-        val source = buildDispatcherFile(standaloneAuthority(listOf(tool), emptyList(), emptyList(), emptyList())).toString()
+        val ideaTool = IdeaTool(
+            contract,
+            IdeaToolBinding(contract.id, ToolInputPattern.WasmFrames, "org.jetbrains.hexana.mcp.query.schemaPlanFixture", UnknownFieldPolicy.Ignore),
+        )
+        val standalone = buildDispatcherFile(standaloneAuthority(listOf(standaloneTool), emptyList(), emptyList(), emptyList())).toString()
+        val idea = ideaSource(listOf(ideaTool))
 
         assertEquals(
             FieldDefaultValue.Null,
-            compileSchemaPlan(input).root.fields.single { it.name == "explicitNull" }.defaultValue,
+            compileSchemaPlan(input).root.fields.single { it.name == "sourceMapPath" }.defaultValue,
         )
-        assertTrue(source.contains("put(\"wireRequired\""))
-        assertTrue(Regex("required = listOf\\(\\s*\\\"wireRequired\\\"").containsMatchIn(source), source)
-        assertTrue(source.contains("put(\"default\", JsonPrimitive(7))"), source)
-        assertFalse(source.contains("put(\"default\", JsonNull)"), source)
-        assertTrue(source.contains("put(\"nestedCount\""), source)
-        assertTrue(source.contains("\"maxItems\", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES)"), source)
-        assertTrue(source.contains("put(\"labels\""), source)
+        listOf(standalone, idea).forEach { source ->
+            assertTrue(source.contains("put(\"wireRange\""), source)
+            assertTrue(source.contains("put(\"nestedCount\""), source)
+            assertTrue(source.contains("Nested samples."), source)
+            assertTrue(source.contains("\"maxItems\", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES)"), source)
+            assertTrue(source.contains("\"maxLength\", JsonPrimitive(12)"), source)
+            assertTrue(source.contains("\"minimum\", JsonPrimitive(0)"), source)
+            assertTrue(source.contains("\"maximum\", JsonPrimitive(99)"), source)
+            assertTrue(source.contains("\"minimum\", JsonPrimitive(1)"), source)
+            assertTrue(source.contains("\"maximum\", JsonPrimitive(9)"), source)
+            assertTrue(source.contains("put(\"default\", JsonPrimitive(true))"), source)
+            assertFalse(source.contains("put(\"default\", JsonNull)"), source)
+            assertTrue(source.contains("put(\"additionalProperties\""), source)
+        }
+        assertTrue(Regex("required = listOf\\(\\s*\\\"wireRange\\\"").containsMatchIn(standalone), standalone)
+        assertTrue(idea.contains("McpToolSchema.ofPropertiesSchema("), idea)
+        assertTrue(Regex("requiredProperties = setOf\\(\\\"path\\\", \\\"wireRange\\\"\\)").containsMatchIn(idea), idea)
+        assertTrue(idea.contains("definitions = emptyMap<String, JsonElement>()"), idea)
+        assertTrue(idea.contains("put(\"path\""), idea)
+        assertTrue(idea.contains("put(\"projectPath\""), idea)
+        assertTrue(idea.contains("\"wireRange\""), idea)
+        assertFalse(idea.contains("standaloneOnly"), idea)
+        assertTrue(standalone.contains("standaloneOnly"), standalone)
+        assertFalse(idea.contains("oneOf"), idea)
+        assertFalse(idea.contains("\"\$ref\""), idea)
     }
 
     @Test
