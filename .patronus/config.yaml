@@ -5,6 +5,8 @@ checks:
   - "/analytics/**"
   - "/binaryProvider/**"
   - "/build.gradle.kts"
+  - "/cli/runtime/**"
+  - "/cli/wasm-tools-core/**"
   - "/debugInfo/**"
   - "/disassembly/**"
   - "/encdec/**"
