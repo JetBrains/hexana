@@ -584,11 +584,31 @@ value class ToolId(val value: String) {
     override fun toString(): String = value
 }
 
-data class StandaloneHandlerSpec(val methodName: String) {
-    init {
-        require(STANDALONE_HANDLER_METHOD_NAME_REGEX.matches(methodName)) {
-            "Standalone handler method name must be a Kotlin method name, got `$methodName`."
+sealed class StandaloneInvocationSpec {
+    abstract val methodName: String
+
+    data class JsonArguments(override val methodName: String) : StandaloneInvocationSpec() {
+        init { validateStandaloneHandlerMethodName(methodName) }
+    }
+
+    data class TypedRequest(
+        override val methodName: String,
+        val requestTypeName: String,
+        val invalidInputMethodName: String,
+    ) : StandaloneInvocationSpec() {
+        init {
+            validateStandaloneHandlerMethodName(methodName)
+            validateStandaloneHandlerMethodName(invalidInputMethodName)
+            require(KOTLIN_TYPE_NAME_REGEX.matches(requestTypeName)) {
+                "Standalone typed request name must be a Kotlin type name, got `$requestTypeName`."
+            }
         }
+    }
+}
+
+private fun validateStandaloneHandlerMethodName(methodName: String) {
+    require(STANDALONE_HANDLER_METHOD_NAME_REGEX.matches(methodName)) {
+        "Standalone handler method name must be a Kotlin method name, got `$methodName`."
     }
 }
 
@@ -1374,6 +1394,7 @@ private val FQN_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*
 private val FIELD_NAME_REGEX = Regex("^[a-z][A-Za-z0-9]*$")
 private val TOOL_NAME_REGEX = Regex("^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
 private val STANDALONE_HANDLER_METHOD_NAME_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]*$")
+private val KOTLIN_TYPE_NAME_REGEX = Regex("^[A-Z][A-Za-z0-9_]*$")
 private val CLI_COMMAND_NAME_REGEX = Regex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 private val CLI_OPTION_NAME_REGEX = Regex("^--[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 

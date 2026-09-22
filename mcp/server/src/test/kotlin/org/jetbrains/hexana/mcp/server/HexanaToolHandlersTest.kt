@@ -771,6 +771,199 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun listFunctionsGeneratedRequestPreservesExplicitLimitAndTypedInvocation() {
+        val wasm = createWasmFile(
+            "explicit-list-functions-limit.wasm",
+            """
+            (module
+              (func ${'$'}first)
+              (func ${'$'}second))
+            """.trimIndent(),
+        )
+        val observedLimits = mutableListOf<Int>()
+        val handlers = HexanaToolHandlers(
+            resourceLimits = HexanaResourceLimits(maxCandidateCount = 1),
+            analysisService = Proxy.newProxyInstance(
+                HexanaAnalysisService::class.java.classLoader,
+                arrayOf(HexanaAnalysisService::class.java),
+            ) { _, method, args ->
+                when (method.name) {
+                    "listFunctions" -> {
+                        observedLimits += args!![2] as Int
+                        FunctionsResult(emptyList())
+                    }
+                    else -> error("Unexpected service call: ${method.name}")
+                }
+            } as HexanaAnalysisService,
+        )
+
+        val explicit = handlers.listFunctions(
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("limit", JsonPrimitive(200))
+            },
+        )
+        val typed = handlers.listFunctions(
+            ListFunctionsRequest(
+                path = null,
+                bytesBase64 = null,
+                bytes = buildJsonArray {
+                    Files.readAllBytes(wasm).forEach { add(JsonPrimitive(it.toInt() and 0xff)) }
+                },
+                offset = JsonPrimitive(0),
+                limit = JsonPrimitive(200),
+            ),
+        )
+
+        assertFalse(explicit.isError == true)
+        assertEquals(0, explicit.structuredContent!!["functions"]!!.jsonArray.size)
+        assertFalse(typed.isError == true)
+        assertEquals(0, typed.structuredContent!!["functions"]!!.jsonArray.size)
+        assertEquals(listOf(200, 200), observedLimits)
+    }
+
+    @Test
+    fun listFunctionsGeneratedDecoderValidatesSourcesAndPreservesHostInlineLimits() {
+        val wasm = createWasmFile("generated-list-functions-input.wasm", "(module (func))")
+        val wasmBytes = Files.readAllBytes(wasm)
+        val byteArray = buildJsonArray { wasmBytes.forEach { add(JsonPrimitive(it.toInt() and 0xff)) } }
+
+        val missing = handlers.listFunctions(buildJsonObject { })
+        val conflicting = handlers.listFunctions(buildJsonObject {
+            put("path", JsonPrimitive(wasm.toString()))
+            put("bytes", byteArray)
+        })
+        val nullSource = handlers.listFunctions(buildJsonObject { put("path", JsonNull) })
+        val unknownField = handlers.listFunctions(buildJsonObject {
+            put("bytes", byteArray)
+            put("ignoredByDecoder", JsonPrimitive(true))
+        })
+        val base64 = handlers.listFunctions(buildJsonObject {
+            put("bytesBase64", JsonPrimitive(Base64.getEncoder().encodeToString(wasmBytes)))
+        })
+        val malformedBase64 = handlers.listFunctions(buildJsonObject { put("bytesBase64", JsonPrimitive("a")) })
+        val oversizedBytes = HexanaToolHandlers(maxInlineInputBytes = 2).listFunctions(
+            buildJsonObject { put("bytes", byteArray) },
+        )
+
+        assertEquals("Exactly one of `path`, `bytesBase64`, or `bytes` is required", (missing.content.single() as TextContent).text)
+        assertEquals("Provide exactly one of `path`, `bytesBase64`, or `bytes`", (conflicting.content.single() as TextContent).text)
+        assertEquals("Exactly one of `path`, `bytesBase64`, or `bytes` is required", (nullSource.content.single() as TextContent).text)
+        assertFalse(unknownField.isError == true)
+        assertFalse(base64.isError == true)
+        assertEquals("`bytesBase64` must be valid base64", (malformedBase64.content.single() as TextContent).text)
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", oversizedBytes.structuredContent?.get("code")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun listFunctionsValidatesEachSourceBeforeGeneratedExactOneSelectionAndWithoutServiceCall() {
+        var serviceCalls = 0
+        val handlers = HexanaToolHandlers(
+            maxInlineInputBytes = 2,
+            analysisService = Proxy.newProxyInstance(
+                HexanaAnalysisService::class.java.classLoader,
+                arrayOf(HexanaAnalysisService::class.java),
+            ) { _, method, _ ->
+                if (method.name == "listFunctions") serviceCalls++
+                error("Unexpected service call: ${method.name}")
+            } as HexanaAnalysisService,
+        )
+        val validBytes = buildJsonArray { add(JsonPrimitive(0)) }
+        val oversizedMalformedBytes = buildJsonArray {
+            add(buildJsonObject { put("wrong", JsonPrimitive(true)) })
+            add(JsonPrimitive(256))
+            add(JsonPrimitive(0))
+        }
+
+        val blankPath = handlers.listFunctions(buildJsonObject {
+            put("path", JsonPrimitive("  "))
+            put("bytes", validBytes)
+        })
+        val blankBase64 = handlers.listFunctions(buildJsonObject {
+            put("path", JsonPrimitive("unused.wasm"))
+            put("bytesBase64", JsonPrimitive("  "))
+        })
+        val malformedBase64 = handlers.listFunctions(buildJsonObject {
+            put("path", JsonPrimitive("unused.wasm"))
+            put("bytesBase64", JsonPrimitive("a"))
+        })
+        val oversizedMalformedBytesResult = handlers.listFunctions(buildJsonObject {
+            put("path", JsonPrimitive("unused.wasm"))
+            put("bytes", oversizedMalformedBytes)
+        })
+        val invalidRawBytes = handlers.listFunctions(buildJsonObject {
+            put("path", JsonPrimitive("unused.wasm"))
+            put("bytes", buildJsonArray { add(JsonPrimitive(256)) })
+        })
+        val blankPathWrongOffset = handlers.listFunctions(buildJsonObject {
+            put("path", JsonPrimitive("  "))
+            put("offset", buildJsonObject { })
+        })
+        val blankPathInvalidLimit = handlers.listFunctions(buildJsonObject {
+            put("path", JsonPrimitive("  "))
+            put("limit", JsonPrimitive(0))
+        })
+        val malformedBase64InvalidOffset = handlers.listFunctions(buildJsonObject {
+            put("bytesBase64", JsonPrimitive("a"))
+            put("offset", JsonPrimitive(-1))
+        })
+        val oversizedMalformedBytesInvalidLimit = handlers.listFunctions(buildJsonObject {
+            put("bytes", oversizedMalformedBytes)
+            put("limit", JsonPrimitive(0))
+        })
+
+        assertEquals("`path` must not be blank", (blankPath.content.single() as TextContent).text)
+        assertEquals("`bytesBase64` must not be blank", (blankBase64.content.single() as TextContent).text)
+        assertEquals("`bytesBase64` must be valid base64", (malformedBase64.content.single() as TextContent).text)
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", oversizedMalformedBytesResult.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertEquals("`bytes[0]` must be between 0 and 255", (invalidRawBytes.content.single() as TextContent).text)
+        assertEquals("`path` must not be blank", (blankPathWrongOffset.content.single() as TextContent).text)
+        assertEquals("`path` must not be blank", (blankPathInvalidLimit.content.single() as TextContent).text)
+        assertEquals("`bytesBase64` must be valid base64", (malformedBase64InvalidOffset.content.single() as TextContent).text)
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", oversizedMalformedBytesInvalidLimit.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertEquals(0, serviceCalls)
+    }
+
+    @Test
+    fun listFunctionsPreservesLegacyWrongJsonShapeErrorMappingWithoutServiceCall() {
+        var serviceCalls = 0
+        val handlers = HexanaToolHandlers(
+            analysisService = Proxy.newProxyInstance(
+                HexanaAnalysisService::class.java.classLoader,
+                arrayOf(HexanaAnalysisService::class.java),
+            ) { _, method, _ ->
+                if (method.name == "listFunctions") serviceCalls++
+                error("Unexpected service call: ${method.name}")
+            } as HexanaAnalysisService,
+        )
+        val validPath = JsonPrimitive("unused.wasm")
+        val legacyInternalCases = listOf(
+            buildJsonObject { put("path", buildJsonObject { }) },
+            buildJsonObject { put("path", buildJsonArray { }) },
+            buildJsonObject { put("path", validPath); put("offset", buildJsonObject { }) },
+            buildJsonObject { put("path", validPath); put("offset", buildJsonArray { }) },
+            buildJsonObject { put("path", validPath); put("limit", buildJsonObject { }) },
+            buildJsonObject { put("path", validPath); put("limit", buildJsonArray { }) },
+            buildJsonObject { put("bytes", buildJsonArray { add(buildJsonObject { }) }) },
+            buildJsonObject { put("bytes", buildJsonArray { add(buildJsonArray { }) }) },
+        )
+
+        isolateUnavailableDiagnostics()
+        legacyInternalCases.forEach { arguments ->
+            val result = handlers.listFunctions(arguments)
+            assertEquals(true, result.isError)
+            assertEquals("INTERNAL_ERROR", result.structuredContent?.get("code")?.jsonPrimitive?.content)
+            assertEquals("Internal error while executing `list_functions`.", (result.content.single() as TextContent).text)
+        }
+
+        val invalidBytesShape = handlers.listFunctions(buildJsonObject { put("bytes", buildJsonObject { }) })
+        assertEquals(true, invalidBytesShape.isError)
+        assertEquals("INVALID_INPUT", invalidBytesShape.structuredContent?.get("code")?.jsonPrimitive?.content)
+        assertEquals("`bytes` must be an array", (invalidBytesShape.content.single() as TextContent).text)
+        assertEquals(0, serviceCalls)
+    }
+
+    @Test
     fun listCustomSectionsReturnsOffsetsAndPreviews() {
         val wasm = temporaryFolder.newFile("custom_sections.wasm").toPath().also {
             Files.write(it, wasmWithCustomSections())

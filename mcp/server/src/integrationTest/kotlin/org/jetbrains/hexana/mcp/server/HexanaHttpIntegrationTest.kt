@@ -113,6 +113,32 @@ class HexanaHttpIntegrationTest {
                             ?.int
                     )
 
+                    logger.info("Requesting tools/call list_functions with inline bytes")
+                    val functionsResult = client.callTool(
+                        name = "list_functions",
+                        arguments = mapOf("bytes" to wasmBytes),
+                        meta = emptyMap<String, Any?>()
+                    )
+                    assertFalse(functionsResult.isError == true)
+                    assertJsonTextMatchesStructured(functionsResult)
+                    assertEquals(
+                        1,
+                        functionsResult.structuredContent
+                            ?.get("functions")
+                            ?.jsonArray
+                            ?.size
+                    )
+
+                    logger.info("Requesting tools/call list_functions with invalid inline bytes")
+                    val invalidFunctionsResult = client.callTool(
+                        name = "list_functions",
+                        arguments = mapOf("bytes" to emptyMap<String, Any?>()),
+                        meta = emptyMap<String, Any?>()
+                    )
+                    assertEquals(true, invalidFunctionsResult.isError)
+                    assertEquals("INVALID_INPUT", invalidFunctionsResult.structuredContent?.get("code")?.jsonPrimitive?.content)
+                    assertEquals("`bytes` must be an array", invalidFunctionsResult.structuredContent?.get("message")?.jsonPrimitive?.content)
+
                     logger.info("Requesting tools/call list_memory")
                     val memoryResult = client.callTool(
                         name = "list_memory",

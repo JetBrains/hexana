@@ -210,7 +210,7 @@ class HexanaToolsTest {
         assertTrue(mcpProfile("advanced").toolIds.intersect(mcpProfile("scripting").toolIds.toSet()).isEmpty())
         assertEquals(32, HexanaCliTools.size)
         assertTrue(HexanaStandaloneTools.all {
-            it.standaloneHandler.methodName.matches(Regex("^[A-Za-z_][A-Za-z0-9_]*$"))
+            it.standaloneInvocation.methodName.matches(Regex("^[A-Za-z_][A-Za-z0-9_]*$"))
         })
     }
 
@@ -488,7 +488,7 @@ class HexanaToolsTest {
 
     @Test
     fun `standalone handler and CLI command names validate independently`() {
-        assertFailsWith<IllegalArgumentException> { StandaloneHandlerSpec("org.jetbrains.hexana.BadHandler") }
+        assertFailsWith<IllegalArgumentException> { StandaloneInvocationSpec.JsonArguments("org.jetbrains.hexana.BadHandler") }
         assertFailsWith<IllegalArgumentException> {
             cliToolBinding(QueryArtifactsToolId, "query_artifacts", ToolGroup.ArtifactQuery, ToolOutputPolicy.ToolDefined)
         }

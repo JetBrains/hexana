@@ -291,13 +291,29 @@ class HexanaToolHandlers(
     }
 
     fun listFunctions(arguments: JsonObject?): CallToolResult {
-        return execute("list_functions", FunctionsResult.serializer()) {
-            analysisService.listFunctions(
-                input = wasmInput(arguments),
-                offset = arguments.intOrDefault("offset", HexanaToolInputDefaults.LIST_FUNCTIONS_OFFSET, minimum = 0),
-                limit = arguments.limitOrResourceDefault("limit", HexanaToolInputDefaults.LIST_FUNCTIONS_LIMIT)
-            )
+        return try {
+            listFunctions(decodeListFunctionsRequest(arguments))
+        } catch (error: ToolInputException) {
+            listFunctionsInputFailure(error)
         }
+    }
+
+    internal fun listFunctions(request: ListFunctionsRequest): CallToolResult {
+        return execute("list_functions", FunctionsResult.serializer()) { listFunctionsResult(request) }
+    }
+
+    internal fun listFunctionsInputFailure(error: ToolInputException): CallToolResult {
+        return execute("list_functions", FunctionsResult.serializer()) { throw error }
+    }
+
+    private fun listFunctionsResult(request: ListFunctionsRequest): FunctionsResult {
+        val input = wasmInput(request)
+        val scalars = decodeListFunctionsRequestScalars(request)
+        return analysisService.listFunctions(
+            input = input,
+            offset = scalars.offset ?: HexanaToolInputDefaults.LIST_FUNCTIONS_OFFSET,
+            limit = scalars.limit ?: minOf(HexanaToolInputDefaults.LIST_FUNCTIONS_LIMIT, resourceLimits.maxCandidateCount),
+        )
     }
 
     fun listCodeSectionOffsets(arguments: JsonObject?): CallToolResult {
@@ -664,6 +680,26 @@ class HexanaToolHandlers(
         }
     }
 
+    private fun wasmInput(request: ListFunctionsRequest): WasmInput {
+        val path = request.path.optionalNonBlankString("path")
+        val bytesBase64Decoded = request.bytesBase64.optionalNonBlankString("bytesBase64")
+            ?.let { decodeInlineBase64(it, resourceLimits.maxInlineWasmBytes) }
+        val bytes = request.bytes.optionalByteArray("bytes", resourceLimits.maxInlineWasmBytes)
+
+        requireListFunctionsRequestSourceGroup0(
+            path != null,
+            bytesBase64Decoded != null,
+            bytes != null,
+        )
+
+        return when {
+            path != null -> WasmInput.FilePath(path)
+            bytesBase64Decoded != null -> WasmInput.RawBytes(bytesBase64Decoded)
+            bytes != null -> WasmInput.RawBytes(bytes)
+            else -> error("Generated list_functions source selection did not select a source")
+        }
+    }
+
     private fun binaryInput(arguments: JsonObject?): BinaryInput {
         val path = arguments.optionalNonBlankString("path")
         val bytesBase64 = arguments.optionalNonBlankString("bytesBase64")
@@ -796,6 +832,35 @@ class HexanaToolHandlers(
 
     private fun JsonObject?.optionalByteArray(name: String, maxInlineBytes: Int): ByteArray? {
         val element = this?.get(name) ?: return null
+        if (element == JsonNull) return null
+        val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
+        if (array.size > maxInlineBytes) {
+            throw ToolInputException(
+                "`$name` exceeds maximum size of $maxInlineBytes bytes. Send a smaller inline payload or increase the configured MCP inline-size limit.",
+                code = HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
+            )
+        }
+        return ByteArray(array.size) { index ->
+            val value = array[index].jsonPrimitive.intOrNull
+                ?: throw ToolInputException("`$name[$index]` must be an integer")
+            if (value !in 0..255) {
+                throw ToolInputException("`$name[$index]` must be between 0 and 255")
+            }
+            value.toByte()
+        }
+    }
+
+    private fun JsonElement?.optionalNonBlankString(name: String): String? {
+        val element = this ?: return null
+        if (element == JsonNull) return null
+        val value = element.jsonPrimitive.contentOrNull
+            ?: throw ToolInputException("`$name` must be a string")
+        if (value.isBlank()) throw ToolInputException("`$name` must not be blank")
+        return value
+    }
+
+    private fun JsonElement?.optionalByteArray(name: String, maxInlineBytes: Int): ByteArray? {
+        val element = this ?: return null
         if (element == JsonNull) return null
         val array = element as? JsonArray ?: throw ToolInputException("`$name` must be an array")
         if (array.size > maxInlineBytes) {
@@ -1043,7 +1108,7 @@ class HexanaToolHandlers(
     }
 }
 
-private class ToolInputException(
+internal class ToolInputException(
     override val message: String,
     val code: HexanaAnalysisErrorCode = HexanaAnalysisErrorCode.INVALID_INPUT,
 ) : RuntimeException(message)

@@ -77,6 +77,33 @@ class HexanaToolCompatibilityTest {
     }
 
     @Test
+    fun `standalone invocation variant and typed metadata mutations affect only standalone snapshot`() {
+        fun mutateTypedInvocation(
+            transform: (StandaloneInvocationSpec.TypedRequest) -> StandaloneInvocationSpec,
+        ) = baseline.standaloneAuthority.copy(
+            registrations = baseline.standaloneAuthority.registrations.map { tool ->
+                if (tool.id != ListFunctionsToolId) return@map tool
+                val invocation = tool.standaloneInvocation as? StandaloneInvocationSpec.TypedRequest
+                    ?: error("Expected a typed standalone invocation for ${tool.id}")
+                tool.copy(binding = tool.binding.copy(invocation = transform(invocation)))
+            }
+        )
+
+        assertOnlySnapshotsChanged(
+            baseline.copy(standaloneAuthority = mutateTypedInvocation { it.copy(requestTypeName = "ChangedRequest") }),
+            "standalone",
+        )
+        assertOnlySnapshotsChanged(
+            baseline.copy(standaloneAuthority = mutateTypedInvocation { it.copy(invalidInputMethodName = "changedInputFailure") }),
+            "standalone",
+        )
+        assertOnlySnapshotsChanged(
+            baseline.copy(standaloneAuthority = mutateTypedInvocation { StandaloneInvocationSpec.JsonArguments(it.methodName) }),
+            "standalone",
+        )
+    }
+
+    @Test
     fun `MCPB binding mutation affects only MCPB snapshot`() {
         assertOnlySnapshotsChanged(
             baseline.copy(mcpbBinding = McpProductProfileBinding(FixtureMcpProductSpec.id, FixtureMcpProductSpec.defaultProfileId)),
@@ -191,7 +218,17 @@ class HexanaToolCompatibilityTest {
         appendLine("scripting=${authority.profile(ProfileId("scripting")).toolIds.joinToString { it.value }}")
         authority.registrations.forEachIndexed { index, tool ->
             appendLine("standalone[$index].id=${tool.id.value}")
-            appendLine("standalone[$index].handler=${tool.standaloneHandler.methodName}")
+            appendLine("standalone[$index].handler=${tool.standaloneInvocation.methodName}")
+            when (val invocation = tool.standaloneInvocation) {
+                is StandaloneInvocationSpec.JsonArguments -> {
+                    appendLine("standalone[$index].invocation=jsonArguments")
+                }
+                is StandaloneInvocationSpec.TypedRequest -> {
+                    appendLine("standalone[$index].invocation=typedRequest")
+                    appendLine("standalone[$index].requestType=${invocation.requestTypeName}")
+                    appendLine("standalone[$index].invalidInputHandler=${invocation.invalidInputMethodName}")
+                }
+            }
         }
     }
 
@@ -378,7 +415,7 @@ class HexanaToolCompatibilityTest {
         // with the field-presence snapshot extension that arrived from master.
         const val EXPECTED_SEMANTIC = "5400f3de10d8700b3425c6d0e20e09cc5f19626403f010935639f275a02818e8"
         const val EXPECTED_IDEA = "b3d01605c58323500af1b4e1eeabfa8b6ff2e4fb659bfccac35c9869c379d378"
-        const val EXPECTED_STANDALONE = "0395327fb451b08908345ce4e59bd1cf97bb05dd4bb1cb2165679a2744dd8b44"
+        const val EXPECTED_STANDALONE = "dd0f31cd4e78e695abd10fca5a78ac31cd8602e4ba01a92688295fac45f16a41"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"
         const val EXPECTED_MCP_PRODUCTS = "13bc46a83aa5707e526842837ab9f0ac472229483024dba827b7cc35014f8903"
         const val EXPECTED_CLI = "60d6436c68d95f34199144e2946a1fc3f5815ce3b9f8c624e37a424833451473"

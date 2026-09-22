@@ -37,7 +37,7 @@ data class IdeaTool(
 
 data class StandaloneToolBinding(
     val id: ToolId,
-    val handler: StandaloneHandlerSpec,
+    val invocation: StandaloneInvocationSpec,
     val unknownFieldPolicy: UnknownFieldPolicy,
 )
 
@@ -45,7 +45,7 @@ data class StandaloneTool(
     override val contract: ToolSpec,
     val binding: StandaloneToolBinding,
 ) : ContractBoundTool {
-    val standaloneHandler: StandaloneHandlerSpec get() = binding.handler
+    val standaloneInvocation: StandaloneInvocationSpec get() = binding.invocation
 }
 
 data class StandaloneToolAuthority(
@@ -108,7 +108,10 @@ private fun idea(id: ToolId, pattern: ToolInputPattern, handlerFqn: String) =
     IdeaToolBinding(id, pattern, handlerFqn, HexanaIdeaUnknownFieldPolicy)
 
 private fun standalone(id: ToolId, handler: String) =
-    StandaloneToolBinding(id, StandaloneHandlerSpec(handler), HexanaStandaloneUnknownFieldPolicy)
+    StandaloneToolBinding(id, StandaloneInvocationSpec.JsonArguments(handler), HexanaStandaloneUnknownFieldPolicy)
+
+private fun standalone(id: ToolId, invocation: StandaloneInvocationSpec) =
+    StandaloneToolBinding(id, invocation, HexanaStandaloneUnknownFieldPolicy)
 
 internal val HexanaIdeaToolBindings = listOf(
     idea(SummarizeBinaryToolId, ToolInputPattern.BinaryOnly, "org.jetbrains.hexana.mcp.query.readBinarySummary"),
@@ -197,7 +200,10 @@ private val STANDALONE_TOOL_BINDINGS = listOf(
     standalone(AuditGlobalStatePolicyToolId, "auditGlobalStatePolicy"), standalone(AuditLocalStackBudgetToolId, "auditLocalStackBudget"),
     standalone(ListCustomSectionsToolId, "listCustomSections"), standalone(ListImportsToolId, "listImports"),
     standalone(ListExportsToolId, "listExports"), standalone(SearchExportsToolId, "searchExports"),
-    standalone(ListExportedFunctionsToolId, "listExportedFunctions"), standalone(ListFunctionsToolId, "listFunctions"),
+    standalone(ListExportedFunctionsToolId, "listExportedFunctions"), standalone(
+        ListFunctionsToolId,
+        StandaloneInvocationSpec.TypedRequest("listFunctions", "ListFunctionsRequest", "listFunctionsInputFailure"),
+    ),
     standalone(ListCodeSectionOffsetsToolId, "listCodeSectionOffsets"), standalone(FunctionsForIndicesToolId, "functionsForIndices"),
     standalone(ResolveFunctionSignatureToolId, "resolveFunctionSignature"), standalone(DisassembleFunctionToolId, "disassembleFunction"),
     standalone(GetFunctionCallGraphToolId, "getFunctionCallGraph"), standalone(SearchFunctionsByNameToolId, "searchFunctionsByName"),

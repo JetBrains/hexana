@@ -109,7 +109,7 @@ class ResolvedToolCatalogReport(
         val mcpbSelected = tool.id in mcpProducts.resolve(mcpbBinding).toolIds
         return listOf(
             View("idea", idea != null, idea?.let { buildJsonObject { put("inputPattern", JsonPrimitive(pattern(it.inputPattern))); put("handlerFqn", JsonPrimitive(it.handlerFqn)) } }, if (idea != null) "IDEA default selection and binding" else "not selected by IDEA default authority"),
-            View("standaloneRegistration", standalone != null, standalone?.let { buildJsonObject { put("handler", JsonPrimitive(it.standaloneHandler.methodName)) } }, if (standalone != null) "standalone registration authority" else "not registered by standalone authority"),
+            View("standaloneRegistration", standalone != null, standalone?.let { standaloneInvocation(it.standaloneInvocation) }, if (standalone != null) "standalone registration authority" else "not registered by standalone authority"),
             profileView("standaloneDefault", tool.id, standaloneAuthority.profile(ProfileId("default")).toolIds, "standalone default profile"),
             profileView("standaloneAdvanced", tool.id, standaloneAuthority.profile(ProfileId("advanced")).toolIds, "standalone advanced profile"),
             profileView("standaloneScripting", tool.id, standaloneAuthority.profile(ProfileId("scripting")).toolIds, "standalone scripting profile"),
@@ -120,6 +120,18 @@ class ResolvedToolCatalogReport(
 
     private fun profileView(name: String, id: ToolId, selected: List<ToolId>, profile: String) =
         View(name, id in selected, null, if (id in selected) "$profile selection" else "excluded by $profile selection")
+
+    private fun standaloneInvocation(invocation: StandaloneInvocationSpec): JsonObject = buildJsonObject {
+        put("handler", JsonPrimitive(invocation.methodName))
+        when (invocation) {
+            is StandaloneInvocationSpec.JsonArguments -> put("invocationKind", JsonPrimitive("jsonArguments"))
+            is StandaloneInvocationSpec.TypedRequest -> {
+                put("invocationKind", JsonPrimitive("typedRequest"))
+                put("requestTypeName", JsonPrimitive(invocation.requestTypeName))
+                put("invalidInputMethodName", JsonPrimitive(invocation.invalidInputMethodName))
+            }
+        }
+    }
 
     private fun cliView(cli: CliTool?): View =
         if (cli == null) View("cli", false, null, "not selected by CLI authority")

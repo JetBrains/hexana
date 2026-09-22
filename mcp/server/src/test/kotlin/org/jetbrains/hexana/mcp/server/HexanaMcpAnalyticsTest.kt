@@ -119,7 +119,7 @@ class HexanaMcpAnalyticsTest {
             val result = HexanaToolHandlers(transport = HexanaEvent.McpTransport.STDIO)
                 .listFunctions(
                     buildJsonObject {
-                        put("path", JsonPrimitive("/missing/module.wasm"))
+                        put("path", buildJsonObject { })
                         put("offset", JsonPrimitive(0))
                         put("limit", JsonPrimitive(10))
                     }

@@ -22,15 +22,20 @@ import org.jetbrains.hexana.mcp.tools.McpProfileSpec
 import org.jetbrains.hexana.mcp.tools.McpRuntimeBinding
 import org.jetbrains.hexana.mcp.tools.ProfileId
 import org.jetbrains.hexana.mcp.tools.ProductId
-import org.jetbrains.hexana.mcp.tools.StandaloneHandlerSpec
+import org.jetbrains.hexana.mcp.tools.StandaloneInvocationSpec
 import org.jetbrains.hexana.mcp.tools.StandaloneTool
 import org.jetbrains.hexana.mcp.tools.StandaloneToolBinding
 import org.jetbrains.hexana.mcp.tools.StandaloneToolAuthority
 import org.jetbrains.hexana.mcp.tools.ToolSpec
 import org.jetbrains.hexana.mcp.tools.ToolInputPattern
 import org.jetbrains.hexana.mcp.tools.UnknownFieldPolicy
+import org.jetbrains.hexana.mcp.tools.WasmInputClass
 import org.jetbrains.hexana.mcp.tools.compileSchemaPlan
 import org.jetbrains.hexana.mcp.tools.class_
+import org.jetbrains.hexana.mcp.tools.pathSource
+import org.jetbrains.hexana.mcp.tools.base64Source
+import org.jetbrains.hexana.mcp.tools.bytesSource
+import org.jetbrains.hexana.mcp.tools.withExactOneSourceGroup
 import org.jetbrains.hexana.mcp.tools.mcpDescription
 import org.jetbrains.hexana.mcp.tools.id
 import org.jetbrains.hexana.mcp.tools.name
@@ -137,7 +142,11 @@ class ToolDescriptionGenerationTest {
         val contract = ToolSpec(org.jetbrains.hexana.mcp.tools.ToolId("schema_plan_fixture"), "Schema fixture.", null, input, nested)
         val standaloneTool = StandaloneTool(
             contract,
-            StandaloneToolBinding(contract.id, StandaloneHandlerSpec("schemaPlanFixture"), UnknownFieldPolicy.Ignore),
+            StandaloneToolBinding(
+                contract.id,
+                StandaloneInvocationSpec.JsonArguments("schemaPlanFixture"),
+                UnknownFieldPolicy.Ignore,
+            ),
         )
         val ideaTool = IdeaTool(
             contract,
@@ -213,6 +222,125 @@ class ToolDescriptionGenerationTest {
     }
 
     @Test
+    fun `non-public typed fixture derives its neutral request decoder from the schema plan`() {
+        val input = WasmInputClass.with("TypedDecoderFixture") {
+            int("offset", default = 0).minimum(0)
+            int("limit", default = 200).minimum(1)
+        }
+        val tool = StandaloneTool(
+            ToolSpec(org.jetbrains.hexana.mcp.tools.ListFunctionsToolId, "Typed decoder fixture.", null, input, input),
+            StandaloneToolBinding(
+                org.jetbrains.hexana.mcp.tools.ListFunctionsToolId,
+                StandaloneInvocationSpec.TypedRequest(
+                    "typedDecoderFixture",
+                    "TypedDecoderFixtureRequest",
+                    "typedDecoderFixtureInputFailure",
+                ),
+                org.jetbrains.hexana.mcp.tools.UnknownFieldPolicy.Ignore,
+            ),
+        )
+
+        val source = buildDispatcherFile(
+            standaloneAuthority(listOf(tool), listOf(tool.id), emptyList(), emptyList()),
+        ).toString()
+
+        assertTrue(source.contains("internal data class TypedDecoderFixtureRequest"), source)
+        assertTrue(source.contains("internal fun decodeTypedDecoderFixtureRequest"), source)
+        assertTrue(source.contains("internal data class TypedDecoderFixtureRequestScalars"), source)
+        assertTrue(source.contains("internal fun decodeTypedDecoderFixtureRequestScalars"), source)
+        assertTrue(source.contains("handlers.typedDecoderFixture(decodeTypedDecoderFixtureRequest(request.arguments))"), source)
+        assertTrue(source.contains("handlers.typedDecoderFixtureInputFailure(error)"), source)
+        assertTrue(source.contains("requireTypedDecoderFixtureRequestSourceGroup0"), source)
+        assertTrue(source.contains("sourceGroup0Count"), source)
+        assertTrue(source.contains("Exactly one of `path`, `bytesBase64`, or `bytes` is required"), source)
+        assertTrue(source.contains("Provide exactly one of `path`, `bytesBase64`, or `bytes`"), source)
+        assertTrue(source.contains("`offset` must be >= 0"), source)
+        assertTrue(source.contains("`limit` must be >= 1"), source)
+        assertTrue(source.contains("offset: JsonElement?"), source)
+        assertTrue(source.contains("limit: JsonElement?"), source)
+        assertTrue(source.contains("offset: Int?"), source)
+        assertTrue(source.contains("limit: Int?"), source)
+        assertTrue(source.contains("offsetElement.jsonPrimitive.intOrNull"), source)
+        assertTrue(source.contains("limitElement.jsonPrimitive.intOrNull"), source)
+        assertFalse(source.contains("HexanaResourceLimits"), source)
+    }
+
+    @Test
+    fun `typed source-group helpers use stable indexed identifiers for legal group names`() {
+        val sourceInput = class_("IndexedSourceGroupFixture") {
+            nullable("path", of = FieldType.StringT)
+            nullable("bytesBase64", of = FieldType.StringT)
+            nullable("bytes", of = FieldType.ListOf(FieldType.Int32))
+        }
+        val input = sourceInput.withExactOneSourceGroup(
+            "1 input",
+            pathSource(sourceInput.fieldRef("path")),
+            base64Source(sourceInput.fieldRef("bytesBase64")),
+            bytesSource(sourceInput.fieldRef("bytes")),
+        )
+        val tool = StandaloneTool(
+            ToolSpec(org.jetbrains.hexana.mcp.tools.ListFunctionsToolId, "Indexed source fixture.", null, input, input),
+            StandaloneToolBinding(
+                org.jetbrains.hexana.mcp.tools.ListFunctionsToolId,
+                StandaloneInvocationSpec.TypedRequest("indexedSourceFixture", "IndexedSourceFixtureRequest", "indexedSourceFixtureInputFailure"),
+                org.jetbrains.hexana.mcp.tools.UnknownFieldPolicy.Ignore,
+            ),
+        )
+
+        val source = buildDispatcherFile(standaloneAuthority(listOf(tool), listOf(tool.id), emptyList(), emptyList())).toString()
+
+        assertTrue(source.contains("requireIndexedSourceFixtureRequestSourceGroup0"), source)
+        assertTrue(source.contains("sourceGroup0Count"), source)
+        assertFalse(source.contains("1InputCount"), source)
+    }
+
+    @Test
+    fun `typed adapters reject duplicate and cross-derived top-level declarations`() {
+        fun typedTool(base: StandaloneTool, requestTypeName: String): StandaloneTool {
+            val input = class_("${requestTypeName}Input") { int("offset", default = 0).minimum(0) }
+            return StandaloneTool(
+                base.contract.copy(input = input, output = input),
+                base.binding.copy(
+                    invocation = StandaloneInvocationSpec.TypedRequest(
+                        methodName = "${base.name}Handler",
+                        requestTypeName = requestTypeName,
+                        invalidInputMethodName = "${base.name}InputFailure",
+                    ),
+                ),
+            )
+        }
+
+        val firstBase = HexanaStandaloneTools[0]
+        val secondBase = HexanaStandaloneTools[1]
+        listOf(
+            "SharedRequest" to "SharedRequest",
+            "SharedRequest" to "SharedRequestScalars",
+        ).forEach { (firstRequestType, secondRequestType) ->
+            val first = typedTool(firstBase, firstRequestType)
+            val second = typedTool(secondBase, secondRequestType)
+            val error = assertFailsWith<IllegalArgumentException> {
+                buildDispatcherFile(
+                    standaloneAuthority(listOf(first, second), listOf(first.id, second.id), emptyList(), emptyList()),
+                )
+            }
+
+            assertTrue(error.message.orEmpty().contains("colliding top-level type declarations"), error.message)
+            assertTrue(error.message.orEmpty().contains("`SharedRequestScalars`"), error.message)
+        }
+    }
+
+    @Test
+    fun `source alternatives preserve human-readable conjunctions`() {
+        assertEquals("", formatBacktickedAlternatives(emptyList()))
+        assertEquals("`path`", formatBacktickedAlternatives(listOf("path")))
+        assertEquals("`path` or `bytes`", formatBacktickedAlternatives(listOf("path", "bytes")))
+        assertEquals(
+            "`path`, `bytesBase64`, or `bytes`",
+            formatBacktickedAlternatives(listOf("path", "bytesBase64", "bytes")),
+        )
+    }
+
+    @Test
     fun `standalone profiles preserve explicit disjoint membership`() {
         val source = dispatcherSource()
         assertTrue(source.contains("DEFAULT_TOOL_NAMES"))
@@ -259,7 +387,7 @@ class ToolDescriptionGenerationTest {
     fun `standalone dispatcher uses the explicit handler binding`() {
         val original = HexanaStandaloneTools.single { it.name == "summarize_module" }
         val rebound = original.copy(
-            binding = original.binding.copy(handler = StandaloneHandlerSpec("customSummaryHandler")),
+            binding = original.binding.copy(invocation = StandaloneInvocationSpec.JsonArguments("customSummaryHandler")),
         )
 
         val source = buildDispatcherFile(

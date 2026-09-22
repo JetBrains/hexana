@@ -11,9 +11,15 @@ import kotlin.Int
 import kotlin.String
 import kotlin.collections.Map
 import kotlin.collections.Set
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 
 /**
@@ -157,6 +163,53 @@ internal object HexanaToolInputDefaults {
   public const val QUERY_ARTIFACTS_DETAIL: String = "summary"
 
   public const val QUERY_ARTIFACTS_MAX_BYTES: Int = 24_000
+}
+
+internal data class ListFunctionsRequest(
+  public val path: JsonElement?,
+  public val bytesBase64: JsonElement?,
+  public val bytes: JsonElement?,
+  public val offset: JsonElement?,
+  public val limit: JsonElement?,
+)
+
+internal fun decodeListFunctionsRequest(arguments: JsonObject?): ListFunctionsRequest {
+  val pathElement = arguments?.get("path")
+  val path = pathElement?.takeUnless { it == JsonNull }
+  val bytesBase64Element = arguments?.get("bytesBase64")
+  val bytesBase64 = bytesBase64Element?.takeUnless { it == JsonNull }
+  val bytesElement = arguments?.get("bytes")
+  val bytes = bytesElement?.takeUnless { it == JsonNull }
+  val offsetElement = arguments?.get("offset")
+  val offset = offsetElement
+  val limitElement = arguments?.get("limit")
+  val limit = limitElement
+  return ListFunctionsRequest(path, bytesBase64, bytes, offset, limit)
+}
+
+internal data class ListFunctionsRequestScalars(
+  public val offset: Int?,
+  public val limit: Int?,
+)
+
+internal fun decodeListFunctionsRequestScalars(request: ListFunctionsRequest): ListFunctionsRequestScalars {
+  val offsetElement = request.offset
+  val offset = if (offsetElement == null) null else offsetElement.jsonPrimitive.intOrNull ?: throw ToolInputException("`offset` must be an integer")
+  if (offset != null && offset < 0) throw ToolInputException("`offset` must be >= 0")
+  val limitElement = request.limit
+  val limit = if (limitElement == null) null else limitElement.jsonPrimitive.intOrNull ?: throw ToolInputException("`limit` must be an integer")
+  if (limit != null && limit < 1) throw ToolInputException("`limit` must be >= 1")
+  return ListFunctionsRequestScalars(offset, limit)
+}
+
+internal fun requireListFunctionsRequestSourceGroup0(
+  source0Present: Boolean,
+  source1Present: Boolean,
+  source2Present: Boolean,
+) {
+  val sourceGroup0Count = listOf(source0Present, source1Present, source2Present).count { it }
+  if (sourceGroup0Count == 0) throw ToolInputException("Exactly one of `path`, `bytesBase64`, or `bytes` is required")
+  if (sourceGroup0Count > 1) throw ToolInputException("Provide exactly one of `path`, `bytesBase64`, or `bytes`")
 }
 
 /**
@@ -2707,7 +2760,11 @@ private fun Server.registerListFunctionsTool(handlers: HexanaToolHandlers) {
       idempotentHint = true,
     ),
   ))  {
-    request: CallToolRequest -> handlers.listFunctions(request.arguments)
+    request: CallToolRequest -> try {
+      handlers.listFunctions(decodeListFunctionsRequest(request.arguments))
+    } catch (error: ToolInputException) {
+      handlers.listFunctionsInputFailure(error)
+    }
   }
 }
 

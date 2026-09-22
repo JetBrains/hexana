@@ -27,6 +27,27 @@ class ResolvedToolCatalogReportTest {
     }
 
     @Test
+    fun `standalone registration details include invocation variant and typed metadata`() {
+        val tools = document(ResolvedToolCatalogReport())
+        val typedDetails = tools.getValue("list_functions").jsonObject.getValue("views").jsonObject
+            .getValue("standaloneRegistration").jsonObject.getValue("details").jsonObject
+        assertEquals("typedRequest", typedDetails.getValue("invocationKind").jsonPrimitive.content)
+        assertEquals("listFunctions", typedDetails.getValue("handler").jsonPrimitive.content)
+        assertEquals("ListFunctionsRequest", typedDetails.getValue("requestTypeName").jsonPrimitive.content)
+        assertEquals("listFunctionsInputFailure", typedDetails.getValue("invalidInputMethodName").jsonPrimitive.content)
+
+        val jsonArgumentsTool = HexanaStandaloneTools.first {
+            it.standaloneInvocation is StandaloneInvocationSpec.JsonArguments
+        }
+        val jsonArgumentsDetails = tools.getValue(jsonArgumentsTool.name).jsonObject.getValue("views").jsonObject
+            .getValue("standaloneRegistration").jsonObject.getValue("details").jsonObject
+        assertEquals("jsonArguments", jsonArgumentsDetails.getValue("invocationKind").jsonPrimitive.content)
+        assertEquals(jsonArgumentsTool.standaloneInvocation.methodName, jsonArgumentsDetails.getValue("handler").jsonPrimitive.content)
+        assertFalse(jsonArgumentsDetails.containsKey("requestTypeName"))
+        assertFalse(jsonArgumentsDetails.containsKey("invalidInputMethodName"))
+    }
+
+    @Test
     fun `report keeps canonical order when resolved authority inputs are shuffled`() {
         val shuffledProduct = HexanaMcpProductSpec.copy(
             profiles = HexanaMcpProductSpec.profiles.reversed().map { it.copy(toolIds = it.toolIds.reversed()) },

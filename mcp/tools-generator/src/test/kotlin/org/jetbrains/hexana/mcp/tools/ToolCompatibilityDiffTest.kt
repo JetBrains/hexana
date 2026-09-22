@@ -168,6 +168,47 @@ class ToolCompatibilityDiffTest {
     }
 
     @Test
+    fun `standalone invocation variant and typed metadata have stable binding paths`() {
+        val target = HexanaStandaloneTools.single { it.id == ListFunctionsToolId }
+        val typedInvocation = target.standaloneInvocation as StandaloneInvocationSpec.TypedRequest
+        fun report(invocation: StandaloneInvocationSpec) = ResolvedToolCatalogReport(
+            standaloneAuthority = HexanaStandaloneAuthority.copy(
+                registrations = HexanaStandaloneAuthority.registrations.map { tool ->
+                    if (tool.id == target.id) tool.copy(binding = tool.binding.copy(invocation = invocation)) else tool
+                },
+            ),
+        )
+        fun differences(invocation: StandaloneInvocationSpec) =
+            ToolCompatibilityDiff.between(baseline, report(invocation)).differences
+
+        val requestTypeDifference = differences(typedInvocation.copy(requestTypeName = "ChangedListFunctionsRequest")).single()
+        assertDifference(
+            requestTypeDifference, "standalone", "standaloneRegistration", ToolCompatibilityDiff.Category.Binding,
+            "tool/${target.id.value}/view/standaloneRegistration/details/requestTypeName",
+        )
+
+        val inputFailureDifference = differences(typedInvocation.copy(invalidInputMethodName = "changedListFunctionsInputFailure")).single()
+        assertDifference(
+            inputFailureDifference, "standalone", "standaloneRegistration", ToolCompatibilityDiff.Category.Binding,
+            "tool/${target.id.value}/view/standaloneRegistration/details/invalidInputMethodName",
+        )
+
+        val variantDifferences = differences(StandaloneInvocationSpec.JsonArguments(typedInvocation.methodName))
+        assertEquals(
+            setOf(
+                "tool/${target.id.value}/view/standaloneRegistration/details/invocationKind",
+                "tool/${target.id.value}/view/standaloneRegistration/details/requestTypeName",
+                "tool/${target.id.value}/view/standaloneRegistration/details/invalidInputMethodName",
+            ),
+            variantDifferences.mapTo(mutableSetOf()) { it.path },
+        )
+        assertTrue(variantDifferences.all {
+            it.surface == "standalone" && it.view == "standaloneRegistration" &&
+                it.category == ToolCompatibilityDiff.Category.Binding
+        })
+    }
+
+    @Test
     fun `nested schemas and CLI arrays use stable semantic paths`() {
         val before = document("""{"tools":[{"id":"example","inputSchema":{"oneOf":["a"],"fields":[{"wireName":"outer","type":{"kind":"list","element":{"kind":"class","schema":{"fields":[{"wireName":"limit","default":1,"maximum":2}]}}}}]},"outputSchema":{},"views":{"cli":{"selected":true,"details":{"sources":[{"name":"wasm","kind":"Wasm"}],"params":[{"name":"offset","cliOption":"--offset"}],"groups":["Module"],"formats":["JSON"],"products":["hexana-cli"]}}}}]}""")
         val after = document("""{"tools":[{"id":"example","inputSchema":{"oneOf":["a","b"],"fields":[{"wireName":"outer","type":{"kind":"list","element":{"kind":"class","schema":{"fields":[{"wireName":"limit","default":3,"maximum":4},{"wireName":"added","type":"string"}]}}}}]},"outputSchema":{},"views":{"cli":{"selected":true,"details":{"sources":[{"name":"wasm","kind":"Binary"}],"params":[{"name":"offset","cliOption":"--from"},{"name":"limit","cliOption":"--limit"}],"groups":["Module","Function"],"formats":["JSON","TABLE"],"products":["hexana-cli-script"]}}}}]}""")
