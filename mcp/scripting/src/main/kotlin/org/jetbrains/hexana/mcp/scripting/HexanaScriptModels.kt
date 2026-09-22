@@ -8,6 +8,7 @@ import org.jetbrains.hexana.shared.scripting.FlagSpec
 import org.jetbrains.hexana.shared.scripting.ScriptConsoleEntry
 import org.jetbrains.hexana.shared.scripting.ScriptUsageError
 import org.jetbrains.hexana.shared.scripting.SliceRegistrationInfo
+import org.jetbrains.hexana.shared.scripting.SuiteArtifactDeclaration
 import org.jetbrains.hexana.shared.scripting.SuiteNodeResult
 
 sealed interface HexanaScriptSource {
@@ -126,6 +127,15 @@ data class HexanaScriptResult(
      * Null for every non-suite run.
      */
     val suite: SuiteNodeResult? = null,
+    /**
+     * Every `hexana.artifact(role, options)` declaration encountered while the
+     * suite module evaluated, in call order, recorded before any resolution or
+     * failure. Populated by [HexanaSuiteRunner.runSuite] on success, script
+     * error, and binding failure alike (declarations seen before the throw),
+     * and by [HexanaSuiteRunner.collectSuiteDeclarations] with no mappings.
+     * Empty for every non-suite run.
+     */
+    val artifactDeclarations: List<SuiteArtifactDeclaration> = emptyList(),
 ) {
     val success: Boolean
         get() = status == HexanaScriptStatus.SUCCESS

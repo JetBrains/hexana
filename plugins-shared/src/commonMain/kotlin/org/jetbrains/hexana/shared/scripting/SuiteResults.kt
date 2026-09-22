@@ -7,6 +7,24 @@ enum class SuiteNodeKind { SUITE, TEST }
 enum class SuiteNodeStatus { PASS, FAIL, SKIP }
 
 /**
+ * One `hexana.artifact(role, options)` declaration collected from a suite file.
+ * Pure data, shared across all hosts: the IDE reads these to build the role
+ * table in the settings editor and to scan which suites match a binary,
+ * without providing any role mappings.
+ *
+ * @param role the artifact role name (first argument of `hexana.artifact`)
+ * @param formats declared acceptable format ids (`options.formats` array plus
+ *   `options.type` string, in that order); empty means any format
+ * @param optional true when `options.optional === true` (an unmapped optional
+ *   role resolves to null instead of failing)
+ */
+data class SuiteArtifactDeclaration(
+    val role: String,
+    val formats: List<String> = emptyList(),
+    val optional: Boolean = false,
+)
+
+/**
  * One node of a test-suite run: either a `describe` group (SUITE) or a single
  * `test` (TEST). Pure data, shared across all hosts.
  *

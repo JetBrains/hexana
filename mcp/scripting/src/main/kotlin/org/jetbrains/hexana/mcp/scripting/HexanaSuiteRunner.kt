@@ -19,6 +19,7 @@ import org.jetbrains.hexana.shared.scripting.SCRIPT_CONSOLE_GLOBAL
 import org.jetbrains.hexana.shared.scripting.SCRIPT_HEXANA_GLOBAL
 import org.jetbrains.hexana.shared.scripting.ScriptConsoleEntry
 import org.jetbrains.hexana.shared.scripting.ScriptOutput
+import org.jetbrains.hexana.shared.scripting.SuiteArtifactDeclaration
 import org.jetbrains.hexana.shared.scripting.SuiteNodeKind
 import org.jetbrains.hexana.shared.scripting.SuiteNodeResult
 import org.jetbrains.hexana.shared.scripting.SuiteNodeStatus
@@ -179,6 +180,98 @@ class HexanaSuiteRunner(
         }
     }
 
+    /**
+     * Declaration-collection mode: evaluates the suite module WITHOUT any role
+     * mappings and WITHOUT executing tests, so the IDE can harvest
+     * [HexanaScriptResult.artifactDeclarations] (settings-editor role table,
+     * "which suites match this binary" scan).
+     *
+     * `hexana.artifact` returns a benign inert stub for every role (mapped or
+     * not; no fail-fast, no file IO), so a plain collection pass runs to
+     * completion unless the user's own top-level code throws. On such an error
+     * the declarations seen up to that point are still returned (mirroring the
+     * 2A flags precedent). [HexanaScriptResult.suite] carries the collected
+     * registration tree with every node SKIP and zero durations.
+     *
+     * @param suiteFilePath path of the suite `.mjs`/`.js` file
+     * @param libRoot directory containing importable packages, as in [runSuite]
+     */
+    fun collectSuiteDeclarations(
+        suiteFilePath: String,
+        libRoot: String? = null,
+    ): HexanaScriptResult {
+        val started = System.nanoTime()
+        val suitePath: Path
+        val scriptText: String
+        val libRootPath: Path?
+        try {
+            suitePath = allowedFilePolicy.resolveAllowedRegularFile(suiteFilePath, "Suite file")
+            val size = Files.size(suitePath)
+            if (size > limits.maxScriptFileBytes) {
+                return failureResult(
+                    HexanaScriptStatus.INVALID_INPUT,
+                    HexanaScriptDiagnostic(
+                        code = "RESOURCE_LIMIT_EXCEEDED",
+                        message = "Suite file exceeds maximum size of ${limits.maxScriptFileBytes} bytes",
+                    ),
+                    suiteFilePath, started,
+                )
+            }
+            scriptText = Files.readString(suitePath)
+            libRootPath = libRoot?.let { allowedFilePolicy.resolveAllowedDirectory(it, "Suite library root") }
+        } catch (error: HexanaAnalysisException) {
+            return failureResult(
+                HexanaScriptStatus.INVALID_INPUT,
+                HexanaScriptDiagnostic(
+                    code = error.code.name,
+                    message = error.message,
+                    exceptionClass = error::class.java.name,
+                ),
+                suiteFilePath, started,
+            )
+        } catch (error: Exception) {
+            return internalError(suiteFilePath, error, started)
+        }
+
+        val console = SuiteConsole(null)
+        val contextRef = AtomicReference<Context?>()
+        val executor = Executors.newSingleThreadExecutor(suiteThreadFactory)
+        val future = executor.submit(Callable {
+            executeCollect(suitePath, scriptText, libRootPath, console, contextRef, started)
+        })
+        return try {
+            future.get(limits.timeoutMillis, TimeUnit.MILLISECONDS)
+        } catch (_: TimeoutException) {
+            contextRef.get()?.close(true)
+            future.cancel(true)
+            failureResult(
+                HexanaScriptStatus.TIMEOUT,
+                HexanaScriptDiagnostic(
+                    code = "TIMEOUT",
+                    message = "Suite timed out after ${limits.timeoutMillis} ms",
+                ),
+                suitePath.toString(), started, console.entries(),
+            )
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            contextRef.get()?.close(true)
+            future.cancel(true)
+            failureResult(
+                HexanaScriptStatus.INTERNAL_ERROR,
+                HexanaScriptDiagnostic(code = "INTERRUPTED", message = "Suite execution was interrupted"),
+                suitePath.toString(), started, console.entries(),
+            )
+        } catch (error: ExecutionException) {
+            when (val cause = error.cause) {
+                is VirtualMachineError -> throw cause
+                is LinkageError -> throw cause
+                else -> internalError(suitePath.toString(), cause ?: error, started, console.entries())
+            }
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Execution on the suite executor thread
     // -------------------------------------------------------------------------
@@ -197,6 +290,7 @@ class HexanaSuiteRunner(
         started: Long,
     ): HexanaScriptResult {
         val previousClassLoader = Thread.currentThread().contextClassLoader
+        var artifactBinder: SuiteArtifactBinder? = null
         try {
             Thread.currentThread().contextClassLoader = HexanaSuiteRunner::class.java.classLoader
             val suiteDir = suitePath.parent.toRealPath()
@@ -208,11 +302,12 @@ class HexanaSuiteRunner(
                 val registry = SuiteRegistry(rootName = suitePath.fileName.toString())
                 val timers = SuiteTimers()
                 val drbg = Sha256CounterDrbg(seedBytes)
-                val artifactBinder = SuiteArtifactBinder(artifacts, limits, allowedFilePolicy)
+                val binder = SuiteArtifactBinder(artifacts, limits, allowedFilePolicy)
+                artifactBinder = binder
 
                 val bindings = ctx.getBindings("js")
                 bindings.putMember(SCRIPT_CONSOLE_GLOBAL, console.proxy())
-                bindings.putMember(SCRIPT_HEXANA_GLOBAL, suiteHexanaProxy(artifactBinder))
+                bindings.putMember(SCRIPT_HEXANA_GLOBAL, suiteHexanaProxy(binder))
                 registry.bindGlobals(bindings)
                 timers.bindGlobals(bindings)
 
@@ -232,6 +327,7 @@ class HexanaSuiteRunner(
                         if (error.isCancelled) HexanaScriptStatus.TIMEOUT else HexanaScriptStatus.SCRIPT_ERROR,
                         error.toSuiteDiagnostic(),
                         suitePath.toString(), started, console.entries(),
+                        artifactDeclarations = binder.declarations(),
                     )
                 }
                 registry.collecting = false
@@ -247,6 +343,7 @@ class HexanaSuiteRunner(
                     durationMillis = elapsedMillis(started),
                     console = console.entries(),
                     suite = suiteTree,
+                    artifactDeclarations = binder.declarations(),
                 )
             }
         } catch (error: PolyglotException) {
@@ -254,14 +351,152 @@ class HexanaSuiteRunner(
                 if (error.isCancelled) HexanaScriptStatus.TIMEOUT else HexanaScriptStatus.SCRIPT_ERROR,
                 error.toSuiteDiagnostic(),
                 suitePath.toString(), started, console.entries(),
+                artifactDeclarations = artifactBinder?.declarations().orEmpty(),
             )
         } catch (error: Exception) {
-            return internalError(suitePath.toString(), error, started, console.entries())
+            return internalError(
+                suitePath.toString(), error, started, console.entries(),
+                artifactDeclarations = artifactBinder?.declarations().orEmpty(),
+            )
         } finally {
             contextRef.set(null)
             Thread.currentThread().contextClassLoader = previousClassLoader
         }
     }
+
+    /**
+     * Collection-mode execution: same context profile and prelude as [executeSuite],
+     * but `hexana.artifact` records declarations and returns an inert stub, and no
+     * test is executed after the module evaluates.
+     */
+    private fun executeCollect(
+        suitePath: Path,
+        scriptText: String,
+        libRootPath: Path?,
+        console: SuiteConsole,
+        contextRef: AtomicReference<Context?>,
+        started: Long,
+    ): HexanaScriptResult {
+        val previousClassLoader = Thread.currentThread().contextClassLoader
+        val declarations = mutableListOf<SuiteArtifactDeclaration>()
+        try {
+            Thread.currentThread().contextClassLoader = HexanaSuiteRunner::class.java.classLoader
+            val suiteDir = suitePath.parent.toRealPath()
+            val roots = listOfNotNull(suiteDir, libRootPath)
+            val fileSystem = SuiteModuleFileSystem(roots, libRootPath, cwd = suiteDir)
+            val context = buildSuiteContext(fileSystem)
+            contextRef.set(context)
+            context.use { ctx ->
+                val registry = SuiteRegistry(rootName = suitePath.fileName.toString())
+                val timers = SuiteTimers()
+                val drbg = Sha256CounterDrbg(Sha256CounterDrbg.deriveSeed(scriptText, emptyMap()))
+
+                val bindings = ctx.getBindings("js")
+                bindings.putMember(SCRIPT_CONSOLE_GLOBAL, console.proxy())
+                bindings.putMember(SCRIPT_HEXANA_GLOBAL, collectHexanaProxy(declarations))
+                registry.bindGlobals(bindings)
+                timers.bindGlobals(bindings)
+
+                val preludeFn = ctx.eval(
+                    Source.newBuilder("js", SuitePrelude.TEXT, SuitePrelude.SOURCE_NAME).buildLiteral()
+                )
+                preludeFn.execute(cryptoHostBridge(drbg))
+
+                val moduleSource = Source.newBuilder("js", scriptText, suitePath.toString())
+                    .uri(suitePath.toUri())
+                    .mimeType(ES_MODULE_MIME_TYPE)
+                    .build()
+                try {
+                    ctx.eval(moduleSource)
+                } catch (error: PolyglotException) {
+                    return failureResult(
+                        if (error.isCancelled) HexanaScriptStatus.TIMEOUT else HexanaScriptStatus.SCRIPT_ERROR,
+                        error.toSuiteDiagnostic(),
+                        suitePath.toString(), started, console.entries(),
+                        artifactDeclarations = declarations.toList(),
+                    )
+                }
+                registry.collecting = false
+
+                return HexanaScriptResult(
+                    status = HexanaScriptStatus.SUCCESS,
+                    output = emptyOutput(),
+                    diagnostics = emptyList(),
+                    binary = null,
+                    sourceName = suitePath.fileName.toString(),
+                    sourcePath = suitePath.toString(),
+                    durationMillis = elapsedMillis(started),
+                    console = console.entries(),
+                    suite = collectedTree(registry.root),
+                    artifactDeclarations = declarations.toList(),
+                )
+            }
+        } catch (error: PolyglotException) {
+            return failureResult(
+                if (error.isCancelled) HexanaScriptStatus.TIMEOUT else HexanaScriptStatus.SCRIPT_ERROR,
+                error.toSuiteDiagnostic(),
+                suitePath.toString(), started, console.entries(),
+                artifactDeclarations = declarations.toList(),
+            )
+        } catch (error: Exception) {
+            return internalError(
+                suitePath.toString(), error, started, console.entries(),
+                artifactDeclarations = declarations.toList(),
+            )
+        } finally {
+            contextRef.set(null)
+            Thread.currentThread().contextClassLoader = previousClassLoader
+        }
+    }
+
+    /** Maps the collected registration tree to a result tree: every node SKIP, zero durations. */
+    private fun collectedTree(group: SuiteGroupNode): SuiteNodeResult = SuiteNodeResult(
+        name = group.name,
+        kind = SuiteNodeKind.SUITE,
+        status = SuiteNodeStatus.SKIP,
+        durationMillis = 0,
+        children = group.children.map { child ->
+            when (child) {
+                is SuiteGroupNode -> collectedTree(child)
+                is SuiteTestNode -> SuiteNodeResult(
+                    name = child.name,
+                    kind = SuiteNodeKind.TEST,
+                    status = SuiteNodeStatus.SKIP,
+                    durationMillis = 0,
+                    sourceFile = child.sourceFile,
+                    sourceLine = child.sourceLine,
+                )
+            }
+        },
+        sourceFile = group.sourceFile,
+        sourceLine = group.sourceLine,
+    )
+
+    /**
+     * `hexana` global for the declaration-collection mode: `artifact` records the
+     * declaration and returns a benign inert stub (every property reads as
+     * `undefined`); no mapping lookup, no fail-fast, no file IO.
+     */
+    private fun collectHexanaProxy(declarations: MutableList<SuiteArtifactDeclaration>): ProxyObject =
+        object : ProxyObject {
+            private val keys = listOf("artifact", "has", "api")
+
+            override fun getMember(key: String): Any? = when (key) {
+                "artifact" -> ProxyExecutable { args ->
+                    declarations += parseSuiteArtifactDeclaration(args)
+                    inertArtifactStub
+                }
+                "has" -> ProxyExecutable { args ->
+                    args.getOrNull(0)?.takeIf { it.isString }?.asString() == "suite"
+                }
+                "api" -> 2
+                else -> null
+            }
+
+            override fun getMemberKeys(): Any = ProxyArray.fromList(keys)
+            override fun hasMember(key: String): Boolean = key in keys
+            override fun putMember(key: String, value: Value) { /* read-only */ }
+        }
 
     /**
      * Builds the suite-profile GraalJS [Context]: the base hardening plus the
@@ -350,6 +585,7 @@ class HexanaSuiteRunner(
         sourcePath: String,
         started: Long,
         console: List<ScriptConsoleEntry> = emptyList(),
+        artifactDeclarations: List<SuiteArtifactDeclaration> = emptyList(),
     ): HexanaScriptResult = HexanaScriptResult(
         status = status,
         output = emptyOutput(),
@@ -359,6 +595,7 @@ class HexanaSuiteRunner(
         sourcePath = sourcePath,
         durationMillis = elapsedMillis(started),
         console = console,
+        artifactDeclarations = artifactDeclarations,
     )
 
     private fun internalError(
@@ -366,6 +603,7 @@ class HexanaSuiteRunner(
         error: Throwable,
         started: Long,
         console: List<ScriptConsoleEntry> = emptyList(),
+        artifactDeclarations: List<SuiteArtifactDeclaration> = emptyList(),
     ): HexanaScriptResult = failureResult(
         HexanaScriptStatus.INTERNAL_ERROR,
         HexanaScriptDiagnostic(
@@ -373,7 +611,7 @@ class HexanaSuiteRunner(
             message = error.message ?: error::class.java.name,
             exceptionClass = error::class.java.name,
         ),
-        sourcePath, started, console,
+        sourcePath, started, console, artifactDeclarations,
     )
 
     private fun emptyOutput(): HexanaScriptOutput = HexanaScriptOutput(
@@ -411,6 +649,18 @@ class HexanaSuiteRunner(
 
         private val suiteThreadFactory = ThreadFactory { runnable ->
             Thread(runnable, "hexana-suite-runner").apply { isDaemon = true }
+        }
+
+        /**
+         * Benign inert artifact handle for the declaration-collection mode:
+         * every property reads as `undefined`, nothing is executable, writes
+         * are ignored. No file IO can be reached through it.
+         */
+        private val inertArtifactStub: ProxyObject = object : ProxyObject {
+            override fun getMember(key: String): Any? = null
+            override fun getMemberKeys(): Any = ProxyArray.fromList(emptyList<Any>())
+            override fun hasMember(key: String): Boolean = false
+            override fun putMember(key: String, value: Value) { /* inert */ }
         }
     }
 }
@@ -932,6 +1182,30 @@ internal class SuiteExecutor(
 // -----------------------------------------------------------------------------
 
 /**
+ * Parses one `hexana.artifact(role, options)` call into a pure declaration
+ * record, without touching the role mapping or any file. Shared by the binder
+ * (which records, then resolves) and by the declaration-collection mode (which
+ * records and returns an inert stub).
+ *
+ * @throws IllegalArgumentException when the role argument is not a string
+ */
+internal fun parseSuiteArtifactDeclaration(args: Array<Value>): SuiteArtifactDeclaration {
+    val role = args.getOrNull(0)?.takeIf { it.isString }?.asString()
+        ?: throw IllegalArgumentException("hexana.artifact(role, options): role must be a string")
+    val options = args.getOrNull(1)?.takeIf { !it.isNull && it.hasMembers() }
+    val optional = options?.takeIf { it.hasMember("optional") }?.getMember("optional")
+        ?.takeIf { it.isBoolean }?.asBoolean() ?: false
+    val formats = buildList {
+        options?.takeIf { it.hasMember("formats") }?.getMember("formats")
+            ?.takeIf { it.hasArrayElements() }
+            ?.let { array -> (0 until array.arraySize).forEach { add(array.getArrayElement(it).asString()) } }
+        options?.takeIf { it.hasMember("type") }?.getMember("type")
+            ?.takeIf { it.isString }?.asString()?.let { add(it) }
+    }
+    return SuiteArtifactDeclaration(role = role, formats = formats, optional = optional)
+}
+
+/**
  * Resolves `hexana.artifact(role, options)` calls against the host's role→path
  * mapping. Loads each mapped file once (through [BinaryInputLoader], validating
  * each path against [basePolicy] before loading) and returns the same guest shape
@@ -957,16 +1231,21 @@ internal class SuiteArtifactBinder(
     /** role → guest binary handle, so repeated `hexana.artifact` calls are stable. */
     private val cache = mutableMapOf<String, Any>()
 
+    /** Every declaration encountered, in call order, recorded before any resolution. */
+    private val declarationsList = mutableListOf<SuiteArtifactDeclaration>()
+
+    fun declarations(): List<SuiteArtifactDeclaration> = declarationsList.toList()
+
     fun resolve(args: Array<Value>): Any? {
-        val role = args.getOrNull(0)?.takeIf { it.isString }?.asString()
-            ?: throw IllegalArgumentException("hexana.artifact(role, options): role must be a string")
-        val options = args.getOrNull(1)?.takeIf { !it.isNull && it.hasMembers() }
-        val optional = options?.takeIf { it.hasMember("optional") }?.getMember("optional")
-            ?.takeIf { it.isBoolean }?.asBoolean() ?: false
+        // Record the declaration BEFORE any resolution or failure, so a run that
+        // dies on an unmapped role still reports what it saw up to that point.
+        val declaration = parseSuiteArtifactDeclaration(args)
+        declarationsList += declaration
+        val role = declaration.role
 
         val rawPath = mapping[role]
         if (rawPath == null) {
-            if (optional) return null
+            if (declaration.optional) return null
             throw IllegalArgumentException(
                 "Required artifact role \"$role\" is not mapped. Pass --artifact $role=<path> to map it."
             )
@@ -979,13 +1258,7 @@ internal class SuiteArtifactBinder(
             throw IllegalArgumentException("Artifact \"$role\" ($rawPath): ${error.message}", error)
         }
         val formatId = binaryFormatId(loaded.provider)
-        val allowedFormats = buildList {
-            options?.takeIf { it.hasMember("formats") }?.getMember("formats")
-                ?.takeIf { it.hasArrayElements() }
-                ?.let { array -> (0 until array.arraySize).forEach { add(array.getArrayElement(it).asString()) } }
-            options?.takeIf { it.hasMember("type") }?.getMember("type")
-                ?.takeIf { it.isString }?.asString()?.let { add(it) }
-        }
+        val allowedFormats = declaration.formats
         if (allowedFormats.isNotEmpty() && formatId !in allowedFormats) {
             throw IllegalArgumentException(
                 "Artifact \"$role\" ($rawPath): format \"$formatId\" does not match " +

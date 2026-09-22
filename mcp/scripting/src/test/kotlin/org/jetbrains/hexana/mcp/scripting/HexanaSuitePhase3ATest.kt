@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.scripting
 
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.mcp.BinaryInput
+import org.jetbrains.hexana.shared.scripting.SuiteArtifactDeclaration
 import org.jetbrains.hexana.shared.scripting.SuiteNodeKind
 import org.jetbrains.hexana.shared.scripting.SuiteNodeResult
 import org.jetbrains.hexana.shared.scripting.SuiteNodeStatus
@@ -735,6 +736,100 @@ class HexanaSuitePhase3ATest {
         )
         assertEquals(2, fromHelper.sourceLine,
             "call site in helper.mjs is on line 2, got: ${fromHelper.sourceLine}")
+    }
+
+    // ----- Amendment 3: artifact declarations -----
+
+    /**
+     * collectSuiteDeclarations with zero mappings: exact role/formats/optional for
+     * a 3-artifact suite, no test bodies executed (console side-effect check),
+     * and a SKIP-only registration tree.
+     */
+    @Test
+    fun collectSuiteDeclarationsRecordsRolesWithoutMappingsAndRunsNoTests() {
+        val suite = writeSuite(
+            """
+            const primary = hexana.artifact("primary", { formats: ["wasm"] });
+            const debugElf = hexana.artifact("debug", { formats: ["elf", "wasm"], optional: true });
+            const extra = hexana.artifact("extra");
+            test("never", () => { console.log("SHOULD_NOT_RUN"); });
+            describe("grp", () => {
+              test("also-never", () => { console.log("ALSO_SHOULD_NOT_RUN"); });
+            });
+            """.trimIndent()
+        )
+        val result = runner().collectSuiteDeclarations(suite.toString())
+
+        assertEquals(HexanaScriptStatus.SUCCESS, result.status,
+            "collection must succeed with zero mappings: ${result.diagnostics}")
+        assertEquals(
+            listOf(
+                SuiteArtifactDeclaration("primary", listOf("wasm"), optional = false),
+                SuiteArtifactDeclaration("debug", listOf("elf", "wasm"), optional = true),
+                SuiteArtifactDeclaration("extra", emptyList(), optional = false),
+            ),
+            result.artifactDeclarations,
+        )
+        // No test body ran
+        assertEquals(emptyList(), consoleTexts(result), "no test body may execute in collection mode")
+
+        // The registration tree is still available, all SKIP
+        val root = assertNotNull(result.suite)
+        assertEquals(listOf("never", "grp"), root.children.map { it.name })
+        assertEquals(SuiteNodeStatus.SKIP, root.status)
+        assertEquals(SuiteNodeStatus.SKIP, root.children[0].status)
+        assertEquals(SuiteNodeStatus.SKIP, root.children[1].status)
+        assertEquals(SuiteNodeStatus.SKIP, root.children[1].children.single().status)
+    }
+
+    /**
+     * A normal runSuite that dies on an unmapped required role still carries the
+     * declarations seen before the throw (including the one that threw).
+     */
+    @Test
+    fun failedBindingRunSuiteCarriesDeclarationsSeenBeforeThrow() {
+        val suite = writeSuite(
+            """
+            const opt = hexana.artifact("opt", { optional: true });
+            const req = hexana.artifact("req", { formats: ["wasm"] });
+            test("never", () => { console.log("SHOULD_NOT_RUN"); });
+            """.trimIndent()
+        )
+        val result = runner().runSuite(suite.toString(), artifacts = emptyMap())
+
+        assertEquals(HexanaScriptStatus.SCRIPT_ERROR, result.status)
+        assertNull(result.suite)
+        assertTrue(result.diagnostics.joinToString { it.message }.contains("\"req\""),
+            "diagnostic must name the unmapped role: ${result.diagnostics}")
+        assertEquals(
+            listOf(
+                SuiteArtifactDeclaration("opt", emptyList(), optional = true),
+                SuiteArtifactDeclaration("req", listOf("wasm"), optional = false),
+            ),
+            result.artifactDeclarations,
+        )
+        assertFalse(consoleTexts(result).contains("SHOULD_NOT_RUN"))
+    }
+
+    /** The runSuite success path also carries the declarations. */
+    @Test
+    fun successfulRunSuiteCarriesArtifactDeclarations() {
+        val suite = writeSuite(
+            """
+            const app = hexana.artifact("app", { formats: ["wasm"] });
+            test("size", () => {
+              if (app.size !== 4703) throw new Error("size " + app.size);
+            });
+            """.trimIndent()
+        )
+        val result = runner().runSuite(suite.toString(), artifacts = mapOf("app" to appDebugWasm.toString()))
+
+        assertEquals(HexanaScriptStatus.SUCCESS, result.status)
+        assertEquals(SuiteNodeStatus.PASS, assertNotNull(result.suite).children.single().status)
+        assertEquals(
+            listOf(SuiteArtifactDeclaration("app", listOf("wasm"), optional = false)),
+            result.artifactDeclarations,
+        )
     }
 
     // ----- Base-profile pins: the v1 runner must be unaffected -----
