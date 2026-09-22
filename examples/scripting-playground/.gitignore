@@ -5,3 +5,7 @@
 
 # Hexana baseline store (created by check scripts with --baselines-dir .hexana/baselines).
 .hexana/
+
+# Local npm installs for --lib-root demos. Do not commit.
+node_modules/
+**/node_modules/

@@ -362,3 +362,138 @@ Requires `user/scripting-v2-phase2b` and a running IDE sandbox (`./gradlew runId
 - [ ] Editing limit=42 in the table, running: stdout shows "flags.limit = 42"
 - [ ] Copy CLI Command produces a valid hexana-cli-script invocation with the -- separator
 - [ ] No input binary: run still starts, engine receives the stub wasm, console may show errors or empty findings
+
+## Walkthrough part 6: test suites (Phase 3A)
+
+Requires the `user/scripting-v2-phase3a` branch and a built CLI:
+
+```sh
+./gradlew :cli:hexana-cli-script:installDist
+```
+
+Binary: `cli/hexana-cli-script/build/install/hexana-cli-script/bin/hexana-cli-script`.
+
+All commands below run from `examples/scripting-playground/`.
+
+### Step 1: run the suite, read the report
+
+```sh
+hexana-cli-script test hexana-script/tests/ \
+  --artifact app=bin/app-debug.wasm \
+  --telemetry-enabled false
+```
+
+Observed stdout:
+
+```
+Suite: app.test.js
+[PASS] app-debug.wasm shape > size is exactly 4703 bytes (2 ms)
+[PASS] app-debug.wasm shape > format is wasm (0 ms)
+[PASS] app-debug.wasm shape > name is app-debug.wasm (0 ms)
+[PASS] app-debug.wasm shape > exports > exactly 5 exports (2 ms)
+[PASS] app-debug.wasm shape > exports > export names match MANIFEST (16 ms)
+[PASS] app-debug.wasm shape > exports > memory export has kind memory (1 ms)
+[PASS] app-debug.wasm shape > exports > func exports have kind func (4 ms)
+[PASS] imports > no imports (wasi-libc is statically linked) (0 ms)
+[PASS] functions > total function count is 8 (3 ms)
+[PASS] functions > all functions are code (no imports) (1 ms)
+[PASS] functions > functions have non-negative funcidx (0 ms)
+[PASS] async crypto > SHA-256 digest of file header completes and has 32 bytes (34 ms)
+[PASS] async crypto > setTimeout resolves in async test (1 ms)
+
+13 passed, 0 failed, 0 skipped (71 ms)
+```
+
+Observed stderr: `[log] SHA-256(header[:8]) = 93a44bbb96c75121...`
+
+Exit 0.
+
+Report structure: `Suite: <filename>`, then `[PASS]/<FAIL>/<SKIP>]
+describe-path > test-name (N ms)`, summary at the end. Nested
+`describe` blocks join with ` > `. The suite uses `import { assertEquals }
+from "./helpers/expect.mjs"` for assertions and an async test that runs
+`crypto.subtle.digest` (SHA-256 of the Wasm magic header).
+
+### Step 2: produce a JUnit XML report
+
+```sh
+hexana-cli-script test hexana-script/tests/ \
+  --artifact app=bin/app-debug.wasm \
+  --report junit /tmp/suite.xml \
+  --telemetry-enabled false
+```
+
+Exit 0. The report is written to `/tmp/suite.xml`. First lines:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="app.test.js" tests="13" failures="0" skipped="0" time="...">
+    <testcase name="size is exactly 4703 bytes" classname="app-debug.wasm shape" .../>
+    ...
+```
+
+Each nested `describe` becomes the `classname` of its child `testcase` elements.
+Failures get a `<failure message="...">` element.
+
+### Step 3: flip the deliberate failure on, watch exit 1
+
+The file `hexana-script/tests/deliberate-failure.test.js.disabled` contains one
+always-failing test. Rename it temporarily:
+
+```sh
+mv hexana-script/tests/deliberate-failure.test.js.disabled \
+   hexana-script/tests/deliberate-failure.test.js
+
+hexana-cli-script test hexana-script/tests/ \
+  --artifact app=bin/app-debug.wasm \
+  --telemetry-enabled false
+```
+
+Observed: the summary shows `14 passed, 1 failed, 0 skipped`, exit 1. The
+failure line reads:
+
+```
+[FAIL] deliberate > this test always fails (8 ms)
+       Error: deliberate failure: rename to .disabled after the demo
+```
+
+Rename back to restore the green state:
+
+```sh
+mv hexana-script/tests/deliberate-failure.test.js \
+   hexana-script/tests/deliberate-failure.test.js.disabled
+```
+
+Directory run now discovers only `app.test.js` and exits 0 again.
+
+### Step 4: seed determinism
+
+The `--seed <hex>` flag pins the DRBG used by `crypto.getRandomValues` and
+`crypto.randomUUID`. Two runs with the same seed produce byte-identical output
+for any randomness consumed in the suite. A different seed diverges.
+
+```sh
+hexana-cli-script test hexana-script/tests/ \
+  --artifact app=bin/app-debug.wasm \
+  --seed aabbccdd \
+  --telemetry-enabled false
+```
+
+Run the same command twice. The stderr lines (console.log output) are identical.
+Change `--seed` to `--seed 00112233` and the random bytes change.
+
+The default seed (no `--seed`) is derived from the suite source text and the
+artifact content, so it stays stable as long as neither changes.
+
+### QA checklist additions (Phase 3A)
+
+- [ ] `hexana-cli-script test hexana-script/tests/ --artifact app=bin/app-debug.wasm --telemetry-enabled false`: exit 0, 13 passed
+- [ ] stdout shows `Suite: app.test.js`, nested describes joined with ` > `
+- [ ] stderr shows `[log] SHA-256(header[:8]) = 93a44bbb96c75121...`
+- [ ] `--report junit /tmp/suite.xml`: exit 0, XML file present, `tests="13" failures="0"`
+- [ ] rename deliberate-failure.test.js.disabled to .test.js, rerun directory: exit 1, `[FAIL] deliberate > this test always fails`
+- [ ] rename back to .disabled, rerun: exit 0
+- [ ] `--seed aabbccdd` twice: stderr rng line identical both runs
+- [ ] `--seed 00112233` (different seed): rng line differs from aabbccdd run
+- [ ] `node_modules/` absent from git status (covered by .gitignore)

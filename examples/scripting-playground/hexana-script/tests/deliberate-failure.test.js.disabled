@@ -1,0 +1,25 @@
+// deliberate-failure.test.js.disabled
+//
+// This file is intentionally named .disabled so it is NOT discovered by the
+// default directory run (only *.test.js files are picked up).
+//
+// PURPOSE: Walkthrough demo for "watching exit 1". Rename to
+// deliberate-failure.test.js before the demo run, rename back after.
+//
+// When enabled:
+//   hexana-cli-script test hexana-script/tests/ \
+//     --artifact app=bin/app-debug.wasm \
+//     --telemetry-enabled false
+//
+// Expected: exit 1, report shows [FAIL] deliberate > this test always fails.
+
+describe("deliberate", () => {
+    test("this test always fails", () => {
+        throw new Error("deliberate failure: rename to .disabled after the demo");
+    });
+
+    test("this test always passes", () => {
+        const answer = 6 * 7;
+        if (answer !== 42) throw new Error("bad arithmetic: " + answer);
+    });
+});
