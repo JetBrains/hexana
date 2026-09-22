@@ -102,6 +102,17 @@ public object HexanaGeneratedCliToolRegistry {
           executionStatus = HexanaCliExecutionStatus.EXECUTABLE,
         ),
         HexanaCliToolSpec(
+          commandName = "test",
+          toolName = "run_script_suite",
+          summary = "Run a Hexana test suite (.test.js files) and report results.",
+          groups = setOf(HexanaCliToolGroup.SCRIPTING),
+          inputModes = setOf(),
+          outputFormats = setOf(HexanaCliOutputFormat.RAW),
+          defaultOutputFormat = HexanaCliOutputFormat.RAW,
+          defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
+          executionStatus = HexanaCliExecutionStatus.EXECUTABLE,
+        ),
+        HexanaCliToolSpec(
           commandName = "wasm-to-wat",
           toolName = "wasm_to_wat",
           summary = "Convert a `.wasm` module to WebAssembly text format.",

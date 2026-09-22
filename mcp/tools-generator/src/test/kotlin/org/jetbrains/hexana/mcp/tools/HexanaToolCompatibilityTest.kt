@@ -371,13 +371,18 @@ class HexanaToolCompatibilityTest {
         // inputs and script argv, baseline flags (--baselines-dir, --update-baselines),
         // --sarif-out, and the sarif output capability. All additions are additive with
         // defaults; existing inputs, outputs, and bounds are unchanged.
-        const val EXPECTED_SEMANTIC = "971d6ac9784aa8c9f19b0fe0ec5797f7f205d6d2c27c7f7bdcd5bcc4e0cc920d"
+        // Reviewed: `run_script_suite` added as a CLI-only executable tool of the
+        // hexana-cli-script product (runs .test.js suite files, reports results; not in
+        // any MCP or standalone profile). Its suiteFiles input is a positional parameter,
+        // and the guidance text describes the ESM-only import resolution. Combined here
+        // with the field-presence snapshot extension that arrived from master.
+        const val EXPECTED_SEMANTIC = "5400f3de10d8700b3425c6d0e20e09cc5f19626403f010935639f275a02818e8"
         const val EXPECTED_IDEA = "b3d01605c58323500af1b4e1eeabfa8b6ff2e4fb659bfccac35c9869c379d378"
         const val EXPECTED_STANDALONE = "0395327fb451b08908345ce4e59bd1cf97bb05dd4bb1cb2165679a2744dd8b44"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"
         const val EXPECTED_MCP_PRODUCTS = "13bc46a83aa5707e526842837ab9f0ac472229483024dba827b7cc35014f8903"
-        const val EXPECTED_CLI = "098ff1435ae4b6381b7d45560a816957de87aef48fc918156c5e02c7ecf1c78d"
+        const val EXPECTED_CLI = "60d6436c68d95f34199144e2946a1fc3f5815ce3b9f8c624e37a424833451473"
         const val EXPECTED_HEXANA_CLI = "db8dba08f15faf3153d25f51a7cd530ef2fab2aa343964ff00be4450d361150b"
-        const val EXPECTED_HEXANA_CLI_SCRIPT = "11c2f56233795f1ee126dd501bea91e4152b56ef57a975a2507b895b72c5cabd"
+        const val EXPECTED_HEXANA_CLI_SCRIPT = "5ae8d15bdd2814e7e50481a8fee97ccc30884f02b22e3e84fe723b57f1b56b23"
     }
 }

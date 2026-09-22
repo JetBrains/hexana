@@ -124,6 +124,7 @@ class HexanaToolsTest {
                 "search_binary_functions",
                 "query_binary",
                 "run_binary_script",
+                "run_script_suite",
                 "wasm_to_wat",
                 "summarize_module",
                 "list_enabled_features",
@@ -207,7 +208,7 @@ class HexanaToolsTest {
         assertTrue(mcpProfile("default").toolIds.intersect(mcpProfile("advanced").toolIds.toSet()).isEmpty())
         assertTrue(mcpProfile("default").toolIds.intersect(mcpProfile("scripting").toolIds.toSet()).isEmpty())
         assertTrue(mcpProfile("advanced").toolIds.intersect(mcpProfile("scripting").toolIds.toSet()).isEmpty())
-        assertEquals(31, HexanaCliTools.size)
+        assertEquals(32, HexanaCliTools.size)
         assertTrue(HexanaStandaloneTools.all {
             it.standaloneHandler.methodName.matches(Regex("^[A-Za-z_][A-Za-z0-9_]*$"))
         })
@@ -262,9 +263,9 @@ class HexanaToolsTest {
             product.id to HexanaCliTools.filter { product.id in it.binding.products }.map { it.name }
         }
         assertEquals(listOf("summarize_binary", "wasm_to_wat", "summarize_module"), products.getValue(HexanaCliProductSpec.id))
-        assertEquals(listOf("run_binary_script"), products.getValue(HexanaCliScriptProductSpec.id))
+        assertEquals(listOf("run_binary_script", "run_script_suite"), products.getValue(HexanaCliScriptProductSpec.id))
         val executable = HexanaCliTools.filter { it.binding.executionStatus == CliExecutionStatus.Executable }
-        assertEquals(4, executable.size)
+        assertEquals(5, executable.size)
         assertTrue(executable.all { it.inputModel != null })
         assertEquals(OutputConversionCapability.Pretty, HexanaCliTools.single { it.name == "summarize_module" }.binding.defaultOutput)
     }
@@ -687,6 +688,7 @@ class HexanaToolsTest {
                     OutputConversionCapability.RawText,
                     OutputConversionCapability.Sarif,
                 )
+                "run_script_suite" -> setOf(OutputConversionCapability.RawText)
                 else -> setOf(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper)
             }
             assertEquals(

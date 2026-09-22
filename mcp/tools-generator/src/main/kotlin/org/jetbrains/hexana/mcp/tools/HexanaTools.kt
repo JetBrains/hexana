@@ -2,7 +2,7 @@ package org.jetbrains.hexana.mcp.tools
 
 private val HEXANA_TOOL_ORDER = listOf(
     SummarizeBinaryToolId, ListBinaryFunctionsToolId, SearchBinaryFunctionsToolId, QueryBinaryToolId,
-    RunBinaryScriptToolId, WasmToWatToolId, SummarizeModuleToolId, ListEnabledFeaturesToolId,
+    RunBinaryScriptToolId, RunScriptSuiteToolId, WasmToWatToolId, SummarizeModuleToolId, ListEnabledFeaturesToolId,
     GetEntrypointPolicyToolId, ListRequiredProposalsToolId, DiffRequiredProposalsToolId,
     CheckRuntimeCompatibilityToolId, CheckComponentCompatibilityToolId, ResolveComponentDependenciesToolId,
     ListComponentSurfaceToolId, PlanAbiBindingRegenerationToolId, CheckMemoryContractToolId,

@@ -338,6 +338,16 @@ private val CLI_TOOL_BINDINGS = listOf(
         unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
     ),
     cliToolBinding(
+        RunScriptSuiteToolId, "test", ToolGroup.Scripting, ToolOutputPolicy.ToolDefined,
+        executionStatus = CliExecutionStatus.Executable,
+        defaultOutput = OutputConversionCapability.RawText,
+        products = setOf(HexanaCliScriptProductSpec.id),
+        inputModel = toolInputModel {
+            param(name = "suiteFiles")
+        },
+        unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
+    ),
+    cliToolBinding(
         WasmToWatToolId, "wasm-to-wat", ToolGroup.Converters, ToolOutputPolicy.ToolDefined,
         executionStatus = CliExecutionStatus.Executable,
         defaultOutput = OutputConversionCapability.RawText,

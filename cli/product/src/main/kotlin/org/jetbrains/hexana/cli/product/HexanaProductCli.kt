@@ -171,6 +171,14 @@ public class HexanaProductCli(
         var baselinesDir: Path? = null
         var updateBaselines = false
         var sarifOut: Path? = null
+        // Suite-test flags (only for run_script_suite / "test" command)
+        val isSuite = spec.isSuiteTool
+        val suiteFiles = mutableListOf<String>()
+        val suiteArtifacts = mutableMapOf<String, String>()
+        var suiteLibRoot: String? = null
+        var suiteSeed: String? = null
+        var suiteTestTimeoutMillis: Long? = null
+        var suiteJUnitReportPath: Path? = null
 
         while (args.isNotEmpty()) {
             val arg = args.removeAt(0)
@@ -227,14 +235,55 @@ public class HexanaProductCli(
                     scriptArgs += args.toList()
                     args.clear()
                 }
+                // Suite-test flags (only parsed for the "test" command)
+                "--artifact" -> {
+                    requireSuiteOption(spec, arg)
+                    val token = args.requireValue(arg)
+                    val eqIdx = token.indexOf('=')
+                    if (eqIdx <= 0 || eqIdx == token.lastIndex) {
+                        throw ProductUsageException("$arg value must be role=path, got: $token")
+                    }
+                    val role = token.substring(0, eqIdx)
+                    val path = token.substring(eqIdx + 1)
+                    suiteArtifacts[role] = path
+                }
+                "--lib-root" -> {
+                    requireSuiteOption(spec, arg)
+                    suiteLibRoot = args.requireValue(arg)
+                }
+                "--seed" -> {
+                    requireSuiteOption(spec, arg)
+                    val seed = args.requireValue(arg)
+                    if (!seed.matches(Regex("[0-9a-fA-F]+"))) {
+                        throw ProductUsageException("$arg must be a hex string, got: $seed")
+                    }
+                    suiteSeed = seed
+                }
+                "--test-timeout" -> {
+                    requireSuiteOption(spec, arg)
+                    suiteTestTimeoutMillis = args.requireValue(arg).toLongOrNull()?.takeIf { it > 0 }
+                        ?: throw ProductUsageException("$arg must be a positive integer")
+                }
+                "--report" -> {
+                    requireSuiteOption(spec, arg)
+                    val reportFormat = args.requireValue(arg)
+                    if (reportFormat != "junit") {
+                        throw ProductUsageException("$arg format must be 'junit', got: $reportFormat")
+                    }
+                    suiteJUnitReportPath = Path.of(args.requireValue("--report"))
+                }
                 else -> {
                     if (arg.startsWith("--")) {
                         throw ProductUsageException("Unknown ${spec.commandName} option: $arg")
                     }
-                    if (pathArgument != null) {
-                        throw ProductUsageException("Unexpected ${spec.commandName} argument: $arg")
+                    if (isSuite) {
+                        suiteFiles += arg
+                    } else {
+                        if (pathArgument != null) {
+                            throw ProductUsageException("Unexpected ${spec.commandName} argument: $arg")
+                        }
+                        pathArgument = arg
                     }
-                    pathArgument = arg
                 }
             }
         }
@@ -243,6 +292,32 @@ public class HexanaProductCli(
         params += scriptSources.params()
 
         val resourceLimits = options.toResourceLimits()
+
+        if (isSuite) {
+            if (suiteFiles.isEmpty()) {
+                throw ProductUsageException("${spec.commandName} requires at least one suite file or directory.")
+            }
+            return ParsedCommand.Executable(
+                spec = spec,
+                // The suite executor reads suiteFiles; this selection is a
+                // non-blank placeholder satisfying the Path invariant.
+                sourceSelection = ToolInputSourceSelection.Path(suiteFiles.first()),
+                params = params,
+                format = format,
+                outputPath = outputPath,
+                resourceLimits = resourceLimits,
+                allowedRoots = options.effectiveAllowedRoots,
+                terminalWidth = null,
+                analytics = analytics,
+                suiteFiles = suiteFiles,
+                suiteArtifacts = suiteArtifacts,
+                suiteLibRoot = suiteLibRoot,
+                suiteSeed = suiteSeed,
+                suiteTestTimeoutMillis = suiteTestTimeoutMillis,
+                suiteJUnitReportPath = suiteJUnitReportPath,
+            )
+        }
+
         val sourceSelection = selectSource(
             spec = spec,
             pathArgument = pathArgument,
@@ -425,6 +500,13 @@ public data class HexanaProductToolExecutionRequest(
     val baselinesDir: Path? = null,
     val updateBaselines: Boolean = false,
     val sarifOut: Path? = null,
+    // Suite-test-only fields; ignored by non-suite executors.
+    val suiteFiles: List<String> = emptyList(),
+    val suiteArtifacts: Map<String, String> = emptyMap(),
+    val suiteLibRoot: String? = null,
+    val suiteSeed: String? = null,
+    val suiteTestTimeoutMillis: Long? = null,
+    val suiteJUnitReportPath: Path? = null,
 )
 
 private sealed class ParsedCommand(
@@ -461,6 +543,13 @@ private sealed class ParsedCommand(
         val baselinesDir: Path? = null,
         val updateBaselines: Boolean = false,
         val sarifOut: Path? = null,
+        // Suite-test-only fields; ignored by non-suite executors.
+        val suiteFiles: List<String> = emptyList(),
+        val suiteArtifacts: Map<String, String> = emptyMap(),
+        val suiteLibRoot: String? = null,
+        val suiteSeed: String? = null,
+        val suiteTestTimeoutMillis: Long? = null,
+        val suiteJUnitReportPath: Path? = null,
     ) : ParsedCommand(spec.commandName, analytics)
 }
 
@@ -478,6 +567,12 @@ private fun ParsedCommand.Executable.toExecutionRequest(): HexanaProductToolExec
         baselinesDir = baselinesDir,
         updateBaselines = updateBaselines,
         sarifOut = sarifOut,
+        suiteFiles = suiteFiles,
+        suiteArtifacts = suiteArtifacts,
+        suiteLibRoot = suiteLibRoot,
+        suiteSeed = suiteSeed,
+        suiteTestTimeoutMillis = suiteTestTimeoutMillis,
+        suiteJUnitReportPath = suiteJUnitReportPath,
     )
 
 private data class CliAnalyticsSettings(
@@ -885,7 +980,20 @@ private fun requireTerminalWidthOption(spec: HexanaCliToolSpec, optionName: Stri
 }
 
 private val HexanaCliToolSpec.requiresScriptSource: Boolean
-    get() = HexanaCliToolGroup.SCRIPTING in groups
+    get() = HexanaCliToolGroup.SCRIPTING in groups && !isSuiteTool
+
+// Suite tool has inputModes == empty and toolName "run_script_suite".
+// It does not need a binary source or a --script flag.
+private const val RUN_SCRIPT_SUITE_TOOL_NAME = "run_script_suite"
+
+private val HexanaCliToolSpec.isSuiteTool: Boolean
+    get() = toolName == RUN_SCRIPT_SUITE_TOOL_NAME
+
+private fun requireSuiteOption(spec: HexanaCliToolSpec, optionName: String) {
+    if (!spec.isSuiteTool) {
+        throw ProductUsageException("Unknown ${spec.commandName} option: $optionName")
+    }
+}
 
 private fun MutableList<String>.requireValue(optionName: String): String =
     removeFirstOrNull() ?: throw ProductUsageException("Missing value for $optionName")

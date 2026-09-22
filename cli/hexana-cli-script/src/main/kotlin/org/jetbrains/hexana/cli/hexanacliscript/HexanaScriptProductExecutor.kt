@@ -5,9 +5,13 @@ import org.jetbrains.hexana.cli.product.HexanaProductToolExecutorBinding
 import org.jetbrains.hexana.cli.product.HexanaProductToolExecutor
 import org.jetbrains.hexana.cli.product.ProductCliResult
 import org.jetbrains.hexana.cli.scripting.RUN_BINARY_SCRIPT_TOOL_NAME
+import org.jetbrains.hexana.cli.scripting.RUN_SCRIPT_SUITE_TOOL_NAME
 import org.jetbrains.hexana.cli.scripting.RunScriptCliRequest
+import org.jetbrains.hexana.cli.scripting.RunSuiteCliRequest
 import org.jetbrains.hexana.cli.scripting.runScriptCli
+import org.jetbrains.hexana.cli.scripting.runSuiteCli
 import org.jetbrains.hexana.cli.scripting.runScriptSupportedOutputFormats
+import org.jetbrains.hexana.cli.scripting.suiteSupportedOutputFormats
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
 import java.nio.file.Path
@@ -15,6 +19,7 @@ import java.nio.file.Path
 internal object HexanaScriptProductExecutor : HexanaProductToolExecutor {
     override val bindings: List<HexanaProductToolExecutorBinding> = listOf(
         HexanaProductToolExecutorBinding(RUN_BINARY_SCRIPT_TOOL_NAME, runScriptSupportedOutputFormats(), ::executeRunScript),
+        HexanaProductToolExecutorBinding(RUN_SCRIPT_SUITE_TOOL_NAME, suiteSupportedOutputFormats(), ::executeRunSuite),
     )
 
     private fun executeRunScript(request: HexanaProductToolExecutionRequest): ProductCliResult {
@@ -38,6 +43,22 @@ internal object HexanaScriptProductExecutor : HexanaProductToolExecutor {
                 updateBaselines = request.updateBaselines,
                 sarifOut = request.sarifOut,
                 toolVersion = HEXANA_CLI_SCRIPT_VERSION,
+            )
+        )
+        return ProductCliResult(stdout = rendered.stdout, stderr = rendered.stderr, exitCode = rendered.exitCode)
+    }
+
+    private fun executeRunSuite(request: HexanaProductToolExecutionRequest): ProductCliResult {
+        val rendered = runSuiteCli(
+            RunSuiteCliRequest(
+                suiteFiles = request.suiteFiles,
+                artifacts = request.suiteArtifacts,
+                libRoot = request.suiteLibRoot,
+                seed = request.suiteSeed,
+                testTimeoutMillis = request.suiteTestTimeoutMillis,
+                limits = HexanaScriptLimits.interactive(),
+                allowedFilePolicy = allowedFilePolicy(request.allowedRoots),
+                junitReportPath = request.suiteJUnitReportPath,
             )
         )
         return ProductCliResult(stdout = rendered.stdout, stderr = rendered.stderr, exitCode = rendered.exitCode)

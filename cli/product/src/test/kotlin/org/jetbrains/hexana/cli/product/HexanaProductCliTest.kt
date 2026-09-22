@@ -40,7 +40,7 @@ class HexanaProductCliTest {
         assertEquals(
             mapOf(
                 "hexana-cli" to listOf("summarize-binary", "summarize-module", "wasm-to-wat"),
-                "hexana-cli-script" to listOf("run-script"),
+                "hexana-cli-script" to listOf("run-script", "test"),
             ),
             commands,
         )
@@ -291,6 +291,64 @@ class HexanaProductCliTest {
     }
 
     @Test
+    fun artifactTokenWithoutEqualsSignReportsUsageError() {
+        val result = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI_SCRIPT, FailOnScriptExecuteExecutor).run(
+            args = arrayOf("test", "--artifact", "norole"),
+            stdin = ByteArrayInputStream(ByteArray(0)),
+            env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
+        )
+        assertEquals(USAGE_EXIT_CODE, result.exitCode, result.stderr)
+        assertTrue(result.stderr.contains("role=path"), result.stderr)
+    }
+
+    @Test
+    fun nonHexSeedReportsUsageError() {
+        val result = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI_SCRIPT, FailOnScriptExecuteExecutor).run(
+            args = arrayOf("test", "--seed", "notahexstring!"),
+            stdin = ByteArrayInputStream(ByteArray(0)),
+            env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
+        )
+        assertEquals(USAGE_EXIT_CODE, result.exitCode, result.stderr)
+        assertTrue(result.stderr.contains("hex"), result.stderr)
+    }
+
+    @Test
+    fun nonPositiveTestTimeoutReportsUsageError() {
+        for (bad in listOf("0", "-1", "notanumber")) {
+            val result = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI_SCRIPT, FailOnScriptExecuteExecutor).run(
+                args = arrayOf("test", "--test-timeout", bad),
+                stdin = ByteArrayInputStream(ByteArray(0)),
+                env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
+            )
+            assertEquals(USAGE_EXIT_CODE, result.exitCode, "expected usage error for --test-timeout $bad: ${result.stderr}")
+            assertTrue(result.stderr.contains("positive integer"), result.stderr)
+        }
+    }
+
+    @Test
+    fun reportFormatOtherThanJunitReportsUsageError() {
+        val result = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI_SCRIPT, FailOnScriptExecuteExecutor).run(
+            args = arrayOf("test", "--report", "yaml", "out.xml"),
+            stdin = ByteArrayInputStream(ByteArray(0)),
+            env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
+        )
+        assertEquals(USAGE_EXIT_CODE, result.exitCode, result.stderr)
+        assertTrue(result.stderr.contains("junit"), result.stderr)
+    }
+
+    @Test
+    fun suiteFlagOnRunScriptReportsUsageError() {
+        val result = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI_SCRIPT, FailOnScriptExecuteExecutor).run(
+            args = arrayOf("run-script", "--seed", "aabbccdd", "--script-text", "print(1)", "--stdin"),
+            stdin = ByteArrayInputStream(ByteArray(0)),
+            env = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false"),
+        )
+        assertEquals(USAGE_EXIT_CODE, result.exitCode, result.stderr)
+        assertTrue(result.stderr.contains("Unknown"), result.stderr)
+        assertTrue(result.stderr.contains("--seed"), result.stderr)
+    }
+
+    @Test
     fun telemetryDoesNotConsumeStreamingResponseBody() {
         val home = temporaryFolder.newFolder("telemetry-home")
         withUserHome(home.absolutePath) {
@@ -346,7 +404,10 @@ private object FailOnExecuteExecutor : HexanaProductToolExecutor {
 }
 
 private object FailOnScriptExecuteExecutor : HexanaProductToolExecutor {
-    override val bindings: List<HexanaProductToolExecutorBinding> = listOf(testBinding("run_binary_script"))
+    override val bindings: List<HexanaProductToolExecutorBinding> = listOf(
+        testBinding("run_binary_script"),
+        testBinding("run_script_suite"),
+    )
 }
 
 private val STANDARD_TOOL_NAMES = listOf("summarize_binary", "summarize_module", "wasm_to_wat")

@@ -252,7 +252,7 @@ class ToolDescriptionGenerationTest {
         val metadata = metadataSource()
 
         assertTrue(metadata.contains("executionStatus = HexanaCliExecutionStatus.TODO"))
-        assertEquals(4, HexanaCliTools.count { it.binding.executionStatus == CliExecutionStatus.Executable })
+        assertEquals(5, HexanaCliTools.count { it.binding.executionStatus == CliExecutionStatus.Executable })
     }
 
     @Test

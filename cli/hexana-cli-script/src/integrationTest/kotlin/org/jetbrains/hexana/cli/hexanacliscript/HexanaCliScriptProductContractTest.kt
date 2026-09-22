@@ -34,7 +34,7 @@ class HexanaCliScriptProductContractTest {
 
         val tools = target.run(listOf("tools"))
         assertSuccess(tools)
-        assertEquals(listOf("run-script"), toolNames(tools.stdout))
+        assertEquals(listOf("run-script", "test"), toolNames(tools.stdout))
 
         listOf("summarize-binary", "summarize-module", "wasm-to-wat").forEach { command ->
             assertFailure(target.run(listOf(command)), 2, "no such subcommand: $command")

@@ -166,6 +166,54 @@ class HexanaCliScriptIntegrationTest {
     }
 
     @Test
+    fun installedTestCommandRunsSuitesMapsExitCodesAndWritesJUnitReport() {
+        val passingDir = temporaryFolder.newFolder("suites-passing").toPath()
+        Files.writeString(
+            passingDir.resolve("a.test.js"),
+            """
+            describe("math", () => {
+              test("adds", () => {
+                console.log("hello-log");
+                if (1 + 1 !== 2) throw new Error("bad math");
+              });
+            });
+            """.trimIndent(),
+        )
+
+        val passing = runScriptCli("test", passingDir.toString())
+        assertEquals(0, passing.exitCode, "stdout=${passing.stdout}, stderr=${passing.stderr}")
+        assertTrue(passing.stdout.contains("Suite: a.test.js"), passing.stdout)
+        assertTrue(passing.stdout.contains("[PASS] math > adds"), passing.stdout)
+        assertTrue(passing.stdout.contains("1 passed, 0 failed, 0 skipped"), passing.stdout)
+        assertTrue(passing.stderr.contains("[log] hello-log"), passing.stderr)
+
+        val mixedDir = temporaryFolder.newFolder("suites-mixed").toPath()
+        Files.writeString(
+            mixedDir.resolve("a.test.js"),
+            "test(\"fine\", () => {});\n",
+        )
+        Files.writeString(
+            mixedDir.resolve("b.test.js"),
+            "test(\"breaks\", () => { throw new Error(\"boom\"); });\n",
+        )
+        val junit = temporaryFolder.root.toPath().resolve("junit-report.xml")
+
+        val mixed = runScriptCli("test", mixedDir.toString(), "--report", "junit", junit.toString())
+        assertEquals(1, mixed.exitCode, "stdout=${mixed.stdout}, stderr=${mixed.stderr}")
+        assertTrue(mixed.stdout.contains("[FAIL] breaks"), mixed.stdout)
+        assertTrue(mixed.stdout.contains("1 passed, 1 failed, 0 skipped"), mixed.stdout)
+        assertTrue(Files.isRegularFile(junit), "JUnit report must be written")
+        val xml = Files.readString(junit)
+        assertTrue(xml.startsWith("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"), xml)
+        assertTrue(xml.contains("<testsuite name=\"a.test.js\" tests=\"1\" failures=\"0\""), xml)
+        assertTrue(xml.contains("<testsuite name=\"b.test.js\" tests=\"1\" failures=\"1\""), xml)
+        assertTrue(xml.contains("<failure message="), xml)
+
+        val usage = runScriptCli("test")
+        assertEquals(2, usage.exitCode, "stdout=${usage.stdout}, stderr=${usage.stderr}")
+    }
+
+    @Test
     fun telemetryDefaultsToEnabledSupportsOptOutAndUsesSharedDistinctId() {
         val home = temporaryFolder.newFolder("telemetry-home").toPath()
         FakePostHogServer.start().use { server ->

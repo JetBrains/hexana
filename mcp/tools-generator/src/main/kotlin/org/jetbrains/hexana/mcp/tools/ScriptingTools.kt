@@ -2,6 +2,7 @@ package org.jetbrains.hexana.mcp.tools
 
 private const val SCRIPTING_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.scripting"
 val RunBinaryScriptToolId = ToolId("run_binary_script")
+val RunScriptSuiteToolId = ToolId("run_script_suite")
 private const val SCRIPT_SOURCE_VALIDATION =
     "Provide exactly one of `scriptPath` or `script`."
 
@@ -50,6 +51,14 @@ private val RunBinaryScriptResultClass = class_("RunBinaryScriptResult", kotlinP
     long("durationMillis").describe("Execution duration in milliseconds.")
 }
 
+private val RunScriptSuiteResultClass = class_("RunScriptSuiteResult", kotlinPackage = SCRIPTING_MODEL_PACKAGE) {
+    outputCapabilities(OutputConversionCapability.RawText)
+    int("passed").describe("Number of tests that passed.")
+    int("failed").describe("Number of tests that failed.")
+    int("skipped").describe("Number of tests that were skipped.")
+    long("durationMillis").describe("Total run duration in milliseconds.")
+}
+
 internal val ScriptingTools: List<ToolSpec> = tools {
     tool(RunBinaryScriptToolId) {
         summary = "Run a Hexana JavaScript script over a Wasm or native binary."
@@ -71,5 +80,23 @@ internal val ScriptingTools: List<ToolSpec> = tools {
         """
         input = RunBinaryScriptInput
         output = RunBinaryScriptResultClass
+    }
+    tool(RunScriptSuiteToolId) {
+        summary = "Run a Hexana test suite (.test.js files) and report results."
+        guidance = """
+            CLI-only command (`hexana-cli-script test`). Not available in MCP or IntelliJ.
+            Pass one or more .test.js file paths, or a single directory to discover all *.test.js files recursively.
+            Suite files use `describe(name, fn)` / `test(name, fn)` to declare tests. Assertion helpers are user-supplied.
+            Use `--artifact role=path` (repeatable) to bind named binaries for scripts that call `artifact("role")`.
+            Use `--lib-root <dir>` to set the library root for resolving bare ESM import specifiers from a node_modules directory.
+            Use `--seed <hex>` to fix the PRNG seed for deterministic runs.
+            Use `--test-timeout <millis>` to set the per-test timeout.
+            Use `--report junit <file>` to write a JUnit XML report alongside the console output.
+        """
+        input = class_("RunScriptSuiteInput") {
+            list("suiteFiles", of = string())
+                .describe("One or more .test.js file paths, or a single directory path.")
+        }
+        output = RunScriptSuiteResultClass
     }
 }

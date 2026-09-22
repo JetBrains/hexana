@@ -47,6 +47,7 @@ public object HexanaGeneratedCliProducts {
         ),
         "hexana-cli-script" to listOf(
           HexanaCliProductToolSelection("run_binary_script", "run-script", "ToolDefined", "RawText"),
+          HexanaCliProductToolSelection("run_script_suite", "test", "ToolDefined", "RawText"),
         ),
       )
 }

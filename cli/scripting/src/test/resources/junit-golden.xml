@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="sample.test.js" tests="3" failures="1" skipped="1" time="0.600">
+    <testcase name="passes" classname="sample.test.js" time="0.123"/>
+    <testcase name="skips" classname="sample.test.js" time="0.000">
+      <skipped/>
+    </testcase>
+    <testcase name="fails" classname="sample.test.js" time="0.456">
+      <failure message="expected true">expected true
+  at sample.test.js:7</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
