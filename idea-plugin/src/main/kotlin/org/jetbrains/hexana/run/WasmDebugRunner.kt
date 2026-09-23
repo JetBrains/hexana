@@ -238,7 +238,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
                     withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
                 }
 
-                LOG.info("Starting LLDB for Wasmtime gdbstub connection")
+                LOG.info("Starting LLDB for Wasmtime gdbstub connection: $lldbExe")
 
                 val lldbHandler = MostlySilentOSProcessHandler(lldbCommandLine)
                 val lldb = LldbCommunicator(lldbHandler)
@@ -636,7 +636,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
          * to a bare command name for PATH lookup.
          *
          * Resolution order:
-         * 1. Homebrew LLVM installations on macOS
+         * 1. Homebrew standalone LLDB, then legacy LLVM installations on macOS
          * 2. Versioned LLVM packages on Linux
          * 3. Bare `lldb` / `lldb.exe` for PATH lookup
          */
@@ -644,9 +644,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             if (!SystemInfo.isWindows) {
                 val candidates = mutableListOf<String>()
                 if (SystemInfo.isMac) {
-                    candidates.add("/opt/homebrew/opt/llvm/bin/lldb")
-                    candidates.add("/usr/local/opt/llvm/bin/lldb")
-                    candidates.add("/usr/bin/lldb")
+                    return resolveMacOsLldbPath { File(it).exists() }
                 } else {
                     // Linux: discover versioned LLVM packages by listing
                     // directories rather than hardcoding version numbers.
@@ -668,6 +666,15 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
             }
             return DEFAULT_LLDB_PATH
         }
+
+        internal fun resolveMacOsLldbPath(exists: (String) -> Boolean): String =
+            listOf(
+                "/opt/homebrew/opt/lldb/bin/lldb",
+                "/usr/local/opt/lldb/bin/lldb",
+                "/opt/homebrew/opt/llvm/bin/lldb",
+                "/usr/local/opt/llvm/bin/lldb",
+                "/usr/bin/lldb",
+            ).firstOrNull(exists) ?: "lldb"
 
         /**
          * Lists entries in [directory] whose names start with [prefix],
