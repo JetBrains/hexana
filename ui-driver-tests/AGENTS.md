@@ -67,6 +67,10 @@ Support code:
 - For debugger flows this means: selecting the "Wasm" debugger tab goes through Driver, because only the production
   `ContentManagerListener` flips stepping to instruction granularity. Session control (start-paused, step, resume, stop)
   goes through `WasmRunConfigTestHelper`, which calls the same `XDebugSession` entry points as the toolbar actions.
+- Select the debugger tab through `JBRunnerTabs`' own Driver-visible `Select Next Tab` action and confirm selection
+  through the packaged semantic probe. On macOS, both normal and strict mouse clicks can leave the selected tab on
+  Console even when Driver locates the rendered `SimpleColoredComponent`; an unconfirmed label click is not a reliable
+  user-workflow assertion.
 - Packaged probes intentionally live under `idea-plugin/src/ui-tests-framework/kotlin` and ship in the plugin ZIP used by
   these tests. Keep them tiny, assertion-oriented, and meaningful as product state rather than test-only behavior.
 - Add Compose accessibility names only for durable user-facing controls that Driver must locate or activate. Do not add

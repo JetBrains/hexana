@@ -31,6 +31,8 @@ for normal IDE workflows:
 - Settings tests should use `HexanaIde.hexanaSettings(...)` for standard settings-dialog navigation and assertions.
 - `HexanaRunConfigurationDriverTest` now uses `hexanaIde(...)` plus the run/debug DSL entry points in
   `src/test/kotlin/org/jetbrains/hexana/ui/framework/HexanaWasmRunDsl.kt`.
+- Run/debug console assertions read the full console editor document through Driver's `JEditorUiComponent.text`.
+  `getAllTexts()` only observes rendered text and loses earlier output when the console scrolls.
 - Keep the low-level launch/debug plumbing inside `HexanaRunConfigurationUiTestProbe` and the framework helpers, not
   in the visible test body. The breakpoint-inspection helper `org.jetbrains.hexana.run.WasmRunConfigTestHelper`
   lives in `idea-plugin/src/ui-tests-framework/kotlin` with the packaged probe boundary.

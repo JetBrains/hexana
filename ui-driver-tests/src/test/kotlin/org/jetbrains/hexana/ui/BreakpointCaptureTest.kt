@@ -225,7 +225,7 @@ class BreakpointCaptureTest {
     private fun resolveScreenshotDir(): Path {
         val override = System.getenv("HEXANA_CORPUS_SCREENSHOT_DIR")?.trim()?.ifBlank { null }
         val dir = override?.let { Path.of(it) }
-            ?: repoRoot().resolve("docs", "whatsnew", "captures", "0.20")
+            ?: repoRoot().resolve(Path.of("docs", "whatsnew", "captures", "0.20"))
         return dir.toAbsolutePath().normalize().createDirectories()
     }
 

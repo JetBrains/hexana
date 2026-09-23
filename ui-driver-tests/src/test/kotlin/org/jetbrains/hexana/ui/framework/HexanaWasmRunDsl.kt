@@ -1,11 +1,16 @@
 package org.jetbrains.hexana.ui.framework
 
 import com.intellij.driver.client.Driver
+import com.intellij.driver.model.OnDispatcher
+import com.intellij.driver.sdk.ActionManager
+import com.intellij.driver.sdk.ActionUtils
 import com.intellij.driver.sdk.invokeAction
 import com.intellij.driver.sdk.ui.components.UiComponent.Companion.waitFound
-import com.intellij.driver.sdk.ui.ui
+import com.intellij.driver.sdk.ui.components.common.ideFrame
+import com.intellij.driver.sdk.ui.components.common.toolwindows.debugToolWindow
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 internal fun HexanaIde.runWasm(
     wasmFileName: String,
@@ -368,14 +373,35 @@ internal class HexanaWasmRunDsl internal constructor(
         )
     }
 
-    /**
-     * Clicks the "Wasm" debugger tab through the real debugger layout, which is
-     * what switches stepping to wasm-instruction granularity.
-     */
+    /** Selects the "Wasm" debugger tab through the real debugger layout. */
     fun selectWasmDebuggerTab(timeout: Duration = 2.minutes) {
-        driver.withContext {
-            ui.x { and(byClass("SingleHeightLabel"), byAccessibleName("Wasm")) }.waitFound(timeout).click()
+        val deadline = System.nanoTime() + timeout.inWholeNanoseconds
+        var lastState = wasmDebuggerTabState()
+        if (lastState.tabSelected) return
+
+        val runnerTabs = driver.ideFrame {
+            ensureFocused()
+        }.debugToolWindow().jbRunnerTabs.waitFound(timeout)
+        runnerTabs.setFocus()
+
+        repeat(3) {
+            val nextTabAction = driver.utility(ActionUtils::class).getActions(runnerTabs.component)
+                .singleOrNull { it.getTemplateText() == "Select Next Tab" }
+                ?: error("Debugger tab container does not expose its Select Next Tab action")
+            val callback = driver.withContext(OnDispatcher.EDT) {
+                service(ActionManager::class).tryToExecute(nextTabAction, null, runnerTabs.component, null, true)
+            }
+            check(!callback.isRejected()) {
+                "Select Next Tab action was rejected: ${callback.getError()}"
+            }
+            val confirmationDeadline = minOf(deadline, System.nanoTime() + 2.seconds.inWholeNanoseconds)
+            while (System.nanoTime() < confirmationDeadline) {
+                lastState = wasmDebuggerTabState()
+                if (lastState.tabSelected) return
+                Thread.sleep(250)
+            }
         }
+        throw AssertionError("Timed out selecting the Wasm debugger tab; last state: $lastState")
     }
 
     /** Selects the LLDB-backed debugger console through the active debugger layout. */

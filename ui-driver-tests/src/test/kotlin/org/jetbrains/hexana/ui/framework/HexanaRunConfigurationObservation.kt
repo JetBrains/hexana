@@ -3,7 +3,7 @@ package org.jetbrains.hexana.ui.framework
 import com.intellij.driver.client.Driver
 import com.intellij.driver.sdk.getRunContentManager
 import com.intellij.driver.sdk.singleProject
-import com.intellij.driver.sdk.ui.UiText.Companion.asString
+import com.intellij.driver.sdk.ui.components.common.JEditorUiComponent
 import com.intellij.driver.sdk.ui.components.common.ideFrame
 import com.intellij.driver.sdk.waitFor
 import kotlin.time.Duration
@@ -130,8 +130,8 @@ private fun Driver.readRunConfigurationConsoleOutput(): String {
         var output = ""
         ideFrame {
             output = x { byClass("ConsoleViewImpl") }
-                .x { byAccessibleName("Editor") }
-                .getAllTexts().asString()
+                .x(JEditorUiComponent::class.java) { byAccessibleName("Editor") }
+                .text
         }
         return output
     } catch (t: Throwable) {

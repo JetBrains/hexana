@@ -268,6 +268,17 @@ class HexanaRunConfigurationDriverTest {
     }
 
     @Test
+    fun debugConsoleIncludesOutputOutsideTheViewport() {
+        hexanaIde(testName = "hexana-debug-console-history") {
+            val result = debugWasm("console_history.wasm")
+
+            assertTrue(result.consoleOutput.contains("console-history-start"), result.consoleOutput)
+            assertEquals(256, result.consoleOutput.lineSequence().count { it == "console-history-line" })
+            assertTrue(result.consoleOutput.contains("console-history-end"), result.consoleOutput)
+        }
+    }
+
+    @Test
     fun debugCoreModuleWithNodeJs() {
         val nodePath = HexanaRunConfigurationRuntimePreflight.ensureNodeJs()
         hexanaIde(testName = "hexana-debug-core-module-nodejs") {
