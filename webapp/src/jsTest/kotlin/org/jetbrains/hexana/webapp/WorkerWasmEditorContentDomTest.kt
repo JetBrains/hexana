@@ -100,7 +100,7 @@ class WorkerWasmEditorContentDomTest {
                         onLegacyWasmReparseRequested = {},
                         legacyWasmProviderFactory = factory,
                         scriptTabs = if (hasSemanticScript) {
-                            listOf(ScriptTabState("semantic.js", "print(\"semantic-import-count:\" + binary.imports.length)"))
+                            listOf(ScriptTabState("semantic.js", "print(\"semantic-import-count:\" + binary.imports().length)"))
                         } else emptyList(),
                     )
                 }
