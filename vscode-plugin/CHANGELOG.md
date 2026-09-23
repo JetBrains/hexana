@@ -1,4 +1,4 @@
-# Unreleased
+# 0.12.0 - 23.09.2026
 - "Hexana Binary Editor" is now offered for **any** file under "Reopen Editor With…", so a binary with an extension Hexana does not claim (an Arrow stream written as `.stream`, a firmware image as `.dat`) can be opened in it on request; files Hexana does claim keep opening in it automatically
 - support for Apache Parquet and Apache Arrow IPC files: Schema, Row Groups / Record Batches, Metadata and Data tabs, the same ones the IntelliJ plugin shows
 - support for `.tar` archives, and for gzipped ones (`.tar.gz`, `.tgz`) — entries are listed and can be opened in their own tab, including entries that are themselves gzipped
