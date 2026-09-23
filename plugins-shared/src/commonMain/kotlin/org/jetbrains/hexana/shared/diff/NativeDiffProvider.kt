@@ -1,5 +1,8 @@
 package org.jetbrains.hexana.shared.diff
 
+import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
+import org.jetbrains.hexana.parsing.common.NativeBinaryFormatDetector
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.nativeOrGenericBinaryProvider
 import org.jetbrains.hexana.shared.CellValue
@@ -11,19 +14,43 @@ import org.jetbrains.hexana.wasm.analysis.diff.DiffClass
 import org.jetbrains.hexana.wasm.analysis.diff.SizeDiffNode
 
 /**
- * Diff of two native binaries (ELF, Mach-O, PE, COFF, archives): per-section size impact.
+ * Diff of two native binaries (ELF, Mach-O, PE, COFF, archives): per-section size impact,
+ * plus — where both sides carry function records — a per-function comparison whose detail
+ * pane shows the selected function's code side by side.
  *
- * Accepts any pair where neither side is Wasm, so it is the registry's fallback. It has no
- * detail pane yet; a per-function disassembly comparison plugs in as a [DiffDetailSource].
+ * Per-function diff exists for ELF, Mach-O and COFF objects, the formats whose parsers
+ * yield `NativeFunctionRecord`s with a body range. PE images have no function table in
+ * the parser yet (no `.pdata`), and archives / fat Mach-O have no single body list, so
+ * those keep the size tab only.
+ *
+ * Accepts any pair where neither side is Wasm, so it is the registry's fallback.
  */
 class NativeDiffProvider : BinaryDiffProvider {
     override fun accepts(input: BinaryDiffInput): Boolean =
         input.leftType == BinaryProviderType.Generic && input.rightType == BinaryProviderType.Generic
 
-    override fun session(input: BinaryDiffInput): BinaryDiffSession = BinaryDiffSession(
-        tabs = listOf(DiffTab("Size Impact", "Comparing binaries…") { nativeSizeTab(input) }),
-    )
+    override fun session(input: BinaryDiffInput, host: BinaryDiffHost): BinaryDiffSession {
+        val sizeTab = DiffTab("Size Impact", "Comparing binaries…") { nativeSizeTab(input) }
+        if (!hasFunctionRecords(input.left) || !hasFunctionRecords(input.right)) {
+            return BinaryDiffSession(tabs = listOf(sizeTab))
+        }
+        val functions = NativeFunctionSession(input, host)
+        return BinaryDiffSession(
+            tabs = listOf(
+                sizeTab,
+                DiffTab("Functions", "Comparing functions…") { ctx -> nativeFunctionsTab(input, functions, ctx) },
+            ),
+            detail = NativeFunctionDetailSource(functions),
+        )
+    }
 }
+
+/** A header sniff: whether the format's parser yields function records. */
+private fun hasFunctionRecords(bytes: CommonByteBuffer): Boolean =
+    when (NativeBinaryFormatDetector.detect(bytes.duplicate())) {
+        is NativeBinaryFormat.Elf, is NativeBinaryFormat.MachO, is NativeBinaryFormat.Coff -> true
+        else -> false
+    }
 
 /** The native size diff, flattened for display — computed by [nativeSizeDiff]. */
 class NativeSizeDiff(

@@ -101,3 +101,6 @@ Append one line per write-back: date, page, what changed.
   `plugins-shared/shared/diff/`: one view per host (`BinaryDiffEditorView`, `BinaryDiffView`)
   replaces the per-format IntelliJ views and the drifted VS Code copies, ahead of per-function
   native diff.
+- 2026-09-23 — `entities/binary-diff-provider` — Native per-function diff: Functions tab + code
+  detail for ELF / Mach-O / COFF, name→hash pairing, address-masked instruction comparison, and
+  the host-supplied disassembler (`BinaryDiffHost`) — Capstone in IntelliJ, raw bytes in VS Code.

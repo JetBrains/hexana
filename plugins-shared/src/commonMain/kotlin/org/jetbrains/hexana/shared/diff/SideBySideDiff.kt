@@ -28,7 +28,14 @@ data class SideBySideRow(
  * changed hunk, removed and added lines are zipped so a modified line shows old | new
  * on one row, with any surplus occupying a single side.
  */
-fun sideBySideRows(ops: List<LineOp>): List<SideBySideRow> {
+fun sideBySideRows(ops: List<LineOp>): List<SideBySideRow> = sideBySideRows(ops, null, null)
+
+/**
+ * [sideBySideRows] over ops diffed on comparison keys, displaying different text per side:
+ * [leftText]/[rightText] map an op's `leftIdx`/`rightIdx` to the line shown. Lets a diff
+ * that ignores addresses still show them — a SAME row then has two different texts.
+ */
+fun sideBySideRows(ops: List<LineOp>, leftText: ((Int) -> String)?, rightText: ((Int) -> String)?): List<SideBySideRow> {
     val out = ArrayList<SideBySideRow>(ops.size)
     val removed = ArrayList<String>()
     val added = ArrayList<String>()
@@ -43,11 +50,13 @@ fun sideBySideRows(ops: List<LineOp>): List<SideBySideRow> {
     }
     for (op in ops) {
         when (op.kind) {
-            LineOpKind.REMOVED -> removed.add(op.text)
-            LineOpKind.ADDED -> added.add(op.text)
+            LineOpKind.REMOVED -> removed.add(op.leftIdx?.let { leftText?.invoke(it) } ?: op.text)
+            LineOpKind.ADDED -> added.add(op.rightIdx?.let { rightText?.invoke(it) } ?: op.text)
             LineOpKind.SAME -> {
                 flushHunk()
-                out.add(SideBySideRow(op.text, false, op.text, false))
+                val l = op.leftIdx?.let { leftText?.invoke(it) } ?: op.text
+                val r = op.rightIdx?.let { rightText?.invoke(it) } ?: op.text
+                out.add(SideBySideRow(l, false, r, false))
             }
         }
     }

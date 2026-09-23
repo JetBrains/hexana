@@ -29,12 +29,16 @@ kotlin {
                 implementation(project(":parsing:dex"))
                 implementation(project(":parsing:arsc"))
                 implementation(project(":debugInfo:dwarf"))
+                // `api`: BinaryDiffHost exposes the host-supplied `Disassembler`.
+                api(project(":disassembly:core"))
+                implementation(libs.kotlinx.coroutines.core)
             }
         }
 
         commonTest {
             dependencies {
                 implementation(libs.kotlin.test)
+                implementation(libs.kotlinx.coroutines.test)
             }
         }
 
@@ -43,6 +47,7 @@ kotlin {
                 implementation(libs.kotlin.test)
                 implementation(project(":parsing:parquet"))
                 implementation(project(":parsing:arrow"))
+                implementation(project(":disassembly:capstone-wasm"))
             }
         }
     }

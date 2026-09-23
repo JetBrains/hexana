@@ -33,7 +33,7 @@ class WasmModuleDiffProvider : BinaryDiffProvider {
     override fun accepts(input: BinaryDiffInput): Boolean =
         input.leftType == BinaryProviderType.Wasm && input.rightType == BinaryProviderType.Wasm
 
-    override fun session(input: BinaryDiffInput): BinaryDiffSession = BinaryDiffSession(
+    override fun session(input: BinaryDiffInput, host: BinaryDiffHost): BinaryDiffSession = BinaryDiffSession(
         tabs = listOf(
             DiffTab("Size Impact", "Comparing modules…") { ctx -> sizeTab(input, ctx) },
             DiffTab("Entities", "Comparing entities…") { ctx -> entityTab(input, ctx) },
@@ -378,7 +378,7 @@ internal class WasmWatDiffDetailSource(private val input: BinaryDiffInput) : Dif
 
     override val placeholder: String get() = "Select a function to compare its WAT."
 
-    override fun render(ref: DiffItemRef): SideBySideDiff {
+    override suspend fun render(ref: DiffItemRef): SideBySideDiff {
         val (l, r) = sources
         val li = ref.leftIndex ?: l.codeIdxForName(ref.name)
         val ri = ref.rightIndex ?: r.codeIdxForName(ref.name)

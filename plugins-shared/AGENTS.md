@@ -26,7 +26,7 @@ The module provides:
   (each a lazily computed `DiffTabContent` whose table is an ordinary `TableTabDescriptor`, tinted through
   `rowTintProvider`), an optional banner, and an optional `DiffDetailSource` rendering the selected `DiffItemRef`
   side by side. `WasmModuleDiffProvider` (Size Impact / Entities / Dispatch + WAT), `WasmComponentDiffProvider`
-  (submodules, opened through `DiffOpenRequest`), and `NativeDiffProvider` (section size impact). Rendered by
+  (submodules, opened through `DiffOpenRequest`), and `NativeDiffProvider` (section size impact, plus per-function code diff for ELF / Mach-O / COFF in `NativeFunctionDiff.kt`; the instruction decoder is host-supplied through `BinaryDiffHost`). Rendered by
   `idea-plugin`'s `BinaryDiffEditorView` and `web-ui`'s `BinaryDiffView`; see `kb/wiki/entities/binary-diff-provider.md`.
 - **LLDB output parsing** (`LldbOutputParser.kt`) — pure parsers for LLDB stop events, expression results, frame locations, function names, and WAMR debug support detection; used by both `idea-plugin` and `vscode-plugin:extension-lib`.
 - **DWARF path matching** (`DwarfPathMatcher.kt`) — platform-agnostic utilities for matching DWARF debug-info file paths against IDE/editor breakpoint paths, compilation-unit path heuristics, crate name extraction, and CU hash suffix stripping; used by both `idea-plugin` and `vscode-plugin:extension-lib`.
@@ -95,6 +95,8 @@ all bind one definition. Before this existed each host hand-maintained its own w
 - Keep `compute` and `render` synchronous and UI-free; hosts decide the threading (IntelliJ runs them on
   `Dispatchers.IO`, the single-threaded webview inline).
 - A row that navigates returns a `DiffOpenRequest` through `DiffTabContext.open` rather than calling a host API.
+- A capability only a host can supply (the native disassembler) goes on `BinaryDiffHost`, optional, with a degraded
+  path when absent — never a host-specific branch in a provider.
 
 ## KMP Targets
 
@@ -110,6 +112,7 @@ all bind one definition. Before this existed each host hand-maintained its own w
 - `:binaryProvider`
 - `:encdec`
 - `:debugInfo:dwarf`
+- `:disassembly:core` (`api` — `BinaryDiffHost` exposes its `Disassembler`)
 
 ## Runtime Compatibility Rules
 

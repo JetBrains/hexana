@@ -48,12 +48,11 @@ import org.jetbrains.hexana.disassembly.llvmobjdump.LlvmObjdumpRunResult
 import org.jetbrains.hexana.disassembly.llvmobjdump.LlvmObjdumpRunner
 import org.jetbrains.hexana.disassembly.llvmobjdump.LlvmObjdumpSyntaxMode
 import org.jetbrains.hexana.disassembly.llvmobjdump.LlvmObjdumpValidInstruction
-import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
-import org.jetbrains.hexana.parsing.common.NativeBinaryWordSize
 import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.HexanaSourceLocation
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.shared.nativeDisassemblyArch
 import org.jetbrains.hexana.providers.NativeFunctionRecord
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.elf.ElfAddressMapper
@@ -679,50 +678,8 @@ private fun NativeBinaryProvider.virtualAddressToFileOffset(virtualAddress: ULon
     }
 }
 
-private fun NativeBinaryProvider.disassemblyArch(): Arch =
-    when (val format = nativeFormat) {
-        is NativeBinaryFormat.Elf -> archFromElfMachine(format.machine, format.wordSize, (this as? ElfBinaryProvider)?.armProfile)
-        is NativeBinaryFormat.Pe -> archFromPeMachine(format.machine)
-        is NativeBinaryFormat.Coff -> archFromPeMachine(format.machine)
-        is NativeBinaryFormat.MachO -> archFromMachOCpuType(format.cpuType)
-        is NativeBinaryFormat.Archive,
-        is NativeBinaryFormat.FatMachO,
-        -> Arch.X86_64
-    }
-
-private fun archFromElfMachine(machine: Int?, wordSize: NativeBinaryWordSize, armProfile: Char? = null): Arch =
-    when (machine) {
-        0x03 -> Arch.X86
-        0x28 -> when (armProfile) {
-            'M' -> Arch.THUMB
-            else -> Arch.ARM
-        }
-        0x3E -> Arch.X86_64
-        0xB7 -> Arch.ARM64
-        0xF3 -> if (wordSize == NativeBinaryWordSize.Bits32) Arch.RISC_V_32 else Arch.RISC_V_64
-        else -> Arch.X86_64
-    }
-
-private fun archFromPeMachine(machine: Int?): Arch =
-    when (machine) {
-        0x014C -> Arch.X86
-        0x01C0, 0x01C4 -> Arch.ARM
-        0x8664 -> Arch.X86_64
-        0xAA64 -> Arch.ARM64
-        0x5032 -> Arch.RISC_V_32
-        0x5064 -> Arch.RISC_V_64
-        else -> Arch.X86_64
-    }
-
-private fun archFromMachOCpuType(cpuType: Int?): Arch =
-    when (cpuType) {
-        0x00000007 -> Arch.X86
-        0x01000007 -> Arch.X86_64
-        0x0000000C -> Arch.ARM
-        0x0100000C -> Arch.ARM64
-        0x01000018 -> Arch.RISC_V_64
-        else -> Arch.X86_64
-    }
+/** Unknown machines keep the listing's historical x86-64 fallback rather than failing outright. */
+private fun NativeBinaryProvider.disassemblyArch(): Arch = nativeDisassemblyArch(this) ?: Arch.X86_64
 
 private fun NativeBinaryProvider.disassemblyAddressToFileOffset(address: ULong, sectionName: String?): Long? {
     virtualAddressToFileOffset(address)?.let { return it }

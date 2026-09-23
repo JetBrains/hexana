@@ -59,6 +59,9 @@ import org.jetbrains.hexana.ui.createComposePanel
 import org.jetbrains.hexana.ui.panel.BinaryDiffEditorView
 import org.jetbrains.hexana.ui.panel.BinaryDiffModel
 import org.jetbrains.hexana.ui.panel.DiffLoadable
+import org.jetbrains.hexana.disassembly.capstone.CapstoneWasmDisassembler
+import org.jetbrains.hexana.disassembly.capstone.loadFromClasspath
+import org.jetbrains.hexana.shared.diff.BinaryDiffHost
 import org.jetbrains.hexana.shared.diff.BinaryDiffProviderRegistry
 import org.jetbrains.hexana.shared.diff.DiffOpenRequest
 import org.jetbrains.hexana.shared.diff.nativeSizeDiff
@@ -758,7 +761,9 @@ class HexanaFileEditor(
         }
         // Every tab is computed once, off the EDT, into editor-scoped flows that outlive
         // any tab switch; recomputed only on close + reopen (a fresh editor).
-        val model = BinaryDiffModel(provider.session(file.input), wasmDiffScope, ::openDiffRequest)
+        // Capstone decodes native functions for the per-function diff; loaded on first use.
+        val host = BinaryDiffHost(nativeDisassembler = { CapstoneWasmDisassembler.loadFromClasspath() })
+        val model = BinaryDiffModel(provider.session(file.input, host), wasmDiffScope, ::openDiffRequest)
         diffModel = model
         panel.add(createComposePanel { BinaryDiffEditorView(model, stateHolder) })
     }
@@ -766,7 +771,8 @@ class HexanaFileEditor(
     internal fun nativeDiffStateForUiTest(): NativeDiffUiTestState {
         val input = (myFile as? HexanaDiffVirtualFile)?.input
             ?: return NativeDiffUiTestState(status = "error", error = "Not a diff editor")
-        if (diffModel?.tabs?.firstOrNull()?.value == DiffLoadable.Loading) {
+        val sizeTab = diffModel?.let { m -> m.session.tabs.indexOfFirst { it.name == "Size Impact" }.takeIf { it >= 0 }?.let(m.tabs::get) }
+        if (sizeTab?.value == DiffLoadable.Loading) {
             return NativeDiffUiTestState(status = "loading")
         }
         val diff = nativeSizeDiff(input)

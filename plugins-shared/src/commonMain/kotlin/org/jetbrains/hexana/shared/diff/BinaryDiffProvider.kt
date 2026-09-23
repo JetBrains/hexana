@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.shared.diff
 
+import org.jetbrains.hexana.disassembly.core.Disassembler
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProviderType
 import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
@@ -43,8 +44,20 @@ interface BinaryDiffProvider {
     /** Cheap sniff of both sides. The first accepting provider in the registry wins. */
     fun accepts(input: BinaryDiffInput): Boolean
 
-    fun session(input: BinaryDiffInput): BinaryDiffSession
+    fun session(input: BinaryDiffInput, host: BinaryDiffHost = BinaryDiffHost()): BinaryDiffSession
 }
+
+/**
+ * Capabilities only a host can supply. Everything is optional: a provider degrades
+ * when a capability is missing rather than disappearing from that host.
+ *
+ * @param nativeDisassembler loads the instruction decoder used by the native per-function
+ *   diff. Called at most once per session, lazily. `null` means native functions are compared
+ *   as raw bytes instead of instructions.
+ */
+class BinaryDiffHost(
+    val nativeDisassembler: (suspend () -> Disassembler)? = null,
+)
 
 /**
  * One open diff.
@@ -64,12 +77,13 @@ class BinaryDiffSession(
 
 /**
  * A diff tab. [compute] does the expensive parse + diff; hosts run it off the UI thread,
- * once per open diff, and keep the result across tab switches.
+ * once per open diff, and keep the result across tab switches. It suspends only to load
+ * host capabilities (see [BinaryDiffHost]); the work itself is blocking.
  */
 class DiffTab(
     val name: String,
     val loadingMessage: String,
-    val compute: (DiffTabContext) -> DiffTabContent,
+    val compute: suspend (DiffTabContext) -> DiffTabContent,
 )
 
 /**
@@ -127,7 +141,7 @@ interface DiffDetailSource {
     /** Shown before anything is selected. */
     val placeholder: String
 
-    fun render(ref: DiffItemRef): SideBySideDiff
+    suspend fun render(ref: DiffItemRef): SideBySideDiff
 }
 
 object BinaryDiffProviderRegistry {

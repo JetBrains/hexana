@@ -29,7 +29,7 @@ class WasmComponentDiffProvider : BinaryDiffProvider {
     override fun accepts(input: BinaryDiffInput): Boolean =
         input.leftType == BinaryProviderType.WasmComponent && input.rightType == BinaryProviderType.WasmComponent
 
-    override fun session(input: BinaryDiffInput): BinaryDiffSession = BinaryDiffSession(
+    override fun session(input: BinaryDiffInput, host: BinaryDiffHost): BinaryDiffSession = BinaryDiffSession(
         tabs = listOf(DiffTab("Submodules", "Comparing components…") { ctx -> submodulesTab(input, ctx) }),
     )
 }

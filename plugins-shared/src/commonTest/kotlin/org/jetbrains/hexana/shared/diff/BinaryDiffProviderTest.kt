@@ -6,6 +6,7 @@ import org.jetbrains.hexana.shared.WasmBinaryWriter
 import org.jetbrains.hexana.wasm.analysis.diff.NodeKind
 import org.jetbrains.hexana.wasm.analysis.diff.line.LineOp
 import org.jetbrains.hexana.wasm.analysis.diff.line.LineOpKind
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -78,7 +79,7 @@ class BinaryDiffProviderTest {
     }
 
     @Test
-    fun wasmSizeTabListsModifiedFunctionAndSelectsIt() {
+    fun wasmSizeTabListsModifiedFunctionAndSelectsIt() = runTest {
         var selected: DiffItemRef? = null
         val tab = WasmModuleDiffProvider().session(input(base, head)).tabs.first()
         val content = tab.compute(DiffTabContext(select = { selected = it }))
@@ -94,7 +95,7 @@ class BinaryDiffProviderTest {
     }
 
     @Test
-    fun wasmDetailRendersSideBySideWat() {
+    fun wasmDetailRendersSideBySideWat() = runTest {
         val detail = assertNotNull(WasmModuleDiffProvider().session(input(base, head)).detail)
         val rendered = detail.render(DiffItemRef("hello", 0, 0))
         assertNull(rendered.emptyMessage)
@@ -102,14 +103,14 @@ class BinaryDiffProviderTest {
     }
 
     @Test
-    fun identicalModulesHaveNoSizeTable() {
+    fun identicalModulesHaveNoSizeTable() = runTest {
         val content = WasmModuleDiffProvider().session(input(base, base)).tabs.first().compute(DiffTabContext())
         assertNull(content.table)
         assertEquals("Modules are identical — no size changes.", content.emptyMessage)
     }
 
     @Test
-    fun nativeWithoutSizeAnalysisReportsIt() {
+    fun nativeWithoutSizeAnalysisReportsIt() = runTest {
         val session = NativeDiffProvider().session(input(byteArrayOf(1, 2, 3), byteArrayOf(4, 5, 6)))
         assertNull(session.detail)
         val content = session.tabs.single().compute(DiffTabContext())
