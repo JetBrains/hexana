@@ -78,6 +78,30 @@ class ScriptApiReferenceTest {
     }
 
     @Test
+    fun checkReportShapeMatchesTheHostReportProxy() {
+        // The report object is host-bound: GraalScriptContributionCollector.buildReportProxy
+        // exposes exactly these members to a check's run() callback. There is no
+        // cross-platform ScriptValue to compare against, so the contract is pinned by name.
+        assertEquals(
+            listOf("fail", "info", "warn"),
+            ScriptApiReference.shape(ScriptApiReference.CHECK_REPORT_SHAPE).memberNames.sorted(),
+            "documented CheckReport members must match what buildReportProxy exposes",
+        )
+    }
+
+    @Test
+    fun checkSpecShapeMatchesTheDefineCheckContract() {
+        // The spec object is user-supplied and read by the host:
+        // GraalScriptContributionCollector.parseGraalCheckSpec reads exactly these members
+        // (id and severity and run required, description optional).
+        assertEquals(
+            listOf("description", "id", "run", "severity"),
+            ScriptApiReference.shape(ScriptApiReference.CHECK_SPEC_SHAPE).memberNames.sorted(),
+            "documented CheckSpec members must match what parseGraalCheckSpec reads",
+        )
+    }
+
+    @Test
     fun everyDocumentedShapeIsCoveredByThisTest() {
         val covered = setOf(
             ScriptApiReference.BINARY_SHAPE,
@@ -87,6 +111,8 @@ class ScriptApiReferenceTest {
             ScriptApiReference.STRING_SHAPE,
             ScriptApiReference.SIZE_NODE_SHAPE,
             ScriptApiReference.TAB_SHAPE,
+            ScriptApiReference.CHECK_REPORT_SHAPE,
+            ScriptApiReference.CHECK_SPEC_SHAPE,
         )
         assertEquals(
             covered.sorted(),
