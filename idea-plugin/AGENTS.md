@@ -67,6 +67,8 @@ This module compiles sources from three locations:
 - The hex viewer UI is Compose, but it is hosted inside IntelliJ Swing components. Respect EDT/background boundaries already present in the code.
 - If you add new tabs or binary panels, check `ui/panel/*`, `StructureView.kt`, and `HexViewStateHolder.kt` together.
 - Table-based tabs (Data, Exports, Imports, Functions, Custom, Modules) are defined as UI-free `TableTabDescriptor`s in `plugins-shared` and converted to Compose panels via `TableTabBridge.kt`.
+- Diff editors (core Wasm, Component Model, native) are one `HexanaDiffVirtualFile` rendered by `ui/panel/BinaryDiffEditorView.kt`
+  from a `plugins-shared` `BinaryDiffProvider` session. Add or change diff tabs in the provider, not in this module.
 - IDE-specific per-row actions (run buttons, navigation context menus, open-in-editor click) are injected through enrichment functions in `TableTabEnricher.kt` — do not override entire panels for IDE-specific actions; add enrichment instead.
 
 ### Binary Parsing And Navigation

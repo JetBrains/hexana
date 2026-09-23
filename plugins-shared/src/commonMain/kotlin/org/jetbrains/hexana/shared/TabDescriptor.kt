@@ -89,6 +89,14 @@ enum class HexRangeRole { PRIMARY, SECONDARY }
 class HexRange(val offset: Long, val size: Int, val role: HexRangeRole = HexRangeRole.PRIMARY)
 
 /**
+ * Background tint of a table row, produced by [TableTabDescriptor.rowTintProvider].
+ *
+ * A role rather than a colour, like [HexRangeRole]: IntelliJ maps it to a theme colour and
+ * the web UI to a CSS variable. Used by the diff tables to mark what changed.
+ */
+enum class RowTint { Added, Removed, Modified, Moved }
+
+/**
  * What a [RowActionDescriptor] does, so each host can pick its own icon for it.
  *
  * Named for the action rather than for a picture, because these descriptors stay free of
@@ -222,7 +230,8 @@ class PredefinedFilter(
  *   [rowSelectionProvider] path is used unchanged.
  * @param rowDetailProvider optional provider of out-of-file bytes for a given row index.
  *   When non-null, the UI layer shows the returned [RowDetailData] in a side panel beside
- *   the hex view on row select; `null` for a row means that row has nothing to show.
+ *   the hex view on row select; `null` for a row means that row has nothing to show. * @param rowTintProvider optional background tint for a given row index; `null` for a row
+ *   means no tint. When the provider itself is `null`, rows are not tinted.
  */
 class TableTabDescriptor(
     val name: String,
@@ -248,6 +257,7 @@ class TableTabDescriptor(
     val defaultFilterShowAll: Boolean = false,
     val treemapData: TreemapData? = null,
     val rowDetailProvider: ((index: Int) -> RowDetailData?)? = null,
+    val rowTintProvider: ((index: Int) -> RowTint?)? = null,
 ) {
     companion object {
         /** Sentinel value for [defaultSortColumn] that targets the implicit ID column. */

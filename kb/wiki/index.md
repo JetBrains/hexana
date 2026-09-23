@@ -15,6 +15,9 @@ consult-first / write-back rules.
   `BinaryProvider`, why gzip stays outside it, and the per-host lists that decide which files
   reach the editor in the first place.
 
+- [[entities/binary-diff-provider]] — the shared diff model (`BinaryDiffProvider`): tabs,
+  detail pane, navigation requests, and how IntelliJ and VS Code host it.
+
 ## Sources
 
 - [[sources/hexana-0-20-whatsnew]] — 0.20 card selection, validated claims,

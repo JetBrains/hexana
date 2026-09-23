@@ -20,9 +20,9 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.hexana.breakpoints.BinaryBreakpointRegistry
 import org.jetbrains.hexana.breakpoints.BinaryIdentityProvider
 import org.jetbrains.hexana.disassembly.core.Arch
-import org.jetbrains.hexana.HexanaComponentDiffVirtualFile
 import org.jetbrains.hexana.HexanaFileEditor
-import org.jetbrains.hexana.HexanaNativeDiffVirtualFile
+import org.jetbrains.hexana.HexanaDiffVirtualFile
+import org.jetbrains.hexana.shared.diff.BinaryDiffInput
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
@@ -165,13 +165,8 @@ object HexanaEditorUiTestProbe {
         require(leftProvider.canProvideWasmModule()) { "Left file is not a Component Model binary: $leftPath" }
         require(rightProvider.canProvideWasmModule()) { "Right file is not a Component Model binary: $rightPath" }
 
-        val diffFile = HexanaComponentDiffVirtualFile(
-            name = "${left.name} ↔ ${right.name}",
-            leftBuffer = leftBytes,
-            rightBuffer = rightBytes,
-            leftName = left.name,
-            rightName = right.name,
-        )
+        val input = BinaryDiffInput(leftBytes, rightBytes, left.name, right.name)
+        val diffFile = HexanaDiffVirtualFile(input.title, input)
         return runOnEdt {
             FileEditorManager.getInstance(singleOpenProject()).openFile(diffFile, true)
             payload(
@@ -189,13 +184,13 @@ object HexanaEditorUiTestProbe {
     fun openNativeDiff(leftPath: String, rightPath: String): List<String> {
         val left = resolveAbsoluteFile(leftPath)
         val right = resolveAbsoluteFile(rightPath)
-        val diffFile = HexanaNativeDiffVirtualFile(
-            name = "${left.name} ↔ ${right.name}",
-            leftBuffer = left.contentsToByteArray().toCommonByteBuffer(),
-            rightBuffer = right.contentsToByteArray().toCommonByteBuffer(),
-            leftName = left.name,
-            rightName = right.name,
+        val input = BinaryDiffInput(
+            left.contentsToByteArray().toCommonByteBuffer(),
+            right.contentsToByteArray().toCommonByteBuffer(),
+            left.name,
+            right.name,
         )
+        val diffFile = HexanaDiffVirtualFile(input.title, input)
         return runOnEdt {
             FileEditorManager.getInstance(singleOpenProject()).openFile(diffFile, true)
             payload(
@@ -584,18 +579,18 @@ object HexanaEditorUiTestProbe {
     @JvmStatic
     fun componentDiffState(fileName: String): List<String> = runOnEdt {
         val editor = requireHexanaEditor(fileName)
-        val file = editor.myFile as? HexanaComponentDiffVirtualFile
-            ?: throw IllegalStateException("Expected component diff virtual file for '$fileName', got ${editor.myFile::class.java.name}")
+        val file = editor.myFile as? HexanaDiffVirtualFile
+            ?: throw IllegalStateException("Expected diff virtual file for '$fileName', got ${editor.myFile::class.java.name}")
         val result = WasmComponentDiffOrchestrator.diff(
-            WasmComponentBinaryProvider(file.leftBuffer.duplicate()),
-            WasmComponentBinaryProvider(file.rightBuffer.duplicate()),
+            WasmComponentBinaryProvider(file.input.left.duplicate()),
+            WasmComponentBinaryProvider(file.input.right.duplicate()),
         ) ?: throw IllegalStateException("Could not compute component diff for '$fileName'")
         payload(
             "hexana-component-diff-state",
             buildList {
                 add("fileName=${file.name}")
-                add("leftName=${file.leftName}")
-                add("rightName=${file.rightName}")
+                add("leftName=${file.input.leftName}")
+                add("rightName=${file.input.rightName}")
                 add("totalPairings=${result.pairings.size}")
                 add("differingCount=${result.differingCount}")
                 result.pairings.forEachIndexed { index, pairing ->
@@ -609,8 +604,8 @@ object HexanaEditorUiTestProbe {
     @JvmStatic
     fun nativeDiffState(fileName: String): List<String> = runOnEdt {
         val editor = requireHexanaEditor(fileName)
-        require(editor.myFile is HexanaNativeDiffVirtualFile) {
-            "Expected native diff virtual file for '$fileName', got ${editor.myFile::class.java.name}"
+        require(editor.myFile is HexanaDiffVirtualFile) {
+            "Expected diff virtual file for '$fileName', got ${editor.myFile::class.java.name}"
         }
         val state = editor.nativeDiffStateForUiTest()
         payload(

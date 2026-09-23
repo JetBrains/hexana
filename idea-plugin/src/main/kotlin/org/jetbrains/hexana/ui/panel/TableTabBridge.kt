@@ -54,8 +54,10 @@ import org.jetbrains.hexana.shared.ColumnWidth
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.PredefinedFilter
 import org.jetbrains.hexana.shared.RowSelectionData
+import org.jetbrains.hexana.shared.RowTint
 import org.jetbrains.hexana.shared.TableTabChildRows
 import org.jetbrains.hexana.shared.TableTabDescriptor
+import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
@@ -142,7 +144,7 @@ private fun GroupedTableTabContent(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TableTabContent(
+internal fun TableTabContent(
     descriptor: TableTabDescriptor,
     state: HexViewStateHolder,
     searchBarLeading: (@Composable () -> Unit)? = null,
@@ -335,10 +337,12 @@ private fun TableTabTable(
     }
 
     val actionColumnWidth = textMeasurer.measureWidthMonospace("__")
+    val rowTintColor = rowTintColors()
 
     Table(
         columns = columns,
         dataCount = effectiveRowCount,
+        rowColor = descriptor.rowTintProvider?.let { tint -> { id -> tint(toOriginal(id))?.let(rowTintColor) } } ?: { null },
         onTableFocusChanged = { focused -> state.isTableFocused = focused },
         onRowContextMenu = { rowIndex ->
             val origIndex = toOriginal(rowIndex)
@@ -732,6 +736,23 @@ internal const val MAX_MEASURED_COLUMN_CHARS = 80
 // Multi-range highlight colors (mirrors JitFileEditorView's SymRangeColor / BciHighlightColor).
 private val HexRangePrimaryColor = Color(0x223B82F6)
 private val HexRangeSecondaryColor = Color(0x553B82F6)
+
+/** Resolves [RowTint]s to the theme's diff colours; read once per composition. */
+@Composable
+private fun rowTintColors(): (RowTint) -> Color {
+    val added = HexanaTheme.diffAddedColor
+    val removed = HexanaTheme.diffRemovedColor
+    val modified = HexanaTheme.diffModifiedColor
+    val moved = HexanaTheme.diffMovedColor
+    return { tint ->
+        when (tint) {
+            RowTint.Added -> added
+            RowTint.Removed -> removed
+            RowTint.Modified -> modified
+            RowTint.Moved -> moved
+        }
+    }
+}
 
 private fun colorFor(role: HexRangeRole): Color = when (role) {
     HexRangeRole.PRIMARY -> HexRangePrimaryColor

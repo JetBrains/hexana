@@ -9,24 +9,25 @@ import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.hexana.HexanaComponentDiffVirtualFile
-import org.jetbrains.hexana.HexanaWasmDiffVirtualFile
-import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.providers.BinaryProviderType
-import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
+import org.jetbrains.hexana.HexanaDiffVirtualFile
 import org.jetbrains.hexana.providers.format.WasmSymbolMap
+import org.jetbrains.hexana.shared.diff.BinaryDiffInput
+import org.jetbrains.hexana.shared.diff.BinaryDiffProviderRegistry
 import org.jetbrains.hexana.toCommonByteBuffer
 
 /**
  * `Compare WASM With…` — pick a second `.wasm` file and open a diff against the
  * selected one.
  *
- * - Two **core** modules → a [HexanaWasmDiffVirtualFile] (size / entity / WAT diff).
- * - Two **Component Model** binaries → a [HexanaComponentDiffVirtualFile] that pairs
- *   their embedded submodules and lets the user open each differing pair in its own tab.
- * - A core-vs-component mix is rejected with a message.
+ * Opens a [HexanaDiffVirtualFile]; the format's
+ * [org.jetbrains.hexana.shared.diff.BinaryDiffProvider] decides what it shows:
  *
- * Both route through the existing [org.jetbrains.hexana.HexanaFileEditorProvider].
+ * - Two **core** modules → size / entity / dispatch tabs with a WAT side-by-side.
+ * - Two **Component Model** binaries → their embedded submodules paired, each differing
+ *   pair openable in its own tab.
+ * - A core-vs-component mix has no provider and is rejected with a message.
+ *
+ * Routes through the existing [org.jetbrains.hexana.HexanaFileEditorProvider].
  */
 class CompareWasmAction : AnAction() {
 
@@ -85,41 +86,24 @@ class CompareWasmAction : AnAction() {
             Messages.showWarningDialog(project, "Could not read one of the selected files.", "Compare WASM")
             return
         }
-        val leftType = detectType(leftBuffer)
-        val rightType = detectType(rightBuffer)
-        val diffFile: VirtualFile = when {
-            leftType == BinaryProviderType.Wasm && rightType == BinaryProviderType.Wasm ->
-                HexanaWasmDiffVirtualFile(
-                    name = "${left.name} ↔ ${right.name}",
-                    leftBuffer = leftBuffer,
-                    rightBuffer = rightBuffer,
-                    leftName = left.name,
-                    rightName = right.name,
-                    leftSymbolMap = loadSymbolMap(left),
-                    rightSymbolMap = loadSymbolMap(right),
-                )
-
-            leftType == BinaryProviderType.WasmComponent && rightType == BinaryProviderType.WasmComponent ->
-                HexanaComponentDiffVirtualFile(
-                    name = "${left.name} ↔ ${right.name}",
-                    leftBuffer = leftBuffer,
-                    rightBuffer = rightBuffer,
-                    leftName = left.name,
-                    rightName = right.name,
-                    leftSymbolMap = loadSymbolMap(left),
-                    rightSymbolMap = loadSymbolMap(right),
-                )
-
-            else -> {
-                Messages.showWarningDialog(
-                    project,
-                    "Compare a core module with a core module, or a component with a component — " +
-                        "the two selected files are not the same kind of WASM binary.",
-                    "Compare WASM",
-                )
-                return
-            }
+        val input = BinaryDiffInput(
+            left = leftBuffer,
+            right = rightBuffer,
+            leftName = left.name,
+            rightName = right.name,
+            leftSymbolMap = loadSymbolMap(left),
+            rightSymbolMap = loadSymbolMap(right),
+        )
+        if (BinaryDiffProviderRegistry.forInput(input) == null) {
+            Messages.showWarningDialog(
+                project,
+                "Compare a core module with a core module, or a component with a component — " +
+                    "the two selected files are not the same kind of WASM binary.",
+                "Compare WASM",
+            )
+            return
         }
+        val diffFile = HexanaDiffVirtualFile(input.title, input)
         FileEditorManager.getInstance(project).openFile(diffFile, true)
     }
 
@@ -147,9 +131,4 @@ class CompareWasmAction : AnAction() {
             .withFileFilter { it.extension.equals("wasm", ignoreCase = true) }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
-
-    // Duplicate so the selector's cursor advance does not disturb the buffer handed
-    // to the diff panel (which expects position 0).
-    private fun detectType(buffer: CommonByteBuffer): BinaryProviderType =
-        WasmBinaryProviderSelector.select(buffer.duplicate())
 }

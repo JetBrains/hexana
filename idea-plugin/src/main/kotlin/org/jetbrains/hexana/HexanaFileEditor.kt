@@ -47,16 +47,6 @@ import org.jetbrains.annotations.Nls
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
-import org.jetbrains.hexana.providers.format.ComponentDiffResult
-import org.jetbrains.hexana.providers.format.SubmoduleKind
-import org.jetbrains.hexana.providers.format.SubmodulePairing
-import org.jetbrains.hexana.providers.format.SubmoduleRef
-import org.jetbrains.hexana.providers.format.WasmComponentDiffOrchestrator
-import org.jetbrains.hexana.providers.format.WasmEntityDiffOrchestrator
-import org.jetbrains.hexana.providers.format.WasmDispatchSurfaceDiffOrchestrator
-import org.jetbrains.hexana.providers.format.WasmDispatchSurfaceDiffResult
-import org.jetbrains.hexana.providers.format.WasmEntityDiffResult
-import org.jetbrains.hexana.providers.format.WasmSizeDiffOrchestrator
 import org.jetbrains.hexana.sourcemap.parseSourceMap
 import org.jetbrains.hexana.sourcemap.sourceMapTextFromDataUrl
 import org.jetbrains.hexana.ui.BinaryEditorView
@@ -66,20 +56,16 @@ import org.jetbrains.hexana.ui.HexSearchField
 import org.jetbrains.hexana.ui.WASM_FUNCTION_NAV_TARGET_KEY
 import org.jetbrains.hexana.ui.WasmFunctionNavTarget
 import org.jetbrains.hexana.ui.createComposePanel
+import org.jetbrains.hexana.ui.panel.BinaryDiffEditorView
+import org.jetbrains.hexana.ui.panel.BinaryDiffModel
 import org.jetbrains.hexana.ui.panel.DiffLoadable
+import org.jetbrains.hexana.shared.diff.BinaryDiffProviderRegistry
+import org.jetbrains.hexana.shared.diff.DiffOpenRequest
+import org.jetbrains.hexana.shared.diff.nativeSizeDiff
 import org.jetbrains.hexana.ui.panel.Panel
-import org.jetbrains.hexana.ui.panel.SizeReady
 import org.jetbrains.hexana.ui.panel.decompiledContentPanel
 import org.jetbrains.hexana.ui.panel.decompiledEditorComposable
-import org.jetbrains.hexana.ui.panel.WasmComponentDiffEditorView
-import org.jetbrains.hexana.ui.panel.NativeDiffEditorView
-import org.jetbrains.hexana.ui.panel.NativeSizeReady
-import org.jetbrains.hexana.ui.panel.WasmDiffEditorView
-import org.jetbrains.hexana.ui.panel.buildNativeRows
-import org.jetbrains.hexana.ui.panel.buildRows
-import org.jetbrains.hexana.wasm.analysis.diff.BinarySizeDiff
 import org.jetbrains.hexana.ui.setupSearchActions
-import org.jetbrains.hexana.wasm.analysis.diff.summarize
 import org.jetbrains.hexana.wasm.dwarf.WasmDwarfAccessor
 import org.jetbrains.hexana.wat.LightWatFile
 import org.jetbrains.hexana.wat.WatFileset
@@ -196,11 +182,8 @@ class HexanaFileEditor(
     @Volatile var cachedIdentity: org.jetbrains.hexana.shared.BinaryIdentity? = null
         private set
 
-    private val wasmSizeDiffFlow = MutableStateFlow<DiffLoadable<SizeReady>>(DiffLoadable.Loading)
-    private val wasmEntityDiffFlow = MutableStateFlow<DiffLoadable<WasmEntityDiffResult>>(DiffLoadable.Loading)
-    private val wasmDispatchDiffFlow = MutableStateFlow<DiffLoadable<WasmDispatchSurfaceDiffResult>>(DiffLoadable.Loading)
-    private val wasmComponentDiffFlow = MutableStateFlow<DiffLoadable<ComponentDiffResult>>(DiffLoadable.Loading)
-    private val nativeSizeDiffFlow = MutableStateFlow<DiffLoadable<NativeSizeReady>>(DiffLoadable.Loading)
+    /** The open diff's editor-scoped state; null unless this editor hosts a [HexanaDiffVirtualFile]. */
+    private var diffModel: BinaryDiffModel? = null
 
     init {
         panel = UiDataProvider.wrapComponent(JPanel(BorderLayout())) { sink ->
@@ -214,26 +197,11 @@ class HexanaFileEditor(
     var binaryProvider: BinaryProvider? = null
 
     fun initPanel() {
-        // A WASM size-diff compares two modules; it has no single-file hex/edit
-        // surface, so it short-circuits the normal binary-editor wiring.
-        val diffFile = myFile as? HexanaWasmDiffVirtualFile
+        // A diff compares two binaries; it has no single-file hex/edit surface, so it
+        // short-circuits the normal binary-editor wiring.
+        val diffFile = myFile as? HexanaDiffVirtualFile
         if (diffFile != null) {
-            initWasmDiffPanel(diffFile)
-            return
-        }
-
-        // A Component Model diff compares the *submodules* of two components; like the
-        // core diff it has no single-file hex surface, so it short-circuits too.
-        val componentDiffFile = myFile as? HexanaComponentDiffVirtualFile
-        if (componentDiffFile != null) {
-            initComponentDiffPanel(componentDiffFile)
-            return
-        }
-
-        // A native binary diff compares two ELF/Mach-O/PE/etc. files by section sizes.
-        val nativeDiffFile = myFile as? HexanaNativeDiffVirtualFile
-        if (nativeDiffFile != null) {
-            initNativeDiffPanel(nativeDiffFile)
+            initDiffPanel(diffFile)
             return
         }
 
@@ -782,194 +750,50 @@ class HexanaFileEditor(
 
 
 
-    private fun initWasmDiffPanel(file: HexanaWasmDiffVirtualFile) {
-        // Compute both diffs once, off the EDT, into editor-scoped flows. These outlive
-        // any tab switch and are recomputed only on close + reopen (a fresh editor).
-        wasmDiffScope.launch {
-            val diff = WasmSizeDiffOrchestrator.diff(
-                WasmBinaryProvider(file.leftBuffer.duplicate()),
-                WasmBinaryProvider(file.rightBuffer.duplicate()),
-                file.leftSymbolMap,
-                file.rightSymbolMap,
-            )
-            wasmSizeDiffFlow.value = if (diff == null) {
-                DiffLoadable.Error(WASM_DIFF_PARSE_ERROR)
-            } else {
-                DiffLoadable.Ready(SizeReady(diff.summarize(), buildRows(diff)))
-            }
+    private fun initDiffPanel(file: HexanaDiffVirtualFile) {
+        val provider = BinaryDiffProviderRegistry.forInput(file.input)
+        if (provider == null) {
+            panel.add(createComposePanel { org.jetbrains.jewel.ui.component.Text("These two binaries are not the same kind and cannot be compared.") })
+            return
         }
-        wasmDiffScope.launch {
-            val result = WasmEntityDiffOrchestrator.diff(
-                WasmBinaryProvider(file.leftBuffer.duplicate()),
-                WasmBinaryProvider(file.rightBuffer.duplicate()),
-                file.leftSymbolMap,
-                file.rightSymbolMap,
-            )
-            wasmEntityDiffFlow.value = if (result == null) {
-                DiffLoadable.Error(WASM_DIFF_PARSE_ERROR)
-            } else {
-                DiffLoadable.Ready(result)
-            }
-        }
-        wasmDiffScope.launch {
-            val result = WasmDispatchSurfaceDiffOrchestrator.diff(
-                WasmBinaryProvider(file.leftBuffer.duplicate()),
-                WasmBinaryProvider(file.rightBuffer.duplicate()),
-                file.leftSymbolMap,
-                file.rightSymbolMap,
-            )
-            wasmDispatchDiffFlow.value = if (result == null) {
-                DiffLoadable.Error(WASM_DIFF_PARSE_ERROR)
-            } else {
-                DiffLoadable.Ready(result)
-            }
-        }
-
-        val view = createComposePanel {
-            WasmDiffEditorView(
-                leftBuffer = file.leftBuffer,
-                rightBuffer = file.rightBuffer,
-                leftName = file.leftName,
-                rightName = file.rightName,
-                sizeModelFlow = wasmSizeDiffFlow,
-                entityModelFlow = wasmEntityDiffFlow,
-                dispatchModelFlow = wasmDispatchDiffFlow,
-                leftSymbolMap = file.leftSymbolMap,
-                rightSymbolMap = file.rightSymbolMap,
-            )
-        }
-        panel.add(view)
+        // Every tab is computed once, off the EDT, into editor-scoped flows that outlive
+        // any tab switch; recomputed only on close + reopen (a fresh editor).
+        val model = BinaryDiffModel(provider.session(file.input), wasmDiffScope, ::openDiffRequest)
+        diffModel = model
+        panel.add(createComposePanel { BinaryDiffEditorView(model, stateHolder) })
     }
 
-    private fun initComponentDiffPanel(file: HexanaComponentDiffVirtualFile) {
-        // Cheap submodule enumeration + pairing, computed once off the EDT into an
-        // editor-scoped flow. The expensive per-submodule diff is deferred to a click.
-        wasmDiffScope.launch {
-            val result = WasmComponentDiffOrchestrator.diff(
-                WasmComponentBinaryProvider(file.leftBuffer.duplicate()),
-                WasmComponentBinaryProvider(file.rightBuffer.duplicate()),
-            )
-            wasmComponentDiffFlow.value = if (result == null) {
-                DiffLoadable.Error(WASM_DIFF_PARSE_ERROR)
-            } else {
-                DiffLoadable.Ready(result)
-            }
+    internal fun nativeDiffStateForUiTest(): NativeDiffUiTestState {
+        val input = (myFile as? HexanaDiffVirtualFile)?.input
+            ?: return NativeDiffUiTestState(status = "error", error = "Not a diff editor")
+        if (diffModel?.tabs?.firstOrNull()?.value == DiffLoadable.Loading) {
+            return NativeDiffUiTestState(status = "loading")
         }
-
-        val view = createComposePanel {
-            WasmComponentDiffEditorView(
-                leftName = file.leftName,
-                rightName = file.rightName,
-                modelFlow = wasmComponentDiffFlow,
-                onOpenSubmodule = { pairing -> openSubmoduleDiff(file, pairing) },
-            )
-        }
-        panel.add(view)
+        val diff = nativeSizeDiff(input)
+            ?: return NativeDiffUiTestState(status = "error", error = "Size analysis is not available for one or both binaries.")
+        return NativeDiffUiTestState(
+            status = "ready",
+            changedRowCount = diff.rows.count { it.classification != org.jetbrains.hexana.wasm.analysis.diff.DiffClass.IDENTICAL },
+            sections = diff.rows.map { "${it.classification}:${it.name}" },
+        )
     }
-
-    private fun initNativeDiffPanel(file: HexanaNativeDiffVirtualFile) {
-        wasmDiffScope.launch {
-            val leftProvider = nativeOrGenericBinaryProvider(file.leftBuffer.duplicate())
-            val rightProvider = nativeOrGenericBinaryProvider(file.rightBuffer.duplicate())
-            val leftSize = leftProvider.sizeAnalysis
-            val rightSize = rightProvider.sizeAnalysis
-            if (leftSize == null || rightSize == null) {
-                nativeSizeDiffFlow.value = DiffLoadable.Error(
-                    "Size analysis is not available for one or both binaries.",
-                )
-                return@launch
-            }
-            val diff = BinarySizeDiff.diff(leftSize, rightSize)
-            nativeSizeDiffFlow.value = DiffLoadable.Ready(
-                NativeSizeReady(
-                    baseTotal = diff.sizeA,
-                    headTotal = diff.sizeB,
-                    totalDelta = diff.delta,
-                    rows = buildNativeRows(diff),
-                ),
-            )
-        }
-
-        val view = createComposePanel {
-            NativeDiffEditorView(
-                leftName = file.leftName,
-                rightName = file.rightName,
-                sizeModelFlow = nativeSizeDiffFlow,
-            )
-        }
-        panel.add(view)
-    }
-
-    internal fun nativeDiffStateForUiTest(): NativeDiffUiTestState =
-        when (val model = nativeSizeDiffFlow.value) {
-            DiffLoadable.Loading -> NativeDiffUiTestState(status = "loading")
-            is DiffLoadable.Error -> NativeDiffUiTestState(status = "error", error = model.message)
-            is DiffLoadable.Ready -> NativeDiffUiTestState(
-                status = "ready",
-                changedRowCount = model.value.rows.count { it.classification != org.jetbrains.hexana.wasm.analysis.diff.DiffClass.IDENTICAL },
-                sections = model.value.rows.map { "${it.classification}:${it.name}" },
-            )
-        }
 
     /**
-     * Opens the clicked submodule pair in its own tab. The two submodule byte ranges are
-     * sliced from the parent component buffers and *materialized* (so the child tab's
-     * lifetime is independent of this one), then routed by kind: a core-module pair reuses
-     * the existing [HexanaWasmDiffVirtualFile] size/entity/WAT diff, a nested-component pair
-     * recurses into another [HexanaComponentDiffVirtualFile], and a one-sided submodule
-     * opens that single side's structure in a [HexanaBinaryVirtualFile].
-     *
-     * Slicing/materialization runs off the EDT; only [FileEditorManager.openFile] is on it.
+     * Opens what a diff row asked for in its own tab: another diff (a pair of submodules,
+     * routed back through the registry) or a single binary with nothing to compare against
+     * (a one-sided submodule), shown as its structure in a [HexanaBinaryVirtualFile].
      */
-    private fun openSubmoduleDiff(parent: HexanaComponentDiffVirtualFile, pairing: SubmodulePairing) {
+    private fun openDiffRequest(request: DiffOpenRequest) {
+        val child: VirtualFile = when (request) {
+            is DiffOpenRequest.Diff -> HexanaDiffVirtualFile(request.title, request.input)
+            is DiffOpenRequest.Single -> HexanaBinaryVirtualFile(request.title, request.bytes)
+        }
         wasmDiffScope.launch {
-            val child = buildSubmoduleDiffFile(parent, pairing) ?: return@launch
             withContext(Dispatchers.EDT) {
                 FileEditorManager.getInstance(myProject).openFile(child, true)
             }
         }
     }
-
-    private fun buildSubmoduleDiffFile(
-        parent: HexanaComponentDiffVirtualFile,
-        pairing: SubmodulePairing,
-    ): VirtualFile? {
-        val left = pairing.left
-        val right = pairing.right
-        return when {
-            left != null && right != null -> {
-                val leftBuffer = materializeSubmodule(parent.leftBuffer, left)
-                val rightBuffer = materializeSubmodule(parent.rightBuffer, right)
-                val leftName = "${parent.leftName}∷${left.label}"
-                val rightName = "${parent.rightName}∷${right.label}"
-                val name = "$leftName ↔ $rightName"
-                when (pairing.kind) {
-                    // A pair always shares its kind (pairing is within-kind), so the kind is
-                    // authoritative — no need to re-sniff the slice.
-                    SubmoduleKind.COMPONENT -> HexanaComponentDiffVirtualFile(
-                        name, leftBuffer, rightBuffer, leftName, rightName,
-                        parent.leftSymbolMap, parent.rightSymbolMap,
-                    )
-
-                    SubmoduleKind.CORE_MODULE -> HexanaWasmDiffVirtualFile(
-                        name, leftBuffer, rightBuffer, leftName, rightName,
-                        parent.leftSymbolMap, parent.rightSymbolMap,
-                    )
-                }
-            }
-
-            left != null -> openSingleSubmodule(parent.leftBuffer, left, parent.leftName)
-            right != null -> openSingleSubmodule(parent.rightBuffer, right, parent.rightName)
-            else -> null
-        }
-    }
-
-    /** A one-sided (added/removed) submodule has nothing to diff against — show its structure. */
-    private fun openSingleSubmodule(buffer: CommonByteBuffer, ref: SubmoduleRef, parentName: String): VirtualFile =
-        HexanaBinaryVirtualFile("$parentName∷${ref.label}", materializeSubmodule(buffer, ref))
-
-    private fun materializeSubmodule(parentBuffer: CommonByteBuffer, ref: SubmoduleRef): CommonByteBuffer =
-        parentBuffer.slice(ref.contentOffset, ref.contentSize).toByteArray().toCommonByteBuffer()
 
     override fun getComponent(): JComponent {
         return panel
@@ -1253,9 +1077,6 @@ private fun tryDecompileViaClassFileDecompiler(file: VirtualFile): CharSequence?
         null
     }
 }
-
-private const val WASM_DIFF_PARSE_ERROR =
-    "Could not analyze one or both modules (not a core WASM module?)."
 
 private fun isHexanaSupportedExtension(fileName: String): Boolean {
     val ext = fileName.substringAfterLast('.', "").lowercase()

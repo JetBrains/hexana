@@ -7,6 +7,7 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.renderComposable
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
+import org.jetbrains.hexana.shared.diff.BinaryDiffInput
 
 fun main() {
     renderComposable(rootElementId = "root") {
@@ -21,7 +22,6 @@ fun BinaryEditorApp() {
     var filePath by remember { mutableStateOf("") }
     var parentFileName by remember { mutableStateOf<String?>(null) }
     var diffPayload by remember { mutableStateOf<DiffPayload?>(null) }
-    var nativeDiffPayload by remember { mutableStateOf<NativeDiffPayload?>(null) }
     var expiredMessage by remember { mutableStateOf<String?>(null) }
     val scriptTabs = remember { mutableStateListOf<ScriptTabState>() }
     var dialogPickedPath by remember { mutableStateOf("") }
@@ -80,18 +80,12 @@ fun BinaryEditorApp() {
                         showSemanticHighlighting = message.settingValue
                     }
                 }
-                "load-diff" -> {
+                // Both kinds render the same view, which picks the format from the bytes.
+                "load-diff", "load-native-diff" -> {
                     val left = message.leftData
                     val right = message.rightData
                     if (left != null && right != null) {
                         diffPayload = DiffPayload(left, message.leftName, right, message.rightName)
-                    }
-                }
-                "load-native-diff" -> {
-                    val left = message.leftData
-                    val right = message.rightData
-                    if (left != null && right != null) {
-                        nativeDiffPayload = NativeDiffPayload(left, message.leftName, right, message.rightName)
                     }
                 }
                 "load-expired" -> {
@@ -157,25 +151,12 @@ fun BinaryEditorApp() {
             return@CompositionLocalProvider
         }
 
-        val ndp = nativeDiffPayload
-        if (ndp != null) {
-            NativeDiffView(
-                leftData = ndp.leftData,
-                leftName = ndp.leftName,
-                rightData = ndp.rightData,
-                rightName = ndp.rightName,
-            )
-            return@CompositionLocalProvider
-        }
-
         val dp = diffPayload
         if (dp != null) {
-            WasmDiffView(
-                leftData = dp.leftData,
-                leftName = dp.leftName,
-                rightData = dp.rightData,
-                rightName = dp.rightName,
-            )
+            val input = remember(dp) {
+                BinaryDiffInput(dp.leftData.toCommonByteBuffer(), dp.rightData.toCommonByteBuffer(), dp.leftName, dp.rightName)
+            }
+            BinaryDiffView(input)
             return@CompositionLocalProvider
         }
 

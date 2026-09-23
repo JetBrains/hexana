@@ -28,6 +28,7 @@ import org.w3c.dom.events.EventListener
 import org.w3c.dom.events.KeyboardEvent
 import org.w3c.dom.events.MouseEvent
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.shared.RowTint
 import org.jetbrains.hexana.shared.RowActionKind
 import org.jetbrains.hexana.shared.ColumnDescriptor
 import org.jetbrains.hexana.shared.ColumnWidth
@@ -526,6 +527,7 @@ fun TableTabContent(
 
                         PanelTableRow(
                             isHighlighted = isHighlighted,
+                            backgroundColor = descriptor.rowTintProvider?.invoke(index)?.let(::rowTintCss),
                             onClick = {
                                 applyRowDetailVsc(descriptor, index, selection)
                                 val clickAction = descriptor.rowClickAction
@@ -1048,6 +1050,14 @@ private fun FilterDropdownVsc(
  * detail clears the bytes but keeps the panel open: it says so, rather than
  * flickering shut or leaving the previous row's plaintext up.
  */
+/** The VS Code diff-editor colour for a [RowTint], falling back to a fixed tint outside VS Code. */
+internal fun rowTintCss(tint: RowTint): String = when (tint) {
+    RowTint.Added -> "var(--vscode-diffEditor-insertedTextBackground, rgba(0,255,0,0.1))"
+    RowTint.Removed -> "var(--vscode-diffEditor-removedTextBackground, rgba(255,0,0,0.1))"
+    RowTint.Modified -> "rgba(255,165,0,0.1)"
+    RowTint.Moved -> "rgba(100,149,237,0.1)"
+}
+
 private fun applyRowDetailVsc(descriptor: TableTabDescriptor, index: Int, selection: HexSelectionState) {
     val provider = descriptor.rowDetailProvider ?: return
     val detail = provider(index)

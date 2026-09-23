@@ -9,7 +9,8 @@ import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.hexana.HexanaNativeDiffVirtualFile
+import org.jetbrains.hexana.HexanaDiffVirtualFile
+import org.jetbrains.hexana.shared.diff.BinaryDiffInput
 import org.jetbrains.hexana.toCommonByteBuffer
 
 /**
@@ -70,13 +71,8 @@ class CompareBinaryAction : AnAction() {
             return
         }
 
-        val diffFile = HexanaNativeDiffVirtualFile(
-            name = "${left.name} ↔ ${right.name}",
-            leftBuffer = leftBuffer,
-            rightBuffer = rightBuffer,
-            leftName = left.name,
-            rightName = right.name,
-        )
+        val input = BinaryDiffInput(leftBuffer, rightBuffer, left.name, right.name)
+        val diffFile = HexanaDiffVirtualFile(input.title, input)
         FileEditorManager.getInstance(project).openFile(diffFile, true)
     }
 

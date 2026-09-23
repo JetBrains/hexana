@@ -21,6 +21,13 @@ The module provides:
 - **Table tab descriptors** (`TabDescriptor.kt`) — UI-free `TableTabDescriptor`, `ColumnDescriptor`, `CellValue`, `ColumnWidth`, `RowActionDescriptor`, `RowContextMenuItemDescriptor`, and `TableTabsProvider` abstraction for table-based editor tabs; consumed by both `idea-plugin` and `vscode-plugin` to render Data, Exports, Imports, Functions, Custom, and Modules tabs without duplicating format-specific logic. The descriptors carry optional action hooks (per-row action buttons, context menu items, custom row click handlers) that the consuming platform attaches via an enrichment step before rendering.
 - **Wasm table tabs** (`WasmTableTabs.kt`, `WasmComponentTableTabs.kt`) — `TableTabsProvider` implementations for core Wasm and component-model Wasm binaries.
 - **Native table tabs** (`NativeTableTabs.kt`, `NativeTableTabFormatting.kt`) — `TableTabsProvider` implementation and shared formatting helpers for ELF (Headers/Sections/Segments/Symbols/Functions/Relocations/Imports/Exports/Strings), Mach-O (Headers/Load Commands/Segments/Sections/Symbols/Dynamic Symbols/Dylibs/Relocations/Strings), Fat Mach-O (Universal/Slices), PE (Headers/Sections/Imports/Exports/Relocations/Debug/Symbols/Strings), COFF (Symbols/Strings), and archive (Strings) structure tabs.
+- **Diff providers** (`diff/`) — `BinaryDiffProvider` and `BinaryDiffProviderRegistry`, the diff counterpart of
+  `TableTabsProvider`. A provider sniffs a `BinaryDiffInput` pair and returns a `BinaryDiffSession`: the diff tabs
+  (each a lazily computed `DiffTabContent` whose table is an ordinary `TableTabDescriptor`, tinted through
+  `rowTintProvider`), an optional banner, and an optional `DiffDetailSource` rendering the selected `DiffItemRef`
+  side by side. `WasmModuleDiffProvider` (Size Impact / Entities / Dispatch + WAT), `WasmComponentDiffProvider`
+  (submodules, opened through `DiffOpenRequest`), and `NativeDiffProvider` (section size impact). Rendered by
+  `idea-plugin`'s `BinaryDiffEditorView` and `web-ui`'s `BinaryDiffView`; see `kb/wiki/entities/binary-diff-provider.md`.
 - **LLDB output parsing** (`LldbOutputParser.kt`) — pure parsers for LLDB stop events, expression results, frame locations, function names, and WAMR debug support detection; used by both `idea-plugin` and `vscode-plugin:extension-lib`.
 - **DWARF path matching** (`DwarfPathMatcher.kt`) — platform-agnostic utilities for matching DWARF debug-info file paths against IDE/editor breakpoint paths, compilation-unit path heuristics, crate name extraction, and CU hash suffix stripping; used by both `idea-plugin` and `vscode-plugin:extension-lib`.
 - **DWARF outline** (`DwarfOutline.kt`) — the row model behind the `.debug_abbrev`, `.debug_info` and
@@ -79,6 +86,15 @@ all bind one definition. Before this existed each host hand-maintained its own w
   stream because that stream is all some hosts receive (the webapp worker posts lines over a message channel; the CLI
   and MCP tool return lines as their documented result shape), so deriving it keeps every host laying output out the
   same way. Host renderers decide only how a text or table block *looks*.
+
+## Diff Rules
+
+- A format's diff tabs, row labels, summaries, key → `DiffItemRef` parsing, and detail rendering belong in a
+  `BinaryDiffProvider` here. Hosts render sessions and never branch on a format, so a new provider, tab or detail
+  pane appears in IntelliJ and VS Code at once.
+- Keep `compute` and `render` synchronous and UI-free; hosts decide the threading (IntelliJ runs them on
+  `Dispatchers.IO`, the single-threaded webview inline).
+- A row that navigates returns a `DiffOpenRequest` through `DiffTabContext.open` rather than calling a host API.
 
 ## KMP Targets
 

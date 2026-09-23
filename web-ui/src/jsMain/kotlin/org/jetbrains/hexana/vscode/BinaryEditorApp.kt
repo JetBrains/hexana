@@ -68,19 +68,10 @@ class ScriptTabState(
 }
 
 /**
- * Holds the state for a diff view: the two binary payloads and their names.
+ * Holds the state for a diff view: the two binary payloads and their names. The format
+ * (core Wasm, component, native) is sniffed from the bytes by [BinaryDiffView].
  */
 class DiffPayload(
-    val leftData: ByteArray,
-    val leftName: String,
-    val rightData: ByteArray,
-    val rightName: String,
-)
-
-/**
- * Holds the state for a native binary diff view.
- */
-class NativeDiffPayload(
     val leftData: ByteArray,
     val leftName: String,
     val rightData: ByteArray,

@@ -97,3 +97,7 @@ Append one line per write-back: date, page, what changed.
   every text file as hex, and two matching `default` editors suppress auto-opening
   entirely.
 
+- 2026-09-23 — `entities/binary-diff-provider` — Diff unified behind `BinaryDiffProvider` in
+  `plugins-shared/shared/diff/`: one view per host (`BinaryDiffEditorView`, `BinaryDiffView`)
+  replaces the per-format IntelliJ views and the drifted VS Code copies, ahead of per-function
+  native diff.
