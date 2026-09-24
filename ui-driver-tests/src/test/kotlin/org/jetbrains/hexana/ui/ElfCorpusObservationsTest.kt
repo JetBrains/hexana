@@ -18,7 +18,8 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * Opens 12 Zephyr/ZMK ELF artifacts sequentially in one IDE launch, collects observations
  * (panel names, provider kind, diff sections), takes screenshots, and writes raw data to
- * /tmp/hexana-corpus-observations.json. Fails if fewer than 12 artifact entries are collected.
+ * hexana-corpus-observations.json in the system temp directory. Fails if fewer than 12
+ * artifact entries are collected.
  *
  * Disassembly panel state is NOT observable via probe: the load result lives in Compose-local
  * `remember` state inside NativeDisassemblyPanelVirtualized and is unreachable without
@@ -598,11 +599,12 @@ class ElfCorpusObservationsTest {
             }
         }
 
+        val jsonPath = Path.of(System.getProperty("java.io.tmpdir"), "hexana-thumb-acceptance.json")
         Files.writeString(
-            Path.of("/tmp/hexana-thumb-acceptance.json"),
+            jsonPath,
             "{\n  \"generatedAt\": \"${java.time.Instant.now()}\",\n  \"rows\": ${rows.toJsonArray()}\n}\n",
         )
-        logOutput("Thumb acceptance rows written to /tmp/hexana-thumb-acceptance.json")
+        logOutput("Thumb acceptance rows written to $jsonPath")
     }
 
     /**
@@ -631,7 +633,7 @@ class ElfCorpusObservationsTest {
         firstOrNull { it.startsWith("$key=") }?.substringAfter('=')
 
     private fun appendDisassemblyInstructionsJson(results: List<DisasmDrillResult>) {
-        val jsonPath = Path.of("/tmp/hexana-corpus-observations.json")
+        val jsonPath = Path.of(System.getProperty("java.io.tmpdir"), "hexana-corpus-observations.json")
         val block = buildString {
             appendLine("  \"disassemblyInstructions\": [")
             results.forEachIndexed { index, result ->
@@ -768,7 +770,7 @@ class ElfCorpusObservationsTest {
         }
         sb.appendLine("  ]")
         sb.appendLine("}")
-        val jsonPath = Path.of("/tmp/hexana-corpus-observations.json")
+        val jsonPath = Path.of(System.getProperty("java.io.tmpdir"), "hexana-corpus-observations.json")
         Files.writeString(jsonPath, sb.toString())
         logOutput("Observations JSON written to $jsonPath")
     }
