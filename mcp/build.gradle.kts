@@ -94,6 +94,7 @@ val r8OwnedJarNames = setOf(
     "common.jar",
     "common-jvm.jar",
     "core.jar",
+    "core-jvm.jar",
     "dex-jvm.jar",
     "dwarf-jvm.jar",
     "elf-jvm.jar",
