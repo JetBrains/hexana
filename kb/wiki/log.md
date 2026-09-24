@@ -107,3 +107,6 @@ Append one line per write-back: date, page, what changed.
 - 2026-09-24 — `entities/binary-diff-provider` — Webview performance: quadratic Mach-O/COFF size
   inference fixed in `NativeFunctionDiscovery` (11.5 s → 110 ms on clangd), 32-bit body hash
   for Kotlin/JS, and cooperative async tab computation + prefetch in `BinaryDiffView`.
+- 2026-09-24 — `entities/binary-diff-provider` — AI review fixes: file-offset dedupe of native bodies,
+  lazy `DiffOpenRequest`, webview back-stack state + virtualized detail, Wasm-only routing in
+  Compare WASM, and diff release docs / QA plan (`idea-plugin/QA/13-binary-diff.md`).

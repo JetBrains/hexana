@@ -98,17 +98,21 @@ class DiffTabContext(
     val open: ((DiffOpenRequest) -> Unit)? = null,
 )
 
-/** Something a diff row asks the host to open. */
+/**
+ * Something a diff row asks the host to open.
+ *
+ * The payload is a factory, not a value: building it can copy megabytes (a submodule is
+ * sliced out of its parent and materialized), and the row click that creates the request
+ * runs on the UI thread. Hosts call it off that thread.
+ */
 sealed interface DiffOpenRequest {
     val title: String
 
     /** Another diff, e.g. a pair of submodules of two components. */
-    class Diff(val input: BinaryDiffInput) : DiffOpenRequest {
-        override val title: String get() = input.title
-    }
+    class Diff(override val title: String, val input: () -> BinaryDiffInput) : DiffOpenRequest
 
     /** A single binary with nothing to compare against, e.g. an added submodule. */
-    class Single(override val title: String, val bytes: CommonByteBuffer) : DiffOpenRequest
+    class Single(override val title: String, val bytes: () -> CommonByteBuffer) : DiffOpenRequest
 }
 
 /**

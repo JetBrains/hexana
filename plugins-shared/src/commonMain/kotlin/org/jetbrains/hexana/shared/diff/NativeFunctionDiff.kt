@@ -6,6 +6,7 @@ import org.jetbrains.hexana.disassembly.core.DecodedInstruction
 import org.jetbrains.hexana.disassembly.core.Disassembler
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.providers.NativeFunctionRecord
 import org.jetbrains.hexana.providers.nativeOrGenericBinaryProvider
 import org.jetbrains.hexana.shared.CellValue
 import org.jetbrains.hexana.shared.ColumnDescriptor
@@ -46,26 +47,38 @@ internal class NativeFunctionPair(
 
 /**
  * The function bodies of [provider], in address order, or `null` when the format has no
- * function records. Imports, nameless records and records whose range falls outside the
- * file are dropped; aliases at one address are kept once.
- *
- * Yields every [YIELD_EVERY] records: on the single-threaded webview this is what keeps
- * the UI responsive while a large binary is hashed.
+ * function records.
  */
 internal suspend fun nativeFunctionBodies(provider: NativeBinaryProvider): List<NativeFunctionBody>? {
     val records = provider.nativeFunctions ?: return null
     yield()
-    val bytes = provider.bytes
-    val fileArch = nativeDisassemblyArch(provider)
+    return nativeFunctionBodies(records, provider.bytes, nativeDisassemblyArch(provider))
+}
+
+/**
+ * Imports, nameless records and records whose range falls outside the file are dropped.
+ * Aliases (several symbols for one body) are kept once — keyed by file offset, not
+ * address: in a relocatable object each function in its own section (`-ffunction-sections`,
+ * C++ COMDAT, MSVC `/Gy`) has the same section-relative address, 0, and keying on it
+ * collapsed all of them into one.
+ *
+ * Yields every [YIELD_EVERY] records: on the single-threaded webview this is what keeps
+ * the UI responsive while a large binary is hashed.
+ */
+internal suspend fun nativeFunctionBodies(
+    records: List<NativeFunctionRecord>,
+    bytes: CommonByteBuffer,
+    fileArch: Arch?,
+): List<NativeFunctionBody> {
     val out = ArrayList<NativeFunctionBody>(records.size)
-    val seenAddresses = HashSet<ULong>()
+    val seenOffsets = HashSet<Int>()
     for ((i, record) in records.withIndex()) {
         if (i % YIELD_EVERY == YIELD_EVERY - 1) yield()
         if (record.imported || record.name.isBlank()) continue
         val offset = record.fileOffset?.takeIf { it >= 0 && it <= Int.MAX_VALUE }?.toInt() ?: continue
         val size = record.size?.takeIf { it > 0uL && it <= Int.MAX_VALUE.toULong() }?.toInt() ?: continue
         if (offset.toLong() + size > bytes.limit()) continue
-        if (!seenAddresses.add(record.virtualAddress)) continue
+        if (!seenOffsets.add(offset)) continue
         out.add(
             NativeFunctionBody(
                 name = record.demangledName?.takeIf { it.isNotBlank() } ?: record.name,
@@ -77,7 +90,7 @@ internal suspend fun nativeFunctionBodies(provider: NativeBinaryProvider): List<
             ),
         )
     }
-    out.sortBy { it.virtualAddress }
+    out.sortWith(compareBy<NativeFunctionBody> { it.virtualAddress }.thenBy { it.fileOffset })
     return out
 }
 
@@ -223,6 +236,9 @@ internal suspend fun nativeFunctionsTab(input: BinaryDiffInput, session: NativeF
     val bodies = session.bodies()
         ?: return DiffTabContent(emptyMessage = "Per-function comparison needs a symbol table on both sides.")
     val (left, right) = bodies
+    if (left.isEmpty() && right.isEmpty()) {
+        return DiffTabContent(emptyMessage = "Neither side has function symbols (stripped binaries?) — nothing to compare per function.")
+    }
     val pairs = pairNativeFunctions(left, right).toMutableList()
     yield()
     val refinedOrNull = session.withDisassembler { refineWithDisassembly(pairs, bodies, session, it) }
@@ -302,13 +318,16 @@ internal class NativeFunctionDetailSource(private val session: NativeFunctionSes
         val decodable = (l == null || l.arch != null) && (r == null || r.arch != null)
         val decoded = if (decodable) {
             session.withDisassembler { d ->
-                l?.let { decodeFunction(d, session.leftBytes, it) }.orEmpty() to r?.let { decodeFunction(d, session.rightBytes, it) }.orEmpty()
+                val leftDecoded = l?.let { decodeFunction(d, session.leftBytes, it) }.orEmpty()
+                yield()
+                leftDecoded to r?.let { decodeFunction(d, session.rightBytes, it) }.orEmpty()
             }
         } else {
             null
         }
         val (leftLines, rightLines) = decoded
             ?: (l?.let { hexLines(session.leftBytes, it) }.orEmpty() to r?.let { hexLines(session.rightBytes, it) }.orEmpty())
+        yield()
         val ops = LineDiff.diff(leftLines.map { it.key }, rightLines.map { it.key })
         val rows = sideBySideRows(ops, { leftLines[it].text }, { rightLines[it].text })
         return SideBySideDiff(if (decoded != null) title else "$title  [bytes]", rows)

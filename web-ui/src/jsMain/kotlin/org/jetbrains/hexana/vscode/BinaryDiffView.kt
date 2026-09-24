@@ -3,8 +3,10 @@ package org.jetbrains.hexana.vscode
 import androidx.compose.runtime.*
 import kotlinx.browser.window
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.web.css.*
@@ -31,29 +33,103 @@ import org.jetbrains.hexana.shared.diff.SideBySideDiff
  * A row that opens another diff (a pair of component submodules) pushes it onto an
  * in-webview stack with a back link, rather than asking the extension for a new
  * editor; a single binary (a one-sided submodule) opens through [Host.openModule].
+ * Each stack entry owns its [DiffScreenState], so going back restores the parent as it
+ * was — computed tabs, selected tab and row — instead of re-running its diff.
  */
 @Composable
 fun BinaryDiffView(input: BinaryDiffInput) {
     val host = LocalHost.current
-    val stack = remember(input) { mutableStateListOf(input) }
+    val scope = rememberCoroutineScope()
+    val stack = remember(input) {
+        val entries = mutableStateListOf<DiffScreenState>()
+        lateinit var open: (DiffOpenRequest) -> Unit
+        open = { request ->
+            scope.launch {
+                // The request's factory copies the submodule bytes out of the parent; let the
+                // click paint first and run it on the macrotask dispatcher, off the composition.
+                awaitAnimationFrame()
+                when (request) {
+                    is DiffOpenRequest.Diff -> {
+                        val child = withContext(Dispatchers.Default) { request.input() }
+                        entries.add(DiffScreenState(child, scope, open))
+                    }
+                    is DiffOpenRequest.Single -> {
+                        val bytes = withContext(Dispatchers.Default) { request.bytes().toByteArray() }
+                        host.openModule(0, request.title, bytes)
+                    }
+                }
+            }
+        }
+        entries.add(DiffScreenState(input, scope, open))
+        entries
+    }
+    DisposableEffect(input) { onDispose { stack.forEach { it.dispose() } } }
+
     val current = stack.last()
     key(current) {
         DiffScreen(
-            input = current,
-            onBack = if (stack.size > 1) ({ stack.removeAt(stack.lastIndex) }) else null,
-            open = { request ->
-                when (request) {
-                    is DiffOpenRequest.Diff -> stack.add(request.input)
-                    is DiffOpenRequest.Single -> host.openModule(0, request.title, request.bytes.toByteArray())
-                }
-            },
+            state = current,
+            onBack = if (stack.size > 1) ({ stack.removeAt(stack.lastIndex).dispose() }) else null,
         )
     }
 }
 
+/**
+ * Everything one diff screen has computed or selected, kept outside its composition so it
+ * survives being covered by a nested diff. Work runs in a child of the view's scope and is
+ * cancelled when the entry is popped.
+ */
+private class DiffScreenState(
+    val input: BinaryDiffInput,
+    parentScope: CoroutineScope,
+    open: (DiffOpenRequest) -> Unit,
+) {
+    private val job = SupervisorJob(parentScope.coroutineContext[Job])
+    private val scope = CoroutineScope(parentScope.coroutineContext + job)
+    private val jobs = HashMap<Int, Job>()
+
+    val session: BinaryDiffSession? = BinaryDiffProviderRegistry.forInput(input)?.session(input)
+    var selectedTab by mutableStateOf(0)
+    var selectedRef by mutableStateOf<DiffItemRef?>(null)
+    var rendered by mutableStateOf<Pair<DiffItemRef, SideBySideDiff>?>(null)
+    var banner by mutableStateOf<List<DiffTextLine>>(emptyList())
+    val contents = mutableStateMapOf<Int, Result<DiffTabContent>>()
+    val selection = HexSelectionState()
+    private val context = DiffTabContext(select = { selectedRef = it }, open = open)
+
+    init {
+        session?.let { s ->
+            scope.launch {
+                awaitAnimationFrame()
+                banner = withContext(Dispatchers.Default) { runCatching { s.banner() }.getOrDefault(emptyList()) }
+            }
+        }
+    }
+
+    // The webview has one thread, so "async" here means: let the loading message paint,
+    // then compute on a macrotask dispatcher, where the providers' `yield()` points hand
+    // the thread back to the browser between chunks. Each tab is computed once per entry.
+    fun ensureComputed(index: Int): Job = jobs.getOrPut(index) {
+        val s = session!!
+        scope.launch(Dispatchers.Default) {
+            val result = try {
+                Result.success(s.tabs[index].compute(context))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+            contents[index] = result
+        }
+    }
+
+    fun dispose() = job.cancel()
+}
+
 @Composable
-private fun DiffScreen(input: BinaryDiffInput, onBack: (() -> Unit)?, open: (DiffOpenRequest) -> Unit) {
-    val session = remember(input) { BinaryDiffProviderRegistry.forInput(input)?.session(input) }
+private fun DiffScreen(state: DiffScreenState, onBack: (() -> Unit)?) {
+    val input = state.input
+    val session = state.session
 
     Div({
         style {
@@ -95,51 +171,23 @@ private fun DiffScreen(input: BinaryDiffInput, onBack: (() -> Unit)?, open: (Dif
                 Text("These two binaries are not the same kind and cannot be compared.")
             }
         } else {
-            DiffSessionContent(session, open)
+            DiffSessionContent(state, session)
         }
     }
 }
 
 @Composable
-private fun DiffSessionContent(session: BinaryDiffSession, open: (DiffOpenRequest) -> Unit) {
-    var selectedTab by remember(session) { mutableStateOf(0) }
-    var selectedRef by remember(session) { mutableStateOf<DiffItemRef?>(null) }
-    val context = remember(session) { DiffTabContext(select = { selectedRef = it }, open = open) }
-    val contents = remember(session) { mutableStateMapOf<Int, Result<DiffTabContent>>() }
-    var banner by remember(session) { mutableStateOf<List<DiffTextLine>>(emptyList()) }
-    val selection = remember(session) { HexSelectionState() }
-    val scope = rememberCoroutineScope()
-    val jobs = remember(session) { HashMap<Int, Job>() }
-
-    // The webview has one thread, so "async" here means: let the loading message paint,
-    // then compute on a macrotask dispatcher, where the providers' `yield()` points hand
-    // the thread back to the browser between chunks. Each tab is computed once per session.
-    fun ensureComputed(index: Int): Job = jobs.getOrPut(index) {
-        scope.launch(Dispatchers.Default) {
-            val result = try {
-                Result.success(session.tabs[index].compute(context))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
-            contents[index] = result
-        }
-    }
-
-    LaunchedEffect(session) {
+private fun DiffSessionContent(state: DiffScreenState, session: BinaryDiffSession) {
+    val selectedTab = state.selectedTab
+    LaunchedEffect(state, selectedTab) {
         awaitAnimationFrame()
-        banner = withContext(Dispatchers.Default) { runCatching { session.banner() }.getOrDefault(emptyList()) }
-    }
-    LaunchedEffect(session, selectedTab) {
-        awaitAnimationFrame()
-        ensureComputed(selectedTab).join()
+        state.ensureComputed(selectedTab).join()
         // Prefetch the other tabs in the background, so switching to them is instant.
-        session.tabs.indices.forEach { ensureComputed(it) }
+        session.tabs.indices.forEach { state.ensureComputed(it) }
     }
 
     if (session.tabs.size > 1) {
-        DiffTabBar(session.tabs.map { it.name }, selectedTab) { selectedTab = it }
+        DiffTabBar(session.tabs.map { it.name }, selectedTab) { state.selectedTab = it }
     }
 
     Div({
@@ -152,15 +200,15 @@ private fun DiffSessionContent(session: BinaryDiffSession, open: (DiffOpenReques
             property("padding", "8px 12px")
         }
     }) {
-        if (banner.isNotEmpty()) {
-            Div({ style { property("padding-bottom", "6px") } }) { TextLines(banner) }
+        if (state.banner.isNotEmpty()) {
+            Div({ style { property("padding-bottom", "6px") } }) { TextLines(state.banner) }
             DiffDivider()
         }
-        val result = contents[selectedTab]
+        val result = state.contents[selectedTab]
         when {
             result == null -> Div { Text(session.tabs[selectedTab].loadingMessage) }
             result.isFailure -> Div { Text(result.exceptionOrNull()?.message ?: "Failed to compare.") }
-            else -> DiffTabBody(result.getOrThrow(), selection)
+            else -> DiffTabBody(result.getOrThrow(), state.selection)
         }
     }
 
@@ -170,11 +218,13 @@ private fun DiffSessionContent(session: BinaryDiffSession, open: (DiffOpenReques
                 property("border-top", "2px solid var(--hexana-border, #333)")
                 property("flex", "0 0 40%")
                 property("min-height", "120px")
-                property("overflow-y", "auto")
+                display(DisplayStyle.Flex)
+                property("flex-direction", "column")
+                property("overflow", "hidden")
                 property("padding", "8px 12px")
             }
         }) {
-            SideBySideDetailPanel(detail, selectedRef)
+            SideBySideDetailPanel(detail, state)
         }
     }
 }
@@ -223,22 +273,26 @@ private fun DiffTabBar(labels: List<String>, selected: Int, onSelect: (Int) -> U
     }
 }
 
+/**
+ * Renders the selected item side by side. The result is kept on [state], so returning to
+ * this screen does not render it again, and the rows are virtualized: a large function is
+ * tens of thousands of lines, far too many DOM nodes to create at once.
+ */
 @Composable
-private fun SideBySideDetailPanel(detail: DiffDetailSource, selected: DiffItemRef?) {
-    var rendered by remember { mutableStateOf<SideBySideDiff?>(null) }
-    LaunchedEffect(selected) {
-        rendered = null
-        if (selected != null) {
-            awaitAnimationFrame()
-            rendered = withContext(Dispatchers.Default) { detail.render(selected) }
-        }
+private fun SideBySideDetailPanel(detail: DiffDetailSource, state: DiffScreenState) {
+    val selected = state.selectedRef
+    LaunchedEffect(state, selected) {
+        if (selected == null || state.rendered?.first == selected) return@LaunchedEffect
+        state.rendered = null
+        awaitAnimationFrame()
+        state.rendered = selected to withContext(Dispatchers.Default) { detail.render(selected) }
     }
-    val diff = rendered
+    val diff = state.rendered?.takeIf { it.first == selected }?.second
     when {
         selected == null -> Div({ style { property("opacity", "0.7") } }) { Text(detail.placeholder) }
         diff == null -> Div({ style { property("opacity", "0.7") } }) { Text("Rendering…") }
         else -> {
-            Div({ style { property("font-weight", "bold"); property("padding-bottom", "4px") } }) {
+            Div({ style { property("font-weight", "bold"); property("padding-bottom", "4px"); property("flex-shrink", "0") } }) {
                 Text(diff.title)
             }
             val empty = diff.emptyMessage
@@ -246,38 +300,35 @@ private fun SideBySideDetailPanel(detail: DiffDetailSource, selected: DiffItemRe
                 Div({ style { property("opacity", "0.7") } }) { Text(empty) }
                 return
             }
-            Div({
-                style {
-                    property("overflow-y", "auto")
-                    property("flex", "1")
-                    property("min-height", "0")
-                }
-            }) {
-                for (row in diff.rows) {
-                    Div({
-                        style {
-                            display(DisplayStyle.Flex)
-                            width(100.percent)
-                        }
-                    }) {
-                        SideCell(
-                            gutter = if (row.leftRemoved) "-" else " ",
-                            text = row.left,
-                            isHighlighted = row.leftRemoved,
-                            color = "var(--vscode-diffEditor-removedTextBackground, rgba(255,0,0,0.15))",
-                        )
-                        SideCell(
-                            gutter = if (row.rightAdded) "+" else " ",
-                            text = row.right,
-                            isHighlighted = row.rightAdded,
-                            color = "var(--vscode-diffEditor-insertedTextBackground, rgba(0,255,0,0.15))",
-                        )
+            val rows = diff.rows
+            VirtualizedList(itemCount = rows.size, itemHeightPx = SIDE_BY_SIDE_ROW_HEIGHT_PX) { i ->
+                val row = rows[i]
+                Div({
+                    style {
+                        display(DisplayStyle.Flex)
+                        width(100.percent)
+                        height(100.percent)
                     }
+                }) {
+                    SideCell(
+                        gutter = if (row.leftRemoved) "-" else " ",
+                        text = row.left,
+                        isHighlighted = row.leftRemoved,
+                        color = "var(--vscode-diffEditor-removedTextBackground, rgba(255,0,0,0.15))",
+                    )
+                    SideCell(
+                        gutter = if (row.rightAdded) "+" else " ",
+                        text = row.right,
+                        isHighlighted = row.rightAdded,
+                        color = "var(--vscode-diffEditor-insertedTextBackground, rgba(0,255,0,0.15))",
+                    )
                 }
             }
         }
     }
 }
+
+private const val SIDE_BY_SIDE_ROW_HEIGHT_PX = 18
 
 @Composable
 private fun SideCell(gutter: String, text: String?, isHighlighted: Boolean, color: String) {
@@ -285,9 +336,10 @@ private fun SideCell(gutter: String, text: String?, isHighlighted: Boolean, colo
         style {
             property("flex", "1")
             property("min-width", "0")
-            property("overflow-x", "auto")
+            property("overflow", "hidden")
+            property("text-overflow", "ellipsis")
             property("white-space", "pre")
-            property("min-height", "1.4em")
+            property("line-height", "${SIDE_BY_SIDE_ROW_HEIGHT_PX}px")
             property("padding-right", "8px")
             if (isHighlighted) {
                 property("background", color)

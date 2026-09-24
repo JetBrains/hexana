@@ -13,6 +13,10 @@ import org.jetbrains.hexana.HexanaDiffVirtualFile
 import org.jetbrains.hexana.providers.format.WasmSymbolMap
 import org.jetbrains.hexana.shared.diff.BinaryDiffInput
 import org.jetbrains.hexana.shared.diff.BinaryDiffProviderRegistry
+import org.jetbrains.hexana.shared.diff.WasmComponentDiffProvider
+import org.jetbrains.hexana.shared.diff.WasmModuleDiffProvider
+import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
 import org.jetbrains.hexana.toCommonByteBuffer
 
 /**
@@ -94,13 +98,21 @@ class CompareWasmAction : AnAction() {
             leftSymbolMap = loadSymbolMap(left),
             rightSymbolMap = loadSymbolMap(right),
         )
-        if (BinaryDiffProviderRegistry.forInput(input) == null) {
-            Messages.showWarningDialog(
-                project,
+        // Only the Wasm providers: the registry's native fallback accepts any non-Wasm pair, so
+        // a `.wasm` whose header is not Wasm (truncated, mislabelled) would otherwise open as an
+        // empty native size diff instead of being reported.
+        val provider = BinaryDiffProviderRegistry.forInput(input)
+        if (provider !is WasmModuleDiffProvider && provider !is WasmComponentDiffProvider) {
+            val notWasm = listOf(left to leftBuffer, right to rightBuffer)
+                .firstOrNull { (_, buffer) -> WasmBinaryProviderSelector.select(buffer.duplicate()) == BinaryProviderType.Generic }
+                ?.first
+            val message = if (notWasm != null) {
+                "${notWasm.name} is not a WebAssembly binary (no `\\0asm` header)."
+            } else {
                 "Compare a core module with a core module, or a component with a component — " +
-                    "the two selected files are not the same kind of WASM binary.",
-                "Compare WASM",
-            )
+                    "the two selected files are not the same kind of WASM binary."
+            }
+            Messages.showWarningDialog(project, message, "Compare WASM")
             return
         }
         val diffFile = HexanaDiffVirtualFile(input.title, input)

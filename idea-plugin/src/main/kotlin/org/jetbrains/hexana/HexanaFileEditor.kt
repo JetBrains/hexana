@@ -790,11 +790,12 @@ class HexanaFileEditor(
      * (a one-sided submodule), shown as its structure in a [HexanaBinaryVirtualFile].
      */
     private fun openDiffRequest(request: DiffOpenRequest) {
-        val child: VirtualFile = when (request) {
-            is DiffOpenRequest.Diff -> HexanaDiffVirtualFile(request.title, request.input)
-            is DiffOpenRequest.Single -> HexanaBinaryVirtualFile(request.title, request.bytes)
-        }
         wasmDiffScope.launch {
+            // Materializing the request copies the submodule bytes; do it here, off the EDT.
+            val child: VirtualFile = when (request) {
+                is DiffOpenRequest.Diff -> HexanaDiffVirtualFile(request.title, request.input())
+                is DiffOpenRequest.Single -> HexanaBinaryVirtualFile(request.title, request.bytes())
+            }
             withContext(Dispatchers.EDT) {
                 FileEditorManager.getInstance(myProject).openFile(child, true)
             }

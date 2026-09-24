@@ -1,6 +1,14 @@
 package org.jetbrains.hexana.shared.diff
 
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.parsing.common.NativeByteRange
+import org.jetbrains.hexana.providers.NativeFunctionRangeConfidence
+import org.jetbrains.hexana.providers.NativeFunctionRecord
+import org.jetbrains.hexana.providers.NativeFunctionSymbolSource
+import org.jetbrains.hexana.providers.format.SubmoduleKind
+import org.jetbrains.hexana.providers.format.SubmodulePairing
+import org.jetbrains.hexana.providers.format.SubmoduleRef
+import org.jetbrains.hexana.providers.format.SubmoduleStatus
 import org.jetbrains.hexana.shared.RowTint
 import org.jetbrains.hexana.shared.WasmBinaryWriter
 import org.jetbrains.hexana.wasm.analysis.diff.NodeKind
@@ -145,5 +153,44 @@ class BinaryDiffProviderTest {
             ),
             rows,
         )
+    }
+
+    @Test
+    fun functionsInSeparateSectionsAtTheSameAddressAreAllKept() = runTest {
+        // A relocatable object built with -ffunction-sections: every function sits at
+        // section-relative address 0, each in its own section at its own file offset.
+        fun record(name: String, fileOffset: Long, symbolIndex: Int) = NativeFunctionRecord(
+            name = name, demangledName = null, symbolIndex = symbolIndex,
+            source = NativeFunctionSymbolSource.Symtab, binding = 1, sectionIndex = symbolIndex + 2,
+            sectionName = ".text.$name", imported = false, thunkLike = false,
+            virtualAddress = 0uL, fileOffset = fileOffset, size = 4uL,
+            rangeConfidence = NativeFunctionRangeConfidence.SymbolSize,
+            recordRange = NativeByteRange(symbolIndex * 24, 24),
+        )
+        val bytes = ByteArray(64) { it.toByte() }.toCommonByteBuffer()
+        val records = listOf(record("a", 16, 0), record("b", 32, 1), record("c", 48, 2), record("a_alias", 16, 3))
+        val bodies = nativeFunctionBodies(records, bytes, fileArch = null)
+        assertEquals(listOf("a", "b", "c"), bodies.map { it.name }, "one body per file offset; the alias is folded")
+    }
+
+    @Test
+    fun submoduleOpenRequestsMaterializeOnlyWhenInvoked() {
+        val parent = BinaryDiffInput(
+            ByteArray(32) { it.toByte() }.toCommonByteBuffer(),
+            ByteArray(32) { (it + 100).toByte() }.toCommonByteBuffer(),
+            "base.wasm", "head.wasm",
+        )
+        fun ref(offset: Int) = SubmoduleRef(SubmoduleKind.CORE_MODULE, offset, 4, "module[0]", 0L)
+        val pair = submoduleOpenRequest(parent, SubmodulePairing(SubmoduleKind.CORE_MODULE, SubmoduleStatus.MODIFIED, ref(8), ref(12)))
+        val diff = assertIs<DiffOpenRequest.Diff>(pair)
+        assertEquals("base.wasm∷module[0] ↔ head.wasm∷module[0]", diff.title)
+        val child = diff.input()
+        assertEquals(listOf<Byte>(8, 9, 10, 11), child.left.toByteArray().toList())
+        assertEquals(listOf<Byte>(112, 113, 114, 115), child.right.toByteArray().toList())
+
+        val added = submoduleOpenRequest(parent, SubmodulePairing(SubmoduleKind.CORE_MODULE, SubmoduleStatus.ADDED, null, ref(0)))
+        val single = assertIs<DiffOpenRequest.Single>(added)
+        assertEquals("head.wasm∷module[0]", single.title)
+        assertEquals(listOf<Byte>(100, 101, 102, 103), single.bytes().toByteArray().toList())
     }
 }

@@ -5,8 +5,11 @@
 ### Added
 - Arrow IPC **streams** open as streams. Previously every `.arrow` file was read as an IPC *file*, so a stream (conventionally `.arrows`) showed no Schema or Messages tabs; both extensions are now accepted and the format is resolved from the content.
 - Binaries whose name says nothing about their format open by content: a WebAssembly module written without a `.wasm` extension gets the full Wasm editor instead of a raw hex view, and so does a Parquet or Arrow export a tool dumped extensionless.
+- **Per-function native binary diff.** **Compare Binary With…** on two ELF, Mach-O or COFF files adds a **Functions** tab next to Size Impact: functions are paired by name, renames are recognized by identical code, and a function that only moved because the code before it grew is reported as moved rather than modified. Selecting a function shows its disassembly side by side, with shifted addresses ignored when lining up instructions. PE images (`.exe`, `.dll`) and archives keep the section size comparison only.
 
 ### Changed
+- One diff editor for every format: WASM module, Component Model and native comparisons share the same tab strip, tables (now searchable and sortable) and side-by-side detail pane.
+- **Compare Binary With…** on two `.wasm` files opens the WASM diff instead of an empty native one; **Compare WASM With…** on a file that is not WebAssembly says so instead of opening a native diff.
 - The "Send anonymous usage analytics" setting takes effect immediately instead of at the next IDE restart. Turning it off flushes whatever was already captured under consent and then tears the client down; turning it on starts reporting straight away.
 - Provider selection moved to one shared factory (`createBinaryProvider` in `binaryProvider`) that the IDE, the VS Code extension and the browser app all call. The two copies had drifted: Parquet, Arrow and `.pb` Protobuf-message files resolved only in the IDE, and tar archives only in the IDE once gzipped. Every host now supports every format the provider layer does.
 
@@ -15,6 +18,7 @@
 ### Removed
 
 ### Fixed
+- Opening a native binary with tens of thousands of symbols (e.g. an LLVM tool) no longer spends seconds inferring function sizes: the Mach-O and COFF "size = gap to the next symbol" rule was quadratic. Affects the Disassembly tabs and the diff.
 
 ### Security
 - Opening a gzipped file no longer inflates it without a bound: a payload over 128 MiB inflated is refused and the file is shown as the compressed bytes it is, instead of a small archive being able to exhaust the IDE's heap.

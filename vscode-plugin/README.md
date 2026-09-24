@@ -72,8 +72,8 @@ Opening a script from its tab attaches the type definitions next to it (`hexana-
 
 ### Binary Comparison
 
-- **Compare WASM** — compare two `.wasm` files showing size changes per section, and for functions a diff of their WAT bodies.
-- **Compare Binary** — compare two native binary files showing size changes per section.
+- **Compare WASM** — compare two `.wasm` files: size changes per section, changed entities, per-signature dispatch-table changes, and for functions a diff of their WAT bodies. Two Component Model binaries are compared submodule by submodule; click one to compare it.
+- **Compare Binary** — compare two native binary files: size changes per section and, for ELF, Mach-O and COFF, a per-function comparison (added, removed, modified, renamed) with the selected function's bytes side by side.
 
 Both commands are available from the Explorer context menu and the Command Palette.
 

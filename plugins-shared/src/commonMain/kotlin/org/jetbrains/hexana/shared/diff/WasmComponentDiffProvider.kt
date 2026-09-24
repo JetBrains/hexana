@@ -69,24 +69,29 @@ private fun submodulesTab(input: BinaryDiffInput, ctx: DiffTabContext): DiffTabC
 
 /**
  * What clicking [pairing] opens. The two byte ranges are sliced from the parent buffers and
- * *materialized*, so the opened tab's lifetime is independent of the parent diff.
+ * *materialized*, so the opened tab's lifetime is independent of the parent diff — lazily,
+ * when the host invokes the request's factory off the UI thread.
  */
 internal fun submoduleOpenRequest(parent: BinaryDiffInput, pairing: SubmodulePairing): DiffOpenRequest? {
     val left = pairing.left
     val right = pairing.right
     return when {
-        left != null && right != null -> DiffOpenRequest.Diff(
-            BinaryDiffInput(
-                left = materialize(parent.left, left),
-                right = materialize(parent.right, right),
-                leftName = "${parent.leftName}∷${left.label}",
-                rightName = "${parent.rightName}∷${right.label}",
-                leftSymbolMap = parent.leftSymbolMap,
-                rightSymbolMap = parent.rightSymbolMap,
-            ),
-        )
-        left != null -> DiffOpenRequest.Single("${parent.leftName}∷${left.label}", materialize(parent.left, left))
-        right != null -> DiffOpenRequest.Single("${parent.rightName}∷${right.label}", materialize(parent.right, right))
+        left != null && right != null -> {
+            val leftName = "${parent.leftName}∷${left.label}"
+            val rightName = "${parent.rightName}∷${right.label}"
+            DiffOpenRequest.Diff("$leftName ↔ $rightName") {
+                BinaryDiffInput(
+                    left = materialize(parent.left, left),
+                    right = materialize(parent.right, right),
+                    leftName = leftName,
+                    rightName = rightName,
+                    leftSymbolMap = parent.leftSymbolMap,
+                    rightSymbolMap = parent.rightSymbolMap,
+                )
+            }
+        }
+        left != null -> DiffOpenRequest.Single("${parent.leftName}∷${left.label}") { materialize(parent.left, left) }
+        right != null -> DiffOpenRequest.Single("${parent.rightName}∷${right.label}") { materialize(parent.right, right) }
         else -> null
     }
 }

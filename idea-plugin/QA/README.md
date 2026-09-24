@@ -19,6 +19,7 @@ Each file covers a feature area and can be executed independently.
 | [10-settings.md](10-settings.md) | Plugin settings | P1 |
 | [11-dwarf.md](11-dwarf.md) | DWARF debug info | P2 |
 | [12-cross-ide.md](12-cross-ide.md) | Cross-IDE compatibility | P1 |
+| [13-binary-diff.md](13-binary-diff.md) | WASM and native binary comparison | P1 |
 
 ## Priority Levels
 

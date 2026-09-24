@@ -1,3 +1,8 @@
+# Unreleased
+- "Compare Binary" on two ELF, Mach-O or COFF files adds a "Functions" tab: functions are paired by name (renames recognized by identical code), and selecting one shows the two versions' bytes side by side. PE images and archives keep the section size comparison only
+- "Compare WASM" gains the "Dispatch" tab (per-signature `call_indirect` candidates that entered or left the table) and Component Model comparison: submodules are paired, and clicking one opens its own comparison with a "Back" link
+- comparison tables are searchable and sortable, and every tab loads in the background, so a large binary no longer freezes the view while it is compared
+
 # 0.12.0 - 23.09.2026
 - "Hexana Binary Editor" is now offered for **any** file under "Reopen Editor With…", so a binary with an extension Hexana does not claim (an Arrow stream written as `.stream`, a firmware image as `.dat`) can be opened in it on request; files Hexana does claim keep opening in it automatically
 - support for Apache Parquet and Apache Arrow IPC files: Schema, Row Groups / Record Batches, Metadata and Data tabs, the same ones the IntelliJ plugin shows

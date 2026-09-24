@@ -96,3 +96,18 @@ over `parsing/native-fixtures`, with real Capstone).
   (every 1024 records), pairing and refine (every 64 decodes). Once the visible tab is done,
   the other tabs prefetch in the background. The provider parse itself is still one
   non-yielding step.
+
+### Review fixes (2026-09-24)
+
+- Function bodies are deduplicated by **file offset**, not address: in relocatable objects with one
+  section per function (`-ffunction-sections`, C++ COMDAT, MSVC `/Gy`) every function has address 0,
+  and keying on it merged them all into one.
+- `DiffOpenRequest` carries a factory (`input: () -> BinaryDiffInput`, `bytes: () -> CommonByteBuffer`):
+  materializing a submodule copies its bytes and the row click runs on the UI thread, so hosts
+  invoke it off that thread (IntelliJ on `wasmDiffScope`, the webview after a paint on
+  `Dispatchers.Default`).
+- The webview back stack holds a `DiffScreenState` per entry (session, computed tabs, selected tab
+  and row, rendered detail), so "Back" restores the parent instead of recomputing it; the detail
+  pane is a `VirtualizedList`.
+- **Compare WASM With…** accepts only the Wasm providers: the registry's native fallback would
+  otherwise take a `.wasm` pair whose header is not Wasm.
