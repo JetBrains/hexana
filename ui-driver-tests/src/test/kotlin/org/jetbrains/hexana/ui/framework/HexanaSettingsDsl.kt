@@ -60,10 +60,10 @@ internal class HexanaSettingsDsl internal constructor(
     private var dialog: SettingsDialogUiComponent = ideFrame.openSettingsDialog(page)
 
     fun expectControlsPresent() {
-        dialog.content {
-            waitOneText(WASM_TOOLS_LABEL, timeout = 30.seconds)
-            waitOneText(LLVM_OBJDUMP_LABEL, timeout = 30.seconds)
-        }
+        // A spotlight scroll from the search fallback can land after openSettingsPage's
+        // scroll reset and clip the top rows; scroll back to top and retry so it loses.
+        waitOneTextAtTopRetrying(WASM_TOOLS_LABEL)
+        waitOneTextAtTopRetrying(LLVM_OBJDUMP_LABEL)
         checkBox(USE_BUILT_IN_WASM_TOOLS_CHECKBOX).waitFound(30.seconds)
         checkBox(SHOW_OFFSETS_CHECKBOX).waitFound(30.seconds)
         checkBox(SEND_ANALYTICS_CHECKBOX).waitFound(30.seconds)
@@ -100,6 +100,16 @@ internal class HexanaSettingsDsl internal constructor(
         runCatching {
             dialog.closeDialog()
         }
+    }
+
+    private fun waitOneTextAtTopRetrying(expected: String) {
+        repeat(2) {
+            runCatching {
+                dialog.waitOneTextAtTop(expected, timeout = 10.seconds)
+                return
+            }
+        }
+        dialog.waitOneTextAtTop(expected, timeout = 10.seconds)
     }
 
     private fun checkBox(text: String): JCheckBoxUi =
