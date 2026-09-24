@@ -20,6 +20,10 @@
 **Steps:** Open Find Action and type "compare binaries"; open the Project view context menu on a `.wasm` file, then on an `.so`.
 **Expected:** A single **Compare Binaries With…** entry in each place (no separate WASM / Binary entries; the former ids do not show in Find Action). A shortcut previously assigned to the old Compare WASM or Compare Binary action still runs the comparison.
 
+### 13.2b Extensionless binaries
+**Steps:** Right-click an extensionless ELF executable (e.g. a Linux build output), then select two of them; repeat with a WASM module saved without `.wasm`. Then right-click a headerless `.bin` firmware image and a text file.
+**Expected:** The entry is shown for the executables and the module (**Compare Binary Files** when two are selected), and not for the `.bin` image or the text file.
+
 ### 13.3 Component diff navigation
 **Steps:** Compare two Component Model binaries. Click a **Modified** submodule, then an **Added** one.
 **Expected:** The table lists every submodule with its status. The modified pair opens as its own WASM diff tab; the added one opens as a single binary. The UI stays responsive while the submodule is extracted.

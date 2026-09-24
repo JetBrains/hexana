@@ -121,3 +121,9 @@ the bytes, and `BinaryDiffProviderRegistry.rejectionReason` phrases why a pair i
 kinds, or a `.wasm` without a Wasm header), for both hosts. The old ids stay as hidden aliases so
 bound shortcuts keep working: IntelliJ `LegacyCompareFilesAction` (in no menu, hidden from Find
 Action), VS Code commands registered but not contributed in `package.json`.
+
+In IntelliJ the entry is offered by **file type**, not extension (`CompareFilesAction.isComparable`):
+`WasmFileType` or any `NativeBinaryFileType` (ELF, Mach-O, PE incl. COFF objects, `ar`), which
+`NativeBinaryFileTypeDetector` assigns by magic — so extensionless binaries qualify and a headerless
+`.bin` does not. VS Code still offers it by extension list (plus extensionless files), since its
+`when` clauses cannot see content.

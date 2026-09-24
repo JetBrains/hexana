@@ -11,6 +11,8 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.HexanaDiffVirtualFile
+import org.jetbrains.hexana.NativeBinaryFileType
+import org.jetbrains.hexana.WasmFileType
 import org.jetbrains.hexana.providers.format.WasmSymbolMap
 import org.jetbrains.hexana.shared.diff.BinaryDiffInput
 import org.jetbrains.hexana.shared.diff.BinaryDiffProviderRegistry
@@ -115,9 +117,6 @@ open class CompareFilesAction : AnAction() {
         }
     }
 
-    /** Files offered for comparison from the Project view: WASM plus the native extensions. */
-    private fun isComparable(file: VirtualFile): Boolean =
-        !file.isDirectory && COMPARABLE_EXTENSIONS.any { file.extension.equals(it, ignoreCase = true) }
 
     private fun chooser(title: String, description: String) =
         FileChooserDescriptorFactory.singleFile()
@@ -129,11 +128,17 @@ open class CompareFilesAction : AnAction() {
     companion object {
         private const val TITLE = "Compare Binaries"
 
-        private val COMPARABLE_EXTENSIONS = setOf(
-            "wasm",
-            "o", "obj", "so", "dylib", "dll", "exe", "elf", "a", "lib",
-            "ko", "sys", "axf", "bin", "out",
-        )
+        /**
+         * Whether [file] is a binary some diff provider compares: a WASM module or component,
+         * or a native binary (ELF, Mach-O, PE, COFF object, `ar` archive).
+         *
+         * Decided by file type, not extension: [org.jetbrains.hexana.NativeBinaryFileTypeDetector]
+         * types these by their magic, so an extensionless executable or a module saved without
+         * `.wasm` qualifies, while a headerless `.bin` image — which no provider can compare —
+         * does not. Reading the cached file type keeps this cheap enough for `update`.
+         */
+        internal fun isComparable(file: VirtualFile): Boolean =
+            !file.isDirectory && (file.fileType is WasmFileType || file.fileType is NativeBinaryFileType)
     }
 }
 

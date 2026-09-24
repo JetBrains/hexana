@@ -9,7 +9,7 @@
 
 ### Changed
 - One diff editor for every format: WASM module, Component Model and native comparisons share the same tab strip, tables (now searchable and sortable) and side-by-side detail pane.
-- **Compare WASM With…** and **Compare Binary With…** are merged into one **Compare Binaries With…** action (Hexana context menu, Find Action) that picks the comparison from the files' contents. A pair that is not the same kind — or a `.wasm` that is not WebAssembly — is reported instead of opening an empty diff. Shortcuts bound to the old actions keep working.
+- **Compare WASM With…** and **Compare Binary With…** are merged into one **Compare Binaries With…** action (Hexana context menu, Find Action) that picks the comparison from the files' contents. It is offered for any WASM or native binary Hexana recognizes by content, including extensionless executables and modules, rather than for a fixed list of extensions. A pair that is not the same kind — or a `.wasm` that is not WebAssembly — is reported instead of opening an empty diff. Shortcuts bound to the old actions keep working.
 - The "Send anonymous usage analytics" setting takes effect immediately instead of at the next IDE restart. Turning it off flushes whatever was already captured under consent and then tears the client down; turning it on starts reporting straight away.
 - Provider selection moved to one shared factory (`createBinaryProvider` in `binaryProvider`) that the IDE, the VS Code extension and the browser app all call. The two copies had drifted: Parquet, Arrow and `.pb` Protobuf-message files resolved only in the IDE, and tar archives only in the IDE once gzipped. Every host now supports every format the provider layer does.
 
