@@ -18,9 +18,7 @@ import kotlin.io.path.exists
 class HexanaWhatsNew018WasiSdkCaptureTest {
     @Test
     fun captureManagedWasiSdkSelector() {
-        val isolatedHome = Path.of("/tmp/hx018").toAbsolutePath().normalize()
-        require(!isolatedHome.exists()) { "Capture home already exists: $isolatedHome" }
-        isolatedHome.createDirectories()
+        val isolatedHome = Files.createTempDirectory("hx018").toAbsolutePath().normalize()
         try {
             hexanaIde(
                 testName = "hexana-whats-new-018-managed-wasi-sdk-capture",
