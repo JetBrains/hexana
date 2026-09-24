@@ -104,3 +104,6 @@ Append one line per write-back: date, page, what changed.
 - 2026-09-23 — `entities/binary-diff-provider` — Native per-function diff: Functions tab + code
   detail for ELF / Mach-O / COFF, name→hash pairing, address-masked instruction comparison, and
   the host-supplied disassembler (`BinaryDiffHost`) — Capstone in IntelliJ, raw bytes in VS Code.
+- 2026-09-24 — `entities/binary-diff-provider` — Webview performance: quadratic Mach-O/COFF size
+  inference fixed in `NativeFunctionDiscovery` (11.5 s → 110 ms on clangd), 32-bit body hash
+  for Kotlin/JS, and cooperative async tab computation + prefetch in `BinaryDiffView`.

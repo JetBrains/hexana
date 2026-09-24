@@ -79,3 +79,20 @@ over `parsing/native-fixtures`, with real Capstone).
   stays blocking and hosts still pick the thread.
 - The arch mapping (`nativeDisassemblyArch`, plugins-shared) moved out of IntelliJ's
   `NativeDisassemblyPanel`; per-function Thumb comes from `NativeFunctionRecord.isThumb`.
+
+### Performance (webview)
+
+- The first cause of a slow Functions tab was not the diff: `NativeFunctionDiscovery` inferred
+  Mach-O/COFF sizes ("gap to the next symbol in the section") by scanning every symbol per
+  symbol, quadratically — 11.5 s on the JVM for clangd's ~47k functions. It is now a sorted
+  address list plus a binary search per section (`SortedAddresses`), also used for ELF's
+  zero-size symbols: 110 ms. This also speeds up every other consumer of `nativeFunctions`.
+- Body hashes are two 32-bit hashes packed into a Long, read in bulk. Kotlin/JS emulates `Long`
+  arithmetic: a per-byte 64-bit FNV measured ~320 ms per 4 MiB in Chrome versus ~30 ms.
+- The webview has one thread and no worker, and the diff model (lambdas in
+  `TableTabDescriptor`) cannot cross `postMessage`. So "async" means cooperative: `BinaryDiffView`
+  waits for the loading message to paint, runs `compute`/`render` on `Dispatchers.Default` (a
+  macrotask dispatcher in the browser), and the providers `yield()` between parse, hash
+  (every 1024 records), pairing and refine (every 64 decodes). Once the visible tab is done,
+  the other tabs prefetch in the background. The provider parse itself is still one
+  non-yielding step.

@@ -18,6 +18,7 @@ import org.jetbrains.hexana.wasm.analysis.diff.line.LineDiff
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.yield
 
 /**
  * One side's function whose body is in the file: the byte range comes from the symbol
@@ -47,29 +48,37 @@ internal class NativeFunctionPair(
  * The function bodies of [provider], in address order, or `null` when the format has no
  * function records. Imports, nameless records and records whose range falls outside the
  * file are dropped; aliases at one address are kept once.
+ *
+ * Yields every [YIELD_EVERY] records: on the single-threaded webview this is what keeps
+ * the UI responsive while a large binary is hashed.
  */
-internal fun nativeFunctionBodies(provider: NativeBinaryProvider): List<NativeFunctionBody>? {
+internal suspend fun nativeFunctionBodies(provider: NativeBinaryProvider): List<NativeFunctionBody>? {
     val records = provider.nativeFunctions ?: return null
+    yield()
     val bytes = provider.bytes
     val fileArch = nativeDisassemblyArch(provider)
-    return records.asSequence()
-        .filter { !it.imported && it.name.isNotBlank() }
-        .mapNotNull { record ->
-            val offset = record.fileOffset?.takeIf { it >= 0 && it <= Int.MAX_VALUE }?.toInt() ?: return@mapNotNull null
-            val size = record.size?.takeIf { it > 0uL && it <= Int.MAX_VALUE.toULong() }?.toInt() ?: return@mapNotNull null
-            if (offset.toLong() + size > bytes.limit()) return@mapNotNull null
+    val out = ArrayList<NativeFunctionBody>(records.size)
+    val seenAddresses = HashSet<ULong>()
+    for ((i, record) in records.withIndex()) {
+        if (i % YIELD_EVERY == YIELD_EVERY - 1) yield()
+        if (record.imported || record.name.isBlank()) continue
+        val offset = record.fileOffset?.takeIf { it >= 0 && it <= Int.MAX_VALUE }?.toInt() ?: continue
+        val size = record.size?.takeIf { it > 0uL && it <= Int.MAX_VALUE.toULong() }?.toInt() ?: continue
+        if (offset.toLong() + size > bytes.limit()) continue
+        if (!seenAddresses.add(record.virtualAddress)) continue
+        out.add(
             NativeFunctionBody(
                 name = record.demangledName?.takeIf { it.isNotBlank() } ?: record.name,
                 virtualAddress = record.virtualAddress,
                 fileOffset = offset,
                 size = size,
                 arch = if (record.isThumb && fileArch == Arch.ARM) Arch.THUMB else fileArch,
-                hash = fnv1a(bytes, offset, size),
-            )
-        }
-        .distinctBy { it.virtualAddress }
-        .sortedBy { it.virtualAddress }
-        .toList()
+                hash = bodyHash(bytes, offset, size),
+            ),
+        )
+    }
+    out.sortBy { it.virtualAddress }
+    return out
 }
 
 /**
@@ -132,42 +141,57 @@ private fun namedPair(left: List<NativeFunctionBody>, right: List<NativeFunction
  * Without that, relinking makes nearly every function look modified. Bounded by
  * [MAX_REFINE_BYTES] so a huge binary does not stall the tab; returns whether it ran.
  */
-internal fun refineWithDisassembly(
+internal suspend fun refineWithDisassembly(
     pairs: MutableList<NativeFunctionPair>,
+    bodies: NativeBodies,
     session: NativeFunctionSession,
     disassembler: Disassembler,
 ): Boolean {
+    val (left, right) = bodies
     val candidates = pairs.indices.filter { i ->
         val p = pairs[i]
         p.classification == DiffClass.MODIFIED && p.left != null && p.right != null &&
-            session.left[p.left].size == session.right[p.right].size &&
-            session.left[p.left].arch != null && session.right[p.right].arch != null
+            left[p.left].size == right[p.right].size &&
+            left[p.left].arch != null && right[p.right].arch != null
     }
-    if (candidates.sumOf { session.left[pairs[it].left!!].size.toLong() } > MAX_REFINE_BYTES) return false
-    for (i in candidates) {
+    if (candidates.sumOf { left[pairs[it].left!!].size.toLong() } > MAX_REFINE_BYTES) return false
+    for ((n, i) in candidates.withIndex()) {
+        if (n % REFINE_YIELD_EVERY == REFINE_YIELD_EVERY - 1) yield()
         val p = pairs[i]
-        val l = decodeFunction(disassembler, session.leftBytes, session.left[p.left!!]).map { it.key }
-        val r = decodeFunction(disassembler, session.rightBytes, session.right[p.right!!]).map { it.key }
+        val l = decodeFunction(disassembler, session.leftBytes, left[p.left!!]).map { it.key }
+        val r = decodeFunction(disassembler, session.rightBytes, right[p.right!!]).map { it.key }
         if (l == r) pairs[i] = NativeFunctionPair(p.name, p.left, p.right, DiffClass.MOVED, "addresses only")
     }
     return true
 }
 
+/** Both sides' function bodies. */
+internal data class NativeBodies(val left: List<NativeFunctionBody>, val right: List<NativeFunctionBody>)
+
 /**
  * Both sides of a native diff, parsed once and shared by the Functions tab and the detail
  * pane. The disassembler is loaded on first use, at most once.
  */
-internal class NativeFunctionSession(input: BinaryDiffInput, private val host: BinaryDiffHost) {
+internal class NativeFunctionSession(private val input: BinaryDiffInput, private val host: BinaryDiffHost) {
     val leftBytes: CommonByteBuffer = input.left.duplicate()
     val rightBytes: CommonByteBuffer = input.right.duplicate()
-    private val bodies by lazy {
-        val l = (nativeOrGenericBinaryProvider(input.left.duplicate()) as? NativeBinaryProvider)?.let(::nativeFunctionBodies)
-        val r = (nativeOrGenericBinaryProvider(input.right.duplicate()) as? NativeBinaryProvider)?.let(::nativeFunctionBodies)
-        if (l != null && r != null) l to r else null
+    private val parseLock = Mutex()
+    private var parsed = false
+    private var bodies: NativeBodies? = null
+
+    /**
+     * Both sides' function bodies, parsed on first call; `null` when either side has no
+     * function records. The tab and the detail pane share the one parse.
+     */
+    suspend fun bodies(): NativeBodies? = parseLock.withLock {
+        if (!parsed) {
+            val l = (nativeOrGenericBinaryProvider(input.left.duplicate()) as? NativeBinaryProvider)?.let { nativeFunctionBodies(it) }
+            val r = l?.let { (nativeOrGenericBinaryProvider(input.right.duplicate()) as? NativeBinaryProvider)?.let { nativeFunctionBodies(it) } }
+            bodies = if (l != null && r != null) NativeBodies(l, r) else null
+            parsed = true
+        }
+        bodies
     }
-    val available: Boolean get() = bodies != null
-    val left: List<NativeFunctionBody> get() = bodies?.first.orEmpty()
-    val right: List<NativeFunctionBody> get() = bodies?.second.orEmpty()
 
     private val lock = Mutex()
     private var disassembler: Disassembler? = null
@@ -178,7 +202,7 @@ internal class NativeFunctionSession(input: BinaryDiffInput, private val host: B
      * failed to load). Serialized: a decoder instance is not safe for concurrent use, and
      * the Functions tab and the detail pane can decode at the same time.
      */
-    suspend fun <T> withDisassembler(block: (Disassembler) -> T): T? = lock.withLock {
+    suspend fun <T> withDisassembler(block: suspend (Disassembler) -> T): T? = lock.withLock {
         val d = disassembler ?: run {
             val loader = host.nativeDisassembler
             if (disassemblerFailed || loader == null) return@withLock null
@@ -196,13 +220,12 @@ internal class NativeFunctionSession(input: BinaryDiffInput, private val host: B
 }
 
 internal suspend fun nativeFunctionsTab(input: BinaryDiffInput, session: NativeFunctionSession, ctx: DiffTabContext): DiffTabContent {
-    if (!session.available) {
-        return DiffTabContent(emptyMessage = "Per-function comparison needs a symbol table on both sides.")
-    }
-    val left = session.left
-    val right = session.right
+    val bodies = session.bodies()
+        ?: return DiffTabContent(emptyMessage = "Per-function comparison needs a symbol table on both sides.")
+    val (left, right) = bodies
     val pairs = pairNativeFunctions(left, right).toMutableList()
-    val refinedOrNull = session.withDisassembler { refineWithDisassembly(pairs, session, it) }
+    yield()
+    val refinedOrNull = session.withDisassembler { refineWithDisassembly(pairs, bodies, session, it) }
     val refined = refinedOrNull == true
     val changed = pairs.filter { it.classification != DiffClass.IDENTICAL }
 
@@ -264,8 +287,9 @@ internal class NativeFunctionDetailSource(private val session: NativeFunctionSes
     override val placeholder: String get() = "Select a function to compare its code."
 
     override suspend fun render(ref: DiffItemRef): SideBySideDiff {
-        val l = ref.leftIndex?.let { session.left.getOrNull(it) }
-        val r = ref.rightIndex?.let { session.right.getOrNull(it) }
+        val bodies = session.bodies()
+        val l = ref.leftIndex?.let { bodies?.left?.getOrNull(it) }
+        val r = ref.rightIndex?.let { bodies?.right?.getOrNull(it) }
         val title = buildString {
             append(ref.name)
             val sides = listOfNotNull(l?.let { "base ${hex(it.virtualAddress)}, ${formatSize(it.size)}" }, r?.let { "head ${hex(it.virtualAddress)}, ${formatSize(it.size)}" })
@@ -335,13 +359,24 @@ internal fun normalizedKey(text: String): String =
 
 private fun hex(address: ULong): String = "0x" + address.toString(16)
 
-private fun fnv1a(bytes: CommonByteBuffer, offset: Int, size: Int): Long {
-    var hash = 0xcbf29ce484222325uL.toLong()
-    for (i in offset until offset + size) {
-        hash = (hash xor (bytes[i].toLong() and 0xFF)) * 0x100000001b3L
+/**
+ * Identity of a function body: two independent 32-bit hashes (FNV-1a and djb2) of its bytes,
+ * packed into one Long. 32-bit on purpose — Kotlin/JS emulates `Long` arithmetic, and a
+ * 64-bit hash per byte made hashing a large binary take seconds in the webview; `Int` maths
+ * is native there. The bytes are read in bulk for the same reason.
+ */
+private fun bodyHash(bytes: CommonByteBuffer, offset: Int, size: Int): Long {
+    var fnv = 0x811c9dc5.toInt()
+    var djb = 5381
+    for (b in bytes.slice(offset, size).toByteArray()) {
+        val v = b.toInt() and 0xFF
+        fnv = (fnv xor v) * 0x01000193
+        djb = (djb shl 5) + djb + v
     }
-    return hash
+    return (fnv.toLong() shl 32) or (djb.toLong() and 0xFFFFFFFFL)
 }
 
 private const val MAX_RENDER_BYTES = 256 * 1024
 private const val MAX_REFINE_BYTES = 16L * 1024 * 1024
+private const val YIELD_EVERY = 1024
+private const val REFINE_YIELD_EVERY = 64

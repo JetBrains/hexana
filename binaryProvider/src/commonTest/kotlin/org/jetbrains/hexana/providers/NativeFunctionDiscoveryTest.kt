@@ -9,6 +9,8 @@ import org.jetbrains.hexana.parsing.common.NativeByteRange
 import org.jetbrains.hexana.providers.elf.ElfProgramHeader
 import org.jetbrains.hexana.providers.elf.ElfSectionHeader
 import org.jetbrains.hexana.providers.elf.ElfSymbol
+import org.jetbrains.hexana.providers.macho.MachOSection
+import org.jetbrains.hexana.providers.macho.MachOSymbol
 import org.jetbrains.hexana.providers.pe.PeCoffSymbol
 import org.jetbrains.hexana.providers.pe.PeSection
 
@@ -241,6 +243,26 @@ class NativeFunctionDiscoveryTest {
         assertEquals(0x401000uL, functions[0].virtualAddress)
         assertEquals(0x401020uL, functions[1].virtualAddress)
     }
+    @Test
+    fun `infers Mach-O sizes from the next symbol in the same section regardless of order`() {
+        // Symbol-table order is not address order, two symbols alias one address, and the
+        // second section's symbols must not bound the first's.
+        val text = machOSection(index = 0, name = "__text", address = 0x1000uL, size = 0x100uL)
+        val other = machOSection(index = 1, name = "__stubs", address = 0x2000uL, size = 0x40uL)
+        val values = listOf(0x1080uL, 0x1000uL, 0x1040uL, 0x1040uL, 0x10F0uL)
+        val symbols = values.mapIndexed { i, v -> machOSymbol(i, "f$i", sectionIndex = 1, value = v) } +
+            machOSymbol(values.size, "stub", sectionIndex = 2, value = 0x2000uL)
+
+        val sizes = NativeFunctionDiscovery.fromMachO(symbols, listOf(text, other)).associate { it.name to it.size }
+
+        assertEquals(0x70uL, sizes["f0"]) // 0x1080 → next 0x10F0
+        assertEquals(0x40uL, sizes["f1"]) // 0x1000 → next 0x1040
+        assertEquals(0x40uL, sizes["f2"]) // aliases share the gap to 0x1080
+        assertEquals(0x40uL, sizes["f3"])
+        assertEquals(0x10uL, sizes["f4"]) // last in __text: capped at the section end 0x1100
+        assertEquals(0x40uL, sizes["stub"])
+    }
+
 }
 
 private fun symbol(
@@ -342,4 +364,31 @@ private fun loadSegment(): ElfProgramHeader = ElfProgramHeader(
     alignment = 0x1000uL,
     headerRange = NativeByteRange(0, 56),
     fileRange = NativeByteRange(0x1000, 0x100),
+)
+
+private fun machOSection(index: Int, name: String, address: ULong, size: ULong) = MachOSection(
+    index = index,
+    segmentIndex = 0,
+    name = name,
+    segmentName = "__TEXT",
+    address = address,
+    size = size,
+    fileOffset = address,
+    alignment = 0u,
+    relocationOffset = 0u,
+    relocationCount = 0u,
+    flags = 0x80000400u,
+    headerRange = NativeByteRange(0, 80),
+    contentRange = NativeByteRange(address.toInt(), size.toInt()),
+)
+
+private fun machOSymbol(index: Int, name: String, sectionIndex: Int, value: ULong) = MachOSymbol(
+    index = index,
+    nameOffset = 0u,
+    name = name,
+    type = 0x0F, // N_SECT | N_EXT
+    sectionIndex = sectionIndex,
+    description = 0,
+    value = value,
+    recordRange = NativeByteRange(index * 16, 16),
 )

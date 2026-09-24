@@ -1,6 +1,12 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.*
+import kotlinx.browser.window
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Span
@@ -99,17 +105,37 @@ private fun DiffSessionContent(session: BinaryDiffSession, open: (DiffOpenReques
     var selectedTab by remember(session) { mutableStateOf(0) }
     var selectedRef by remember(session) { mutableStateOf<DiffItemRef?>(null) }
     val context = remember(session) { DiffTabContext(select = { selectedRef = it }, open = open) }
-    // The webview is single-threaded, so tabs are computed on first view rather than all
-    // up front, and cached for the lifetime of the session.
     val contents = remember(session) { mutableStateMapOf<Int, Result<DiffTabContent>>() }
     var banner by remember(session) { mutableStateOf<List<DiffTextLine>>(emptyList()) }
     val selection = remember(session) { HexSelectionState() }
+    val scope = rememberCoroutineScope()
+    val jobs = remember(session) { HashMap<Int, Job>() }
 
-    LaunchedEffect(session) { banner = runCatching { session.banner() }.getOrDefault(emptyList()) }
-    LaunchedEffect(session, selectedTab) {
-        if (selectedTab !in contents) {
-            contents[selectedTab] = runCatching { session.tabs[selectedTab].compute(context) }
+    // The webview has one thread, so "async" here means: let the loading message paint,
+    // then compute on a macrotask dispatcher, where the providers' `yield()` points hand
+    // the thread back to the browser between chunks. Each tab is computed once per session.
+    fun ensureComputed(index: Int): Job = jobs.getOrPut(index) {
+        scope.launch(Dispatchers.Default) {
+            val result = try {
+                Result.success(session.tabs[index].compute(context))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+            contents[index] = result
         }
+    }
+
+    LaunchedEffect(session) {
+        awaitAnimationFrame()
+        banner = withContext(Dispatchers.Default) { runCatching { session.banner() }.getOrDefault(emptyList()) }
+    }
+    LaunchedEffect(session, selectedTab) {
+        awaitAnimationFrame()
+        ensureComputed(selectedTab).join()
+        // Prefetch the other tabs in the background, so switching to them is instant.
+        session.tabs.indices.forEach { ensureComputed(it) }
     }
 
     if (session.tabs.size > 1) {
@@ -201,7 +227,11 @@ private fun DiffTabBar(labels: List<String>, selected: Int, onSelect: (Int) -> U
 private fun SideBySideDetailPanel(detail: DiffDetailSource, selected: DiffItemRef?) {
     var rendered by remember { mutableStateOf<SideBySideDiff?>(null) }
     LaunchedEffect(selected) {
-        rendered = selected?.let { detail.render(it) }
+        rendered = null
+        if (selected != null) {
+            awaitAnimationFrame()
+            rendered = withContext(Dispatchers.Default) { detail.render(selected) }
+        }
     }
     val diff = rendered
     when {
@@ -284,4 +314,17 @@ private fun DiffDivider() {
             property("margin", "4px 0")
         }
     })
+}
+
+/** Suspends until the browser is about to paint, so state set before this call is visible first. */
+private suspend fun awaitAnimationFrame() {
+    kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+        val handle = window.requestAnimationFrame { cont.resumeWith(Result.success(Unit)) }
+        cont.invokeOnCancellation { window.cancelAnimationFrame(handle) }
+    }
+    // One frame renders the pending state; the next callback runs after that paint.
+    kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+        val handle = window.requestAnimationFrame { cont.resumeWith(Result.success(Unit)) }
+        cont.invokeOnCancellation { window.cancelAnimationFrame(handle) }
+    }
 }

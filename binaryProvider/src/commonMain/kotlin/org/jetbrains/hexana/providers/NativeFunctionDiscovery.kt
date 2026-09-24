@@ -86,9 +86,10 @@ object NativeFunctionDiscovery {
 
         // Group defined function symbols by section so size inference can find
         // the next symbol's value in the same section.
-        val definedBySection: Map<Int, List<MachOSymbol>> = candidateSymbols
+        val definedBySection: Map<Int, SortedAddresses> = candidateSymbols
             .filter { (it.type and N_TYPE) == N_SECT }
-            .groupBy { it.sectionIndex }
+            .groupBy({ it.sectionIndex }, { it.value })
+            .mapValues { SortedAddresses(it.value) }
 
         return candidateSymbols.map { symbol ->
             val isUndefined = (symbol.type and N_TYPE) == N_UNDF
@@ -131,7 +132,8 @@ object NativeFunctionDiscovery {
             .sortedWith(compareBy<ElfSymbol> { it.isUndefined }.thenBy { it.sectionIndex }.thenBy { it.value })
         val definedFunctionSymbolsBySection = functionSymbols
             .filterNot { it.isUndefined }
-            .groupBy { it.sectionIndex }
+            .groupBy({ it.sectionIndex }, { if (isArm) it.value and 1uL.inv() else it.value })
+            .mapValues { SortedAddresses(it.value) }
 
         return functionSymbols.map { symbol ->
             val source = symbol.symbolSource(sections)
@@ -142,7 +144,7 @@ object NativeFunctionDiscovery {
             val isThumb = isArm && !symbol.isUndefined && (symbol.value and 1uL) == 1uL
             val maskedValue = if (isThumb) symbol.value and 1uL.inv() else symbol.value
 
-            val size = symbol.resolvedFunctionSize(definedFunctionSymbolsBySection, maskedValue, maskBit0 = isArm)
+            val size = symbol.resolvedFunctionSize(definedFunctionSymbolsBySection, maskedValue)
             NativeFunctionRecord(
                 name = symbol.name,
                 demangledName = NativeSymbolDemangler.demangle(symbol.name),
@@ -200,9 +202,10 @@ object NativeFunctionDiscovery {
     ): List<NativeFunctionRecord> {
         val functionSymbols = symbols.filter { (it.type and COFF_DT_FUNCTION_MASK) == COFF_DT_FUNCTION &&
             it.name.isNotBlank() }
-        val definedBySection: Map<Int, List<PeCoffSymbol>> = functionSymbols
+        val definedBySection: Map<Int, SortedAddresses> = functionSymbols
             .filter { it.sectionNumber > 0 }
-            .groupBy { it.sectionNumber }
+            .groupBy({ it.sectionNumber }, { it.value.toULong() })
+            .mapValues { SortedAddresses(it.value) }
 
         return functionSymbols.map { symbol ->
             val imported = symbol.sectionNumber <= 0
@@ -211,7 +214,7 @@ object NativeFunctionDiscovery {
             val resolvedSize = if (imported || section == null) {
                 ResolvedFunctionSize(null, NativeFunctionRangeConfidence.Unknown)
             } else {
-                resolveCoffFunctionSize(symbol, section, definedBySection[symbol.sectionNumber].orEmpty())
+                resolveCoffFunctionSize(symbol, section, definedBySection[symbol.sectionNumber])
             }
             NativeFunctionRecord(
                 name = symbol.name,
@@ -245,20 +248,17 @@ object NativeFunctionDiscovery {
 private fun resolveCoffFunctionSize(
     symbol: PeCoffSymbol,
     section: PeSection,
-    definedInSection: List<PeCoffSymbol>,
+    definedInSection: SortedAddresses?,
 ): ResolvedFunctionSize {
     // `value` is section-relative; size = distance to the next defined function symbol in the
     // same section, capped at the section's raw-data size (the section-relative end).
-    val nextValue = definedInSection.asSequence()
-        .map { it.value }
-        .filter { it > symbol.value }
-        .minOrNull()
-    val sectionEnd = section.rawDataSize
+    val nextValue = definedInSection?.firstAfter(symbol.value.toULong())
+    val sectionEnd = section.rawDataSize.toULong()
     val end = when {
         nextValue != null -> minOf(nextValue, sectionEnd)
         else -> sectionEnd
     }
-    val size = (end.toLong() - symbol.value.toLong()).takeIf { it > 0L }
+    val size = (end.toLong() - symbol.value.toULong().toLong()).takeIf { it > 0L }
         ?: return ResolvedFunctionSize(null, NativeFunctionRangeConfidence.Unknown)
     return ResolvedFunctionSize(size.toULong(), NativeFunctionRangeConfidence.NextSymbolInSection)
 }
@@ -267,6 +267,26 @@ private fun resolveCoffFunctionSize(
 private const val COFF_DT_FUNCTION_MASK: Int = 0x30
 private const val COFF_DT_FUNCTION: Int = 0x20
 private const val COFF_SYM_CLASS_EXTERNAL: Int = 2
+
+/**
+ * The distinct start addresses of one section's defined functions, sorted, so the
+ * "size = gap to the next symbol" rule is a binary search rather than a scan of every
+ * symbol per symbol — quadratic, which took seconds on a binary with ~50k functions.
+ */
+private class SortedAddresses(values: Collection<ULong>) {
+    private val sorted: List<ULong> = values.distinct().sorted()
+
+    /** The smallest address strictly greater than [address], or `null`. */
+    fun firstAfter(address: ULong): ULong? {
+        var lo = 0
+        var hi = sorted.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (sorted[mid] <= address) lo = mid + 1 else hi = mid
+        }
+        return sorted.getOrNull(lo)
+    }
+}
 
 private data class ResolvedFunctionSize(
     val size: ULong?,
@@ -287,9 +307,8 @@ private fun ElfSymbol.isThunkLike(section: ElfSectionHeader?): Boolean =
     name.contains("@plt") || section?.name == ".plt" || section?.name == ".plt.got" || section?.name == ".plt.sec"
 
 private fun ElfSymbol.resolvedFunctionSize(
-    definedFunctionSymbolsBySection: Map<Int, List<ElfSymbol>>,
+    definedFunctionSymbolsBySection: Map<Int, SortedAddresses>,
     maskedValue: ULong = value,
-    maskBit0: Boolean = false,
 ): ResolvedFunctionSize {
     if (size > 0uL) {
         return ResolvedFunctionSize(size, NativeFunctionRangeConfidence.SymbolSize)
@@ -299,11 +318,9 @@ private fun ElfSymbol.resolvedFunctionSize(
         return ResolvedFunctionSize(null, NativeFunctionRangeConfidence.Unknown)
     }
 
-    // On ARM, use masked addresses for gap computation so bit-0 Thumb markers don't skew sizes.
-    fun ElfSymbol.gapValue(): ULong = if (maskBit0) value and 1uL.inv() else value
-    val nextSymbol = definedFunctionSymbolsBySection[sectionIndex]
-        ?.firstOrNull { other -> other.gapValue() > maskedValue }
-    val nextSize = nextSymbol?.let { it.gapValue() - maskedValue }?.takeIf { it > 0uL }
+    // On ARM the addresses are already masked, so bit-0 Thumb markers don't skew sizes.
+    val nextValue = definedFunctionSymbolsBySection[sectionIndex]?.firstAfter(maskedValue)
+    val nextSize = nextValue?.let { it - maskedValue }?.takeIf { it > 0uL }
     return if (nextSize != null) {
         ResolvedFunctionSize(nextSize, NativeFunctionRangeConfidence.NextSymbolInSection)
     } else {
@@ -350,16 +367,11 @@ private fun machOFileOffsetOf(virtualAddress: ULong, section: MachOSection): Lon
 private fun resolveMachOFunctionSize(
     symbol: MachOSymbol,
     section: MachOSection?,
-    definedBySection: Map<Int, List<MachOSymbol>>,
+    definedBySection: Map<Int, SortedAddresses>,
 ): ResolvedFunctionSize {
     // `nlist` carries no n_size field. Convention: size = distance to the
     // next defined symbol in the same section, capped at the section end.
-    val nextValue = definedBySection[symbol.sectionIndex]
-        .orEmpty()
-        .asSequence()
-        .map { it.value }
-        .filter { it > symbol.value }
-        .minOrNull()
+    val nextValue = definedBySection[symbol.sectionIndex]?.firstAfter(symbol.value)
     val sectionEnd = section?.let { it.address + it.size }
     val end = when {
         nextValue != null && sectionEnd != null -> minOf(nextValue, sectionEnd)

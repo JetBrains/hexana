@@ -26,8 +26,8 @@ class NativeFunctionDiffTest {
     private fun functionsTab(session: BinaryDiffSession) = session.tabs.single { it.name == "Functions" }
 
     /** [bytes] with the first function body's first byte flipped: same size, different code. */
-    private fun withFirstFunctionPatched(bytes: ByteArray): Pair<ByteArray, String> {
-        val body = NativeFunctionSession(input(bytes, bytes), BinaryDiffHost()).left.first()
+    private suspend fun withFirstFunctionPatched(bytes: ByteArray): Pair<ByteArray, String> {
+        val body = NativeFunctionSession(input(bytes, bytes), BinaryDiffHost()).bodies()!!.left.first()
         val patched = bytes.copyOf()
         patched[body.fileOffset] = (patched[body.fileOffset].toInt() xor 0xFF).toByte()
         return patched to body.name
@@ -84,7 +84,7 @@ class NativeFunctionDiffTest {
         val session = NativeDiffProvider().session(input(base, head))
         val content = functionsTab(session).compute(DiffTabContext())
         assertTrue(content.header.any { "raw bytes" in it.text })
-        val index = NativeFunctionSession(input(base, head), BinaryDiffHost()).left.indexOfFirst { it.name == name }
+        val index = NativeFunctionSession(input(base, head), BinaryDiffHost()).bodies()!!.left.indexOfFirst { it.name == name }
         val rendered = assertNotNull(session.detail).render(DiffItemRef(name, index, index))
         assertTrue(rendered.title.endsWith("[bytes]"), rendered.title)
         assertTrue(rendered.rows.first().leftRemoved, "first byte row differs")
