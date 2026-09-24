@@ -73,6 +73,22 @@ class BinaryDiffProviderTest {
     }
 
     @Test
+    fun rejectionReasonsNameTheOffendingFiles() {
+        fun named(l: ByteArray, lName: String, r: ByteArray, rName: String) =
+            BinaryDiffInput(l.toCommonByteBuffer(), r.toCommonByteBuffer(), lName, rName)
+        assertNull(BinaryDiffProviderRegistry.rejectionReason(named(base, "a.wasm", head, "b.wasm")))
+        assertNull(BinaryDiffProviderRegistry.rejectionReason(named(byteArrayOf(1), "a.so", byteArrayOf(2), "b.so")))
+        assertEquals(
+            "a.wasm is a WebAssembly module and c.wasm is a WebAssembly component — only binaries of the same kind can be compared.",
+            BinaryDiffProviderRegistry.rejectionReason(named(base, "a.wasm", componentPreamble, "c.wasm")),
+        )
+        assertEquals(
+            "broken.wasm is not a WebAssembly binary (it has no `\\0asm` header).",
+            BinaryDiffProviderRegistry.rejectionReason(named(byteArrayOf(1, 2, 3), "broken.wasm", byteArrayOf(4, 5, 6), "other.wasm")),
+        )
+    }
+
+    @Test
     fun mismatchedKindsAreNotComparable() {
         assertNull(BinaryDiffProviderRegistry.forInput(input(base, componentPreamble)))
         assertNull(BinaryDiffProviderRegistry.forInput(input(base, byteArrayOf(1, 2, 3))))

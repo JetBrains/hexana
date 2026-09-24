@@ -67,8 +67,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     context.subscriptions.push(WasmEditorProvider.register(context));
-    context.subscriptions.push(WasmEditorProvider.registerCompareCommand(context));
-    context.subscriptions.push(WasmEditorProvider.registerCompareBinaryCommand(context));
+    context.subscriptions.push(WasmEditorProvider.registerCompareFilesCommand(context));
     registerWasmDebugAdapter(context);
     registerWasmDebugView(context);
     registerHexanaMcpServerCommands(context);

@@ -109,5 +109,15 @@ over `parsing/native-fixtures`, with real Capstone).
 - The webview back stack holds a `DiffScreenState` per entry (session, computed tabs, selected tab
   and row, rendered detail), so "Back" restores the parent instead of recomputing it; the detail
   pane is a `VirtualizedList`.
-- **Compare WASM With…** accepts only the Wasm providers: the registry's native fallback would
-  otherwise take a `.wasm` pair whose header is not Wasm.
+- A `.wasm` whose header is not Wasm is rejected: the registry's native fallback would otherwise
+  take it (see below).
+
+### One compare action (2026-09-24)
+
+"Compare WASM" and "Compare Binary" are merged into one action per host — IntelliJ
+`hexana.compareFiles` "Compare Binaries With…" (not "Compare Files": the platform's own text diff
+has that name), VS Code `hexana.compareFiles` "Hexana: Compare Files". The provider is picked from
+the bytes, and `BinaryDiffProviderRegistry.rejectionReason` phrases why a pair is refused (different
+kinds, or a `.wasm` without a Wasm header), for both hosts. The old ids stay as hidden aliases so
+bound shortcuts keep working: IntelliJ `LegacyCompareFilesAction` (in no menu, hidden from Find
+Action), VS Code commands registered but not contributed in `package.json`.

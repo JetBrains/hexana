@@ -1,5 +1,6 @@
 # Unreleased
-- "Compare Binary" on two ELF, Mach-O or COFF files adds a "Functions" tab: functions are paired by name (renames recognized by identical code), and selecting one shows the two versions' bytes side by side. PE images and archives keep the section size comparison only
+- "Compare WASM" and "Compare Binary" are merged into one "Hexana: Compare Files" command that picks the comparison from the files' contents; keybindings bound to the old commands keep working
+- comparing two ELF, Mach-O or COFF files adds a "Functions" tab: functions are paired by name (renames recognized by identical code), and selecting one shows the two versions' bytes side by side. PE images and archives keep the section size comparison only
 - "Compare WASM" gains the "Dispatch" tab (per-signature `call_indirect` candidates that entered or left the table) and Component Model comparison: submodules are paired, and clicking one opens its own comparison with a "Back" link
 - comparison tables are searchable and sortable, and every tab loads in the background, so a large binary no longer freezes the view while it is compared
 

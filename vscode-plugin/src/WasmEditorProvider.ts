@@ -127,6 +127,9 @@ async function readRuntimeTargetsJson(scope?: vscode.Uri): Promise<string> {
  * `filenamePattern` in `package.json`, so an entry opens exactly when the same file
  * on disk would.
  */
+/** Native-binary extensions offered by the compare file dialog (besides `.wasm`). */
+const COMPARABLE_NATIVE_EXTENSIONS = ["o", "obj", "so", "dylib", "dll", "exe", "elf", "a", "lib", "ko", "sys", "axf", "bin", "out"];
+
 const OPENABLE_ENTRY_EXTENSIONS = new Set([
     "wasm", "class", "dex", "arsc", "jar", "zip", "war", "apk", "bin",
     "elf", "exe", "so", "o", "a", "dll", "dylib",
@@ -199,7 +202,7 @@ function inflateIfGzipped(fileName: string, data: Uint8Array): { data: Uint8Arra
 
 /**
  * In-memory store for pending diff payloads keyed by a synthetic
- * `hexana-module:` URI.  When the user invokes "Compare WASM With…" we
+ * `hexana-module:` URI.  When the user invokes "Hexana: Compare Files" we
  * store both byte arrays here and open a new custom editor tab whose URI
  * matches the key.  `resolveCustomEditor` checks this map and, when a
  * diff entry is present, sends a `load-diff` message instead of the
@@ -376,179 +379,79 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
     }
 
     /**
-     * Registers the `hexana.compareBinary` command that lets the user pick two
-     * native binary files and opens a diff view showing per-section size differences.
+     * Registers `hexana.compareFiles`: pick two binaries of any supported format and open
+     * a diff view in a new custom editor tab. The webview picks the comparison from the
+     * bytes (core WASM, Component Model, native), and reports a pair that is not the same
+     * kind.
+     *
+     * The former `hexana.compareWasm` / `hexana.compareBinary` ids are registered as
+     * aliases so keybindings bound to them keep working. They are not contributed in
+     * `package.json`, so the Command Palette and menus offer only `hexana.compareFiles`.
      */
-    public static registerCompareBinaryCommand(context: vscode.ExtensionContext): vscode.Disposable {
-        return vscode.commands.registerCommand("hexana.compareBinary", async (contextUri?: vscode.Uri, selectedUris?: vscode.Uri[]) => {
-            const isNative = WasmEditorProvider.isNativeBinary;
-            const nativeFilter = { "Native Binary": ["o", "obj", "so", "dylib", "dll", "exe", "elf", "a", "lib", "ko", "sys", "axf", "bin", "out", "*"] };
+    public static registerCompareFilesCommand(context: vscode.ExtensionContext): vscode.Disposable {
+        const handler = async (contextUri?: vscode.Uri, selectedUris?: vscode.Uri[]) => {
+            const isComparable = (uri: vscode.Uri) =>
+                uri.fsPath.toLowerCase().endsWith(".wasm") || WasmEditorProvider.isNativeBinary(uri);
+            const filters = { "Binaries": ["wasm", ...COMPARABLE_NATIVE_EXTENSIONS, "*"] };
 
-            // When exactly two files are selected and both look like native binaries
-            // (known extension or extensionless), compare them directly.
-            if (selectedUris && selectedUris.length === 2 && selectedUris.every(u => isNative(u))) {
-                const left = selectedUris[0];
-                const right = selectedUris[1];
+            let left: vscode.Uri | undefined;
+            let right: vscode.Uri | undefined;
+            // When exactly two comparable files are selected in the explorer, use them directly.
+            if (selectedUris && selectedUris.length === 2 && selectedUris.every(isComparable)) {
+                [left, right] = selectedUris;
+            } else {
+                // Left file: use the context-menu URI if available, otherwise prompt.
+                left = contextUri && !contextUri.fsPath.endsWith("/") && isComparable(contextUri)
+                    ? contextUri
+                    : await vscode.window.showOpenDialog({
+                        canSelectMany: false,
+                        filters,
+                        title: "Compare Files — Select First File",
+                    }).then(uris => uris?.[0]);
+                if (!left) return;
 
-                const leftData = await vscode.workspace.fs.readFile(left);
-                const rightData = await vscode.workspace.fs.readFile(right);
-                const leftName = path.basename(left.fsPath);
-                const rightName = path.basename(right.fsPath);
-
-                const diffUri = vscode.Uri.parse(
-                    `hexana-module:/${leftName} ↔ ${rightName}?diff=true&native=true&left=${encodeURIComponent(left.toString())}&right=${encodeURIComponent(right.toString())}`,
-                );
-                const key = diffUri.toString();
-
-                inMemoryModules.set(key, { data: leftData, fileName: `${leftName} ↔ ${rightName}` });
-                pendingDiffs.set(key, { leftData, leftName, rightData, rightName });
-
-                try {
-                    await vscode.commands.executeCommand(
-                        "vscode.openWith",
-                        diffUri,
-                        WasmEditorProvider.viewType,
-                    );
-                } catch (err) {
-                    console.error("[Hexana] Failed to open native diff view:", err);
-                    vscode.window.showErrorMessage(`Failed to open diff view: ${err}`);
-                }
-                return;
-            }
-
-            // Left file: use the context-menu URI if available, otherwise prompt.
-            const left = contextUri && !contextUri.fsPath.endsWith("/") && isNative(contextUri)
-                ? contextUri
-                : await vscode.window.showOpenDialog({
+                // Right file: always prompt.
+                right = await vscode.window.showOpenDialog({
                     canSelectMany: false,
-                    filters: nativeFilter,
-                    title: "Compare Binary — Select First File",
+                    filters,
+                    title: `Compare With (against ${path.basename(left.fsPath)})`,
+                    defaultUri: vscode.Uri.file(path.dirname(left.fsPath)),
                 }).then(uris => uris?.[0]);
-            if (!left) return;
-
-            // Right file: always prompt.
-            const right = await vscode.window.showOpenDialog({
-                canSelectMany: false,
-                filters: nativeFilter,
-                title: `Compare With Binary File (against ${path.basename(left.fsPath)})`,
-                defaultUri: vscode.Uri.file(path.dirname(left.fsPath)),
-            }).then(uris => uris?.[0]);
-            if (!right) return;
-
-            const leftData = await vscode.workspace.fs.readFile(left);
-            const rightData = await vscode.workspace.fs.readFile(right);
-            const leftName = path.basename(left.fsPath);
-            const rightName = path.basename(right.fsPath);
-
-            const diffUri = vscode.Uri.parse(
-                `hexana-module:/${leftName} ↔ ${rightName}?diff=true&native=true&left=${encodeURIComponent(left.toString())}&right=${encodeURIComponent(right.toString())}`,
-            );
-            const key = diffUri.toString();
-
-            inMemoryModules.set(key, { data: leftData, fileName: `${leftName} ↔ ${rightName}` });
-            pendingDiffs.set(key, { leftData, leftName, rightData, rightName });
-
-            try {
-                await vscode.commands.executeCommand(
-                    "vscode.openWith",
-                    diffUri,
-                    WasmEditorProvider.viewType,
-                );
-            } catch (err) {
-                console.error("[Hexana] Failed to open native diff view:", err);
-                vscode.window.showErrorMessage(`Failed to open diff view: ${err}`);
+                if (!right) return;
             }
-        });
+            await WasmEditorProvider.openDiff(left, right);
+        };
+        return vscode.Disposable.from(
+            vscode.commands.registerCommand("hexana.compareFiles", handler),
+            vscode.commands.registerCommand("hexana.compareWasm", handler),
+            vscode.commands.registerCommand("hexana.compareBinary", handler),
+        );
     }
 
-    /**
-     * Registers the `hexana.compareWasm` command that lets the user pick two
-     * `.wasm` files and opens a diff view in a new custom editor tab.
-     */
-    public static registerCompareCommand(context: vscode.ExtensionContext): vscode.Disposable {
-        return vscode.commands.registerCommand("hexana.compareWasm", async (contextUri?: vscode.Uri, selectedUris?: vscode.Uri[]) => {
-            const wasmFilter = { "WebAssembly": ["wasm"] };
-            const isWasm = (uri: vscode.Uri) => uri.fsPath.endsWith(".wasm");
+    private static async openDiff(left: vscode.Uri, right: vscode.Uri): Promise<void> {
+        const leftData = await vscode.workspace.fs.readFile(left);
+        const rightData = await vscode.workspace.fs.readFile(right);
+        const leftName = path.basename(left.fsPath);
+        const rightName = path.basename(right.fsPath);
 
-            // When exactly two .wasm files are selected in the explorer, use them directly.
-            if (selectedUris && selectedUris.length === 2 && selectedUris.every(isWasm)) {
-                const left = selectedUris[0];
-                const right = selectedUris[1];
+        // Build a synthetic URI for the diff tab. Encode the original file paths so the
+        // diff can be restored after a VS Code restart without re-prompting the user.
+        const diffUri = vscode.Uri.parse(
+            `hexana-module:/${leftName} ↔ ${rightName}?diff=true&left=${encodeURIComponent(left.toString())}&right=${encodeURIComponent(right.toString())}`,
+        );
+        const key = diffUri.toString();
 
-                const leftData = await vscode.workspace.fs.readFile(left);
-                const rightData = await vscode.workspace.fs.readFile(right);
-                const leftName = path.basename(left.fsPath);
-                const rightName = path.basename(right.fsPath);
+        // Store the left side as the "document" bytes so openCustomDocument can serve
+        // something, and store the diff payload separately.
+        inMemoryModules.set(key, { data: leftData, fileName: `${leftName} ↔ ${rightName}` });
+        pendingDiffs.set(key, { leftData, leftName, rightData, rightName });
 
-                const diffUri = vscode.Uri.parse(
-                    `hexana-module:/${leftName} ↔ ${rightName}?diff=true&left=${encodeURIComponent(left.toString())}&right=${encodeURIComponent(right.toString())}`,
-                );
-                const key = diffUri.toString();
-
-                inMemoryModules.set(key, { data: leftData, fileName: `${leftName} ↔ ${rightName}` });
-                pendingDiffs.set(key, { leftData, leftName, rightData, rightName });
-
-                try {
-                    await vscode.commands.executeCommand(
-                        "vscode.openWith",
-                        diffUri,
-                        WasmEditorProvider.viewType,
-                    );
-                } catch (err) {
-                    console.error("[Hexana] Failed to open diff view:", err);
-                    vscode.window.showErrorMessage(`Failed to open diff view: ${err}`);
-                }
-                return;
-            }
-
-            // Left file: use the context-menu URI if available, otherwise prompt.
-            const left = contextUri && !contextUri.fsPath.endsWith("/")
-                ? contextUri
-                : await vscode.window.showOpenDialog({
-                    canSelectMany: false,
-                    filters: wasmFilter,
-                    title: "Compare WASM — Select First Module",
-                }).then(uris => uris?.[0]);
-            if (!left) return;
-
-            // Right file: always prompt.
-            const right = await vscode.window.showOpenDialog({
-                canSelectMany: false,
-                filters: wasmFilter,
-                title: `Compare With WASM File (against ${path.basename(left.fsPath)})`,
-                defaultUri: vscode.Uri.file(path.dirname(left.fsPath)),
-            }).then(uris => uris?.[0]);
-            if (!right) return;
-
-            const leftData = await vscode.workspace.fs.readFile(left);
-            const rightData = await vscode.workspace.fs.readFile(right);
-            const leftName = path.basename(left.fsPath);
-            const rightName = path.basename(right.fsPath);
-
-            // Build a synthetic URI for the diff tab.
-            // Encode the original file paths so the diff can be restored
-            // after a VS Code restart without re-prompting the user.
-            const diffUri = vscode.Uri.parse(
-                `hexana-module:/${leftName} ↔ ${rightName}?diff=true&left=${encodeURIComponent(left.toString())}&right=${encodeURIComponent(right.toString())}`,
-            );
-            const key = diffUri.toString();
-
-            // Store the left side as the "document" bytes so openCustomDocument
-            // can serve something, and store the diff payload separately.
-            inMemoryModules.set(key, { data: leftData, fileName: `${leftName} ↔ ${rightName}` });
-            pendingDiffs.set(key, { leftData, leftName, rightData, rightName });
-
-            try {
-                await vscode.commands.executeCommand(
-                    "vscode.openWith",
-                    diffUri,
-                    WasmEditorProvider.viewType,
-                );
-            } catch (err) {
-                console.error("[Hexana] Failed to open diff view:", err);
-                vscode.window.showErrorMessage(`Failed to open diff view: ${err}`);
-            }
-        });
+        try {
+            await vscode.commands.executeCommand("vscode.openWith", diffUri, WasmEditorProvider.viewType);
+        } catch (err) {
+            console.error("[Hexana] Failed to open diff view:", err);
+            vscode.window.showErrorMessage(`Failed to open diff view: ${err}`);
+        }
     }
 
     public static register(context: vscode.ExtensionContext): vscode.Disposable {
@@ -774,7 +677,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     }
                     webviewPanel.webview.postMessage({
                         type: "load-expired",
-                        message: "This diff session has expired and the original files could not be read. Please run \"Compare WASM With…\" again.",
+                        message: "This diff session has expired and the original files could not be read. Please run \"Hexana: Compare Files\" again.",
                     });
                     return;
                 }

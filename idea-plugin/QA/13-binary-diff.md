@@ -9,19 +9,23 @@
 ## Test Cases
 
 ### 13.1 WASM module diff
-**Steps:** Select two `.wasm` core modules in the Project view -> **Compare WASM Files**.
+**Steps:** Select two `.wasm` core modules in the Project view -> **Hexana** -> **Compare Binary Files**.
 **Expected:** A diff editor titled `base ↔ head` with **Size Impact**, **Entities** and **Dispatch** tabs. Rows are tinted added / removed / modified / moved; each table has a search field and sortable columns. Clicking a function row shows its WAT side by side in the bottom pane, removed lines on the left, added on the right.
 
 ### 13.2 Mismatched or non-WASM inputs
-**Steps:** Run **Compare WASM With…** on a core module and a component; then on a `.wasm` whose header is not WebAssembly (e.g. a renamed text file).
-**Expected:** A warning each time — "not the same kind of WASM binary", then "`<name>` is not a WebAssembly binary". No diff editor opens.
+**Steps:** Run **Compare Binaries With…** on a core module and a component; on a `.wasm` and an ELF; then on a `.wasm` whose header is not WebAssembly (e.g. a renamed text file).
+**Expected:** A warning each time naming both kinds ("`a.wasm` is a WebAssembly module and `b.wasm` is a WebAssembly component — only binaries of the same kind can be compared"), then "`<name>` is not a WebAssembly binary". No diff editor opens.
+
+### 13.2a One action for every format
+**Steps:** Open Find Action and type "compare binaries"; open the Project view context menu on a `.wasm` file, then on an `.so`.
+**Expected:** A single **Compare Binaries With…** entry in each place (no separate WASM / Binary entries; the former ids do not show in Find Action). A shortcut previously assigned to the old Compare WASM or Compare Binary action still runs the comparison.
 
 ### 13.3 Component diff navigation
 **Steps:** Compare two Component Model binaries. Click a **Modified** submodule, then an **Added** one.
 **Expected:** The table lists every submodule with its status. The modified pair opens as its own WASM diff tab; the added one opens as a single binary. The UI stays responsive while the submodule is extracted.
 
 ### 13.4 Native size and function tabs
-**Steps:** **Compare Binary With…** on two builds of an ELF (repeat for Mach-O and COFF).
+**Steps:** **Compare Binaries With…** on two builds of an ELF (repeat for Mach-O and COFF).
 **Expected:** **Size Impact** and **Functions** tabs. Functions lists only changed functions (identical ones are counted in the footer), classified Added / Removed / Modified / Moved; a renamed but unchanged function reads "renamed from …", one that only shifted reads "addresses only".
 
 ### 13.5 Native function detail

@@ -110,3 +110,5 @@ Append one line per write-back: date, page, what changed.
 - 2026-09-24 — `entities/binary-diff-provider` — AI review fixes: file-offset dedupe of native bodies,
   lazy `DiffOpenRequest`, webview back-stack state + virtualized detail, Wasm-only routing in
   Compare WASM, and diff release docs / QA plan (`idea-plugin/QA/13-binary-diff.md`).
+- 2026-09-24 — `entities/binary-diff-provider` — One compare action per host (`hexana.compareFiles`),
+  shared `rejectionReason`, old action/command ids kept as hidden aliases.

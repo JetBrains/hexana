@@ -90,7 +90,7 @@ fun BinaryEditorApp() {
                 }
                 "load-expired" -> {
                     expiredMessage = message.message.ifBlank {
-                        "This diff session has expired. Please run \"Compare WASM With…\" again."
+                        "This diff session has expired. Please run \"Hexana: Compare Files\" again."
                     }
                 }
                 "load-nested-module" -> {

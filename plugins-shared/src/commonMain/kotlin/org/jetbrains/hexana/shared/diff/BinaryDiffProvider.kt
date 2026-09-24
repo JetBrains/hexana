@@ -159,6 +159,31 @@ object BinaryDiffProviderRegistry {
 
     /** The provider for [input], or `null` when the two sides cannot be compared (e.g. a module and a component). */
     fun forInput(input: BinaryDiffInput): BinaryDiffProvider? = providers.firstOrNull { it.accepts(input) }
+
+    /**
+     * Why [input] should not be compared, phrased for the user, or `null` when it can be.
+     *
+     * One compare action serves every format, so this is where a pair is turned down: two
+     * files of different kinds (a module and a component, Wasm and native), and a `.wasm`
+     * whose header is not WebAssembly — the native fallback would accept that one and show
+     * a truncated or mislabelled module as an empty native diff.
+     */
+    fun rejectionReason(input: BinaryDiffInput): String? {
+        for ((name, type) in listOf(input.leftName to input.leftType, input.rightName to input.rightType)) {
+            if (type == BinaryProviderType.Generic && name.endsWith(".wasm", ignoreCase = true)) {
+                return "$name is not a WebAssembly binary (it has no `\\0asm` header)."
+            }
+        }
+        if (forInput(input) != null) return null
+        return "${input.leftName} is ${kindLabel(input.leftType)} and ${input.rightName} is " +
+            "${kindLabel(input.rightType)} — only binaries of the same kind can be compared."
+    }
+
+    private fun kindLabel(type: BinaryProviderType): String = when (type) {
+        BinaryProviderType.Wasm -> "a WebAssembly module"
+        BinaryProviderType.WasmComponent -> "a WebAssembly component"
+        BinaryProviderType.Generic -> "not WebAssembly"
+    }
 }
 
 internal fun DiffClass.label(): String = when (this) {
