@@ -24,6 +24,8 @@ import javax.swing.JComponent
  * triggering ELF parsing on the EDT. The Memory tab itself gates on the full
  * [isMemoryBudgetEligible] result; if the file is not eligible the Memory tab
  * will not appear and the notification is harmless.
+ *
+ * The user can hide the notification per file; the choice is persisted in [MemoryBudgetSettings].
  */
 class ElfMemoryBudgetNotification : EditorNotificationProvider, DumbAware {
 
@@ -32,6 +34,7 @@ class ElfMemoryBudgetNotification : EditorNotificationProvider, DumbAware {
         file: VirtualFile,
     ): Function<in FileEditor, out JComponent?>? {
         if (!looksLikeElf(file)) return null
+        if (MemoryBudgetSettings.getInstance(project).isNotificationDismissed(file.path)) return null
         if (hasCapacitySource(project, file)) return null
 
         return Function {
@@ -41,6 +44,13 @@ class ElfMemoryBudgetNotification : EditorNotificationProvider, DumbAware {
                 if (project.isDisposed) return@createActionLabel
                 showCapacityChooser(project, file)
             }
+            val dismiss = Runnable {
+                if (project.isDisposed) return@Runnable
+                MemoryBudgetSettings.getInstance(project).dismissNotification(file.path)
+                EditorNotifications.getInstance(project).updateNotifications(file)
+            }
+            panel.createActionLabel("Don't show again", dismiss)
+            panel.setCloseAction(dismiss)
             panel
         }
     }

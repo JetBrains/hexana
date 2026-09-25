@@ -53,11 +53,26 @@ class MemoryBudgetSettings : SimplePersistentStateComponent<MemoryBudgetSettings
     fun clearEntry(elfPath: String) {
         state.entries = state.entries.toMutableMap().also { it.remove(elfPath) }
     }
+
+    /** Whether the user chose to hide the "linker map not found" notification for this ELF. */
+    fun isNotificationDismissed(elfPath: String): Boolean = elfPath in state.dismissedNotifications
+
+    fun dismissNotification(elfPath: String) {
+        state.addDismissedNotification(elfPath)
+    }
 }
 
 class MemoryBudgetSettingsState : BaseState() {
     @get:XCollection
     var entries by map<String, MemoryBudgetEntry>()
+
+    /** ELF paths for which the missing-capacity-source notification was dismissed. */
+    @get:XCollection(style = XCollection.Style.v2)
+    var dismissedNotifications by stringSet()
+
+    fun addDismissedNotification(elfPath: String) {
+        if (dismissedNotifications.add(elfPath)) incrementModificationCount()
+    }
 }
 
 @Tag("MemoryBudgetEntry")
