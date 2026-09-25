@@ -40,6 +40,13 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.createBinaryProvider
 import org.jetbrains.hexana.shared.diff.BinaryDiffProviderRegistry
+import org.jetbrains.hexana.shared.diff.DiffSection
+import org.jetbrains.hexana.shared.diff.DiffSections
+import org.jetbrains.hexana.shared.diff.HexDiff
+import org.jetbrains.hexana.shared.diff.HexDiffStructure
+import org.jetbrains.hexana.shared.diff.SectionStatus
+import org.jetbrains.hexana.shared.diff.diffSections
+import org.jetbrains.hexana.shared.diff.mergeSections
 import org.jetbrains.hexana.toCommonByteBuffer
 import org.jetbrains.hexana.ui.createComposePanel
 import java.awt.BorderLayout
@@ -130,7 +137,7 @@ private class HexDiffViewer(context: DiffContext, private val request: ContentDi
                 // byte diff is useful without it. Sections first, then the slower table tabs.
                 val leftProvider = providerOf(diff.left, left)
                 val rightProvider = providerOf(diff.right, right)
-                if (!areComparable(leftProvider, rightProvider)) {
+                if (!HexDiffStructure.areComparable(leftProvider, rightProvider)) {
                     // Different formats: their sections and tables describe unrelated things,
                     // so only the byte diff is shown.
                     withContext(Dispatchers.EDT) { state.tabs = emptyList() }
@@ -145,10 +152,10 @@ private class HexDiffViewer(context: DiffContext, private val request: ContentDi
                     status.text = statusText(diff) + sectionStatus(sections)
                 }
                 if (tableState != null) {
-                    val tabs = diffTableTabs(
+                    val tabs = HexDiffStructure.diffTableTabs(
                         leftProvider, rightProvider, nameOf(left), nameOf(right),
                         onError = { LOG.info("A table tab failed in the hex diff", it) },
-                        checkCanceled = { ensureActive() },
+                        between = { ensureActive() },
                         onRowClick = { l, r ->
                             listOfNotNull(l, r).minOrNull()?.let { state.goToOffset(it.toLong()) }
                         },
@@ -182,14 +189,6 @@ private class HexDiffViewer(context: DiffContext, private val request: ContentDi
             ?: error("cannot read ${content.file.name}")
         else -> ByteArray(0).toCommonByteBuffer()
     }
-
-    /**
-     * Whether both sides' structure can be compared: the same kind of provider (two ELF
-     * files, two WASM modules, …). A missing side — a file added or deleted — compares
-     * against nothing, so its sections and rows all show as added or removed.
-     */
-    private fun areComparable(left: BinaryProvider?, right: BinaryProvider?): Boolean =
-        left == null || right == null || left::class == right::class
 
     private fun nameOf(content: DiffContent): String? = (content as? FileContent)?.file?.name
 

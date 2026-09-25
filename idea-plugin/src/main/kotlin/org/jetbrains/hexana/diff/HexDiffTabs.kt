@@ -20,13 +20,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.jetbrains.hexana.HexViewStateHolder
-import org.jetbrains.hexana.providers.BinaryProvider
-import org.jetbrains.hexana.shared.TabPriority
-import org.jetbrains.hexana.shared.TableTabDescriptor
-import org.jetbrains.hexana.shared.TableTabsContext
-import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.shared.diff.TableTabDiff
-import org.jetbrains.hexana.shared.diff.TableTabDiffer
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.ScrollableTabStrip
 import org.jetbrains.hexana.ui.panel.TableTabContent
@@ -35,42 +29,6 @@ import org.jetbrains.jewel.ui.component.CircularProgressIndicator
 import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.component.TabData
 import org.jetbrains.jewel.ui.component.Text
-
-/**
- * The table tabs of both binaries, diffed pairwise: every flat tab either side's
- * [org.jetbrains.hexana.shared.TableTabsProvider]s produce, paired by name within its provider.
- * Tree tabs are left out for now.
- *
- * Blocking — each provider parses its side — so hosts call it off the UI thread. A provider
- * that fails on one side contributes nothing for that side rather than failing the diff.
- */
-internal fun diffTableTabs(
-    left: BinaryProvider?,
-    right: BinaryProvider?,
-    leftName: String?,
-    rightName: String?,
-    onError: (Throwable) -> Unit,
-    checkCanceled: () -> Unit,
-    onRowClick: (leftOffset: Int?, rightOffset: Int?) -> Unit,
-): List<TableTabDiff> {
-    fun tabsOf(index: Int, provider: BinaryProvider?, name: String?): List<TableTabDescriptor> {
-        provider ?: return emptyList()
-        return try {
-            TableTabsProviderRegistry.providers[index].tableTabs(provider, TableTabsContext(fileName = name))
-        } catch (e: Exception) {
-            onError(e)
-            emptyList()
-        }
-    }
-    return TableTabsProviderRegistry.providers.indices.flatMap { index ->
-        checkCanceled()
-        val leftTabs = tabsOf(index, left, leftName)
-        val rightTabs = tabsOf(index, right, rightName)
-        val priority = (leftTabs + rightTabs).associate { TableTabDiffer.baseName(it.name) to it.priority }
-        TableTabDiffer.diffTabs(leftTabs, rightTabs) { l, r -> onRowClick(l?.offset, r?.offset) }
-            .map { Triple(priority[it.name] ?: TabPriority.Medium, index, it) }
-    }.sortedWith(compareBy({ it.first }, { it.second })).map { it.third }
-}
 
 /**
  * The tab strip under the hex diff: one tab per diffed table, a changed tab marked with its

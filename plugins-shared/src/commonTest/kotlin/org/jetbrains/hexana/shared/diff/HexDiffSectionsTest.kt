@@ -1,12 +1,17 @@
-package org.jetbrains.hexana.diff
+package org.jetbrains.hexana.shared.diff
 
-import com.intellij.testFramework.UsefulTestCase
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.StructureRange
 
-class HexDiffSectionsTest : UsefulTestCase() {
+class HexDiffSectionsTest {
 
-    fun testChangedBytesAreAttributedToTheirSection() {
+    @Test
+    fun changedBytesAreAttributedToTheirSection() {
         val left = ByteArray(16 * 20)
         val right = left.copyOf()
         right[40] = 1 // .a
@@ -27,7 +32,8 @@ class HexDiffSectionsTest : UsefulTestCase() {
         assertEquals(listOf(40L, null, 200L), sections.map { it.firstChangedOffset })
     }
 
-    fun testBytesPastTheShorterSideCountAsChanged() {
+    @Test
+    fun bytesPastTheShorterSideCountAsChanged() {
         val left = ByteArray(40) { 7 }
         val right = ByteArray(100) { 7 }
         val diff = diff(left, right)
@@ -39,7 +45,8 @@ class HexDiffSectionsTest : UsefulTestCase() {
         assertEquals(40L, sections.single().firstChangedOffset)
     }
 
-    fun testLookupsUseOffsetOrder() {
+    @Test
+    fun lookupsUseOffsetOrder() {
         val diff = diff(ByteArray(64), ByteArray(64))
         val sections = diffSections(
             diff,
@@ -53,7 +60,8 @@ class HexDiffSectionsTest : UsefulTestCase() {
         assertEquals(listOf(".b", ".c"), sectionLabelsIn(sections, 16, 64))
     }
 
-    fun testMergePairsByNameAndPlacesOneSidedSectionsInOrder() {
+    @Test
+    fun mergePairsByNameAndPlacesOneSidedSectionsInOrder() {
         val left = listOf(section(".a", 0), section(".b", 1, changed = 5), section(".gone", 2), section(".c", 3))
         val right = listOf(section(".new", 0), section(".a", 1), section(".b", 2), section(".extra", 3), section(".c", 4))
 
@@ -73,7 +81,8 @@ class HexDiffSectionsTest : UsefulTestCase() {
         assertEquals(5L, merged.merged.first { it.label == ".b" }.changedBytes)
     }
 
-    fun testMergePairsRepeatedNamesByOccurrence() {
+    @Test
+    fun mergePairsRepeatedNamesByOccurrence() {
         val merged = mergeSections(
             listOf(section("x", 0), section("x", 1)),
             listOf(section("x", 0), section("x", 1), section("x", 2)),

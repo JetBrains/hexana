@@ -30,6 +30,8 @@ data class VscodeMessage(
     val leftName: String = "",
     val rightData: ByteArray? = null,
     val rightName: String = "",
+    /** Which view a diff opens on: `"hex"` (default) or `"hexana"`. */
+    val diffMode: String = "",
     val message: String = "",
     val parentData: ByteArray? = null,
     val moduleIndex: Int = -1,
@@ -638,6 +640,7 @@ internal fun decodeVscodeMessage(type: String, data: dynamic): VscodeMessage =
                 leftName = (data.leftName as? String) ?: "",
                 rightData = messageBytesOrNull(data.rightData),
                 rightName = (data.rightName as? String) ?: "",
+                diffMode = (data.mode as? String) ?: "",
             )
         }
         "load-native-diff" -> {
@@ -647,6 +650,7 @@ internal fun decodeVscodeMessage(type: String, data: dynamic): VscodeMessage =
                 leftName = (data.leftName as? String) ?: "",
                 rightData = messageBytesOrNull(data.rightData),
                 rightName = (data.rightName as? String) ?: "",
+                diffMode = (data.mode as? String) ?: "",
             )
         }
         "load-expired" -> {

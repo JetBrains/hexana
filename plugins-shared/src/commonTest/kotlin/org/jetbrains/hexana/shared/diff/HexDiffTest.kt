@@ -1,11 +1,16 @@
-package org.jetbrains.hexana.diff
+package org.jetbrains.hexana.shared.diff
 
-import com.intellij.testFramework.UsefulTestCase
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.jetbrains.hexana.io.toCommonByteBuffer
 
-class HexDiffTest : UsefulTestCase() {
+class HexDiffTest {
 
-    fun testIdenticalInputsHaveNoBlocksAndFoldEntirely() {
+    @Test
+    fun identicalInputsHaveNoBlocksAndFoldEntirely() {
         val bytes = ByteArray(16 * 100) { it.toByte() }
         val diff = diff(bytes, bytes.copyOf())
 
@@ -16,7 +21,8 @@ class HexDiffTest : UsefulTestCase() {
         assertEquals(HexDiffLayout.Item.Fold(0, 100), layout.itemAt(0))
     }
 
-    fun testChangedBytesFormBlocksAndUnchangedStretchesFold() {
+    @Test
+    fun changedBytesFormBlocksAndUnchangedStretchesFold() {
         val left = ByteArray(16 * 100)
         val right = left.copyOf()
         right[16 * 10 + 3] = 1 // row 10
@@ -25,8 +31,8 @@ class HexDiffTest : UsefulTestCase() {
 
         val diff = diff(left, right)
         assertEquals(3L, diff.changedBytes)
-        assertOrderedEquals(diff.blockStarts.toList(), listOf(10, 50))
-        assertOrderedEquals(diff.blockEnds.toList(), listOf(12, 51))
+        assertEquals(diff.blockStarts.toList(), listOf(10, 50))
+        assertEquals(diff.blockEnds.toList(), listOf(12, 51))
         assertEquals(ByteChange.MODIFIED, diff.changeAt(16 * 10 + 3))
         assertEquals(ByteChange.NONE, diff.changeAt(16 * 10 + 4))
 
@@ -42,7 +48,8 @@ class HexDiffTest : UsefulTestCase() {
         assertEquals(layout.itemOf(50), items.indexOf(HexDiffLayout.Item.Row(50)))
     }
 
-    fun testExpandedFoldAndNoCollapseShowEveryRow() {
+    @Test
+    fun expandedFoldAndNoCollapseShowEveryRow() {
         val left = ByteArray(16 * 40)
         val right = left.copyOf().also { it[16 * 20] = 7 }
         val diff = diff(left, right)
@@ -53,7 +60,8 @@ class HexDiffTest : UsefulTestCase() {
         assertTrue((0 until expanded.itemCount).map(expanded::itemAt).last() is HexDiffLayout.Item.Fold)
     }
 
-    fun testListKeysAreUniqueAndSurviveExpandingAFold() {
+    @Test
+    fun listKeysAreUniqueAndSurviveExpandingAFold() {
         val left = ByteArray(16 * 60)
         val right = left.copyOf().also { it[16 * 30] = 1 }
         val diff = diff(left, right)
@@ -71,7 +79,8 @@ class HexDiffTest : UsefulTestCase() {
         assertFalse(collapsed.itemAt(0).key == expanded.itemAt(0).key) // fold 0 vs row 0
     }
 
-    fun testShortUnchangedStretchStaysVisible() {
+    @Test
+    fun shortUnchangedStretchStaysVisible() {
         val left = ByteArray(16 * 20)
         val right = left.copyOf().also {
             it[16 * 5] = 1
@@ -84,7 +93,8 @@ class HexDiffTest : UsefulTestCase() {
         assertEquals(HexDiffLayout.Item.Fold(16, 20), items.last())
     }
 
-    fun testSizeDifferenceCountsTailAsChanged() {
+    @Test
+    fun sizeDifferenceCountsTailAsChanged() {
         val left = ByteArray(20) { 1 }
         val right = ByteArray(40) { 1 }
         val diff = diff(left, right)
@@ -92,18 +102,19 @@ class HexDiffTest : UsefulTestCase() {
         assertEquals(20L, diff.changedBytes)
         assertEquals(3, diff.rowCount)
         // Row 0 is equal; row 1 holds bytes 16..19 on both sides and 20..31 only on the right.
-        assertOrderedEquals(diff.blockStarts.toList(), listOf(1))
-        assertOrderedEquals(diff.blockEnds.toList(), listOf(3))
+        assertEquals(diff.blockStarts.toList(), listOf(1))
+        assertEquals(diff.blockEnds.toList(), listOf(3))
         assertEquals(ByteChange.NONE, diff.changeAt(19))
         assertEquals(ByteChange.ADDED, diff.changeAt(20))
         assertEquals(ByteChange.REMOVED, diff(right, left).changeAt(39))
     }
 
-    fun testEmptySideIsEntirelyAdded() {
+    @Test
+    fun emptySideIsEntirelyAdded() {
         val diff = diff(ByteArray(0), ByteArray(33))
         assertEquals(33L, diff.changedBytes)
-        assertOrderedEquals(diff.blockStarts.toList(), listOf(0))
-        assertOrderedEquals(diff.blockEnds.toList(), listOf(3))
+        assertEquals(diff.blockStarts.toList(), listOf(0))
+        assertEquals(diff.blockEnds.toList(), listOf(3))
     }
 
     private fun diff(left: ByteArray, right: ByteArray) =

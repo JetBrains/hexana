@@ -1,4 +1,4 @@
-package org.jetbrains.hexana.diff
+package org.jetbrains.hexana.shared.diff
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 
@@ -13,7 +13,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
  * @param blockStarts first row of each run of consecutive changed rows, ascending
  * @param blockEnds exclusive end row of the run at the same index
  */
-internal class HexDiff(
+class HexDiff(
     val left: CommonByteBuffer,
     val right: CommonByteBuffer,
     val bytesPerRow: Int,
@@ -37,7 +37,7 @@ internal class HexDiff(
     }
 
     fun isRowChanged(row: Int): Boolean {
-        val i = blockStarts.binarySearch(row).let { if (it >= 0) it else -it - 2 }
+        val i = blockStarts.binarySearchCommon(row).let { if (it >= 0) it else -it - 2 }
         return i >= 0 && row < blockEnds[i]
     }
 
@@ -91,7 +91,7 @@ internal class HexDiff(
     }
 }
 
-internal enum class ByteChange { NONE, MODIFIED, REMOVED, ADDED }
+enum class ByteChange { NONE, MODIFIED, REMOVED, ADDED }
 
 /**
  * What the hex diff list displays: runs of rows, with long unchanged stretches between
@@ -101,7 +101,7 @@ internal enum class ByteChange { NONE, MODIFIED, REMOVED, ADDED }
  * Each segment is a half-open row range `[segmentStart, segmentEnd)`; a folded segment is
  * one list item, any other segment is one item per row.
  */
-internal class HexDiffLayout private constructor(
+class HexDiffLayout private constructor(
     private val segmentStart: IntArray,
     private val segmentEnd: IntArray,
     private val segmentFolded: BooleanArray,
@@ -123,7 +123,7 @@ internal class HexDiffLayout private constructor(
     }
 
     fun itemAt(index: Int): Item {
-        val s = segmentFirstItem.binarySearch(index).let { if (it >= 0) it else -it - 2 }
+        val s = segmentFirstItem.binarySearchCommon(index).let { if (it >= 0) it else -it - 2 }
         return if (segmentFolded[s]) {
             Item.Fold(segmentStart[s], segmentEnd[s])
         } else {
@@ -134,7 +134,7 @@ internal class HexDiffLayout private constructor(
     /** List index showing [row]: its own item, or the fold hiding it. */
     fun itemOf(row: Int): Int {
         if (segmentStart.isEmpty()) return 0
-        val s = segmentStart.binarySearch(row).let { if (it >= 0) it else -it - 2 }.coerceAtLeast(0)
+        val s = segmentStart.binarySearchCommon(row).let { if (it >= 0) it else -it - 2 }.coerceAtLeast(0)
         return if (segmentFolded[s]) segmentFirstItem[s] else segmentFirstItem[s] + (row - segmentStart[s])
     }
 
@@ -215,4 +215,23 @@ private class IntArrayBuilder {
     }
 
     fun toArray(): IntArray = data.copyOf(size)
+}
+
+/**
+ * `java.util.Arrays.binarySearch` semantics for a sorted array, in common code: the index of
+ * [key], or `-(insertion point) - 1` when absent.
+ */
+internal fun IntArray.binarySearchCommon(key: Int): Int {
+    var low = 0
+    var high = size - 1
+    while (low <= high) {
+        val mid = (low + high) ushr 1
+        val value = this[mid]
+        when {
+            value < key -> low = mid + 1
+            value > key -> high = mid - 1
+            else -> return mid
+        }
+    }
+    return -(low + 1)
 }

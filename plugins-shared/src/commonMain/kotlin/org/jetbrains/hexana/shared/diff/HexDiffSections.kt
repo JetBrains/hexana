@@ -1,4 +1,4 @@
-package org.jetbrains.hexana.diff
+package org.jetbrains.hexana.shared.diff
 
 import org.jetbrains.hexana.providers.StructureRange
 
@@ -11,7 +11,7 @@ import org.jetbrains.hexana.providers.StructureRange
  *   tint by it, so adjacent sections always differ
  * @param firstChangedOffset first byte of the section that differs, `null` when unchanged
  */
-internal class DiffSection(
+class DiffSection(
     val offset: Long,
     val size: Long,
     val label: String,
@@ -28,7 +28,7 @@ internal class DiffSection(
  * [sideSize], each with its changed-byte count. Scans only the changed blocks, and only
  * bytes both sides hold — bytes past the shorter side are changed by definition.
  */
-internal fun diffSections(
+fun diffSections(
     diff: HexDiff,
     ranges: List<StructureRange>,
     sideSize: Int,
@@ -44,7 +44,7 @@ internal fun diffSections(
         var changed = 0L
         var firstChanged: Long? = null
         // First block ending after the section start; blocks are sorted and disjoint.
-        var b = diff.blockEnds.binarySearch(((start / bytesPerRow) + 1).toInt()).let { if (it >= 0) it else -it - 1 }
+        var b = diff.blockEnds.binarySearchCommon(((start / bytesPerRow) + 1).toInt()).let { if (it >= 0) it else -it - 1 }
         while (b < diff.blockCount && diff.blockStarts[b] * bytesPerRow < end) {
             val from = maxOf(start, diff.blockStarts[b] * bytesPerRow)
             val to = minOf(end, diff.blockEnds[b] * bytesPerRow)
@@ -66,7 +66,7 @@ internal fun diffSections(
 }
 
 /** The section of the offset-sorted [sections] holding [offset], or `null` in a gap. */
-internal fun sectionAt(sections: List<DiffSection>, offset: Long): DiffSection? {
+fun sectionAt(sections: List<DiffSection>, offset: Long): DiffSection? {
     var low = 0
     var high = sections.size - 1
     var found = -1
@@ -83,7 +83,7 @@ internal fun sectionAt(sections: List<DiffSection>, offset: Long): DiffSection? 
 }
 
 /** Labels of the offset-sorted [sections] overlapping `[from, to)`, in order. */
-internal fun sectionLabelsIn(sections: List<DiffSection>, from: Long, to: Long): List<String> {
+fun sectionLabelsIn(sections: List<DiffSection>, from: Long, to: Long): List<String> {
     // Sections do not nest in practice, so the one holding `from` (or the first after it) is where overlap starts.
     var i = firstStartingAtOrAfter(sections, from).let { if (it > 0 && sections[it - 1].end > from) it - 1 else it }
     val result = ArrayList<String>()
@@ -105,14 +105,14 @@ private fun firstStartingAtOrAfter(sections: List<DiffSection>, offset: Long): I
 }
 
 /** How a section differs between the two sides of the diff. */
-internal enum class SectionStatus { UNCHANGED, MODIFIED, LEFT_ONLY, RIGHT_ONLY }
+enum class SectionStatus { UNCHANGED, MODIFIED, LEFT_ONLY, RIGHT_ONLY }
 
 /**
  * One entry of the section bar: a section of either side, paired with the same-named
  * section of the other side when there is one. Both halves share [colorIndex], so a
  * section has one tint on both sides.
  */
-internal class MergedSection(val label: String, val colorIndex: Int, val left: DiffSection?, val right: DiffSection?) {
+class MergedSection(val label: String, val colorIndex: Int, val left: DiffSection?, val right: DiffSection?) {
     val status: SectionStatus = when {
         left == null -> SectionStatus.RIGHT_ONLY
         right == null -> SectionStatus.LEFT_ONLY
@@ -129,7 +129,7 @@ internal class MergedSection(val label: String, val colorIndex: Int, val left: D
 }
 
 /** Both sides' sections, recolored so a pair shares a tint, plus the merged bar. */
-internal class DiffSections(
+class DiffSections(
     val left: List<DiffSection>,
     val right: List<DiffSection>,
     val merged: List<MergedSection>,
@@ -145,10 +145,14 @@ internal class DiffSections(
  * after the section that precedes them on the right. Linear, since archives can have tens
  * of thousands of entries.
  */
-internal fun mergeSections(left: List<DiffSection>, right: List<DiffSection>): DiffSections {
+fun mergeSections(left: List<DiffSection>, right: List<DiffSection>): DiffSections {
     fun keys(sections: List<DiffSection>): List<String> {
         val seen = HashMap<String, Int>()
-        return sections.map { s -> "${s.label}\u0000${seen.merge(s.label, 1, Int::plus)}" }
+        return sections.map { s ->
+            val occurrence = (seen[s.label] ?: 0) + 1
+            seen[s.label] = occurrence
+            "${s.label}\u0000$occurrence"
+        }
     }
     val leftKeys = keys(left)
     val rightKeys = keys(right)

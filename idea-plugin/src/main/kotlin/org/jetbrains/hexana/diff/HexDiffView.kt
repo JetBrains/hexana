@@ -51,7 +51,16 @@ import com.intellij.openapi.util.text.StringUtil
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.shared.diff.ByteChange
+import org.jetbrains.hexana.shared.diff.DiffSection
+import org.jetbrains.hexana.shared.diff.DiffSections
+import org.jetbrains.hexana.shared.diff.HexDiff
+import org.jetbrains.hexana.shared.diff.HexDiffLayout
+import org.jetbrains.hexana.shared.diff.MergedSection
+import org.jetbrains.hexana.shared.diff.SectionStatus
 import org.jetbrains.hexana.shared.diff.TableTabDiff
+import org.jetbrains.hexana.shared.diff.sectionAt
+import org.jetbrains.hexana.shared.diff.sectionLabelsIn
 import org.jetbrains.hexana.ui.VerticalSplitPanel
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.asASCII

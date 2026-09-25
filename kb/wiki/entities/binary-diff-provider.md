@@ -184,3 +184,17 @@ Default viewer per entry point: the platform keeps the viewer order per diff **p
 `CompareFilesAction` opens a `SimpleDiffRequestChain` under place `Hexana.CompareBinaries`, whose order is seeded once
 with `HexanaStructuralDiffTool` first; the IDE's Compare Files uses the default place, where EP registration order puts
 `HexDiffTool` first. `FORCE_DIFF_TOOL` was rejected — it hides the viewer switcher.
+
+### VS Code hex diff (2026-09-25)
+
+The hex diff's UI-free parts moved to `plugins-shared/.../shared/diff/` (`HexDiff`, `HexDiffLayout`, `HexDiffSections`,
+`HexDiffStructure.diffTableTabs/areComparable/expectsTabs`, `TableTabDiffer`) — common code, so no
+`IntArray.binarySearch` / `HashMap.merge` / `String.format` there. `web-ui` renders it in `HexDiffView.kt`
+(Compose-for-Web, `VirtualizedList` rows, styled runs per row, the same diff-safe section palette) inside
+`DiffModeView`, a Hex diff / Hexana diff switch that mounts each view lazily and then only hides it.
+
+Entry points: the diff URI carries `mode=hex|hexana`; `hexana.compareFiles` opens `hexana`, VS Code's own Compare
+Selected is redirected to `hex`. VS Code reports a `DiffEditorInput` whose sides are custom editors as
+`TabInputKind.UnknownInput` (only text/text and notebook/notebook diffs get a kind), and the label is
+`originalName ↔ modifiedName` even for equal names (directories go to a description the Tab API does not expose) —
+so such a tab is paired with the sides resolved within 3 s by name, in resolution order for equal names.

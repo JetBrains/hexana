@@ -80,12 +80,15 @@ fun BinaryEditorApp() {
                         showSemanticHighlighting = message.settingValue
                     }
                 }
-                // Both kinds render the same view, which picks the format from the bytes.
+                // Both kinds render the same view, which picks the format from the bytes. The
+                // host says which view it opens on: Hexana's Compare Files asks for the Hexana
+                // diff, VS Code's own Compare Selected for the hex diff.
                 "load-diff", "load-native-diff" -> {
                     val left = message.leftData
                     val right = message.rightData
                     if (left != null && right != null) {
-                        diffPayload = DiffPayload(left, message.leftName, right, message.rightName)
+                        val mode = if (message.diffMode == "hexana") DiffViewMode.HEXANA else DiffViewMode.HEX
+                        diffPayload = DiffPayload(left, message.leftName, right, message.rightName, mode)
                     }
                 }
                 "load-expired" -> {
@@ -156,7 +159,7 @@ fun BinaryEditorApp() {
             val input = remember(dp) {
                 BinaryDiffInput(dp.leftData.toCommonByteBuffer(), dp.rightData.toCommonByteBuffer(), dp.leftName, dp.rightName)
             }
-            BinaryDiffView(input)
+            DiffModeView(input, dp.mode)
             return@CompositionLocalProvider
         }
 

@@ -60,6 +60,18 @@ When adding a new table-based tab, add it to the relevant `TableTabsProvider` in
 it will appear automatically in both IntelliJ and VS Code. To attach VS Code-specific actions,
 update `TableTabEnricher.kt`.
 
+## Diff View
+
+- A diff is a `hexana-module:` URI with `diff=true&mode=hex|hexana` and the two source URIs; the host posts
+  `load-diff` with both payloads and `mode`, and the webview renders `DiffModeView` (`web-ui`), a switch between
+  `HexDiffView` (hex diff with sections and table-tab diffs) and `BinaryDiffView` (the `BinaryDiffProvider` diff).
+- `hexana.compareFiles` opens on `hexana`. VS Code's own diffs of two Hexana binaries are redirected to `hex` by
+  `registerCompareSelectedRedirect`: a text-diff tab reports its sides; a diff of two custom-editor files is reported as
+  an *unknown* tab (VS Code's `mainThreadEditorTabs` has no custom-diff input kind), so it is paired by its
+  `a ↔ b` label with the sides the editor just resolved (`diffTabPairing.ts`).
+- The hex-diff model, fold layout, section pairing and table-tab diffing are shared with IntelliJ in
+  `plugins-shared/.../shared/diff/` (`HexDiff`, `HexDiffSections`, `HexDiffStructure`, `TableTabDiff`).
+
 ## Working Rules
 
 - Keep the TypeScript host as thin as possible; all Wasm logic belongs in Kotlin.

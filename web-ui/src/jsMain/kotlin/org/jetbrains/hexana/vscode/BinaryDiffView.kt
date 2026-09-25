@@ -369,7 +369,7 @@ private fun DiffDivider() {
 }
 
 /** Suspends until the browser is about to paint, so state set before this call is visible first. */
-private suspend fun awaitAnimationFrame() {
+internal suspend fun awaitAnimationFrame() {
     kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
         val handle = window.requestAnimationFrame { cont.resumeWith(Result.success(Unit)) }
         cont.invokeOnCancellation { window.cancelAnimationFrame(handle) }

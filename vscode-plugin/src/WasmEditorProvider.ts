@@ -4,6 +4,7 @@ import * as vscode from "vscode";
 import { getWebviewContent } from "./webviewContent";
 import { extensionLib, getSelectedRuntime, runExport } from "./WasmRunConfigurations";
 import { isNativeBinary } from "./NativeBinaryFileTypeDetector";
+import { DIFF_LABEL_SEPARATOR, pairSidesForLabel } from "./diffTabPairing";
 import { WasmFeatureCatalogProvider } from "./wasmFeatureCatalog";
 import {
     binaryFileContent,
@@ -127,6 +128,17 @@ async function readRuntimeTargetsJson(scope?: vscode.Uri): Promise<string> {
  * `filenamePattern` in `package.json`, so an entry opens exactly when the same file
  * on disk would.
  */
+/**
+ * Extensions whose files a VS Code diff of two of them is redirected to the Hexana diff for:
+ * those the `hexana.wasmEditor` custom editor claims in `package.json`, plus the native ones
+ * the compare dialog offers.
+ */
+const HEXANA_DIFF_EXTENSIONS = new Set([
+    "wasm", "elf", "exe", "so", "o", "a", "dll", "dylib", "jar", "zip", "war", "apk", "class", "dex", "arsc",
+    "desc", "protoset", "pcap", "cap", "pcapng", "parquet", "arrow", "arrows", "pb", "tar", "tgz", "gz",
+    "obj", "lib", "ko", "sys", "axf", "bin", "out",
+]);
+
 /** Native-binary extensions offered by the compare file dialog (besides `.wasm`). */
 const COMPARABLE_NATIVE_EXTENSIONS = ["o", "obj", "so", "dylib", "dll", "exe", "elf", "a", "lib", "ko", "sys", "axf", "bin", "out"];
 
@@ -211,7 +223,29 @@ function inflateIfGzipped(fileName: string, data: Uint8Array): { data: Uint8Arra
 const pendingDiffs = new Map<string, {
     leftData: Uint8Array; leftName: string;
     rightData: Uint8Array; rightName: string;
+    mode: DiffMode;
 }>();
+
+/** How long a resolved side or an unmatched diff tab waits for its counterpart. */
+const DIFF_MATCH_WINDOW_MS = 3000;
+
+/** Sides the Hexana editor resolved just now — candidates for a custom-editor diff tab. */
+const recentSides: { uri: vscode.Uri; at: number }[] = [];
+
+/** Unknown-input `a ↔ b` tabs waiting for their sides to resolve. */
+const pendingDiffTabs: { tab: vscode.Tab; at: number }[] = [];
+
+function prune(entries: { at: number }[], now: number): void {
+    for (let i = entries.length - 1; i >= 0; i--) {
+        if (now - entries[i].at > DIFF_MATCH_WINDOW_MS) entries.splice(i, 1);
+    }
+}
+
+/**
+ * Which view a diff opens on: the hex diff (sections, table tabs; any pair) or the Hexana
+ * structural diff. The webview offers a switch between them either way.
+ */
+type DiffMode = "hex" | "hexana";
 
 /**
  * In-memory store for WAT text keyed by a synthetic `hexana-wat:` URI.
@@ -419,7 +453,9 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 }).then(uris => uris?.[0]);
                 if (!right) return;
             }
-            await WasmEditorProvider.openDiff(left, right);
+            // Hexana's own entry opens on the structural diff, as it did before the hex diff
+            // existed; VS Code's Compare Selected opens on the hex diff (see below).
+            await WasmEditorProvider.openDiff(left, right, "hexana");
         };
         return vscode.Disposable.from(
             vscode.commands.registerCommand("hexana.compareFiles", handler),
@@ -428,7 +464,99 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         );
     }
 
-    private static async openDiff(left: vscode.Uri, right: vscode.Uri): Promise<void> {
+    /**
+     * Redirects VS Code's own binary diffs — Compare Selected, Select for Compare, and any
+     * other `vscode.diff` of two binaries Hexana opens — to the Hexana diff tab, opened on
+     * the hex diff. VS Code would show the two sides as unrelated editors (or "binary file
+     * not shown"); a diff tab of two Hexana binaries is closed and replaced as it appears.
+     *
+     * Only sides VS Code can read through its file system are taken over: a diff whose
+     * content comes from a text-document provider (e.g. a `git:` revision) is left alone.
+     */
+    public static registerCompareSelectedRedirect(): vscode.Disposable {
+        return vscode.window.tabGroups.onDidChangeTabs(async (event) => {
+            for (const tab of event.opened) {
+                const input = tab.input;
+                if (input instanceof vscode.TabInputTextDiff) {
+                    // Files VS Code shows as text: it reports both sides.
+                    const { original, modified } = input;
+                    if (await WasmEditorProvider.isHexanaBinary(original) && await WasmEditorProvider.isHexanaBinary(modified)) {
+                        await WasmEditorProvider.replaceDiffTab(tab, original, modified);
+                    }
+                } else if (input === undefined && tab.label.includes(DIFF_LABEL_SEPARATOR)) {
+                    // Files the Hexana editor claims: VS Code puts two Hexana editors side by side
+                    // and reports the tab as unknown, without its sides. They are paired with the
+                    // sides just resolved in this editor, see `noteResolvedSide`.
+                    pendingDiffTabs.push({ tab, at: Date.now() });
+                    await WasmEditorProvider.matchCustomDiffTabs();
+                }
+            }
+        });
+    }
+
+    /**
+     * Records a side the Hexana editor just resolved, so a custom-editor diff tab appearing
+     * alongside it (whose sides VS Code does not report) can be paired with it.
+     */
+    private static async noteResolvedSide(uri: vscode.Uri): Promise<void> {
+        if (uri.scheme === "hexana-module") return;
+        recentSides.push({ uri, at: Date.now() });
+        await WasmEditorProvider.matchCustomDiffTabs();
+    }
+
+    /**
+     * Pairs pending unknown `a ↔ b` diff tabs with recently resolved sides by name, then
+     * replaces each paired tab with the Hexana diff. Tabs and sides older than a few seconds
+     * are dropped: a diff opens both sides at once, and a stale entry would only mismatch.
+     */
+    private static async matchCustomDiffTabs(): Promise<void> {
+        const now = Date.now();
+        prune(recentSides, now);
+        prune(pendingDiffTabs, now);
+        for (const pending of [...pendingDiffTabs]) {
+            const pair = pairSidesForLabel(pending.tab.label, recentSides.map(s => s.uri), uri => path.basename(uri.path));
+            if (!pair) continue;
+            pendingDiffTabs.splice(pendingDiffTabs.indexOf(pending), 1);
+            for (const side of pair) {
+                const index = recentSides.findIndex(s => s.uri.toString() === side.toString());
+                if (index >= 0) recentSides.splice(index, 1);
+            }
+            await WasmEditorProvider.replaceDiffTab(pending.tab, pair[0], pair[1]);
+        }
+    }
+
+    private static async replaceDiffTab(tab: vscode.Tab, original: vscode.Uri, modified: vscode.Uri): Promise<void> {
+        try {
+            await vscode.window.tabGroups.close(tab);
+        } catch (err) {
+            console.warn("[Hexana] Failed to close the native diff tab:", err);
+        }
+        await WasmEditorProvider.openDiff(original, modified, "hex");
+    }
+
+    /**
+     * Whether [uri] is a binary the Hexana editor opens, readable through VS Code's file
+     * system: its extension is one the custom editor claims, or — extensionless — its first
+     * bytes carry a known binary signature. Text files are never matched.
+     */
+    private static async isHexanaBinary(uri: vscode.Uri): Promise<boolean> {
+        const base = path.basename(uri.path).toLowerCase();
+        const ext = base.includes(".") ? base.split(".").pop() ?? "" : "";
+        try {
+            if (ext !== "") {
+                if (!HEXANA_DIFF_EXTENSIONS.has(ext) && !base.endsWith(".tar.gz")) return false;
+                await vscode.workspace.fs.stat(uri);
+                return true;
+            }
+            const bytes = await vscode.workspace.fs.readFile(uri);
+            return isNativeBinary(bytes.subarray(0, 64));
+        } catch {
+            // Not on a file system VS Code can read (e.g. a `git:` text provider).
+            return false;
+        }
+    }
+
+    private static async openDiff(left: vscode.Uri, right: vscode.Uri, mode: DiffMode): Promise<void> {
         const leftData = await vscode.workspace.fs.readFile(left);
         const rightData = await vscode.workspace.fs.readFile(right);
         const leftName = path.basename(left.fsPath);
@@ -437,14 +565,14 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         // Build a synthetic URI for the diff tab. Encode the original file paths so the
         // diff can be restored after a VS Code restart without re-prompting the user.
         const diffUri = vscode.Uri.parse(
-            `hexana-module:/${leftName} ↔ ${rightName}?diff=true&left=${encodeURIComponent(left.toString())}&right=${encodeURIComponent(right.toString())}`,
+            `hexana-module:/${leftName} ↔ ${rightName}?diff=true&mode=${mode}&left=${encodeURIComponent(left.toString())}&right=${encodeURIComponent(right.toString())}`,
         );
         const key = diffUri.toString();
 
         // Store the left side as the "document" bytes so openCustomDocument can serve
         // something, and store the diff payload separately.
         inMemoryModules.set(key, { data: leftData, fileName: `${leftName} ↔ ${rightName}` });
-        pendingDiffs.set(key, { leftData, leftName, rightData, rightName });
+        pendingDiffs.set(key, { leftData, leftName, rightData, rightName, mode });
 
         try {
             await vscode.commands.executeCommand("vscode.openWith", diffUri, WasmEditorProvider.viewType);
@@ -627,6 +755,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         };
 
         webviewPanel.webview.html = getWebviewContent(webviewPanel.webview, this.context.extensionUri);
+        // Possibly one side of a VS Code diff; see `registerCompareSelectedRedirect`.
+        void WasmEditorProvider.noteResolvedSide(document.uri);
 
         this.openWebviews.set(webviewPanel, document.uri);
         webviewPanel.onDidDispose(() => this.openWebviews.delete(webviewPanel));
@@ -646,6 +776,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                         leftName: diff.leftName,
                         rightData: toWebviewBytes(diff.rightData),
                         rightName: diff.rightName,
+                        mode: diff.mode,
                     });
                     return;
                 }
@@ -669,6 +800,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                                 leftName: path.basename(leftUri.fsPath),
                                 rightData: toWebviewBytes(rightData),
                                 rightName: path.basename(rightUri.fsPath),
+                                mode: params.get("mode") === "hexana" ? "hexana" : "hex",
                             });
                             return;
                         } catch (err) {
