@@ -151,3 +151,15 @@ The hex diff is **positional** (byte `i` vs byte `i`), rows of 16; runs of chang
 and unchanged stretches of ≥ 4 rows outside 3 rows of context fold into one clickable item
 (`HexDiffLayout`). An insertion therefore marks every following row as changed; alignment (LCS) was
 rejected as too costly for multi-MB binaries.
+
+Sections in the hex diff (`diff/HexDiffSections.kt`): each side gets its own `StructureRange`s from
+`createBinaryProvider(bytes, fileName = …)`, parsed after the byte diff is shown. `diffSections`
+attributes changed bytes per section by scanning only changed blocks (bytes past the shorter side are
+counted arithmetically). Tints use `HexanaTheme.diffStructureColors` — blues, purple, teal, slate —
+deliberately disjoint from the diff's amber / red / green; the single-file `structureColors` palette
+contains green, gold and orange and would read as changes. The section bar is a single wrapping `FlowRow` for both sides
+(`mergeSections` pairs the n-th same-named section of each side, in left order, right-only ones after
+their right-side predecessor; a pair shares one tint). Height is capped and scrolls; past 400 entries
+(ZIP / PCAP emit tens of thousands) only changed sections are listed. A click scrolls the shared
+positional view to the earliest change on either side, so a section at different offsets on the two
+sides lines up on one side only.

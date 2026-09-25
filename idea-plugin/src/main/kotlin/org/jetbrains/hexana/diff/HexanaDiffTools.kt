@@ -35,6 +35,7 @@ import org.jetbrains.hexana.HexanaFileEditorProvider
 import org.jetbrains.hexana.actions.CompareFilesAction
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.providers.createBinaryProvider
 import org.jetbrains.hexana.shared.diff.BinaryDiffProviderRegistry
 import org.jetbrains.hexana.toCommonByteBuffer
 import org.jetbrains.hexana.ui.createComposePanel
@@ -118,6 +119,15 @@ private class HexDiffViewer(private val request: ContentDiffRequest) : FrameDiff
                     state.diff = diff
                     status.text = statusText(diff)
                 }
+                // Sections come second: parsing can take a while on a large binary, and the
+                // byte diff is useful without them.
+                val leftSections = sectionsOf(diff, diff.left, left, diff.leftSize)
+                val rightSections = sectionsOf(diff, diff.right, right, diff.rightSize)
+                val sections = mergeSections(leftSections, rightSections)
+                withContext(Dispatchers.EDT) {
+                    state.sections = sections
+                    status.text = statusText(diff) + sectionStatus(sections)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -142,6 +152,33 @@ private class HexDiffViewer(private val request: ContentDiffRequest) : FrameDiff
         is FileContent -> withContext(Dispatchers.IO) { content.file.toCommonByteBuffer() }
             ?: error("cannot read ${content.file.name}")
         else -> ByteArray(0).toCommonByteBuffer()
+    }
+
+    /**
+     * The sections of one side, from the provider Hexana would open it with. Empty for a
+     * missing side, a format without structure, or one that fails to parse — the byte diff
+     * stands on its own.
+     */
+    private fun CoroutineScope.sectionsOf(diff: HexDiff, bytes: CommonByteBuffer, content: DiffContent, size: Int): List<DiffSection> {
+        val file = (content as? FileContent)?.file ?: return emptyList()
+        return try {
+            val ranges = createBinaryProvider(bytes, sourcePath = null, fileName = file.name).structureRanges
+            diffSections(diff, ranges, size) { ensureActive() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            LOG.info("No sections for ${file.name} in the hex diff", e)
+            emptyList()
+        }
+    }
+
+    /** E.g. " · 3 of 28 sections modified", counting added and removed sections as modified. */
+    private fun sectionStatus(sections: DiffSections): String {
+        val all = sections.merged.size
+        if (all == 0) return ""
+        val modified = sections.merged.count { it.status != SectionStatus.UNCHANGED }
+        return " · ${"%,d".format(modified)} of ${"%,d".format(all)} " +
+            (if (all == 1) "section" else "sections") + " modified"
     }
 
     private fun statusText(diff: HexDiff): String = if (diff.isIdentical) {

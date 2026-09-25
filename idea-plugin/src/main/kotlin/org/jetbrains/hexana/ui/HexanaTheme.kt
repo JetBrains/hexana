@@ -71,6 +71,31 @@ object HexanaTheme {
         @Composable
         get() = if (JewelTheme.isDark) darkStructureColors else lightStructureColors
 
+    /**
+     * Section tints for the hex diff. Unlike [structureColors] they avoid the diff's own
+     * hues — amber (modified), red (removed), green (added) — and keep to blues, purples,
+     * teal and slate, so a tinted section never reads as a change.
+     */
+    val diffStructureColors: List<Color>
+        @Composable
+        get() = if (JewelTheme.isDark) darkDiffStructureColors else lightDiffStructureColors
+
+    private val darkDiffStructureColors = listOf(
+        Color(100, 149, 237, 44),  // cornflower blue
+        Color(186, 147, 214, 44),  // lavender
+        Color(90, 200, 215, 44),   // cyan teal
+        Color(150, 160, 190, 44),  // slate
+        Color(125, 115, 235, 44),  // indigo
+    )
+
+    private val lightDiffStructureColors = listOf(
+        Color(70, 130, 220, 40),   // cornflower blue
+        Color(148, 103, 189, 40),  // muted purple
+        Color(40, 160, 190, 40),   // cyan teal
+        Color(105, 120, 155, 40),  // slate
+        Color(95, 85, 210, 40),    // indigo
+    )
+
     private val darkStructureColors = listOf(
         Color(100, 149, 237, 38),  // cornflower blue
         Color(144, 238, 144, 38),  // light green
