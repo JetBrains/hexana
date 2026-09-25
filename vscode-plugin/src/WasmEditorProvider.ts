@@ -800,7 +800,9 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                                 leftName: path.basename(leftUri.fsPath),
                                 rightData: toWebviewBytes(rightData),
                                 rightName: path.basename(rightUri.fsPath),
-                                mode: params.get("mode") === "hexana" ? "hexana" : "hex",
+                                // A tab restored from before the hex diff carries no mode; only
+                                // "Hexana: Compare Files" opened diffs then, on this view.
+                                mode: params.get("mode") === "hex" ? "hex" : "hexana",
                             });
                             return;
                         } catch (err) {

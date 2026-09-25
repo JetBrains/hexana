@@ -18,6 +18,11 @@ import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.NativeBinaryFileType
 import org.jetbrains.hexana.WasmFileType
 import org.jetbrains.hexana.diff.HexanaStructuralDiffTool
+import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.WasmBinaryProviderSelector
+import com.intellij.openapi.util.Key
+import java.io.IOException
 import org.jetbrains.hexana.providers.format.WasmSymbolMap
 import org.jetbrains.hexana.shared.diff.BinaryDiffInput
 import org.jetbrains.hexana.shared.diff.BinaryDiffProviderRegistry
@@ -172,13 +177,34 @@ open class CompareFilesAction : AnAction() {
             !file.isDirectory && (file.fileType is WasmFileType || file.fileType is NativeBinaryFileType)
 
         /**
-         * Whether [left] and [right] are both WASM or both native — the split the diff
-         * providers follow, decided from the cached file types. A WASM module against a
-         * component still passes and is refused by [BinaryDiffProviderRegistry.rejectionReason],
-         * since telling them apart takes reading the header.
+         * Whether a diff provider compares [left] with [right]: two core WASM modules, two
+         * components, or two native binaries — the split [BinaryDiffProviderRegistry] follows.
+         * A module and a component share a file type, so WASM files are told apart by their
+         * 8-byte header ([wasmKind]); native files by their file type alone.
          */
         internal fun isComparablePair(left: VirtualFile, right: VirtualFile): Boolean =
-            isComparable(left) && isComparable(right) && (left.fileType is WasmFileType) == (right.fileType is WasmFileType)
+            isComparable(left) && isComparable(right) && wasmKind(left) == wasmKind(right)
+
+        /**
+         * What the header says a WASM-typed [file] is (module, component, or neither), the same
+         * sniff the diff providers use; [BinaryProviderType.Generic] for a native file, unread.
+         * Cached per modification stamp, since the diff window asks on every tool-list update.
+         */
+        private fun wasmKind(file: VirtualFile): BinaryProviderType {
+            if (file.fileType !is WasmFileType) return BinaryProviderType.Generic
+            file.getUserData(WASM_KIND)?.let { (stamp, kind) -> if (stamp == file.modificationStamp) return kind }
+            val header = try {
+                file.inputStream.use { it.readNBytes(8) }
+            } catch (_: IOException) {
+                ByteArray(0)
+            }
+            val kind =
+                if (header.size < 8) BinaryProviderType.Generic else WasmBinaryProviderSelector.select(header.toCommonByteBuffer())
+            file.putUserData(WASM_KIND, file.modificationStamp to kind)
+            return kind
+        }
+
+        private val WASM_KIND = Key.create<Pair<Long, BinaryProviderType>>("hexana.compare.wasmKind")
     }
 }
 

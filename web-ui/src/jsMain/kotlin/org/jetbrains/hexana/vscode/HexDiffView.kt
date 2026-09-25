@@ -83,7 +83,9 @@ fun DiffModeView(input: BinaryDiffInput, initialMode: DiffViewMode) {
         }
         for (view in DiffViewMode.entries) {
             if (view !in mounted) continue
-            Div({
+            // Keyed: mounting the other view inserts it before or after this one, and without
+            // a key this view's state would be matched by position and recreated.
+            key(view) { Div({
                 style {
                     display(if (view == mode) DisplayStyle.Flex else DisplayStyle.None)
                     property("flex-direction", "column")
@@ -96,7 +98,7 @@ fun DiffModeView(input: BinaryDiffInput, initialMode: DiffViewMode) {
                     DiffViewMode.HEX -> HexDiffView(hexState)
                     DiffViewMode.HEXANA -> BinaryDiffView(input)
                 }
-            }
+            } }
         }
     }
 }
@@ -159,6 +161,10 @@ internal class HexDiffState(val input: BinaryDiffInput) {
     /** The diffed table tabs; `null` while being computed. */
     var tabs: List<TableTabDiff>? by mutableStateOf(null)
     var selectedTab: Int by mutableStateOf(0)
+        private set
+
+    /** Tabs shown at least once; they stay mounted (hidden) so each keeps its sort, search and row. */
+    val visitedTabs = mutableStateSetOf<Int>()
     var tabsHeightPx: Int by mutableStateOf(280)
 
     var collapseUnchanged: Boolean by mutableStateOf(true)
@@ -182,6 +188,11 @@ internal class HexDiffState(val input: BinaryDiffInput) {
         val row = (offset / diff.bytesPerRow).toInt()
         val target = if (diff.isRowChanged(row)) (row - HexDiffLayout.CONTEXT_ROWS).coerceAtLeast(0) else row
         reveal = ListReveal(layout.itemOf(target), ++revealRequests)
+    }
+
+    fun selectTab(index: Int) {
+        selectedTab = index
+        visitedTabs += index
     }
 
     fun goToBlock(block: Int) {
@@ -221,7 +232,7 @@ internal class HexDiffState(val input: BinaryDiffInput) {
                 between = { awaitAnimationFrame() },
                 onRowClick = { l, r -> listOfNotNull(l, r).minOrNull()?.let { goToOffset(it.toLong()) } },
             )
-            selectedTab = tabs.indexOfFirst { it.changed > 0 }.coerceAtLeast(0)
+            selectTab(tabs.indexOfFirst { it.changed > 0 }.coerceAtLeast(0))
             this.tabs = tabs
         } catch (e: CancellationException) {
             throw e
@@ -559,7 +570,7 @@ private fun DiffTabsPanel(state: HexDiffState, tabs: List<TableTabDiff>) {
                     property("border-bottom", if (active) "2px solid var(--vscode-focusBorder, #007FD4)" else "2px solid transparent")
                     property("opacity", if (active || tab.changed > 0) "1" else "0.6")
                 }
-                onClick { state.selectedTab = i }
+                onClick { state.selectTab(i) }
             }) {
                 if (tab.changed > 0) {
                     Span({ style { property("color", MODIFIED_BORDER) } }) { Text("● ") }
@@ -571,19 +582,25 @@ private fun DiffTabsPanel(state: HexDiffState, tabs: List<TableTabDiff>) {
             }
         }
     }
-    val tab = tabs.getOrNull(selected) ?: return
-    Div({
-        style {
-            property("flex", "1")
-            property("min-height", "0")
-            display(DisplayStyle.Flex)
-            property("flex-direction", "column")
-            property("overflow", "hidden")
-            property("padding", "6px 12px")
+    // Every visited tab stays mounted and only the current one is shown, so switching back finds
+    // its table as it was left. Keyed by tab: visiting a new tab inserts it among the others, and
+    // without a key their state would be matched by position.
+    for ((index, tab) in tabs.withIndex()) {
+        if (index !in state.visitedTabs) continue
+        key(index) {
+            Div({
+                style {
+                    property("flex", "1")
+                    property("min-height", "0")
+                    display(if (index == selected) DisplayStyle.Flex else DisplayStyle.None)
+                    property("flex-direction", "column")
+                    property("overflow", "hidden")
+                    property("padding", "6px 12px")
+                }
+            }) {
+                TableTabContent(tab.descriptor, state.selection)
+            }
         }
-    }) {
-        // Keyed so each tab's table keeps its own sort, search and selection.
-        key(selected) { TableTabContent(tab.descriptor, state.selection) }
     }
 }
 

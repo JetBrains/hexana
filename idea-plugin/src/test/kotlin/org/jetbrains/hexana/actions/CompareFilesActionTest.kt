@@ -72,6 +72,10 @@ class CompareFilesActionTest : BasePlatformTestCase() {
         assertTrue(CompareFilesAction.isComparablePair(executable, file("tool", machO)))
         assertFalse(CompareFilesAction.isComparablePair(module, executable))
         assertFalse(CompareFilesAction.isComparablePair(executable, module))
+        // A module and a component share the WASM file type; only the header tells them apart.
+        val component = file("component.wasm", byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x0D, 0x00, 0x01, 0x00))
+        assertFalse(CompareFilesAction.isComparablePair(module, component))
+        assertTrue(CompareFilesAction.isComparablePair(component, file("component-old.wasm", byteArrayOf(0x00, 0x61, 0x73, 0x6D, 0x0D, 0x00, 0x01, 0x00))))
     }
 
     fun `test extensionless binaries are comparable by content`() {

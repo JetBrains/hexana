@@ -92,7 +92,15 @@ private class DiffScreenState(
     val session: BinaryDiffSession? = BinaryDiffProviderRegistry.forInput(input)?.session(input)
     var selectedTab by mutableStateOf(0)
         private set
-    var selectedRef by mutableStateOf<DiffItemRef?>(null)
+
+    /** Tabs shown at least once; they stay mounted (hidden) so each keeps its sort, search and row. */
+    val visitedTabs = mutableStateSetOf(0)
+
+    /** The row each tab selected for the detail pane; a tab that selected nothing has no entry. */
+    private val selectedRefs = mutableStateMapOf<Int, DiffItemRef>()
+
+    /** What the detail pane shows: the current tab's selected row. */
+    val selectedRef: DiffItemRef? get() = selectedRefs[selectedTab]
 
     /** Height of the detail pane once the user resized it; `null` keeps the default share. */
     var detailHeightPx by mutableStateOf<Double?>(null)
@@ -100,7 +108,11 @@ private class DiffScreenState(
     var banner by mutableStateOf<List<DiffTextLine>>(emptyList())
     val contents = mutableStateMapOf<Int, Result<DiffTabContent>>()
     val selection = HexSelectionState()
-    private val context = DiffTabContext(select = { selectedRef = it }, open = open)
+    // Row clicks come from the table on screen, so they belong to the current tab.
+    private val context = DiffTabContext(
+        select = { ref -> if (ref == null) selectedRefs.remove(selectedTab) else selectedRefs[selectedTab] = ref },
+        open = open,
+    )
 
     init {
         session?.let { s ->
@@ -129,13 +141,14 @@ private class DiffScreenState(
     }
 
     /**
-     * Switches tabs. The detail pane shows what a row of the *current* tab selected, so it is
-     * cleared: a function picked in Functions has nothing to do with the Size Impact tab.
+     * Switches tabs. The detail pane follows the current tab's own selection, so it is empty on
+     * a tab that selected nothing (a function picked in Functions has nothing to do with Size
+     * Impact) and shows that function again on returning to Functions, whose table still
+     * highlights its row.
      */
     fun selectTab(index: Int) {
-        if (index == selectedTab) return
         selectedTab = index
-        selectedRef = null
+        visitedTabs += index
     }
 
     fun dispose() = job.cancel()
@@ -219,12 +232,29 @@ private fun DiffSessionContent(state: DiffScreenState, session: BinaryDiffSessio
             Div({ style { property("padding-bottom", "6px") } }) { TextLines(state.banner) }
             DiffDivider()
         }
-        val result = state.contents[selectedTab]
-        when {
-            result == null -> Div { Text(session.tabs[selectedTab].loadingMessage) }
-            result.isFailure -> Div { Text(result.exceptionOrNull()?.message ?: "Failed to compare.") }
-            // Keyed so each tab's table keeps its own sort, search and selected row.
-            else -> key(selectedTab) { DiffTabBody(result.getOrThrow(), state.selection) }
+        // Every visited tab stays mounted and only the current one is shown, so switching back
+        // finds its table as it was left. Keyed by tab: visiting a new tab inserts it among the
+        // others, and without a key their state would be matched by position.
+        for (index in session.tabs.indices) {
+            if (index !in state.visitedTabs) continue
+            key(index) {
+                Div({
+                    style {
+                        display(if (index == selectedTab) DisplayStyle.Flex else DisplayStyle.None)
+                        property("flex-direction", "column")
+                        property("flex", "1")
+                        property("min-height", "0")
+                        property("overflow", "hidden")
+                    }
+                }) {
+                    val result = state.contents[index]
+                    when {
+                        result == null -> Div { Text(session.tabs[index].loadingMessage) }
+                        result.isFailure -> Div { Text(result.exceptionOrNull()?.message ?: "Failed to compare.") }
+                        else -> DiffTabBody(result.getOrThrow(), state.selection)
+                    }
+                }
+            }
         }
     }
 
