@@ -2,6 +2,7 @@ package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.*
 import kotlinx.browser.window
+import org.w3c.dom.HTMLElement
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -90,7 +91,11 @@ private class DiffScreenState(
 
     val session: BinaryDiffSession? = BinaryDiffProviderRegistry.forInput(input)?.session(input)
     var selectedTab by mutableStateOf(0)
+        private set
     var selectedRef by mutableStateOf<DiffItemRef?>(null)
+
+    /** Height of the detail pane once the user resized it; `null` keeps the default share. */
+    var detailHeightPx by mutableStateOf<Double?>(null)
     var rendered by mutableStateOf<Pair<DiffItemRef, SideBySideDiff>?>(null)
     var banner by mutableStateOf<List<DiffTextLine>>(emptyList())
     val contents = mutableStateMapOf<Int, Result<DiffTabContent>>()
@@ -121,6 +126,16 @@ private class DiffScreenState(
             }
             contents[index] = result
         }
+    }
+
+    /**
+     * Switches tabs. The detail pane shows what a row of the *current* tab selected, so it is
+     * cleared: a function picked in Functions has nothing to do with the Size Impact tab.
+     */
+    fun selectTab(index: Int) {
+        if (index == selectedTab) return
+        selectedTab = index
+        selectedRef = null
     }
 
     fun dispose() = job.cancel()
@@ -187,7 +202,7 @@ private fun DiffSessionContent(state: DiffScreenState, session: BinaryDiffSessio
     }
 
     if (session.tabs.size > 1) {
-        DiffTabBar(session.tabs.map { it.name }, selectedTab) { state.selectedTab = it }
+        DiffTabBar(session.tabs.map { it.name }, selectedTab) { state.selectTab(it) }
     }
 
     Div({
@@ -208,16 +223,27 @@ private fun DiffSessionContent(state: DiffScreenState, session: BinaryDiffSessio
         when {
             result == null -> Div { Text(session.tabs[selectedTab].loadingMessage) }
             result.isFailure -> Div { Text(result.exceptionOrNull()?.message ?: "Failed to compare.") }
-            else -> DiffTabBody(result.getOrThrow(), state.selection)
+            // Keyed so each tab's table keeps its own sort, search and selected row.
+            else -> key(selectedTab) { DiffTabBody(result.getOrThrow(), state.selection) }
         }
     }
 
     session.detail?.let { detail ->
+        var pane by remember { mutableStateOf<HTMLElement?>(null) }
+        ResizeDivider { delta ->
+            // The first drag starts from the pane's default share, measured in pixels.
+            val current = state.detailHeightPx ?: pane?.clientHeight?.toDouble() ?: return@ResizeDivider
+            state.detailHeightPx = (current - delta).coerceIn(MIN_DETAIL_HEIGHT_PX, MAX_DETAIL_HEIGHT_PX)
+        }
         Div({
+            ref { element ->
+                pane = element
+                onDispose { pane = null }
+            }
             style {
                 property("border-top", "2px solid var(--hexana-border, #333)")
-                property("flex", "0 0 40%")
-                property("min-height", "120px")
+                property("flex", state.detailHeightPx?.let { "0 0 ${it}px" } ?: "0 0 40%")
+                property("min-height", "${MIN_DETAIL_HEIGHT_PX.toInt()}px")
                 display(DisplayStyle.Flex)
                 property("flex-direction", "column")
                 property("overflow", "hidden")
@@ -329,6 +355,8 @@ private fun SideBySideDetailPanel(detail: DiffDetailSource, state: DiffScreenSta
 }
 
 private const val SIDE_BY_SIDE_ROW_HEIGHT_PX = 18
+private const val MIN_DETAIL_HEIGHT_PX = 80.0
+private const val MAX_DETAIL_HEIGHT_PX = 4000.0
 
 @Composable
 private fun SideCell(gutter: String, text: String?, isHighlighted: Boolean, color: String) {

@@ -131,7 +131,12 @@ private fun DiffTabs(model: BinaryDiffModel, state: HexViewStateHolder) {
                         selected = index == selectedTab,
                         content = { Text(tab.name) },
                         closable = false,
-                        onClick = { selectedTab = index },
+                        onClick = {
+                            // The detail pane shows the current tab's selected row; a function
+                            // picked in Functions means nothing on another tab.
+                            if (index != selectedTab) model.selected.value = null
+                            selectedTab = index
+                        },
                     )
                 },
                 style = JewelTheme.defaultTabStyle,
