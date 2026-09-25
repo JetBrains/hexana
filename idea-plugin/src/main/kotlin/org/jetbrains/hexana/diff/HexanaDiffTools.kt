@@ -29,12 +29,14 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaDiffVirtualFile
 import org.jetbrains.hexana.HexanaFileEditor
 import org.jetbrains.hexana.HexanaFileEditorProvider
 import org.jetbrains.hexana.actions.CompareFilesAction
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.createBinaryProvider
 import org.jetbrains.hexana.shared.diff.BinaryDiffProviderRegistry
 import org.jetbrains.hexana.toCommonByteBuffer
@@ -72,7 +74,7 @@ class HexDiffTool : FrameDiffTool, SuppressiveDiffTool {
     }
 
     override fun createComponent(context: DiffContext, request: DiffRequest): FrameDiffTool.DiffViewer =
-        HexDiffViewer(request as ContentDiffRequest)
+        HexDiffViewer(context, request as ContentDiffRequest)
 
     private fun isReadable(file: VirtualFile): Boolean = file.isValid && !file.isDirectory
 }
@@ -99,10 +101,13 @@ class HexanaStructuralDiffTool : FrameDiffTool {
         HexanaStructuralDiffViewer(context, request as ContentDiffRequest)
 }
 
-private class HexDiffViewer(private val request: ContentDiffRequest) : FrameDiffTool.DiffViewer {
+private class HexDiffViewer(context: DiffContext, private val request: ContentDiffRequest) : FrameDiffTool.DiffViewer {
     private val state = HexDiffViewState(title(request, 0), title(request, 1))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val composePanel = createComposePanel { HexDiffView(state) }
+
+    /** Backs the table renderer of the diffed tabs; tables need a project to render. */
+    private val tableState = context.project?.let { HexViewStateHolder(it) }
+    private val composePanel = createComposePanel { HexDiffView(state, tableState) }
     private val panel = JPanel(BorderLayout()).apply { add(composePanel, BorderLayout.CENTER) }
     private val status = JBLabel("Comparing…").apply { border = JBUI.Borders.emptyRight(8) }
 
@@ -119,14 +124,28 @@ private class HexDiffViewer(private val request: ContentDiffRequest) : FrameDiff
                     state.diff = diff
                     status.text = statusText(diff)
                 }
-                // Sections come second: parsing can take a while on a large binary, and the
-                // byte diff is useful without them.
-                val leftSections = sectionsOf(diff, diff.left, left, diff.leftSize)
-                val rightSections = sectionsOf(diff, diff.right, right, diff.rightSize)
-                val sections = mergeSections(leftSections, rightSections)
+                // Structure comes second: parsing can take a while on a large binary, and the
+                // byte diff is useful without it. Sections first, then the slower table tabs.
+                val leftProvider = providerOf(diff.left, left)
+                val rightProvider = providerOf(diff.right, right)
+                val sections = mergeSections(
+                    sectionsOf(diff, leftProvider, diff.leftSize),
+                    sectionsOf(diff, rightProvider, diff.rightSize),
+                )
                 withContext(Dispatchers.EDT) {
                     state.sections = sections
                     status.text = statusText(diff) + sectionStatus(sections)
+                }
+                if (tableState != null) {
+                    val tabs = diffTableTabs(
+                        leftProvider, rightProvider, nameOf(left), nameOf(right),
+                        onError = { LOG.info("A table tab failed in the hex diff", it) },
+                        checkCanceled = { ensureActive() },
+                        onRowClick = { l, r ->
+                            listOfNotNull(l, r).minOrNull()?.let { state.goToOffset(it.toLong()) }
+                        },
+                    )
+                    withContext(Dispatchers.EDT) { state.tabs = tabs }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -154,20 +173,31 @@ private class HexDiffViewer(private val request: ContentDiffRequest) : FrameDiff
         else -> ByteArray(0).toCommonByteBuffer()
     }
 
+    private fun nameOf(content: DiffContent): String? = (content as? FileContent)?.file?.name
+
     /**
-     * The sections of one side, from the provider Hexana would open it with. Empty for a
-     * missing side, a format without structure, or one that fails to parse — the byte diff
-     * stands on its own.
+     * The provider Hexana would open one side with; `null` for a missing side or one that
+     * fails to parse — the byte diff stands on its own.
      */
-    private fun CoroutineScope.sectionsOf(diff: HexDiff, bytes: CommonByteBuffer, content: DiffContent, size: Int): List<DiffSection> {
-        val file = (content as? FileContent)?.file ?: return emptyList()
+    private fun providerOf(bytes: CommonByteBuffer, content: DiffContent): BinaryProvider? {
+        val name = nameOf(content) ?: return null
         return try {
-            val ranges = createBinaryProvider(bytes, sourcePath = null, fileName = file.name).structureRanges
-            diffSections(diff, ranges, size) { ensureActive() }
+            createBinaryProvider(bytes, sourcePath = null, fileName = name)
+        } catch (e: Exception) {
+            LOG.info("Cannot parse $name for the hex diff", e)
+            null
+        }
+    }
+
+    /** One side's sections; empty for a format without structure, or one that fails to parse. */
+    private fun CoroutineScope.sectionsOf(diff: HexDiff, provider: BinaryProvider?, size: Int): List<DiffSection> {
+        provider ?: return emptyList()
+        return try {
+            diffSections(diff, provider.structureRanges, size) { ensureActive() }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            LOG.info("No sections for ${file.name} in the hex diff", e)
+            LOG.info("No sections in the hex diff", e)
             emptyList()
         }
     }

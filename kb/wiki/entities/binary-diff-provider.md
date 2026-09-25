@@ -163,3 +163,13 @@ their right-side predecessor; a pair shares one tint). Height is capped and scro
 (ZIP / PCAP emit tens of thousands) only changed sections are listed. A click scrolls the shared
 positional view to the earliest change on either side, so a section at different offsets on the two
 sides lines up on one side only.
+
+Table tabs in the hex diff (`plugins-shared/.../shared/diff/TableTabDiff.kt`, `TableTabDiffer`): the flat
+tabs (`childrenProvider == null`) every `TableTabsProvider` produces for each side are paired by name
+within their provider (a trailing ` (N)` count is ignored) and merged into one `TableTabDescriptor`
+using `rowTintProvider`, a default "Changed rows" `PredefinedFilter`, and `old → new` cell text. Rows
+need no key column: identical rows pair first (by full content, n-th with n-th); the rest pair through
+a column whose values are unique on both sides, chosen by **how many cells its pairs agree on** — not by
+pair count, since an address column matches as often as a name column but pairs unrelated rows; rounds
+repeat while anything pairs. Right-only rows follow their right-side predecessor. Tree tabs are not
+diffed yet.

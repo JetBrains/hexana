@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.remember
@@ -48,7 +49,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.intellij.openapi.util.text.StringUtil
 import kotlinx.coroutines.flow.MutableSharedFlow
+import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.shared.diff.TableTabDiff
+import org.jetbrains.hexana.ui.VerticalSplitPanel
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.asASCII
 import org.jetbrains.jewel.ui.component.Text
@@ -71,6 +75,10 @@ internal class HexDiffViewState(val leftTitle: String, val rightTitle: String) {
      * or when the format has no structure Hexana knows.
      */
     var sections: DiffSections by mutableStateOf(DiffSections.EMPTY)
+
+    /** Both sides' table tabs, diffed; `null` while they are still being computed. */
+    var tabs: List<TableTabDiff>? by mutableStateOf(null)
+    var topFraction: Float by mutableFloatStateOf(0.6f)
 
     val listState = LazyListState()
 
@@ -122,8 +130,27 @@ internal class HexDiffViewState(val leftTitle: String, val rightTitle: String) {
     }
 }
 
+/**
+ * The hex diff over the diffed table tabs, split like the single-file editor. [tableState]
+ * backs the table renderer; without one (no project) the tabs are not shown.
+ */
 @Composable
-internal fun HexDiffView(state: HexDiffViewState) {
+internal fun HexDiffView(state: HexDiffViewState, tableState: HexViewStateHolder?) {
+    val tabs = state.tabs
+    if (tableState == null || tabs.isNullOrEmpty()) {
+        HexDiffBody(state)
+        return
+    }
+    VerticalSplitPanel(
+        topFraction = state.topFraction,
+        onDragFraction = { delta -> state.topFraction = (state.topFraction + delta).coerceIn(0.2f, 0.9f) },
+        northPanel = { HexDiffBody(state) },
+        southPanel = { HexDiffTabsPanel(tabs, tableState) },
+    )
+}
+
+@Composable
+private fun HexDiffBody(state: HexDiffViewState) {
     val diff = state.diff
     val layout = state.layout
     Column(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {

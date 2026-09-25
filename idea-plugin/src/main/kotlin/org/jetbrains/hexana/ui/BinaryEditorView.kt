@@ -780,30 +780,6 @@ private fun TabsPanel(
     }
 
     var expanded by remember { mutableStateOf(false) }
-    var tabBarWidthPx by remember { mutableIntStateOf(0) }
-    var tabContentWidthPx by remember(panels) { mutableIntStateOf(0) }
-    var tabOffsetPx by remember(panels) { mutableIntStateOf(0) }
-    val tabOverflowPx = (tabContentWidthPx - tabBarWidthPx).coerceAtLeast(0)
-    val hasHiddenTabs = tabOverflowPx > TAB_OVERFLOW_THRESHOLD_PX
-    val maxTabOffsetPx = if (hasHiddenTabs) tabOverflowPx else 0
-    val canShowPreviousHiddenTab = hasHiddenTabs && tabOffsetPx > 0
-    val canShowNextHiddenTab = hasHiddenTabs && tabOffsetPx < maxTabOffsetPx
-
-    LaunchedEffect(maxTabOffsetPx) {
-        tabOffsetPx = tabOffsetPx.coerceIn(0, maxTabOffsetPx)
-    }
-
-    // When the last tab is selected (e.g. after adding a script tab),
-    // scroll the tab strip to the end so the new tab is visible.
-    // We also react to maxTabOffsetPx changes because the tab content width
-    // is measured asynchronously — the first LaunchedEffect may fire before
-    // the new tab has been laid out, so maxTabOffsetPx is still stale.
-    LaunchedEffect(state.tabIndex, panels.size, maxTabOffsetPx) {
-        if (state.tabIndex == panels.size - 1 && maxTabOffsetPx > 0) {
-            tabOffsetPx = maxTabOffsetPx
-        }
-    }
-
     val tabs by remember(state.tabIndex, panels, scriptTabIndices) {
         derivedStateOf {
             panels.mapIndexed { index, panel ->
@@ -848,52 +824,12 @@ private fun TabsPanel(
                     )
                 }
             }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .onGloballyPositioned { tabBarWidthPx = it.size.width }
-                    .clipToBounds(),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (hasHiddenTabs) {
-                        IconButton(
-                            enabled = canShowPreviousHiddenTab,
-                            onClick = {
-                                tabOffsetPx = (tabOffsetPx - tabBarWidthPx).coerceAtLeast(0)
-                            },
-                        ) {
-                            Text("‹")
-                        }
-                    }
-
-                    NaturalWidthTabStrip(
-                        tabs = tabs,
-                        offsetPx = tabOffsetPx.coerceIn(0, maxTabOffsetPx),
-                        onContentWidthChanged = { widthPx ->
-                            if (widthPx < TAB_STRIP_IMPLAUSIBLE_MEASURE_WIDTH) {
-                                tabContentWidthPx = widthPx
-                            }
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .clipToBounds(),
-                    )
-
-                    if (hasHiddenTabs) {
-                        IconButton(
-                            enabled = canShowNextHiddenTab,
-                            onClick = {
-                                tabOffsetPx = (tabOffsetPx + tabBarWidthPx).coerceAtMost(maxTabOffsetPx)
-                            },
-                        ) {
-                            Text("›")
-                        }
-                    }
-                }
-            }
+            ScrollableTabStrip(
+                tabs = tabs,
+                selectedIndex = state.tabIndex,
+                resetKey = panels,
+                modifier = Modifier.weight(1f),
+            )
             IconButton(onClick = onAddScriptTab) {
                 Icon(
                     AllIconsKeys.General.Add,
@@ -914,6 +850,91 @@ private fun TabsPanel(
             // the LaunchedEffect catches up on the next composition.
             val safeIndex = state.tabIndex.coerceIn(0, panels.size - 1)
             panels.get(safeIndex).render()
+        }
+    }
+}
+
+/**
+ * A tab strip that keeps every tab at its natural width and, when they do not all fit,
+ * scrolls: ‹ › buttons page through the hidden ones. Selecting the last tab (e.g. a tab
+ * just added) scrolls to the end so it is visible.
+ *
+ * @param resetKey scroll position is reset when it changes, e.g. when the tab list is rebuilt
+ */
+@Composable
+internal fun ScrollableTabStrip(
+    tabs: List<TabData>,
+    selectedIndex: Int,
+    resetKey: Any?,
+    modifier: Modifier = Modifier,
+) {
+    var tabBarWidthPx by remember { mutableIntStateOf(0) }
+    var tabContentWidthPx by remember(resetKey) { mutableIntStateOf(0) }
+    var tabOffsetPx by remember(resetKey) { mutableIntStateOf(0) }
+    val tabOverflowPx = (tabContentWidthPx - tabBarWidthPx).coerceAtLeast(0)
+    val hasHiddenTabs = tabOverflowPx > TAB_OVERFLOW_THRESHOLD_PX
+    val maxTabOffsetPx = if (hasHiddenTabs) tabOverflowPx else 0
+    val canShowPreviousHiddenTab = hasHiddenTabs && tabOffsetPx > 0
+    val canShowNextHiddenTab = hasHiddenTabs && tabOffsetPx < maxTabOffsetPx
+
+    LaunchedEffect(maxTabOffsetPx) {
+        tabOffsetPx = tabOffsetPx.coerceIn(0, maxTabOffsetPx)
+    }
+
+    // When the last tab is selected (e.g. after adding a script tab),
+    // scroll the tab strip to the end so the new tab is visible.
+    // We also react to maxTabOffsetPx changes because the tab content width
+    // is measured asynchronously — the first LaunchedEffect may fire before
+    // the new tab has been laid out, so maxTabOffsetPx is still stale.
+    LaunchedEffect(selectedIndex, tabs.size, maxTabOffsetPx) {
+        if (selectedIndex == tabs.size - 1 && maxTabOffsetPx > 0) {
+            tabOffsetPx = maxTabOffsetPx
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .onGloballyPositioned { tabBarWidthPx = it.size.width }
+            .clipToBounds(),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (hasHiddenTabs) {
+                IconButton(
+                    enabled = canShowPreviousHiddenTab,
+                    onClick = {
+                        tabOffsetPx = (tabOffsetPx - tabBarWidthPx).coerceAtLeast(0)
+                    },
+                ) {
+                    Text("‹")
+                }
+            }
+
+            NaturalWidthTabStrip(
+                tabs = tabs,
+                offsetPx = tabOffsetPx.coerceIn(0, maxTabOffsetPx),
+                onContentWidthChanged = { widthPx ->
+                    if (widthPx < TAB_STRIP_IMPLAUSIBLE_MEASURE_WIDTH) {
+                        tabContentWidthPx = widthPx
+                    }
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .clipToBounds(),
+            )
+
+            if (hasHiddenTabs) {
+                IconButton(
+                    enabled = canShowNextHiddenTab,
+                    onClick = {
+                        tabOffsetPx = (tabOffsetPx + tabBarWidthPx).coerceAtMost(maxTabOffsetPx)
+                    },
+                ) {
+                    Text("›")
+                }
+            }
         }
     }
 }
