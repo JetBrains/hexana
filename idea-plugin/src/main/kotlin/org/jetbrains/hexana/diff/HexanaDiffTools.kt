@@ -129,6 +129,12 @@ private class HexDiffViewer(context: DiffContext, private val request: ContentDi
                 // byte diff is useful without it. Sections first, then the slower table tabs.
                 val leftProvider = providerOf(diff.left, left)
                 val rightProvider = providerOf(diff.right, right)
+                if (!areComparable(leftProvider, rightProvider)) {
+                    // Different formats: their sections and tables describe unrelated things,
+                    // so only the byte diff is shown.
+                    withContext(Dispatchers.EDT) { state.tabs = emptyList() }
+                    return@launch
+                }
                 val sections = mergeSections(
                     sectionsOf(diff, leftProvider, diff.leftSize),
                     sectionsOf(diff, rightProvider, diff.rightSize),
@@ -175,6 +181,14 @@ private class HexDiffViewer(context: DiffContext, private val request: ContentDi
             ?: error("cannot read ${content.file.name}")
         else -> ByteArray(0).toCommonByteBuffer()
     }
+
+    /**
+     * Whether both sides' structure can be compared: the same kind of provider (two ELF
+     * files, two WASM modules, …). A missing side — a file added or deleted — compares
+     * against nothing, so its sections and rows all show as added or removed.
+     */
+    private fun areComparable(left: BinaryProvider?, right: BinaryProvider?): Boolean =
+        left == null || right == null || left::class == right::class
 
     private fun nameOf(content: DiffContent): String? = (content as? FileContent)?.file?.name
 
@@ -299,11 +313,15 @@ private class HexanaStructuralDiffViewer(
 }
 
 /**
- * Whether either side is a format Hexana parses into tables — anything it opens except the
- * generic catch-all binary type. A cheap file-type check, made before the bytes are read.
+ * Whether table tabs are likely: a side is a format Hexana parses into tables — anything it
+ * opens except the generic catch-all binary type — and the two sides, when both exist, are
+ * of the same file type (two different formats get only the byte diff). A cheap file-type
+ * check, made before the bytes are read; the provider check after parsing is authoritative.
  */
-private fun expectsTabs(request: ContentDiffRequest): Boolean = request.contents.any {
-    it is FileContent && HexanaFileEditorProvider.acceptsFile(it.file) && it.file.fileType !is BinaryFileType
+private fun expectsTabs(request: ContentDiffRequest): Boolean {
+    val files = request.contents.filterIsInstance<FileContent>().map { it.file }
+    if (files.size == 2 && files[0].fileType != files[1].fileType) return false
+    return files.any { HexanaFileEditorProvider.acceptsFile(it) && it.fileType !is BinaryFileType }
 }
 
 /** The request's title for side [index], falling back to the file name. */
