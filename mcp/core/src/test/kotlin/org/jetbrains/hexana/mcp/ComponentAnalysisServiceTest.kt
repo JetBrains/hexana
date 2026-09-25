@@ -59,6 +59,22 @@ class ComponentAnalysisServiceTest {
     }
 
     @Test
+    fun componentWitStructureReadsCoreFileOnceForApplicability() {
+        val core = temporaryFolder.newFile("core-structure.wasm").toPath()
+        Files.write(core, byteArrayOf(0, 0x61, 0x73, 0x6d, 1, 0, 0, 0))
+        var reads = 0
+        val service = DefaultHexanaAnalysisService(
+            fileSizeReader = Files::size,
+            fileBytesReader = { path, _ -> reads++; Files.readAllBytes(path) },
+        )
+
+        val result = service.componentWitStructure(WasmInput.FilePath(core.toString()))
+
+        assertFalse(result.surface.isComponent)
+        assertEquals(1, reads)
+    }
+
+    @Test
     fun resolveComponentDependenciesFindsProvidersAndUnresolvedImports() {
         val root = temporaryFolder.newFolder("project").toPath()
         val calculator = copyFixture("calculator.wasm", root.resolve("calculator.wasm"))

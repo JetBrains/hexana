@@ -18,6 +18,7 @@ checks:
   - "/hexanaDocument/**"
   - "/jvm-jit/**"
   - "/karma.config.d/**"
+  - "/mcp/core/**"
   - "/parsing/**"
   - "/plugins-shared/**"
   - "/settings.gradle.kts"

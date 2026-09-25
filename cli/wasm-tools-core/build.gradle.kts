@@ -16,6 +16,7 @@ base {
 
 dependencies {
     api(project(":cli:runtime"))
+    api(project(":mcp:core"))
     api(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit4)
@@ -27,11 +28,15 @@ kotlin {
 }
 
 val verifyWasmToolsCoreBoundary = tasks.register("verifyWasmToolsCoreBoundary") {
-    description = "Fails if cli:wasm-tools-core depends on product, MCP, transport, or IDE layers."
+    description = "Fails if cli:wasm-tools-core depends on product, MCP server, transport, or IDE layers."
     group = "verification"
 
     doLast {
-        val allowedProjectPaths = setOf(":cli:runtime")
+        val allowedProjectPaths = setOf(":cli:runtime", ":mcp:core")
+        val allowedResolvedProjectPaths = allowedProjectPaths + allowedProjectPaths.flatMap { dependencyPath ->
+            project(dependencyPath).configurations.getByName("runtimeClasspath").incoming.resolutionResult.allComponents
+                .mapNotNull { (it.id as? ProjectComponentIdentifier)?.projectPath }
+        }
         val forbiddenGroups = listOf("com.github.ajalt.clikt", "com.jetbrains.intellij", "io.ktor", "io.modelcontextprotocol")
         val directConfigurations = setOf("api", "implementation", "compileOnly", "runtimeOnly", "testImplementation", "testCompileOnly", "testRuntimeOnly")
         val resolvedConfigurations = setOf("compileClasspath", "runtimeClasspath", "testCompileClasspath", "testRuntimeClasspath")
@@ -48,7 +53,7 @@ val verifyWasmToolsCoreBoundary = tasks.register("verifyWasmToolsCoreBoundary") 
         val resolvedViolations = resolvedConfigurations.flatMap { name ->
             configurations.getByName(name).incoming.resolutionResult.allComponents.mapNotNull { component ->
                 when (val id = component.id) {
-                    is ProjectComponentIdentifier -> id.projectPath.takeIf { it != project.path && it !in allowedProjectPaths }
+                    is ProjectComponentIdentifier -> id.projectPath.takeIf { it != project.path && it !in allowedResolvedProjectPaths }
                         ?.let { "$name resolves project($it)" }
                     is ModuleComponentIdentifier -> id.group.takeIf(::isForbiddenGroup)?.let { "$name resolves $it:${id.module}:${id.version}" }
                     else -> null
@@ -57,7 +62,7 @@ val verifyWasmToolsCoreBoundary = tasks.register("verifyWasmToolsCoreBoundary") 
         }.distinct()
         val violations = directViolations + resolvedViolations
         check(violations.isEmpty()) {
-            "cli:wasm-tools-core must remain workflow-neutral. Forbidden dependencies:\n" + violations.joinToString("\n")
+            "cli:wasm-tools-core must remain independent of product and transport layers. Forbidden dependencies:\n" + violations.joinToString("\n")
         }
     }
 }
