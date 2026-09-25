@@ -94,7 +94,7 @@ open class CompareFilesAction : AnAction() {
             left.name,
             right.name,
         )
-        // A place of its own, so this entry opens on the Hexana diff — what it showed before it
+        // A place of its own, so this entry opens on the size and functions diff — what it showed before it
         // moved into the diff window — while the IDE's Compare Files keeps the hex diff first.
         // The platform remembers the viewer order per place, so a switch here sticks here only.
         val chain = SimpleDiffRequestChain(request)

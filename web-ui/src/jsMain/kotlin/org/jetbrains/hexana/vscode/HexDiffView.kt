@@ -52,7 +52,7 @@ enum class DiffViewMode {
  * counterpart of the viewer switcher IntelliJ's diff window offers.
  *
  * Each view is mounted the first time it is shown and then only hidden, so switching back
- * keeps its computed diff, scroll position and selection. The Hexana diff is offered only
+ * keeps its computed diff, scroll position and selection. The size and functions diff is offered only
  * for pairs a provider compares; for any other pair the hex diff is all there is.
  */
 @Composable
@@ -113,12 +113,12 @@ private fun ModeSwitch(mode: DiffViewMode, structuralAvailable: Boolean, onSelec
             property("flex-shrink", "0")
         }
     }) {
-        SegmentButton("Hex diff", selected = mode == DiffViewMode.HEX, enabled = true) { onSelect(DiffViewMode.HEX) }
+        SegmentButton("Hex", selected = mode == DiffViewMode.HEX, enabled = true) { onSelect(DiffViewMode.HEX) }
         SegmentButton(
-            "Hexana diff",
+            "Size, modules and functions",
             selected = mode == DiffViewMode.HEXANA,
             enabled = structuralAvailable,
-            tooltip = if (structuralAvailable) null else "Only binaries of the same kind (two WASM modules, two components, two native binaries) have a Hexana diff.",
+            tooltip = if (structuralAvailable) null else "Only binaries of the same kind (two WASM modules, two components, two native binaries) have a size and functions diff.",
         ) { onSelect(DiffViewMode.HEXANA) }
     }
 }
@@ -146,7 +146,7 @@ private fun SegmentButton(label: String, selected: Boolean, enabled: Boolean, to
 
 /**
  * Everything the hex diff computes or remembers, kept outside the composition so hiding the
- * view (switching to the Hexana diff) loses nothing.
+ * view (switching to the size and functions diff) loses nothing.
  */
 internal class HexDiffState(val input: BinaryDiffInput) {
     var diff: HexDiff? by mutableStateOf(null)

@@ -93,7 +93,7 @@ class HexDiffTool : FrameDiffTool, SuppressiveDiffTool {
  * [org.jetbrains.hexana.shared.diff.BinaryDiffProvider] may compare (WASM, native).
  */
 class HexanaStructuralDiffTool : FrameDiffTool {
-    override fun getName(): String = "Hexana diff viewer"
+    override fun getName(): String = "Size, modules and functions diff viewer"
 
     override fun getIcon() = AllIcons.Nodes.DataTables
 

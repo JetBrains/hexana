@@ -69,7 +69,7 @@ class ScriptTabState(
 
 /**
  * Holds the state for a diff view: the two binary payloads, their names, and the view the
- * diff opens on. For the Hexana diff the format (core Wasm, component, native) is sniffed
+ * diff opens on. For the size and functions diff the format (core Wasm, component, native) is sniffed
  * from the bytes by [BinaryDiffView].
  */
 class DiffPayload(

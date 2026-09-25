@@ -129,7 +129,7 @@ async function readRuntimeTargetsJson(scope?: vscode.Uri): Promise<string> {
  * on disk would.
  */
 /**
- * Extensions whose files a VS Code diff of two of them is redirected to the Hexana diff for:
+ * Extensions whose files a VS Code diff of two of them is redirected to Hexana's diff for:
  * those the `hexana.wasmEditor` custom editor claims in `package.json`, plus the native ones
  * the compare dialog offers.
  */
@@ -466,7 +466,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
     /**
      * Redirects VS Code's own binary diffs — Compare Selected, Select for Compare, and any
-     * other `vscode.diff` of two binaries Hexana opens — to the Hexana diff tab, opened on
+     * other `vscode.diff` of two binaries Hexana opens — to Hexana's diff tab, opened on
      * the hex diff. VS Code would show the two sides as unrelated editors (or "binary file
      * not shown"); a diff tab of two Hexana binaries is closed and replaced as it appears.
      *
@@ -506,7 +506,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
     /**
      * Pairs pending unknown `a ↔ b` diff tabs with recently resolved sides by name, then
-     * replaces each paired tab with the Hexana diff. Tabs and sides older than a few seconds
+     * replaces each paired tab with Hexana's diff. Tabs and sides older than a few seconds
      * are dropped: a diff opens both sides at once, and a stale entry would only mismatch.
      */
     private static async matchCustomDiffTabs(): Promise<void> {
