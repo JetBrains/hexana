@@ -127,3 +127,27 @@ In IntelliJ the entry is offered by **file type**, not extension (`CompareFilesA
 `NativeBinaryFileTypeDetector` assigns by magic — so extensionless binaries qualify and a headerless
 `.bin` does not. VS Code still offers it by extension list (plus extensionless files), since its
 `when` clauses cannot see content.
+
+### IntelliJ diff window integration (2026-09-25)
+
+The platform diff window (Compare Files, VCS changes) is extended through the `diff.DiffTool` EP
+(`idea-plugin/.../diff/HexanaDiffTools.kt`), not through `DiffToolSubstitutor`. Facts from the
+2026.2 platform sources:
+
+- `DiffManagerImpl.getDiffTools()` lists EP tools **before** the built-ins (`SimpleDiffTool`,
+  `UnifiedDiffTool`, `BinaryDiffTool`, `DirDiffTool`), so an EP tool whose `canShow` accepts wins by
+  default; the user's choice is then persisted per tool class in `DiffSettings.diffToolsOrder`.
+- `DiffRequestProcessor` shows a segmented **viewer switcher** whenever more than one `FrameDiffTool`
+  accepts the request — no custom "switch mode" button is needed. Hexana registers two tools:
+  `HexDiffTool` ("Hex viewer") and `HexanaStructuralDiffTool` ("Hexana diff viewer", hosts a
+  `HexanaFileEditor` on a `HexanaDiffVirtualFile`). `HexDiffTool` implements the public
+  `SuppressiveDiffTool` to hide the platform `BinaryDiffTool` (two plain editors side by side) wherever
+  it accepts the request; suppression is applied to both the default pick and the switcher.
+- The platform prev/next-difference arrows are driven by `DiffDataKeys.PREV_NEXT_DIFFERENCE_ITERABLE`,
+  which is `@ApiStatus.Internal` — the hex viewer ships its own Previous/Next Difference toolbar
+  actions instead.
+
+The hex diff is **positional** (byte `i` vs byte `i`), rows of 16; runs of changed rows are blocks,
+and unchanged stretches of ≥ 4 rows outside 3 rows of context fold into one clickable item
+(`HexDiffLayout`). An insertion therefore marks every following row as changed; alignment (LCS) was
+rejected as too costly for multi-MB binaries.

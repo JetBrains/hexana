@@ -1,0 +1,312 @@
+package org.jetbrains.hexana.diff
+
+import androidx.compose.foundation.ScrollbarStyle
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateSetOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import com.intellij.openapi.util.text.StringUtil
+import kotlinx.coroutines.flow.MutableSharedFlow
+import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.ui.HexanaTheme
+import org.jetbrains.hexana.ui.asASCII
+import org.jetbrains.jewel.ui.component.Text
+
+/**
+ * State of one hex diff viewer, shared by the Compose view and the diff window's Swing
+ * toolbar actions (collapse toggle, previous / next difference).
+ */
+internal class HexDiffViewState(val leftTitle: String, val rightTitle: String) {
+    /** `null` while the comparison is still running (or failed, see [error]). */
+    var diff: HexDiff? by mutableStateOf(null)
+    var error: String? by mutableStateOf(null)
+    var collapseUnchanged: Boolean by mutableStateOf(true)
+
+    /** Start rows of folds the user expanded by clicking them. */
+    val expandedFolds = mutableStateSetOf<Int>()
+
+    val listState = LazyListState()
+
+    /** List indices to bring into view; collected by the composition, which owns the frame clock. */
+    val scrollRequests = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+
+    val layout: HexDiffLayout? by derivedStateOf {
+        diff?.let { HexDiffLayout.build(it, collapseUnchanged, expandedFolds.toSet()) }
+    }
+
+    fun canGo(next: Boolean): Boolean = targetBlockItem(next) != null
+
+    fun go(next: Boolean) {
+        targetBlockItem(next)?.let { scrollRequests.tryEmit(it) }
+    }
+
+    /**
+     * The list index to scroll to for the next / previous changed block: the block's first
+     * row, less the context rows kept above it, so the change lands near the top.
+     */
+    private fun targetBlockItem(next: Boolean): Int? {
+        val diff = diff ?: return null
+        val layout = layout ?: return null
+        val current = listState.firstVisibleItemIndex
+        fun target(block: Int) = layout.itemOf((diff.blockStarts[block] - HexDiffLayout.CONTEXT_ROWS).coerceAtLeast(0))
+        // Targets ascend with the block index, so binary-search the first one past the top row;
+        // toolbar updates call this repeatedly on diffs with many blocks.
+        var low = 0
+        var high = diff.blockCount
+        while (low < high) {
+            val mid = (low + high) ushr 1
+            if (target(mid) > current) high = mid else low = mid + 1
+        }
+        val block = if (next) low else generateSequence(low - 1) { it - 1 }.takeWhile { it >= 0 }
+            .firstOrNull { target(it) < current } ?: -1
+        return if (block in 0 until diff.blockCount) target(block) else null
+    }
+}
+
+@Composable
+internal fun HexDiffView(state: HexDiffViewState) {
+    val diff = state.diff
+    val layout = state.layout
+    Column(modifier = Modifier.fillMaxSize().background(HexanaTheme.backgroundColor)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            SideTitle(state.leftTitle, diff?.leftSize, Modifier.weight(1f))
+            Box(Modifier.width(SIDE_GAP))
+            SideTitle(state.rightTitle, diff?.rightSize, Modifier.weight(1f))
+        }
+        when {
+            state.error != null -> Message(state.error!!)
+            diff == null || layout == null -> Message("Comparing…")
+            else -> DiffRows(state, diff, layout)
+        }
+    }
+}
+
+@Composable
+private fun DiffRows(state: HexDiffViewState, diff: HexDiff, layout: HexDiffLayout) {
+    val listState = state.listState
+    LaunchedEffect(state) {
+        state.scrollRequests.collect { listState.animateScrollToItem(it) }
+    }
+    val colors = DiffColors(
+        modified = HexanaTheme.diffModifiedColor.copy(alpha = 0.55f),
+        removed = HexanaTheme.diffRemovedColor.copy(alpha = 0.55f),
+        added = HexanaTheme.diffAddedColor.copy(alpha = 0.55f),
+        changedText = HexanaTheme.textColor,
+        rowTint = HexanaTheme.diffModifiedColor.copy(alpha = 0.10f),
+    )
+    val header = remember(diff.bytesPerRow) { columnHeader(diff.bytesPerRow) }
+
+    Row(modifier = Modifier.fillMaxWidth()) {
+        HeaderCell(header, Modifier.weight(1f))
+        Box(Modifier.width(SIDE_GAP))
+        HeaderCell(header, Modifier.weight(1f))
+    }
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            items(count = layout.itemCount) { index ->
+                when (val item = layout.itemAt(index)) {
+                    is HexDiffLayout.Item.Row -> DiffRow(diff, item.row, colors)
+                    is HexDiffLayout.Item.Fold -> FoldRow(item, diff.bytesPerRow) {
+                        state.expandedFolds.add(item.startRow)
+                    }
+                }
+            }
+        }
+        val scrollbarColor = HexanaTheme.hexTextColor
+        VerticalScrollbar(
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(18.dp).padding(end = 8.dp),
+            adapter = rememberScrollbarAdapter(scrollState = listState),
+            style = ScrollbarStyle(
+                minimalHeight = 16.dp,
+                thickness = 8.dp,
+                shape = RoundedCornerShape(4.dp),
+                hoverDurationMillis = 300,
+                unhoverColor = scrollbarColor.copy(alpha = 0.50f),
+                hoverColor = scrollbarColor.copy(alpha = 0.80f),
+            ),
+        )
+    }
+}
+
+@Composable
+private fun DiffRow(diff: HexDiff, row: Int, colors: DiffColors) {
+    val tint = if (diff.isRowChanged(row)) colors.rowTint else Color.Transparent
+    val hexColor = HexanaTheme.hexTextColor
+    Row(modifier = Modifier.fillMaxWidth()) {
+        for (side in DiffSide.entries) {
+            if (side == DiffSide.RIGHT) Box(Modifier.width(SIDE_GAP))
+            val buffer = if (side == DiffSide.LEFT) diff.left else diff.right
+            val line = remember(diff, row, side, colors) { sideLine(diff, buffer, row, side, colors) }
+            Row(modifier = Modifier.weight(1f).background(tint).clipToBounds().padding(horizontal = 8.dp)) {
+                Text(
+                    line.offset,
+                    style = MONOSPACE.copy(color = hexColor),
+                    softWrap = false,
+                    maxLines = 1,
+                    modifier = Modifier.width(OFFSET_WIDTH),
+                )
+                Text(line.hex, style = MONOSPACE.copy(color = hexColor), softWrap = false, maxLines = 1)
+                Text(
+                    line.ascii,
+                    style = MONOSPACE.copy(color = hexColor),
+                    softWrap = false,
+                    maxLines = 1,
+                    modifier = Modifier.padding(start = 16.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FoldRow(fold: HexDiffLayout.Item.Fold, bytesPerRow: Int, onExpand: () -> Unit) {
+    val rows = fold.endRow - fold.startRow
+    val from = fold.startRow.toLong() * bytesPerRow
+    val to = fold.endRow.toLong() * bytesPerRow - 1
+    val label = "⋯  ${"%,d".format(rows)} unchanged ${if (rows == 1) "row" else "rows"}" +
+        "  (${offsetText(from)} – ${offsetText(to)})  ·  click to expand"
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .background(HexanaTheme.hexTextColor.copy(alpha = 0.12f))
+            .pointerHoverIcon(PointerIcon.Hand)
+            .clickable(onClick = onExpand)
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    ) {
+        Text(label, style = MONOSPACE.copy(color = HexanaTheme.hexTextColor), softWrap = false, maxLines = 1)
+    }
+}
+
+@Composable
+private fun SideTitle(title: String, size: Int?, modifier: Modifier) {
+    val text = if (size == null) title else "$title  ·  ${StringUtil.formatFileSize(size.toLong())}"
+    Text(
+        text,
+        style = MONOSPACE.copy(fontWeight = FontWeight.Bold),
+        softWrap = false,
+        maxLines = 1,
+        modifier = modifier.clipToBounds().padding(horizontal = 8.dp),
+    )
+}
+
+@Composable
+private fun HeaderCell(header: String, modifier: Modifier) {
+    Row(modifier = modifier.clipToBounds().padding(horizontal = 8.dp, vertical = 2.dp)) {
+        Box(Modifier.width(OFFSET_WIDTH))
+        Text(header, style = MONOSPACE, softWrap = false, maxLines = 1)
+        Text("ASCII", style = MONOSPACE, softWrap = false, maxLines = 1, modifier = Modifier.padding(start = 16.dp))
+    }
+}
+
+@Composable
+private fun Message(message: String) {
+    Box(modifier = Modifier.padding(8.dp)) {
+        Text(message, style = MONOSPACE)
+    }
+}
+
+private enum class DiffSide { LEFT, RIGHT }
+
+private data class DiffColors(
+    val modified: Color,
+    val removed: Color,
+    val added: Color,
+    val changedText: Color,
+    val rowTint: Color,
+)
+
+private class SideLine(val offset: String, val hex: AnnotatedString, val ascii: AnnotatedString)
+
+/**
+ * One side of one row. Bytes the other side lacks or holds differently are tinted —
+ * modified on both sides, removed on the left, added on the right; offsets past this side's
+ * end are left blank so both columns stay aligned.
+ */
+private fun sideLine(diff: HexDiff, buffer: CommonByteBuffer, row: Int, side: DiffSide, colors: DiffColors): SideLine {
+    val size = buffer.limit()
+    val from = row * diff.bytesPerRow
+    val hex = buildAnnotatedString {
+        for (i in 0 until diff.bytesPerRow) {
+            if (i > 0) append(' ')
+            val offset = from + i
+            if (offset >= size) {
+                append("  ")
+                continue
+            }
+            appendByte(hexByte(buffer[offset]), diff.changeAt(offset), side, colors)
+        }
+    }
+    val ascii = buildAnnotatedString {
+        for (i in 0 until diff.bytesPerRow) {
+            val offset = from + i
+            if (offset >= size) {
+                append(' ')
+                continue
+            }
+            appendByte(buffer[offset].asASCII() ?: ".", diff.changeAt(offset), side, colors)
+        }
+    }
+    val offset = if (from < size) offsetText(from.toLong()) else ""
+    return SideLine(offset, hex, ascii)
+}
+
+private fun AnnotatedString.Builder.appendByte(text: String, change: ByteChange, side: DiffSide, colors: DiffColors) {
+    val background = when (change) {
+        ByteChange.NONE -> null
+        ByteChange.MODIFIED -> colors.modified
+        ByteChange.REMOVED -> colors.removed.takeIf { side == DiffSide.LEFT }
+        ByteChange.ADDED -> colors.added.takeIf { side == DiffSide.RIGHT }
+    }
+    if (background == null) {
+        append(text)
+    } else {
+        withStyle(SpanStyle(background = background, color = colors.changedText, fontWeight = FontWeight.Bold)) {
+            append(text)
+        }
+    }
+}
+
+private fun columnHeader(bytesPerRow: Int): String =
+    (0 until bytesPerRow).joinToString(" ") { it.toString(16).padStart(2, '0').uppercase() }
+
+private fun hexByte(byte: Byte): String = (byte.toInt() and 0xFF).toString(16).padStart(2, '0').uppercase()
+
+private fun offsetText(offset: Long): String = offset.toString(16).padStart(8, '0').uppercase()
+
+private val MONOSPACE = TextStyle(fontFamily = FontFamily.Monospace)
+private val OFFSET_WIDTH = 84.dp
+private val SIDE_GAP = 12.dp

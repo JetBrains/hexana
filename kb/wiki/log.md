@@ -112,3 +112,4 @@ Append one line per write-back: date, page, what changed.
   Compare WASM, and diff release docs / QA plan (`idea-plugin/QA/13-binary-diff.md`).
 - 2026-09-24 — `entities/binary-diff-provider` — One compare action per host (`hexana.compareFiles`),
   shared `rejectionReason`, old action/command ids kept as hidden aliases.
+- 2026-09-25 — `entities/binary-diff-provider` — IntelliJ diff window integration: `diff.DiffTool` hex viewer + structural viewer, platform viewer switcher, positional hex diff with folds.

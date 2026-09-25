@@ -81,42 +81,17 @@ open class CompareFilesAction : AnAction() {
             ) ?: return
         }
 
-        val leftBuffer = left.toCommonByteBuffer()
-        val rightBuffer = right.toCommonByteBuffer()
-        if (leftBuffer == null || rightBuffer == null) {
+        val input = diffInput(left, right)
+        if (input == null) {
             Messages.showWarningDialog(project, "Could not read one of the selected files.", TITLE)
             return
         }
-        val input = BinaryDiffInput(
-            left = leftBuffer,
-            right = rightBuffer,
-            leftName = left.name,
-            rightName = right.name,
-            leftSymbolMap = loadSymbolMap(left),
-            rightSymbolMap = loadSymbolMap(right),
-        )
         BinaryDiffProviderRegistry.rejectionReason(input)?.let { reason ->
             Messages.showWarningDialog(project, reason, TITLE)
             return
         }
         FileEditorManager.getInstance(project).openFile(HexanaDiffVirtualFile(input.title, input), true)
     }
-
-    /**
-     * Auto-loads a `--emit-symbol-map` sidecar named `<file>.symbols` sitting next to a WASM
-     * module (mirrors the `.hexana.json` / `.map` sibling conventions). Returns null when
-     * absent or unreadable — the diff then runs without de-minification.
-     */
-    private fun loadSymbolMap(file: VirtualFile): WasmSymbolMap? {
-        if (!file.extension.equals("wasm", ignoreCase = true)) return null
-        val sidecar = file.parent?.findChild("${file.name}.symbols") ?: return null
-        return try {
-            WasmSymbolMap.parse(sidecar.contentsToByteArray().decodeToString())
-        } catch (t: Throwable) {
-            null
-        }
-    }
-
 
     private fun chooser(title: String, description: String) =
         FileChooserDescriptorFactory.singleFile()
@@ -127,6 +102,38 @@ open class CompareFilesAction : AnAction() {
 
     companion object {
         private const val TITLE = "Compare Binaries"
+
+        /**
+         * The diff input for [left] against [right], or null when either cannot be read.
+         * Maps local files rather than reading them, so it is cheap enough for the EDT.
+         */
+        internal fun diffInput(left: VirtualFile, right: VirtualFile): BinaryDiffInput? {
+            val leftBuffer = left.toCommonByteBuffer() ?: return null
+            val rightBuffer = right.toCommonByteBuffer() ?: return null
+            return BinaryDiffInput(
+                left = leftBuffer,
+                right = rightBuffer,
+                leftName = left.name,
+                rightName = right.name,
+                leftSymbolMap = loadSymbolMap(left),
+                rightSymbolMap = loadSymbolMap(right),
+            )
+        }
+
+        /**
+         * Auto-loads a `--emit-symbol-map` sidecar named `<file>.symbols` sitting next to a WASM
+         * module (mirrors the `.hexana.json` / `.map` sibling conventions). Returns null when
+         * absent or unreadable — the diff then runs without de-minification.
+         */
+        private fun loadSymbolMap(file: VirtualFile): WasmSymbolMap? {
+            if (!file.extension.equals("wasm", ignoreCase = true)) return null
+            val sidecar = file.parent?.findChild("${file.name}.symbols") ?: return null
+            return try {
+                WasmSymbolMap.parse(sidecar.contentsToByteArray().decodeToString())
+            } catch (t: Throwable) {
+                null
+            }
+        }
 
         /**
          * Whether [file] is a binary some diff provider compares: a WASM module or component,

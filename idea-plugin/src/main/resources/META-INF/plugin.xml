@@ -246,6 +246,9 @@
                   extensions="pb"/>
 
         <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
+        <!-- Viewers for the platform diff window; offered in its viewer switcher, hex diff by default. -->
+        <diff.DiffTool implementation="org.jetbrains.hexana.diff.HexDiffTool"/>
+        <diff.DiffTool implementation="org.jetbrains.hexana.diff.HexanaStructuralDiffTool"/>
         <structureViewBuilder factoryClass="org.jetbrains.hexana.ui.HexanaStructureViewBuilderProvider"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.feedback.HexanaFeedbackFileEditorProvider"/>
         <fileEditorProvider implementation="org.jetbrains.hexana.whatsnew.HexanaWhatsNewFileEditorProvider"/>

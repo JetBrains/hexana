@@ -16,7 +16,8 @@ consult-first / write-back rules.
   reach the editor in the first place.
 
 - [[entities/binary-diff-provider]] — the shared diff model (`BinaryDiffProvider`): tabs,
-  detail pane, navigation requests, and how IntelliJ and VS Code host it.
+  detail pane, navigation requests, how IntelliJ and VS Code host it, and the hex viewer in the
+  IntelliJ diff window (`diff.DiffTool`).
 
 ## Sources
 

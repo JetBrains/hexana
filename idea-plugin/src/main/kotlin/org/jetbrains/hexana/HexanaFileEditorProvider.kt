@@ -25,35 +25,37 @@ import org.jetbrains.hexana.statistics.HexanaCounterUsagesCollector
 class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
     companion object {
         const val EDITOR_TYPE_ID: String = "hexana-editor"
+
+        /** Whether Hexana opens [file]; project-independent, so the diff tools share it. */
+        fun acceptsFile(file: VirtualFile): Boolean =
+            file.fileType is WasmFileType ||
+                file.fileType is BinaryFileType ||
+                file.fileType is NativeBinaryFileType ||
+                file.fileType is ParquetFileType ||
+                file.fileType is ArrowFileType ||
+                file.fileType is ProtobufFileType ||
+                file.fileType is ProtobufMessageFileType ||
+                file.extension.equals("class", ignoreCase = true) ||
+                file.extension.equals("jar", ignoreCase = true) ||
+                file.extension.equals("zip", ignoreCase = true) ||
+                file.extension.equals("war", ignoreCase = true) ||
+                file.extension.equals("apk", ignoreCase = true) ||
+                file.extension.equals("tar", ignoreCase = true) ||
+                file.extension.equals("tgz", ignoreCase = true) ||
+                file.name.endsWith(".tar.gz", ignoreCase = true) ||
+                file.extension.equals("jit", ignoreCase = true) ||
+                file.extension.equals("dex", ignoreCase = true) ||
+                file.extension.equals("arsc", ignoreCase = true) ||
+                file.extension.equals("parquet", ignoreCase = true) ||
+                file.extension.equals("arrow", ignoreCase = true) ||
+                file.extension.equals("arrows", ignoreCase = true) ||
+                file.extension.equals("gz", ignoreCase = true)
     }
 
     override fun accept(
         project: Project,
         file: VirtualFile
-    ): Boolean {
-        return file.fileType is WasmFileType ||
-            file.fileType is BinaryFileType ||
-            file.fileType is NativeBinaryFileType ||
-            file.fileType is ParquetFileType ||
-            file.fileType is ArrowFileType ||
-            file.fileType is ProtobufFileType ||
-            file.fileType is ProtobufMessageFileType ||
-            file.extension.equals("class", ignoreCase = true) ||
-            file.extension.equals("jar", ignoreCase = true) ||
-            file.extension.equals("zip", ignoreCase = true) ||
-            file.extension.equals("war", ignoreCase = true) ||
-            file.extension.equals("apk", ignoreCase = true) ||
-            file.extension.equals("tar", ignoreCase = true) ||
-            file.extension.equals("tgz", ignoreCase = true) ||
-            file.name.endsWith(".tar.gz", ignoreCase = true) ||
-            file.extension.equals("jit", ignoreCase = true) ||
-            file.extension.equals("dex", ignoreCase = true) ||
-            file.extension.equals("arsc", ignoreCase = true) ||
-            file.extension.equals("parquet", ignoreCase = true) ||
-            file.extension.equals("arrow", ignoreCase = true) ||
-            file.extension.equals("arrows", ignoreCase = true) ||
-            file.extension.equals("gz", ignoreCase = true)
-    }
+    ): Boolean = acceptsFile(file)
 
     override fun createEditor(
         project: Project,
