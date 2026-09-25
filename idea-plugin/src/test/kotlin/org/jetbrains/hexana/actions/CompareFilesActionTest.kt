@@ -37,6 +37,17 @@ class CompareFilesActionTest : BasePlatformTestCase() {
         return event.presentation.isEnabledAndVisible
     }
 
+    fun `test only pairs a diff provider accepts are comparable pairs`() {
+        val executable = file("server", elf)
+        val module = file("module.wasm", wasm)
+        assertTrue(CompareFilesAction.isComparablePair(executable, file("server-old", elf)))
+        assertTrue(CompareFilesAction.isComparablePair(module, file("module-old.wasm", wasm)))
+        // Native formats share one provider, so ELF against Mach-O is compared.
+        assertTrue(CompareFilesAction.isComparablePair(executable, file("tool", machO)))
+        assertFalse(CompareFilesAction.isComparablePair(module, executable))
+        assertFalse(CompareFilesAction.isComparablePair(executable, module))
+    }
+
     fun `test extensionless binaries are comparable by content`() {
         val executable = file("server", elf)
         val module = file("module", wasm)

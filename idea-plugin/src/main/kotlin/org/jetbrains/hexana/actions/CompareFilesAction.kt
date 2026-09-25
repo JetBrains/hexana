@@ -146,6 +146,15 @@ open class CompareFilesAction : AnAction() {
          */
         internal fun isComparable(file: VirtualFile): Boolean =
             !file.isDirectory && (file.fileType is WasmFileType || file.fileType is NativeBinaryFileType)
+
+        /**
+         * Whether [left] and [right] are both WASM or both native — the split the diff
+         * providers follow, decided from the cached file types. A WASM module against a
+         * component still passes and is refused by [BinaryDiffProviderRegistry.rejectionReason],
+         * since telling them apart takes reading the header.
+         */
+        internal fun isComparablePair(left: VirtualFile, right: VirtualFile): Boolean =
+            isComparable(left) && isComparable(right) && (left.fileType is WasmFileType) == (right.fileType is WasmFileType)
     }
 }
 

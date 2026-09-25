@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -96,7 +97,12 @@ internal fun HexDiffTabsPanel(tabs: List<TableTabDiff>, tableState: HexViewState
         Divider(orientation = Orientation.Horizontal, modifier = Modifier.fillMaxWidth())
         val tab = tabs.getOrNull(selected) ?: return@Column
         Box(modifier = Modifier.weight(1f).padding(8.dp)) {
-            TableTabContent(tab.descriptor, tableState)
+            // Every tab renders from this one call site; without a key the table's remembered
+            // sort column, selection and search carry over to the next tab — and a sort column
+            // past the next table's width throws.
+            key(selected) {
+                TableTabContent(tab.descriptor, tableState)
+            }
         }
     }
 }

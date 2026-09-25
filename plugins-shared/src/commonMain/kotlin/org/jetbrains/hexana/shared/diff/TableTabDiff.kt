@@ -37,7 +37,7 @@ class TableRowPair(val left: Int?, val right: Int?, val tint: RowTint?)
  * 2. the rest are paired as modified through a column whose values are unique on both
  *    sides — the one whose pairs agree on the most other cells (a name, typically:
  *    addresses and sizes shift between builds, names do not), repeated while it pairs
- *    anything;
+ *    anything; rows whose value in that key column is duplicated then pair in order;
  * 3. what is left is removed (left only) or added (right only).
  */
 object TableTabDiffer {
@@ -146,22 +146,36 @@ object TableTabDiffer {
 
         // 2. Modified rows, through the most discriminating column.
         // Each round removes rows, which can make another column's values unique.
+        var keyColumn = -1
         for (round in 0 until columnCount) {
             // Scored by how many cells the pairs it makes agree on, not by how many pairs: an
             // address column can match as often as a name column, but pairs rows that agree
             // on nothing else.
+            var bestColumn = -1
             var bestPairs: List<Pair<Int, Int>> = emptyList()
             var bestScore = 0
             for (c in 0 until columnCount) {
                 val pairs = uniqueMatches(left, leftPair, right, rightPair, c)
                 val score = pairs.sumOf { (i, j) -> equalCells(left[i], right[j]) }
                 if (score > bestScore) {
+                    bestColumn = c
                     bestPairs = pairs
                     bestScore = score
                 }
             }
             if (bestPairs.isEmpty()) break
+            if (keyColumn < 0) keyColumn = bestColumn
             for ((i, j) in bestPairs) {
+                leftPair[i] = j
+                rightPair[j] = i
+                modified[i] = true
+            }
+        }
+        // Rows sharing a key value (two local `static helper` symbols) were skipped above as
+        // ambiguous; pair them n-th with n-th. Only on the column the data identified as the
+        // key — doing it on any column would let a "Type" column pair unrelated rows.
+        if (keyColumn >= 0) {
+            for ((i, j) in occurrenceMatches(left, leftPair, right, rightPair, keyColumn)) {
                 leftPair[i] = j
                 rightPair[j] = i
                 modified[i] = true
@@ -187,6 +201,30 @@ object TableTabDiffer {
                 result += TableRowPair(i, j, if (modified[i]) RowTint.Modified else null)
                 addRightOnly(j)
             }
+        }
+        return result
+    }
+
+    /** Unpaired rows with equal [column] values, the n-th such row on the left with the n-th on the right. */
+    private fun occurrenceMatches(
+        left: List<List<CellValue<*>?>>,
+        leftPair: IntArray,
+        right: List<List<CellValue<*>?>>,
+        rightPair: IntArray,
+        column: Int,
+    ): List<Pair<Int, Int>> {
+        val rightByValue = HashMap<String, ArrayDeque<Int>>()
+        for (j in right.indices) {
+            if (rightPair[j] >= 0) continue
+            val value = right[j][column]?.representation?.takeIf { it.isNotBlank() } ?: continue
+            rightByValue.getOrPut(value) { ArrayDeque() }.addLast(j)
+        }
+        val result = ArrayList<Pair<Int, Int>>()
+        for (i in left.indices) {
+            if (leftPair[i] >= 0) continue
+            val value = left[i][column]?.representation?.takeIf { it.isNotBlank() } ?: continue
+            val j = rightByValue[value]?.removeFirstOrNull() ?: continue
+            result += i to j
         }
         return result
     }

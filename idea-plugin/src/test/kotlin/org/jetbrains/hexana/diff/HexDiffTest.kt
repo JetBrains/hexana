@@ -53,6 +53,24 @@ class HexDiffTest : UsefulTestCase() {
         assertTrue((0 until expanded.itemCount).map(expanded::itemAt).last() is HexDiffLayout.Item.Fold)
     }
 
+    fun testListKeysAreUniqueAndSurviveExpandingAFold() {
+        val left = ByteArray(16 * 60)
+        val right = left.copyOf().also { it[16 * 30] = 1 }
+        val diff = diff(left, right)
+        val collapsed = HexDiffLayout.build(diff, collapse = true)
+        val expanded = HexDiffLayout.build(diff, collapse = true, expanded = setOf(0))
+
+        for (layout in listOf(collapsed, expanded, HexDiffLayout.build(diff, collapse = false))) {
+            val keys = (0 until layout.itemCount).map { layout.itemAt(it).key }
+            assertEquals(keys.size, keys.toSet().size)
+        }
+        // The changed row keeps its key whichever folds are open, which is what holds the scroll position.
+        val changedKey = HexDiffLayout.Item.Row(30).key
+        assertEquals(changedKey, collapsed.itemAt(collapsed.itemOf(30)).key)
+        assertEquals(changedKey, expanded.itemAt(expanded.itemOf(30)).key)
+        assertFalse(collapsed.itemAt(0).key == expanded.itemAt(0).key) // fold 0 vs row 0
+    }
+
     fun testShortUnchangedStretchStaysVisible() {
         val left = ByteArray(16 * 20)
         val right = left.copyOf().also {

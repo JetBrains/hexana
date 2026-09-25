@@ -110,8 +110,16 @@ internal class HexDiffLayout private constructor(
     val itemCount: Int,
 ) {
     sealed interface Item {
-        data class Row(val row: Int) : Item
-        data class Fold(val startRow: Int, val endRow: Int) : Item
+        /** Stable list key: a row by its index, a fold by its start row (negative, so the two never collide). */
+        val key: Long
+
+        data class Row(val row: Int) : Item {
+            override val key: Long get() = row.toLong()
+        }
+
+        data class Fold(val startRow: Int, val endRow: Int) : Item {
+            override val key: Long get() = -1L - startRow
+        }
     }
 
     fun itemAt(index: Int): Item {

@@ -207,7 +207,9 @@ private fun DiffRows(state: HexDiffViewState, diff: HexDiff, layout: HexDiffLayo
     }
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-            items(count = layout.itemCount) { index ->
+            // Keyed by row, so expanding a fold or toggling collapsing keeps the rows in view
+            // where they are instead of whatever lands at the same list index.
+            items(count = layout.itemCount, key = { layout.itemAt(it).key }) { index ->
                 when (val item = layout.itemAt(index)) {
                     is HexDiffLayout.Item.Row -> DiffRow(diff, item.row, colors, state.sections)
                     is HexDiffLayout.Item.Fold -> FoldRow(item, diff.bytesPerRow, state.sections) {

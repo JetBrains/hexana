@@ -51,6 +51,19 @@ class TableTabDiffTest {
     }
 
     @Test
+    fun changedRowsWithADuplicatedKeyPairInOrder() {
+        // Two local symbols named `helper`, both moved; `main` identifies Name as the key column.
+        val columns = listOf("Name", "Address")
+        val left = table("Symbols", columns, listOf(listOf("main", "0x10"), listOf("helper", "0x20"), listOf("helper", "0x30")))
+        val right = table("Symbols", columns, listOf(listOf("main", "0x14"), listOf("helper", "0x24"), listOf("helper", "0x34")))
+
+        val table = TableTabDiffer.diff("Symbols", left, right).descriptor
+
+        assertEquals(listOf(RowTint.Modified, RowTint.Modified, RowTint.Modified), table.tints())
+        assertEquals(listOf("0x20 → 0x24", "0x30 → 0x34"), listOf(table.cell(1, 1), table.cell(2, 1)))
+    }
+
+    @Test
     fun identicalRowsStayUntintedAndDuplicatesPairInOrder() {
         val rows = listOf(listOf("a", "1"), listOf("a", "1"), listOf("b", "2"))
         val diff = TableTabDiffer.diff("T", table("T", listOf("K", "V"), rows), table("T", listOf("K", "V"), rows.take(2)))

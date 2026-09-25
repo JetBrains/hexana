@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -144,10 +145,14 @@ private fun DiffTabs(model: BinaryDiffModel, state: HexViewStateHolder) {
         val tab = tabs.getOrNull(selectedTab) ?: return@Column
         val content by model.tabs[selectedTab].collectAsState()
         Box(modifier = Modifier.weight(1f)) {
-            when (val c = content) {
-                DiffLoadable.Loading -> Message(tab.loadingMessage)
-                is DiffLoadable.Error -> Message(c.message)
-                is DiffLoadable.Ready -> DiffTabBody(c.value, state)
+            // Keyed so each tab's table keeps its own remembered state (sort column, search);
+            // shared, a sort column past the next table's width throws.
+            key(selectedTab) {
+                when (val c = content) {
+                    DiffLoadable.Loading -> Message(tab.loadingMessage)
+                    is DiffLoadable.Error -> Message(c.message)
+                    is DiffLoadable.Ready -> DiffTabBody(c.value, state)
+                }
             }
         }
     }

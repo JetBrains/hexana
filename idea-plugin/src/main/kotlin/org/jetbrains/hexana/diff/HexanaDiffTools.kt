@@ -93,9 +93,10 @@ class HexanaStructuralDiffTool : FrameDiffTool {
     override fun canShow(context: DiffContext, request: DiffRequest): Boolean {
         if (context.project == null) return false
         val contents = (request as? ContentDiffRequest)?.contents ?: return false
-        return contents.size == 2 && contents.all {
-            it is FileContent && it.file.isValid && CompareFilesAction.isComparable(it.file)
-        }
+        if (contents.size != 2 || !contents.all { it is FileContent && it.file.isValid }) return false
+        // Offered only when a provider can compare the pair, so the switcher never leads to a
+        // "not the same kind" message.
+        return CompareFilesAction.isComparablePair((contents[0] as FileContent).file, (contents[1] as FileContent).file)
     }
 
     override fun createComponent(context: DiffContext, request: DiffRequest): FrameDiffTool.DiffViewer =
@@ -282,7 +283,9 @@ private class HexanaStructuralDiffViewer(
     private val request: ContentDiffRequest,
 ) : FrameDiffTool.DiffViewer {
     private val panel = JPanel(BorderLayout())
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var editor: HexanaFileEditor? = null
+    private var disposed = false
 
     override fun getComponent(): JComponent = panel
 
@@ -290,24 +293,37 @@ private class HexanaStructuralDiffViewer(
 
     override fun init(): FrameDiffTool.ToolbarComponents {
         val (left, right) = request.contents.map { (it as FileContent).file }
-        val input = CompareFilesAction.diffInput(left, right)
-        val rejection = if (input == null) {
-            "Could not read one of the files."
-        } else {
-            BinaryDiffProviderRegistry.rejectionReason(input)
-        }
-        if (input == null || rejection != null) {
-            panel.add(JBLabel(rejection ?: "", SwingConstants.CENTER), BorderLayout.CENTER)
-        } else {
-            val title = "${title(request, 0)} ↔ ${title(request, 1)}"
-            val diffEditor = HexanaFileEditor(context.project!!, HexanaDiffVirtualFile(title, input))
-            editor = diffEditor
-            panel.add(diffEditor.component, BorderLayout.CENTER)
+        show(JBLabel("Comparing…", SwingConstants.CENTER))
+        scope.launch {
+            // Reading the inputs maps both files, reads any `.symbols` sidecar and sniffs each
+            // header (a remote file is even downloaded), so it stays off the EDT.
+            val input = withContext(Dispatchers.IO) { CompareFilesAction.diffInput(left, right) }
+            val rejection = if (input == null) "Could not read one of the files." else BinaryDiffProviderRegistry.rejectionReason(input)
+            withContext(Dispatchers.EDT) {
+                if (disposed) return@withContext
+                if (input == null || rejection != null) {
+                    show(JBLabel(rejection ?: "", SwingConstants.CENTER))
+                } else {
+                    val title = "${title(request, 0)} ↔ ${title(request, 1)}"
+                    val diffEditor = HexanaFileEditor(context.project!!, HexanaDiffVirtualFile(title, input))
+                    editor = diffEditor
+                    show(diffEditor.component)
+                }
+            }
         }
         return FrameDiffTool.ToolbarComponents()
     }
 
+    private fun show(component: JComponent) {
+        panel.removeAll()
+        panel.add(component, BorderLayout.CENTER)
+        panel.revalidate()
+        panel.repaint()
+    }
+
     override fun dispose() {
+        disposed = true
+        scope.cancel()
         editor?.let { Disposer.dispose(it) }
     }
 }
