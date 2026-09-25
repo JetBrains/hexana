@@ -72,7 +72,9 @@ This module compiles sources from three locations:
 - The platform diff window (Compare Files, VCS changes) gets Hexana viewers via `diff.DiffTool` extensions in `diff/HexanaDiffTools.kt`:
   `HexDiffTool` (positional hex diff with folded unchanged rows, model in `diff/HexDiff.kt`) and `HexanaStructuralDiffTool`
   (hosts the `HexanaDiffVirtualFile` editor). The platform's viewer switcher toggles between them; `HexDiffTool` is a
-  `SuppressiveDiffTool` that hides the platform `BinaryDiffTool` wherever it applies.
+  `SuppressiveDiffTool` that hides the platform `BinaryDiffTool` wherever it applies. `CompareFilesAction` (Compare Binaries With…)
+  opens this platform diff too (`DiffManager.showDiff`); the editor-tab `HexanaDiffVirtualFile` is still what the structural
+  viewer hosts and what submodule rows open.
 - IDE-specific per-row actions (run buttons, navigation context menus, open-in-editor click) are injected through enrichment functions in `TableTabEnricher.kt` — do not override entire panels for IDE-specific actions; add enrichment instead.
 
 ### Binary Parsing And Navigation

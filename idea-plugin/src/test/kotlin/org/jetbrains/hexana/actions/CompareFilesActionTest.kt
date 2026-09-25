@@ -1,5 +1,10 @@
 package org.jetbrains.hexana.actions
 
+import com.intellij.diff.DiffManagerEx
+import com.intellij.diff.impl.DiffRequestProcessor
+import com.intellij.diff.impl.DiffSettingsHolder
+import org.jetbrains.hexana.diff.HexDiffTool
+import org.jetbrains.hexana.diff.HexanaStructuralDiffTool
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.ActionUiKind
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -35,6 +40,27 @@ class CompareFilesActionTest : BasePlatformTestCase() {
         )
         action.update(event)
         return event.presentation.isEnabledAndVisible
+    }
+
+    fun `test hexana compare opens on the structural viewer and compare files on the hex diff`() {
+        val tools = DiffManagerEx.getInstance().diffTools
+        val hexanaPlace = DiffSettingsHolder.DiffSettings.getSettings(CompareFilesAction.DIFF_PLACE)
+        hexanaPlace.diffToolsOrder = emptyList()
+
+        CompareFilesAction.preferStructuralViewer()
+        val hexanaOrder = DiffRequestProcessor.getToolOrderFromSettings(hexanaPlace, tools)
+        assertInstanceOf(hexanaOrder.first(), HexanaStructuralDiffTool::class.java)
+        assertTrue(hexanaOrder.indexOfFirst { it is HexDiffTool } > 0)
+
+        // The IDE's own Compare Files uses the default place, where the hex diff comes first.
+        val defaultOrder = DiffRequestProcessor.getToolOrderFromSettings(DiffSettingsHolder.DiffSettings.getSettings(null), tools)
+        assertTrue(defaultOrder.indexOfFirst { it is HexDiffTool } < defaultOrder.indexOfFirst { it is HexanaStructuralDiffTool })
+
+        // Seeded once: a viewer the user picked afterwards is kept.
+        hexanaPlace.diffToolsOrder = listOf(HexDiffTool::class.java.canonicalName)
+        CompareFilesAction.preferStructuralViewer()
+        assertEquals(listOf(HexDiffTool::class.java.canonicalName), hexanaPlace.diffToolsOrder)
+        hexanaPlace.diffToolsOrder = emptyList()
     }
 
     fun `test only pairs a diff provider accepts are comparable pairs`() {

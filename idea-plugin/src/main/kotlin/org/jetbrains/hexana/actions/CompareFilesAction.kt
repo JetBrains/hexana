@@ -1,5 +1,12 @@
 package org.jetbrains.hexana.actions
 
+import com.intellij.diff.DiffContentFactory
+import com.intellij.diff.DiffManager
+import com.intellij.diff.DiffDialogHints
+import com.intellij.diff.chains.SimpleDiffRequestChain
+import com.intellij.diff.impl.DiffSettingsHolder
+import com.intellij.diff.requests.SimpleDiffRequest
+import com.intellij.diff.util.DiffUserDataKeys
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
@@ -7,12 +14,10 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
-import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.hexana.HexanaDiffVirtualFile
 import org.jetbrains.hexana.NativeBinaryFileType
 import org.jetbrains.hexana.WasmFileType
+import org.jetbrains.hexana.diff.HexanaStructuralDiffTool
 import org.jetbrains.hexana.providers.format.WasmSymbolMap
 import org.jetbrains.hexana.shared.diff.BinaryDiffInput
 import org.jetbrains.hexana.shared.diff.BinaryDiffProviderRegistry
@@ -21,14 +26,11 @@ import org.jetbrains.hexana.toCommonByteBuffer
 /**
  * `Compare Binaries With…` — pick a second file and open a diff against the selected one.
  *
- * One action for every format: it opens a [HexanaDiffVirtualFile], and the
- * [org.jetbrains.hexana.shared.diff.BinaryDiffProvider] that accepts the pair decides what
- * it shows — size / entity / dispatch tabs with a WAT side by side for two core WASM
- * modules, paired submodules for two Component Model binaries, section sizes and a
- * per-function comparison for two native binaries. A pair that is not the same kind is
- * rejected with [BinaryDiffProviderRegistry.rejectionReason].
- *
- * Routes through the existing [org.jetbrains.hexana.HexanaFileEditorProvider].
+ * Opens the platform diff, the same one as the IDE's own Compare Files, where Hexana's
+ * `diff.DiffTool`s show it (see `org.jetbrains.hexana.diff.HexDiffTool`): the hex diff with
+ * sections and table tabs, and — for pairs a
+ * [org.jetbrains.hexana.shared.diff.BinaryDiffProvider] compares — the structural diff with
+ * size / entity / per-function tabs. The diff window's viewer switcher moves between them.
  */
 open class CompareFilesAction : AnAction() {
 
@@ -81,17 +83,26 @@ open class CompareFilesAction : AnAction() {
             ) ?: return
         }
 
-        val input = diffInput(left, right)
-        if (input == null) {
-            Messages.showWarningDialog(project, "Could not read one of the selected files.", TITLE)
-            return
-        }
-        BinaryDiffProviderRegistry.rejectionReason(input)?.let { reason ->
-            Messages.showWarningDialog(project, reason, TITLE)
-            return
-        }
-        FileEditorManager.getInstance(project).openFile(HexanaDiffVirtualFile(input.title, input), true)
+        // The platform diff, where Hexana's viewers live: the hex diff (any pair, structure
+        // included when both are the same kind) and the structural diff (pairs a provider
+        // compares), switchable there. Reading and comparing happen in the viewers, off the EDT.
+        val factory = DiffContentFactory.getInstance()
+        val request = SimpleDiffRequest(
+            "${left.name} ↔ ${right.name}",
+            factory.create(project, left),
+            factory.create(project, right),
+            left.name,
+            right.name,
+        )
+        // A place of its own, so this entry opens on the Hexana diff — what it showed before it
+        // moved into the diff window — while the IDE's Compare Files keeps the hex diff first.
+        // The platform remembers the viewer order per place, so a switch here sticks here only.
+        val chain = SimpleDiffRequestChain(request)
+        chain.putUserData(DiffUserDataKeys.PLACE, DIFF_PLACE)
+        preferStructuralViewer()
+        DiffManager.getInstance().showDiff(project, chain, DiffDialogHints.DEFAULT)
     }
+
 
     private fun chooser(title: String, description: String) =
         FileChooserDescriptorFactory.singleFile()
@@ -101,7 +112,20 @@ open class CompareFilesAction : AnAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     companion object {
-        private const val TITLE = "Compare Binaries"
+        /** The diff place of Hexana's own compare entry, see [actionPerformed]. */
+        internal const val DIFF_PLACE = "Hexana.CompareBinaries"
+
+        /**
+         * Seeds [DIFF_PLACE]'s viewer order with the structural viewer first — once: after that
+         * the order is whatever the user last picked in the switcher. Pairs it does not accept
+         * fall through to the next viewer, the hex diff.
+         */
+        internal fun preferStructuralViewer() {
+            val settings = DiffSettingsHolder.DiffSettings.getSettings(DIFF_PLACE)
+            if (settings.diffToolsOrder.isEmpty()) {
+                settings.diffToolsOrder = listOf(HexanaStructuralDiffTool::class.java.canonicalName)
+            }
+        }
 
         /**
          * The diff input for [left] against [right], or null when either cannot be read.

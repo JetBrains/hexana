@@ -115,3 +115,5 @@ Append one line per write-back: date, page, what changed.
 - 2026-09-25 — `entities/binary-diff-provider` — IntelliJ diff window integration: `diff.DiffTool` hex viewer + structural viewer, platform viewer switcher, positional hex diff with folds.
 - 2026-09-25 — `entities/binary-diff-provider` — hex diff sections: per-side structure ranges, diff-safe palette, section bar with modified counts.
 - 2026-09-25 — `entities/binary-diff-provider` — hex diff table tabs: `TableTabDiffer` (flat tabs, keyless row pairing, cell-agreement column choice).
+- 2026-09-25 — `entities/binary-diff-provider` — Compare Binaries With… opens the platform diff window (Hexana viewers) instead of an editor tab.
+- 2026-09-25 — `entities/binary-diff-provider` — per-entry-point default viewer via diff places.

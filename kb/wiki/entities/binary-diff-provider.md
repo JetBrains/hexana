@@ -173,3 +173,14 @@ a column whose values are unique on both sides, chosen by **how many cells its p
 pair count, since an address column matches as often as a name column but pairs unrelated rows; rounds
 repeat while anything pairs. Right-only rows follow their right-side predecessor. Tree tabs are not
 diffed yet.
+
+`hexana.compareFiles` (Compare Binaries With…) opens the platform diff window via `DiffManager.showDiff` with a
+`SimpleDiffRequest` of two `DiffContentFactory` file contents, so it lands in the same Hexana viewers as the IDE's
+Compare Files; the mismatched-kinds warning dialog is gone (the hex diff handles any pair). The editor-tab diff
+(`HexanaDiffVirtualFile`) remains for the structural viewer, submodule navigation and UI-driver probes.
+
+Default viewer per entry point: the platform keeps the viewer order per diff **place**
+(`DiffUserDataKeys.PLACE`, read from the request chain's user data; `DiffSettingsHolder.DiffSettings.getSettings(place)`).
+`CompareFilesAction` opens a `SimpleDiffRequestChain` under place `Hexana.CompareBinaries`, whose order is seeded once
+with `HexanaStructuralDiffTool` first; the IDE's Compare Files uses the default place, where EP registration order puts
+`HexDiffTool` first. `FORCE_DIFF_TOOL` was rejected — it hides the viewer switcher.
