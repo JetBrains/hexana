@@ -29,6 +29,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.hexana.BinaryFileType
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaDiffVirtualFile
 import org.jetbrains.hexana.HexanaFileEditor
@@ -102,7 +103,7 @@ class HexanaStructuralDiffTool : FrameDiffTool {
 }
 
 private class HexDiffViewer(context: DiffContext, private val request: ContentDiffRequest) : FrameDiffTool.DiffViewer {
-    private val state = HexDiffViewState(title(request, 0), title(request, 1))
+    private val state = HexDiffViewState(title(request, 0), title(request, 1), tabsExpected = expectsTabs(request))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** Backs the table renderer of the diffed tabs; tables need a project to render. */
@@ -153,6 +154,8 @@ private class HexDiffViewer(context: DiffContext, private val request: ContentDi
                 LOG.warn("Hex diff failed", e)
                 withContext(Dispatchers.EDT) {
                     state.error = "Could not compare: ${e.message ?: e::class.simpleName}"
+                    // Settles the reserved tabs area; otherwise its spinner would never stop.
+                    state.tabs = emptyList()
                     status.text = "Comparison failed"
                 }
             }
@@ -293,6 +296,14 @@ private class HexanaStructuralDiffViewer(
     override fun dispose() {
         editor?.let { Disposer.dispose(it) }
     }
+}
+
+/**
+ * Whether either side is a format Hexana parses into tables — anything it opens except the
+ * generic catch-all binary type. A cheap file-type check, made before the bytes are read.
+ */
+private fun expectsTabs(request: ContentDiffRequest): Boolean = request.contents.any {
+    it is FileContent && HexanaFileEditorProvider.acceptsFile(it.file) && it.file.fileType !is BinaryFileType
 }
 
 /** The request's title for side [index], falling back to the file name. */

@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.diff
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +30,7 @@ import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.hexana.ui.ScrollableTabStrip
 import org.jetbrains.hexana.ui.panel.TableTabContent
 import org.jetbrains.jewel.ui.Orientation
+import org.jetbrains.jewel.ui.component.CircularProgressIndicator
 import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.component.TabData
 import org.jetbrains.jewel.ui.component.Text
@@ -95,6 +97,17 @@ internal fun HexDiffTabsPanel(tabs: List<TableTabDiff>, tableState: HexViewState
         val tab = tabs.getOrNull(selected) ?: return@Column
         Box(modifier = Modifier.weight(1f).padding(8.dp)) {
             TableTabContent(tab.descriptor, tableState)
+        }
+    }
+}
+
+/** Holds the tabs' place while both sides' tables are built and diffed. */
+@Composable
+internal fun HexDiffTabsLoading() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator()
+            Text("Loading extra comparison data…", style = TextStyle(color = HexanaTheme.hexTextColor))
         }
     }
 }

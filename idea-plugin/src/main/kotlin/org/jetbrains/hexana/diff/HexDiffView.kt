@@ -61,7 +61,15 @@ import org.jetbrains.jewel.ui.component.Text
  * State of one hex diff viewer, shared by the Compose view and the diff window's Swing
  * toolbar actions (collapse toggle, previous / next difference).
  */
-internal class HexDiffViewState(val leftTitle: String, val rightTitle: String) {
+internal class HexDiffViewState(
+    val leftTitle: String,
+    val rightTitle: String,
+    /**
+     * Whether table tabs are likely, decided from the file types before anything is parsed,
+     * so their space is reserved from the start instead of the split appearing late.
+     */
+    val tabsExpected: Boolean = false,
+) {
     /** `null` while the comparison is still running (or failed, see [error]). */
     var diff: HexDiff? by mutableStateOf(null)
     var error: String? by mutableStateOf(null)
@@ -137,7 +145,10 @@ internal class HexDiffViewState(val leftTitle: String, val rightTitle: String) {
 @Composable
 internal fun HexDiffView(state: HexDiffViewState, tableState: HexViewStateHolder?) {
     val tabs = state.tabs
-    if (tableState == null || tabs.isNullOrEmpty()) {
+    // While loading, the split is kept only when tabs are expected; once loaded, only when
+    // there are any (an expected format can still turn out to have none).
+    val showTabs = tableState != null && if (tabs == null) state.tabsExpected else tabs.isNotEmpty()
+    if (!showTabs) {
         HexDiffBody(state)
         return
     }
@@ -145,7 +156,9 @@ internal fun HexDiffView(state: HexDiffViewState, tableState: HexViewStateHolder
         topFraction = state.topFraction,
         onDragFraction = { delta -> state.topFraction = (state.topFraction + delta).coerceIn(0.2f, 0.9f) },
         northPanel = { HexDiffBody(state) },
-        southPanel = { HexDiffTabsPanel(tabs, tableState) },
+        southPanel = {
+            if (tabs == null) HexDiffTabsLoading() else HexDiffTabsPanel(tabs, tableState!!)
+        },
     )
 }
 
