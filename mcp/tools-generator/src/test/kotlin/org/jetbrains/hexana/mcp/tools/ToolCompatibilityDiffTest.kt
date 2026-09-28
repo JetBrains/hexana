@@ -18,6 +18,32 @@ class ToolCompatibilityDiffTest {
     private val baseline = ResolvedToolCatalogReport()
 
     @Test
+    fun `documentation changes stay separate from wire and binding changes`() {
+        val original = document("""{"tools":[{"id":"example","summary":"Old summary","guidance":null,"inputSchema":{"fields":[{"wireName":"limit","type":{"kind":"int32"},"description":"Old help"}]},"outputSchema":{},"views":{"cli":{"selected":true,"details":{"inputOptions":[{"name":"--limit","type":"integer","description":"Old help","default":"1"}],"examples":[{"description":"Old example","arguments":["example","--limit","1"]}]}}}}]}""")
+        val changed = document("""{"tools":[{"id":"example","summary":"New summary","guidance":null,"inputSchema":{"fields":[{"wireName":"limit","type":{"kind":"int32"},"description":"New help"}]},"outputSchema":{},"views":{"cli":{"selected":true,"details":{"inputOptions":[{"name":"--limit","type":"integer","description":"New help","default":"2"}],"examples":[{"description":"New example","arguments":["example","--limit","1"]}]}}}}]}""")
+        val differences = ToolCompatibilityDiff.between(original, changed).differences
+        assertTrue(differences.any { it.path == "tool/example/summary" && it.category == ToolCompatibilityDiff.Category.Prose })
+        assertTrue(differences.any { it.path == "tool/example/input/field/limit/description" && it.category == ToolCompatibilityDiff.Category.Prose })
+        assertTrue(differences.any { it.path.endsWith("/option/--limit/default") && it.category == ToolCompatibilityDiff.Category.Defaults })
+        assertTrue(differences.any { it.path.endsWith("/example/0/description") && it.category == ToolCompatibilityDiff.Category.Prose })
+    }
+
+    @Test
+    fun `adding and removing CLI examples are prose changes`() {
+        val without = document("""{"tools":[{"id":"example","views":{"cli":{"selected":true,"details":{"examples":[]}}}}]}""")
+        val with = document("""{"tools":[{"id":"example","views":{"cli":{"selected":true,"details":{"examples":[{"description":"Use stdin","arguments":["example","--stdin"]}]}}}}]}""")
+        val path = "tool/example/view/cli/details/example/0"
+
+        val added = ToolCompatibilityDiff.between(without, with).differences.single()
+        assertDifference(added, "cli", "cli", ToolCompatibilityDiff.Category.Prose, path)
+        assertEquals(null, added.before)
+
+        val removed = ToolCompatibilityDiff.between(with, without).differences.single()
+        assertDifference(removed, "cli", "cli", ToolCompatibilityDiff.Category.Prose, path)
+        assertEquals(null, removed.after)
+    }
+
+    @Test
     fun `CLI product membership mutation affects only CLI product membership`() {
         val target = HexanaCliTools.first { HexanaCliProductSpec.id in it.binding.products }
         val changed = ResolvedToolCatalogReport(
@@ -57,7 +83,7 @@ class ToolCompatibilityDiffTest {
 
         assertEquals(2, differences.size)
         assertDifference(
-            differences[0], "cli", "product", ToolCompatibilityDiff.Category.Binding,
+            differences[0], "cli", "product", ToolCompatibilityDiff.Category.Prose,
             "cliProduct/${product.id.value}/description",
         )
         assertDifference(

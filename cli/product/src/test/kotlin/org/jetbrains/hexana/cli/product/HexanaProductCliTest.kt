@@ -7,6 +7,7 @@ import org.jetbrains.hexana.cli.metadata.HexanaCliExecutionStatus
 import org.jetbrains.hexana.cli.metadata.HexanaCliProductToolSelection
 import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliProducts
 import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliToolRegistry
+import org.jetbrains.hexana.cli.metadata.validateHexanaCliUsageExamples
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
@@ -125,6 +126,30 @@ class HexanaProductCliTest {
             assertEquals(SUCCESS_EXIT_CODE, result.exitCode, result.stderr)
             assertTrue(result.stdout.startsWith("Usage: hexana-cli summarize-binary"), result.stdout)
         }
+    }
+
+    @Test
+    fun commandHelpShowsGeneratedFieldsConstraintsSourcesAndExamples() {
+        validateHexanaCliUsageExamples()
+        val help = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI, FailOnExecuteExecutor).run(
+            arrayOf("help", "summarize-module"), FailOnReadInputStream, emptyMap(),
+        )
+        assertEquals(SUCCESS_EXIT_CODE, help.exitCode, help.stderr)
+        assertTrue(help.stdout.contains("--format <json|pretty|table> (default: pretty)"), help.stdout)
+        assertTrue(help.stdout.contains("--wasm-base64 <base64>"), help.stdout)
+        assertTrue(help.stdout.contains("maximum length derived from --max-inline-bytes"), help.stdout)
+        assertTrue(help.stdout.contains("wasm: choose exactly one of wasm, --stdin, --bytes-base64, --wasm-base64"), help.stdout)
+        assertTrue(help.stdout.contains("hexana-cli summarize-module module.wasm"), help.stdout)
+        assertTrue(help.stdout.contains("hexana-cli summarize-module --stdin"), help.stdout)
+        assertTrue(help.stdout.contains("<wasm>  Readable local"), help.stdout)
+        assertTrue(!help.stdout.contains("<wasm> <path>"), help.stdout)
+
+        val scriptHelp = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI_SCRIPT, FailOnScriptExecuteExecutor).run(
+            arrayOf("help", "test"), FailOnReadInputStream, emptyMap(),
+        )
+        assertEquals(SUCCESS_EXIT_CODE, scriptHelp.exitCode, scriptHelp.stderr)
+        assertTrue(scriptHelp.stdout.contains("<suiteFiles...>  One or more .test.js"), scriptHelp.stdout)
+        assertTrue(!scriptHelp.stdout.contains("<suiteFiles> <list<string>>"), scriptHelp.stdout)
     }
 
     @Test

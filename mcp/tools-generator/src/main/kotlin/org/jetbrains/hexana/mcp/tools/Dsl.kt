@@ -852,6 +852,7 @@ data class CliToolBinding(
     val products: Set<ProductId> = emptySet(),
     val inputModel: ToolInputModel? = null,
     val generatedInputRequest: String? = null,
+    val examples: List<CliUsageExample> = emptyList(),
     val unknownFieldPolicy: UnknownFieldPolicy = UnknownFieldPolicy.Reject,
 ) {
     init {
@@ -867,6 +868,9 @@ data class CliToolBinding(
                 "TODO CLI tool '$commandName' cannot generate an input request."
             }
         }
+        require(examples.isEmpty() || generatedInputRequest != null) {
+            "CLI tool '$commandName' examples require a generated input request."
+        }
         if (executionStatus == CliExecutionStatus.Executable) {
             require(inputModel != null) {
                 "Executable CLI tool '$commandName' must declare an explicit input model."
@@ -879,6 +883,35 @@ data class CliToolBinding(
                 "TODO CLI tool '$commandName' must not declare an executable input model."
             }
         }
+    }
+}
+
+sealed class CliExampleSource {
+    abstract val slotName: String
+
+    data class Path(override val slotName: String, val value: String) : CliExampleSource() {
+        init { require(value.isNotBlank()) { "CLI example path must not be blank." } }
+    }
+
+    data class Stdin(override val slotName: String) : CliExampleSource()
+}
+
+data class CliUsageExample(
+    val description: String,
+    val source: CliExampleSource,
+) {
+    init { require(description.isNotBlank()) { "CLI example description must not be blank." } }
+}
+
+fun CliToolBinding.exampleArguments(example: CliUsageExample): List<String> {
+    val slot = inputModel?.sources?.singleOrNull { it.name == example.source.slotName }
+        ?: throw IllegalArgumentException("CLI tool '$commandName' example references unknown source slot '${example.source.slotName}'.")
+    return when (val source = example.source) {
+        is CliExampleSource.Path -> slot.cli.positionalPathName?.let { listOf(source.value) }
+            ?: slot.cli.pathOption?.let { listOf(it, source.value) }
+            ?: throw IllegalArgumentException("CLI tool '$commandName' example source '${slot.name}' has no path binding.")
+        is CliExampleSource.Stdin -> slot.cli.stdinOption?.let(::listOf)
+            ?: throw IllegalArgumentException("CLI tool '$commandName' example source '${slot.name}' has no stdin binding.")
     }
 }
 
@@ -925,6 +958,7 @@ fun cliToolBinding(
     products: Set<ProductId> = emptySet(),
     inputModel: ToolInputModel? = null,
     generatedInputRequest: String? = null,
+    examples: List<CliUsageExample> = emptyList(),
     unknownFieldPolicy: UnknownFieldPolicy = UnknownFieldPolicy.Reject,
 ): CliToolBinding = CliToolBinding(
     id = id,
@@ -937,6 +971,7 @@ fun cliToolBinding(
     products = products,
     inputModel = inputModel,
     generatedInputRequest = generatedInputRequest,
+    examples = examples,
     unknownFieldPolicy = unknownFieldPolicy,
 )
 
@@ -1462,6 +1497,7 @@ class ToolBuilder internal constructor(private val id: ToolId) {
 
 internal fun validateCliBinding(contract: ToolSpec, binding: CliToolBinding) {
     binding.inputModel?.let { validateExplicitInputModel(contract.name, contract.input, it) }
+    binding.examples.forEach(binding::exampleArguments)
     val selectedOutputs = listOfNotNull(binding.outputOverride, binding.defaultOutput)
     selectedOutputs.forEach { selectedOutput ->
         require(selectedOutput in contract.output.outputCapabilities) {

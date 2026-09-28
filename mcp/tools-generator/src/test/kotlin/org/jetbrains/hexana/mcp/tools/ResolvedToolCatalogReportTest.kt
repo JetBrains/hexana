@@ -85,8 +85,22 @@ class ResolvedToolCatalogReportTest {
         assertTrue(text.contains("formats:"))
         assertTrue(text.contains("products:"))
         assertTrue(text.contains("inputBinding:"))
+        assertTrue(text.contains("inputOptions:"))
+        assertTrue(text.contains("sourceGroups:"))
+        assertTrue(text.contains("examples:"))
         assertTrue(text.contains("closedRange(parameter=entriesRange)"))
         assertTrue(IDENTITY_TOKEN.find(text) == null)
+    }
+
+    @Test
+    fun `CLI report includes field help and typed usage examples`() {
+        val cli = document(ResolvedToolCatalogReport()).getValue("summarize_module").jsonObject
+            .getValue("views").jsonObject.getValue("cli").jsonObject.getValue("details").jsonObject
+        val options = cli.getValue("inputOptions").jsonArray.associateBy { it.jsonObject.getValue("name").jsonPrimitive.content }
+        assertEquals("base64", options.getValue("--wasm-base64").jsonObject.getValue("type").jsonPrimitive.content)
+        assertEquals("maximum length derived from --max-inline-bytes", options.getValue("--wasm-base64").jsonObject.getValue("constraints").jsonPrimitive.content)
+        assertEquals("wasm", cli.getValue("sourceGroups").jsonArray.single().jsonObject.getValue("name").jsonPrimitive.content)
+        assertEquals(2, cli.getValue("examples").jsonArray.size)
     }
 
     @Test

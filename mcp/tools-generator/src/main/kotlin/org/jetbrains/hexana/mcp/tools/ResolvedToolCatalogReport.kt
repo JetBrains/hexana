@@ -8,6 +8,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import org.jetbrains.hexana.mcp.tools.generator.cliInputOptions
+import org.jetbrains.hexana.mcp.tools.generator.cliSourceGroups
 
 /** Deterministic, static developer-facing view of the resolved tool authorities. */
 class ResolvedToolCatalogReport(
@@ -153,6 +155,23 @@ class ResolvedToolCatalogReport(
             put("defaultOutput", JsonPrimitive(cli.binding.defaultOutput.name))
             put("formats", strings(cliFormats(cli).sorted()))
             put("inputBinding", cli.binding.inputModel?.let(::inputBinding) ?: JsonNull)
+            put("inputOptions", buildJsonArray { cli.cliInputOptions().forEach { option -> add(buildJsonObject {
+                put("name", JsonPrimitive(option.name)); put("type", JsonPrimitive(option.valueType))
+                put("description", JsonPrimitive(option.description))
+                put("default", option.defaultValue?.let(::JsonPrimitive) ?: JsonNull)
+                put("constraints", option.constraints?.let(::JsonPrimitive) ?: JsonNull)
+                put("required", JsonPrimitive(option.required))
+            }) } })
+            put("sourceGroups", buildJsonArray { cli.cliSourceGroups().forEach { group -> add(buildJsonObject {
+                put("name", JsonPrimitive(group.name)); put("required", JsonPrimitive(group.required))
+                put("alternatives", strings(group.alternatives))
+                put("explanation", JsonPrimitive(if (group.required) "Choose exactly one source." else "Choose at most one source."))
+            }) } })
+            put("examples", buildJsonArray { cli.binding.examples.forEach { example -> add(buildJsonObject {
+                put("description", JsonPrimitive(example.description))
+                put("arguments", strings(listOf(cli.binding.commandName) + cli.binding.exampleArguments(example)))
+                put("sourceSlot", JsonPrimitive(example.source.slotName))
+            }) } })
             put("generatedInputRequest", cli.binding.generatedInputRequest?.let(::JsonPrimitive) ?: JsonNull)
             put("products", strings(cli.binding.products.map { it.value }.sorted()))
         }, "CLI binding authority")

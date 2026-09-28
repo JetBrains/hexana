@@ -418,6 +418,10 @@ private val CLI_TOOL_BINDINGS = listOf(
         products = setOf(HexanaCliProductSpec.id),
         inputModel = wasmCliInputModel(),
         generatedInputRequest = "SummarizeModuleCliInput",
+        examples = listOf(
+            CliUsageExample("Summarize a local WebAssembly module.", CliExampleSource.Path("wasm", "module.wasm")),
+            CliUsageExample("Summarize a module supplied on standard input.", CliExampleSource.Stdin("wasm")),
+        ),
         unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
     ),
     todoCli(ListEnabledFeaturesToolId, "list-enabled-features", ToolGroup.Module),

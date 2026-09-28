@@ -14,7 +14,7 @@ import kotlinx.serialization.json.Json
 class ToolCompatibilityDiff private constructor(
     val differences: List<Difference>,
 ) {
-    enum class Category { Schema, Defaults, Bounds, Binding, Membership }
+    enum class Category { Schema, Defaults, Bounds, Binding, Membership, Prose }
 
     data class Difference(
         val surface: String,
@@ -59,6 +59,9 @@ class ToolCompatibilityDiff private constructor(
                 if (oldTool == null || newTool == null) {
                     changes += Difference("semantic", "catalog", Category.Membership, "tool/$id", oldTool, newTool)
                 } else {
+                    listOf("summary", "guidance").forEach { key ->
+                        compareJson(changes, "semantic", "catalog", Category.Prose, "tool/$id/$key", oldTool[key], newTool[key])
+                    }
                     compareSchema(changes, id, "input", oldTool["inputSchema"].objectOrEmpty(), newTool["inputSchema"].objectOrEmpty())
                     compareSchema(changes, id, "output", oldTool["outputSchema"].objectOrEmpty(), newTool["outputSchema"].objectOrEmpty())
                     compareViews(changes, id, oldTool["views"].objectOrEmpty(), newTool["views"].objectOrEmpty())
@@ -77,7 +80,8 @@ class ToolCompatibilityDiff private constructor(
                     after = afterProducts[id],
                 ) { path ->
                     when {
-                        path.endsWith("/executableName") || path.endsWith("/description") -> Category.Binding
+                        path.endsWith("/description") -> Category.Prose
+                        path.endsWith("/executableName") -> Category.Binding
                         path.contains("/selection/") && path.endsWith("/command") -> Category.Binding
                         else -> Category.Membership
                     }
@@ -135,7 +139,14 @@ class ToolCompatibilityDiff private constructor(
                 }
                 compareJson(changes, surface, name, Category.Membership, "tool/$toolId/view/$name/selected", oldView?.get("selected"), newView?.get("selected"))
                 compareJson(changes, surface, name, Category.Binding, "tool/$toolId/view/$name/details", oldView?.get("details"), newView?.get("details")) { path ->
-                    if (path.contains("/products")) Category.Membership else Category.Binding
+                    when {
+                        path.contains("/products") -> Category.Membership
+                        path.endsWith("/description") || path.endsWith("/explanation") ||
+                            path.endsWith("/details/examples") || path.contains("/details/example/") -> Category.Prose
+                        path.endsWith("/default") -> Category.Defaults
+                        path.endsWith("/constraints") -> Category.Bounds
+                        else -> Category.Binding
+                    }
                 }
             }
         }
@@ -175,6 +186,7 @@ class ToolCompatibilityDiff private constructor(
             "default" -> Category.Defaults
             "minimum", "maximum", "maxItems", "maxLength", "itemMinimum", "itemMaximum" -> Category.Bounds
             "oneOf", "inputCapabilities", "outputCapabilities" -> Category.Membership
+            "description" -> Category.Prose
             else -> Category.Schema
         }
 
@@ -182,20 +194,26 @@ class ToolCompatibilityDiff private constructor(
             "fields" -> "field"
             "sources" -> "source"
             "params" -> "param"
+            "inputOptions" -> "option"
+            "sourceGroups" -> "source"
+            "examples" -> "example"
             "selections" -> if (path.startsWith("mcpProduct/")) "member" else "tool"
             "profiles" -> "profile"
             else -> "member"
         }
 
-        private fun indexedArray(array: JsonArray, key: String): Map<String, JsonElement> = array.associateBy { element ->
-            when (key) {
+        private fun indexedArray(array: JsonArray, key: String): Map<String, JsonElement> = array.mapIndexed { index, element ->
+            val identity = when (key) {
+                "example" -> index.toString()
+                "option" -> (element as JsonObject)["name"]!!.jsonPrimitive.content
                 "field" -> (element as JsonObject)["wireName"]!!.jsonPrimitive.content
                 "source", "param" -> (element as JsonObject)["name"]!!.jsonPrimitive.content
                 "tool" -> (element as JsonObject)["tool"]!!.jsonPrimitive.content
                 "profile" -> (element as JsonObject)["id"]!!.jsonPrimitive.content
                 else -> (element as JsonPrimitive).content
             }
-        }
+            identity to element
+        }.toMap()
 
         private fun JsonElement?.objectOrEmpty(): JsonObject = this as? JsonObject ?: JsonObject(emptyMap())
         private fun value(value: JsonElement?): String = when (value) {

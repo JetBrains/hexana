@@ -14,6 +14,7 @@ import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.asTypeName
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import org.jetbrains.hexana.mcp.tools.CliExecutionStatus
+import org.jetbrains.hexana.mcp.tools.CliExampleSource
 import org.jetbrains.hexana.mcp.tools.CliProductRegistry
 import org.jetbrains.hexana.mcp.tools.CliProductSpec
 import org.jetbrains.hexana.mcp.tools.CliTool
@@ -45,6 +46,7 @@ import org.jetbrains.hexana.mcp.tools.output
 import org.jetbrains.hexana.mcp.tools.summary
 import org.jetbrains.hexana.mcp.tools.compileSchemaPlan
 import org.jetbrains.hexana.mcp.tools.validateCliProducts
+import org.jetbrains.hexana.mcp.tools.exampleArguments
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.system.exitProcess
@@ -59,6 +61,9 @@ private val TOOL_HANDLERS = ClassName(SERVER_PACKAGE, "HexanaToolHandlers")
 private val TOOL_PROFILE = ClassName(SERVER_PACKAGE, "HexanaMcpToolProfile")
 private val CLI_TOOL_SPEC = ClassName(CLI_METADATA_PACKAGE, "HexanaCliToolSpec")
 private val CLI_INPUT_OPTION_SPEC = ClassName(CLI_METADATA_PACKAGE, "HexanaCliInputOptionSpec")
+private val CLI_SOURCE_GROUP_SPEC = ClassName(CLI_METADATA_PACKAGE, "HexanaCliSourceGroupSpec")
+private val CLI_USAGE_EXAMPLE_SPEC = ClassName(CLI_METADATA_PACKAGE, "HexanaCliUsageExampleSpec")
+private val CLI_SOURCE_SELECTION = ClassName("org.jetbrains.hexana.cli.runtime", "ToolInputSourceSelection")
 private val CLI_INPUT_MODE = ClassName(CLI_METADATA_PACKAGE, "HexanaCliInputMode")
 private val CLI_OUTPUT_FORMAT = ClassName(CLI_METADATA_PACKAGE, "HexanaCliOutputFormat")
 private val TOOL_OUTPUT_FORMAT = ClassName("org.jetbrains.hexana.cli.runtime", "ToolOutputFormat")
@@ -210,13 +215,16 @@ internal fun buildCliMetadataToolsetFile(tools: List<CliTool>): FileSpec {
         buildCliOutputPolicyEnum(),
         buildCliExecutionStatusEnum(),
         buildCliInputOptionSpecClass(),
+        buildCliSourceGroupSpecClass(),
+        buildCliUsageExampleSpecClass(),
         buildCliToolSpecClass(),
         buildCliToolRegistryObject(tools),
     )
     val outputFormatAlias = buildCliOutputFormatAlias()
+    val exampleValidator = buildCliExampleValidator(tools)
     validateUniqueTopLevelDeclarations(
         types = fixedTypes + adapters.flatMap { listOf(it.request, it.converter) },
-        functions = adapters.map(CliInputAdapter::decoder),
+        functions = adapters.map(CliInputAdapter::decoder) + exampleValidator,
         typeAliases = listOf(outputFormatAlias),
         additionalTypeNames = listOf(CLI_PRODUCT_DESCRIPTOR.simpleName, CLI_PRODUCT_TOOL_SELECTION.simpleName, "HexanaCliProducts"),
         owner = "CLI metadata",
@@ -227,8 +235,28 @@ internal fun buildCliMetadataToolsetFile(tools: List<CliTool>): FileSpec {
         .addTypeAlias(outputFormatAlias)
         .apply { fixedTypes.drop(1).forEach(::addType) }
         .apply { adapters.forEach { addType(it.request); addFunction(it.decoder); addType(it.converter) } }
+        .addFunction(exampleValidator)
         .build()
 }
+
+private fun buildCliExampleValidator(tools: List<CliTool>): FunSpec =
+    FunSpec.builder("validateHexanaCliUsageExamples")
+        .addModifiers(KModifier.PUBLIC)
+        .addKdoc("Validate documented examples with the same generated decoders used by CLI input adapters.\n")
+        .apply {
+            tools.filter { it.binding.examples.isNotEmpty() }.forEach { tool ->
+                val requestName = requireNotNull(tool.binding.generatedInputRequest)
+                beginControlFlow("%T.TOOLS.single { it.toolName == %S }.examples.forEach",
+                    ClassName(CLI_METADATA_PACKAGE, "HexanaGeneratedCliToolRegistry"), tool.name)
+                addStatement("decode%L(%T(%T(%S), %T(emptyMap()), %T(sourceSelections = listOf(it.sourceSelection))))",
+                    requestName,
+                    ClassName("org.jetbrains.hexana.cli.runtime", "ToolInputConversionRequest"),
+                    ClassName("org.jetbrains.hexana.cli.runtime", "ToolRuntimeContext"), tool.name,
+                    JSON_OBJECT,
+                    ClassName("org.jetbrains.hexana.cli.runtime", "ToolInputSources"))
+                endControlFlow()
+            }
+        }.build()
 
 internal fun buildCliProductSelectionFile(tools: List<CliTool>, products: CliProductRegistry): FileSpec {
     validateCliProducts(tools, products, requireCompleteSelection = false)
@@ -434,26 +462,52 @@ private fun buildCliExecutionStatusEnum(): TypeSpec =
         .build()
 
 private fun buildCliInputOptionSpecClass(): TypeSpec {
-    val fields = listOf("name", "valueType", "description", "defaultValue")
+    val fields = listOf("name", "valueType", "description", "defaultValue", "constraints", "required")
     return TypeSpec.classBuilder(CLI_INPUT_OPTION_SPEC)
         .addModifiers(KModifier.PUBLIC, KModifier.DATA)
         .addKdoc("Generated option metadata from CLI bindings and semantic input fields.\n")
         .primaryConstructor(FunSpec.constructorBuilder().apply {
-            fields.forEach { field -> addParameter(field, String::class.asTypeName().copy(nullable = field == "defaultValue")) }
+            fields.forEach { field -> addParameter(field, if (field == "required") Boolean::class.asTypeName() else String::class.asTypeName().copy(nullable = field == "defaultValue" || field == "constraints")) }
         }.build())
         .apply {
             fields.forEach { field ->
-                addProperty(PropertySpec.builder(field, String::class.asTypeName().copy(nullable = field == "defaultValue"))
+                addProperty(PropertySpec.builder(field, if (field == "required") Boolean::class.asTypeName() else String::class.asTypeName().copy(nullable = field == "defaultValue" || field == "constraints"))
                     .initializer(field).build())
             }
         }.build()
 }
+
+private fun buildCliSourceGroupSpecClass(): TypeSpec = TypeSpec.classBuilder(CLI_SOURCE_GROUP_SPEC)
+    .addModifiers(KModifier.PUBLIC, KModifier.DATA)
+    .primaryConstructor(FunSpec.constructorBuilder()
+        .addParameter("name", String::class)
+        .addParameter("required", Boolean::class)
+        .addParameter("alternatives", KOTLIN_LIST.parameterizedBy(String::class.asTypeName()))
+        .build())
+    .addProperty(PropertySpec.builder("name", String::class).initializer("name").build())
+    .addProperty(PropertySpec.builder("required", Boolean::class).initializer("required").build())
+    .addProperty(PropertySpec.builder("alternatives", KOTLIN_LIST.parameterizedBy(String::class.asTypeName())).initializer("alternatives").build())
+    .build()
+
+private fun buildCliUsageExampleSpecClass(): TypeSpec = TypeSpec.classBuilder(CLI_USAGE_EXAMPLE_SPEC)
+    .addModifiers(KModifier.PUBLIC, KModifier.DATA)
+    .primaryConstructor(FunSpec.constructorBuilder()
+        .addParameter("description", String::class)
+        .addParameter("arguments", KOTLIN_LIST.parameterizedBy(String::class.asTypeName()))
+        .addParameter("sourceSelection", CLI_SOURCE_SELECTION)
+        .build())
+    .addProperty(PropertySpec.builder("description", String::class).initializer("description").build())
+    .addProperty(PropertySpec.builder("arguments", KOTLIN_LIST.parameterizedBy(String::class.asTypeName())).initializer("arguments").build())
+    .addProperty(PropertySpec.builder("sourceSelection", CLI_SOURCE_SELECTION).initializer("sourceSelection").build())
+    .build()
 
 private fun buildCliToolSpecClass(): TypeSpec {
     val setOfInputMode = KOTLIN_SET.parameterizedBy(CLI_INPUT_MODE)
     val setOfOutputFormat = KOTLIN_SET.parameterizedBy(CLI_OUTPUT_FORMAT)
     val setOfToolGroup = KOTLIN_SET.parameterizedBy(CLI_TOOL_GROUP)
     val listOfInputOption = KOTLIN_LIST.parameterizedBy(CLI_INPUT_OPTION_SPEC)
+    val listOfSourceGroup = KOTLIN_LIST.parameterizedBy(CLI_SOURCE_GROUP_SPEC)
+    val listOfUsageExample = KOTLIN_LIST.parameterizedBy(CLI_USAGE_EXAMPLE_SPEC)
     val constructor = FunSpec.constructorBuilder()
         .addParameter(ParameterSpec.builder("commandName", String::class).build())
         .addParameter(ParameterSpec.builder("toolName", String::class).build())
@@ -462,6 +516,8 @@ private fun buildCliToolSpecClass(): TypeSpec {
         .addParameter(ParameterSpec.builder("inputModes", setOfInputMode).build())
         .addParameter(ParameterSpec.builder("sourceSlotName", String::class.asTypeName().copy(nullable = true)).build())
         .addParameter(ParameterSpec.builder("inputOptions", listOfInputOption).build())
+        .addParameter("sourceGroups", listOfSourceGroup)
+        .addParameter("examples", listOfUsageExample)
         .addParameter(ParameterSpec.builder("outputFormats", setOfOutputFormat).build())
         .addParameter(ParameterSpec.builder("defaultOutputFormat", CLI_OUTPUT_FORMAT).build())
         .addParameter(ParameterSpec.builder("defaultOutputPolicy", CLI_OUTPUT_POLICY).build())
@@ -484,6 +540,8 @@ private fun buildCliToolSpecClass(): TypeSpec {
         .addProperty(property("inputModes", setOfInputMode))
         .addProperty(property("sourceSlotName", String::class.asTypeName().copy(nullable = true)))
         .addProperty(property("inputOptions", listOfInputOption))
+        .addProperty(property("sourceGroups", listOfSourceGroup))
+        .addProperty(property("examples", listOfUsageExample))
         .addProperty(property("outputFormats", setOfOutputFormat))
         .addProperty(property("defaultOutputFormat", CLI_OUTPUT_FORMAT))
         .addProperty(property("defaultOutputPolicy", CLI_OUTPUT_POLICY))
@@ -541,6 +599,8 @@ private fun cliToolSpecInitializer(spec: CliTool): CodeBlock {
         .add("  inputModes = %L,\n", enumSetInitializer(CLI_INPUT_MODE, spec.generatedCliInputModeNames()))
         .add("  sourceSlotName = %S,\n", spec.inputModel?.sources?.singleOrNull()?.name)
         .add("  inputOptions = %L,\n", cliInputOptionsInitializer(spec.cliInputOptions()))
+        .add("  sourceGroups = %L,\n", cliSourceGroupsInitializer(spec))
+        .add("  examples = %L,\n", cliExamplesInitializer(spec))
         .add("  outputFormats = %L,\n", enumSetInitializer(CLI_OUTPUT_FORMAT, outputFormats.map { it.generatedCliOutputFormatName() }))
         .add("  defaultOutputFormat = %T.%L,\n", CLI_OUTPUT_FORMAT, defaultOutput.generatedCliOutputFormatName())
         .add("  defaultOutputPolicy = %T.%L,\n", CLI_OUTPUT_POLICY, outputPolicy.generatedCliOutputPolicyName())
@@ -553,8 +613,35 @@ private fun cliInputOptionsInitializer(options: List<CliInputOption>): CodeBlock
     if (options.isEmpty()) return CodeBlock.of("emptyList()")
     return CodeBlock.builder().add("listOf(\n").indent().apply {
         options.forEach { option ->
-            add("%T(%S, %S, %S, %S),\n", CLI_INPUT_OPTION_SPEC,
-                option.name, option.valueType, option.description, option.defaultValue)
+            add("%T(%S, %S, %S, %S, %S, %L),\n", CLI_INPUT_OPTION_SPEC,
+                option.name, option.valueType, option.description, option.defaultValue, option.constraints, option.required)
+        }
+    }.unindent().add(")").build()
+}
+
+private fun cliSourceGroupsInitializer(tool: CliTool): CodeBlock {
+    val groups = tool.cliSourceGroups()
+    if (groups.isEmpty()) return CodeBlock.of("emptyList()")
+    return CodeBlock.builder().add("listOf(\n").indent().apply {
+        groups.forEach { group ->
+            add("%T(%S, %L, listOf(${group.alternatives.joinToString { "%S" }})),\n",
+                CLI_SOURCE_GROUP_SPEC, group.name, group.required, *group.alternatives.toTypedArray())
+        }
+    }.unindent().add(")").build()
+}
+
+private fun cliExamplesInitializer(tool: CliTool): CodeBlock {
+    val examples = tool.binding.examples
+    if (examples.isEmpty()) return CodeBlock.of("emptyList()")
+    return CodeBlock.builder().add("listOf(\n").indent().apply {
+        examples.forEach { example ->
+            val arguments = tool.binding.exampleArguments(example)
+            val selection = when (val source = example.source) {
+                is CliExampleSource.Path -> CodeBlock.of("%T(%S, %S)", CLI_SOURCE_SELECTION.nestedClass("Path"), source.value, source.slotName)
+                is CliExampleSource.Stdin -> CodeBlock.of("%T(byteArrayOf(), %S)", CLI_SOURCE_SELECTION.nestedClass("StdinBytes"), source.slotName)
+            }
+            add("%T(%S, listOf(${arguments.joinToString { "%S" }}), %L),\n",
+                CLI_USAGE_EXAMPLE_SPEC, example.description, *arguments.toTypedArray(), selection)
         }
     }.unindent().add(")").build()
 }

@@ -16,7 +16,10 @@ generators resolve contracts through the authority for their consumer and emit c
 - `HexanaCliToolset.kt` also emits source-slot and per-option metadata for executable CLI bindings. Bindings with
   `generatedInputRequest` emit a typed neutral request decoder and converter in that file; `summarize-module` is the
   current production consumer. The decoder keeps source bytes in `ToolInputSources`, while semantic parameter types,
-  descriptions, defaults, and bounds come from bound `FieldSpec` values. Generated request, converter, and decoder
+  descriptions, defaults, and bounds come from bound `FieldSpec` values. CLI help reads these generated options and
+  source groups. `CliUsageExample` belongs to the CLI binding and is allowed only with a generated input request;
+  `validateHexanaCliUsageExamples()` passes its typed source choices through the same generated decoder as runtime.
+  Run `:cli:metadata:test` when adding or changing examples. Generated request, converter, and decoder
   declarations must not collide with each other or the fixed CLI metadata declarations.
 
 A separate Claude Desktop MCPB manifest generator consumes the standalone default profile in canonical contract order
@@ -86,7 +89,7 @@ reviewed with the DSL change.
 `./gradlew :mcp:tools-generator:generateHexanaToolCatalogReport` is a manual, build-only developer report. It writes
 `resolved-tool-catalog.json` and `resolved-tool-catalog.txt` under
 `mcp/tools-generator/build/reports/hexana-tool-catalog/`. Team leads can use it to inspect canonical semantic order,
-schema metadata, and the independent IDEA, standalone, derived MCPB, and CLI selections. It reports static exposure
+schema metadata, CLI field help/source groups/examples, and the independent IDEA, standalone, derived MCPB, and CLI selections. It reports static exposure
 only: runtime availability is intentionally not evaluated and requirements remain empty until declared by an authority.
 
 Use root `./gradlew generateHexanaToolArtifacts` to run all independent IDEA, standalone, CLI, MCPB, and report
@@ -99,6 +102,7 @@ To review compatibility, save the previous `resolved-tool-catalog.json`, generat
 `./gradlew :mcp:tools-generator:generateHexanaToolCompatibilityDiff -PhexanaToolCompatibilityBeforeReport=<saved-report> -PhexanaToolCompatibilityAfterReport=<new-report>`.
 It writes `tool-compatibility-diff.json` and `.txt` under `build/reports/hexana-tool-compatibility/`; both are
 deterministic build-only review artifacts, not product CLI commands.
+The diff classifies prose and examples independently from schema/default/bounds and binding changes.
 
 Before sending a catalog change for review, run the generated-artifact drift checks:
 
@@ -135,7 +139,12 @@ Before sending a catalog change for review, run the generated-artifact drift che
 4. Update each applicable independent authority in `SurfaceAuthorities.kt`: IDEA selection/binding, standalone
    binding and effective profile lists, and CLI binding/product selections. MCPB follows standalone default membership
    automatically.
-5. Run the affected generators and verification: `./gradlew :mcp:tools-generator:test :idea-plugin:test :mcp:server:test
+5. For a CLI product, add its `CliProductSpec` and registry entry, select each executable binding in exactly one
+   product, and provide a matching concrete executor/projection. Add `CliUsageExample` to a generated-input binding;
+   its source must resolve to a declared path or stdin choice. Refresh the CLI metadata and use
+   `:cli:metadata:test` to validate examples against the generated decoder. Help and the developer report then project
+   the same binding; do not maintain a separate help catalog.
+6. Run the affected generators and verification: `./gradlew :mcp:tools-generator:test :idea-plugin:test :mcp:server:test
    :mcp:server:integrationTest`, plus the generated-artifact drift checks above.
 
 ## Testing

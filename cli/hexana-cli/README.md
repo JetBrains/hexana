@@ -21,6 +21,8 @@ they do not need a JDK. On another platform, or when a native build is unsuitabl
 
 `version` prints the product version, `help [command]` shows command help, and `tools` prints the exact product tool
 catalog and its formats. `hexana-cli` does not provide MCP transports or `run-script`.
+Command help lists source choices, field descriptions, types, defaults, and limits from the generated tool metadata.
+The `summarize-module` examples in help are validated against its generated input decoder during development.
 
 ## Commands and input
 
@@ -44,7 +46,7 @@ cat module.wasm | hexana-cli summarize-module --stdin --format json
 hexana-cli wasm-to-wat --wasm-base64 "$(base64 < module.wasm)" --format raw
 ```
 
-Formats are command-specific: `summarize-binary` supports `json`; `summarize-module` supports `json` and `pretty`;
+Formats are command-specific: `summarize-binary` supports `json`; `summarize-module` supports `json`, `pretty`, and `table`;
 and `wasm-to-wat` supports `json` and `raw`. Results go to stdout unless `--output <path>` is given. `--output`
 creates missing parent directories and overwrites an existing file; no payload is then printed to stdout.
 

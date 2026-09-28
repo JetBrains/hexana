@@ -40,7 +40,15 @@ internal data class CliInputOption(
     val valueType: String,
     val description: String,
     val defaultValue: String? = null,
+    val constraints: String? = null,
+    val required: Boolean = false,
 )
+
+internal data class CliSourceGroup(val name: String, val required: Boolean, val alternatives: List<String>)
+
+internal fun CliTool.cliSourceGroups(): List<CliSourceGroup> = inputModel?.sources.orEmpty().map { source ->
+    CliSourceGroup(source.name, source.required, source.cli.bindings().map { it.value })
+}
 
 internal fun CliTool.cliInputOptions(): List<CliInputOption> {
     if (binding.executionStatus != CliExecutionStatus.Executable) return emptyList()
@@ -55,22 +63,40 @@ internal fun CliTool.cliInputOptions(): List<CliInputOption> {
         fun description(kind: SourceSelectionKind): String =
             sourceClass.fields.single { field -> field.name == group.selections.single { it.kind == kind }.field.name }
                 .describe.orEmpty()
+        fun constraints(kind: SourceSelectionKind): String? =
+            sourceClass.fields.single { field -> field.name == group.selections.single { it.kind == kind }.field.name }
+                .constraintText()
         val cli = source.cli
         listOfNotNull(
-            cli.positionalPathName?.let { CliInputOption(it, "path", description(SourceSelectionKind.Path)) },
-            cli.pathOption?.let { CliInputOption(it, "path", description(SourceSelectionKind.Path)) },
+            cli.positionalPathName?.let { CliInputOption(it, "path", description(SourceSelectionKind.Path), constraints = constraints(SourceSelectionKind.Path)) },
+            cli.pathOption?.let { CliInputOption(it, "path", description(SourceSelectionKind.Path), constraints = constraints(SourceSelectionKind.Path)) },
             cli.stdinOption?.let { CliInputOption(it, "stdin", "Read ${source.name} bytes from standard input.") },
-            cli.base64Option?.let { CliInputOption(it, "base64", description(SourceSelectionKind.Base64)) },
-            cli.bytesOption?.let { CliInputOption(it, "list<integer>", description(SourceSelectionKind.Bytes)) },
-        ) + cli.base64Aliases.map { CliInputOption(it, "base64", description(SourceSelectionKind.Base64)) }
+            cli.base64Option?.let { CliInputOption(it, "base64", description(SourceSelectionKind.Base64), constraints = constraints(SourceSelectionKind.Base64)) },
+            cli.bytesOption?.let { CliInputOption(it, "list<integer>", description(SourceSelectionKind.Bytes), constraints = constraints(SourceSelectionKind.Bytes)) },
+        ) + cli.base64Aliases.map { CliInputOption(it, "base64", description(SourceSelectionKind.Base64), constraints = constraints(SourceSelectionKind.Base64)) }
     }
-    val params = model.params.mapNotNull { param ->
-        param.cliOption?.let { option ->
-            val field = input.fields.single { it.name == param.targetField }
-            CliInputOption(option, field.type.cliValueType(), field.describe.orEmpty(), field.presence.defaultText())
-        }
+    val params = model.params.map { param ->
+        val field = input.fields.single { it.name == param.targetField }
+        CliInputOption(param.cliOption ?: param.name, field.type.cliValueType(), field.describe.orEmpty(), field.presence.defaultText(), field.constraintText(), field.presence == FieldPresence.Required)
     }
     return sources + params
+}
+
+private fun FieldSpec.constraintText(): String? = buildList {
+    minimum?.let { add("minimum $it") }
+    maximum?.let { add("maximum $it") }
+    maxLength?.let { add("maximum length ${it.cliLimitText()}") }
+    maxItems?.let { add("maximum items ${it.cliLimitText()}") }
+    itemMinimum?.let { add("item minimum $it") }
+    itemMaximum?.let { add("item maximum $it") }
+}.joinToString(", ").ifEmpty { null }
+
+private fun SchemaIntValue.cliLimitText(): String = when (this) {
+    is SchemaIntValue.Literal -> value.toString()
+    SchemaIntValue.MaxInlineWasmBytes,
+    SchemaIntValue.MaxInlineWasmBase64Length,
+    SchemaIntValue.MaxInlineBinaryBytes,
+    SchemaIntValue.MaxInlineBinaryBase64Length -> "derived from --max-inline-bytes"
 }
 
 private fun FieldType.cliValueType(): String = when (this) {

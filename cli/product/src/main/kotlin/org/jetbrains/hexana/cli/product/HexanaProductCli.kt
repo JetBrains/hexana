@@ -400,14 +400,19 @@ public class HexanaProductCli(
                     appendLine()
                     appendLine("Options:")
                     appendLine("  -h, --help")
-                    appendLine("  --format <${spec.outputFormats.joinToString("|") { it.cliName() }}>")
-                    appendLine("  --stdin")
-                    if (HexanaCliInputMode.BINARY_PATH in spec.inputModes) {
-                        appendLine("  --binary-base64 <base64>")
-                        appendLine("  --bytes-base64 <base64>")
-                    }
-                    if (HexanaCliInputMode.WASM_PATH in spec.inputModes) {
-                        appendLine("  --wasm-base64 <base64>")
+                    appendLine("  --format <${spec.outputFormats.joinToString("|") { it.cliName() }}> (default: ${spec.defaultOutputFormat.cliName()})")
+                    spec.inputOptions.forEach { option ->
+                        val isNamedOption = option.name.startsWith("--")
+                        val usage = if (isNamedOption) option.name else "<${option.name}${if (option.valueType.startsWith("list<")) "..." else ""}>"
+                        val type = if (!isNamedOption || option.valueType == "stdin") "" else " <${option.valueType}>"
+                        val annotations = listOfNotNull(
+                            option.defaultValue?.let { "default: $it" },
+                            option.constraints,
+                            "required".takeIf { option.required },
+                        ).joinToString(", ")
+                        val description = option.description.trim()
+                        val detail = if (annotations.isEmpty()) description else "${description.trimEnd('.')} ($annotations).".trim()
+                        appendLine("  $usage$type${if (detail.isNotEmpty()) "  $detail" else ""}")
                     }
                     appendLine("  --allowed-root <path>")
                     appendLine("  --max-file-bytes <n>")
@@ -424,9 +429,20 @@ public class HexanaProductCli(
                     appendLine("  --telemetry-enabled <true|false>")
                     appendLine("  --telemetry-key <key>")
                     appendLine("  --telemetry-host <url>")
-                    if (spec.requiresScriptSource) {
-                        appendLine("  --script <path>")
-                        appendLine("  --script-text <text>")
+                    if (spec.sourceGroups.isNotEmpty()) {
+                        appendLine()
+                        appendLine("Source choices:")
+                        spec.sourceGroups.forEach { group ->
+                            appendLine("  ${group.name}: ${if (group.required) "choose exactly one" else "choose at most one"} of ${group.alternatives.joinToString()}")
+                        }
+                    }
+                    if (spec.examples.isNotEmpty()) {
+                        appendLine()
+                        appendLine("Examples:")
+                        spec.examples.forEach { example ->
+                            appendLine("  ${example.description}")
+                            appendLine("    ${product.executableName} ${spec.commandName} ${example.arguments.joinToString(" ")}")
+                        }
                     }
                     appendLine()
                     appendLine("Environment:")
