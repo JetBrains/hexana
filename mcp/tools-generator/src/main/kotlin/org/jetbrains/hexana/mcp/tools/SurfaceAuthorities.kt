@@ -16,13 +16,49 @@ val ContractBoundTool.mcpDescription: String get() = contract.mcpDescription
 
 data class IdeaToolBinding(
     val id: ToolId,
-    val inputPattern: ToolInputPattern,
+    val inputPattern: ToolInputPattern?,
     val handlerFqn: String,
     val unknownFieldPolicy: UnknownFieldPolicy,
+    val typedInvocation: IdeaTypedInvocationSpec? = null,
 ) {
     init {
+        require((inputPattern == null) != (typedInvocation == null)) {
+            "IDEA tool '${id.value}' must declare exactly one invocation binding."
+        }
         require(HANDLER_FQN_REGEX.matches(handlerFqn)) {
             "IDEA tool '${id.value}' handler must be a fully-qualified function name, got `$handlerFqn`."
+        }
+    }
+}
+
+data class IdeaTypedInvocationSpec(
+    val requestTypeName: String,
+    val source: SourceSelection,
+    val fields: List<FieldRef>,
+) {
+    init {
+        require(Regex("^[A-Z][A-Za-z0-9_]*$").matches(requestTypeName)) {
+            "IDEA typed request name must be a Kotlin type name, got `$requestTypeName`."
+        }
+        require(fields.distinctBy(FieldRef::name).size == fields.size) {
+            "IDEA typed request `$requestTypeName` references duplicate fields."
+        }
+    }
+
+    fun validateFor(input: ClassSpec) {
+        require(source.kind == SourceSelectionKind.Path) {
+            "IDEA typed request `$requestTypeName` currently requires a path source."
+        }
+        require(input.exactOneSourceGroups.any { group -> source in group.selections }) {
+            "IDEA typed request `$requestTypeName` must select a source from `${input.name}`."
+        }
+        (listOf(source.field) + fields).forEach { reference ->
+            require(input.fieldRef(reference.name) == reference) {
+                "IDEA typed request `$requestTypeName` field `${reference.name}` does not match `${input.name}`."
+            }
+        }
+        require(fields.none { field -> input.exactOneSourceGroups.any { group -> group.selections.any { it.field == field } } }) {
+            "IDEA typed request `$requestTypeName` must keep source fields separate from ordinary fields."
         }
     }
 }
@@ -31,7 +67,8 @@ data class IdeaTool(
     override val contract: ToolSpec,
     val binding: IdeaToolBinding,
 ) : ContractBoundTool {
-    val inputPattern: ToolInputPattern get() = binding.inputPattern
+    val inputPattern: ToolInputPattern? get() = binding.inputPattern
+    val typedInvocation: IdeaTypedInvocationSpec? get() = binding.typedInvocation
     val handlerFqn: String get() = binding.handlerFqn
 }
 
@@ -107,6 +144,9 @@ internal val HexanaCliUnknownFieldPolicy = UnknownFieldPolicy.Reject
 private fun idea(id: ToolId, pattern: ToolInputPattern, handlerFqn: String) =
     IdeaToolBinding(id, pattern, handlerFqn, HexanaIdeaUnknownFieldPolicy)
 
+private fun ideaTyped(id: ToolId, invocation: IdeaTypedInvocationSpec, handlerFqn: String) =
+    IdeaToolBinding(id, null, handlerFqn, HexanaIdeaUnknownFieldPolicy, invocation)
+
 private fun standalone(id: ToolId, handler: String) =
     StandaloneToolBinding(id, StandaloneInvocationSpec.JsonArguments(handler), HexanaStandaloneUnknownFieldPolicy)
 
@@ -136,7 +176,15 @@ internal val HexanaIdeaToolBindings = listOf(
     idea(ListExportsToolId, ToolInputPattern.WasmOnly, "org.jetbrains.hexana.mcp.query.readExports"),
     idea(SearchExportsToolId, ToolInputPattern.ExportNameSearch, "org.jetbrains.hexana.mcp.query.readExportsByName"),
     idea(ListExportedFunctionsToolId, ToolInputPattern.ClosedRange("entriesRange"), "org.jetbrains.hexana.mcp.query.readExportedFunctions"),
-    idea(ListFunctionsToolId, ToolInputPattern.FunctionPage, "org.jetbrains.hexana.mcp.query.readFunctions"),
+    ideaTyped(
+        ListFunctionsToolId,
+        IdeaTypedInvocationSpec(
+            "ListFunctionsIdeaRequest",
+            pathSource(ListFunctionsInput.fieldRef("path")),
+            listOf(ListFunctionsInput.fieldRef("offset"), ListFunctionsInput.fieldRef("limit")),
+        ),
+        "org.jetbrains.hexana.mcp.query.readFunctions",
+    ),
     idea(ListCodeSectionOffsetsToolId, ToolInputPattern.WasmOnly, "org.jetbrains.hexana.mcp.query.readCodeSectionOffsets"),
     idea(FunctionsForIndicesToolId, ToolInputPattern.Indices, "org.jetbrains.hexana.mcp.query.readFunctionsByIndices"),
     idea(ResolveFunctionSignatureToolId, ToolInputPattern.Funcidx, "org.jetbrains.hexana.mcp.query.readFunctionSignature"),
@@ -181,7 +229,8 @@ internal fun resolveIdeaTools(
         "IDEA default tool authority",
         IdeaToolBinding::id,
     ) { contract, binding ->
-        validateInputPattern(contract.name, contract.input, binding.inputPattern)
+        binding.inputPattern?.let { validateInputPattern(contract.name, contract.input, it) }
+        binding.typedInvocation?.validateFor(contract.input)
         IdeaTool(contract, binding)
     }
 }

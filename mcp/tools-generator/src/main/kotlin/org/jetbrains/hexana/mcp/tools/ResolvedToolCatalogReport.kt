@@ -108,7 +108,16 @@ class ResolvedToolCatalogReport(
         val cli = cliTools.firstOrNull { it.id == tool.id }
         val mcpbSelected = tool.id in mcpProducts.resolve(mcpbBinding).toolIds
         return listOf(
-            View("idea", idea != null, idea?.let { buildJsonObject { put("inputPattern", JsonPrimitive(pattern(it.inputPattern))); put("handlerFqn", JsonPrimitive(it.handlerFqn)) } }, if (idea != null) "IDEA default selection and binding" else "not selected by IDEA default authority"),
+            View("idea", idea != null, idea?.let { buildJsonObject {
+                it.inputPattern?.let { selectedPattern -> put("inputPattern", JsonPrimitive(pattern(selectedPattern))) }
+                it.typedInvocation?.let { invocation ->
+                    put("invocation", JsonPrimitive("typedRequest"))
+                    put("requestTypeName", JsonPrimitive(invocation.requestTypeName))
+                    put("source", JsonPrimitive(invocation.source.field.name))
+                    put("fields", strings(invocation.fields.map { field -> field.name }))
+                }
+                put("handlerFqn", JsonPrimitive(it.handlerFqn))
+            } }, if (idea != null) "IDEA default selection and binding" else "not selected by IDEA default authority"),
             View("standaloneRegistration", standalone != null, standalone?.let { standaloneInvocation(it.standaloneInvocation) }, if (standalone != null) "standalone registration authority" else "not registered by standalone authority"),
             profileView("standaloneDefault", tool.id, standaloneAuthority.profile(ProfileId("default")).toolIds, "standalone default profile"),
             profileView("standaloneAdvanced", tool.id, standaloneAuthority.profile(ProfileId("advanced")).toolIds, "standalone advanced profile"),
@@ -237,7 +246,6 @@ class ResolvedToolCatalogReport(
         ToolInputPattern.WasmPathLabel -> "wasmPathLabel"
         ToolInputPattern.WasmWithBaseline -> "wasmWithBaseline"
         ToolInputPattern.WasmWithBinding -> "wasmWithBinding"
-        ToolInputPattern.FunctionPage -> "functionPage"
         ToolInputPattern.Funcidx -> "funcidx"
         ToolInputPattern.FunctionNameSearch -> "functionNameSearch"
         ToolInputPattern.ExportNameSearch -> "exportNameSearch"

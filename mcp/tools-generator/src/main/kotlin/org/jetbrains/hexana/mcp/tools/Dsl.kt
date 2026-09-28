@@ -1372,7 +1372,6 @@ sealed class ToolInputPattern {
     object WasmPathLabel : ToolInputPattern()
     object WasmWithBaseline : ToolInputPattern()
     object WasmWithBinding : ToolInputPattern()
-    object FunctionPage : ToolInputPattern()
     object Funcidx : ToolInputPattern()
     object FunctionNameSearch : ToolInputPattern()
     object ExportNameSearch : ToolInputPattern()
@@ -1816,19 +1815,6 @@ internal fun validateInputPattern(toolName: String, input: ClassSpec, pattern: T
             requireType(bindingPath, FieldType.StringT)
             requireNonNullable(bindingPath)
             requireDescribed(bindingPath)
-        }
-        ToolInputPattern.FunctionPage -> {
-            requireWasmInput()
-            val offset = requireField("offset")
-            requireType(offset, FieldType.Int32)
-            requireNonNullable(offset)
-            requireDefault(offset, "Int") { it is Int }
-            requireDescribed(offset)
-            val limit = requireField("limit")
-            requireType(limit, FieldType.Int32)
-            requireNonNullable(limit)
-            requireDefault(limit, "Int") { it is Int }
-            requireDescribed(limit)
         }
         ToolInputPattern.Funcidx -> {
             requireWasmInput()

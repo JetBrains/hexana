@@ -207,7 +207,13 @@ class HexanaToolCompatibilityTest {
     private fun ideaSnapshot(tools: List<IdeaTool>): String = buildString {
         tools.forEachIndexed { index, tool ->
             appendLine("idea[$index].id=${tool.id.value}")
-            appendLine("idea[$index].pattern=${tool.inputPattern.compatibilityText()}")
+            tool.inputPattern?.let { appendLine("idea[$index].pattern=${it.compatibilityText()}") }
+            tool.typedInvocation?.let { invocation ->
+                appendLine("idea[$index].invocation=TypedRequest")
+                appendLine("idea[$index].requestType=${invocation.requestTypeName}")
+                appendLine("idea[$index].source=${invocation.source.kind}:${invocation.source.field.name}")
+                appendLine("idea[$index].fields=${invocation.fields.joinToString { it.name }}")
+            }
             appendLine("idea[$index].handler=${tool.handlerFqn}")
         }
     }
@@ -416,7 +422,7 @@ class HexanaToolCompatibilityTest {
         // and the guidance text describes the ESM-only import resolution. Combined here
         // with the field-presence snapshot extension that arrived from master.
         const val EXPECTED_SEMANTIC = "5400f3de10d8700b3425c6d0e20e09cc5f19626403f010935639f275a02818e8"
-        const val EXPECTED_IDEA = "b3d01605c58323500af1b4e1eeabfa8b6ff2e4fb659bfccac35c9869c379d378"
+        const val EXPECTED_IDEA = "714da9778528306fde04001169ecf03acb957ef9e43959f90d245b0fc4ca539d"
         const val EXPECTED_STANDALONE = "dd0f31cd4e78e695abd10fca5a78ac31cd8602e4ba01a92688295fac45f16a41"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"
         const val EXPECTED_MCP_PRODUCTS = "13bc46a83aa5707e526842837ab9f0ac472229483024dba827b7cc35014f8903"

@@ -1,13 +1,75 @@
 package org.jetbrains.hexana.mcp.direct
 
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonPrimitive
+import org.junit.Assert.assertThrows
 
 class HexanaMcpFunctionsToolTest : HexanaMcpToolsetDirectTestBase() {
+    fun testListFunctionsKeepsIdeaSourceAndPaginationContract() {
+        val fixture = createFunctionFixture("fixtures/direct/functions/list_functions_contract.wasm")
+        val path = fixture.projectRelativePath
+
+        fun request(block: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) = buildJsonObject(block)
+        fun error(input: JsonObject): String {
+            val result = callTool("list_functions", input)
+            assertTrue(result.isError)
+            return result.textPayloads.single()
+        }
+
+        assertEquals("Missing required argument `path`", error(request {}))
+        assertEquals("Missing required argument `path`", error(request { put("bytesBase64", JsonPrimitive("AAAA")) }))
+        assertEquals("File not found", error(request { put("path", JsonNull) }))
+
+        val defaults = callToolJsonObject("list_functions", request { put("path", JsonPrimitive(path)) })
+        assertEquals(3, defaults.array("functions").size)
+        val explicitNulls = callToolJsonObject("list_functions", request {
+            put("path", JsonPrimitive(path))
+            put("offset", JsonNull)
+            put("limit", JsonNull)
+        })
+        assertEquals(defaults, explicitNulls)
+
+        val withExtraSources = callToolJsonObject("list_functions", request {
+            put("path", JsonPrimitive(path))
+            put("bytesBase64", JsonPrimitive("invalid base64"))
+            put("bytes", buildJsonArray { add(JsonPrimitive(999)) })
+            put("extra", JsonPrimitive(true))
+            put("offset", JsonPrimitive(1))
+            put("limit", JsonPrimitive(1))
+        })
+        assertEquals(1, withExtraSources.array("functions").size)
+        assertEquals(1, withExtraSources.array("functions").obj(0).int("funcidx"))
+
+        val zeroLimit = callToolJsonObject("list_functions", request {
+            put("path", JsonPrimitive(path))
+            put("limit", JsonPrimitive(0))
+        })
+        assertTrue(zeroLimit.array("functions").isEmpty())
+
+        val invalidScalar = callToolJsonObject("list_functions", request {
+            put("path", JsonPrimitive(path))
+            put("offset", JsonPrimitive("not an integer"))
+        })
+        assertEquals(defaults, invalidScalar)
+        assertThrows(IllegalArgumentException::class.java) {
+            callTool("list_functions", request {
+                put("path", JsonPrimitive(path))
+                put("offset", JsonPrimitive(-1))
+            })
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            callTool("list_functions", request {
+                put("path", JsonPrimitive(path))
+                put("limit", JsonPrimitive(-1))
+            })
+        }
+    }
+
     fun testListFunctionsReturnsImportedAndDefinedFunctions() {
         val fixture = createFunctionFixture("fixtures/direct/functions/list_functions.wasm")
 

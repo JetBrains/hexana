@@ -16,6 +16,7 @@ import org.jetbrains.hexana.mcp.tools.HexanaStandaloneTools
 import org.jetbrains.hexana.mcp.tools.HexanaTools
 import org.jetbrains.hexana.mcp.tools.IdeaTool
 import org.jetbrains.hexana.mcp.tools.IdeaToolBinding
+import org.jetbrains.hexana.mcp.tools.IdeaTypedInvocationSpec
 import org.jetbrains.hexana.mcp.tools.McpProductRegistry
 import org.jetbrains.hexana.mcp.tools.McpProductSpec
 import org.jetbrains.hexana.mcp.tools.McpProfileSpec
@@ -263,6 +264,68 @@ class ToolDescriptionGenerationTest {
         assertTrue(source.contains("offsetElement.jsonPrimitive.intOrNull"), source)
         assertTrue(source.contains("limitElement.jsonPrimitive.intOrNull"), source)
         assertFalse(source.contains("HexanaResourceLimits"), source)
+    }
+
+    @Test
+    fun `IDEA typed fixture derives source and ordinary fields without a tool-specific branch`() {
+        val input = WasmInputClass.with("IdeaTypedFixtureInput") {
+            int("offset", default = 0).minimum(0)
+            int("limit", default = 200).minimum(1)
+            int("pageSize", default = 7).serialName("page_size")
+            int("when", default = 3)
+            requiredNullable("nullableInt", FieldType.Int32)
+            requiredNullable("nullableString", FieldType.StringT)
+            requiredNullable("nullableBoolean", FieldType.BooleanT)
+        }
+        val contract = ToolSpec(
+            org.jetbrains.hexana.mcp.tools.ToolId("idea_typed_fixture"), "IDEA typed fixture.", null,
+            input, ClassSpec("IdeaTypedFixtureOutput", emptyList()),
+        )
+        val invocation = IdeaTypedInvocationSpec(
+            "IdeaTypedFixtureRequest",
+            pathSource(input.fieldRef("path")),
+            listOf(
+                input.fieldRef("offset"), input.fieldRef("limit"), input.fieldRef("pageSize"), input.fieldRef("when"),
+                input.fieldRef("nullableInt"), input.fieldRef("nullableString"), input.fieldRef("nullableBoolean"),
+            ),
+        )
+        val tool = IdeaTool(
+            contract,
+            IdeaToolBinding(contract.id, null, "org.jetbrains.hexana.mcp.query.readFunctions", UnknownFieldPolicy.Ignore, invocation),
+        )
+
+        val source = ideaSource(listOf(tool))
+        assertTrue(source.contains("private data class IdeaTypedFixtureRequest"), source)
+        assertTrue(source.contains("val pageSize = args.optionalIntArgument(\"page_size\") ?: 7"), source)
+        assertTrue(source.contains("provider.readFunctions(request.offset, request.limit, request.pageSize, request.`when`, request.nullableInt, request.nullableString, request.nullableBoolean)"), source)
+        assertTrue(source.contains("public val `when`: Int,"), source)
+        assertTrue(source.contains("val `when` = args.optionalIntArgument(\"when\") ?: 3"), source)
+        assertTrue(source.contains("IdeaTypedFixtureRequest(path, offset, limit, pageSize, `when`, nullableInt"), source)
+        assertTrue(source.contains("put(\"page_size\""), source)
+        assertTrue(source.contains("requiredProperties = setOf(\"path\", \"nullableInt\", \"nullableString\", \"nullableBoolean\")"), source)
+        assertTrue(source.contains("public val nullableInt: Int?"), source)
+        assertTrue(source.contains("public val nullableString: String?"), source)
+        assertTrue(source.contains("public val nullableBoolean: Boolean?"), source)
+        assertEquals(3, Regex("JsonNull -> null").findAll(source).count())
+        assertTrue(source.contains("Missing required argument `nullableInt`"), source)
+        assertTrue(source.contains("Missing required argument `nullableString`"), source)
+        assertTrue(source.contains("Missing required argument `nullableBoolean`"), source)
+        assertFalse(source.contains("put(\"bytesBase64\""), source)
+        assertFalse(source.contains("put(\"bytes\""), source)
+
+        val invalid = tool.copy(binding = tool.binding.copy(
+            typedInvocation = invocation.copy(source = pathSource(WasmInputClass.fieldRef("path"))),
+        ))
+        val error = assertFailsWith<IllegalArgumentException> { ideaSource(listOf(invalid)) }
+        assertTrue(error.message.orEmpty().contains("must select a source"), error.message)
+
+        listOf("HexanaToolset", "HexanaMcpToolCompatibility").forEach { reservedName ->
+            val colliding = tool.copy(binding = tool.binding.copy(
+                typedInvocation = invocation.copy(requestTypeName = reservedName),
+            ))
+            val collision = assertFailsWith<IllegalArgumentException> { ideaSource(listOf(colliding)) }
+            assertTrue(collision.message.orEmpty().contains("top-level type declarations collide: $reservedName"), collision.message)
+        }
     }
 
     @Test

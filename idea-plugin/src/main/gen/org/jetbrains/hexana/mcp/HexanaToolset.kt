@@ -1560,12 +1560,10 @@ public class HexanaToolset : McpToolsProvider {
       ),
     )
     override suspend fun call(args: JsonObject): McpToolCallResult {
-      val path = args.requireStringArgument("path")
-      val offset = args.optionalIntArgument("offset") ?: 0
-      val limit = args.optionalIntArgument("limit") ?: 200
-      val file = requireWasmFile(path)
+      val request = decodeListFunctionsIdeaRequest(args)
+      val file = requireWasmFile(request.path)
       val provider = file.requireCoreWasmBinaryProvider()
-      val result = provider.readFunctions(offset, limit)
+      val result = provider.readFunctions(request.offset, request.limit)
       val text = encodeHexanaJson(result)
       val structuredContent = encodeHexanaJsonElement(result).jsonObject
       return McpToolCallResult.text(text, structuredContent)
@@ -2544,6 +2542,19 @@ public class HexanaToolset : McpToolsProvider {
     }
   }
   )
+}
+
+private data class ListFunctionsIdeaRequest(
+  public val path: String,
+  public val offset: Int,
+  public val limit: Int,
+)
+
+private fun decodeListFunctionsIdeaRequest(args: JsonObject): ListFunctionsIdeaRequest {
+  val path = args.requireStringArgument("path")
+  val offset = args.optionalIntArgument("offset") ?: 0
+  val limit = args.optionalIntArgument("limit") ?: 200
+  return ListFunctionsIdeaRequest(path, offset, limit)
 }
 
 private fun JsonObject.requireStringArgument(name: String): String = this[name]?.jsonPrimitive?.content
