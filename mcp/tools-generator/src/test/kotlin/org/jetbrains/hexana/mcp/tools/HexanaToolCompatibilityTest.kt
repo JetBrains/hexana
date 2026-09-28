@@ -69,6 +69,20 @@ class HexanaToolCompatibilityTest {
     }
 
     @Test
+    fun `repeatable CLI parameter cardinality and cap affect CLI fingerprint`() {
+        fun withCap(cap: Int) = baseline.copy(cliTools = baseline.cliTools.map { tool ->
+            if (tool.name != "run_script_suite") return@map tool
+            val model = requireNotNull(tool.binding.inputModel)
+            tool.copy(binding = tool.binding.copy(inputModel = model.copy(params = model.params.map { param ->
+                param.copy(cliOption = "--fixture-files", cardinality = CliParameterCardinality.Repeatable,
+                    maxOccurrences = cap)
+            })))
+        })
+        assertOnlySnapshotsChanged(withCap(2), "CLI")
+        assertOnlySnapshotsChanged(withCap(3), "CLI")
+    }
+
+    @Test
     fun `IDEA membership-only mutation affects only IDEA snapshot`() {
         assertOnlySnapshotsChanged(
             baseline.copy(ideaTools = baseline.ideaTools.dropLast(1)),
@@ -312,6 +326,10 @@ class HexanaToolCompatibilityTest {
             appendLine("$prefix.param[$index].kind=${param.kind.name}")
             appendLine("$prefix.param[$index].target=${param.targetField}")
             appendLine("$prefix.param[$index].option=${param.cliOption.orEmpty()}")
+            if (param.cardinality != CliParameterCardinality.Single || param.maxOccurrences != 1) {
+                appendLine("$prefix.param[$index].cardinality=${param.cardinality.name}")
+                appendLine("$prefix.param[$index].maxOccurrences=${param.maxOccurrences}")
+            }
         }
     }
 

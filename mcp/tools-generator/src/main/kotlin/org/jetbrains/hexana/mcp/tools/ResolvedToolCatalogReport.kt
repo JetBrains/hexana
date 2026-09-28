@@ -193,6 +193,10 @@ class ResolvedToolCatalogReport(
             model.params.sortedBy { it.name }.forEach { param -> add(buildJsonObject {
                 put("name", JsonPrimitive(param.name)); put("kind", JsonPrimitive(param.kind.name)); put("targetField", JsonPrimitive(param.targetField))
                 put("cliOption", param.cliOption?.let(::JsonPrimitive) ?: JsonNull)
+                if (param.cardinality != CliParameterCardinality.Single || param.maxOccurrences != 1) {
+                    put("cardinality", JsonPrimitive(param.cardinality.name))
+                    put("maxOccurrences", JsonPrimitive(param.maxOccurrences))
+                }
             }) }
         })
     }

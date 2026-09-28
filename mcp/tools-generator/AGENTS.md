@@ -21,6 +21,12 @@ generators resolve contracts through the authority for their consumer and emit c
   `validateHexanaCliUsageExamples()` passes its typed source choices through the same generated decoder as runtime.
   Run `:cli:metadata:test` when adding or changing examples. Generated request, converter, and decoder
   declarations must not collide with each other or the fixed CLI metadata declarations.
+- CLI parameter bindings emit option spelling, target field, scalar value type, single/repeatable cardinality, and a
+  positive occurrence maximum. Repeatable bindings target list fields. `cli:product` consumes new declared options in
+  supplied order, rejects duplicate values, and passes their values to the selected executor. Existing named product
+  parser branches retain their current behavior until equivalent generic parsing is proved by product fixtures. Declared
+  parameter options cannot reuse a product parser option, except the existing `run-script` bindings for `--script` and
+  `--script-text`. Command help lists declared parameters with their types, repeat limits, and descriptions.
 
 A separate Claude Desktop MCPB manifest generator consumes the standalone default profile in canonical contract order
 and refreshes the checked-in packaging template.

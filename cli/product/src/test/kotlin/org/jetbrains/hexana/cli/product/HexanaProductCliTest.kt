@@ -4,7 +4,10 @@ import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
 import org.jetbrains.hexana.cli.metadata.HexanaCliExecutionStatus
+import org.jetbrains.hexana.cli.metadata.HexanaCliInputOptionSpec
 import org.jetbrains.hexana.cli.metadata.HexanaCliProductToolSelection
+import org.jetbrains.hexana.cli.metadata.HexanaCliParameterCardinality
+import org.jetbrains.hexana.cli.metadata.HexanaCliParameterSpec
 import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliProducts
 import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliToolRegistry
 import org.jetbrains.hexana.cli.metadata.validateHexanaCliUsageExamples
@@ -32,6 +35,109 @@ import kotlin.test.fail
 class HexanaProductCliTest {
     @get:Rule
     val temporaryFolder = TemporaryFolder()
+
+    @Test
+    fun declaredParametersPreserveRepeatOrderAndSingleUseWithEitherSource() {
+        val executor = RecordingProductExecutor()
+        val cli = parameterFixtureCli(executor)
+        val pathResult = cli.run(
+            arrayOf("summarize-module", "/fixture.wasm", "--fixture-tag", "first", "--fixture-mode", "strict", "--fixture-tag", "second"),
+            ByteArrayInputStream(ByteArray(0)), fixtureEnv,
+        )
+        assertEquals(SUCCESS_EXIT_CODE, pathResult.exitCode, pathResult.stderr)
+        assertEquals(mapOf("tags" to listOf("first", "second"), "mode" to listOf("strict")), executor.singleRequest().parameterValues)
+        assertEquals(ToolInputSourceSelection.Path("/fixture.wasm", "wasm"), executor.singleRequest().sourceSelection)
+
+        val stdinExecutor = RecordingProductExecutor()
+        val stdinResult = parameterFixtureCli(stdinExecutor).run(
+            arrayOf("summarize-module", "--stdin", "--fixture-tag", "stdin"),
+            ByteArrayInputStream(MINIMAL_WASM_MODULE), fixtureEnv,
+        )
+        assertEquals(SUCCESS_EXIT_CODE, stdinResult.exitCode, stdinResult.stderr)
+        assertEquals(listOf("stdin"), stdinExecutor.singleRequest().parameterValues["tags"])
+        stdinExecutor.singleRequest().assertStdinSource(MINIMAL_WASM_MODULE, "wasm")
+    }
+
+    @Test
+    fun declaredParametersRejectDuplicateCapUnsupportedOptionAndMultipleSources() {
+        val cli = parameterFixtureCli(RecordingProductExecutor())
+        val invalid = listOf(
+            arrayOf("summarize-module", "file.wasm", "--fixture-mode", "first", "--fixture-mode", "second") to "Repeated",
+            arrayOf("summarize-module", "file.wasm", "--fixture-tag", "same", "--fixture-tag", "same") to "Duplicate",
+            arrayOf("summarize-module", "file.wasm", "--fixture-tag", "a", "--fixture-tag", "b", "--fixture-tag", "c") to "at most 2",
+            arrayOf("summarize-module", "file.wasm", "--fixture-other", "value") to "Unknown",
+            arrayOf("summarize-module", "file.wasm", "--stdin") to "exactly one",
+        )
+        invalid.forEach { (args, message) ->
+            val result = cli.run(args, ByteArrayInputStream(MINIMAL_WASM_MODULE), fixtureEnv)
+            assertEquals(USAGE_EXIT_CODE, result.exitCode, result.stderr)
+            assertTrue(result.stderr.contains(message), result.stderr)
+        }
+    }
+
+    @Test
+    fun declaredJsonParametersRequireObjectsBeforeExecution() {
+        val executor = RecordingProductExecutor()
+        val cli = parameterFixtureCli(executor)
+        val objectValue = """{"enabled":true,"values":[1,null]}"""
+        val valid = cli.run(
+            arrayOf("summarize-module", "/fixture.wasm", "--fixture-policy", objectValue),
+            FailOnReadInputStream, fixtureEnv,
+        )
+        assertEquals(SUCCESS_EXIT_CODE, valid.exitCode, valid.stderr)
+
+        listOf("[]", "null", "42", "true", "\"text\"", "{invalid").forEach { value ->
+            val result = cli.run(
+                arrayOf("summarize-module", "/fixture.wasm", "--fixture-policy", value),
+                FailOnReadInputStream, fixtureEnv,
+            )
+            assertEquals(USAGE_EXIT_CODE, result.exitCode, "value=$value: ${result.stderr}")
+            assertTrue(result.stderr.contains("--fixture-policy requires JSON object value"), result.stderr)
+        }
+        assertEquals(listOf(objectValue), executor.singleRequest().parameterValues["policyJson"])
+    }
+
+    @Test
+    fun declaredParameterHelpShowsTypeLimitDescriptionAndPreservesLegacyScriptEntries() {
+        val help = parameterFixtureCli(RecordingProductExecutor()).run(
+            arrayOf("help", "summarize-module"), FailOnReadInputStream, fixtureEnv,
+        )
+        assertEquals(SUCCESS_EXIT_CODE, help.exitCode, help.stderr)
+        assertTrue(help.stdout.contains("--fixture-tag <string>  Ordered tags (repeatable, max 2)."), help.stdout)
+        assertTrue(help.stdout.contains("--fixture-mode <string>  Execution mode."), help.stdout)
+        assertEquals(1, help.stdout.lines().count { it.trim().startsWith("--fixture-tag <string>") })
+        assertEquals(1, help.stdout.lines().count { it.trim().startsWith("--fixture-mode <string>") })
+
+        val scriptHelp = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI_SCRIPT, FailOnScriptExecuteExecutor).run(
+            arrayOf("help", "run-script"), FailOnReadInputStream, fixtureEnv,
+        )
+        assertEquals(SUCCESS_EXIT_CODE, scriptHelp.exitCode, scriptHelp.stderr)
+        assertEquals(1, scriptHelp.stdout.lines().count { it.trim().startsWith("--script <string>") })
+        assertEquals(1, scriptHelp.stdout.lines().count { it.trim().startsWith("--script-text <string>") })
+    }
+
+    private fun parameterFixtureCli(executor: RecordingProductExecutor): HexanaProductCli {
+        val registry = HexanaGeneratedCliToolRegistry.TOOLS.map { spec ->
+            if (spec.toolName == "summarize_module") spec.copy(
+                inputOptions = spec.inputOptions + listOf(
+                    HexanaCliInputOptionSpec("--fixture-tag", "list<string>", "Ordered tags.", null, null, false),
+                    HexanaCliInputOptionSpec("--fixture-mode", "string", "Execution mode.", null, null, false),
+                    HexanaCliInputOptionSpec("--fixture-policy", "json", "Policy object.", null, null, false),
+                ),
+                parameterOptions = listOf(
+                    HexanaCliParameterSpec("--fixture-tag", "tags", "string", HexanaCliParameterCardinality.REPEATABLE, 2),
+                    HexanaCliParameterSpec("--fixture-mode", "mode", "string", HexanaCliParameterCardinality.SINGLE, 1),
+                    HexanaCliParameterSpec("--fixture-policy", "policyJson", "json", HexanaCliParameterCardinality.SINGLE, 1),
+                ),
+            ) else spec
+        }
+        return HexanaProductCli(
+            HexanaGeneratedCliProducts.HEXANA_CLI, executor,
+            HexanaGeneratedCliProducts.SELECTIONS.getValue(HexanaGeneratedCliProducts.HEXANA_CLI.productId), registry,
+        )
+    }
+
+    private val fixtureEnv = mapOf("HEXANA_CLI_TELEMETRY_ENABLED" to "false")
 
     @Test
     fun generatedProductSelectionsMatchApprovedCommandInventory() {

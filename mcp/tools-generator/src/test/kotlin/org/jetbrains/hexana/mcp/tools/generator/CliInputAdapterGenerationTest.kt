@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.mcp.tools.generator
 
 import org.jetbrains.hexana.mcp.tools.CliExecutionStatus
+import org.jetbrains.hexana.mcp.tools.CliParameterCardinality
 import org.jetbrains.hexana.mcp.tools.CliTool
 import org.jetbrains.hexana.mcp.tools.HexanaCliProductSpec
 import org.jetbrains.hexana.mcp.tools.HexanaCliTools
@@ -67,7 +68,7 @@ class CliInputAdapterGenerationTest {
                 cli { pathOption("--baseline") }
             }
             param("limit", input.fieldRef("limit"), "--limit")
-            param("indices", input.fieldRef("indices"), "--indices")
+            param("indices", input.fieldRef("indices"), "--indices", CliParameterCardinality.Repeatable, 2)
             jsonParam("filters", input.fieldRef("filters"), "--filters")
             param("query", input.fieldRef("query"), "--query")
         }
@@ -97,6 +98,9 @@ class CliInputAdapterGenerationTest {
         assertEquals("25", tool.cliInputOptions().single { it.name == "--limit" }.defaultValue)
         assertEquals("list<integer>", tool.cliInputOptions().single { it.name == "--indices" }.valueType)
         assertEquals("Filter object.", tool.cliInputOptions().single { it.name == "--filters" }.description)
+        val metadata = buildCliMetadataToolsetFile(listOf(tool)).toString()
+        assertTrue(metadata.contains("HexanaCliParameterSpec(\"--indices\", \"indices\", \"integer\", HexanaCliParameterCardinality.REPEATABLE, 2)"), metadata)
+        assertTrue(metadata.contains("HexanaCliParameterSpec(\"--limit\", \"limit\", \"integer\", HexanaCliParameterCardinality.SINGLE, 1)"), metadata)
     }
 
     @Test

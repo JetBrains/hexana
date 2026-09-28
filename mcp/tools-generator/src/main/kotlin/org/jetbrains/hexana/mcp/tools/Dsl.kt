@@ -1230,11 +1230,20 @@ data class ParamBindingSpec(
     val cliOption: String? = null,
     /** Typed target used by new declarations; `targetField` remains a migration bridge. */
     val targetReference: FieldRef? = null,
+    val cardinality: CliParameterCardinality = CliParameterCardinality.Single,
+    val maxOccurrences: Int = 1,
 ) {
     init {
         requireInputModelName(name, "Param")
         requireInputModelName(targetField, "Param target field")
         cliOption?.let { validateCliOption(it, "CLI param option") }
+        require(maxOccurrences > 0) { "CLI param '$name' maximum occurrences must be positive." }
+        require(cardinality != CliParameterCardinality.Single || maxOccurrences == 1) {
+            "Single CLI param '$name' must have maximum occurrences 1."
+        }
+        require(cardinality != CliParameterCardinality.Repeatable || cliOption != null) {
+            "Repeatable CLI param '$name' must declare an option."
+        }
         targetReference?.let { reference ->
             require(reference.name == targetField) {
                 "Param '$name' typed target `${reference.name}` does not match target field `$targetField`."
@@ -1242,6 +1251,8 @@ data class ParamBindingSpec(
         }
     }
 }
+
+enum class CliParameterCardinality { Single, Repeatable }
 
 enum class ParamBindingKind {
     Value,
@@ -1317,17 +1328,27 @@ class ToolInputModelBuilder internal constructor() {
         name: String,
         targetField: String = name,
         cliOption: String? = null,
+        cardinality: CliParameterCardinality = CliParameterCardinality.Single,
+        maxOccurrences: Int = 1,
     ) {
         params += ParamBindingSpec(
             name = name,
             kind = ParamBindingKind.Value,
             targetField = targetField,
             cliOption = cliOption,
+            cardinality = cardinality,
+            maxOccurrences = maxOccurrences,
         )
     }
 
-    fun param(name: String, target: FieldRef, cliOption: String? = null) {
-        params += ParamBindingSpec(name, ParamBindingKind.Value, target.name, cliOption, target)
+    fun param(
+        name: String,
+        target: FieldRef,
+        cliOption: String? = null,
+        cardinality: CliParameterCardinality = CliParameterCardinality.Single,
+        maxOccurrences: Int = 1,
+    ) {
+        params += ParamBindingSpec(name, ParamBindingKind.Value, target.name, cliOption, target, cardinality, maxOccurrences)
     }
 
     fun jsonParam(
@@ -1453,6 +1474,14 @@ private val STANDALONE_HANDLER_METHOD_NAME_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]
 private val KOTLIN_TYPE_NAME_REGEX = Regex("^[A-Z][A-Za-z0-9_]*$")
 private val CLI_COMMAND_NAME_REGEX = Regex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 private val CLI_OPTION_NAME_REGEX = Regex("^--[a-z][a-z0-9]*(-[a-z0-9]+)*$")
+private val PRODUCT_PARSER_OPTIONS = setOf(
+    "--help", "--version", "--format", "--stdin", "--binary-base64", "--bytes-base64", "--wasm-base64",
+    "--script", "--script-text", "--allowed-root", "--max-file-bytes", "--max-inline-bytes",
+    "--max-text-file-bytes", "--max-output-bytes", "--max-candidate-count", "--max-scan-roots",
+    "--max-scan-depth", "--terminal-width", "--output", "--telemetry-enabled", "--telemetry-key",
+    "--telemetry-host", "--input", "--script-arg", "--baselines-dir", "--update-baselines",
+    "--sarif-out", "--artifact", "--lib-root", "--seed", "--test-timeout", "--report",
+)
 
 private fun requireInputModelName(name: String, owner: String) {
     require(FIELD_NAME_REGEX.matches(name)) {
@@ -1579,6 +1608,13 @@ private fun validateExplicitInputModel(toolName: String, input: ClassSpec, input
 
     inputModel.params.forEach { param ->
         val field = requireInputField(param.targetField)
+        val option = param.cliOption
+        val legacyScriptSource = toolName == RunBinaryScriptToolId.value &&
+            ((option == "--script" && param.targetField == "scriptPath") ||
+                (option == "--script-text" && param.targetField == "script"))
+        require(option == null || option !in PRODUCT_PARSER_OPTIONS || legacyScriptSource) {
+            "Tool '$toolName' CLI param `${param.name}` uses reserved product parser option `$option`."
+        }
         param.targetReference?.let { reference ->
             require(input.fieldRef(field.name) == reference) {
                 "Tool '$toolName' CLI param `${param.name}` references a foreign or stale field `${reference.name}`."
@@ -1588,6 +1624,11 @@ private fun validateExplicitInputModel(toolName: String, input: ClassSpec, input
             require(field.type == FieldType.JsonObjectT) {
                 "Tool '$toolName' JSON CLI param `${param.name}` must target a JSON object input field, " +
                     "got `${param.targetField}` with type ${field.type}."
+            }
+        }
+        if (param.cardinality == CliParameterCardinality.Repeatable) {
+            require(param.kind == ParamBindingKind.Value && field.type is FieldType.ListOf) {
+                "Tool '$toolName' repeatable CLI param `${param.name}` must target a list value field."
             }
         }
     }

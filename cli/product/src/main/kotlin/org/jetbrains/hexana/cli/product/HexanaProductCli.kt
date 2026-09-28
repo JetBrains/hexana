@@ -12,6 +12,8 @@ import org.jetbrains.hexana.cli.metadata.HexanaCliInputMode
 import org.jetbrains.hexana.cli.metadata.HexanaCliOutputFormat
 import org.jetbrains.hexana.cli.metadata.HexanaCliProductDescriptor
 import org.jetbrains.hexana.cli.metadata.HexanaCliProductToolSelection
+import org.jetbrains.hexana.cli.metadata.HexanaCliParameterCardinality
+import org.jetbrains.hexana.cli.metadata.HexanaCliParameterSpec
 import org.jetbrains.hexana.cli.metadata.HexanaCliExecutionStatus
 import org.jetbrains.hexana.cli.metadata.HexanaCliToolSpec
 import org.jetbrains.hexana.cli.metadata.HexanaGeneratedCliProducts
@@ -50,11 +52,20 @@ public fun runHexanaProductCli(
     exitProcess(result.exitCode)
 }
 
-public class HexanaProductCli(
+public class HexanaProductCli private constructor(
     private val product: HexanaCliProductDescriptor,
     private val executor: HexanaProductToolExecutor,
+    private val selectedTools: Map<String, HexanaCliToolSpec>,
 ) {
-    private val selectedTools = selectedProductTools(product, executor.bindings)
+    public constructor(product: HexanaCliProductDescriptor, executor: HexanaProductToolExecutor) :
+        this(product, executor, selectedProductTools(product, executor.bindings))
+
+    internal constructor(
+        product: HexanaCliProductDescriptor,
+        executor: HexanaProductToolExecutor,
+        selections: List<HexanaCliProductToolSelection>,
+        registry: List<HexanaCliToolSpec>,
+    ) : this(product, executor, selectedProductTools(product, executor.bindings, selections, registry))
 
     public fun run(
         args: Array<String>,
@@ -159,6 +170,8 @@ public class HexanaProductCli(
 
         val options = CommandOptions.fromEnv(env)
         val params = mutableMapOf<String, JsonPrimitive>()
+        val parameterValues = linkedMapOf<String, MutableList<String>>()
+        val parameterOptions = spec.parameterOptions.associateBy { it.option }
         val scriptSources = ScriptSourceOptions()
         var pathArgument: String? = null
         var stdinRequested = false
@@ -273,6 +286,23 @@ public class HexanaProductCli(
                     suiteJUnitReportPath = Path.of(args.requireValue("--report"))
                 }
                 else -> {
+                    val parameter = parameterOptions[arg]
+                    if (parameter != null) {
+                        val values = parameterValues.getOrPut(parameter.targetField) { mutableListOf() }
+                        if (parameter.cardinality == HexanaCliParameterCardinality.SINGLE && values.isNotEmpty()) {
+                            throw ProductUsageException("Repeated ${spec.commandName} option: $arg")
+                        }
+                        val value = args.requireValue(arg)
+                        validateParameterValue(parameter, value)
+                        if (value in values) {
+                            throw ProductUsageException("Duplicate ${spec.commandName} $arg value: $value")
+                        }
+                        if (values.size >= parameter.maxOccurrences) {
+                            throw ProductUsageException("$arg accepts at most ${parameter.maxOccurrences} value(s)")
+                        }
+                        values += value
+                        continue
+                    }
                     if (arg.startsWith("--")) {
                         throw ProductUsageException("Unknown ${spec.commandName} option: $arg")
                     }
@@ -303,6 +333,7 @@ public class HexanaProductCli(
                 // non-blank placeholder satisfying the Path invariant.
                 sourceSelection = ToolInputSourceSelection.Path(suiteFiles.first()),
                 params = params,
+                parameterValues = parameterValues.mapValues { it.value.toList() },
                 format = format,
                 outputPath = outputPath,
                 resourceLimits = resourceLimits,
@@ -331,6 +362,7 @@ public class HexanaProductCli(
             spec = spec,
             sourceSelection = sourceSelection,
             params = params,
+            parameterValues = parameterValues.mapValues { it.value.toList() },
             format = format,
             outputPath = outputPath,
             resourceLimits = resourceLimits,
@@ -402,12 +434,15 @@ public class HexanaProductCli(
                     appendLine("  -h, --help")
                     appendLine("  --format <${spec.outputFormats.joinToString("|") { it.cliName() }}> (default: ${spec.defaultOutputFormat.cliName()})")
                     spec.inputOptions.forEach { option ->
+                        val parameter = spec.parameterOptions.firstOrNull { it.option == option.name }
                         val isNamedOption = option.name.startsWith("--")
                         val usage = if (isNamedOption) option.name else "<${option.name}${if (option.valueType.startsWith("list<")) "..." else ""}>"
-                        val type = if (!isNamedOption || option.valueType == "stdin") "" else " <${option.valueType}>"
+                        val type = if (!isNamedOption || option.valueType == "stdin") "" else " <${parameter?.valueType ?: option.valueType}>"
                         val annotations = listOfNotNull(
                             option.defaultValue?.let { "default: $it" },
                             option.constraints,
+                            parameter?.takeIf { it.cardinality == HexanaCliParameterCardinality.REPEATABLE }
+                                ?.let { "repeatable, max ${it.maxOccurrences}" },
                             "required".takeIf { option.required },
                         ).joinToString(", ")
                         val description = option.description.trim()
@@ -506,6 +541,7 @@ public data class HexanaProductToolExecutionRequest(
     val spec: HexanaCliToolSpec,
     val sourceSelection: ToolInputSourceSelection,
     val params: Map<String, JsonPrimitive>,
+    val parameterValues: Map<String, List<String>> = emptyMap(),
     val format: HexanaCliOutputFormat,
     val resourceLimits: HexanaResourceLimits,
     val allowedRoots: List<String>,
@@ -547,6 +583,7 @@ private sealed class ParsedCommand(
         val spec: HexanaCliToolSpec,
         val sourceSelection: ToolInputSourceSelection,
         val params: Map<String, JsonPrimitive>,
+        val parameterValues: Map<String, List<String>>,
         val format: HexanaCliOutputFormat,
         val outputPath: Path?,
         val resourceLimits: HexanaResourceLimits,
@@ -574,6 +611,7 @@ private fun ParsedCommand.Executable.toExecutionRequest(): HexanaProductToolExec
         spec = spec,
         sourceSelection = sourceSelection,
         params = params,
+        parameterValues = parameterValues,
         format = format,
         resourceLimits = resourceLimits,
         allowedRoots = allowedRoots,
@@ -1015,6 +1053,20 @@ private fun MutableList<String>.requireValue(optionName: String): String =
 private fun MutableList<String>.requirePositiveInt(optionName: String): Int =
     requireValue(optionName).toIntOrNull()?.takeIf { it > 0 }
         ?: throw ProductUsageException("$optionName must be a positive integer")
+
+private fun validateParameterValue(parameter: HexanaCliParameterSpec, value: String) {
+    val valid = when (parameter.valueType) {
+        "integer" -> value.toLongOrNull() != null
+        "number" -> value.toDoubleOrNull()?.isFinite() == true
+        "boolean" -> value == "true" || value == "false"
+        "json" -> runCatching { Json.parseToJsonElement(value) is JsonObject }.getOrDefault(false)
+        else -> true
+    }
+    if (!valid) {
+        val expectedType = if (parameter.valueType == "json") "JSON object" else parameter.valueType
+        throw ProductUsageException("${parameter.option} requires $expectedType value")
+    }
+}
 
 private fun requireNoArgs(commandName: String, args: List<String>) {
     if (args.isNotEmpty()) {

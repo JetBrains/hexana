@@ -2,6 +2,7 @@
 package org.jetbrains.hexana.cli.metadata
 
 import kotlin.Boolean
+import kotlin.Int
 import kotlin.String
 import kotlin.collections.List
 import kotlin.collections.Set
@@ -91,6 +92,25 @@ public data class HexanaCliUsageExampleSpec(
 )
 
 /**
+ * Generated CLI parameter cardinality.
+ */
+public enum class HexanaCliParameterCardinality {
+  SINGLE,
+  REPEATABLE,
+}
+
+/**
+ * Generated option binding and occurrence limit from the CLI authority.
+ */
+public data class HexanaCliParameterSpec(
+  public val option: String,
+  public val targetField: String,
+  public val valueType: String,
+  public val cardinality: HexanaCliParameterCardinality,
+  public val maxOccurrences: Int,
+)
+
+/**
  * Generated CLI-visible tool metadata derived from the catalog.
  */
 public data class HexanaCliToolSpec(
@@ -103,6 +123,7 @@ public data class HexanaCliToolSpec(
   public val inputOptions: List<HexanaCliInputOptionSpec>,
   public val sourceGroups: List<HexanaCliSourceGroupSpec>,
   public val examples: List<HexanaCliUsageExampleSpec>,
+  public val parameterOptions: List<HexanaCliParameterSpec>,
   public val outputFormats: Set<HexanaCliOutputFormat>,
   public val defaultOutputFormat: HexanaCliOutputFormat,
   public val defaultOutputPolicy: HexanaCliOutputPolicy,
@@ -131,6 +152,7 @@ public object HexanaGeneratedCliToolRegistry {
           HexanaCliSourceGroupSpec("binary", true, listOf("binary", "--stdin", "--bytes-base64", "--binary-base64")),
         ),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -155,6 +177,10 @@ public object HexanaGeneratedCliToolRegistry {
           HexanaCliSourceGroupSpec("binary", true, listOf("binary", "--stdin", "--bytes-base64", "--binary-base64")),
         ),
           examples = emptyList(),
+          parameterOptions = listOf(
+          HexanaCliParameterSpec("--script", "scriptPath", "string", HexanaCliParameterCardinality.SINGLE, 1),
+          HexanaCliParameterSpec("--script-text", "script", "string", HexanaCliParameterCardinality.SINGLE, 1),
+        ),
           outputFormats = setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.SARIF, HexanaCliOutputFormat.RAW),
           defaultOutputFormat = HexanaCliOutputFormat.RAW,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -172,6 +198,7 @@ public object HexanaGeneratedCliToolRegistry {
         ),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.RAW),
           defaultOutputFormat = HexanaCliOutputFormat.RAW,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -194,6 +221,7 @@ public object HexanaGeneratedCliToolRegistry {
           HexanaCliSourceGroupSpec("wasm", true, listOf("wasm", "--stdin", "--bytes-base64", "--wasm-base64")),
         ),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.RAW),
           defaultOutputFormat = HexanaCliOutputFormat.RAW,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -219,6 +247,7 @@ public object HexanaGeneratedCliToolRegistry {
           HexanaCliUsageExampleSpec("Summarize a local WebAssembly module.", listOf("module.wasm"), ToolInputSourceSelection.Path("module.wasm", "wasm")),
           HexanaCliUsageExampleSpec("Summarize a module supplied on standard input.", listOf("--stdin"), ToolInputSourceSelection.StdinBytes(byteArrayOf(), "wasm")),
         ),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.PRETTY, HexanaCliOutputFormat.TABLE),
           defaultOutputFormat = HexanaCliOutputFormat.PRETTY,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -234,6 +263,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -249,6 +279,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -264,6 +295,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -279,6 +311,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -294,6 +327,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -309,6 +343,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -324,6 +359,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -339,6 +375,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -354,6 +391,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -369,6 +407,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -384,6 +423,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -399,6 +439,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -414,6 +455,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -429,6 +471,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -444,6 +487,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -459,6 +503,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -474,6 +519,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -489,6 +535,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -504,6 +551,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -519,6 +567,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -534,6 +583,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -549,6 +599,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -564,6 +615,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -579,6 +631,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -594,6 +647,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -609,6 +663,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -624,6 +679,7 @@ public object HexanaGeneratedCliToolRegistry {
           inputOptions = emptyList(),
           sourceGroups = emptyList(),
           examples = emptyList(),
+          parameterOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,

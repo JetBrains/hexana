@@ -15,10 +15,12 @@ import com.squareup.kotlinpoet.asTypeName
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import org.jetbrains.hexana.mcp.tools.CliExecutionStatus
 import org.jetbrains.hexana.mcp.tools.CliExampleSource
+import org.jetbrains.hexana.mcp.tools.CliParameterCardinality
 import org.jetbrains.hexana.mcp.tools.CliProductRegistry
 import org.jetbrains.hexana.mcp.tools.CliProductSpec
 import org.jetbrains.hexana.mcp.tools.CliTool
 import org.jetbrains.hexana.mcp.tools.FieldDefaultValue
+import org.jetbrains.hexana.mcp.tools.FieldType
 import org.jetbrains.hexana.mcp.tools.FieldPresence
 import org.jetbrains.hexana.mcp.tools.HexanaToolSchemaCompatibility
 import org.jetbrains.hexana.mcp.tools.HexanaCliProductRegistry
@@ -64,6 +66,8 @@ private val CLI_INPUT_OPTION_SPEC = ClassName(CLI_METADATA_PACKAGE, "HexanaCliIn
 private val CLI_SOURCE_GROUP_SPEC = ClassName(CLI_METADATA_PACKAGE, "HexanaCliSourceGroupSpec")
 private val CLI_USAGE_EXAMPLE_SPEC = ClassName(CLI_METADATA_PACKAGE, "HexanaCliUsageExampleSpec")
 private val CLI_SOURCE_SELECTION = ClassName("org.jetbrains.hexana.cli.runtime", "ToolInputSourceSelection")
+private val CLI_PARAMETER_CARDINALITY = ClassName(CLI_METADATA_PACKAGE, "HexanaCliParameterCardinality")
+private val CLI_PARAMETER_SPEC = ClassName(CLI_METADATA_PACKAGE, "HexanaCliParameterSpec")
 private val CLI_INPUT_MODE = ClassName(CLI_METADATA_PACKAGE, "HexanaCliInputMode")
 private val CLI_OUTPUT_FORMAT = ClassName(CLI_METADATA_PACKAGE, "HexanaCliOutputFormat")
 private val TOOL_OUTPUT_FORMAT = ClassName("org.jetbrains.hexana.cli.runtime", "ToolOutputFormat")
@@ -217,6 +221,8 @@ internal fun buildCliMetadataToolsetFile(tools: List<CliTool>): FileSpec {
         buildCliInputOptionSpecClass(),
         buildCliSourceGroupSpecClass(),
         buildCliUsageExampleSpecClass(),
+        buildCliParameterCardinalityEnum(),
+        buildCliParameterSpecClass(),
         buildCliToolSpecClass(),
         buildCliToolRegistryObject(tools),
     )
@@ -501,6 +507,29 @@ private fun buildCliUsageExampleSpecClass(): TypeSpec = TypeSpec.classBuilder(CL
     .addProperty(PropertySpec.builder("sourceSelection", CLI_SOURCE_SELECTION).initializer("sourceSelection").build())
     .build()
 
+private fun buildCliParameterCardinalityEnum(): TypeSpec = TypeSpec.enumBuilder(CLI_PARAMETER_CARDINALITY)
+    .addModifiers(KModifier.PUBLIC)
+    .addKdoc("Generated CLI parameter cardinality.\n")
+    .addEnumConstant("SINGLE")
+    .addEnumConstant("REPEATABLE")
+    .build()
+
+private fun buildCliParameterSpecClass(): TypeSpec {
+    val fields = listOf("option", "targetField", "valueType", "cardinality", "maxOccurrences")
+    val types = listOf(String::class.asTypeName(), String::class.asTypeName(), String::class.asTypeName(),
+        CLI_PARAMETER_CARDINALITY, Int::class.asTypeName())
+    return TypeSpec.classBuilder(CLI_PARAMETER_SPEC)
+        .addModifiers(KModifier.PUBLIC, KModifier.DATA)
+        .addKdoc("Generated option binding and occurrence limit from the CLI authority.\n")
+        .primaryConstructor(FunSpec.constructorBuilder().apply {
+            fields.zip(types).forEach { (field, type) -> addParameter(field, type) }
+        }.build())
+        .apply { fields.zip(types).forEach { (field, type) ->
+            addProperty(PropertySpec.builder(field, type).initializer(field).build())
+        } }
+        .build()
+}
+
 private fun buildCliToolSpecClass(): TypeSpec {
     val setOfInputMode = KOTLIN_SET.parameterizedBy(CLI_INPUT_MODE)
     val setOfOutputFormat = KOTLIN_SET.parameterizedBy(CLI_OUTPUT_FORMAT)
@@ -508,6 +537,7 @@ private fun buildCliToolSpecClass(): TypeSpec {
     val listOfInputOption = KOTLIN_LIST.parameterizedBy(CLI_INPUT_OPTION_SPEC)
     val listOfSourceGroup = KOTLIN_LIST.parameterizedBy(CLI_SOURCE_GROUP_SPEC)
     val listOfUsageExample = KOTLIN_LIST.parameterizedBy(CLI_USAGE_EXAMPLE_SPEC)
+    val listOfParameter = KOTLIN_LIST.parameterizedBy(CLI_PARAMETER_SPEC)
     val constructor = FunSpec.constructorBuilder()
         .addParameter(ParameterSpec.builder("commandName", String::class).build())
         .addParameter(ParameterSpec.builder("toolName", String::class).build())
@@ -518,6 +548,7 @@ private fun buildCliToolSpecClass(): TypeSpec {
         .addParameter(ParameterSpec.builder("inputOptions", listOfInputOption).build())
         .addParameter("sourceGroups", listOfSourceGroup)
         .addParameter("examples", listOfUsageExample)
+        .addParameter(ParameterSpec.builder("parameterOptions", listOfParameter).build())
         .addParameter(ParameterSpec.builder("outputFormats", setOfOutputFormat).build())
         .addParameter(ParameterSpec.builder("defaultOutputFormat", CLI_OUTPUT_FORMAT).build())
         .addParameter(ParameterSpec.builder("defaultOutputPolicy", CLI_OUTPUT_POLICY).build())
@@ -542,6 +573,7 @@ private fun buildCliToolSpecClass(): TypeSpec {
         .addProperty(property("inputOptions", listOfInputOption))
         .addProperty(property("sourceGroups", listOfSourceGroup))
         .addProperty(property("examples", listOfUsageExample))
+        .addProperty(property("parameterOptions", listOfParameter))
         .addProperty(property("outputFormats", setOfOutputFormat))
         .addProperty(property("defaultOutputFormat", CLI_OUTPUT_FORMAT))
         .addProperty(property("defaultOutputPolicy", CLI_OUTPUT_POLICY))
@@ -601,12 +633,31 @@ private fun cliToolSpecInitializer(spec: CliTool): CodeBlock {
         .add("  inputOptions = %L,\n", cliInputOptionsInitializer(spec.cliInputOptions()))
         .add("  sourceGroups = %L,\n", cliSourceGroupsInitializer(spec))
         .add("  examples = %L,\n", cliExamplesInitializer(spec))
+        .add("  parameterOptions = %L,\n", cliParameterOptionsInitializer(spec))
         .add("  outputFormats = %L,\n", enumSetInitializer(CLI_OUTPUT_FORMAT, outputFormats.map { it.generatedCliOutputFormatName() }))
         .add("  defaultOutputFormat = %T.%L,\n", CLI_OUTPUT_FORMAT, defaultOutput.generatedCliOutputFormatName())
         .add("  defaultOutputPolicy = %T.%L,\n", CLI_OUTPUT_POLICY, outputPolicy.generatedCliOutputPolicyName())
         .add("  executionStatus = %T.%L,\n", CLI_EXECUTION_STATUS, executionStatus.generatedCliExecutionStatusName())
         .add(")")
         .build()
+}
+
+private fun cliParameterOptionsInitializer(spec: CliTool): CodeBlock {
+    val params = spec.inputModel?.params.orEmpty().filter { it.cliOption != null }
+    if (params.isEmpty()) return CodeBlock.of("emptyList()")
+    return CodeBlock.builder().add("listOf(\n").indent().apply {
+        params.forEach { param ->
+            val field = spec.input.fields.single { it.name == param.targetField }
+            val valueType = if (param.cardinality == CliParameterCardinality.Repeatable) {
+                (field.type as FieldType.ListOf).element.cliValueType()
+            } else {
+                field.type.cliValueType()
+            }
+            add("%T(%S, %S, %S, %T.%L, %L),\n", CLI_PARAMETER_SPEC, param.cliOption,
+                param.targetField, valueType, CLI_PARAMETER_CARDINALITY,
+                param.cardinality.name.uppercase(), param.maxOccurrences)
+        }
+    }.unindent().add(")").build()
 }
 
 private fun cliInputOptionsInitializer(options: List<CliInputOption>): CodeBlock {

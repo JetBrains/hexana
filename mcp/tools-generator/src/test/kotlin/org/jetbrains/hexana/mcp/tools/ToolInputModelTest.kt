@@ -8,6 +8,37 @@ import kotlin.test.assertTrue
 class ToolInputModelTest {
 
     @Test
+    fun `parameter cardinality requires a positive cap and list target for repetition`() {
+        assertFailsWith<IllegalArgumentException> {
+            ParamBindingSpec("tags", ParamBindingKind.Value, cliOption = "--tag",
+                cardinality = CliParameterCardinality.Repeatable, maxOccurrences = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            ParamBindingSpec("tags", ParamBindingKind.Value, cliOption = "--tag", maxOccurrences = 2)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            ParamBindingSpec("tags", ParamBindingKind.Value,
+                cardinality = CliParameterCardinality.Repeatable, maxOccurrences = 2)
+        }
+        val model = twoWasmSourcesWithParamsModel()
+        val invalid = model.copy(params = model.params.map { param ->
+            if (param.name == "limit") param.copy(cardinality = CliParameterCardinality.Repeatable, maxOccurrences = 2)
+            else param
+        })
+        val error = assertFailsWith<IllegalArgumentException> { futureCompareModulesSpec(invalid) }
+        assertTrue(error.message.orEmpty().contains("must target a list value field"), error.message)
+    }
+
+    @Test
+    fun `parameter bindings reject options consumed by the shared product parser`() {
+        listOf("--format", "--output", "--telemetry-enabled", "--artifact", "--script").forEach { option ->
+            val model = toolInputModel { param("query", cliOption = option) }
+            val error = assertFailsWith<IllegalArgumentException> { futureCompareModulesSpec(model) }
+            assertTrue(error.message.orEmpty().contains("reserved product parser option `$option`"), error.message)
+        }
+    }
+
+    @Test
     fun `single root Wasm source can be declared`() {
         val model = toolInputModel {
             source(

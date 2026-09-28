@@ -99,7 +99,7 @@ private fun SchemaIntValue.cliLimitText(): String = when (this) {
     SchemaIntValue.MaxInlineBinaryBase64Length -> "derived from --max-inline-bytes"
 }
 
-private fun FieldType.cliValueType(): String = when (this) {
+internal fun FieldType.cliValueType(): String = when (this) {
     FieldType.Int32, FieldType.Int64, FieldType.UInt32, FieldType.ByteT -> "integer"
     FieldType.Float64 -> "number"
     FieldType.BooleanT -> "boolean"
