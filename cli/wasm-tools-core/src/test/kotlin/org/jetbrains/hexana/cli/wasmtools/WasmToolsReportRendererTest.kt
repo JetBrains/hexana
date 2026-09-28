@@ -193,6 +193,18 @@ class WasmToolsReportRendererTest {
     }
 
     @Test
+    fun `pre-omitted diagnostics make the report partial and count as item truncation`() {
+        val result = rendered(WasmToolsReportRenderer.render(request().copy(preOmittedDiagnostics = 7)))
+        val report = result.semanticReport
+
+        assertEquals(1, result.exitCode)
+        assertEquals("partial", report["completeness"]!!.jsonObject["status"]!!.jsonPrimitive.content)
+        assertOmitted(report, workflowItems = 0, findings = 0, diagnostics = 7)
+        assertEquals(listOf("max_items"), report["truncation"]!!.jsonObject["causes"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("output_truncated"), findingCodes(report))
+    }
+
+    @Test
     fun `byte trimming removes atomic workflow units before findings or diagnostics`() {
         val units = listOf(atomicType("a", "x".repeat(1_000)), atomicType("b", "y".repeat(1_000)))
         val full = rendered(WasmToolsReportRenderer.render(request(

@@ -48,6 +48,16 @@ class TypedCustomMetadataQueryTest {
         assertEquals("gc", result.targetFeatures.sections.single().features!!.single().name)
     }
 
+    @Test
+    fun `raw preview keeps malformed exact-cap utf8 binary`() {
+        val bytes = coreWasm(customSection("note", ByteArray(95) { 'a'.code.toByte() } + byteArrayOf(0xc2.toByte())))
+
+        val preview = WasmBinaryProvider(bytes.toCommonByteBuffer()).readCustomSections().customSections.single()
+
+        assertEquals("binary", preview.encoding)
+        assertTrue(preview.preview.endsWith("0xc2"))
+    }
+
     private fun parseModule(bytes: ByteArray): BaseModule =
         (WasmParser().parse(bytes.toCommonByteBuffer()) as WasmParseSuccess).wasmModule as BaseModule
 

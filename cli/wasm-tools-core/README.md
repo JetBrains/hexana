@@ -1,5 +1,7 @@
 # Wasm tools workflow core
 
+This module owns the versioned report envelope and neutral workflow composers. It accepts inputs that an eventual CLI frontend has already selected and bounded; it does not resolve paths, scan directories, or register commands.
+
 ## Component WIT report
 
 `ComponentWitReport.compose` builds the `component-wit-report` body for the
@@ -64,3 +66,11 @@ stage is `not_applicable`; a diagnostic and limitation explain why extraction
 was unavailable. This is a missing-evidence result, not a workflow failure.
 
 Run `./gradlew :mcp:core:test :cli:wasm-tools-core:test` for this workflow.
+
+## Metadata audit workflow
+
+`MetadataAuditWorkflow.run` uses `mcp:core` to parse one core module or component, reuse the 96-byte custom-section preview, decode bounded `producers` and `target_features` occurrences, and obtain core-only enabled-feature evidence. The report preserves encoded occurrence, field, and value order. It materializes at most 500 custom-section inventory items before rendering; `max_items` may lower that limit. Each custom section and its typed occurrence form one renderer item, so report limits remove them together. Within retained inventory, typed decoding stops after 60,000 payload bytes per metadata type. The affected typed status becomes `partial` when an occurrence is skipped by either limit, with a resource-limit diagnostic and finding. `truncation` records omitted inventory items and section-scan diagnostics.
+
+For a recognized core module with malformed non-custom sections, the workflow reports provider parse problems as `section_decode` diagnostics. If feature extraction fails, `enabled_features.stage` becomes `partial` with null feature values and a diagnostic. Unresolved sections also make the report partial. Provider parse problems are capped at 1,000; reaching the cap adds a resource-limit diagnostic and a limitation because further omissions cannot be counted exactly. The report exits 1 when partial. The `enabled_features.stage` value `completed` means the core detector ran; report completeness carries the separate evidence-quality status required by the version 1 schema.
+
+The dependency boundary permits `mcp:core` and its parser/provider dependencies, while excluding product, transport, server, and IDE layers. The accepted MCP-25 report schema remains the contract. Run `./gradlew :mcp:core:test :cli:wasm-tools-core:test` after changes to the workflow.

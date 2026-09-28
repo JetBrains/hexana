@@ -131,6 +131,8 @@ public data class WasmToolsReportRequest(
     val format: ToolOutputFormat = ToolOutputFormat.JSON,
     val maxItems: Int = WASM_TOOLS_DEFAULT_MAX_ITEMS,
     val maxOutputBytes: Long? = null,
+    val preOmittedWorkflowItems: Int = 0,
+    val preOmittedDiagnostics: Int = 0,
 ) {
     internal val frozenBody: WorkflowReportBody = WorkflowReportBody(body.frozenFields, body.frozenCollections)
     internal val frozenDiagnostics: List<ReportDiagnostic> = immutableList(diagnostics.toList())
@@ -141,6 +143,7 @@ public data class WasmToolsReportRequest(
         require(productVersion.isNotBlank()) { "productVersion must not be blank." }
         require(maxItems > 0) { "maxItems must be positive." }
         require(maxOutputBytes == null || maxOutputBytes >= 0) { "maxOutputBytes must be non-negative." }
+        require(preOmittedWorkflowItems >= 0 && preOmittedDiagnostics >= 0) { "Pre-omitted counts must be non-negative." }
         require(frozenLimitations.all { it.isNotBlank() }) { "limitations must not contain blank values." }
         require(frozenFindings.none { it.code == OUTPUT_TRUNCATED_CODE }) {
             "output_truncated is reserved for renderer-generated truncation findings."
@@ -226,10 +229,10 @@ public object WasmToolsReportRenderer {
         private val collections = request.frozenBody.frozenCollections.map { collection ->
             collection to collection.frozenItems.sortedWith(workflowItemComparator).toMutableList()
         }
-        private var omittedDiagnostics = 0
+        private var omittedDiagnostics = request.preOmittedDiagnostics
         private var omittedFindings = 0
-        private var omittedWorkflowItems = 0
-        private var itemLimited = false
+        private var omittedWorkflowItems = request.preOmittedWorkflowItems
+        private var itemLimited = omittedWorkflowItems > 0 || omittedDiagnostics > 0
         private var byteLimited = false
         var version = 0L
             private set
