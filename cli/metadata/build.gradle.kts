@@ -16,12 +16,14 @@ val discardedServerDir = layout.buildDirectory.dir("generator-discard/server")
 val verifiedDiscardedServerDir = layout.buildDirectory.dir("generator-verify-discard/server")
 val generatedCliToolsetFile = generatedCliMetadataDir.file("org/jetbrains/hexana/cli/metadata/HexanaCliToolset.kt")
 val generatedCliProductsFile = generatedCliMetadataDir.file("org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt")
+val generatedCliReleaseDescriptorFile = generatedCliMetadataDir.file("cli-release-artifacts.json")
 val verifiedCliToolsetFile = verifiedCliMetadataDir.map {
     it.file("org/jetbrains/hexana/cli/metadata/HexanaCliToolset.kt").asFile
 }
 val verifiedCliProductsFile = verifiedCliMetadataDir.map {
     it.file("org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt").asFile
 }
+val verifiedCliReleaseDescriptorFile = verifiedCliMetadataDir.map { it.file("cli-release-artifacts.json").asFile }
 
 idea {
     module {
@@ -48,7 +50,7 @@ tasks.register<JavaExec>("generateHexanaCliMetadata") {
     })
 
     inputs.files(project(":mcp:tools-generator").tasks.named("classes"))
-    outputs.files(generatedCliToolsetFile, generatedCliProductsFile)
+    outputs.files(generatedCliToolsetFile, generatedCliProductsFile, generatedCliReleaseDescriptorFile)
 
     dependsOn(":mcp:tools-generator:classes")
 }
@@ -70,7 +72,7 @@ val regenerateHexanaCliMetadataForVerification = tasks.register<JavaExec>("regen
     }
 
     inputs.files(project(":mcp:tools-generator").tasks.named("classes"))
-    outputs.files(verifiedCliToolsetFile, verifiedCliProductsFile)
+    outputs.files(verifiedCliToolsetFile, verifiedCliProductsFile, verifiedCliReleaseDescriptorFile)
 
     dependsOn(":mcp:tools-generator:classes")
 }
@@ -84,6 +86,7 @@ tasks.register("verifyHexanaCliMetadataUpToDate") {
     val generatedFiles = listOf(
         "HexanaCliToolset.kt" to (generatedCliToolsetFile.asFile to verifiedCliToolsetFile),
         "HexanaCliProducts.kt" to (generatedCliProductsFile.asFile to verifiedCliProductsFile),
+        "cli-release-artifacts.json" to (generatedCliReleaseDescriptorFile.asFile to verifiedCliReleaseDescriptorFile),
     )
 
     inputs.files(generatedFiles.map { it.second.first })

@@ -96,70 +96,11 @@ archive_name() {
   printf '%s-native-%s-%s.zip\n' "$product" "$platform" "$CLI_VERSION"
 }
 
-expected_input_names() {
-  local platform product
-  for platform in macos-arm64 linux-x64; do
-    for product in hexana-cli hexana-cli-script; do
-      archive_name "$platform" "$product"
-    done
-    printf '%s-identity.json\n' "$platform"
-  done
-}
-
-zip_entry_hash() {
-  local archive="$1"
-  local entry="$2"
-  local extracted
-  extracted="$(mktemp "${TMPDIR:-/tmp}/cli-download-entry.XXXXXX")"
-  if ! unzip -p "$archive" "$entry" > "$extracted" || [ ! -s "$extracted" ]; then
-    rm -f "$extracted"
-    die "Archive $archive lacks a non-empty $entry"
-  fi
-  sha256_file "$extracted"
-  rm -f "$extracted"
-}
-
 validate_input() {
-  local actual expected identity platform source_revision build_id product archive
-  [ -d "$CLI_RELEASE_ARTIFACT_DIR" ] || die 'CLI_RELEASE_ARTIFACT_DIR does not exist'
-
-  expected="$(expected_input_names | sort)"
-  actual="$(cd "$CLI_RELEASE_ARTIFACT_DIR" && find . -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)"
-  [ "$actual" = "$expected" ] || die 'CLI input must contain exactly four ZIPs and two identity files'
-
-  CLI_SOURCE_REVISION=''
-  for platform in macos-arm64 linux-x64; do
-    identity="$CLI_RELEASE_ARTIFACT_DIR/$platform-identity.json"
-    jq -e --arg platform "$platform" --arg version "$CLI_VERSION" '
-      (.sourceRevision | type == "string" and test("^[0-9a-f]{40}$")) and
-      (.teamCityBuildId | type == "string" and length > 0) and
-      .platform == $platform and
-      .version == $version and
-      (.artifacts | type == "array" and length == 2) and
-      ([.artifacts[].name] | sort) == [
-        "hexana-cli-native-" + $platform + "-" + $version + ".zip",
-        "hexana-cli-script-native-" + $platform + "-" + $version + ".zip"
-      ] and
-      all(.artifacts[]; .sha256 | type == "string" and test("^[0-9a-f]{64}$"))
-    ' "$identity" >/dev/null || die "Invalid identity $identity"
-
-    source_revision="$(jq -r .sourceRevision "$identity")"
-    build_id="$(jq -r .teamCityBuildId "$identity")"
-    [ -z "$CLI_SOURCE_REVISION" ] || [ "$CLI_SOURCE_REVISION" = "$source_revision" ] || die 'Platform identities have different source revisions'
-    CLI_SOURCE_REVISION="$source_revision"
-    [ -n "$build_id" ] || die "Identity has no producer build ID: $identity"
-
-    for product in hexana-cli hexana-cli-script; do
-      archive="$(archive_name "$platform" "$product")"
-      [ -s "$CLI_RELEASE_ARTIFACT_DIR/$archive" ] || die "Missing or empty CLI archive: $archive"
-      jq -e --arg name "$archive" --arg hash "$(sha256_file "$CLI_RELEASE_ARTIFACT_DIR/$archive")" '
-        .artifacts[] | select(.name == $name and .sha256 == $hash)
-      ' "$identity" >/dev/null || die "Archive does not match identity: $archive"
-      zip_entry_hash "$CLI_RELEASE_ARTIFACT_DIR/$archive" "bin/$product" >/dev/null
-      zip_entry_hash "$CLI_RELEASE_ARTIFACT_DIR/$archive" 'LICENSE.txt' >/dev/null
-      zip_entry_hash "$CLI_RELEASE_ARTIFACT_DIR/$archive" 'THIRD-PARTY-NOTICES.md' >/dev/null
-    done
-  done
+  CLI_MATRIX_FILE="$1"
+  python3 cli/packaging/validate_release_artifacts.py \
+    "$CLI_RELEASE_DESCRIPTOR" "$CLI_RELEASE_ARTIFACT_DIR" "$CLI_VERSION" "$CLI_MATRIX_FILE" || die 'CLI release input validation failed'
+  CLI_SOURCE_REVISION="$(jq -r .sourceRevision "$CLI_MATRIX_FILE")"
 
   [ -z "$GIT_REVISION" ] || {
     [[ "$GIT_REVISION" =~ ^[0-9a-f]{40}$ ]] && [ "$GIT_REVISION" = "$CLI_SOURCE_REVISION" ]
@@ -172,9 +113,23 @@ render_readme() {
   [ -f "$CLI_README_TEMPLATE" ] || die "Missing CLI README template: $CLI_README_TEMPLATE"
   grep -F -q '@VERSION@' "$CLI_README_TEMPLATE" || die 'CLI README template lacks @VERSION@'
   grep -F -q '@DOWNLOADS_PREFIX@' "$CLI_README_TEMPLATE" || die 'CLI README template lacks @DOWNLOADS_PREFIX@'
+  grep -F -q '@DOWNLOADS_TABLE@' "$CLI_README_TEMPLATE" || die 'CLI README template lacks @DOWNLOADS_TABLE@'
 
   : > "$target"
   while IFS= read -r line || [ -n "$line" ]; do
+    if [ "$line" = '@DOWNLOADS_TABLE@' ]; then
+      jq -r --arg prefix "${CLI_PUBLIC_PREFIX%/}" '
+        . as $matrix |
+        "| Product | " + ($matrix.targets | map(.displayName) | join(" | ")) + " |",
+        "| --- | " + ($matrix.targets | map("---") | join(" | ")) + " |",
+        ($matrix.products[] as $product |
+          "| `" + $product.id + "` | " +
+          ([$matrix.targets[] as $target | $matrix.artifacts[] |
+            select(.target == $target.id and .product == $product.id) |
+            "[Download](" + $prefix + "/" + .name + ")"] | join(" | ")) + " |")
+      ' "$CLI_MATRIX_FILE" >> "$target"
+      continue
+    fi
     line="${line//@VERSION@/$CLI_VERSION}"
     line="${line//@DOWNLOADS_PREFIX@/${CLI_PUBLIC_PREFIX%/}}"
     printf '%s\n' "$line" >> "$target"
@@ -189,25 +144,31 @@ append_manifest_artifact() {
   local platform="$2"
   local product="$3"
   local archive="$4"
-  local next github_url
+  local kind="$5"
+  local launcher="$6"
+  local license_hash="$7"
+  local notices_hash="$8"
+  local next github_url archive_file
   next="$manifest.next"
   github_url="$(join_url "$GITHUB_RELEASE_ASSET_BASE_URL" "$archive")"
+  archive_file="$(dirname "$manifest")/$archive"
 
   jq \
     --arg platform "$platform" \
     --arg product "$product" \
+    --arg kind "$kind" \
     --arg name "$archive" \
     --arg downloads_url "$(join_url "$CLI_PUBLIC_PREFIX" "$archive")" \
     --arg github_url "$github_url" \
-    --arg archive_hash "$(sha256_file "$CLI_RELEASE_ARTIFACT_DIR/$archive")" \
-    --arg launcher "$product" \
-    --arg license_hash "$(zip_entry_hash "$CLI_RELEASE_ARTIFACT_DIR/$archive" 'LICENSE.txt')" \
-    --arg notices_hash "$(zip_entry_hash "$CLI_RELEASE_ARTIFACT_DIR/$archive" 'THIRD-PARTY-NOTICES.md')" \
-    --argjson archive_size "$(file_size "$CLI_RELEASE_ARTIFACT_DIR/$archive")" \
+    --arg archive_hash "$(sha256_file "$archive_file")" \
+    --arg launcher "${launcher#bin/}" \
+    --arg license_hash "$license_hash" \
+    --arg notices_hash "$notices_hash" \
+    --argjson archive_size "$(file_size "$archive_file")" \
     '.artifacts += [{
       name: $name,
       platform: $platform,
-      kind: (if $product == "hexana-cli" then "standard-cli-native" else "script-cli-native" end),
+      kind: $kind,
       size: $archive_size,
       sha256: $archive_hash,
       githubReleaseAssetUrl: (if $github_url == "" then null else $github_url end),
@@ -222,13 +183,15 @@ append_manifest_artifact() {
   mv "$next" "$manifest"
 }
 
-make_bundle() {
+make_bundle() (
   local bundle_dir="$1"
-  local manifest ledger platform product archive producer_build
+  local manifest ledger platform product archive producer_build kind launcher matrix row license_hash notices_hash executable_hash
   manifest="$bundle_dir/hexana-cli-release-$CLI_VERSION.json"
   ledger="$bundle_dir/hexana-cli-release-$CLI_VERSION.ledger.json"
+  matrix="$(mktemp "${TMPDIR:-/tmp}/cli-download-matrix.XXXXXX")"
+  trap 'rm -f "$matrix"' EXIT
 
-  validate_input
+  validate_input "$matrix"
   rm -rf "$bundle_dir"
   mkdir -p "$bundle_dir"
 
@@ -254,13 +217,20 @@ make_bundle() {
     --arg generated_at "$GENERATED_AT" \
     '{schemaVersion: 1, kind: "hexana-cli-downloads-ledger", version: $version, sourceRevision: $revision, generatedAt: $generated_at, artifacts: []}' > "$ledger"
 
-  for platform in macos-arm64 linux-x64; do
-    producer_build="$(jq -r .teamCityBuildId "$CLI_RELEASE_ARTIFACT_DIR/$platform-identity.json")"
-    for product in hexana-cli hexana-cli-script; do
-      archive="$(archive_name "$platform" "$product")"
+  while IFS= read -r row; do
+      platform="$(jq -r .target <<< "$row")"
+      product="$(jq -r .product <<< "$row")"
+      archive="$(jq -r .name <<< "$row")"
+      producer_build="$(jq -r .producerBuildId <<< "$row")"
+      kind="$(jq -r .kind <<< "$row")"
+      launcher="$(jq -r .launcher <<< "$row")"
+      license_hash="$(jq -r .licenseSha256 <<< "$row")"
+      notices_hash="$(jq -r .noticesSha256 <<< "$row")"
+      executable_hash="$(jq -r .launcherSha256 <<< "$row")"
       cp "$CLI_RELEASE_ARTIFACT_DIR/$archive" "$bundle_dir/$archive"
+      [ "$(sha256_file "$bundle_dir/$archive")" = "$(jq -r .sha256 <<< "$row")" ] || die "Copied archive does not match identity: $archive"
       printf '%s  %s\n' "$(sha256_file "$bundle_dir/$archive")" "$archive" > "$bundle_dir/$archive.sha256"
-      append_manifest_artifact "$manifest" "$platform" "$product" "$archive"
+      append_manifest_artifact "$manifest" "$platform" "$product" "$archive" "$kind" "$launcher" "$license_hash" "$notices_hash"
       jq \
         --arg platform "$platform" \
         --arg product "$product" \
@@ -269,7 +239,8 @@ make_bundle() {
         --arg name "$archive" \
         --arg url "$(join_url "$CLI_PUBLIC_PREFIX" "$archive")" \
         --arg archive_hash "$(sha256_file "$bundle_dir/$archive")" \
-        --arg executable_hash "$(zip_entry_hash "$bundle_dir/$archive" "bin/$product")" \
+        --arg launcher "$launcher" \
+        --arg executable_hash "$executable_hash" \
         --argjson archive_size "$(file_size "$bundle_dir/$archive")" \
         '.artifacts += [{
           product: $product,
@@ -277,16 +248,15 @@ make_bundle() {
           sourceRevision: $revision,
           producerBuildId: $producer_build,
           archive: {name: $name, url: $url, size: $archive_size, sha256: $archive_hash},
-          executable: {path: ("bin/" + $product), sha256: $executable_hash}
+          executable: {path: $launcher, sha256: $executable_hash}
         }]' "$ledger" > "$ledger.next"
       mv "$ledger.next" "$ledger"
-    done
-  done
+  done < <(jq -c '.artifacts[]' "$matrix")
 
   render_readme "$bundle_dir/README.md"
-  jq -e '.artifacts | length == 4' "$manifest" >/dev/null
-  jq -e '.artifacts | length == 4' "$ledger" >/dev/null
-}
+  jq -e --argjson count "$(jq '.artifacts | length' "$matrix")" '.artifacts | length == $count' "$manifest" >/dev/null
+  jq -e --argjson count "$(jq '.artifacts | length' "$matrix")" '.artifacts | length == $count' "$ledger" >/dev/null
+)
 
 bundle_names() {
   (cd "$1" && find . -maxdepth 1 -type f -exec basename {} \; | sort)
@@ -411,8 +381,10 @@ validate_index() {
       (.version | valid_semver) and
       .manifestUrl == ($root + "/" + .version + "/hexana-cli-release-" + .version + ".json") and
       .downloadsPrefix == ($root + "/" + .version) and
-      (.platforms | type == "array" and length > 0 and all(.[]; . == "linux-x64" or . == "macos-arm64")) and
-      ([.artifactKinds[]] | sort == ["script-cli-native", "standard-cli-native"])
+      (.platforms | type == "array" and length > 0 and all(.[]; type == "string" and test("^[a-z][a-z0-9-]*$"))) and
+      ([.platforms[]] | unique | length) == (.platforms | length) and
+      (.artifactKinds | type == "array" and length > 0 and all(.[]; type == "string" and test("^[a-z][a-z0-9-]*$"))) and
+      ([.artifactKinds[]] | unique | length) == (.artifactKinds | length)
     )
   '
   jq -e --arg root "$CLI_ROOT_PUBLIC_PREFIX" "$index_filter" "$1" >/dev/null || die 'Existing CLI index has an incompatible retained release'
@@ -497,33 +469,42 @@ fixture_zip() {
   fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/cli-download-fixture.XXXXXX")"
   mkdir -p "$fixture_dir/bin"
   printf '%s\n' "$payload" > "$fixture_dir/LICENSE.txt"
+  printf 'Fixture archive for %s\n' "$product" > "$fixture_dir/README.md"
   printf '%s' "$notices" > "$fixture_dir/THIRD-PARTY-NOTICES.md"
   printf '#!/bin/sh\necho %s\n' "$product" > "$fixture_dir/bin/$product"
   chmod +x "$fixture_dir/bin/$product"
-  rm -f "$archive"
-  (cd "$fixture_dir" && zip -q -r "$archive" LICENSE.txt THIRD-PARTY-NOTICES.md bin)
+  python3 - "$fixture_dir" "$archive" "$product" <<'PY'
+import sys
+import zipfile
+from pathlib import Path
+
+fixture_dir = Path(sys.argv[1])
+with zipfile.ZipFile(sys.argv[2], "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    for name in ("LICENSE.txt", "README.md", "THIRD-PARTY-NOTICES.md", f"bin/{sys.argv[3]}"):
+        archive.write(fixture_dir / name, arcname=name)
+PY
   rm -rf "$fixture_dir"
 }
 
 fixture_identity() {
   local input_dir="$1"
   local platform="$2"
-  local standard script
-  standard="$(archive_name "$platform" hexana-cli)"
-  script="$(archive_name "$platform" hexana-cli-script)"
+  local archive artifacts
+  artifacts="$(while IFS= read -r archive; do
+    jq -n --arg name "$archive" --arg sha256 "$(sha256_file "$input_dir/$archive")" '{name: $name, sha256: $sha256}'
+  done < <(jq -r --arg platform "$platform" --arg version "$CLI_VERSION" '
+    .artifacts[] | select(.target == $platform) | .archiveNameTemplate | gsub("\\{version\\}"; $version)
+  ' "$CLI_RELEASE_DESCRIPTOR") | jq -s .)"
   jq -n \
     --arg platform "$platform" \
     --arg version "$CLI_VERSION" \
-    --arg standard "$standard" \
-    --arg script "$script" \
-    --arg standard_hash "$(sha256_file "$input_dir/$standard")" \
-    --arg script_hash "$(sha256_file "$input_dir/$script")" \
+    --argjson artifacts "$artifacts" \
     '{
       sourceRevision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       teamCityBuildId: (if $platform == "macos-arm64" then "501" else "502" end),
       platform: $platform,
       version: $version,
-      artifacts: [{name: $standard, sha256: $standard_hash}, {name: $script, sha256: $script_hash}]
+      artifacts: $artifacts
     }' > "$input_dir/$platform-identity.json"
 }
 
@@ -565,9 +546,8 @@ EOF
 self_test() {
   local temp input bundle index storage fake calls old_index status remote_ledger remote_manifest
   local original_archive changed_bundle regenerated_bundle prerelease_input prerelease_bundle prerelease_index
-  local metadata_input metadata_bundle metadata_index
+  local metadata_input metadata_bundle metadata_index third_input third_bundle third_descriptor original_descriptor
   local calls_before cleanup_done resolved_version malformed_bundle malformed_index malformed_version valid_version
-  require_tool zip
   resolved_version="$(CLI_VERSION='' PLUGIN_VERSION='999.999.999' resolve_cli_version)"
   [ "$resolved_version" = "$(read_cli_version)" ] || die 'Self-test accepted PLUGIN_VERSION as the CLI release authority'
   temp="$(mktemp -d "${TMPDIR:-/tmp}/cli-downloads-self-test.XXXXXX")"
@@ -589,6 +569,7 @@ self_test() {
   CLI_INDEX_S3_URI="${CLI_ROOT_S3_PREFIX}releases.json"
   CLI_INDEX_DIR="$index"
   CLI_README_TEMPLATE='cli/packaging/CLI_DOWNLOADS_README.md.template'
+  CLI_RELEASE_DESCRIPTOR='cli/metadata/src/main/gen/cli-release-artifacts.json'
   CLI_RELEASE_ARTIFACT_DIR="$input"
   GITHUB_RELEASE_ASSET_BASE_URL=''
   GIT_REVISION='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
@@ -630,7 +611,7 @@ self_test() {
 
   printf 'unexpected\n' > "$input/not-a-cli-input.txt"
   set +e
-  (validate_input) > "$temp/wrong-product.out" 2>&1
+  (validate_input "$temp/wrong-product-matrix.json") > "$temp/wrong-product.out" 2>&1
   status=$?
   set -e
   [ "$status" -ne 0 ] || die 'Self-test accepted a wrong product input'
@@ -639,7 +620,7 @@ self_test() {
   jq '.sourceRevision = "not-a-sha"' "$input/macos-arm64-identity.json" > "$temp/invalid-identity.json"
   mv "$temp/invalid-identity.json" "$input/macos-arm64-identity.json"
   set +e
-  (validate_input) > "$temp/invalid-identity.out" 2>&1
+  (validate_input "$temp/invalid-identity-matrix.json") > "$temp/invalid-identity.out" 2>&1
   status=$?
   set -e
   [ "$status" -ne 0 ] || die 'Self-test accepted an invalid identity'
@@ -656,6 +637,8 @@ self_test() {
     }]}' > "$old_index"
   CLI_EXISTING_RELEASES_INDEX_FILE="$old_index"
   make_bundle "$bundle"
+  make_bundle "$temp/trailing-bundle/"
+  cmp -s "$bundle/hexana-cli-release-$CLI_VERSION.json" "$temp/trailing-bundle/hexana-cli-release-$CLI_VERSION.json" || die 'Self-test trailing-slash bundle differs'
   make_index "$bundle" "$index"
   jq -e '.stable.version == "0.2.0" and (.releases | length == 2)' "$index/releases.json" >/dev/null
   jq -e 'all(.artifacts[]; .githubReleaseAssetUrl == null)' "$bundle/hexana-cli-release-$CLI_VERSION.json" >/dev/null || die 'Self-test did not accept an empty GitHub base URL'
@@ -765,6 +748,74 @@ self_test() {
   make_index "$metadata_bundle" "$metadata_index"
   jq -e '.stable.version == "0.2.1+build-1"' "$metadata_index/releases.json" >/dev/null || die 'Self-test treated build metadata as a prerelease'
 
+  CLI_VERSION='0.4.0'
+  CLI_PUBLIC_PREFIX="$CLI_ROOT_PUBLIC_PREFIX/$CLI_VERSION"
+  CLI_S3_PREFIX="$CLI_ROOT_S3_PREFIX$CLI_VERSION/"
+  original_descriptor="$CLI_RELEASE_DESCRIPTOR"
+  third_descriptor="$temp/third-product-descriptor.json"
+  jq '
+    .products += [{id: "fixture-cli", executable: "fixture-cli", artifactKind: "fixture-cli-native", launcher: "bin/fixture-cli"}] |
+    .artifacts += [.targets[] | {target: .id, product: "fixture-cli", archiveNameTemplate: ("fixture-cli-native-" + .id + "-{version}.zip")}]
+  ' "$original_descriptor" > "$third_descriptor"
+  CLI_RELEASE_DESCRIPTOR="$third_descriptor"
+  third_input="$temp/third-input"
+  third_bundle="$temp/third-bundle"
+  mkdir -p "$third_input"
+  for platform in macos-arm64 linux-x64; do
+    fixture_zip "$third_input/$(archive_name "$platform" hexana-cli)" hexana-cli standard
+    fixture_zip "$third_input/$(archive_name "$platform" hexana-cli-script)" hexana-cli-script script
+    fixture_zip "$third_input/$(archive_name "$platform" fixture-cli)" fixture-cli fixture
+    fixture_identity "$third_input" "$platform"
+  done
+  CLI_RELEASE_ARTIFACT_DIR="$third_input"
+  make_bundle "$third_bundle"
+  jq -e '(.artifacts | length == 6) and ([.artifacts[].kind] | unique | length == 3)' \
+    "$third_bundle/hexana-cli-release-$CLI_VERSION.json" >/dev/null || die 'Self-test lost the third product'
+  grep -F -q 'fixture-cli-native-linux-x64-0.4.0.zip' "$third_bundle/README.md" || die 'Self-test README omitted the third product'
+
+  rm "$third_input/$(archive_name linux-x64 fixture-cli)"
+  set +e
+  (make_bundle "$temp/missing-third-bundle") > "$temp/missing-third.out" 2>&1
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] && grep -F -q 'missing=' "$temp/missing-third.out" || die 'Self-test accepted a missing descriptor-required archive'
+  fixture_zip "$third_input/$(archive_name linux-x64 fixture-cli)" fixture-cli fixture
+  fixture_identity "$third_input" linux-x64
+
+  printf 'extra\n' > "$third_input/extra-product.zip"
+  set +e
+  (make_bundle "$temp/extra-third-bundle") > "$temp/extra-third.out" 2>&1
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] && grep -F -q 'extra=' "$temp/extra-third.out" || die 'Self-test accepted an extra product archive'
+  rm "$third_input/extra-product.zip"
+
+  jq '(.artifacts[] | select(.name | startswith("fixture-cli-")) | .name) = "wrong-product.zip"' \
+    "$third_input/linux-x64-identity.json" > "$temp/wrong-product-identity.json"
+  mv "$temp/wrong-product-identity.json" "$third_input/linux-x64-identity.json"
+  set +e
+  (make_bundle "$temp/wrong-third-bundle") > "$temp/wrong-third.out" 2>&1
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] && grep -F -q 'Unknown archive in linux-x64-identity.json' "$temp/wrong-third.out" || die 'Self-test accepted a wrong product identity'
+  fixture_identity "$third_input" linux-x64
+
+  fixture_zip "$third_input/$(archive_name linux-x64 fixture-cli)" wrong-launcher fixture
+  fixture_identity "$third_input" linux-x64
+  set +e
+  (make_bundle "$temp/wrong-launcher-bundle") > "$temp/wrong-launcher.out" 2>&1
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] && grep -F -q 'wrong layout' "$temp/wrong-launcher.out" || die 'Self-test accepted a wrong archive launcher'
+  fixture_zip "$third_input/$(archive_name linux-x64 fixture-cli)" fixture-cli fixture
+  fixture_identity "$third_input" linux-x64
+
+  PUBLISH_DOWNLOADS=true
+  upload_prefix "$third_bundle" "$CLI_S3_PREFIX" "$temp/third-cache"
+  upload_prefix "$third_bundle" "$CLI_S3_PREFIX" "$temp/third-retry-cache"
+  [ "$(remote_names "$CLI_S3_PREFIX")" = "$(bundle_names "$third_bundle")" ] || die 'Self-test third-product retry changed the release inventory'
+  CLI_RELEASE_DESCRIPTOR="$original_descriptor"
+
   trap - RETURN
   cleanup
   [ "$cleanup_done" = true ] && [ ! -e "$temp" ] || die 'Self-test cleanup failed'
@@ -773,7 +824,7 @@ self_test() {
 
 main() {
   require_tool jq
-  require_tool unzip
+  require_tool python3
   if [ "$(to_bool "${CLI_DOWNLOADS_BUNDLE_SELF_TEST:-false}" CLI_DOWNLOADS_BUNDLE_SELF_TEST)" = true ]; then
     self_test
     return
@@ -784,6 +835,7 @@ main() {
   validate_semver CLI_VERSION "$CLI_VERSION"
   validate_segment CLI_VERSION "$CLI_VERSION"
   CLI_RELEASE_ARTIFACT_DIR="${CLI_RELEASE_ARTIFACT_DIR:?CLI_RELEASE_ARTIFACT_DIR is required}"
+  CLI_RELEASE_DESCRIPTOR="${CLI_RELEASE_DESCRIPTOR:-cli/metadata/src/main/gen/cli-release-artifacts.json}"
   CLI_DOWNLOADS_BUNDLE_DIR="${CLI_DOWNLOADS_BUNDLE_DIR:-cli/out/downloads-release}"
   CLI_DOWNLOADS_INDEX_DIR="${CLI_DOWNLOADS_INDEX_DIR:-cli/out/downloads-index}"
   CLI_DOWNLOADS_README_TEMPLATE="${CLI_DOWNLOADS_README_TEMPLATE:-cli/packaging/CLI_DOWNLOADS_README.md.template}"
@@ -813,6 +865,7 @@ main() {
   PUBLISH_DOWNLOADS="$(to_bool "${PUBLISH_DOWNLOADS:-false}" PUBLISH_DOWNLOADS)"
 
   [ "$PUBLISH_DOWNLOADS" = false ] || {
+    [ "$CLI_RELEASE_DESCRIPTOR" = 'cli/metadata/src/main/gen/cli-release-artifacts.json' ] || die 'Publication requires the checked-in generated CLI release descriptor'
     require_tool aws
     validate_destinations
   }

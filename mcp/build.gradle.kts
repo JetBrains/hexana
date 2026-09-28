@@ -1697,6 +1697,60 @@ val nativeScriptCliProduct = NativeCliProduct(
 
 val nativeCliProducts = listOf(nativeStandardCliProduct, nativeScriptCliProduct)
 val nativeCliTasks = nativeCliProducts.map(::registerNativeCliProductTasks)
+val cliReleaseDescriptorFile = project(":cli:metadata").layout.projectDirectory.file("src/main/gen/cli-release-artifacts.json")
+
+val verifyNativeCliReleaseDescriptor = tasks.register("verifyNativeCliReleaseDescriptor") {
+    group = "verification"
+    description = "Verifies that native CLI release tasks match the generated product/artifact descriptor."
+    dependsOn(":cli:metadata:verifyHexanaCliMetadataUpToDate")
+    inputs.file(cliReleaseDescriptorFile)
+
+    doLast {
+        val descriptor = JsonSlurper().parse(cliReleaseDescriptorFile.asFile) as Map<*, *>
+        check(descriptor["schemaVersion"] == 1 && descriptor["kind"] == "hexana-cli-native-release-artifacts") {
+            "Unsupported native CLI release descriptor."
+        }
+        val products = (descriptor["products"] as List<*>).map { it as Map<*, *> }
+        val targets = (descriptor["targets"] as List<*>).map { it as Map<*, *> }
+        val artifacts = (descriptor["artifacts"] as List<*>).map { it as Map<*, *> }
+        val knownProducts = nativeCliProducts.associateBy { it.executableName }
+        val descriptorProducts = products.associateBy { it["id"] as String }
+        check(knownProducts.size == nativeCliProducts.size &&
+            descriptorProducts.size == products.size &&
+            products.map { it["executable"] }.toSet() == knownProducts.keys && products.size == knownProducts.size
+        ) {
+            "Native CLI release tasks do not match descriptor products."
+        }
+        val nativeProductById = descriptorProducts.mapValues { (_, entry) ->
+            knownProducts.getValue(entry["executable"] as String)
+        }
+        val artifactKinds = products.map { it["artifactKind"] }
+        check(artifactKinds.all { it is String && it.isNotBlank() } && artifactKinds.size == artifactKinds.toSet().size) {
+            "Native CLI release descriptor has missing or duplicate artifact kinds."
+        }
+        check(targets.map { it["id"] } == nativeReleasePlatforms) {
+            "Native CLI release targets do not match descriptor targets."
+        }
+        val expectedPairs = nativeReleasePlatforms.flatMap { target -> descriptorProducts.keys.map { target to it } }.toSet()
+        val actualPairs = artifacts.map { it["target"] to it["product"] }
+        check(actualPairs.size == expectedPairs.size && actualPairs.toSet() == expectedPairs) {
+            "Native CLI release artifact matrix is incomplete or duplicated."
+        }
+        products.forEach { entry ->
+            val product = nativeProductById.getValue(entry["id"] as String)
+            check(entry["executable"] == product.executableName && entry["launcher"] == "bin/${product.executableName}") {
+                "Native CLI descriptor launcher differs from ${product.executableName}."
+            }
+        }
+        artifacts.forEach { entry ->
+            val product = nativeProductById.getValue(entry["product"] as String)
+            val target = entry["target"] as String
+            check(entry["archiveNameTemplate"] == nativeCliArchiveName(product, target).replace(mcpServerVersion, "{version}")) {
+                "Native CLI descriptor archive differs from ${product.executableName}/$target."
+            }
+        }
+    }
+}
 
 val zipObfuscatedMcpServer = tasks.register<Zip>("zipObfuscatedMcpServer") {
     group = "distribution"
@@ -2479,6 +2533,7 @@ tasks.register("assembleNativeCliReleaseArchives") {
     if (nativeCliHostSupported) {
         dependsOn(nativeCliTasks.map { it.zipRuntime })
     }
+    dependsOn(verifyNativeCliReleaseDescriptor)
     doFirst {
         requireSupportedNativeCliHost()
     }
@@ -2490,6 +2545,7 @@ tasks.register("verifyNativeCliReleaseArchives") {
     if (nativeCliHostSupported) {
         dependsOn(nativeCliTasks.map { it.verifyRuntime })
     }
+    dependsOn(verifyNativeCliReleaseDescriptor)
     outputs.upToDateWhen { false }
 
     doLast {

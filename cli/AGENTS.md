@@ -22,8 +22,8 @@ This folder contains neutral CLI modules shared by current and future command-li
   script product executor.
 - `integration-tests/`: test-only external-process support shared by product suites. Keep production metadata out of
   it; product behavior contracts belong in each installed product module and process cleanup stays behind its runner.
-- `packaging/`: CLI-only public-download release assembly and publication. It accepts the verified four-native-ZIP,
-  two-identity aggregate and owns its immutable version ledger and release index.
+- `packaging/`: CLI-only public-download release assembly and publication. It validates the generated release
+  descriptor against verified native ZIPs and per-target identity files, and owns its immutable version ledger and release index.
 
 ## Verification
 
@@ -36,6 +36,8 @@ This folder contains neutral CLI modules shared by current and future command-li
 - Run `./gradlew :cli:integration-tests:test` for shared process-support tests.
 - Run `./gradlew teamcityCliTests` for the dedicated TeamCity CLI JVM gate; general verification remains under
   `./gradlew teamcityCiTests`.
+- Run `./gradlew verifyCliReleasePackaging` after changing the CLI downloads validator or publisher; the task runs in
+  `teamcityCliTests` and the Server/CLI Patronus lane.
 - Run `./gradlew :cli:hexana-cli:nativeIntegrationTest` and
   `./gradlew :cli:hexana-cli-script:nativeIntegrationTest` with GraalVM 25+ for native product contracts.
 - TeamCity keeps native integration tasks under `./gradlew :mcp:assembleNativeMcpReleaseArtifacts`.

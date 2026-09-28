@@ -810,12 +810,16 @@ data class CliProductSpec(
     val id: ProductId,
     val executableName: String,
     val description: String,
+    val nativeArtifactKind: String = "${id.value}-native",
 ) {
     init {
         require(CLI_COMMAND_NAME_REGEX.matches(executableName)) {
             "CLI product '${id.value}' executable '$executableName' must be strict kebab-case."
         }
         require(description.isNotBlank()) { "CLI product '${id.value}' description must not be blank." }
+        require(CLI_COMMAND_NAME_REGEX.matches(nativeArtifactKind)) {
+            "CLI product '${id.value}' native artifact kind '$nativeArtifactKind' must be strict kebab-case."
+        }
     }
 }
 
@@ -829,6 +833,10 @@ class CliProductRegistry(products: List<CliProductSpec>) {
         val duplicateExecutables = this.products.groupBy(CliProductSpec::executableName).filterValues { it.size > 1 }.keys
         require(duplicateExecutables.isEmpty()) {
             "CLI product registry contains duplicate executable names: ${duplicateExecutables.joinToString()}"
+        }
+        val duplicateArtifactKinds = this.products.groupBy(CliProductSpec::nativeArtifactKind).filterValues { it.size > 1 }.keys
+        require(duplicateArtifactKinds.isEmpty()) {
+            "CLI product registry contains duplicate native artifact kinds: ${duplicateArtifactKinds.joinToString()}"
         }
         val reservedGeneratedNames = this.products.map { it.id.value }.filter { it in RESERVED_CLI_PRODUCT_IDS }
         require(reservedGeneratedNames.isEmpty()) {

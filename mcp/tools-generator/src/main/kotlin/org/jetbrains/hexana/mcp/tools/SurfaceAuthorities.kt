@@ -353,12 +353,14 @@ val HexanaCliProductSpec = CliProductSpec(
     id = ProductId("hexana-cli"),
     executableName = "hexana-cli",
     description = "Hexana command-line tools for binary and WebAssembly inspection.",
+    nativeArtifactKind = "standard-cli-native",
 )
 
 val HexanaCliScriptProductSpec = CliProductSpec(
     id = ProductId("hexana-cli-script"),
     executableName = "hexana-cli-script",
     description = "Hexana command-line scripting runtime.",
+    nativeArtifactKind = "script-cli-native",
 )
 
 val HexanaCliProductRegistry = CliProductRegistry(

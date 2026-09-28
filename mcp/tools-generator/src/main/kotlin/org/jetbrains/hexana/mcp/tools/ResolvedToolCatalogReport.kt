@@ -80,6 +80,7 @@ class ResolvedToolCatalogReport(
     private fun cliProductDocument(product: CliProductSpec): JsonObject = buildJsonObject {
         put("id", JsonPrimitive(product.id.value))
         put("executableName", JsonPrimitive(product.executableName))
+        put("nativeArtifactKind", JsonPrimitive(product.nativeArtifactKind))
         put("description", JsonPrimitive(product.description))
         put("selections", buildJsonArray {
             normalizedContracts.mapNotNull { contract -> cliTools.singleOrNull { it.id == contract.id } }

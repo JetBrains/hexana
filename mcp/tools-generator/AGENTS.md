@@ -13,6 +13,8 @@ generators resolve contracts through the authority for their consumer and emit c
   metadata shared by split products.
 - `cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt` — generated product identities,
   selected executable tools, output policy, and default output metadata.
+- `cli/metadata/src/main/gen/cli-release-artifacts.json` — versioned native release product, target, archive, and
+  launcher expectations consumed by CLI downloads packaging.
 - `HexanaCliToolset.kt` also emits source-slot and per-option metadata for executable CLI bindings. Bindings with
   `generatedInputRequest` emit a typed neutral request decoder and converter in that file; `summarize-module` is the
   current production consumer. The decoder keeps source bytes in `ToolInputSources`, while semantic parameter types,

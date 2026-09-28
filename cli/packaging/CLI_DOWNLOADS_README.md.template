@@ -9,10 +9,7 @@ provide `tools`, `version`, and `help`.
 
 ## Downloads
 
-| Product | macOS Apple silicon | Linux x86-64 |
-| --- | --- | --- |
-| `hexana-cli` | [Download](@DOWNLOADS_PREFIX@/hexana-cli-native-macos-arm64-@VERSION@.zip) | [Download](@DOWNLOADS_PREFIX@/hexana-cli-native-linux-x64-@VERSION@.zip) |
-| `hexana-cli-script` | [Download](@DOWNLOADS_PREFIX@/hexana-cli-script-native-macos-arm64-@VERSION@.zip) | [Download](@DOWNLOADS_PREFIX@/hexana-cli-script-native-linux-x64-@VERSION@.zip) |
+@DOWNLOADS_TABLE@
 
 Each ZIP has a sibling `.sha256` file. Verify it before extracting:
 

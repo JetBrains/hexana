@@ -47,6 +47,7 @@ developer catalog report, then checked by the generated decoder in `:cli:metadat
 
 The standalone generator emits only `HexanaToolDispatcher.kt` into `mcp:server`. Neutral CLI generation emits
 `HexanaCliToolset.kt` and `HexanaCliProducts.kt` into `cli:metadata`; it must not emit a server CLI adapter.
+It also emits `cli-release-artifacts.json` for the native CLI downloads package validator.
 
 ## Packaging and Verification
 

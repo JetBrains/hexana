@@ -12,6 +12,7 @@ import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
@@ -226,6 +227,31 @@ tasks.register("verifyHexanaToolArtifactsUpToDate") {
     )
 }
 
+val verifyCliReleaseValidatorTests = tasks.register<Exec>("verifyCliReleaseValidatorTests") {
+    group = "verification"
+    description = "Run CLI release descriptor and archive validator tests."
+    dependsOn(":cli:metadata:verifyHexanaCliMetadataUpToDate")
+    workingDir = rootProject.projectDir
+    environment("PYTHONDONTWRITEBYTECODE", "1")
+    commandLine("python3", "-m", "unittest", "discover", "-s", "cli/packaging", "-p", "test_*.py")
+}
+
+val verifyCliDownloadsPublisherSelfTest = tasks.register<Exec>("verifyCliDownloadsPublisherSelfTest") {
+    group = "verification"
+    description = "Run the CLI downloads publisher against fake local storage."
+    dependsOn(":cli:metadata:verifyHexanaCliMetadataUpToDate")
+    workingDir = rootProject.projectDir
+    environment("PYTHONDONTWRITEBYTECODE", "1")
+    environment("CLI_DOWNLOADS_BUNDLE_SELF_TEST", "true")
+    commandLine("bash", "cli/packaging/publish-cli-downloads-release-bundle.sh")
+}
+
+tasks.register("verifyCliReleasePackaging") {
+    group = "verification"
+    description = "Verify CLI release artifact validation and downloads publication."
+    dependsOn(verifyCliReleaseValidatorTests, verifyCliDownloadsPublisherSelfTest)
+}
+
 // Aggregator lists driven by ci-configuration's build configurations.
 // The lists travel with the code branch so release branches stay self-contained.
 val teamcityCoreTestTaskPaths = listOf(
@@ -364,6 +390,7 @@ val teamcityCiTestTaskPaths =
         teamcityCiOwnedTestTaskPaths.filterNot(teamcityCiTestTaskOrder::contains)
 
 val teamcityCliTestTaskPaths = listOf(
+    ":verifyCliReleasePackaging",
     ":cli:runtime:build",
     ":cli:metadata:build",
     ":cli:core:check",
@@ -747,6 +774,7 @@ tasks.register("verifyTeamcityCliTestsReleaseGateCoverage") {
     description = "Verify the TeamCity CLI aggregate includes all product-owned JVM release gates."
     doLast {
         val requiredTaskPaths = listOf(
+            ":verifyCliReleasePackaging",
             ":cli:runtime:build",
             ":cli:metadata:build",
             ":cli:core:check",

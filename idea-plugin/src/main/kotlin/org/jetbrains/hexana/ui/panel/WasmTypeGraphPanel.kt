@@ -584,7 +584,7 @@ private fun DrawScope.drawTypeNode(
 }
 
 // copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
-private val DASH_FIELD_REF = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))
+private val DASH_FIELD_REF by lazy { PathEffect.dashPathEffect(floatArrayOf(8f, 6f)) }
 
 private fun DrawScope.drawTypeEdge(
     startX: Float, startY: Float,

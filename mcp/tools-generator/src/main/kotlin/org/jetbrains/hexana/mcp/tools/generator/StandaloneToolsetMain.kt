@@ -108,6 +108,7 @@ fun main(args: Array<String>) {
     val metadataFiles = buildStandaloneCliMetadataFiles(HexanaCliTools, HexanaCliProductRegistry)
     serverFiles.forEach { it.writeTo(serverOutputRoot) }
     metadataFiles.forEach { it.writeTo(metadataOutputRoot) }
+    Files.writeString(metadataOutputRoot.resolve("cli-release-artifacts.json"), buildCliReleaseArtifactDescriptor(HexanaCliProductRegistry))
     val names = (serverFiles + metadataFiles).joinToString { "${it.packageName}.${it.name}" }
     println("Wrote $names to $serverOutputRoot and $metadataOutputRoot")
 }
