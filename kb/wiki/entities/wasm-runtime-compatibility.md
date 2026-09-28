@@ -1,5 +1,8 @@
 # Wasm runtime compatibility table
 
+> Since 2026-09-28 the warning is a problem in [[entities/binary-inspections]]: the proposals
+> badges are purely informational and the problems badge beside them counts the verdicts.
+
 Warns when a Wasm module uses a spec proposal that a runtime the project targets cannot run,
 and shows the full matrix with documentation links. Data comes from
 [[sources/webassembly-features-json]]; targets come from a project file both editors share.
@@ -18,9 +21,9 @@ features.json (remote)                          plugins-shared/features/features
                                                 ▼
                     WasmRuntimeCompatibility.evaluate(usedProposals)
                               │                          │
-                    TableTabsContext                 badge warning state
+                    TableTabsContext                 WasmRuntimeCompatibilityInspection
                               ▼                          ▼
-              "Compatibility" tab              ProposalBadges (IJ + web-ui)
+              "Compatibility" tab              problems badge + Problems tab
 ```
 
 Everything host-neutral is in `plugins-shared/src/commonMain/.../shared/features/`. Each host

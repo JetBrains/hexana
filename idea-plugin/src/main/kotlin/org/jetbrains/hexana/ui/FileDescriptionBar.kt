@@ -766,11 +766,12 @@ private fun NativeImageBadges(
 private const val MAX_INDIVIDUAL_PROPOSAL_BADGES = 3
 
 /**
- * The proposals a module uses, as badges, with a warning marker on any proposal a
- * configured runtime cannot run.
+ * The proposals a module uses, as informational badges. Deliberately carries no warning
+ * state: a proposal a configured runtime cannot run is a runtime-compatibility problem,
+ * counted by the problems badge next to it ([ProblemsBadge]) and listed in the Problems tab.
  *
- * @param compatibility per-proposal verdicts against `.hexana/runtimes.json`; empty when the
- *   project declares no runtimes, and the badges then render as plain informational chips
+ * @param compatibility per-proposal verdicts against `.hexana/runtimes.json`, shown in the
+ *   tooltip; empty when the project declares no runtimes
  * @param onOpenCompatibility selects the Compatibility tab, where the full matrix and the
  *   documentation links live. Clicking the badge is the only route to it that does not
  *   require knowing the tab exists.
@@ -784,89 +785,35 @@ private fun ProposalBadges(
 ) {
     val proposalBackground = if (JewelTheme.isDark) Color(0xFF3D5040) else Color(0xFFD4EDDA)
     val proposalForeground = if (JewelTheme.isDark) Color(0xFFA8D8B0) else Color(0xFF2D6A3F)
-    val warningBackground = if (JewelTheme.isDark) Color(0xFF5A4A2A) else Color(0xFFFFF3CD)
-    val warningForeground = if (JewelTheme.isDark) Color(0xFFE0C070) else Color(0xFF7A5C00)
 
     val byProposal = remember(compatibility) { compatibility.associateBy { it.proposal } }
-    val clickModifier = if (onOpenCompatibility != null) {
-        Modifier
-            .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
-            .clickable { onOpenCompatibility() }
-    } else {
-        Modifier
-    }
+    val badgeModifier = Modifier
+        .background(proposalBackground, RoundedCornerShape(4.dp))
+        .then(
+            if (onOpenCompatibility != null) {
+                Modifier
+                    .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
+                    .clickable { onOpenCompatibility() }
+            } else {
+                Modifier
+            },
+        )
+        .padding(horizontal = 8.dp, vertical = 2.dp)
+    val labelStyle = TextStyle(fontSize = 11.sp, color = proposalForeground)
 
     if (proposals.size <= MAX_INDIVIDUAL_PROPOSAL_BADGES) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             for (proposal in proposals) {
                 val entry = byProposal[proposal]
-                val hasWarning = entry?.hasWarning == true
                 Tooltip(tooltip = { ProposalTooltip(listOfNotNull(entry), proposal, onOpenCompatibility != null) }) {
-                    Row(
-                        modifier = Modifier
-                            .background(
-                                if (hasWarning) warningBackground else proposalBackground,
-                                RoundedCornerShape(4.dp),
-                            )
-                            .then(clickModifier)
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (hasWarning) {
-                            Icon(
-                                AllIconsKeys.General.Warning,
-                                contentDescription = "Unsupported by a configured runtime",
-                                iconClass = AllIcons::class.java,
-                                modifier = Modifier.size(12.dp),
-                            )
-                        }
-                        Text(
-                            text = proposal.displayName,
-                            style = TextStyle(
-                                fontSize = 11.sp,
-                                color = if (hasWarning) warningForeground else proposalForeground,
-                            ),
-                        )
-                    }
+                    Text(text = proposal.displayName, modifier = badgeModifier, style = labelStyle)
                 }
             }
         }
     } else {
-        // Collapsed form: one badge for the count, and a single marker when anything warns.
-        val warned = proposals.mapNotNull { byProposal[it] }.filter { it.hasWarning }
-        Tooltip(tooltip = { CollapsedProposalTooltip(proposals, byProposal, onOpenCompatibility != null) }) {
-            Row(
-                modifier = Modifier
-                    .background(
-                        if (warned.isNotEmpty()) warningBackground else proposalBackground,
-                        RoundedCornerShape(4.dp),
-                    )
-                    .then(clickModifier)
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (warned.isNotEmpty()) {
-                    Icon(
-                        AllIconsKeys.General.Warning,
-                        contentDescription = "Unsupported by a configured runtime",
-                        iconClass = AllIcons::class.java,
-                        modifier = Modifier.size(12.dp),
-                    )
-                }
-                Text(
-                    text = if (warned.isEmpty()) {
-                        "${proposals.size} proposals"
-                    } else {
-                        "${proposals.size} proposals, ${warned.size} unsupported"
-                    },
-                    style = TextStyle(
-                        fontSize = 11.sp,
-                        color = if (warned.isNotEmpty()) warningForeground else proposalForeground,
-                    ),
-                )
-            }
+        // Collapsed form: one badge for the count.
+        Tooltip(tooltip = { CollapsedProposalTooltip(proposals, onOpenCompatibility != null) }) {
+            Text(text = "${proposals.size} proposals", modifier = badgeModifier, style = labelStyle)
         }
     }
 }
@@ -890,17 +837,7 @@ private fun ProposalTooltip(
         if (entry != null && entry.statuses.isNotEmpty()) {
             Column(modifier = Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 for (status in entry.statuses) {
-                    Text(
-                        text = if (status.support.isWarning) "\u26A0 ${status.describe}" else status.describe,
-                        style = TextStyle(
-                            fontSize = 11.sp,
-                            color = if (status.support.isWarning) {
-                                if (JewelTheme.isDark) Color(0xFFE0C070) else Color(0xFF7A5C00)
-                            } else {
-                                Color.Unspecified
-                            },
-                        ),
-                    )
+                    Text(text = status.describe, style = TextStyle(fontSize = 11.sp))
                 }
             }
         }
@@ -914,34 +851,15 @@ private fun ProposalTooltip(
     }
 }
 
-/** Tooltip for the collapsed badge: every proposal, warning ones first and marked. */
+/** Tooltip for the collapsed badge: every proposal the module uses. */
 @Composable
 private fun CollapsedProposalTooltip(
     proposals: List<WasmProposal>,
-    byProposal: Map<WasmProposal, ProposalCompatibility>,
     canOpenCompatibility: Boolean,
 ) {
-    val warningColor = if (JewelTheme.isDark) Color(0xFFE0C070) else Color(0xFF7A5C00)
-    // Warning rows first: with more than three proposals the list is long enough that the
-    // actionable ones would otherwise be buried.
-    val ordered = proposals.sortedByDescending { byProposal[it]?.hasWarning == true }
-
     Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        for (proposal in ordered) {
-            val entry = byProposal[proposal]
-            val hasWarning = entry?.hasWarning == true
-            Text(
-                text = if (hasWarning) "\u26A0 ${proposal.displayName}" else proposal.displayName,
-                style = TextStyle(fontSize = 11.sp, color = if (hasWarning) warningColor else Color.Unspecified),
-            )
-            if (hasWarning) {
-                for (status in entry.warnings) {
-                    Text(
-                        text = "    ${status.describe}",
-                        style = TextStyle(fontSize = 11.sp, color = warningColor),
-                    )
-                }
-            }
+        for (proposal in proposals) {
+            Text(text = proposal.displayName, style = TextStyle(fontSize = 11.sp))
         }
         if (canOpenCompatibility) {
             Text(

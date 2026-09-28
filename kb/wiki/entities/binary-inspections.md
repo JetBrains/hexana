@@ -28,7 +28,7 @@ Everything host-neutral is in `plugins-shared/.../shared/inspections/` and
 |---|---|
 | Wasm `ParseProblem` → a Wasm/component-only Problems tab in `WasmTableTabs.kt` / `WasmComponentTableTabs.kt` | `WasmParseProblemsInspection` (`wasm.parse`) |
 | ELF/Mach-O/PE `NativeParserDiagnostic`s — computed by the whole-file parsers, read by nothing but `binary.raw` | `NativeParseDiagnosticsInspection` (`native.parse`), via `NativeBinaryProvider.parseDiagnostics` |
-| Runtime-compatibility warning state — only the yellow proposal badge | `WasmRuntimeCompatibilityInspection` (`wasm.runtime-compatibility`); the badge still shows, and the problems badge counts it |
+| Runtime-compatibility warning state — only the yellow proposal badge | `WasmRuntimeCompatibilityInspection` (`wasm.runtime-compatibility`); the proposals badges no longer carry any warning state (icon, colour, "N unsupported", ⚠ in tooltips) — the problems badge is the one marker |
 | Script `CheckFinding`s appended to the Wasm Problems tab by an IntelliJ enricher | `CheckFinding.toBinaryProblem()` → `hostProblems` |
 
 The IntelliJ and web-ui Problems enrichers (`enrichWasmProblemsTab`, `enrichProblemsTab`) and
@@ -45,7 +45,7 @@ The IntelliJ and web-ui Problems enrichers (`enrichWasmProblemsTab`, `enrichProb
   `.gnu.hash`, `PT_GNU_STACK` all come back "unknown" — a false note on every real binary. Found
   by running the CLI over `parsing/native-fixtures/test-data`. Revisit only if the known sets
   become the format's full vocabulary.
-- **Runtime incompatibility is a warning**, matching the badge, so `inspect-binary` exits 0 on
+- **Runtime incompatibility is a warning**, as the proposals badge showed it before, so `inspect-binary` exits 0 on
   it. Only errors make it exit 1 (the `run-script` convention for ERROR findings).
 - **CLI verdicts come from the bundled catalog snapshot** (`WasmFeatureCatalog.bundled`), never
   the network, so a CI run is reproducible. Targets come from `--runtimes <runtimes.json>`; with

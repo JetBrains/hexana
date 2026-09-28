@@ -16,12 +16,12 @@ enum class FeatureSupport {
     /**
      * `features.json` records nothing usable for this pair. Deliberately *not* a warning:
      * the upstream table leaves many (runtime, feature) cells empty, and warning on them
-     * would make the badge cry wolf on almost every module.
+     * would put a problem on almost every module.
      */
     Unknown,
     ;
 
-    /** Whether this verdict should raise the warning marker on the proposals badge. */
+    /** Whether this verdict is a runtime-compatibility problem (and a ⚠ row in the Compatibility tab). */
     val isWarning: Boolean get() = this == Unsupported || this == FlagRequired
 }
 

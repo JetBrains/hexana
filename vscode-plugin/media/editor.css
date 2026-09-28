@@ -807,16 +807,6 @@ html, body {
 
 /* --- Runtime compatibility ------------------------------------------------ */
 
-/*
- * Warning variant of the proposals badge, shown when a proposal the module uses is not
- * supported by a runtime declared in .hexana/runtimes.json. The colours are also inlined
- * as fallbacks by EditorToolbar.ProposalBadge, matching how the base badge already works.
- */
-.hexana-proposal-badge-warning {
-    --hexana-proposal-badge-warning-bg: var(--vscode-inputValidation-warningBackground, #5a4a2a);
-    --hexana-proposal-badge-warning-fg: var(--vscode-editorWarning-foreground, #e0c070);
-}
-
 /* Wider than the default dialog: one row per runtime, with a version column. */
 .hexana-runtime-targets-dialog {
     min-width: 460px;

@@ -156,7 +156,7 @@ internal fun compatibilityTabDescriptor(
         showIdColumn = false,
         priority = TabPriority.Medium,
         predefinedFilters = if (warningCount > 0) {
-            // Pre-selected, because the reason to open this tab is usually the badge warning.
+            // Pre-selected, because the reason to open this tab is usually a runtime-compatibility problem.
             listOf(PredefinedFilter("Unsupported only") { index -> rows[index].hasWarning })
         } else {
             emptyList()

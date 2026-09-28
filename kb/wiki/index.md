@@ -8,7 +8,7 @@ consult-first / write-back rules.
 - [[entities/hexana-scripting-api]] — the custom script tab surface (`binary`, `print`,
   `table`, `row`) and how each host binds it.
 - [[entities/wasm-runtime-compatibility]] — the Wasm runtime compatibility table: proposal
-  detection, `.hexana/runtimes.json`, the badge warning, and the Compatibility tab.
+  detection, `.hexana/runtimes.json`, the runtime-compatibility problems, and the Compatibility tab.
 - [[entities/dwarf-outline-model]] — the shared row model behind the `.debug_*` editor tabs:
   node ids, deferred children, whole-tree search, and the grouping rule both editors follow.
 - [[entities/binary-provider-selection]] — the one factory that turns bytes plus a name into a
