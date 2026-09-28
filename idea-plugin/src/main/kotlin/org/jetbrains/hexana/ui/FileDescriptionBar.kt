@@ -608,12 +608,19 @@ private fun ProblemsBadge(problems: List<BinaryProblem>, onOpenProblems: () -> U
 private fun ProblemsTooltip(problems: List<BinaryProblem>) {
     val actionable = problems.filter { it.severity != ProblemSeverity.Info }
     val shown = actionable.take(MAX_TOOLTIP_PROBLEMS)
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    // Sized like ProposalTooltip, the tooltip of the badges beside this one.
+    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
         for (problem in shown) {
-            Text("${problem.severity.label}: ${problem.message}")
+            Text("${problem.severity.label}: ${problem.message}", style = TextStyle(fontSize = 11.sp))
         }
-        if (actionable.size > shown.size) Text("…and ${actionable.size - shown.size} more")
-        Text("Click for the Problems tab")
+        if (actionable.size > shown.size) {
+            Text("…and ${actionable.size - shown.size} more", style = TextStyle(fontSize = 11.sp))
+        }
+        Text(
+            text = "Click for the Problems tab",
+            modifier = Modifier.padding(top = 4.dp),
+            style = TextStyle(fontSize = 11.sp),
+        )
     }
 }
 
