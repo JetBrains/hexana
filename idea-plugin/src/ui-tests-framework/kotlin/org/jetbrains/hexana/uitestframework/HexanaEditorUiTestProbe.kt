@@ -41,7 +41,9 @@ import com.intellij.notification.NotificationsManager
 import org.jetbrains.hexana.providers.format.typeDisplayName
 import org.jetbrains.hexana.wasm.analysis.typegraph.TypeGraphNodeKind
 import org.jetbrains.hexana.wasm.analysis.typegraph.computeTypeNeighborhood
+import org.jetbrains.hexana.wasm.opcodes.OpCode
 import org.jetbrains.hexana.wasm.opcodes.OpCodeWithOffset
+import org.jetbrains.hexana.wasm.opcodes.OpCodes
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmSectionCode
 import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
@@ -566,6 +568,26 @@ object HexanaEditorUiTestProbe {
         }
         if (best < 0) throw IllegalStateException("No struct with supertype and subtypes in '$fileIdentifier'")
         val demoFuncIdx = index.referencingFuncs(best).firstOrNull() ?: -1
+        // Hub type for the "graph opens fast on a type with >50 transitive
+        // referencers" acceptance check: the smallest 2-hop neighborhood above
+        // 50 (matches the acceptance bar without dragging in a 1500-node hub).
+        var hub = -1
+        var hubSize = Int.MAX_VALUE
+        for (t in 0 until index.typeCount) {
+            if (index.kind(t) != TypeGraphNodeKind.STRUCT) continue
+            val size = computeTypeNeighborhood(
+                index = index,
+                focus = t,
+                includeHierarchy = true,
+                includeFieldRefs = true,
+            ).included.size
+            if (size > 50 && size < hubSize) {
+                hubSize = size
+                hub = t
+            }
+        }
+        if (hub < 0) hubSize = -1
+        val sites = findGcInstructionSites(provider)
         return payload(
             "hexana-wasm-type-graph-demo-targets",
             listOf(
@@ -576,8 +598,79 @@ object HexanaEditorUiTestProbe {
                 "referencingFuncs=${index.referencingFuncs(best).size}",
                 "recGroup=${index.recGroup(best)}",
                 "demoFuncIdx=$demoFuncIdx",
+                "hubTypeIdx=$hub",
+                "hubTypeName=${if (hub >= 0) provider.typeDisplayName(hub) else ""}",
+                "hubNeighborhood=$hubSize",
+                "totalTypes=${index.typeCount}",
+                "castFuncIdx=${sites["castFuncIdx"] ?: -1}",
+                "castTypeIdx=${sites["castTypeIdx"] ?: -1}",
+                "structGetFuncIdx=${sites["structGetFuncIdx"] ?: -1}",
+                "structGetTypeIdx=${sites["structGetTypeIdx"] ?: -1}",
             ),
         )
+    }
+
+    /**
+     * Scans the code section for the first ref.cast (concrete heap type) and the
+     * first struct.get, returning global funcidx + target type index for each.
+     */
+    private fun findGcInstructionSites(provider: WasmBinaryProvider): Map<String, Int> {
+        val wasmModule = provider.wasmModule ?: return emptyMap()
+        val codeSection = wasmModule.codeSection ?: return emptyMap()
+        val importFuncCount = provider.importFuncCount
+        val result = HashMap<String, Int>()
+        fun walk(opcodes: List<OpCode>, funcIdx: Int) {
+            for (op in opcodes) {
+                when (op) {
+                    is OpCodes.GC.RefCast, is OpCodes.GC.RefCastNullable -> {
+                        if (!result.containsKey("castFuncIdx")) {
+                            // Concrete heap types carry the type index in WasmHeapType.type
+                            // (>= 0); abstract heap types are negative S33 values.
+                            val t = when (op) {
+                                is OpCodes.GC.RefCast -> op.value.type
+                                is OpCodes.GC.RefCastNullable -> op.value.type
+                                else -> null
+                            }
+                            if (t != null && t in 0..Int.MAX_VALUE.toLong()) {
+                                result["castFuncIdx"] = funcIdx
+                                result["castTypeIdx"] = t.toInt()
+                            }
+                        }
+                    }
+                    is OpCodes.GC.StructGet -> {
+                        if (!result.containsKey("structGetFuncIdx")) {
+                            result["structGetFuncIdx"] = funcIdx
+                            result["structGetTypeIdx"] = op.typeIndex.toInt()
+                        }
+                    }
+                    is OpCodes.Flow.Block -> walk(op.value, funcIdx)
+                    is OpCodes.Flow.Loop -> walk(op.value, funcIdx)
+                    is OpCodes.Flow.If -> walk(op.value, funcIdx)
+                    is OpCodes.Flow.Else -> walk(op.value, funcIdx)
+                    is OpCodes.Flow.TryTable -> walk(op.code, funcIdx)
+                    else -> {}
+                }
+                if (result.size >= 4) return
+            }
+        }
+        val codeEntryOffsets = with(codeSection) { provider.bytes.scanOffsets() }
+        for ((localIdx, entryOffset) in codeEntryOffsets.withIndex()) {
+            val entry = with(codeSection) { provider.bytes.parseCodeEntry(entryOffset.offset) }
+            walk(entry.opCodes, importFuncCount + localIdx)
+            if (result.size >= 4) break
+        }
+        return result
+    }
+
+    /**
+     * Reads a wasm UI-state breadcrumb published by the wasm panels (keys:
+     * "typeGraph", "typeNavResult", "typeInfo"). Empty value = not published yet.
+     */
+    @JvmStatic
+    fun wasmUiProbeValue(fileIdentifier: String, key: String): List<String> {
+        val editor = requireHexanaEditor(fileIdentifier)
+        val value = editor.wasmUiProbeState[key]
+        return payload("hexana-wasm-ui-probe-value", listOf("key=$key", "value=${value.orEmpty()}"))
     }
 
     /**

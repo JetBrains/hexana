@@ -664,6 +664,7 @@ fun WasmTypeGraphPanel(
     provider: WasmBinaryProvider,
     focusTypeFlow: MutableStateFlow<Int?>,
     onNavigateToType: (typeIdx: Int, byteOffset: Long) -> Unit,
+    uiProbeSink: ((String, String) -> Unit)? = null,
 ) {
     val focusType by focusTypeFlow.collectAsState()
     var filter by remember { mutableStateOf(TypeGraphFilter.BOTH) }
@@ -704,6 +705,7 @@ fun WasmTypeGraphPanel(
     var showAll by remember { mutableStateOf(false) }
 
     LaunchedEffect(focus, filter, expandedTypes, showAll) {
+        val startNanos = System.nanoTime()
         val data = withContext(Dispatchers.IO) {
             val baseNeighborhood = if (showAll) {
                 IntArray(index.typeCount) { it }
@@ -722,6 +724,12 @@ fun WasmTypeGraphPanel(
             GraphData(graph, includedSet, clusters)
         }
         graphData = data
+        val buildMillis = (System.nanoTime() - startNanos) / 1_000_000
+        uiProbeSink?.invoke(
+            "typeGraph",
+            "focus=$focus shown=${data.graph.nodes.size} total=${index.typeCount} filter=$filter" +
+                " showAll=$showAll expanded=${expandedTypes.size} buildMillis=$buildMillis",
+        )
     }
 
     val data = graphData

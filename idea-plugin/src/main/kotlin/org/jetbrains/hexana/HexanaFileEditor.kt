@@ -196,6 +196,15 @@ class HexanaFileEditor(
     }
 
     /**
+     * UI-state breadcrumbs published by wasm panels (type graph build stats,
+     * type navigation results, type-info popup data). Read by UI-test probes
+     * to gate assertions instead of sleeping. Keys: "typeGraph",
+     * "typeNavResult", "typeInfo".
+     */
+    val wasmUiProbeState = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val wasmUiProbeSink: (String, String) -> Unit = { key, value -> wasmUiProbeState[key] = value }
+
+    /**
      * WASM-diff models, computed once off the EDT and held for the lifetime of this
      * editor (this tab). Switching the inner tabs — or the IDE editor tab, which may
      * tear down and rebuild the Compose composition — re-collects these flows rather
@@ -311,6 +320,7 @@ class HexanaFileEditor(
                     wasmTypeNavFlow = wasmTypeNavFlow,
                     wasmTypeGraphFocusFlow = wasmTypeGraphFocusFlow,
                     wasmTypeInfoNavFlow = wasmTypeInfoNavFlow,
+                    wasmUiProbeSink = wasmUiProbeSink,
                     classFileNavTargetFlow = classFileNavTargetFlow,
                     onOpenZipEntry = { entry -> openZipEntry(entry, commonBuffer) },
                     onOpenTarEntry = { entry ->

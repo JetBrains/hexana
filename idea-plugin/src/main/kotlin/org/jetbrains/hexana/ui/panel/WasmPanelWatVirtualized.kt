@@ -166,6 +166,7 @@ internal fun WasmPanelWatVirtualized(
      */
     typeNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
     typeInfoNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
+    uiProbeSink: ((String, String) -> Unit)? = null,
     gutterMarks: kotlinx.coroutines.flow.StateFlow<Map<Long, GutterMark>>? = null,
     executionOffset: kotlinx.coroutines.flow.StateFlow<Long?>? = null,
     onToggleBreakpoint: ((funcIdx: Int, byteOffset: Long, instrOrdinal: Int) -> Unit)? = null,
@@ -239,6 +240,7 @@ internal fun WasmPanelWatVirtualized(
         byteOffsetNavFlow = byteOffsetNavFlow,
         typeNavFlow = typeNavFlow,
         typeInfoNavFlow = typeInfoNavFlow,
+        uiProbeSink = uiProbeSink,
         onOffsetClicked = { offset -> state.scrollHexViewTo(offset, setCursor = true) },
         gutterMarks = gutterMarks,
         executionOffset = executionOffset,
@@ -260,6 +262,7 @@ private fun WasmPanelWatVirtualizedContent(
     byteOffsetNavFlow: MutableStateFlow<Int?> = MutableStateFlow(null),
     typeNavFlow: MutableStateFlow<Int?> = MutableStateFlow(null),
     typeInfoNavFlow: MutableStateFlow<Int?> = MutableStateFlow(null),
+    uiProbeSink: ((String, String) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
     gutterMarks: kotlinx.coroutines.flow.StateFlow<Map<Long, GutterMark>>? = null,
     executionOffset: kotlinx.coroutines.flow.StateFlow<Long?>? = null,
@@ -503,7 +506,8 @@ private fun WasmPanelWatVirtualizedContent(
     val typeNav by typeNavFlow.collectAsState()
     androidx.compose.runtime.LaunchedEffect(typeNav) {
         val typeIdx = typeNav ?: return@LaunchedEffect
-        navigator.gotoType(typeIdx)
+        val resolved = navigator.gotoType(typeIdx)
+        uiProbeSink?.invoke("typeNavResult", "typeIdx=$typeIdx resolved=$resolved")
         typeNavFlow.value = null
     }
 
@@ -751,6 +755,14 @@ private fun WasmPanelWatVirtualizedContent(
                 referencingTypes = index.referencingTypes(idx).map(::typeEntry),
                 referencingFuncs = index.referencingFuncs(idx).map(::funcEntry),
                 fields = fields,
+            )
+        }
+        typeInfoData?.let { data ->
+            uiProbeSink?.invoke(
+                "typeInfo",
+                "typeIdx=${data.typeIdx} kind=${data.kindLabel} fields=${data.fields.size}" +
+                    " supers=${data.superTypes.size} subs=${data.directSubtypes.size}" +
+                    " refTypes=${data.referencingTypes.size} refFuncs=${data.referencingFuncs.size}",
             )
         }
     }

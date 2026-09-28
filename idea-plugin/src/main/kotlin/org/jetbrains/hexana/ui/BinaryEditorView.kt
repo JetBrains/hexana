@@ -110,6 +110,7 @@ internal fun BinaryEditorView(
     wasmTypeNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
     wasmTypeGraphFocusFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
     wasmTypeInfoNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
+    wasmUiProbeSink: ((String, String) -> Unit)? = null,
     classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?> = remember { MutableStateFlow(null) },
     onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
     onOpenTarEntry: ((TarEntry) -> Unit)? = null,
@@ -403,6 +404,7 @@ internal fun BinaryEditorView(
                     wasmTypeNavFlow = wasmTypeNavFlow,
                     wasmTypeGraphFocusFlow = wasmTypeGraphFocusFlow,
                     wasmTypeInfoNavFlow = wasmTypeInfoNavFlow,
+                    wasmUiProbeSink = wasmUiProbeSink,
                     classFileNavTargetFlow = classFileNavTargetFlow,
                     fileName = fileName,
                     gutterMarksModelFlow = gutterMarksModelFlow,
@@ -1178,6 +1180,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
     wasmTypeNavFlow: MutableStateFlow<Int?>? = null,
     wasmTypeGraphFocusFlow: MutableStateFlow<Int?>? = null,
     wasmTypeInfoNavFlow: MutableStateFlow<Int?>? = null,
+    wasmUiProbeSink: ((String, String) -> Unit)? = null,
     classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?>? = null,
     fileName: String? = null,
     gutterMarksModelFlow: StateFlow<GutterMarksModel?>? = null,
@@ -1242,6 +1245,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
                             ?: remember { MutableStateFlow(null) },
                         typeNavFlow = typeNavFlowActual,
                         typeInfoNavFlow = typeInfoNavFlowActual,
+                        uiProbeSink = wasmUiProbeSink,
                         gutterMarks = gutterModel?.marks,
                         executionOffset = executionOffsetFlow,
                         onToggleBreakpoint = onToggleWasmBreakpoint,
@@ -1259,6 +1263,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
                     WasmTypeGraphPanel(
                         provider = live,
                         focusTypeFlow = typeGraphFlowActual,
+                        uiProbeSink = wasmUiProbeSink,
                         onNavigateToType = { typeIdx, _ ->
                             typeNavFlowActual.value = typeIdx
                             state.requestSelectTabByDescription("WAT (virtualized)")
@@ -1302,6 +1307,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
                             ?: remember { MutableStateFlow(null) },
                         typeNavFlow = typeNavFlowActual,
                         typeInfoNavFlow = typeInfoNavFlowActual,
+                        uiProbeSink = wasmUiProbeSink,
                         gutterMarks = gutterModel?.marks,
                         executionOffset = executionOffsetFlow,
                         onToggleBreakpoint = onToggleWasmBreakpoint,
@@ -1319,6 +1325,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
                     WasmTypeGraphPanel(
                         provider = live,
                         focusTypeFlow = typeGraphFlowActual,
+                        uiProbeSink = wasmUiProbeSink,
                         onNavigateToType = { typeIdx, _ ->
                             typeNavFlowActual.value = typeIdx
                             state.requestSelectTabByDescription("WAT (virtualized)")

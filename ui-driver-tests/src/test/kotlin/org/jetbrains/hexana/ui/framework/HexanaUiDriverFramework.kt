@@ -273,6 +273,12 @@ internal class HexanaEditor internal constructor(
     fun wasmTypeGraphDemoTargets(): List<String> =
         probe.wasmTypeGraphDemoTargets(fileIdentifier)
 
+    fun wasmUiProbeValue(key: String): String? =
+        probe.wasmUiProbeValue(fileIdentifier, key)
+            .firstOrNull { it.startsWith("value=") }
+            ?.removePrefix("value=")
+            ?.takeIf { it.isNotEmpty() }
+
     fun binaryGutterMarks(): List<String> =
         probe.binaryGutterMarks(fileIdentifier)
 
@@ -617,6 +623,8 @@ internal interface HexanaEditorUiTestProbeRef {
     fun showWasmTypeInfoPopup(fileName: String, typeIdx: Int): List<String>
 
     fun wasmTypeGraphDemoTargets(fileName: String): List<String>
+
+    fun wasmUiProbeValue(fileName: String, key: String): List<String>
 
     fun clearNotifications(): List<String>
 
