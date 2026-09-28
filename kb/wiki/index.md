@@ -15,6 +15,9 @@ consult-first / write-back rules.
   `BinaryProvider`, why gzip stays outside it, and the per-host lists that decide which files
   reach the editor in the first place.
 
+- [[entities/binary-inspections]] — the shared problems model (`BinaryInspection` →
+  `BinaryProblem`) behind the Problems tab, the toolbar count badge, and `inspect-binary`;
+  what was migrated into it and why unresolved native records are excluded.
 - [[entities/binary-diff-provider]] — the shared diff model (`BinaryDiffProvider`): tabs,
   detail pane, navigation requests, how IntelliJ and VS Code host it, and the hex viewer in the
   IntelliJ diff window (`diff.DiffTool`).

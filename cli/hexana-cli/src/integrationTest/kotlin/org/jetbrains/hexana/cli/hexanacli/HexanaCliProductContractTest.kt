@@ -27,7 +27,7 @@ class HexanaCliProductContractTest {
 
         val tools = target.run(listOf("tools"))
         assertSuccess(tools)
-        assertEquals(listOf("summarize-binary", "summarize-module", "wasm-to-wat"), toolNames(tools.stdout))
+        assertEquals(listOf("inspect-binary", "summarize-binary", "summarize-module", "wasm-to-wat"), toolNames(tools.stdout))
 
         val rejected = target.run(listOf("run-script"))
         assertFailure(rejected, 2, "no such subcommand: run-script")
@@ -53,6 +53,43 @@ class HexanaCliProductContractTest {
         val stdinWat = target.run(listOf("wasm-to-wat", "--stdin", "--format", "raw"), stdin = MINIMAL_WASM_MODULE)
         assertSuccess(stdinWat)
         assertTrue(stdinWat.stdout.contains("(module"), stdinWat.describe())
+    }
+
+    @Test
+    fun inspectBinaryExitsNonZeroOnlyForErrorsAndReadsDeclaredRuntimes() {
+        val clean = target.run(listOf("inspect-binary", "--stdin"), stdin = MINIMAL_WASM_MODULE)
+        assertSuccess(clean)
+        assertTrue(clean.stdout.contains("no problems"), clean.describe())
+
+        // A code section header declaring 16 payload bytes, followed by one.
+        val truncated = temporaryFolder.root.toPath().resolve("truncated.wasm")
+        Files.write(truncated, MINIMAL_WASM_MODULE + byteArrayOf(0x0A, 0x10, 0x01))
+        val failed = target.run(listOf("inspect-binary", truncated.toString(), "--format", "json"))
+        assertEquals(1, failed.exitCode, failed.describe())
+        val problems = JsonParser.parseString(failed.stdout).asJsonObject["problems"].asJsonArray
+        assertEquals("wasm.section_truncated", problems.single().asJsonObject["code"].asString)
+
+        // One function using i32.extend8_s (sign extension), checked against Chrome 1.
+        val signExt = temporaryFolder.root.toPath().resolve("sign-ext.wasm")
+        Files.write(
+            signExt,
+            MINIMAL_WASM_MODULE + byteArrayOf(
+                0x01, 0x04, 0x01, 0x60, 0x00, 0x00, 0x03, 0x02, 0x01, 0x00,
+                0x0A, 0x08, 0x01, 0x06, 0x00, 0x41, 0x00, 0xC0.toByte(), 0x1A, 0x0B,
+            ),
+        )
+        val runtimes = temporaryFolder.root.toPath().resolve("runtimes.json")
+        Files.writeString(runtimes, """{"targets":[{"runtime":"Chrome","version":"1"}]}""")
+        val warned = target.run(listOf("inspect-binary", signExt.toString(), "--runtimes", runtimes.toString()))
+        assertSuccess(warned)
+        assertTrue(warned.stdout.contains("[wasm.proposal_unsupported]"), warned.describe())
+        assertTrue(warned.stdout.contains("Runtime targets: Chrome 1"), warned.describe())
+
+        val help = target.run(listOf("inspect-binary", "--help"))
+        assertSuccess(help)
+        assertTrue(help.stdout.contains("--format <json|pretty|table|sarif>"), help.describe())
+        assertTrue(help.stdout.contains("--runtimes <path>"), help.describe())
+        assertFailure(target.run(listOf("summarize-binary", truncated.toString(), "--runtimes", runtimes.toString())), 2, "Unsupported summarize-binary option: --runtimes")
     }
 
     @Test

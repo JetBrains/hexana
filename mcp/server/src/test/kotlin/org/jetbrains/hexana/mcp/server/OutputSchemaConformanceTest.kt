@@ -20,6 +20,7 @@ import org.jetbrains.hexana.mcp.model.binaries.*
 import org.jetbrains.hexana.mcp.model.components.*
 import org.jetbrains.hexana.mcp.model.converters.*
 import org.jetbrains.hexana.mcp.model.data.*
+import org.jetbrains.hexana.mcp.model.inspections.*
 import org.jetbrains.hexana.mcp.model.elements.*
 import org.jetbrains.hexana.mcp.model.entrypoints.*
 import org.jetbrains.hexana.mcp.model.exports.*
@@ -164,7 +165,7 @@ class OutputSchemaConformanceTest {
     )
 
     private val serializerEntries: List<Pair<String, KSerializer<*>>> = listOf(
-        out(PlanAbiBindingRegenerationResult.serializer()), out(QueryArtifactsResult.serializer()), out(BinaryFunctionsResult.serializer()), out(BinarySummaryResult.serializer()), out(QueryBinaryResult.serializer()),
+        out(PlanAbiBindingRegenerationResult.serializer()), out(QueryArtifactsResult.serializer()), out(BinaryFunctionsResult.serializer()), out(BinarySummaryResult.serializer()), out(InspectBinaryResult.serializer()), out(QueryBinaryResult.serializer()),
         out(CheckComponentCompatibilityResult.serializer()), out(ListComponentSurfaceResult.serializer()), out(ResolveComponentDependenciesResult.serializer()), out(WasmToWatResult.serializer()),
         out(AuditDataPayloadPolicyResult.serializer()), out(ListDataSectionsResult.serializer()), out(ListDataSegmentsResult.serializer()), out(ListElementSegmentsResult.serializer()), out(EntrypointPolicyResult.serializer()),
         out(ListExportedFunctionsResult.serializer()), out(ListExportsResult.serializer()), out(SearchExportsResult.serializer()), out(AuditLocalStackBudgetResult.serializer()), out(DisassembleFunctionResult.serializer()), out(FunctionsResult.serializer()),

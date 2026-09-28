@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.vscode
 
+import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
 import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
@@ -276,6 +277,13 @@ fun BinaryEditorContent(
             runtimeCompatibility = runtimeCompatibility,
             onOpenCompatibilityTab = if (runtimeCompatibility != null) {
                 { activeTab = "Compatibility" }
+            } else {
+                null
+            },
+            // A worker presentation means the binary was parsed off the UI thread; counting
+            // problems here would parse it again on this one.
+            onOpenProblemsTab = if (workerWasmToolbarPresentation == null && workerNativeImageToolbarPresentation == null) {
+                { activeTab = PROBLEMS_TAB_NAME }
             } else {
                 null
             },

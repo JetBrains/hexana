@@ -219,6 +219,13 @@ public class HexanaProductCli private constructor(
                     requireScriptOption(spec, arg)
                     scriptSources.addInline(args.requireValue(arg))
                 }
+                RUNTIMES_OPTION -> {
+                    requireDeclaredOption(spec, arg)
+                    if (RUNTIME_TARGETS_PATH_PARAM in params) {
+                        throw ProductUsageException("Repeated ${spec.commandName} option: $arg")
+                    }
+                    params[RUNTIME_TARGETS_PATH_PARAM] = JsonPrimitive(args.requireValue(arg))
+                }
                 "--allowed-root" -> options.allowedRoots += args.requireValue(arg)
                 "--max-file-bytes" -> options.maxFileBytes = args.requirePositiveInt(arg)
                 "--max-inline-bytes" -> options.maxInlineBytes = args.requirePositiveInt(arg)
@@ -478,6 +485,9 @@ public class HexanaProductCli private constructor(
                             appendLine("  ${example.description}")
                             appendLine("    ${product.executableName} ${spec.commandName} ${example.arguments.joinToString(" ")}")
                         }
+                    }
+                    spec.inputOptions.firstOrNull { it.name == RUNTIMES_OPTION }?.let { option ->
+                        appendLine("  $RUNTIMES_OPTION <path>  ${option.description}")
                     }
                     appendLine()
                     appendLine("Environment:")
@@ -1021,6 +1031,21 @@ private fun requireBase64SourceOption(spec: HexanaCliToolSpec, optionName: Strin
         }
         "--wasm-base64" -> requireSourceMode(spec, HexanaCliInputMode.WASM_PATH, optionName)
         else -> error("Unsupported base64 source option: $optionName")
+    }
+}
+
+/**
+ * `--runtimes <.hexana/runtimes.json>`: the runtimes `inspect-binary` checks proposals against.
+ * Bound to the semantic `runtimeTargetsPath` field in the CLI authority; the option list in the
+ * generated spec does not carry field names, so the mapping is spelled out here.
+ */
+private const val RUNTIMES_OPTION = "--runtimes"
+private const val RUNTIME_TARGETS_PATH_PARAM = "runtimeTargetsPath"
+
+/** Rejects an option the command's generated metadata does not list. */
+private fun requireDeclaredOption(spec: HexanaCliToolSpec, optionName: String) {
+    if (spec.inputOptions.none { it.name == optionName }) {
+        throw ProductUsageException("Unsupported ${spec.commandName} option: $optionName")
     }
 }
 

@@ -48,6 +48,14 @@ The module provides:
   targets into per-runtime verdicts. `WasmCompatibilityTableTab.kt` builds the Compatibility
   tab from those verdicts. Every proposal maps to an upstream feature key through
   `WasmProposal.featureId`, pinned in both directions by `WasmFeatureCatalogTest`.
+- **Binary inspections** (`inspections/`, `ProblemsTableTab.kt`) — the one place a problem about a binary is decided.
+  `BinaryProblem` (inspection id, stable `code`, `ProblemSeverity`, kind, message, optional byte range / `funcIdx`) is
+  what every host renders; `BinaryInspection` implementations (`WasmParseProblemsInspection`,
+  `NativeParseDiagnosticsInspection`, `WasmRuntimeCompatibilityInspection`) are listed in `BinaryInspectionRegistry` and
+  run by `inspectBinary`. `BinaryProblemsTableTabsProvider` (registered last in `TableTabsProviderRegistry`) builds the
+  Problems tab for every format; the IntelliJ and VS Code toolbar count badges and the `inspect-binary` CLI / MCP tool
+  (via `mcp/core`'s `readBinaryInspections`) read the same `inspectBinary` result. See
+  `kb/wiki/entities/binary-inspections.md`.
 - **Scripting API** (`scripting/`) — the single definition of the custom script tab surface. `ScriptValue.kt` is a
   host-neutral lazy value tree; `ScriptBinaryApi.kt` builds the `binary` global from a `BinaryProvider` (reusing
   `fileTypeDescription`, `structureRanges`, and `TableTabsProviderRegistry` so `binary.tab(name)` reads the same tables
@@ -97,6 +105,21 @@ all bind one definition. Before this existed each host hand-maintained its own w
 - A row that navigates returns a `DiffOpenRequest` through `DiffTabContext.open` rather than calling a host API.
 - A capability only a host can supply (the native disassembler) goes on `BinaryDiffHost`, optional, with a degraded
   path when absent — never a host-specific branch in a provider.
+
+## Inspection Rules
+
+- A new warning or error about a binary is a `BinaryInspection` registered in `BinaryInspectionRegistry` — never a
+  host-side banner, badge or table. That is what puts it in the IntelliJ and VS Code Problems tab, both toolbar badges,
+  the webapp worker, and `hexana-cli inspect-binary` at once.
+- `inspect` must be pure and must not throw on a malformed binary; `inspectBinary` still turns a throw into an
+  `inspection.failed` warning, because a silently missing inspection reads like a clean file.
+- `mayReport` is only a cheap tab-advertisement guess: it may say `true` for a clean binary, never `false` for one with
+  problems, and must not force a lazy parse.
+- `code` values are a public contract (SARIF fingerprints and `properties.code`, MCP/CLI JSON). Do not rename one.
+- Problems that need something only a host has (script check findings, which need GraalJS) are not inspections; the
+  host passes them as `InspectionContext.hostProblems` / `TableTabsContext.hostProblems`.
+- Hosts contribute navigation only, through `TableTabsContext.problemNavigator`; the tab's rows, columns and menus stay
+  here.
 
 ## KMP Targets
 

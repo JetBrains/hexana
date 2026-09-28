@@ -54,9 +54,7 @@ import com.intellij.openapi.ui.ValidationInfo
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
-import org.jetbrains.hexana.shared.scripting.CheckFinding
 import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
-import org.jetbrains.hexana.shared.scripting.ScriptAnchor
 import org.jetbrains.hexana.wasm.components.ComponentPrimitiveCharType
 
 
@@ -75,8 +73,9 @@ fun BinaryProvider.getTabEnricher(): List<TableTabDescriptor>.(
 /**
  * Enriches [TableTabDescriptor]s produced by [WasmTableTabsProvider] with
  * IDE-specific actions: run buttons on exported functions, unreachable
- * function badges and cross-panel navigation on the Functions tab, and
- * WAT/hex navigation on the Problems tab.
+ * function badges and cross-panel navigation on the Functions tab. The
+ * Problems tab is not enriched here: its navigation comes from
+ * [problemNavigator] through the tab context.
  *
  * @param onShowPaths callback invoked when the user selects "Show Paths
  *   from Roots" on a function row; receives the function index
@@ -96,11 +95,6 @@ internal fun List<TableTabDescriptor>.enrichWasmTabs(
             provider.garbageAnalysis?.entries
                 ?.map { it.funcIndex }?.toSet() ?: emptySet()
         })
-        "Problems" -> {
-            val scriptFindings = ScriptFindingsStore.getInstance(hexViewState.project)
-                .findingsFor(provider.file)
-            enrichWasmProblemsTab(tab, provider, provider.file, hexViewState, scriptFindings)
-        }
         else -> tab
     }
 }
@@ -448,163 +442,6 @@ private fun enrichWasmFunctionsTab(
                 )
             }
             add(sourceLocationMenuItem(provider, project) { index -> index })
-        },
-    )
-}
-
-/**
- * Enriches the Problems tab with IDE navigation:
- * - Row click on a code problem (funcIdx != null): switches to WAT (virtualized) and
- *   scrolls to the function body.
- * - Row click on a non-code problem (funcIdx == null): scrolls the hex view to the
- *   failed byte region.
- * - Context menu "Show in WAT (virtualized)": same as row click for code problems.
- * - Context menu "Show in Wat": switches to the plain Wat tab and, for ShowLiteEditor
- *   state, scrolls to the nearest annotated line via [HexanaFileEditor.requestWasmByteOffsetNav].
- * - [extraFindings]: script check findings appended after parse problems (may be empty).
- */
-private fun enrichWasmProblemsTab(
-    tab: TableTabDescriptor,
-    provider: WasmBinaryProvider,
-    file: VirtualFile,
-    hexViewState: HexViewStateHolder,
-    extraFindings: List<CheckFinding> = emptyList(),
-): TableTabDescriptor {
-    val project = hexViewState.project
-    val problems = provider.parseProblems
-    val parseCount = problems.size
-
-    // Pre-compute finding rows so cell providers are O(1) without allocating on every call.
-    val findingRows = extraFindings.map { it.toProblemsRow() }
-    val totalRowCount = parseCount + findingRows.size
-
-    fun navigateRow(index: Int) {
-        if (index < parseCount) {
-            val p = problems.getOrNull(index) ?: return
-            val funcIdx = p.funcIdx
-            if (funcIdx != null) {
-                navigateToFunctionInWat(file, project, funcIdx)
-            } else {
-                hexViewState.scrollHexViewTo(p.byteOffset.toLong(), setCursor = true)
-            }
-        } else {
-            val finding = extraFindings.getOrNull(index - parseCount) ?: return
-            when (val a = finding.anchor) {
-                is ScriptAnchor.Function -> navigateToFunctionInWat(file, project, a.funcidx.toInt())
-                is ScriptAnchor.ByteRange -> hexViewState.scrollHexViewTo(a.offset, setCursor = true)
-                null -> {}
-            }
-        }
-    }
-
-    fun navigateToPlainWat(index: Int) {
-        if (index >= parseCount) return
-        val p = problems.getOrNull(index) ?: return
-        // Push the byte offset so WasmPanelWat's WatLiteEditor can scroll to the
-        // nearest annotated line. The editor's requestWasmByteOffsetNav is the same
-        // channel the virtualized panel uses for structural navigation.
-        val editors = FileEditorManager.getInstance(project).openFile(file, false)
-        val editor = editors.filterIsInstance<HexanaFileEditor>().firstOrNull()
-        editor?.requestWasmByteOffsetNav(p.byteOffset)
-        hexViewState.requestSelectTabByDescription("Wat")
-    }
-
-    // When there are no extra findings, keep the descriptor identical to the original
-    // (same column objects, same rowSelectionProvider) to avoid any regression.
-    if (findingRows.isEmpty()) {
-        return TableTabDescriptor(
-            name = tab.name,
-            columns = tab.columns,
-            rowCount = tab.rowCount,
-            defaultSortColumn = tab.defaultSortColumn,
-            defaultSortAscending = tab.defaultSortAscending,
-            rowSelectionProvider = tab.rowSelectionProvider,
-            rowClickAction = { index -> navigateRow(index) },
-            contextMenuItems = buildList {
-                add(RowContextMenuItemDescriptor(
-                    labelProvider = { "Show in WAT (virtualized)" },
-                    isVisible = { index -> problems.getOrNull(index)?.funcIdx != null },
-                    action = { index ->
-                        val p = problems.getOrNull(index) ?: return@RowContextMenuItemDescriptor
-                        val funcIdx = p.funcIdx ?: return@RowContextMenuItemDescriptor
-                        navigateToFunctionInWat(file, project, funcIdx)
-                    },
-                ))
-                add(RowContextMenuItemDescriptor(
-                    labelProvider = { "Show in Wat" },
-                    action = { index -> navigateToPlainWat(index) },
-                ))
-            },
-        )
-    }
-
-    // Build merged columns that route on index < parseCount vs. finding row.
-    val mergedColumns = tab.columns.mapIndexed { colIdx, origCol ->
-        ColumnDescriptor(
-            name = origCol.name,
-            widthBehavior = origCol.widthBehavior,
-        ) { rowIndex ->
-            if (rowIndex < parseCount) {
-                origCol.cellProvider(rowIndex)
-            } else {
-                val row = findingRows.getOrNull(rowIndex - parseCount)
-                    ?: return@ColumnDescriptor CellValue("")
-                when (colIdx) {
-                    0 -> CellValue(row.kind)
-                    1 -> CellValue(row.location)
-                    2 -> if (row.offsetValue >= 0) CellValue(row.offsetValue, row.offsetText)
-                         else CellValue("")
-                    3 -> if (row.sizeValue >= 0) CellValue(row.sizeValue, row.sizeText)
-                         else CellValue("")
-                    4 -> CellValue(row.message, tooltip = row.message.takeIf { it.length > 40 })
-                    else -> CellValue("")
-                }
-            }
-        }
-    }
-
-    return TableTabDescriptor(
-        name = tab.name,
-        columns = mergedColumns,
-        rowCount = totalRowCount,
-        defaultSortColumn = tab.defaultSortColumn,
-        defaultSortAscending = tab.defaultSortAscending,
-        rowSelectionProvider = { index ->
-            if (index < parseCount) {
-                tab.rowSelectionProvider(index)
-            } else {
-                val finding = extraFindings.getOrNull(index - parseCount)
-                when (val a = finding?.anchor) {
-                    is ScriptAnchor.ByteRange -> RowSelectionData(a.offset.toInt(), a.length.toInt())
-                    else -> null
-                }
-            }
-        },
-        rowClickAction = { index -> navigateRow(index) },
-        contextMenuItems = buildList {
-            add(RowContextMenuItemDescriptor(
-                labelProvider = { "Show in WAT (virtualized)" },
-                isVisible = { index ->
-                    if (index < parseCount) problems.getOrNull(index)?.funcIdx != null
-                    else extraFindings.getOrNull(index - parseCount)?.anchor is ScriptAnchor.Function
-                },
-                action = { index ->
-                    if (index < parseCount) {
-                        val p = problems.getOrNull(index) ?: return@RowContextMenuItemDescriptor
-                        val funcIdx = p.funcIdx ?: return@RowContextMenuItemDescriptor
-                        navigateToFunctionInWat(file, project, funcIdx)
-                    } else {
-                        val finding = extraFindings.getOrNull(index - parseCount) ?: return@RowContextMenuItemDescriptor
-                        val a = finding.anchor as? ScriptAnchor.Function ?: return@RowContextMenuItemDescriptor
-                        navigateToFunctionInWat(file, project, a.funcidx.toInt())
-                    }
-                },
-            ))
-            add(RowContextMenuItemDescriptor(
-                labelProvider = { "Show in Wat" },
-                isVisible = { index -> index < parseCount },
-                action = { index -> navigateToPlainWat(index) },
-            ))
         },
     )
 }

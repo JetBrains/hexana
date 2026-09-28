@@ -6,8 +6,6 @@ import org.jetbrains.hexana.wasm.analysis.MonosResult
 import org.jetbrains.hexana.wasm.analysis.exceptions.ThrowingFunction
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageReason
 import org.jetbrains.hexana.wasm.analysis.garbage.GarbageResult
-import org.jetbrains.hexana.wasm.sections.ParseProblem
-import org.jetbrains.hexana.wasm.sections.ParseProblemKind
 
 /**
  * [TableTabsProvider] for core Wasm binaries.
@@ -30,7 +28,6 @@ class WasmTableTabsProvider : TableTabsProvider {
             exceptionSurfaceTab(provider)?.let { add(it) }
             customTab(provider)?.let { add(it) }
             compatibilityTab(provider, context)?.let { add(it) }
-            problemsTab(provider)?.let { add(it) }
         }
     }
 
@@ -53,17 +50,6 @@ class WasmTableTabsProvider : TableTabsProvider {
             // Advertised only when a host supplied the catalog + targets; `singleTab`
             // resolves to null and the placeholder is dropped when no proposals are used.
             if (context.runtimeCompatibility != null) add(COMPATIBILITY_TAB_NAME)
-            // parseProblems is lazy; avoid forcing it here — advertise the tab
-            // whenever any problem source exists (a section whose partial parse
-            // can fail, or a recorded section-scan failure). singleTab resolves
-            // to null and removes the placeholder when the module is clean.
-            val problemSources = module.codeSection != null || module.typesSection != null ||
-                module.importSection != null || module.exportSection != null ||
-                module.tableSection != null || module.memorySection != null ||
-                module.functionSection != null || module.exceptionSection != null ||
-                module.globalSection != null || module.elementSection != null ||
-                module.dataSection != null || provider.hasSectionScanFailures
-            if (problemSources) add("Problems")
         }
         return Pair(names, emptyList())
     }
@@ -80,7 +66,6 @@ class WasmTableTabsProvider : TableTabsProvider {
             "Exceptions" -> exceptionSurfaceTab(provider)
             "Custom" -> customTab(provider)
             COMPATIBILITY_TAB_NAME -> compatibilityTab(provider, context)
-            "Problems" -> problemsTab(provider)
             else -> null
         }
     }
@@ -360,69 +345,6 @@ private fun customTab(provider: WasmBinaryProvider): TableTabDescriptor? {
             section?.let { RowSelectionData(it.sectionOffset, it.contentSize) }
         },
     )
-}
-
-private fun problemsTab(provider: WasmBinaryProvider): TableTabDescriptor? {
-    // parseProblems is lazy — this forces it. The work is bounded (capped at 1000)
-    // and runs on a background thread (singleTab is always called off-EDT).
-    return problemsTabDescriptor(provider.parseProblems)
-}
-
-/** Problems tab shared by core-module and component providers. */
-internal fun problemsTabDescriptor(problems: List<ParseProblem>): TableTabDescriptor? {
-    if (problems.isEmpty()) return null
-
-    return TableTabDescriptor(
-        name = "Problems",
-        columns = listOf(
-            col("Kind", ColumnWidth.MeasuredMin("Unknown opcode")) { index ->
-                CellValue(problems[index].kind.label())
-            },
-            col("Location", ColumnWidth.MeasuredMin("func 9999")) { index ->
-                val p = problems[index]
-                val loc = when {
-                    p.funcIdx != null -> "func ${p.funcIdx}"
-                    p.typeIdx != null -> "type ${p.typeIdx}"
-                    else -> p.sectionName
-                }
-                CellValue(loc)
-            },
-            col("Offset", ColumnWidth.MeasuredMin("0x00000000")) { index ->
-                val v = hex(problems[index].byteOffset)
-                CellValue(problems[index].byteOffset.toLong(), v)
-            },
-            col("Size", ColumnWidth.MeasuredMin("0x0000")) { index ->
-                val v = hex(problems[index].byteSize)
-                CellValue(problems[index].byteSize.toLong(), v)
-            },
-            col("Message", ColumnWidth.Fill()) { index ->
-                val msg = problems[index].message
-                CellValue(msg, tooltip = msg.takeIf { it.length > 40 })
-            },
-        ),
-        rowCount = problems.size,
-        rowSelectionProvider = { index ->
-            val p = problems.getOrNull(index) ?: return@TableTabDescriptor null
-            RowSelectionData(p.byteOffset, p.byteSize)
-        },
-        // rowClickAction is left null here; the IntelliJ enricher replaces it
-        // for rows with a funcIdx to navigate into the WAT view.
-    )
-}
-
-private fun ParseProblemKind.label(): String = when (this) {
-    ParseProblemKind.LOCALS_PARSE_FAILURE -> "Locals parse failure"
-    ParseProblemKind.UNKNOWN_OPCODE -> "Unknown opcode"
-    ParseProblemKind.CODE_ENTRY_CORRUPT -> "Code entry corrupt"
-    ParseProblemKind.UNKNOWN_TYPE_BYTE -> "Unknown type byte"
-    ParseProblemKind.INIT_EXPR_PARSE_FAILURE -> "Init expr failure"
-    ParseProblemKind.UNKNOWN_CORE_INSTANCE_TAG -> "Unknown instance tag"
-    ParseProblemKind.CORE_INSTANCE_ENTRY_CORRUPT -> "Instance entry corrupt"
-    ParseProblemKind.SECTION_TRUNCATED -> "Section truncated"
-    ParseProblemKind.SECTION_RESOLVE_FAILURE -> "Malformed section name"
-    ParseProblemKind.IMPORT_ENTRY_CORRUPT -> "Import entry corrupt"
-    ParseProblemKind.EXPORT_ENTRY_CORRUPT -> "Export entry corrupt"
-    ParseProblemKind.SECTION_ENTRY_CORRUPT -> "Section entry corrupt"
 }
 
 /**

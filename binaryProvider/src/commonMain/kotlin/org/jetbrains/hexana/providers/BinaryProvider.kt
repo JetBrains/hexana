@@ -5,6 +5,7 @@ import org.jetbrains.hexana.io.containsRange
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormatDetector
+import org.jetbrains.hexana.parsing.common.NativeParserDiagnostic
 import org.jetbrains.hexana.providers.elf.ArmAttributesParser
 import org.jetbrains.hexana.providers.elf.ElfDwarfAccessor
 import org.jetbrains.hexana.providers.elf.ElfDynamicEntry
@@ -320,6 +321,16 @@ sealed class NativeBinaryProvider(
      * signals available to them (strings, sections, symbols, exports).
      */
     open val nativeImageInfo: NativeImageInfo? get() = null
+
+    /**
+     * Diagnostics from the format's whole-file parser: why a header or table could not be
+     * read, which the per-table lazies drop when they answer `null`. `null` for a format
+     * without such a parser (archives); for a failed parse, the fatal diagnostic.
+     *
+     * It re-walks every table the parser knows, so it is lazy in each subclass and meant
+     * for the binary inspections rather than for rendering a tab.
+     */
+    open val parseDiagnostics: List<NativeParserDiagnostic>? get() = null
 }
 
 class ElfBinaryProvider(
@@ -329,6 +340,8 @@ class ElfBinaryProvider(
 ) : NativeBinaryProvider(sharedBytes, sourcePath) {
 
     val header: ElfHeader? by lazy { ElfParser.parseHeader(bytes) }
+
+    override val parseDiagnostics: List<NativeParserDiagnostic> by lazy { ElfParser.parse(bytes).diagnostics }
 
     val sections: List<ElfSectionHeader>? by lazy {
         header?.let { ElfParser.parseSectionHeaders(bytes, it) }
@@ -431,6 +444,8 @@ class MachOBinaryProvider(
 ) : NativeBinaryProvider(sharedBytes, sourcePath) {
 
     val header: MachOHeader? by lazy { MachOParser.parseHeader(bytes) }
+
+    override val parseDiagnostics: List<NativeParserDiagnostic> by lazy { MachOParser.parse(bytes).diagnostics }
 
     val loadCommands: List<MachOLoadCommand>? by lazy {
         header?.let { MachOParser.parseLoadCommands(bytes, it) }
@@ -559,6 +574,8 @@ class FatMachOBinaryProvider(
 
     val fatHeader: MachOFatHeader? by lazy { MachOParser.parseFatHeader(bytes) }
 
+    override val parseDiagnostics: List<NativeParserDiagnostic> by lazy { MachOParser.parse(bytes).diagnostics }
+
     val architectures: List<MachOFatArch>? by lazy {
         fatHeader?.let { MachOParser.parseFatArchitectures(bytes, it) }
     }
@@ -595,6 +612,8 @@ class PeBinaryProvider(
 ) : NativeBinaryProvider(sharedBytes, sourcePath) {
 
     val dosHeader: PeDosHeader? by lazy { PeParser.parseDosHeader(bytes) }
+
+    override val parseDiagnostics: List<NativeParserDiagnostic> by lazy { PeParser.parse(bytes).diagnostics }
 
     val coffHeader: PeCoffHeader? by lazy {
         dosHeader?.let { PeParser.parseCoffHeader(bytes, it) }
@@ -678,6 +697,8 @@ class CoffBinaryProvider(
 ) : NativeBinaryProvider(sharedBytes, sourcePath) {
 
     val coffHeader: PeCoffHeader? by lazy { PeParser.parseCoffObjectHeader(bytes) }
+
+    override val parseDiagnostics: List<NativeParserDiagnostic> by lazy { PeParser.parse(bytes).diagnostics }
 
     val sections: List<PeSection>? by lazy {
         val h = coffHeader ?: return@lazy null

@@ -58,7 +58,7 @@ class HexanaMcpServerSchemaTest {
         )
 
         val advancedNames = HexanaGeneratedMcpToolProfiles.ADVANCED_TOOL_NAMES
-        assertEquals(18, advancedNames.size)
+        assertEquals(19, advancedNames.size)
         assertEquals(
             advancedNames,
             createHexanaMcpServer(toolProfile = HexanaMcpToolProfile.ADVANCED).tools.keys.toSet(),

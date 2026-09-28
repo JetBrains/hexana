@@ -1,5 +1,10 @@
 package org.jetbrains.hexana.vscode
 
+import org.jetbrains.hexana.shared.inspections.BinaryProblem
+import org.jetbrains.hexana.shared.inspections.InspectionContext
+import org.jetbrains.hexana.shared.inspections.ProblemSeverity
+import org.jetbrains.hexana.shared.inspections.counts
+import org.jetbrains.hexana.shared.inspections.inspectBinary
 import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.Color
 import org.jetbrains.compose.web.css.DisplayStyle
@@ -69,6 +74,11 @@ fun EditorToolbar(
     runtimeCompatibility: WasmRuntimeCompatibility? = null,
     /** Selects the Compatibility tab, where the matrix and the documentation links live. */
     onOpenCompatibilityTab: (() -> Unit)? = null,
+    /**
+     * Selects the Problems tab. `null` hides the problems badge — the webapp's worker route
+     * passes null, because counting would parse the binary on the UI thread it offloads.
+     */
+    onOpenProblemsTab: (() -> Unit)? = null,
     fileTypeLabelOverride: String? = null,
     workerWasmToolbarPresentation: WorkerWasmToolbarPresentation? = null,
     workerNativeImageToolbarPresentation: WorkerNativeImageToolbarPresentation? = null,
@@ -421,6 +431,15 @@ fun EditorToolbar(
                 }
                 ProposalBadges(proposals, compatibility, onOpenCompatibilityTab)
             }
+
+            if (onOpenProblemsTab != null) {
+                // The same inputs the Problems tab is built from, so the count matches it.
+                val problems = remember(provider, runtimeCompatibility) {
+                    runCatching { inspectBinary(provider, InspectionContext(runtimeCompatibility)) }
+                        .getOrDefault(emptyList())
+                }
+                ProblemsBadge(problems, onOpenProblemsTab)
+            }
         }
 
         // Spacer to push Share Feedback to the right
@@ -596,6 +615,55 @@ private fun ProposalBadge(
         }
         Text(label)
     }
+}
+
+/** Most problems the badge tooltip lists before summarising the rest. */
+private const val MAX_TOOLTIP_PROBLEMS = 5
+
+/**
+ * "2 errors, 1 warning", coloured by the worst severity, opening the Problems tab. Absent
+ * when there are no errors or warnings: notes alone are not worth a toolbar marker. Mirrors
+ * the IntelliJ badge in `FileDescriptionBar.kt`.
+ */
+@Composable
+private fun ProblemsBadge(problems: List<BinaryProblem>, onClick: () -> Unit) {
+    val counts = remember(problems) { problems.counts() }
+    val severity = counts.highestSeverity?.takeIf { it != ProblemSeverity.Info } ?: return
+    val isError = severity == ProblemSeverity.Error
+    Span({
+        classes("hexana-problems-badge")
+        attr("title", problemsTooltip(problems))
+        style {
+            property("padding", "2px 8px")
+            property("border-radius", "4px")
+            property("font-size", "11px")
+            property("cursor", "pointer")
+            if (isError) {
+                property("background", "var(--vscode-inputValidation-errorBackground, #5C3232)")
+                property("color", "var(--vscode-errorForeground, #F0A0A0)")
+            } else {
+                property("background", "var(--vscode-inputValidation-warningBackground, #5A4A2A)")
+                property("color", "var(--vscode-editorWarning-foreground, #E0C070)")
+            }
+        }
+        onClick { event ->
+            event.stopPropagation()
+            onClick()
+        }
+    }) {
+        Span({ style { property("margin-right", "4px") } }) { Text(if (isError) "\u2716" else "\u26A0") }
+        Text(counts.label)
+    }
+}
+
+private fun problemsTooltip(problems: List<BinaryProblem>): String = buildString {
+    val actionable = problems.filter { it.severity != ProblemSeverity.Info }
+    actionable.take(MAX_TOOLTIP_PROBLEMS).forEachIndexed { index, problem ->
+        if (index > 0) append('\n')
+        append(problem.severity.label).append(": ").append(problem.message)
+    }
+    if (actionable.size > MAX_TOOLTIP_PROBLEMS) append("\n…and ${actionable.size - MAX_TOOLTIP_PROBLEMS} more")
+    append("\n\nClick for the Problems tab")
 }
 
 private fun proposalTooltip(

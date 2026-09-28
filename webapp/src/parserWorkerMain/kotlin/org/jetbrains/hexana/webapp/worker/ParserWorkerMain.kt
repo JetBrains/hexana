@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.webapp.worker
 
+import org.jetbrains.hexana.shared.inspections.inspectBinary
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.javabytecode.JavaBytecodeInstruction
 import org.jetbrains.hexana.javabytecode.JavaBytecodeOperands
@@ -1016,7 +1017,9 @@ private fun corePresentation(provider: WasmBinaryProvider, inputBytes: Int, star
     val imports = provider.imports
     val exports = provider.exports
     val codeOffsets = provider.codeOffsets
-    val problems = provider.parseProblems
+    // The shared inspections, as every other host lists them. No runtime targets: the webapp
+    // has no project directory to read them from.
+    val problems = inspectBinary(provider)
     val proposals = provider.usedProposals.sortedBy { it.toString() }
     val graalWebImage = provider.graalWebImageInfo
     return ParserWorkerPresentation(
@@ -1048,13 +1051,14 @@ private fun corePresentation(provider: WasmBinaryProvider, inputBytes: Int, star
             addTable("Functions", listOf("Function", "Size"), codeOffsets.mapIndexed { index, item ->
                 row(listOf("func ${provider.importFuncCount + index}", "${item.size} bytes"), item.offset, item.size)
             })
-            addTable("Problems", listOf("Kind", "Location", "Message"), problems.map { item ->
-                val location = item.funcIdx?.let { "func $it" } ?: item.typeIdx?.let { "type $it" } ?: item.sectionName
-                row(listOf(item.kind.toString(), location, item.message), item.byteOffset, item.byteSize)
+            addTable("Problems", listOf("Severity", "Kind", "Location", "Message"), problems.map { item ->
+                val range = item.byteRange
+                val cells = listOf(item.severity.label, item.kind, item.location.orEmpty(), item.message)
+                if (range == null) row(cells) else row(cells, range.offset.toInt(), range.size.toInt())
             })
             addTable("Proposals", listOf("Proposal"), proposals.map { item -> row(listOf(item.toString())) })
         },
-        diagnostics = problems.map { item -> ParserWorkerDiagnostic(item.kind.toString(), item.message) },
+        diagnostics = problems.map { item -> ParserWorkerDiagnostic(item.code, item.message) },
         legacyTabs = coreLegacyTabs(module),
         toolbar = ParserWorkerToolbar(
             runnableExportName = exports.filterIsInstance<WasmFunctionExportRecordEntry>()

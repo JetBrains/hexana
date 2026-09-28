@@ -21,9 +21,6 @@ class WasmComponentTableTabsProvider : TableTabsProvider {
             componentImportsTab(provider)?.let { add(it) }
             componentModulesTab(provider)?.let { add(it) }
             componentNestedComponentsTab(provider)?.let { add(it) }
-            // Forces the lazy parseProblems; bounded by the core-instance count
-            // and tableTabs runs off-EDT.
-            problemsTabDescriptor(provider.parseProblems)?.let { add(it) }
         }
     }
 }

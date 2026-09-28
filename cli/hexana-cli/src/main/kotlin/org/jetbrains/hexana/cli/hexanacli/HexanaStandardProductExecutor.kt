@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.cli.hexanacli
 
+import org.jetbrains.hexana.cli.core.INSPECT_BINARY_TOOL_NAME
 import org.jetbrains.hexana.cli.core.SUMMARIZE_BINARY_TOOL_NAME
 import org.jetbrains.hexana.cli.core.SUMMARIZE_MODULE_TOOL_NAME
 import org.jetbrains.hexana.cli.core.StandardCliRequest
@@ -25,6 +26,7 @@ internal object HexanaStandardProductExecutor : HexanaProductToolExecutor {
         HexanaProductToolExecutorBinding(SUMMARIZE_BINARY_TOOL_NAME, standardCliSupportedOutputFormats(SUMMARIZE_BINARY_TOOL_NAME), ::executeSummarizeBinary),
         HexanaProductToolExecutorBinding(SUMMARIZE_MODULE_TOOL_NAME, standardCliSupportedOutputFormats(SUMMARIZE_MODULE_TOOL_NAME), ::executeStandard),
         HexanaProductToolExecutorBinding(WASM_TO_WAT_TOOL_NAME, standardCliSupportedOutputFormats(WASM_TO_WAT_TOOL_NAME), ::executeStandard),
+        HexanaProductToolExecutorBinding(INSPECT_BINARY_TOOL_NAME, standardCliSupportedOutputFormats(INSPECT_BINARY_TOOL_NAME), ::executeStandard),
     )
 
     private fun executeSummarizeBinary(request: HexanaProductToolExecutionRequest): ProductCliResult {
@@ -62,6 +64,7 @@ internal object HexanaStandardProductExecutor : HexanaProductToolExecutor {
             } else {
                 ""
             },
+            exitCode = standardOutput.exitCode,
         )
     }
 }

@@ -278,7 +278,8 @@ internal fun resolveIdeaTools(
 val HexanaIdeaTools: List<IdeaTool> by lazy(::resolveIdeaTools)
 
 private val STANDALONE_TOOL_BINDINGS = listOf(
-    standalone(SummarizeBinaryToolId, "summarizeBinary"), standalone(ListBinaryFunctionsToolId, "listBinaryFunctions"),
+    standalone(SummarizeBinaryToolId, "summarizeBinary"), standalone(InspectBinaryToolId, "inspectBinary"),
+    standalone(ListBinaryFunctionsToolId, "listBinaryFunctions"),
     standalone(SearchBinaryFunctionsToolId, "searchBinaryFunctions"), standalone(QueryBinaryToolId, "queryBinary"),
     standalone(RunBinaryScriptToolId, "runBinaryScript"), standalone(SummarizeModuleToolId, "summarizeModule"),
     standalone(ListEnabledFeaturesToolId, "listEnabledFeatures"), standalone(GetEntrypointPolicyToolId, "getEntrypointPolicy"),
@@ -342,7 +343,9 @@ private val HexanaMcpDefaultProfile = McpProfileSpec(ProfileId("default"), stand
 ), "standalone product hexana-mcp default profile"))
 
 private val HexanaMcpAdvancedProfile = McpProfileSpec(ProfileId("advanced"), standaloneProfile(listOf(
-    ListBinaryFunctionsToolId, SearchBinaryFunctionsToolId, QueryBinaryToolId,
+    // Advanced rather than default: the default profile is also the IDEA toolset, whose
+    // binary-only input pattern cannot carry `runtimeTargetsPath`.
+    InspectBinaryToolId, ListBinaryFunctionsToolId, SearchBinaryFunctionsToolId, QueryBinaryToolId,
     ResolveComponentDependenciesToolId, ListComponentSurfaceToolId, ListCustomSectionsToolId,
     ListCodeSectionOffsetsToolId, FunctionsForIndicesToolId, GetLocalsForFunctionsToolId,
     GetInstructionsForFunctionsToolId, GetMemoryForIndicesToolId, GetGlobalsForIndicesToolId,
@@ -438,6 +441,24 @@ private val CLI_TOOL_BINDINGS = listOf(
         executionStatus = CliExecutionStatus.Executable,
         products = setOf(HexanaCliProductSpec.id),
         inputModel = binaryCliInputModel(),
+        unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
+    ),
+    cliToolBinding(
+        InspectBinaryToolId, "inspect-binary", ToolGroup.Binary, ToolOutputPolicy.ToolDefined,
+        executionStatus = CliExecutionStatus.Executable,
+        defaultOutput = OutputConversionCapability.Pretty,
+        products = setOf(HexanaCliProductSpec.id),
+        inputModel = toolInputModel {
+            binarySource("binary", target = SourceTargetSpec.RootInput) {
+                cli {
+                    positional("binary")
+                    stdin("--stdin")
+                    base64("--bytes-base64")
+                    base64Alias("--binary-base64")
+                }
+            }
+            param(name = "runtimeTargetsPath", cliOption = "--runtimes")
+        },
         unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
     ),
     cliToolBinding(

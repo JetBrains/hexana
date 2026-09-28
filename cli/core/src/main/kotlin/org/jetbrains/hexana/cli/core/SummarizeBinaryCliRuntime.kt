@@ -273,6 +273,7 @@ public fun standardCliSupportedOutputFormats(toolName: String): Set<ToolOutputFo
         SUMMARIZE_BINARY_TOOL_NAME -> SummarizeBinaryJsonRenderer.supportedFormats
         SUMMARIZE_MODULE_TOOL_NAME -> SummarizeModuleRenderer.supportedFormats
         WASM_TO_WAT_TOOL_NAME -> WasmToWatRenderer.supportedFormats
+        INSPECT_BINARY_TOOL_NAME -> InspectBinaryRenderer.supportedFormats
         else -> error("Standard CLI tool '$toolName' is not registered.")
     }
 
@@ -280,6 +281,8 @@ internal data class CliToolRuntimeBinding(
     val converter: ToolInputConverter,
     val executor: ToolExecutor,
     val renderer: ToolOutputRenderer,
+    /** Process exit status for a completed run; tools without a policy always succeed. */
+    val exitCode: (semanticResult: JsonElement) -> Int = { 0 },
 )
 
 internal class CliToolRuntimeRegistry private constructor(
@@ -294,17 +297,22 @@ internal class CliToolRuntimeRegistry private constructor(
             converters: Map<String, ToolInputConverter>,
             executors: Map<String, ToolExecutor>,
             renderers: Map<String, ToolOutputRenderer>,
+            exitCodes: Map<String, (JsonElement) -> Int> = emptyMap(),
         ): CliToolRuntimeRegistry {
             require(expectedTools.isNotEmpty()) { "Expected tool runtime bindings must not be empty." }
             val registeredTools = converters.keys + executors.keys + renderers.keys
             require(registeredTools == expectedTools) {
                 "Tool runtime registry must contain exactly $expectedTools, got $registeredTools."
             }
+            require(exitCodes.keys.all { it in expectedTools }) {
+                "Exit-code policies name unregistered tools: ${exitCodes.keys - expectedTools}."
+            }
             val bindings = expectedTools.associateWith { toolName ->
                 CliToolRuntimeBinding(
                     converter = requireNotNull(converters[toolName]) { "Missing converter for '$toolName'." },
                     executor = requireNotNull(executors[toolName]) { "Missing executor for '$toolName'." },
                     renderer = requireNotNull(renderers[toolName]) { "Missing renderer for '$toolName'." },
+                    exitCode = exitCodes[toolName] ?: { 0 },
                 )
             }
             return CliToolRuntimeRegistry(bindings)
@@ -315,6 +323,8 @@ internal class CliToolRuntimeRegistry private constructor(
 public data class RenderedStandardCliOutput(
     val rendered: RenderedToolOutput,
     val diagnostics: List<ToolExecutionDiagnostic> = emptyList(),
+    /** Non-zero when the tool's result itself is a failure, e.g. `inspect-binary` finding errors. */
+    val exitCode: Int = 0,
 )
 
 public fun standardCli(
@@ -346,7 +356,11 @@ public fun standardCli(
             options = ToolRenderOptions(format = request.format, terminalWidth = request.terminalWidth),
         )
     )
-    return RenderedStandardCliOutput(rendered = rendered, diagnostics = execution.diagnostics)
+    return RenderedStandardCliOutput(
+        rendered = rendered,
+        diagnostics = execution.diagnostics,
+        exitCode = binding.exitCode(execution.semanticResult),
+    )
 }
 
 public fun summarizeBinaryCli(
@@ -377,6 +391,7 @@ internal fun standardRuntimeRegistry(
             SUMMARIZE_BINARY_TOOL_NAME to SummarizeBinaryInputConverter(),
             SUMMARIZE_MODULE_TOOL_NAME to SummarizeModuleCliInputConverter,
             WASM_TO_WAT_TOOL_NAME to WasmToWatInputConverter(),
+            INSPECT_BINARY_TOOL_NAME to InspectBinaryInputConverter(),
         ),
         executors = mapOf(
             SUMMARIZE_BINARY_TOOL_NAME to SummarizeBinaryExecutor(analysisService),
@@ -387,28 +402,32 @@ internal fun standardRuntimeRegistry(
                 allowedFilePolicy = allowedFilePolicy,
                 wasmPrinter = wasmPrinter,
             ),
+            INSPECT_BINARY_TOOL_NAME to InspectBinaryExecutor(analysisService),
         ),
         renderers = mapOf(
             SUMMARIZE_BINARY_TOOL_NAME to SummarizeBinaryJsonRenderer,
             SUMMARIZE_MODULE_TOOL_NAME to SummarizeModuleRenderer,
             WASM_TO_WAT_TOOL_NAME to WasmToWatRenderer,
-        )
+            INSPECT_BINARY_TOOL_NAME to InspectBinaryRenderer,
+        ),
+        exitCodes = mapOf(INSPECT_BINARY_TOOL_NAME to ::inspectBinaryExitCode),
     )
 
 internal val STANDARD_ANALYSIS_TOOL_NAMES: Set<String> = setOf(
     SUMMARIZE_BINARY_TOOL_NAME,
     SUMMARIZE_MODULE_TOOL_NAME,
     WASM_TO_WAT_TOOL_NAME,
+    INSPECT_BINARY_TOOL_NAME,
 )
 
-private fun ToolInputSources.singleBinaryInput(): BinaryInput {
+internal fun ToolInputSources.singleBinaryInput(commandName: String = "summarize-binary"): BinaryInput {
     require(pathArguments.isEmpty() && stdinText == null && stdinBytesCopy() == null)
     return when (val source = sourceSelections.singleOrNull()) {
         is ToolInputSourceSelection.Path -> BinaryInput.FilePath(source.path)
         is ToolInputSourceSelection.Base64 -> BinaryInput.InlineBytes(source.bytesBase64)
         is ToolInputSourceSelection.StdinBytes -> BinaryInput.RawBytes(source.bytes())
         is ToolInputSourceSelection.ByteList -> BinaryInput.RawBytes(source.bytes.map(Int::toByte).toByteArray())
-        null -> throw IllegalArgumentException("summarize-binary requires exactly one binary source selection.")
+        null -> throw IllegalArgumentException("$commandName requires exactly one binary source selection.")
     }
 }
 

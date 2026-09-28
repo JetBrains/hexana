@@ -67,6 +67,7 @@ import org.jetbrains.hexana.features.WasmFeatureCatalogService
 import org.jetbrains.hexana.features.WasmRuntimeCompatibilityConfigurable
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.shared.COMPATIBILITY_TAB_NAME
+import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
 import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.NativeDebugTabData
@@ -334,6 +335,10 @@ internal fun BinaryEditorView(
                     WasmRuntimeCompatibilityConfigurable::class.java,
                 )
             },
+            // The Problems tab lists these alongside the inspections' own; the toolbar badge
+            // reads the same pair through ideInspectionContext, so the two agree.
+            hostProblems = scriptCheckProblems(state.project, filePath),
+            problemNavigator = binaryProvider.problemNavigator(state),
         )
 
         val panelsResolved = remember(binaryProvider, hexEditedSinceOpen) { mutableStateOf(false) }
@@ -563,44 +568,53 @@ internal fun BinaryEditorView(
             }
         }
 
-        // Rebuild just the Compatibility tab when .hexana/runtimes.json changes, or when a
-        // background refresh replaces the feature catalog the verdicts are read from. Only
-        // its columns depend on either — whether the tab exists at all depends on the project
-        // having a base path and the module using proposals, both fixed for this editor — so
-        // re-resolving every panel would re-run the expensive analyses for nothing. `drop(1)`
-        // skips the current value: the initial resolution already used it.
+        // Rebuild just the tabs whose content depends on host state, when that state changes:
+        // .hexana/runtimes.json, or a background refresh of the feature catalog the verdicts
+        // are read from, moves both the Compatibility columns and the runtime-compatibility
+        // problems; a finished script run moves only the Problems tab. Re-resolving every panel
+        // would re-run the expensive analyses for nothing. `drop(1)` skips the current value:
+        // the initial resolution already used it.
+        suspend fun refreshTab(tabName: String) {
+            val rebuilt = withContext(Dispatchers.Default) {
+                runCatching {
+                    val context = buildTableTabsContext(null)
+                    TableTabsProviderRegistry.providers
+                        .firstNotNullOfOrNull { p -> p.singleTab(tabName, binaryProvider, context) }
+                        ?.let { tab -> binaryProvider.getTabEnricher()(listOf(tab), state, pathsNav).firstOrNull() }
+                }.getOrNull()
+            }
+            val panel = rebuilt?.let {
+                binaryProvider.resolveOrdinaryTabPanel(
+                    tab = it,
+                    state = state,
+                    archiveName = fileName,
+                    onOpenZipEntry = onOpenZipEntry,
+                    onOpenTarEntry = onOpenTarEntry,
+                )
+            }
+            if (rebuilt != null) {
+                state.publishResolvedTableTab(
+                    tabName = rebuilt.name,
+                    columns = rebuilt.columns.map { it.name },
+                    prologueText = rebuilt.prologueText,
+                )
+            }
+            // Inserts the tab when it was absent: a module with no problems gains one once
+            // a declared runtime cannot run it, or a script check fails.
+            replacePlaceholder(panels, tabName, panel)
+        }
         LaunchedEffect(binaryProvider, panels) {
             merge(
                 RuntimeTargetsService.getInstance(state.project).changes.drop(1),
                 WasmFeatureCatalogService.getInstance().changes.drop(1),
             ).collect {
-                val rebuilt = withContext(Dispatchers.Default) {
-                    runCatching {
-                        val context = buildTableTabsContext(null)
-                        TableTabsProviderRegistry.providers
-                            .firstNotNullOfOrNull { p ->
-                                p.singleTab(COMPATIBILITY_TAB_NAME, binaryProvider, context)
-                            }
-                            ?.let { tab -> binaryProvider.getTabEnricher()(listOf(tab), state, pathsNav).firstOrNull() }
-                    }.getOrNull()
-                }
-                val panel = rebuilt?.let {
-                    binaryProvider.resolveOrdinaryTabPanel(
-                        tab = it,
-                        state = state,
-                        archiveName = fileName,
-                        onOpenZipEntry = onOpenZipEntry,
-                        onOpenTarEntry = onOpenTarEntry,
-                    )
-                }
-                if (rebuilt != null) {
-                    state.publishResolvedTableTab(
-                        tabName = rebuilt.name,
-                        columns = rebuilt.columns.map { it.name },
-                        prologueText = rebuilt.prologueText,
-                    )
-                }
-                replacePlaceholder(panels, COMPATIBILITY_TAB_NAME, panel)
+                refreshTab(COMPATIBILITY_TAB_NAME)
+                refreshTab(PROBLEMS_TAB_NAME)
+            }
+        }
+        LaunchedEffect(binaryProvider, panels) {
+            ScriptFindingsStore.getInstance(state.project).changes.drop(1).collect {
+                refreshTab(PROBLEMS_TAB_NAME)
             }
         }
 
@@ -635,6 +649,7 @@ internal fun BinaryEditorView(
                     fileName = fileName,
                     binaryProvider = liveProvider,
                     state = state,
+                    filePath = filePath,
                     onSizeClick = topTabIndex?.let { idx -> {
                         state.setSelectedTab(idx)
                         if (state.topFraction > 0.9f) {

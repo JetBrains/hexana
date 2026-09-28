@@ -146,7 +146,7 @@ class HexanaProductCliTest {
         }
         assertEquals(
             mapOf(
-                "hexana-cli" to listOf("summarize-binary", "summarize-module", "wasm-to-wat"),
+                "hexana-cli" to listOf("inspect-binary", "summarize-binary", "summarize-module", "wasm-to-wat"),
                 "hexana-cli-script" to listOf("run-script", "test"),
                 "hexana-wasm-tools" to listOf("component-wit-report", "metadata-audit", "validate-and-explain"),
             ),
@@ -582,7 +582,7 @@ private object FailOnScriptExecuteExecutor : HexanaProductToolExecutor {
     )
 }
 
-private val STANDARD_TOOL_NAMES = listOf("summarize_binary", "summarize_module", "wasm_to_wat")
+private val STANDARD_TOOL_NAMES = listOf("inspect_binary", "summarize_binary", "summarize_module", "wasm_to_wat")
 
 private fun testBinding(toolName: String): HexanaProductToolExecutorBinding =
     HexanaProductToolExecutorBinding(toolName, formatsFor(toolName)) { request ->

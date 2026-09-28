@@ -40,6 +40,7 @@ private val CURRENT_DEFAULT_MCP_TOOL_NAMES = listOf(
 )
 
 private val CURRENT_ADVANCED_MCP_TOOL_NAMES = listOf(
+    "inspect_binary",
     "list_binary_functions",
     "search_binary_functions",
     "query_binary",
@@ -120,6 +121,7 @@ class HexanaToolsTest {
         assertEquals(
             listOf(
                 "summarize_binary",
+                "inspect_binary",
                 "list_binary_functions",
                 "search_binary_functions",
                 "query_binary",
@@ -182,11 +184,12 @@ class HexanaToolsTest {
         assertEquals(
             listOf(
                 "summarize_binary",
+                "inspect_binary",
                 "list_binary_functions",
                 "search_binary_functions",
                 "query_binary",
             ),
-            HexanaTools.take(4).map { it.name },
+            HexanaTools.take(5).map { it.name },
         )
     }
 
@@ -202,16 +205,16 @@ class HexanaToolsTest {
     fun `surface authorities preserve approved inventories and bindings`() {
         assertEquals(CURRENT_DEFAULT_MCP_TOOL_NAMES, HexanaIdeaTools.map { it.name })
         assertEquals(29, HexanaIdeaTools.size)
-        assertEquals(48, HexanaStandaloneTools.size)
+        assertEquals(49, HexanaStandaloneTools.size)
         assertEquals(CURRENT_DEFAULT_MCP_TOOL_NAMES, mcpProfile("default").toolIds.map { it.value })
         assertEquals(CURRENT_ADVANCED_MCP_TOOL_NAMES, mcpProfile("advanced").toolIds.map { it.value })
         assertEquals(listOf("run_binary_script"), mcpProfile("scripting").toolIds.map { it.value })
         assertEquals(29, mcpProfile("default").toolIds.size)
-        assertEquals(18, mcpProfile("advanced").toolIds.size)
+        assertEquals(19, mcpProfile("advanced").toolIds.size)
         assertTrue(mcpProfile("default").toolIds.intersect(mcpProfile("advanced").toolIds.toSet()).isEmpty())
         assertTrue(mcpProfile("default").toolIds.intersect(mcpProfile("scripting").toolIds.toSet()).isEmpty())
         assertTrue(mcpProfile("advanced").toolIds.intersect(mcpProfile("scripting").toolIds.toSet()).isEmpty())
-        assertEquals(35, HexanaCliTools.size)
+        assertEquals(36, HexanaCliTools.size)
         assertTrue(HexanaStandaloneTools.all {
             it.standaloneInvocation.methodName.matches(Regex("^[A-Za-z_][A-Za-z0-9_]*$"))
         })
@@ -265,12 +268,12 @@ class HexanaToolsTest {
         val products = HexanaCliProductRegistry.products.associate { product ->
             product.id to HexanaCliTools.filter { product.id in it.binding.products }.map { it.name }
         }
-        assertEquals(listOf("summarize_binary", "wasm_to_wat", "summarize_module"), products.getValue(HexanaCliProductSpec.id))
+        assertEquals(listOf("summarize_binary", "inspect_binary", "wasm_to_wat", "summarize_module"), products.getValue(HexanaCliProductSpec.id))
         assertEquals(listOf("run_binary_script", "run_script_suite"), products.getValue(HexanaCliScriptProductSpec.id))
         assertEquals(listOf("validate_and_explain", "metadata_audit", "component_wit_report"),
             products.getValue(HexanaWasmToolsProductSpec.id))
         val executable = HexanaCliTools.filter { it.binding.executionStatus == CliExecutionStatus.Executable }
-        assertEquals(8, executable.size)
+        assertEquals(9, executable.size)
         assertTrue(executable.all { it.inputModel != null })
         assertEquals(OutputConversionCapability.Pretty, HexanaCliTools.single { it.name == "summarize_module" }.binding.defaultOutput)
     }
@@ -733,6 +736,13 @@ class HexanaToolsTest {
                 "run_script_suite" -> setOf(OutputConversionCapability.RawText)
                 "validate_and_explain", "metadata_audit", "component_wit_report" ->
                     setOf(OutputConversionCapability.SemanticJson, OutputConversionCapability.Pretty)
+                "inspect_binary" -> setOf(
+                    OutputConversionCapability.SemanticJson,
+                    OutputConversionCapability.McpWrapper,
+                    OutputConversionCapability.Pretty,
+                    OutputConversionCapability.Table,
+                    OutputConversionCapability.Sarif,
+                )
                 else -> setOf(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper)
             }
             assertEquals(

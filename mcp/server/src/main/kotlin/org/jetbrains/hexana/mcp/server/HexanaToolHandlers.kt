@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.mcp.server
 
+import org.jetbrains.hexana.mcp.model.inspections.InspectBinaryResult
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.coroutines.CancellationException
@@ -111,6 +112,15 @@ class HexanaToolHandlers(
     fun summarizeBinary(arguments: JsonObject?): CallToolResult {
         return execute("summarize_binary", BinarySummaryResult.serializer()) {
             analysisService.summarizeBinary(binaryInput(arguments))
+        }
+    }
+
+    fun inspectBinary(arguments: JsonObject?): CallToolResult {
+        return execute("inspect_binary", InspectBinaryResult.serializer()) {
+            analysisService.inspectBinary(
+                input = binaryInput(arguments),
+                runtimeTargetsInput = arguments.optionalNonBlankString("runtimeTargetsPath")?.let(TextInput::FilePath),
+            )
         }
     }
 

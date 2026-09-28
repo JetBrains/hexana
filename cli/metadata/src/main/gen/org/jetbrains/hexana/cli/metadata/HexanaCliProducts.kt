@@ -46,6 +46,7 @@ public object HexanaGeneratedCliProducts {
   public val SELECTIONS: Map<String, List<HexanaCliProductToolSelection>> = mapOf(
         "hexana-cli" to listOf(
           HexanaCliProductToolSelection("summarize_binary", "summarize-binary", "ToolDefined", "SemanticJson"),
+          HexanaCliProductToolSelection("inspect_binary", "inspect-binary", "ToolDefined", "Pretty"),
           HexanaCliProductToolSelection("wasm_to_wat", "wasm-to-wat", "ToolDefined", "RawText"),
           HexanaCliProductToolSelection("summarize_module", "summarize-module", "ToolDefined", "Pretty"),
         ),

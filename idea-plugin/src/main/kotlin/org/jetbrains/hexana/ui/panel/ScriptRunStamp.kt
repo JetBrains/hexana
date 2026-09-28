@@ -242,67 +242,6 @@ internal fun ScriptAnchor.renderAnchor(): String = when (this) {
     is ScriptAnchor.ByteRange -> "0x${offset.toString(16)}+$length"
 }
 
-// -------------------------------------------------------------------------
-// Problems-tab row model (pure, testable)
-// -------------------------------------------------------------------------
-
-/**
- * Columns produced for a [CheckFinding] row merged into the Problems tab.
- *
- * Mirrors the Problems tab column schema: Kind, Location, Offset, Size, Message.
- *
- * @property kind "check:error", "check:warning", or "check:info"
- * @property location the check id (e.g. "user:no-imports")
- * @property offsetText hex offset for ByteRange anchors, "" otherwise
- * @property offsetValue raw offset value for numeric sorting, -1L for non-range rows
- * @property sizeText hex size for ByteRange anchors, "" otherwise
- * @property sizeValue raw size value for numeric sorting, -1L for non-range rows
- * @property message the finding message
- */
-internal data class FindingProblemsRow(
-    val kind: String,
-    val location: String,
-    val offsetText: String,
-    val offsetValue: Long,
-    val sizeText: String,
-    val sizeValue: Long,
-    val message: String,
-)
-
-/** Converts a [CheckFinding] to its Problems-tab row. */
-internal fun CheckFinding.toProblemsRow(): FindingProblemsRow {
-    val kindLabel = "check:${severity.name.lowercase()}"
-    return when (val a = anchor) {
-        is ScriptAnchor.Function -> FindingProblemsRow(
-            kind = kindLabel,
-            location = "func[${a.funcidx}]",
-            offsetText = "",
-            offsetValue = -1L,
-            sizeText = "",
-            sizeValue = -1L,
-            message = message,
-        )
-        is ScriptAnchor.ByteRange -> FindingProblemsRow(
-            kind = kindLabel,
-            location = checkId,
-            offsetText = "0x${a.offset.toString(16)}",
-            offsetValue = a.offset,
-            sizeText = "0x${a.length.toString(16)}",
-            sizeValue = a.length,
-            message = message,
-        )
-        null -> FindingProblemsRow(
-            kind = kindLabel,
-            location = checkId,
-            offsetText = "",
-            offsetValue = -1L,
-            sizeText = "",
-            sizeValue = -1L,
-            message = message,
-        )
-    }
-}
-
 /**
  * Model for the Checks tab state.
  *

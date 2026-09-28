@@ -448,14 +448,12 @@ class HexanaToolCompatibilityTest {
         // any MCP or standalone profile). Its suiteFiles input is a positional parameter,
         // and the guidance text describes the ESM-only import resolution. Combined here
         // with the field-presence snapshot extension that arrived from master.
-        // Reviewed: CLI-only Wasm workflow contracts and the hexana-wasm-tools product
-        // extend the semantic and CLI snapshots without changing IDEA or standalone membership.
-        const val EXPECTED_SEMANTIC = "f1a5bd7a976e542062fd91cfb51516e870fe3ce6de061b529c48cea671e413ac"
-        const val EXPECTED_IDEA = "61a577f8701b4778a5688ce89769913bbef589dce14df69aba7197a2c4a63256"
-        const val EXPECTED_STANDALONE = "727c29abd4bfc2d7f16c7d8be7e4c839df0c27eb50287e73ff273da951fbf47f"
+        const val EXPECTED_SEMANTIC = "5400f3de10d8700b3425c6d0e20e09cc5f19626403f010935639f275a02818e8"
+        const val EXPECTED_IDEA = "714da9778528306fde04001169ecf03acb957ef9e43959f90d245b0fc4ca539d"
+        const val EXPECTED_STANDALONE = "dd0f31cd4e78e695abd10fca5a78ac31cd8602e4ba01a92688295fac45f16a41"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"
         const val EXPECTED_MCP_PRODUCTS = "13bc46a83aa5707e526842837ab9f0ac472229483024dba827b7cc35014f8903"
-        const val EXPECTED_CLI = "d1d4bcdf7bf6e8ad06d305b275854f9358bac69521a6dd28fdbdb2d2b4cf37a5"
+        const val EXPECTED_CLI = "78c54bcff7ec202f6ae4b355148237baa8a2a0e28d080cf32e661f6c7b8b509a"
         const val EXPECTED_HEXANA_CLI = "db8dba08f15faf3153d25f51a7cd530ef2fab2aa343964ff00be4450d361150b"
         const val EXPECTED_HEXANA_CLI_SCRIPT = "5ae8d15bdd2814e7e50481a8fee97ccc30884f02b22e3e84fe723b57f1b56b23"
     }

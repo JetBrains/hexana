@@ -1,11 +1,13 @@
 package org.jetbrains.hexana.mcp.tools
 
 private const val BINARIES_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.binaries"
+private const val INSPECTIONS_MODEL_PACKAGE = "org.jetbrains.hexana.mcp.model.inspections"
 
 val SummarizeBinaryToolId = ToolId("summarize_binary")
 val QueryBinaryToolId = ToolId("query_binary")
 val ListBinaryFunctionsToolId = ToolId("list_binary_functions")
 val SearchBinaryFunctionsToolId = ToolId("search_binary_functions")
+val InspectBinaryToolId = ToolId("inspect_binary")
 
 val BinaryModuleIdentityResultClass = class_("BinaryModuleIdentityResult", kotlinPackage = BINARIES_MODEL_PACKAGE) {
     nullable("path", of = string()).describe("Caller-supplied path label, when the binary came from a path.")
@@ -162,6 +164,51 @@ private val BinaryFunctionsResultClass = class_("BinaryFunctionsResult", kotlinP
     list("warnings", of = BinaryWarningResultClass).describe("Non-fatal warnings.")
 }
 
+internal val InspectBinaryInput = BinaryInputClass.with("InspectBinaryInput") {
+    nullable("runtimeTargetsPath", of = string())
+        .describe("Optional path to a `.hexana/runtimes.json` declaring the runtimes the project targets. When omitted, the runtime-compatibility inspection is skipped.")
+        .maxLength(4096)
+}
+
+val BinaryProblemResultClass = class_("BinaryProblemResult", kotlinPackage = INSPECTIONS_MODEL_PACKAGE) {
+    string("inspectionId").describe("Id of the inspection that reported the problem, such as `wasm.parse`; the SARIF rule id.")
+    string("code").describe("Stable machine-readable problem code, such as `wasm.unknown_opcode` or `elf.invalid_symbols`.")
+    string("severity").describe("Problem severity: `error`, `warning`, or `info`.")
+    string("kind").describe("Short human-readable problem kind.")
+    string("message").describe("Problem description.")
+    nullable("location", of = string()).describe("Format-specific location such as `func 12` or a section name, when known.")
+    nullable("byteOffset", of = long()).describe("Absolute file offset of the affected bytes, when the problem has a position.")
+    nullable("byteLength", of = long()).describe("Length of the affected bytes, when the problem has a position.")
+    nullable("funcidx", of = int()).describe("WebAssembly function index, when the problem is inside a function.")
+}
+
+val BinaryProblemCountsResultClass = class_("BinaryProblemCountsResult", kotlinPackage = INSPECTIONS_MODEL_PACKAGE) {
+    int("errors").describe("Number of error problems.")
+    int("warnings").describe("Number of warning problems.")
+    int("infos").describe("Number of informational problems.")
+}
+
+val BinaryInspectionResultClass = class_("BinaryInspectionResult", kotlinPackage = INSPECTIONS_MODEL_PACKAGE) {
+    string("id").describe("Inspection id.")
+    string("name").describe("Inspection display name.")
+    string("description").describe("What the inspection looks for.")
+}
+
+val InspectBinaryResultClass = class_("InspectBinaryResult", kotlinPackage = INSPECTIONS_MODEL_PACKAGE) {
+    outputCapabilities(
+        OutputConversionCapability.SemanticJson,
+        OutputConversionCapability.McpWrapper,
+        OutputConversionCapability.Pretty,
+        OutputConversionCapability.Table,
+        OutputConversionCapability.Sarif,
+    )
+    embed("module", of = BinaryModuleIdentityResultClass).describe("Format, path label, size, and architecture identity.")
+    embed("counts", of = BinaryProblemCountsResultClass).describe("Problem totals per severity.")
+    list("problems", of = BinaryProblemResultClass).describe("Problems, most severe first, then in file order.")
+    list("inspections", of = BinaryInspectionResultClass).describe("Every inspection that ran, including those that reported nothing.")
+    list("runtimeTargets", of = string()).describe("Runtimes the compatibility inspection checked against; empty when none were declared.")
+}
+
 internal val BinaryTools: List<ToolSpec> = tools {
     tool(SummarizeBinaryToolId) {
         summary = "Summarize a Wasm or native binary with compact identity and entity counts."
@@ -173,6 +220,17 @@ internal val BinaryTools: List<ToolSpec> = tools {
         """
         input = BinaryInputClass
         output = BinarySummaryResultClass
+    }
+
+    tool(InspectBinaryToolId) {
+        summary = "Report errors and warnings found in a Wasm or native binary."
+        guidance = """
+            Runs the same inspections as the Hexana Problems tab in IntelliJ and VS Code: WebAssembly parse problems, ELF/Mach-O/PE parser diagnostics and unknown record types, and, when `runtimeTargetsPath` names a `.hexana/runtimes.json`, proposals a declared runtime cannot run.
+            Each problem carries a stable `code`, a `severity`, and a byte range or `funcidx` when it has a position; follow up with `query_binary` or the Wasm function tools to inspect the affected region.
+            Runtime verdicts come from the WebAssembly feature catalog snapshot bundled with Hexana.
+        """
+        input = InspectBinaryInput
+        output = InspectBinaryResultClass
     }
 
     tool(QueryBinaryToolId) {

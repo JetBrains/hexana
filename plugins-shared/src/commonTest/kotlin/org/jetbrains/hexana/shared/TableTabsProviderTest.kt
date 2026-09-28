@@ -279,17 +279,19 @@ class TableTabsProviderTest {
         val provider = WasmBinaryProvider(bytes.toCommonByteBuffer())
         val ctx = TableTabsContext()
 
-        val advertised = WasmTableTabsProvider().availableTabNames(provider, ctx)
-        assertNotNull(advertised)
+        val advertised = BinaryProblemsTableTabsProvider().availableTabNames(provider, ctx)
         assertTrue("Problems" in advertised.first, "Problems must be advertised for a module with a type section")
 
-        val problems = WasmTableTabsProvider().singleTab("Problems", provider, ctx)
+        val problems = BinaryProblemsTableTabsProvider().singleTab("Problems", provider, ctx)
         assertNotNull(problems, "Problems tab must resolve for the truncated type section")
         assertEquals(1, problems.rowCount, "exactly one UNKNOWN_TYPE_BYTE problem expected")
-        assertEquals("Unknown type byte", problems.columns[0].cellProvider(0).representation)
+        assertEquals("Warning", problems.columns[0].cellProvider(0).representation)
+        assertEquals("Unknown type byte", problems.columns[1].cellProvider(0).representation)
 
-        val allTabs = WasmTableTabsProvider().tableTabs(provider)
-        assertEquals(listOf("Problems"), allTabs.map { it.name }, "only the Problems tab applies to this module")
+        assertEquals(emptyList(), WasmTableTabsProvider().tableTabs(provider).map { it.name },
+            "no format tab applies to this module; Problems is no longer the Wasm provider's")
+        val allTabs = TableTabsProviderRegistry.providers.flatMap { it.tableTabs(provider) }
+        assertTrue("Problems" in allTabs.map { it.name }, "the registry must still produce Problems")
     }
 
     @Test

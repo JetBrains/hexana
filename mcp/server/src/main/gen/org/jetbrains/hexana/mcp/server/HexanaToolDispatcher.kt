@@ -71,6 +71,7 @@ internal object HexanaGeneratedMcpToolProfiles {
       )
 
   internal val ADVANCED_TOOL_NAMES: Set<String> = setOf(
+        "inspect_binary",
         "list_binary_functions",
         "search_binary_functions",
         "query_binary",
@@ -286,6 +287,7 @@ internal fun requireListDataSegmentsRequestSourceGroup0(
  */
 public fun Server.registerHexanaTools(handlers: HexanaToolHandlers, profile: HexanaMcpToolProfile = HexanaMcpToolProfile.defaultProfile()) {
   if (profile.includesTool("summarize_binary")) registerSummarizeBinaryTool(handlers)
+  if (profile.includesTool("inspect_binary")) registerInspectBinaryTool(handlers)
   if (profile.includesTool("list_binary_functions")) registerListBinaryFunctionsTool(handlers)
   if (profile.includesTool("search_binary_functions")) registerSearchBinaryFunctionsTool(handlers)
   if (profile.includesTool("query_binary")) registerQueryBinaryTool(handlers)
@@ -402,6 +404,95 @@ private fun Server.registerSummarizeBinaryTool(handlers: HexanaToolHandlers) {
     ),
   ))  {
     request: CallToolRequest -> handlers.summarizeBinary(request.arguments)
+  }
+}
+
+private fun Server.registerInspectBinaryTool(handlers: HexanaToolHandlers) {
+  addTool(tool = Tool(
+    name = "inspect_binary",
+    description = """
+  |Report errors and warnings found in a Wasm or native binary.
+  |Runs the same inspections as the Hexana Problems tab in IntelliJ and VS Code: WebAssembly parse problems, ELF/Mach-O/PE parser diagnostics and unknown record types, and, when `runtimeTargetsPath` names a `.hexana/runtimes.json`, proposals a declared runtime cannot run.
+  |Each problem carries a stable `code`, a `severity`, and a byte range or `funcidx` when it has a position; follow up with `query_binary` or the Wasm function tools to inspect the affected region.
+  |Runtime verdicts come from the WebAssembly feature catalog snapshot bundled with Hexana.
+  """.trimMargin(),
+    inputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("path", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Readable local binary path. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+      })
+      put("bytesBase64", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Base64 binary bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxLength", JsonPrimitive(((HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES + 2) / 3) * 4))
+      })
+      put("bytes", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("array"))
+          add(JsonPrimitive("null"))
+        })
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("integer"))
+          put("minimum", JsonPrimitive(0))
+          put("maximum", JsonPrimitive(255))
+        })
+        put("description", JsonPrimitive("Raw binary bytes as 0..255 integers. Provide exactly one of `path`, `bytesBase64`, or `bytes`."))
+        put("maxItems", JsonPrimitive(HexanaAnalysisLimits.MAX_INLINE_BINARY_BYTES))
+      })
+      put("runtimeTargetsPath", buildJsonObject {
+        put("type", buildJsonArray {
+          add(JsonPrimitive("string"))
+          add(JsonPrimitive("null"))
+        })
+        put("description", JsonPrimitive("Optional path to a `.hexana/runtimes.json` declaring the runtimes the project targets. When omitted, the runtime-compatibility inspection is skipped."))
+        put("maxLength", JsonPrimitive(4_096))
+      })
+    },
+    required = listOf()
+  ),
+    outputSchema = ToolSchema(
+    properties = buildJsonObject {
+      put("module", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+      put("counts", buildJsonObject {
+        put("type", JsonPrimitive("object"))
+      })
+      put("problems", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("inspections", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("object"))
+        })
+      })
+      put("runtimeTargets", buildJsonObject {
+        put("type", JsonPrimitive("array"))
+        put("items", buildJsonObject {
+          put("type", JsonPrimitive("string"))
+        })
+      })
+    },
+    required = listOf("module", "counts", "problems", "inspections", "runtimeTargets")
+  ),
+    annotations = ToolAnnotations(
+      readOnlyHint = true,
+      destructiveHint = false,
+      idempotentHint = true,
+    ),
+  ))  {
+    request: CallToolRequest -> handlers.inspectBinary(request.arguments)
   }
 }
 

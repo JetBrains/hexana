@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.shared.inspections.BinaryProblem
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
 
@@ -402,6 +403,10 @@ class TreemapData(
  *   host enrichment step so the Compatibility tab's documentation links are built once.
  * @param openRuntimeSettings opens the host's runtime-targets settings UI; `null` when the
  *   host has none, in which case the tab omits the action.
+ * @param hostProblems problems only the host knows about (IntelliJ's last script-check
+ *   findings), listed in the Problems tab alongside the inspections' own.
+ * @param problemNavigator how a Problems row takes the user to the problem; `null` leaves
+ *   the host's default row click, which selects the problem's bytes.
  */
 class TableTabsContext(
     val nativeDebugData: NativeDebugTabData? = null,
@@ -409,6 +414,8 @@ class TableTabsContext(
     val runtimeCompatibility: WasmRuntimeCompatibility? = null,
     val openUrl: ((String) -> Unit)? = null,
     val openRuntimeSettings: (() -> Unit)? = null,
+    val hostProblems: List<BinaryProblem> = emptyList(),
+    val problemNavigator: ProblemNavigator? = null,
 )
 
 object TableTabsProviderRegistry {
@@ -430,6 +437,8 @@ object TableTabsProviderRegistry {
             WasmProfilerTabsProvider(),
             ParquetTableTabsProvider(),
             ArrowTableTabsProvider(),
+            // Last, so Problems follows every format's own tabs.
+            BinaryProblemsTableTabsProvider(),
         )
     }
 }

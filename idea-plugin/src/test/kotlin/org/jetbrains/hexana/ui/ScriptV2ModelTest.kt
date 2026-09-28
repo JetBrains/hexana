@@ -8,6 +8,9 @@ import org.jetbrains.hexana.mcp.scripting.SlicePage
 import org.jetbrains.hexana.mcp.scripting.SlicePageError
 import org.jetbrains.hexana.mcp.scripting.SlicePageResult
 import org.jetbrains.hexana.mcp.scripting.SliceRow
+import org.jetbrains.hexana.shared.inspections.ProblemByteRange
+import org.jetbrains.hexana.shared.inspections.ProblemSeverity
+import org.jetbrains.hexana.shared.inspections.toBinaryProblem
 import org.jetbrains.hexana.shared.scripting.CheckFinding
 import org.jetbrains.hexana.shared.scripting.CheckRegistrationInfo
 import org.jetbrains.hexana.shared.scripting.CheckSeverity
@@ -26,7 +29,6 @@ import org.jetbrains.hexana.ui.panel.isScriptStale
 import org.jetbrains.hexana.ui.panel.renderModeFor
 import org.jetbrains.hexana.ui.panel.renderAnchor
 import org.jetbrains.hexana.ui.panel.sha256Hex
-import org.jetbrains.hexana.ui.panel.toProblemsRow
 import org.jetbrains.hexana.ui.panel.toRow
 
 /**
@@ -404,52 +406,40 @@ class ScriptV2ModelTest : UsefulTestCase() {
     }
 
     // -------------------------------------------------------------------------
-    // CheckFinding -> FindingProblemsRow (Problems tab injection)
+    // ScriptFindingsStore -> Problems tab and toolbar badge
     // -------------------------------------------------------------------------
 
-    fun testProblemsRowFunctionAnchor() {
-        val finding = CheckFinding(
-            checkId = "user:c",
-            severity = CheckSeverity.ERROR,
-            message = "bad function",
-            anchor = ScriptAnchor.Function(funcidx = 7L),
-        )
-        val row = finding.toProblemsRow()
-        assertEquals("check:error", row.kind)
-        assertEquals("func[7]", row.location)
-        assertEquals("", row.offsetText)
-        assertEquals(-1L, row.offsetValue)
-        assertEquals("bad function", row.message)
-    }
-
-    fun testProblemsRowByteRangeAnchor() {
+    fun testFindingsAreFoundByTheEditorPathAndBecomeProblems() {
+        val store = ScriptFindingsStore()
+        val file = LightVirtualFile("module.wasm")
         val finding = CheckFinding(
             checkId = "user:size",
             severity = CheckSeverity.WARNING,
             message = "too big",
             anchor = ScriptAnchor.ByteRange(offset = 0x20L, length = 0x40L),
         )
-        val row = finding.toProblemsRow()
-        assertEquals("check:warning", row.kind)
-        assertEquals("user:size", row.location)
-        assertEquals("0x20", row.offsetText)
-        assertEquals(0x20L, row.offsetValue)
-        assertEquals("0x40", row.sizeText)
-        assertEquals(0x40L, row.sizeValue)
+        store.replaceFindings(file, "checks.js", listOf(finding))
+
+        val problem = store.findingsFor(file.path).single().toBinaryProblem()
+        assertEquals("user:size", problem.inspectionId)
+        assertEquals(ProblemSeverity.Warning, problem.severity)
+        assertEquals(ProblemByteRange(0x20L, 0x40L), problem.byteRange)
+        assertEmpty(store.findingsFor("/elsewhere.wasm"))
+        assertEmpty(store.findingsFor(null as String?))
     }
 
-    fun testProblemsRowNoAnchor() {
-        val finding = CheckFinding(
-            checkId = "user:global",
-            severity = CheckSeverity.INFO,
-            message = "global note",
-            anchor = null,
-        )
-        val row = finding.toProblemsRow()
-        assertEquals("check:info", row.kind)
-        assertEquals("user:global", row.location)
-        assertEquals("", row.offsetText)
-        assertEquals(-1L, row.offsetValue)
-        assertEquals("", row.sizeText)
+    fun testEveryWriteAnnouncesAChange() {
+        val store = ScriptFindingsStore()
+        val file = LightVirtualFile("module.wasm")
+        val finding = CheckFinding("user:c", CheckSeverity.ERROR, "bad", anchor = null)
+        val start = store.changes.value
+
+        store.replaceFindings(file, "checks.js", listOf(finding))
+        // Clearing a file's findings must refresh too, or a fixed problem would linger.
+        store.replaceFindings(file, "checks.js", emptyList())
+        store.clearAll()
+
+        assertEquals(start + 3, store.changes.value)
+        assertEmpty(store.findingsFor(file))
     }
 }

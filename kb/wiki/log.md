@@ -118,3 +118,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-09-25 — `entities/binary-diff-provider` — Compare Binaries With… opens the platform diff window (Hexana viewers) instead of an editor tab.
 - 2026-09-25 — `entities/binary-diff-provider` — per-entry-point default viewer via diff places.
 - 2026-09-25 — `entities/binary-diff-provider` — VS Code hex diff, shared hex-diff model, Compare Selected redirect.
+- 2026-09-28 — `entities/binary-inspections` — Shared binary inspections: Wasm parse, native parser diagnostics, runtime compatibility, and script findings as `BinaryProblem`s; Problems tab for every format, IntelliJ/VS Code count badge, `hexana-cli inspect-binary` (pretty/table/json/sarif) and advanced-profile `inspect_binary` MCP tool.

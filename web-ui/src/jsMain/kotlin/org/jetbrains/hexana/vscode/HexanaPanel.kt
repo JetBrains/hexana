@@ -136,6 +136,10 @@ fun HexanaPanel(
                     runtimeCompatibility = runtimeCompatibility,
                     openUrl = { url -> host.openUrl(url) },
                     openRuntimeSettings = onConfigureRuntimes,
+                    problemNavigator = problemNavigator(provider, selection) { funcIdx ->
+                        watNavFuncIdx.value = funcIdx
+                        onActiveTabChange(FixedTab.Wat.label)
+                    },
                 )
                 val enriched = enricher(p.tableTabs(provider, tabsContext), fileName, pendingRun)
                 for (d in enriched) {
@@ -147,11 +151,6 @@ fun HexanaPanel(
                         enrichArchiveMembersTab(d, provider, host)
                     } else if (d.name == "Packets" && provider is PcapBinaryProvider) {
                         enrichPcapPacketsTab(d, provider, host)
-                    } else if (d.name == "Problems" && provider is WasmBinaryProvider) {
-                        enrichProblemsTab(d, provider, selection) { funcIdx ->
-                            watNavFuncIdx.value = funcIdx
-                            onActiveTabChange(FixedTab.Wat.label)
-                        }
                     } else d
                     tabEntries += TabEntry(
                         PanelTab(desc.name) { sel -> TableTabContent(desc, sel) },

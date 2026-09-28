@@ -69,6 +69,13 @@ import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.features.RuntimeTargetsService
 import org.jetbrains.hexana.features.WasmFeatureCatalogService
 import org.jetbrains.hexana.shared.COMPATIBILITY_TAB_NAME
+import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
+import org.jetbrains.hexana.shared.inspections.BinaryProblem
+import org.jetbrains.hexana.shared.inspections.ProblemSeverity
+import org.jetbrains.hexana.shared.inspections.counts
+import org.jetbrains.hexana.shared.inspections.inspectBinary
+import org.jetbrains.hexana.ui.panel.ScriptFindingsStore
+import org.jetbrains.hexana.ui.panel.ideInspectionContext
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.features.ProposalCompatibility
 import org.jetbrains.hexana.wasm.analysis.WasmProposal
@@ -95,6 +102,8 @@ internal fun FileDescriptionBar(
     fileName: String,
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
+    /** Path of the editor's file; keys the script-check findings the problems badge counts. */
+    filePath: String? = null,
     onSizeClick: (() -> Unit)? = null,
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
@@ -171,6 +180,7 @@ internal fun FileDescriptionBar(
                     onSslKeyLogLoaded = onSslKeyLogLoaded,
                     pcapHasTls = pcapHasTls,
                     sslKeyLogGeneration = sslKeyLogGeneration,
+                    filePath = filePath,
                 )
             }
         } else {
@@ -184,6 +194,7 @@ internal fun FileDescriptionBar(
                 onSslKeyLogLoaded = onSslKeyLogLoaded,
                 pcapHasTls = pcapHasTls,
                 sslKeyLogGeneration = sslKeyLogGeneration,
+                filePath = filePath,
             )
         }
     }
@@ -263,6 +274,7 @@ private fun NormalModeContent(
     onSslKeyLogLoaded: () -> Unit = {},
     pcapHasTls: Boolean = false,
     sslKeyLogGeneration: Int = 0,
+    filePath: String? = null,
 ) {
     val moduleType = fileTypeDescription(binaryProvider, fileName)
 
@@ -520,6 +532,88 @@ private fun NormalModeContent(
                 if (state.topFraction > 0.9f) state.setTopFraction(0.5f)
             },
         )
+    }
+
+    // Recomputed on the same triggers that rebuild the Problems tab, from the same inputs
+    // (ideInspectionContext), so the count always matches the tab the badge opens.
+    val findingsGeneration by ScriptFindingsStore.getInstance(state.project).changes.collectAsState()
+    val problems by produceState<List<BinaryProblem>>(
+        emptyList(), binaryProvider, filePath, targetsGeneration, catalogGeneration, findingsGeneration,
+    ) {
+        value = withContext(Dispatchers.Default) {
+            runCatching { inspectBinary(binaryProvider, ideInspectionContext(state.project, filePath)) }
+                .getOrDefault(emptyList())
+        }
+    }
+    ProblemsBadge(
+        problems = problems,
+        onOpenProblems = {
+            state.requestSelectTabByDescription(PROBLEMS_TAB_NAME)
+            if (state.topFraction > 0.9f) state.setTopFraction(0.5f)
+        },
+    )
+}
+
+/** Most problems a badge tooltip lists before summarising the rest. */
+private const val MAX_TOOLTIP_PROBLEMS = 5
+
+/**
+ * "2 errors, 1 warning" beside the file type, coloured and iconed by the worst severity,
+ * opening the Problems tab on click. Absent when there are no errors or warnings: notes
+ * alone (unknown record types) are not worth a marker in the toolbar.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ProblemsBadge(problems: List<BinaryProblem>, onOpenProblems: () -> Unit) {
+    val counts = remember(problems) { problems.counts() }
+    val severity = counts.highestSeverity?.takeIf { it != ProblemSeverity.Info } ?: return
+
+    val isError = severity == ProblemSeverity.Error
+    val background = when {
+        isError -> if (JewelTheme.isDark) Color(0xFF5C3232) else Color(0xFFF8D7DA)
+        else -> if (JewelTheme.isDark) Color(0xFF5A4A2A) else Color(0xFFFFF3CD)
+    }
+    val foreground = when {
+        isError -> if (JewelTheme.isDark) Color(0xFFF0A0A0) else Color(0xFF842029)
+        else -> if (JewelTheme.isDark) Color(0xFFE0C070) else Color(0xFF7A5C00)
+    }
+
+    Tooltip(tooltip = { ProblemsTooltip(problems) }) {
+        Row(
+            modifier = Modifier
+                .background(background, RoundedCornerShape(4.dp))
+                .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
+                .clickable { onOpenProblems() }
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                if (isError) AllIconsKeys.General.Error else AllIconsKeys.General.Warning,
+                contentDescription = severity.label,
+                iconClass = AllIcons::class.java,
+                modifier = Modifier.size(12.dp),
+            )
+            Text(text = counts.label, style = TextStyle(fontSize = 11.sp, color = foreground))
+        }
+    }
+}
+
+/**
+ * The first few errors and warnings, most severe first — [inspectBinary] already sorted
+ * them. Plain text only: a Jewel tooltip dismisses on pointer exit, so the badge itself
+ * is the link to the full list.
+ */
+@Composable
+private fun ProblemsTooltip(problems: List<BinaryProblem>) {
+    val actionable = problems.filter { it.severity != ProblemSeverity.Info }
+    val shown = actionable.take(MAX_TOOLTIP_PROBLEMS)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        for (problem in shown) {
+            Text("${problem.severity.label}: ${problem.message}")
+        }
+        if (actionable.size > shown.size) Text("…and ${actionable.size - shown.size} more")
+        Text("Click for the Problems tab")
     }
 }
 

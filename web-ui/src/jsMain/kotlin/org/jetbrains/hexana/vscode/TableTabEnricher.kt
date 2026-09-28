@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.vscode
 
+import org.jetbrains.hexana.shared.ProblemNavigator
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
@@ -165,43 +166,30 @@ private fun enrichWasmFunctionsTab(
 }
 
 /**
- * Enriches the Problems tab with VS Code navigation, mirroring the IntelliJ
- * behavior: a row with a funcIdx switches to the WAT tab and scrolls to the
- * function; other rows fall back to selecting the failed byte region in the
- * hex viewer.
+ * How a Problems row navigates in the webview, mirroring IntelliJ: a problem inside a Wasm
+ * function switches to the WAT tab at that function; anything else with a position
+ * selects its bytes in the hex viewer, which is what the bridge does for a row without a
+ * click action.
  */
-internal fun enrichProblemsTab(
-    tab: TableTabDescriptor,
-    provider: WasmBinaryProvider,
+internal fun problemNavigator(
+    provider: BinaryProvider,
     selection: HexSelectionState,
     onNavigateToWatFunc: (Int) -> Unit,
-): TableTabDescriptor {
-    val problems = provider.parseProblems
-
-    return TableTabDescriptor(
-        name = tab.name,
-        columns = tab.columns,
-        rowCount = tab.rowCount,
-        defaultSortColumn = tab.defaultSortColumn,
-        defaultSortAscending = tab.defaultSortAscending,
-        rowSelectionProvider = tab.rowSelectionProvider,
-        rowClickAction = { index ->
-            val funcIdx = problems.getOrNull(index)?.funcIdx
-            if (funcIdx != null) {
-                onNavigateToWatFunc(funcIdx)
-            } else {
-                // Same behavior as the bridge's default (no rowClickAction) path.
-                val selData = tab.rowSelectionProvider(index)
-                if (selData != null) {
-                    selection.anchorIndex = selData.offset
-                    selection.activeIndex = selData.offset + selData.size - 1
-                    selection.cursorIndex = selData.offset
-                    scrollHexViewerTo(selData.offset)
-                }
-            }
-        },
-    )
-}
+): ProblemNavigator = ProblemNavigator(
+    open = { problem ->
+        val funcIdx = problem.funcIdx
+        val range = problem.byteRange
+        if (funcIdx != null && provider is WasmBinaryProvider) {
+            onNavigateToWatFunc(funcIdx)
+        } else if (range != null) {
+            val offset = range.offset.toInt()
+            selection.anchorIndex = offset
+            selection.activeIndex = offset + range.size.toInt() - 1
+            selection.cursorIndex = offset
+            scrollHexViewerTo(offset)
+        }
+    },
+)
 
 // ---------------------------------------------------------------------------
 // Component Exports enrichment

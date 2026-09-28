@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.mcp
 
+import org.jetbrains.hexana.mcp.model.inspections.InspectBinaryResult
+import org.jetbrains.hexana.mcp.query.readBinaryInspections
+import org.jetbrains.hexana.shared.features.RuntimeTargets
+import org.jetbrains.hexana.shared.features.parseRuntimeTargets
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.mcp.model.data.AuditDataPayloadPolicyResult
@@ -71,6 +75,14 @@ interface HexanaAnalysisService {
 
     fun summarizeBinary(input: BinaryInput): BinarySummaryResult {
         throw UnsupportedOperationException("summarizeBinary is not implemented")
+    }
+
+    /**
+     * Runs the binary inspections over [input]. [runtimeTargetsInput] is a
+     * `.hexana/runtimes.json`; `null` skips the runtime-compatibility inspection.
+     */
+    fun inspectBinary(input: BinaryInput, runtimeTargetsInput: TextInput?): InspectBinaryResult {
+        throw UnsupportedOperationException("inspectBinary is not implemented")
     }
 
     fun queryBinary(
@@ -301,6 +313,14 @@ class DefaultHexanaAnalysisService(
     override fun summarizeBinary(input: BinaryInput): BinarySummaryResult {
         val binary = binaryInputLoader().load(input)
         return binary.provider.readBinarySummary(binary.identity.path)
+    }
+
+    override fun inspectBinary(input: BinaryInput, runtimeTargetsInput: TextInput?): InspectBinaryResult {
+        // Read before the binary, so a bad targets path fails without parsing anything. The
+        // file format itself is lenient: an unreadable one declares nothing, as in the IDEs.
+        val runtimeTargets = runtimeTargetsInput?.let { parseRuntimeTargets(loadText(it).text) } ?: RuntimeTargets.EMPTY
+        val binary = binaryInputLoader().load(input)
+        return binary.provider.readBinaryInspections(binary.identity.path, runtimeTargets)
     }
 
     override fun queryBinary(
