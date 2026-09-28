@@ -1,0 +1,1057 @@
+package org.jetbrains.hexana.ui.panel
+
+import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
+import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.format.typeDisplayName
+import org.jetbrains.hexana.wasm.analysis.typegraph.TypeGraphIndex
+import org.jetbrains.hexana.wasm.analysis.typegraph.TypeGraphNodeKind
+import org.jetbrains.hexana.wasm.analysis.typegraph.computeTypeNeighborhood
+import org.jetbrains.jewel.foundation.theme.JewelTheme
+import org.jetbrains.jewel.ui.component.Text
+
+// copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
+private const val DOUBLE_CLICK_INTERVAL_MS = 400L
+// copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
+private const val NODE_PADDING_H = 20f
+// copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
+private const val NODE_PADDING_V = 12f
+// copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
+private const val HORIZONTAL_GAP = 40f
+// copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
+private const val VERTICAL_GAP = 140f
+// copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
+private const val COMPONENT_GAP = 80f
+// copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
+private const val MAX_ROW_WIDTH = 1800f
+// copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
+private const val WRAP_ROW_GAP = 60f
+
+/** Inflate amount around a rec-group bounding box to draw the cluster frame. */
+private const val REC_GROUP_FRAME_INFLATE = 12f
+
+// --- Filter mode ---
+
+internal enum class TypeGraphFilter { HIERARCHY, FIELD_REFS, BOTH }
+
+// --- Graph model ---
+
+private data class TypeGraphNode(
+    val id: Int,         // typeIdx
+    val kind: TypeGraphNodeKind,
+    val label: String,   // typeDisplayName result
+    val sublabel: String, // "struct, N fields" / "array" / "func"
+    val layer: Int,
+    val isFocus: Boolean,
+)
+
+private enum class TypeEdgeKind { SUBTYPE, FIELD_REF }
+
+private data class TypeGraphEdge(
+    val from: Int,
+    val to: Int,
+    val kind: TypeEdgeKind,
+)
+
+/** Graph model used by the canvas layout. All keys are typeIdx. */
+private data class TypeGraph(
+    val nodes: Map<Int, TypeGraphNode>,
+    val edges: List<TypeGraphEdge>,
+)
+
+// --- Layout types (copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears) ---
+
+private data class TgNodeRect(val x: Float, val y: Float, val width: Float, val height: Float)
+
+private data class TgLayoutEdge(val from: Int, val to: Int, val kind: TypeEdgeKind)
+
+// copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
+private enum class TgEdgeKind { NORMAL, SAME_LAYER, BACK_EDGE }
+
+// copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
+private enum class TgHighlightKind { NONE, OUTGOING, INCOMING }
+
+private data class TgLayout(
+    val nodePositions: Map<Int, TgNodeRect>,
+    val edges: List<TgLayoutEdge>,
+    val recGroupFrames: List<RecGroupFrame>,
+    val totalWidth: Float,
+    val totalHeight: Float,
+)
+
+private data class RecGroupFrame(
+    val groupIndex: Int,
+    val x: Float,
+    val y: Float,
+    val width: Float,
+    val height: Float,
+)
+
+// --- Pure logic helpers (internal so tests can reach them) ---
+
+/**
+ * Assigns layer = subtype hierarchy depth (BFS from superTypes).
+ * Nodes with no supertype get depth 0. FUNC nodes without a supertype also get depth 0.
+ * Returns a map from typeIdx to depth.
+ *
+ * Exposed internal for unit tests.
+ */
+internal fun assignTypeLayers(included: IntArray, index: TypeGraphIndex): Map<Int, Int> {
+    val includedSet = included.toHashSet()
+    val depth = mutableMapOf<Int, Int>()
+
+    // Seed: nodes whose supertypes are absent or not in the included set get depth 0.
+    for (t in included) {
+        val supers = index.superTypes(t).filter { it in includedSet }
+        if (supers.isEmpty()) depth[t] = 0
+    }
+
+    // BFS downward through subtype edges.
+    val queue = ArrayDeque<Int>()
+    for ((t, d) in depth) if (d == 0) queue.add(t)
+
+    while (queue.isNotEmpty()) {
+        val t = queue.removeFirst()
+        val d = depth[t] ?: continue
+        for (sub in index.directSubtypes(t)) {
+            if (sub !in includedSet) continue
+            val existing = depth[sub]
+            val candidate = d + 1
+            if (existing == null || candidate > existing) {
+                depth[sub] = candidate
+                queue.add(sub)
+            }
+        }
+    }
+
+    // Any remaining nodes not reachable via edges get depth 0.
+    for (t in included) {
+        if (t !in depth) depth[t] = 0
+    }
+    return depth
+}
+
+/**
+ * Computes the union of the neighborhood set with expansion additions.
+ * expandedTypes contains typeIdx values the user has explicitly expanded;
+ * their direct neighbors (subtypes + supertypes + fieldRefs + referencingTypes
+ * subject to filter) are added to the base included set.
+ *
+ * Exposed internal for unit tests.
+ */
+internal fun unionWithExpansions(
+    base: IntArray,
+    expandedTypes: Set<Int>,
+    index: TypeGraphIndex,
+    filter: TypeGraphFilter,
+): Set<Int> {
+    val result = base.toHashSet()
+    for (t in expandedTypes) {
+        if (t !in result) continue
+        if (filter != TypeGraphFilter.FIELD_REFS) {
+            result.addAll(index.superTypes(t).asIterable())
+            result.addAll(index.directSubtypes(t).asIterable())
+        }
+        if (filter != TypeGraphFilter.HIERARCHY) {
+            result.addAll(index.fieldRefs(t).asIterable())
+            result.addAll(index.referencingTypes(t).asIterable())
+        }
+    }
+    return result
+}
+
+/**
+ * Groups rec-group membership for the included set.
+ * Returns a map from rec-group index to list of included typeIdx values.
+ * Groups with fewer than 2 included members are omitted.
+ *
+ * Exposed internal for unit tests.
+ */
+internal fun recGroupClusters(included: Collection<Int>, index: TypeGraphIndex): Map<Int, List<Int>> {
+    val byGroup = mutableMapOf<Int, MutableList<Int>>()
+    for (t in included) {
+        val g = index.recGroup(t)
+        if (g >= 0) byGroup.getOrPut(g) { mutableListOf() }.add(t)
+    }
+    return byGroup.filter { (_, members) -> members.size >= 2 }
+}
+
+// --- Graph builder ---
+
+private fun buildTypeGraph(
+    included: Set<Int>,
+    focusType: Int,
+    index: TypeGraphIndex,
+    provider: WasmBinaryProvider,
+    filter: TypeGraphFilter,
+    layers: Map<Int, Int>,
+): TypeGraph {
+    val nodes = mutableMapOf<Int, TypeGraphNode>()
+    for (t in included) {
+        val kind = index.kind(t)
+        val sublabel = when (kind) {
+            TypeGraphNodeKind.STRUCT -> {
+                val fc = index.fieldRefs(t).size
+                "struct, $fc field${if (fc == 1) "" else "s"}"
+            }
+            TypeGraphNodeKind.ARRAY -> "array"
+            TypeGraphNodeKind.FUNC -> "func"
+        }
+        nodes[t] = TypeGraphNode(
+            id = t,
+            kind = kind,
+            label = provider.typeDisplayName(t),
+            sublabel = sublabel,
+            layer = layers[t] ?: 0,
+            isFocus = t == focusType,
+        )
+    }
+
+    val edges = mutableListOf<TypeGraphEdge>()
+    if (filter != TypeGraphFilter.FIELD_REFS) {
+        // SUBTYPE edges: from parent to child (parent renders above, child below)
+        for (t in included) {
+            for (sub in index.directSubtypes(t)) {
+                if (sub in included) edges.add(TypeGraphEdge(t, sub, TypeEdgeKind.SUBTYPE))
+            }
+        }
+    }
+    if (filter != TypeGraphFilter.HIERARCHY) {
+        // FIELD_REF edges: FUNC nodes get no outgoing field edges (leaf fence)
+        for (t in included) {
+            if (index.kind(t) == TypeGraphNodeKind.FUNC) continue
+            for (ref in index.fieldRefs(t)) {
+                if (ref in included && ref != t) edges.add(TypeGraphEdge(t, ref, TypeEdgeKind.FIELD_REF))
+            }
+        }
+    }
+    return TypeGraph(nodes, edges)
+}
+
+// --- Layout ---
+
+// copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
+private fun tgFindConnectedComponents(nodeIds: Set<Int>, edges: List<TypeGraphEdge>): List<Set<Int>> {
+    val parent = nodeIds.associateWith { it }.toMutableMap()
+    fun find(x: Int): Int {
+        var r = x
+        while (parent[r] != r) r = parent[r]!!
+        var c = x
+        while (c != r) { val n = parent[c]!!; parent[c] = r; c = n }
+        return r
+    }
+    fun union(a: Int, b: Int) { parent[find(a)] = find(b) }
+    for (e in edges) { if (e.from in parent && e.to in parent) union(e.from, e.to) }
+    return nodeIds.groupBy { find(it) }.values.map { it.toSet() }
+}
+
+// copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
+private fun tgWrapLayerRows(
+    layer: List<TypeGraphNode>,
+    nodeSizes: Map<Int, Pair<Float, Float>>,
+): List<List<TypeGraphNode>> {
+    val rows = mutableListOf<MutableList<TypeGraphNode>>()
+    var currentRow = mutableListOf<TypeGraphNode>()
+    var currentWidth = 0f
+    for (node in layer) {
+        val w = nodeSizes[node.id]?.first ?: 100f
+        val needed = if (currentRow.isEmpty()) w else w + HORIZONTAL_GAP
+        if (currentRow.isNotEmpty() && currentWidth + needed > MAX_ROW_WIDTH) {
+            rows.add(currentRow)
+            currentRow = mutableListOf()
+            currentWidth = 0f
+        }
+        currentRow.add(node)
+        currentWidth += needed
+    }
+    if (currentRow.isNotEmpty()) rows.add(currentRow)
+    return rows
+}
+
+// copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
+private fun tgReorderLayersToReduceCrossings(
+    layers: List<List<TypeGraphNode>>,
+    edges: List<TypeGraphEdge>,
+    nodeIds: Set<Int>,
+): List<List<TypeGraphNode>> {
+    if (layers.size <= 1) return layers
+    val relevantEdges = edges.filter { it.from in nodeIds && it.to in nodeIds && it.from != it.to }
+    val result = layers.map { it.toMutableList() }
+    fun positionOf(id: Int, layerNodes: List<TypeGraphNode>): Int = layerNodes.indexOfFirst { it.id == id }
+
+    // Forward pass
+    for (li in 1 until result.size) {
+        val prevPositions = result[li - 1].mapIndexed { idx, n -> n.id to idx }.toMap()
+        val barycenters = result[li].associateWith { node ->
+            val neighbors = relevantEdges
+                .filter { (it.from == node.id && it.to in prevPositions) ||
+                    (it.to == node.id && it.from in prevPositions) }
+                .map { if (it.from == node.id) prevPositions[it.to]!! else prevPositions[it.from]!! }
+            if (neighbors.isEmpty()) positionOf(node.id, result[li]).toDouble() else neighbors.average()
+        }
+        result[li].sortBy { barycenters[it] }
+    }
+    // Backward pass
+    for (li in (result.size - 2) downTo 0) {
+        val nextPositions = result[li + 1].mapIndexed { idx, n -> n.id to idx }.toMap()
+        val barycenters = result[li].associateWith { node ->
+            val neighbors = relevantEdges
+                .filter { (it.from == node.id && it.to in nextPositions) ||
+                    (it.to == node.id && it.from in nextPositions) }
+                .map { if (it.from == node.id) nextPositions[it.to]!! else nextPositions[it.from]!! }
+            if (neighbors.isEmpty()) positionOf(node.id, result[li]).toDouble() else neighbors.average()
+        }
+        result[li].sortBy { barycenters[it] }
+    }
+    return result
+}
+
+private fun layoutTypeGraph(
+    graph: TypeGraph,
+    textMeasurer: TextMeasurer,
+    recGroupClustersMap: Map<Int, List<Int>>,
+): TgLayout {
+    val labelStyle = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+    val subStyle = TextStyle(fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+
+    val nodeSizes = mutableMapOf<Int, Pair<Float, Float>>()
+    for ((id, node) in graph.nodes) {
+        val labelWidth = textMeasurer.measure(node.label, style = labelStyle).size.width.toFloat()
+        val subWidth = textMeasurer.measure(node.sublabel, style = subStyle).size.width.toFloat()
+        val textWidth = maxOf(labelWidth, subWidth)
+        val width = textWidth + NODE_PADDING_H * 2
+        val labelHeight = textMeasurer.measure(node.label, style = labelStyle).size.height.toFloat()
+        val subHeight = textMeasurer.measure(node.sublabel, style = subStyle).size.height.toFloat()
+        val height = labelHeight + subHeight + NODE_PADDING_V * 2 + 4f
+        nodeSizes[id] = width to height
+    }
+
+    // Group nodes by depth layer; within each layer sort by (recGroup, typeIdx) first.
+    val depthGroups = graph.nodes.values
+        .groupBy { it.layer }
+        .toSortedMap()
+    val layers: List<List<TypeGraphNode>> = depthGroups.map { (_, nodes) ->
+        nodes.sortedWith(compareBy({ graph.nodes[it.id]?.layer ?: 0 },
+            // pre-sort by recGroup then typeIdx so rec-group members start adjacent
+            { /* recGroup not in node directly; access via id */ it.id }))
+    }
+
+    val positions = mutableMapOf<Int, TgNodeRect>()
+
+    // Layout by connected component, then side-by-side (copied from WasmComponentDependencyGraph.kt)
+    val nodesWithEdges = buildSet<Int> { for (e in graph.edges) { add(e.from); add(e.to) } }
+    val isolatedNodesList = graph.nodes.values.filter { it.id !in nodesWithEdges }
+    val connectedNodeIds = graph.nodes.keys.filter { it in nodesWithEdges }.toSet()
+
+    var isolatedRowHeight = 0f
+    if (isolatedNodesList.isNotEmpty()) {
+        val rows = tgWrapLayerRows(isolatedNodesList, nodeSizes)
+        var currentY = 0f
+        for (row in rows) {
+            val rowWidth = row.sumOf { (nodeSizes[it.id]?.first ?: 0f).toDouble() }.toFloat() +
+                (row.size - 1) * HORIZONTAL_GAP
+            val rowHeight = row.maxOf { nodeSizes[it.id]?.second ?: 36f }
+            var x = 0f
+            for (node in row) {
+                val (w, h) = nodeSizes[node.id] ?: (100f to 36f)
+                val yOffset = (rowHeight - h) / 2f
+                positions[node.id] = TgNodeRect(x, currentY + yOffset, w, h)
+                x += w + HORIZONTAL_GAP
+            }
+            currentY += rowHeight + WRAP_ROW_GAP
+        }
+        val isoEntries = positions.entries.toList()
+        val isoRowGroups = isoEntries.groupBy { (_, r) -> r.y }
+        for ((_, entries) in isoRowGroups) {
+            val minX = entries.minOf { it.value.x }
+            val maxX = entries.maxOf { it.value.x + it.value.width }
+            val rowWidth = maxX - minX
+            val shift = -rowWidth / 2f - minX
+            for ((id, rect) in entries) positions[id] = TgNodeRect(rect.x + shift, rect.y, rect.width, rect.height)
+        }
+        isolatedRowHeight = currentY + VERTICAL_GAP - WRAP_ROW_GAP
+    }
+
+    val connectedGraph = TypeGraph(graph.nodes.filterKeys { it in connectedNodeIds }, graph.edges)
+    val components = tgFindConnectedComponents(connectedNodeIds, graph.edges)
+    var componentOffsetX = 0f
+    var totalHeight = isolatedRowHeight
+
+    for (componentNodeIds in components) {
+        val compResult = layoutTypeComponent(connectedGraph, componentNodeIds, nodeSizes)
+        for ((id, rect) in compResult.first) {
+            positions[id] = TgNodeRect(rect.x + componentOffsetX, rect.y + isolatedRowHeight, rect.width, rect.height)
+        }
+        componentOffsetX += compResult.second + COMPONENT_GAP
+        totalHeight = maxOf(totalHeight, compResult.third + isolatedRowHeight)
+    }
+
+    val totalWidth = (componentOffsetX - COMPONENT_GAP).coerceAtLeast(0f)
+    val shiftX = -totalWidth / 2f
+    val centeredPositions = positions.mapValues { (_, r) ->
+        if (r.y < isolatedRowHeight) r else TgNodeRect(r.x + shiftX, r.y, r.width, r.height)
+    }
+
+    // Compute rec-group frames from final positions.
+    val recFrames = mutableListOf<RecGroupFrame>()
+    for ((groupIndex, members) in recGroupClustersMap) {
+        val rects = members.mapNotNull { centeredPositions[it] }
+        if (rects.size < 2) continue
+        val minX = rects.minOf { it.x } - REC_GROUP_FRAME_INFLATE
+        val minY = rects.minOf { it.y } - REC_GROUP_FRAME_INFLATE
+        val maxX = rects.maxOf { it.x + it.width } + REC_GROUP_FRAME_INFLATE
+        val maxY = rects.maxOf { it.y + it.height } + REC_GROUP_FRAME_INFLATE
+        recFrames.add(RecGroupFrame(groupIndex, minX, minY, maxX - minX, maxY - minY))
+    }
+
+    val layoutEdges = graph.edges.map { TgLayoutEdge(it.from, it.to, it.kind) }
+    return TgLayout(centeredPositions, layoutEdges, recFrames, totalWidth, totalHeight)
+}
+
+private fun layoutTypeComponent(
+    graph: TypeGraph,
+    nodeIds: Set<Int>,
+    nodeSizes: Map<Int, Pair<Float, Float>>,
+): Triple<Map<Int, TgNodeRect>, Float, Float> {
+    val depthGroups = graph.nodes.values
+        .filter { it.id in nodeIds }
+        .groupBy { it.layer }
+        .toSortedMap()
+    val layers = depthGroups.values.toList()
+
+    val reorderedLayers = tgReorderLayersToReduceCrossings(layers, graph.edges, nodeIds)
+
+    val positions = mutableMapOf<Int, TgNodeRect>()
+    var currentY = 0f
+    var maxWidth = 0f
+
+    for (layer in reorderedLayers) {
+        val rows = tgWrapLayerRows(layer, nodeSizes)
+        for (row in rows) {
+            val rowWidth = row.sumOf { (nodeSizes[it.id]?.first ?: 0f).toDouble() }.toFloat() +
+                (row.size - 1) * HORIZONTAL_GAP
+            maxWidth = maxOf(maxWidth, rowWidth)
+            val rowHeight = row.maxOf { nodeSizes[it.id]?.second ?: 36f }
+            var x = 0f
+            for (node in row) {
+                val (w, h) = nodeSizes[node.id] ?: (100f to 36f)
+                val yOffset = (rowHeight - h) / 2f
+                positions[node.id] = TgNodeRect(x, currentY + yOffset, w, h)
+                x += w + HORIZONTAL_GAP
+            }
+            currentY += rowHeight + WRAP_ROW_GAP
+        }
+        currentY += VERTICAL_GAP - WRAP_ROW_GAP
+    }
+
+    // Center each row within the component's maxWidth.
+    val rowGroups = positions.entries.groupBy { (_, r) -> r.y }.toSortedMap()
+    for ((_, entries) in rowGroups) {
+        val minX = entries.minOf { it.value.x }
+        val maxX = entries.maxOf { it.value.x + it.value.width }
+        val rowWidth = maxX - minX
+        val shift = (maxWidth - rowWidth) / 2f - minX
+        for ((id, rect) in entries) positions[id] = TgNodeRect(rect.x + shift, rect.y, rect.width, rect.height)
+    }
+    return Triple(positions, maxWidth, currentY)
+}
+
+// --- Drawing ---
+
+private object TypeNodeColors {
+    // Dark theme
+    val STRUCT = Color(0xFF5BA3CF.toInt())
+    val ARRAY = Color(0xFF8CB369.toInt())
+    val FUNC = Color(0xFFD4A054.toInt())
+    val FOCUS_RING = Color(0xFFFFD700.toInt())
+    // Light theme
+    val STRUCT_LIGHT = Color(0xFF2470B3.toInt())
+    val ARRAY_LIGHT = Color(0xFF4A7A2E.toInt())
+    val FUNC_LIGHT = Color(0xFFB07D2A.toInt())
+    val FOCUS_RING_LIGHT = Color(0xFFB8860B.toInt())
+    // Rec-group frame
+    val REC_FRAME_DARK = Color(0x33AAAAAA.toInt())
+    val REC_FRAME_LIGHT = Color(0x33555555.toInt())
+    val REC_FRAME_BORDER_DARK = Color(0x88888888.toInt())
+    val REC_FRAME_BORDER_LIGHT = Color(0x88444444.toInt())
+}
+
+private fun typeNodeColor(kind: TypeGraphNodeKind, isDark: Boolean): Color = when (kind) {
+    TypeGraphNodeKind.STRUCT -> if (isDark) TypeNodeColors.STRUCT else TypeNodeColors.STRUCT_LIGHT
+    TypeGraphNodeKind.ARRAY -> if (isDark) TypeNodeColors.ARRAY else TypeNodeColors.ARRAY_LIGHT
+    TypeGraphNodeKind.FUNC -> if (isDark) TypeNodeColors.FUNC else TypeNodeColors.FUNC_LIGHT
+}
+
+private fun DrawScope.drawTypeNode(
+    x: Float, y: Float, width: Float, height: Float,
+    node: TypeGraphNode,
+    textMeasurer: TextMeasurer,
+    isHovered: Boolean,
+    isDark: Boolean,
+) {
+    val color = typeNodeColor(node.kind, isDark)
+    val bgAlpha = if (isHovered) 0.35f else if (node.isFocus) 0.28f else 0.15f
+    val borderWidth = when {
+        node.isFocus -> 3f
+        isHovered -> 2.5f
+        else -> 2f
+    }
+
+    drawRoundRect(
+        color = color.copy(alpha = bgAlpha),
+        topLeft = Offset(x, y),
+        size = Size(width, height),
+        cornerRadius = CornerRadius(8f),
+    )
+    drawRoundRect(
+        color = color,
+        topLeft = Offset(x, y),
+        size = Size(width, height),
+        cornerRadius = CornerRadius(8f),
+        style = Stroke(width = borderWidth),
+    )
+    // Extra glow ring for the focus node
+    if (node.isFocus) {
+        val inset = -4f
+        val focusRing = if (isDark) TypeNodeColors.FOCUS_RING else TypeNodeColors.FOCUS_RING_LIGHT
+        drawRoundRect(
+            color = focusRing.copy(alpha = 0.6f),
+            topLeft = Offset(x + inset, y + inset),
+            size = Size(width - inset * 2, height - inset * 2),
+            cornerRadius = CornerRadius(12f),
+            style = Stroke(width = 2f),
+        )
+    }
+
+    val labelStyle = TextStyle(
+        color = color,
+        fontSize = 13.sp,
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Bold,
+    )
+    val labelResult = textMeasurer.measure(node.label, style = labelStyle)
+    drawText(
+        labelResult,
+        topLeft = Offset(
+            x + (width - labelResult.size.width) / 2f,
+            y + NODE_PADDING_V,
+        ),
+    )
+
+    val subStyle = TextStyle(
+        color = color.copy(alpha = 0.7f),
+        fontSize = 11.sp,
+        fontFamily = FontFamily.Monospace,
+    )
+    val subResult = textMeasurer.measure(node.sublabel, style = subStyle)
+    drawText(
+        subResult,
+        topLeft = Offset(
+            x + (width - subResult.size.width) / 2f,
+            y + height - subResult.size.height - NODE_PADDING_V,
+        ),
+    )
+}
+
+// copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears
+private val DASH_FIELD_REF = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))
+
+private fun DrawScope.drawTypeEdge(
+    startX: Float, startY: Float,
+    endX: Float, endY: Float,
+    kind: TypeEdgeKind,
+    highlightKind: TgHighlightKind,
+    edgeKind: TgEdgeKind,
+    isDark: Boolean,
+) {
+    val isHighlighted = highlightKind != TgHighlightKind.NONE
+    val edgeColor = when (highlightKind) {
+        TgHighlightKind.OUTGOING -> if (isDark) Color(0xFF6CB4EE.toInt()) else Color(0xFF2B7ACC.toInt())
+        TgHighlightKind.INCOMING -> if (isDark) Color(0xFF7BC67E.toInt()) else Color(0xFF2E8B32.toInt())
+        TgHighlightKind.NONE -> if (isDark) Color(0xFF666666.toInt()) else Color(0xFF999999.toInt())
+    }
+    val strokeWidth = if (isHighlighted) 2.5f else 1.5f
+    val pathEffect = if (kind == TypeEdgeKind.FIELD_REF) DASH_FIELD_REF else null
+    val arrowSize = 10f
+    val arrowLength = arrowSize * 1.5f
+    val stroke = Stroke(width = strokeWidth, pathEffect = pathEffect)
+
+    when (edgeKind) {
+        TgEdgeKind.SAME_LAYER -> {
+            val dist = kotlin.math.abs(endX - startX)
+            val arcDrop = (dist * 0.4f).coerceIn(30f, 120f)
+            val path = Path().apply {
+                moveTo(startX, startY)
+                cubicTo(startX, startY + arcDrop, endX, endY + arcDrop, endX, endY + arrowLength)
+            }
+            drawPath(path, edgeColor, style = stroke)
+            drawPath(Path().apply {
+                moveTo(endX, endY); lineTo(endX - arrowSize, endY + arrowLength); lineTo(endX + arrowSize, endY + arrowLength); close()
+            }, color = edgeColor)
+        }
+        TgEdgeKind.BACK_EDGE -> {
+            val dist = kotlin.math.abs(endX - startX).coerceAtLeast(60f)
+            val loopOffset = dist * 0.3f + 40f
+            val sideDir = if (startX <= endX) -1f else 1f
+            val sideX = minOf(startX, endX) + sideDir * loopOffset
+            val path = Path().apply {
+                moveTo(startX, startY)
+                cubicTo(sideX, startY, sideX, endY, endX, endY + arrowLength)
+            }
+            drawPath(path, edgeColor, style = stroke)
+            drawPath(Path().apply {
+                moveTo(endX, endY); lineTo(endX - arrowSize, endY + arrowLength); lineTo(endX + arrowSize, endY + arrowLength); close()
+            }, color = edgeColor)
+        }
+        TgEdgeKind.NORMAL -> {
+            val midY = (startY + endY) / 2f
+            val path = Path().apply {
+                moveTo(startX, startY)
+                cubicTo(startX, midY, endX, midY, endX, endY - arrowLength)
+            }
+            drawPath(path, edgeColor, style = stroke)
+            drawPath(Path().apply {
+                moveTo(endX, endY); lineTo(endX - arrowSize, endY - arrowLength); lineTo(endX + arrowSize, endY - arrowLength); close()
+            }, color = edgeColor)
+        }
+    }
+}
+
+// --- Public panel composable ---
+
+/**
+ * Focused WasmGC Type Graph panel.
+ *
+ * [focusTypeFlow] is set by the WAT panel "Show type graph" action; null means nothing is
+ * selected yet. When a type is selected this panel computes its neighborhood via
+ * [computeTypeNeighborhood] (off EDT), builds a layered graph, and renders it on a
+ * pan/zoom canvas. Double-clicking a node invokes [onNavigateToType] to jump back to
+ * the WAT view.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun WasmTypeGraphPanel(
+    provider: WasmBinaryProvider,
+    focusTypeFlow: MutableStateFlow<Int?>,
+    onNavigateToType: (typeIdx: Int, byteOffset: Long) -> Unit,
+) {
+    val focusType by focusTypeFlow.collectAsState()
+    var filter by remember { mutableStateOf(TypeGraphFilter.BOTH) }
+    var expandedTypes by remember { mutableStateOf(emptySet<Int>()) }
+    var showAllConfirmPending by remember { mutableStateOf(false) }
+
+    // Reset expansion when focus changes.
+    LaunchedEffect(focusType) {
+        expandedTypes = emptySet()
+        showAllConfirmPending = false
+    }
+
+    // Early-exit states that need no data.
+    val focus = focusType
+    if (focus == null) {
+        Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+            Text("Open the WAT view and use 'Show type graph' on a type")
+        }
+        return
+    }
+
+    val index = provider.typeGraphIndex
+    if (index == null || !index.hasGcTypes) {
+        Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+            Text("No GC types in this module")
+        }
+        return
+    }
+
+    // Off-EDT data computation.
+    data class GraphData(
+        val graph: TypeGraph,
+        val included: Set<Int>,
+        val recClusters: Map<Int, List<Int>>,
+    )
+
+    var graphData by remember { mutableStateOf<GraphData?>(null) }
+    var showAll by remember { mutableStateOf(false) }
+
+    LaunchedEffect(focus, filter, expandedTypes, showAll) {
+        val data = withContext(Dispatchers.IO) {
+            val baseNeighborhood = if (showAll) {
+                IntArray(index.typeCount) { it }
+            } else {
+                computeTypeNeighborhood(
+                    index, focus,
+                    includeHierarchy = filter != TypeGraphFilter.FIELD_REFS,
+                    includeFieldRefs = filter != TypeGraphFilter.HIERARCHY,
+                ).included
+            }
+            val includedSet = unionWithExpansions(baseNeighborhood, expandedTypes, index, filter)
+            val includedArr = includedSet.toIntArray().also { it.sort() }
+            val layers = assignTypeLayers(includedArr, index)
+            val clusters = recGroupClusters(includedSet, index)
+            val graph = buildTypeGraph(includedSet, focus, index, provider, filter, layers)
+            GraphData(graph, includedSet, clusters)
+        }
+        graphData = data
+    }
+
+    val data = graphData
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Header bar: filter controls + counters + show-all button.
+        val isDarkHeader = JewelTheme.isDark
+        val mutedColor = if (isDarkHeader) Color(0xFFAAAAAA.toInt()) else Color(0xFF6E7177.toInt())
+        val selectedBg = if (isDarkHeader) Color(0xFF3A3A3A.toInt()) else Color(0xFFDDDDDD.toInt())
+        val normalBg = Color.Transparent
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            // Filter segmented control (three pills)
+            for (mode in TypeGraphFilter.entries) {
+                val label = when (mode) {
+                    TypeGraphFilter.HIERARCHY -> "Hierarchy"
+                    TypeGraphFilter.FIELD_REFS -> "Field refs"
+                    TypeGraphFilter.BOTH -> "Both"
+                }
+                val selected = filter == mode
+                Text(
+                    text = label,
+                    modifier = Modifier
+                        .background(if (selected) selectedBg else normalBg, shape = RoundedCornerShape(4.dp))
+                        .clickable { if (!selected) { filter = mode; showAll = false } }
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    style = TextStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isDarkHeader) Color(0xFFCCCCCC.toInt()) else Color(0xFF333333.toInt()),
+                    ),
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Counter
+            val shown = data?.included?.size ?: 0
+            val total = index.typeCount
+            Text(
+                text = "showing $shown of $total types",
+                style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = mutedColor),
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Show-all button
+            if (!showAll) {
+                if (showAllConfirmPending) {
+                    Text(
+                        text = "Large module: $total types. Click again to render.",
+                        style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = mutedColor),
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                Text(
+                    text = "Show all types ($total)",
+                    modifier = Modifier
+                        .background(selectedBg, shape = RoundedCornerShape(4.dp))
+                        .clickable {
+                            if (total > 300 && !showAllConfirmPending) {
+                                showAllConfirmPending = true
+                            } else {
+                                showAll = true
+                                showAllConfirmPending = false
+                            }
+                        }
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    style = TextStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
+                        color = if (isDarkHeader) Color(0xFFCCCCCC.toInt()) else Color(0xFF333333.toInt()),
+                    ),
+                )
+            }
+        }
+
+        // Canvas area
+        if (data == null) {
+            Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                Text("Loading...")
+            }
+            return@Column
+        }
+
+        if (data.graph.nodes.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.Center) {
+                Text("No types to show for the current filter.")
+            }
+            return@Column
+        }
+
+        val textMeasurer = rememberTextMeasurer()
+        // Layout runs in composition (text measurement requires UI side).
+        val layout = remember(data, textMeasurer) {
+            layoutTypeGraph(data.graph, textMeasurer, data.recClusters)
+        }
+
+        var panOffset by remember { mutableStateOf(Offset.Zero) }
+        var scale by remember { mutableStateOf(1f) }
+        var hoveredNodeId by remember { mutableStateOf<Int?>(null) }
+        var lastPressedNodeId by remember { mutableStateOf<Int?>(null) }
+        var lastPressUptimeMillis by remember { mutableLongStateOf(0L) }
+        val isDark = JewelTheme.isDark
+
+        Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            panOffset += dragAmount
+                        }
+                    }
+                    .onPointerEvent(PointerEventType.Scroll) { event ->
+                        val scrollDelta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
+                        val zoomFactor = if (scrollDelta > 0) 0.9f else 1.1f
+                        scale = (scale * zoomFactor).coerceIn(0.2f, 3f)
+                    }
+                    .onPointerEvent(PointerEventType.Move) { event ->
+                        val pos = event.changes.firstOrNull()?.position ?: return@onPointerEvent
+                        val origin = Offset(size.width / 2f, 40f) + panOffset
+                        val graphX = (pos.x - origin.x) / scale
+                        val graphY = (pos.y - origin.y) / scale
+                        hoveredNodeId = layout.nodePositions.entries.firstOrNull { (_, r) ->
+                            graphX >= r.x && graphX <= r.x + r.width &&
+                                graphY >= r.y && graphY <= r.y + r.height
+                        }?.key
+                    }
+                    .onPointerEvent(PointerEventType.Exit) { hoveredNodeId = null }
+                    .onPointerEvent(PointerEventType.Press) { event ->
+                        val pos = event.changes.firstOrNull()?.position ?: return@onPointerEvent
+                        val origin = Offset(size.width / 2f, 40f) + panOffset
+                        val graphX = (pos.x - origin.x) / scale
+                        val graphY = (pos.y - origin.y) / scale
+                        val clickedId = layout.nodePositions.entries.firstOrNull { (_, r) ->
+                            graphX >= r.x && graphX <= r.x + r.width &&
+                                graphY >= r.y && graphY <= r.y + r.height
+                        }?.key
+                        val pressUptimeMillis = event.changes.firstOrNull()?.uptimeMillis ?: 0L
+                        val isDoubleClick = clickedId != null &&
+                            clickedId == lastPressedNodeId &&
+                            pressUptimeMillis - lastPressUptimeMillis <= DOUBLE_CLICK_INTERVAL_MS
+                        lastPressedNodeId = if (isDoubleClick) null else clickedId
+                        lastPressUptimeMillis = pressUptimeMillis
+
+                        if (clickedId != null) {
+                            if (isDoubleClick) {
+                                // Double-click: navigate back to WAT
+                                val offset = provider.leafTypeRecords.getOrNull(clickedId)?.offset?.toLong() ?: 0L
+                                onNavigateToType(clickedId, offset)
+                            } else {
+                                // Single click: expand neighbors
+                                expandedTypes = if (clickedId in expandedTypes) {
+                                    expandedTypes - clickedId
+                                } else {
+                                    expandedTypes + clickedId
+                                }
+                            }
+                        }
+                    }
+            ) {
+                val origin = Offset(size.width / 2f, 40f) + panOffset
+
+                withTransform({
+                    translate(origin.x, origin.y)
+                    scale(scale, scale, Offset.Zero)
+                }) {
+                    // Draw rec-group cluster frames FIRST (behind nodes).
+                    // Note: row wrap can scatter rec-group members across rows, so the
+                    // bounding box may include whitespace between them.
+                    val recFrameBg = if (isDark) TypeNodeColors.REC_FRAME_DARK else TypeNodeColors.REC_FRAME_LIGHT
+                    val recFrameBorder = if (isDark) TypeNodeColors.REC_FRAME_BORDER_DARK else TypeNodeColors.REC_FRAME_BORDER_LIGHT
+                    val recCaptionStyle = TextStyle(
+                        color = recFrameBorder,
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                    for (frame in layout.recGroupFrames) {
+                        drawRoundRect(
+                            color = recFrameBg,
+                            topLeft = Offset(frame.x, frame.y),
+                            size = Size(frame.width, frame.height),
+                            cornerRadius = CornerRadius(8f),
+                        )
+                        drawRoundRect(
+                            color = recFrameBorder,
+                            topLeft = Offset(frame.x, frame.y),
+                            size = Size(frame.width, frame.height),
+                            cornerRadius = CornerRadius(8f),
+                            style = Stroke(width = 1.5f),
+                        )
+                        val caption = textMeasurer.measure("rec #${frame.groupIndex}", style = recCaptionStyle)
+                        drawText(
+                            caption,
+                            topLeft = Offset(frame.x + 6f, frame.y + 4f),
+                        )
+                    }
+
+                    // Build edge draw infos.
+                    for (edge in layout.edges) {
+                        val from = layout.nodePositions[edge.from] ?: continue
+                        val to = layout.nodePositions[edge.to] ?: continue
+                        val sameLayer = kotlin.math.abs(from.y - to.y) < 1f
+                        val isBackEdge = !sameLayer && from.y + from.height > to.y + to.height
+                        val edgeKind = when {
+                            sameLayer -> TgEdgeKind.SAME_LAYER
+                            isBackEdge -> TgEdgeKind.BACK_EDGE
+                            else -> TgEdgeKind.NORMAL
+                        }
+                        val hl = when (hoveredNodeId) {
+                            edge.from -> TgHighlightKind.OUTGOING
+                            edge.to -> TgHighlightKind.INCOMING
+                            else -> TgHighlightKind.NONE
+                        }
+                        val (startX, startY, endX, endY) = when (edgeKind) {
+                            TgEdgeKind.NORMAL -> arrayOf(
+                                from.x + from.width / 2f, from.y + from.height,
+                                to.x + to.width / 2f, to.y,
+                            )
+                            TgEdgeKind.SAME_LAYER -> arrayOf(
+                                from.x + from.width / 2f, from.y + from.height,
+                                to.x + to.width / 2f, to.y + to.height,
+                            )
+                            TgEdgeKind.BACK_EDGE -> arrayOf(
+                                from.x + from.width / 2f, from.y,
+                                to.x + to.width / 2f, to.y + to.height,
+                            )
+                        }
+                        drawTypeEdge(startX, startY, endX, endY, edge.kind, hl, edgeKind, isDark)
+                    }
+
+                    // Draw nodes.
+                    for ((id, rect) in layout.nodePositions) {
+                        val node = data.graph.nodes[id] ?: continue
+                        drawTypeNode(rect.x, rect.y, rect.width, rect.height, node, textMeasurer, hoveredNodeId == id, isDark)
+                    }
+                }
+            }
+
+            // Zoom controls (copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears)
+            val controlBg = if (isDark) Color(0xCC1E1E1E.toInt()) else Color(0xCCF5F5F5.toInt())
+            val controlText = if (isDark) Color(0xFFCCCCCC.toInt()) else Color(0xFF333333.toInt())
+            val controlMuted = if (isDark) Color(0xFF888888.toInt()) else Color(0xFF999999.toInt())
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(12.dp)
+                    .background(controlBg)
+                    .padding(4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier = Modifier.size(28.dp).clickable { scale = (scale * 1.2f).coerceIn(0.2f, 3f) },
+                    contentAlignment = Alignment.Center,
+                ) { Text("+", color = controlText) }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text("${(scale * 100).toInt()}%", color = controlMuted, fontSize = 9.sp)
+                Spacer(modifier = Modifier.height(2.dp))
+                Box(
+                    modifier = Modifier.size(28.dp).clickable { scale = (scale / 1.2f).coerceIn(0.2f, 3f) },
+                    contentAlignment = Alignment.Center,
+                ) { Text("−", color = controlText) }
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier.size(28.dp).clickable { scale = 1f; panOffset = Offset.Zero },
+                    contentAlignment = Alignment.Center,
+                ) { Text("⌂", color = controlText, fontSize = 14.sp) }
+            }
+
+            // Legend
+            val legendBg = if (isDark) Color(0xCC1E1E1E.toInt()) else Color(0xCCF5F5F5.toInt())
+            val legendMuted = if (isDark) Color(0xFFAAAAAA.toInt()) else Color(0xFF6E7177.toInt())
+            var legendExpanded by remember { mutableStateOf(false) }
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .background(legendBg)
+                    .clickable { legendExpanded = !legendExpanded }
+                    .padding(8.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (legendExpanded) "▼" else "▶", color = legendMuted)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Legend")
+                }
+                if (legendExpanded) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    TypeLegendItem(if (isDark) TypeNodeColors.STRUCT else TypeNodeColors.STRUCT_LIGHT, "Struct")
+                    TypeLegendItem(if (isDark) TypeNodeColors.ARRAY else TypeNodeColors.ARRAY_LIGHT, "Array")
+                    TypeLegendItem(if (isDark) TypeNodeColors.FUNC else TypeNodeColors.FUNC_LIGHT, "Func")
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                        Box(modifier = Modifier.width(24.dp).height(2.dp).background(legendMuted))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Subtype edge", color = legendMuted)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                        // Visual indicator for dashed = field ref
+                        Box(modifier = Modifier.width(24.dp).height(2.dp).background(legendMuted.copy(alpha = 0.5f)))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Field ref edge (dashed)", color = legendMuted)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Click node to expand neighbors", color = legendMuted)
+                    Text("Double-click to navigate to WAT", color = legendMuted)
+                    Text("Scroll to zoom, drag to pan", color = legendMuted)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TypeLegendItem(color: Color, label: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(vertical = 2.dp),
+    ) {
+        Box(modifier = Modifier.size(12.dp).background(color))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(label)
+    }
+}

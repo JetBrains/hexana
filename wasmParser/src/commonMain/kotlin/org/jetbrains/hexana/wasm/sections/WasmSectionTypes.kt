@@ -125,16 +125,21 @@ object StandardTypesParser {
         hasDescriptorClause: Boolean,
     ): WasmTypeRecord {
         return when (typCode) {
-            -0x22 -> arrayType(offset, hasDescriptorClause)   // 0x5e array
+            -0x22 -> arrayType(offset, superTypers, isFinal, hasDescriptorClause)   // 0x5e array
             -0x21 -> structType(offset, superTypers, isFinal, hasDescriptorClause)  // 0x5f struct
-            -0x20 -> funcType(offset, hasDescriptorClause)    // 0x60 func
+            -0x20 -> funcType(offset, superTypers, isFinal, hasDescriptorClause)    // 0x60 func
             else -> error("unknown type id: 0x${typCode.toUInt().toString(16)}")
         }
     }
 
-    private fun CommonByteBuffer.arrayType(offset: Int, hasDescriptorClause: Boolean): WasmTypeRecord {
+    private fun CommonByteBuffer.arrayType(
+        offset: Int,
+        superTypers: List<UInt>,
+        isFinal: Boolean,
+        hasDescriptorClause: Boolean,
+    ): WasmTypeRecord {
         val fieldType = fieldType()
-        return WasmArrayTypeRecord(offset, sizeFromOffset(offset), fieldType, hasDescriptorClause)
+        return WasmArrayTypeRecord(offset, sizeFromOffset(offset), fieldType, superTypers, isFinal, hasDescriptorClause)
     }
     private fun CommonByteBuffer.structType(
         offset: Int,
@@ -148,7 +153,12 @@ object StandardTypesParser {
         }
         return WasmStructTypeRecord(offset, sizeFromOffset(offset), superTypers, fields, isFinal, hasDescriptorClause)
     }
-    private fun CommonByteBuffer.funcType(offset: Int, hasDescriptorClause: Boolean): WasmTypeRecord {
+    private fun CommonByteBuffer.funcType(
+        offset: Int,
+        superTypers: List<UInt>,
+        isFinal: Boolean,
+        hasDescriptorClause: Boolean,
+    ): WasmTypeRecord {
         val params = mutableListOf<WasmValueType<*>>()
         consumeArray {
             params.add(valueType()!!)
@@ -158,7 +168,7 @@ object StandardTypesParser {
         consumeArray {
             retTypes.add(valueType()!!)
         }
-        return WasmSectionFunctionTypeRecord(offset, sizeFromOffset(offset), params, retTypes, hasDescriptorClause)
+        return WasmSectionFunctionTypeRecord(offset, sizeFromOffset(offset), params, retTypes, superTypers, isFinal, hasDescriptorClause)
     }
 
     private fun CommonByteBuffer.fieldType(): WasmFieldType {
@@ -314,6 +324,12 @@ sealed interface WasmTypeRecord : WasmRange, WasmComponentCoreType {
      * the custom-descriptors proposal. A `rec` group reports it on its entries, not on itself.
      */
     val hasDescriptorClause: Boolean get() = false
+
+    /** Supertype indices from the `sub` prefix, empty when no `sub` clause was present. */
+    val superTypes: List<UInt> get() = emptyList()
+
+    /** True when declared `sub final` or when no `sub` clause was present (defaults to final). */
+    val isFinal: Boolean get() = true
 }
 
 data class WasmFieldType(val storageType: WasmValueType<*>, val isMutable: Boolean)
@@ -328,15 +344,17 @@ data class WasmArrayTypeRecord(
     override val offset: Int,
     override val size: Int,
     val fieldType: WasmFieldType,
+    override val superTypes: List<UInt> = emptyList(),
+    override val isFinal: Boolean = true,
     override val hasDescriptorClause: Boolean = false
 ) : WasmTypeRecord
 
 data class WasmStructTypeRecord(
     override val offset: Int,
     override val size: Int,
-    val superTypes: List<UInt>,
+    override val superTypes: List<UInt>,
     val fields: List<WasmFieldType>,
-    val isFinal: Boolean,
+    override val isFinal: Boolean,
     override val hasDescriptorClause: Boolean = false
 ) : WasmTypeRecord
 
@@ -345,6 +363,8 @@ data class WasmSectionFunctionTypeRecord(
     override val size: Int,
     val params: List<WasmValueType<*>>,
     val retTypes: List<WasmValueType<*>>,
+    override val superTypes: List<UInt> = emptyList(),
+    override val isFinal: Boolean = true,
     override val hasDescriptorClause: Boolean = false
 ) : WasmTypeRecord
 

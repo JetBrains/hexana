@@ -89,6 +89,13 @@ import org.jetbrains.hexana.providers.format.RowEncodeResult
 import org.jetbrains.hexana.providers.format.RowKind
 import org.jetbrains.hexana.providers.format.WasmChunkTree
 import org.jetbrains.hexana.providers.format.WasmHexanaWatRenderer
+import org.jetbrains.hexana.providers.format.storageTypeRefIdx
+import org.jetbrains.hexana.providers.format.typeDisplayName
+import org.jetbrains.hexana.providers.format.fieldDisplayName
+import org.jetbrains.hexana.wasm.sections.WasmStructTypeRecord
+import org.jetbrains.hexana.wasm.sections.WasmArrayTypeRecord
+import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
+import org.jetbrains.hexana.wasm.sections.WasmRefType
 import org.jetbrains.hexana.providers.format.WasmParsedBinary
 import org.jetbrains.hexana.providers.format.WasmSectionKinds
 import org.jetbrains.hexana.providers.format.buildWasmChunkTree
@@ -151,10 +158,24 @@ internal fun WasmPanelWatVirtualized(
      */
     navTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
     byteOffsetNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
+    /**
+     * External type-navigation request from the Type Graph panel. Non-null
+     * value drives the panel to scroll to the specified type's definition row
+     * in the TYPE section. After consumption the flow is reset to null so
+     * equal re-clicks re-fire. Mirrors [byteOffsetNavFlow].
+     */
+    typeNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
     gutterMarks: kotlinx.coroutines.flow.StateFlow<Map<Long, GutterMark>>? = null,
     executionOffset: kotlinx.coroutines.flow.StateFlow<Long?>? = null,
     onToggleBreakpoint: ((funcIdx: Int, byteOffset: Long, instrOrdinal: Int) -> Unit)? = null,
     onDeleteBreakpoint: ((id: String) -> Unit)? = null,
+    /**
+     * Called when the user activates "Show Type Graph" on a type row or in the
+     * type-info popup. Null when the Type Graph tab is not wired up (e.g. in
+     * non-BinaryEditorView callers). When non-null, a context-menu item and a
+     * popup button are shown.
+     */
+    onShowTypeGraph: ((typeIdx: Int) -> Unit)? = null,
 ) {
     // WAT model build (parse + DWARF symbol resolution + the ~130k-chunk
     // tree) runs OFF the EDT on Dispatchers.IO; a spinner shows on first
@@ -215,11 +236,13 @@ internal fun WasmPanelWatVirtualized(
         foldedSectionsExternal = foldedSectionsExternal,
         navTargetFlow = navTargetFlow,
         byteOffsetNavFlow = byteOffsetNavFlow,
+        typeNavFlow = typeNavFlow,
         onOffsetClicked = { offset -> state.scrollHexViewTo(offset, setCursor = true) },
         gutterMarks = gutterMarks,
         executionOffset = executionOffset,
         onToggleBreakpoint = onToggleBreakpoint,
         onDeleteBreakpoint = onDeleteBreakpoint,
+        onShowTypeGraph = onShowTypeGraph,
     )
 }
 
@@ -233,11 +256,13 @@ private fun WasmPanelWatVirtualizedContent(
     foldedSectionsExternal: MutableState<Set<ChunkId>>?,
     navTargetFlow: MutableStateFlow<WasmFunctionNavTarget?>,
     byteOffsetNavFlow: MutableStateFlow<Int?> = MutableStateFlow(null),
+    typeNavFlow: MutableStateFlow<Int?> = MutableStateFlow(null),
     onOffsetClicked: ((Long) -> Unit)? = null,
     gutterMarks: kotlinx.coroutines.flow.StateFlow<Map<Long, GutterMark>>? = null,
     executionOffset: kotlinx.coroutines.flow.StateFlow<Long?>? = null,
     onToggleBreakpoint: ((funcIdx: Int, byteOffset: Long, instrOrdinal: Int) -> Unit)? = null,
     onDeleteBreakpoint: ((id: String) -> Unit)? = null,
+    onShowTypeGraph: ((typeIdx: Int) -> Unit)? = null,
 ) {
     // Read provider from the bundle, not from a separate param: it must stay
     // matched to chunkTree/renderer/snapshot through edit-commit swaps.
@@ -470,6 +495,15 @@ private fun WasmPanelWatVirtualizedContent(
         byteOffsetNavFlow.value = null
     }
 
+    // External type-index navigation from the Type Graph panel.
+    // Scrolls the WAT view to the type's definition row in the TYPE section.
+    val typeNav by typeNavFlow.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(typeNav) {
+        val typeIdx = typeNav ?: return@LaunchedEffect
+        navigator.gotoType(typeIdx)
+        typeNavFlow.value = null
+    }
+
     // Lowercase function name → global funcidx and the reverse view, built
     // from the chunk tree's already-resolved displayName field. Excludes
     // imports (they have no body chunk in the code section). The forward map
@@ -636,6 +670,89 @@ private fun WasmPanelWatVirtualizedContent(
         }
     }
     val onThrowHandler: (ThrowSiteRequest) -> Unit = { request -> throwHandlerRequest = request }
+
+    // Type-info popup: click on a TypeAnnotation row or a typeLinks token in a
+    // TYPE-section def row requests a TypeInfoData build off the EDT. The
+    // TypeGraphIndex lazy property already ran during renderer init (inlineTypeAnnotations
+    // triggers it for GC modules), so this is normally a cheap dict lookup.
+    var typeInfoData by remember { mutableStateOf<TypeInfoData?>(null) }
+    var typeInfoRequest by remember { mutableStateOf<TypeInfoRequest?>(null) }
+    androidx.compose.runtime.LaunchedEffect(typeInfoRequest) {
+        val request = typeInfoRequest ?: return@LaunchedEffect
+        typeInfoData = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val idx = request.typeIdx
+            val index = provider.typeGraphIndex ?: return@withContext null
+            val kind = index.kind(idx)
+            val kindLabel = kind.name.lowercase()
+            val recGroup = index.recGroup(idx)
+            fun typeEntry(t: Int) = TypeEntry(t, provider.typeDisplayName(t))
+            fun funcEntry(f: Int): FuncEntry {
+                val isImport = f < provider.importFuncCount
+                val label = funcDisplayNames[f] ?: if (isImport) "(imported)" else "\$func$f"
+                return FuncEntry(f, label, isImport)
+            }
+            // Build field/param/result structural preview from leafTypeRecords.
+            fun storageTypeLabel(vt: org.jetbrains.hexana.wasm.sections.WasmValueType<*>): Pair<String, Int?> {
+                val refTypeIdx = storageTypeRefIdx(vt)
+                val text = when (vt) {
+                    is org.jetbrains.hexana.wasm.sections.WasmPactTypeI8 -> "i8"
+                    is org.jetbrains.hexana.wasm.sections.WasmPactTypeI16 -> "i16"
+                    is org.jetbrains.hexana.wasm.sections.WasmI32Type -> "i32"
+                    is org.jetbrains.hexana.wasm.sections.WasmI64Type -> "i64"
+                    is org.jetbrains.hexana.wasm.sections.WasmF32Type -> "f32"
+                    is org.jetbrains.hexana.wasm.sections.WasmF64Type -> "f64"
+                    is org.jetbrains.hexana.wasm.sections.WasmVecType -> "v128"
+                    is WasmRefType -> {
+                        if (refTypeIdx != null) {
+                            val name = provider.typeDisplayName(refTypeIdx)
+                            "(ref $name)"
+                        } else {
+                            vt.toString()
+                        }
+                    }
+                    else -> vt.toString()
+                }
+                return text to refTypeIdx
+            }
+            val fields: List<FieldEntry> = when (val rec = provider.leafTypeRecords.getOrNull(idx)) {
+                is WasmStructTypeRecord -> rec.fields.mapIndexed { fi, field ->
+                    val name = provider.fieldDisplayName(idx, fi) ?: "field $fi"
+                    val (typeText, refTypeIdx) = storageTypeLabel(field.storageType)
+                    val mut = if (field.isMutable) " mut" else ""
+                    FieldEntry("$name: $typeText$mut", refTypeIdx)
+                }
+                is WasmArrayTypeRecord -> {
+                    val (typeText, refTypeIdx) = storageTypeLabel(rec.fieldType.storageType)
+                    val mut = if (rec.fieldType.isMutable) " mut" else ""
+                    listOf(FieldEntry("elem: $typeText$mut", refTypeIdx))
+                }
+                is WasmSectionFunctionTypeRecord -> {
+                    val params = rec.params.mapIndexed { pi, vt ->
+                        val (typeText, refTypeIdx) = storageTypeLabel(vt)
+                        FieldEntry("param $pi: $typeText", refTypeIdx)
+                    }
+                    val results = rec.retTypes.mapIndexed { ri, vt ->
+                        val (typeText, refTypeIdx) = storageTypeLabel(vt)
+                        FieldEntry("result $ri: $typeText", refTypeIdx)
+                    }
+                    params + results
+                }
+                else -> emptyList()
+            }
+            TypeInfoData(
+                typeIdx = idx,
+                kindLabel = kindLabel,
+                recGroup = recGroup,
+                superTypes = index.superTypes(idx).map(::typeEntry),
+                directSubtypes = index.directSubtypes(idx).map(::typeEntry),
+                referencingTypes = index.referencingTypes(idx).map(::typeEntry),
+                referencingFuncs = index.referencingFuncs(idx).map(::funcEntry),
+                fields = fields,
+            )
+        }
+    }
+    val onTypeInfo: (TypeInfoRequest) -> Unit = { request -> typeInfoRequest = request }
+    val onGotoType: (Int) -> Unit = { typeIdx -> navigator.gotoType(typeIdx) }
 
     // Build the search results adapter: WAT search produces funcIdx-based
     // results; we adapt them to ChunkSearchResult for the common panel.
@@ -809,6 +926,9 @@ private fun WasmPanelWatVirtualizedContent(
                             onFollow = onFollowTarget,
                             onIndirectCandidates = onIndirectCandidates,
                             onThrowHandler = onThrowHandler,
+                            onTypeInfo = onTypeInfo,
+                            onGotoType = onGotoType,
+                            onShowTypeGraph = onShowTypeGraph,
                             onOffsetClicked = onOffsetClicked,
                             gutterMark = if (rowByteOffset != null) currentMarks[rowByteOffset] else null,
                             isExecutionRow = rowByteOffset != null && rowByteOffset == currentExecOffset,
@@ -844,6 +964,9 @@ private fun WasmPanelWatVirtualizedContent(
                             onFollow = onFollowTarget,
                             onIndirectCandidates = onIndirectCandidates,
                             onThrowHandler = onThrowHandler,
+                            onTypeInfo = onTypeInfo,
+                            onGotoType = onGotoType,
+                            onShowTypeGraph = onShowTypeGraph,
                             onOffsetClicked = onOffsetClicked,
                             gutterMarks = currentMarks,
                             executionOffset = currentExecOffset,
@@ -896,6 +1019,33 @@ private fun WasmPanelWatVirtualizedContent(
             },
         )
     }
+    val typeData = typeInfoData
+    if (typeData != null) {
+        WasmTypeInfoPopup(
+            data = typeData,
+            onGotoType = { typeIdx ->
+                typeInfoData = null
+                typeInfoRequest = null
+                navigator.gotoType(typeIdx)
+            },
+            onGotoFunc = { funcIdx ->
+                typeInfoData = null
+                typeInfoRequest = null
+                navigator.gotoFunc(funcIdx, WasmSectionKinds.FUNCTION)
+            },
+            onDismiss = {
+                typeInfoData = null
+                typeInfoRequest = null
+            },
+            onShowTypeGraph = onShowTypeGraph?.let { cb ->
+                { typeIdx ->
+                    typeInfoData = null
+                    typeInfoRequest = null
+                    cb(typeIdx)
+                }
+            },
+        )
+    }
 }
 
 private data class PanelState(
@@ -916,7 +1066,10 @@ private fun buildPanelState(provider: WasmBinaryProvider): PanelState {
         chunkTree = buildWasmChunkTree(parsed),
         // The IDE panel gates candidate rows behind per-site expanders, so it
         // is the one renderRows consumer that can afford the inline rows.
-        renderer = WasmHexanaWatRenderer(parsed).apply { inlineIndirectCandidates = true },
+        renderer = WasmHexanaWatRenderer(parsed).apply {
+                inlineIndirectCandidates = true
+                inlineTypeAnnotations = true
+            },
         snapshot = snapshot,
     )
 }
@@ -1111,6 +1264,12 @@ private fun ChunkRow(
     /** See [RenderedRowView.onIndirectCandidates]. */
     onIndirectCandidates: ((IndirectSiteRequest) -> Unit)? = null,
     onThrowHandler: ((ThrowSiteRequest) -> Unit)? = null,
+    /** See [RenderedRowView.onTypeInfo]. */
+    onTypeInfo: ((TypeInfoRequest) -> Unit)? = null,
+    /** See [RenderedRowView.onGotoType]. */
+    onGotoType: ((typeIdx: Int) -> Unit)? = null,
+    /** See [WasmPanelWatVirtualized.onShowTypeGraph]. */
+    onShowTypeGraph: ((typeIdx: Int) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
     gutterMarks: Map<Long, GutterMark> = emptyMap(),
     executionOffset: Long? = null,
@@ -1205,6 +1364,9 @@ private fun ChunkRow(
                 onFollow = onFollow,
                 onIndirectCandidates = onIndirectCandidates,
                 onThrowHandler = onThrowHandler,
+                onTypeInfo = onTypeInfo,
+                onGotoType = onGotoType,
+                onShowTypeGraph = onShowTypeGraph,
                 onOffsetClicked = onOffsetClicked,
                 gutterMark = if (rowByteOffset != null) gutterMarks[rowByteOffset] else null,
                 isExecutionRow = rowByteOffset != null && rowByteOffset == executionOffset,
@@ -1260,6 +1422,12 @@ private fun WatRowItem(
     /** See [RenderedRowView.onIndirectCandidates]. */
     onIndirectCandidates: ((IndirectSiteRequest) -> Unit)? = null,
     onThrowHandler: ((ThrowSiteRequest) -> Unit)? = null,
+    /** See [RenderedRowView.onTypeInfo]. */
+    onTypeInfo: ((TypeInfoRequest) -> Unit)? = null,
+    /** See [RenderedRowView.onGotoType]. */
+    onGotoType: ((typeIdx: Int) -> Unit)? = null,
+    /** See [WasmPanelWatVirtualized.onShowTypeGraph]. */
+    onShowTypeGraph: ((typeIdx: Int) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
     gutterMark: GutterMark? = null,
     isExecutionRow: Boolean = false,
@@ -1409,18 +1577,24 @@ private fun WatRowItem(
             onFollow = onFollow,
             onIndirectCandidates = onIndirectCandidates,
             onThrowHandler = onThrowHandler,
+            onTypeInfo = onTypeInfo,
+            onGotoType = onGotoType,
             onOffsetClicked = onOffsetClicked,
         )
     }
-    // Right-click context menu on rows that carry a byte offset: "Go to
-    // Source (file:line)" resolved through the provider's source-location
-    // chain (DWARF, else a loaded `.map` sidecar), plus the dispatch
-    // candidates entry on call_indirect rows. Items are built lazily at
-    // popup time — no per-row resolution while scrolling.
+    // Right-click context menu. Rows with a byte offset get "Go to Source"
+    // and dispatch-candidate items. TYPE-section definition rows additionally
+    // get per-typeLink "Go to <name>" items and, when the Type Graph tab is
+    // wired up, a "Show Type Graph" item. Items are built lazily at popup
+    // time — no per-row resolution while scrolling.
     val rowSourceOffset = row.editable?.opStart
         ?: row.tokens.firstOrNull { it.kind == RenderTokenKind.OFFSET_ANNOTATION }?.sourceOffset
+    val isTypeRow = chunk.kind == WasmSectionKinds.TYPE
+    val hasContextItems = project != null &&
+        (rowSourceOffset != null || row.indirectCallTypeIdx != null ||
+            (isTypeRow && (row.typeLinks.isNotEmpty() || onShowTypeGraph != null)))
     val rowView: @Composable () -> Unit =
-        if (project != null && (rowSourceOffset != null || row.indirectCallTypeIdx != null)) {
+        if (hasContextItems) {
             {
                 androidx.compose.foundation.ContextMenuArea(items = {
                     buildList {
@@ -1434,6 +1608,25 @@ private fun WatRowItem(
                             add(
                                 androidx.compose.foundation.ContextMenuItem("Show Dispatch Candidates") {
                                     onIndirectCandidates(request)
+                                },
+                            )
+                        }
+                        // Per-link "Go to <type name>" items on TYPE-section rows.
+                        if (isTypeRow && onGotoType != null) {
+                            for (link in row.typeLinks) {
+                                val linkName = provider.typeDisplayName(link.typeIdx)
+                                add(
+                                    androidx.compose.foundation.ContextMenuItem("Go to $linkName") {
+                                        onGotoType(link.typeIdx)
+                                    },
+                                )
+                            }
+                        }
+                        // "Show Type Graph" on TYPE-section rows when wired.
+                        if (isTypeRow && onShowTypeGraph != null && chunk.indexInSection >= 0) {
+                            add(
+                                androidx.compose.foundation.ContextMenuItem("Show Type Graph") {
+                                    onShowTypeGraph(chunk.indexInSection)
                                 },
                             )
                         }
@@ -1697,6 +1890,13 @@ private fun RenderedRowView(
      */
     onIndirectCandidates: ((IndirectSiteRequest) -> Unit)? = null,
     onThrowHandler: ((ThrowSiteRequest) -> Unit)? = null,
+    /** Invoked when a TypeAnnotation row is clicked or a GC-opcode row is activated. */
+    onTypeInfo: ((TypeInfoRequest) -> Unit)? = null,
+    /**
+     * Navigate directly to the type definition for [typeIdx]. Used for
+     * Cmd+B / click on typeLinks tokens in Type-section definition rows.
+     */
+    onGotoType: ((typeIdx: Int) -> Unit)? = null,
     onOffsetClicked: ((Long) -> Unit)? = null,
 ) {
     val info = row.editable
@@ -1777,6 +1977,64 @@ private fun RenderedRowView(
             )
             return
         }
+        val typeAnnKind = row.kind as? RowKind.TypeAnnotation
+        if (typeAnnKind != null && onTypeInfo != null) {
+            // TypeAnnotation rows are comment lines emitted after a GC type's
+            // def row. Clicking them opens the type-info popup for that type.
+            // Hand cursor only — no Tooltip wrapper (selection-hierarchy crash).
+            val request = TypeInfoRequest(typeAnnKind.typeIdx)
+            val rowFocus = remember(chunkId, rowIndex) { FocusRequester() }
+            SelectableTokenRow(
+                tokens = row.tokens,
+                color = color,
+                onOffsetClicked = onOffsetClicked,
+                modifier = Modifier
+                    .focusRequester(rowFocus)
+                    .focusable()
+                    .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
+                    .clickable { onTypeInfo(request) }
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        if (KeymapShortcuts.isModifierOnly(event)) return@onPreviewKeyEvent false
+                        if (KeymapShortcuts.matches(event, IdeActions.ACTION_GOTO_DECLARATION)) {
+                            onTypeInfo(request)
+                            true
+                        } else {
+                            false
+                        }
+                    },
+            )
+            return
+        }
+        val gcTypeIdx = row.gcTypeIdx
+        if (gcTypeIdx != null && onTypeInfo != null) {
+            // GC-opcode rows carry a type immediate (struct.new, array.get,
+            // ref.cast, call_ref, …). Clicking opens the type-info popup.
+            // Same hand-cursor, no-Tooltip pattern as indirect candidates.
+            val request = TypeInfoRequest(gcTypeIdx)
+            val rowFocus = remember(chunkId, rowIndex) { FocusRequester() }
+            SelectableTokenRow(
+                tokens = row.tokens,
+                color = color,
+                onOffsetClicked = onOffsetClicked,
+                modifier = Modifier
+                    .focusRequester(rowFocus)
+                    .focusable()
+                    .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
+                    .clickable { onTypeInfo(request) }
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        if (KeymapShortcuts.isModifierOnly(event)) return@onPreviewKeyEvent false
+                        if (KeymapShortcuts.matches(event, IdeActions.ACTION_GOTO_DECLARATION)) {
+                            onTypeInfo(request)
+                            true
+                        } else {
+                            false
+                        }
+                    },
+            )
+            return
+        }
         val throwTagIdx = row.throwTagIdx
         val throwOffset = row.tokens.firstOrNull { it.kind == RenderTokenKind.OFFSET_ANNOTATION }?.sourceOffset
         if (throwTagIdx != null && throwOffset != null && onThrowHandler != null &&
@@ -1808,6 +2066,51 @@ private fun RenderedRowView(
                         }
                     },
             )
+            return
+        }
+        // typeLinks rows: Type-section definition rows that carry concrete ref
+        // tokens (supertype reference, ref-typed field). When exactly one link
+        // exists Cmd+B and click navigate directly to that type; when multiple
+        // links exist the context menu (added in WatRowItem) covers them and
+        // Cmd+B / click open the type-info popup instead.
+        val links = row.typeLinks
+        if (links.isNotEmpty() && onGotoType != null) {
+            val rowFocus = remember(chunkId, rowIndex) { FocusRequester() }
+            if (links.size == 1) {
+                val singleTypeIdx = links.first().typeIdx
+                SelectableTokenRow(
+                    tokens = row.tokens,
+                    color = color,
+                    onOffsetClicked = onOffsetClicked,
+                    modifier = Modifier
+                        .focusRequester(rowFocus)
+                        .focusable()
+                        .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
+                        .clickable { onGotoType(singleTypeIdx) }
+                        .onPreviewKeyEvent { event ->
+                            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                            if (KeymapShortcuts.isModifierOnly(event)) return@onPreviewKeyEvent false
+                            if (KeymapShortcuts.matches(event, IdeActions.ACTION_GOTO_DECLARATION)) {
+                                onGotoType(singleTypeIdx)
+                                true
+                            } else {
+                                false
+                            }
+                        },
+                )
+            } else {
+                // Multiple links: the context menu handles per-link navigation.
+                // Cmd+B on a multi-link def row has no single unambiguous target,
+                // so we render it without a key handler.
+                SelectableTokenRow(
+                    tokens = row.tokens,
+                    color = color,
+                    onOffsetClicked = onOffsetClicked,
+                    modifier = Modifier
+                        .focusRequester(rowFocus)
+                        .focusable(),
+                )
+            }
             return
         }
         SelectableTokenRow(

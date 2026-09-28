@@ -48,9 +48,25 @@ public data class RenderedRow(
      */
     public val throwTagIdx: Int? = null,
     /**
+     * The type immediate of a WasmGC instruction row (struct.new, array.get,
+     * ref.cast, call_ref, etc.), `null` for every other row. Powers the type
+     * structure preview popup. Carried read-only like [indirectCallTypeIdx].
+     * Only set when the heap type is a concrete type index (WasmIndexHeapType);
+     * abstract heap types (anyref, eqref, etc.) produce no gcTypeIdx.
+     */
+    public val gcTypeIdx: Int? = null,
+    /**
+     * Clickable type-ref tokens on a Type-section definition row. Each entry
+     * maps a token position (index into [tokens]) to the type index it refers
+     * to, enabling Cmd+B / click-navigation from a supertype ref or a
+     * ref-typed field to that type's definition row. Empty for all non-type
+     * rows and for type rows with no concrete references.
+     */
+    public val typeLinks: List<TypeTokenLink> = emptyList(),
+    /**
      * Role discriminator the panel uses to give specific rows special
      * behaviour (the Data section's expander row click, body-row hiding
-     * when the entry is collapsed, …). Defaults to [RowKind.Generic] for
+     * when the entry is collapsed, ...). Defaults to [RowKind.Generic] for
      * every chunk that doesn't need it.
      */
     public val kind: RowKind = RowKind.Generic,
@@ -162,6 +178,15 @@ public sealed interface RowKind {
      * so clicking (or Cmd+B) navigates to the candidate function.
      */
     public data class IndirectCandidate(val siteKey: Long) : RowKind
+
+    /**
+     * Inline annotation appended after a Type-section definition row when the
+     * renderer's `inlineTypeAnnotations` flag is on and the module has GC types.
+     * Carries a summary comment with subtype/reference counts and the rec-group
+     * membership. The panel treats this row as clickable: clicking opens the
+     * type referencers popup for [typeIdx].
+     */
+    public data class TypeAnnotation(val typeIdx: Int) : RowKind
 }
 
 /**
@@ -172,6 +197,14 @@ public data class FollowTarget(
     public val funcIdx: Int,
     public val section: SectionKind,
 )
+
+/**
+ * A clickable type-reference token on a Type-section definition row.
+ * [tokenIndex] is the index into [RenderedRow.tokens]; [typeIdx] is the type
+ * the token refers to. Enables Cmd+B / click-navigation from a supertype
+ * reference or a ref-typed field to the target type's definition row.
+ */
+public data class TypeTokenLink(val tokenIndex: Int, val typeIdx: Int)
 
 /**
  * Per-row metadata needed to commit an inline edit. Together with the

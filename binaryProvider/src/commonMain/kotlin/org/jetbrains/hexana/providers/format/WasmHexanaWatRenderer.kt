@@ -132,6 +132,19 @@ public class WasmHexanaWatRenderer(
      */
     public var inlineIndirectCandidates: Boolean = false
 
+    /**
+     * When true, every Type-section definition row for a GC type (struct,
+     * array, or any type in a module where [TypeGraphIndex.hasGcTypes] is
+     * true) is followed by a single [RowKind.TypeAnnotation] comment row
+     * summarising subtypes, references, and rec-group membership. Also,
+     * supertype refs and concrete ref-typed fields on type-definition rows
+     * emit TYPE_REF tokens and are recorded in [RenderedRow.typeLinks] so
+     * the panel can make them click-navigable. Off by default — only the
+     * IDE's virtualized WAT panel enables it; other renderRows consumers
+     * have no annotation handling and must not see the extra rows.
+     */
+    public var inlineTypeAnnotations: Boolean = false
+
     private val watSymbols = WatSymbolNames { funcIdx -> resolver.resolve(SymbolKind.FUNCTION, funcIdx) }
 
     private val memoryRecords: List<WasmMemoryRecord> by lazy {
@@ -242,6 +255,27 @@ public class WasmHexanaWatRenderer(
             val target = FollowTarget(funcIdx = funcIdx, section = WasmSectionKinds.CODE)
             return rawRows.map { RenderedRow(tokens = it, followTarget = target) }
         }
+        // Type-section rows: when inlineTypeAnnotations is on and the module has
+        // GC types, re-render the chunk with link tracking and append one
+        // TypeAnnotation row per type entry. When the flag is off the chunk is
+        // a normal single-row entry with no typeLinks and no annotation rows.
+        if (chunk.kind == WasmSectionKinds.TYPE) {
+            val hasGc = inlineTypeAnnotations && (provider.typeGraphIndex?.hasGcTypes == true)
+            if (!hasGc) {
+                return rawRows.map { RenderedRow(tokens = it) }
+            }
+            // Re-render with link capture: renderTypeElementWithLinks re-emits
+            // the same token stream as the normal path but also records
+            // TypeTokenLink entries for supertype refs and concrete ref fields.
+            val linkTokens = mutableListOf<RenderToken>()
+            val links = renderTypeElementWithLinks(chunk, snapshot.byteSource(), linkTokens)
+            val typeIdx = chunk.indexInSection
+            val defRow = RenderedRow(
+                tokens = splitOnLineBreaks(linkTokens).firstOrNull() ?: emptyList(),
+                typeLinks = links,
+            )
+            return listOf(defRow, typeAnnotationRow(typeIdx))
+        }
         if (chunk.kind != WasmSectionKinds.CODE) {
             return rawRows.map { RenderedRow(tokens = it) }
         }
@@ -307,12 +341,56 @@ public class WasmHexanaWatRenderer(
             // `throw $tag` rows are read-only too; the tag index rides on the
             // row for the exception-flow (handler resolution) popup.
             val throwTagIdx = (opInfo?.op as? OpCodes.Flow.Trow)?.value?.toInt()
+            // GC instruction rows carry the type immediate so the panel can
+            // open the type structure preview popup. Only concrete type indices
+            // (WasmIndexHeapType) produce a gcTypeIdx; abstract heap types
+            // (anyref, eqref, ...) are not navigable.
+            val gcTypeIdx: Int? = when (val op = opInfo?.op) {
+                // struct.new / struct.new_default: single type immediate
+                is OpCodes.GC.StructNew -> op.value.toInt()
+                is OpCodes.GC.StructNewDefault -> op.value.toInt()
+                // struct.get / struct.get_s / struct.get_u / struct.set: first imm = typeIdx
+                is OpCodes.GC.StructGet -> op.typeIndex.toInt()
+                is OpCodes.GC.StructGetSignExtended -> op.typeIndex.toInt()
+                is OpCodes.GC.StructGetZeroExtended -> op.typeIndex.toInt()
+                is OpCodes.GC.StructSet -> op.typeIndex.toInt()
+                // array.new / array.new_default / array.get* / array.set /
+                // array.fill / array.new_data / array.new_elem: single type imm
+                is OpCodes.GC.ArrayNew -> op.value.toInt()
+                is OpCodes.GC.ArrayNewDefault -> op.value.toInt()
+                is OpCodes.GC.ArrayGet -> op.value.toInt()
+                is OpCodes.GC.ArrayGetSigned -> op.value.toInt()
+                is OpCodes.GC.ArrayGetUnsigned -> op.value.toInt()
+                is OpCodes.GC.ArraySet -> op.value.toInt()
+                is OpCodes.GC.ArrayFill -> op.value.toInt()
+                is OpCodes.GC.ArrayNewFixed -> op.value0.toInt()
+                is OpCodes.GC.ArrayInitData -> op.value.toInt()
+                is OpCodes.GC.ArrayInitElem -> op.value.toInt()
+                // array.new_data / array.new_element: dst type is value (first)
+                is OpCodes.GC.ArrayNewData -> op.typeIndexDst.toInt()
+                is OpCodes.GC.ArrayNewElement -> op.value.toInt()
+                // array.copy: dst type is typeIndexDst (first)
+                is OpCodes.GC.ArrayCopy -> op.typeIndexDst.toInt()
+                // ref.test / ref.cast (nullable): heap-type immediate; only index heap types
+                is OpCodes.GC.RefTest -> { val v = op.value.type; if (v in 0..Int.MAX_VALUE.toLong()) v.toInt() else null }
+                is OpCodes.GC.RefTestNullable -> { val v = op.value.type; if (v in 0..Int.MAX_VALUE.toLong()) v.toInt() else null }
+                is OpCodes.GC.RefCast -> { val v = op.value.type; if (v in 0..Int.MAX_VALUE.toLong()) v.toInt() else null }
+                is OpCodes.GC.RefCastNullable -> { val v = op.value.type; if (v in 0..Int.MAX_VALUE.toLong()) v.toInt() else null }
+                // br_on_cast / br_on_cast_fail: dst heap type (dstType)
+                is OpCodes.GC.BrOnCast -> { val v = op.dstType.type; if (v in 0..Int.MAX_VALUE.toLong()) v.toInt() else null }
+                is OpCodes.GC.BrOnCastFail -> { val v = op.dstType.type; if (v in 0..Int.MAX_VALUE.toLong()) v.toInt() else null }
+                // call_ref / return_call_ref: type immediate is the func type idx
+                is OpCodes.Flow.CallRef -> op.value.toInt()
+                is OpCodes.Flow.ReturnCallRef -> op.value.toInt()
+                else -> null
+            }
             val siteRow = RenderedRow(
                 tokens = rowTokens,
                 editable = editable,
                 followTarget = followTarget,
                 indirectCallTypeIdx = indirectCallTypeIdx,
                 throwTagIdx = throwTagIdx,
+                gcTypeIdx = gcTypeIdx,
             )
             if (inlineIndirectCandidates && indirectCallTypeIdx != null && rowOpStart != null) {
                 listOf(siteRow) + indirectCandidateRows(indirectCallTypeIdx, siteKey = rowOpStart)
@@ -422,6 +500,30 @@ public class WasmHexanaWatRenderer(
             )
         }
         return rows
+    }
+
+    /**
+     * Single inline-annotation row appended after a Type-section definition
+     * row when [inlineTypeAnnotations] is on. Emits a comment-style line with
+     * subtype count, referencing-type count, referencing-func count, and
+     * rec-group membership (omitted when the type belongs to no group).
+     * All counts are O(1) reads from [TypeGraphIndex].
+     */
+    private fun typeAnnotationRow(typeIdx: Int): RenderedRow {
+        val index = provider.typeGraphIndex
+        val subtypes = index?.directSubtypes(typeIdx)?.size ?: 0
+        val refTypes = index?.referencingTypes(typeIdx)?.size ?: 0
+        val refFuncs = index?.referencingFuncs(typeIdx)?.size ?: 0
+        val recGroup = index?.recGroup(typeIdx) ?: -1
+        val sb = StringBuilder(";; \$type$typeIdx | subtypes: $subtypes | referenced by: $refTypes types, $refFuncs funcs")
+        if (recGroup >= 0) sb.append(" | rec group #$recGroup")
+        return RenderedRow(
+            tokens = listOf(
+                RenderToken("    ", RenderTokenKind.WHITESPACE),
+                RenderToken(sb.toString(), RenderTokenKind.COMMENT),
+            ),
+            kind = RowKind.TypeAnnotation(typeIdx),
+        )
     }
 
     /**
@@ -1591,12 +1693,42 @@ public class WasmHexanaWatRenderer(
         }
     }
 
-    private fun appendTypeRecordBody(out: MutableList<RenderToken>, record: WasmTypeRecord) {
+    /**
+     * Like [renderTypeElement] but also captures [TypeTokenLink]s for
+     * supertype refs and ref-typed fields. Returns the populated link list
+     * (empty when the type has no such references).
+     */
+    private fun renderTypeElementWithLinks(
+        chunk: BinaryChunk.Element,
+        source: ByteSource,
+        tokens: MutableList<RenderToken>,
+    ): List<TypeTokenLink> {
+        val record = typeRecords.getOrNull(chunk.indexInSection)
+        val links = mutableListOf<TypeTokenLink>()
+        renderStructuredElement(chunk, source, tokens) { out ->
+            out += punct("(")
+            out += keyword("type")
+            out += space()
+            out += RenderToken("\$type${chunk.indexInSection}", RenderTokenKind.IDENTIFIER, sourceOffset = chunk.byteRange.first)
+            if (record != null) {
+                out += space()
+                appendTypeRecordBody(out, record, links)
+            }
+            out += punct(")")
+        }
+        return links
+    }
+
+    private fun appendTypeRecordBody(
+        out: MutableList<RenderToken>,
+        record: WasmTypeRecord,
+        typeLinks: MutableList<TypeTokenLink>? = null,
+    ) {
         when (record) {
             is WasmSectionFunctionTypeRecord -> appendFuncType(out, record)
-            is WasmStructTypeRecord -> appendStructType(out, record)
-            is WasmArrayTypeRecord -> appendArrayType(out, record)
-            is WasmRecursiveTypeRecord -> appendRecType(out, record)
+            is WasmStructTypeRecord -> appendStructType(out, record, typeLinks)
+            is WasmArrayTypeRecord -> appendArrayType(out, record, typeLinks)
+            is WasmRecursiveTypeRecord -> appendRecType(out, record, typeLinks)
         }
     }
 
@@ -1626,48 +1758,94 @@ public class WasmHexanaWatRenderer(
         out += punct(")")
     }
 
-    private fun appendStructType(out: MutableList<RenderToken>, record: WasmStructTypeRecord) {
+    private fun appendStructType(
+        out: MutableList<RenderToken>,
+        record: WasmStructTypeRecord,
+        typeLinks: MutableList<TypeTokenLink>? = null,
+    ) {
         out += punct("(")
         out += keyword("struct")
         for (field in record.fields) {
             out += space()
-            appendFieldType(out, field)
+            appendFieldType(out, field, typeLinks)
         }
         out += punct(")")
         if (record.superTypes.isNotEmpty()) {
             out += space()
-            val supers = record.superTypes.joinToString(",") { "\$type$it" }
-            out += comment("(; sub $supers${if (record.isFinal) " final" else ""} ;)")
+            out += comment("(; sub")
+            for (superIdx in record.superTypes) {
+                out += space()
+                val tokenIndex = out.size
+                out += typeRef("\$type$superIdx")
+                typeLinks?.add(TypeTokenLink(tokenIndex, superIdx.toInt()))
+            }
+            if (record.isFinal) {
+                out += space()
+                out += comment("final")
+            }
+            out += comment(";)")
         }
     }
 
-    private fun appendArrayType(out: MutableList<RenderToken>, record: WasmArrayTypeRecord) {
+    private fun appendArrayType(
+        out: MutableList<RenderToken>,
+        record: WasmArrayTypeRecord,
+        typeLinks: MutableList<TypeTokenLink>? = null,
+    ) {
         out += punct("(")
         out += keyword("array")
         out += space()
-        appendFieldType(out, record.fieldType)
+        appendFieldType(out, record.fieldType, typeLinks)
         out += punct(")")
+        if (record.superTypes.isNotEmpty()) {
+            out += space()
+            out += comment("(; sub")
+            for (superIdx in record.superTypes) {
+                out += space()
+                val tokenIndex = out.size
+                out += typeRef("\$type$superIdx")
+                typeLinks?.add(TypeTokenLink(tokenIndex, superIdx.toInt()))
+            }
+            if (record.isFinal) {
+                out += space()
+                out += comment("final")
+            }
+            out += comment(";)")
+        }
     }
 
-    private fun appendRecType(out: MutableList<RenderToken>, record: WasmRecursiveTypeRecord) {
+    private fun appendRecType(
+        out: MutableList<RenderToken>,
+        record: WasmRecursiveTypeRecord,
+        typeLinks: MutableList<TypeTokenLink>? = null,
+    ) {
         out += punct("(")
         out += keyword("rec")
         for (entry in record.entries) {
             out += space()
-            appendTypeRecordBody(out, entry)
+            appendTypeRecordBody(out, entry, typeLinks)
         }
         out += punct(")")
     }
 
-    private fun appendFieldType(out: MutableList<RenderToken>, field: WasmFieldType) {
+    private fun appendFieldType(
+        out: MutableList<RenderToken>,
+        field: WasmFieldType,
+        typeLinks: MutableList<TypeTokenLink>? = null,
+    ) {
+        val refTypeIdx: Int? = storageTypeRefIdx(field.storageType)
         if (field.isMutable) {
             out += punct("(")
             out += keyword("mut")
             out += space()
+            val tokenIndex = out.size
             out += typeRef(storageTypeName(field.storageType))
+            if (refTypeIdx != null) typeLinks?.add(TypeTokenLink(tokenIndex, refTypeIdx))
             out += punct(")")
         } else {
+            val tokenIndex = out.size
             out += typeRef(storageTypeName(field.storageType))
+            if (refTypeIdx != null) typeLinks?.add(TypeTokenLink(tokenIndex, refTypeIdx))
         }
     }
 
@@ -2266,4 +2444,28 @@ public class WasmHexanaWatRenderer(
         /** Bytes per row in [DataViewMode.ASCII] / [DataViewMode.UTF8] modes. */
         public const val DATA_BYTES_PER_ROW_TEXT: Int = 64
     }
+}
+
+/**
+ * Returns the concrete type index referenced by a storage/value type, or null.
+ * Covers both [WasmIndexHeapType] (ordinary index ref) and [WasmExactHeapType]
+ * (custom-descriptors exact ref), consistent with TypeGraphIndexBuilder.refFromValueType.
+ * Used by the WAT renderer's appendFieldType and the WAT virtualized panel's type-info popup.
+ *
+ * Public so that IDE-layer consumers (idea-plugin) can delegate to this
+ * rather than re-deriving the same logic.
+ */
+public fun storageTypeRefIdx(vt: WasmValueType<*>): Int? {
+    val refType = (vt as? WasmRefType)?.code ?: return null
+    val ht = when (refType) {
+        is WasmNonNullableReferenceType -> refType.heapType
+        is WasmNullableReferenceType -> refType.heapType
+        else -> null
+    } ?: return null
+    val v = when (ht) {
+        is WasmIndexHeapType -> ht.type
+        is WasmExactHeapType -> ht.type
+        else -> null
+    } ?: return null
+    return if (v in 0..Int.MAX_VALUE.toLong()) v.toInt() else null
 }

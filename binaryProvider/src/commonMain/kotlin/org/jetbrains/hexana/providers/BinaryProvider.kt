@@ -73,6 +73,8 @@ import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphBuilder
 import org.jetbrains.hexana.wasm.analysis.callgraph.CallGraphResult
 import org.jetbrains.hexana.wasm.analysis.dispatch.DispatchCandidates
 import org.jetbrains.hexana.wasm.analysis.dispatch.DispatchCandidatesBuilder
+import org.jetbrains.hexana.wasm.analysis.typegraph.TypeGraphIndex
+import org.jetbrains.hexana.wasm.analysis.typegraph.TypeGraphIndexBuilder
 import org.jetbrains.hexana.wasm.analysis.exceptions.ExceptionPropagation
 import org.jetbrains.hexana.wasm.analysis.exceptions.ExceptionPropagationBuilder
 import org.jetbrains.hexana.wasm.analysis.exceptions.WasmExceptionTags
@@ -1350,6 +1352,37 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
             wasmModule?.let { DispatchCandidatesBuilder(bytes, it).build() }
         } catch (_: Exception) {
             null
+        }
+    }
+
+    /**
+     * Reverse index of the WasmGC type hierarchy: supertype/subtype edges,
+     * field-ref edges, and per-function references. Null for non-GC modules
+     * and on parse error. Built lazily off the EDT; the code pass walks the
+     * whole code section so callers must not invoke this on the EDT.
+     */
+    val typeGraphIndex: TypeGraphIndex? by lazy {
+        try {
+            wasmModule?.let { TypeGraphIndexBuilder(bytes, it).build() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Flattened list of type records in type-index order (rec-group entries
+     * expanded). Index i corresponds to typeGraphIndex type index i.
+     */
+    val leafTypeRecords: List<WasmTypeRecord> by lazy {
+        val section = wasmModule?.typesSection ?: return@lazy emptyList()
+        val records = try { with(section) { bytes.parseTypes() } } catch (_: Exception) { return@lazy emptyList() }
+        buildList {
+            for (record in records) {
+                when (record) {
+                    is WasmRecursiveTypeRecord -> addAll(record.entries)
+                    else -> add(record)
+                }
+            }
         }
     }
 

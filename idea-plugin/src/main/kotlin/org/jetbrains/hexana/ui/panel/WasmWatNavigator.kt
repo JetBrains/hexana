@@ -133,6 +133,27 @@ internal class WasmWatNavigator(
         return true
     }
 
+    /**
+     * Scroll-and-focus the Type-section entry for [typeIdx]. Returns false
+     * for out-of-range indices or when the type section is not present.
+     */
+    fun gotoType(typeIdx: Int, recordHistory: Boolean = true): Boolean {
+        for (i in 0 until chunkTree.totalChunks) {
+            val c = chunkTree.chunkAt(i)
+            if (c is BinaryChunk.Element && c.kind == WasmSectionKinds.TYPE && c.indexInSection == typeIdx) {
+                val target = NavTarget(chunkId = c.id, rowIdx = null)
+                if (recordHistory) {
+                    history.current?.let { history.back += it }
+                    history.forward.clear()
+                }
+                history.current = target
+                scope.launch { scrollAndFocus(target) }
+                return true
+            }
+        }
+        return false
+    }
+
     fun back(): Boolean {
         val prev = history.back.removeLastOrNull()
         if (prev == null) return false

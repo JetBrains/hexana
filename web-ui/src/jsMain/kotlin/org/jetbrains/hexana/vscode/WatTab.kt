@@ -1274,6 +1274,10 @@ private fun appendChunkRowsHtml(
         if ((row.kind is RowKind.DataBody || row.kind is RowKind.DataDescriptor) && !isDataExpanded) continue
         if (row.kind is RowKind.ImportDescriptor && !isImportExpanded) continue
         if (row.kind is RowKind.ExportDescriptor && !isExportExpanded) continue
+        // TypeAnnotation rows are IntelliJ-only (flag never set on the VS Code renderer path)
+        if (row.kind is RowKind.TypeAnnotation) continue
+        // IndirectCandidate/Expander rows are IntelliJ-only (inline candidates not produced here)
+        if (row.kind is RowKind.IndirectCandidate || row.kind is RowKind.IndirectCandidatesExpander) continue
 
         // Expander rows
         if (row.kind is RowKind.DataExpander) {
