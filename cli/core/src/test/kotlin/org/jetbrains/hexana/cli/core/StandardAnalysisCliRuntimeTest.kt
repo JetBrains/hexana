@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.cli.core
 
+import org.jetbrains.hexana.cli.metadata.SummarizeModuleCliInputConverter
+
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.builtins.serializer
@@ -89,7 +91,7 @@ class StandardAnalysisCliRuntimeTest {
 
     @Test
     fun summarizeModuleConverterAcceptsPathBase64StdinAndRejectsWrongShape() {
-        val converter = SummarizeModuleInputConverter()
+        val converter = SummarizeModuleCliInputConverter
         listOf(
             ToolInputSourceSelection.Path("sample.wasm", "wasm"),
             ToolInputSourceSelection.Base64(MINIMAL_WASM_BASE64, "wasm"),
@@ -101,6 +103,15 @@ class StandardAnalysisCliRuntimeTest {
 
         assertFailsWith<IllegalArgumentException> {
             converter.convert(conversionRequest(SUMMARIZE_MODULE_TOOL_NAME))
+        }.also {
+            assertTrue(it.message.orEmpty().contains("exactly one wasm source"))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            converter.convert(conversionRequest(
+                SUMMARIZE_MODULE_TOOL_NAME,
+                ToolInputSourceSelection.Path("sample.wasm", "wasm"),
+                ToolInputSourceSelection.Base64(MINIMAL_WASM_BASE64, "other"),
+            ))
         }.also {
             assertTrue(it.message.orEmpty().contains("exactly one wasm source"))
         }

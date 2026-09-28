@@ -17,6 +17,7 @@ base {
 dependencies {
     api(project(":cli:runtime"))
     api(project(":mcp:core"))
+    implementation(project(":cli:metadata"))
     implementation(project(":graalwasm:wasmprinter"))
 
     testImplementation(libs.junit4)
@@ -34,6 +35,7 @@ val verifyCliCoreBoundary = tasks.register("verifyCliCoreBoundary") {
     doLast {
         val allowedProjectPaths = setOf(
             ":cli:runtime",
+            ":cli:metadata",
             ":mcp:core",
             ":graalwasm:wasmprinter",
         )

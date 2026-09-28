@@ -544,6 +544,7 @@ class ToolInputModelTest {
             positionalPathName = "wasm",
             stdinOption = "--stdin",
             base64Option = "--bytes-base64",
+            base64Aliases = listOf("--wasm-base64"),
             autoStdin = true,
         )
 
@@ -552,6 +553,7 @@ class ToolInputModelTest {
             positionalPathName = "binary",
             stdinOption = "--stdin",
             base64Option = "--bytes-base64",
+            base64Aliases = listOf("--binary-base64"),
             autoStdin = true,
         )
 }

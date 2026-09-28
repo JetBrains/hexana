@@ -335,6 +335,7 @@ private val CLI_TOOL_BINDINGS = listOf(
                     positional("binary")
                     stdin("--stdin")
                     base64("--bytes-base64")
+                    base64Alias("--binary-base64")
                     autoStdin()
                 }
             }
@@ -367,6 +368,7 @@ private val CLI_TOOL_BINDINGS = listOf(
         defaultOutput = OutputConversionCapability.Pretty,
         products = setOf(HexanaCliProductSpec.id),
         inputModel = wasmCliInputModel(),
+        generatedInputRequest = "SummarizeModuleCliInput",
         unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
     ),
     todoCli(ListEnabledFeaturesToolId, "list-enabled-features", ToolGroup.Module),

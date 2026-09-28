@@ -40,6 +40,8 @@ Shared CLI ownership remains layered:
 
 `mcp/tools-generator/.../SurfaceAuthorities.kt` keeps semantic MCP contracts independent from CLI release products.
 Each executable CLI binding belongs to exactly one release product: `hexana-cli` or `hexana-cli-script`.
+The CLI authority also owns source slots and option names. Generated neutral metadata supplies option types,
+descriptions, defaults, and the `summarize-module` typed input validator to the CLI runtime.
 
 The standalone generator emits only `HexanaToolDispatcher.kt` into `mcp:server`. Neutral CLI generation emits
 `HexanaCliToolset.kt` and `HexanaCliProducts.kt` into `cli:metadata`; it must not emit a server CLI adapter.

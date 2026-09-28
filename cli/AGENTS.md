@@ -6,7 +6,7 @@ This folder contains neutral CLI modules shared by current and future command-li
 
 - `runtime/`: framework-neutral contracts only. It may use Kotlin and semantic JSON types, but must not depend on MCP
   SDK, Ktor, Clikt, analytics, IntelliJ APIs, or `mcp:server`.
-- `metadata/`: neutral generated CLI catalog and release-product metadata. It must depend only on `cli:runtime` at
+- `metadata/`: neutral generated CLI catalog, input request adapters, and release-product metadata. It must depend only on `cli:runtime` at
   runtime and must not import MCP SDK, Ktor, Clikt, analytics, IntelliJ APIs, or `mcp:server`.
 - `core/`: neutral command orchestration and adapters for the standard `hexana-cli` analysis commands
   `summarize-binary`, `summarize-module`, and `wasm-to-wat`.

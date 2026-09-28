@@ -851,6 +851,7 @@ data class CliToolBinding(
     val defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
     val products: Set<ProductId> = emptySet(),
     val inputModel: ToolInputModel? = null,
+    val generatedInputRequest: String? = null,
     val unknownFieldPolicy: UnknownFieldPolicy = UnknownFieldPolicy.Reject,
 ) {
     init {
@@ -858,6 +859,14 @@ data class CliToolBinding(
             "CLI command '$commandName' must be strict kebab-case."
         }
         require(groups.isNotEmpty()) { "CLI tool '$commandName' must declare at least one group." }
+        generatedInputRequest?.let { name ->
+            require(Regex("[A-Z][A-Za-z0-9]*").matches(name)) {
+                "CLI tool '$commandName' generated input request name must be a Kotlin class name."
+            }
+            require(executionStatus == CliExecutionStatus.Executable) {
+                "TODO CLI tool '$commandName' cannot generate an input request."
+            }
+        }
         if (executionStatus == CliExecutionStatus.Executable) {
             require(inputModel != null) {
                 "Executable CLI tool '$commandName' must declare an explicit input model."
@@ -915,6 +924,7 @@ fun cliToolBinding(
     defaultOutput: OutputConversionCapability = OutputConversionCapability.SemanticJson,
     products: Set<ProductId> = emptySet(),
     inputModel: ToolInputModel? = null,
+    generatedInputRequest: String? = null,
     unknownFieldPolicy: UnknownFieldPolicy = UnknownFieldPolicy.Reject,
 ): CliToolBinding = CliToolBinding(
     id = id,
@@ -926,6 +936,7 @@ fun cliToolBinding(
     defaultOutput = defaultOutput,
     products = products,
     inputModel = inputModel,
+    generatedInputRequest = generatedInputRequest,
     unknownFieldPolicy = unknownFieldPolicy,
 )
 
@@ -982,6 +993,8 @@ data class ToolInputModel(
 
         val duplicateParamNames = params.groupBy { it.name }.filterValues { it.size > 1 }.keys
         require(duplicateParamNames.isEmpty()) { "Duplicate input param names: $duplicateParamNames" }
+        val overlappingNames = sources.map { it.name }.intersect(params.map { it.name }.toSet())
+        require(overlappingNames.isEmpty()) { "Source and param names overlap: $overlappingNames" }
 
         val duplicateParamTargets = params
             .groupBy { it.targetField }
@@ -1061,6 +1074,7 @@ data class CliSourceSpec(
     val pathOption: String? = null,
     val stdinOption: String? = null,
     val base64Option: String? = null,
+    val base64Aliases: List<String> = emptyList(),
     val bytesOption: String? = null,
     val autoStdin: Boolean = false,
 ) {
@@ -1087,6 +1101,7 @@ data class CliSourceSpec(
         pathOption?.let { CliSourceBinding("path option", it) },
         stdinOption?.let { CliSourceBinding("stdin option", it) },
         base64Option?.let { CliSourceBinding("base64 option", it) },
+        *base64Aliases.map { CliSourceBinding("base64 alias", it) }.toTypedArray(),
         bytesOption?.let { CliSourceBinding("bytes option", it) },
     )
 }
@@ -1099,6 +1114,7 @@ class CliSourceSpecBuilder internal constructor() {
     private var pathOption: String? = null
     private var stdinOption: String? = null
     private var base64Option: String? = null
+    private val base64Aliases = mutableListOf<String>()
     private var bytesOption: String? = null
     private var autoStdin: Boolean = false
 
@@ -1122,6 +1138,10 @@ class CliSourceSpecBuilder internal constructor() {
         base64Option = option
     }
 
+    fun base64Alias(option: String) {
+        base64Aliases += option
+    }
+
     fun bytes(option: String) {
         require(bytesOption == null) { "CLI source bytes option is already declared." }
         bytesOption = option
@@ -1136,6 +1156,7 @@ class CliSourceSpecBuilder internal constructor() {
         pathOption = pathOption,
         stdinOption = stdinOption,
         base64Option = base64Option,
+        base64Aliases = base64Aliases.toList(),
         bytesOption = bytesOption,
         autoStdin = autoStdin,
     )
@@ -1338,6 +1359,7 @@ private fun rootSourceCliInputModel(
                     positionalPathName = positionalPathName,
                     stdinOption = "--stdin",
                     base64Option = "--bytes-base64",
+                    base64Aliases = listOf(if (kind == SourceKind.Wasm) "--wasm-base64" else "--binary-base64"),
                     autoStdin = true,
                 ),
             )

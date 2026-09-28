@@ -264,6 +264,7 @@ class HexanaToolCompatibilityTest {
             appendLine("$prefix.execution=${binding.executionStatus.name}")
             appendLine("$prefix.outputOverride=${binding.outputOverride?.name.orEmpty()}")
             appendLine("$prefix.defaultOutput=${binding.defaultOutput.name}")
+            appendLine("$prefix.generatedInputRequest=${binding.generatedInputRequest.orEmpty()}")
             appendLine("$prefix.products=${binding.products.joinToString { it.value }}")
             appendInputModel("$prefix.input", binding.inputModel)
         }
@@ -296,6 +297,7 @@ class HexanaToolCompatibilityTest {
             appendLine("$prefix.source[$index].path=${source.cli.pathOption.orEmpty()}")
             appendLine("$prefix.source[$index].stdin=${source.cli.stdinOption.orEmpty()}")
             appendLine("$prefix.source[$index].base64=${source.cli.base64Option.orEmpty()}")
+            appendLine("$prefix.source[$index].base64Aliases=${source.cli.base64Aliases.joinToString()}")
             appendLine("$prefix.source[$index].bytes=${source.cli.bytesOption.orEmpty()}")
             appendLine("$prefix.source[$index].autoStdin=${source.cli.autoStdin}")
         }
@@ -418,7 +420,7 @@ class HexanaToolCompatibilityTest {
         const val EXPECTED_STANDALONE = "dd0f31cd4e78e695abd10fca5a78ac31cd8602e4ba01a92688295fac45f16a41"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"
         const val EXPECTED_MCP_PRODUCTS = "13bc46a83aa5707e526842837ab9f0ac472229483024dba827b7cc35014f8903"
-        const val EXPECTED_CLI = "60d6436c68d95f34199144e2946a1fc3f5815ce3b9f8c624e37a424833451473"
+        const val EXPECTED_CLI = "78c54bcff7ec202f6ae4b355148237baa8a2a0e28d080cf32e661f6c7b8b509a"
         const val EXPECTED_HEXANA_CLI = "db8dba08f15faf3153d25f51a7cd530ef2fab2aa343964ff00be4450d361150b"
         const val EXPECTED_HEXANA_CLI_SCRIPT = "5ae8d15bdd2814e7e50481a8fee97ccc30884f02b22e3e84fe723b57f1b56b23"
     }

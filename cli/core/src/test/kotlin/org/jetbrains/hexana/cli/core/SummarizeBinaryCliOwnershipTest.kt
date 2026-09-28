@@ -47,9 +47,14 @@ class SummarizeBinaryCliOwnershipTest {
         val registry = standardRuntimeRegistry(DefaultHexanaAnalysisService())
         selectedStandardTools.forEach { toolName ->
             val binding = registry.binding(toolName)
+            val converterOwner = if (toolName == SUMMARIZE_MODULE_TOOL_NAME) {
+                "org.jetbrains.hexana.cli.metadata."
+            } else {
+                "org.jetbrains.hexana.cli.core."
+            }
             assertTrue(
-                binding.converter::class.qualifiedName.orEmpty().startsWith("org.jetbrains.hexana.cli.core."),
-                "$toolName converter must be owned by cli:core",
+                binding.converter::class.qualifiedName.orEmpty().startsWith(converterOwner),
+                "$toolName converter must be owned by $converterOwner",
             )
             assertTrue(
                 binding.executor::class.qualifiedName.orEmpty().startsWith("org.jetbrains.hexana.cli.core."),

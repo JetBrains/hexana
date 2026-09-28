@@ -144,6 +144,7 @@ class ResolvedToolCatalogReport(
             put("defaultOutput", JsonPrimitive(cli.binding.defaultOutput.name))
             put("formats", strings(cliFormats(cli).sorted()))
             put("inputBinding", cli.binding.inputModel?.let(::inputBinding) ?: JsonNull)
+            put("generatedInputRequest", cli.binding.generatedInputRequest?.let(::JsonPrimitive) ?: JsonNull)
             put("products", strings(cli.binding.products.map { it.value }.sorted()))
         }, "CLI binding authority")
 
@@ -151,7 +152,11 @@ class ResolvedToolCatalogReport(
         put("sources", buildJsonArray {
             model.sources.sortedBy { it.name }.forEach { source -> add(buildJsonObject {
                 put("name", JsonPrimitive(source.name)); put("kind", JsonPrimitive(source.kind.name))
-                put("target", JsonPrimitive(if (source.target == SourceTargetSpec.RootInput) "rootInput" else (source.target as SourceTargetSpec.Field).name))
+                put("target", JsonPrimitive(when (val target = source.target) {
+                    SourceTargetSpec.RootInput -> "rootInput"
+                    is SourceTargetSpec.Field -> target.name
+                    is SourceTargetSpec.FieldReference -> target.reference.name
+                }))
                 put("required", JsonPrimitive(source.required)); put("bindings", strings(source.cli.bindings().map { "${it.kind}:${it.value}" }.sorted()))
                 put("autoStdin", JsonPrimitive(source.cli.autoStdin))
             }) }

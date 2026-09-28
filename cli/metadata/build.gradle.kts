@@ -31,6 +31,8 @@ idea {
 
 dependencies {
     api(project(":cli:runtime"))
+    testImplementation(libs.junit4)
+    testImplementation(libs.kotlin.test)
 }
 
 tasks.register<JavaExec>("generateHexanaCliMetadata") {

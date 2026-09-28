@@ -4,6 +4,10 @@ package org.jetbrains.hexana.cli.metadata
 import kotlin.String
 import kotlin.collections.List
 import kotlin.collections.Set
+import kotlinx.serialization.json.JsonObject
+import org.jetbrains.hexana.cli.runtime.ToolInputConversionRequest
+import org.jetbrains.hexana.cli.runtime.ToolInputConverter
+import org.jetbrains.hexana.cli.runtime.ToolInputSourceSelection
 import org.jetbrains.hexana.cli.runtime.ToolOutputFormat
 
 /**
@@ -60,6 +64,16 @@ public enum class HexanaCliExecutionStatus {
 }
 
 /**
+ * Generated option metadata from CLI bindings and semantic input fields.
+ */
+public data class HexanaCliInputOptionSpec(
+  public val name: String,
+  public val valueType: String,
+  public val description: String,
+  public val defaultValue: String?,
+)
+
+/**
  * Generated CLI-visible tool metadata derived from the catalog.
  */
 public data class HexanaCliToolSpec(
@@ -68,6 +82,8 @@ public data class HexanaCliToolSpec(
   public val summary: String,
   public val groups: Set<HexanaCliToolGroup>,
   public val inputModes: Set<HexanaCliInputMode>,
+  public val sourceSlotName: String?,
+  public val inputOptions: List<HexanaCliInputOptionSpec>,
   public val outputFormats: Set<HexanaCliOutputFormat>,
   public val defaultOutputFormat: HexanaCliOutputFormat,
   public val defaultOutputPolicy: HexanaCliOutputPolicy,
@@ -85,6 +101,13 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Summarize a Wasm or native binary with compact identity and entity counts.",
           groups = setOf(HexanaCliToolGroup.BINARY),
           inputModes = setOf(HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN),
+          sourceSlotName = "binary",
+          inputOptions = listOf(
+          HexanaCliInputOptionSpec("binary", "path", "Readable local binary path. Provide exactly one of `path`, `bytesBase64`, or `bytes`.", null),
+          HexanaCliInputOptionSpec("--stdin", "stdin", "Read binary bytes from standard input.", null),
+          HexanaCliInputOptionSpec("--bytes-base64", "base64", "Base64 binary bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`.", null),
+          HexanaCliInputOptionSpec("--binary-base64", "base64", "Base64 binary bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`.", null),
+        ),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -96,6 +119,15 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Run a Hexana JavaScript script over a Wasm or native binary.",
           groups = setOf(HexanaCliToolGroup.SCRIPTING),
           inputModes = setOf(HexanaCliInputMode.BINARY_PATH, HexanaCliInputMode.STDIN),
+          sourceSlotName = "binary",
+          inputOptions = listOf(
+          HexanaCliInputOptionSpec("binary", "path", "Readable local binary path. Provide exactly one of `path`, `bytesBase64`, or `bytes`.", null),
+          HexanaCliInputOptionSpec("--stdin", "stdin", "Read binary bytes from standard input.", null),
+          HexanaCliInputOptionSpec("--bytes-base64", "base64", "Base64 binary bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`.", null),
+          HexanaCliInputOptionSpec("--binary-base64", "base64", "Base64 binary bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`.", null),
+          HexanaCliInputOptionSpec("--script", "string", "Readable local JavaScript file path. Provide exactly one of `scriptPath` or `script`.", null),
+          HexanaCliInputOptionSpec("--script-text", "string", "Inline JavaScript source text. Provide exactly one of `scriptPath` or `script`.", null),
+        ),
           outputFormats = setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.SARIF, HexanaCliOutputFormat.RAW),
           defaultOutputFormat = HexanaCliOutputFormat.RAW,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -107,6 +139,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Run a Hexana test suite (.test.js files) and report results.",
           groups = setOf(HexanaCliToolGroup.SCRIPTING),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.RAW),
           defaultOutputFormat = HexanaCliOutputFormat.RAW,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -118,6 +152,13 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Convert a `.wasm` module to WebAssembly text format.",
           groups = setOf(HexanaCliToolGroup.CONVERTERS),
           inputModes = setOf(HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.STDIN),
+          sourceSlotName = "wasm",
+          inputOptions = listOf(
+          HexanaCliInputOptionSpec("wasm", "path", "Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`.", null),
+          HexanaCliInputOptionSpec("--stdin", "stdin", "Read wasm bytes from standard input.", null),
+          HexanaCliInputOptionSpec("--bytes-base64", "base64", "Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`.", null),
+          HexanaCliInputOptionSpec("--wasm-base64", "base64", "Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`.", null),
+        ),
           outputFormats = setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.RAW),
           defaultOutputFormat = HexanaCliOutputFormat.RAW,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -129,6 +170,13 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Summarize a WebAssembly module — counts of imports, exports, memories, globals, functions, types.",
           groups = setOf(HexanaCliToolGroup.MODULE),
           inputModes = setOf(HexanaCliInputMode.WASM_PATH, HexanaCliInputMode.STDIN),
+          sourceSlotName = "wasm",
+          inputOptions = listOf(
+          HexanaCliInputOptionSpec("wasm", "path", "Readable local `.wasm` path. Provide exactly one of `path`, `bytesBase64`, or `bytes`.", null),
+          HexanaCliInputOptionSpec("--stdin", "stdin", "Read wasm bytes from standard input.", null),
+          HexanaCliInputOptionSpec("--bytes-base64", "base64", "Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`.", null),
+          HexanaCliInputOptionSpec("--wasm-base64", "base64", "Base64 `.wasm` bytes. Provide exactly one of `path`, `bytesBase64`, or `bytes`.", null),
+        ),
           outputFormats = setOf(HexanaCliOutputFormat.JSON, HexanaCliOutputFormat.PRETTY, HexanaCliOutputFormat.TABLE),
           defaultOutputFormat = HexanaCliOutputFormat.PRETTY,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -140,6 +188,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "List enabled or inferred WebAssembly feature flags for a `.wasm` module.",
           groups = setOf(HexanaCliToolGroup.MODULE),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -151,6 +201,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Return policy-ready direct host-call facts for exported WebAssembly entrypoints.",
           groups = setOf(HexanaCliToolGroup.ENTRYPOINT_POLICY),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -162,6 +214,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "List required WebAssembly proposals inferred from detected module features.",
           groups = setOf(HexanaCliToolGroup.RUNTIME),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -173,6 +227,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Diff required WebAssembly proposals between a current and baseline module.",
           groups = setOf(HexanaCliToolGroup.RUNTIME),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -184,6 +240,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Check a WebAssembly module's required proposals against a conservative runtime support profile.",
           groups = setOf(HexanaCliToolGroup.RUNTIME),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -195,6 +253,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Compare current/previous component imports against provider candidates and lock/config files.",
           groups = setOf(HexanaCliToolGroup.COMPONENT),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -206,6 +266,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Plan report-ready ABI binding regeneration from current Wasm plus a stale binding file.",
           groups = setOf(HexanaCliToolGroup.ARTIFACT_QUERY),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -217,6 +279,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Check a memory contract with current/baseline Wasm and policy JSON; returns report-ready violations.",
           groups = setOf(HexanaCliToolGroup.MEMORY),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -228,6 +292,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Audit global-state policy with current/baseline Wasm and policy JSON; returns report-ready violations.",
           groups = setOf(HexanaCliToolGroup.GLOBAL),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -239,6 +305,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Audit exported function local counts against a local stack budget policy.",
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -250,6 +318,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "List imported functions declared by a `.wasm` module.",
           groups = setOf(HexanaCliToolGroup.IMPORT),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -261,6 +331,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "List exports declared by a `.wasm` module.",
           groups = setOf(HexanaCliToolGroup.EXPORT),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -272,6 +344,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Search exports by name and resolve common export metadata.",
           groups = setOf(HexanaCliToolGroup.EXPORT),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -283,6 +357,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "List exported functions within a closed range of the export section.",
           groups = setOf(HexanaCliToolGroup.EXPORT),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -294,6 +370,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "List imported and defined functions with offset/limit pagination.",
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -305,6 +383,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Resolve the type index and signature for one function index.",
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -316,6 +396,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Disassemble one function by unified function index.",
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -327,6 +409,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Return resolved direct calls and memory write sites for function indices.",
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -338,6 +422,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Search function names across imports, exports, and debug names.",
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -349,6 +435,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Aggregate WebAssembly crash-report and stack-frame triage from function indices, labels, and offsets.",
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -360,6 +448,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Focused lookup for function indices, symbols, signatures, and metadata.",
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -371,6 +461,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Focused source lookup for WebAssembly code offsets or function indices.",
           groups = setOf(HexanaCliToolGroup.FUNCTION),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -382,6 +474,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Low-level list of imported and defined memories from a `.wasm` module.",
           groups = setOf(HexanaCliToolGroup.MEMORY),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -393,6 +487,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Low-level list of imported and defined globals from a `.wasm` module.",
           groups = setOf(HexanaCliToolGroup.GLOBAL),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -404,6 +500,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "List element segments declared by a `.wasm` module.",
           groups = setOf(HexanaCliToolGroup.ELEMENT),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -415,6 +513,8 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Return data-segment metadata with range slicing and optional export/global context.",
           groups = setOf(HexanaCliToolGroup.DATA),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
@@ -426,10 +526,33 @@ public object HexanaGeneratedCliToolRegistry {
           summary = "Audit data segments against a payload policy JSON file and return report-ready matches.",
           groups = setOf(HexanaCliToolGroup.DATA),
           inputModes = setOf(),
+          sourceSlotName = null,
+          inputOptions = emptyList(),
           outputFormats = setOf(HexanaCliOutputFormat.JSON),
           defaultOutputFormat = HexanaCliOutputFormat.JSON,
           defaultOutputPolicy = HexanaCliOutputPolicy.TOOL_DEFINED,
           executionStatus = HexanaCliExecutionStatus.TODO,
         ),
       )
+}
+
+public data class SummarizeModuleCliInput(
+  public val wasm: ToolInputSourceSelection,
+)
+
+public fun decodeSummarizeModuleCliInput(request: ToolInputConversionRequest): SummarizeModuleCliInput {
+  require(request.context.toolName == "summarize_module")
+  require(request.rawArguments.isEmpty()) { "summarize-module does not accept semantic parameters." }
+  require(request.sources.pathArguments.isEmpty()) { "summarize-module requires a selected wasm source." }
+  require(request.sources.stdinText == null && request.sources.stdinBytesCopy() == null) { "summarize-module requires a selected wasm source." }
+  val wasm = request.sources.sourceSelections.singleOrNull() ?: throw IllegalArgumentException("summarize-module requires exactly one wasm source selection.")
+  require(wasm.slotName == "wasm") { "summarize-module source must use slot 'wasm', got '" + wasm.slotName + "'." }
+  return SummarizeModuleCliInput(wasm)
+}
+
+public object SummarizeModuleCliInputConverter : ToolInputConverter {
+  override fun convert(request: ToolInputConversionRequest): JsonObject {
+    decodeSummarizeModuleCliInput(request)
+    return JsonObject(emptyMap())
+  }
 }

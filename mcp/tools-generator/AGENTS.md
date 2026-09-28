@@ -13,6 +13,11 @@ generators resolve contracts through the authority for their consumer and emit c
   metadata shared by split products.
 - `cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt` — generated product identities,
   selected executable tools, output policy, and default output metadata.
+- `HexanaCliToolset.kt` also emits source-slot and per-option metadata for executable CLI bindings. Bindings with
+  `generatedInputRequest` emit a typed neutral request decoder and converter in that file; `summarize-module` is the
+  current production consumer. The decoder keeps source bytes in `ToolInputSources`, while semantic parameter types,
+  descriptions, defaults, and bounds come from bound `FieldSpec` values. Generated request, converter, and decoder
+  declarations must not collide with each other or the fixed CLI metadata declarations.
 
 A separate Claude Desktop MCPB manifest generator consumes the standalone default profile in canonical contract order
 and refreshes the checked-in packaging template.

@@ -37,6 +37,7 @@ import org.jetbrains.hexana.cli.runtime.ToolOutputRenderRequest
 import org.jetbrains.hexana.cli.runtime.ToolOutputRenderer
 import org.jetbrains.hexana.cli.runtime.ToolRenderOptions
 import org.jetbrains.hexana.cli.runtime.ToolRuntimeContext
+import org.jetbrains.hexana.cli.metadata.SummarizeModuleCliInputConverter
 import java.util.concurrent.CancellationException
 
 public const val SUMMARIZE_BINARY_TOOL_NAME: String = "summarize_binary"
@@ -86,12 +87,6 @@ internal class SummarizeBinaryInputConverter : ToolInputConverter by SingleSourc
     toolName = SUMMARIZE_BINARY_TOOL_NAME,
     commandName = "summarize-binary",
     sourceSlotName = "binary",
-)
-
-internal class SummarizeModuleInputConverter : ToolInputConverter by SingleSourceInputConverter(
-    toolName = SUMMARIZE_MODULE_TOOL_NAME,
-    commandName = "summarize-module",
-    sourceSlotName = "wasm",
 )
 
 internal class WasmToWatInputConverter : ToolInputConverter by SingleSourceInputConverter(
@@ -380,7 +375,7 @@ internal fun standardRuntimeRegistry(
         expectedTools = STANDARD_ANALYSIS_TOOL_NAMES,
         converters = mapOf(
             SUMMARIZE_BINARY_TOOL_NAME to SummarizeBinaryInputConverter(),
-            SUMMARIZE_MODULE_TOOL_NAME to SummarizeModuleInputConverter(),
+            SUMMARIZE_MODULE_TOOL_NAME to SummarizeModuleCliInputConverter,
             WASM_TO_WAT_TOOL_NAME to WasmToWatInputConverter(),
         ),
         executors = mapOf(

@@ -741,10 +741,8 @@ private fun selectSource(
     if (sourceCount > 1) {
         throw ProductUsageException("Provide exactly one ${spec.commandName} source.")
     }
-    val slotName = if (HexanaCliInputMode.WASM_PATH in spec.inputModes) {
-        "wasm"
-    } else {
-        "binary"
+    val slotName = requireNotNull(spec.sourceSlotName) {
+        "${spec.commandName} must declare one generated source slot."
     }
     pathArgument?.let {
         if (it.isBlank()) {

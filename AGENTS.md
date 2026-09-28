@@ -62,7 +62,7 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - `binaryProvider/`: thin provider layer that wraps parsed Wasm and native binary data for the UI and navigation features. Native providers are a sealed hierarchy (`ElfBinaryProvider`, `MachOBinaryProvider`, `FatMachOBinaryProvider`, `PeBinaryProvider`, `CoffBinaryProvider`, `ArchiveBinaryProvider`) under `NativeBinaryProvider`; format detection is done by `NativeBinaryFormatDetector` and the factory `nativeOrGenericBinaryProvider`.
 - `plugins-shared/`: Kotlin Multiplatform shared logic (no UI framework) used by both `idea-plugin` and `vscode-plugin:webview` — component description formatting, type labels, signature resolution, WAT text generation, table tab descriptors, and the custom-script-tab API surface (`shared/scripting/`) that every host binds.
 - `cli/runtime/`: framework-neutral CLI runtime contracts for input conversion, semantic execution, output format selection, rendered payloads, source selections, and runtime context. It must not depend on MCP SDK, Ktor, Clikt, analytics, IntelliJ APIs, or server modules.
-- `cli/metadata/`: neutral generated CLI catalog and release-product metadata consumed by split CLI products. It depends only on `cli:runtime` and generated metadata must stay free of MCP SDK, Ktor, Clikt, analytics, IntelliJ APIs, and `mcp:server`.
+- `cli/metadata/`: neutral generated CLI catalog, input request adapters, and release-product metadata consumed by split CLI products. It depends only on `cli:runtime` and generated metadata must stay free of MCP SDK, Ktor, Clikt, analytics, IntelliJ APIs, and `mcp:server`.
 - `cli/core/`: neutral CLI command orchestration and adapters for the standard `hexana-cli` product.
 - `cli/scripting/`: neutral script-only CLI runtime contribution for `run-script`. It reuses `mcp:scripting` and
   `cli:runtime`, but stays free of standard command composition, MCP transports, Clikt, Ktor, analytics, IntelliJ APIs,
@@ -221,7 +221,7 @@ Existing IDE run configurations currently include:
 - `mcp/server/src/main/gen/HexanaToolDispatcher.kt` is generated from resolved semantic contracts plus the standalone
   authority and contains standalone MCP tool registration plus MCP profile/default metadata.
 - `cli/metadata/src/main/gen/HexanaCliToolset.kt` and `cli/metadata/src/main/gen/HexanaCliProducts.kt` are generated from
-  resolved semantic contracts plus the independent CLI authority and contain CLI-visible metadata and release-product
+  resolved semantic contracts plus the independent CLI authority and contain CLI-visible metadata, opted-in input adapters, and release-product
   membership. Regenerate with `./gradlew :cli:metadata:generateHexanaCliMetadata`; verify with
   `./gradlew :cli:metadata:verifyHexanaCliMetadataUpToDate`.
 - `mcp/server` generation intentionally emits only `HexanaToolDispatcher.kt`; CLI command construction stays outside
