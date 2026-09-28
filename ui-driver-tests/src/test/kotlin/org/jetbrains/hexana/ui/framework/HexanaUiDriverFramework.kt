@@ -126,6 +126,8 @@ internal class HexanaIde internal constructor(
         probe.setClipboardText(text)
     }
 
+    fun suiteConsoleClasspathState(): List<String> = probe.suiteConsoleClasspathState()
+
     fun openFile(fileName: String): HexanaEditor {
         driver.openFile(fileName, waitForCodeAnalysis = false, isTextEditor = false)
         return HexanaEditor(driver, fileName, context.projectRelativeFileIdentifier(fileName))
@@ -583,6 +585,7 @@ internal interface HexanaEditorUiTestProbeRef {
 
     fun nativeDisassemblySummary(fileName: String, maxRanges: Int): List<String>
     fun setClipboardText(text: String): List<String>
+    fun suiteConsoleClasspathState(): List<String>
     fun toggleBinaryBreakpointOnFirstInstruction(fileName: String, query: String): List<String>
 
     fun navigateWatToByteOffset(fileName: String, byteOffset: Int): List<String>

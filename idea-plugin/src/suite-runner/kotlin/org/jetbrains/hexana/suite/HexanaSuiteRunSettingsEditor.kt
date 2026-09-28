@@ -1,4 +1,4 @@
-package org.jetbrains.hexana.run
+package org.jetbrains.hexana.suite
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
@@ -14,6 +14,13 @@ import com.intellij.ui.dsl.builder.panel
 import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
 import org.jetbrains.hexana.mcp.scripting.HexanaSuiteRunner
+import org.jetbrains.hexana.run.ArtifactRow
+import org.jetbrains.hexana.run.buildSuiteCliCommand
+import org.jetbrains.hexana.run.parseArtifactEntries
+import org.jetbrains.hexana.run.CollectionPassCache
+import org.jetbrains.hexana.run.declarationsToRows
+import org.jetbrains.hexana.run.rowsToArtifactValues
+import org.jetbrains.hexana.run.storedValuesToMap
 import org.jetbrains.hexana.shared.scripting.SuiteArtifactDeclaration
 import java.awt.datatransfer.StringSelection
 import java.io.File

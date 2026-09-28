@@ -62,9 +62,11 @@
 
     <dependencies>
         <plugin id="com.intellij.mcpServer"/>
-        <!-- SM test-runner console and rerun-failed action for the Hexana Suite run configuration -->
-        <module name="intellij.platform.smRunner"/>
-        <module name="intellij.platform.testRunner"/>
+        <!-- NOTE: do not declare intellij.platform.smRunner / intellij.platform.testRunner here.
+             2025.2/2025.3 do not register those module names, and an unresolvable plugin-level
+             module dependency silently disables the WHOLE plugin there (TC build 1072434679).
+             The SM console lives in the org.jetbrains.hexana.suiteRunner content module
+             (see <content> below), which declares them and degrades gracefully. -->
         <module name="intellij.libraries.skiko"/>
         <module name="intellij.libraries.compose.foundation.desktop"/>
 
@@ -73,6 +75,14 @@
         <module name="intellij.platform.jewel.ui"/>
         <module name="intellij.platform.jewel.ideLafBridge"/>
     </dependencies>
+
+    <content>
+        <!-- Hexana Suite run configuration (SM test console), shipped as a content module
+             jar (lib/modules/). Loads on 2026.1+ where intellij.platform.smRunner /
+             intellij.platform.testRunner are registered module names; skipped on
+             2025.2/2025.3 (no suite run configuration there, everything else works). -->
+        <module name="org.jetbrains.hexana.suiteRunner"/>
+    </content>
 
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
@@ -385,10 +395,6 @@
         <!-- Hexana Script run configuration -->
         <configurationType implementation="org.jetbrains.hexana.run.HexanaScriptRunConfigurationType"/>
         <runConfigurationProducer implementation="org.jetbrains.hexana.run.HexanaScriptRunConfigurationProducer"/>
-
-        <!-- Hexana Suite run configuration (*.test.js, SM test runner console) -->
-        <configurationType implementation="org.jetbrains.hexana.run.HexanaSuiteRunConfigurationType"/>
-        <runConfigurationProducer implementation="org.jetbrains.hexana.run.HexanaSuiteRunConfigurationProducer"/>
         <programRunner implementation="org.jetbrains.hexana.run.WasmDebugRunner"/>
         <programRunner implementation="org.jetbrains.hexana.run.CdpDebugRunner"/>
         <xdebugger.breakpointType implementation="org.jetbrains.hexana.run.WasmLineBreakpointType"/>
@@ -436,10 +442,8 @@
                     class="org.jetbrains.hexana.actions.OpenAsProtobufMessageAction"
                     text="Open As Protobuf Message"
                     description="Decode this file as a raw Protobuf wire-encoded message"/>
-            <action id="hexana.runSuitesForBinary"
-                    class="org.jetbrains.hexana.actions.HexanaRunSuitesForBinaryAction"
-                    text="Run Suites for This Binary"
-                    description="Run Hexana test suites whose declared artifacts match this binary's format"/>
+            <!-- hexana.runSuitesForBinary is registered by the org.jetbrains.hexana.suiteRunner
+                 content module (absent on 2025.2/2025.3, see <content> below). -->
             <separator/>
             <action id="hexana.showElementInHexView" class="org.jetbrains.hexana.actions.ShowElementInHexViewAction"/>
             <action id="hexana.goToOffset" class="org.jetbrains.hexana.actions.GoToOffsetAction"

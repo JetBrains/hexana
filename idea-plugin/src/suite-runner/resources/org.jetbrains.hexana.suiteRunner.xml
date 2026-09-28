@@ -1,0 +1,31 @@
+<!-- Content module for the Hexana Suite run configuration (*.test.js, SM test console).
+     Ships as lib/modules/org.jetbrains.hexana.suiteRunner.jar. intellij.platform.smRunner
+     resolves on 2026.1+ (2026.1 registers it as a core module, 2026.2+ moves it into the
+     bundled intellij.testRunner.plugin); on 2025.2/2025.3 the name is not registered, the
+     module is skipped, and the suite run configuration is simply absent while the rest of
+     the plugin works. Do NOT add intellij.platform.testRunner here: 2026.1 does not
+     register that name (its classes are in core there), and on 2026.2+ it comes
+     transitively through smRunner's own dependency. Never declare these modules in the
+     main plugin <dependencies>: 2025.2/2025.3 refuse to load the whole plugin over an
+     unresolvable module name (TC build 1072434679). -->
+<idea-plugin package="org.jetbrains.hexana.suite">
+    <dependencies>
+        <module name="intellij.platform.smRunner"/>
+    </dependencies>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <configurationType implementation="org.jetbrains.hexana.suite.HexanaSuiteRunConfigurationType"/>
+        <runConfigurationProducer implementation="org.jetbrains.hexana.suite.HexanaSuiteRunConfigurationProducer"/>
+    </extensions>
+
+    <actions>
+        <action id="hexana.runSuitesForBinary"
+                class="org.jetbrains.hexana.suite.HexanaRunSuitesForBinaryAction"
+                text="Run Suites for This Binary"
+                description="Run Hexana test suites whose declared artifacts match this binary's format">
+            <add-to-group group-id="hexana.contextMenuGroup"
+                          anchor="after"
+                          relative-to-action="hexana.openAsProtobufMessage"/>
+        </action>
+    </actions>
+</idea-plugin>

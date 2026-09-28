@@ -2,6 +2,7 @@ package org.jetbrains.hexana.run
 
 import com.intellij.execution.testframework.sm.runner.SMTestProxy
 import com.intellij.testFramework.UsefulTestCase
+import org.jetbrains.hexana.suite.describePathForProxy
 
 /**
  * Rerun-failed mapping: SM test proxies -> engine describe paths via

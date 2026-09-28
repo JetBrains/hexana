@@ -1,4 +1,4 @@
-package org.jetbrains.hexana.run
+package org.jetbrains.hexana.suite
 
 import com.intellij.execution.DefaultExecutionResult
 import com.intellij.execution.ExecutionResult
@@ -16,6 +16,11 @@ import org.jetbrains.hexana.mcp.AllowedFilePolicy
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptLimits
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptStatus
 import org.jetbrains.hexana.mcp.scripting.HexanaSuiteRunner
+import org.jetbrains.hexana.run.HexanaScriptProcessHandler
+import org.jetbrains.hexana.run.collectionErrorServiceMessages
+import org.jetbrains.hexana.run.discoverSuiteFiles
+import org.jetbrains.hexana.run.parseArtifactEntries
+import org.jetbrains.hexana.run.suiteTreeToServiceMessages
 import org.jetbrains.hexana.shared.scripting.ConsoleSeverity
 import org.jetbrains.hexana.shared.scripting.SuiteNodeStatus
 import java.io.File

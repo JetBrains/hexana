@@ -1,4 +1,4 @@
-package org.jetbrains.hexana.run
+package org.jetbrains.hexana.suite
 
 import com.intellij.execution.configurations.ConfigurationFactory
 import com.intellij.execution.configurations.RunConfiguration

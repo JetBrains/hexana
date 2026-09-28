@@ -1,4 +1,4 @@
-package org.jetbrains.hexana.run
+package org.jetbrains.hexana.suite
 
 import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.actions.LazyRunConfigurationProducer

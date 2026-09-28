@@ -1,4 +1,4 @@
-package org.jetbrains.hexana.run
+package org.jetbrains.hexana.suite
 
 import com.intellij.execution.Executor
 import com.intellij.execution.Location
@@ -17,6 +17,8 @@ import com.intellij.openapi.ui.ComponentContainer
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.psi.PsiManager
 import com.intellij.psi.search.GlobalSearchScope
+import org.jetbrains.hexana.run.HEXANA_SCRIPT_LOCATION_PROTOCOL
+import org.jetbrains.hexana.run.proxyPathOf
 
 /**
  * SM test-runner console properties for the Hexana Suite run configuration:

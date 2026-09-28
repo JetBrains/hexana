@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.uitestframework
 
+import com.intellij.execution.configurations.ConfigurationTypeUtil
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.fileEditor.FileDocumentManager
@@ -287,6 +288,33 @@ object HexanaEditorUiTestProbe {
     fun setClipboardText(text: String): List<String> = runOnEdt {
         CopyPasteManager.getInstance().setContents(StringSelection(text))
         payload("hexana-set-clipboard-text", listOf("length=${text.length}"))
+    }
+
+    /**
+     * Reports whether the Hexana Suite run configuration type is registered (i.e. the
+     * org.jetbrains.hexana.suiteRunner content module loaded) and whether the SM test-runner
+     * classes it needs are reachable through THAT module's classloader. Classes are looked up
+     * by name only (no static references) so the probe itself never fails to link. The type is
+     * registered on 2026.1+ where the platform exposes intellij.platform.smRunner /
+     * intellij.platform.testRunner as module names; on 2025.2/2025.3 the module is skipped
+     * and the type is absent by design.
+     */
+    @JvmStatic
+    fun suiteConsoleClasspathState(): List<String> {
+        val suiteType = ConfigurationTypeUtil.findConfigurationType("HexanaSuiteRunConfiguration")
+        val loader = suiteType?.javaClass?.classLoader
+        val classFlags = listOf(
+            "com.intellij.execution.testframework.sm.SMTestRunnerConnectionUtil",
+            "com.intellij.execution.testframework.sm.runner.SMTRunnerConsoleProperties",
+            "com.intellij.execution.testframework.actions.AbstractRerunFailedTestsAction",
+        ).map { name ->
+            val loadable = loader != null && runCatching { Class.forName(name, false, loader) }.isSuccess
+            "${name.substringAfterLast('.')}=$loadable"
+        }
+        return payload(
+            "hexana-suite-console-classpath",
+            classFlags + "suiteTypeRegistered=${suiteType != null}",
+        )
     }
 
     /**

@@ -4,6 +4,8 @@ import com.intellij.execution.PsiLocation
 import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.actions.RunConfigurationProducer
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import org.jetbrains.hexana.suite.HexanaSuiteRunConfiguration
+import org.jetbrains.hexana.suite.HexanaSuiteRunConfigurationProducer
 
 /**
  * Producer disambiguation between the Hexana Script and Hexana Suite run

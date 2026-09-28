@@ -1,4 +1,4 @@
-package org.jetbrains.hexana.actions
+package org.jetbrains.hexana.suite
 
 import com.intellij.execution.ExecutorRegistry
 import com.intellij.execution.ProgramRunnerUtil
@@ -15,12 +15,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.HexanaFileEditor
-import org.jetbrains.hexana.run.HexanaSuiteConfigurationFactory
-import org.jetbrains.hexana.run.HexanaSuiteRunConfiguration
-import org.jetbrains.hexana.run.HexanaSuiteRunConfigurationType
-import org.jetbrains.hexana.run.collectSuiteDeclarations
 import org.jetbrains.hexana.run.matchingSuiteRole
-import org.jetbrains.hexana.run.tryGetCachedSuiteDeclarations
 import com.intellij.openapi.util.Key
 import org.jetbrains.hexana.shared.binaryFormatId
 import java.util.concurrent.atomic.AtomicBoolean

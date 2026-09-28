@@ -526,3 +526,46 @@ sourceSets {
         }
     }
 }
+
+// Hexana Suite run configuration: packaged as a v2 content module jar
+// (lib/modules/org.jetbrains.hexana.suiteRunner.jar) so its dependencies on
+// intellij.platform.smRunner / intellij.platform.testRunner stay OPTIONAL.
+// 2025.2/2025.3 do not register those module names and skip the module (the
+// suite feature is absent there); declaring them at plugin level instead
+// disables the WHOLE plugin on those builds (TC build 1072434679). The module
+// classloader adds the SM edges that 2026.2+ needs, where the SM classes live
+// in the bundled intellij.testRunner.plugin rather than the core classpath.
+val suiteRunner: SourceSet = sourceSets.create("suiteRunner") {
+    kotlin {
+        srcDir("src/suite-runner/kotlin")
+    }
+    resources.srcDir("src/suite-runner/resources")
+    compileClasspath += sourceSets.main.get().output + sourceSets.main.get().compileClasspath
+}
+
+// Friend-path to main so the module code keeps access to internal declarations
+// (SuiteRunConfigurationModels helpers, CollectionPassCache, the script process handler).
+kotlin.target.compilations.named("suiteRunner") {
+    associateWith(kotlin.target.compilations.getByName("main"))
+}
+
+val suiteRunnerJar = tasks.register<Jar>("suiteRunnerJar") {
+    archiveFileName.set("org.jetbrains.hexana.suiteRunner.jar")
+    from(suiteRunner.output)
+}
+
+tasks.withType<PrepareSandboxTask>().configureEach {
+    from(suiteRunnerJar) {
+        into(pluginName.map { "$it/lib/modules" })
+    }
+}
+
+// The idea-plugin unit tests exercise the suite run configuration classes directly
+// (including internal declarations, hence the friend-path association).
+sourceSets.test {
+    compileClasspath += suiteRunner.output
+    runtimeClasspath += suiteRunner.output
+}
+kotlin.target.compilations.named("test") {
+    associateWith(kotlin.target.compilations.getByName("suiteRunner"))
+}
