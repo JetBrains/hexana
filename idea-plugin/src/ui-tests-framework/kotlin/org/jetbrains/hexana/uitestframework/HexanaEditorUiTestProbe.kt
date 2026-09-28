@@ -36,6 +36,11 @@ import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.classifyArchiveMember
 import org.jetbrains.hexana.shared.BinaryAnchor
+import com.intellij.notification.Notification
+import com.intellij.notification.NotificationsManager
+import org.jetbrains.hexana.providers.format.typeDisplayName
+import org.jetbrains.hexana.wasm.analysis.typegraph.TypeGraphNodeKind
+import org.jetbrains.hexana.wasm.analysis.typegraph.computeTypeNeighborhood
 import org.jetbrains.hexana.wasm.opcodes.OpCodeWithOffset
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmSectionCode
@@ -74,6 +79,17 @@ object HexanaEditorUiTestProbe {
 
     @JvmStatic
     fun ping(): String = "pong"
+
+    /** Expires all notification balloons; capture drills call this before screenshots. */
+    @JvmStatic
+    fun clearNotifications(): List<String> = runOnEdt {
+        ProjectManager.getInstance().openProjects.forEach { project ->
+            NotificationsManager.getNotificationsManager()
+                .getNotificationsOfType(Notification::class.java, project)
+                .forEach { it.expire() }
+        }
+        payload("hexana-clear-notifications", listOf("cleared=true"))
+    }
 
     @JvmStatic
     fun closeAllEditors(): List<String> = runOnEdt {
@@ -465,6 +481,103 @@ object HexanaEditorUiTestProbe {
         val editor = requireHexanaEditor(fileIdentifier)
         editor.requestWasmByteOffsetNav(byteOffset)
         return payload("hexana-navigate-wat-byte-offset", listOf("byteOffset=0x${byteOffset.toString(16)}"))
+    }
+
+    /**
+     * Scrolls the WAT (virtualized) panel to the definition row of type [typeIdx].
+     * Must be called after the WAT tab is selected and rendered.
+     */
+    @JvmStatic
+    fun navigateWatToType(fileIdentifier: String, typeIdx: Int): List<String> {
+        val editor = requireHexanaEditor(fileIdentifier)
+        editor.requestWasmTypeNav(typeIdx)
+        return payload("hexana-navigate-wat-type", listOf("typeIdx=$typeIdx"))
+    }
+
+    /**
+     * Focuses the Type Graph panel on [typeIdx]. Selecting the "Type Graph"
+     * editor tab is a separate [selectTab] call.
+     */
+    @JvmStatic
+    fun showWasmTypeGraph(fileIdentifier: String, typeIdx: Int): List<String> {
+        val editor = requireHexanaEditor(fileIdentifier)
+        editor.requestWasmTypeGraphFocus(typeIdx)
+        return payload("hexana-show-wasm-type-graph", listOf("typeIdx=$typeIdx"))
+    }
+
+    /**
+     * Opens the WAT (virtualized) panel's type-info popup for [typeIdx], exactly
+     * as clicking a type annotation row or a GC instruction row would.
+     */
+    @JvmStatic
+    fun showWasmTypeInfoPopup(fileIdentifier: String, typeIdx: Int): List<String> {
+        val editor = requireHexanaEditor(fileIdentifier)
+        editor.requestWasmTypeInfoPopup(typeIdx)
+        return payload("hexana-show-wasm-type-info-popup", listOf("typeIdx=$typeIdx"))
+    }
+
+    /**
+     * Picks WasmGC demo targets for capture drills from the module's type graph
+     * index: the struct type with a supertype that has the most direct subtypes
+     * (rec-group members preferred), plus a function that references it (for the
+     * instruction-popup capture). Fails on modules without GC types.
+     */
+    @JvmStatic
+    fun wasmTypeGraphDemoTargets(fileIdentifier: String): List<String> {
+        val editor = requireHexanaEditor(fileIdentifier)
+        val provider = editor.binaryProvider as? WasmBinaryProvider
+            ?: throw IllegalStateException(
+                "Expected a wasm provider for '$fileIdentifier', got ${editor.binaryProvider?.kindId()}",
+            )
+        val index = provider.typeGraphIndex
+            ?: throw IllegalStateException("No type graph index for '$fileIdentifier'")
+        if (!index.hasGcTypes) throw IllegalStateException("Module has no GC types: '$fileIdentifier'")
+        // Prefer a readable focused graph: the candidate whose 2-hop neighborhood
+        // is closest to ~30 nodes, not a hub type that renders as a wall of nodes.
+        var best = -1
+        var bestDist = Long.MAX_VALUE
+        for (t in 0 until index.typeCount) {
+            if (index.kind(t) != TypeGraphNodeKind.STRUCT) continue
+            if (index.superTypes(t).isEmpty()) continue
+            if (index.directSubtypes(t).isEmpty()) continue
+            if (index.referencingFuncs(t).isEmpty()) continue
+            val neighborhoodSize = computeTypeNeighborhood(
+                index = index,
+                focus = t,
+                includeHierarchy = true,
+                includeFieldRefs = true,
+            ).included.size
+            val dist = kotlin.math.abs(neighborhoodSize - 30).toLong() * 4 +
+                (if (index.recGroup(t) >= 0) 0L else 2L)
+            if (dist < bestDist) {
+                bestDist = dist
+                best = t
+            }
+        }
+        if (best < 0) {
+            // Dense or sparse modules: drop the referencing-funcs requirement.
+            for (t in 0 until index.typeCount) {
+                if (index.kind(t) != TypeGraphNodeKind.STRUCT) continue
+                if (index.superTypes(t).isEmpty()) continue
+                if (index.directSubtypes(t).isEmpty()) continue
+                best = t
+                break
+            }
+        }
+        if (best < 0) throw IllegalStateException("No struct with supertype and subtypes in '$fileIdentifier'")
+        val demoFuncIdx = index.referencingFuncs(best).firstOrNull() ?: -1
+        return payload(
+            "hexana-wasm-type-graph-demo-targets",
+            listOf(
+                "typeIdx=$best",
+                "typeName=${provider.typeDisplayName(best)}",
+                "subtypes=${index.directSubtypes(best).size}",
+                "referencingTypes=${index.referencingTypes(best).size}",
+                "referencingFuncs=${index.referencingFuncs(best).size}",
+                "recGroup=${index.recGroup(best)}",
+                "demoFuncIdx=$demoFuncIdx",
+            ),
+        )
     }
 
     /**

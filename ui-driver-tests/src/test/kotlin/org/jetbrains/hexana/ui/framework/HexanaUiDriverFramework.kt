@@ -118,6 +118,14 @@ internal class HexanaIde internal constructor(
         driver.closeToolWindow("Structure")
     }
 
+    fun closeServicesToolWindow() {
+        driver.closeToolWindow("Services")
+    }
+
+    fun clearNotifications() {
+        probe.clearNotifications()
+    }
+
     fun closeAllEditors() {
         probe.closeAllEditors()
     }
@@ -252,6 +260,18 @@ internal class HexanaEditor internal constructor(
 
     fun navigateWatToByteOffset(byteOffset: Int): List<String> =
         probe.navigateWatToByteOffset(fileIdentifier, byteOffset)
+
+    fun navigateWatToType(typeIdx: Int): List<String> =
+        probe.navigateWatToType(fileIdentifier, typeIdx)
+
+    fun showWasmTypeGraph(typeIdx: Int): List<String> =
+        probe.showWasmTypeGraph(fileIdentifier, typeIdx)
+
+    fun showWasmTypeInfoPopup(typeIdx: Int): List<String> =
+        probe.showWasmTypeInfoPopup(fileIdentifier, typeIdx)
+
+    fun wasmTypeGraphDemoTargets(): List<String> =
+        probe.wasmTypeGraphDemoTargets(fileIdentifier)
 
     fun binaryGutterMarks(): List<String> =
         probe.binaryGutterMarks(fileIdentifier)
@@ -589,6 +609,16 @@ internal interface HexanaEditorUiTestProbeRef {
     fun toggleBinaryBreakpointOnFirstInstruction(fileName: String, query: String): List<String>
 
     fun navigateWatToByteOffset(fileName: String, byteOffset: Int): List<String>
+
+    fun navigateWatToType(fileName: String, typeIdx: Int): List<String>
+
+    fun showWasmTypeGraph(fileName: String, typeIdx: Int): List<String>
+
+    fun showWasmTypeInfoPopup(fileName: String, typeIdx: Int): List<String>
+
+    fun wasmTypeGraphDemoTargets(fileName: String): List<String>
+
+    fun clearNotifications(): List<String>
 
     fun binaryGutterMarks(fileName: String): List<String>
 }

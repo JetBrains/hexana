@@ -165,6 +165,7 @@ internal fun WasmPanelWatVirtualized(
      * equal re-clicks re-fire. Mirrors [byteOffsetNavFlow].
      */
     typeNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
+    typeInfoNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
     gutterMarks: kotlinx.coroutines.flow.StateFlow<Map<Long, GutterMark>>? = null,
     executionOffset: kotlinx.coroutines.flow.StateFlow<Long?>? = null,
     onToggleBreakpoint: ((funcIdx: Int, byteOffset: Long, instrOrdinal: Int) -> Unit)? = null,
@@ -237,6 +238,7 @@ internal fun WasmPanelWatVirtualized(
         navTargetFlow = navTargetFlow,
         byteOffsetNavFlow = byteOffsetNavFlow,
         typeNavFlow = typeNavFlow,
+        typeInfoNavFlow = typeInfoNavFlow,
         onOffsetClicked = { offset -> state.scrollHexViewTo(offset, setCursor = true) },
         gutterMarks = gutterMarks,
         executionOffset = executionOffset,
@@ -257,6 +259,7 @@ private fun WasmPanelWatVirtualizedContent(
     navTargetFlow: MutableStateFlow<WasmFunctionNavTarget?>,
     byteOffsetNavFlow: MutableStateFlow<Int?> = MutableStateFlow(null),
     typeNavFlow: MutableStateFlow<Int?> = MutableStateFlow(null),
+    typeInfoNavFlow: MutableStateFlow<Int?> = MutableStateFlow(null),
     onOffsetClicked: ((Long) -> Unit)? = null,
     gutterMarks: kotlinx.coroutines.flow.StateFlow<Map<Long, GutterMark>>? = null,
     executionOffset: kotlinx.coroutines.flow.StateFlow<Long?>? = null,
@@ -752,6 +755,13 @@ private fun WasmPanelWatVirtualizedContent(
         }
     }
     val onTypeInfo: (TypeInfoRequest) -> Unit = { request -> typeInfoRequest = request }
+    // External popup requests (HexanaFileEditor / UI-test capture drills).
+    val typeInfoNav by typeInfoNavFlow.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(typeInfoNav) {
+        val requestedTypeIdx = typeInfoNav ?: return@LaunchedEffect
+        typeInfoRequest = TypeInfoRequest(requestedTypeIdx)
+        typeInfoNavFlow.value = null
+    }
     val onGotoType: (Int) -> Unit = { typeIdx -> navigator.gotoType(typeIdx) }
 
     // Build the search results adapter: WAT search produces funcIdx-based

@@ -107,6 +107,9 @@ internal fun BinaryEditorView(
     onNavigateToParent: (() -> Unit)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
     wasmByteOffsetNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
+    wasmTypeNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
+    wasmTypeGraphFocusFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
+    wasmTypeInfoNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) },
     classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?> = remember { MutableStateFlow(null) },
     onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
     onOpenTarEntry: ((TarEntry) -> Unit)? = null,
@@ -255,12 +258,12 @@ internal fun BinaryEditorView(
     // from HexanaFileEditor; panels capture it by reference.
     val wasmNavFlow: MutableStateFlow<WasmFunctionNavTarget?> = wasmFunctionNavTargetFlow
     val wasmOffsetNavFlow: MutableStateFlow<Int?> = wasmByteOffsetNavFlow
-    // Type Graph cross-tab flows. Lifted for the same reason as wasmNavFlow:
-    // the same instance must survive panel rebuilds on edit commits.
+    // Type Graph cross-tab flows come in as parameters (with remembered
+    // defaults) so HexanaFileEditor and UI-test probes can drive them; the
+    // same instances survive panel rebuilds on edit commits.
     // wasmTypeNavFlow drives the WAT panel to scroll to a type's definition row;
-    // wasmTypeGraphFocusFlow drives the Type Graph panel to focus on a type.
-    val wasmTypeNavFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) }
-    val wasmTypeGraphFocusFlow: MutableStateFlow<Int?> = remember { MutableStateFlow(null) }
+    // wasmTypeGraphFocusFlow drives the Type Graph panel to focus on a type;
+    // wasmTypeInfoNavFlow opens the WAT panel's type-info popup.
 
     // IDE-keymap-routed Undo / Redo for the editable document. Attached at
     // the BinaryEditorView root so the shortcut fires from anywhere inside
@@ -399,6 +402,7 @@ internal fun BinaryEditorView(
                     wasmByteOffsetNavFlow = wasmOffsetNavFlow,
                     wasmTypeNavFlow = wasmTypeNavFlow,
                     wasmTypeGraphFocusFlow = wasmTypeGraphFocusFlow,
+                    wasmTypeInfoNavFlow = wasmTypeInfoNavFlow,
                     classFileNavTargetFlow = classFileNavTargetFlow,
                     fileName = fileName,
                     gutterMarksModelFlow = gutterMarksModelFlow,
@@ -1173,6 +1177,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
     wasmByteOffsetNavFlow: MutableStateFlow<Int?>? = null,
     wasmTypeNavFlow: MutableStateFlow<Int?>? = null,
     wasmTypeGraphFocusFlow: MutableStateFlow<Int?>? = null,
+    wasmTypeInfoNavFlow: MutableStateFlow<Int?>? = null,
     classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?>? = null,
     fileName: String? = null,
     gutterMarksModelFlow: StateFlow<GutterMarksModel?>? = null,
@@ -1224,6 +1229,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
                         ?: remember { MutableStateFlow(null) }).collectAsState()
                     val typeNavFlowActual = wasmTypeNavFlow ?: remember { MutableStateFlow<Int?>(null) }
                     val typeGraphFlowActual = wasmTypeGraphFocusFlow ?: remember { MutableStateFlow<Int?>(null) }
+                    val typeInfoNavFlowActual = wasmTypeInfoNavFlow ?: remember { MutableStateFlow<Int?>(null) }
                     WasmPanelWatVirtualized(
                         provider = live,
                         state = state,
@@ -1235,6 +1241,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
                         byteOffsetNavFlow = wasmByteOffsetNavFlow
                             ?: remember { MutableStateFlow(null) },
                         typeNavFlow = typeNavFlowActual,
+                        typeInfoNavFlow = typeInfoNavFlowActual,
                         gutterMarks = gutterModel?.marks,
                         executionOffset = executionOffsetFlow,
                         onToggleBreakpoint = onToggleWasmBreakpoint,
@@ -1284,6 +1291,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
                         ?: remember { MutableStateFlow(null) }).collectAsState()
                     val typeNavFlowActual = wasmTypeNavFlow ?: remember { MutableStateFlow<Int?>(null) }
                     val typeGraphFlowActual = wasmTypeGraphFocusFlow ?: remember { MutableStateFlow<Int?>(null) }
+                    val typeInfoNavFlowActual = wasmTypeInfoNavFlow ?: remember { MutableStateFlow<Int?>(null) }
                     WasmPanelWatVirtualized(
                         provider = live,
                         state = state,
@@ -1293,6 +1301,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
                         navTargetFlow = wasmFunctionNavTargetFlow
                             ?: remember { MutableStateFlow(null) },
                         typeNavFlow = typeNavFlowActual,
+                        typeInfoNavFlow = typeInfoNavFlowActual,
                         gutterMarks = gutterModel?.marks,
                         executionOffset = executionOffsetFlow,
                         onToggleBreakpoint = onToggleWasmBreakpoint,

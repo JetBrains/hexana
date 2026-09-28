@@ -163,6 +163,39 @@ class HexanaFileEditor(
     }
 
     /**
+     * Pending type-definition navigation request (a type index) for the WAT
+     * virtualized panel, mirroring [wasmByteOffsetNavFlow].
+     */
+    private val wasmTypeNavFlow: MutableStateFlow<Int?> = MutableStateFlow(null)
+
+    /** Scroll the WAT virtualized view to the definition row of type [typeIdx]. */
+    fun requestWasmTypeNav(typeIdx: Int) {
+        wasmTypeNavFlow.value = typeIdx
+    }
+
+    /**
+     * Pending Type Graph focus request (a type index). Consumed by the Type
+     * Graph panel; selecting the "Type Graph" tab is a separate step.
+     */
+    private val wasmTypeGraphFocusFlow: MutableStateFlow<Int?> = MutableStateFlow(null)
+
+    /** Focus the Type Graph panel on [typeIdx]. Safe to call from any thread. */
+    fun requestWasmTypeGraphFocus(typeIdx: Int) {
+        wasmTypeGraphFocusFlow.value = typeIdx
+    }
+
+    /**
+     * Pending type-info popup request (a type index) for the WAT virtualized
+     * panel. Used by UI-test capture drills to open the popup deterministically.
+     */
+    private val wasmTypeInfoNavFlow: MutableStateFlow<Int?> = MutableStateFlow(null)
+
+    /** Open the WAT virtualized panel's type-info popup for [typeIdx]. */
+    fun requestWasmTypeInfoPopup(typeIdx: Int) {
+        wasmTypeInfoNavFlow.value = typeIdx
+    }
+
+    /**
      * WASM-diff models, computed once off the EDT and held for the lifetime of this
      * editor (this tab). Switching the inner tabs — or the IDE editor tab, which may
      * tear down and rebuild the Compose composition — re-collects these flows rather
@@ -275,6 +308,9 @@ class HexanaFileEditor(
                     },
                     wasmFunctionNavTargetFlow = wasmFunctionNavTargetFlow,
                     wasmByteOffsetNavFlow = wasmByteOffsetNavFlow,
+                    wasmTypeNavFlow = wasmTypeNavFlow,
+                    wasmTypeGraphFocusFlow = wasmTypeGraphFocusFlow,
+                    wasmTypeInfoNavFlow = wasmTypeInfoNavFlow,
                     classFileNavTargetFlow = classFileNavTargetFlow,
                     onOpenZipEntry = { entry -> openZipEntry(entry, commonBuffer) },
                     onOpenTarEntry = { entry ->
