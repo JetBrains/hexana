@@ -158,6 +158,8 @@ public sealed interface WasmToolsReportRenderResult {
     ) : WasmToolsReportRenderResult
 
     public data object OutputLimitRefused : WasmToolsReportRenderResult { override val exitCode: Int = 3 }
+    public data class InputRefused(val message: String) : WasmToolsReportRenderResult { override val exitCode: Int = 3 }
+    public data class UsageError(val message: String) : WasmToolsReportRenderResult { override val exitCode: Int = 2 }
     public data object InternalFailure : WasmToolsReportRenderResult { override val exitCode: Int = 70 }
 }
 

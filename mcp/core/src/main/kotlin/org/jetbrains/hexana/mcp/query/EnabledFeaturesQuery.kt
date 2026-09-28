@@ -41,6 +41,7 @@ import org.jetbrains.hexana.wasm.sections.WasmTableExternalType
 import org.jetbrains.hexana.wasm.sections.WasmTypeRecord
 import org.jetbrains.hexana.wasm.sections.WasmValueType
 import org.jetbrains.hexana.wasm.sections.WasmVecType
+import java.util.ArrayDeque
 
 fun WasmBinaryProvider.readEnabledFeatures(): ListEnabledFeaturesResult {
     val wasmModule = requireNotNull(wasmModule)
@@ -223,7 +224,17 @@ private class EnabledFeatureDetector {
     }
 
     fun recordOpcodes(opcodes: List<OpCode>) {
-        opcodes.forEach(::recordOpcode)
+        val pending = ArrayDeque<Iterator<OpCode>>()
+        pending.addLast(opcodes.iterator())
+        while (pending.isNotEmpty()) {
+            val current = pending.getLast()
+            if (!current.hasNext()) {
+                pending.removeLast()
+                continue
+            }
+            val nested = recordOpcode(current.next())
+            if (nested != null) pending.addLast(nested.iterator())
+        }
     }
 
     fun recordConstExpression(section: String, opcodes: List<OpCode>) {
@@ -259,7 +270,8 @@ private class EnabledFeatureDetector {
         )
     }
 
-    private fun recordOpcode(opcode: OpCode) {
+    private fun recordOpcode(opcode: OpCode): List<OpCode>? {
+        var nested: List<OpCode>? = null
         when (opcode) {
             is VectorOpCode -> {
                 simd = true
@@ -306,17 +318,18 @@ private class EnabledFeatureDetector {
             }
             is OpCodes.Flow.TryTable -> {
                 recordBlockType(opcode.blockType)
-                recordOpcodes(opcode.code)
+                nested = opcode.code
             }
             is OpCodes.Flow.Block -> {
                 recordBlockType(opcode.type)
-                recordOpcodes(opcode.value)
+                nested = opcode.value
             }
         }
         if (opcode::class.qualifiedName.orEmpty().contains(".OpCodes.GC.")) {
             recordGcTypes("Code")
             recordInstruction(opcode)
         }
+        return nested
     }
 
     private fun recordBlockType(blockType: StandardTypesParser.WasmBlockType?) {

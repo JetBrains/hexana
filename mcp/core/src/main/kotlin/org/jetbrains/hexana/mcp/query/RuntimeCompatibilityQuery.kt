@@ -42,7 +42,7 @@ fun WasmBinaryProvider.diffRequiredProposals(
     )
 }
 
-private fun ListEnabledFeaturesResult.toRequiredProposals(): ListRequiredProposalsResult {
+internal fun ListEnabledFeaturesResult.toRequiredProposals(): ListRequiredProposalsResult {
     val proposals = proposalRules()
         .filter { rule -> rule.isEnabled(features) }
         .map { rule ->
@@ -62,19 +62,12 @@ private fun ListEnabledFeaturesResult.toRequiredProposals(): ListRequiredProposa
     )
 }
 
-private fun ListRequiredProposalsResult.checkRuntimeCompatibility(
+internal fun ListRequiredProposalsResult.checkRuntimeCompatibility(
     rawRuntime: String,
     version: String?
 ): CheckRuntimeCompatibilityResult {
-    val runtime = rawRuntime.trim().lowercase()
-    if (runtime.isBlank()) {
-        throw HexanaAnalysisException(HexanaAnalysisErrorCode.INVALID_INPUT, "Runtime must not be blank")
-    }
-    val runtimeMatrix = runtimeSupportMatrix()[runtime]
-        ?: throw HexanaAnalysisException(
-            HexanaAnalysisErrorCode.INVALID_INPUT,
-            "Unsupported runtime `$rawRuntime`. Supported runtimes: ${runtimeSupportMatrix().keys.sorted().joinToString()}"
-        )
+    val runtime = validateRuntimeTarget(rawRuntime)
+    val runtimeMatrix = checkNotNull(runtimeSupportMatrix()[runtime])
 
     val statuses = proposals.map { proposal ->
         val support = runtimeMatrix[proposal.proposal] ?: RuntimeSupport(
@@ -105,6 +98,20 @@ private fun ListRequiredProposalsResult.checkRuntimeCompatibility(
             "The optional `version` value is reported for context but exact version parsing is intentionally not attempted."
         )
     )
+}
+
+internal fun validateRuntimeTarget(rawRuntime: String): String {
+    val runtime = rawRuntime.trim().lowercase()
+    if (runtime.isBlank()) {
+        throw HexanaAnalysisException(HexanaAnalysisErrorCode.INVALID_INPUT, "Runtime must not be blank")
+    }
+    if (runtime !in runtimeSupportMatrix()) {
+        throw HexanaAnalysisException(
+            HexanaAnalysisErrorCode.INVALID_INPUT,
+            "Unsupported runtime `$rawRuntime`. Supported runtimes: ${runtimeSupportMatrix().keys.sorted().joinToString()}"
+        )
+    }
+    return runtime
 }
 
 private fun ListRequiredProposalsResult.diffRequiredProposals(
